@@ -68,14 +68,13 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-156 items — **Open** 63 · **In flight** 0 · **Closed** 93
+156 items — **Open** 62 · **In flight** 0 · **Closed** 94
 
-### Open (63)
+### Open (62)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) 🔒 | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `triaged` | — |
-| [`B-002`](#b-002--o-cluster-mgmt-é-spof-de-tudo-e-renomeá-lo-para-core-não-muda-isso----) | O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso | `triaged` | — |
 | [`B-005`](#b-005--unificar-cell-e-cluster-em-11-aposentando-cell-default----) | Unificar cell e cluster em 1:1, aposentando `cell-default` | `triaged` | — |
 | [`B-014`](#b-014--testtransitclient_ratelimitburst-reprova-por-tempo-não-por-comportamento----) | `TestTransitClient_RateLimitBurst` reprova por tempo, não por comportamento | `triaged` | média |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
@@ -142,10 +141,11 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (93)
+### Closed (94)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
+| [`B-002`](#b-002--o-cluster-mgmt-é-spof-de-tudo-e-renomeá-lo-para-core-não-muda-isso---x) | O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso | `shipped` | — |
 | [`B-003`](#b-003--o-checker-de-ponteiros-acusa-de-fabricação-todo-caminho-iniciado-por-ponto---x) | O checker de ponteiros acusa de fabricação todo caminho iniciado por ponto | `shipped` | — |
 | [`B-004`](#b-004--a-fixture-boa-do-discover-confidence-não-passa-no-layout-em-que-o-skill-é-instalado---x) | A fixture "boa" do discover-confidence não passa no layout em que o skill é instalado | `shipped` | — |
 | [`B-006`](#b-006--o-oráculo-do-conjunto-de-gates-vive-num-arquivo-com-data-no-nome-e-é-mutado-a-cada-gate---x) | O oráculo do conjunto de gates vive num arquivo com data no nome, e é mutado a cada gate | `shipped` | — |
@@ -358,7 +358,7 @@ registro dessa reunião foi localizado. O código resultante é o desenho certo 
 decisão certa chegou por um caminho que a governança não viu.
 
 
-## B-002 — O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso   [ ]
+## B-002 — O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso   [x]
 
 domain: engine-go
 repo: loopzero
@@ -366,8 +366,41 @@ suggested_mode: review
 source: human
 evidence: `.claude/knowledge-base/discoveries/opportunities/core-cluster-spof-opportunity.md` — medido em 2026-08-09 sobre a árvore `26ba1340`, rastreando cada função até o **sítio de chamada**, não até a linha de helmfile. As 4 funções **param** juntas, sem janela de degradação: login (`api/internal/config/config.go:257`, JWKS do Hydra que roda no `mgmt`), deploy e rollback (`config.go:377` Gitea + `config.go:381` ArgoCD, ambos no `mgmt`), build (a iniciação parte do `loopzero-api`; um build em voo continua no cluster de build). **Mas o plano de dados sobrevive:** Traefik, cert-manager, Argo Rollouts, KEDA e ESO vivem na cell (`runtime.helmfile.yaml.gotmpl:98`, `:76`, `:148`, `:123`, `:108`), e nenhum caminho de dados chama de volta o `mgmt`. A metade Model-B **continua não medida** — o código vive em `loopzero-cloud` e `loopzero-traefik-mcp`, fora deste registro.
 why_now: o `B-001` renomeia este cluster para `core` justamente porque o nome `mgmt` faz todo mundo raciocinar sobre ele como infraestrutura de suporte descartável. O rename corrige o **raciocínio**; não corrige o **raio de explosão**. Registrar agora é o que impede que o rename seja lido como se o problema tivesse sido resolvido — o item existe para que a diferença fique explícita depois que `core` for o nome.
-status: triaged
+status: shipped
 depends_on: B-001 apenas para vocabulário (o item continua válido com qualquer um dos dois nomes); tecnicamente independente — não bloqueia nem é bloqueado pelo rename
+resolution: |
+  Fechado 2026-08-18. Item de **medicao** — as tres balas estao cumpridas, e nenhuma delas
+  pedia mitigacao.
+
+  **Bala 1** ja estava: o raio por funcao foi medido em 2026-08-09 e corrigiu o proprio
+  titulo deste item — o SPOF e total e do plano de controle, e o trafego de tenant nao e
+  afetado.
+
+  **Bala 2 era a lacuna real**, e a opportunity dizia `nao medido` na linha dos produtos
+  Model-B. Medido agora: nem `loopzero-cloud` nem `loopzero-traefik-mcp` contem **qualquer** cliente
+  Kubernetes (`kubeconfig`, `clientcmd`, `InClusterConfig`, `kubernetes.NewForConfig` — zero
+  ocorrencias fora de teste e documentacao). A dependencia existe, e transitiva e o roteador
+  a separa: `/engine/*` proxia para `loopzero-api`, que roda no core; todas as rotas de produto
+  (`/v1/{auth,telemetry,api-keys,memory,storage,billing,settings/webhooks,dashboard/*}`)
+  usam handlers e upstreams proprios. **Confirmada e restrita a um prefixo.**
+
+  A fronteira de repositorio esta dita, como a bala exigia: a evidencia vive em
+  `loopzero-cloud/cmd/main.go`, repositorio irmao. A pergunta era deste item; um eventual
+  conserto pertence ao backlog daquele projeto.
+
+  **Bala 3** — registrado na opportunity
+  (`.claude/knowledge-base/discoveries/opportunities/core-cluster-spof-opportunity.md`,
+  secao *Medicao da metade Model-B*), que e o artefato que uma decisao de arquitetura
+  consome, e nao apenas neste bloco.
+
+  **O limite, dito em voz alta:** a medicao le o roteamento declarado no codigo, nao o
+  comportamento sob queda real. Provar que aquelas rotas continuam servindo com o core fora
+  e o experimento de chaos do Corner 4, e ele **nao foi executado**.
+
+  **O que este item deliberadamente nao faz:** mitigar. O proprio bloco ja registrava que
+  quanto tempo o plano de controle pode ficar fora sem consequencia para o negocio e decisao
+  de produto que ninguem tomou, e dimensionar HA antes dela seria solucao sem requisito.
+
 dod:
   - existe uma medição do raio de explosão real: para cada uma das 4 funções (login, deploy, build, rollback), o que degrada e o que para completamente quando o cluster fica indisponível
   - a dependência por-requisição dos produtos Model-B está confirmada ou refutada **com evidência**, e a fronteira de repositório dessa evidência está dita
