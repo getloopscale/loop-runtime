@@ -68,14 +68,13 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-156 items — **Open** 61 · **In flight** 0 · **Closed** 95
+156 items — **Open** 60 · **In flight** 0 · **Closed** 96
 
-### Open (61)
+### Open (60)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) 🔒 | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `triaged` | — |
-| [`B-014`](#b-014--testtransitclient_ratelimitburst-reprova-por-tempo-não-por-comportamento----) | `TestTransitClient_RateLimitBurst` reprova por tempo, não por comportamento | `triaged` | média |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
 | [`B-024`](#b-024--os-seeds-herdam-o-contexto-do-kubectl-e-culpam-o-recurso-errado----) | Os seeds herdam o contexto do kubectl e culpam o recurso errado | `triaged` | média |
 | [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `triaged` | média |
@@ -140,7 +139,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (95)
+### Closed (96)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -156,6 +155,7 @@ _None._
 | [`B-011`](#b-011--o-reconciliador-do-loopzero-cloud-reiniciava-o-deployment-a-cada-5-minutos-sempre---x) | O reconciliador do loopzero-cloud reiniciava o deployment a cada 5 minutos, sempre | `shipped` | — |
 | [`B-012`](#b-012--a-imagem-do-mcp-do-loopzero-promptly-nunca-constrói-os-pacotes-que-ela-executa---x) | A imagem do MCP do loopzero-promptly nunca constrói os pacotes que ela executa | `shipped` | baixa |
 | [`B-013`](#b-013--o-nó-agente-da-cell-2-está-notready-desde-2026-07-23-por-token-não-autorizado---x) | O nó agente da cell-2 está NotReady desde 2026-07-23 por token não autorizado | `shipped` | baixa |
+| [`B-014`](#b-014--testtransitclient_ratelimitburst-reprova-por-tempo-não-por-comportamento---x) | `TestTransitClient_RateLimitBurst` reprova por tempo, não por comportamento | `shipped` | média |
 | [`B-015`](#b-015--dois-charts-apontam-para-versões-que-não-existem-mais-no-upstream---x) | Dois charts apontam para versões que não existem mais no upstream | `shipped` | baixa |
 | [`B-016`](#b-016--o-token-que-puxa-as-imagens-de-plataforma-do-ghcr-está-inválido---x) | O token que puxa as imagens de plataforma do GHCR está inválido | `shipped` | alta |
 | [`B-017`](#b-017--o-dockerfilelocal-do-loopzero-cloud-tem-dois-defeitos-que-o-impedem-de-construir---x) | O `Dockerfile.local` do loopzero-cloud tem dois defeitos que o impedem de construir | `shipped` | alta |
@@ -747,7 +747,7 @@ dod:
 > Registrado 2026-08-10 durante o diagnóstico do app-dev (slug: `cell2-agent-node-unauthorized`).
 
 
-## B-014 — `TestTransitClient_RateLimitBurst` reprova por tempo, não por comportamento   [ ]
+## B-014 — `TestTransitClient_RateLimitBurst` reprova por tempo, não por comportamento   [x]
 
 domain: engine-go
 repo: loopzero
@@ -755,8 +755,37 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-10 durante a suíte completa do módulo `pkg`. `pkg/vault/transit_client_test.go:622-625` reprovou com `allowed: got 11 want 10 (burst capacity)` e `rate limited: got 4 want 5 (N - burst)` — o balde deixou passar uma requisição a mais do que a capacidade de rajada. Reexecutado isoladamente **5 vezes seguidas: 5 PASS**. O arquivo do teste não contém a palavra `cell` nenhuma vez (`grep -c cell` = 0), então não tem relação com a renomeação que estava em curso; o gatilho é a suíte inteira rodando em paralelo, que muda o tempo de parede entre a criação do balde e a rajada.
 why_now: apareceu ao rodar a suíte completa dos quatro módulos de uma vez, o que raramente é feito — a execução por pacote esconde a corrida. Um teste que reprova conforme a carga da máquina reprova em CI compartilhada, e o custo é a suíte inteira perder credibilidade: quem vê vermelho intermitente passa a reexecutar em vez de investigar, e o próximo defeito real vira ruído.
-status: triaged
+status: shipped
 severity: média — não há defeito de produto, mas `.claude/rules/testing.md` § 3 é explícito: *"Tests MUST be deterministic. Flaky tests are bugs — fix or delete."*
+resolution: |
+  Fechado 2026-08-18, com as tres balas cumpridas.
+
+  **O mecanismo:** o teste fazia 15 chamadas HTTP reais e contava as permitidas. A
+  `RateLimitPerSec=10` o balde reabastece a 10/s, entao bastava as 15 chamadas levarem mais
+  de 100ms para um token extra entrar no meio da contagem — `got 11 want 10`. Reprovava por
+  tempo, nao por comportamento.
+
+  **Bala 1 — relogio injetado, e sem abstracao nova.** A escada de parcimonia parou na
+  rung 2: `rate.Limiter` ja expoe `AllowN(t, n)`, que recebe o instante. O seam e um campo
+  de funcao (`now func() time.Time`), nulo em producao, e `acquireRateToken` passou a
+  chamar `AllowN(c.timeNow(), 1)`. Tres testes novos afirmam o contrato num instante
+  congelado: rajada exata, reabastecimento dirigido pelo relogio injetado, e isolamento por
+  tenant. Rodam em 0,00s — nao ha espera.
+
+  **Bala 2 — medido:** `-count=50` verde nos testes de limite, e a suite completa do modulo
+  `pkg` em paralelo (`-parallel 8 -count=2`) sem falha. `golangci-lint` limpo.
+
+  **Bala 3 — o que o teste antigo protegia, dito explicitamente.** Ele nao foi removido: o
+  que ele cobre e que os novos NAO cobrem e a **fiacao** — que o caminho publico `Encrypt`
+  de fato consulta o limitador. A assercao dele passou a ser insensivel a um token a mais
+  ou a menos de proposito: responde *"o limitador esta ligado?"*, nao *"quantos passaram?"*.
+  O contrato de capacidade mudou de casa, para onde e afirmavel.
+
+  **O limite, dito em voz alta:** **nao reproduzi a falha**. Ela foi registrada em
+  2026-08-10 rodando os quatro modulos de uma vez; sob a carga que consegui montar aqui
+  (`-count=12 -parallel 8` no pacote) o teste antigo passou. O conserto se apoia no
+  mecanismo, que e demonstravel por construcao, e nao numa reproducao que eu tivesse visto.
+
 dod:
   - o teste afirma a capacidade de rajada sem depender do relógio de parede — relógio injetado, ou asserção sobre a decisão do limitador em vez da contagem observada
   - roda 50 vezes seguidas com `-count=50` em verde, e também com a suíte completa do módulo em paralelo

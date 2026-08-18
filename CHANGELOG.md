@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Um teste do limite de requisições reprovava conforme a máquina estivesse ocupada, não conforme o comportamento.** Ele contava quantas chamadas passavam num intervalo curto, e como a permissão se renova com o tempo, uma máquina mais lenta deixava passar uma a mais e o teste acusava erro onde não havia. O contrato agora é verificado com o tempo controlado pelo próprio teste — a mesma lógica de produção, sem depender do relógio —, e a verificação antiga passou a afirmar só o que pode garantir: que o limite realmente está ligado no caminho público. (B-014)
+
 ## [0.76.6] - 2026-08-18
 
 ### Fixed
