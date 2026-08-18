@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-155 items — **Open** 63 · **In flight** 0 · **Closed** 92
+155 items — **Open** 62 · **In flight** 0 · **Closed** 93
 
-### Open (63)
+### Open (62)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -129,7 +129,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-138`](#b-138--o-invariante-do-sumário-de-prontidão-é-afirmado-num-pacote-e-existe-em-seis----) | O invariante do sumário de prontidão é afirmado num pacote e existe em seis | `triaged` | média |
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `triaged` | média |
 | [`B-141`](#b-141--há-um-segundo-pacote-go-chamado-helpers-e-o-b-061-afirmava-que-era-um-só----) | Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só | `triaged` | baixa |
-| [`B-142`](#b-142--um-token-do-digitalocean-vivo-atravessou-cinco-meses-e-vários-pushes-sem-ser-barrado----) 🔒 | Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado | `triaged` | P0 |
 | [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `triaged` | média |
 | [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média |
 | [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados----) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `triaged` | baixa |
@@ -142,7 +141,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (92)
+### Closed (93)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -232,6 +231,7 @@ _None._
 | [`B-132`](#b-132--o-publish-do-loopzero-rag-nunca-inicia-ele-chama-um-workflow-reutilizável-do-loopzero-que-não-resolve---x) | O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve | `killed` | alta |
 | [`B-133`](#b-133--a-issue-de-falha-de-ci-dedup-por-título-e-221-falhas-viraram-um-fio-que-nunca-fecha---x) | A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha | `killed` | média |
 | [`B-140`](#b-140--um-push-real-nunca-disparou-um-build-nesta-instância-e-a-cadeia-que-permitiria-medi-lo-tem-quatro-elos-faltando---x) | Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando | `shipped` | alta |
+| [`B-142`](#b-142--um-token-do-digitalocean-vivo-atravessou-cinco-meses-e-vários-pushes-sem-ser-barrado---x) 🔒 | Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado | `shipped` | P0 |
 | [`B-143`](#b-143--o-gate-de-segredos-deu-vereditos-diferentes-para-a-mesma-entrada-e-deixou-passar-cinco-meses---x) | O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses | `shipped` | alta |
 | [`B-144`](#b-144--o-contrato-manda-o-backlog-viver-no-umbrella-e-nenhum-projeto-faz-isso---x) | O contrato manda o backlog viver no umbrella, e nenhum projeto faz isso | `shipped` | — |
 | [`B-145`](#b-145--dez-itens-moram-no-backlog-do-projeto-errado---x) | Dez itens moram no backlog do projeto errado | `shipped` | — |
@@ -6745,7 +6745,7 @@ dod:
 
 > Registrado 2026-08-17 ao fechar o `B-061`. **A afirmação "é o único" era falsificável e foi falsificada** — exatamente o que uma varredura de população faz (`rules/testing.md § 4.2`). Não foi renomeado junto porque o defeito do `B-061` (nome que não recusa nada, num pacote com alcance de quatro binários) não se aplica a este: ele é coeso e vive num módulo de teste.
 
-## B-142 — Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado   [ ]
+## B-142 — Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado   [x]
 
 domain: engine-go
 repo: loopzero
@@ -6754,8 +6754,38 @@ source: discover-review
 severity: **P0** — credencial de conta inteira, válida agora, exposta desde 2026-03-22. Atenuantes que não resolvem: repositório privado, e o valor ausente do `HEAD`.
 evidence: reportado pelo `trufflehog` do delivery gate em 2026-08-17 como `✅ Found verified result` — ele consultou a API do DigitalOcean e a credencial respondeu **ativa**. `DigitalOceanV2`, commit `64fef3336` (*"fix: use DO API token for Kaniko registry auth"*, 2026-03-22), `infra/pulumi/src/components/bootstrap.ts:1040`. Presente em **2** commits do histórico, ausente do `HEAD`. **O valor não está registrado aqui nem no issue, por política.**
 why_now: o token está vivo. Remover o arquivo não resolve — histórico não se desfaz sem reescrita, e o conserto é **revogar**. À época o repositório não tinha gate de segredos no caminho de push: o `trufflehog` foi ligado em `T4.7` dois meses depois.
-status: triaged
+status: shipped
 blocked_by: revogação no painel do DigitalOcean — é ação na conta do dono, e nada no repositório a substitui.
+resolution: |
+  Fechado 2026-08-18 com as tres balas medidas.
+
+  **Bala 1 — a credencial exposta nao responde mais como viva.** Medido com o proprio gate,
+  que na passada de verificacao roda SEM `--no-verification` (`check.go:238-241`), isto e,
+  consulta a API do provedor:
+
+      179 candidatos varridos, todos adjudicados; 0 verificado(s) como vivo(s)
+      candidato DigitalOceanToken presente na passada -> Verified = False
+
+  Em 2026-08-17 a MESMA ferramenta reportou este token como `✅ Found verified result`.
+
+  E antes de aceitar o zero, verifiquei que ele nao e o verde-sem-verificacao que este
+  ciclo recusa: `api.digitalocean.com` responde **HTTP 401** desta maquina — alcancada, sem
+  credencial —, entao o caminho de verificacao esta aberto.
+
+  **O limite, dito em voz alta:** isto mede que a credencial esta **morta**, nao que houve
+  o ato de **revogacao**. Expiracao produz o mesmo resultado, e esta sessao ja mediu cinco
+  PATs do GitHub expirando entre 18/07 e 10/08 nesta conta. A distincao nao muda a postura
+  de seguranca — a exposicao esta fechada —, mas muda o que se pode afirmar.
+
+  **Bala 2 — auditoria**, ja registrada acima: 16.501 acoes, `create` 1.069 contra
+  `destroy` 1.071, atividade em queda, sem assinatura de abuso, com a limitacao escrita de
+  que o provedor nao atribui acao a token.
+
+  **Bala 3 — nada no fonte.** Os cinco arquivos que casam `dop_v1_` na arvore carregam
+  apenas o **prefixo de 7 caracteres** como espaco reservado em documentacao (medido por
+  comprimento e hash, nunca por valor). O caminho operacional entra por Secret:
+  `infra/scripts/openbao/seed-loopzero-secrets.sh` grava `digitalocean/token` no OpenBao.
+
 dod:
   - o token está revogado, e o `trufflehog --only-verified` deixa de reportá-lo
   - a atividade da API no período foi auditada, ou está escrito por que não foi
