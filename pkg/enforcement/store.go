@@ -6,6 +6,7 @@ package enforcement
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
@@ -21,12 +22,16 @@ import (
 //
 // Implementations MUST:
 //
-//   - Return ("starter", nil) when the subscription row is missing AND
-//     the limiter's OnFallbackStarter callback (set on PlanLimiter) is
-//     responsible for emitting the metric. Returning a non-nil error here
-//     causes the limiter to log and fall back to "starter" as well, but
-//     the OnFallbackStarter callback only fires when GetTenantPlan
-//     returns an error or empty plan.
+//   - Return ("", nil) when the subscription row is missing. CORRIGIDO
+//     2026-08-18 (B-140): este contrato pedia ("starter", nil), o doc do
+//     metodo dizia ("starter", error), e a implementacao fazia
+//     ("", ErrNoRows) — tres afirmacoes divergentes sobre o mesmo caso, e
+//     nenhuma delas era o que rodava. O erro chegava a `ResolvePlanTier`
+//     como fatal e virava 503 na criacao do primeiro projeto de todo
+//     tenant novo.
+//     "" e nao "starter" porque `OnFallbackStarter` (metrica de "caiu para
+//     starter") so dispara quando GetTenantPlan devolve erro OU plano
+//     vazio; devolver "starter" silenciaria a contagem.
 //
 //   - Return (-1, _, nil) for hardLimit when the metric has no
 //     enforced cap for the plan (NULL hard_limit row).
@@ -36,8 +41,8 @@ import (
 //     request) per ADR-0033 enumeration.
 type LimitsStore interface {
 	// GetTenantPlan returns the active plan name (e.g., "starter",
-	// "pro") for the given tenant, or ("starter", error) if no
-	// subscription row exists.
+	// "pro") for the given tenant, or ("", nil) when no subscription row
+	// exists — ver a nota do contrato acima (B-140).
 	GetTenantPlan(ctx context.Context, tenantID string) (string, error)
 
 	// GetLimits returns the (hard, soft) limits for the given (plan,
@@ -70,6 +75,21 @@ func (s *sqlLimitsStore) GetTenantPlan(ctx context.Context, tenantID string) (st
 		"SELECT plan FROM subscriptions WHERE tenant_id = $1 AND status IN ('active', 'trialing') LIMIT 1",
 		tenantID,
 	).Scan(&plan)
+	// Linha ausente NAO e erro: e o estado normal de um tenant que acabou de entrar.
+	//
+	// Medido em 2026-08-18 (B-140): propagar `ErrNoRows` fazia `ResolvePlanTier` tratar a
+	// condicao como fatal, e `POST /api/v1/projects` devolvia 503 PLATFORM_DEGRADED — a
+	// PRIMEIRA acao da jornada central do produto, para todo tenant novo.
+	//
+	// Devolve "" e nao "starter", apesar de o contrato da interface acima pedir "starter",
+	// e a razao foi medida: `limiter.go:259` dispara `OnFallbackStarter` quando
+	// `err != nil || plan == ""`. Devolver "starter" silenciaria essa metrica — ninguem
+	// contaria quantos tenants caem no fallback. Com "", os DOIS consumidores ficam certos:
+	// `ResolvePlanTier` cai para Starter sem erro (o caminho que ele ja documentava como o
+	// unico legitimo, e que era inalcancavel), e a metrica continua disparando.
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
 	if err != nil {
 		return "", err
 	}
