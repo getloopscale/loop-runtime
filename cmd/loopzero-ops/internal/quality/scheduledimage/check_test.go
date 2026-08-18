@@ -196,3 +196,28 @@ func TestIsencaoPrecisaDeRazaoEPrazo(t *testing.T) {
 		t.Fatalf("a isenção precisa ser CONTADA para que sua existência apareça; got %d", out.Exempt)
 	}
 }
+
+// O WorkflowTemplate disparado por evento sofre do MESMO defeito, e a primeira versão deste
+// gate era cega a ele: varria só CronWorkflow/CronJob.
+//
+// Medido em 2026-08-18: `loopzero-ci-workflows` usa a mesma imagem impossível em DUAS superfícies
+// — os quatro crons e o `workflowtemplate-quality-gate.yaml`, disparado por PR via o sensor do
+// Gitea. Um gate que cobrisse só metade reportaria verde com o defeito idêntico um arquivo ao
+// lado — a superestimação de cobertura que este ecossistema já mediu em quatro itens.
+//
+// Os dois compartilham a propriedade que importa: a execução é AUTÔNOMA, então a falha aparece
+// longe de quem a causou.
+func TestWorkflowTemplateTambemEJulgado(t *testing.T) {
+	wt := `kind: WorkflowTemplate
+spec:
+  templates:
+    - container:
+        image: "{{ .Values.img.repository }}:{{ .Values.img.tag }}"
+`
+	root := arvore(t, "c1", wt,
+		"img:\n  repository: registry.digitalocean.com/loopzero-system/loopzero-ops\n  tag: v0.1.0\n",
+		matrizComLoopZeroAPI)
+	if _, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}}); !errors.Is(err, ErrNoPublicationPath) {
+		t.Fatalf("execução disparada por evento reprova igual; err=%v", err)
+	}
+}

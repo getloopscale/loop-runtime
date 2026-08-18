@@ -89,7 +89,7 @@ render-schema-gen-sql	gates	T0.2 sqlc schema render pipeline: ephemeral PG16 + g
 route-auth-coverage	gates	Enforces R2-F8 (HIGH) — every api/internal/server/router.go route MUST be inside middleware.Auth group OR registerProtectedRoutes OR explicit public-allowlist. Locates group ranges via brace-counter, enumerates r.{Get,Post,Put,Patch,Delete,Method}( calls. M-Migrate2 2026-07-07 replaces infra/tests/check-route-auth-coverage_test.sh.
 routes-acyclic	gates	Deny-by-default fence over api/internal/routes subpackages: registered families only, no sibling edges (B-041).
 runtime-slo	-	Validates runtime SLO definitions and thresholds.
-scheduled-image	gates	Recurso agendado nao pode usar imagem nossa sem caminho de publicacao nesta arvore.
+scheduled-image	gates	Execucao autonoma (agendada ou por evento) nao pode usar imagem nossa sem caminho de publicacao nesta arvore.
 script-count	gates	Tracks the total shell-script count against the reduction target.
 scripts-audit	-	Audits shell scripts against the allowlist ledger.
 security-context	gates	Enforces pod securityContext (non-root, limits, probes).
