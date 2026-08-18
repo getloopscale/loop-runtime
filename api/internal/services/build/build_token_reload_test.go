@@ -6,7 +6,7 @@
 // RESTART before deploys work again.
 //
 // The watcher already NOTICES the problem — `ReportWatchError` logs
-// "build cluster auth failed — rotate loopzero-build-sa token" and bumps
+// "build cluster auth failed — rotate loopzero-workflow-submitter token" and bumps
 // ArgoWatcherTokenExpiredTotal on 401/403. What it cannot do is act on it: the
 // bearer token was baked into the rest.Config at process start, so rotating the
 // Secret changes the file on disk and nothing else. Every deploy keeps failing
