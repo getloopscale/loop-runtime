@@ -133,34 +133,27 @@ releases:
     values:
       - ../helm/argo-events-bus/values.yaml
 
-  - name: loopzero-ci-workflows
-    namespace: argo-ci
-    chart: ../helm/loopzero-ci-workflows
-    needs:
-      - argo-events/argo-events-bus
-    values:
-      - ../helm/loopzero-ci-workflows/values.yaml
-      # `ciCronsEnabled` passou a ser OPT-IN em 2026-08-18 (B-019). Era opt-out — `true` para quem
-      # nao opinou —, e `dev-public`, que serve app-dev.loopzero.example, nao opina: os quatro crons
-      # eram agendados la e os quatro so podiam falhar, porque a imagem que executam nao existe em
-      # registro nenhum (o DOCR devolve `404 registry does not exist`, nao ha Dockerfile dela na
-      # arvore, e ela nao esta na matriz de publicacao).
-      #
-      # Nao e desligar automacao: e parar de AGENDAR O IMPOSSIVEL. Um pod vermelho a cada 6h e pior
-      # que automacao ausente — treina quem olha o cluster a ignorar vermelho, e foi esse ruido que
-      # fez o item ser o ultimo investigado. Mesma polaridade de `infra/quality/host-ports.txt`:
-      # lista de negacao envelhece para o lado inseguro; a de permissao, para o lado seguro.
-      #
-      # Quando a imagem tiver caminho, voltar e uma linha por ambiente — agora consciente.
-      enabled: {{ dig "ciCronsEnabled" false .Values }}
-          weeklySoak:
-            enabled: {{ dig "ciCronsEnabled" false .Values }}
-          coverageReport:
-            enabled: {{ dig "ciCronsEnabled" false .Values }}
-          cosignDeadline:
-            enabled: {{ dig "ciCronsEnabled" false .Values }}
-
-  # Wave 0: Loki for build logs (NodePort 30100 for cross-cluster scrape)
+  # loopzero-ci-workflows APOSENTADO em 2026-08-18 (B-019).
+  #
+  # O chart inteiro era nao-funcional, nao parte dele: `eventsource-gitea` -> `sensor-pr-trigger`
+  # -> `workflowTemplateRef` -> o WorkflowTemplate de quality gate, mais os quatro CronWorkflows,
+  # TODOS executando `registry.digitalocean.com/loopzero-system/loopzero-ops`. Medido em 2026-08-18:
+  #
+  #   o registro             `doctl registry get` -> 404 registry does not exist
+  #   o Dockerfile           nao existe nenhum para loopzero-ops na arvore
+  #   a task de build        nao existe — a unica mencao a ela era um comentario a declarando
+  #   a matriz               release-artifacts.yml publica 5 imagens; loopzero-ops fora
+  #   infra/images/ (3)      tambem fora da matriz — nao ha imagem alcancavel para hospedar
+  #
+  # E os workloads nao executavam o binario loopzero-ops: rodavam `task ...` e um script bash, sem
+  # clone do repositorio e sem volume. O que faltava era um RUNNER DE CI com a arvore e o
+  # toolchain dentro — artefato publicado novo, para rodar verificacoes que
+  # `hooks/delivery-gate.sh` ja roda em TODO push via `task quality:all`, sem cluster nenhum.
+  #
+  # Construir esse runner seria erguer infraestrutura para duplicar uma trava que funciona.
+  # `pre-release-governance.md`: legado e erro, deleta-se. A intencao dos quatro agendamentos
+  # (watchdog 6h, soak semanal, cobertura semanal, prazo do cosign diario) esta registrada em
+  # B-147; o git preserva o chart para quem reconstruir com um runner de verdade.
   - name: loki
     namespace: monitoring
     chart: grafana/loki
