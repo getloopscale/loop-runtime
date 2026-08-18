@@ -54,6 +54,9 @@ SAÍDA:
 `
 
 type leakReport struct {
+	// Upstream diz QUAL superficie caiu quando ha falha de gateway (B-022). Vazio em dia
+	// normal — um campo que fala sempre vira ruido e para de ser lido.
+	Upstream string   `json:"upstream,omitempty"`
 	Pass     int      `json:"pass"`
 	Fail     int      `json:"fail"`
 	Skip     int      `json:"skip"`
@@ -93,8 +96,23 @@ func runLeak(args []string) int {
 	ctx := context.Background()
 	rep := leakReport{Failures: []string{}}
 
+	// Guarda os codigos das duas superficies para separar QUEM caiu (B-022). O caminho do
+	// motor atravessa o painel, entao um 502 em `/engine/*` sozinho nao diz se o motor
+	// caiu ou se o painel levou os dois junto — e as duas situacoes pedem acoes diferentes.
+	var engineStatus, dashboardStatus int
+
 	for _, alvo := range alvos {
 		v := leak.Probe(ctx, cli, alvo)
+		switch {
+		case strings.HasPrefix(alvo.Path, "/engine/"):
+			engineStatus = v.Status
+		case strings.HasPrefix(alvo.Path, "/v1/"):
+			// Rota de produto do painel: nao atravessa o motor (medido em B-002). O
+			// primeiro que aparecer basta — o que importa e se o painel responde.
+			if dashboardStatus == 0 {
+				dashboardStatus = v.Status
+			}
+		}
 		switch {
 		case v.Skipped:
 			rep.Skip++
@@ -111,6 +129,18 @@ func runLeak(args []string) int {
 			rep.Failures = append(rep.Failures, v.Host+v.Path+" "+v.Reason)
 			if !*asJSON {
 				fmt.Printf("  FAIL  %-46s %d\n", v.Host+v.Path, v.Status)
+			}
+		}
+	}
+
+	// B-022: com as duas superficies sondadas, o relatorio passa a dizer QUAL caiu em vez
+	// de deixar o operador com dois 502 iguais. So fala quando ha algo a separar — em dia
+	// normal isto e silencio.
+	if engineStatus != 0 && dashboardStatus != 0 {
+		if st := leak.ClassifyUpstream(engineStatus, dashboardStatus); st != leak.UpstreamBothUp {
+			rep.Upstream = st.Explicacao()
+			if !*asJSON {
+				fmt.Printf("  UPSTREAM  %s\n", rep.Upstream)
 			}
 		}
 	}

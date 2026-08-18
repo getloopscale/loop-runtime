@@ -1337,6 +1337,39 @@ evidence: medido em 2026-08-10, por acidente. Ao sincronizar o Caddyfile canôni
 why_now: o arranjo é deliberado e tem valor real — `r.Use(requireJWT)` no grupo `/engine` é o que mantém o `loopzero-api` **nunca exposto diretamente**: quem autentica é o plano de controle, e o motor só recebe o que já passou por ele. O que não está registrado é o custo: o CLI, que fala com o motor e não com o painel, fica sem deploy quando um componente de dashboard cai. Nenhum incidente até hoje veio disso — a medição veio de um acidente meu, não de uma queda real.
 status: triaged
 severity: baixa hoje, alta no dia em que o `loopzero-cloud` cair sozinho em produção. O `B-002` registra que o cluster central é SPOF; este item é mais estreito e mais provável: não é o cluster que cai, é **um** processo, e ele carrega uma jornada (deploy) que não é dele.
+progress_2026_08_18: |
+  **A quarta bala esta fechada; as tres primeiras seguem abertas, e de proposito.**
+
+  A bala 4 — *a sonda distingue "o motor esta fora" de "o painel esta fora"* — nao dependia
+  da decisao de fronteira de autenticacao, entao foi feita: `leak.ClassifyUpstream` separa
+  os dois casos e a sonda `loopzero-ops leak live` passou a reporta-lo.
+
+  **Como a separacao e possivel:** as rotas de produto do painel nao atravessam o motor —
+  medido no `B-002` no mesmo dia. `loopzero-cloud` proxia `/engine/*` para o `loopzero-api`,
+  enquanto `/v1/auth`, `/v1/billing`, `/v1/memory` e as demais usam handlers e upstreams
+  proprios. Uma rota de produto respondendo enquanto `/engine/*` nao responde e evidencia de
+  que o painel esta de pe.
+
+  | leitura | veredito | para onde o operador olha |
+  |---|---|---|
+  | ambos respondem | `UpstreamBothUp` | nada a dizer — o relatorio fica em silencio |
+  | `/engine/*` 5xx, produto responde | `UpstreamEngineDown` | o `loopzero-api` no cluster central |
+  | ambos 5xx | `UpstreamDashboardDown` | o `loopzero-cloud` e o proxy da borda |
+  | `/engine/*` responde, produto 5xx | `UpstreamInconclusive` | contradiz a topologia — sondar de novo antes de agir |
+
+  O ultimo caso e o que **nao** se resolve por adivinhacao: ele contradiz a topologia
+  medida, e inventar um veredito ali seria afirmar o que a sonda nao sabe.
+
+  **O limite:** isto classifica dois codigos de status, nao a causa. Um 502 pode ser
+  upstream fora, lento ou mal configurado, e a sonda nao distingue os tres. O que ela passa
+  a distinguir e QUAL superficie falhou — que era o que faltava.
+
+  **Por que as balas 1 a 3 nao foram tocadas:** elas exigem decidir se o caminho do motor
+  mantem a dependencia do painel ou ganha rota propria autenticada. Isso move a fronteira de
+  autenticacao, e `rules/pre-release-governance.md` classifica como T2+ — registro MEET
+  **antes** do codigo. Um loop autonomo escrevendo essa mudanca seria exatamente o bypass
+  que a governanca existe para impedir.
+
 dod:
   - está decidido se o caminho do motor mantém a dependência do painel ou ganha uma rota própria autenticada — e a decisão está num ADR, porque muda a fronteira de autenticação
   - se mantiver: existe medição de quanto tempo o `loopzero-cloud` ficou indisponível no último trimestre, para a decisão ser sobre risco medido e não sobre desenho no quadro
