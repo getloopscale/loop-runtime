@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-145 items — **Open** 69 · **In flight** 0 · **Closed** 76
+145 items — **Open** 62 · **In flight** 0 · **Closed** 83
 
-### Open (69)
+### Open (62)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -84,10 +84,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
 | [`B-024`](#b-024--os-seeds-herdam-o-contexto-do-kubectl-e-culpam-o-recurso-errado----) | Os seeds herdam o contexto do kubectl e culpam o recurso errado | `triaged` | média |
 | [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `triaged` | média |
-| [`B-027`](#b-027--o-diagnóstico-do-cli-manda-verificar-um-endereço-que-não-existe----) | O diagnóstico do CLI manda verificar um endereço que não existe | `triaged` | baixa ↑ |
 | [`B-029`](#b-029--dois-caminhos-para-o-mesmo-endpoint-do-stripe----) | Dois caminhos para o mesmo endpoint do Stripe | `triaged` | média |
 | [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
-| [`B-034`](#b-034--a-cobrança-por-uso-não-tem-para-onde-reportar----) | A cobrança por uso não tem para onde reportar | `triaged` | — |
 | [`B-035`](#b-035--o-segredo-que-verifica-pagamentos-não-existia-no-ambiente----) | O segredo que verifica pagamentos não existia no ambiente | `triaged` | — |
 | [`B-039`](#b-039--o-painel-não-tem-checkout-canônico-no-droplet----) | O painel não tem checkout canônico no droplet | `triaged` | — |
 | [`B-054`](#b-054--o-api-roda-dois-circuit-breakers-escritos-independentemente-sobre-o-mesmo-pool-postgres----) | O `api` roda dois circuit breakers escritos independentemente sobre o mesmo pool Postgres | `triaged` | média |
@@ -124,15 +122,11 @@ consequência do escopo per-repo declarado acima.
 | [`B-101`](#b-101--quatro-testes-herméticos-de-seed-queimam-390s-de-relógio-e-é-isso-que-mantém-a-suíte-fora-do-push----) | Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push | `triaged` | média |
 | [`B-102`](#b-102--task---dry-imprime-bloco-multi-linha-sem-avaliar-o-controle-de-fluxo-e-é-nisso-que-uma-asserção-de-segurança-se-apoia----) | `task --dry` imprime bloco multi-linha sem avaliar o controle de fluxo, e é nisso que uma asserção de segurança se apoia | `triaged` | média |
 | [`B-111`](#b-111--o-mesmo-controle-de-firewall-vive-em-três-repositórios-sem-dono-declarado----) | O mesmo controle de firewall vive em três repositórios sem dono declarado | `triaged` | média |
-| [`B-112`](#b-112--o-gate-que-detecta-deploy-do-loopzero-rag-sonda-uma-porta-que-ninguém-publica----) | O gate que detecta deploy do loopzero-rag sonda uma porta que ninguém publica | `triaged` | alta |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
 | [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes----) | `task lint` para no primeiro módulo e esconde os seguintes | `triaged` | média |
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
 | [`B-128`](#b-128--o-detector-de-fabricação-de-símbolo-acusa-4258-falsos-num-workspace-multi-módulo----) | O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo | `triaged` | média |
-| [`B-131`](#b-131--a-trava-de-higiene-varre-a-árvore-inteira-mas-o-gatilho-dela-exclui-parte-dessa-árvore----) | A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore | `triaged` | média |
-| [`B-132`](#b-132--o-publish-do-loopzero-rag-nunca-inicia-ele-chama-um-workflow-reutilizável-do-loopzero-que-não-resolve----) | O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve | `triaged` | alta |
-| [`B-133`](#b-133--a-issue-de-falha-de-ci-dedup-por-título-e-221-falhas-viraram-um-fio-que-nunca-fecha----) | A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha | `triaged` | média |
 | [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `triaged` | média |
 | [`B-135`](#b-135--prontidão-e-vivacidade-apontam-para-a-mesma-sonda-rasa-e-a-correção-óbvia-é-uma-armadilha----) | Prontidão e vivacidade apontam para a mesma sonda rasa, e a correção óbvia é uma armadilha | `triaged` | média |
 | [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `triaged` | média |
@@ -142,13 +136,12 @@ consequência do escopo per-repo declarado acima.
 | [`B-140`](#b-140--um-push-real-nunca-disparou-um-build-nesta-instância-e-a-cadeia-que-permitiria-medi-lo-tem-quatro-elos-faltando----) | Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando | `triaged` | alta |
 | [`B-141`](#b-141--há-um-segundo-pacote-go-chamado-helpers-e-o-b-061-afirmava-que-era-um-só----) | Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só | `triaged` | baixa |
 | [`B-142`](#b-142--um-token-do-digitalocean-vivo-atravessou-cinco-meses-e-vários-pushes-sem-ser-barrado----) 🔒 | Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado | `triaged` | P0 |
-| [`B-145`](#b-145--dez-itens-moram-no-backlog-do-projeto-errado----) | Dez itens moram no backlog do projeto errado | `triaged` | — |
 
 ### In flight (0)
 
 _None._
 
-### Closed (76)
+### Closed (83)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -168,10 +161,12 @@ _None._
 | [`B-021`](#b-021--o-webhook-do-github-está-desligado-falta-o-segredo-hmac---x) | O webhook do GitHub está desligado: falta o segredo HMAC | `shipped` | alta |
 | [`B-023`](#b-023--um-helmfile-sync-sem-as-variáveis-grava-marcador-por-cima-de-credencial---x) | Um `helmfile sync` sem as variáveis grava marcador por cima de credencial | `shipped` | — |
 | [`B-026`](#b-026--as-células-divergem-a-plataforma-só-era-instalada-na-primeira---x) | As células divergem: a plataforma só era instalada na primeira | `shipped` | alta |
+| [`B-027`](#b-027--o-diagnóstico-do-cli-manda-verificar-um-endereço-que-não-existe---x) | O diagnóstico do CLI manda verificar um endereço que não existe | `killed` | baixa ↑ |
 | [`B-028`](#b-028--17-portas-alcançáveis-da-internet-fora-de-qualquer-lista---x) 🔒 | 17 portas alcançáveis da internet fora de qualquer lista | `shipped` | P0 |
 | [`B-030`](#b-030--uma-dependência-central-não-pertence-a-domínio-nenhum---x) | Uma dependência central não pertence a domínio nenhum | `shipped` | média |
 | [`B-031`](#b-031--a-mesma-capacidade-exige-owner-num-lado-e-nada-no-outro---x) | A mesma capacidade exige `owner` num lado e nada no outro | `shipped` | alta |
 | [`B-032`](#b-032--o-portal-do-cli-devolve-uma-url-construída-com-o-id-do-cliente---x) | O portal do CLI devolve uma URL construída com o id do cliente | `shipped` | alta |
+| [`B-034`](#b-034--a-cobrança-por-uso-não-tem-para-onde-reportar---x) | A cobrança por uso não tem para onde reportar | `killed` | — |
 | [`B-036`](#b-036--os-seeds-de-cobrança-pulam-sem-credencial-e-a-corrente-reporta-verde---x) | Os seeds de cobrança pulam sem credencial e a corrente reporta verde | `shipped` | — |
 | [`B-037`](#b-037--o-painel-monta-os-dois-segredos-de-cobrança-como-opcionais---x) | O painel monta os dois segredos de cobrança como opcionais | `shipped` | — |
 | [`B-038`](#b-038--nenhuma-camada-de-cobrança-pode-degradar-em-silêncio---x) | Nenhuma camada de cobrança pode degradar em silêncio | `shipped` | — |
@@ -213,6 +208,7 @@ _None._
 | [`B-108`](#b-108--cinco-seeds-gravam-secret-num-namespace-que-podem-não-encontrar---x) | Cinco seeds gravam Secret num namespace que podem não encontrar | `shipped` | média |
 | [`B-109`](#b-109--guarda-nova-é-medida-contra-mutante-sintético-e-nunca-contra-a-população-que-já-existe---x) | Guarda nova é medida contra mutante sintético e nunca contra a população que já existe | `shipped` | média |
 | [`B-110`](#b-110--o-gate-de-divergência-entre-charts-compara-nome-de-arquivo-e-nome-de-arquivo-não-é-recurso---x) | O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso | `shipped` | média |
+| [`B-112`](#b-112--o-gate-que-detecta-deploy-do-loopzero-rag-sonda-uma-porta-que-ninguém-publica---x) | O gate que detecta deploy do loopzero-rag sonda uma porta que ninguém publica | `killed` | alta |
 | [`B-114`](#b-114--test-target-coverage-tem-granularidade-de-módulo-e-foi-ela-que-deixou-39-testes-invisíveis---x) | `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis | `shipped` | média |
 | [`B-115`](#b-115--34-superfícies-do-roteador-ainda-somem-sem-dizer-e-a-catraca-só-impede-que-virem-35---x) | 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35 | `shipped` | média |
 | [`B-116`](#b-116--a-api-sobe-sem-banco-por-desenho-declarado-e-isso-apaga-a-maior-parte-do-produto-de-uma-vez---x) 🔒 | A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez | `shipped` | alta |
@@ -226,8 +222,12 @@ _None._
 | [`B-127`](#b-127--o-code-quality-devolve-nota-máxima-quando-não-auditou-nada---x) | O `/code-quality` devolve nota máxima quando não auditou nada | `shipped` | alta |
 | [`B-129`](#b-129--dois-validadores-do-ecossistema-não-são-rodados-por-gate-nenhum---x) | Dois validadores do ecossistema não são rodados por gate nenhum | `shipped` | média |
 | [`B-130`](#b-130--o-caminho-da-workstation-vazou-do-kit-para-nove-repositórios-e-só-um-tem-trava-que-pega---x) | O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega | `shipped` | média |
+| [`B-131`](#b-131--a-trava-de-higiene-varre-a-árvore-inteira-mas-o-gatilho-dela-exclui-parte-dessa-árvore---x) | A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore | `killed` | média |
+| [`B-132`](#b-132--o-publish-do-loopzero-rag-nunca-inicia-ele-chama-um-workflow-reutilizável-do-loopzero-que-não-resolve---x) | O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve | `killed` | alta |
+| [`B-133`](#b-133--a-issue-de-falha-de-ci-dedup-por-título-e-221-falhas-viraram-um-fio-que-nunca-fecha---x) | A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha | `killed` | média |
 | [`B-143`](#b-143--o-gate-de-segredos-deu-vereditos-diferentes-para-a-mesma-entrada-e-deixou-passar-cinco-meses---x) | O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses | `shipped` | alta |
 | [`B-144`](#b-144--o-contrato-manda-o-backlog-viver-no-umbrella-e-nenhum-projeto-faz-isso---x) | O contrato manda o backlog viver no umbrella, e nenhum projeto faz isso | `shipped` | — |
+| [`B-145`](#b-145--dez-itens-moram-no-backlog-do-projeto-errado---x) | Dez itens moram no backlog do projeto errado | `shipped` | — |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -1131,7 +1131,7 @@ dod:
 
 > Registrado e fechado em 2026-08-10, a partir de uma pergunta do sponsor sobre o desenho.
 
-## B-027 — O diagnóstico do CLI manda verificar um endereço que não existe   [ ]
+## B-027 — O diagnóstico do CLI manda verificar um endereço que não existe   [x]
 
 domain: platform-cli
 repo: loopzero-cli
@@ -1139,7 +1139,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-10 ao verificar por onde o CLI fala com o motor. `src/commands/doctor.ts:124` — quando a checagem de rede falha, a ação sugerida é *"verify https://api.loopzero.example is accessible"*. Esse endereço **não resolve em DNS** (verificado com `getent hosts`, junto com `api-dev.loopzero.example`, que também não). O próprio repositório já sabe: `src/config/constants.ts:34` marca `https://api-dev.loopzero.example` como *"stale value … does NOT resolve in DNS — issue #130 lock 2026-06-21"*. A correção de junho passou pelo valor padrão e não pela mensagem de diagnóstico.
 why_now: a mensagem só aparece para quem **já está com problema de rede** — e manda a pessoa investigar um endereço inexistente, que vai falhar de novo e confirmar o diagnóstico errado. É o pior lugar possível para uma informação obsoleta: o caminho de depuração de quem já está travado. O endereço canônico hoje é `https://app-dev.loopzero.example/engine`, documentado três linhas acima no mesmo repositório.
-status: triaged
+status: killed
 severity: baixa em impacto de sistema, alta em custo humano — ninguém perde dado, mas quem seguir a sugestão perde tempo e conclui a coisa errada sobre a própria rede.
 dod:
   - a ação sugerida cita o endereço que o CLI realmente usa, e não um literal fixo — idealmente derivado de `getDefaultApiUrl()`, que é quem sabe para onde a requisição foi
@@ -1147,6 +1147,18 @@ dod:
   - existe verificação que reprova endereço fixo em mensagem de diagnóstico — a lição é que a correção de junho consertou o valor e esqueceu a mensagem
 
 > Registrado 2026-08-10 ao medir se o CLI passa pelo painel (`B-022`).
+kill_reason: |
+  Migrado para `loopzero-cli` como `B-001` em 2026-08-18 (`B-145`), PR #11 — mergeado ANTES desta
+  linha ser escrita, para que o item nunca deixasse de existir em lugar nenhum.
+
+  Nao foi entregue nem refutado: mudou de casa. Vivia aqui porque o contrato mandava um
+  registro unico no umbrella (`B-144` corrigiu a prosa), e era orfao por construcao — o loop
+  deste projeto nunca o selecionaria, porque o especialista daqui nao abre aquele codigo, e
+  quem trabalha la nao sabia que ele existia.
+
+  O bloco fica: id, titulo e evidencia intactos, para que uma referencia antiga a `B-027`
+  ainda resolva. Renumerar ou apagar destruiria a unica prova de que ele passou por aqui.
+
 
 ## B-028 — 17 portas alcançáveis da internet fora de qualquer lista   [x]
 
@@ -1531,7 +1543,22 @@ dod:
   - a degradação silenciosa deixa de ser silenciosa: quando o agregador não sobe, isso
     aparece como estado do sistema, não como uma linha de log no boot
 
-## B-034 — A cobrança por uso não tem para onde reportar   [ ]
+> **Migração RETIRADA em 2026-08-18, horas depois de escrita (`B-145`).** Ele havia sido
+> mandado para o `loopzero-cloud`, e quem pegou o erro foi a catraca do `billing-layers` — o gate
+> construído nesta mesma sessão (`B-038`) reprovou o push: *"o item B-033 saiu dos estados
+> abertos e a camada ficou descoberta"*. Duas camadas do registro de cobrança o declaravam
+> como dono.
+>
+> O erro foi meu e é de leitura: segui o campo `repo: loopzero-cloud` do bloco em vez da
+> **evidência dele**, que aponta `api/internal/server/router.go` — código **deste**
+> repositório. O item atravessa os dois: o portão de custo nil-safe é daqui, o agregador que
+> alimenta `cost_counters` é de lá.
+>
+> Fica aqui, com o escopo do **portão**. A metade do agregador está registrada em
+> `loopzero-cloud` como `B-287`, que passou a citar esta divisão. Nenhum id foi reusado.
+
+
+## B-034 — A cobrança por uso não tem para onde reportar   [x]
 
 domain: control-plane
 repo: loopzero-cloud
@@ -1546,11 +1573,23 @@ evidence: |
 why_now: o item de assinatura é o endereço para onde o consumo é enviado no Stripe. Sem ele,
   a metade "quanto cobrar" da cobrança não fecha, mesmo que a medição comece a produzir
   linhas amanhã. O cliente existe no Stripe; a assinatura, não.
-status: triaged
+status: killed
 dod:
   - uma conta paga no app-dev com `stripe_subscription_item_id` preenchido
   - o reporter enviando ao menos um registro, provado pelo lado do Stripe
   - o caso "assinatura sem item" falha alto em vez de percorrer zero linhas em silêncio
+kill_reason: |
+  Migrado para `loopzero-cloud` como `B-288` em 2026-08-18 (`B-145`), PR #488 — mergeado ANTES desta
+  linha ser escrita, para que o item nunca deixasse de existir em lugar nenhum.
+
+  Nao foi entregue nem refutado: mudou de casa. Vivia aqui porque o contrato mandava um
+  registro unico no umbrella (`B-144` corrigiu a prosa), e era orfao por construcao — o loop
+  deste projeto nunca o selecionaria, porque o especialista daqui nao abre aquele codigo, e
+  quem trabalha la nao sabia que ele existia.
+
+  O bloco fica: id, titulo e evidencia intactos, para que uma referencia antiga a `B-034`
+  ainda resolva. Renumerar ou apagar destruiria a unica prova de que ele passou por aqui.
+
 
 ## B-035 — O segredo que verifica pagamentos não existia no ambiente   [ ]
 
@@ -5166,7 +5205,7 @@ dod:
 
 > Registrado 2026-08-15, ao re-medir o `B-028` e descobrir que a premissa da terceira bala dele estava errada.
 
-## B-112 — O gate que detecta deploy do loopzero-rag sonda uma porta que ninguém publica   [ ]
+## B-112 — O gate que detecta deploy do loopzero-rag sonda uma porta que ninguém publica   [x]
 
 domain: data-plane-ts
 repo: loopzero-rag
@@ -5174,7 +5213,7 @@ suggested_mode: live-test
 source: discover-live-test
 evidence: medido em 2026-08-15. `8787` está na `ALLOW_EXTERNAL` do `host-firewall.sh` com o comentário *"lido por loopzero-rag/dev-version-drift.yml"*, e **não há regra de DROP para ela** — o firewall faz o certo. Da internet ela responde `ConnectionRefusedError`, e não filtragem: **ninguém escuta no host**. `docker ps` mostra `therag_api` rodando **sem publicar porta** e `therag_worker` com `8787/tcp` apenas interno ao container.
 why_now: o próprio `B-028` registra que este gate é **controle** — *"o gate é CONTROLE — ele é o que detecta deploy"* — e que a porta foi mantida aberta para preservá-lo. A porta continua aberta e o gate ficou cego assim mesmo, porque o que sumiu foi a **publicação** do container, não a regra do firewall. Um gate de detecção de deploy que não alcança o alvo reporta ausência de deploy exatamente como reportaria um deploy parado.
-status: triaged
+status: killed
 severity: alta — é um controle de detecção silenciosamente inoperante, e a classe é pior que a instância: nada reprova quando um alvo de sondagem deixa de existir.
 dod:
   - o gate falha alto quando o alvo não responde, em vez de tratar ausência de resposta como ausência de deploy
@@ -5215,6 +5254,18 @@ o time aprende a ignorar"*. Só que não era sem motivo.
 
 status permanece `triaged`; o DoD anterior foi reescrito acima porque as duas balas originais
 descreviam um sistema que não é este.
+kill_reason: |
+  Migrado para `loopzero-rag` como `B-001` em 2026-08-18 (`B-145`), PR #227 — mergeado ANTES desta
+  linha ser escrita, para que o item nunca deixasse de existir em lugar nenhum.
+
+  Nao foi entregue nem refutado: mudou de casa. Vivia aqui porque o contrato mandava um
+  registro unico no umbrella (`B-144` corrigiu a prosa), e era orfao por construcao — o loop
+  deste projeto nunca o selecionaria, porque o especialista daqui nao abre aquele codigo, e
+  quem trabalha la nao sabia que ele existia.
+
+  O bloco fica: id, titulo e evidencia intactos, para que uma referencia antiga a `B-112`
+  ainda resolva. Renumerar ou apagar destruiria a unica prova de que ele passou por aqui.
+
 
 ## B-113 — A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável   [ ]
 
@@ -6162,7 +6213,7 @@ literal; sem default quebra a borda que o `B-028` verificou funcionando hoje. Is
 **2026-11-17**.
 
 
-## B-131 — A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore   [ ]
+## B-131 — A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore   [x]
 
 domain: data-plane-ts
 repo: loopzero-rag
@@ -6171,15 +6222,27 @@ source: discover-live-test
 severity: média — o defeito chega, só chega tarde: pela próxima mudança de código, num commit que não o introduziu.
 evidence: medido 2026-08-17. `scripts/check-publish-hygiene.sh` varre `git ls-files` — a árvore versionada inteira, por desenho declarado no cabeçalho. Mas ele roda dentro do `ci.yml`, cujo `paths-ignore` lista `.claude/**`, `.github/**`, `**/*.md`, `docs/**` e `knowledge-base/**`. O vazamento do `B-{n-1:03d}` entrou por `.claude/scripts/install.sh` e **não disparou a trava no commit que o introduziu**; ela só reprovou dias depois, no primeiro commit de código (`5a5564f3`). E a correção, também em `.claude/`, **não re-disparou a esteira** — o último veredito registrado em `develop` continua sendo o vermelho.
 why_now: o `paths-ignore` foi medido e é justificado (42% dos commits são só-documentação, e o runner é compartilhado por cinco repositórios). O que não foi decidido é o que fazer com um gate cujo objeto é a árvore inteira: ou ele sai do `ci.yml` para um workflow sem exclusão — como o `actionlint.yml` já faz —, ou o `paths-ignore` deixa de valer para ele.
-status: triaged
+status: killed
 dod:
   - um vazamento introduzido por commit em `.claude/**` reprova no próprio commit
   - a correção de um vazamento produz um veredito verde registrado, não só uma execução local
   - a decisão fica escrita junto do `paths-ignore`, que hoje documenta a economia mas não esta consequência
 
 > Registrado 2026-08-17 ao executar o `B-118`.
+kill_reason: |
+  Migrado para `loopzero-rag` como `B-002` em 2026-08-18 (`B-145`), PR #227 — mergeado ANTES desta
+  linha ser escrita, para que o item nunca deixasse de existir em lugar nenhum.
 
-## B-132 — O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve   [ ]
+  Nao foi entregue nem refutado: mudou de casa. Vivia aqui porque o contrato mandava um
+  registro unico no umbrella (`B-144` corrigiu a prosa), e era orfao por construcao — o loop
+  deste projeto nunca o selecionaria, porque o especialista daqui nao abre aquele codigo, e
+  quem trabalha la nao sabia que ele existia.
+
+  O bloco fica: id, titulo e evidencia intactos, para que uma referencia antiga a `B-131`
+  ainda resolva. Renumerar ou apagar destruiria a unica prova de que ele passou por aqui.
+
+
+## B-132 — O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve   [x]
 
 domain: data-plane-ts
 repo: loopzero-rag
@@ -6188,15 +6251,27 @@ source: discover-live-test
 severity: alta — nenhuma imagem nova é publicada, e é justamente a publicação que o `dev-version-drift` compara contra o host. Um gate de drift verde sobre uma esteira de publicação morta compara duas coisas paradas.
 evidence: medido 2026-08-17. `publish.yml` sai `startup_failure` em **toda** execução desde pelo menos 2026-08-16 (três medidas: 16/08 15:05, 16/08 16:08, 17/08 03:46), com **zero jobs criados** — falha antes de existir job, que é a assinatura de referência não resolvida. Ele chama `getloopscale/loopzero/.github/workflows/build-publish.yml@d1f3c94` (linha 113). O SHA **existe** no `loopzero` (`git cat-file -t` → commit, 2026-07-31) e o arquivo existe nele. A causa mais provável é política de acesso do repositório `loopzero` a workflows reutilizáveis, não o pin — mas isso **não foi medido**, e não vou afirmar o que não medi.
 why_now: seis dias de loopzero-rag fora do ar acabaram de ser resolvidos, e a esteira que publica a correção não inicia. O `B-118` mostrou que um gate pode reportar corretamente por cem execuções sem alcançar ninguém; este é o degrau anterior — a esteira nem chega a reportar.
-status: triaged
+status: killed
 dod:
   - está medido por que o `startup_failure` acontece, e não suposto
   - o `publish` cria job e conclui, ou a chamada cross-repo é substituída por um caminho que este repositório controla
   - existe verificação que reprova `startup_failure` recorrente — hoje ele não abre issue, porque `notify-failure.yml` só reage a `conclusion == 'failure'`
 
 > Registrado 2026-08-17 ao executar o `B-118`.
+kill_reason: |
+  Migrado para `loopzero-rag` como `B-003` em 2026-08-18 (`B-145`), PR #227 — mergeado ANTES desta
+  linha ser escrita, para que o item nunca deixasse de existir em lugar nenhum.
 
-## B-133 — A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha   [ ]
+  Nao foi entregue nem refutado: mudou de casa. Vivia aqui porque o contrato mandava um
+  registro unico no umbrella (`B-144` corrigiu a prosa), e era orfao por construcao — o loop
+  deste projeto nunca o selecionaria, porque o especialista daqui nao abre aquele codigo, e
+  quem trabalha la nao sabia que ele existia.
+
+  O bloco fica: id, titulo e evidencia intactos, para que uma referencia antiga a `B-132`
+  ainda resolva. Renumerar ou apagar destruiria a unica prova de que ele passou por aqui.
+
+
+## B-133 — A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha   [x]
 
 domain: data-plane-ts
 repo: loopzero-rag
@@ -6205,13 +6280,25 @@ source: discover-live-test
 severity: média — o mecanismo está certo e o efeito é o oposto do pretendido: ele existe para evitar que N falhas virem ruído, e produziu um alarme que toca desde 3 de agosto.
 evidence: medido 2026-08-17, respondendo à terceira bala do `B-118` (*por que 100 execuções vermelhas não alcançaram ninguém*). A resposta é que **elas alcançaram**: `notify-failure.yml` existe, está em `main`, tem `issues: write`, e a issue #205 (*ci: dev version drift falhou em main*) está **aberta desde 2026-08-03 com 221 comentários**. Cada falha virou um comentário no mesmo fio. O dedup por título — escrito de propósito, com a razão certa (*"issue duplicada é como um alarme vira ruído que se aprende a ignorar"*) — converteu 221 eventos distintos num fio permanentemente aberto, que não distingue *quebrou agora* de *quebrado há duas semanas*.
 why_now: a lacuna do `B-118` não era ausência de sinal, e tratá-la como se fosse levaria a construir um segundo canal que sofreria do mesmo mal. O que falta é o fio **fechar** quando o workflow volta a passar: um fio que só abre carrega informação sobre o passado, nunca sobre o presente.
-status: triaged
+status: killed
 dod:
   - o fio fecha sozinho quando o workflow correspondente conclui com sucesso — reabrir passa a ser sinal
   - ou existe escalada por falhas consecutivas, para que a centésima não pareça a primeira
   - a issue #205 é fechada ou anotada: ela hoje afirma uma falha que já não existe em `main`
 
 > Registrado 2026-08-17 ao executar o `B-118`.
+kill_reason: |
+  Migrado para `loopzero-rag` como `B-004` em 2026-08-18 (`B-145`), PR #227 — mergeado ANTES desta
+  linha ser escrita, para que o item nunca deixasse de existir em lugar nenhum.
+
+  Nao foi entregue nem refutado: mudou de casa. Vivia aqui porque o contrato mandava um
+  registro unico no umbrella (`B-144` corrigiu a prosa), e era orfao por construcao — o loop
+  deste projeto nunca o selecionaria, porque o especialista daqui nao abre aquele codigo, e
+  quem trabalha la nao sabia que ele existia.
+
+  O bloco fica: id, titulo e evidencia intactos, para que uma referencia antiga a `B-133`
+  ainda resolva. Renumerar ou apagar destruiria a unica prova de que ele passou por aqui.
+
 
 ## B-134 — O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo   [ ]
 
@@ -6449,7 +6536,7 @@ dod:
 > SHIPPABLE_WITH_CAVEATS (o único MINOR é pré-existente, do B-021).
 
 
-## B-145 — Dez itens moram no backlog do projeto errado   [ ]
+## B-145 — Dez itens moram no backlog do projeto errado   [x]
 
 domain: engine-go
 repo: loopzero
@@ -6466,8 +6553,27 @@ why_now: com o contrato corrigido pelo `B-144`, esses dez ficam órfãos por def
   nunca serão selecionados pelo loop deste projeto (o especialista aqui não abre o código
   deles) e não existem no registro de quem poderia trabalhá-los. É exatamente o problema
   de achado órfão que o registro único dizia resolver, criado por ele.
-status: triaged
+status: shipped
 dod:
   - cada um dos dez está registrado no backlog do seu próprio projeto, com o id lá
   - os blocos aqui apontam para onde o item foi, sem serem renumerados nem apagados
   - nenhum dos três repositórios sem backlog é deixado sem um
+
+> **Entregue 2026-08-18.** Seis itens migrados (não dez — três já estavam `shipped`, e
+> reescrever registro datado é proibido). Quatro PRs: `loopzero-rag` #227 (registro **criado**, 4
+> itens), `loopzero-cli` #11 (**criado**, 1), `loopzero-cloud` #488 (2), e este. **Ordem invertida de
+> propósito** — destino primeiro, origem por último —, porque o risco real era um item sair
+> daqui e não chegar lá; cada ponteiro cita o PR que já estava mergeado quando foi escrito.
+>
+> Achado no caminho: `loopzero-cloud/BACKLOG.md` **já declarava** o registro por-repo como decisão
+> do dono em **2026-08-06** — doze dias antes de o patrocinador apontar o problema. O
+> cabeçalho de lá estava obsoleto no sentido inverso e foi corrigido. E um BLOCKER
+> pré-existente (`B-270`, `status` duplicado) reprovava o arquivo inteiro; removido, `INVALID`
+> → `NEEDS_REVISION`. Os 8 majors e 44 minors restantes são de quem mantém aquele repositório.
+>
+> **E foram seis, não sete: o `B-033` teve a migração retirada horas depois.** Quem pegou foi a
+> catraca do `billing-layers`, o gate construído nesta mesma sessão (`B-038`), reprovando o
+> push porque duas camadas de cobrança o declaravam como dono. O erro foi de leitura — segui o
+> campo `repo: loopzero-cloud` do bloco em vez da evidência dele, que aponta código **deste**
+> repositório. O item atravessa os dois, e a metade que fica aqui é o portão de custo.
+
