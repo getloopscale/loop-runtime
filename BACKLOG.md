@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-152 items — **Open** 61 · **In flight** 0 · **Closed** 91
+152 items — **Open** 60 · **In flight** 0 · **Closed** 92
 
-### Open (61)
+### Open (60)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -128,7 +128,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `triaged` | média |
 | [`B-138`](#b-138--o-invariante-do-sumário-de-prontidão-é-afirmado-num-pacote-e-existe-em-seis----) | O invariante do sumário de prontidão é afirmado num pacote e existe em seis | `triaged` | média |
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `triaged` | média |
-| [`B-140`](#b-140--um-push-real-nunca-disparou-um-build-nesta-instância-e-a-cadeia-que-permitiria-medi-lo-tem-quatro-elos-faltando----) | Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando | `triaged` | alta |
 | [`B-141`](#b-141--há-um-segundo-pacote-go-chamado-helpers-e-o-b-061-afirmava-que-era-um-só----) | Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só | `triaged` | baixa |
 | [`B-142`](#b-142--um-token-do-digitalocean-vivo-atravessou-cinco-meses-e-vários-pushes-sem-ser-barrado----) 🔒 | Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado | `triaged` | P0 |
 | [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `triaged` | média |
@@ -140,7 +139,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (91)
+### Closed (92)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -229,6 +228,7 @@ _None._
 | [`B-131`](#b-131--a-trava-de-higiene-varre-a-árvore-inteira-mas-o-gatilho-dela-exclui-parte-dessa-árvore---x) | A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore | `killed` | média |
 | [`B-132`](#b-132--o-publish-do-loopzero-rag-nunca-inicia-ele-chama-um-workflow-reutilizável-do-loopzero-que-não-resolve---x) | O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve | `killed` | alta |
 | [`B-133`](#b-133--a-issue-de-falha-de-ci-dedup-por-título-e-221-falhas-viraram-um-fio-que-nunca-fecha---x) | A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha | `killed` | média |
+| [`B-140`](#b-140--um-push-real-nunca-disparou-um-build-nesta-instância-e-a-cadeia-que-permitiria-medi-lo-tem-quatro-elos-faltando---x) | Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando | `shipped` | alta |
 | [`B-143`](#b-143--o-gate-de-segredos-deu-vereditos-diferentes-para-a-mesma-entrada-e-deixou-passar-cinco-meses---x) | O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses | `shipped` | alta |
 | [`B-144`](#b-144--o-contrato-manda-o-backlog-viver-no-umbrella-e-nenhum-projeto-faz-isso---x) | O contrato manda o backlog viver no umbrella, e nenhum projeto faz isso | `shipped` | — |
 | [`B-145`](#b-145--dez-itens-moram-no-backlog-do-projeto-errado---x) | Dez itens moram no backlog do projeto errado | `shipped` | — |
@@ -6621,7 +6621,7 @@ dod:
 
 > Registrado 2026-08-17 ao fechar o `B-130`. **Não é texto a corrigir: é migração de ambiente**, e fazê-la dentro de um item de higiene teria acoplado risco de indisponibilidade a uma limpeza de comentários.
 
-## B-140 — Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando   [ ]
+## B-140 — Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando   [x]
 
 domain: engine-go
 repo: loopzero
@@ -6630,6 +6630,18 @@ source: discover-live-test
 severity: alta — é a prova ponta a ponta da jornada central do produto (conectar repositório → push → deploy), e ela **nunca foi feita nesta instância**. Não é regressão: é ausência de evidência.
 evidence: medido no droplet em 2026-08-17, herdando a terceira bala do `B-021`. `select count(*) from builds` = **0**, `projects` = **0** — nunca houve build aqui. A cadeia de seeds que criaria o destino foi percorrida elo a elo hoje: `github-app-dev` **PASS** (o conserto do `B-021` sustentou); `admin-loopzero-dev` estava **FAIL** (`/sessions/whoami` HTTP 401) e **foi re-semeada com sucesso** (identidade `15422d7d…` + sessão persistida) — bloqueio removido; `tenant-fixture` **SKIP**, exige `LOOPZERO_TENANT_ID`, e a identidade admin **não tem linha em `tenants`** (existem só `tn-e2etest` e `tn-1362a887c7c523be`, de `paulohenriquevn`); `github-webhook-fixture` **FAIL** — `gh` não está instalado no droplet. E `connect-canonical-fixture.sh` ainda exige o binário do LoopZero CLI e permissão de escrita no repositório de fixture.
 why_now: o `B-021` fechou com o webhook **provado vivo** (401 sem assinatura, 200 com assinatura válida, 403 com inválida, re-verificado em 2026-08-17). O que sobrou não é sobre o webhook: é sobre existir um destino para ele acionar. Medir um push hoje mediria o estado da cadeia de seeds, e reportar `FAIL` culparia o elo errado.
+resolution: |
+  Fechado 2026-08-18 com prova ao vivo. `POST /projects/b140-journey/connect` com o
+  `installation_id` do App já instalado, a URL do webhook repontada para a superfície que o
+  repositório já havia escolhido, e um push real (`0f1ee7f5`) entregue com `status=OK` e
+  convertido em `build-6c2159bf89acf415` — o commit exato, o carimbo exato.
+
+  O item pedia `builds > 0` a partir de um push real. Está medido.
+
+  O que continua vermelho é o estágio seguinte, e tem item próprio: os dois builds que esta
+  instalação produziu falham em manifestos ([[B-152]]). Fechar aqui é honesto porque a
+  pergunta deste item era se o push chega e vira build — e chega.
+
 measurement_2026_08_18: |
   A cadeia foi percorrida ponta a ponta pela primeira vez, e o item estava certo
   no diagnóstico e errado na contagem: os elos não eram quatro.
@@ -6655,7 +6667,7 @@ measurement_2026_08_18: |
   deve apontar — T2, atravessa dois repositórios), [[B-152]] (o único build que a
   instância produziu, e ele falha em manifestos).
 
-status: triaged
+status: shipped
 dod:
   - a identidade admin tem tenant, e `tenant-fixture` deixa de sair `SKIP`
   - `gh` disponível onde os seeds rodam, ou o seed que depende dele tem caminho que não o exija
@@ -7113,6 +7125,12 @@ evidence: |
   A mensagem nomeia a etapa e não nomeia o domínio, o app nem o motivo. É o
   caminho de contorno da cadeia de [[B-150]]: prova que build e submissão
   funcionam, e que o estágio de manifestos não.
+  Segundo ponto, medido 2026-08-18 depois de repontar o webhook em [[B-150]]:
+  `build-6c2159bf89acf415` (sha `0f1ee7f5`), criado por um **push real**, falha com a
+  mensagem idêntica. Os dois builds que esta instalação produziu — um pelo connect, outro
+  pelo webhook — morrem no mesmo estágio com o mesmo texto. A causa não depende do caminho
+  de entrada, e agora é o único elo vermelho da jornada.
+
 why_now: |
   Este é o único build que a instância conseguiu produzir, e ele falha. Enquanto
   [[B-150]] e [[B-151]] tratam de o evento *chegar*, este trata de o que acontece
