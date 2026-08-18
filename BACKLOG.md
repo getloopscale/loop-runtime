@@ -68,14 +68,13 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-156 items — **Open** 62 · **In flight** 0 · **Closed** 94
+156 items — **Open** 61 · **In flight** 0 · **Closed** 95
 
-### Open (62)
+### Open (61)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) 🔒 | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `triaged` | — |
-| [`B-005`](#b-005--unificar-cell-e-cluster-em-11-aposentando-cell-default----) | Unificar cell e cluster em 1:1, aposentando `cell-default` | `triaged` | — |
 | [`B-014`](#b-014--testtransitclient_ratelimitburst-reprova-por-tempo-não-por-comportamento----) | `TestTransitClient_RateLimitBurst` reprova por tempo, não por comportamento | `triaged` | média |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
 | [`B-024`](#b-024--os-seeds-herdam-o-contexto-do-kubectl-e-culpam-o-recurso-errado----) | Os seeds herdam o contexto do kubectl e culpam o recurso errado | `triaged` | média |
@@ -141,13 +140,14 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (94)
+### Closed (95)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-002`](#b-002--o-cluster-mgmt-é-spof-de-tudo-e-renomeá-lo-para-core-não-muda-isso---x) | O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso | `shipped` | — |
 | [`B-003`](#b-003--o-checker-de-ponteiros-acusa-de-fabricação-todo-caminho-iniciado-por-ponto---x) | O checker de ponteiros acusa de fabricação todo caminho iniciado por ponto | `shipped` | — |
 | [`B-004`](#b-004--a-fixture-boa-do-discover-confidence-não-passa-no-layout-em-que-o-skill-é-instalado---x) | A fixture "boa" do discover-confidence não passa no layout em que o skill é instalado | `shipped` | — |
+| [`B-005`](#b-005--unificar-cell-e-cluster-em-11-aposentando-cell-default---x) | Unificar cell e cluster em 1:1, aposentando `cell-default` | `killed` | — |
 | [`B-006`](#b-006--o-oráculo-do-conjunto-de-gates-vive-num-arquivo-com-data-no-nome-e-é-mutado-a-cada-gate---x) | O oráculo do conjunto de gates vive num arquivo com data no nome, e é mutado a cada gate | `shipped` | — |
 | [`B-007`](#b-007--43-mb-de-snapshot-de-helmfile-que-ninguém-gera-nem-consome---x) | 4,3 MB de snapshot de helmfile que ninguém gera nem consome | `shipped` | — |
 | [`B-008`](#b-008--task-testunit-está-vermelho-por-drift-entre-repositórios---x) | `task test:unit` está vermelho por drift entre repositórios | `shipped` | — |
@@ -468,7 +468,7 @@ dod:
 > Mesma causa-raiz do **`B-120`** (23 invocações de script nas skills apontando para o layout errado) — três itens, uma família.
 
 
-## B-005 — Unificar cell e cluster em 1:1, aposentando `cell-default`   [ ]
+## B-005 — Unificar cell e cluster em 1:1, aposentando `cell-default`   [x]
 
 domain: engine-go
 repo: loopzero
@@ -478,9 +478,46 @@ sponsor: CTO — decidido 2026-08-09
 tier: T3 (`.claude/rules/pre-release-governance.md`) — toca schema, placement e identidade de cluster; ADR obrigatório e reunião **antes** de código
 evidence: hoje a relação é **2:1** — `infra/helmfile/scripts/bootstrap-cell-cc.sh:20-22` mostra `cell-default` **e** `cell-1` apontando para o mesmo cluster `loopzero-workload`, com `cell-2` para `loopzero-runtime-2`. Pesquisa de 2026-08-09 sobre o papel do `cell-default`: `api/internal/placement/cells.go:30` o define como constante `DefaultCellID`, e o doc-comment em `cells.go:20-29` é explícito — é *"the canonical single-cluster cell used by dev-public and the standalone tilt-up environment"*, e *"Production multi-cluster paths derive cell identity from CrossClusterTokenReviewer, NOT this constant"*, com um MUST NOT para autorização cross-cell em produção. Ou seja: **não é uma cell de produção, é a cell do caminho de desenvolvimento**. Restrição de schema a respeitar: `api/internal/db/migrations/000006_cells.up.sql:40` impõe `CHECK (cell_id ~ '^cell-[a-z0-9-]+$')`, então qualquer id novo continua tendo de começar com `cell-`. O default da coluna vem de `000011_add_cell_id.up.sql:9` (`DEFAULT 'cell-default'`).
 why_now: nasceu da medição do `B-001`. O mapa original do rename (`loopzero-workload` → `cell-1`) foi refutado porque criaria homônimo entre o nome do cluster e o de uma das duas cells que rodam nele. O CTO decidiu em 2026-08-09 pela saída de fundo: **eliminar a relação 2:1** e fazer cell↔cluster 1:1, o que torna `cell-N` um nome não-ambíguo para o cluster e alinha de vez a infra ao vocabulário que o código já usa. Sem isto, a metade `cell` do `B-001` fica bloqueada.
-status: triaged
+status: killed
 blocks: a metade `cell` do `B-001` (`loopzero-workload`/`loopzero-runtime-2` → `cell-N`). As metades `mgmt`→`core` e `vault`→`secrets` **não** dependem deste item e seguem em planejamento.
 **Medição de 2026-08-10 (droplet app-dev), que fecha o primeiro bullet do DoD:** `select cell_id, count(*) from tenants group by cell_id` retorna **`cell-default | 94`** e mais nada — zero tenants em `cell-1`, zero em `cell-2`. E `select cell_id, status from cells` retorna as três como `active`, ou seja, a migration `000007_activate_cell_2` de fato ativou a cell-2. Consequência para o desenho: **a unificação não migra tenant nenhum entre cells** — os 94 estão todos na cell de compatibilidade, e o trabalho é reapontá-los para uma cell nomeada, não redistribuí-los. Isso muda o tamanho da migração de "mover 94 tenants" para "renomear a cell de 94 tenants", que são coisas diferentes na reunião T3.
+
+kill_reason: |
+  A premissa foi refutada pela medicao de 2026-08-18: **a relacao ja e 1:1 e `cell-default`
+  ja esta aposentado.** Nao ha unificacao a fazer.
+
+  Medido, nas quatro camadas onde o item afirmava a relacao 2:1:
+
+  - **codigo** — `placement/cells.go:30` declara `DefaultCellID = "cell-0"`, um id de cell
+    real, nao um default magico
+  - **config** — `infra/helmfile/scripts/bootstrap-cell-cc.sh` declara *"Cell <-> cluster:
+    1:1"* com `cell-0` -> `k3d-loopzero-cell-0` e `cell-1` -> `k3d-loopzero-cell-1`. O cabecalho
+    citado pelo item **estava mentindo**, e o proprio arquivo hoje registra isso; corrigido
+    em `4d7a6b97a`
+  - **schema vivo** — os unicos defaults de `cell_id` sao `'cell-0'` em `tenants` e
+    `leader_generations`. `preview_environments` e `release_app_attestations` nao tem
+    default algum
+  - **dados** — `tenants` tem `cell-0 | 2`; a tabela `cells` tem `cell-0` e `cell-1`, ambas
+    `active`; zero linhas apontando para cell inexistente; zero fora do padrao do CHECK
+
+  **As migracoes 000004 e 000005 ainda escrevem `DEFAULT 'cell-default'`, e isso NAO e
+  defeito** — sao as migracoes originais, superadas por migracoes posteriores, e migracao
+  aplicada nunca se edita (forward-only). O estado vivo e o que vale, e ele nao tem
+  `cell-default` em lugar nenhum.
+
+  **Por que `killed` e nao `shipped`:** as tres balas do DoD estao objetivamente satisfeitas
+  hoje, mas **este loop nao fez esse trabalho** — ele chegou pronto, pela cadeia do `B-001`
+  e pelo conserto do cabecalho. Marcar `shipped` reivindicaria trabalho que nao aconteceu
+  aqui. A hipotese era *"existe uma relacao 2:1 para unificar"*, e a medicao a refutou.
+
+  **O que isto desbloqueia:** o campo `blocks` deste item apontava a metade `cell` do
+  `B-001`. Ela deixa de estar bloqueada por aqui — o que resta la e a decisao de sponsor
+  registrada no `blocked_by` daquele item, que e outra coisa.
+
+  **O limite:** medi codigo, config, schema vivo e dados nesta instalacao. Nao medi outras
+  instalacoes, e a contagem de tenants caiu de 94 (10/08) para 2, o que indica ambiente
+  recriado — entao os **dados** provam pouco sozinhos. O peso da conclusao esta no codigo e
+  no schema, que sao os mesmos em qualquer instalacao.
 
 dod:
   - ~~está medido quantos tenants estão hoje em cada cell~~ — **MEDIDO 2026-08-10: 94 em `cell-default`, 0 nas demais**; falta o que acontece com eles na unificação
