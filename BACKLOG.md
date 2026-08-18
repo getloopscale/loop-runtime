@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-143 items — **Open** 71 · **In flight** 0 · **Closed** 72
+143 items — **Open** 68 · **In flight** 0 · **Closed** 75
 
-### Open (71)
+### Open (68)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -89,9 +89,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
 | [`B-034`](#b-034--a-cobrança-por-uso-não-tem-para-onde-reportar----) | A cobrança por uso não tem para onde reportar | `triaged` | — |
 | [`B-035`](#b-035--o-segredo-que-verifica-pagamentos-não-existia-no-ambiente----) | O segredo que verifica pagamentos não existia no ambiente | `triaged` | — |
-| [`B-036`](#b-036--os-seeds-de-cobrança-pulam-sem-credencial-e-a-corrente-reporta-verde----) | Os seeds de cobrança pulam sem credencial e a corrente reporta verde | `triaged` | — |
-| [`B-037`](#b-037--o-painel-monta-os-dois-segredos-de-cobrança-como-opcionais----) | O painel monta os dois segredos de cobrança como opcionais | `triaged` | — |
-| [`B-038`](#b-038--nenhuma-camada-de-cobrança-pode-degradar-em-silêncio----) | Nenhuma camada de cobrança pode degradar em silêncio | `triaged` | — |
 | [`B-039`](#b-039--o-painel-não-tem-checkout-canônico-no-droplet----) | O painel não tem checkout canônico no droplet | `triaged` | — |
 | [`B-054`](#b-054--o-api-roda-dois-circuit-breakers-escritos-independentemente-sobre-o-mesmo-pool-postgres----) | O `api` roda dois circuit breakers escritos independentemente sobre o mesmo pool Postgres | `triaged` | média |
 | [`B-056`](#b-056--dois-charts-diferentes-têm-o-mesmo-nome-em-duas-árvores-com-ciclos-de-vida-distintos----) | Dois charts diferentes têm o mesmo nome, em duas árvores com ciclos de vida distintos | `triaged` | média |
@@ -150,7 +147,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (72)
+### Closed (75)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -174,6 +171,9 @@ _None._
 | [`B-030`](#b-030--uma-dependência-central-não-pertence-a-domínio-nenhum---x) | Uma dependência central não pertence a domínio nenhum | `shipped` | média |
 | [`B-031`](#b-031--a-mesma-capacidade-exige-owner-num-lado-e-nada-no-outro---x) | A mesma capacidade exige `owner` num lado e nada no outro | `shipped` | alta |
 | [`B-032`](#b-032--o-portal-do-cli-devolve-uma-url-construída-com-o-id-do-cliente---x) | O portal do CLI devolve uma URL construída com o id do cliente | `shipped` | alta |
+| [`B-036`](#b-036--os-seeds-de-cobrança-pulam-sem-credencial-e-a-corrente-reporta-verde---x) | Os seeds de cobrança pulam sem credencial e a corrente reporta verde | `shipped` | — |
+| [`B-037`](#b-037--o-painel-monta-os-dois-segredos-de-cobrança-como-opcionais---x) | O painel monta os dois segredos de cobrança como opcionais | `shipped` | — |
+| [`B-038`](#b-038--nenhuma-camada-de-cobrança-pode-degradar-em-silêncio---x) | Nenhuma camada de cobrança pode degradar em silêncio | `shipped` | — |
 | [`B-040`](#b-040--o-gate-que-garante-autenticação-em-toda-rota-pública-passa-enumerando-zero-rotas---x) | O gate que garante autenticação em toda rota pública passa enumerando zero rotas | `shipped` | alta |
 | [`B-041`](#b-041--routes-é-o-pior-módulo-de-148-e-é-onde-se-procura-a-resposta-a-o-que-é-secret---x) | `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?" | `shipped` | alta |
 | [`B-042`](#b-042--ninguém-decidiu-se-o-provisionamento-de-chave-transit-é-do-api-ou-do-operator---x) | Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator | `shipped` | alta |
@@ -1575,7 +1575,7 @@ dod:
   - um evento real do Stripe processado no app-dev, provado pelo lado do Stripe e pelo log
   - a ausência do Secret deixa de ser um estado que o sistema aceita ao subir
 
-## B-036 — Os seeds de cobrança pulam sem credencial e a corrente reporta verde   [ ]
+## B-036 — Os seeds de cobrança pulam sem credencial e a corrente reporta verde   [x]
 
 > Registered 2026-08-11 by `/backlog-item` (slug: `billing-fail-closed`).
 
@@ -1591,13 +1591,21 @@ evidence: |
 why_now: `SKIP-graceful` é a política certa para um seed opcional e a errada para a credencial
   que autoriza cobrar. O resultado é uma corrente que passa inteira num ambiente que não
   consegue faturar nem verificar pagamento — e um verde que afirma o contrário.
-status: triaged
+status: shipped
 dod:
   - um ambiente que declara cobrança e não tem credencial FALHA, em vez de pular
   - o teste que prove isso falha antes da correção
   - a distinção fica explícita: opcional por design ≠ ausente por acidente
 
-## B-037 — O painel monta os dois segredos de cobrança como opcionais   [ ]
+> **Fechado 2026-08-18 — medido como já entregue.** O desenho existe e está ligado: `Capability`
+> + `RequirementPolicy` + `MissingInput` (`cmd/loopzero-ops/internal/seed/capability.go`), chamado
+> nos dois seeds em 4 pontos, com a política injetada na raiz de composição
+> (`seed_subcmd.go:185`). Suspeitei de "implementado mas não ligado" e a medição me contrariou.
+> O `status: triaged` é que estava velho — a narrativa de fechamento vivia dentro do bloco do
+> `B-038` desde 2026-08-11 e nunca virou estado. A camada agora é a linha `seed` de
+> `infra/quality/billing-layers.txt`, e perder a guarda dela reprova.
+
+## B-037 — O painel monta os dois segredos de cobrança como opcionais   [x]
 
 > Registered 2026-08-11 by `/backlog-item` (slug: `billing-fail-closed`).
 
@@ -1613,14 +1621,22 @@ evidence: |
 why_now: `optional: true` é o que transforma "não temos credencial" em "subiu normalmente".
   É a terceira camada do mesmo padrão, e a mais silenciosa: as outras duas ao menos deixam
   uma linha de log. Esta não deixa nada.
-status: triaged
+status: shipped
 dod:
   - um ambiente que declara cobrança não sobe sem as credenciais, ou sobe declarando-se
     sem cobrança de forma visível — nunca as duas coisas ao mesmo tempo
   - os dois charts irmãos corrigidos juntos (a regra dos 3 charts sobrepostos)
   - provado no app-dev, removendo o Secret e observando o que o sistema diz
 
-## B-038 — Nenhuma camada de cobrança pode degradar em silêncio   [ ]
+> **Fechado 2026-08-18 — medido como já entregue, com guarda que o item não pedia.** Os dois
+> charts usam `optional: {{ not .Values.billing.required }}`, e o valor está ligado em
+> `infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl:186`. Cheguei a concluir
+> "parametrização inerte" por greppar `environments/`; o valor mora em `values/dev-public/`, e
+> a segunda medição desfez a primeira. A assimetria aparente entre os charts é de desenho — o
+> publicado monta a chave de API por `existingSecret` (ADR D1). O gate `billingsecrets` já
+> impede a regressão para literal, e a camada virou a linha `secret-mount` do registro.
+
+## B-038 — Nenhuma camada de cobrança pode degradar em silêncio   [x]
 
 > Registered 2026-08-11 by `/backlog-item` (slug: `billing-fail-closed`).
 
@@ -1642,7 +1658,7 @@ why_now: cada uma dessas escolhas é defensável isolada. Juntas formam um siste
   de qualquer configuração faltante, cobra menos e barra menos — e informa isso a ninguém.
   A direção do erro é o achado: um sistema de cobrança que erra sempre para o mesmo lado
   não está sendo tolerante, está tendo um viés.
-status: triaged
+status: shipped
 dod:
   - uma verificação em `loopzero-ops` que enumere as camadas de cobrança e reprove quando
     qualquer uma esteja degradada — no espírito do registro fechado-por-padrão de portas
@@ -1687,6 +1703,22 @@ correto no repositório; era a cópia no droplet que carregava o remendo velho. 
 existe em dois diretórios ad-hoc criados por sessões anteriores (`.buildmeta-cloud`,
 `.b017-prova`), e um deles é um clone de refspec restrito onde `git switch workspace` falha.
 Registrado como B-039.
+
+> **Entregue 2026-08-18.** `infra/quality/billing-layers.txt` + o gate `billing-layers`
+> enumeram as cinco camadas, cada uma com um dono verificável: `gate:` (rodado no
+> `quality.yml`, não apenas registrado), `test:` (existente) ou `open:B-NNN` (item **aberto**).
+> **A catraca é o que faz valer**: marcar o `B-033` como entregue sem cobrir a camada reprova o
+> gate — provado ponta a ponta, reprovando e nomeando as duas camadas, com restauração
+> verificada. O piso impede o registro de se auto-silenciar por remoção de linha.
+>
+> A âncora foi **medida antes de escolhida**: por nome casa 142 arquivos (ruído); por
+> referência a insumo, 21. Ainda assim ela perdeu a camada `cost-gate` até `CostEnforcer` ser
+> acrescentado — é o limite conhecido, e está escrito no doc do pacote em vez de descoberto
+> depois. A varredura cobre só este repositório, de propósito: varrer o irmão faria trabalho
+> alheio travar o push daqui.
+>
+> As camadas 3 e 4 **continuam degradando** (`open:B-033`). Esta fatia não conserta a cadeia —
+> garante que ela seja enumerável, com dono, e impossível de encolher em silêncio.
 
 ## B-039 — O painel não tem checkout canônico no droplet   [ ]
 
