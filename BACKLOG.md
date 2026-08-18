@@ -6662,6 +6662,29 @@ dod:
 >
 > **`builds` segue 0.** As balas 1 a 3 dependem do plano do tenant e da instalação do App.
 
+> **Avanço medido ao vivo em 2026-08-18, e a cadeia tinha SEIS elos, não quatro.**
+>
+> | elo | estado |
+> |---|---|
+> | credenciais do droplet (GHCR + gomod) | ✅ consertado — `B-016` |
+> | token do cluster de build | ✅ **consertado** — erro a cada 2s zerado, runbook seguido |
+> | JWT com audiência | ✅ resolvido — `aud: loopzero-engine` → `GET /projects` **200** |
+> | **CI publicando imagem** | ✅ **consertado** — não publicava há **5 dias**; dois `go.mod` fora de sincronia que só falham com `GOWORK=off` |
+> | plano do tenant (503) | ✅ **consertado no código e provado ao vivo** — era `ErrNoRows` tratado como fatal; o caminho de onboarding que `ResolvePlanTier` documentava era inalcançável |
+> | instalação do GitHub App | ❌ **zero instalações** — `connect` exige `installation_id` |
+>
+> **`projects` foi de 0 para 1** (`b140-journey` em `tn-e2etest`). A chamada que devolvia
+> `503 PLATFORM_DEGRADED` agora devolve `422 PROJECTS_EXCEED_PLAN` — o tenant resolve para
+> Starter e o limite é aplicado corretamente, que é o comportamento certo.
+>
+> **`builds` segue 0.** O único elo restante é a instalação do GitHub App no repositório de
+> fixture — concessão de permissão na conta do dono, e nada no repositório a substitui.
+>
+> **Bala 4 entregue em dobro:** `runbook-parity` (a mensagem que mandava rotacionar o SA que o
+> runbook proíbe) e `module-selfcontained` (todo módulo compila sem `go.work`, que é o que o CI
+> faz — o gate achou o segundo módulo quebrado sozinho, depois de eu consertar o primeiro).
+
+
 ## B-141 — Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só   [ ]
 
 domain: engine-go
