@@ -645,7 +645,7 @@ Build it first with `task quality:build`, then `/tmp/loopzero-ops quality --list
 |------|-------------|-----------|
 | **`loopzero-ops` quality gates (73)** | `task quality:gates` (full scan) · `task quality:diff` (PR-scoped) · `task quality:all` | Pure-logic gates: `unhomed-logic`, `no-new-bash`, `advisory-lock-scope`, `cli-exit-codes`, `prod-image-tags`, `no-migrate-force`, … |
 | **kubeconform** | `task validate:manifests` | K8s manifest schema validation (`--strict`) |
-| **golangci-lint v2.11+** | `task lint` · `task lint:strict` (baseline-tracked) | Go static analysis |
+| **golangci-lint v2.11+** | `task lint` (os 9 módulos do workspace, com catraca por módulo) | Go static analysis |
 | **helmfile template + kubeconform** | `task validate:helmfile-templates` · `task validate:matrix` | Renders every release and schema-checks the output |
 | **helm-diff / helm-drift** | `loopzero-ops quality helm-diff-structural` · `helm-drift` — **registered but not wired** into any task (`--list` shows `-`) | Structural pre-sync diff; rendered-vs-deployed drift |
 | **chart-testing (ct) / helm-chartsnap** | `ct.yaml` + `.chart-testing/` config retained; **no runner wired** | Chart lint / install test / output-drift snapshots |

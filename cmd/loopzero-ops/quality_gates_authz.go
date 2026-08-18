@@ -19,6 +19,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/billingsecrets"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clusterrolenosecretsstar"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/deadlineratchet"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lintcoverage"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nolegacysatoken"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/oidccredadminloopzero"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratoslifespan"
@@ -388,6 +389,47 @@ func runBillingSecrets(args []string) int {
 //
 // O irmão `billing-secrets` cobre UMA camada. Este cobre a lista das cinco — e é a lista
 // que o B-038 mede: "a quinta camada nasce sem a verificação que as outras quatro tinham".
+func runLintCoverage(args []string) int {
+	fs := flag.NewFlagSet("lint-coverage", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	write := fs.Bool("write", false, "recongela a linha de base com o medido")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+
+	if *write {
+		out, merr := lintcoverage.Measure(lintcoverage.Config{RepoRoot: *root})
+		// Recongelar usa o MEDIDO, mesmo quando houve regressão — é um ato consciente,
+		// e o diff do arquivo é onde ele fica visível.
+		if merr != nil || (len(out.Lint) == 0 && len(out.Gofmt) == 0) {
+			fmt.Fprintf(os.Stderr, "lint-coverage: nada medido, nada a congelar: %v\n", merr)
+			return 5
+		}
+		p := filepath.Join(*root, lintcoverage.BaselineRelPath)
+		if werr := lintcoverage.WriteBaseline(p, out.Lint, out.Gofmt); werr != nil {
+			fmt.Fprintf(os.Stderr, "lint-coverage: %v\n", werr)
+			return 5
+		}
+		fmt.Printf("lint-coverage: linha de base regravada — %s\n", out.Reason)
+		return 0
+	}
+
+	out, err := lintcoverage.Check(lintcoverage.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "lint-coverage: FAIL — %v\n", err)
+		for _, r := range out.Regressions {
+			fmt.Fprintf(os.Stderr, "  regressão: %s [%s] %d → %d\n", r.Module, r.Dimension, r.Was, r.Now)
+		}
+		return 2
+	}
+	fmt.Printf("lint-coverage: PASS — %s\n", out.Reason)
+	for _, i := range out.Improvements {
+		fmt.Printf("  melhorou: %s %d → %d (recongele com `--write`)\n", i.Module, i.Was, i.Now)
+	}
+	return 0
+}
+
 func runScheduledImage(args []string) int {
 	fs := flag.NewFlagSet("scheduled-image", flag.ContinueOnError)
 	root := fs.String("repo-root", ".", "repository root")

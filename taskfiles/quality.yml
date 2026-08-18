@@ -139,6 +139,7 @@ tasks:
       - /tmp/loopzero-ops quality billing-secrets   # B-037: opcionalidade de segredo de cobranca e valor, nao literal
       - /tmp/loopzero-ops quality billing-layers    # B-038: as cinco camadas de cobranca enumeraveis, com dono e catraca
       - /tmp/loopzero-ops quality scheduled-image   # B-019: agendamento nao aponta para imagem sem caminho de publicacao
+      - /tmp/loopzero-ops quality lint-coverage     # B-121/B-083/B-148: todo modulo Go medido, catraca por modulo
       - /tmp/loopzero-ops quality correlation-header   # T6.1 of plan 2026-06-01-p3-infra-observability-test-debt
       - /tmp/loopzero-ops quality helm-overlap-parity
       - /tmp/loopzero-ops quality prod-image-digests
