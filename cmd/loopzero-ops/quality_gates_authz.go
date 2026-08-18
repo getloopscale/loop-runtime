@@ -23,6 +23,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/oidccredadminloopzero"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratoslifespan"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routeauthcoverage"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scheduledimage"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/securitycontext"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/tenantpredicate"
 )
@@ -387,6 +388,25 @@ func runBillingSecrets(args []string) int {
 //
 // O irmão `billing-secrets` cobre UMA camada. Este cobre a lista das cinco — e é a lista
 // que o B-038 mede: "a quinta camada nasce sem a verificação que as outras quatro tinham".
+func runScheduledImage(args []string) int {
+	fs := flag.NewFlagSet("scheduled-image", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := scheduledimage.Check(scheduledimage.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "scheduled-image: FAIL — %v\n", err)
+		for _, f := range out.Findings {
+			fmt.Fprintf(os.Stderr, "  %s [%s] %s\n", f.File, f.Chart, f.Image)
+		}
+		return 2
+	}
+	fmt.Printf("scheduled-image: PASS — %s\n", out.Reason)
+	return 0
+}
+
 func runBillingLayers(args []string) int {
 	fs := flag.NewFlagSet("billing-layers", flag.ContinueOnError)
 	root := fs.String("repo-root", ".", "repository root")

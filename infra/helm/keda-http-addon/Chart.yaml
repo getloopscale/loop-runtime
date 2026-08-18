@@ -13,6 +13,11 @@ version: 0.1.0
 appVersion: "0.8.0"
 
 dependencies:
-  - name: http-add-on
+  # O defeito aqui e o NOME, nao a versao — e tratar as duas quebras do B-015 como o mesmo
+  # problema foi o que as manteve abertas. `helm` respondeu "http-add-on chart not found in
+  # repo", e o repositorio kedacore publica tres charts: `keda`, `keda-add-ons-http` e
+  # `external-scaler-azure-cosmos-db`. Sob o nome certo, a versao 0.8.0 EXISTE (medido
+  # 2026-08-18, 27 versoes publicadas). (B-015)
+  - name: keda-add-ons-http
     version: "0.8.0"
     repository: "https://kedacore.github.io/charts"

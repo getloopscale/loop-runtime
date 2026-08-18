@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-145 items — **Open** 62 · **In flight** 0 · **Closed** 83
+146 items — **Open** 62 · **In flight** 0 · **Closed** 84
 
 ### Open (62)
 
@@ -78,7 +78,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-002`](#b-002--o-cluster-mgmt-é-spof-de-tudo-e-renomeá-lo-para-core-não-muda-isso----) | O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso | `triaged` | — |
 | [`B-005`](#b-005--unificar-cell-e-cluster-em-11-aposentando-cell-default----) | Unificar cell e cluster em 1:1, aposentando `cell-default` | `triaged` | — |
 | [`B-014`](#b-014--testtransitclient_ratelimitburst-reprova-por-tempo-não-por-comportamento----) | `TestTransitClient_RateLimitBurst` reprova por tempo, não por comportamento | `triaged` | média |
-| [`B-015`](#b-015--dois-charts-apontam-para-versões-que-não-existem-mais-no-upstream----) | Dois charts apontam para versões que não existem mais no upstream | `triaged` | baixa |
 | [`B-016`](#b-016--o-token-que-puxa-as-imagens-de-plataforma-do-ghcr-está-inválido----) | O token que puxa as imagens de plataforma do GHCR está inválido | `triaged` | alta |
 | [`B-019`](#b-019--os-quatro-cronworkflows-executam-uma-imagem-cujo-registro-foi-deletado----) | Os quatro CronWorkflows executam uma imagem cujo registro foi deletado | `triaged` | média |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
@@ -136,12 +135,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-140`](#b-140--um-push-real-nunca-disparou-um-build-nesta-instância-e-a-cadeia-que-permitiria-medi-lo-tem-quatro-elos-faltando----) | Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando | `triaged` | alta |
 | [`B-141`](#b-141--há-um-segundo-pacote-go-chamado-helpers-e-o-b-061-afirmava-que-era-um-só----) | Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só | `triaged` | baixa |
 | [`B-142`](#b-142--um-token-do-digitalocean-vivo-atravessou-cinco-meses-e-vários-pushes-sem-ser-barrado----) 🔒 | Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado | `triaged` | P0 |
+| [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `triaged` | média |
 
 ### In flight (0)
 
 _None._
 
-### Closed (83)
+### Closed (84)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -155,6 +155,7 @@ _None._
 | [`B-011`](#b-011--o-reconciliador-do-loopzero-cloud-reiniciava-o-deployment-a-cada-5-minutos-sempre---x) | O reconciliador do loopzero-cloud reiniciava o deployment a cada 5 minutos, sempre | `shipped` | — |
 | [`B-012`](#b-012--a-imagem-do-mcp-do-loopzero-promptly-nunca-constrói-os-pacotes-que-ela-executa---x) | A imagem do MCP do loopzero-promptly nunca constrói os pacotes que ela executa | `shipped` | baixa |
 | [`B-013`](#b-013--o-nó-agente-da-cell-2-está-notready-desde-2026-07-23-por-token-não-autorizado---x) | O nó agente da cell-2 está NotReady desde 2026-07-23 por token não autorizado | `shipped` | baixa |
+| [`B-015`](#b-015--dois-charts-apontam-para-versões-que-não-existem-mais-no-upstream---x) | Dois charts apontam para versões que não existem mais no upstream | `shipped` | baixa |
 | [`B-017`](#b-017--o-dockerfilelocal-do-loopzero-cloud-tem-dois-defeitos-que-o-impedem-de-construir---x) | O `Dockerfile.local` do loopzero-cloud tem dois defeitos que o impedem de construir | `shipped` | alta |
 | [`B-018`](#b-018--a-borda-alcança-kratos-e-hydra-por-encaminhamento-de-porta-que-não-sobrevive-a-um-rebuild---x) | A borda alcança Kratos e Hydra por encaminhamento de porta que não sobrevive a um rebuild | `shipped` | média |
 | [`B-020`](#b-020--o-host-cloud-dev-era-um-segundo-nome-para-o-mesmo-painel---x) | O host `cloud-dev` era um segundo nome para o mesmo painel | `shipped` | — |
@@ -683,7 +684,7 @@ dod:
 
 > Registrado 2026-08-10 ao rodar a suíte completa durante a unificação cell↔cluster (`B-005`).
 
-## B-015 — Dois charts apontam para versões que não existem mais no upstream   [ ]
+## B-015 — Dois charts apontam para versões que não existem mais no upstream   [x]
 
 domain: engine-go
 repo: loopzero
@@ -691,7 +692,7 @@ suggested_mode: bug
 source: discover-live-test
 evidence: medido no droplet app-dev em 2026-08-10, durante a reconstrução total. Ao vendorizar as dependências de todos os charts, dois falharam contra o upstream: `infra/helm/k6-operator/` — *"can't get a valid version for 1 subchart(s): \"k6-operator\" (repository https://grafana.github.io/helm-charts, version 3.10.0)"* — e `infra/helm/keda-http-addon/` — *"http-add-on chart not found in repo https://kedacore.github.io/charts"*. Os outros 16 charts com dependências vendorizaram sem erro. Nenhum dos dois está no caminho de `task setup` (a instalação completou com eles falhando), então o impacto hoje é potencial, não atual.
 why_now: apareceu porque a reconstrução a partir de clone limpo é a única situação que exercita `helm dependency build` em todos os charts de uma vez — o `B-015` é filho direto do defeito que o `9918556b` corrigiu. Enquanto ninguém instalava do zero, as duas quebras ficaram invisíveis. Elas mordem no dia em que alguém precisar de k6 ou do KEDA HTTP add-on, que é exatamente um dia em que já se está resolvendo outro problema.
-status: triaged
+status: shipped
 severity: baixa — nada instalado hoje depende deles; alta no dia em que depender, porque a falha aparece no meio de uma instalação e não no momento em que a versão sumiu do upstream.
 dod:
   - cada um dos dois tem versão (ou nome de chart) válida contra o repositório upstream atual, ou está declarado como removido com a razão
@@ -699,6 +700,16 @@ dod:
   - está decidido se um chart cuja dependência remota some deve reprovar a instalação ou apenas avisar — hoje avisa, e a razão está escrita na própria task
 
 > Registrado 2026-08-10 durante a reconstrução total do app-dev (`B-001`, `B-005`).
+
+> **Entregue 2026-08-18.** As duas quebras tinham causas **diferentes**, e tratá-las como uma
+> só foi o que as manteve abertas. `k6-operator`: a **versão** `3.10.0` não existe — 39 estão
+> publicadas e a série 3.x vive até `3.16.0`, que é onde ficamos (a 4.x salta o app de 0.0.23
+> para 1.6.0, decisão de upgrade e não de conserto). `keda-http-addon`: o defeito é o **nome** —
+> o repositório kedacore publica `keda-add-ons-http`, e sob o nome certo a versão `0.8.0`
+> **existe**. Provado: `task validate:helm-deps` → **`18 chart(s) vendorizados, 0 com upstream
+> indisponível`** (era 2). A terceira bala fica como está: a task segue avisando em vez de
+> reprovar, e a razão já estava escrita nela.
+
 
 ## B-016 — O token que puxa as imagens de plataforma do GHCR está inválido   [ ]
 
@@ -760,6 +771,13 @@ dod:
 > Nota de método: minha primeira sonda do Secret leu os campos `username`/`password` e concluiu "Secret
 > em branco". Aquele `dockerconfigjson` só tem o campo `auth` (base64 de `user:pass`) — eu quase
 > reportei um achado falso a partir de um campo que não existe naquele formato.
+
+> **Bloqueio RE-MEDIDO em 2026-08-18**, porque o registro anterior era de 14/08 e a disciplina
+> manda re-medir em vez de confiar no papel. Continua idêntico: `~/.loopzero/ghcr-pull-token.txt`
+> com **40 bytes** e data de **19/jun**, e `GET ghcr.io/v2/getloopscale/loopzero-api/manifests/develop`
+> devolve **`HTTP 401`**. As balas 3 e 4 já estavam fechadas; 1 e 2 exigem um PAT do GitHub com
+> `read:packages` que **só o patrocinador emite**. Nada mais no item depende de engenharia.
+
 
 ## B-017 — O `Dockerfile.local` do loopzero-cloud tem dois defeitos que o impedem de construir   [x]
 
@@ -860,6 +878,29 @@ dod:
   - existe verificação que reprova quando um manifesto agendado referencia imagem impossível de puxar, senão o próximo apodrecimento é igualmente silencioso
 
 > Registrado 2026-08-10 ao fechar o `B-018`. Mitigado no mesmo commit: `standalone-multi` deixou de agendá-los (`ciCronsEnabled: false`), e os ambientes com alvo real — `drill`, `standalone`, `dev`, `prod` — seguem com os quatro.
+
+> **Duas das quatro balas fechadas em 2026-08-18; o item segue ABERTO, e a medição encontrou
+> mais do que ele registrava.** São **quatro camadas de ausência**, não uma: o registro (404), o
+> Dockerfile (não existe), a task de build (**a única menção a `task images:build:loopzero-ops` no
+> repositório inteiro era o comentário do `values.yaml` afirmando que ela existe**) e a matriz de
+> publicação (5 imagens, `loopzero-ops` fora).
+>
+> **E a quinta decide o item: os crons NÃO executam o binário.** Rodam `task drill:watchdog`,
+> `task quality:coverage:report` e um script bash, **sem clone do repositório e sem volume**. A
+> imagem que falta é um *runner de CI* com a árvore dentro. Publicar `cmd/loopzero-ops` entregaria
+> uma imagem que **puxa e falha em seguida**, em `task: not found` — trabalho que parece conserto.
+>
+> **Fechadas:** o agendamento virou **opt-in** (`dev-public` não declarava e agendava os quatro,
+> todos condenados a falhar); e o gate **`scheduled-image`** reprova manifesto agendado cuja
+> imagem não tem caminho de publicação nesta árvore. A dívida do `loopzero-ops` está **isenta com
+> razão e prazo (2026-11-18)**, não escondida.
+>
+> **O que se perdeu, medido — e não é o esperado:** o `cosignDeadline` lê o ConfigMap
+> `loopzero-system/loopzero-cosign-config`, e ele **nunca existiu** no cluster. O cron não deixou de
+> checar um prazo: não tinha entrada para checar. Registrado como **`B-146`**.
+>
+> **Aberto:** a bala 1. As três opções (runner de CI · clone+toolchain · aposentar) estão com
+> custo medido no MEET de 2026-08-18. É decisão de superfície de publicação, não minha.
 
 
 ## B-020 — O host `cloud-dev` era um segundo nome para o mesmo painel   [x]
@@ -6576,4 +6617,29 @@ dod:
 > push porque duas camadas de cobrança o declaravam como dono. O erro foi de leitura — segui o
 > campo `repo: loopzero-cloud` do bloco em vez da evidência dele, que aponta código **deste**
 > repositório. O item atravessa os dois, e a metade que fica aqui é o portão de custo.
+
+## B-146 — O prazo do cosign é verificado contra um ConfigMap que nunca existiu   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: live-test
+source: discover-live-test
+evidence: |
+  Medido ao vivo em 2026-08-18, no cluster `loopzero-core`:
+  `kubectl -n loopzero-system get cm loopzero-cosign-config` → **ausente**.
+  O cron `cosignDeadline` executa `infra/scripts/security/check-cosign-cutover-deadline.sh`,
+  que declara na própria cabeça: *"Requires: ConfigMap loopzero-system/loopzero-cosign-config: mode +
+  cutover_deadline keys"*. Sem ele, o script não tem o que comparar.
+why_now: apareceu ao medir a bala 3 do `B-019` — *"o que se perdeu no intervalo, em especial o
+  prazo do cosign"*. A resposta é mais estreita e pior que a suposta: o cron não deixou de
+  checar um prazo por causa da imagem quebrada; **ele nunca teve entrada para checar**. O
+  ADR-2026-05-12 declara um corte keyed→keyless com prazo duro, e a verificação que o protege
+  depende de um objeto que ninguém provisionou.
+status: triaged
+severity: média — não quebra ambiente, mas é uma guarda de supply-chain que reporta sobre nada.
+  A mesma forma dos B-124/B-127/B-129/B-143 desta sessão, agora num prazo de assinatura.
+dod:
+  - está medido se o prazo do ADR-2026-05-12 já venceu, e em que modo o cosign opera hoje
+  - o ConfigMap é provisionado pelo caminho declarativo, ou está escrito por que ele não existe
+  - a ausência da entrada deixa de ser silenciosa: o script reprova em vez de não ter o que fazer
 
