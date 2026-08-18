@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- **O ambiente público voltou a conseguir baixar as imagens da plataforma.** A causa não era configuração nem permissão: as credenciais de acesso **venceram** — cinco delas entre 18 de julho e 10 de agosto, e a última expirou exatamente no dia em que o sistema foi visto funcionando pela última vez. Enquanto havia camadas em cache nas máquinas, ninguém percebeu; a falha só apareceria na próxima reconstrução do zero. Substituídas por uma credencial com prazo declarado e o mínimo de permissão necessária, e verificado de ponta a ponta que as seis imagens da plataforma voltam a ser acessíveis com a credencial que está no cluster. (B-016)
 - **Trinta e um arquivos de código-fonte voltaram ao formato padrão da linguagem.** Eles estavam publicados fora dele, o que faz qualquer pessoa que abra esses pacotes gerar um diff de reformatação misturado à própria mudança — atrito na revisão, sem nada de comportamento envolvido. Restam 155 arquivos na mesma condição, agora medidos e registrados. (B-148)
 
 ### Removed

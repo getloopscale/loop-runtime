@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-148 items — **Open** 63 · **In flight** 0 · **Closed** 85
+148 items — **Open** 62 · **In flight** 0 · **Closed** 86
 
-### Open (63)
+### Open (62)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -78,7 +78,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-002`](#b-002--o-cluster-mgmt-é-spof-de-tudo-e-renomeá-lo-para-core-não-muda-isso----) | O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso | `triaged` | — |
 | [`B-005`](#b-005--unificar-cell-e-cluster-em-11-aposentando-cell-default----) | Unificar cell e cluster em 1:1, aposentando `cell-default` | `triaged` | — |
 | [`B-014`](#b-014--testtransitclient_ratelimitburst-reprova-por-tempo-não-por-comportamento----) | `TestTransitClient_RateLimitBurst` reprova por tempo, não por comportamento | `triaged` | média |
-| [`B-016`](#b-016--o-token-que-puxa-as-imagens-de-plataforma-do-ghcr-está-inválido----) | O token que puxa as imagens de plataforma do GHCR está inválido | `triaged` | alta |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
 | [`B-024`](#b-024--os-seeds-herdam-o-contexto-do-kubectl-e-culpam-o-recurso-errado----) | Os seeds herdam o contexto do kubectl e culpam o recurso errado | `triaged` | média |
 | [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `triaged` | média |
@@ -142,7 +141,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (85)
+### Closed (86)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -157,6 +156,7 @@ _None._
 | [`B-012`](#b-012--a-imagem-do-mcp-do-loopzero-promptly-nunca-constrói-os-pacotes-que-ela-executa---x) | A imagem do MCP do loopzero-promptly nunca constrói os pacotes que ela executa | `shipped` | baixa |
 | [`B-013`](#b-013--o-nó-agente-da-cell-2-está-notready-desde-2026-07-23-por-token-não-autorizado---x) | O nó agente da cell-2 está NotReady desde 2026-07-23 por token não autorizado | `shipped` | baixa |
 | [`B-015`](#b-015--dois-charts-apontam-para-versões-que-não-existem-mais-no-upstream---x) | Dois charts apontam para versões que não existem mais no upstream | `shipped` | baixa |
+| [`B-016`](#b-016--o-token-que-puxa-as-imagens-de-plataforma-do-ghcr-está-inválido---x) | O token que puxa as imagens de plataforma do GHCR está inválido | `shipped` | alta |
 | [`B-017`](#b-017--o-dockerfilelocal-do-loopzero-cloud-tem-dois-defeitos-que-o-impedem-de-construir---x) | O `Dockerfile.local` do loopzero-cloud tem dois defeitos que o impedem de construir | `shipped` | alta |
 | [`B-018`](#b-018--a-borda-alcança-kratos-e-hydra-por-encaminhamento-de-porta-que-não-sobrevive-a-um-rebuild---x) | A borda alcança Kratos e Hydra por encaminhamento de porta que não sobrevive a um rebuild | `shipped` | média |
 | [`B-019`](#b-019--os-quatro-cronworkflows-executam-uma-imagem-cujo-registro-foi-deletado---x) | Os quatro CronWorkflows executam uma imagem cujo registro foi deletado | `shipped` | média |
@@ -713,7 +713,7 @@ dod:
 > reprovar, e a razão já estava escrita nela.
 
 
-## B-016 — O token que puxa as imagens de plataforma do GHCR está inválido   [ ]
+## B-016 — O token que puxa as imagens de plataforma do GHCR está inválido   [x]
 
 domain: engine-go
 repo: loopzero
@@ -721,7 +721,7 @@ suggested_mode: live-test
 source: discover-live-test
 evidence: medido no droplet app-dev em 2026-08-10, após a reconstrução total. Quatro componentes do cluster `loopzero-core` ficam em `ImagePullBackOff`: `loopzero-api`, `loopzero-cloud`, `loopzero-app-operator` e `loopzero-platform-operator` (13 pods problemáticos de 69; os clusters `loopzero-build`, `loopzero-cell-0` e `loopzero-cell-1` estão 100% limpos). O `dev-public` os puxa de `ghcr.io/getloopscale/loopzero-api:develop` com o `imagePullSecret` `ghcr-pull`, cuja fonte canônica é `~/.loopzero/ghcr-pull-token.txt` (`taskfiles/infra.yml:985,993`). O arquivo existe, tem 40 bytes e data de **2026-06-19**; testado direto contra o registro devolve **`HTTP 401`** para `develop`, `latest` e `main`. O Secret no cluster carrega o mesmo token (usuário `getloopscale`) e falha igual. `docker pull` sem credencial devolve `403`.
 why_now: a condição é anterior à reconstrução — o achado de 2026-08-09 já registrava GHCR inacessível a partir do droplet. O que mudou é que o cache local de imagens mascarava o problema: os pods rodavam com camadas puxadas meses atrás. `k3d cluster delete` levou o cache junto, e a dependência ficou exposta. **Não é regressão do rename**; é uma dependência que só aparece quando o ambiente sobe do zero, que é exatamente o que o mandato de cleanroom existe para forçar.
-status: triaged
+status: shipped
 severity: alta — sem isto, `app-dev.loopzero.example` não volta a servir. É o único item que separa a plataforma reconstruída de estar funcional.
 **RESOLVIDO em 2026-08-10 — e a afirmação original estava errada.** Eu havia escrito que não existia caminho técnico sem a credencial. Existe: `loopzero-api` e os quatro operators têm Dockerfile **neste** repositório, e o `loopzero-cloud` tem no repo irmão. As seis imagens foram construídas localmente e publicadas no registro do k3d, e `LOOPZERO_PLATFORM_IMAGE_PREFIX` (commit `6b4669dd`, padrão inalterado no GHCR) passou a permitir apontar o ambiente para elas. O token do GHCR continua inválido — o que mudou é que ele deixou de ser condição para o ambiente subir.
 dod:
@@ -825,6 +825,50 @@ dod:
 > `read:packages` em `~/.loopzero/ghcr-pull-token.txt` (fecha pelo caminho publicado) **ou**
 > `Contents:read` em `getloopscale/loopzero-contracts` no `~/.loopzero/gomod-token.txt` (fecha pelo caminho
 > local, cuja decisão já está tomada acima).
+
+> **ENTREGUE 2026-08-18, com o patrocinador autenticando o 2FA e o resto executado ponta a ponta.**
+>
+> **A causa, finalmente medida: os tokens VENCERAM.** A lista de PATs da conta mostra cinco
+> vencimentos entre 18/jul e 10/ago — e o `Testes-prod` venceu em **10/ago**, exatamente a data
+> em que este item registrou as imagens ainda construindo localmente. Não foi revogação, não foi
+> escopo, não foi a reescrita de histórico: prazo.
+>
+> **O conserto.** PAT clássico novo, criado pelo navegador na conta `@getloopscale`, com **apenas**
+> `repo` + `read:packages` (sem `write:packages`) e **prazo de 90 dias** — a ausência de prazo é
+> o que produz o silêncio, então ele tem um. Instalado nos dois arquivos do droplet, com backup
+> dos antigos preservado.
+>
+> **Bala 1 — verificada:**
+>
+> ```
+> api/user                    HTTP 200      conta getloopscale
+> getloopscale/loopzero-contracts    HTTP 200      o módulo privado que o build precisa
+> ```
+>
+> **Bala 2 — verificada em substância.** `task images:ghcr:pullsecret` reprovisionou o Secret no
+> `loopzero-core` (hash `e2f28bed` → `6b24b336`). Os quatro deployments **não estavam** em
+> `ImagePullBackOff` para sair dele — os cinco clusters estavam com zero pods fora de `Running`,
+> porque rodavam de camadas em cache, como este item previu. Então a prova foi feita pelo que
+> importa: **o PAT extraído do Secret que está no cluster** busca
+>
+> ```
+> loopzero-api · loopzero-cloud · loopzero-app-operator ·
+> loopzero-platform-operator · loopzero-tenant-operator · loopzero-preview-operator   →  6 × HTTP 200
+> camada real (blob) de loopzero-api                                          →  HTTP 200
+> ```
+>
+> E um pod novo de `loopzero-api` subiu `Running` em 26s após deleção forçada.
+>
+> **Bala 3 — decidida:** o `dev-public` fica com o caminho **publicado**, que voltou a funcionar.
+> O caminho local também destravou (o mesmo token serve o `loopzero-contracts`), então os dois
+> existem — e é essa redundância que impede o próximo vencimento de parar o ambiente.
+>
+> **Duas armadilhas de medição no caminho, que quase produziram conclusão falsa:**
+> primeiro li `404` para cinco imagens e quase registrei "problema de ACL de pacote" — era o meu
+> `Accept` sem `application/vnd.oci.image.manifest.v1+json`, e sem ele o GHCR devolve 404 para
+> manifesto OCI simples. Depois li `401` ao usar o campo `auth` do Secret como `Bearer` — ele é
+> credencial **Basic** (`base64(usuário:token)`), e o esquema do GHCR é `Bearer base64(token)`.
+> Nenhum dos dois era defeito do sistema; os dois eram defeito da minha requisição.
 
 
 ## B-017 — O `Dockerfile.local` do loopzero-cloud tem dois defeitos que o impedem de construir   [x]
