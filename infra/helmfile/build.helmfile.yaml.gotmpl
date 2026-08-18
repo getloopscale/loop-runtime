@@ -140,17 +140,25 @@ releases:
       - argo-events/argo-events-bus
     values:
       - ../helm/loopzero-ci-workflows/values.yaml
-      # `ciCronsEnabled` e opt-out por ambiente e vale `true` para quem nao opinou, entao
-      # `drill` — o unico com alvo real — segue agendando sem precisar declarar nada.
-      - crons:
-          drillWatchdog:
-            enabled: {{ dig "ciCronsEnabled" true .Values }}
+      # `ciCronsEnabled` passou a ser OPT-IN em 2026-08-18 (B-019). Era opt-out — `true` para quem
+      # nao opinou —, e `dev-public`, que serve app-dev.loopzero.example, nao opina: os quatro crons
+      # eram agendados la e os quatro so podiam falhar, porque a imagem que executam nao existe em
+      # registro nenhum (o DOCR devolve `404 registry does not exist`, nao ha Dockerfile dela na
+      # arvore, e ela nao esta na matriz de publicacao).
+      #
+      # Nao e desligar automacao: e parar de AGENDAR O IMPOSSIVEL. Um pod vermelho a cada 6h e pior
+      # que automacao ausente — treina quem olha o cluster a ignorar vermelho, e foi esse ruido que
+      # fez o item ser o ultimo investigado. Mesma polaridade de `infra/quality/host-ports.txt`:
+      # lista de negacao envelhece para o lado inseguro; a de permissao, para o lado seguro.
+      #
+      # Quando a imagem tiver caminho, voltar e uma linha por ambiente — agora consciente.
+      enabled: {{ dig "ciCronsEnabled" false .Values }}
           weeklySoak:
-            enabled: {{ dig "ciCronsEnabled" true .Values }}
+            enabled: {{ dig "ciCronsEnabled" false .Values }}
           coverageReport:
-            enabled: {{ dig "ciCronsEnabled" true .Values }}
+            enabled: {{ dig "ciCronsEnabled" false .Values }}
           cosignDeadline:
-            enabled: {{ dig "ciCronsEnabled" true .Values }}
+            enabled: {{ dig "ciCronsEnabled" false .Values }}
 
   # Wave 0: Loki for build logs (NodePort 30100 for cross-cluster scrape)
   - name: loki

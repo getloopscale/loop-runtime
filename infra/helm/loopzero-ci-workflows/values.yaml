@@ -4,9 +4,22 @@
 namespace: argo-ci
 serviceAccountName: loopzero-ci-runner
 
-# Image for loopzero-ops binary execution.
-# Operator builds via `task images:build:loopzero-ops` and pushes to DOCR.
-# Locally falls back to k3d registry.
+# Imagem que os quatro CronWorkflows executam.
+#
+# CORRIGIDO 2026-08-18 (B-019): as duas linhas anteriores afirmavam que o operador constroi
+# via `task images:build:loopzero-ops` e publica no DOCR. Medido: essa task NAO EXISTE — a unica
+# mencao a ela no repositorio inteiro era este comentario. Nao ha Dockerfile de loopzero-ops, ela
+# nao esta na matriz de `release-artifacts.yml`, e o registro DOCR devolve
+# `404 registry does not exist`. Quatro camadas de ausencia, e o comentario afirmava a unica
+# que teria resolvido.
+#
+# E os crons NAO executam o binario loopzero-ops: rodam `task ...` e um script bash, sem clone do
+# repositorio e sem volume. A imagem que falta e um RUNNER DE CI com a arvore dentro, nao o
+# binario — por isso publicar cmd/loopzero-ops nao consertaria nada.
+#
+# O gate `scheduled-image` guarda a regressao; a divida esta declarada com prazo em
+# `scheduledimage.DefaultExemptions`, e o futuro dos quatro crons e decisao registrada no MEET
+# de 2026-08-18.
 loopzeroOpsImage:
   repository: registry.digitalocean.com/loopzero-system/loopzero-ops
   # Pinned via digest in prod overlay per ADR-2026-05-27-T2.2 + T2.3.
