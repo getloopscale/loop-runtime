@@ -81,6 +81,7 @@ func wrapWithLoopZeroMarkers(stepName, script string) string {
 	return fmt.Sprintf(`echo '::loopzero:: phase=%[1]s step=%[2]s level=info msg="%[3]s starting"'
 __loopzero_start=$(date +%%s)
 __loopzero_log=$(mktemp 2>/dev/null || echo /tmp/loopzero-step.$$.log)
+__loopzero_rc=$(mktemp 2>/dev/null || echo /tmp/loopzero-step.$$.rc)
 : > "$__loopzero_log"
 __loopzero_on_exit() {
   __loopzero_rc=$?
@@ -98,10 +99,28 @@ __loopzero_on_exit() {
   rm -f "$__loopzero_log" 2>/dev/null || true
 }
 trap __loopzero_on_exit EXIT
-(set -o pipefail) 2>/dev/null || true
+# O status do passo e capturado DENTRO do bloco, antes do pipe.
+#
+# B-153: aqui o script corria como um pipeline para o tee, e havia um set -o pipefail
+# dentro de parenteses. Duas coisas erradas ao mesmo tempo: o status de um pipeline POSIX
+# e o do ULTIMO comando (o tee, que sempre sucede), e a opcao pipefail ligada num subshell
+# e descartada junto com ele. Medido ao vivo: TODO passo construido por buildContainer
+# saia 0 fizesse o que fizesse — os cinco passos de falha-fechada do runtime nao suportado
+# reportaram Succeeded, e o build seguiu sem Dockerfile ate morrer com uma mensagem que
+# nao nomeava nada disso.
+#
+# A forma abaixo e POSIX (ash/dash/bash): o script roda num subshell, o status dele e
+# gravado por um echo que corre no bloco externo — nao abortado, porque o set -e do script
+# fica confinado ao subshell — e o shell termina com esse status.
 {
+  (
 %[4]s
+  )
+  echo $? > "$__loopzero_rc"
 } 2>&1 | tee -a "$__loopzero_log"
+__loopzero_status=$(cat "$__loopzero_rc" 2>/dev/null || echo 1)
+rm -f "$__loopzero_rc" 2>/dev/null || true
+exit "$__loopzero_status"
 `, phase, stepName, display, script)
 }
 

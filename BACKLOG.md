@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-152 items — **Open** 60 · **In flight** 0 · **Closed** 92
+153 items — **Open** 61 · **In flight** 0 · **Closed** 92
 
-### Open (60)
+### Open (61)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -134,6 +134,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média |
 | [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados----) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `triaged` | baixa |
 | [`B-152`](#b-152--o-primeiro-build-do-fixture-falha-em-manifestos-e-a-mensagem-não-diz-qual-domínio----) | O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio | `triaged` | — |
+| [`B-153`](#b-153--seis-passos-do-build-não-conseguem-falhar-o-exit-1-deles-é-engolido-por-um-tee----) | Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee` | `triaged` | — |
 
 ### In flight (0)
 
@@ -7131,6 +7132,25 @@ evidence: |
   pelo webhook — morrem no mesmo estágio com o mesmo texto. A causa não depende do caminho
   de entrada, e agora é o único elo vermelho da jornada.
 
+  Cadeia completa, medida 2026-08-18 ao vivo, do fim para o comeco:
+
+    manifest_builder: missing image digest for app "api"   <- o que o usuario ve, embrulhado
+      <- sign-image nunca rodou, porque nao havia imagem
+      <- build-image-api falhou 4x: failed to read dockerfile: open Dockerfile: no such file
+      <- generate-dockerfile terminou Completed sem escrever o arquivo
+      <- ele era um passo de falha-fechada que nao conseguia falhar ([[B-153]])
+      <- porque o runtime resolveu para "unsupported"
+
+  O ultimo elo: `resolveLanguageStrategy` aceita exatamente `node` ou `python`
+  (`api/internal/services/deploycontracts/build_plan.go:179`), lendo `unit.Runtime`. O
+  `loopzero.yaml` do repositorio de fixture declara `framework: python` — o contrato passou a
+  ser keyed em `runtime` e o fixture nao acompanhou.
+
+  Com [[B-153]] consertado, esse caso deixa de morrer tres estagios adiante com uma
+  mensagem que nao o nomeia: o passo reprova dizendo `runtime "unsupported" is not
+  supported`. Resta decidir se o fixture e que esta velho ou se a resolucao deveria
+  aceitar `framework` — questao do contrato LoopZeroKit/LoopZeroCloud, nao deste item.
+
 why_now: |
   Este é o único build que a instância conseguiu produzir, e ele falha. Enquanto
   [[B-150]] e [[B-151]] tratam de o evento *chegar*, este trata de o que acontece
@@ -7144,3 +7164,57 @@ status: triaged
 dod:
   - a causa da falha de manifestos identificada e coberta por teste que falha no estado atual
   - a mensagem nomeia o domínio e o app envolvidos
+
+## B-153 — Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee`   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-live-test
+evidence: |
+  Medido ao vivo 2026-08-18, perseguindo [[B-152]]. O passo `generate-dockerfile` do build
+  `build-8044d982b5a5cc1b` imprimiu o erro e o pod terminou **`Completed`**:
+
+      loopzero: runtime "unsupported" is not supported — LoopZeroCloud deploys the fixed
+      LoopZeroKit stack (python, node) only
+      ::loopzero:: … step=generate-dockerfile level=info msg="Generate dockerfile completed in 0s"
+
+  O script que ele executa é, literalmente, `echo "…" >&2` seguido de `exit 1`
+  (`api/internal/argo/languages.go` — `unsupportedStrategy.failStep`). Ele saiu 0.
+
+  A causa está no invólucro de marcadores de log, `wrapWithLoopZeroMarkers`
+  (`api/internal/argo/`), que executa o script dentro de um **pipeline**:
+
+      { <script> } 2>&1 | tee -a "$__loopzero_log"
+
+  Em shell POSIX o status de um pipeline é o do **último** comando — o `tee`, que sempre
+  sucede. A proteção que existe ali, `(set -o pipefail) 2>/dev/null || true`, está dentro de
+  **parênteses**: liga a opção num subshell e a descarta junto com ele, sem efeito algum
+  sobre o shell que roda o pipeline.
+
+  Reproduzido fora do cluster, no mesmo shell do container:
+
+      $ sh -c '(set -o pipefail) 2>/dev/null || true
+               { echo erro >&2; exit 1; } 2>&1 | tee /dev/null; echo "status: $?"'
+      erro
+      status: 0
+
+  Alcance medido no workflow real: `validate-workspace`, `install-deps`, `build-apps`,
+  `security-scan` e `generate-dockerfile` reportaram **todos** `Succeeded` — e os cinco eram
+  o mesmo `failStep`, isto é, o mecanismo inteiro de falha-fechada do runtime não suportado
+  é inerte. `build-image-api` foi o único a falhar corretamente, e é justamente o único que
+  **não** passa por `buildContainer` (é montado por `buildkitContainer`).
+why_now: |
+  Este é o elo que transforma um erro legível em silêncio: o build segue para o estágio
+  seguinte com a árvore sem Dockerfile, o BuildKit falha quatro vezes, não há digest, e o
+  usuário recebe `Failed to build manifests with custom domains` — uma mensagem que não
+  nomeia nada do que realmente aconteceu ([[B-152]]).
+
+  E é a mesma classe de defeito que esta sessão vem fechando em outras superfícies: um verde
+  que não distingue "passou" de "não verifiquei". Aqui ele está no caminho por onde todo
+  build do produto passa.
+status: triaged
+dod:
+  - um passo cujo script sai não-zero faz o pod terminar não-zero, provado por teste
+  - a asserção vale no shell do container (POSIX/ash), não só em bash
+  - o mecanismo de falha-fechada do runtime não suportado reprova o build de ponta a ponta
