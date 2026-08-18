@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-148 items — **Open** 62 · **In flight** 0 · **Closed** 86
+149 items — **Open** 60 · **In flight** 0 · **Closed** 89
 
-### Open (62)
+### Open (60)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -106,7 +106,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-080`](#b-080--os-43-arquivos-de-routes-ainda-são-um-pacote-plano-e-mover-263-símbolos-exportados-é-t3----) | Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3 | `triaged` | alta |
 | [`B-081`](#b-081--as-277-mensagens-de-erro-autoradas-nos-handlers-não-têm-gate-de-vocabulário----) | As 277 mensagens de erro autoradas nos handlers não têm gate de vocabulário | `triaged` | média |
 | [`B-082`](#b-082--check-loopzero-api-vault-projected-token_testsh-reprova-de-forma-intermitente-dentro-do-qualitygates----) | `check-loopzero-api-vault-projected-token_test.sh` reprova de forma intermitente dentro do `quality:gates` | `triaged` | média |
-| [`B-083`](#b-083--task-lint-continua-vermelho-por-88-achados-em-api-que-o-b-009-nunca-cobriu----) | `task lint` continua vermelho por 88 achados em `api/`, que o B-009 nunca cobriu | `triaged` | média |
 | [`B-086`](#b-086--um-documento-de-decisão-que-registra-a-ausência-de-um-adr-faz-esse-adr-resolver----) | Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver | `triaged` | média |
 | [`B-091`](#b-091--infraqualitydry-run-baselinetxt-é-a-segunda-baseline-sem-leitor----) | `infra/quality/dry-run-baseline.txt` é a segunda baseline sem leitor | `triaged` | baixa |
 | [`B-093`](#b-093--o-validador-do-servicesjson-não-bloqueia-os-prefixos-que-a-plataforma-injeta----) | O validador do `services.json` não bloqueia os prefixos que a plataforma injeta | `triaged` | média |
@@ -120,7 +119,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-102`](#b-102--task---dry-imprime-bloco-multi-linha-sem-avaliar-o-controle-de-fluxo-e-é-nisso-que-uma-asserção-de-segurança-se-apoia----) | `task --dry` imprime bloco multi-linha sem avaliar o controle de fluxo, e é nisso que uma asserção de segurança se apoia | `triaged` | média |
 | [`B-111`](#b-111--o-mesmo-controle-de-firewall-vive-em-três-repositórios-sem-dono-declarado----) | O mesmo controle de firewall vive em três repositórios sem dono declarado | `triaged` | média |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
-| [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes----) | `task lint` para no primeiro módulo e esconde os seguintes | `triaged` | média |
 | [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
 | [`B-128`](#b-128--o-detector-de-fabricação-de-símbolo-acusa-4258-falsos-num-workspace-multi-módulo----) | O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo | `triaged` | média |
@@ -135,13 +133,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-142`](#b-142--um-token-do-digitalocean-vivo-atravessou-cinco-meses-e-vários-pushes-sem-ser-barrado----) 🔒 | Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado | `triaged` | P0 |
 | [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `triaged` | média |
 | [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média |
-| [`B-148`](#b-148--155-arquivos-go-não-passam-pelo-gofmt-e-nenhum-gate-percebe----) | 155 arquivos Go não passam pelo `gofmt`, e nenhum gate percebe | `triaged` | baixa |
+| [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados----) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `triaged` | baixa |
 
 ### In flight (0)
 
 _None._
 
-### Closed (86)
+### Closed (89)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -195,6 +193,7 @@ _None._
 | [`B-075`](#b-075--o-primitivo-de-crypto-shredding-não-tem-dono-e-o-adr-quase-o-deletou---x) | O primitivo de crypto-shredding não tem dono, e o ADR quase o deletou | `shipped` | alta |
 | [`B-076`](#b-076--21-divergências-entre-chart-publicado-e-de-bootstrap-estão-aprovadas-sem-que-ninguém-tenha-medido-por-quê---x) | 21 divergências entre chart publicado e de bootstrap estão aprovadas sem que ninguém tenha medido por quê | `shipped` | média |
 | [`B-077`](#b-077--a-cerca-de-forma-dos-crs-tenant-está-desligada-exatamente-no-cluster-onde-os-crs-vivem---x) | A cerca de forma dos CRs Tenant está desligada exatamente no cluster onde os CRs vivem | `shipped` | alta |
+| [`B-083`](#b-083--task-lint-continua-vermelho-por-88-achados-em-api-que-o-b-009-nunca-cobriu---x) | `task lint` continua vermelho por 88 achados em `api/`, que o B-009 nunca cobriu | `shipped` | média |
 | [`B-084`](#b-084--a-cerca-routes-acyclic-não-vigia-o-pacote-pai-e-o-risco-cresce-a-cada-família---x) | A cerca `routes-acyclic` não vigia o pacote pai, e o risco cresce a cada família | `shipped` | alta |
 | [`B-085`](#b-085--dez-arquivos-escrevem-status-fora-do-contrato-em-28-pontos---x) | Dez arquivos escrevem `.status` fora do contrato, em 28 pontos | `shipped` | alta |
 | [`B-087`](#b-087--task-qualityall-aborta-no-primeiro-passo-contra-um-diretório-que-não-existe-desde-o-m9---x) | `task quality:all` aborta no primeiro passo, contra um diretório que não existe desde o M9 | `shipped` | alta |
@@ -219,6 +218,7 @@ _None._
 | [`B-118`](#b-118--o-loopzero-rag-está-fora-do-ar-há-seis-dias-dado-do-postgresql-15-sob-imagem-18---x) 🔒 | O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18 | `shipped` | alta |
 | [`B-119`](#b-119--o-gate-de-digest-está-em-modo-aviso-há-três-meses-e-a-chave-tem-dono-nomeado---x) 🔒 | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado | `shipped` | média |
 | [`B-120`](#b-120--23-invocações-de-script-nas-skills-não-resolvem-no-layout-em-que-elas-rodam---x) | 23 invocações de script nas skills não resolvem no layout em que elas rodam | `shipped` | alta |
+| [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes---x) | `task lint` para no primeiro módulo e esconde os seguintes | `shipped` | média |
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda---x) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `shipped` | média |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda---x) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `shipped` | média |
 | [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem---x) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `shipped` | alta |
@@ -231,6 +231,7 @@ _None._
 | [`B-143`](#b-143--o-gate-de-segredos-deu-vereditos-diferentes-para-a-mesma-entrada-e-deixou-passar-cinco-meses---x) | O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses | `shipped` | alta |
 | [`B-144`](#b-144--o-contrato-manda-o-backlog-viver-no-umbrella-e-nenhum-projeto-faz-isso---x) | O contrato manda o backlog viver no umbrella, e nenhum projeto faz isso | `shipped` | — |
 | [`B-145`](#b-145--dez-itens-moram-no-backlog-do-projeto-errado---x) | Dez itens moram no backlog do projeto errado | `shipped` | — |
+| [`B-148`](#b-148--155-arquivos-go-não-passam-pelo-gofmt-e-nenhum-gate-percebe---x) | 155 arquivos Go não passam pelo `gofmt`, e nenhum gate percebe | `shipped` | baixa |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -3844,7 +3845,7 @@ dod:
 > Registrado 2026-08-12 durante a fatia slice-5. Não foi causado por ela: provado com a mudança em
 > stash — 0 antes, 0 depois, isoladamente.
 
-## B-083 — `task lint` continua vermelho por 88 achados em `api/`, que o B-009 nunca cobriu   [ ]
+## B-083 — `task lint` continua vermelho por 88 achados em `api/`, que o B-009 nunca cobriu   [x]
 
 domain: engine-go
 repo: loopzero
@@ -3852,7 +3853,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12, ao fechar o `B-009`. Aquele item mediu *"11 achados, todos em `operators/`"* — e os 11 estão em zero agora. Mas `cd api && golangci-lint run ./...` devolve **88**: 44 `gosec`, 34 `staticcheck`, 7 `unused`, 1 `errorlint`, 1 `errcheck`. **Nenhum** deles está nos arquivos que a sessão de fatias tocou (`routes/secrets.go`, `routes/projects.go`, `db/query_executor.go`, `db/dbtx/`, `routes/httpio/`) — são pré-existentes. A medição original do `B-009` provavelmente parou no primeiro módulo que reprovou: `task lint` roda os módulos em comandos separados e o Task aborta no primeiro erro.
 why_now: `task lint` é uma das linhas do `CLAUDE.md § Pre-completion checklist`, e continua não-marcável — agora por um corpo diferente e maior do que o item que a explicava. O `task lint:baseline` passa (88 < 200), então há duas tasks com veredictos opostos sobre a mesma coisa, e a que aparece na checklist é a estrita.
-status: triaged
+status: shipped
 severity: média — nada quebrado; o custo é uma linha de checklist que ninguém pode marcar, que é como uma checklist deixa de ser checklist.
 dod:
   - os 88 estão corrigidos, ou a fração irredutível está allowlistada com sunset conforme `code-quality-allowlist.txt`
@@ -3862,6 +3863,16 @@ dod:
 > Registrado 2026-08-12 ao fechar `B-009` e `B-071`. Os dois vermelhos que o `B-009` narrava como
 > "a checklist que ninguém roda inteira" eram na verdade três: os 11 de `operators`, os 4 testes de
 > migração, e estes 88 — que só ficaram visíveis quando os outros dois saíram da frente.
+
+> **Fechado 2026-08-18 — a bala 1 já estava resolvida, e o status é que estava velho.** Os 88
+> achados de `api/` medidos em 12/08 estão em **0**. E não foram varridos para baixo do tapete:
+> os 12 linters do `.golangci.yml` seguem ligados, e as diretivas `//nolint` em `api/` foram de
+> **37 para 43** — **6 supressões contra 82 correções reais**.
+>
+> As balas 2 e 3 foram as desta fatia. A `lint:strict` **saiu**: ela comparava um total agregado
+> contra um baseline de 200 (`api=140 + operators=60`) com os dois em **zero** — 200 fora da
+> realidade. Agora há uma task, um veredito, e a linha de base é **por módulo** e derivada do
+> medido. Um total único deixaria `cmd/loopzero-ops` melhorar 10 e `api` piorar 10 sem ninguém ver.
 
 ## B-084 — A cerca `routes-acyclic` não vigia o pacote pai, e o risco cresce a cada família   [x]
 
@@ -6011,7 +6022,7 @@ dod:
 > **O oráculo de gates confirmou a adição:** `TestOracle_MatchesFrozenBaseline` reprovou com *"got 126 lines, baseline 125"* — exatamente um gate a mais — e a baseline foi re-congelada conscientemente.
 
 
-## B-121 — `task lint` para no primeiro módulo e esconde os seguintes   [ ]
+## B-121 — `task lint` para no primeiro módulo e esconde os seguintes   [x]
 
 domain: engine-go
 repo: loopzero
@@ -6020,13 +6031,28 @@ source: discover-review
 severity: média — não é defeito de produto, mas é um gate que reporta verde sobre o que não olhou, e foi ele que manteve 63 achados invisíveis enquanto o `B-009` dizia 11
 evidence: medido 2026-08-16. `taskfiles/test.yml § lint` roda três comandos em sequência — `cd pkg && golangci-lint run ./...`, depois `operators`, depois `api`. O Task aborta no primeiro comando que sai != 0, então `api` **nunca era linted** enquanto `operators` tivesse um achado. Reproduzido: antes da correção do `B-009`, `task lint` reportava `1 issues` (operators); com `operators` limpo, a mesma task reportou `63` (api). Os dois números vieram da mesma árvore, com um commit de diferença que tocou uma linha de teste.
 why_now: descoberto ao fechar o `B-009`, cujo enunciado ("11 achados, todos em `operators/`") era consequência direta deste comportamento e não da árvore.
-status: triaged
+status: shipped
 dod:
   - `task lint` roda os três módulos mesmo quando um falha, e o código de saída reflete o agregado
   - a saída diz quantos achados por módulo, para que uma contagem citada num item nomeie o que foi medido
   - existe teste que prova que um achado em `pkg` não impede `api` de ser linted
 
 > Registrado 2026-08-16 ao fechar o `B-009`.
+
+> **Entregue 2026-08-18 — e a medição mostrou que o item descrevia o sintoma menor.** Ele fala
+> de abortar no primeiro módulo. Medido: mesmo **sem** abortar, `task lint` olhava **3 de 9**.
+> Os não cobertos somavam **318 achados**, sendo **221 no `cmd/loopzero-ops`** — o binário que
+> executa os 130 gates deste repositório. A ferramenta que reprova a árvore não era reprovada
+> por ninguém.
+>
+> As três balas fechadas: a task roda **todos** os módulos sem abortar e o veredito é agregado;
+> a saída diz a contagem **por módulo** (`api=0/70 cmd/loopzero-ops=221/0 …`); e existe teste
+> provando que um achado em `pkg` não impede `api` de ser medido —
+> `TestFalhaNumModuloNaoImpedeOsOutros`, com a falha **fabricada** por uma costura injetável,
+> porque um teste que dependesse de rodar `golangci-lint` de verdade não conseguiria produzi-la.
+>
+> Os módulos são descobertos **no disco**, nunca listados: foi uma lista à mão que deixou cinco
+> de fora. Um módulo novo sem entrada na linha de base **reprova**, em vez de entrar em silêncio.
 
 ## B-122 — Comentário afirma um gate de credenciais que não existe   [ ]
 
@@ -6818,7 +6844,7 @@ dod:
   - o que ficar sem executor está declarado como tal, e não some em silêncio
   - o `cosignDeadline` tem entrada válida antes de ser reagendado, ou o `B-146` fecha primeiro
 
-## B-148 — 155 arquivos Go não passam pelo `gofmt`, e nenhum gate percebe   [ ]
+## B-148 — 155 arquivos Go não passam pelo `gofmt`, e nenhum gate percebe   [x]
 
 domain: engine-go
 repo: loopzero
@@ -6835,7 +6861,7 @@ why_now: apareceu ao investigar por que a trava de fim de turno reclamava de có
   produção alterado sem CHANGELOG: os 31 arquivos sujos não eram trabalho de ninguém, eram
   normalização de formatação pendente. Ao medir para decidir se commitava ou descartava,
   o número maior apareceu.
-status: triaged
+status: shipped
 severity: baixa — não muda comportamento. O custo é de atrito: diffs poluídos por
   reformatação alheia, e revisão que precisa separar o que é mudança do que é formatação.
 dod:
@@ -6843,4 +6869,46 @@ dod:
   - existe verificação que reprove arquivo fora de formato antes do commit, e não depois
   - está medido se `golangci-lint` já cobriria isso com o linter certo ligado, em vez de
     uma verificação nova
+
+> **Fechado 2026-08-18 — medido, com piso, e a terceira bala respondida com dado.** A bala
+> perguntava se o `golangci-lint` já cobriria isto com o linter certo ligado. **Não cobre, e a
+> medição é direta:** `pkg` tem **30** arquivos fora do `gofmt` e **0** achados de
+> `golangci-lint`. Nenhum linter de formatação está habilitado, e habilitá-lo somaria as 155 aos
+> números por módulo, misturando duas dimensões que se corrigem de formas diferentes —
+> formatação é mecânica, `gosec` não é.
+>
+> `gofmt` virou dimensão própria, com catraca própria: `api` 70 · `infra` 53 · `pkg` 30 ·
+> `operators` 1. Os 155 **não foram corrigidos** — estão congelados e visíveis na saída de todo
+> push, e um arquivo novo fora de formato reprova. Registrado em `B-149`.
+
+## B-149 — 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: |
+  Medido 2026-08-18 pelo gate `lint-coverage`, que nasceu nesta data:
+  | módulo | lint | gofmt |
+  |---|---:|---:|
+  | `cmd/loopzero-ops` | **221** | 0 |
+  | `infra/tests` | **93** | 53 |
+  | `infra/scripts` | 4 | 1 |
+  | `api` | 0 | **70** |
+  | `pkg` | 0 | **30** |
+  | `operators` | 0 | 1 |
+  | `operators/api` · `tools/*` (2) | 0 | 0 |
+  Total: **318 achados**, **155 arquivos** fora do `gofmt`.
+why_now: eles estavam invisíveis porque `task lint` olhava 3 dos 9 módulos (`B-121`). Agora
+  estão medidos e com catraca — um achado novo reprova —, mas os 318 seguem lá. E o maior
+  bloco, 221, está no `cmd/loopzero-ops`: o binário que executa os 130 gates deste repositório.
+  Uma catraca que ninguém baixa vira carimbo; o gate imprime as melhorias justamente para
+  que alguém recongele, mas nada obriga.
+status: triaged
+severity: baixa — nada quebrado. O custo é que a ferramenta de qualidade é a menos verificada
+  do repositório, e isso é desconfortável na exata medida em que ela julga todo o resto.
+dod:
+  - o número de `cmd/loopzero-ops` caiu, ou o que resta está classificado por linter com razão
+  - `gofmt` chega a zero em ao menos um módulo, e a linha de base é recongelada
+  - está medido quantos dos 318 são supressáveis com razão contra quantos são defeito real
 

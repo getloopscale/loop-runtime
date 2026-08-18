@@ -482,54 +482,30 @@ tasks:
         fi
         echo "PASS: No vulnerabilities at MEDIUM+ severity"
 
-  lint:strict:
-    desc: golangci-lint gate with baseline tracking (Phase 4)
-    cmds:
-      - |
-        # Quality-Gate Phase 4 — golangci-lint baseline tracker.
-        # Unified .golangci.yml at repo root enables: gosec, errorlint,
-        # bodyclose, rowserrcheck, sqlclosecheck, unconvert, copyloopvar
-        # on top of defaults (errcheck/govet/ineffassign/staticcheck/unused).
-        # Same baseline-decrement pattern as dupl:strict.
-        # Decrement these as PRs eliminate issues.
-        if ! command -v golangci-lint >/dev/null 2>&1; then
-          echo "FAIL: golangci-lint not installed — https://golangci-lint.run/welcome/install/"
-          exit 1
-        fi
-        API_LINT=$(cd api && (golangci-lint run --timeout 5m 2>&1 || true) | grep -E "^[a-z].*:[0-9]+:[0-9]+:" | wc -l)
-        OPS_LINT=$(cd operators && (golangci-lint run --timeout 5m 2>&1 || true) | grep -E "^[a-z].*:[0-9]+:[0-9]+:" | wc -l)
-        PKG_LINT=$(cd pkg && (golangci-lint run --timeout 5m 2>&1 || true) | grep -E "^[a-z].*:[0-9]+:[0-9]+:" | wc -l)
-        TOTAL=$((API_LINT + OPS_LINT + PKG_LINT))
-        BASELINE=200  # api=140 + operators=60 + pkg=0 (Phase 4 baseline)
-        echo "golangci-lint: api=$API_LINT operators=$OPS_LINT pkg=$PKG_LINT Total=$TOTAL Baseline=$BASELINE"
-        if [ "$TOTAL" -gt "$BASELINE" ]; then
-          echo "FAIL: Lint count ($TOTAL) exceeds baseline ($BASELINE)"
-          echo "New lint issue introduced. Run 'golangci-lint run' in each module for details."
-          exit 1
-        fi
-        echo "PASS: Lint count ($TOTAL) within baseline ($BASELINE)"
-
   lint:
-    desc: Lint all components
+    desc: Lint de TODOS os modulos Go, com catraca por modulo (B-121/B-083/B-148)
     cmds:
       - |
-        if command -v golangci-lint >/dev/null 2>&1; then
-          cd pkg && golangci-lint run ./...
-        else
-          echo "SKIP: golangci-lint not installed — install: https://golangci-lint.run/welcome/install/"
+        # CORRIGIDO 2026-08-18. Esta task rodava TRES modulos de NOVE, em tres entradas `cmds`
+        # separadas — e o Task aborta na primeira que sai != 0, entao um achado em `pkg`
+        # impedia `api` de ser medido. Foi por isso que o B-009 reportou "11 achados, todos em
+        # operators": `api` nunca tinha sido olhado.
+        #
+        # Medido no dia da correcao, modulo a modulo: os tres cobertos em 0, e 318 achados nos
+        # que ninguem olhava — 221 deles em `cmd/loopzero-ops`, o binario que executa os 130 gates
+        # deste repositorio. Mais 155 arquivos fora do `gofmt`, invisiveis porque nenhum linter
+        # de formatacao esta habilitado no .golangci.yml.
+        #
+        # A `lint:strict` saiu junto: ela comparava um total agregado contra um baseline de 200
+        # (`api=140 + operators=60`) com os dois em ZERO. Duas tasks com vereditos opostos sobre
+        # a mesma coisa e pior que uma errada.
+        #
+        # A logica agora tem casa e teste em cmd/loopzero-ops/internal/quality/lintcoverage.
+        if [ ! -x /tmp/loopzero-ops ]; then
+          (cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .)
         fi
-      - |
-        if command -v golangci-lint >/dev/null 2>&1; then
-          cd operators && golangci-lint run ./...
-        else
-          echo "SKIP: golangci-lint not installed — install: https://golangci-lint.run/welcome/install/"
-        fi
-      - |
-        if command -v golangci-lint >/dev/null 2>&1; then
-          cd api && golangci-lint run ./...
-        else
-          echo "SKIP: golangci-lint not installed — install: https://golangci-lint.run/welcome/install/"
-        fi
+        /tmp/loopzero-ops quality lint-coverage
+
   validate:helm-deps:
     desc: |
       Vendoriza as dependências de TODO chart que declara `dependencies:`, nas duas
