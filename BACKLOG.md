@@ -68,15 +68,14 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-156 items — **Open** 60 · **In flight** 0 · **Closed** 96
+156 items — **Open** 59 · **In flight** 0 · **Closed** 97
 
-### Open (60)
+### Open (59)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) 🔒 | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `triaged` | — |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
-| [`B-024`](#b-024--os-seeds-herdam-o-contexto-do-kubectl-e-culpam-o-recurso-errado----) | Os seeds herdam o contexto do kubectl e culpam o recurso errado | `triaged` | média |
 | [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `triaged` | média |
 | [`B-029`](#b-029--dois-caminhos-para-o-mesmo-endpoint-do-stripe----) | Dois caminhos para o mesmo endpoint do Stripe | `triaged` | média |
 | [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
@@ -139,7 +138,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (96)
+### Closed (97)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -164,6 +163,7 @@ _None._
 | [`B-020`](#b-020--o-host-cloud-dev-era-um-segundo-nome-para-o-mesmo-painel---x) | O host `cloud-dev` era um segundo nome para o mesmo painel | `shipped` | — |
 | [`B-021`](#b-021--o-webhook-do-github-está-desligado-falta-o-segredo-hmac---x) | O webhook do GitHub está desligado: falta o segredo HMAC | `shipped` | alta |
 | [`B-023`](#b-023--um-helmfile-sync-sem-as-variáveis-grava-marcador-por-cima-de-credencial---x) | Um `helmfile sync` sem as variáveis grava marcador por cima de credencial | `shipped` | — |
+| [`B-024`](#b-024--os-seeds-herdam-o-contexto-do-kubectl-e-culpam-o-recurso-errado---x) | Os seeds herdam o contexto do kubectl e culpam o recurso errado | `shipped` | média |
 | [`B-026`](#b-026--as-células-divergem-a-plataforma-só-era-instalada-na-primeira---x) | As células divergem: a plataforma só era instalada na primeira | `shipped` | alta |
 | [`B-027`](#b-027--o-diagnóstico-do-cli-manda-verificar-um-endereço-que-não-existe---x) | O diagnóstico do CLI manda verificar um endereço que não existe | `killed` | baixa ↑ |
 | [`B-028`](#b-028--17-portas-alcançáveis-da-internet-fora-de-qualquer-lista---x) 🔒 | 17 portas alcançáveis da internet fora de qualquer lista | `shipped` | P0 |
@@ -1396,7 +1396,7 @@ dod:
 
 **Um achado de passagem.** O `loopzero-ops seed patch-kratos` falhou primeiro com `configmaps "ory-kratos-config" not found`, embora o ConfigMap existisse: o contexto padrão do kubectl estava em `k3d-loopzero-secrets`, deixado pelo `k3d:secrets:create`. O seed herda o contexto atual em vez de fixar o cluster que ele opera — e a mensagem culpa o ConfigMap em vez do contexto. Registrado como `B-024`.
 
-## B-024 — Os seeds herdam o contexto do kubectl e culpam o recurso errado   [ ]
+## B-024 — Os seeds herdam o contexto do kubectl e culpam o recurso errado   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1404,8 +1404,51 @@ suggested_mode: bug
 source: discover-live-test
 evidence: medido em 2026-08-10. `loopzero-ops seed patch-kratos` reprovou com `get configmap loopzero-auth/ory-kratos-config: configmaps "ory-kratos-config" not found` — e o ConfigMap existia. O contexto padrão do kubectl estava em `k3d-loopzero-secrets` (deixado por `task k3d:secrets:create`), e o seed operou o cluster errado. Trocado o contexto para `k3d-loopzero-core`, o mesmo comando passou com 7 correções.
 why_now: o `k3d:secrets:create` passou a fazer parte do caminho canônico há poucas semanas, e ele muda o contexto ativo como efeito colateral. Qualquer seed rodado depois dele opera o cluster de segredos sem avisar. A mensagem de erro é o que torna isto caro: ela nomeia o recurso ausente, não o cluster errado — quem a lê procura o ConfigMap, que está lá.
-status: triaged
+status: shipped
 severity: média — não corrompe nada (o cluster errado simplesmente não tem os recursos), mas manda quem depura para o lugar errado, e o custo é tempo em cima de um sistema já quebrado.
+resolution: |
+  Fechado 2026-08-18, as tres balas cumpridas — e a revisao independente mudou o conserto.
+
+  **Bala 1 — o cluster e fixado, nao herdado.** `CORE_CONTEXT` fixa o contexto quando
+  definida; sem ela o comportamento nao muda (herda o ativo) e a mensagem diz qual usou.
+  A convencao ja existia no repositorio — `seed-post-cleanroom-all.sh` usava
+  `${CORE_CONTEXT:-k3d-loopzero-core}` nos proprios kubectl —, entao a escada parou na rung 4:
+  reusar o que esta instalado. O script passou a **exportar** a variavel, o que fixa a
+  cadeia canonica inteira.
+
+  **Bala 2 — a mensagem nomeia o contexto**, nos 12 sitios de erro de `kube.go`, e o
+  identificador do recurso continua la (ha teste travando os dois lados).
+
+  **Bala 3 — decidido: o `k3d:secrets:create` nao troca mais o contexto.** Escada rung 3,
+  recurso nativo: `--kubeconfig-switch-context=false`. Nao ha logica de restauracao escrita.
+  `--kubeconfig-update-default` fica no padrao, entao a entrada do contexto segue gravada e
+  os `--context k3d-loopzero-secrets` do proprio task continuam valendo.
+
+  **O que a revisao pegou, e eu nao teria pego:**
+
+  - **BLOCKER — minha guarda do taskfile era cega.** Ela casava o bloco inteiro, e o
+    comentario que eu mesmo escrevi no mesmo commit continha as strings procuradas. Dois
+    mutantes passavam: flag removida do comando, e a linha do comando APAGADA por inteiro.
+    A guarda escrita para impedir isso era satisfeita pelo texto que falava sobre isso —
+    a mesma armadilha que o gate `runbook-parity` ja pagou nesta base. Corrigida para
+    descartar comentario e casar a linha de comando; os dois mutantes agora reprovam.
+  - **HIGH — o conserto sozinho so trocava QUAL cluster errado era atingido.** Sem fixar,
+    os seeds cairiam onde quer que o `task setup` tivesse deixado o kubectl. Dai a bala 1
+    ter virado fixacao de verdade, e nao apenas diagnostico.
+  - **HIGH — meu conserto quebrava o runbook do OpenBao.** Tres comandos de
+    `docs/operations/openbao-init-runbook.md` rodavam sem `--context` e funcionavam por
+    heranca da troca que eu removi; passariam a dizer "recurso nao encontrado" sobre um
+    OpenBao que existe — a inversao exata deste item. Corrigidos, junto com o comentario
+    que dizia "mgmt cluster kubeconfig" apontando para o cluster de secrets.
+  - **E eu quase reintroduzi o defeito ao consertar:** ao fazer `CORE_CONTEXT` fixar, o
+    nome passou a ser resolvido num caminho e o cliente construido noutro. A mensagem
+    nomearia um cluster onde ninguem procurou — pior que nao nomear. Unificado numa
+    resolucao so, com teste que compara os dois.
+
+  **Uma afirmacao minha corrigida:** escrevi no teste que a decisao de mudar so o
+  `secrets:create` estava *"medida, nao suposta"*. Nao estava — nada mediu expectativa de
+  operador. Era assercao vestida de evidencia, e a revisao chamou. O texto foi reescrito.
+
 dod:
   - os seeds fixam o cluster que operam em vez de herdar o contexto ativo, ou falham dizendo qual contexto usaram
   - a mensagem de recurso-não-encontrado nomeia o contexto, para quem lê não procurar o recurso certo no cluster errado
