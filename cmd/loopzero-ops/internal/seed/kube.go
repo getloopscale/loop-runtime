@@ -59,6 +59,9 @@ type KubeClient interface {
 // kubeClient is the production KubeClient backed by a controller-runtime client.
 type kubeClient struct {
 	c client.Client
+	// contextName nomeia o cluster com que este cliente fala. Vazio quando o chamador
+	// nao o declarou — e ai as mensagens ficam como sempre foram.
+	contextName string
 }
 
 // NewKubeClient wraps a controller-runtime client.Client. The client itself is
@@ -68,23 +71,54 @@ func NewKubeClient(c client.Client) KubeClient {
 	return &kubeClient{c: c}
 }
 
+// NewKubeClientForContext e o mesmo cliente sabendo com QUAL cluster fala.
+//
+// # Por que existe
+//
+// B-024, medido 2026-08-10: `loopzero-ops seed patch-kratos` reprovou com
+// `get configmap loopzero-auth/ory-kratos-config: configmaps "ory-kratos-config" not found`, e
+// o ConfigMap existia. O seed falava com outro cluster — `k3d:secrets:create` troca o
+// contexto ativo como efeito colateral, e os seeds herdam o que estiver ativo. A mensagem
+// mandava procurar o recurso certo no cluster errado, e o custo era tempo de depuracao em
+// cima de um sistema que ja estava quebrado.
+//
+// # Por que um construtor irmao, e nao um parametro a mais
+//
+// `NewKubeClient` tem 98 chamadores, 96 deles em teste. Trocar a assinatura churnaria 96
+// sitios por um beneficio que nao os envolve — teste com cliente falso nao tem contexto de
+// kubeconfig para nomear. Este construtor e opt-in: a raiz de composicao usa, o resto fica.
+func NewKubeClientForContext(c client.Client, contextName string) KubeClient {
+	return &kubeClient{c: c, contextName: contextName}
+}
+
+// resourceAt descreve o alvo de uma operacao, nomeando o cluster quando ele e conhecido.
+//
+// Sem contexto declarado devolve exatamente o que a mensagem sempre trouxe — inventar um
+// rotulo vazio seria pior que a original.
+func (k *kubeClient) resourceAt(namespace, name string) string {
+	if k.contextName == "" {
+		return namespace + "/" + name
+	}
+	return namespace + "/" + name + " (contexto " + k.contextName + ")"
+}
+
 func (k *kubeClient) CreateOrUpdateSecret(ctx context.Context, s *corev1.Secret) (bool, error) {
 	err := k.c.Create(ctx, s)
 	if err == nil {
 		return true, nil
 	}
 	if !apierrors.IsAlreadyExists(err) {
-		return false, fmt.Errorf("create secret %s/%s: %w", s.Namespace, s.Name, err)
+		return false, fmt.Errorf("create secret %s: %w", k.resourceAt(s.Namespace, s.Name), err)
 	}
 	// Exists — update, preserving the live resourceVersion (a merge would 409
 	// without it). Get the current object to carry its RV forward.
 	var existing corev1.Secret
 	if err := k.c.Get(ctx, client.ObjectKey{Namespace: s.Namespace, Name: s.Name}, &existing); err != nil {
-		return false, fmt.Errorf("get secret %s/%s for update: %w", s.Namespace, s.Name, err)
+		return false, fmt.Errorf("get secret %s for update: %w", k.resourceAt(s.Namespace, s.Name), err)
 	}
 	s.ResourceVersion = existing.ResourceVersion
 	if err := k.c.Update(ctx, s); err != nil {
-		return false, fmt.Errorf("update secret %s/%s: %w", s.Namespace, s.Name, err)
+		return false, fmt.Errorf("update secret %s: %w", k.resourceAt(s.Namespace, s.Name), err)
 	}
 	return false, nil
 }
@@ -92,7 +126,7 @@ func (k *kubeClient) CreateOrUpdateSecret(ctx context.Context, s *corev1.Secret)
 func (k *kubeClient) GetSecret(ctx context.Context, namespace, name string) (*corev1.Secret, error) {
 	var s corev1.Secret
 	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &s); err != nil {
-		return nil, fmt.Errorf("get secret %s/%s: %w", namespace, name, err)
+		return nil, fmt.Errorf("get secret %s: %w", k.resourceAt(namespace, name), err)
 	}
 	return &s, nil
 }
@@ -103,7 +137,7 @@ func (k *kubeClient) SecretExists(ctx context.Context, namespace, name string) (
 		if apierrors.IsNotFound(err) {
 			return false, nil
 		}
-		return false, fmt.Errorf("get secret %s/%s: %w", namespace, name, err)
+		return false, fmt.Errorf("get secret %s: %w", k.resourceAt(namespace, name), err)
 	}
 	return true, nil
 }
@@ -111,7 +145,7 @@ func (k *kubeClient) SecretExists(ctx context.Context, namespace, name string) (
 func (k *kubeClient) PatchSecretData(ctx context.Context, namespace, name string, patch map[string][]byte) error {
 	var existing corev1.Secret
 	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &existing); err != nil {
-		return fmt.Errorf("get secret %s/%s: %w", namespace, name, err)
+		return fmt.Errorf("get secret %s: %w", k.resourceAt(namespace, name), err)
 	}
 	if existing.Data == nil {
 		existing.Data = map[string][]byte{}
@@ -120,7 +154,7 @@ func (k *kubeClient) PatchSecretData(ctx context.Context, namespace, name string
 		existing.Data[k2] = v
 	}
 	if err := k.c.Update(ctx, &existing); err != nil {
-		return fmt.Errorf("update secret %s/%s: %w", namespace, name, err)
+		return fmt.Errorf("update secret %s: %w", k.resourceAt(namespace, name), err)
 	}
 	return nil
 }
@@ -128,7 +162,7 @@ func (k *kubeClient) PatchSecretData(ctx context.Context, namespace, name string
 func (k *kubeClient) GetConfigMap(ctx context.Context, namespace, name string) (*corev1.ConfigMap, error) {
 	var c corev1.ConfigMap
 	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &c); err != nil {
-		return nil, fmt.Errorf("get configmap %s/%s: %w", namespace, name, err)
+		return nil, fmt.Errorf("get configmap %s: %w", k.resourceAt(namespace, name), err)
 	}
 	return &c, nil
 }
@@ -136,7 +170,7 @@ func (k *kubeClient) GetConfigMap(ctx context.Context, namespace, name string) (
 func (k *kubeClient) PatchConfigMapData(ctx context.Context, namespace, name string, patch map[string]string) error {
 	var existing corev1.ConfigMap
 	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &existing); err != nil {
-		return fmt.Errorf("get configmap %s/%s: %w", namespace, name, err)
+		return fmt.Errorf("get configmap %s: %w", k.resourceAt(namespace, name), err)
 	}
 	if existing.Data == nil {
 		existing.Data = map[string]string{}
@@ -145,7 +179,7 @@ func (k *kubeClient) PatchConfigMapData(ctx context.Context, namespace, name str
 		existing.Data[k2] = v
 	}
 	if err := k.c.Update(ctx, &existing); err != nil {
-		return fmt.Errorf("update configmap %s/%s: %w", namespace, name, err)
+		return fmt.Errorf("update configmap %s: %w", k.resourceAt(namespace, name), err)
 	}
 	return nil
 }
@@ -153,7 +187,7 @@ func (k *kubeClient) PatchConfigMapData(ctx context.Context, namespace, name str
 func (k *kubeClient) RolloutRestartDeployment(ctx context.Context, namespace, name string) error {
 	var d appsv1.Deployment
 	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &d); err != nil {
-		return fmt.Errorf("get deployment %s/%s: %w", namespace, name, err)
+		return fmt.Errorf("get deployment %s: %w", k.resourceAt(namespace, name), err)
 	}
 	if d.Spec.Template.ObjectMeta.Annotations == nil {
 		d.Spec.Template.ObjectMeta.Annotations = map[string]string{}
@@ -161,7 +195,7 @@ func (k *kubeClient) RolloutRestartDeployment(ctx context.Context, namespace, na
 	d.Spec.Template.ObjectMeta.Annotations["kubectl.kubernetes.io/restartedAt"] =
 		time.Now().UTC().Format(time.RFC3339)
 	if err := k.c.Update(ctx, &d); err != nil {
-		return fmt.Errorf("update deployment %s/%s: %w", namespace, name, err)
+		return fmt.Errorf("update deployment %s: %w", k.resourceAt(namespace, name), err)
 	}
 	return nil
 }

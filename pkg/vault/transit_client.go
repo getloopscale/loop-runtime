@@ -157,6 +157,18 @@ type TransitClient struct {
 	rateLimiters *lru.Cache[string, *rate.Limiter]
 	rateLimit    rate.Limit
 	rateBurst    int
+
+	// now fornece o instante que o limitador consulta. Existe para que a capacidade de
+	// rajada seja afirmavel sem depender do relogio de parede.
+	//
+	// B-014: o teste da rajada contava chamadas HTTP reais e reprovava com
+	// `allowed: got 11 want 10` quando as 15 chamadas levavam mais de 100ms — a 10/s, um
+	// token extra reabastecia no meio da contagem. Reprovava por tempo, nao por
+	// comportamento.
+	//
+	// Nao ha abstracao de relogio nova aqui: `rate.Limiter` ja expoe `AllowN(t, n)`, que
+	// recebe o instante. O seam e um campo de funcao, nulo em producao.
+	now func() time.Time
 }
 
 // NewTransitClient constructs a TransitClient with SPKI pinning baked
@@ -251,6 +263,15 @@ func verifySPKIPin(rawCerts [][]byte, expectedPin []byte) error {
 	return nil
 }
 
+// timeNow devolve o instante que o limitador deve usar. Em producao e o relogio real; um
+// teste substitui `now` para congelar ou avancar o tempo deliberadamente.
+func (c *TransitClient) timeNow() time.Time {
+	if c.now != nil {
+		return c.now()
+	}
+	return time.Now()
+}
+
 // acquireRateToken checks the per-tenant rate limit (T3.4 + EC-08). When
 // rate limiting is disabled (cfg.RateLimitPerSec <= 0), it always
 // returns nil. Returns ErrRateLimited when the tenant's bucket is empty.
@@ -263,7 +284,7 @@ func (c *TransitClient) acquireRateToken(tenantID string) error {
 		lim = rate.NewLimiter(c.rateLimit, c.rateBurst)
 		c.rateLimiters.Add(tenantID, lim)
 	}
-	if !lim.Allow() {
+	if !lim.AllowN(c.timeNow(), 1) {
 		return fmt.Errorf("vault: tenant %s: %w", tenantID, ErrRateLimited)
 	}
 	return nil

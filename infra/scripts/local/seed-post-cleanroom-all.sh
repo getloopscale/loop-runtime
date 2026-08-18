@@ -40,6 +40,20 @@
 
 set -euo pipefail
 
+# B-024: FIXA o cluster que os seeds operam, em vez de deixá-los herdar o contexto ativo.
+#
+# O passo 0a deste script roda `task k3d:secrets:create`, e o `k3d cluster create` trocava
+# o `current-context` como efeito colateral — então todo seed abaixo dele operava o cluster
+# de secrets achando que era o central, e reportava "recurso não encontrado" sobre recursos
+# que existiam. O taskfile deixou de trocar o contexto, mas isso sozinho apenas mudaria QUAL
+# cluster errado seria atingido: sem fixar, os seeds cairiam onde quer que o `task setup`
+# tenha deixado o kubectl.
+#
+# A variável já era a convenção deste script (ver o `kubectl --context "${CORE_CONTEXT:-...}"`
+# mais abaixo); aqui ela passa a valer para os seeds também. `export` porque `run_step` usa
+# `eval`, e o binário a lê em `resolveContextName`.
+export CORE_CONTEXT="${CORE_CONTEXT:-k3d-loopzero-core}"
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 

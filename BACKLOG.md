@@ -68,18 +68,14 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-156 items — **Open** 63 · **In flight** 0 · **Closed** 93
+156 items — **Open** 59 · **In flight** 0 · **Closed** 97
 
-### Open (63)
+### Open (59)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) 🔒 | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `triaged` | — |
-| [`B-002`](#b-002--o-cluster-mgmt-é-spof-de-tudo-e-renomeá-lo-para-core-não-muda-isso----) | O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso | `triaged` | — |
-| [`B-005`](#b-005--unificar-cell-e-cluster-em-11-aposentando-cell-default----) | Unificar cell e cluster em 1:1, aposentando `cell-default` | `triaged` | — |
-| [`B-014`](#b-014--testtransitclient_ratelimitburst-reprova-por-tempo-não-por-comportamento----) | `TestTransitClient_RateLimitBurst` reprova por tempo, não por comportamento | `triaged` | média |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
-| [`B-024`](#b-024--os-seeds-herdam-o-contexto-do-kubectl-e-culpam-o-recurso-errado----) | Os seeds herdam o contexto do kubectl e culpam o recurso errado | `triaged` | média |
 | [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `triaged` | média |
 | [`B-029`](#b-029--dois-caminhos-para-o-mesmo-endpoint-do-stripe----) | Dois caminhos para o mesmo endpoint do Stripe | `triaged` | média |
 | [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
@@ -142,12 +138,14 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (93)
+### Closed (97)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
+| [`B-002`](#b-002--o-cluster-mgmt-é-spof-de-tudo-e-renomeá-lo-para-core-não-muda-isso---x) | O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso | `shipped` | — |
 | [`B-003`](#b-003--o-checker-de-ponteiros-acusa-de-fabricação-todo-caminho-iniciado-por-ponto---x) | O checker de ponteiros acusa de fabricação todo caminho iniciado por ponto | `shipped` | — |
 | [`B-004`](#b-004--a-fixture-boa-do-discover-confidence-não-passa-no-layout-em-que-o-skill-é-instalado---x) | A fixture "boa" do discover-confidence não passa no layout em que o skill é instalado | `shipped` | — |
+| [`B-005`](#b-005--unificar-cell-e-cluster-em-11-aposentando-cell-default---x) | Unificar cell e cluster em 1:1, aposentando `cell-default` | `killed` | — |
 | [`B-006`](#b-006--o-oráculo-do-conjunto-de-gates-vive-num-arquivo-com-data-no-nome-e-é-mutado-a-cada-gate---x) | O oráculo do conjunto de gates vive num arquivo com data no nome, e é mutado a cada gate | `shipped` | — |
 | [`B-007`](#b-007--43-mb-de-snapshot-de-helmfile-que-ninguém-gera-nem-consome---x) | 4,3 MB de snapshot de helmfile que ninguém gera nem consome | `shipped` | — |
 | [`B-008`](#b-008--task-testunit-está-vermelho-por-drift-entre-repositórios---x) | `task test:unit` está vermelho por drift entre repositórios | `shipped` | — |
@@ -156,6 +154,7 @@ _None._
 | [`B-011`](#b-011--o-reconciliador-do-loopzero-cloud-reiniciava-o-deployment-a-cada-5-minutos-sempre---x) | O reconciliador do loopzero-cloud reiniciava o deployment a cada 5 minutos, sempre | `shipped` | — |
 | [`B-012`](#b-012--a-imagem-do-mcp-do-loopzero-promptly-nunca-constrói-os-pacotes-que-ela-executa---x) | A imagem do MCP do loopzero-promptly nunca constrói os pacotes que ela executa | `shipped` | baixa |
 | [`B-013`](#b-013--o-nó-agente-da-cell-2-está-notready-desde-2026-07-23-por-token-não-autorizado---x) | O nó agente da cell-2 está NotReady desde 2026-07-23 por token não autorizado | `shipped` | baixa |
+| [`B-014`](#b-014--testtransitclient_ratelimitburst-reprova-por-tempo-não-por-comportamento---x) | `TestTransitClient_RateLimitBurst` reprova por tempo, não por comportamento | `shipped` | média |
 | [`B-015`](#b-015--dois-charts-apontam-para-versões-que-não-existem-mais-no-upstream---x) | Dois charts apontam para versões que não existem mais no upstream | `shipped` | baixa |
 | [`B-016`](#b-016--o-token-que-puxa-as-imagens-de-plataforma-do-ghcr-está-inválido---x) | O token que puxa as imagens de plataforma do GHCR está inválido | `shipped` | alta |
 | [`B-017`](#b-017--o-dockerfilelocal-do-loopzero-cloud-tem-dois-defeitos-que-o-impedem-de-construir---x) | O `Dockerfile.local` do loopzero-cloud tem dois defeitos que o impedem de construir | `shipped` | alta |
@@ -164,6 +163,7 @@ _None._
 | [`B-020`](#b-020--o-host-cloud-dev-era-um-segundo-nome-para-o-mesmo-painel---x) | O host `cloud-dev` era um segundo nome para o mesmo painel | `shipped` | — |
 | [`B-021`](#b-021--o-webhook-do-github-está-desligado-falta-o-segredo-hmac---x) | O webhook do GitHub está desligado: falta o segredo HMAC | `shipped` | alta |
 | [`B-023`](#b-023--um-helmfile-sync-sem-as-variáveis-grava-marcador-por-cima-de-credencial---x) | Um `helmfile sync` sem as variáveis grava marcador por cima de credencial | `shipped` | — |
+| [`B-024`](#b-024--os-seeds-herdam-o-contexto-do-kubectl-e-culpam-o-recurso-errado---x) | Os seeds herdam o contexto do kubectl e culpam o recurso errado | `shipped` | média |
 | [`B-026`](#b-026--as-células-divergem-a-plataforma-só-era-instalada-na-primeira---x) | As células divergem: a plataforma só era instalada na primeira | `shipped` | alta |
 | [`B-027`](#b-027--o-diagnóstico-do-cli-manda-verificar-um-endereço-que-não-existe---x) | O diagnóstico do CLI manda verificar um endereço que não existe | `killed` | baixa ↑ |
 | [`B-028`](#b-028--17-portas-alcançáveis-da-internet-fora-de-qualquer-lista---x) 🔒 | 17 portas alcançáveis da internet fora de qualquer lista | `shipped` | P0 |
@@ -358,7 +358,7 @@ registro dessa reunião foi localizado. O código resultante é o desenho certo 
 decisão certa chegou por um caminho que a governança não viu.
 
 
-## B-002 — O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso   [ ]
+## B-002 — O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso   [x]
 
 domain: engine-go
 repo: loopzero
@@ -366,8 +366,41 @@ suggested_mode: review
 source: human
 evidence: `.claude/knowledge-base/discoveries/opportunities/core-cluster-spof-opportunity.md` — medido em 2026-08-09 sobre a árvore `26ba1340`, rastreando cada função até o **sítio de chamada**, não até a linha de helmfile. As 4 funções **param** juntas, sem janela de degradação: login (`api/internal/config/config.go:257`, JWKS do Hydra que roda no `mgmt`), deploy e rollback (`config.go:377` Gitea + `config.go:381` ArgoCD, ambos no `mgmt`), build (a iniciação parte do `loopzero-api`; um build em voo continua no cluster de build). **Mas o plano de dados sobrevive:** Traefik, cert-manager, Argo Rollouts, KEDA e ESO vivem na cell (`runtime.helmfile.yaml.gotmpl:98`, `:76`, `:148`, `:123`, `:108`), e nenhum caminho de dados chama de volta o `mgmt`. A metade Model-B **continua não medida** — o código vive em `loopzero-cloud` e `loopzero-traefik-mcp`, fora deste registro.
 why_now: o `B-001` renomeia este cluster para `core` justamente porque o nome `mgmt` faz todo mundo raciocinar sobre ele como infraestrutura de suporte descartável. O rename corrige o **raciocínio**; não corrige o **raio de explosão**. Registrar agora é o que impede que o rename seja lido como se o problema tivesse sido resolvido — o item existe para que a diferença fique explícita depois que `core` for o nome.
-status: triaged
+status: shipped
 depends_on: B-001 apenas para vocabulário (o item continua válido com qualquer um dos dois nomes); tecnicamente independente — não bloqueia nem é bloqueado pelo rename
+resolution: |
+  Fechado 2026-08-18. Item de **medicao** — as tres balas estao cumpridas, e nenhuma delas
+  pedia mitigacao.
+
+  **Bala 1** ja estava: o raio por funcao foi medido em 2026-08-09 e corrigiu o proprio
+  titulo deste item — o SPOF e total e do plano de controle, e o trafego de tenant nao e
+  afetado.
+
+  **Bala 2 era a lacuna real**, e a opportunity dizia `nao medido` na linha dos produtos
+  Model-B. Medido agora: nem `loopzero-cloud` nem `loopzero-traefik-mcp` contem **qualquer** cliente
+  Kubernetes (`kubeconfig`, `clientcmd`, `InClusterConfig`, `kubernetes.NewForConfig` — zero
+  ocorrencias fora de teste e documentacao). A dependencia existe, e transitiva e o roteador
+  a separa: `/engine/*` proxia para `loopzero-api`, que roda no core; todas as rotas de produto
+  (`/v1/{auth,telemetry,api-keys,memory,storage,billing,settings/webhooks,dashboard/*}`)
+  usam handlers e upstreams proprios. **Confirmada e restrita a um prefixo.**
+
+  A fronteira de repositorio esta dita, como a bala exigia: a evidencia vive em
+  `loopzero-cloud/cmd/main.go`, repositorio irmao. A pergunta era deste item; um eventual
+  conserto pertence ao backlog daquele projeto.
+
+  **Bala 3** — registrado na opportunity
+  (`.claude/knowledge-base/discoveries/opportunities/core-cluster-spof-opportunity.md`,
+  secao *Medicao da metade Model-B*), que e o artefato que uma decisao de arquitetura
+  consome, e nao apenas neste bloco.
+
+  **O limite, dito em voz alta:** a medicao le o roteamento declarado no codigo, nao o
+  comportamento sob queda real. Provar que aquelas rotas continuam servindo com o core fora
+  e o experimento de chaos do Corner 4, e ele **nao foi executado**.
+
+  **O que este item deliberadamente nao faz:** mitigar. O proprio bloco ja registrava que
+  quanto tempo o plano de controle pode ficar fora sem consequencia para o negocio e decisao
+  de produto que ninguem tomou, e dimensionar HA antes dela seria solucao sem requisito.
+
 dod:
   - existe uma medição do raio de explosão real: para cada uma das 4 funções (login, deploy, build, rollback), o que degrada e o que para completamente quando o cluster fica indisponível
   - a dependência por-requisição dos produtos Model-B está confirmada ou refutada **com evidência**, e a fronteira de repositório dessa evidência está dita
@@ -435,7 +468,7 @@ dod:
 > Mesma causa-raiz do **`B-120`** (23 invocações de script nas skills apontando para o layout errado) — três itens, uma família.
 
 
-## B-005 — Unificar cell e cluster em 1:1, aposentando `cell-default`   [ ]
+## B-005 — Unificar cell e cluster em 1:1, aposentando `cell-default`   [x]
 
 domain: engine-go
 repo: loopzero
@@ -445,9 +478,46 @@ sponsor: CTO — decidido 2026-08-09
 tier: T3 (`.claude/rules/pre-release-governance.md`) — toca schema, placement e identidade de cluster; ADR obrigatório e reunião **antes** de código
 evidence: hoje a relação é **2:1** — `infra/helmfile/scripts/bootstrap-cell-cc.sh:20-22` mostra `cell-default` **e** `cell-1` apontando para o mesmo cluster `loopzero-workload`, com `cell-2` para `loopzero-runtime-2`. Pesquisa de 2026-08-09 sobre o papel do `cell-default`: `api/internal/placement/cells.go:30` o define como constante `DefaultCellID`, e o doc-comment em `cells.go:20-29` é explícito — é *"the canonical single-cluster cell used by dev-public and the standalone tilt-up environment"*, e *"Production multi-cluster paths derive cell identity from CrossClusterTokenReviewer, NOT this constant"*, com um MUST NOT para autorização cross-cell em produção. Ou seja: **não é uma cell de produção, é a cell do caminho de desenvolvimento**. Restrição de schema a respeitar: `api/internal/db/migrations/000006_cells.up.sql:40` impõe `CHECK (cell_id ~ '^cell-[a-z0-9-]+$')`, então qualquer id novo continua tendo de começar com `cell-`. O default da coluna vem de `000011_add_cell_id.up.sql:9` (`DEFAULT 'cell-default'`).
 why_now: nasceu da medição do `B-001`. O mapa original do rename (`loopzero-workload` → `cell-1`) foi refutado porque criaria homônimo entre o nome do cluster e o de uma das duas cells que rodam nele. O CTO decidiu em 2026-08-09 pela saída de fundo: **eliminar a relação 2:1** e fazer cell↔cluster 1:1, o que torna `cell-N` um nome não-ambíguo para o cluster e alinha de vez a infra ao vocabulário que o código já usa. Sem isto, a metade `cell` do `B-001` fica bloqueada.
-status: triaged
+status: killed
 blocks: a metade `cell` do `B-001` (`loopzero-workload`/`loopzero-runtime-2` → `cell-N`). As metades `mgmt`→`core` e `vault`→`secrets` **não** dependem deste item e seguem em planejamento.
 **Medição de 2026-08-10 (droplet app-dev), que fecha o primeiro bullet do DoD:** `select cell_id, count(*) from tenants group by cell_id` retorna **`cell-default | 94`** e mais nada — zero tenants em `cell-1`, zero em `cell-2`. E `select cell_id, status from cells` retorna as três como `active`, ou seja, a migration `000007_activate_cell_2` de fato ativou a cell-2. Consequência para o desenho: **a unificação não migra tenant nenhum entre cells** — os 94 estão todos na cell de compatibilidade, e o trabalho é reapontá-los para uma cell nomeada, não redistribuí-los. Isso muda o tamanho da migração de "mover 94 tenants" para "renomear a cell de 94 tenants", que são coisas diferentes na reunião T3.
+
+kill_reason: |
+  A premissa foi refutada pela medicao de 2026-08-18: **a relacao ja e 1:1 e `cell-default`
+  ja esta aposentado.** Nao ha unificacao a fazer.
+
+  Medido, nas quatro camadas onde o item afirmava a relacao 2:1:
+
+  - **codigo** — `placement/cells.go:30` declara `DefaultCellID = "cell-0"`, um id de cell
+    real, nao um default magico
+  - **config** — `infra/helmfile/scripts/bootstrap-cell-cc.sh` declara *"Cell <-> cluster:
+    1:1"* com `cell-0` -> `k3d-loopzero-cell-0` e `cell-1` -> `k3d-loopzero-cell-1`. O cabecalho
+    citado pelo item **estava mentindo**, e o proprio arquivo hoje registra isso; corrigido
+    em `4d7a6b97a`
+  - **schema vivo** — os unicos defaults de `cell_id` sao `'cell-0'` em `tenants` e
+    `leader_generations`. `preview_environments` e `release_app_attestations` nao tem
+    default algum
+  - **dados** — `tenants` tem `cell-0 | 2`; a tabela `cells` tem `cell-0` e `cell-1`, ambas
+    `active`; zero linhas apontando para cell inexistente; zero fora do padrao do CHECK
+
+  **As migracoes 000004 e 000005 ainda escrevem `DEFAULT 'cell-default'`, e isso NAO e
+  defeito** — sao as migracoes originais, superadas por migracoes posteriores, e migracao
+  aplicada nunca se edita (forward-only). O estado vivo e o que vale, e ele nao tem
+  `cell-default` em lugar nenhum.
+
+  **Por que `killed` e nao `shipped`:** as tres balas do DoD estao objetivamente satisfeitas
+  hoje, mas **este loop nao fez esse trabalho** — ele chegou pronto, pela cadeia do `B-001`
+  e pelo conserto do cabecalho. Marcar `shipped` reivindicaria trabalho que nao aconteceu
+  aqui. A hipotese era *"existe uma relacao 2:1 para unificar"*, e a medicao a refutou.
+
+  **O que isto desbloqueia:** o campo `blocks` deste item apontava a metade `cell` do
+  `B-001`. Ela deixa de estar bloqueada por aqui — o que resta la e a decisao de sponsor
+  registrada no `blocked_by` daquele item, que e outra coisa.
+
+  **O limite:** medi codigo, config, schema vivo e dados nesta instalacao. Nao medi outras
+  instalacoes, e a contagem de tenants caiu de 94 (10/08) para 2, o que indica ambiente
+  recriado — entao os **dados** provam pouco sozinhos. O peso da conclusao esta no codigo e
+  no schema, que sao os mesmos em qualquer instalacao.
 
 dod:
   - ~~está medido quantos tenants estão hoje em cada cell~~ — **MEDIDO 2026-08-10: 94 em `cell-default`, 0 nas demais**; falta o que acontece com eles na unificação
@@ -677,7 +747,7 @@ dod:
 > Registrado 2026-08-10 durante o diagnóstico do app-dev (slug: `cell2-agent-node-unauthorized`).
 
 
-## B-014 — `TestTransitClient_RateLimitBurst` reprova por tempo, não por comportamento   [ ]
+## B-014 — `TestTransitClient_RateLimitBurst` reprova por tempo, não por comportamento   [x]
 
 domain: engine-go
 repo: loopzero
@@ -685,8 +755,37 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-10 durante a suíte completa do módulo `pkg`. `pkg/vault/transit_client_test.go:622-625` reprovou com `allowed: got 11 want 10 (burst capacity)` e `rate limited: got 4 want 5 (N - burst)` — o balde deixou passar uma requisição a mais do que a capacidade de rajada. Reexecutado isoladamente **5 vezes seguidas: 5 PASS**. O arquivo do teste não contém a palavra `cell` nenhuma vez (`grep -c cell` = 0), então não tem relação com a renomeação que estava em curso; o gatilho é a suíte inteira rodando em paralelo, que muda o tempo de parede entre a criação do balde e a rajada.
 why_now: apareceu ao rodar a suíte completa dos quatro módulos de uma vez, o que raramente é feito — a execução por pacote esconde a corrida. Um teste que reprova conforme a carga da máquina reprova em CI compartilhada, e o custo é a suíte inteira perder credibilidade: quem vê vermelho intermitente passa a reexecutar em vez de investigar, e o próximo defeito real vira ruído.
-status: triaged
+status: shipped
 severity: média — não há defeito de produto, mas `.claude/rules/testing.md` § 3 é explícito: *"Tests MUST be deterministic. Flaky tests are bugs — fix or delete."*
+resolution: |
+  Fechado 2026-08-18, com as tres balas cumpridas.
+
+  **O mecanismo:** o teste fazia 15 chamadas HTTP reais e contava as permitidas. A
+  `RateLimitPerSec=10` o balde reabastece a 10/s, entao bastava as 15 chamadas levarem mais
+  de 100ms para um token extra entrar no meio da contagem — `got 11 want 10`. Reprovava por
+  tempo, nao por comportamento.
+
+  **Bala 1 — relogio injetado, e sem abstracao nova.** A escada de parcimonia parou na
+  rung 2: `rate.Limiter` ja expoe `AllowN(t, n)`, que recebe o instante. O seam e um campo
+  de funcao (`now func() time.Time`), nulo em producao, e `acquireRateToken` passou a
+  chamar `AllowN(c.timeNow(), 1)`. Tres testes novos afirmam o contrato num instante
+  congelado: rajada exata, reabastecimento dirigido pelo relogio injetado, e isolamento por
+  tenant. Rodam em 0,00s — nao ha espera.
+
+  **Bala 2 — medido:** `-count=50` verde nos testes de limite, e a suite completa do modulo
+  `pkg` em paralelo (`-parallel 8 -count=2`) sem falha. `golangci-lint` limpo.
+
+  **Bala 3 — o que o teste antigo protegia, dito explicitamente.** Ele nao foi removido: o
+  que ele cobre e que os novos NAO cobrem e a **fiacao** — que o caminho publico `Encrypt`
+  de fato consulta o limitador. A assercao dele passou a ser insensivel a um token a mais
+  ou a menos de proposito: responde *"o limitador esta ligado?"*, nao *"quantos passaram?"*.
+  O contrato de capacidade mudou de casa, para onde e afirmavel.
+
+  **O limite, dito em voz alta:** **nao reproduzi a falha**. Ela foi registrada em
+  2026-08-10 rodando os quatro modulos de uma vez; sob a carga que consegui montar aqui
+  (`-count=12 -parallel 8` no pacote) o teste antigo passou. O conserto se apoia no
+  mecanismo, que e demonstravel por construcao, e nao numa reproducao que eu tivesse visto.
+
 dod:
   - o teste afirma a capacidade de rajada sem depender do relógio de parede — relógio injetado, ou asserção sobre a decisão do limitador em vez da contagem observada
   - roda 50 vezes seguidas com `-count=50` em verde, e também com a suíte completa do módulo em paralelo
@@ -1238,6 +1337,39 @@ evidence: medido em 2026-08-10, por acidente. Ao sincronizar o Caddyfile canôni
 why_now: o arranjo é deliberado e tem valor real — `r.Use(requireJWT)` no grupo `/engine` é o que mantém o `loopzero-api` **nunca exposto diretamente**: quem autentica é o plano de controle, e o motor só recebe o que já passou por ele. O que não está registrado é o custo: o CLI, que fala com o motor e não com o painel, fica sem deploy quando um componente de dashboard cai. Nenhum incidente até hoje veio disso — a medição veio de um acidente meu, não de uma queda real.
 status: triaged
 severity: baixa hoje, alta no dia em que o `loopzero-cloud` cair sozinho em produção. O `B-002` registra que o cluster central é SPOF; este item é mais estreito e mais provável: não é o cluster que cai, é **um** processo, e ele carrega uma jornada (deploy) que não é dele.
+progress_2026_08_18: |
+  **A quarta bala esta fechada; as tres primeiras seguem abertas, e de proposito.**
+
+  A bala 4 — *a sonda distingue "o motor esta fora" de "o painel esta fora"* — nao dependia
+  da decisao de fronteira de autenticacao, entao foi feita: `leak.ClassifyUpstream` separa
+  os dois casos e a sonda `loopzero-ops leak live` passou a reporta-lo.
+
+  **Como a separacao e possivel:** as rotas de produto do painel nao atravessam o motor —
+  medido no `B-002` no mesmo dia. `loopzero-cloud` proxia `/engine/*` para o `loopzero-api`,
+  enquanto `/v1/auth`, `/v1/billing`, `/v1/memory` e as demais usam handlers e upstreams
+  proprios. Uma rota de produto respondendo enquanto `/engine/*` nao responde e evidencia de
+  que o painel esta de pe.
+
+  | leitura | veredito | para onde o operador olha |
+  |---|---|---|
+  | ambos respondem | `UpstreamBothUp` | nada a dizer — o relatorio fica em silencio |
+  | `/engine/*` 5xx, produto responde | `UpstreamEngineDown` | o `loopzero-api` no cluster central |
+  | ambos 5xx | `UpstreamDashboardDown` | o `loopzero-cloud` e o proxy da borda |
+  | `/engine/*` responde, produto 5xx | `UpstreamInconclusive` | contradiz a topologia — sondar de novo antes de agir |
+
+  O ultimo caso e o que **nao** se resolve por adivinhacao: ele contradiz a topologia
+  medida, e inventar um veredito ali seria afirmar o que a sonda nao sabe.
+
+  **O limite:** isto classifica dois codigos de status, nao a causa. Um 502 pode ser
+  upstream fora, lento ou mal configurado, e a sonda nao distingue os tres. O que ela passa
+  a distinguir e QUAL superficie falhou — que era o que faltava.
+
+  **Por que as balas 1 a 3 nao foram tocadas:** elas exigem decidir se o caminho do motor
+  mantem a dependencia do painel ou ganha rota propria autenticada. Isso move a fronteira de
+  autenticacao, e `rules/pre-release-governance.md` classifica como T2+ — registro MEET
+  **antes** do codigo. Um loop autonomo escrevendo essa mudanca seria exatamente o bypass
+  que a governanca existe para impedir.
+
 dod:
   - está decidido se o caminho do motor mantém a dependência do painel ou ganha uma rota própria autenticada — e a decisão está num ADR, porque muda a fronteira de autenticação
   - se mantiver: existe medição de quanto tempo o `loopzero-cloud` ficou indisponível no último trimestre, para a decisão ser sobre risco medido e não sobre desenho no quadro
@@ -1264,7 +1396,7 @@ dod:
 
 **Um achado de passagem.** O `loopzero-ops seed patch-kratos` falhou primeiro com `configmaps "ory-kratos-config" not found`, embora o ConfigMap existisse: o contexto padrão do kubectl estava em `k3d-loopzero-secrets`, deixado pelo `k3d:secrets:create`. O seed herda o contexto atual em vez de fixar o cluster que ele opera — e a mensagem culpa o ConfigMap em vez do contexto. Registrado como `B-024`.
 
-## B-024 — Os seeds herdam o contexto do kubectl e culpam o recurso errado   [ ]
+## B-024 — Os seeds herdam o contexto do kubectl e culpam o recurso errado   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1272,8 +1404,51 @@ suggested_mode: bug
 source: discover-live-test
 evidence: medido em 2026-08-10. `loopzero-ops seed patch-kratos` reprovou com `get configmap loopzero-auth/ory-kratos-config: configmaps "ory-kratos-config" not found` — e o ConfigMap existia. O contexto padrão do kubectl estava em `k3d-loopzero-secrets` (deixado por `task k3d:secrets:create`), e o seed operou o cluster errado. Trocado o contexto para `k3d-loopzero-core`, o mesmo comando passou com 7 correções.
 why_now: o `k3d:secrets:create` passou a fazer parte do caminho canônico há poucas semanas, e ele muda o contexto ativo como efeito colateral. Qualquer seed rodado depois dele opera o cluster de segredos sem avisar. A mensagem de erro é o que torna isto caro: ela nomeia o recurso ausente, não o cluster errado — quem a lê procura o ConfigMap, que está lá.
-status: triaged
+status: shipped
 severity: média — não corrompe nada (o cluster errado simplesmente não tem os recursos), mas manda quem depura para o lugar errado, e o custo é tempo em cima de um sistema já quebrado.
+resolution: |
+  Fechado 2026-08-18, as tres balas cumpridas — e a revisao independente mudou o conserto.
+
+  **Bala 1 — o cluster e fixado, nao herdado.** `CORE_CONTEXT` fixa o contexto quando
+  definida; sem ela o comportamento nao muda (herda o ativo) e a mensagem diz qual usou.
+  A convencao ja existia no repositorio — `seed-post-cleanroom-all.sh` usava
+  `${CORE_CONTEXT:-k3d-loopzero-core}` nos proprios kubectl —, entao a escada parou na rung 4:
+  reusar o que esta instalado. O script passou a **exportar** a variavel, o que fixa a
+  cadeia canonica inteira.
+
+  **Bala 2 — a mensagem nomeia o contexto**, nos 12 sitios de erro de `kube.go`, e o
+  identificador do recurso continua la (ha teste travando os dois lados).
+
+  **Bala 3 — decidido: o `k3d:secrets:create` nao troca mais o contexto.** Escada rung 3,
+  recurso nativo: `--kubeconfig-switch-context=false`. Nao ha logica de restauracao escrita.
+  `--kubeconfig-update-default` fica no padrao, entao a entrada do contexto segue gravada e
+  os `--context k3d-loopzero-secrets` do proprio task continuam valendo.
+
+  **O que a revisao pegou, e eu nao teria pego:**
+
+  - **BLOCKER — minha guarda do taskfile era cega.** Ela casava o bloco inteiro, e o
+    comentario que eu mesmo escrevi no mesmo commit continha as strings procuradas. Dois
+    mutantes passavam: flag removida do comando, e a linha do comando APAGADA por inteiro.
+    A guarda escrita para impedir isso era satisfeita pelo texto que falava sobre isso —
+    a mesma armadilha que o gate `runbook-parity` ja pagou nesta base. Corrigida para
+    descartar comentario e casar a linha de comando; os dois mutantes agora reprovam.
+  - **HIGH — o conserto sozinho so trocava QUAL cluster errado era atingido.** Sem fixar,
+    os seeds cairiam onde quer que o `task setup` tivesse deixado o kubectl. Dai a bala 1
+    ter virado fixacao de verdade, e nao apenas diagnostico.
+  - **HIGH — meu conserto quebrava o runbook do OpenBao.** Tres comandos de
+    `docs/operations/openbao-init-runbook.md` rodavam sem `--context` e funcionavam por
+    heranca da troca que eu removi; passariam a dizer "recurso nao encontrado" sobre um
+    OpenBao que existe — a inversao exata deste item. Corrigidos, junto com o comentario
+    que dizia "mgmt cluster kubeconfig" apontando para o cluster de secrets.
+  - **E eu quase reintroduzi o defeito ao consertar:** ao fazer `CORE_CONTEXT` fixar, o
+    nome passou a ser resolvido num caminho e o cliente construido noutro. A mensagem
+    nomearia um cluster onde ninguem procurou — pior que nao nomear. Unificado numa
+    resolucao so, com teste que compara os dois.
+
+  **Uma afirmacao minha corrigida:** escrevi no teste que a decisao de mudar so o
+  `secrets:create` estava *"medida, nao suposta"*. Nao estava — nada mediu expectativa de
+  operador. Era assercao vestida de evidencia, e a revisao chamou. O texto foi reescrito.
+
 dod:
   - os seeds fixam o cluster que operam em vez de herdar o contexto ativo, ou falham dizendo qual contexto usaram
   - a mensagem de recurso-não-encontrado nomeia o contexto, para quem lê não procurar o recurso certo no cluster errado

@@ -12,13 +12,13 @@
     "tools/loopzero-dockerfile-lint": 0
   },
   "gofmt": {
-    "api": 70,
+    "api": 69,
     "cmd/loopzero-ops": 0,
     "infra/scripts": 1,
     "infra/tests": 53,
     "operators": 1,
     "operators/api": 0,
-    "pkg": 30,
+    "pkg": 28,
     "tools/gen-service-auth-ed25519": 0,
     "tools/loopzero-dockerfile-lint": 0
   }

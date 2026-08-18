@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **As ferramentas de preparação do ambiente diziam que um recurso não existia quando na verdade estavam olhando o ambiente errado.** Criar o ambiente de segredos trocava, como efeito colateral, qual ambiente as ferramentas seguintes iriam operar — e elas herdavam essa escolha sem dizer. O resultado era uma mensagem de "não encontrado" sobre algo que existia, mandando quem estava depurando procurar no lugar certo pelo motivo errado. Agora a mensagem nomeia o ambiente em que procurou, e a criação do ambiente de segredos deixou de trocar a escolha ativa — mantendo, ainda assim, o acesso a ele. (B-024)
+- **A sonda da borda passou a dizer QUAL parte caiu.** Quando o painel fica indisponível, o caminho do motor cai junto — porque ele passa por dentro do painel — e as duas falhas apareciam idênticas para quem estava de plantão, apesar de exigirem ações opostas. Agora o relatório separa os dois casos e diz para onde olhar, apoiado na medição de que as telas de produto do painel não dependem do motor. Em dia normal ele continua em silêncio. (B-022)
+- **Um teste do limite de requisições reprovava conforme a máquina estivesse ocupada, não conforme o comportamento.** Ele contava quantas chamadas passavam num intervalo curto, e como a permissão se renova com o tempo, uma máquina mais lenta deixava passar uma a mais e o teste acusava erro onde não havia. O contrato agora é verificado com o tempo controlado pelo próprio teste — a mesma lógica de produção, sem depender do relógio —, e a verificação antiga passou a afirmar só o que pode garantir: que o limite realmente está ligado no caminho público. (B-014)
+
 ## [0.76.6] - 2026-08-18
 
 ### Fixed

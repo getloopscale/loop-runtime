@@ -44,15 +44,22 @@ title: "Runbook: OpenBao Init Ceremony"
 ## Status check (run BEFORE ceremony to confirm state)
 
 ```bash
-# From operator machine with mgmt cluster kubeconfig:
-kubectl -n secrets-system get pods -l app.kubernetes.io/name=openbao
+# From the operator machine. `--context` is REQUIRED and not optional style:
+# these commands target the SEPARATE `loopzero-secrets` cluster, never mgmt/core — the
+# comment here used to say "mgmt cluster kubeconfig", which was wrong about the target.
+#
+# They used to work without it by accident: `k3d cluster create` switched the active
+# context to the new cluster as a side effect. That side effect was REMOVED (B-024),
+# because seeds inherited it and silently operated the wrong cluster. Without the flag
+# these now report "no resources found" about an OpenBao that exists.
+kubectl --context k3d-loopzero-secrets -n secrets-system get pods -l app.kubernetes.io/name=openbao
 # Expected: openbao-{0,1,2} Running 1/1 (or pending if size=1 in standalone)
 
 # Port-forward + check seal status (expect Sealed: true, Initialized: false)
-kubectl -n secrets-system port-forward svc/openbao 8200:8200 &
+kubectl --context k3d-loopzero-secrets -n secrets-system port-forward svc/openbao 8200:8200 &
 export VAULT_ADDR=https://localhost:8200
 export VAULT_CACERT=/tmp/openbao-ca.pem
-kubectl -n secrets-system get secret openbao-tls -o jsonpath='{.data.ca\.crt}' | base64 -d > /tmp/openbao-ca.pem
+kubectl --context k3d-loopzero-secrets -n secrets-system get secret openbao-tls -o jsonpath='{.data.ca\.crt}' | base64 -d > /tmp/openbao-ca.pem
 bao status
 # Expected output BEFORE init:
 #   Sealed:    true

@@ -134,8 +134,18 @@ func emitSeedResult(name string, r seed.Result, asJSON bool) {
 // Only ErrCredsBadMode / ErrCredsMalformed are surfaced upstream (operator
 // error → FAIL). A missing kubeconfig IS a hard error (nothing to do).
 func buildSeedDeps(dryRun bool) (seed.Deps, error) {
-	// Default (mgmt) client via the standard ConfigFlags — respects
-	// KUBECONFIG / --kubeconfig / --context override.
+	// Cliente do contexto resolvido via ConfigFlags.
+	//
+	// A origem do contexto, em ordem: `CORE_CONTEXT` quando definida, senao o
+	// `current-context` do kubeconfig (`KUBECONFIG` ou caminho padrao). NAO ha flags
+	// `--kubeconfig` nem `--context` neste subcomando — `runSeed` declara apenas
+	// `--verify`, `--dry-run` e `--json`, e o comentario anterior prometia afordancias
+	// inexistentes (achado LOW da revisao de B-024).
+	//
+	// B-024: este comentario dizia "Default (mgmt) client", e nao era verdade — nada aqui
+	// fixa o mgmt. Depois de `k3d:secrets:create`, que troca o contexto ativo como efeito
+	// colateral, o "cliente do mgmt" passava a falar com o cluster de secrets em silencio.
+	// O cliente agora carrega o nome do contexto para que a mensagem diga onde procurou.
 	mgmt, mgmtRest, mgmtCtrl, err := buildKubeClientAndRest("")
 	if err != nil {
 		return seed.Deps{}, fmt.Errorf("kubeconfig: %w", err)
@@ -200,9 +210,15 @@ func buildKubeClient(ctxName string) (seed.KubeClient, error) {
 // PortForwardCtor (port-forward needs the rest.Config; pod-listing for label
 // resolution needs the ctrlclient.Client).
 func buildKubeClientAndRest(ctxName string) (seed.KubeClient, *rest.Config, ctrlclient.Client, error) {
+	// O contexto e resolvido UMA vez e usado para as duas coisas: construir o cliente e
+	// nomear as mensagens. Resolver em dois caminhos deixaria a mensagem nomear um cluster
+	// onde ninguem procurou — pior que nao nomear, porque manda o operador conferir o lugar
+	// errado com confianca. (Achado 1 da revisao de B-024.)
+	resolved := resolveContextName(ctxName)
+
 	cfgFlags := genericclioptions.NewConfigFlags(true)
-	if ctxName != "" {
-		cfgFlags.Context = &ctxName
+	if resolved != "" {
+		cfgFlags.Context = &resolved
 	}
 	restCfg, err := cfgFlags.ToRESTConfig()
 	if err != nil {
@@ -212,5 +228,60 @@ func buildKubeClientAndRest(ctxName string) (seed.KubeClient, *rest.Config, ctrl
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("kube client context %q: %w", ctxName, err)
 	}
-	return seed.NewKubeClient(cli), restCfg, cli, nil
+	// B-024: o cliente passa a saber COM QUEM fala. Sem isto, um recurso ausente porque o
+	// contexto ativo aponta para outro cluster produzia a mesma mensagem que um recurso que
+	// realmente nao existe, e as duas mandam o operador para lados opostos.
+	return seed.NewKubeClientForContext(cli, resolved), restCfg, cli, nil
+}
+
+// contextUsedByClientConfig devolve o contexto que o ConfigFlags de fato usaria, pelo mesmo
+// caminho que `buildKubeClientAndRest` percorre. Existe para que um teste possa provar que
+// o nome anunciado e o cluster consultado nao divergem.
+func contextUsedByClientConfig(explicit string) (string, error) {
+	resolved := resolveContextName(explicit)
+	cfgFlags := genericclioptions.NewConfigFlags(true)
+	if resolved != "" {
+		cfgFlags.Context = &resolved
+	}
+	raw, err := cfgFlags.ToRawKubeConfigLoader().RawConfig()
+	if err != nil {
+		return "", err
+	}
+	if resolved != "" {
+		return resolved, nil
+	}
+	return raw.CurrentContext, nil
+}
+
+// resolveContextName devolve o nome do contexto que o ConfigFlags realmente usaria.
+//
+// Um pedido explicito vence. Sem ele, le o `current-context` do kubeconfig — que e o que o
+// ConfigFlags faz, e o que `k3d:secrets:create` altera como efeito colateral.
+//
+// Devolve vazio quando o kubeconfig nao pode ser lido: uma mensagem com nome errado e pior
+// que uma sem nome nenhum, e nomear e uma comodidade de diagnostico, nunca um pre-requisito
+// para o seed rodar.
+func resolveContextName(explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+	// `CORE_CONTEXT` FIXA o cluster, em vez de herdar o ativo.
+	//
+	// Achado da revisao (B-024): nomear o contexto na mensagem melhora o diagnostico mas
+	// nao elimina a heranca — trocava apenas QUAL cluster errado era atingido. A convencao
+	// ja existia no repositorio (`seed-post-cleanroom-all.sh:335` usa
+	// `${CORE_CONTEXT:-k3d-loopzero-core}` nos proprios kubectl), entao a escada parou na
+	// rung 4: reusar o que esta instalado.
+	//
+	// Sem a variavel o comportamento NAO muda — herda o ativo e diz qual usou. Fixar um
+	// padrao rigido aqui quebraria quem roda seeds fora do k3d, e o item pede que a origem
+	// seja declarada ou dita, nao que seja imposta.
+	if pinned := os.Getenv("CORE_CONTEXT"); pinned != "" {
+		return pinned
+	}
+	raw, err := genericclioptions.NewConfigFlags(true).ToRawKubeConfigLoader().RawConfig()
+	if err != nil {
+		return ""
+	}
+	return raw.CurrentContext
 }

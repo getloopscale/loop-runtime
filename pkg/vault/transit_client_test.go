@@ -597,10 +597,21 @@ func newRateLimitStub(t *testing.T, perSec int) (*TransitClient, *vaultStubT21) 
 	return c, stub
 }
 
-// TestTransitClient_RateLimitBurst — token-bucket contract: with
-// RateLimitPerSec=10, a burst of 15 immediate calls for the SAME tenant
-// allows 10 through (initial bucket capacity) and rejects the remaining
-// 5 with ErrRateLimited. Refill replenishes over time.
+// TestTransitClient_RateLimitBurst — a FIACAO: `Encrypt` consulta mesmo o limitador.
+//
+// Este teste afirmava a capacidade exata (10 permitidas, 5 recusadas) contando chamadas
+// HTTP reais. Isso reprovava por tempo: a 10/s o balde reabastece, entao bastava as 15
+// chamadas levarem mais de 100ms para entrar um token extra e a contagem virar 11 — medido
+// em 2026-08-10 durante a suite completa dos quatro modulos (B-014). Um teste que reprova
+// conforme a maquina esta ocupada e um bug, per `rules/testing.md` § 3.
+//
+// O contrato de capacidade — rajada exata, reabastecimento e isolamento por tenant — vive
+// agora em `transit_client_rate_clock_test.go`, com o instante injetado, onde e afirmavel
+// sem relogio de parede.
+//
+// O que sobra aqui, e que aqueles testes NAO cobrem, e a fiacao: que o caminho publico
+// `Encrypt` de fato passa pelo limitador. A assercao e insensivel a um token a mais ou a
+// menos de proposito — ela responde "o limitador esta ligado?", nao "quantos passaram?".
 func TestTransitClient_RateLimitBurst(t *testing.T) {
 	c, _ := newRateLimitStub(t, 10)
 
@@ -618,11 +629,15 @@ func TestTransitClient_RateLimitBurst(t *testing.T) {
 		}
 		t.Errorf("unexpected error: %v", err)
 	}
-	if allowed != 10 {
-		t.Errorf("allowed: got %d want 10 (burst capacity)", allowed)
+	if allowed == 0 {
+		t.Error("nenhuma chamada passou — o limitador esta recusando tudo, nao limitando")
 	}
-	if rateLimited != 5 {
-		t.Errorf("rate limited: got %d want 5 (N - burst)", rateLimited)
+	if rateLimited == 0 {
+		t.Errorf("nenhuma das %d chamadas foi recusada — `Encrypt` nao consulta o limitador", N)
+	}
+	if allowed+rateLimited != N {
+		t.Errorf("%d chamadas sumiram: permitidas=%d recusadas=%d de %d",
+			N-(allowed+rateLimited), allowed, rateLimited, N)
 	}
 }
 

@@ -178,7 +178,14 @@ tasks:
           exit 1
         fi
       - task: registry:create
-      - k3d cluster list -o json | grep -q '"name":"loopzero-secrets"' || k3d cluster create --config infra/k3d/secrets-cluster.yaml
+      # `--kubeconfig-switch-context=false` (B-024): sem isto o create reaponta o
+      # `current-context` do operador, e como os seeds herdam o contexto ativo,
+      # qualquer seed rodado depois operava o cluster errado — reportando
+      # "recurso nao encontrado" sobre recursos que existiam.
+      #
+      # `--kubeconfig-update-default` fica no padrao `true`: a entrada do contexto
+      # CONTINUA gravada, e os `--context k3d-loopzero-secrets` abaixo seguem valendo.
+      - k3d cluster list -o json | grep -q '"name":"loopzero-secrets"' || k3d cluster create --config infra/k3d/secrets-cluster.yaml --kubeconfig-switch-context=false
       - kubectl --context k3d-loopzero-secrets wait --for=condition=Ready node --all --timeout=120s
       - kubectl --context k3d-loopzero-secrets cluster-info
       - echo "[OK] loopzero-secrets cluster ready. Next:- task k3d:secrets:bootstrap"
