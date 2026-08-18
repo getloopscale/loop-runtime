@@ -17,6 +17,7 @@ import (
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/billinglayers"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/billingsecrets"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyhostparity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clusterrolenosecretsstar"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/deadlineratchet"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lintcoverage"
@@ -426,6 +427,26 @@ func runRunbookParity(args []string) int {
 		return 2
 	}
 	fmt.Printf("runbook-parity: PASS — %s\n", out.Reason)
+	return 0
+}
+
+func runCaddyHostParity(args []string) int {
+	fs := flag.NewFlagSet("caddy-host-parity", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "caddy-host-parity: FAIL — %v\n", err)
+		for _, f := range out.Findings {
+			fmt.Fprintf(os.Stderr, "  %s sem bloco de site; sem certificado o handshake cai antes de qualquer HTTP\n", f.Host)
+		}
+		return 2
+	}
+	fmt.Printf("caddy-host-parity: PASS — %d exigidos, %d servidos, %d congelados com dono\n",
+		out.Scanned, out.Served, out.Frozen)
 	return 0
 }
 

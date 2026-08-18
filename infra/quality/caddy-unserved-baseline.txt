@@ -1,0 +1,17 @@
+# Catraca de `loopzero-ops quality caddy-host-parity`.
+#
+# Hostname que o verificador de borda (`infra/scripts/local/caddy-up-dev-public.sh`)
+# exige certificado e que `infra/local/Caddyfile` não declara como bloco de site.
+# Sem bloco não há certificado, e o handshake cai antes de qualquer status HTTP.
+#
+# Congelar aqui NÃO conserta: mantém o gate rodável enquanto o conserto tem dono.
+# Toda linha nomeia o item que o resolve — congelamento sem dono é esconder, e o
+# gate recusa (ErrUnownedFreeze). Servido o hostname, a linha sai (ErrStaleFreeze).
+#
+# Formato: <hostname> <item>
+
+# Medido 2026-08-18 pelo log de entregas do App do GitHub: toda entrega falhando
+# com `tls: internal error`, incluindo o push de um commit real. O destino correto
+# atravessa dois repositórios (o irmão de produção proxia para loopzero-cloud, que
+# devolve 404 nessa rota) e é decisão T2 — por isso tem dono, não conserto aqui.
+cloud-dev.loopzero.example B-151
