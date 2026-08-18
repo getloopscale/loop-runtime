@@ -804,6 +804,27 @@ dod:
 >
 > **Continua bloqueado, agora em DOIS segredos**, e nenhum deles é produzível por engenharia.
 
+> **Inventário exaustivo das vias, 2026-08-18.** Quatro caminhos testados; nenhum fecha o item
+> sem uma credencial nova.
+>
+> | via | medição | veredito |
+> |---|---|---|
+> | puxar a imagem publicada do GHCR | token de 19/jun → **401** | bloqueado |
+> | construir localmente pelo módulo publicado | token do `gomod` de 06/jul → **401** | bloqueado |
+> | dispensar credencial: o módulo é público? | `api.github.com/repos/getloopscale/loopzero-contracts` **404** sem auth, e ausente do `proxy.golang.org` | **é privado** |
+> | construir do checkout irmão (`../loopzero-contracts`, que o `go.work` unifica e que existe aqui e no droplet) | tecnicamente viável | **recusado** |
+>
+> **Por que a quarta via é recusada, e não esquecida.** `api/go.mod` fixa
+> `github.com/getloopscale/loopzero-contracts v0.4.0` **sem `replace`** — foi a decisão do corte M5, e o
+> `api/Dockerfile` a documenta. Construir a imagem a partir da fonte do irmão produziria um
+> artefato que **não corresponde a nenhuma versão publicada** do módulo: exatamente a deriva que
+> o pin existe para impedir. Seria trocar um bloqueio honesto por perda de proveniência.
+>
+> **O item para aqui.** O que destrava é um dos dois segredos, e qualquer um serve:
+> `read:packages` em `~/.loopzero/ghcr-pull-token.txt` (fecha pelo caminho publicado) **ou**
+> `Contents:read` em `getloopscale/loopzero-contracts` no `~/.loopzero/gomod-token.txt` (fecha pelo caminho
+> local, cuja decisão já está tomada acima).
+
 
 ## B-017 — O `Dockerfile.local` do loopzero-cloud tem dois defeitos que o impedem de construir   [x]
 
