@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-147 items — **Open** 62 · **In flight** 0 · **Closed** 85
+148 items — **Open** 63 · **In flight** 0 · **Closed** 85
 
-### Open (62)
+### Open (63)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -136,6 +136,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-142`](#b-142--um-token-do-digitalocean-vivo-atravessou-cinco-meses-e-vários-pushes-sem-ser-barrado----) 🔒 | Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado | `triaged` | P0 |
 | [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `triaged` | média |
 | [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média |
+| [`B-148`](#b-148--155-arquivos-go-não-passam-pelo-gofmt-e-nenhum-gate-percebe----) | 155 arquivos Go não passam pelo `gofmt`, e nenhum gate percebe | `triaged` | baixa |
 
 ### In flight (0)
 
@@ -6772,4 +6773,30 @@ dod:
     externo, ou aposentadoria explícita de cada trabalho
   - o que ficar sem executor está declarado como tal, e não some em silêncio
   - o `cosignDeadline` tem entrada válida antes de ser reagendado, ou o `B-146` fecha primeiro
+
+## B-148 — 155 arquivos Go não passam pelo `gofmt`, e nenhum gate percebe   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: |
+  Medido 2026-08-18. `gofmt -l api cmd operators pkg infra tools` contra o `HEAD` reporta
+  **184** arquivos; contra a árvore de trabalho, **155** — a diferença são 31 arquivos que
+  estavam pendentes de commit e que esta fatia normalizou.
+  A deriva não é pega por nada: `task lint` roda `golangci-lint` sobre a **árvore de
+  trabalho**, e ninguém lint o `HEAD`. Um arquivo pode ser commitado fora do formato e o
+  próximo a abrir o pacote gera um diff que não é dele.
+why_now: apareceu ao investigar por que a trava de fim de turno reclamava de código de
+  produção alterado sem CHANGELOG: os 31 arquivos sujos não eram trabalho de ninguém, eram
+  normalização de formatação pendente. Ao medir para decidir se commitava ou descartava,
+  o número maior apareceu.
+status: triaged
+severity: baixa — não muda comportamento. O custo é de atrito: diffs poluídos por
+  reformatação alheia, e revisão que precisa separar o que é mudança do que é formatação.
+dod:
+  - `gofmt -l` sobre os módulos de produção reporta zero, ou o que sobra está declarado
+  - existe verificação que reprove arquivo fora de formato antes do commit, e não depois
+  - está medido se `golangci-lint` já cobriria isso com o linter certo ligado, em vez de
+    uma verificação nova
 

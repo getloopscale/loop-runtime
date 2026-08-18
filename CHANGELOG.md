@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Trinta e um arquivos de código-fonte voltaram ao formato padrão da linguagem.** Eles estavam publicados fora dele, o que faz qualquer pessoa que abra esses pacotes gerar um diff de reformatação misturado à própria mudança — atrito na revisão, sem nada de comportamento envolvido. Restam 155 arquivos na mesma condição, agora medidos e registrados. (B-148)
+
 ### Removed
 - **O sistema de integração contínua que rodava dentro do cluster foi aposentado — ele não funcionava desde que o registro de imagens dele foi apagado.** Tudo nele executava a mesma imagem, e essa imagem não tem como ser construída: não existe receita para ela no projeto, a tarefa que a documentação citava nunca existiu, e ela não está na lista do que é publicado. Mantê-lo exigiria criar e publicar uma imagem nova só para repetir verificações que já rodam a cada envio de código, sem cluster nenhum. Os quatro trabalhos periódicos que ele agendava ficaram registrados com horário e comando, porque a necessidade não morreu com o mecanismo. (B-019, B-147)
 

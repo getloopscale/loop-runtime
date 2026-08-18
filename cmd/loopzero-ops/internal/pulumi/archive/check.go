@@ -33,8 +33,8 @@ import (
 	"strings"
 	"time"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/shellrun"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // PulumiVersionPinned — bash PULUMI_VERSION_PINNED.
@@ -68,12 +68,12 @@ var CiphertextExcludePatterns = []*regexp.Regexp{
 
 // Archived captures one successful (dir, stack) export.
 type Archived struct {
-	Dir              string
-	Stack            string
-	S3Key            string
-	SHA256           string
-	ResourceCount    int
-	PlaintextHits    int // C9 warning count
+	Dir           string
+	Stack         string
+	S3Key         string
+	SHA256        string
+	ResourceCount int
+	PlaintextHits int // C9 warning count
 }
 
 // Config holds the archive inputs.
@@ -110,11 +110,11 @@ type Config struct {
 
 // Outcome captures the archive run result.
 type Outcome struct {
-	Pass                     bool
-	Targets                  []string
-	Archived                 []Archived
-	LiveResourceCount        int
-	Messages                 []string
+	Pass              bool
+	Targets           []string
+	Archived          []Archived
+	LiveResourceCount int
+	Messages          []string
 }
 
 // preflight returns nil when env + bucket are OK to proceed. ArchiveOnly
@@ -162,7 +162,7 @@ func preflight(cfg Config, runner shellrun.Runner) error {
 	})
 	if err != nil || encRes.ExitCode != 0 {
 		return &loopzeroerrors.LoopZeroError{
-			Code: "OPS_USAGE",
+			Code:    "OPS_USAGE",
 			Message: fmt.Sprintf("pulumi-archive: bucket %s encryption query failed (C4 requires aws:kms)", bucket),
 		}
 	}

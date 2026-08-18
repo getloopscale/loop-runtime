@@ -38,11 +38,11 @@ func TestErrors_DistinctIdentities(t *testing.T) {
 
 // mockClient implements TenantTransitClient for testing.
 type mockClient struct {
-	ensureCalls    int
-	deleteCalls    int
-	lastTenantID   string
-	ensureError    error
-	deleteError    error
+	ensureCalls  int
+	deleteCalls  int
+	lastTenantID string
+	ensureError  error
+	deleteError  error
 }
 
 func (m *mockClient) EnsureTenantKey(_ context.Context, tenantID string) error {

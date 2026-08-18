@@ -55,11 +55,11 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 
 	Context("when a new PlatformBootstrap CR is created with all services healthy", func() {
 		var (
-			giteaServer  *httptest.Server
-			argoServer   *httptest.Server
-			apiServer    *httptest.Server
-			pbName       string
-			pbNamespace  string
+			giteaServer       *httptest.Server
+			argoServer        *httptest.Server
+			apiServer         *httptest.Server
+			pbName            string
+			pbNamespace       string
 			giteaTokenCreated atomic.Bool
 		)
 

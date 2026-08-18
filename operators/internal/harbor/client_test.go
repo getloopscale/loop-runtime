@@ -203,11 +203,11 @@ func TestEnsureRobotAccount_CreatesNewRobot(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			resp := map[string]interface{}{
-				"id":          1,
-				"name":        "robot$build-acme",
-				"secret":      "robot-secret-token",
+				"id":            1,
+				"name":          "robot$build-acme",
+				"secret":        "robot-secret-token",
 				"creation_time": time.Now().Format(time.RFC3339),
-				"expires_at":   time.Now().Add(24 * time.Hour).Unix(),
+				"expires_at":    time.Now().Add(24 * time.Hour).Unix(),
 			}
 			_ = json.NewEncoder(w).Encode(resp)
 
@@ -252,9 +252,9 @@ func TestEnsureRobotAccount_ReturnsExistingIfNotExpired(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			resp := []map[string]interface{}{
 				{
-					"id":          5,
-					"name":        "robot$build-acme",
-					"expires_at":  expiresAt,
+					"id":         5,
+					"name":       "robot$build-acme",
+					"expires_at": expiresAt,
 				},
 			}
 			_ = json.NewEncoder(w).Encode(resp)

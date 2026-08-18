@@ -22,16 +22,17 @@ package tenant
 
 import (
 	"context"
+	"os"
+	"strings"
+	"testing"
+
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
-	"strings"
-	"testing"
 )
 
 // controllerSource reads this controller with COMMENT LINES REMOVED.
@@ -150,7 +151,7 @@ func TestTenantController_DoesNotDiscardStatusWriteErrors(t *testing.T) {
 	if strings.Contains(src, "_ = r.Status().Update") || strings.Contains(src, "_ = r.Status().Patch") {
 		t.Error("a status write result is discarded with `_ =`. CLAUDE.md is explicit that a " +
 			"status-write failure is never swallowed; the readiness summary belongs to " +
-			"reconcilehelpers.DeferReadinessSummary, which logs it (B-085).")
+			"reconcile.DeferReadinessSummary, which logs it (B-085).")
 	}
 }
 
@@ -160,7 +161,7 @@ func TestTenantController_DelegatesReadinessSummaryToTheHelper(t *testing.T) {
 	src := controllerSource(t)
 	if !strings.Contains(src, "DeferReadinessSummary") {
 		t.Error("the readiness summary is still inlined here. Four of the six controllers delegate " +
-			"to reconcilehelpers.DeferReadinessSummary, which slice-10 fixed to use a locked merge " +
+			"to reconcile.DeferReadinessSummary, which slice-10 fixed to use a locked merge " +
 			"patch and to log the error; a local copy diverges from it silently (B-085).")
 	}
 }

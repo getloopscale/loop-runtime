@@ -18,7 +18,7 @@ import (
 // cache scoping (cache.Options.ByObject map). Detects:
 //   - Overlap: same CRD scoped in two binaries (wasteful + race risk)
 //   - Orphan:  CRD reconciled by a binary but missing from its cache scope
-//              (falls back to ALL-namespace cache → memory blow-up)
+//     (falls back to ALL-namespace cache → memory blow-up)
 //
 // Per ADR-0023 condition + k8s-controller-engineer review: this is the
 // static AST layer. A future TestCacheScopingCongruence_Runtime layer will

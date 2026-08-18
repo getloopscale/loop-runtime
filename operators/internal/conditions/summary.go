@@ -17,15 +17,15 @@ import (
 //
 // Algorithm (mutually exclusive, classification cascade):
 //   - Stalled=True  iff any detail has status False with reason in
-//                   {ReasonFailed, ReasonStalled, ReasonDegraded}.
-//                   Stalled wins over Reconciling (failure takes priority).
+//     {ReasonFailed, ReasonStalled, ReasonDegraded}.
+//     Stalled wins over Reconciling (failure takes priority).
 //   - Reconciling=True iff (a) Stalled is not True AND
-//                   (b) any detail is missing OR status Unknown OR
-//                   status False with reason in
-//                   {ReasonReconciling, ReasonProgressing, ReasonWaiting,
-//                    ReasonNotFound, ReasonUnreachable, "Initializing"}.
+//     (b) any detail is missing OR status Unknown OR
+//     status False with reason in
+//     {ReasonReconciling, ReasonProgressing, ReasonWaiting,
+//     ReasonNotFound, ReasonUnreachable, "Initializing"}.
 //   - Ready=True    iff none of the above AND every detail has status
-//                   True with ObservedGeneration == generation.
+//     True with ObservedGeneration == generation.
 //
 // Edge cases:
 //   - Empty detailTypes → Ready=True with reason "NoDetailsRequired".
@@ -56,10 +56,10 @@ func SetReadinessSummary(conds *[]metav1.Condition, generation int64, detailType
 	}
 
 	var (
-		stalledReasons    []string
-		reconcilingMissing []string
-		reconcilingDetail string
-		allTrue           = true
+		stalledReasons        []string
+		reconcilingMissing    []string
+		reconcilingDetail     string
+		allTrue               = true
 		hasGenerationMismatch bool
 	)
 

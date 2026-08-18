@@ -135,8 +135,8 @@ func TestExit_NonStandardCodePropagated(t *testing.T) {
 // TestExit_IsSuccessReflectsCode — IsSuccess MUST be true iff ExitCode==0.
 func TestExit_IsSuccessReflectsCode(t *testing.T) {
 	cases := []struct {
-		code     int
-		success  bool
+		code    int
+		success bool
 	}{
 		{0, true}, {1, false}, {-1, false}, {137, false}, {255, false},
 	}

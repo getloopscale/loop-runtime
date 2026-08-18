@@ -16,12 +16,12 @@ type Option func(*runOptions)
 // Defaults reflect typical orchestrator usage (no env override, parent
 // cwd, no streaming, no stdin).
 type runOptions struct {
-	env       []string
-	cwd       string
-	stdin     io.Reader
-	stdoutW   io.Writer
-	stderrW   io.Writer
-	timeout   time.Duration
+	env         []string
+	cwd         string
+	stdin       io.Reader
+	stdoutW     io.Writer
+	stderrW     io.Writer
+	timeout     time.Duration
 	envIsolated bool
 }
 
@@ -30,8 +30,9 @@ type runOptions struct {
 // the operator's shell env (D7' isolation pattern).
 //
 // To extend rather than replace, callers should manually concatenate:
-//   env := append(os.Environ(), "EXTRA=value")
-//   runner.Run(ctx, "...", []string{}, WithEnv(env))
+//
+//	env := append(os.Environ(), "EXTRA=value")
+//	runner.Run(ctx, "...", []string{}, WithEnv(env))
 func WithEnv(env []string) Option {
 	return func(o *runOptions) {
 		o.env = env
@@ -73,9 +74,10 @@ func WithStdin(r io.Reader) Option {
 // be empty when this option is used; the writer is the canonical sink.
 //
 // Use for commands that emit large output (>10 MiB) like:
-//   pulumi stack output --json
-//   helmfile diff
-//   docker save | gzip
+//
+//	pulumi stack output --json
+//	helmfile diff
+//	docker save | gzip
 func WithStreamingStdout(w io.Writer) Option {
 	return func(o *runOptions) {
 		o.stdoutW = w
@@ -84,7 +86,8 @@ func WithStreamingStdout(w io.Writer) Option {
 
 // WithStreamingStderr is the stderr equivalent of WithStreamingStdout.
 // Common pattern for shell-orchestrator scripts that log to stderr:
-//   WithStreamingStderr(os.Stderr) // tee child's stderr to ours
+//
+//	WithStreamingStderr(os.Stderr) // tee child's stderr to ours
 func WithStreamingStderr(w io.Writer) Option {
 	return func(o *runOptions) {
 		o.stderrW = w
