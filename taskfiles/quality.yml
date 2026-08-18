@@ -137,6 +137,7 @@ tasks:
       - bash .github/scripts/check-workflow-hygiene.sh
       - /tmp/loopzero-ops quality anonymous-auth
       - /tmp/loopzero-ops quality billing-secrets   # B-037: opcionalidade de segredo de cobranca e valor, nao literal
+      - /tmp/loopzero-ops quality billing-layers    # B-038: as cinco camadas de cobranca enumeraveis, com dono e catraca
       - /tmp/loopzero-ops quality correlation-header   # T6.1 of plan 2026-06-01-p3-infra-observability-test-debt
       - /tmp/loopzero-ops quality helm-overlap-parity
       - /tmp/loopzero-ops quality prod-image-digests

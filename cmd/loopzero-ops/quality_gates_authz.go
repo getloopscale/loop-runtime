@@ -10,8 +10,12 @@ import (
 	"os"
 	"strings"
 
+	"path/filepath"
+
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/agplisolation"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/anonymousauth"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/billinglayers"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/billingsecrets"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clusterrolenosecretsstar"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/deadlineratchet"
@@ -376,5 +380,32 @@ func runBillingSecrets(args []string) int {
 	// lido nada se pareceria, no log, com um gate que passou.
 	fmt.Printf("billing-secrets: PASS — %d chart(s) verificados, opcionalidade decidida por valor\n",
 		len(outcome.Scanned))
+	return 0
+}
+
+// runBillingLayers verifica que a CADEIA de cobrança continua enumerável, com dono.
+//
+// O irmão `billing-secrets` cobre UMA camada. Este cobre a lista das cinco — e é a lista
+// que o B-038 mede: "a quinta camada nasce sem a verificação que as outras quatro tinham".
+func runBillingLayers(args []string) int {
+	fs := flag.NewFlagSet("billing-layers", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	sibling := fs.String("sibling-root", "", "raiz de ../loopzero-cloud (padrão: irmão do repo-root)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	if *sibling == "" {
+		*sibling = filepath.Join(*root, "..", "loopzero-cloud")
+	}
+
+	out, err := billinglayers.Check(billinglayers.Config{RepoRoot: *root, SiblingRoot: *sibling})
+	if err != nil {
+		// Não existe ramo que devolva 0 sem veredito: uma guarda que não resolve, uma
+		// dívida fechada sem cobertura, ou uma camada nova não declarada reprovam aqui.
+		fmt.Fprintf(os.Stderr, "billing-layers: FAIL — %v\n", err)
+		return 2
+	}
+	fmt.Printf("billing-layers: PASS — %s\n", out.Reason)
 	return 0
 }

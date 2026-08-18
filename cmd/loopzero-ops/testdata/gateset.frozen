@@ -8,6 +8,7 @@ argo-app-identity	gates	The ArgoCD Application name is derived only from naming.
 base-image-digest	gates	Base images are pinned by digest, not floating tags.
 baseline-compare	-	Compares a captured steady-state baseline against the current state.
 baseline-update	-	Updates the committed steady-state baseline artifact.
+billing-layers	gates	As camadas de cobranca precisam ser enumeraveis e com dono; divida fechada sem cobertura reprova.
 billing-secrets	gates	Segredos de cobranca nao podem ter opcionalidade literal; a decisao e por valor.
 caddyfile-csp	gates	Operator-local edge Caddyfile invariants (no CSP on app-dev, preserved headers, rate-limit).
 caddyfile-dev-server-deny	gates	Defense-in-depth: app-dev block MUST 404 dev-server-only paths (/src/*, /.env, /@vite/*, /node_modules/*, /vite.config.*). Regression protection for loopzero-cloud#141.

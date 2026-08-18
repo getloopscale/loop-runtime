@@ -1,0 +1,56 @@
+# Registro das camadas de cobrança — lido por `loopzero-ops quality billing-layers`.
+#
+# POLARIDADE: FECHADO POR PADRÃO. Um arquivo que referencia um insumo de cobrança e não
+# aparece aqui é uma REPROVAÇÃO, não um silêncio.
+#
+# POR QUE ELE EXISTE
+#   Em 2026-08-11 mediram-se CINCO camadas independentes onde a ausência de configuração
+#   de cobrança era tolerada, todas falhando para o MESMO lado — não cobrar, não barrar,
+#   não verificar — e nenhuma dizendo isso. O painel serviu 20h com plano e preço na tela
+#   enquanto o segredo que verifica pagamentos não existia no cluster.
+#   Cada escolha é defensável isolada. A direção do erro é o achado: um sistema de
+#   cobrança que erra sempre para o mesmo lado não é tolerante, tem viés. (B-038)
+#
+# FORMATO
+#   [ancora]       um insumo por linha — a referência que marca um arquivo como candidato
+#   [piso]         o número mínimo de camadas; menos que isso REPROVA
+#   [camadas]      <id> | <repo> | <arquivos,vírgula> | <guarda> | <como degrada>
+#   [referencias]  <arquivo> | <por que NÃO é uma camada>
+#
+# GUARDAS
+#   gate:<nome>   um gate do loopzero-ops cobre — só resolve se o gate for RODADO no quality.yml
+#   test:<path>   um teste afirma o invariante (verificado por EXISTÊNCIA, não conteúdo)
+#   open:B-NNN    dívida declarada com dono — resolve SÓ enquanto o item estiver aberto
+#                 (raw, triaged ou planned); shipped e killed REPROVAM
+#
+# A CATRACA: fechar um item `open:` sem trocar a guarda REPROVA. É isso que impede a
+# dívida de virar tapete — sem ela, bastaria marcar o B-033 como entregue para a camada
+# ficar descoberta e silenciosa com este arquivo ainda afirmando que alguém cuida dela.
+
+[ancora]
+loopzero-stripe-webhook
+loopzero-stripe-api-keys
+LOOPZERO_PROMETHEUS_URL
+CapabilityBilling
+CostEnforcer
+stripe_subscription_item_id
+
+[piso]
+5
+
+[camadas]
+secret-mount | loopzero | infra/helm/loopzero-cloud/templates/deployment.yaml,charts/loopzero-cloud/templates/deployment.yaml,infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl | gate:billing-secrets | `optional: true` literal fazia o pod subir sem a credencial que autoriza cobrar; hoje é `{{ not .Values.billing.required }}`, ligado em dev-public. Medido 2026-08-11: 20h Running sem os dois Secrets, sem um único evento. (B-037)
+seed | loopzero | cmd/loopzero-ops/internal/seed/capability.go,cmd/loopzero-ops/internal/seed/stripe_webhook_secret.go,cmd/loopzero-ops/internal/seed/stripe_api_keys.go | test:cmd/loopzero-ops/internal/seed/stripe_required_test.go | `SKIP-graceful` deixava a corrente verde sem credencial; hoje `MissingInput` reprova quando o ambiente DECLAROU a capacidade. Opcional por design continua pulando. (B-036)
+cost-gate | loopzero | api/internal/middleware/cost_enforcement.go,api/internal/server/router.go,api/cmd/setup_server.go | open:B-033 | nil-safe: com `CostEnforcer` não injetado o middleware é pass-through, e as três métricas de custo ficam sem teto. O comentário em router.go declara isso. (B-033)
+cost-aggregator | loopzero-cloud | cmd/main.go | open:B-033 | `LOOPZERO_PROMETHEUS_URL` vazio desliga o agregador com um `logger.Info` — o mesmo nível do boot bem-sucedido. É a ÚNICA fonte de `cost_counters`, e o portão acima degrada para "passa" quando a tabela está vazia. (B-033)
+usage-report | loopzero-cloud | internal/metering/reporter.go,internal/metering/stalled.go | test:internal/metering/stalled_test.go | assinatura sem `stripe_subscription_item_id` fazia o reporter registrar WARN e seguir para sempre; hoje `stalled.go` decide pela IDADE — até 24h é espera, além disso é travamento. (B-034)
+
+[referencias]
+api/internal/server/server.go | transporte: carrega o CostEnforcer até o router; a decisão de barrar é do middleware
+api/internal/db/store/cost_wrapper.go | acesso a `cost_counters`; lê e escreve, não decide se cobra
+api/internal/db/generated/models.go | gerado por sqlc a partir do schema; espelha a coluna, não a política
+cmd/loopzero-ops/internal/quality/billingsecrets/check.go | é a GUARDA da camada secret-mount, não a camada
+cmd/loopzero-ops/internal/quality/devpublicenv/check.go | confere presença de variáveis do dev-public; não decide nada sobre cobrança
+cmd/loopzero-ops/quality_gates_authz.go | fiação de subcomando do loopzero-ops
+infra/helmfile/environments/dev-public.yaml | declara o ambiente; o valor que liga a cobrança mora em values/dev-public/
+taskfiles/infra.yml | task de operador que IMPRIME o comando de criar o Secret à mão; instrução, não caminho de execução
