@@ -94,7 +94,9 @@ func MapBuildStatusToProjectStatus(state statemachine.State) ProjectStatus {
 //
 //   - otherwise → fall back to MapBuildStatusToProjectStatus on the
 //     latest build state. This covers:
+//
 //   - Cold projects (no release ever) — only build status to read.
+//
 //   - Terminal non-active releases (SUPERSEDED, ROLLED_BACK,
 //     CANCELLED) — the historical release is not the current truth;
 //     the latest build attempt is.

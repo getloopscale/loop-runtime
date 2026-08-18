@@ -83,4 +83,3 @@ func CountPermanentEnvironments(limiter *PlanLimiter) func(tenantID string) int 
 		return count
 	}
 }
-
