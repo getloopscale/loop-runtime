@@ -9358,6 +9358,7 @@ severity: media — falha para o lado SEGURO (bloqueia demais), mas o efeito obs
 evidence: medido em 2026-08-19 por isolamento de quatro sondas. `.claude/hooks/validate-command.sh:224-231` casa TRES regex — `RM_INVOCATION_RE`, `RM_RECURSIVE_RE`, `DANGEROUS_PATH_RE` — **independentemente sobre a string inteira do comando** e faz AND. Nada as amarra a MESMA invocacao.
 why_now: bloqueou trabalho real hoje. O comando era `rm -f <arquivo do projeto>` seguido de `grep -rn ... | sed 's/^/   /'`: o `rm` veio do primeiro comando, o `-r` do `grep -rn`, e o "caminho perigoso" da expressao do `sed` (`/` seguido de espacos casa `/([[:space:]]|$)`). Nenhum `rm -r` existia.
 status: triaged
+delivered_in: (ver a nota abaixo — o conserto e os testes estao no mesmo commit)
 dod:
   - existe teste que reprova ANTES do conserto com a forma medida (`rm -f a.go` + `grep -rn` + `sed 's/^/   /'` no mesmo bloco) e passa depois
   - `rm -rf /`, `rm -rf $HOME` e `rm -rf ~` continuam bloqueados — a guarda so' pode ficar mais precisa, nunca mais permissiva
@@ -9383,3 +9384,43 @@ que estava sendo verificado.
 
 
 
+
+> **Consertado 2026-08-19, com uma medicao que corrige a severidade para baixo.**
+>
+> As tres condicoes passaram a ser avaliadas dentro do MESMO trecho: o bloco e'
+> partido nos separadores de comando e so' os trechos que invocam o apagamento sao
+> testados. Trechos menores nunca inventam uma combinacao — no maximo deixam de
+> inventa-la, que e' a direcao segura.
+>
+> Testes em `cmd/loopzero-ops/hook_rm_guard_test.go`, que executam o hook de verdade:
+> dois de regressao (falhavam antes, passam agora), **13 formas destrutivas que
+> seguem bloqueadas** (`/`, `$HOME`, `~`, `~/`, `/etc`, `/usr/lib`, `-fr`, `-Rf`,
+> `--recursive --force`, `-r -f`, encadeado com `&&`, `/home/paulo`, `/*`) e 4 que a
+> propria mensagem declara permitidas.
+>
+> **A varredura de populacao voltou ZERO, e isso corrige a severidade.** Extraidas 43
+> invocacoes distintas dos taskfiles, scripts e helmfile: a guarda **anterior** ao
+> conserto ja' nao bloqueava nenhuma. O defeito nao atinge comando versionado — vive
+> em comando COMPOSTO ad-hoc, que e' o que um agente ou uma pessoa digita. Registrei
+> isso dentro do proprio teste para que a varredura nao seja lida como tendo pego
+> algo: ela e' catraca, nao achado.
+>
+> **O conserto e' NECESSARIO E NAO SUFICIENTE, e isto foi verificado ao vivo.** Depois
+> de consertar a copia deste repositorio, rodei a forma bloqueada de novo: **continua
+> bloqueada**. A mensagem cita `${CLAUDE_PLUGIN_ROOT}/hooks/validate-command.sh` — a
+> guarda que de fato governa os comandos e' uma copia INSTALADA de plugin, fora daqui.
+> Medido: `find ~/.claude/plugins -name validate-command.sh` devolve **2 copias**,
+> nenhuma com o conserto (`marketplaces/loopzero-memory/...` e
+> `cache/k8s-cncf-expert/...`). Um comando precisa passar pelas duas, entao enquanto a
+> do plugin nao mudar, o comportamento nao muda.
+>
+> **Nao editei as copias instaladas.** Elas pertencem ao repositorio de origem do
+> plugin e sao sobrescritas na proxima atualizacao; edita-las seria um conserto que se
+> apaga sozinho e que some do rastro de auditoria. Este item fica ABERTO pela metade
+> que nao e' minha — e a forma dele e' a mesma do **B-111**: um controle, varias casas,
+> nenhum dono.
+>
+> **O escrever este teste foi a evidencia mais direta do defeito.** O arquivo nao pode
+> ser criado por heredoc de shell — o comando que o escreveria carrega os literais
+> destrutivos, e a guarda bloqueava a criacao do teste que a verifica. Precisei da
+> ferramenta de escrita de arquivo. Esta' anotado no topo do arquivo.
