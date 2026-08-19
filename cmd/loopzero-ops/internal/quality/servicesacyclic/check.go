@@ -17,11 +17,10 @@
 //	domain    → deploycontracts
 //	platform  → deploycontracts
 //	placement → (pure leaf)
-//	billing   → (pure leaf)
 //	deploycontracts    → (pure leaf — imports NO other services subpackage)
 //
 // Any edge not in the allow-list FAILs: a new reverse edge (e.g. release → build)
-// would re-introduce a cycle; a new cross-leaf edge (placement → billing) would
+// would re-introduce a cycle; a new cross-leaf edge (placement → deploycontracts) would
 // erode the leaf invariant; a new subpackage not registered here forces a
 // conscious decision instead of silently widening the graph.
 //
@@ -73,6 +72,16 @@ const servicesImportPrefix = "github.com/getloopscale/loopzero/api/internal/serv
 // It cannot collide with a real subpackage (dir names never contain '<').
 const missingRootMarker = "<services-root-missing-or-empty>"
 
+// `billing` NAO esta aqui, e a ausencia e' deliberada (B-065). O dominio foi
+// extraido para `../loopzero-cloud` no M4; `api/internal/services/billing` ficou como
+// diretorio VAZIO e nao rastreado, e o registro sobreviveu ao codigo. Um contexto
+// registrado para codigo inexistente GASTA ADIANTADO a decisao que este gate
+// existe para forcar: quem criasse o diretorio depois comecaria a importar sem
+// que nada perguntasse. A rota `GET /api/v1/billing` continua servida deste
+// repositorio (`api/internal/server/router.go:610`) delegando ao handler; a
+// LOGICA de billing mora no `loopzero-cloud`. Se um dia existir codigo de billing
+// aqui, registrar de novo — conscientemente.
+//
 // allowed is the deny-by-default adjacency allow-list. allowed[A] is the set of
 // subpackages A is permitted to import. A subpackage absent from this map is
 // unknown → fail-closed. An empty set means "pure leaf" (imports no sibling).
@@ -84,7 +93,6 @@ var allowed = map[string]map[string]bool{
 	"domain":          {"deploycontracts": true},
 	"platform":        {"deploycontracts": true},
 	"placement":       {},
-	"billing":         {},
 	"deploycontracts": {},
 }
 

@@ -3483,7 +3483,7 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
-## B-065 — Um contexto delimitado vazio está pré-aprovado no DAG congelado   [ ]
+## B-065 — Um contexto delimitado vazio está pré-aprovado no DAG congelado   [x]
 
 domain: engine-go
 repo: loopzero
@@ -3491,11 +3491,37 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `api/internal/services/billing` é um diretório **vazio e não rastreado pelo git** — não existe num clone novo. Mas `servicesacyclic/check.go:87` o registra como contexto delimitado, folha pura, no DAG congelado. A explicação não é descuido: billing foi extraído para `../loopzero-cloud` no M4 (`CLAUDE.md:14`); o código mudou de repositório e o registro no gate ficou. Resultado: o domínio de billing hoje está em três lugares — a lógica no `loopzero-cloud`, a rota `GET /api/v1/billing` ainda servida daqui (`server/router.go:519`), e um contexto fantasma no meio.
 why_now: o `servicesacyclic` existe para que um subpacote **novo e não registrado** reprove, forçando decisão consciente. Um contexto vazio pré-registrado **gasta essa decisão adiantado**: alguém pode criar `services/billing` e começar a importar para lá sem que o gate force ninguém a pensar.
-status: triaged
+status: shipped
 severity: baixa — sem impacto hoje; é uma folha do gate emprestada a código que não existe mais aqui.
 dod:
   - a entrada `billing` sai do DAG congelado, ou existe código que a justifique
   - está escrito onde o domínio de billing mora, já que a rota continua sendo servida deste repositório
+
+> **Fechado 2026-08-18 — DoD 2/2, e a classe fechada junto.**
+>
+> Confirmado ao pé da letra: `api/internal/services/billing` existe no disco com
+> **zero arquivos rastreados** (`git ls-files` vazio — inexistente num clone novo),
+> e o DAG congelado o registrava como folha pura. A rota `GET /api/v1/billing`
+> segue servida daqui — hoje em `api/internal/server/router.go:610`, não 519: o
+> item citou a linha de 2026-08-11 e ela derivou.
+>
+> **Bala 1 — a entrada saiu.** `"billing": {}` foi removida do `allowed`, junto da
+> linha do doc-comment e de um exemplo que citava uma aresta `placement → billing`
+> que não pode mais existir. O gate segue PASS (135 arquivos varridos).
+>
+> **Bala 2 — escrito onde o domínio mora**, no lugar onde alguém que procure
+> `billing` vai parar: o próprio `allowed`, em `servicesacyclic/check.go`. A
+> ausência é declarada como deliberada, com o M4, o `loopzero-cloud`, a rota que fica
+> e a instrução de registrar de novo — conscientemente — se um dia existir código
+> de billing aqui.
+>
+> **A classe, não só a instância:** `TestTodoContextoRegistradoTemCodigoRastreado`
+> exige que todo contexto do DAG tenha `.go` **rastreado pelo git**. Usa
+> `git ls-files` e não `os.Stat` de propósito — um diretório vazio existe na
+> máquina de quem já rodou o build e não existe num clone novo, então o disco
+> responderia coisas diferentes em máquinas diferentes; o índice do git é o mesmo
+> em toda parte. A guarda pegou a instância **real** antes de qualquer mutante, e
+> um mutante sintético (`fantasma`) confirmou que o verde não vem de outro motivo.
 
 > Registrado 2026-08-11 pela auditoria de arquitetura. Este item é também o exemplo medido do limite de escopo: a auditoria cobriu **um** repositório, e billing é um domínio que não cabe em um.
 
