@@ -81,12 +81,19 @@ type AppRelease struct {
 
 // WorkflowSpec contains everything needed to submit a build workflow.
 type WorkflowSpec struct {
-	BuildID       string
-	TenantID      string
-	ProjectID     string
-	Environment   string
-	CommitSHA     string
-	NoCache       bool // Skip BuildKit layer cache (full rebuild via --no-cache)
+	BuildID     string
+	TenantID    string
+	ProjectID   string
+	Environment string
+	CommitSHA   string
+	// NoCache carrega a INTENCAO do usuario — reconstruir do zero, sem reaproveitar
+	// trabalho anterior — e nao o mecanismo que a realiza. O comentario anterior
+	// dizia "Skip BuildKit layer cache", nomeando no contrato de dominio uma
+	// ferramenta que so' existe no construtor (`api/internal/argo/buildkit.go:82`,
+	// o unico leitor que decide algo com este campo). Trocar de construtor nao
+	// muda o que o usuario pediu; mudava este comentario, e e' assim que o
+	// vocabulario de um plano vaza para onde ele nao tem endereco (B-062).
+	NoCache       bool
 	Apps          []AppSpec
 	Plan          *BuildPlan // v2: resolved build plan (when present, WorkflowBuilder uses this instead of Apps)
 	CorrelationID string
