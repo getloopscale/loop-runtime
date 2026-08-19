@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 49 · **In flight** 0 · **Closed** 115
+164 items — **Open** 48 · **In flight** 0 · **Closed** 116
 
-### Open (49)
+### Open (48)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -84,7 +84,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `triaged` | média |
 | [`B-059`](#b-059--o-transporte-carrega-o-schema-de-payload-de-cada-domínio-e-faz-body-snooping----) | O transporte carrega o schema de payload de cada domínio e faz body-snooping | `triaged` | média |
 | [`B-060`](#b-060--o-único-lugar-onde-os-quatro-planos-se-encontram-é-uma-pasta-de-arquivos-irmãos----) | O único lugar onde os quatro planos se encontram é uma pasta de arquivos irmãos | `triaged` | média |
-| [`B-062`](#b-062--o-vocabulário-do-plano-de-build-está-espalhado-por-quinze-pacotes-incluindo-o-sink-de-domínio----) | O vocabulário do plano de build está espalhado por quinze pacotes, incluindo o sink de domínio | `triaged` | média |
 | [`B-064`](#b-064--o-control-plane-alcança-o-plano-de-secrets-por-um-nome-dns-reescrito-em-tempo-de-resolução----) | O control plane alcança o plano de secrets por um nome DNS reescrito em tempo de resolução | `triaged` | média |
 | [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `triaged` | média |
 | [`B-069`](#b-069--a-mesma-regra-de-env-reservada-descarta-em-silêncio-de-um-lado-e-mata-o-build-do-outro----) | A mesma regra de env reservada descarta em silêncio de um lado e mata o build do outro | `triaged` | média |
@@ -128,7 +127,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (115)
+### Closed (116)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -183,6 +182,7 @@ _None._
 | [`B-055`](#b-055--o-invariante-de-escritor-único-de-status-vale-em-2-de-8-controllers-e-o-helper-que-o-repara-não-tem-chamador---x) | O invariante de escritor único de status vale em 2 de 8 controllers, e o helper que o repara não tem chamador | `shipped` | alta |
 | [`B-056`](#b-056--dois-charts-diferentes-têm-o-mesmo-nome-em-duas-árvores-com-ciclos-de-vida-distintos---x) | Dois charts diferentes têm o mesmo nome, em duas árvores com ciclos de vida distintos | `shipped` | média |
 | [`B-061`](#b-061--reconcilehelpers-guarda-três-assuntos-sem-relação-e-o-doc-dele-ainda-chama-o-pacote-de-shared---x) | `reconcilehelpers` guarda três assuntos sem relação, e o doc dele ainda chama o pacote de `shared` | `shipped` | baixa |
+| [`B-062`](#b-062--o-vocabulário-do-plano-de-build-está-espalhado-por-quinze-pacotes-incluindo-o-sink-de-domínio---x) | O vocabulário do plano de build está espalhado por quinze pacotes, incluindo o sink de domínio | `shipped` | média |
 | [`B-063`](#b-063--um-módulo-de-infraestrutura-depende-de-uma-suíte-de-testes-e-tools-está-fora-do-workspace----x) | Um módulo de infraestrutura depende de uma suíte de testes, e `tools/` está fora do workspace | `shipped` | baixa |
 | [`B-065`](#b-065--um-contexto-delimitado-vazio-está-pré-aprovado-no-dag-congelado---x) | Um contexto delimitado vazio está pré-aprovado no DAG congelado | `shipped` | baixa |
 | [`B-066`](#b-066--três-suítes-de-invariante-são-testes-go-comuns-invisíveis-ao-oráculo-de-gates---x) | Três suítes de invariante são testes Go comuns, invisíveis ao oráculo de gates | `shipped` | baixa |
@@ -3426,7 +3426,7 @@ gates estruturais passam — `unhomed-logic` (64 ≤ 82), `pkg-usage-matrix` em 
 acíclico, `status-writer-contract` sobre 82 produtos, `publish-hygiene` 4543 limpos.
 
 
-## B-062 — O vocabulário do plano de build está espalhado por quinze pacotes, incluindo o sink de domínio   [ ]
+## B-062 — O vocabulário do plano de build está espalhado por quinze pacotes, incluindo o sink de domínio   [x]
 
 domain: engine-go
 repo: loopzero
@@ -3434,7 +3434,41 @@ suggested_mode: evolve
 source: discover-review
 evidence: medido em 2026-08-11. Um grep por `BuildKit|cosign|WorkflowSubmitter|argoproj…Workflow` bate em **15 pacotes distintos** de `api/internal` — incluindo o sink de domínio: `services/deploycontracts/shared_contracts.go:89` declara `NoCache bool // Skip BuildKit layer cache (--no-cache)`. Do lado da infra o plano é explícito (`build.helmfile`, `build-cluster.yaml`, `charts/loopzero-build-cwts`); do lado do código não há endereço. Os quatro pacotes api-side que de fato são build (`argo`, `source`, `shellgen`, `admission`) somam 10 importadores de produção.
 why_now: é a metade de código do plano que a pergunta original nomeia em segundo lugar. E o custo do gate depende disto: uma verificação que confine o vocabulário de build precisaria hoje enumerar **15 prefixos**; depois de aninhar os quatro pacotes, **3** — a diferença entre um gate mantenível e um que ninguém mantém.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19 — e a bala 2 fecha por MEDIÇÃO REFUTANDO A PREMISSA, não por
+> implementação.**
+>
+> **Bala 3, conferida hoje:** `grep -rn "BuildKit|cosign|WorkflowSubmitter|argoproj"
+> api/internal/domain` devolve **zero**. O sink de domínio não declara mais nenhum
+> campo com semântica de plano de build.
+>
+> **Bala 2 — a premissa não se sustenta.** O item queria um gate que impedisse o
+> vocabulário de orquestração de se espalhar. A nota de 18/08 já o tinha estreitado
+> para "só os tipos de orquestração … 5 prefixos". Medido hoje, prefixo a prefixo:
+>
+> | pacote | por que cita `WorkflowSubmitter` |
+> |---|---|
+> | `services/deploycontracts` | **declara a porta** — é a interface, com o comentário `DIP -- no direct coupling` |
+> | `buildplane/argo` | é o **adaptador** que a satisfaz |
+> | `services/platform` | é um **decorator** (`CircuitBreakerWorkflowSubmitter`) sobre a porta |
+> | `services/build` | é o **consumidor** |
+> | `api/cmd`, `api/cmd/controller` | **raiz de composição** — onde o concreto entra na interface |
+> | `adapters/adapters.go` | um **comentário** mapeando porta → adaptador; nem código é |
+>
+> São **sete**, não cinco, e **todos legítimos**. Porta, adaptador, decorator,
+> consumidor e raiz de composição é exatamente a forma que a Inversão de Dependência
+> produz — o nome da porta *tem* de aparecer nos dois lados dela. Um gate congelando
+> esses sete não impediria vazamento: cobraria cerimônia de um desenho correto, e seria
+> o "gate que ninguém mantém" que o próprio item temia.
+>
+> E os matches de `argoproj` que o grep original contou são majoritariamente
+> `argoproj.io` do **ArgoCD** — plano de deploy, não de build — em `argocd`, `k8s`,
+> `manifests` e `services/release`. Contá-los como vocabulário de build inflou o número
+> que motivou o gate.
+>
+> Matar uma bala por medição é resultado, não desistência: o que ela pediria construir
+> não guardaria nada.
 delivered_in: e0adb510a 698fd507d 61f5bf9c7  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — nada quebrado; é a razão de "o que é build?" não ter resposta no código.
 dod:
