@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package chaosslo is the pure-logic SLO verdict of the chaos resilience runner
+// Package slo is the pure-logic SLO verdict of the chaos resilience runner.
+//
+// Chamava-se `chaosslo` e vivia em `internal/quality/`, onde nao pertencia: ele
+// serve o subcomando `chaos`, nao um gate, e por isso o oraculo `quality --list`
+// nunca o enumerou (B-066). O prefixo do nome existia para desambiguar dentro
+// daquele diretorio; sob `internal/chaos/` o caminho ja' diz o mesmo.
 // (Track C TC3.1 of docs/plans/completed/2026-05-24-drill-consolidation-migration-plan.md).
 //
 // It compares baseline / during / post chaos samples and decides whether the
