@@ -114,6 +114,7 @@ sqlc-sync	gates	Committed sqlc generated/ is in sync with the schema codegen.
 sqlc-tx-prop	gates	Enforces pool-bound vs tx-bound query propagation inside withEnvironmentLock.
 stack-coverage	gates	Verifies the tool-inventory stack-coverage claims via grep.
 status-writer-contract	gates	Refuses a bare Status().Update anywhere in operators production code, including the local-alias and SubResource spellings (ADR 2026-08-12-status-writer-contract, B-085).
+stdlib-only	gates	O pacote de vocabulario compartilhado nao pode importar fora da biblioteca padrao.
 taskfile-interface	gates	Validates the Taskfile public-interface contract.
 template-compliance	-	Checks documents comply with their canonical templates.
 tenant-csp-passthrough	gates	Static-CSP Traefik middleware must not be attached to tenant routes (#59).

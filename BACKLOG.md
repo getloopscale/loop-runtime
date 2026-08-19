@@ -3067,6 +3067,35 @@ evidence: medido em 2026-08-11. Existem `pkg/domain` (vocabulário de produto), 
 why_now: a duplicação da palavra em dois níveis é consequência direta do topo em forma de camada (B-041); resolver ali torna o rename aqui quase mecânico. E o `types.go` único é o que faz uma porta de secrets e uma porta de billing mudarem no mesmo arquivo.
 status: triaged
 severity: média — não quebra nada; custa navegação e força dois nomes de pacote que mentem sobre o diretório.
+progress_2026_08_18: |
+  **Bala 4 fechada. As balas 1-3 sao UMA mudanca, nao tres — e a medicao mostrou por que.**
+
+  **O acoplamento que o DoD implica sem dizer:** renomear `domainsvc` para `domain` (bala 3)
+  **colidiria** nos imports com `api/internal/domain` — que e exatamente por que o sufixo
+  `svc` existe. A bala 3 so e possivel DEPOIS da bala 1 (renomear o pacote guardado para
+  `ports`). Fazer 3 sem 1 recria a colisao que o alias evitava.
+
+  **Escala medida:** `api/internal/domain` tem 9 arquivos, 1.214 linhas, e e importado por
+  **90 arquivos**. O rename e mecanico e o compilador o verifica inteiro, mas e uma passada
+  grande que merece fatia propria — meia-renomeacao e pior que nenhuma.
+
+  A dependencia declarada no `why_now` esta satisfeita: o `B-041` esta `shipped`.
+
+  **Bala 4 — a propriedade agora e verificada, nao assumida.** Medido com `go list`:
+  `api/internal/domain` importa **9 pacotes, todos da biblioteca padrao**. E a razao de ele
+  poder ser importado por 90 arquivos e justamente essa; um unico import externo ali
+  atravessa para os 90, e nada impedia. O `CLAUDE.md` descrevia a propriedade como razao do
+  pacote existir — descrever nao e verificar.
+
+  O gate `stdlib-only` recusa qualquer import fora da stdlib, inclusive de outro pacote
+  **deste** repositorio: nao e "externo" no sentido de terceiro, mas arrasta o mesmo
+  acoplamento. Provado com mutante (`prometheus` injetado → reprova; removido → passa).
+
+  **E a ausencia do pacote reprova**, de proposito: a bala 1 pede justamente mover este
+  diretorio, e uma guarda que ficasse verde sobre um caminho que sumiu seria a forma
+  `PASS — 0` que este ecossistema ja pagou para aprender. Quem renomear atualiza o caminho
+  conscientemente — e ai a propriedade viaja com o rename em vez de morrer nele.
+
 dod:
   - `api/internal/domain` passa a ter nome que diz o que ele é (o alvo medido é `ports`), com um arquivo por contexto
   - os 49 alias re-exports são deletados — hoje eles fazem a porta e o consumidor serem a mesma linha

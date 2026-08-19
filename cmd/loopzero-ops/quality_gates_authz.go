@@ -31,6 +31,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/runbookparity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scheduledimage"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/securitycontext"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/stdlibonly"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/tenantpredicate"
 )
 
@@ -429,6 +430,22 @@ func runRunbookParity(args []string) int {
 		return 2
 	}
 	fmt.Printf("runbook-parity: PASS — %s\n", out.Reason)
+	return 0
+}
+
+func runStdlibOnly(args []string) int {
+	fs := flag.NewFlagSet("stdlib-only", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := stdlibonly.Check(stdlibonly.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "stdlib-only: FAIL — %v\n", err)
+		return 2
+	}
+	fmt.Printf("stdlib-only: PASS — %d import(s), todos da biblioteca padrao\n", out.Scanned)
 	return 0
 }
 
