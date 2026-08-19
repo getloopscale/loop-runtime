@@ -68,7 +68,7 @@ cd infra/tests && go test ./e2e/... -v -timeout 120m \
 
 ### Quality gates — the CI substitute
 
-GitHub Actions was removed as the pipeline in 2026-05-23; **3 workflows remain** (`build-publish.yml`, `release-artifacts.yml`, `workflow-hygiene.yml`) and are not the quality gate. The gates are **126 wired quality gates** in `cmd/loopzero-ops`, run locally or by whatever CI is wired:
+GitHub Actions was removed as the pipeline in 2026-05-23. **4 workflows remain** (`build-publish.yml`, `release-artifacts.yml`, `workflow-hygiene.yml`, `ci.yml`) — this line said **3** and named the first three until 2026-08-19, and the fourth had been added deliberately in the meantime. Three of them are not the quality gate; **`ci.yml` is**, and its own header says why: the gates moved to a pre-push hook that runs *on the pusher machine and only there*, so a repository with no GitHub gate has none for anyone else. The gate inventory is **140 wired quality gates** in `cmd/loopzero-ops` (measured 2026-08-19 via `--list`, the oracle), run locally or by whatever CI is wired:
 
 ```bash
 task quality:gates            # full-repo scan

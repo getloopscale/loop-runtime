@@ -7956,6 +7956,30 @@ why_now: o `B-119` acabou de separar as duas populações do gate e ligou a que 
 status: triaged
 dod:
   - `build-publish.yml` declara `outputs.digest` no `workflow_call`, e um consumidor o recebe
+> **Medido 2026-08-19 — confirmado, com consumidor identificado; a mudança é T2 e
+> não a fiz.**
+>
+> `workflow_call:` declara `inputs:` e **nenhum** `outputs:`
+> (`.github/workflows/build-publish.yml:17-40`), enquanto `steps.build.outputs.digest`
+> é usado nas linhas 255 e 264 para montar a referência que o cosign assina. O valor
+> existe e morre dentro do workflow.
+>
+> **O consumidor da segunda metade da DoD existe:** `release-artifacts.yml:103`
+> chama `./.github/workflows/build-publish.yml`.
+>
+> **Não apliquei porque a governança classifica mudança de pipeline/CI como T2**, e
+> aqui há uma razão além da regra: o `workflow-hygiene.yml` registra que este
+> reusable é consumido por **cinco repositórios**. Acrescentar `outputs:` é
+> aditivo e não quebra chamador nenhum — mas é superfície de contrato entre repos,
+> e é exatamente o tipo de coisa que a reunião existe para ver.
+>
+> **Achado colateral, esse consertado:** ao medir os workflows notei que o
+> `CLAUDE.md:71` afirmava *"3 workflows remain"* e havia **4** — o `ci.yml` entrou
+> depois, deliberadamente, e o cabeçalho dele explica por quê: os gates migraram
+> para um hook de pré-push que roda **na máquina de quem empurra e só nela**. A
+> linha também dizia 126 gates; o oráculo diz **140**. Corrigida com os dois
+> números medidos e a data.
+
   - os sete `image.digest` são preenchidos **pela publicação**, não à mão — e a origem do valor está escrita junto
   - com o valor presente, `prod-image-digests` passa a enforçar também `missing_digest` (`EnforceAll()` vira o padrão), e o VAP sai de `requireImageDigestEnforce: false`
 
