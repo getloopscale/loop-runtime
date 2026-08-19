@@ -18,6 +18,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/billinglayers"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/billingsecrets"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyhostparity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/chartpairs"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clusterrolenosecretsstar"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dashboardrootparity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/deadlineratchet"
@@ -428,6 +429,23 @@ func runRunbookParity(args []string) int {
 		return 2
 	}
 	fmt.Printf("runbook-parity: PASS — %s\n", out.Reason)
+	return 0
+}
+
+func runChartPairs(args []string) int {
+	fs := flag.NewFlagSet("chart-pairs", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := chartpairs.Check(chartpairs.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "chart-pairs: FAIL — %v\n", err)
+		return 2
+	}
+	fmt.Printf("chart-pairs: PASS — %d em infra/helm, %d em charts/, %d par(es) declarado(s): %v\n",
+		out.InfraHelm, out.Charts, len(out.Pairs), out.Pairs)
 	return 0
 }
 

@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-156 items — **Open** 57 · **In flight** 0 · **Closed** 99
+156 items — **Open** 56 · **In flight** 0 · **Closed** 100
 
-### Open (57)
+### Open (56)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -80,7 +80,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
 | [`B-035`](#b-035--o-segredo-que-verifica-pagamentos-não-existia-no-ambiente----) | O segredo que verifica pagamentos não existia no ambiente | `triaged` | — |
 | [`B-054`](#b-054--o-api-roda-dois-circuit-breakers-escritos-independentemente-sobre-o-mesmo-pool-postgres----) | O `api` roda dois circuit breakers escritos independentemente sobre o mesmo pool Postgres | `triaged` | média |
-| [`B-056`](#b-056--dois-charts-diferentes-têm-o-mesmo-nome-em-duas-árvores-com-ciclos-de-vida-distintos----) | Dois charts diferentes têm o mesmo nome, em duas árvores com ciclos de vida distintos | `triaged` | média |
 | [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `triaged` | média |
 | [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `triaged` | média |
 | [`B-059`](#b-059--o-transporte-carrega-o-schema-de-payload-de-cada-domínio-e-faz-body-snooping----) | O transporte carrega o schema de payload de cada domínio e faz body-snooping | `triaged` | média |
@@ -136,7 +135,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (99)
+### Closed (100)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -189,6 +188,7 @@ _None._
 | [`B-052`](#b-052--o-claudemd-aponta-para-cinco-contratos-que-não-existem---x) | O `CLAUDE.md` aponta para cinco contratos que não existem | `shipped` | média |
 | [`B-053`](#b-053--apiv1version-responde-dev-em-toda-imagem-construída---x) | `/api/v1/version` responde `"dev"` em toda imagem construída | `shipped` | média |
 | [`B-055`](#b-055--o-invariante-de-escritor-único-de-status-vale-em-2-de-8-controllers-e-o-helper-que-o-repara-não-tem-chamador---x) | O invariante de escritor único de status vale em 2 de 8 controllers, e o helper que o repara não tem chamador | `shipped` | alta |
+| [`B-056`](#b-056--dois-charts-diferentes-têm-o-mesmo-nome-em-duas-árvores-com-ciclos-de-vida-distintos---x) | Dois charts diferentes têm o mesmo nome, em duas árvores com ciclos de vida distintos | `shipped` | média |
 | [`B-061`](#b-061--reconcilehelpers-guarda-três-assuntos-sem-relação-e-o-doc-dele-ainda-chama-o-pacote-de-shared---x) | `reconcilehelpers` guarda três assuntos sem relação, e o doc dele ainda chama o pacote de `shared` | `shipped` | baixa |
 | [`B-070`](#b-070--env-aws_region-já-quebra-o-build-hoje-e-a-api-aceitaria-a-mesma-chave---x) | `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave | `shipped` | média ↑ |
 | [`B-071`](#b-071--task-testunit-está-vermelho-na-workspace-e-a-causa-é-um-par-que-se-desencontrou---x) | `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou | `shipped` | alta |
@@ -3015,7 +3015,7 @@ dod:
 > escalar), então apagaria a escrita de outro ator. Corrigido com
 > `MergeFromWithOptimisticLock` e um teste que encena a corrida — mesma lição da fatia slice-9.
 
-## B-056 — Dois charts diferentes têm o mesmo nome, em duas árvores com ciclos de vida distintos   [ ]
+## B-056 — Dois charts diferentes têm o mesmo nome, em duas árvores com ciclos de vida distintos   [x]
 
 domain: engine-go
 repo: loopzero
@@ -3023,8 +3023,34 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `infra/helm/loopzero-api/Chart.yaml:2` (v0.1.0) e `charts/loopzero-api/Chart.yaml:2` (v0.2.0) declaram **o mesmo `name`**; o mesmo vale para `loopzero-cloud`. São charts diferentes, com templates diferentes e ciclos de vida diferentes (bootstrap Helmfile L2 × publicado OCI L3), e nenhum é superconjunto do outro. Renomear é preservador de comportamento: o nome do release vem da chave `name:` do helmfile (`core.helmfile.yaml.gotmpl:481`), não do diretório do chart. Some-se: `loopzero-common` é dependência de 9 dos 13 charts publicados e de **zero** charts de bootstrap.
 why_now: o `CLAUDE.md:171` manda manter os pares em paridade — *"when patching one, apply the same fix to the other"* — e a única forma de saber de qual se fala é pelo caminho. Um nome ambíguo num contrato que exige edição sincronizada é armadilha de leitura, e o B-046 é o caso em que ela já custou.
-status: triaged
+status: shipped
 severity: média — não quebra instalação; torna o contrato de paridade difícil de discutir e de auditar.
+resolution: |
+  Fechado 2026-08-18 pela segunda alternativa do DoD — convencao escrita —, e a medicao
+  encontrou um defeito que o item nao previa.
+
+  **A contagem estava errada, e no documento que manda o conserto.** `CLAUDE.md:171` afirmava
+  **3** charts sobrepostos, incluindo `loopzero-admission-policies`. Medido:
+  `infra/helm/loopzero-admission-policies` **nao existe** — o chart vive so em `charts/`. O
+  contrato mandava *"apply the same fix to the other"* num par que nao tem outro lado, e
+  diluir a paridade com um par inexistente enfraquece os dois que sao reais.
+
+  Populacao medida: 24 charts em `infra/helm`, 13 em `charts/`, **2** com o mesmo `name` —
+  `loopzero-api` e `loopzero-cloud`.
+
+  **Por que convencao e nao renomeacao.** Medi o custo antes de escolher: `.Chart.Name` so
+  alimenta ROTULOS (`app.kubernetes.io/name` em ConfigMap e Secret de `infra/helm/loopzero-api`),
+  nenhum seletor o usa, e o helmfile nomeia o release explicitamente
+  (`core.helmfile.yaml.gotmpl:492`) — entao renomear NAO mudaria o release, o que satisfaz a
+  bala 2. Mas renomear compra clareza que o caminho ja da (`infra/helm/` vs `charts/`) ao
+  custo de mexer em dois charts vivos. A rung 1 da escada recusa.
+
+  **A convencao esta amarrada, nao apenas escrita.** `infra/quality/chart-pairs.txt` declara
+  os pares e como se refere a cada um — sempre pelo caminho, nunca pelo nome nu — e o gate
+  `chart-pairs` compara a lista com o disco: par novo nao declarado reprova, e declaracao que
+  sobreviveu ao par tambem. Esse segundo caso e literalmente o defeito que o `CLAUDE.md`
+  tinha, e e por isso que o gate existe: a prosa ja envelheceu uma vez.
+
 dod:
   - os nomes deixam de colidir, ou existe convenção escrita que diz como se refere a cada um
   - o nome do release instalado não muda (verificado contra a chave `name:` do helmfile)
