@@ -12,7 +12,7 @@
     "tools/loopzero-dockerfile-lint": 0
   },
   "gofmt": {
-    "api": 69,
+    "api": 68,
     "cmd/loopzero-ops": 0,
     "infra/scripts": 1,
     "infra/tests": 53,

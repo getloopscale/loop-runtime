@@ -7,12 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"log/slog"
 	"net/http"
 	"strings"
 
-	"github.com/getloopscale/loopzero/pkg/enforcement"
 	planpkg "github.com/getloopscale/loopzero-contracts/plan"
+	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
 // CostEnforcement is the HTTP middleware that consults a CapChecker
@@ -87,7 +88,15 @@ func (e *CostEnforcer) Middleware(metric planpkg.CostMetric) func(http.Handler) 
 				return
 			}
 
-			if err := e.checker.Check(r.Context(), uc.TenantID, plan, metric); err != nil {
+			razão, err := e.checker.CheckReason(r.Context(), uc.TenantID, plan, metric)
+
+			// B-033: a decisao vira estado observavel. `unmeasured` alto significa que a
+			// protecao nao esta avaliando nada — e o estado medido no app-dev, onde o
+			// agregador esta desligado e `cost_counters` tem zero linhas. Antes disso, o
+			// unico sinal era uma linha de log no boot de OUTRO processo.
+			metrics.CostCapDecisionsTotal.WithLabelValues(string(metric), razão.String()).Inc()
+
+			if err != nil {
 				var ex *planpkg.ExceededError
 				if errors.As(err, &ex) {
 					writeCostExceeded(w, ex, e.logger)

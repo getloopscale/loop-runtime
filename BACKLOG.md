@@ -1996,6 +1996,40 @@ why_now: o agregador é a ÚNICA fonte de `cost_counters`, e o portão que lê e
   degrada para "passa" quando ela está vazia. As três métricas de custo — minutos de build,
   egresso, puxadas de registro — não têm teto no ambiente que serve o painel público.
 status: triaged
+progress_2026_08_18: |
+  **Duas das tres balas fechadas — as que sao deste repositorio. A primeira e do `loopzero-cloud`.**
+
+  **Bala 2 ja estava satisfeita**, e a medicao mostrou isso antes de eu escrever qualquer
+  coisa: `TestEnforcement_RejectOnExceeded` e `TestEnforcement_402ResponseShape` existem em
+  `api/internal/middleware/cost_enforcement_test.go` e afirmam a NEGACAO com 402.
+
+  **Bala 3 fechada.** O portao tinha duas portas silenciosas, e nenhuma produzia sinal:
+
+      linha de contador ausente  -> ALLOW  ("treat as 0")
+      erro de leitura do store   -> ALLOW  (fail-open deliberado)
+
+  A primeira e a que o item mede: com o agregador desligado, `cost_counters` vazia, TODO
+  teto libera — e nada distingue isso de "o tenant realmente nao consumiu".
+
+  `CapChecker.CheckReason` passou a devolver a razao (`under_cap`, `unmeasured`,
+  `store_error`, `unlimited`, `blocked`), e o middleware a publica em
+  `loopzero_cost_cap_decisions_total{metric,reason}`. **O veredito nao muda** — libera e bloqueia
+  exatamente como antes; muda o que o sistema consegue dizer sobre a propria protecao:
+  `unmeasured` alto significa que ela nao esta avaliando nada, e `under_cap` zerado ao longo
+  de um periodo significa que ela **nunca** avaliou.
+
+  `Check` continua existindo com o mesmo contrato, para quem so quer saber se pode.
+
+  A fiacao esta provada pelo caminho real, nao so pela existencia da metrica: um teste
+  exercita o middleware com store vazio e verifica que a serie `unmeasured` foi alimentada.
+  Metrica registrada e nunca incrementada seria o padrao "implementado mas nao ligado" — e
+  seria perverso justamente aqui, num item que existe porque uma protecao estava inerte.
+
+  **A bala 1 pertence ao `loopzero-cloud`** e nao foi tocada: quem preenche `cost_counters` e o
+  agregador de la, e a variavel `LOOPZERO_PROMETHEUS_URL` falta no Deployment DELE. Registrado
+  aqui para nao virar buraco invisivel; o conserto pertence ao backlog daquele projeto, per
+  `rules/cycle-backlog.md § Output`.
+
 dod:
   - `cost_counters` recebendo linhas no app-dev, com data recente
   - um teste que prove o portão NEGANDO ao estourar, e não só permitindo
