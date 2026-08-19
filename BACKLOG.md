@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 29 · **In flight** 0 · **Closed** 135
+164 items — **Open** 28 · **In flight** 0 · **Closed** 136
 
-### Open (29)
+### Open (28)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -94,7 +94,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
 | [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `triaged` | média |
-| [`B-135`](#b-135--prontidão-e-vivacidade-apontam-para-a-mesma-sonda-rasa-e-a-correção-óbvia-é-uma-armadilha----) | Prontidão e vivacidade apontam para a mesma sonda rasa, e a correção óbvia é uma armadilha | `triaged` | média |
 | [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `triaged` | média |
 | [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `triaged` | média |
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `triaged` | média |
@@ -108,7 +107,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (135)
+### Closed (136)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -226,6 +225,7 @@ _None._
 | [`B-131`](#b-131--a-trava-de-higiene-varre-a-árvore-inteira-mas-o-gatilho-dela-exclui-parte-dessa-árvore---x) | A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore | `killed` | média |
 | [`B-132`](#b-132--o-publish-do-loopzero-rag-nunca-inicia-ele-chama-um-workflow-reutilizável-do-loopzero-que-não-resolve---x) | O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve | `killed` | alta |
 | [`B-133`](#b-133--a-issue-de-falha-de-ci-dedup-por-título-e-221-falhas-viraram-um-fio-que-nunca-fecha---x) | A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha | `killed` | média |
+| [`B-135`](#b-135--prontidão-e-vivacidade-apontam-para-a-mesma-sonda-rasa-e-a-correção-óbvia-é-uma-armadilha---x) | Prontidão e vivacidade apontam para a mesma sonda rasa, e a correção óbvia é uma armadilha | `shipped` | média |
 | [`B-138`](#b-138--o-invariante-do-sumário-de-prontidão-é-afirmado-num-pacote-e-existe-em-seis---x) | O invariante do sumário de prontidão é afirmado num pacote e existe em seis | `shipped` | média |
 | [`B-140`](#b-140--um-push-real-nunca-disparou-um-build-nesta-instância-e-a-cadeia-que-permitiria-medi-lo-tem-quatro-elos-faltando---x) | Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando | `shipped` | alta |
 | [`B-141`](#b-141--há-um-segundo-pacote-go-chamado-helpers-e-o-b-061-afirmava-que-era-um-só---x) | Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só | `shipped` | baixa |
@@ -8420,7 +8420,7 @@ dod:
 
 > Registrado 2026-08-17 ao fechar o `B-119`.
 
-## B-135 — Prontidão e vivacidade apontam para a mesma sonda rasa, e a correção óbvia é uma armadilha   [ ]
+## B-135 — Prontidão e vivacidade apontam para a mesma sonda rasa, e a correção óbvia é uma armadilha   [x]
 
 domain: engine-go
 repo: loopzero
@@ -8429,7 +8429,36 @@ source: discover-review
 severity: média — nada quebra hoje; o que não existe é a capacidade de tirar do Service uma instância que não consegue servir. Sobe para **alta** se alguma dependência do processo puder degradar em runtime sem derrubá-lo.
 evidence: medido 2026-08-17 ao executar o `B-116`. `charts/loopzero-api/values.yaml:235-249`: `livenessProbe` **e** `readinessProbe` apontam ambas para `/api/v1/health`. Esse handler (`api/internal/routes/health/health.go`, `func Health`) responde **200 incondicionalmente** — é a sonda rasa, documentada como *"lightweight liveness probe"*. Prontidão e vivacidade significam, portanto, exatamente a mesma coisa: *"o processo está vivo"*. Não existe estado em que o pod esteja `Running` e fora do Service.
 why_now: o `B-116` acabou de decidir que a API **não sobe** sem banco, o que fecha o caso do arranque. O que fica descoberto é a degradação **depois** do arranque: um banco que cai em runtime deixa o pod `Ready`, recebendo tráfego e devolvendo erro em 27 das 36 superfícies.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19.** Registro do T2:
+> `MEET-ASYNC-AMENDMENT-2026-08-19-readiness-deep-probe.md` — pendente de ratificacao.
+>
+> **O endpoint certo ja' existia e o chart e' que nao o usava.**
+> `server/router.go:120` registra `/api/v1/health/ready` -> `DeepHealth`, que devolve **503**
+> quando o banco nao responde, quando um servico declarado esta' inalcancavel, ou quando a
+> descoberta encontra **zero cells**.
+>
+> **Bala 2 — a decisao de quais dependencias entram ja' estava no codigo; escrevi a razao de
+> cada uma:** banco (27 das 36 superficies), servicos declarados (o caminho de deploy
+> inteiro), e zero cells (o roteador nao resolve destino nenhum, entao a instancia esta' viva
+> e nao serve NENHUMA operacao).
+>
+> **A guarda achou uma SEGUNDA instancia, que era o que de fato roda.** Escrevi o teste
+> cobrindo os dois charts; ele passou no publicado e **reprovou no
+> `infra/helm/loopzero-api`** — o de bootstrap tinha o mesmo defeito. Corrigido junto.
+>
+> **A liveness NAO mudou, e isso e' decisao registrada:** aponta-la para o deep faria o banco
+> fora **matar** o pod, e o pod novo tambem nao teria banco — laco de reinicio sem
+> convergencia.
+>
+> **Duas objecoes do Challenger ficaram como risco aceito, nao descartadas:** falha
+> correlacionada (todas as replicas saem do Service juntas se o banco oscilar — e' o
+> comportamento correto: manter no Service troca "indisponivel e visivel" por "responde erro
+> e parece saudavel", e a segunda nao dispara alarme) e custo de I/O (mitigado subindo
+> `periodSeconds` de 10 para 15).
+>
+> **Mutante:** revertido o caminho para `/api/v1/health`, a guarda reprova; restaurado, passa.
 dod:
   - a prontidão reflete a capacidade **desta instância** de servir, e existe estado observável em que o pod está vivo e fora do Service
 > **Medido 2026-08-19 — o endpoint que falta não falta; o que falta é a decisão
