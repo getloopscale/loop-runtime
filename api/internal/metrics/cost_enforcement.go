@@ -27,6 +27,17 @@ import (
 //	reason="store_error"  a leitura falhou e o portão liberou (fail-open deliberado)
 //	reason="unlimited"    o plano não tem teto para esta métrica
 //	reason="blocked"      o contador alcançou o teto
+//	reason="disabled"     o portão NÃO EXISTE — o enforcer nunca foi ligado (receptor nulo)
+//
+// `disabled` foi acrescentado em 2026-08-19 e é o mais grave dos seis, apesar de parecer
+// o mais inócuo. Os outros cinco descrevem uma proteção que rodou; este descreve a
+// ausência dela, para todo mundo ao mesmo tempo. Ele faltava porque o contador era
+// incrementado DEPOIS do desvio de receptor nulo — então o caso pior era o único que não
+// emitia nada, e o único sinal era a linha de log de boot que este item recusa como
+// suficiente.
+//
+// Para quem está de plantão a distinção decide a ação: `unmeasured` pode ser um tenant
+// novo e legítimo; `disabled` é a proteção fora do ar.
 //
 // `unmeasured` alto significa que a proteção não está avaliando nada. `under_cap` em zero
 // ao longo de um período inteiro significa que ela **nunca** avaliou — que é exatamente o

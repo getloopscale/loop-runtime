@@ -2069,6 +2069,32 @@ why_now: o agregador é a ÚNICA fonte de `cost_counters`, e o portão que lê e
   degrada para "passa" quando ela está vazia. As três métricas de custo — minutos de build,
   egresso, puxadas de registro — não têm teto no ambiente que serve o painel público.
 status: triaged
+
+> **Medido 2026-08-19 — duas das tres balas ja' estavam fechadas, e a terceira tinha um
+> buraco que so' aparece lendo a ordem do codigo.**
+>
+> **Bala 2 — ja' fechada.** `cost_enforcement_test.go` prova o portao NEGANDO: exige 402
+> e `code == "COST_CAP_EXCEEDED"`, com teste proprio para a forma da resposta.
+>
+> **Bala 3 — parcialmente fechada, e o resto entregue hoje.** A metrica
+> `CostCapDecisionsTotal` ja' existia, criada por este item, e ja' distinguia
+> `unmeasured` — "o portao avaliou e nao havia contador". Mas ela e' incrementada
+> **depois** do desvio de receptor nulo (`cost_enforcement.go:69`), entao **o caso pior
+> era o unico que nao emitia nada**: quando o enforcer nunca foi ligado, a requisicao
+> passava em silencio e o unico sinal era a linha de log de boot que esta bala recusa
+> explicitamente como suficiente.
+>
+> Acrescentado `reason="disabled"`. A distincao decide a acao de quem esta' de plantao:
+> `unmeasured` pode ser tenant novo e legitimo; `disabled` e' a protecao fora do ar para
+> **todo mundo ao mesmo tempo**.
+>
+> O desvio continua passando direto de proposito — bloquear ali quebraria o boot
+> tolerante que ele existe para permitir, e o teste afirma isso explicitamente. A
+> mudanca e' observar, nao bloquear.
+>
+> **Bala 1 continua aberta e nao e' deste repositorio:** `cost_counters` so' recebe
+> linhas quando o agregador do `loopzero-cloud` sobe, e a variavel que o liga
+> (`LOOPZERO_PROMETHEUS_URL`) nao existe no Deployment de la'.
 delivered_in: f49ca098a  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 progress_2026_08_18: |
   **Duas das tres balas fechadas — as que sao deste repositorio. A primeira e do `loopzero-cloud`.**

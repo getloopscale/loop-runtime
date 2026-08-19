@@ -66,7 +66,15 @@ func (e *CostEnforcer) Middleware(metric planpkg.CostMetric) func(http.Handler) 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// nil receiver = pass-through. Lets cmd/setup_server.go wire
 			// CostEnforcement before the cloud control plane is fully up.
+			//
+			// B-033: passar direto continua certo — bloquear aqui quebraria o boot
+			// tolerante que este desvio existe para permitir. O que estava errado era
+			// passar em SILENCIO: a decisao e' emitida com `reason="disabled"`, para
+			// que "a protecao nao existe" deixe de ser indistinguivel de "nao houve
+			// requisicao". O item pede exatamente isso — estado do sistema, e nao uma
+			// linha de log no boot de outro processo.
 			if e == nil || e.checker == nil {
+				metrics.CostCapDecisionsTotal.WithLabelValues(string(metric), "disabled").Inc()
 				next.ServeHTTP(w, r)
 				return
 			}
