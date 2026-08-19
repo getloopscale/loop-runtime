@@ -62,7 +62,7 @@ var environmentSM = statemachine.NewEnvironmentTypedMachine()
 // +kubebuilder:rbac:groups=loopzero.io,resources=environments,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=loopzero.io,resources=environments/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=loopzero.io,resources=environments/finalizers,verbs=update
-// +kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch
+// +kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch;patch
 type EnvironmentReconciler struct {
 	client.Client
 	RuntimeClient    client.Client
@@ -358,6 +358,12 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 		}
 	}
 
+	// Namespace gone — retire a tupla do Tenant ANTES de soltar o finalizer, senao a
+	// Application fica orfa (B-074). Depois do finalizer nao ha' segunda chance: o CR some.
+	if err := r.pruneTenantEnvironmentEntry(ctx, env); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Namespace gone — remove finalizer
 	controllerutil.RemoveFinalizer(env, environmentFinalizer)
 	if err := r.Update(ctx, env); err != nil {
@@ -366,6 +372,59 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 
 	logger.Info("environment deletion complete", "environment", env.Name)
 	return ctrl.Result{}, nil
+}
+
+// pruneTenantEnvironmentEntry remove a tupla (Project, Environment) deste ambiente de
+// `Tenant.Spec.Environments`.
+//
+// B-074: apagar o Environment CR direto apagava o Namespace e soltava o finalizer, e mais nada.
+// A Application do ArgoCD continuava viva apontando para um Namespace que ja' nao existe, porque
+// o reaper que a alcancaria — `pruneOrphanPreviewApps` — so' apaga Application FORA de
+// `expectedApplicationNames`, conjunto derivado justamente desta lista pela tupla (Project, Name).
+// Enquanto a tupla estivesse la', a Application seguia ESPERADA.
+//
+// Removemos a tupla em vez de apagar a Application aqui: o dono do `.spec` dela e' o operator do
+// tenant (ADR 2026-08-12-argocd-application-ownership, B-050). Abrir uma segunda via de delecao
+// num controller que nao e' o dono e' "codigo correto no lugar errado". Reusar o reaper que ja'
+// existe mantem um dono e um mecanismo.
+//
+// Registro T2:
+// knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-19-environment-delete-orphans-application.md
+func (r *EnvironmentReconciler) pruneTenantEnvironmentEntry(ctx context.Context, env *loopzerov1.Environment) error {
+	logger := log.FromContext(ctx)
+
+	var tenant loopzerov1.Tenant
+	key := client.ObjectKey{Name: env.Spec.TenantRef.Name, Namespace: env.Namespace}
+	if err := r.Get(ctx, key, &tenant); err != nil {
+		if errors.IsNotFound(err) {
+			// O Tenant ja' se foi: nao ha' tupla para remover, e segurar o finalizer aqui
+			// travaria a delecao do Environment para sempre.
+			return nil
+		}
+		return err
+	}
+
+	base := tenant.DeepCopy()
+	mantidas := make([]loopzerov1.TenantEnvironmentEntry, 0, len(tenant.Spec.Environments))
+	for _, e := range tenant.Spec.Environments {
+		if e.Project == env.Spec.Project && e.Name == env.Spec.Environment {
+			continue
+		}
+		mantidas = append(mantidas, e)
+	}
+	if len(mantidas) == len(tenant.Spec.Environments) {
+		return nil
+	}
+	tenant.Spec.Environments = mantidas
+
+	// Merge patch off a base snapshot: nao carrega resourceVersion, entao nao da' 409 contra
+	// uma escrita concorrente da api em outro campo do mesmo spec.
+	if err := r.Patch(ctx, &tenant, client.MergeFrom(base)); err != nil {
+		return err
+	}
+	logger.Info("removed environment tuple from tenant spec",
+		"tenant", tenant.Name, "project", env.Spec.Project, "environment", env.Spec.Environment)
+	return nil
 }
 
 // SetupEnvironmentController registers the EnvironmentController with the manager.

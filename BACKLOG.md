@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 26 · **In flight** 0 · **Closed** 138
+164 items — **Open** 25 · **In flight** 0 · **Closed** 139
 
-### Open (26)
+### Open (25)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -84,7 +84,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-059`](#b-059--o-transporte-carrega-o-schema-de-payload-de-cada-domínio-e-faz-body-snooping----) | O transporte carrega o schema de payload de cada domínio e faz body-snooping | `triaged` | média |
 | [`B-060`](#b-060--o-único-lugar-onde-os-quatro-planos-se-encontram-é-uma-pasta-de-arquivos-irmãos----) | O único lugar onde os quatro planos se encontram é uma pasta de arquivos irmãos | `triaged` | média |
 | [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `triaged` | média |
-| [`B-074`](#b-074--deletar-o-environment-cr-direto-deixa-a-application-órfã-e-o-reaper-não-a-alcança----) | Deletar o Environment CR direto deixa a Application órfã, e o reaper não a alcança | `triaged` | média |
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `triaged` | média |
 | [`B-080`](#b-080--os-43-arquivos-de-routes-ainda-são-um-pacote-plano-e-mover-263-símbolos-exportados-é-t3----) | Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3 | `triaged` | alta |
 | [`B-094`](#b-094--a-metade-api-do-find_sec_004-guarda-um-campo-que-ninguém-popula----) | A metade API do `find_sec_004` guarda um campo que ninguém popula | `triaged` | média |
@@ -105,7 +104,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (138)
+### Closed (139)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -172,6 +171,7 @@ _None._
 | [`B-071`](#b-071--task-testunit-está-vermelho-na-workspace-e-a-causa-é-um-par-que-se-desencontrou---x) | `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou | `shipped` | alta |
 | [`B-072`](#b-072--a-policy-versionada-nega-ao-api-a-criação-de-chave-que-o-api-faz---x) | A policy versionada nega ao `api` a criação de chave que o `api` faz | `shipped` | alta |
 | [`B-073`](#b-073--o-chart-guarda-chuva-não-tem-consumidor-conhecido-e-mantê-lo-custa---x) | O chart guarda-chuva não tem consumidor conhecido, e mantê-lo custa | `shipped` | baixa |
+| [`B-074`](#b-074--deletar-o-environment-cr-direto-deixa-a-application-órfã-e-o-reaper-não-a-alcança----) | Deletar o Environment CR direto deixa a Application órfã, e o reaper não a alcança | `shipped` | média |
 | [`B-075`](#b-075--o-primitivo-de-crypto-shredding-não-tem-dono-e-o-adr-quase-o-deletou---x) | O primitivo de crypto-shredding não tem dono, e o ADR quase o deletou | `shipped` | alta |
 | [`B-076`](#b-076--21-divergências-entre-chart-publicado-e-de-bootstrap-estão-aprovadas-sem-que-ninguém-tenha-medido-por-quê---x) | 21 divergências entre chart publicado e de bootstrap estão aprovadas sem que ninguém tenha medido por quê | `shipped` | média |
 | [`B-077`](#b-077--a-cerca-de-forma-dos-crs-tenant-está-desligada-exatamente-no-cluster-onde-os-crs-vivem---x) | A cerca de forma dos CRs Tenant está desligada exatamente no cluster onde os CRs vivem | `shipped` | alta |
@@ -4300,7 +4300,7 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-12 ao decidir o `B-050`. `EnvironmentReconciler.reconcileDelete` (`operators/internal/environment/environment_controller.go:303-348`) deleta o Namespace (`:335`) e remove o finalizer (`:345-347`) — e **não toca na Application nem em `Tenant.Spec.Environments`**. Como a entrada permanece no spec, `expectedApplicationNames` (`operators/internal/tenant/tenant_gitops.go:146-160`) continua considerando a Application "esperada", e `pruneOrphanPreviewApps` (`:381-412`) nunca a remove. O caminho **coberto** pelo reaper é o outro: `RemoveEnvironment` (`api/internal/k8s/tenant_cr_manager.go:175-215`) tira a tupla do spec, e aí o prune alcança.
 why_now: o `CLAUDE.md` § Known Systemic Patterns descreve o sintoma "Orphan ArgoCD Application … status Unknown forever" com contorno manual — e o texto está **desatualizado**: entrou em `c6fc9671` (2026-06-10), dois dias antes de o reaper existir (`ecbabf34`, 2026-06-12), e suas citações não resolvem mais (aponta `operators/internal/tenant/environment_controller.go:235`; o arquivo está em `operators/internal/environment/` e a função em `:303`). O padrão documentado descreve um caminho que foi consertado, e não descreve o que continua quebrado.
-status: triaged
+status: shipped
 severity: média — a órfã não corrompe nada, mas gera exit 5 em `loopzero platform status` (drift) e o contorno é manual entre execuções de teste.
 dod:
   - deletar o Environment CR direto passa a limpar a Application, ou a remover a tupla do `Tenant.Spec.Environments` para o reaper alcançar
