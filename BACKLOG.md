@@ -5810,6 +5810,29 @@ status: triaged
 severity: média — não há regressão nova (ela nunca renderizou), e o comentário indica uma migração como pré-condição. Vira alta se a T3.2/T3.3 do ADR-0018 v2 já tiver rodado, porque então a cerca está pronta e desligada.
 dod:
   - está medido se a migração T3.3 que ela aguarda já rodou
+> **Medido 2026-08-19 — o resultado que a cerca aguarda JÁ VALE, e por isso a
+> severidade sobe. Não a liguei.**
+>
+> A política dormente exige uma coisa só:
+> `object.metadata.namespace == "loopzero-system"` para `loopzero.io` `tenants` e
+> `environments`. Medido nos dois — e únicos — caminhos de criação:
+> `api/internal/k8s/tenant_cr_manager.go:32` fixa `const tenantNamespace = "loopzero-system"`,
+> e `operators/internal/tenant/tenant_controller.go:406` cria o Environment CR em
+> `tenant.Namespace`, que é o namespace do Tenant, ou seja o mesmo. **O invariante
+> que ela guardaria já é verdade no código.**
+>
+> Isso responde a bala: o estado que a migração T3.3 produziria já está no lugar.
+> E aciona textualmente a condição que o próprio item registra — *"vira alta se a
+> T3.2/T3.3 já tiver rodado, porque então a cerca está pronta e desligada"*.
+>
+> **Não liguei o toggle, e a razão não é timidez.** A política tem
+> `failurePolicy: Fail` sobre CRs de plataforma: ligada errado, ela bloqueia toda
+> escrita de Tenant e Environment. O `CLAUDE.md` registra três armadilhas de CEL
+> dessa mesma família, incluindo uma em que uma lista de isenções vazia negou tudo,
+> e a irmã `tenantCrShape` só foi ligada depois de um ADR que mediu **quem escreve**
+> aqueles CRs. A mesma medição precisa existir para esta antes do toggle — e é
+> mudança T2/T3 com reunião antes do código.
+
   - se rodou, ela é habilitada no overlay do mgmt — e o teste de render passa a cobri-la
   - se não rodou, isso está escrito no `values-mgmt.yaml`, e não só no base
 
