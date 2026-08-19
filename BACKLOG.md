@@ -1456,6 +1456,35 @@ dod:
 
 > Registrado 2026-08-10 ao restaurar o login com Google.
 
+> **Remedido ao vivo 2026-08-19 — a premissa mudou, a bala 3 está entregue, e o
+> estado atual é o pior dos três possíveis.**
+>
+> O item diz que os três hosts *"hoje não servem nada, então não vazam"*. Medido
+> hoje pela sonda, **eles servem**:
+>
+> | host | resposta |
+> |---|---|
+> | `app.loopzero.example/sessions/whoami` | **401** — servido e negando sem credencial, que é o correto |
+> | `auth.loopzero.example/health/alive` | **200** |
+> | `auth.loopzero.example/.well-known/openid-configuration` | **404** |
+> | `auth.loopzero.example/` | **404** |
+> | `auth.loopzero.example/userinfo` | **404** |
+>
+> **A sonda REPROVA com exit=1** por causa dos três 404. Isso fecha a bala 3: os
+> hosts deixaram de ser "não medidos por nada" — são medidos, e a medição acusa.
+>
+> **Onde está o defeito, medido no droplet:** o bloco do Caddy está certo
+> (`reverse_proxy localhost:14433`); **algo escuta em 14433 e devolve 404** para a
+> descoberta OIDC. Enquanto isso `auth-dev.loopzero.example/.well-known/openid-configuration`
+> responde **200**. O host legado aponta para um processo que responde mas não é o
+> provedor de identidade.
+>
+> **Isso torna a bala 1 urgente em vez de teórica.** Das três saídas — remover,
+> restaurar, manter — **manter é a pior**: um host público que responde 200 no
+> caminho de saúde e 404 em toda a superfície de identidade parece vivo e não é.
+> Não decidi nem mexi: alterar bloco de borda que serve hostname público é
+> mudança de ambiente vivo, do mesmo tipo que recusei no B-139.
+
 ## B-025 — Três hosts públicos apontam para o vazio   [ ]
 
 domain: engine-go
