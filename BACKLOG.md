@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 41 · **In flight** 0 · **Closed** 123
+164 items — **Open** 40 · **In flight** 0 · **Closed** 124
 
-### Open (41)
+### Open (40)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -107,7 +107,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média |
 | [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados---x) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `triaged` | baixa |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `triaged` | — |
-| [`B-156`](#b-156--um-teste-de-chart-depende-de-rede-e-reprova-o-portao-de-entrega-sob-carga----) | Um teste de chart depende de rede e reprova o portao de entrega sob carga | `triaged` | — |
 | [`B-157`](#b-157--uma-ferramenta-com-imagem-config-e-testes-não-é-invocada-por-caminho-nenhum----) | Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum | `triaged` | média |
 | [`B-158`](#b-158--o-registro-que-o-loop-inteiro-le-nao-e-validado-por-nada----) | O registro que o loop inteiro le' nao e' validado por nada | `triaged` | — |
 | [`B-159`](#b-159--o-checklist-manda-escrever-o-changelog-num-arquivo-que-nao-existe----) | O checklist manda escrever o CHANGELOG num arquivo que nao existe | `triaged` | — |
@@ -120,7 +119,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (123)
+### Closed (124)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -246,6 +245,7 @@ _None._
 | [`B-152`](#b-152--o-primeiro-build-do-fixture-falha-em-manifestos-e-a-mensagem-não-diz-qual-domínio---x) | O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio | `shipped` | — |
 | [`B-153`](#b-153--seis-passos-do-build-não-conseguem-falhar-o-exit-1-deles-é-engolido-por-um-tee---x) | Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee` | `shipped` | — |
 | [`B-155`](#b-155--o-lockfile-so-e-procurado-na-raiz-do-bundle-e-a-mensagem-nao-diz-onde-procurou---x) | O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou | `shipped` | — |
+| [`B-156`](#b-156--um-teste-de-chart-depende-de-rede-e-reprova-o-portao-de-entrega-sob-carga---x) | Um teste de chart depende de rede e reprova o portao de entrega sob carga | `shipped` | — |
 | [`B-160`](#b-160--a-guarda-de-comandos-junta-pedacos-de-comandos-diferentes-e-bloqueia-o-inocente---x) | A guarda de comandos junta pedacos de comandos diferentes e bloqueia o inocente | `shipped` | media |
 
 <!-- BACKLOG-INDEX:END -->
@@ -9509,7 +9509,7 @@ dod:
   - decidido e registrado se o lockfile por app e suportado; se for, o install roda no `path`
   - um app com lockfile no proprio subdiretorio constroi, ou reprova dizendo por que nao pode
 
-## B-156 — Um teste de chart depende de rede e reprova o portao de entrega sob carga   [ ]
+## B-156 — Um teste de chart depende de rede e reprova o portao de entrega sob carga   [x]
 
 domain: engine-go
 repo: loopzero
@@ -9534,7 +9534,36 @@ why_now: |
 
   E o custo nao e so o bloqueio: um teste que reprova por rede ensina a repetir o push ate
   passar, que e exatamente o habito que faz uma reprovacao verdadeira ser ignorada.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19 — e a medicao separou dois casos que pareciam um.**
+>
+> **Bala 1 — resolvida na raiz para o teste do item.** `helmfile template` roda
+> `helm repo add/update` contra os repositorios declarados no arquivo **mesmo com o
+> seletor apontando para um unico release**. Medido: sem a flag, **17 chamadas de repo e
+> 10s** com rede boa (foram 123,89s e FALHA sob carga); com `--skip-deps`, **0s e zero
+> chamadas**, e o Service continua renderizando. O teste passa em **0,23s**.
+>
+> **O mesmo conserto QUEBRA o teste irmao, e isso e' o achado.** Apliquei `--skip-deps`
+> tambem em `vault_host_published_reach_test.go` e ele falhou com `repo openbao not
+> found`: aquele render busca um chart **REMOTO**, enquanto o `loopzero-cloud` renderiza um
+> chart **local**. Revertido. A distincao decide o conserto — chart local pode dispensar
+> a rede, chart remoto nao pode.
+>
+> **Bala 2 — a saida passa a dizer QUAL das duas coisas aconteceu.**
+> `ClassificarFalhaDeRender` (`falha_de_rede.go`) reconhece assinatura de rede e devolve
+> a explicacao; o teste do openbao a anexa na falha. Ela **deliberadamente nao** trata
+> `repo <nome> not found` como rede: isso e' configuracao, e foi exatamente o erro que
+> apareceu quando apliquei a flag no lugar errado — classifica-lo como rede mandaria a
+> proxima pessoa procurar defeito na conexao por causa de um erro de arquivo.
+>
+> **Bala 3 — a varredura corrigiu a minha propria contagem.** Eu tinha contado 2
+> execucoes por leitura; a varredura automatizada achou **3** — a terceira era **o
+> proprio arquivo do detector**, que carrega os literais que procura. Excluido por nome,
+> com a razao escrita. Das 8 mencoes a `helmfile` nos testes, **6 sao caminho de arquivo
+> ou literal dentro de asserção sobre script**, e so' 2 executam.
+> `TestExecucoesDeHelmfileNoPortaoSaoAsMedidas` reprova se aparecer uma terceira, dizendo
+> as duas saidas aceitaveis.
 dod:
   - o teste nao contata rede, ou declara a dependencia e a pula quando ela falta
   - a diferenca entre reprovacao por rede e reprovacao por conteudo e legivel na saida
