@@ -149,11 +149,14 @@ func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workf
 	if spec.Plan == nil || len(spec.Plan.Apps) == 0 {
 		return nil, fmt.Errorf("argo: WorkflowSpec.Plan must be non-nil with at least one app (legacy spec.Apps fallback deleted in T1.3 CR-2)")
 	}
-	// build-mode-dispatch-and-dockerfile-security-plan T1.5 (2026-05-07):
-	// group apps by ResolveStrategyForApp so `build: dockerfile` apps land in
-	// their own UserDockerfileStrategy group. Without this, mixed monorepos
-	// (1 node app + 1 app with user Dockerfile) would falsely group under
-	// node and run loopzero-packs on an app that should be lint-only.
+	// Agrupa apps por `ResolveStrategyForApp`.
+	//
+	// O texto anterior descrevia um grupo `UserDockerfileStrategy` para apps
+	// `build: dockerfile`. Esse tipo e esse caminho foram REMOVIDOS em T2.2 —
+	// `user_dockerfile_strategy_test.go` assere a ausencia do passo de lint — e o
+	// comentario ficou no presente descrevendo o que nao existe mais (B-157). O
+	// agrupamento continua valendo pelo runtime: um monorepo com node e python nao
+	// pode rodar a geracao de Dockerfile de um sobre o outro.
 	groups := groupApps(spec.Plan.Apps, func(p deploycontracts.AppBuildPlan) (string, deploycontracts.AppSpec) {
 		app := deploycontracts.AppSpec{
 			Name: p.AppName, Type: p.AppType, Port: p.Port,
@@ -166,11 +169,15 @@ func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workf
 	// REVIEW-AP-3: Generate per-language inline templates for mixed-language support.
 	// Each language group gets its own validate/install/build/scan/dockerfile steps.
 	//
-	// build-mode-dispatch-and-dockerfile-security-plan T1.6 (2026-05-07):
-	// `g.Strategy.DockerfileStep(...)` dispatches per-strategy — language
-	// groups invoke loopzero-packs auto-generation, UserDockerfileStrategy invokes
-	// loopzero-dockerfile-lint. NO conditional `if app.Build == "dockerfile"` in
-	// this orchestrator — Strategy pattern is the dispatch axis.
+	// `g.Strategy.DockerfileStep(...)` despacha por estrategia, e o orquestrador
+	// NAO tem `if app.Build == "dockerfile"` — o padrao Strategy e' o eixo de
+	// despacho, e essa parte segue valendo.
+	//
+	// O que nao vale mais: o texto anterior dizia que a `UserDockerfileStrategy`
+	// invoca o `loopzero-dockerfile-lint`. Esse tipo saiu em T2.2 e o linter nao e'
+	// invocado por caminho nenhum — medido em 2026-08-19, nenhum codigo de
+	// producao emite o passo e `LOOPZERO_DOCKERFILE_LINT_IMAGE` nao e' lida por
+	// nenhum Go (B-157). Hoje todas as estrategias geram o Dockerfile.
 	var inlineTemplates []forge.Templatable
 	for _, g := range groups {
 		inlineTemplates = append(inlineTemplates,
@@ -402,12 +409,15 @@ func (b *WorkflowBuilder) buildMainDAG(spec deploycontracts.WorkflowSpec, groups
 		// Previously, scan had no downstream deps — builds with critical vulnerabilities
 		// still produced container images. Now scan is a true gate.
 		//
-		// build-mode-dispatch-and-dockerfile-security-plan T1.6 (2026-05-07):
-		// the dockerfile-step task name comes from the Strategy's emitted
-		// container — "generate-dockerfile" for language strategies (loopzero-packs),
-		// "dockerfile-lint" for UserDockerfileStrategy. Hardcoding "generate-
-		// dockerfile" broke build:dockerfile workflows ("invalid spec: template
-		// name 'generate-dockerfile' undefined").
+		// O nome do passo de Dockerfile vem da constante `dockerfileStepTemplate`.
+		//
+		// Ele ja' foi perguntado a Strategy, porque havia duas respostas:
+		// "generate-dockerfile" para as estrategias de linguagem e "dockerfile-lint"
+		// para o caminho "traga seu Dockerfile". Esse caminho saiu em T2.2 e a
+		// variacao colapsou (B-068); o comentario anterior seguia descrevendo as
+		// duas como se coexistissem (B-157). Se voltar a haver duas,
+		// `TestTodaEstrategiaEmiteOMesmoNomeDePassoDeDockerfile` reprova e manda
+		// restaurar o ponto de variacao em vez de fixar um segundo literal aqui.
 		dockerfileTemplateName := dockerfileStepTemplate
 		dockerfileName := dockerfileTemplateName + suffix
 		tasks = append(tasks, inlineTask(dockerfileName, dockerfileName, []string{buildName, scanName}))
@@ -422,8 +432,9 @@ func (b *WorkflowBuilder) buildMainDAG(spec deploycontracts.WorkflowSpec, groups
 	// top enforces spec.Plan != nil + len(spec.Plan.Apps) > 0, so the per-app
 	// DAG task wiring has a single emission path keyed by appPlan.DeliveryModel.
 	for _, appPlan := range spec.Plan.Apps {
-		// build-mode-dispatch-and-dockerfile-security-plan T1.5: route by
-		// the per-app Strategy (build:dockerfile → UserDockerfileStrategy)
+		// Roteia pela Strategy do app. O texto anterior citava
+		// `build:dockerfile → UserDockerfileStrategy`, caminho removido em T2.2
+		// (B-157) — hoje o roteamento e' por runtime.
 		// so suffix and dockerfile-step name match the actual emitted templates.
 		app := deploycontracts.AppSpec{
 			Name: appPlan.AppName, Type: appPlan.AppType, Port: appPlan.Port,

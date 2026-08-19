@@ -32,9 +32,10 @@ type LanguageStrategy interface {
 	// ScanStep returns a template that runs security scanning.
 	ScanStep() *forge.Container
 	// DockerfileStep returns a template that produces / validates the Dockerfile
-	// before BuildKit consumes it. For language strategies (Node, Go, Python,
-	// etc.) this returns the loopzero-packs auto-generation container. For
-	// UserDockerfileStrategy it returns the dockerfile-lint container.
+	// before BuildKit consumes it. Toda estrategia devolve hoje o container de
+	// geracao canonica; o texto anterior descrevia tambem um retorno
+	// `dockerfile-lint` para `UserDockerfileStrategy`, tipo removido em T2.2
+	// (B-157). Ver `dockerfileStepTemplate`, que registra o colapso da variacao.
 	// totalApps is the count across ALL groups for output path naming
 	// (matches dockerfilePathForApp / BuildKit consumer).
 	//

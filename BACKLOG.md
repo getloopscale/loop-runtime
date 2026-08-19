@@ -3730,6 +3730,26 @@ dod:
   - está decidido se a ferramenta volta ao caminho de build ou sai da árvore
   - se sair, saem junto a env var do values, os comentários que a descrevem como ativa e as invocações de teste
   - se ficar, existe caminho que a invoque e um teste que prove a invocação
+> **Parcial 2026-08-19 — os comentários que a descreviam como ativa foram corrigidos.**
+>
+> A segunda bala condiciona a limpeza à decisão ("se sair, saem junto…"), mas
+> **uma parte dela não depende da decisão**: os comentários que descrevem o linter
+> como invocado estão errados **em qualquer dos dois desfechos**, porque ele não é
+> invocado hoje.
+>
+> Corrigidos cinco, todos em `buildplane/argo`, que descreviam
+> `UserDockerfileStrategy` no presente — um tipo removido em T2.2:
+> `workflow_builder.go:154`, `:174` (*"UserDockerfileStrategy invokes
+> loopzero-dockerfile-lint"*), `:432`, e `languages.go:37`. O de `languages.go:149`
+> ficou como está: ele **registra a remoção**, e é o único que estava certo.
+>
+> Cada texto novo diz o que mudou e quando, em vez de apagar a história — quem
+> ler daqui a três meses precisa saber que houve dois caminhos e por que sobrou um.
+>
+> As duas balas de decisão seguem abertas: se o linter volta ao caminho de build
+> ou sai da árvore, e a limpeza de `LOOPZERO_DOCKERFILE_LINT_IMAGE` e das invocações
+> de teste que vem com ela.
+
 
 ## B-070 — `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave   [x]
 
