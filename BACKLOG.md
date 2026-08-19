@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 43 · **In flight** 0 · **Closed** 121
+164 items — **Open** 42 · **In flight** 0 · **Closed** 122
 
-### Open (43)
+### Open (42)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -83,7 +83,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `triaged` | média |
 | [`B-059`](#b-059--o-transporte-carrega-o-schema-de-payload-de-cada-domínio-e-faz-body-snooping----) | O transporte carrega o schema de payload de cada domínio e faz body-snooping | `triaged` | média |
 | [`B-060`](#b-060--o-único-lugar-onde-os-quatro-planos-se-encontram-é-uma-pasta-de-arquivos-irmãos----) | O único lugar onde os quatro planos se encontram é uma pasta de arquivos irmãos | `triaged` | média |
-| [`B-064`](#b-064--o-control-plane-alcança-o-plano-de-secrets-por-um-nome-dns-reescrito-em-tempo-de-resolução----) | O control plane alcança o plano de secrets por um nome DNS reescrito em tempo de resolução | `triaged` | média |
 | [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `triaged` | média |
 | [`B-069`](#b-069--a-mesma-regra-de-env-reservada-descarta-em-silêncio-de-um-lado-e-mata-o-build-do-outro----) | A mesma regra de env reservada descarta em silêncio de um lado e mata o build do outro | `triaged` | média |
 | [`B-073`](#b-073--o-chart-guarda-chuva-não-tem-consumidor-conhecido-e-mantê-lo-custa----) | O chart guarda-chuva não tem consumidor conhecido, e mantê-lo custa | `triaged` | baixa |
@@ -122,7 +121,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (121)
+### Closed (122)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -180,6 +179,7 @@ _None._
 | [`B-061`](#b-061--reconcilehelpers-guarda-três-assuntos-sem-relação-e-o-doc-dele-ainda-chama-o-pacote-de-shared---x) | `reconcilehelpers` guarda três assuntos sem relação, e o doc dele ainda chama o pacote de `shared` | `shipped` | baixa |
 | [`B-062`](#b-062--o-vocabulário-do-plano-de-build-está-espalhado-por-quinze-pacotes-incluindo-o-sink-de-domínio---x) | O vocabulário do plano de build está espalhado por quinze pacotes, incluindo o sink de domínio | `shipped` | média |
 | [`B-063`](#b-063--um-módulo-de-infraestrutura-depende-de-uma-suíte-de-testes-e-tools-está-fora-do-workspace----x) | Um módulo de infraestrutura depende de uma suíte de testes, e `tools/` está fora do workspace | `shipped` | baixa |
+| [`B-064`](#b-064--o-control-plane-alcança-o-plano-de-secrets-por-um-nome-dns-reescrito-em-tempo-de-resolução---x) | O control plane alcança o plano de secrets por um nome DNS reescrito em tempo de resolução | `shipped` | média |
 | [`B-065`](#b-065--um-contexto-delimitado-vazio-está-pré-aprovado-no-dag-congelado---x) | Um contexto delimitado vazio está pré-aprovado no DAG congelado | `shipped` | baixa |
 | [`B-066`](#b-066--três-suítes-de-invariante-são-testes-go-comuns-invisíveis-ao-oráculo-de-gates---x) | Três suítes de invariante são testes Go comuns, invisíveis ao oráculo de gates | `shipped` | baixa |
 | [`B-068`](#b-068--um-ponto-de-variação-de-strategy-que-não-varia-mais-mantido-por-construir-e-descartar-um-objeto---x) | Um ponto de variação de Strategy que não varia mais, mantido por construir e descartar um objeto | `shipped` | baixa |
@@ -3640,7 +3640,7 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
-## B-064 — O control plane alcança o plano de secrets por um nome DNS reescrito em tempo de resolução   [ ]
+## B-064 — O control plane alcança o plano de secrets por um nome DNS reescrito em tempo de resolução   [x]
 
 domain: engine-go
 repo: loopzero
@@ -3648,7 +3648,30 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `infra/helm/loopzero-api/values.yaml:118` aponta por padrão para um nome DNS **do mesmo cluster**, e a topologia de cluster separado mantém esse literal e o **reescreve no CoreDNS** (`values/dev-public/loopzero-api.yaml.gotmpl:69-76`). Ou seja: nem o código nem o chart conseguem distinguir se estão falando com um OpenBao no mesmo cluster ou no cluster `loopzero-secrets` — a diferença vive na resolução de nomes. Junto: um `role_id` de AppRole do plano de secrets está **commitado dentro do values file do control plane** (`values/dev-public/loopzero-api.yaml.gotmpl:77`). O `secret_id` está corretamente fora — **não é comprometimento**, é observação de fronteira.
 why_now: o `CLAUDE.md` classifica instalar OpenBao no core como violação de topologia em qualquer tier (ver B-047), mas o valor padrão do chart aponta para o mesmo cluster. As duas coisas não podem estar certas ao mesmo tempo, e hoje o que decide qual vale é uma reescrita de DNS que não aparece em nenhum dos dois lugares.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19 — e a bala 1 fecha REFUTADA, nao satisfeita. A distincao e' o
+> conteudo do item.**
+>
+> A bala pedia tornar o endereco do plano de secrets **explicito** no chart. Isso e'
+> inalcancavel, e o motivo esta' medido: o certificado do OpenBao tem SAN para o **nome
+> intra-cluster**, entao apontar para o endereco real do cluster `loopzero-secrets` quebraria
+> a verificacao TLS (EC-2, registrado em `values.yaml.gotmpl:69-76`). O literal e' a
+> escolha, nao o descuido.
+>
+> O que a bala QUERIA — que a topologia nao dependesse do CoreDNS para ser descoberta —
+> foi entregue pela bala 3: o bloco `vault` do `values.yaml` passou a declarar que o nome
+> e' reescrito, que o OpenBao roda em cluster separado sob o Jeito A, por que o literal e'
+> deliberado, e onde a reescrita vive. A bala 2 ja' estava decidida no template
+> (`deployment.yaml:336-341`).
+>
+> **O que fica em aberto NAO e' bala da DoD.** Existe
+> `infra/tests/charts/cross_cluster_secrets_test.go` e eu queria saber se ele ja' cobre
+> esta topologia. Reconferi hoje: a **listagem** do diretorio passou a ser permitida, mas
+> a **leitura do conteudo** segue negada nesta sessao. Nao contornei com outra ferramenta
+> — trocar de ferramenta para ler o que a permissao recusa e' contornar a decisao, nao
+> respeita-la. Fica registrado como diligencia pendente, e nao como requisito nao
+> cumprido.
 delivered_in: 8f19928d1  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — funciona hoje; o custo é que a fronteira mais forte da plataforma em infra é invisível no chart e no código.
 dod:
