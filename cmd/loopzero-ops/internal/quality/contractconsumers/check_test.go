@@ -390,19 +390,20 @@ func TestCollectDroppedJSONTags_RenamingTheGoFieldKeepsTheTag(t *testing.T) {
 	}
 }
 
-// The existence check is tag-name-global, and that is a REAL limit, recorded
-// here rather than left for someone to discover as a silent miss.
+// Uma tag declarada por DUAS structs, saindo de uma delas, E' uma queda — e era
+// invisivel enquanto a verificacao perguntava apenas se a tag existia em alguma
+// struct: a sobrevivente respondia "ainda existe". Medido em `repositories.go`,
+// que declarava `json:"repo"` duas vezes (B-100).
 //
-// If two structs in the tracked set declare the same tag and one of them drops
-// it, the survivor answers "still exists" and the drop goes unreported.
-// Measured while verifying this fix: repositories.go declares `json:"repo"`
-// TWICE, so renaming one of them was invisible to the gate.
+// Este teste exigia o CONTRARIO ate' 2026-08-19 — documentava o furo, com a
+// instrucao de reescreve-lo, e nao apaga-lo, quando o furo fechasse. E' o que
+// esta acontecendo aqui.
 //
-// It is not a regression — the whole gate already works at tag-name
-// granularity, greping consumers for `.tag` with no idea which struct they
-// read. Narrowing it needs type information on both sides, which is a
-// different gate. Registered as B-100.
-func TestCollectDroppedJSONTags_ADuplicateTagMasksTheDrop(t *testing.T) {
+// O discriminador e' a CONTAGEM de declaracoes, nao o nome da struct. Escopar por
+// nome fecharia o furo criando um falso positivo novo — renomear a struct, ou
+// move-la de pacote, nao muda o contrato de fio e passaria a ser acusado de
+// quebra. Ver `structsDeclaringTagAt`.
+func TestCollectDroppedJSONTags_UmaDeDuasDeclaracoesSaindoEQueda(t *testing.T) {
 	root := gitTree(t)
 	dir := filepath.Join(root, "api", "internal", "routes")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -426,8 +427,9 @@ func TestCollectDroppedJSONTags_ADuplicateTagMasksTheDrop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("collect: %v", err)
 	}
-	if len(tags) != 0 {
-		t.Fatalf("this test DOCUMENTS the limit; if it starts failing the gate got struct-scoped and B-100 is closed — update it, do not delete it. got %v", tags)
+	if len(tags) != 1 || tags[0] != "repo" {
+		t.Fatalf("uma das duas declaracoes de `repo` saiu e a queda nao foi reportada: %v.\n\n"+
+			"Era o furo do B-100 — a struct sobrevivente respondia \"ainda existe\" pela que saiu.", tags)
 	}
 }
 

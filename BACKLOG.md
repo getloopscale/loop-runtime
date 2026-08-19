@@ -6006,6 +6006,39 @@ status: triaged
 severity: média — não deixa contrato quebrado passar (o caminho de detecção continua fechado para a última declaração sair); gera ruído, que é como um gate perde autoridade
 dod:
   - a existência da tag é verificada na struct de onde ela saiu, não em qualquer uma do conjunto — e `TestCollectDroppedJSONTags_ADuplicateTagMasksTheDrop` é reescrito para exigir o contrário do que exige hoje
+> **Fechado 2026-08-19 — a primeira metade da DoD, com o discriminador trocado por
+> medição. A segunda metade continua aberta e está dita abaixo.**
+>
+> **O furo fechou por CONTAGEM, não por nome de struct.** A verificação
+> perguntava se a tag existia em alguma struct; agora compara **quantas structs a
+> declaram** em BASE e em HEAD, e uma declaração a menos é a queda.
+>
+> A DoD pedia "verificada na struct de onde ela saiu". Escopar por **nome** faria
+> isso e criaria um falso positivo novo: renomear a struct — ou movê-la de pacote,
+> que o desenho original protege explicitamente — não muda o contrato de fio e
+> passaria a ser acusado de quebra. O próprio item diz que o custo aqui é o gate
+> gerar ruído e as pessoas aprenderem a contorná-lo; fechar um furo criando ruído
+> seria trocar de defeito. A contagem cai quando uma declaração some e não se move
+> quando ela troca de nome ou de lugar.
+>
+> **O teste que documentava o limite foi reescrito para exigir o contrário**, como
+> a DoD manda, e renomeado — ele afirmava o oposto do que afirma agora, e um nome
+> que diz "mascara" sobre um teste que exige detecção envelheceria mal. As quatro
+> guardas anti-ruído que já existiam seguem verdes
+> (`PureRenameDropsNothing`, `ReformattingTheLineDropsNothing`,
+> `RenamingTheGoFieldKeepsTheTag`, `LastDeclarationLeavingIsCaught`), e são elas
+> que provam que isto não é o gate desligado.
+>
+> **Limite que fica, declarado no código:** se um mesmo commit tira a tag de uma
+> struct e a acrescenta noutra, a contagem não se move e a troca passa. É mais
+> estreito que o furo anterior e não tem cura sem informação de tipo nos dois lados.
+>
+> **A segunda metade do item — `grepConsumersForTag` casar `\.<tag>\b` e contar
+> campo homônimo como consumidor — segue aberta.** Na ocorrência real, 8 dos 9
+> "consumidores" de `repo` eram `p.repo.RepoURL(...)` e 1 era um literal de
+> atributo; zero liam a tag. Fechar isso exige informação de tipo no lado do
+> consumidor, que é outro gate.
+
   - um campo Go homônimo (`p.repo`) e um literal de string (`"loopzero.github.repo"`) deixam de ser reportados como consumidores, provado com estes dois casos exatos
   - a detecção de consumidor em TypeScript continua funcionando — ali `.repo` é de fato o acesso à propriedade, e estreitar demais mataria o lado que motivou o gate
 

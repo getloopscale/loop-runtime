@@ -49,6 +49,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -196,11 +197,18 @@ func collectDroppedJSONTags(root, base, head string) ([]string, error) {
 	// a wire break is a gate people learn to push past.
 	tags := make([]string, 0, len(seen))
 	for t := range seen {
-		still, err := tagExistsAt(root, head, t)
+		antes, err := structsDeclaringTagAt(root, base, t)
 		if err != nil {
 			return nil, err
 		}
-		if still {
+		depois, err := structsDeclaringTagAt(root, head, t)
+		if err != nil {
+			return nil, err
+		}
+		// Uma declaracao a MENOS e' a queda. Igual ou mais significa que a tag
+		// mudou de nome de struct, de arquivo ou de pacote — nada disso mexe no
+		// contrato de fio.
+		if depois >= antes {
 			continue
 		}
 		tags = append(tags, t)
@@ -209,33 +217,58 @@ func collectDroppedJSONTags(root, base, head string) ([]string, error) {
 	return tags, nil
 }
 
-// tagExistsAt reports whether `json:"<tag>"` is still declared anywhere in the
-// tracked files at the given revision.
+// structsDeclaringTagAt conta QUANTAS structs declaram `json:"<tag>"` nos
+// arquivos rastreados, na revisao dada.
 //
-// It deliberately does NOT care which file holds it: moving a struct between
-// packages does not change the wire contract, and the whole point of this
-// check is to answer "does the field still exist" rather than "did this line
-// survive".
-func tagExistsAt(root, rev, tag string) (bool, error) {
-	// The tag ends at a quote or at the option list (`,omitempty`).
+// A versao anterior perguntava apenas se a tag existia em ALGUMA struct, e isso
+// tinha um furo medido: `repositories.go` declarava `json:"repo"` DUAS vezes, e
+// tirar de uma ficava invisivel porque a outra respondia "ainda existe" (B-100).
+//
+// Contar, e nao identificar a struct pelo NOME, e' deliberado. Escopar por nome
+// pegaria o furo, mas criaria um falso positivo novo: renomear a struct — ou
+// move-la de pacote, que o desenho original protege explicitamente — nao muda o
+// contrato de fio e passaria a ser reportado como quebra. Um gate que acusa
+// renomeacao e' um gate que as pessoas aprendem a contornar, que e' o custo que
+// este proprio item registra. A contagem cai quando uma declaracao some e nao se
+// mexe quando uma declaracao muda de nome ou de lugar.
+//
+// LIMITE QUE FICA, declarado: se um mesmo commit TIRA a tag de uma struct e a
+// ACRESCENTA noutra, a contagem nao se move e a troca passa. E' mais estreito que
+// o furo anterior e nao tem cura sem informacao de tipo nos dois lados.
+func structsDeclaringTagAt(root, rev, tag string) (int, error) {
 	pattern := `json:"` + regexp.QuoteMeta(tag) + `[",]`
 
-	args := []string{"-C", root, "grep", "-lE", pattern, rev, "--"}
+	args := []string{"-C", root, "grep", "-cE", pattern, rev, "--"}
 	args = append(args, trackedFiles...)
 	cmd := exec.Command("git", args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
-	if stdout.Len() > 0 {
-		return true, nil
-	}
-	// `git grep` exits 1 on no match, which is the answer, not a failure.
+
+	// `git grep -c` exits 1 sem nenhuma ocorrencia, que e' a resposta e nao falha.
 	var exitErr *exec.ExitError
 	if err != nil && (!errors.As(err, &exitErr) || exitErr.ExitCode() != 1) {
-		return false, fmt.Errorf("git grep for %q at %s failed: %v (stderr: %s)", tag, rev, err, stderr.String())
+		return 0, fmt.Errorf("git grep for %q at %s failed: %v (stderr: %s)", tag, rev, err, stderr.String())
 	}
-	return false, nil
+
+	total := 0
+	for _, linha := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+		if linha == "" {
+			continue
+		}
+		// formato: `<rev>:<arquivo>:<n>`
+		idx := strings.LastIndex(linha, ":")
+		if idx < 0 {
+			continue
+		}
+		n, cerr := strconv.Atoi(strings.TrimSpace(linha[idx+1:]))
+		if cerr != nil {
+			continue
+		}
+		total += n
+	}
+	return total, nil
 }
 
 // grepConsumersForTag runs `git grep` for the dropped tag across consumer
