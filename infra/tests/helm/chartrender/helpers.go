@@ -1,12 +1,20 @@
-// Package helpers provides shared utilities for Helm chart render-time tests.
+// Package chartrender renders Helm charts for render-time tests.
+//
+// O nome anterior era `helpers`, e ele nao dizia nada: era o segundo pacote Go
+// com nome da familia generica na arvore (B-141). O que este pacote faz e
+// UMA coisa — resolver caminho de chart, montar opcoes, renderizar template e
+// desserializar o YAML resultante — e o nome passou a dizer isso.
 //
 // Plan 2026-05-20-helm-render-time-testing-terratest v1.1 — T1.2.
 //
 // Per ADR D5: shared setup reduces ~30 LOC per test file across 19 charts.
 // Per ADR D11: NewOptions invokes `helm dep update` programmatically to
-//   handle charts with dependencies: block (e.g., loopzero-platform umbrella).
+//
+//	handle charts with dependencies: block (e.g., loopzero-platform umbrella).
+//
 // Per ADR D12: IsLibraryChart identifies charts that emit zero manifests
-//   (e.g., loopzero-common with Chart.yaml type: library).
+//
+//	(e.g., loopzero-common with Chart.yaml type: library).
 //
 // Usage from a test file (build tag required):
 //
