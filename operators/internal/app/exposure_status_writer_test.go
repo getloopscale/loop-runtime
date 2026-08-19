@@ -697,6 +697,21 @@ func findStatusPersistSites(t *testing.T) []statusPersistSite {
 // universal**, e esta guarda cobre um sexto da população. Registrado como item próprio;
 // ampliar a guarda para os seis pacotes é uma fatia, não uma nota de rodapé.
 //
+// # A guarda dos SEIS pacotes existe agora, e ela e' a autoritativa (B-138)
+//
+// `cmd/loopzero-ops/internal/quality/readinesssummary` cobre os seis pacotes por AST e
+// SEGUE A CHAMADA: um persist num helper conta como coberto quando quem o chama
+// carrega o `defer`, que e' a forma canonica dos sete reconcilers. Foi isso que a
+// contagem acima nao enxergava — medido em 2026-08-19, os "19 sem sumario" eram
+// TODOS artefato de parar na funcao que envolve o `Patch`. Com a chamada seguida:
+// 33 persists, 33 cobertos, zero violacoes; e o mutante que neutraliza o `defer` do
+// `preview` na arvore real devolve exatamente os 6 sitios que o item nomeia.
+//
+// Esta guarda de pacote FICA, e a razao nao e' inercia: ela roda na suite de
+// `operators`, onde quem mexe no controller ja' esta', e falha a metros do erro em
+// vez de num binario separado. As duas afirmam o mesmo invariante em escopos
+// diferentes; quando divergirem, a de seis pacotes vence.
+//
 // So the assertion is on the ENCLOSING FUNCTION of each persist, not on how many
 // persists there are. A function may satisfy it two ways, and both are used here:
 // fold the summary in-line before the write (patchStatus), or cover every exit

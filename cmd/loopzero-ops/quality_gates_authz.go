@@ -29,6 +29,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nolegacysatoken"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/oidccredadminloopzero"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratoslifespan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/readinesssummary"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routeauthcoverage"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/runbookparity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scheduledimage"
@@ -472,6 +473,32 @@ func runErrorVocabulary(args []string) int {
 		return 1
 	}
 	fmt.Printf("error-vocabulary: PASS — %s\n", out.Summary())
+	return 0
+}
+
+func runReadinessSummary(args []string) int {
+	fs := flag.NewFlagSet("readiness-summary", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := readinesssummary.Check(readinesssummary.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "readiness-summary: FAIL — %v\n", err)
+		return 2
+	}
+	if !out.Pass {
+		fmt.Fprintf(os.Stderr, "readiness-summary: FAIL — %s\n", out.Summary())
+		for _, v := range out.Violacoes {
+			fmt.Fprintf(os.Stderr, "  %s:%d — %s() persiste .status (%s) sem dobrar o sumario de prontidao, "+
+				"nem em linha nem por defer em quem a chama. Uma passagem por aqui deixa a condicao Ready "+
+				"com o que a passagem ANTERIOR calculou, e isso e lido como atual (ADR-0025 D3, B-105).\n",
+				v.Arquivo, v.Linha, v.Funcao, v.Forma)
+		}
+		return 1
+	}
+	fmt.Printf("readiness-summary: PASS — %s\n", out.Summary())
 	return 0
 }
 

@@ -8200,6 +8200,7 @@ severity: média — o invariante é de ORDEM (o sumário é a última mutação
 evidence: varrido 2026-08-17 ao fechar o `B-109`. `TestApp_EveryStatusPersistFoldsTheReadinessSummary` afirma o invariante e roda em **um** pacote; a população são **seis**. Heurística sobre os seis (persistência de `.Status().Patch|Update(` cruzada com menção ao sumário na função que a envolve): **16 com sumário, 19 sem** — `app` 2/2, `environment` 5/1, `platform` 6/7, `preview` **0/6**, `reconcilehelpers` 1/0, `tenant` 2/3. **A limitação é parte do resultado:** a varredura divide por `func ` e procura o sumário por nome, sem seguir chamada — os 19 são **sítios a olhar**, não 19 defeitos.
 why_now: o `B-109` acabou de escrever a regra de que toda guarda roda contra a população real, e esta é a guarda que a motivou. O número acima é o que a regra produz quando aplicada a ela: o invariante **não é obviamente universal**, e a guarda cobre um sexto.
 status: triaged
+delivered_in: (ver a nota abaixo — as tres balas do dod estao medidas e fechadas)
 dod:
   - cada um dos 19 sítios está classificado — dobra por helper que a heurística não seguiu, ou realmente não dobra
   - a guarda cobre os seis pacotes, ou está escrito por que cada pacote de fora não precisa dela
@@ -8232,6 +8233,38 @@ dod:
 > precisa enxergar `defer` no chamador, ou vai medir a forma errada nos seis.
 
 > Registrado 2026-08-17 ao fechar o `B-109`. **Ampliar a guarda para seis pacotes é uma fatia, não uma nota de rodapé** — e afirmar que os 19 são defeitos sem classificá-los seria cometer, aqui, o erro que o `B-109` nomeia.
+
+> **Fechado por medicao 2026-08-19 — as tres balas.**
+>
+> Guarda nova: `cmd/loopzero-ops/internal/quality/readinesssummary`, gate
+> `readiness-summary`, ligado em `taskfiles/quality.yml`. Ela cobre **os seis
+> pacotes** por AST e **segue a chamada**: um persist num helper conta coberto
+> quando quem o chama carrega o `defer`, porque `DeferReadinessSummary` re-busca o
+> CR e **persiste** o sumario no retorno — e' a ultima escrita do ciclo.
+>
+> | bala | resultado |
+> |---|---|
+> | os 19 sitios classificados | **todos artefato da heuristica.** Seguindo a chamada: **33 persists, 33 cobertos, 0 violacoes** |
+> | a guarda cobre os seis pacotes | sim, um gate so' |
+> | o `preview` (0 de 6) | os 6 sao cobertos pelo `defer` do `Reconcile`, como a medicao de hoje previu |
+>
+> **O zero nao e' vacuo, e isto foi provado.** Mutante na **arvore real** (copia com
+> o `defer` do `preview` neutralizado): o gate devolve **6 violacoes**, exatamente
+> `preview_controller.go` 269/366/377/493/608/649 — os sitios que o proprio item
+> nomeia.
+>
+> **Achei e consertei um defeito na minha propria guarda antes de liga-la.** A
+> primeira versao indexava funcao por NOME, e `operators/internal/app` tem **dois**
+> `Reconcile` (Application e Exposure) com o `defer` em so' um: o defer de um cobria
+> os helpers do outro, e o gate teria reportado verde sobre um persist descoberto.
+> Passou a indexar por **receptor+nome**, com resolucao de chamada conservadora
+> (`r.foo()` resolve, qualquer outra forma nao propaga). O teste que prova isso e'
+> `TestNaoConfundeMetodosHomonimosDeTiposDiferentes`.
+>
+> **Limite que fica escrito.** A cobertura e' insensivel a caminho. Isso e' aceitavel
+> aqui por um motivo VERIFICADO, nao suposto: os sete `defer` da arvore estao todos
+> num `Reconcile`, o unico ponto de entrada que o controller-runtime chama. Se algum
+> aparecer fora de um `Reconcile`, a premissa cai.
 
 ## B-139 — O dashboard e os serviços do droplet servem da casa de uma pessoa   [ ]
 

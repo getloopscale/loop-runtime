@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **A verificacao de que o resumo de prontidao e' a ultima escrita antes de salvar passou a valer para os seis controladores, e nao para um.** Ela seguia so' a funcao onde a escrita acontece, e a forma usada por sete controladores registra o resumo no fim do ciclo, num nivel acima — para a verificacao antiga isso parecia ausencia. Medido depois da correcao: 33 pontos de escrita, 33 cobertos (B-138)
+
 ### Removed
 
 - **Um arquivo de configuração que parecia governar uma verificação não era lido por ninguém, e três dos quatro itens que ele listava já nem existiam.** Removido, e uma verificação nova impede que outro arquivo desse diretório passe a parecer contrato sem sê-lo. (B-091)
