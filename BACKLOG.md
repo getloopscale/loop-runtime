@@ -3890,6 +3890,28 @@ dod:
   - se não for: está decidido entre manter com o custo declarado, ou remover
   - `loopzero-monitoring` e `loopzero-dashboard` ganham plano declarado, ou fica escrito que não têm — hoje não há declaração em helmfile nem em doc
 
+> **Remedido 2026-08-18. A metade de disco se sustenta com duas correções; a outra
+> metade não é medível nesta sessão, e a razão importa.**
+>
+> **Duas correções à evidência.** (1) `taskfiles/helm.yml:108` é
+> `helm upgrade --install loopzero charts/loopzero-platform` — um **install**, não "teste ou
+> template" como o item classificou. Existe caminho de instalação, ainda que
+> operado à mão. (2) A única linha `path: charts/*` que aparece perto do nome é
+> `mgmt-loopzero-platform-operator.yaml:17`, e ela aponta para
+> `charts/loopzero-platform-operator` — chart **diferente**. A conclusão do item
+> permanece: o bootstrap do ArgoCD não instala o guarda-chuva.
+>
+> **A bala 1 não é respondível daqui.** `helm show chart oci://registry.digitalocean.com/loopzero-system/helm/loopzero-platform`
+> falha na autenticação do registry — sem credencial não há leitura. E mesmo com
+> credencial a resposta seria sobre **publicação**, não sobre **consumo**: saber que
+> o chart está lá não diz que alguém o instala. O item pergunta a segunda coisa, e
+> trocar uma pela outra seria apresentar o que dá para medir no lugar do que foi
+> perguntado.
+>
+> Fica `triaged`. Para fechar, alguém com acesso ao registry precisa responder
+> consumo — pulls, ou uma decisão de produto de que ninguém fora do workspace deve
+> instalá-lo.
+
 > Registrado 2026-08-12 ao escrever o ADR do `B-048`.
 
 ## B-074 — Deletar o Environment CR direto deixa a Application órfã, e o reaper não a alcança   [ ]
