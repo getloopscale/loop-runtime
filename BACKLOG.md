@@ -6045,7 +6045,7 @@ dod:
 > Registrado 2026-08-13, pela fatia 19: o gate reprovou o push porque `gofmt -w` reduziu o espaçamento antes de um comentário de fim de linha, e uma linha *modificada* contendo a tag era lida como tag *removida*. Essa parte foi corrigida na mesma fatia; o que fica aqui é a granularidade de nome, dos dois lados.
 
 
-## B-101 — Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push   [ ]
+## B-101 — Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push   [x]
 
 domain: engine-go
 repo: loopzero
@@ -6053,10 +6053,32 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-13. `cd cmd/loopzero-ops && go test ./... -short -count=1` leva **408 s**, dos quais **392 s** são de `internal/seed` — e o `-short` não muda nada, porque nenhum teste do pacote o consulta (`grep -c 'testing.Short()' cmd/loopzero-ops/internal/seed/*.go` → 0). Quatro testes respondem por 390 s: `TestLokiCrossCluster_URLDerivaDoGatewayNaoDoContainer` (120 s), `TestLokiCrossClusterSeed_Run_PatchesPromtailAndSetsLokiURL` (120 s), `TestPatchKratosSeed_Run_PatchesAndRolloutsBoth` (90 s) e `TestNetworkingCorednsSeed_HappyPath` (60 s). Nenhum toca cluster — usam `fake.NewClientBuilder()`. Eles pagam o prazo inteiro de `waitForRolloutSettled` (`cmd/loopzero-ops/internal/seed/vault_cross_cluster_addr.go:223`), cujo valor está **cravado na chamada**: `120*time.Second` em `broker.go:109`, `loki_cross_cluster.go:125` e `vault_role_id_sync.go:81`, `60*time.Second` em `networking_cross_cluster_coredns.go:84`. Com cliente falso o Deployment nunca assenta, então o laço espera até o fim.
 why_now: é o obstáculo concreto da bala 2 do DoD do `B-088` — o `delivery-gate.sh` roda `task quality:gates`, que **não** chama `quality:hermetic`, que é onde `cd cmd/loopzero-ops && go test ./...` vive. Medido: `gates` tem `deps: [build]` e nada mais. Ou seja, os testes que provam que um gate reprova o que deve reprovar não estão no caminho de push — e ninguém os colocou lá porque custariam ~7 min por push. Some o custo e a bala fica trivial.
-status: triaged
+status: shipped
 severity: média — não há defeito de produção; o custo é que a rede de proteção dos gates fica fora do único ponto que é obrigatório
 dod:
   - o prazo de espera de rollout é injetável pela raiz de composição, como `Policy` já é em `Deps` (`seed.go:101`), com o zero preservando o valor de hoje
+> **Fechado 2026-08-19 — a DoD já estava implementada, e a consequência que a
+> motivava também. Medido, não suposto.**
+>
+> `Deps.RolloutSettleTimeout` existe (`seed.go:114`) com o contrato exato que a
+> bala pede: zero preserva o valor de hoje. E o default é **argumento**
+> (`settleTimeout(seedDefault)`), não constante do pacote — o comentário explica
+> por quê, e a razão é boa: `loopzero-api` espera 120 s e o CoreDNS 60 s, então um
+> default único dobraria silenciosamente a espera do CoreDNS, contrabandeando
+> mudança de comportamento em produção dentro de uma aceleração de teste. Os cinco
+> call sites usam.
+>
+> **O custo sumiu, medido:** `go test ./internal/seed/ -count=1` leva **1,6 s**.
+> Eram 392 s. Oito arquivos de teste injetam `time.Millisecond`.
+>
+> **E a consequência que o `why_now` perseguia também já ocorreu:** o
+> `delivery-gate.sh` roda `task quality:all` desde 2026-08-13 — o próprio cabeçalho
+> dele registra que rodava `quality:gates` até então e por que mudou. Como
+> `quality:all` declara `deps: [hermetic, gates, contract]`, a suíte que prova que
+> um gate reprova o que deve reprovar **está** no caminho obrigatório de push.
+>
+> Nada a fazer. Fechado por medição.
+
   - os quatro testes passam a injetar um prazo curto, e `cd cmd/loopzero-ops && go test ./... -short` cai para a ordem de segundos
   - o valor cravado deixa de aparecer no ponto de chamada de cada seed
 
