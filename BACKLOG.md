@@ -68,16 +68,15 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 30 · **In flight** 0 · **Closed** 134
+164 items — **Open** 29 · **In flight** 0 · **Closed** 135
 
-### Open (30)
+### Open (29)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) 🔒 | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `triaged` | — |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
 | [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `triaged` | média |
-| [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
 | [`B-054`](#b-054--o-api-roda-dois-circuit-breakers-escritos-independentemente-sobre-o-mesmo-pool-postgres----) | O `api` roda dois circuit breakers escritos independentemente sobre o mesmo pool Postgres | `triaged` | média |
 | [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `triaged` | média |
 | [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `triaged` | média |
@@ -109,7 +108,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (134)
+### Closed (135)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -142,6 +141,7 @@ _None._
 | [`B-030`](#b-030--uma-dependência-central-não-pertence-a-domínio-nenhum---x) | Uma dependência central não pertence a domínio nenhum | `shipped` | média |
 | [`B-031`](#b-031--a-mesma-capacidade-exige-owner-num-lado-e-nada-no-outro---x) | A mesma capacidade exige `owner` num lado e nada no outro | `shipped` | alta |
 | [`B-032`](#b-032--o-portal-do-cli-devolve-uma-url-construída-com-o-id-do-cliente---x) | O portal do CLI devolve uma URL construída com o id do cliente | `shipped` | alta |
+| [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece---x) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `shipped` | — |
 | [`B-034`](#b-034--a-cobrança-por-uso-não-tem-para-onde-reportar---x) | A cobrança por uso não tem para onde reportar | `killed` | — |
 | [`B-035`](#b-035--o-segredo-que-verifica-pagamentos-não-existia-no-ambiente---x) | O segredo que verifica pagamentos não existia no ambiente | `shipped` | — |
 | [`B-036`](#b-036--os-seeds-de-cobrança-pulam-sem-credencial-e-a-corrente-reporta-verde---x) | Os seeds de cobrança pulam sem credencial e a corrente reporta verde | `shipped` | — |
@@ -2052,7 +2052,7 @@ que ainda tem a rota, agora exigindo `owner` — não participa.
 
 O B-029 está fechado por observação, não por argumento.
 
-## B-033 — O teto de custo está desligado, e o portão passa direto quando isso acontece   [ ]
+## B-033 — O teto de custo está desligado, e o portão passa direto quando isso acontece   [x]
 
 domain: control-plane
 repo: loopzero-cloud
@@ -2068,7 +2068,28 @@ evidence: |
 why_now: o agregador é a ÚNICA fonte de `cost_counters`, e o portão que lê essa tabela
   degrada para "passa" quando ela está vazia. As três métricas de custo — minutos de build,
   egresso, puxadas de registro — não têm teto no ambiente que serve o painel público.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19 — as duas balas deste repositorio; a primeira nao e' nossa.**
+>
+> **Bala 2 ja' estava feita:** `cost_enforcement_test.go` prova o portao NEGANDO — exige 402
+> e `code == "COST_CAP_EXCEEDED"`, com teste proprio para a forma da resposta.
+>
+> **Bala 3 entregue hoje**, e o buraco so' aparecia lendo a ORDEM do codigo: a metrica
+> `CostCapDecisionsTotal` ja' distinguia cinco razoes, mas era incrementada **depois** do
+> desvio de receptor nulo. Entao o caso pior — o portao NAO EXISTE — era o unico que nao
+> emitia nada, e o unico sinal era a linha de log de boot que esta bala recusa
+> explicitamente. Acrescentado `reason="disabled"`. O desvio continua passando direto de
+> proposito, e o teste afirma isso: bloquear ali quebraria o boot tolerante.
+>
+> **Bala 1 pertence ao `loopzero-cloud`, reconfirmado ao vivo hoje:** o Deployment do
+> `loopzero-cloud` roda ha' 9 dias e tem **zero** variaveis de ambiente casando `PROM|COST`.
+> Sem `LOOPZERO_PROMETHEUS_URL` o agregador nao sobe, e ele e' a UNICA fonte de `cost_counters`.
+> A variavel entra no chart **deles**.
+>
+> Por `cycle-backlog.md § Output` e pelo `B-145`, segurar aqui a bala de outro projeto nao a
+> conserta — so' mantem este numero alto e da' impressao de cobertura sobre trabalho que
+> ninguem daqui vai fazer.
 
 > **Medido 2026-08-19 — duas das tres balas ja' estavam fechadas, e a terceira tinha um
 > buraco que so' aparece lendo a ordem do codigo.**
