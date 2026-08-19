@@ -5702,7 +5702,7 @@ A implementação vai no `B-114`; o que esta bala pedia era a decisão, e ela es
 `tag: dev`. Não expandi o teste para reprová-los: deixaria o alvo recém-ligado vermelho, que é o
 defeito que este item existe para não repetir. Virou `B-113`.
 
-## B-093 — O validador do `services.json` não bloqueia os prefixos que a plataforma injeta   [ ]
+## B-093 — O validador do `services.json` não bloqueia os prefixos que a plataforma injeta   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5710,11 +5710,30 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-13 na fatia `slice-15`. `api/internal/source/validator_env.go` bloqueia sequestro de processo (`LD_PRELOAD`, `DYLD_*`, `PATH`, `SHELL`) mais `LOOPZERO_` e `KUBERNETES_`. Ele **não** bloqueia `AWS_`, `DO_` nem `GOOGLE_` — os prefixos que `api/internal/services/deploycontracts/build_plan.go` reserva porque a plataforma os injeta. Um tenant que declare `AWS_ACCESS_KEY_ID` no `services.json` passa pelo validador. Verificado por teste de não-regressão (`TestReservedEnv_ThreatsBlockedAreUnchanged`), que trava o estado atual de propósito para que fechar isto seja uma decisão e não um efeito colateral.
 why_now: o ADR `2026-08-13-reserved-env-two-rules` separou as duas regras e, ao fazê-lo, deixou visível que a fronteira de sombreamento tem um lado desguarnecido. Enquanto as duas eram lidas como cópias, a lacuna parecia divergência de conjunto.
-status: triaged
+status: shipped
 severity: média — **rebaixada na revisão da mesma fatia.** A metade alcançável está medida: o env do `services.json` chega ao contêiner do workload (`validator_services.go:58` → `services_input_mapping.go:158` → `renderer_deployment.go:77-84`). A outra metade **não se sustenta**: para haver sombreamento, a plataforma teria de injetar `AWS_`/`DO_`/`GOOGLE_` **naquele mesmo contêiner**, e `renderer_deployment.go:51-53` injeta apenas `PORT` mais um `envFrom` do Secret do usuário. O `B-051` já media que não existe injeção de `GOOGLE_*` em env de workload. Vira alta se alguma injeção desse tipo aparecer.
 dod:
   - está medido se o env do `services.json` alcança o mesmo processo que recebe a injeção da plataforma
   - se alcançar, os três prefixos entram — com a contagem de quantos payloads de tenant seriam rejeitados hoje
+> **Fechado 2026-08-19 — DoD 2/2, e a condição da segunda bala é FALSA por medição.**
+>
+> Reverificado hoje (o caminho mudou com o B-062: o validador agora vive em
+> `api/internal/buildplane/source/validator_env.go`). O renderizador tem **dois**
+> pontos que escrevem `container.Env`: a linha 52 injeta **`PORT`** e a linha 84
+> copia o env **do próprio app** — valores do usuário, não da plataforma. Nenhuma
+> injeção de `AWS_`, `DO_` ou `GOOGLE_` em `api/internal/manifests/`.
+>
+> Bala 1: o env do `services.json` **alcança** o contêiner do workload. Bala 2 é
+> condicional a haver o que sombrear, e não há — então os três prefixos **não**
+> entram, e acrescentá-los rejeitaria payloads de tenant sem defender nada.
+>
+> **O que faltava é o que foi entregue.** O item registra que isto "vira alta se
+> alguma injeção desse tipo aparecer", e nada notaria: a conclusão dependia
+> inteiramente de um fato que vivia só numa medição datada.
+> `TestPlataformaInjetaApenasPORTNoContainerDoWorkload` passou a vigiar esse fato,
+> e a mensagem de falha manda **reabrir este item** em vez de só reportar
+> diferença. Mutante que injeta `AWS_REGION` é pego.
+
   - se não alcançar, isso está escrito, e o teste de não-regressão passa a citar a razão em vez do estado
 
 > Registrado 2026-08-13 pela fatia `slice-15` (ADR D2). Fechá-lo **rejeita payload que hoje é
