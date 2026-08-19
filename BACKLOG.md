@@ -4083,6 +4083,27 @@ source: discover-review
 evidence: medido em 2026-08-12 ao decidir o `B-048`. Os únicos consumidores de `charts/loopzero-platform` são de teste ou template: `taskfiles/helm.yml:32,:37,:42,:108`, `infra/tests/helm/loopzero-platform/defaults_test.go`, `infra/tests/helm/envparity/envparity_test.go:51`, `infra/tests/helm/README.md:125-128`. O **bootstrap do ArgoCD não o usa** — os únicos `path: charts/*` em `infra/argocd-bootstrap/apps/` são quatro Applications, uma por operator. Zero referências em qualquer repositório irmão do workspace.
 why_now: a decisão do `B-048` foi tomada (é composição single-cluster, e isso passa a estar escrito no chart), mas ela levanta a pergunta que a evidência não fecha: **se o chart deveria existir**. Mantê-lo custa o gate `helm-overlap-parity`, os testes de envparity e a manutenção de 12 toggles. O dado que falta não é mensurável em disco — o README documenta instalação via `oci://registry.digitalocean.com/loopzero-system/helm/loopzero-platform`, e o conteúdo do registry não é visível daqui.
 status: triaged
+
+> **Bala 3 fechada 2026-08-19, e a medicao achou um custo que o item nao contava.**
+>
+> Medido com `grep` sobre `infra/argocd-bootstrap/`, `taskfiles/` e `infra/helmfile/`:
+> `loopzero-monitoring` tem **zero** referencias e `loopzero-dashboard` tem **uma**, que e' um
+> **comentario** em `taskfiles/infra.yml:76`. O unico consumo declarado dos dois e' serem
+> dependencias **do proprio guarda-chuva** (`Chart.yaml`, com `condition: <nome>.enabled`).
+>
+> Ou seja: **dois charts cujo unico consumidor e' um chart sem consumidor.** Escrito no
+> `charts/loopzero-platform/README.md`, onde o `B-048` ja' registrou a decisao de composicao
+> — "em vez de deixa-la inferir do silencio".
+>
+> **Custo novo, medido no caminho: o guarda-chuva NAO passa no `helm lint`.** Os
+> `values.schema.json` dos subcharts recusam as chaves `global` e `enabled` que a
+> composicao necessariamente injeta (`loopzero-crds`, `loopzero-api`). Confirmei que e'
+> pre-existente e nao meu: a unica modificacao na arvore era o README. Nao abri item
+> proprio — isto E' o custo que este item mede, e a bala 2 nao pode ser decidida sem ele.
+>
+> **A bala 1 segue sem resposta, e a razao e' de principio, nao de credencial:** o
+> registry OCI responde sobre PUBLICACAO, nao sobre CONSUMO. Quem puxou uma tag nao esta'
+> no artefato.
 severity: baixa — nada quebra; é custo de manutenção de um artefato sem demanda medida.
 dod:
   - está medido se o chart publicado em OCI é consumido fora do workspace

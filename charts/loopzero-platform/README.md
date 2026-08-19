@@ -118,3 +118,42 @@ Values are validated via `values.schema.json` (Draft-07). Key constraints:
 - ADR-0044: loopzero-monitoring naming (rename deferred Post-Launch)
 - charts-sota-implementation-plan: full Sprint 9 chart improvements
 - `docs/technical/charts/`: SOTA research + gates + benchmark
+
+## Quem consome isto, medido — e o que a medição não alcança (B-073)
+
+Medido em 2026-08-19, com `grep` sobre `infra/argocd-bootstrap/`, `taskfiles/` e
+`infra/helmfile/`:
+
+| chart | referências fora dele | o que são |
+|---|---:|---|
+| `loopzero-platform` (este) | 65 | o único caminho de instalação é `taskfiles/helm.yml:108` — `helm upgrade --install loopzero charts/loopzero-platform`, operado à mão. O bootstrap do ArgoCD **não** o instala |
+| `loopzero-dashboard` | 1 | um **comentário** em `taskfiles/infra.yml:76`. Não é invocação |
+| `loopzero-monitoring` | 0 | nenhuma |
+
+**A consequência é um laço fechado, e é o que esta seção existe para não deixar
+implícito:** o único consumo declarado de `loopzero-dashboard` e `loopzero-monitoring` é serem
+dependências **deste** chart (`Chart.yaml`, com `condition: <nome>.enabled`) — e este
+chart não tem consumidor conhecido além do install manual acima. Dois charts cujo único
+consumidor é um chart sem consumidor.
+
+**O que a medição NÃO responde:** se o artefato publicado em OCI é consumido **fora**
+deste workspace. Ler o registry exige credencial que a sessão de manutenção não tem — e,
+ainda que tivesse, o registry responde sobre **publicação**, não sobre **consumo**. Quem
+puxou uma tag não está no artefato; está no log do registry, se houver.
+
+**E o custo não é só de manutenção: o chart não passa no `helm lint` hoje.** Medido na
+mesma data, com apenas este README modificado na árvore:
+
+```
+[ERROR] templates/: values don't meet the specifications of the schema(s) …
+loopzero-crds:  - at '': additional properties 'global', 'enabled' not allowed
+loopzero-api:   …
+```
+
+Os `values.schema.json` dos subcharts recusam as chaves `global` e `enabled` que a
+composição guarda-chuva necessariamente injeta. É um defeito do arranjo, não do README —
+e é dado que pesa na segunda bala, porque "manter com o custo declarado" tem de incluir
+este custo.
+
+Isto é registro do estado medido, **não** uma decisão de remover. Manter com o custo
+declarado ou remover é a segunda bala do `B-073`, e ela continua aberta.
