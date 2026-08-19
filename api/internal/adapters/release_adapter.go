@@ -57,3 +57,11 @@ func resolveEntryApp(appsRaw json.RawMessage) string {
 // _ = db.BuildAppSpec{} — retained import placeholder; other adapters may
 // grow AppSpec usage. Preserving the import avoids a rippling churn.
 var _ = db.BuildAppSpec{}
+
+// A porta que este adaptador satisfaz, afirmada em tempo de compilacao.
+//
+// B-058: o pacote se chama `adapters` e o criterio de admissao dele era "e um adapter" —
+// que nao recusa nada. Medido em 2026-08-18: dos nove adaptadores, cinco NOMEAVAM a porta em
+// prosa e apenas UM a verificava. Prosa nao compila; esta linha sim, e e ela que faz o
+// criterio conseguir dizer nao.
+var _ status.StatusReleaseStore = (*StatusReleaseStoreAdapter)(nil)

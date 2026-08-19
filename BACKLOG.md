@@ -3114,6 +3114,37 @@ evidence: medido em 2026-08-11. **`api/internal/k8s`** (coesão 3) agrupa três 
 why_now: são os três pacotes cuja regra de admissão não consegue dizer não. Enquanto ela for "usa client-go" / "é um adapter" / "é um loop de fundo", todo arquivo novo cabe — e a auditoria mediu que já cabem domínios diferentes em cada um.
 status: triaged
 severity: média — nenhum defeito de comportamento; é a superfície por onde a mistura de domínios entra sem ninguém decidir.
+progress_2026_08_18: |
+  **Bala 2 fechada pela segunda alternativa; bala 4 ja estava feita; balas 1 e 3 ficam.**
+
+  **Bala 4 — o arquivo ja nao existe.** `vault_transit_adapter.go` nao esta em lugar nenhum
+  da arvore. Sobrevive uma **citacao morta**: `api/internal/routes/secrets/secrets.go:76`
+  cita `*adapters.VaultTransitAdapter`, e o tipo `VaultTransitAdapter` nao existe. Nao pude
+  corrigi-la — o diretorio `api/internal/routes/secrets` esta **bloqueado por permissao**
+  nesta sessao. Fica registrado em vez de silenciado.
+
+  **Bala 2 — o criterio agora consegue recusar.** Medido: dos **nove** adaptadores, cinco
+  nomeavam a porta que satisfazem em **prosa**, quatro nao diziam nada, e apenas **um** a
+  afirmava em tempo de compilacao. Prosa nao compila — um comentario dizendo
+  *"implements routes.X"* continua ali depois de a interface mudar de nome, de forma ou de
+  lugar, e o proximo leitor confia nele.
+
+  As nove portas foram descobertas (as documentadas pela prosa, as demais pelo consumidor) e
+  escritas como `var _ Porta = (*Tipo)(nil)`. **O compilador aceitou as oito novas**, o que e
+  a prova de que a prosa estava certa — e agora ela e verificada.
+
+  O gate `adapter-ports` exige a declaracao. A distincao que ele faz e o que o torna util:
+  `var _ = pkg.Tipo{}` e assercao de **uso**, nao de porta — confundir as duas deixaria
+  passar exatamente o defeito. Provado com mutante contra a arvore real.
+
+  E a ausencia do pacote **reprova**, de proposito: a primeira alternativa desta mesma bala e
+  DISSOLVER `adapters`, e uma guarda que ficasse verde sobre o diretorio dissolvido
+  sobreviveria ao proprio objeto.
+
+  **Balas 1 e 3 ficam para fatias proprias**, e a escala explica: `api/internal/k8s` tem 7
+  arquivos e **2.944 linhas** misturando tenancy, workload e secrets; `services/platform`
+  pede renomeacao ou divisao por concern. Sao movimentos arquiteturais, nao mecanicos.
+
 dod:
   - `k8s` encolhe para plumbing real (cliente tipado, resolução de env), com tenancy, workload e secrets em casas próprias
   - `adapters` é dissolvido — cada arquivo vai para junto da porta que satisfaz — ou ganha critério de admissão que consiga recusar

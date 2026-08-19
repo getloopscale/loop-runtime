@@ -15,6 +15,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/agplisolation"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/anonymousauth"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/adapterports"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/billinglayers"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/billingsecrets"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyhostparity"
@@ -430,6 +431,22 @@ func runRunbookParity(args []string) int {
 		return 2
 	}
 	fmt.Printf("runbook-parity: PASS — %s\n", out.Reason)
+	return 0
+}
+
+func runAdapterPorts(args []string) int {
+	fs := flag.NewFlagSet("adapter-ports", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := adapterports.Check(adapterports.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "adapter-ports: FAIL — %v\n", err)
+		return 2
+	}
+	fmt.Printf("adapter-ports: PASS — %d adaptador(es), todos declarando a porta que satisfazem\n", out.Scanned)
 	return 0
 }
 

@@ -1,4 +1,5 @@
 acyclic-graph	gates	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
+adapter-ports	gates	Todo adaptador declara em tempo de compilacao qual porta satisfaz.
 advisory-lock-scope	gates	Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.
 agpl-isolation	gates	Verifies AGPL-licensed code stays isolated from proprietary import paths.
 alert-runbooks	-	Every Prometheus alert has a linked runbook annotation.

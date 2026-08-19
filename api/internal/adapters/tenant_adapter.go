@@ -63,3 +63,11 @@ func (a *TenantK8sEvictorAdapter) EvictTenantsFromClusters(ctx context.Context, 
 		NamespacesFinalized:  c.NamespacesFinalized,
 	}, nil
 }
+
+// A porta que este adaptador satisfaz, afirmada em tempo de compilacao.
+//
+// B-058: o pacote se chama `adapters` e o criterio de admissao dele era "e um adapter" —
+// que nao recusa nada. Medido em 2026-08-18: dos nove adaptadores, cinco NOMEAVAM a porta em
+// prosa e apenas UM a verificava. Prosa nao compila; esta linha sim, e e ela que faz o
+// criterio conseguir dizer nao.
+var _ placementsvc.TenantDBDeleter = (*TenantDBDeleterAdapter)(nil)

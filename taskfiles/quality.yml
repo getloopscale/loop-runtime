@@ -145,6 +145,7 @@ tasks:
       - /tmp/loopzero-ops quality dashboard-root-parity # B-039: o runbook nomeia o caminho que a borda serve
       - /tmp/loopzero-ops quality chart-pairs          # B-056: par de chart nas duas arvores precisa ser declarado
       - /tmp/loopzero-ops quality stdlib-only          # B-057: o vocabulario compartilhado nao arrasta dependencia
+      - /tmp/loopzero-ops quality adapter-ports        # B-058: adaptador declara a porta que satisfaz
       - /tmp/loopzero-ops quality module-selfcontained  # B-140: todo modulo compila sem go.work (o CI usa GOWORK=off)
       - /tmp/loopzero-ops quality correlation-header   # T6.1 of plan 2026-06-01-p3-infra-observability-test-debt
       - /tmp/loopzero-ops quality helm-overlap-parity

@@ -6,6 +6,7 @@ package adapters
 import (
 	"context"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 )
@@ -43,3 +44,10 @@ func (a *RollbackReleaseLookupAdapter) GetLatestReleaseForBuild(ctx context.Cont
 	}
 	return release.ID, nil
 }
+
+// A porta que este adaptador satisfaz, afirmada em tempo de compilacao.
+//
+// B-058: este arquivo NAO declarava, nem em prosa, o que adaptava — e o criterio de admissao
+// do pacote era "e um adapter", que nao recusa nada. A porta foi descoberta pelo consumidor,
+// e agora esta escrita onde o compilador a verifica.
+var _ rollback.RollbackReleaseLookup = (*RollbackReleaseLookupAdapter)(nil)

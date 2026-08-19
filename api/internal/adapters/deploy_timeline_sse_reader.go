@@ -43,3 +43,10 @@ func (a *DeployTimelineSSEReader) GetAfter(ctx context.Context, buildID string, 
 	}
 	return out, nil
 }
+
+// A porta que este adaptador satisfaz, afirmada em tempo de compilacao.
+//
+// B-058: este arquivo NAO declarava, nem em prosa, o que adaptava — e o criterio de admissao
+// do pacote era "e um adapter", que nao recusa nada. A porta foi descoberta pelo consumidor,
+// e agora esta escrita onde o compilador a verifica.
+var _ aggregator.SSEReader = (*DeployTimelineSSEReader)(nil)
