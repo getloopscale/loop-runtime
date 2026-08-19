@@ -6701,6 +6701,37 @@ status: triaged
 severity: média — não é exposição em si, é o mecanismo que garante que a exposição volte a divergir.
 dod:
   - uma cópia é declarada canônica, e as outras ou somem ou passam a apontar para ela
+> **Remedido 2026-08-19 no droplet — a premissa é falsa, e o que sobra é outro
+> problema.**
+>
+> Não são três repositórios. Os três checkouts têm o **mesmo `origin`**:
+>
+> ```
+> /home/paulo/loopzero-cloud/dev/host-firewall.sh              718cb736  origin=loopzero-workspace.git
+> /home/paulo/loopzero-ops/dev/host-firewall.sh                718cb736  origin=loopzero-workspace.git
+> /home/paulo/loopzero-cloud/loopzero-workspace/dev/host-firewall.sh  718cb736  origin=loopzero-workspace.git
+> ```
+>
+> São **três clones do mesmo repositório**, `loopzero-workspace`. O md5 saiu de
+> `359c0d6b` (medido em 15/08) para `718cb736` **nos três juntos** — que é o que um
+> repositório único faz e três repositórios não fariam.
+>
+> Isso desfaz o risco descrito. A DoD pede que uma cópia seja declarada canônica;
+> o git já a declara — as três *são* o mesmo arquivo rastreado, e a divergência
+> silenciosa que o item teme exigiria que alguém editasse sem commitar, que é o
+> mesmo risco de qualquer checkout.
+>
+> **O que sobra é um perigo de operação, e é outro:** no droplet, os diretórios
+> chamados `loopzero-cloud` e `loopzero-ops` são clones de **`loopzero-workspace`**. Quem
+> editar `~/loopzero-cloud/dev/...` acreditando estar no `loopzero-cloud` está noutro
+> repositório. Isso é layout de ambiente, não mudança neste repositório — e por
+> isso fica registrado aqui em vez de virar item novo que ninguém deste repositório
+> poderia fechar.
+>
+> **E nada disso está neste repositório:** `git ls-files | grep host-firewall`
+> devolve **zero** em `loopzero`. O item foi filado contra `loopzero` e seu artefato nunca
+> esteve aqui — a mesma classe do B-145.
+
   - existe verificação que reprova quando duas cópias divergem, medida por conteúdo e não por data
 
 > Registrado 2026-08-15, ao re-medir o `B-028` e descobrir que a premissa da terceira bala dele estava errada.
