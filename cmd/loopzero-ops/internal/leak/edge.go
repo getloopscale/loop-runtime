@@ -145,7 +145,77 @@ var isentas = map[string]string{
 	"/self-service/*":         "fluxo de navegador; 200 é a resposta correta, e o corpo é o que o Kratos precisa entregar",
 	"@auth_bff":               "matcher nomeado do Caddy, sem caminho fixo a requisitar",
 	"/api/v1/webhooks/github": "autenticado por HMAC e não por credencial de usuário; coberto pelo B-021",
-	"-":                       "host inteiro (raiz), sem rota declarada",
+}
+
+// O caminho `-` NAO e isento.
+//
+// B-025: ele estava nesta tabela, com a justificativa "host inteiro (raiz), sem rota
+// declarada" — e e exatamente por ser o host inteiro que ele nao pode sair daqui em
+// silencio. Um `-` declara a exposicao mais AMPLA possivel, e isenta-lo fazia o host
+// desaparecer da sonda sem aparecer como coberto nem como buraco.
+//
+// Medido em 2026-08-18: `cloud.loopzero.example` e `auth.loopzero.example` produziam zero alvos e
+// zero reclamacoes, enquanto serviam servico vivo — 401 em `/v1/billing` e 200 em
+// `/health/ready`, em hostnames de producao. A sonda dizia nada sobre eles, e nada se
+// parecia com tudo bem.
+//
+// Ele passa a cair em `semRepresentante`, que e como este pacote ja nomeia buraco de
+// cobertura. Nao inventamos um representante `/`: as respostas medidas na raiz sao 404 e
+// 200, e nenhuma das duas prova fecho — afirmar que provam seria trocar um silencio por
+// uma mentira. O buraco fica dito ate alguem declarar um representante que preste.
+
+// isenta reporta se a familia esta isenta, honrando o glob que a declaracao usa.
+//
+// O lookup era exato, entao `/self-service/*` na tabela nao cobria
+// `/self-service/registration` — e duas das dez falhas eram ruido pela razao que a propria
+// isencao ja dava (achado M-4 da revisao de B-025).
+func isenta(família string) bool {
+	if _, ok := isentas[família]; ok {
+		return true
+	}
+	for padrão := range isentas {
+		if pre, ok := strings.CutSuffix(padrão, "*"); ok && strings.HasPrefix(família, pre) {
+			return true
+		}
+	}
+	return false
+}
+
+// classeDaLinha devolve a coluna `class` do inventario, vazia quando ausente.
+func classeDaLinha(linha string) string {
+	partes := strings.Split(linha, "|")
+	if len(partes) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(partes[1])
+}
+
+// SemCoberturaDeIdentidade remove dos buracos as familias que a sonda de identidade JA
+// cobre.
+//
+// Achado HIGH-3 da revisao de B-025: o relatorio se contradizia na mesma execucao —
+// `/userinfo` aparecia `ok 401` e, linhas abaixo, `sem representante`. Contabilizar como
+// descoberto o que acabou de ser sondado corroi a confianca no relatorio mais rapido que
+// volume de falhas.
+func SemCoberturaDeIdentidade(buracos []string, alvos []Target) []string {
+	coberto := map[string]bool{}
+	for _, a := range alvos {
+		coberto[a.Path] = true
+		// `/x/y` sondado cobre a familia `/x/*` declarada.
+		if i := strings.LastIndex(a.Path, "/"); i > 0 {
+			coberto[a.Path[:i]+"/*"] = true
+		}
+	}
+	var restou []string
+	for _, b := range buracos {
+		campos := strings.Fields(b)
+		fam := campos[len(campos)-1]
+		if coberto[fam] {
+			continue
+		}
+		restou = append(restou, b)
+	}
+	return restou
 }
 
 // Targets deriva os alvos do inventário declarado.
@@ -178,20 +248,32 @@ func Targets(inventário string, host string) (alvos []Target, semRepresentante 
 		if len(campos) < 2 || campos[0] != host {
 			continue
 		}
+		// A coluna `class` do inventario ja declara o que a rota expoe. Uma rota `internal`
+		// nao tem credencial a negar — exigir 401 dela e erro de categoria, e era ruido
+		// (achado M-3 da revisao de B-025). Ler a classe daqui tambem apaga a duplicacao:
+		// `isentas` e a coluna codificavam a mesma decisao em dois lugares, que e a
+		// "segunda lista que envelheceria sozinha" citada acima como razao de ler o
+		// inventario.
+		if classeDaLinha(linha) == "internal" {
+			continue
+		}
 		família := campos[1]
 		if vistos[família] {
 			continue
 		}
 		vistos[família] = true
 
-		if _, ok := isentas[família]; ok {
+		if isenta(família) {
 			continue
 		}
 		if p, ok := representantes[família]; ok {
 			alvos = append(alvos, Target{Host: host, Path: p})
 			continue
 		}
-		semRepresentante = append(semRepresentante, família)
+		// O buraco carrega o host: sem isso o relatorio mostra varias linhas identicas
+		// dizendo apenas "-", e quem le continua sem saber qual host esta descoberto.
+		// Trocar silencio por ruido anonimo nao e conserto (B-025).
+		semRepresentante = append(semRepresentante, host+" "+família)
 	}
 
 	sort.Slice(alvos, func(i, j int) bool { return alvos[i].Path < alvos[j].Path })

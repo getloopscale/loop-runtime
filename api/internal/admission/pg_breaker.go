@@ -34,6 +34,46 @@ import (
 // "come back later" signal. Read-only handlers MUST NOT consult the
 // breaker — reads do not worsen the saturation the breaker is trying to
 // prevent.
+//
+// ATENCAO — HOJE **NAO HA CHAMADOR** DESSE PADRAO EM PRODUCAO (B-054, medido 2026-08-18).
+//
+// Em `api/cmd/main.go` este breaker e construido (`:509`), iniciado (`:510`) e parado no
+// shutdown (`:514`). `Allow()` nao e chamado em lugar nenhum do modulo `api` fora de teste.
+// Ele mede a saturacao, dispara e rearma com histerese, e registra em log — e nenhuma
+// decisao de admissao o consulta.
+//
+// Nao e so o `Allow`: `Tripped()` e `TrippedSince()` tambem nao tem consumidor fora deste
+// pacote. A superficie de consulta inteira e inerte.
+//
+// Quem de fato barra requisicao sob saturacao e `api/internal/middleware/pgcircuitbreaker.go`,
+// ligado em `server/router.go:82` — um portao percentual de 73 linhas, sem histerese. E o
+// portao abre mesmo: `router.go:77` o condiciona a `cfg.PGPoolStatsFunc != nil`, e
+// `cmd/setup_server.go:365-368` atribui esse campo.
+//
+// Duas ressalvas que um resumo apressado apagaria, e que quem for decidir precisa:
+//
+//  1. "Deixar leitura passar" e IMPOSTO num e apenas PEDIDO no outro. O middleware decide
+//     por metodo HTTP (`pgcircuitbreaker.go:44-47`). O `Allow()` daqui nao ve a requisicao —
+//     devolve um bool; a separacao leitura/escrita vive como instrucao ao chamador, algumas
+//     linhas acima. Sem chamador ela nao existe; com chamador, depende de disciplina humana.
+//     Sao uma garantia estrutural e uma convencao, nao a mesma coisa.
+//
+//  2. Os dois OSCILAM, por mecanismos diferentes. A histerese daqui responde a um laco de
+//     fundo com tick de 1s (`Interval` no config): perto da linha de corte o veredito
+//     alternaria a cada tick. O middleware nao tem tick — le o pool na propria requisicao,
+//     entao requisicoes adjacentes perto de 90% recebem vereditos diferentes. E analogia,
+//     nao identidade, e a diferenca importa para dimensionar o conserto.
+//
+// E os denominadores diferem: este usa o config estatico `DBMaxConns`; o middleware usa o
+// `MaxConns()` vivo do pool. Normalmente coincidem — nao por construcao.
+//
+// Resolver isso — ligar este e aposentar aquele, ou o contrario — muda o que o sistema
+// rejeita sob carga, e por isso e T2 (`rules/pre-release-governance.md`): registro MEET
+// antes do codigo. Ate la esta advertencia existe para que ninguem leia o "usage pattern"
+// acima e conclua que a protecao com histerese esta no caminho da requisicao.
+//
+// `pg_breaker_wiring_test.go` trava as duas direcoes: enquanto nao houver chamador, a
+// advertencia tem de estar aqui; quando houver, ela tem de sair.
 type PGPoolBreaker struct {
 	pool *pgxpool.Pool
 	cfg  BreakerConfig

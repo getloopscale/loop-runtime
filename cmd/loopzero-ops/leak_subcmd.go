@@ -56,11 +56,23 @@ SAÍDA:
 type leakReport struct {
 	// Upstream diz QUAL superficie caiu quando ha falha de gateway (B-022). Vazio em dia
 	// normal — um campo que fala sempre vira ruido e para de ser lido.
-	Upstream string   `json:"upstream,omitempty"`
-	Pass     int      `json:"pass"`
-	Fail     int      `json:"fail"`
-	Skip     int      `json:"skip"`
-	Failures []string `json:"failures"`
+	Upstream string `json:"upstream,omitempty"`
+	Pass     int    `json:"pass"`
+	Fail     int    `json:"fail"`
+	Skip     int    `json:"skip"`
+	// Uncovered conta o que a sonda NAO mede, separado do que ela mediu e reprovou.
+	//
+	// Somar os dois no `fail` impedia o operador de distinguir "a borda deixou passar algo"
+	// de "esta superficie nao e medida" — e as duas exigem acoes diferentes. Medido na
+	// revisao de B-025: a maioria das falhas era buraco de cobertura, e misturadas com
+	// vazamento elas fariam a sonda parar de ser lida.
+	Uncovered   int      `json:"uncovered"`
+	Failures    []string `json:"failures"`
+	NotMeasured []string `json:"not_measured"`
+	// Wildcards nomeia o que foi pulado por nao ter hostname concreto. Antes ficava so no
+	// modo texto, e o JSON — que e o contrato legivel por maquina — dizia `skip: 0` com
+	// curingas pulados (achado M-5 da revisao).
+	Wildcards []string `json:"wildcards,omitempty"`
 }
 
 func runLeak(args []string) int {
@@ -85,16 +97,99 @@ func runLeak(args []string) int {
 		return 1
 	}
 
-	alvos, semRepresentante, err := leak.Targets(*inventory, *host)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		return 1
+	// B-025: sonda TODO host que o inventario declara, nao apenas o do `--host`.
+	//
+	// Medido 2026-08-18: o inventario declarava 7 hosts e a sonda alcancava 2. Os cinco
+	// restantes eram inalcancaveis por construcao — `Targets` filtra por um unico host —, e
+	// dois deles serviam servico VIVO em hostname de producao: `cloud.loopzero.example`
+	// devolvia 401 em `/v1/billing` e `auth.loopzero.example` devolvia 200 em `/health/ready`.
+	//
+	// `--host` continua valendo, agora como filtro para uma execucao focada.
+	// `fs.Visit` so visita flag REALMENTE passada. Comparar com `DefValue` fazia
+	// `--host app-dev.loopzero.example` — o valor que o `--help` anuncia como padrao, e portanto
+	// o que o operador digita para focar — cair na varredura completa (achado HIGH-2 da
+	// revisao de B-025).
+	hostPassado := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "host" {
+			hostPassado = true
+		}
+	})
+
+	var hostsAlvo []string
+	if hostPassado {
+		// `--host ""` sondaria zero superficie de aplicacao e sairia 0: verde vazio, que e
+		// a forma que esta sonda existe para recusar (achado M-6 da revisao de B-025).
+		if strings.TrimSpace(*host) == "" {
+			fmt.Fprintln(os.Stderr, "--host vazio: nao ha superficie a sondar; omita a flag para varrer o inventario")
+			return 1
+		}
+		hostsAlvo = []string{*host}
+	} else {
+		hs, err := leak.Hosts(*inventory)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			return 1
+		}
+		hostsAlvo = hs
 	}
-	alvos = append(alvos, leak.IdentityTargets(*authHost)...)
+
+	var alvos []leak.Target
+	var semRepresentante []string
+	var curingas []string
+	for _, h := range hostsAlvo {
+		// Um curinga nao tem hostname concreto para resolver; sondar `*.x` produziria um
+		// erro de DNS que se pareceria com host fora do ar. Fica dito, nao escondido.
+		if strings.HasPrefix(h, "*.") {
+			curingas = append(curingas, h)
+			continue
+		}
+		a, semRep, err := leak.Targets(*inventory, h)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			return 1
+		}
+		alvos = append(alvos, a...)
+		semRepresentante = append(semRepresentante, semRep...)
+	}
+	// A identidade tambem segue os hosts descobertos (achado HIGH-1 da revisao de B-025).
+	//
+	// `auth.loopzero.example` servia Kratos VIVO num hostname de producao, e a varredura sabia
+	// que ele existia sem aplicar nele nenhuma assercao de identidade. Rodando com
+	// `--auth-host auth.loopzero.example` a revisao mediu tres defeitos concretos: descoberta
+	// OIDC 404, raiz 404 e `/userinfo` 404 — invisiveis enquanto o host aparecia so como
+	// "buraco nao medido".
+	hostsIdent := map[string]bool{*authHost: true}
+	for _, h := range hostsAlvo {
+		if strings.HasPrefix(h, "auth") {
+			hostsIdent[h] = true
+		}
+	}
+	identOrdenados := make([]string, 0, len(hostsIdent))
+	for h := range hostsIdent {
+		identOrdenados = append(identOrdenados, h)
+	}
+	sort.Strings(identOrdenados)
+	for _, h := range identOrdenados {
+		alvos = append(alvos, leak.IdentityTargets(h)...)
+	}
+
+	// Retira dos buracos o que a sonda de identidade acabou de cobrir: contabilizar como
+	// descoberto o que foi sondado e o relatorio discordando de si mesmo (HIGH-3).
+	semRepresentante = leak.SemCoberturaDeIdentidade(semRepresentante, alvos)
 
 	cli := leak.DefaultClient()
 	ctx := context.Background()
-	rep := leakReport{Failures: []string{}}
+	rep := leakReport{Failures: []string{}, NotMeasured: []string{}}
+
+	if len(curingas) > 0 {
+		rep.Wildcards = curingas
+		rep.Skip += len(curingas)
+		if !*asJSON {
+			fmt.Printf("  SKIP  %-46s curinga sem hostname concreto para resolver\n",
+				strings.Join(curingas, ", "))
+		}
+	}
 
 	// Guarda os codigos das duas superficies para separar QUEM caiu (B-022). O caminho do
 	// motor atravessa o painel, entao um 502 em `/engine/*` sozinho nao diz se o motor
@@ -172,16 +267,21 @@ func runLeak(args []string) int {
 		}
 	}
 
-	// Uma família declarada e não medida é buraco de cobertura. Contá-la como falha é
-	// deliberado: o modo de falha que esta sonda existe para impedir é justamente a rota
-	// nova que ninguém sonda, e um aviso silencioso reproduziria isso.
+	// Uma família declarada e não medida é buraco de cobertura, e continua contando para o
+	// código de saída: o modo de falha que esta sonda existe para impedir é justamente a
+	// rota nova que ninguém sonda, e um aviso silencioso reproduziria isso.
+	//
+	// O que mudou (revisão de B-025): ela conta num campo PRÓPRIO. Somada ao `fail`, ela
+	// impedia o operador de distinguir "a borda deixou passar algo" de "esta superfície não
+	// é medida" — e as duas exigem ações diferentes. A maioria das falhas era buraco, e
+	// misturadas com vazamento fariam a sonda parar de ser lida.
 	for _, f := range semRepresentante {
-		rep.Fail++
-		rep.Failures = append(rep.Failures,
+		rep.Uncovered++
+		rep.NotMeasured = append(rep.NotMeasured,
 			fmt.Sprintf("família %q está declarada em %s e não tem representante na sonda; sem um caminho concreto ela nunca é medida",
 				f, *inventory))
 		if !*asJSON {
-			fmt.Printf("  FAIL  %-46s sem representante na sonda\n", f)
+			fmt.Printf("  NAO-MEDIDO  %-40s sem representante na sonda\n", f)
 		}
 	}
 
@@ -193,10 +293,11 @@ func runLeak(args []string) int {
 			return 1
 		}
 	} else {
-		fmt.Printf("\n  PASS=%d  FAIL=%d  SKIP=%d\n", rep.Pass, rep.Fail, rep.Skip)
+		fmt.Printf("\n  PASS=%d  FAIL=%d  NAO-MEDIDO=%d  SKIP=%d\n",
+			rep.Pass, rep.Fail, rep.Uncovered, rep.Skip)
 	}
 
-	if rep.Fail > 0 {
+	if rep.Fail > 0 || rep.Uncovered > 0 {
 		fmt.Fprintln(os.Stderr, "\nA borda deixou passar algo sem credencial:")
 		for _, f := range rep.Failures {
 			fmt.Fprintf(os.Stderr, "  - %s\n", f)

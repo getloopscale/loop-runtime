@@ -1466,6 +1466,67 @@ evidence: medido em 2026-08-10 ao revalidar a topologia. `app.loopzero.example`,
 why_now: apareceu ao medir para onde a borda encaminha, e não por sondagem de host — a sonda `loopzero-ops leak live` só cobre `app-dev` e `auth-dev`, então estes três nunca foram medidos. O `app.loopzero.example` é o mais relevante: ele encaminha para um servidor de **desenvolvimento** (Vite), e o Red Team já fechou dois achados sobre justamente isso (loopzero-cloud#66 e #141, sobre o bundle de produção e o bloqueio de caminhos de dev-server). Um bloco vivo apontando para o Vite reabre a mesma superfície se alguém subir a 5173 na máquina.
 status: triaged
 severity: média — hoje não servem nada, então não vazam. O risco é o bloco existir e alguém subir o Vite: aí `app.loopzero.example` passa a servir código-fonte na internet, que é exatamente o que o #66 fechou.
+measurement_2026_08_18: |
+  **A premissa do item esta refutada, e para pior.** Ele dizia "apontam para o vazio" e
+  "hoje nao servem nada, entao nao vazam". Medido ao vivo:
+
+      cloud.loopzero.example/v1/billing   -> 401   loopzero-cloud VIVO, negando credencial
+      auth.loopzero.example/health/ready  -> 200   Kratos VIVO
+      app.loopzero.example/               -> 502   Vite morto, mas o bloco continua la
+
+  Dois dos tres sao hostnames de **producao** servindo instancias de **desenvolvimento**, e
+  o de identidade esta entre eles.
+
+  **E a lacuna era mais funda que "a sonda nao cobre".** Medido em `Targets`: o caminho `-`,
+  que e como um host INTEIRO se declara, estava na tabela `isentas` com a justificativa
+  "host inteiro (raiz), sem rota declarada". O efeito: `cloud` e `auth` produziam **zero
+  alvos e zero reclamacoes** — nao apareciam como cobertos nem como buraco. Silencio, que e
+  indistinguivel de cobertura, na superficie mais ampla que existe.
+
+  O inventario declara **7 hosts** e a sonda alcancava **2**.
+
+progress_2026_08_18: |
+  **Bala 3 fechada.** Tres consertos, todos herméticos e sem mudar exposicao:
+
+  1. `leak.Hosts` le todo host declarado no inventario, e `leak live` sonda todos. Nao sao
+     tres nomes fixos: fixar nomes deixaria o quarto host futuro invisivel pelo mesmo motivo
+     que estes ficaram. O inventario JA e a declaracao do que a borda expoe.
+  2. O caminho `-` saiu de `isentas` e passa a ser reportado como buraco de cobertura. NAO
+     inventei um representante `/`: as respostas medidas na raiz sao 404 e 200, e nenhuma
+     prova fecho — afirmar que provam seria trocar silencio por mentira.
+  3. O buraco carrega o host. Sem isso o relatorio mostrava quatro linhas identicas dizendo
+     so "-", e trocar silencio por ruido anonimo nao e conserto.
+
+  **CORRECAO — o numero que escrevi aqui primeiro estava errado, e a revisao mediu.** Eu
+  registrei "FAIL foi de 6 para 10, os quatro novos sao buracos que ja existiam". O `6` era
+  um estado intermediario do meu proprio trabalho, nao a linha de base. Medido com a fatia
+  guardada: **HEAD estava `PASS=11 FAIL=0`** — a sonda estava **verde**.
+
+  Isso muda a natureza do que a fatia faz: ela nao revela quatro buracos sobre um sinal ja
+  vermelho; ela leva um sinal verde a vermelho. E na primeira versao ~40% do vermelho era
+  ruido — familias que a propria sonda acabara de aprovar, isencao com glob que nao casava,
+  e uma rota de classe `internal` a quem se exigia 401.
+
+  Depois dos consertos da revisao, o estado final e:
+
+      PASS=13  FAIL=3  NAO-MEDIDO=5  SKIP=2
+
+  As **3 falhas sao defeitos concretos e novos**, todos em `auth.loopzero.example` — hostname de
+  producao servindo Kratos vivo: descoberta OIDC **404**, raiz **404**, `/userinfo` **404**.
+  Sao o que a revisao encontrou ao rodar com `--auth-host auth.loopzero.example`, e estavam
+  invisiveis enquanto o host aparecia so como "buraco nao medido". Os 5 nao-medidos contam
+  em campo proprio, porque somar buraco de cobertura a vazamento impede o operador de saber
+  qual acao tomar.
+
+  **Bala 4 fechada.** A declaracao "delete after the new bundle ships" tinha a condicao
+  **cumprida**: `app-dev` ja serve `dashboard/dist` por `file_server`. A linha do inventario
+  passou a dizer isso, em vez de continuar prometendo.
+
+  **Balas 1 e 2 seguem abertas, e de proposito.** Remover tres hosts publicos — um deles
+  servindo o servico de identidade — muda exposicao e e T2 por `rules/pre-release-governance.md`:
+  registro MEET antes do codigo. O que este loop entrega e a medicao que torna a decisao
+  informada, nao a decisao.
+
 dod:
   - está decidido se os três hosts são removidos ou se voltam a servir — e a decisão vale para os três, não só para o que devolve 502
   - se removidos: saem do Caddyfile e do inventário juntos, e o gate `proxy-exposure` continua PASS
@@ -2720,6 +2781,58 @@ evidence: medido em 2026-08-11. `middleware/pgcircuitbreaker.go` é um portão p
 why_now: duas implementações do mesmo conceito no mesmo processo divergem em silêncio — uma já corrigiu um defeito que a outra tem, e nada força a segunda a aprender. É o mesmo padrão do B-051, uma camada acima.
 status: triaged
 severity: média — nenhum incidente conhecido; o custo é comportamento de proteção inconsistente sobre o mesmo recurso.
+measurement_2026_08_18: |
+  **O item subestimou o achado.** Ele descreve "dois breakers que divergem em silencio". A
+  medicao encontrou algo mais especifico: **um dos dois e inerte**.
+
+  Em `api/cmd/main.go`, o breaker do `admission` e construido (`:509`), iniciado (`:510`) e
+  parado no shutdown (`:514`). **`Allow()` nao e chamado em lugar nenhum do modulo `api`
+  fora de teste** — varredura exaustiva por `Allow(` em `api/`, descontando os limitadores
+  de taxa, que tem metodo homonimo e chamadores legitimos.
+
+  Ele mede a saturacao, dispara e rearma com histerese, e registra em log. Nenhuma decisao
+  de admissao o consulta.
+
+  Quem de fato barra requisicao e `api/internal/middleware/pgcircuitbreaker.go`
+  (`server/router.go:82`): 73 linhas, mesma politica declarada — rejeitar mutacao sob
+  saturacao, deixar leitura passar — e **sem histerese**. A histerese e justamente o que o
+  arquivo do `admission` documenta como razao de existir: sem ela o breaker oscila a cada
+  tick perto da linha de corte.
+
+  Ou seja: o instrumento que resolveu o problema de oscilacao esta desligado, e o que esta
+  ligado tem o problema.
+
+  E `main.go:517` registra `"pg pool circuit breaker enabled"` com `high_water 0.90` e
+  `low_water 0.75` — anunciando ao operador uma protecao que nada consulta.
+
+progress_2026_08_18: |
+  **O que foi entregue:** o codigo passou a DIZER que nao ha chamador, onde alguem leia — no
+  doc do proprio tipo, imediatamente abaixo do "usage pattern" que descreve um padrao que
+  ninguem segue. Um guarda trava as duas direcoes: enquanto nao houver chamador a
+  advertencia tem de estar la; quando houver, ela tem de sair.
+
+  **O guarda foi provado com mutante.** A primeira versao dele passava pelo motivo errado —
+  casava o `Allow()` dos limitadores de taxa e tomava o ramo "tem chamador". Corrigido para
+  exigir que o arquivo tambem importe `internal/admission`. E o primeiro mutante que rodei
+  tambem era ruim (substituia a frase por uma que a continha); refeito, o guarda reprova.
+
+  **O que NAO foi feito, e por que:** decidir qual breaker fica muda o que o sistema rejeita
+  sob carga — e T2 por `rules/pre-release-governance.md`, registro MEET antes do codigo.
+
+  **E nao construi gate de qualidade para a classe — mas o numero que usei para justificar
+  estava errado, e a revisao mediu.** Eu escrevi "so 1 dos 6 componentes Start()ados tem
+  metodo de decisao". Falso: **tres** tem superficie de consulta exportada — o provedor de
+  token (`setup_workflows.go:183`, consumido em cinco sitios de `argocd/sync_client.go`), o
+  roteador dinamico (`setup_background.go:155`, consumido em `cellmgr` e
+  `argocd/sync_client_factory.go`) e este breaker. Os outros tres sao coletores e um
+  observador de push, que de fato nao tem o que consultar.
+
+  A formulacao correta e mais forte que a minha: **dos 6 iniciados, 3 expoem superficie de
+  decisao, e exatamente 1 desses 3 nunca e consultado.** O denominador que importa e 3, nao
+  6 — e 1 em 3 continua nao sendo uma classe. A revisao tambem varreu a forma: `func … Allow() bool`
+  existe **uma unica vez** no repositorio inteiro. A decisao de nao construir o gate se
+  sustenta; a aritmetica que eu tinha escrito para ela, nao.
+
 dod:
   - existe **um** breaker sobre o pool Postgres, ou está escrito por que dois são necessários e o que cada um protege
   - se a resposta for "os dois medem coisas diferentes": os nomes passam a dizer isso (o achado sugere `PGPoolAdmissionGate` para o de saturação), porque hoje ambos se chamam circuit breaker e não são a mesma coisa

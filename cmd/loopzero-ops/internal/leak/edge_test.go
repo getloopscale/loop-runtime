@@ -98,8 +98,17 @@ func TestTargetsReportaFamíliaSemRepresentante(t *testing.T) {
 	if len(alvos) != 0 {
 		t.Errorf("família sem representante não deveria virar alvo: %+v", alvos)
 	}
-	if len(sem) != 1 || sem[0] != "/v1/faturamento/*" {
-		t.Fatalf("queria a família reportada como sem representante, veio %v", sem)
+	// O buraco passou a carregar o host (B-025): sem isso o relatório mostrava várias
+	// linhas idênticas dizendo só a família, e quem lia não sabia qual host estava
+	// descoberto. A asserção verifica os dois, não o formato exato.
+	if len(sem) != 1 {
+		t.Fatalf("queria exatamente um buraco reportado, veio %v", sem)
+	}
+	if !strings.Contains(sem[0], "/v1/faturamento/*") {
+		t.Errorf("o buraco não nomeia a família: %q", sem[0])
+	}
+	if !strings.Contains(sem[0], "app-dev.loopzero.example") {
+		t.Errorf("o buraco não nomeia o host: %q", sem[0])
 	}
 }
 
