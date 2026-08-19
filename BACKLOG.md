@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 31 · **In flight** 0 · **Closed** 133
+164 items — **Open** 30 · **In flight** 0 · **Closed** 134
 
-### Open (31)
+### Open (30)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -92,7 +92,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-094`](#b-094--a-metade-api-do-find_sec_004-guarda-um-campo-que-ninguém-popula----) | A metade API do `find_sec_004` guarda um campo que ninguém popula | `triaged` | média |
 | [`B-095`](#b-095--a-segunda-cerca-sobre-crs-loopzeroio-renderiza-em-lugar-nenhum----) | A segunda cerca sobre CRs `loopzero.io` renderiza em lugar nenhum | `triaged` | média |
 | [`B-098`](#b-098--duas-policies-do-openbao-são-declaradas-e-nunca-ligadas-a-role-nenhum----) | Duas policies do OpenBao são declaradas e nunca ligadas a role nenhum | `triaged` | média |
-| [`B-111`](#b-111--o-mesmo-controle-de-firewall-vive-em-três-repositórios-sem-dono-declarado----) | O mesmo controle de firewall vive em três repositórios sem dono declarado | `triaged` | média |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
 | [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `triaged` | média |
@@ -110,7 +109,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (133)
+### Closed (134)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -206,6 +205,7 @@ _None._
 | [`B-108`](#b-108--cinco-seeds-gravam-secret-num-namespace-que-podem-não-encontrar---x) | Cinco seeds gravam Secret num namespace que podem não encontrar | `shipped` | média |
 | [`B-109`](#b-109--guarda-nova-é-medida-contra-mutante-sintético-e-nunca-contra-a-população-que-já-existe---x) | Guarda nova é medida contra mutante sintético e nunca contra a população que já existe | `shipped` | média |
 | [`B-110`](#b-110--o-gate-de-divergência-entre-charts-compara-nome-de-arquivo-e-nome-de-arquivo-não-é-recurso---x) | O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso | `shipped` | média |
+| [`B-111`](#b-111--o-mesmo-controle-de-firewall-vive-em-três-repositórios-sem-dono-declarado---x) | O mesmo controle de firewall vive em três repositórios sem dono declarado | `killed` | média |
 | [`B-112`](#b-112--o-gate-que-detecta-deploy-do-loopzero-rag-sonda-uma-porta-que-ninguém-publica---x) | O gate que detecta deploy do loopzero-rag sonda uma porta que ninguém publica | `killed` | alta |
 | [`B-114`](#b-114--test-target-coverage-tem-granularidade-de-módulo-e-foi-ela-que-deixou-39-testes-invisíveis---x) | `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis | `shipped` | média |
 | [`B-115`](#b-115--34-superfícies-do-roteador-ainda-somem-sem-dizer-e-a-catraca-só-impede-que-virem-35---x) | 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35 | `shipped` | média |
@@ -7075,7 +7075,7 @@ desapareceram com a chave por arquivo — as 21 entradas opacas viraram 11 com r
 **Provas:** 11/11 aprovadas contra o repositório real, mutante `CronJob` injetado reprovando com
 `SEM APROVAÇÃO`, e `task test:unit` verde com 264 pacotes.
 
-## B-111 — O mesmo controle de firewall vive em três repositórios sem dono declarado   [ ]
+## B-111 — O mesmo controle de firewall vive em três repositórios sem dono declarado   [x]
 
 domain: engine-go
 repo: loopzero
@@ -7083,7 +7083,34 @@ suggested_mode: review
 source: discover-live-test
 evidence: medido em 2026-08-15 no droplet. `host-firewall.sh` é rastreado por git em `loopzero-cloud/dev/`, `loopzero-ops/dev/` e no clone aninhado `loopzero-cloud/loopzero-workspace/dev/`, com `md5` idêntico `359c0d6b`. Nenhum dos três declara qual é a cópia canônica, e a `ALLOW_EXTERNAL` — a política de exposição — está duplicada nas três.
 why_now: o `B-028` registrava que o controle vivia **fora** de git e pedia que entrasse. Medindo, ele já está dentro — três vezes. Isto não é a bala cumprida com folga: uma política de segurança em triplicata diverge na primeira vez que alguém edita uma cópia, e a divergência é silenciosa porque as três continuam existindo e nenhuma reprova.
-status: triaged
+status: killed
+kill_reason: a premissa nao se sustenta — os tres caminhos sao clones do MESMO repositorio (getloopscale/loopzero-workspace) na mesma maquina, nao copias em tres projetos; e esse repositorio nao e este
+
+> **MORTO 2026-08-19 — medido no droplet, e a premissa cai.**
+>
+> O item diz "tres repositorios". Medido:
+>
+> ```
+> /home/paulo/loopzero-cloud                 -> getloopscale/loopzero-workspace
+> /home/paulo/loopzero-ops                   -> getloopscale/loopzero-workspace
+> /home/paulo/loopzero-cloud/loopzero-workspace  -> getloopscale/loopzero-workspace
+> ```
+>
+> **Os tres sao clones do MESMO repositorio**, na mesma maquina — e' por isso que o `md5` e'
+> identico (`718cb736` hoje; o item registrou `359c0d6b`, entao o arquivo mudou desde a
+> medicao, nas TRES ao mesmo tempo, que e' exatamente o que se espera de checkouts do mesmo
+> repo).
+>
+> Nao ha' politica de seguranca em triplicata: ha' **uma**, versionada, com tres copias de
+> trabalho. Divergencia entre checkouts do mesmo repo e' o problema que o git existe para
+> resolver, e ele resolve — nao e' duplicacao de conhecimento no sentido do `B-051`.
+>
+> **E o dono existe e nao e' este repositorio:** o controle vive em `loopzero-workspace`. Por
+> `cycle-backlog.md § Output` e pelo `B-145`, item que aponta para outro projeto mora no
+> registro daquele projeto. Segurar aqui nao o conserta — so' mantem este numero alto.
+>
+> **O que sobrevive da preocupacao original:** nada acionavel aqui. Se alguem quiser reduzir
+> os tres checkouts a um no droplet, e' higiene de maquina, nao de politica.
 severity: média — não é exposição em si, é o mecanismo que garante que a exposição volte a divergir.
 dod:
   - uma cópia é declarada canônica, e as outras ou somem ou passam a apontar para ela
