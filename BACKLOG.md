@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 36 · **In flight** 0 · **Closed** 128
+164 items — **Open** 35 · **In flight** 0 · **Closed** 129
 
-### Open (36)
+### Open (35)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -89,7 +89,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-074`](#b-074--deletar-o-environment-cr-direto-deixa-a-application-órfã-e-o-reaper-não-a-alcança----) | Deletar o Environment CR direto deixa a Application órfã, e o reaper não a alcança | `triaged` | média |
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `triaged` | média |
 | [`B-080`](#b-080--os-43-arquivos-de-routes-ainda-são-um-pacote-plano-e-mover-263-símbolos-exportados-é-t3----) | Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3 | `triaged` | alta |
-| [`B-082`](#b-082--check-loopzero-api-vault-projected-token_testsh-reprova-de-forma-intermitente-dentro-do-qualitygates----) | `check-loopzero-api-vault-projected-token_test.sh` reprova de forma intermitente dentro do `quality:gates` | `triaged` | média |
 | [`B-094`](#b-094--a-metade-api-do-find_sec_004-guarda-um-campo-que-ninguém-popula----) | A metade API do `find_sec_004` guarda um campo que ninguém popula | `triaged` | média |
 | [`B-095`](#b-095--a-segunda-cerca-sobre-crs-loopzeroio-renderiza-em-lugar-nenhum----) | A segunda cerca sobre CRs `loopzero.io` renderiza em lugar nenhum | `triaged` | média |
 | [`B-098`](#b-098--duas-policies-do-openbao-são-declaradas-e-nunca-ligadas-a-role-nenhum----) | Duas policies do OpenBao são declaradas e nunca ligadas a role nenhum | `triaged` | média |
@@ -115,7 +114,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (128)
+### Closed (129)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -185,6 +184,7 @@ _None._
 | [`B-077`](#b-077--a-cerca-de-forma-dos-crs-tenant-está-desligada-exatamente-no-cluster-onde-os-crs-vivem---x) | A cerca de forma dos CRs Tenant está desligada exatamente no cluster onde os CRs vivem | `shipped` | alta |
 | [`B-078`](#b-078--o-gate-de-paridade-de-contexto-não-enxerga-scripts-e-não-pode-comparar-quando-um-lado-é-parametrizado---x) | O gate de paridade de contexto não enxerga scripts, e não pode comparar quando um lado é parametrizado | `shipped` | média |
 | [`B-081`](#b-081--as-277-mensagens-de-erro-autoradas-nos-handlers-não-têm-gate-de-vocabulário---x) | As 277 mensagens de erro autoradas nos handlers não têm gate de vocabulário | `shipped` | média |
+| [`B-082`](#b-082--check-loopzero-api-vault-projected-token_testsh-reprova-de-forma-intermitente-dentro-do-qualitygates---x) | `check-loopzero-api-vault-projected-token_test.sh` reprova de forma intermitente dentro do `quality:gates` | `shipped` | média |
 | [`B-083`](#b-083--task-lint-continua-vermelho-por-88-achados-em-api-que-o-b-009-nunca-cobriu---x) | `task lint` continua vermelho por 88 achados em `api/`, que o B-009 nunca cobriu | `shipped` | média |
 | [`B-084`](#b-084--a-cerca-routes-acyclic-não-vigia-o-pacote-pai-e-o-risco-cresce-a-cada-família---x) | A cerca `routes-acyclic` não vigia o pacote pai, e o risco cresce a cada família | `shipped` | alta |
 | [`B-085`](#b-085--dez-arquivos-escrevem-status-fora-do-contrato-em-28-pontos---x) | Dez arquivos escrevem `.status` fora do contrato, em 28 pontos | `shipped` | alta |
@@ -5118,7 +5118,7 @@ dod:
 > em `httpio` afirmava cobrir *"EVERY error the API emits"* e cobria o que um pass-through pode
 > cobrir; foi reescrito para dizer o que de fato mede, e este item guarda o que ele não mede.
 
-## B-082 — `check-loopzero-api-vault-projected-token_test.sh` reprova de forma intermitente dentro do `quality:gates`   [ ]
+## B-082 — `check-loopzero-api-vault-projected-token_test.sh` reprova de forma intermitente dentro do `quality:gates`   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5126,7 +5126,42 @@ suggested_mode: bug
 source: discover-review
 evidence: observado em 2026-08-12. Um run de `task quality:gates` reprovou com `FAIL: infra/helm/loopzero-api: env LOOPZERO_VAULT_ADDR MISSING` e `FAILURES: 1/15`. O mesmo script, rodado isoladamente antes **e** depois da mudança em stash, saiu **0** nas duas vezes; e o run seguinte de `quality:gates` completo saiu **0**. A variável `LOOPZERO_VAULT_ADDR` não está no ambiente nos dois casos, então a diferença não é ambiental de forma óbvia — o teste renderiza o chart e procura a env var no resultado (`infra/tests/secrets/check-loopzero-api-vault-projected-token_test.sh:154,180`).
 why_now: `.claude/rules/testing.md` é categórico — *"testes devem ser determinísticos; se falha de forma intermitente, é um bug e deve ser corrigido ou removido"*. Um gate que reprova uma vez em N bloqueia um push por motivo que não se reproduz, e o custo real disso é ensinar o time a re-rodar até passar, que é como um gate morre.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19, depois que a permissao foi refinada — e a causa nao era nenhuma
+> das minhas duas hipoteses anteriores.**
+>
+> Eu tinha descartado "o teste e' instavel em si" (5/5 isolado) e "corrida entre duas
+> renderizacoes". A causa real so' apareceu lendo o script:
+>
+> ```bash
+> if [ ! -d "${chart_dir}/charts" ] || [ -z "$(ls -A ...)" ]; then
+>   ( cd "${chart_dir}" && helm dependency build ... )
+> ```
+>
+> A condicao pergunta se existe a pasta `charts/`. **Um chart SEM dependencias nunca vai
+> ter uma**, entao ele caia direto no `helm dependency build` — que nao tem o que
+> construir e mesmo assim mexe no **cache compartilhado** do helm. Sob gates concorrentes,
+> essa mutacao e' a contencao.
+>
+> Medido: `infra/helm/loopzero-api/Chart.yaml` declara **zero** dependencias, e
+> `charts/loopzero-api` ja' tem o `loopzero-common-0.3.0.tgz` vendorizado com
+> `repository: file://../loopzero-common`. `helm template` nos dois funciona sem construir
+> nada — 0s, exit 0, 474 linhas.
+>
+> **Conserto:** perguntar pelo bloco `dependencies:` antes de construir. Perguntar pela
+> pasta era a pergunta que nunca se satisfaz.
+>
+> | bala | resultado |
+> |---|---|
+> | causa medida | contencao no cache compartilhado do helm, disparada por `dependency build` num chart sem dependencias |
+> | 10 execucoes consecutivas | **10 PASS / 0 FAIL**, em 0s cada (era 7,4s isolado e 123,89s sob carga) |
+> | varredura de quem mais toca rede | **2 scripts** chamam `helm dependency build`; o irmao (`check-loopzero-api-no-cluster-secrets_test.sh`) opera so' sobre `charts/loopzero-api`, que TEM o tgz, entao a condicao dele e' falsa e ele nunca dispara. **1 de 2 tinha o defeito.** As execucoes de `helmfile` foram medidas e tratadas no B-156 |
+>
+> **Nota sobre o bloqueio:** ele nao era prompt de permissao, era uma deny rule
+> `Read(**/*secret*)` que casava o diretorio inteiro — que contem apenas scripts de teste.
+> Nao contornei trocando de ferramenta, e foi por isso que a causa foi corrigida na regra
+> em vez de driblada: uma regra ampla driblada continuaria barrando toda sessao futura.
 severity: média — não indica defeito de produto; indica um gate em que não se pode confiar de forma binária.
 dod:
   - a causa da intermitência está medida (render em paralelo? cache do helm? dependência de ordem entre os 15 sub-testes?)

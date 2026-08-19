@@ -41,6 +41,21 @@ fail() {
 # Helper: ensure helm deps built (loopzero-common subchart)
 ensure_deps() {
   local chart_dir="$1"
+  # B-082 — a causa da intermitencia, medida em 2026-08-19.
+  #
+  # A condicao abaixo pergunta se existe a pasta `charts/`. Um chart SEM dependencias
+  # nunca vai ter uma, entao ele caia direto no `helm dependency build` — que nao tem o
+  # que construir e mesmo assim mexe no cache COMPARTILHADO do helm. Sob execucao
+  # concorrente dos gates, essa mutacao e' a contencao: este teste reprovou apos 123,89s
+  # cercado de `Adding repo`, e passou em 7,4s rodando isolado no mesmo checkout.
+  #
+  # Medido: `infra/helm/loopzero-api/Chart.yaml` declara ZERO dependencias, e
+  # `charts/loopzero-api` ja' tem o `loopzero-common-0.3.0.tgz` vendorizado — `helm template`
+  # nos dois funciona sem construir nada (0s, exit 0).
+  #
+  # Perguntar pelo bloco `dependencies:` e' a pergunta certa; perguntar pela pasta era a
+  # pergunta que nunca se satisfaz.
+  grep -q '^dependencies:' "${chart_dir}/Chart.yaml" 2>/dev/null || return 0
   if [ ! -d "${chart_dir}/charts" ] || [ -z "$(ls -A "${chart_dir}/charts" 2>/dev/null)" ]; then
     ( cd "${chart_dir}" && helm dependency build >/dev/null 2>&1 ) || true
   fi
