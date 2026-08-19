@@ -8517,6 +8517,27 @@ severity: média — não quebra ambiente, mas é uma guarda de supply-chain que
 dod:
   - está medido se o prazo do ADR-2026-05-12 já venceu, e em que modo o cosign opera hoje
   - o ConfigMap é provisionado pelo caminho declarativo, ou está escrito por que ele não existe
+> **Bala 1 medida 2026-08-19, e a resposta é pior que a pergunta.**
+>
+> | pergunta da DoD | medição |
+> |---|---|
+> | o prazo já venceu? | **sim, em 2026-08-10** — ADR-2026-05-12 + 90d, valor que o próprio script carrega como stub de dry-run (`check-cosign-cutover-deadline.sh:93`). Hoje é 2026-08-19: venceu há **nove dias** |
+> | em que modo o cosign opera? | **keyed** — o deployment vivo em `loopzero-core` não define `LOOPZERO_COSIGN_KEYLESS`, e `config.go:109` documenta que o default `false` é keyed |
+> | o ConfigMap existe? | **não** — `kubectl -n loopzero-system get cm loopzero-cosign-config` → `NotFound`, reconfirmado hoje |
+>
+> **A consequência exata:** o script sai **1 = BLOCK** quando *prazo vencido E
+> ainda keyed*. As duas condições estão satisfeitas **agora**. A guarda não
+> reporta isso porque o objeto que lhe daria entrada nunca existiu — ela não está
+> silenciosa por acidente de imagem quebrada, como o `B-019` supunha; está
+> silenciosa porque nunca teve o que ler.
+>
+> **Bala 2 fica aberta, e não por esforço.** Provisionar o ConfigMap é trivial —
+> é values de chart, o que já o torna T2. O que não é trivial é o efeito: no
+> instante em que ele existir, a guarda passa a **bloquear**, porque a condição de
+> bloqueio é verdade hoje. Isso é decisão de operação — ou se faz o corte para
+> keyless, ou se emenda o prazo no ADR — e não uma linha de YAML que se acrescenta
+> sem avisar ninguém.
+
   - a ausência da entrada deixa de ser silenciosa: o script reprova em vez de não ter o que fazer
 
 ## B-147 — Quatro trabalhos periódicos perderam o agendador e precisam de um   [ ]
