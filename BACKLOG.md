@@ -4178,7 +4178,7 @@ dod:
 >
 > Fechado pela fatia `slice-16`; o campo `status` não acompanhou até esta medição.
 
-## B-078 — O gate de paridade de contexto não enxerga scripts, e não pode comparar quando um lado é parametrizado   [ ]
+## B-078 — O gate de paridade de contexto não enxerga scripts, e não pode comparar quando um lado é parametrizado   [x]
 
 domain: engine-go
 repo: loopzero
@@ -4186,11 +4186,45 @@ suggested_mode: evolve
 source: discover-review
 evidence: medido em 2026-08-12. O `helmfile-context-parity` varre `Taskfile.yml` + `taskfiles/*.yml` e reporta 8 comparadas contra 20 fora de alcance estático. As 12 invocações do `Taskfile.yml` caem em "parametrizadas" porque o `cell.helmfile` declara `requiredEnv`, então nenhuma delas é comparada. E os invocadores em script — `infra/scripts/local/vault-bootstrap-dev.sh:267-268`, `infra/scripts/production/operator-cutover-execute.sh:142,204`, `infra/scripts/openbao/enable-vault-backup.sh:205` — não são varridos.
 why_now: o gate mede menos do que a leitura casual do seu nome sugere. Enquanto 20 de 28 invocações estiverem fora de alcance, a proteção é parcial — e é melhor que isso esteja escrito num item do que subentendido no `Summary()`.
-status: triaged
+status: shipped
 severity: média — o que ele compara, compara certo; o problema é a cobertura.
 dod:
   - os invocadores em script são varridos, ou está escrito por que não são
   - a fração fora de alcance estático é reportada de forma que ninguém a confunda com cobertura
+> **Fechado 2026-08-19 — DoD 2/2, e a tentativa de ampliar a varredura é que produziu a razão.**
+>
+> Remedido: o gate reportava **4** comparadas, não as 8 do item — a cobertura
+> piorou desde 12/08.
+>
+> **Bala 1, pela via que a própria DoD oferece ("ou está escrito por que não são"),
+> e a razão foi medida, não suposta.** Eu ampliei a varredura para os scripts
+> primeiro, e a ampliação se refutou em duas medições:
+> (1) as quatro invocações parametrizam **o contexto e o caminho** (`-f "$HELMFILE_PATH"`,
+> `-f "${REPO_ROOT}/..."`), então não comprariam comparação alguma; e
+> (2) o parser exige `-f` e `--kube-context` na mesma janela, e invocação em shell
+> quebra em continuações — com os scripts incluídos, a árvore carregava **37**
+> ocorrências e a varredura pareava **28**, com 9 caindo em silêncio. Meio-varrer
+> dá um denominador que não é nem 24 nem 28, e denominador instável é pior que
+> escopo declarado. O escopo está escrito em `globsPadrao`, com esses números.
+>
+> **Bala 2 — entregue.** O `Summary()` passou a dizer **"4 of 24 invocation(s)
+> compared"**. Antes dava os dois números sem nunca dizer que um é do outro.
+>
+> **Três defeitos meus, todos pegos por verificação existente ou por assertion
+> apertada:** (a) minha primeira ampliação acusou dois helmfiles de "não declarar
+> contexto" quando o gate apenas não resolvia `$VAR` no caminho — acusação grave
+> inventada por caminho irresolvível, agora classificada como fora de alcance;
+> (b) o token `helmfile` aparece também no caminho, então em script a mesma
+> ocorrência era pareada uma vez por linha — 36 pareamentos para 24 ocorrências,
+> pego pela reconciliação do `TestCheck_RealTree`, que existe para isso; (c) meu
+> próprio teste da fração passou pelo motivo errado, casando `" of "` dentro de
+> `"out of static reach"` — apertado para exigir a fração literal.
+>
+> O contador independente do teste passou a ler `globsPadrao` em vez de repetir a
+> lista. O comentário que ele substitui já avisava: duas listas que precisam
+> concordar acabam discordando, e aí a reconciliação compara duas árvores
+> diferentes.
+
 
 > Registrado 2026-08-12 pela revisão independente da fatia slice-3 (achado H4 residual + M3).
 > Relacionado: `cell.helmfile.yaml.gotmpl` é reusado pelo plano de BUILD em
