@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 22 · **In flight** 0 · **Closed** 142
+165 items — **Open** 22 · **In flight** 0 · **Closed** 143
 
 ### Open (22)
 
@@ -76,7 +76,6 @@ consequência do escopo per-repo declarado acima.
 |---|---|---|---|
 | [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) 🔒 | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `triaged` | — |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
-| [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `triaged` | média |
 | [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
 | [`B-054`](#b-054--o-api-roda-dois-circuit-breakers-escritos-independentemente-sobre-o-mesmo-pool-postgres----) | O `api` roda dois circuit breakers escritos independentemente sobre o mesmo pool Postgres | `triaged` | média |
 | [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `triaged` | média |
@@ -96,12 +95,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `triaged` | — |
 | [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta |
+| [`B-165`](#b-165--o-ambiente-standalone-public-ficou-sem-borda-que-o-sirva----) | O ambiente `standalone-public` ficou sem borda que o sirva | `raw` | baixa |
 
 ### In flight (0)
 
 _None._
 
-### Closed (142)
+### Closed (143)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -127,6 +127,7 @@ _None._
 | [`B-021`](#b-021--o-webhook-do-github-está-desligado-falta-o-segredo-hmac---x) | O webhook do GitHub está desligado: falta o segredo HMAC | `shipped` | alta |
 | [`B-023`](#b-023--um-helmfile-sync-sem-as-variáveis-grava-marcador-por-cima-de-credencial---x) | Um `helmfile sync` sem as variáveis grava marcador por cima de credencial | `shipped` | — |
 | [`B-024`](#b-024--os-seeds-herdam-o-contexto-do-kubectl-e-culpam-o-recurso-errado---x) | Os seeds herdam o contexto do kubectl e culpam o recurso errado | `shipped` | média |
+| [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `shipped` | média |
 | [`B-026`](#b-026--as-células-divergem-a-plataforma-só-era-instalada-na-primeira---x) | As células divergem: a plataforma só era instalada na primeira | `shipped` | alta |
 | [`B-027`](#b-027--o-diagnóstico-do-cli-manda-verificar-um-endereço-que-não-existe---x) | O diagnóstico do CLI manda verificar um endereço que não existe | `killed` | baixa ↑ |
 | [`B-028`](#b-028--17-portas-alcançáveis-da-internet-fora-de-qualquer-lista---x) 🔒 | 17 portas alcançáveis da internet fora de qualquer lista | `shipped` | P0 |
@@ -1563,7 +1564,7 @@ suggested_mode: review
 source: discover-live-test
 evidence: medido em 2026-08-10 ao revalidar a topologia. `app.loopzero.example`, `auth.loopzero.example` e `cloud.loopzero.example` — **sem** o sufixo `-dev` — têm bloco próprio no Caddyfile e não servem nada: `app` devolve **502** porque encaminha para `localhost:5173`, um servidor Vite de desenvolvimento que não está rodando (`ss -ltn` na 5173 devolve zero sockets); `auth` e `cloud` devolvem **404**. Os três estão declarados em `infra/quality/proxy-exposure.txt`, e a declaração de `app.loopzero.example /sessions/whoami` diz literalmente *"now consumer-less, delete after the new bundle"*. O `setup-dev-public-dns.sh` só gerencia `auth-dev` e `app-dev`, então nem DNS eles têm por parte deste repositório.
 why_now: apareceu ao medir para onde a borda encaminha, e não por sondagem de host — a sonda `loopzero-ops leak live` só cobre `app-dev` e `auth-dev`, então estes três nunca foram medidos. O `app.loopzero.example` é o mais relevante: ele encaminha para um servidor de **desenvolvimento** (Vite), e o Red Team já fechou dois achados sobre justamente isso (loopzero-cloud#66 e #141, sobre o bundle de produção e o bloqueio de caminhos de dev-server). Um bloco vivo apontando para o Vite reabre a mesma superfície se alguém subir a 5173 na máquina.
-status: triaged
+status: shipped
 delivered_in: 5c5595b3a  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — hoje não servem nada, então não vazam. O risco é o bloco existir e alguém subir o Vite: aí `app.loopzero.example` passa a servir código-fonte na internet, que é exatamente o que o #66 fechou.
 measurement_2026_08_18: |
@@ -1634,6 +1635,36 @@ dod:
   - a declaração que diz "delete after the new bundle" é resolvida em vez de continuar descrevendo uma intenção de meses atrás
 
 > Registrado 2026-08-10 durante a revalidação completa da topologia.
+
+> **Decidido e entregue 2026-08-19: os tres foram REMOVIDOS.**
+>
+> O que fechou a decisao foi o proprio comentario do Caddyfile: os blocos eram "legacy,
+> reserved for prod cutover" e encaminhavam para as MESMAS portas locais dos blocos `-dev`
+> — 5173 (Vite), 3002 e 14433. Tres hostnames de producao servindo instancias de
+> desenvolvimento, o de identidade entre eles.
+>
+> Nao serviam o cutover que os justificava: um cutover real apontaria para upstreams de
+> producao, nao para portas de dev da maquina do operador — teriam de ser reescritos de
+> qualquer forma. Enquanto isso, `app.loopzero.example` ficava a um `npm run dev` de servir o
+> dev-server na internet sob nome de producao, que e' o que o Red Team fechou duas vezes
+> (`loopzero-cloud#66` e `#141`).
+>
+> **Quarta bala:** a declaracao "delete after the new bundle" saiu junto com as cinco
+> linhas do inventario. `proxy-exposure` continua PASS (19 proxies).
+>
+> Os dois scripts que verificavam TLS dos seis hostnames passam a verificar os tres `-dev`:
+> manter os removidos ali seria criar o gate-que-nao-pode-passar que o comentario do
+> proprio `caddy-up-dev-public.sh` descreve.
+>
+> **Consequencia registrada, nao escondida:** o ambiente `standalone-public` usa esses
+> nomes e e' o default de `task infra:install:core-dashboard-only`. Ficou sem borda.
+> Registrado como **B-165** em vez de alargar o escopo aqui — o proprio doc de operacao ja'
+> o rotula "(legacy)", e o canonico e' `dev-public`.
+>
+> **Aplicar na borda e' etapa de operador** (`caddy-up-dev-public.sh`), separada e
+> deliberada; este commit muda o arquivo canonico. A direcao e' de reducao de exposicao.
+>
+> Registro T2: `MEET-ASYNC-AMENDMENT-2026-08-19-remove-legacy-prod-hostnames.md`.
 
 ## B-026 — As células divergem: a plataforma só era instalada na primeira   [x]
 
@@ -10496,3 +10527,18 @@ pare de ser lido como total enquanto a decisao nao vem.
 
 
 
+
+## B-165 — O ambiente `standalone-public` ficou sem borda que o sirva   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-19 ao fechar o `B-025`. Os tres hostnames sem sufixo (`app|cloud|auth.loopzero.example`) sairam do `infra/local/Caddyfile` porque serviam processos de desenvolvimento sob nome de producao. O ambiente `infra/helmfile/environments/standalone-public.yaml` usa exatamente esses nomes (`uiBaseUrl: https://app.loopzero.example`, linha 76) e e o **default** de `task infra:install:core-dashboard-only` (`taskfiles/infra.yml:141`). Sem os blocos, esse caminho nao tem borda.
+why_now: a remocao do `B-025` foi deliberada e esta registrada em `MEET-ASYNC-AMENDMENT-2026-08-19-remove-legacy-prod-hostnames.md`, mas o acoplamento com o ambiente nao estava no escopo daquele DoD. Registrar e o que impede que um default documentado quebre em silencio — `docs/operations/local-public-dashboard.md:216` ja rotula o ambiente como "(legacy)", e o canonico e `dev-public`.
+status: raw
+severity: baixa — o ambiente ja era legado e o canonico e outro; o custo e um default de task que aponta para um caminho que nao serve mais.
+dod:
+  - esta decidido se `standalone-public` e aposentado junto com os hostnames ou se ganha borda propria
+  - se aposentado: o default de `task infra:install:core-dashboard-only` passa a `dev-public`, e o doc de operacao acompanha
+  - nenhuma task tem como default um ambiente sem borda que o sirva

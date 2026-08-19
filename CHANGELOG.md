@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A verificacao de que o resumo de prontidao e' a ultima escrita antes de salvar passou a valer para os seis controladores, e nao para um.** Ela seguia so' a funcao onde a escrita acontece, e a forma usada por sete controladores registra o resumo no fim do ciclo, num nivel acima — para a verificacao antiga isso parecia ausencia. Medido depois da correcao: 33 pontos de escrita, 33 cobertos (B-138)
 
 ### Removed
+- **loopzero:** Removidos três endereços públicos que serviam instâncias de desenvolvimento sob nomes reservados para produção — incluindo o de login (B-025)
 - **loopzero:** Removida uma verificação de variáveis de ambiente que nunca chegava a rodar — a proteção equivalente continua ativa no ponto onde o arquivo de serviços é lido (B-094)
 - **A ferramenta que conferia arquivos de build escritos pelo usuário foi retirada.** Ela não era mais acionada por caminho nenhum: a possibilidade de o usuário fornecer o próprio arquivo de build tinha sido removida antes, e hoje a plataforma gera esse arquivo sozinha. Como a ferramenta não executava, retirá-la não muda comportamento algum (B-157)
 - **O pacote "tudo em um" da plataforma foi retirado.** Ele não instalava: qualquer tentativa de gerar os manifestos falhava, e assim estava desde junho, sem ninguém notar — nenhuma verificação o exercitava. Como não instalava, ninguém podia estar usando. A decisão de projeto que ele encarnava continua registrada; o que saiu foi a implementação que não funcionava (B-073)

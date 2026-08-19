@@ -107,8 +107,10 @@ verify_certs() {
   # nao pode passar e um gate que ninguem roda, e foi assim que o webhook do GitHub
   # ficou semanas entregando contra `tls: internal error` sem que nada avisasse.
   # A carga do webhook vive em `app-dev`, que ja tem o handle /api/v1/webhooks/github.
+  # B-025 (2026-08-19): os tres hosts SEM sufixo sairam do Caddyfile — serviam processos de
+  # desenvolvimento sob nome de producao. Verificar TLS deles aqui passaria a reprovar sempre,
+  # que e' exatamente a forma de gate-que-nao-pode-passar descrita no comentario acima.
   local hosts=(
-    auth.loopzero.example app.loopzero.example cloud.loopzero.example
     auth-dev.loopzero.example app-dev.loopzero.example
   )
   # tls_ok if openssl handshake succeeds (cert issued + chain valid).

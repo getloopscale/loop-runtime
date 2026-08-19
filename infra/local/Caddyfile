@@ -63,64 +63,22 @@
   }
 }
 
-# Dashboard (vite dev server with HMR) + same-origin Kratos proxy
-# Per 2026-06-01 security-first mandate: Kratos session endpoints (/sessions/*,
-# /self-service/*) reverse-proxied via app.loopzero.example so XHR from the dashboard
-# is SAME-ORIGIN — eliminates SameSite=Lax cross-subdomain cookie ambiguity
-# entirely. Cookies travel unconditionally on same-origin XHR.
+# ============================================================================
+# Os hosts SEM sufixo (`app|cloud|auth.loopzero.example`) foram REMOVIDOS em 2026-08-19 (B-025).
 #
-# Host header REWRITTEN to auth.loopzero.example so Kratos sees its expected host
-# (matching serve.public.base_url and CORS allowed_origins). Flow.ui.action
-# still emits auth.loopzero.example absolute URLs — those are submitted via top-level
-# form POST (which carries Lax cookies on cross-origin top-level navigation
-# without issue), and the OIDC callbacks land on auth.loopzero.example (matching
-# GitHub/Google OAuth Client redirect_uri registration).
-app.loopzero.example {
-  # WebSocket route MUST come first to win the match priority
-  @ws {
-    header Connection *Upgrade*
-    header Upgrade websocket
-  }
-  reverse_proxy @ws localhost:5173
-
-  # Kratos session endpoints — same-origin proxy
-  # Narrowed to the single endpoint the dashboard calls — see the app-dev block.
-  handle /sessions/whoami {
-    reverse_proxy localhost:14433 {
-      header_up Host auth.loopzero.example
-    }
-  }
-  handle /sessions/* {
-    respond "Not Found" 404
-  }
-  handle /self-service/* {
-    reverse_proxy localhost:14433 {
-      header_up Host auth.loopzero.example
-    }
-  }
-
-  # Dashboard SPA (everything else → vite)
-  reverse_proxy localhost:5173
-  encode gzip
-}
-
-# Cloud auth/billing service
-cloud.loopzero.example {
-  reverse_proxy localhost:3002
-  encode gzip
-  # Stripe webhook posts here; Caddy needs to pass through raw body for signature
-  # validation (cloud's billing webhook handler reads request body before parsing
-  # — Stripe-Signature HMAC depends on the exact bytes received).
-  request_body {
-    max_size 1MB
-  }
-}
-
-# Kratos public (browser-facing login/registration flows)
-auth.loopzero.example {
-  reverse_proxy localhost:14433
-  encode gzip
-}
+# Eles eram descritos como "legacy, reserved for prod cutover", mas encaminhavam para as
+# MESMAS portas locais dos blocos `-dev` abaixo: 5173 (Vite), 3002 e 14433. Ou seja, tres
+# hostnames de producao servindo instancias de desenvolvimento — e o de identidade entre eles.
+# Medido ao vivo: `cloud` devolvia 401 e `auth` 200, os dois VIVOS.
+#
+# Nao serviam o cutover que justificava guarda-los: um cutover real apontaria para upstreams
+# de producao, nao para portas de dev da maquina do operador — teriam de ser reescritos de
+# qualquer forma. Enquanto isso, `app.loopzero.example` ficava a um `npm run dev` de servir o
+# dev-server na internet sob nome de producao, que e' o que o Red Team ja' fechou duas vezes
+# (loopzero-cloud#66 e #141).
+#
+# Registro: knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-19-remove-legacy-prod-hostnames.md
+# ============================================================================
 
 # ============================================================================
 # DEV-PUBLIC env (plan 2026-06-04-dev-public-domain-canonicalization, T1.1)
