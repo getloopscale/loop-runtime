@@ -4883,8 +4883,18 @@ dod:
 > push. Se a falha veio de lá, o alvo da investigação é o paralelismo entre as três
 > pernas, não o script.
 >
-> Quatro execuções completas de `quality:all` foram disparadas para medir a
-> frequência. Sem a leitura do script, corrigir seria adivinhar.
+> **O experimento das quatro execuções falhou como experimento, e o motivo fui eu.**
+> Rodei `quality:all` quatro vezes enquanto continuava editando gates no mesmo
+> repositório. Três das quatro reprovaram por causa das MINHAS edições em voo — a
+> run 1 pegou o `docsrefs` no meio da mudança, a run 2 pegou testes em progresso, e
+> a run 4 pegou a janela em que um arquivo estava corrompido por uma restauração
+> minha malfeita. Só a **run 3** rodou contra árvore estável, e passou.
+>
+> Um ponto de dado não diz nada sobre intermitência, e apresentar "3 de 4
+> reprovaram" como evidência da instabilidade seria inventar a medição: as falhas
+> eram todas minhas. A lição, para quem retomar: **a sonda de flakiness precisa de
+> árvore parada**. Sem a leitura do script, corrigir seria adivinhar de qualquer
+> forma.
 
   - se for dependência de ordem, ela é eliminada e não contornada com retry
 
