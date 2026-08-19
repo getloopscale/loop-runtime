@@ -8592,6 +8592,35 @@ severity: média — nada quebra; o que está em aberto é se o alvo ou a árvor
 evidence: medido 2026-08-17 ao fechar o `B-106`, com a pirâmide **derivada** da árvore pela primeira vez: **989 arquivos — unit 73,5%, integração 15,7%, e2e 10,8%**. O alvo do ADR D7 é `e2e ≤ 5%`. Ele foi escolhido quando `infra/quality/test-inventory.json` **declarava 0,1%** — isto é, calibrado contra um número que descrevia 375 de 988 arquivos e excluía a suíte `infra/tests/e2e` inteira.
 why_now: o `B-106` tornou o número visível pela primeira vez, e fazer o gate reprovar contra o alvo do ADR hoje criaria uma trava que o repositório não consegue satisfazer — a mesma recusa do `B-127` (`HARD`) e do `B-119` (enforcement total). Enquanto isso, a catraca já impede piora.
 status: triaged
+
+> **Medido 2026-08-19 — e a medicao muda a PERGUNTA, nao a resposta.**
+>
+> Hoje: **1044 arquivos — unit 74,6% / integracao 15,1% / e2e 10,2%**.
+>
+> **A comparacao com o alvo do ADR e' entre coisas diferentes.** A faixa `e2e` do gate
+> agrega quatro subarvores, e duas delas nao sao teste de jornada:
+>
+> | subarvore | arquivos | e' jornada de usuario? |
+> |---|---:|---|
+> | `infra/tests/e2e/` | 51 | sim |
+> | `infra/tests/livetest/` | 38 | sim |
+> | `infra/tests/chaos/` | 7 | **nao** — resiliencia |
+> | `infra/tests/performance/` | 23 | **nao** — carga |
+>
+> **30 dos ~107 medem outro eixo.** A piramide classica modela unit/integracao/e2e por
+> *escopo de execucao*; caos e carga sao *tipo de estimulo*, e cabem em qualquer nivel. Sem
+> eles, a faixa de jornada cai para ~7,4% — ainda acima de 5%, mas a comparacao passa a ser
+> entre grandezas comparaveis.
+>
+> **Isto nao e' ajustar o numero ate' passar**, e a prova e' que ele continua nao passando.
+> E' notar que `e2e ≤ 5%` foi escrito sobre um modelo de tres faixas, e o gate mede quatro
+> coisas em tres.
+>
+> **O que continua sendo do sponsor:** se 7,4% de jornada e' certo para um produto cujo
+> objeto E' implantar. O codigo do gate ja' registra que o alvo original foi calibrado
+> contra ficcao (0,1% afirmado vs 10,8% real), e essa decisao nao sai de medicao — sai de
+> quem define a estrategia de teste. O que a medicao entrega e' o numero real, decomposto,
+> na frente dela.
 dod:
   - está decidido se `e2e ≤ 5%` continua sendo o alvo, com o número real na frente, ou se o alvo muda — e a decisão cita o ADR D7
   - se o alvo continuar, existe caminho declarado para sair de 10,8%; se mudar, o ADR é emendado
