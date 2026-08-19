@@ -48,7 +48,7 @@ If any step above fails → STOP. Surface to Claude before proceeding.
 > canonical `task k3d:secrets:bootstrap` + `helmfile sync --selector
 > name=openbao-init` pipeline ALREADY provisions ~80% of what J-22
 > Transit needs out-of-the-box (transit engine enabled, master keys
-> created, `loopzero-api-transit-encrypt` policy written). This runbook
+> created, a policy com permissoes de transit escrita — hoje a `loopzero-api`). This runbook
 > previously duplicated those steps; the duplication is now removed.
 > Only the AppRole-specific configuration remains — per J-22 plan T2.1
 > ADR which chose AppRole over K8s auth.
@@ -56,7 +56,7 @@ If any step above fails → STOP. Surface to Claude before proceeding.
 ### 1.1 — Bootstrap OpenBao server + base provisioning (delegated)
 
 Run the canonical pipeline — installs OpenBao chart + does Shamir init
-+ provisions transit engine + loopzero-api-transit-encrypt policy + K8s
++ provisions transit engine + a policy `loopzero-api` (transit) + K8s
 auth mounts (all idempotent):
 
 ```bash
@@ -99,12 +99,13 @@ kubectl --context k3d-loopzero-secrets -n secrets-system get secret openbao-tls 
 # Enable AppRole auth method (idempotent — bao returns "already enabled" OK)
 bao auth enable approle 2>&1 | grep -v "already enabled" || true
 
-# Write the J-22 AppRole transit policy. NOTE: this is a NARROWER variant
-# of the existing `loopzero-api-transit-encrypt` policy provisioned by
-# openbao-init. J-22 plan T2.1 + EC-06 self-heal requires `create` on
-# transit/keys/loopzero-tenants-* — openbao-init's existing policy uses `+`
-# wildcard which is too broad for the per-tenant key path convention.
-# We add the dedicated AppRole-bound policy alongside the K8s-auth one.
+# Write the J-22 AppRole transit policy.
+#
+# NOTA 2026-08-19 (B-098): este bloco descrevia esta policy como variante MAIS ESTREITA da
+# `loopzero-api-transit-encrypt`, cujo curinga `+` era "too broad for the per-tenant key path
+# convention". Aquela policy foi REMOVIDA justamente por isso — era larga, e nenhum role a
+# carregava. A policy de K8s-auth que hoje concede transit e' a `loopzero-api`, ja' no escopo
+# estreito `loopzero-tenants-*`. Esta continua sendo a variante ligada por AppRole.
 #
 # CANONICAL key-name format: `loopzero-tenants-<tenantID>` (hyphen-joined
 # single segment). LIVE-caught 2026-06-10 J-22 walkthrough: an earlier

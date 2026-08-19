@@ -151,6 +151,9 @@ func Check(cfg Config) (Outcome, error) {
 		failures = append(failures, "Isolation: external-secrets-broker role LEAKED to k8s-core (isolation broken)")
 	}
 
+	// B-098: policy declarada que nenhum role carrega.
+	failures = append(failures, checarPoliciesOrfas(string(rendered))...)
+
 	if len(failures) > 0 {
 		return Outcome{Failures: failures}, ErrViolations
 	}

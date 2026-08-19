@@ -199,7 +199,7 @@ export BAO_ADDR=https://127.0.0.1:8200 BAO_SKIP_VERIFY=true BAO_TOKEN=$ROOT_TOKE
 bao write auth/kubernetes/role/test-reader \
   bound_service_account_names=test-vault-reader \
   bound_service_account_namespaces=default \
-  policies=loopzero-api-read \
+  policies=eso-read \
   ttl=24h
 bao kv put secret/loopzero/test/hello message='Cross-cluster auth works!'
 "
@@ -281,7 +281,7 @@ bao kv get secret/loopzero/test/hello
 
 This validates the contract LoopZero platform will use:
 1. Replace SA `test-vault-reader` → real `loopzero-api` SA
-2. Replace test role → `loopzero-api-read` / `loopzero-api-write` roles per service
+2. Replace test role → `eso-read` / `loopzero-api` roles per service
 3. Replace port-forward → DOKS LoadBalancer or VPC peering
 4. CA cert from cert-manager already prod-pattern
 

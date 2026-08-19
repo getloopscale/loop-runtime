@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 23 · **In flight** 0 · **Closed** 141
+164 items — **Open** 22 · **In flight** 0 · **Closed** 142
 
-### Open (23)
+### Open (22)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -86,7 +86,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `triaged` | média |
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `triaged` | média |
 | [`B-080`](#b-080--os-43-arquivos-de-routes-ainda-são-um-pacote-plano-e-mover-263-símbolos-exportados-é-t3----) | Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3 | `triaged` | alta |
-| [`B-098`](#b-098--duas-policies-do-openbao-são-declaradas-e-nunca-ligadas-a-role-nenhum----) | Duas policies do OpenBao são declaradas e nunca ligadas a role nenhum | `triaged` | média |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
 | [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `triaged` | média |
@@ -102,7 +101,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (141)
+### Closed (142)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -191,6 +190,7 @@ _None._
 | [`B-095`](#b-095--a-segunda-cerca-sobre-crs-loopzeroio-renderiza-em-lugar-nenhum----) | A segunda cerca sobre CRs `loopzero.io` renderiza em lugar nenhum | `shipped` | média |
 | [`B-096`](#b-096--o-chart-publicado-do-loopzero-api-renderiza-uma-sa-que-as-políticas-de-admissão-não-isentam---x) | O chart publicado do `loopzero-api` renderiza uma SA que as políticas de admissão não isentam | `shipped` | média |
 | [`B-097`](#b-097--o-cli-documenta-um-kubectl-patch-que-a-nova-cerca-nega---x) | O CLI documenta um `kubectl patch` que a nova cerca nega | `shipped` | baixa |
+| [`B-098`](#b-098--duas-policies-do-openbao-são-declaradas-e-nunca-ligadas-a-role-nenhum----) | Duas policies do OpenBao são declaradas e nunca ligadas a role nenhum | `shipped` | média |
 | [`B-099`](#b-099--a-policy-corrigida-não-alcança-a-identidade-que-cria-a-chave-e-o-bootstrap-a-sobrescreve---x) | A policy corrigida não alcança a identidade que cria a chave, e o bootstrap a sobrescreve | `shipped` | alta |
 | [`B-100`](#b-100--o-gate-de-contrato-trabalha-por-nome-de-tag-nos-dois-lados-e-chama-campo-homônimo-de-consumidor---x) | O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor | `shipped` | média |
 | [`B-101`](#b-101--quatro-testes-herméticos-de-seed-queimam-390s-de-relógio-e-é-isso-que-mantém-a-suíte-fora-do-push---x) | Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push | `shipped` | média |
@@ -6403,7 +6403,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-13 na fatia `slice-17`. `infra/helm/openbao-init/values.yaml` declara quatro entradas com nome parecido: `loopzero-api-read` (:126), `loopzero-api-transit-encrypt` (:131), `loopzero-api` (:188 — a policy) e `loopzero-api` (:328 — um **role** no mount `k8s-core`). Só a terceira é referenciada: o role em `:334-335` lista `policies: [loopzero-api]`. **nenhum role neste arquivo as liga** — treze roles declaram `policies:`, e o único que nomeia uma policy `loopzero-api-*` é o de k8s-core, que liga `loopzero-api`. (A redação anterior dizia que um `grep` repo-wide devolvia zero; **falso** — `docs/operations/vault-cluster-local-runbook.md:202` liga `loopzero-api-read` a um role, e há outras menções em runbooks e auditorias. A afirmação certa é sobre este arquivo, e é ela que o item precisa.) Duas policies existem, são aplicadas pelo `helmfile sync`, e nenhuma identidade as carrega.
 why_now: ao corrigir o `B-072` eu apliquei o patch na policy errada — `loopzero-api-transit-encrypt`, porque o padrão casou primeiro. Só o teste novo pegou. Quatro nomes parecidos, dois deles inertes, e um que é um role: quem for editar a policy do `api` tem quatro candidatos e três estão errados.
-status: triaged
+status: shipped
 severity: média — não há risco de segurança (uma policy sem role não concede nada a ninguém); o custo é o mesmo do `B-055` e do `B-045`, dívida que parece cobertura, e neste caso já custou um patch no lugar errado.
 dod:
   - está decidido se as duas são removidas ou ligadas a alguma identidade
@@ -6434,6 +6434,28 @@ dod:
 > Registrado 2026-08-13 pela fatia `slice-17`. Quarta instância nesta série do padrão *declarado e
 > nunca ligado* — as outras: `B-055` (helper sem chamador), `B-045` (gates que não rodam), `B-094`
 > (regra que percorre campo não populado).
+
+> **Decidido e entregue 2026-08-19: removidas.** A medicao que faltava mudou a leitura
+> do item.
+>
+> Elas nao eram resto neutro — eram versoes **anteriores e mais largas** da `loopzero-api`
+> corrente: `transit/{encrypt,decrypt}/+` contra `loopzero-tenants-*`, e `secret/data/loopzero/+/*`
+> (a arvore inteira do tenant) contra `+/api/*`. O erro simetrico ao do B-072 — ligar a
+> orfa em vez da corrente — nao concederia de menos, concederia **demais**.
+>
+> O proprio `openbao-transit-cutover-runbook.md` ja' dizia, em junho, que o curinga `+`
+> era *"too broad for the per-tenant key path convention"*. A remocao so' executa o que
+> aquele texto ja' constatava.
+>
+> Ha' rastro de renomeação: a auditoria LIVE de 2026-06-03 registra o role `eso` ligado a
+> `loopzero-api-read`; hoje ele liga `eso-read`, que cobre o mesmo. A policy velha nao
+> acompanhou.
+>
+> **Terceira bala fechada:** o gate `openbao-init-auth-mounts` passou a recusar policy
+> declarada que nenhum role carregue. Ele reprovava a arvore real, nomeando as duas, antes
+> da remocao. Runbooks que as citavam foram repontados para os sucessores.
+>
+> Registro T2: `MEET-ASYNC-AMENDMENT-2026-08-19-remove-orphan-openbao-policies.md`.
 
 ## B-099 — A policy corrigida não alcança a identidade que cria a chave, e o bootstrap a sobrescreve   [x]
 
