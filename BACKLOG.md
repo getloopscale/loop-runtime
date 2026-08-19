@@ -3927,6 +3927,41 @@ severity: média — a órfã não corrompe nada, mas gera exit 5 em `loopzero p
 dod:
   - deletar o Environment CR direto passa a limpar a Application, ou a remover a tupla do `Tenant.Spec.Environments` para o reaper alcançar
   - o parágrafo do `CLAUDE.md` é corrigido: descreve o caminho que ainda quebra, com citações que resolvem
+> **Diagnóstico 2026-08-18 — confirmado, T2, código NÃO escrito.**
+>
+> **Bala 2 já está feita.** A linha do `CLAUDE.md` sobre Application órfã foi
+> reescrita: hoje ela se declara a forma corrigida, separa o que o reaper cobre do
+> que não cobre, e nomeia este item como a lacuna restante. Citações resolvem.
+>
+> **Bala 1 confirmada.** Em `reconcileDelete` a única menção a Tenant é uma
+> checagem de **label do namespace** — não há escrita em `Tenant.Spec.Environments`
+> nem toque na Application. A tupla fica no spec, `expectedApplicationNames`
+> continua protegendo a Application, e o prune nunca a alcança.
+>
+> **Por que não implementei: `.claude/rules/pre-release-governance.md` classifica
+> "controller reconcile logic" como T2** — exige reunião antes do código. Segue o
+> diagnóstico com as alternativas medidas, que é o que a reunião precisa.
+>
+> **Fato que decide o desenho:** `Tenant.Spec.Environments` é **escrito** apenas por
+> `api/internal/k8s/tenant_cr_manager.go`. Os três arquivos do operator que o citam
+> (`tenant_gitops.go`, `tenant_harbor.go`, `tenant_controller.go`) apenas **leem**.
+> O `api` é o único escritor do spec.
+>
+> | opção | o que faz | custo de fronteira |
+> |---|---|---|
+> | **A** (DoD) | `reconcileDelete` remove a tupla do `Tenant.Spec.Environments` | cria um **segundo escritor** do spec, do lado do operator — hoje só o `api` escreve |
+> | **B** (DoD) | `reconcileDelete` deleta a Application | cruza a posse declarada no ADR `2026-08-12-argocd-application-ownership`: quem cria e possui a Application é o reconciler de Tenant |
+> | **C** (não estava no item) | `expectedApplicationNames` deixa de proteger Application cujo **Environment CR não existe mais** | nenhum escritor novo; o prune já é do reconciler de Tenant, que passaria a consultar um fato a mais |
+>
+> **C é viável e barata:** os dois controllers rodam no MESMO binário
+> (`operators/cmd/tenant-operator/main.go:257` e `:281`, mesmo manager), então
+> listar Environment CRs é leitura local. Ela também conserta o caso geral — órfã
+> por qualquer causa, não só por deleção direta — enquanto A e B consertam só o
+> caminho que alguém lembrou de instrumentar.
+>
+> Recomendação para a reunião: **C**, com A como alternativa se a reunião preferir
+> que o spec seja a única fonte de verdade do que é esperado.
+
   - o comentário em `tenant_gitops.go:352-355`, que registra que `preview_controller.go:609` afirma uma propriedade que o `api` nunca ligou, é resolvido junto
 
 > Registrado 2026-08-12 ao escrever o ADR do `B-050`.
