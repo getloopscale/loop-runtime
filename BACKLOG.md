@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-158 items — **Open** 43 · **In flight** 0 · **Closed** 115
+160 items — **Open** 45 · **In flight** 0 · **Closed** 115
 
-### Open (43)
+### Open (45)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -117,6 +117,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-156`](#b-156--um-teste-de-chart-depende-de-rede-e-reprova-o-portao-de-entrega-sob-carga----) | Um teste de chart depende de rede e reprova o portao de entrega sob carga | `triaged` | — |
 | [`B-157`](#b-157--uma-ferramenta-com-imagem-config-e-testes-não-é-invocada-por-caminho-nenhum----) | Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum | `triaged` | média |
 | [`B-158`](#b-158--o-registro-que-o-loop-inteiro-le-nao-e-validado-por-nada----) | O registro que o loop inteiro le' nao e' validado por nada | `triaged` | — |
+| [`B-159`](#b-159--o-checklist-manda-escrever-o-changelog-num-arquivo-que-nao-existe----) | O checklist manda escrever o CHANGELOG num arquivo que nao existe | `triaged` | — |
+| [`B-160`](#b-160--a-guarda-de-comandos-junta-pedacos-de-comandos-diferentes-e-bloqueia-o-inocente----) | A guarda de comandos junta pedacos de comandos diferentes e bloqueia o inocente | `triaged` | media |
 
 ### In flight (0)
 
@@ -9328,5 +9330,56 @@ o item existe para descrever.
 o registro que decide o que o sistema faz em seguida. Um verde sobre nada e' indistinguivel
 de um verde sobre algo — foi o defeito do B-040, do B-127 e do B-128, e aqui ele reaparece um
 nivel acima: nao no que os gates medem, mas em QUEM os manda medir.
+## B-159 — O checklist manda escrever o CHANGELOG num arquivo que nao existe   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-19. `CLAUDE.md:19` diz que "the CHANGELOG live[s] in the UMBRELLA (`../CHANGELOG.md`)" e `CLAUDE.md:243` repete na lista de pre-conclusao: "CHANGELOG entry in the UMBRELLA (../CHANGELOG.md)". `ls ../CHANGELOG.md` -> **nao existe**. O que existe e' `CHANGELOG.md` neste repo, com 1,16 MB e **227 commits desde 2026-08-01**.
+why_now: bati nisso ao fechar o B-138 — segui a instrucao, o arquivo nao estava la', e o commit quase saiu sem entrada de CHANGELOG. Nao e' ambiguidade de redacao: a instrucao nomeia um caminho que nao resolve, e a pratica esmagadora do repositorio faz o oposto do que ela manda.
+status: triaged
+dod:
+  - o `CLAUDE.md` nomeia o arquivo que de fato recebe as entradas, ou o arquivo do umbrella passa a existir e a migracao esta' decidida
+  - a lista de pre-conclusao e o paragrafo da linha 19 dizem a MESMA coisa — hoje dizem a mesma coisa errada, o que e' consistencia sem verdade
+  - se a decisao for manter o CHANGELOG local, o texto diz por que os OUTROS artefatos de ciclo ficam no umbrella e este nao
+
+**Por que nao consertei junto.** Escolher entre "corrigir o texto" e "criar o arquivo no
+umbrella e migrar 1,16 MB" e' decisao de quem mantem o contrato do workspace, nao consequencia
+de uma medicao. As duas fecham o dod e tem custos muito diferentes.
+
+## B-160 — A guarda de comandos junta pedacos de comandos diferentes e bloqueia o inocente   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+severity: media — falha para o lado SEGURO (bloqueia demais), mas o efeito observado foi eu contornar a guarda para deletar um arquivo, o que e' pior para auditoria do que o `rm` que ela barrou
+evidence: medido em 2026-08-19 por isolamento de quatro sondas. `.claude/hooks/validate-command.sh:224-231` casa TRES regex — `RM_INVOCATION_RE`, `RM_RECURSIVE_RE`, `DANGEROUS_PATH_RE` — **independentemente sobre a string inteira do comando** e faz AND. Nada as amarra a MESMA invocacao.
+why_now: bloqueou trabalho real hoje. O comando era `rm -f <arquivo do projeto>` seguido de `grep -rn ... | sed 's/^/   /'`: o `rm` veio do primeiro comando, o `-r` do `grep -rn`, e o "caminho perigoso" da expressao do `sed` (`/` seguido de espacos casa `/([[:space:]]|$)`). Nenhum `rm -r` existia.
+status: triaged
+dod:
+  - existe teste que reprova ANTES do conserto com a forma medida (`rm -f a.go` + `grep -rn` + `sed 's/^/   /'` no mesmo bloco) e passa depois
+  - `rm -rf /`, `rm -rf $HOME` e `rm -rf ~` continuam bloqueados — a guarda so' pode ficar mais precisa, nunca mais permissiva
+  - a varredura roda contra as formas que a arvore de fato usa, e o resultado fica registrado (`rules/testing.md` § 4.2)
+
+**As quatro sondas, porque o diagnostico e' o valor deste item.**
+
+| sonda | comando | resultado |
+|---|---|---|
+| A | `rm -f` sozinho, em `/tmp` | passou |
+| B | `cd /tmp` + `rm -f` + `grep -rn` | passou |
+| C | `rm -f` em caminho do projeto, sem nenhum `-r` | passou |
+| E | `cd <projeto>` + `rm -f`, sem nenhum `-r` | passou |
+| D | `cd <projeto>` + `rm -f` + `grep -rn` + `sed 's/^/   /'` | **BLOQUEADO** |
+
+O que separa D das outras nao e' o `rm`: e' a presenca de um `-r` que pertence a OUTRO
+comando junto de uma barra que pertence a um TERCEIRO. A mensagem diz "'rm -r' on a
+system/home-root path" e nao havia nem `rm -r` nem caminho de raiz.
+
+**A licao e' a mesma do B-040 vista pelo avesso.** La', um gate passava enumerando zero. Aqui,
+uma guarda reprova casando tudo — e as duas formas produzem um veredito que nao fala sobre o
+que estava sendo verificado.
+
 
 
