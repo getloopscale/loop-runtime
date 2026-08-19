@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-163 items — **Open** 48 · **In flight** 0 · **Closed** 115
+164 items — **Open** 49 · **In flight** 0 · **Closed** 115
 
-### Open (48)
+### Open (49)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -122,6 +122,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-161`](#b-161--o-gate-de-runbook-mede-a-anotacao-nao-o-runbook-6-dos-7-links-nao-levam-a-lugar-nenhum----) | O gate de runbook mede a anotacao, nao o runbook: 6 dos 7 links nao levam a lugar nenhum | `triaged` | media |
 | [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta |
 | [`B-163`](#b-163--um-gate-exige-do-pulumi-o-que-a-propria-arquitetura-ja-aposentou----) | Um gate exige do Pulumi o que a propria arquitetura ja' aposentou | `triaged` | baixa |
+| [`B-164`](#b-164--o-gate-de-runbook-varre-110-dos-233-alertas-da-arvore-e-o-numero-que-ele-reporta-parece-o-total----) | O gate de runbook varre 110 dos 233 alertas da arvore, e o numero que ele reporta parece o total | `triaged` | media |
 
 ### In flight (0)
 
@@ -9521,6 +9522,24 @@ evidence: |
   | `docs.loopzero.example/runbooks/vault-policy-denial-spike` | morto | HTTP 404 |
 why_now: o B-067 propoe fechar os 33 alertas adicionando a anotacao. Feito do jeito que a arvore ja' faz, isso deixaria o gate VERDE com 40 links mortos em vez de 7 — uma piora medida, disfarcada de conserto.
 status: triaged
+
+> **Primeira bala fechada 2026-08-19 — o gate passou a distinguir, no que da' para
+> provar sem rede.**
+>
+> `alert-runbooks` verifica agora: caminho **deste** repositorio que nao existe em
+> disco, e URL do GitHub em **org diferente** da canonica (`getloopscale`, tirada do
+> caminho de modulo dos `go.mod` — o remote varia por checkout e por alias de ssh, o
+> caminho de modulo nao). O que ele **nao pode** afirmar sem rede — se
+> `docs.loopzero.example/runbooks/x` esta viva — fica **contado** como nao-verificavel em
+> vez de silenciado. Cinco testes, incluindo a varredura de populacao.
+>
+> **A varredura real devolve 0 mortos e 4 nao-verificaveis, e o motivo importa:** os
+> tres links do GitHub — os dois comprovadamente mortos — vivem em
+> `charts/loopzero-admission-policies/templates/` e `infra/helm/admission-policies/
+> templates/`, **fora do unico diretorio que o gate varre**. Isso virou o **B-164**:
+> a arvore tem 233 alertas e o gate olha 110.
+>
+> As outras balas seguem abertas, e duas delas exigem tocar em chart — gatilho T2.
 dod:
   - o gate distingue anotacao presente de runbook existente, ou esta' escrito por que ele nao pode (e entao a verificacao de link vive em outro lugar declarado)
   - os 6 links mortos sao consertados ou removidos; remover e' aceitavel, porque um alerta sem link e' honesto e um alerta com link morto nao
@@ -9587,5 +9606,37 @@ dod:
 **A pergunta certa aqui nao e' "como migrar esses 9".** E' se um gate deve cobrar de uma
 arvore congelada a politica que ela nunca vai cumprir. Um gate que reprova por desenho
 ensina a ignorar gates — e o custo disso e' pago pelo proximo gate, que estara' certo.
+## B-164 — O gate de runbook varre 110 dos 233 alertas da arvore, e o numero que ele reporta parece o total   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: media — o gate ja' reprova e esta' deliberadamente nao-ligado, entao nada quebra hoje; o custo e' que "33 alertas sem runbook" e' lido como o tamanho da divida, e ele e' menos da metade dela
+evidence: |
+  Medido 2026-08-19 enquanto eu trabalhava o B-161. `DefaultRulesDir` do gate e'
+  **`infra/helm/monitoring/manifests`**, e so'. Contagem de `- alert:` na arvore:
+
+  | diretorio | alertas | varrido? |
+  |---|---:|---|
+  | `infra/helm/monitoring/manifests` | 110 | **sim** |
+  | `charts/loopzero-monitoring/templates` | 86 | nao |
+  | `infra/helm/admission-policies/templates` | 19 | nao |
+  | `charts/loopzero-admission-policies/templates` | 18 | nao |
+  | **total** | **233** | **47%** |
+why_now: os dois diretorios de `admission-policies` sao onde vivem as URLs de runbook que apontam para a org `getloopscale` — e o B-161 mediu, com `gh api`, que os arquivos nao estao la'. Ou seja, os links comprovadamente mortos estao justamente na metade que o gate nao olha. E `charts/` sao os charts OCI publicados que o ArgoCD entrega aos tenants (L3), nao artefato de bootstrap.
+status: triaged
+dod:
+  - o gate varre onde os alertas de fato estao, ou esta' escrito por que cada diretorio de fora nao conta
+  - o numero reportado passa a ser sobre a populacao inteira, e a nota do `failingGate` em `quality_gate_wiring_test.go` acompanha
+  - a varredura roda contra a populacao real e o resultado fica registrado, inclusive se for zero (`rules/testing.md` § 4.2)
+
+**Por que nao ampliei junto.** Ampliar o escopo triplica a populacao de um gate que ja'
+reprova, e o numero que ele reporta esta' citado por escrito na nota do `failingGate`
+como se fosse a divida inteira. Mudar os dois na mesma fatia misturaria "consertar o que
+o gate ve'" com "consertar quanto ele ve'", e a segunda muda quanto trabalho o proximo
+item enxerga. Registrei a verdade nos dois lugares — no item e na nota — para que o 33
+pare de ser lido como total enquanto a decisao nao vem.
+
 
 

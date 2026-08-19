@@ -220,6 +220,21 @@ var gateWiringExemptions = map[string]wiringReason{
 	// present, not that a runbook exists, so adding 33 more dead links would
 	// buy a green gate and nothing else. An on-call operator following a 404 at
 	// 3am is worse off than one who knows there is no runbook.
+	// Duas correcoes medidas em 2026-08-19 (B-161, B-164), porque o paragrafo acima
+	// contava metade da historia:
+	//
+	//  1. O gate JA' distingue link de runbook, na parte que da' para provar sem rede:
+	//     caminho deste repositorio que nao existe em disco, e URL do GitHub em org
+	//     diferente da canonica (`getloopscale`, tirada do caminho de modulo dos go.mod).
+	//     O que ele nao pode afirmar — se `docs.loopzero.example/runbooks/x` esta' viva —
+	//     fica CONTADO como nao-verificavel em vez de silenciado.
+	//
+	//  2. "33 alertas" e' o numero de UM diretorio. Medido: a arvore tem **233**
+	//     alertas e o gate varre **110** — 47%. Ficam de fora
+	//     `charts/loopzero-monitoring/templates` (86), `infra/helm/admission-policies/
+	//     templates` (19) e `charts/loopzero-admission-policies/templates` (18), e e'
+	//     justamente nos dois ultimos que vivem as URLs do GitHub apontando para org
+	//     errada. O escopo e' o B-164.
 	"alert-runbooks": failingGate,
 	// 42 migrations with no matching api/tests/unit/migration_*_test.go. The
 	// gate only checks that the FILE exists, so 42 stubs would turn it green

@@ -50,6 +50,26 @@ type Config struct {
 type Outcome struct {
 	Pass       bool
 	Violations []string // "<file>:<alertName>"
+	// LinksMortos sao anotacoes de runbook que APONTAM PARA O NADA e que o gate
+	// consegue provar sem rede: caminho deste repositorio que nao existe em disco,
+	// ou URL do GitHub numa org diferente da identidade canonica do repo.
+	//
+	// Medido em 2026-08-19 (B-161): das 7 URLs da arvore, SEIS nao levavam a nada, e
+	// todas as sete contavam como satisfeitas. Um alerta que dispara as 3 da manha
+	// mandando o operador para um 404 e' pior que um alerta sem link — o link promete.
+	LinksMortos []LinkMorto
+	// LinksNaoVerificaveis conta as URLs externas. Um gate hermetico nao pode dizer
+	// se `https://docs.loopzero.example/runbooks/x` esta viva; afirmar qualquer um dos dois
+	// seria inventar. Contar e' honesto, e o numero e' o que faz alguem conferir.
+	LinksNaoVerificaveis int
+}
+
+// LinkMorto e' uma anotacao de runbook provada inutil sem sair da maquina.
+type LinkMorto struct {
+	Arquivo string
+	Alerta  string
+	URL     string
+	Motivo  string
 }
 
 // Check scans PrometheusRule YAMLs for alerts missing a runbook annotation.
@@ -89,11 +109,66 @@ func Check(cfg Config) *Outcome {
 		for _, name := range missingRunbookAlerts(string(data), excepted) {
 			out.Violations = append(out.Violations, e.Name()+":"+name)
 		}
+		conferirLinks(root, e.Name(), string(data), out)
 	}
-	if len(out.Violations) > 0 {
+	if len(out.Violations) > 0 || len(out.LinksMortos) > 0 {
 		out.Pass = false
 	}
 	return out
+}
+
+// orgCanonica e' a identidade deste repositorio, tirada do caminho de modulo dos
+// `go.mod` (`github.com/getloopscale/loopzero/...`) e nao do remote git: o remote varia por
+// checkout e por alias de ssh, o caminho de modulo nao.
+const orgCanonica = "getloopscale"
+
+var runbookURLRe = regexp.MustCompile(`runbook_url:\s*"([^"]+)"`)
+var blobRe = regexp.MustCompile(`^https://github\.com/([^/]+)/([^/]+)/blob/[^/]+/(.+)$`)
+
+// conferirLinks prova, SEM REDE, quais anotacoes de runbook nao levam a nada.
+//
+// So' afirma o que da' para afirmar hermeticamente:
+//   - URL de blob do GitHub nesta org  -> confere o caminho em disco
+//   - URL de blob do GitHub noutra org -> link morto por construcao (quem tem acesso
+//     a este repositorio nao alcanca o outro; medido no B-161 com `gh api`)
+//   - qualquer outra                   -> nao-verificavel, e fica CONTADA
+func conferirLinks(root, arquivo, conteudo string, out *Outcome) {
+	blocos := alertSplitRe.Split(conteudo, -1)
+	for _, blk := range blocos[1:] {
+		m := alertNameRe.FindStringSubmatch(blk)
+		if m == nil {
+			continue
+		}
+		alerta := m[1]
+		corpo := blk
+		if len(corpo) > runbookLookahead {
+			corpo = corpo[:runbookLookahead]
+		}
+		u := runbookURLRe.FindStringSubmatch(corpo)
+		if u == nil {
+			continue
+		}
+		url := u[1]
+		b := blobRe.FindStringSubmatch(url)
+		if b == nil {
+			out.LinksNaoVerificaveis++
+			continue
+		}
+		org, caminho := b[1], b[3]
+		if org != orgCanonica {
+			out.LinksMortos = append(out.LinksMortos, LinkMorto{
+				Arquivo: arquivo, Alerta: alerta, URL: url,
+				Motivo: "aponta para a org " + org + ", e a deste repositorio e' " + orgCanonica,
+			})
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(root, caminho)); err != nil {
+			out.LinksMortos = append(out.LinksMortos, LinkMorto{
+				Arquivo: arquivo, Alerta: alerta, URL: url,
+				Motivo: caminho + " nao existe neste repositorio",
+			})
+		}
+	}
 }
 
 // missingRunbookAlerts returns alert names in content lacking a runbook
