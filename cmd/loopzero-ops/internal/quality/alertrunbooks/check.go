@@ -117,10 +117,23 @@ func Check(cfg Config) *Outcome {
 	return out
 }
 
-// orgCanonica e' a identidade deste repositorio, tirada do caminho de modulo dos
-// `go.mod` (`github.com/getloopscale/loopzero/...`) e nao do remote git: o remote varia por
-// checkout e por alias de ssh, o caminho de modulo nao.
-const orgCanonica = "getloopscale"
+// repoCanonico e' o NOME deste repositorio, tirado do caminho de modulo dos `go.mod`
+// (`github.com/getloopscale/loopzero/...`) e nao do remote git — o remote varia por checkout e
+// por alias de ssh, o caminho de modulo nao.
+//
+// A comparacao e' pelo REPO e nao pela ORG, e isso e' correcao de um erro que este mesmo
+// arquivo carregou por algumas horas em 2026-08-19. A versao anterior tratava org
+// diferente de `getloopscale` como link morto "por construcao". Medido depois, com credencial
+// que enxerga: **`getloopscale/loopzero` existe e tem os arquivos**, tanto quanto
+// `getloopscale/loopzero`. Sao dois caminhos para o mesmo repositorio, e a regra teria produzido
+// falso positivo assim que o escopo do gate crescesse (B-164).
+//
+// Como o erro entrou, porque a forma se repete: eu extrai as URLs truncadas, INVENTEI os
+// nomes de arquivo que elas pareciam ter (`sigstore-key-rotation.md`,
+// `tuf-root-rotation.md`), sondei ESSES nomes pela API e recebi Not Found. Os nomes reais
+// eram outros (`sigstore-storage-model.md`, `tuf-root-ceremony.md`) e resolvem. Sondar o
+// que eu supus em vez do que o arquivo diz e' fabricacao de evidencia com passo extra.
+const repoCanonico = "loopzero"
 
 var runbookURLRe = regexp.MustCompile(`runbook_url:\s*"([^"]+)"`)
 var blobRe = regexp.MustCompile(`^https://github\.com/([^/]+)/([^/]+)/blob/[^/]+/(.+)$`)
@@ -154,12 +167,11 @@ func conferirLinks(root, arquivo, conteudo string, out *Outcome) {
 			out.LinksNaoVerificaveis++
 			continue
 		}
-		org, caminho := b[1], b[3]
-		if org != orgCanonica {
-			out.LinksMortos = append(out.LinksMortos, LinkMorto{
-				Arquivo: arquivo, Alerta: alerta, URL: url,
-				Motivo: "aponta para a org " + org + ", e a deste repositorio e' " + orgCanonica,
-			})
+		repo, caminho := b[2], b[3]
+		if repo != repoCanonico {
+			// Outro repositorio: o caminho nao existe nesta arvore por definicao, e
+			// afirmar que ele nao existe NA DE LA' exigiria rede. Contado, nao acusado.
+			out.LinksNaoVerificaveis++
 			continue
 		}
 		// O caminho vem do CONTEUDO de um YAML — entrada nao confiavel. Sem tratamento,

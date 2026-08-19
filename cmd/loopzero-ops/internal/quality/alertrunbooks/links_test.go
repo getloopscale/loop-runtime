@@ -74,22 +74,57 @@ func TestNaoAcusaCaminhoDoProprioRepoQueExiste(t *testing.T) {
 	}
 }
 
-// A org divergente e' achado proprio, e hermetico: a identidade canonica deste
-// repositorio esta' no caminho de modulo dos `go.mod` (`github.com/getloopscale/loopzero`).
-// Medido: duas das URLs da arvore citam `getloopscale`, e a API autenticada confirma
-// que os arquivos nao estao la'. Uma org errada nao e' detalhe de escrita — e' um
-// link que nunca vai resolver para quem tem acesso a este repo.
-func TestAcusaOrgDiferenteDaDoRepositorio(t *testing.T) {
+// ORG diferente NAO e' link morto — e este teste substitui um que afirmava o contrario.
+//
+// A versao de algumas horas atras tratava qualquer org != `getloopscale` como morta "por
+// construcao". Medido depois, com credencial que enxerga: `getloopscale/loopzero` e
+// `getloopscale/loopzero` sao **o mesmo repositorio**, o primeiro redirecionando para o segundo,
+// e os arquivos resolvem nos dois. A regra teria produzido falso positivo assim que o
+// escopo do gate crescesse (B-164).
+//
+// Como o erro entrou: extrai URLs truncadas na saida, INVENTEI os nomes de arquivo que
+// elas pareciam ter, sondei ESSES nomes pela API e recebi Not Found. Os nomes reais eram
+// outros e resolvem. Sondar o que se supoe em vez do que o arquivo diz e' fabricacao de
+// evidencia com um passo a mais.
+//
+// A regra que sobrevive a medicao e' por REPOSITORIO: se a URL aponta para este repo
+// (`loopzero`), o caminho e' conferido em disco, seja qual for a org; se aponta para outro
+// repo, o caminho nao existe nesta arvore por definicao e afirmar que nao existe NA DE LA'
+// exigiria rede — entao e' contado como nao-verificavel, nao acusado.
+func TestOrgDiferenteNoMesmoRepoAindaEConferidaEmDisco(t *testing.T) {
 	raiz := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(raiz, "docs", "runbooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(raiz, "docs", "runbooks", "existe.md"), []byte("# ok\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	escreverRegra(t, raiz, "prometheusrule-teste.yaml", regraCom(
-		"https://github.com/outraorg/loopzero/blob/develop/docs/operations/x.md"))
+		"https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/existe.md"))
 
 	out := Check(Config{Root: raiz})
-	if len(out.LinksMortos) != 1 {
-		t.Fatalf("queria 1 link morto por org divergente, veio %d: %+v", len(out.LinksMortos), out.LinksMortos)
+	if len(out.LinksMortos) != 0 {
+		t.Errorf("acusou como morto um link cujo arquivo EXISTE, so' porque a org do caminho difere. "+
+			"`getloopscale/loopzero` redireciona para `getloopscale/loopzero` — e' o mesmo repositorio: %+v", out.LinksMortos)
 	}
-	if !strings.Contains(out.LinksMortos[0].Motivo, "org") {
-		t.Errorf("o motivo nao nomeia a org: %+v", out.LinksMortos[0])
+	if out.LinksNaoVerificaveis != 0 {
+		t.Errorf("contou como nao-verificavel um link deste mesmo repo, que da' para conferir em disco")
+	}
+}
+
+// Repositorio diferente e' NAO-VERIFICAVEL, nao morto: o caminho nao existe nesta arvore
+// por definicao, e dizer que nao existe na arvore DELE exigiria rede.
+func TestOutroRepositorioContaComoNaoVerificavel(t *testing.T) {
+	raiz := t.TempDir()
+	escreverRegra(t, raiz, "prometheusrule-teste.yaml", regraCom(
+		"https://github.com/getloopscale/outro-repo/blob/main/docs/x.md"))
+
+	out := Check(Config{Root: raiz})
+	if len(out.LinksMortos) != 0 {
+		t.Errorf("acusou de morto um link para OUTRO repositorio, sem ter como saber: %+v", out.LinksMortos)
+	}
+	if out.LinksNaoVerificaveis != 1 {
+		t.Errorf("queria 1 nao-verificavel, veio %d", out.LinksNaoVerificaveis)
 	}
 }
 
