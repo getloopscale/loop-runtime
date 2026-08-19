@@ -82,6 +82,7 @@ orphan-alerts	gates	Detects Prometheus alerts with no owning dashboard/runbook.
 ory-kratos-lifespan	gates	Locks canonical self-service flow lifespans in infra/helm/ory-kratos/values.yaml.gotmpl: login=10m + registration=10m + recovery=15m (defense pair with edge rate_limit for Red Team #89 email-bomb closure). Section-scoped stricter than bash grep -A N (sibling lifespan can NOT leak). M-Migrate2 2026-07-07 replaces infra/tests/helm/ory-kratos-lifespan_test.sh.
 ory-kratos-public-urls	gates	Hermetic helm-template golden test for Ory Kratos serve.public.base_url + CORS + cookie.domain + allowed_return_urls + dashboardRoute-mapped ui_url across standalone-public + dev envs. Advisory-fallthrough when helmfile absent. M22 empirical follow-up (the ONLY M22 target allowlisted — delivers allowlist -1).
 pkg-usage-matrix	gates	Verifies the pkg/ cross-component usage matrix is current.
+platform-cr-namespace	gates	Tenant/Environment CRs em manifesto versionado devem viver em loopzero-system.
 postgresql-pdb-config	gates	Validates the PostgreSQL PodDisruptionBudget configuration.
 prod-image-digests	gates	Production manifests reference images by digest.
 prod-image-tags	gates	Forbids mutable :latest-style image tags in production manifests.

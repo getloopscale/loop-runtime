@@ -49,6 +49,7 @@ var gateRegistry = []gateSpec{
 	{"module-selfcontained", "Todo modulo Go precisa compilar sem o go.work, que e o que o CI faz.", runModuleSelfContained},
 	{"adapter-ports", "Todo adaptador declara em tempo de compilacao qual porta satisfaz.", runAdapterPorts},
 	{"error-vocabulary", "Mensagem de erro autorada nao pode carregar termo interno proibido pela Regra 3.", runErrorVocabulary},
+	{"platform-cr-namespace", "Tenant/Environment CRs em manifesto versionado devem viver em loopzero-system.", runPlatformCRNamespace},
 	{"readiness-summary", "O sumario de prontidao e a ultima mutacao de status antes de persistir, nos seis reconcilers.", runReadinessSummary},
 	{"stdlib-only", "O pacote de vocabulario compartilhado nao pode importar fora da biblioteca padrao.", runStdlibOnly},
 	{"chart-pairs", "Chart que existe nas duas arvores com o mesmo nome precisa estar declarado.", runChartPairs},

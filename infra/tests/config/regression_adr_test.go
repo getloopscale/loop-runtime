@@ -86,3 +86,36 @@ func TestADR0018T32_VAPTemplateExists(t *testing.T) {
 		t.Error("ADR-0018 C4 regression: vaps.tenantNamespace default must be `false` (mandatory deployment order — VAP last)")
 	}
 }
+
+// B-095: a cerca `loopzero-tenant-namespace-policy` casa CREATE **e UPDATE**, e remover finalizer e'
+// um UPDATE. Sem isentar os proprios controllers, um CR cujo namespace nao satisfaca a validacao
+// fica IMPOSSIVEL DE APAGAR — o operator nunca conclui a delecao e o requeue nunca converge. E' a
+// mesma armadilha que o cabecalho da irma `vap-tenant-cr-shape` descreve.
+//
+// A lista precisa ser NAO-VAZIA: a forma `!(x in [])` e' sempre verdadeira, entao uma lista vazia
+// faz a politica valer para toda identidade e negar tudo — armadilha de CEL registrada no
+// `CLAUDE.md`. Por isso este teste exige os nomes, e nao so' a presenca do matchCondition.
+func TestB095_VAPTenantNamespaceIsentaOsProprioControllers(t *testing.T) {
+	const path = "../../helm/admission-policies/templates/vap-tenant-namespace.yaml"
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("VAP template missing: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "exclude-system-actors") {
+		t.Fatal("a politica nao isenta os atores de sistema: ligada, ela trava a remocao de " +
+			"finalizer e torna o CR indeletavel")
+	}
+	for _, sa := range []string{
+		"system:serviceaccount:loopzero-system:loopzero-api",
+		"system:serviceaccount:loopzero-system:loopzero-tenant-operator",
+		"system:serviceaccount:loopzero-system:tenant-operator",
+		"system:kube-controller-manager",
+		"system:masters",
+	} {
+		if !strings.Contains(s, sa) {
+			t.Errorf("a lista de isencao nao nomeia %q; uma lista incompleta nega escritas "+
+				"legitimas, e uma lista VAZIA (`!(x in [])`) nega todas", sa)
+		}
+	}
+}

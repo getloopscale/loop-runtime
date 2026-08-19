@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 24 · **In flight** 0 · **Closed** 140
+164 items — **Open** 23 · **In flight** 0 · **Closed** 141
 
-### Open (24)
+### Open (23)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -86,7 +86,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `triaged` | média |
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `triaged` | média |
 | [`B-080`](#b-080--os-43-arquivos-de-routes-ainda-são-um-pacote-plano-e-mover-263-símbolos-exportados-é-t3----) | Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3 | `triaged` | alta |
-| [`B-095`](#b-095--a-segunda-cerca-sobre-crs-loopzeroio-renderiza-em-lugar-nenhum----) | A segunda cerca sobre CRs `loopzero.io` renderiza em lugar nenhum | `triaged` | média |
 | [`B-098`](#b-098--duas-policies-do-openbao-são-declaradas-e-nunca-ligadas-a-role-nenhum----) | Duas policies do OpenBao são declaradas e nunca ligadas a role nenhum | `triaged` | média |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
@@ -103,7 +102,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (140)
+### Closed (141)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -189,6 +188,7 @@ _None._
 | [`B-092`](#b-092--16-arquivos-de-teste-em-infratests-não-rodam-e-dois-subdiretórios-estão-vermelhos---x) 🔒 | 16 arquivos de teste em `infra/tests` não rodam, e dois subdiretórios estão vermelhos | `shipped` | alta |
 | [`B-093`](#b-093--o-validador-do-servicesjson-não-bloqueia-os-prefixos-que-a-plataforma-injeta---x) | O validador do `services.json` não bloqueia os prefixos que a plataforma injeta | `shipped` | média |
 | [`B-094`](#b-094--a-metade-api-do-find_sec_004-guarda-um-campo-que-ninguém-popula----) | A metade API do `find_sec_004` guarda um campo que ninguém popula | `shipped` | média |
+| [`B-095`](#b-095--a-segunda-cerca-sobre-crs-loopzeroio-renderiza-em-lugar-nenhum----) | A segunda cerca sobre CRs `loopzero.io` renderiza em lugar nenhum | `shipped` | média |
 | [`B-096`](#b-096--o-chart-publicado-do-loopzero-api-renderiza-uma-sa-que-as-políticas-de-admissão-não-isentam---x) | O chart publicado do `loopzero-api` renderiza uma SA que as políticas de admissão não isentam | `shipped` | média |
 | [`B-097`](#b-097--o-cli-documenta-um-kubectl-patch-que-a-nova-cerca-nega---x) | O CLI documenta um `kubectl patch` que a nova cerca nega | `shipped` | baixa |
 | [`B-099`](#b-099--a-policy-corrigida-não-alcança-a-identidade-que-cria-a-chave-e-o-bootstrap-a-sobrescreve---x) | A policy corrigida não alcança a identidade que cria a chave, e o bootstrap a sobrescreve | `shipped` | alta |
@@ -6236,7 +6236,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-13 na fatia `slice-16`. `infra/helm/admission-policies/templates/vap-tenant-namespace.yaml:26-29` casa `loopzero.io` `tenants` **e** `environments` — os mesmos recursos que a `vap-tenant-cr-shape`, portanto também exclusivos do cluster mgmt. Mas `tenantNamespace` é `false` no `values.yaml` base **e** no `values-mgmt.yaml`, então ela não renderiza em cluster nenhum. O comentário do base diz *"Default OFF: toggle on via overlay AFTER T3.3 migration ran successfully"* — e o overlay que ligaria é justamente o do mgmt, onde ela está `false`.
 why_now: a fatia `slice-16` mediu a colocação da cerca irmã e, ao fazê-lo, tornou visível que esta não está em lugar nenhum. Enquanto a `tenantCrShape` estava desligada no mgmt, as duas pareciam ter o mesmo estado; agora só uma está resolvida.
-status: triaged
+status: shipped
 severity: média — não há regressão nova (ela nunca renderizou), e o comentário indica uma migração como pré-condição. Vira alta se a T3.2/T3.3 do ADR-0018 v2 já tiver rodado, porque então a cerca está pronta e desligada.
 dod:
   - está medido se a migração T3.3 que ela aguarda já rodou
@@ -6269,6 +6269,30 @@ dod:
 > Registrado 2026-08-13 pela fatia `slice-16` (Q1 do plano). O teste
 > `infra/tests/helm/tenant_cr_fence_placement_test.go` já está no molde para cobri-la — basta a
 > decisão.
+
+> **Entregue 2026-08-19 — a medicao que faltava foi feita e ACHOU um defeito; o toggle
+> segue OFF por uma unica pre-condicao, agora especifica.**
+>
+> Escritores medidos: os dois de producao escrevem em `loopzero-system` (o do operator
+> porque o cache dele so' enxerga esse namespace). Seeds versionados: dois canonicos e
+> **um fora** — `infra/scripts/production/bootstrap-platform.sh` aplicava o Tenant em
+> `default`, onde o operator nao o enxerga. Ele semeava um CR inerte e reportava sucesso.
+> Corrigido.
+>
+> A politica ganhou `exclude-system-actors`, espelhado da irma: sem ele, ligada, ela
+> tornaria indeletavel qualquer CR fora do lugar — remover finalizer e' um UPDATE.
+> `TestB095_VAPTenantNamespaceIsentaOsProprioControllers` exige que a lista seja
+> nao-vazia e nomeada, porque `!(x in [])` e' sempre verdadeira.
+>
+> Novo gate `platform-cr-namespace` (ligado ao `quality:gates`): recusa manifesto
+> versionado que aplique esses CRs fora de `loopzero-system`. A varredura de populacao achou
+> exatamente a violacao acima antes do conserto.
+>
+> **Falta so' um fato de runtime**, escrito no `values-mgmt.yaml`: confirmar que nenhum
+> Tenant/Environment sobreviveu em `default` num cluster ativo. Corrigir o script nao
+> remove o que uma execucao anterior dele ja aplicou.
+>
+> Registro T2: `MEET-ASYNC-AMENDMENT-2026-08-19-platform-cr-namespace.md`.
 
 ## B-096 — O chart publicado do `loopzero-api` renderiza uma SA que as políticas de admissão não isentam   [x]
 

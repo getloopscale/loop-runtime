@@ -91,6 +91,10 @@ tasks:
       # strategies do runtimeRegistry (a lista paralela apodreceu quando o produto
       # reduziu para node+python); base-image-digest passou depois de pinar os 16
       # FROM no digest do index multi-arch. Somados: < 1.1s.
+      # B-095: Tenant/Environment fora de `loopzero-system` fica invisivel ao operator (cache
+      # restrito a esse namespace) e indeletavel se a cerca de admissao for ligada — remover
+      # finalizer e' um UPDATE. O bootstrap de producao semeava um em `default`.
+      - /tmp/loopzero-ops quality platform-cr-namespace
       - /tmp/loopzero-ops quality crd-semantic-diff
       - /tmp/loopzero-ops quality stack-coverage
       - /tmp/loopzero-ops quality base-image-digest
