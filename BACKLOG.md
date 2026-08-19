@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-160 items — **Open** 45 · **In flight** 0 · **Closed** 115
+161 items — **Open** 46 · **In flight** 0 · **Closed** 115
 
-### Open (45)
+### Open (46)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -119,6 +119,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-158`](#b-158--o-registro-que-o-loop-inteiro-le-nao-e-validado-por-nada----) | O registro que o loop inteiro le' nao e' validado por nada | `triaged` | — |
 | [`B-159`](#b-159--o-checklist-manda-escrever-o-changelog-num-arquivo-que-nao-existe----) | O checklist manda escrever o CHANGELOG num arquivo que nao existe | `triaged` | — |
 | [`B-160`](#b-160--a-guarda-de-comandos-junta-pedacos-de-comandos-diferentes-e-bloqueia-o-inocente----) | A guarda de comandos junta pedacos de comandos diferentes e bloqueia o inocente | `triaged` | media |
+| [`B-161`](#b-161--o-gate-de-runbook-mede-a-anotacao-nao-o-runbook-6-dos-7-links-nao-levam-a-lugar-nenhum----) | O gate de runbook mede a anotacao, nao o runbook: 6 dos 7 links nao levam a lugar nenhum | `triaged` | media |
 
 ### In flight (0)
 
@@ -3677,6 +3678,8 @@ source: discover-review
 evidence: medido em 2026-08-11 rodando os gates desligados. `migration-test-coverage` reprova com **43 violações** — migrations `000017`..`000059` sem `api/tests/unit/migration_{NNNNNN,NNN}*_test.go` correspondente, de **59** migrations no total. `alert-runbooks` reprova com **33 violações** — alertas sem `runbook_url`, incluindo `LoopZeroUnsignedReleasePushed`, `LoopZeroTenantDeletionStuck`, `LoopZeroSecretESOSyncFailing`, `LoopZeroAttestationSaveFailing`. Os dois gates existem, funcionam e não estão ligados (ver B-045).
 why_now: são dois números que ninguém tinha porque o instrumento que os produz não roda. Migração sem teste é irreversível por desenho (o repositório é forward-only); alerta sem runbook acorda alguém às 3h sem dizer o que fazer — e três dos 33 são de assinatura de release e de vazamento de secret.
 status: triaged
+
+> **Ordem medida 2026-08-19 (B-161): NAO feche este item adicionando anotacao antes de consertar os links que ja' existem.** Das 7 URLs de runbook na arvore, **6 nao levam a nada** — 4 dao 404 num site publico e 2 apontam para arquivos que a API autenticada nao encontra, em outra org. Fechar os 33 replicando esse padrao deixaria o gate verde com 40 links mortos: uma piora medida, disfarcada de conserto.
 severity: média — dívida acumulada, não defeito ativo. **Deliberadamente separado do B-045**: ligar os gates e pagar a dívida são trabalhos diferentes, e ligá-los antes de ter plano transformaria 76 achados legítimos num muro que alguém desliga na sexta-feira.
 dod:
   - existe decisão sobre o piso: quais migrations e quais alertas precisam de cobertura, e quais têm exceção **registrada com prazo**
@@ -9424,3 +9427,45 @@ que estava sendo verificado.
 > ser criado por heredoc de shell — o comando que o escreveria carrega os literais
 > destrutivos, e a guarda bloqueava a criacao do teste que a verifica. Precisei da
 > ferramenta de escrita de arquivo. Esta' anotado no topo do arquivo.
+## B-161 — O gate de runbook mede a anotacao, nao o runbook: 6 dos 7 links nao levam a lugar nenhum   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: media — nada quebra em producao, mas o alerta que dispara as 3 da manha manda o operador para um 404, e o gate declara esse alerta CONFORME
+evidence: |
+  Medido em 2026-08-19 com o binario de gates. `loopzero-ops quality alert-runbooks` reprova com
+  **33 alertas sem anotacao** (o B-067 ja' registra esse numero). O que ninguem tinha medido e' o
+  outro lado: as anotacoes que EXISTEM. Sao **7 URLs distintas** em `infra/helm` e `charts`, e
+  **6 nao levam a nada**:
+
+  | URL | veredito | como foi medido |
+  |---|---|---|
+  | `getloopscale/loopzero/blob/main/docs/runbooks/vap-delete-guardrail.md` | **BOM** | `gh api` devolve o arquivo |
+  | `getloopscale/loopzero/blob/develop/docs/operations/sigstore-key-rotation.md` | morto | `gh api` -> Not Found |
+  | `getloopscale/loopzero/blob/develop/docs/operations/tuf-root-rotation.md` | morto | `gh api` -> Not Found |
+  | `docs.loopzero.example/runbooks/vault-sealed` | morto | HTTP 404 (a raiz do site responde 200) |
+  | `docs.loopzero.example/runbooks/vault-audit-stalled` | morto | HTTP 404 |
+  | `docs.loopzero.example/runbooks/vault-auth-failure-spike` | morto | HTTP 404 |
+  | `docs.loopzero.example/runbooks/vault-policy-denial-spike` | morto | HTTP 404 |
+why_now: o B-067 propoe fechar os 33 alertas adicionando a anotacao. Feito do jeito que a arvore ja' faz, isso deixaria o gate VERDE com 40 links mortos em vez de 7 — uma piora medida, disfarcada de conserto.
+status: triaged
+dod:
+  - o gate distingue anotacao presente de runbook existente, ou esta' escrito por que ele nao pode (e entao a verificacao de link vive em outro lugar declarado)
+  - os 6 links mortos sao consertados ou removidos; remover e' aceitavel, porque um alerta sem link e' honesto e um alerta com link morto nao
+  - a org nas URLs e' a mesma do remote deste repo — hoje duas apontam para `getloopscale` e o remote e' `getloopscale`
+  - a varredura roda contra a populacao real e o resultado fica registrado, inclusive se for zero (`rules/testing.md` § 4.2)
+
+**A armadilha que quase me pegou, e ela e' o metodo do item.** A primeira medicao foi
+`curl` e devolveu **404 nas 7**. Concluir "7 links mortos" dali seria errado: os dois
+repositorios do GitHub sao **privados** (`gh api repos/... --jq .private` -> `true` nos
+dois), e um `curl` sem credencial recebe 404 de repo privado exatamente como receberia
+de pagina inexistente. Foi a API autenticada que separou os casos — e ela mostrou que
+**um dos sete esta' bom**. Um item que afirmasse os sete estaria errado por um, e pelo
+motivo errado.
+
+**Por que isto nao e' o B-067.** Aquele conta alertas SEM anotacao; este mede as
+anotacoes QUE EXISTEM. Fixes opostos: la' se acrescenta, aqui se conserta ou remove. E
+a ordem importa — fechar o B-067 antes deste multiplica o defeito por seis.
+
