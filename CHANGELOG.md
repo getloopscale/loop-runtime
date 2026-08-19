@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+
+- **Um arquivo de configuração que parecia governar uma verificação não era lido por ninguém, e três dos quatro itens que ele listava já nem existiam.** Removido, e uma verificação nova impede que outro arquivo desse diretório passe a parecer contrato sem sê-lo. (B-091)
+
 ### Fixed
 - **Um documento escrito para registrar que certa decisão nunca foi tomada fazia essa decisão passar a existir aos olhos da verificação.** A verificação aceitava qualquer documento que apenas citasse o identificador. Agora um registro de decisão só responde pelo identificador que aparece no seu próprio título — quem apenas menciona está falando sobre ele, não o definindo. (B-086)
 - **Nada impedia que uma mensagem de erro mostrasse ao usuário o nome de uma ferramenta interna.** Nenhuma mensagem faz isso hoje; o que faltava era o que impede a próxima. Uma verificação nova examina as 168 mensagens escritas nos manipuladores e reprova a que carregar termo interno — sem incomodar registros de diagnóstico, que não são vistos por quem usa o produto. (B-081)

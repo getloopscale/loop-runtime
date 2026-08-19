@@ -5598,7 +5598,7 @@ seis teria.
 própria (`normalize(key)`), que exigiria seguir a chamada.
 
 
-## B-091 — `infra/quality/dry-run-baseline.txt` é a segunda baseline sem leitor   [ ]
+## B-091 — `infra/quality/dry-run-baseline.txt` é a segunda baseline sem leitor   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5606,11 +5606,32 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 na fatia `slice-13`, ao remover a baseline órfã que o `B-045` nomeia. Dos quatro arquivos em `infra/quality/`, `coverage-baseline.json` e `host-ports.txt` têm 3 leitores em código cada; `dry-run-baseline.txt` tem **zero** — nenhuma referência em `*.go`, `*.yml` ou `*.sh`. É a mesma classe do `environment-lock-baseline.txt` removido nesta fatia.
 why_now: o `B-045` nomeou uma baseline órfã e ela era duas. Um arquivo em `infra/quality/` é lido como insumo de gate; sem leitor, ele parece contrato e não é.
-status: triaged
+status: shipped
 severity: baixa — não quebra nada; é ruído que se disfarça de garantia. Mesmo argumento do `B-045`.
 dod:
   - `dry-run-baseline.txt` é removido ou ganha consumidor
   - existe asserção de que todo arquivo em `infra/quality/` tem pelo menos um leitor em código
+> **Fechado 2026-08-19 — DoD 2/2.**
+>
+> Medido: dos 12 arquivos de dados de `infra/quality/`, onze têm de 1 a 8 leitores
+> e a baseline órfã tinha **zero**. E ela não era só órfã: **três das suas quatro
+> entradas** apontavam para scripts que não existem mais
+> (`bootstrap-platform.sh`, `check-service-auth-rotation.sh`,
+> `install-local-path-provisioner.sh`). Removida.
+>
+> A asserção da segunda bala vive em `cmd/loopzero-ops/quality_baseline_readers_test.go`
+> e reprovou na árvore real antes da remoção — não é guarda que nasce sem ter visto
+> nada. O `README.md` é isento **por declaração escrita**: ele documenta o
+> diretório, não é insumo de gate, e o nome é genérico o bastante para casar com
+> dezenas de arquivos e produzir um "leitor" que não lê nada.
+>
+> **A mesma armadilha do B-086 me pegou de novo, no mesmo turno.** A primeira
+> versão do teste passou — porque o comentário dele **soletrava o nome do arquivo
+> órfão**, e a asserção conta leitores procurando o nome no código. Minha prosa
+> sobre a ausência virou o leitor que faltava. Agora o nome não aparece no
+> comentário, e o arquivo que conta se exclui da contagem — sem isso, qualquer
+> nome citado pela asserção se auto-satisfaz.
+
 
 > Registrado 2026-08-12 pela fatia `slice-13`. Fora da DoD do `B-045`, que nomeia só a baseline de
 > environment-lock — registrado em vez de removido junto, para não ampliar escopo em silêncio.
