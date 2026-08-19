@@ -23,6 +23,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clusterrolenosecretsstar"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dashboardrootparity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/deadlineratchet"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/errorvocabulary"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lintcoverage"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/moduleselfcontained"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nolegacysatoken"
@@ -447,6 +448,30 @@ func runAdapterPorts(args []string) int {
 		return 2
 	}
 	fmt.Printf("adapter-ports: PASS — %d adaptador(es), todos declarando a porta que satisfazem\n", out.Scanned)
+	return 0
+}
+
+func runErrorVocabulary(args []string) int {
+	fs := flag.NewFlagSet("error-vocabulary", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := errorvocabulary.Check(errorvocabulary.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error-vocabulary: FAIL — %v\n", err)
+		return 2
+	}
+	if !out.Pass {
+		fmt.Fprintf(os.Stderr, "error-vocabulary: FAIL — %s\n", out.Summary())
+		for _, v := range out.Violacoes {
+			fmt.Fprintf(os.Stderr, "  %s:%d carrega %q em saida ao usuario: %q\n", v.Arquivo, v.Linha, v.Termo, v.Mensagem)
+		}
+		fmt.Fprintln(os.Stderr, "  A Regra Inquebravel 3 proibe estes termos na saida ao usuario. Use linguagem de produto.")
+		return 1
+	}
+	fmt.Printf("error-vocabulary: PASS — %s\n", out.Summary())
 	return 0
 }
 

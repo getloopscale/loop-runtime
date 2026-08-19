@@ -4810,7 +4810,7 @@ dod:
 > código morto (todos usados dentro do pacote), mas a superfície do pacote merece decisão na próxima
 > fatia que tocar `domains`.
 
-## B-081 — As 277 mensagens de erro autoradas nos handlers não têm gate de vocabulário   [ ]
+## B-081 — As 277 mensagens de erro autoradas nos handlers não têm gate de vocabulário   [x]
 
 domain: engine-go
 repo: loopzero
@@ -4818,11 +4818,33 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 na revisão da fatia slice-5. `httpio.WriteLoopZeroError` é pass-through puro para `errorshttp.WriteJSON` — ele não inventa vocabulário nem o filtra. Alimentado com `"ArgoCD sync failed for tenant_id tn-1; check Gitea and MinIO"`, os quatro termos banidos chegam ao corpo em `detail` **e** `message`, verbatim, e o writer está funcionando exatamente como projetado. A superfície de risco real são as **277** mensagens autoradas nos call sites, e entre os 122 gates **não existe nenhum** sobre o vocabulário delas.
 why_now: a Regra Inquebrável 3 proíbe `ArgoCD`, `GitOps`, `CRD`, `tenant_id`, `Gitea`, `MinIO`, `Kaniko` e outros em saída ao usuário, e hoje isso é honrado por disciplina. A revisão confirmou que nenhuma mensagem em `routes` carrega termo banido **hoje** — então o risco é de regressão, não presente, e um gate agora é barato porque nasce verde.
-status: triaged
+status: shipped
 severity: média — nada quebrado hoje; o que falta é o que impede a próxima mensagem de quebrar.
 dod:
   - existe gate que varre as mensagens de erro autoradas em `routes/` (e `services/`) contra a lista da Regra 3
   - ele nasce verde e reprova uma mensagem suja num fixture
+> **Fechado 2026-08-19 — DoD 2/2. Gate `error-vocabulary`, ligado e nascido verde.**
+>
+> Varre `api/internal/routes/` e `api/internal/services/` por AST e coleta os
+> literais que estão **dentro da expressão de argumento** de um escritor de erro
+> (`WriteLoopZeroError`, `WriteCodeErrorJSON`, `WriteErrorJSON`, `FieldError`, …),
+> descendo na expressão — a mensagem quase sempre vem de um `.Wrap("…")`
+> encadeado, não como literal direto. Medido: **105 arquivos, 168 mensagens, 0
+> violações**.
+>
+> **O escopo é o que impede o gate de ser desligado.** Um literal com `ArgoCD`
+> **fora** de um escritor é log ou nome de campo interno, e a Regra 3 protege a
+> *saída ao usuário*, não o vocabulário do código. Há teste para os dois lados: o
+> mutante com a mensagem suja reprova, e o `slog.Warn` com o mesmo termo passa.
+> Sem o segundo, o gate viraria proibição geral da palavra e morreria na primeira
+> sexta-feira.
+>
+> **Um erro meu, e ele vale registrar:** meu primeiro piso de população exigiu 200
+> mensagens, número que tirei do *"277 mensagens"* do próprio item — e 277 conta
+> **call sites** de `WriteLoopZeroError`, não literais. Duas métricas diferentes;
+> repetir uma no lugar da outra é como se inventa um número. O piso agora é 168,
+> medido, com essa distinção escrita ao lado.
+
   - a lista de termos vive num lugar só, não duplicada entre gate e regra
 
 > Registrado 2026-08-12 pela revisão independente da fatia slice-5 (achado M1). O teste que existia
