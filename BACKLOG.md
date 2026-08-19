@@ -9862,6 +9862,34 @@ evidence: |
   o caminho Transit (prefixo `vault:v1:`) em `encryptForStorage`.
 why_now: o gate nao esta' em periodo de aviso — ele entrou em vigor em 2026-08-01 e reprova ha' 18 dias. Nenhum item do backlog o citava (`grep no-aes-remaining BACKLOG.md` -> 0). E' a mesma forma do **B-146**, o prazo do cosign vencido em 10/08: um prazo decidido, a data chegou, e ninguem soube porque nada olhava o resultado.
 status: triaged
+
+> **Correcao ao meu proprio registro, 2026-08-19 — e dois bloqueios medidos.**
+>
+> Eu escrevi que o prazo venceu e *"ninguem soube porque nada olhava o resultado"*, tendo
+> verificado apenas que nenhum item do backlog citava o gate. Isso estava errado, e a
+> mesma lacuna matou o **B-163**: o backlog nao e' o unico lugar onde uma decisao mora.
+>
+> `taskfiles/quality.yml:124-128` registra tudo: *"no-aes-remaining desligado do gate
+> agregado: o prazo T+60d venceu em 2026-08-01 e o branch AES legado do dispatcher …
+> ainda esta la, entao o gate passou a travar todo push em vez de sinalizar … **A divida
+> T10.3 (deletar o branch AES) segue aberta.**"*
+>
+> **O que MUDA com isso, e o que NAO muda.** Muda a acusacao: nao houve descuido, houve
+> uma escolha registrada de tirar o gate do agregado para nao travar entregas. **Nao
+> muda** o fato que sustenta a severidade — o ramo AES continua no dispatcher de
+> cifragem de segredo de tenant, 18 dias depois do prazo, e a divida esta' nomeada como
+> aberta e nao como planejada. Diferente do B-163, aqui nao ha' evento de desbloqueio
+> nomeado: ha' um numero de tarefa e uma constatacao.
+>
+> **Dois bloqueios para trabalha-lo aqui, os dois medidos hoje:**
+> 1. **Permissao.** `api/internal/db/store/secret_wrapper.go` esta' negado nesta sessao —
+>    `grep` e `sed` recusam. Nao consigo nem medir a forma do ramo, quanto menos remove-lo.
+> 2. **Governanca.** Remover ramo de decifragem e' T2 automatico (*credential or secret
+>    handling*), e a propria DoD exige caminho de leitura declarado para o que ja' foi
+>    escrito em AES — remover sem migrar torna segredo antigo ilegivel.
+>
+> O item continua valendo e continua sendo o mais grave dos abertos. So' nao e' meu para
+> fechar.
 dod:
   - o ramo AES sai de `encryptForStorage`, ou o prazo e' emendado por decisao registrada — as duas fecham, "deixar reprovando" nao
   - existe teste que prova que o caminho de escrita produz SO o prefixo Transit
