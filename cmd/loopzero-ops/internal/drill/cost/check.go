@@ -13,7 +13,7 @@
 // Faithful port: the default rates and the markdown table mirror
 // cost-report.sh:39-45,130-151 exactly so the bash --auto wrapper produces an
 // identical report when it delegates here.
-package drillcost
+package cost
 
 import (
 	"fmt"

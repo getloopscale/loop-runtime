@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/drillcost"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/drill/cost"
 )
 
 const drillHelpText = `loopzero-ops drill — pure-logic helpers for the drill/DR orchestrators
@@ -56,8 +56,8 @@ func runDrillCost(args []string) int {
 		fmt.Fprintln(os.Stderr, "drill cost: --start AND --end required")
 		return 1
 	}
-	rates := drillcost.DefaultRates()
-	rep, err := drillcost.Compute(*start, *end, rates)
+	rates := cost.DefaultRates()
+	rep, err := cost.Compute(*start, *end, rates)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "drill cost: %v\n", err)
 		return 1

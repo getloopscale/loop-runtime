@@ -16,7 +16,7 @@
 //   - p95 degradation during chaos <= 500ms over baseline
 //   - post-recovery p95 drift <= 100ms over baseline
 //   - loopzero-api restart delta <= 2
-package chaosslo
+package slo
 
 import (
 	"encoding/json"

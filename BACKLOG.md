@@ -3536,7 +3536,7 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura. Este item é também o exemplo medido do limite de escopo: a auditoria cobriu **um** repositório, e billing é um domínio que não cabe em um.
 
-## B-066 — Três suítes de invariante são testes Go comuns, invisíveis ao oráculo de gates   [ ]
+## B-066 — Três suítes de invariante são testes Go comuns, invisíveis ao oráculo de gates   [x]
 
 domain: engine-go
 repo: loopzero
@@ -3544,7 +3544,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `opencostgate`, `phase2gate` e `phase3gate` vivem sob `cmd/loopzero-ops/internal/quality/` e contêm apenas `doc.go` + dois `_test.go` cada — **zero entradas no `gateRegistry`**, importados por nada. Portanto `loopzero-ops quality --list`, que o `CLAUDE.md` designa como **o oráculo** do inventário de gates, não consegue enumerá-los. Eles rodam como testes Go comuns ou não rodam; de qualquer forma, quem consultar o oráculo não sabe que existem.
 why_now: o repositório tem um mecanismo bom para esse problema — o `quality_gate_wiring_test.go` exige que todo gate registrado esteja ligado ou isento. Ele não alcança estes três porque eles nunca foram registrados. É a terceira instância do padrão *declarado, testado, nunca ligado* (as outras duas: B-042 e B-055).
-status: triaged
+status: shipped
 severity: baixa — as asserções podem estar rodando via `go test`; o defeito é o inventário mentir por omissão.
 dod:
   - as três suítes são registradas como gates, ou movidas para fora de `internal/quality/` para não parecerem gates
@@ -3567,14 +3567,21 @@ dod:
 > `TestTodoPacoteDeQualityEGateOuAuxiliar` passou a exigir uma das duas coisas, e
 > reprovou nos três antes do movimento.
 >
-> **Bala 2 fica aberta, com o número medido.** Depois do movimento: 145
-> diretórios, 4 auxiliares, **141 importados pelo cmd** — e o oráculo lista
-> **139**. Dois pacotes são importados sem produzir entrada nomeada em `--list`.
-> Não identifiquei quais: nomes de diretório não mapeiam para nomes de gate por
-> regra (`advisorylock` → `advisory-lock-scope`, `caddyfilecspgate` → `caddyfile-csp`),
-> e minha tentativa pelo lado do registry usou um grep de `\.Check|\.Run` que não
-> distingue formas de ponto de entrada — **sinal grosso, não medição**. O oráculo
-> ainda não enumera tudo, e dizer o contrário seria trocar o defeito de lugar.
+> **Bala 2 FECHADA 2026-08-19 — a lacuna de dois era real, e eram estes dois.**
+>
+> Meu sinal anterior (`grep` por `\.Check|\.Run`) era grosso e eu disse isso na
+> hora. Refeito: os oito pacotes que ele acusava usam outros verbos de entrada
+> (`Compare`, `Merge`, `Compute`, `Derive`, `EmitCSV`, `Count`…) e **são** usados.
+>
+> Os dois de verdade eram **`drillcost`** e **`chaosslo`** — pacotes que vivem sob
+> `internal/quality/` mas servem **outros subcomandos**: `drill_subcmd.go` e
+> `chaos_subcmd.go`. Não são gates, então o oráculo estava certo em não os listar;
+> o que estava errado era **onde eles moravam**, exatamente a forma que este mesmo
+> item tratou com o `planregression`.
+>
+> Movidos para `internal/drill/cost` e `internal/chaos/slo`. Medido depois:
+> **144 diretórios − 4 auxiliares = 140, e o oráculo lista 140.** A contagem fecha,
+> e `--list` volta a enumerar tudo que vive ali.
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
