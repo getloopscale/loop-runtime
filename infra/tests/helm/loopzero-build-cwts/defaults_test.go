@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 	"sigs.k8s.io/yaml"
 )
 
@@ -38,16 +38,16 @@ type cwtDoc struct {
 
 func renderAll(t *testing.T) string {
 	t.Helper()
-	cp, err := helpers.ChartPath(chartName)
+	cp, err := chartrender.ChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(cp, "")
+	opts, err := chartrender.NewOptions(cp, "")
 	require.NoError(t, err)
-	return helpers.RenderTemplate(t, opts, cp, releaseName, nil)
+	return chartrender.RenderTemplate(t, opts, cp, releaseName, nil)
 }
 
 func renderCWTs(t *testing.T) []cwtDoc {
 	t.Helper()
-	docs := helpers.SplitYAMLByKind(renderAll(t), "ClusterWorkflowTemplate")
+	docs := chartrender.SplitYAMLByKind(renderAll(t), "ClusterWorkflowTemplate")
 	cwts := make([]cwtDoc, 0, len(docs))
 	for _, d := range docs {
 		var c cwtDoc
@@ -81,7 +81,7 @@ func TestBuildCWTs_AllHaveTemplates(t *testing.T) {
 
 func TestBuildCWTs_ResourceQuotaPresent(t *testing.T) {
 	t.Parallel()
-	docs := helpers.SplitYAMLByKind(renderAll(t), "ResourceQuota")
+	docs := chartrender.SplitYAMLByKind(renderAll(t), "ResourceQuota")
 	require.Equalf(t, expectedQuotas, len(docs),
 		"build namespace MUST have ResourceQuota (prevents runaway build "+
 			"resource consumption); want %d got %d", expectedQuotas, len(docs))
@@ -89,7 +89,7 @@ func TestBuildCWTs_ResourceQuotaPresent(t *testing.T) {
 
 func TestBuildCWTs_LimitRangePresent(t *testing.T) {
 	t.Parallel()
-	docs := helpers.SplitYAMLByKind(renderAll(t), "LimitRange")
+	docs := chartrender.SplitYAMLByKind(renderAll(t), "LimitRange")
 	require.Equalf(t, expectedLimits, len(docs),
 		"build namespace MUST have LimitRange (default pod resource "+
 			"limits); want %d got %d", expectedLimits, len(docs))
@@ -100,7 +100,7 @@ func TestBuildCWTs_RBACFullyDefined(t *testing.T) {
 	out := renderAll(t)
 	for _, kind := range []string{"ServiceAccount", "Role", "RoleBinding",
 		"ClusterRole", "ClusterRoleBinding"} {
-		docs := helpers.SplitYAMLByKind(out, kind)
+		docs := chartrender.SplitYAMLByKind(out, kind)
 		require.NotEmptyf(t, docs,
 			"build-cwts must define %s (Argo Workflows requires "+
 				"explicit RBAC; missing = pods can't start)", kind)
@@ -109,7 +109,7 @@ func TestBuildCWTs_RBACFullyDefined(t *testing.T) {
 
 func TestBuildCWTs_NetworkPolicyPresent(t *testing.T) {
 	t.Parallel()
-	docs := helpers.SplitYAMLByKind(renderAll(t), "NetworkPolicy")
+	docs := chartrender.SplitYAMLByKind(renderAll(t), "NetworkPolicy")
 	require.NotEmpty(t, docs,
 		"build namespace MUST have NetworkPolicy (build pods need scoped "+
 			"egress: only DOCR + Gitea + DNS)")

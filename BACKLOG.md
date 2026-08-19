@@ -8278,7 +8278,7 @@ dod:
 > faz — o gate achou o segundo módulo quebrado sozinho, depois de eu consertar o primeiro).
 
 
-## B-141 — Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só   [ ]
+## B-141 — Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só   [x]
 
 domain: engine-go
 repo: loopzero
@@ -8287,10 +8287,29 @@ source: discover-review
 severity: baixa — o nome é impreciso, mas o pacote é **coeso**: tudo nele serve a renderizar chart em teste. Não é o defeito do `B-061`, que era um pacote 2/5 imposto a quatro binários.
 evidence: medido 2026-08-17 ao fechar o `B-061`. Aquele item afirma ser *"o **único** pacote com nome da família helpers em toda a árvore Go"*. Não é: `infra/tests/helm/helpers` tem **3 arquivos Go, 878 linhas**, e é importado por ~20 testes de chart. (`infra/helmfile/scripts/test_helpers` também casa o nome, mas é shell — fora do escopo.)
 why_now: o limiar `generic_folder_names = 0` é um limiar declarado do projeto, e ele continua violado depois do `B-061`. A diferença é que este aqui **tem uma razão só de mudar** — `BootstrapChartPath`, `ChartPath`, `NewOptions`, `RenderTemplate`, `MustUnmarshalK8SYaml` servem todos a *renderizar um chart para um teste* —, então o nome certo existe (`chartrender`, `helmtest`) e o custo é ~20 arquivos de teste.
-status: triaged
+status: shipped
 dod:
   - o pacote tem um nome que diz o que ele renderiza, ou está escrito por que "helpers" é aceitável num módulo de teste
   - o limiar `generic_folder_names = 0` volta a ser verdade, ou o limiar registra a exceção com a razão
+> **Fechado 2026-08-19 — DoD 2/2, com o limiar verificado por varredura.**
+>
+> **Bala 1:** `infra/tests/helm/helpers` → **`infra/tests/helm/chartrender`**. O
+> nome diz o que o pacote renderiza, que é o que ele faz: `BootstrapChartPath`,
+> `ChartPath`, `NewOptions`, `RenderTemplate` e `MustUnmarshalK8SYaml` servem todos
+> a renderizar um chart para um teste. 26 importadores reapontados; o compilador
+> verifica o movimento por inteiro, e `go vet ./helm/...` passa.
+>
+> **Bala 2 — o limiar volta a ser verdade, e isso foi medido, não deduzido.**
+> Varri `helpers|utils|common|misc|shared|lib|util` sobre `api`, `pkg`, `operators`,
+> `cmd`, `infra/tests`, `infra/scripts` e `tools`. O que sobra:
+>
+> - `node_modules/**` — fixtures de terceiros, não pacote nosso;
+> - `infra/scripts/lib`, `infra/scripts/local/lib`, `k6/scripts/lib` — **shell**,
+>   com **zero** arquivos `.go` cada, e o próprio item já escopara shell para fora.
+>
+> Nenhum pacote **Go** com nome genérico permanece. O limiar não precisa de
+> exceção registrada porque não há exceção.
+
   - nenhum teste de chart quebra — a mudança é de nome, e o compilador verifica cada call site
 
 > Registrado 2026-08-17 ao fechar o `B-061`. **A afirmação "é o único" era falsificável e foi falsificada** — exatamente o que uma varredura de população faz (`rules/testing.md § 4.2`). Não foi renomeado junto porque o defeito do `B-061` (nome que não recusa nada, num pacote com alcance de quatro binários) não se aplica a este: ele é coeso e vive num módulo de teste.

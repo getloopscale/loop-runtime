@@ -26,7 +26,7 @@ package envparity_test
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 )
 
 // parityCharts are the charts whose per-env render is intentionally identical
@@ -64,7 +64,7 @@ func TestEnvParity(t *testing.T) {
 			env := env
 			t.Run(chart+"/"+env, func(t *testing.T) {
 				t.Parallel()
-				helpers.AssertEnvParityIfNoStub(t, env, chart)
+				chartrender.AssertEnvParityIfNoStub(t, env, chart)
 			})
 		}
 	}

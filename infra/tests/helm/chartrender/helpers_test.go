@@ -6,7 +6,7 @@
 //
 // Per skill rules: tests written FIRST (RED), implementation later (GREEN).
 // All tests in this file validate the helpers package contract.
-package helpers
+package chartrender
 
 import (
 	"os"

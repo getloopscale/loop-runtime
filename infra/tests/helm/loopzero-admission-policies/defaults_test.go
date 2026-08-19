@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 	"sigs.k8s.io/yaml"
 )
 
@@ -78,16 +78,16 @@ type vapBindingDoc struct {
 
 func renderAll(t *testing.T) string {
 	t.Helper()
-	chartPath, err := helpers.ChartPath(chartName)
+	chartPath, err := chartrender.ChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(chartPath, "")
+	opts, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
-	return helpers.RenderTemplate(t, opts, chartPath, releaseName, nil)
+	return chartrender.RenderTemplate(t, opts, chartPath, releaseName, nil)
 }
 
 func renderVAPs(t *testing.T) []vapDoc {
 	t.Helper()
-	out := helpers.SplitYAMLByKind(renderAll(t), "ValidatingAdmissionPolicy")
+	out := chartrender.SplitYAMLByKind(renderAll(t), "ValidatingAdmissionPolicy")
 	vaps := make([]vapDoc, 0, len(out))
 	for _, d := range out {
 		var v vapDoc
@@ -99,7 +99,7 @@ func renderVAPs(t *testing.T) []vapDoc {
 
 func renderBindings(t *testing.T) []vapBindingDoc {
 	t.Helper()
-	out := helpers.SplitYAMLByKind(renderAll(t), "ValidatingAdmissionPolicyBinding")
+	out := chartrender.SplitYAMLByKind(renderAll(t), "ValidatingAdmissionPolicyBinding")
 	bs := make([]vapBindingDoc, 0, len(out))
 	for _, d := range out {
 		var b vapBindingDoc
@@ -238,7 +238,7 @@ func TestAdmission_PodTargetingVAPsExemptSystemActors(t *testing.T) {
 
 func TestAdmission_ClusterImagePolicyPresent(t *testing.T) {
 	t.Parallel()
-	docs := helpers.SplitYAMLByKind(renderAll(t), "ClusterImagePolicy")
+	docs := chartrender.SplitYAMLByKind(renderAll(t), "ClusterImagePolicy")
 	require.Equalf(t, expectedCIPs, len(docs),
 		"ClusterImagePolicy count drifted — want %d (cosign signature "+
 			"gate), got %d", expectedCIPs, len(docs))
@@ -246,7 +246,7 @@ func TestAdmission_ClusterImagePolicyPresent(t *testing.T) {
 
 func TestAdmission_PrometheusRuleCount(t *testing.T) {
 	t.Parallel()
-	docs := helpers.SplitYAMLByKind(renderAll(t), "PrometheusRule")
+	docs := chartrender.SplitYAMLByKind(renderAll(t), "PrometheusRule")
 	require.Equalf(t, expectedPRs, len(docs),
 		"PrometheusRule count drifted — want %d (policy-controller-alerts "+
 			"+ tenant-namespace-alerts), got %d", expectedPRs, len(docs))

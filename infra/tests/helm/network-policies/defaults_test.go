@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 	netV1 "k8s.io/api/networking/v1"
 	"sigs.k8s.io/yaml"
 )
@@ -24,12 +24,12 @@ const (
 
 func renderNPs(t *testing.T) []netV1.NetworkPolicy {
 	t.Helper()
-	cp, err := helpers.ChartPath(chartName)
+	cp, err := chartrender.ChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(cp, "")
+	opts, err := chartrender.NewOptions(cp, "")
 	require.NoError(t, err)
-	out := helpers.RenderTemplate(t, opts, cp, releaseName, nil)
-	docs := helpers.SplitYAMLByKind(out, "NetworkPolicy")
+	out := chartrender.RenderTemplate(t, opts, cp, releaseName, nil)
+	docs := chartrender.SplitYAMLByKind(out, "NetworkPolicy")
 	nps := make([]netV1.NetworkPolicy, 0, len(docs))
 	for _, d := range docs {
 		var np netV1.NetworkPolicy

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 	"sigs.k8s.io/yaml"
 )
 
@@ -27,12 +27,12 @@ type clusterIssuerDoc struct {
 
 func render(t *testing.T) []clusterIssuerDoc {
 	t.Helper()
-	cp, err := helpers.ChartPath(chartName)
+	cp, err := chartrender.ChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(cp, "")
+	opts, err := chartrender.NewOptions(cp, "")
 	require.NoError(t, err)
-	out := helpers.RenderTemplate(t, opts, cp, releaseName, nil)
-	docs := helpers.SplitYAMLByKind(out, "ClusterIssuer")
+	out := chartrender.RenderTemplate(t, opts, cp, releaseName, nil)
+	docs := chartrender.SplitYAMLByKind(out, "ClusterIssuer")
 	cis := make([]clusterIssuerDoc, 0, len(docs))
 	for _, d := range docs {
 		var c clusterIssuerDoc

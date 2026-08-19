@@ -3,7 +3,7 @@
 // Package helpers — build-gate meta-defense.
 //
 // b9f19dc8 (2026-05-20) shipped 4 test packages referencing
-// `helpers.SplitYAMLByKind` while the staged helpers.go did NOT define
+// `chartrender.SplitYAMLByKind` while the staged chartrender.go did NOT define
 // that function. Each per-package test run had succeeded against an
 // in-memory edit, but the staged commit was broken. The regression was
 // only caught when a later iteration tried to add new T3.2 packages
@@ -18,7 +18,7 @@
 // runtime as the rest of the suite and is gated by build tag
 // `helm_render`, so it covers the exact set of packages the rest of the
 // plan exercises — no separate config to drift.
-package helpers
+package chartrender
 
 import (
 	"os/exec"

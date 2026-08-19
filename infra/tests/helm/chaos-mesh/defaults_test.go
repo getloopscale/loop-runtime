@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 )
 
 const (
@@ -24,23 +24,23 @@ const (
 
 func renderAll(t *testing.T) string {
 	t.Helper()
-	cp, err := helpers.ChartPath(chartName)
+	cp, err := chartrender.ChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(cp, "")
+	opts, err := chartrender.NewOptions(cp, "")
 	require.NoError(t, err)
-	return helpers.RenderTemplate(t, opts, cp, releaseName, nil)
+	return chartrender.RenderTemplate(t, opts, cp, releaseName, nil)
 }
 
 func TestChaosMesh_HasControllerManagerDeployment(t *testing.T) {
 	t.Parallel()
-	deploys := helpers.SplitYAMLByKind(renderAll(t), "Deployment")
+	deploys := chartrender.SplitYAMLByKind(renderAll(t), "Deployment")
 	require.NotEmpty(t, deploys,
 		"chaos-mesh must emit at least one Deployment (controller-manager)")
 }
 
 func TestChaosMesh_HasChaosDaemonDaemonSet(t *testing.T) {
 	t.Parallel()
-	ds := helpers.SplitYAMLByKind(renderAll(t), "DaemonSet")
+	ds := chartrender.SplitYAMLByKind(renderAll(t), "DaemonSet")
 	require.NotEmpty(t, ds,
 		"chaos-mesh must emit a DaemonSet (chaos-daemon runs per-node)")
 }
@@ -49,7 +49,7 @@ func TestChaosMesh_HasMutatingWebhookConfig(t *testing.T) {
 	t.Parallel()
 	// MutatingWebhookConfiguration is how chaos-mesh injects into pods.
 	// Missing = chaos experiments silently no-op.
-	mw := helpers.SplitYAMLByKind(renderAll(t),
+	mw := chartrender.SplitYAMLByKind(renderAll(t),
 		"MutatingWebhookConfiguration")
 	require.NotEmpty(t, mw,
 		"chaos-mesh MutatingWebhookConfiguration missing — chaos "+
@@ -58,7 +58,7 @@ func TestChaosMesh_HasMutatingWebhookConfig(t *testing.T) {
 
 func TestChaosMesh_HasValidatingWebhookConfig(t *testing.T) {
 	t.Parallel()
-	vw := helpers.SplitYAMLByKind(renderAll(t),
+	vw := chartrender.SplitYAMLByKind(renderAll(t),
 		"ValidatingWebhookConfiguration")
 	require.NotEmpty(t, vw,
 		"chaos-mesh ValidatingWebhookConfiguration missing — CR "+
@@ -70,7 +70,7 @@ func TestChaosMesh_HasRBACFullyDefined(t *testing.T) {
 	out := renderAll(t)
 	for _, kind := range []string{"ServiceAccount", "ClusterRole",
 		"ClusterRoleBinding"} {
-		docs := helpers.SplitYAMLByKind(out, kind)
+		docs := chartrender.SplitYAMLByKind(out, kind)
 		require.NotEmptyf(t, docs,
 			"chaos-mesh must declare %s (operator pattern requirement)",
 			kind)
@@ -79,7 +79,7 @@ func TestChaosMesh_HasRBACFullyDefined(t *testing.T) {
 
 func TestChaosMesh_HasServicesForControllerAndWebhook(t *testing.T) {
 	t.Parallel()
-	svcs := helpers.SplitYAMLByKind(renderAll(t), "Service")
+	svcs := chartrender.SplitYAMLByKind(renderAll(t), "Service")
 	require.GreaterOrEqualf(t, len(svcs), 2,
 		"chaos-mesh needs >=2 Services (controller-metrics + webhook "+
 			"endpoint); got %d", len(svcs))

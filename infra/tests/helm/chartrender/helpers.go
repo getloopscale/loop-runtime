@@ -16,19 +16,19 @@
 //
 //	import (
 //	    "testing"
-//	    "github.com/getloopscale/loopzero/infra/tests/helm/helpers"
+//	    "github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 //	)
 //
 //	func TestLoopZeroAPI_Defaults(t *testing.T) {
-//	    chartPath, _ := helpers.ChartPath("loopzero-api")
-//	    opts, _ := helpers.NewOptions(chartPath, "")
-//	    output := helpers.RenderTemplate(t, opts, chartPath, "loopzero-api-test",
+//	    chartPath, _ := chartrender.ChartPath("loopzero-api")
+//	    opts, _ := chartrender.NewOptions(chartPath, "")
+//	    output := chartrender.RenderTemplate(t, opts, chartPath, "loopzero-api-test",
 //	        []string{"templates/deployment.yaml"})
 //	    var deploy appsV1.Deployment
-//	    helpers.MustUnmarshalK8SYaml(t, output, &deploy)
+//	    chartrender.MustUnmarshalK8SYaml(t, output, &deploy)
 //	    // ... assertions
 //	}
-package helpers
+package chartrender
 
 import (
 	"fmt"
@@ -94,15 +94,15 @@ func resolveDeps(chartPath string) error {
 
 // repoRoot returns the absolute path to the LoopZero repository root,
 // regardless of the caller's CWD. Uses runtime.Caller to walk back
-// from this file's known location: infra/tests/helm/helpers/helpers.go
+// from this file's known location: infra/tests/helm/chartrender/chartrender.go
 //
 // This addresses edge case EC-5 (chart path resolution from non-CWD).
 func repoRoot() (string, error) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
-		return "", fmt.Errorf("runtime.Caller failed — cannot resolve helpers.go location")
+		return "", fmt.Errorf("runtime.Caller failed — cannot resolve chartrender.go location")
 	}
-	// thisFile = .../infra/tests/helm/helpers/helpers.go
+	// thisFile = .../infra/tests/helm/chartrender/chartrender.go
 	// Walk up 4 dirs: helpers/ → helm/ → tests/ → infra/ → repo root
 	root := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(thisFile)))))
 	// Sanity: expect Taskfile.yml at root
@@ -424,7 +424,7 @@ func HasEnvStub(env, chartName string) bool {
 //
 //	func TestEnvParity_dev(t *testing.T) {
 //	    t.Parallel()
-//	    helpers.AssertEnvParityIfNoStub(t, "dev", chartName)
+//	    chartrender.AssertEnvParityIfNoStub(t, "dev", chartName)
 //	}
 func AssertEnvParityIfNoStub(t *testing.T, env, chartName string) {
 	t.Helper()
@@ -453,7 +453,7 @@ func AssertEnvParityIfNoStub(t *testing.T, env, chartName string) {
 //
 // Example:
 //
-//	for _, raw := range helpers.SplitYAMLByKind(out, "CustomResourceDefinition") {
+//	for _, raw := range chartrender.SplitYAMLByKind(out, "CustomResourceDefinition") {
 //	    var crd apiextV1.CustomResourceDefinition
 //	    yaml.Unmarshal([]byte(raw), &crd)
 //	    // ... assertions per CRD
@@ -493,7 +493,7 @@ func SplitYAMLByKind(output, kind string) []string {
 // Example:
 //
 //	var deploy appsV1.Deployment
-//	helpers.MustUnmarshalK8SYamlByKind(t, output, "Deployment", &deploy)
+//	chartrender.MustUnmarshalK8SYamlByKind(t, output, "Deployment", &deploy)
 func MustUnmarshalK8SYamlByKind(t *testing.T, output, kind string, out interface{}) {
 	t.Helper()
 	// Split by document separator (--- at start of line)

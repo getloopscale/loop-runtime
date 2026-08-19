@@ -30,7 +30,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 	appsV1 "k8s.io/api/apps/v1"
 	coreV1 "k8s.io/api/core/v1"
 )
@@ -42,14 +42,14 @@ const (
 
 func renderDeploy(t *testing.T) appsV1.Deployment {
 	t.Helper()
-	chartPath, err := helpers.PublishedChartPath(chartName)
+	chartPath, err := chartrender.PublishedChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(chartPath, "")
+	opts, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
-	out := helpers.RenderTemplate(t, opts, chartPath, releaseName,
+	out := chartrender.RenderTemplate(t, opts, chartPath, releaseName,
 		[]string{"templates/deployment.yaml"})
 	var d appsV1.Deployment
-	helpers.MustUnmarshalK8SYamlByKind(t, out, "Deployment", &d)
+	chartrender.MustUnmarshalK8SYamlByKind(t, out, "Deployment", &d)
 	return d
 }
 
@@ -151,14 +151,14 @@ func TestPublished_HasSeparateServiceTemplate(t *testing.T) {
 	t.Parallel()
 	// Sanity: published variant has Service in its own template
 	// (templates/service.yaml), not multiplexed into deployment.yaml.
-	chartPath, err := helpers.PublishedChartPath(chartName)
+	chartPath, err := chartrender.PublishedChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(chartPath, "")
+	opts, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
-	out := helpers.RenderTemplate(t, opts, chartPath, releaseName,
+	out := chartrender.RenderTemplate(t, opts, chartPath, releaseName,
 		[]string{"templates/service.yaml"})
 	var svc coreV1.Service
-	helpers.MustUnmarshalK8SYamlByKind(t, out, "Service", &svc)
+	chartrender.MustUnmarshalK8SYamlByKind(t, out, "Service", &svc)
 	require.NotEmpty(t, svc.Spec.Ports,
 		"published variant Service must declare at least one port")
 }
@@ -167,17 +167,17 @@ func TestPublished_ServicePortMatchesContainerPort(t *testing.T) {
 	t.Parallel()
 	// Port mapping validation — Service targetPort must resolve to a
 	// container port. Same B50 class as bootstrap test.
-	chartPath, err := helpers.PublishedChartPath(chartName)
+	chartPath, err := chartrender.PublishedChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(chartPath, "")
+	opts, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
 
 	d := renderDeploy(t)
 
-	svcOut := helpers.RenderTemplate(t, opts, chartPath, releaseName,
+	svcOut := chartrender.RenderTemplate(t, opts, chartPath, releaseName,
 		[]string{"templates/service.yaml"})
 	var svc coreV1.Service
-	helpers.MustUnmarshalK8SYamlByKind(t, svcOut, "Service", &svc)
+	chartrender.MustUnmarshalK8SYamlByKind(t, svcOut, "Service", &svc)
 
 	containerPorts := make(map[int32]string)
 	for _, p := range d.Spec.Template.Spec.Containers[0].Ports {
@@ -206,13 +206,13 @@ func TestPublished_ServicePortMatchesContainerPort(t *testing.T) {
 
 func TestPublished_HasNetworkPolicy(t *testing.T) {
 	t.Parallel()
-	chartPath, err := helpers.PublishedChartPath(chartName)
+	chartPath, err := chartrender.PublishedChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(chartPath, "")
+	opts, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
-	out := helpers.RenderTemplate(t, opts, chartPath, releaseName,
+	out := chartrender.RenderTemplate(t, opts, chartPath, releaseName,
 		[]string{"templates/networkpolicy.yaml"})
-	docs := helpers.SplitYAMLByKind(out, "NetworkPolicy")
+	docs := chartrender.SplitYAMLByKind(out, "NetworkPolicy")
 	require.NotEmpty(t, docs,
 		"published variant must declare NetworkPolicy (production "+
 			"zero-trust posture)")
@@ -220,13 +220,13 @@ func TestPublished_HasNetworkPolicy(t *testing.T) {
 
 func TestPublished_HasPodDisruptionBudget(t *testing.T) {
 	t.Parallel()
-	chartPath, err := helpers.PublishedChartPath(chartName)
+	chartPath, err := chartrender.PublishedChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(chartPath, "")
+	opts, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
-	out := helpers.RenderTemplate(t, opts, chartPath, releaseName,
+	out := chartrender.RenderTemplate(t, opts, chartPath, releaseName,
 		[]string{"templates/pdb.yaml"})
-	docs := helpers.SplitYAMLByKind(out, "PodDisruptionBudget")
+	docs := chartrender.SplitYAMLByKind(out, "PodDisruptionBudget")
 	require.NotEmpty(t, docs,
 		"published variant must declare PDB (prevents drain-time outage)")
 }
