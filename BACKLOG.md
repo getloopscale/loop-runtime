@@ -3959,6 +3959,26 @@ dod:
 > por qualquer causa, não só por deleção direta — enquanto A e B consertam só o
 > caminho que alguém lembrou de instrumentar.
 >
+> **Medido 2026-08-19 — o GC nativo do Kubernetes (`ownerReferences`) NÃO serve, e a razão é dura.**
+> Seria a opção mais limpa de todas: o cluster removeria a órfã sozinho, sem prune,
+> sem escritor novo, sem código nosso. Ela exige que dono e dependente estejam no
+> mesmo cluster **e** no mesmo namespace (ou que o dono seja cluster-scoped).
+>
+> | | namespace | escopo do CRD |
+> |---|---|---|
+> | `Tenant` e `Environment` | `loopzero-system` (`api/internal/k8s/tenant_cr_manager.go:32`; o CR nasce em `tenant.Namespace`, `tenant_controller.go:406`) | `Namespaced` (`config/crd/bases/loopzero.io_environments.yaml:15`) |
+> | ArgoCD `Application` | `argocd` (`constants/resources.go:151`, usado em `tenant_gitops.go:98,:129,:311`) | — |
+>
+> Mesmo cluster: sim. **Mesmo namespace: não.** E um `ownerReference` namespaced
+> que aponta para outro namespace não é apenas ignorado — o dono é tratado como
+> **ausente**, e o dependente vira candidato a remoção. Ou seja, a tentativa não
+> falharia sem efeito: arriscaria o coletor apagar Applications **vivas**. Fica
+> registrado para ninguém reabrir a discussão daqui a três meses.
+>
+> Segue valendo a opção **C**, e ela continua **T2** — `pre-release-governance.md`
+> classifica lógica de reconcile de controller assim, e uma decisão de sessão par
+> não substitui a reunião. Implementação segue travada; a medição, não.
+>
 > Recomendação para a reunião: **C**, com A como alternativa se a reunião preferir
 > que o spec seja a única fonte de verdade do que é esperado.
 
