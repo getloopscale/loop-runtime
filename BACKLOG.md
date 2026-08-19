@@ -7421,7 +7421,7 @@ dod:
 > Os módulos são descobertos **no disco**, nunca listados: foi uma lista à mão que deixou cinco
 > de fora. Um módulo novo sem entrada na linha de base **reprova**, em vez de entrar em silêncio.
 
-## B-122 — Comentário afirma um gate de credenciais que não existe   [ ]
+## B-122 — Comentário afirma um gate de credenciais que não existe   [x]
 
 domain: engine-go
 repo: loopzero
@@ -7430,9 +7430,30 @@ source: discover-review
 severity: baixa — a proteção real existe e funciona; o defeito é o comentário afirmar uma segunda que não, e um leitor decidir com base nela
 evidence: medido 2026-08-16. `api/internal/config/config.go:20-22` afirmava que *"the no-hardcoded-credentials gate exempts this file by name"*. `grep -rn "config.go\|devDefault" cmd/loopzero-ops/internal/quality/` não encontra nem o caminho nem o identificador, e `loopzero-ops quality --list` (126 gates) não tem gate dessa família sobre fonte Go. A outra metade da afirmação é verdadeira e foi verificada: `validateProductionCredentials` (`config.go:658-674`) recusa o arranque quando `LOOPZERO_ENV` é produção e qualquer sentinela sobreviveu. A afirmação falsa foi removida na fatia do `B-009`; o que fica em aberto é se o gate deveria existir.
 why_now: encontrado ao justificar as três isenções `//nolint:gosec // G101` do mesmo bloco — escrever a razão exigiu verificar se ela era verdade, e metade não era. Mesma classe do `B-052` (`CLAUDE.md` apontando para contratos ausentes): documentação que promete uma proteção inexistente é pior que silêncio, porque quem lê para de procurar.
-status: triaged
+status: shipped
 dod:
   - está decidido se um gate de credenciais literais em fonte Go deve existir — e, se não, nenhum comentário do repositório afirma que existe
+> **Fechado 2026-08-19 — DoD 2/2, e a decisão da bala 1 é "não", por medição.**
+>
+> **Um gate de credenciais literais em fonte Go NÃO deve existir, porque a
+> capacidade já existe e cobre Go.** Medido: `trufflehog-scan` — ligado, no
+> `quality:gates` — roda `trufflehog git file://<repo>`, ou seja varre o
+> **histórico inteiro** do repositório, e fonte Go está dentro. Um gate novo seria
+> capacidade redundante, que o degrau 4 da escada de parcimônia recusa.
+>
+> A outra metade do risco tem mecanismo próprio e o item já a verificara:
+> `validateProductionCredentials` recusa o **arranque** quando `LOOPZERO_ENV` é
+> produção e qualquer sentinela sobreviveu. Os dois cobrem coisas diferentes —
+> trufflehog pega string com forma de segredo em qualquer commit; a guarda de
+> arranque pega a sentinela de dev conhecida, que é justamente de baixa entropia e
+> pode passar por um detector estatístico. Nenhum dos dois precisa de um terceiro.
+>
+> **Bala 2 verificada:** nenhum comentário do repositório afirma o gate ausente. O
+> `config.go:30-33` não só removeu a afirmação como registrou a correção no lugar —
+> *"No such gate exists — grep over cmd/loopzero-ops/internal/quality/ finds neither
+> this path nor `devDefault`. The claim was removed rather than left to be
+> trusted."*
+
   - se existir, ele isenta `internal/config/config.go` por nome e o comentário volta a citá-lo
   - a varredura por outras afirmações de gate inexistente no corpo de comentários foi feita, porque esta foi encontrada por acaso
 
