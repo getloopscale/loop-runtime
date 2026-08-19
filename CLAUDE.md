@@ -16,7 +16,13 @@ LoopZero is a **CLI-first managed cloud (Kubernetes-backed)** for monorepo deplo
 
 **Consequence:** if you are looking for a CLI command, a dashboard screen, Stripe billing, or a shared contract type, it is **not in this repo**. Do not re-implement it here. The decomposition ADR is `../decisions/2026-06-16-monorepo-decomposition.md` (umbrella root — **not** this repo's own `.claude/knowledge-base/decisions/`); the workspace contract is `../CLAUDE.md` (this used to also name an umbrella-scope rule file; it does not exist in the umbrella either — verified 2026-08-16, B-052).
 
-**Cycle artifacts (plans, reviews, audits, ADRs) and the CHANGELOG live in the UMBRELLA** (`../.claude/knowledge-base/`, `../CHANGELOG.md`), never inside this repo. Product code lives here. One iteration commits to two repositories.
+**Cycle artifacts (plans, reviews, audits, ADRs) and the CHANGELOG live in THIS repo** — `.claude/knowledge-base/` and `CHANGELOG.md`.
+
+This paragraph said the opposite until 2026-08-19, and both halves of it were false (B-159). Measured: `../CHANGELOG.md` **does not exist**, `../.claude/knowledge-base/` **does not exist**, and **all 21 sibling repos keep their own `CHANGELOG.md`** — this one has 4,567 lines and took 227 commits since 2026-08-01 alone. The instruction named a path nothing resolved to, while the repo's overwhelming practice did the opposite.
+
+It also contradicted two neighbours: the paragraph immediately below points at *this* repo's `CHANGELOG.md` and `.claude/knowledge-base/` as the dated history, and `.claude/rules/knowledge-base-location.md` states the rule outright — *"`<project>/.claude/knowledge-base/` is canonical. Always"*, and consumers do **not** share one. Per this file's own precedence rule, the tree wins.
+
+What genuinely lives at the umbrella root is narrower: the decomposition ADR named above, and `../CLAUDE.md`, the workspace contract.
 
 **The codebase is authoritative.** Where this file and the code disagree, the code wins. `CHANGELOG.md` (1 MB, exhaustive) and `.claude/knowledge-base/` hold the dated history — this file deliberately does not restate it.
 
@@ -240,7 +246,7 @@ Stores **WHY** — decisions, trade-offs, rationale that cannot be derived from 
 [ ] Mutating API routes handle Idempotency-Key
 [ ] Exit codes are 0/1/2/3/4/5 only
 [ ] State machine changes go through Transition()
-[ ] CHANGELOG entry in the UMBRELLA (../CHANGELOG.md) with **{project}:** attribution
+[ ] CHANGELOG entry in THIS repo's `CHANGELOG.md`, under `[Unreleased]` (B-159 — this said "in the UMBRELLA (../CHANGELOG.md)" until 2026-08-19, and that file does not exist)
 ```
 
 **Bash blocked:** `kubectl delete` (without dry-run), `k3d cluster delete`, `DROP TABLE/COLUMN`, `git push --force` to main, `helm uninstall` on postgresql/gitea/minio.

@@ -9366,6 +9366,23 @@ source: discover-review
 evidence: medido em 2026-08-19. `CLAUDE.md:19` diz que "the CHANGELOG live[s] in the UMBRELLA (`../CHANGELOG.md`)" e `CLAUDE.md:243` repete na lista de pre-conclusao: "CHANGELOG entry in the UMBRELLA (../CHANGELOG.md)". `ls ../CHANGELOG.md` -> **nao existe**. O que existe e' `CHANGELOG.md` neste repo, com 1,16 MB e **227 commits desde 2026-08-01**.
 why_now: bati nisso ao fechar o B-138 — segui a instrucao, o arquivo nao estava la', e o commit quase saiu sem entrada de CHANGELOG. Nao e' ambiguidade de redacao: a instrucao nomeia um caminho que nao resolve, e a pratica esmagadora do repositorio faz o oposto do que ela manda.
 status: triaged
+
+> **Consertado 2026-08-19 — e a medicao decidiu, em vez de eu escolher.**
+>
+> As duas afirmacoes da frase eram falsas: `../CHANGELOG.md` **nao existe** e
+> `../.claude/knowledge-base/` **tambem nao**. E **os 21 repos irmaos mantem o proprio
+> CHANGELOG** — o deste tem 4.567 linhas e recebeu 227 commits so' desde 2026-08-01.
+>
+> Isso tira a decisao do campo do gosto. O texto contradizia (a) o paragrafo
+> IMEDIATAMENTE abaixo dele, que aponta para o `CHANGELOG.md` e o
+> `.claude/knowledge-base/` **deste** repo como o historico datado; (b) a regra
+> `.claude/rules/knowledge-base-location.md`, que diz literalmente *"`<project>/.claude/
+> knowledge-base/` is canonical. Always"*; e (c) a pratica esmagadora da arvore. E o
+> proprio `CLAUDE.md` declara a precedencia: *"Where this file and the code disagree,
+> the code wins"*.
+>
+> Corrigidos os dois pontos (linha 19 e a lista de pre-conclusao), preservando o que de
+> fato vive no umbrella: o ADR da decomposicao e o `../CLAUDE.md`.
 dod:
   - o `CLAUDE.md` nomeia o arquivo que de fato recebe as entradas, ou o arquivo do umbrella passa a existir e a migracao esta' decidida
   - a lista de pre-conclusao e o paragrafo da linha 19 dizem a MESMA coisa — hoje dizem a mesma coisa errada, o que e' consistencia sem verdade
