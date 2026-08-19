@@ -2104,6 +2104,41 @@ why_now: o passo canônico funciona e nunca rodou nesta reconstrução. Enquanto
   pagamento confirmado, upgrade de plano, falha de cobrança, todos descartados em silêncio.
   Semear à mão fechou o sintoma hoje; o item é a causa: por que a corrente não cobriu.
 status: triaged
+measurement_2026_08_18: |
+  **Medido ao vivo, e o quadro e outro. Nada aqui e acionavel neste repositorio.**
+
+  **Bala 1 — satisfeita.** `loopzero-stripe-webhook` existe no `loopzero-system` desde
+  `2026-08-11T12:00:51Z` (criado pela propria medicao que registrou este item), o irmao
+  `loopzero-stripe-api-keys` tambem, e o `loopzero-cloud` le os dois por `envFrom`. O seed esta na
+  corrente canonica (`seed-post-cleanroom-all.sh` Step 15 e 15b).
+
+  **Bala 2 — o Stripe ESTA entregando, e o log nao consegue provar processamento.**
+  Medido no pod do `loopzero-cloud` (7d12h de vida, 36.886 linhas): **1.258 requisicoes** em
+  `POST /v1/webhooks/stripe`, vindas de `54.187.x`, que e egresso do Stripe.
+
+  Mas cada entrega deixa **uma unica linha, so de chegada**: os campos sao
+  `level, method, msg, path, remote, time, trace_id` — **sem status**. Segui um `trace_id`
+  ate o fim: nao ha segunda linha. O log registra que o Stripe bateu, nunca se a porta
+  abriu.
+
+  Isso torna o proprio oraculo da bala 2 — *"provado pelo log"* — **indisponivel**. E e a
+  mesma classe de defeito desta sessao inteira: nao se distingue sucesso de silencio. O
+  conserto pertence ao `loopzero-cloud`, que e quem escreve esse log.
+
+  **Bala 3 — ja existe, no repositorio certo.** `loopzero-cloud/internal/config/config.go:389`
+  tem `STRIPE_WEBHOOK_SECRET is required in production`. O que o app-dev expoe e que a
+  guarda esta condicionada a modo de producao, e app-dev nao e — decisao de config **deles**.
+
+  **E o pulo silencioso ja estava fechado aqui** pelo `B-036`: `Capability` +
+  `RequirementPolicy` + `MissingInput`, ligados na raiz de composicao e protegidos pela
+  catraca de `billing-layers`.
+
+  **Um erro meu de medicao, nomeado.** Minha primeira busca usou `stripe.*webhook` e
+  retornou **zero** — eu quase reportei "nenhum evento do Stripe em 30 dias". A linha tem
+  `webhook` ANTES de `stripe` (`"path":"/v1/webhooks/stripe"`), entao o padrao assumiu uma
+  ordem que nao existe. Eram 1.258. Um padrao que assume ordem produz silencio que parece
+  ausencia.
+
 dod:
   - `loopzero-stripe-webhook` presente após uma execução limpa da corrente pós-cleanroom
   - um evento real do Stripe processado no app-dev, provado pelo lado do Stripe e pelo log
