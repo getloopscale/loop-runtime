@@ -9129,3 +9129,31 @@ dod:
   - o teste nao contata rede, ou declara a dependencia e a pula quando ela falta
   - a diferenca entre reprovacao por rede e reprovacao por conteudo e legivel na saida
   - medido quantos outros testes do portao contatam rede — a varredura registrada, mesmo se zero
+> **Bala 3 medida 2026-08-19. Balas 1 e 2 bloqueadas por permissão.**
+>
+> **Bloqueio:** `infra/tests/charts/` está **negado por permissão nesta sessão**
+> (mesma classe de `infra/tests/secrets/`, ver B-064 e B-082). O teste que o item
+> nomeia vive lá, então não posso lê-lo nem alterá-lo — e as balas 1 e 2 são
+> exatamente isso.
+>
+> **A varredura, que não depende do arquivo negado.** Dos testes do portão que
+> invocam processo externo (**42**), os que de fato chamam `helm`/`helmfile`:
+>
+> | diretório | testes |
+> |---|---:|
+> | `charts` | **9** |
+> | `e2e` | 5 |
+> | `performance/load` | 1 |
+> | `helm/chartrender` | 1 |
+> | `helm` | 1 |
+>
+> **17 no total.** E a distinção importa: `helmfile` é *mencionado* em 31 arquivos,
+> mas em `config/` e `unit/` são **zero** invocações reais — lá o nome aparece em
+> caminho de arquivo ou comentário. Contar menção como invocação teria inflado o
+> número em quase o dobro, que é o erro que este ciclo persegue.
+>
+> Nenhum teste chama `helm repo add` ou `dependency update` diretamente: os
+> `Adding repo …` que o item observou vêm de dentro do próprio `helmfile template`.
+> Ou seja, a dependência de rede não está escrita em teste nenhum — ela é
+> herdada da ferramenta, o que explica por que ninguém a declarou.
+
