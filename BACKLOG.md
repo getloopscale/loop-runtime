@@ -7621,6 +7621,32 @@ why_now: o artefato que nomeava o risco foi deletado, e apagar o nome de um risc
 status: triaged
 dod:
   - existe uma forma de detectar ciphertext indecifrável que **não** dependa de um usuário tentar lê-lo — varredura periódica, sonda de saúde ou métrica, decidido caso a caso
+> **Medido 2026-08-19 — o desenho está escolhido e justificado; a implementação é
+> T2 e não a fiz.**
+>
+> Reconfirmado: o caminho de decifragem só reporta por **erro de requisição**
+> (`secret_wrapper.go:272` e `:416` devolvem `fmt.Errorf`), e não há métrica
+> alguma no wrapper. As duas métricas `loopzero_secret_*` que existem
+> (`externalsecret_total`, `audit_write_failed_total`) medem outras coisas.
+>
+> **Uma métrica no caminho de leitura NÃO satisfaz a DoD, e é a saída que parece
+> mais barata.** Ela agregaria as falhas — uma chave revogada viraria pico em vez
+> de erro espalhado — mas continua dependendo de **alguém tentar ler**. A DoD é
+> explícita nesse ponto, e ela está certa: o modo de falha é silencioso justamente
+> porque ninguém lê um segredo que não está sendo usado.
+>
+> **O desenho que satisfaz é a canária:** cifrar um valor conhecido com a chave de
+> cada tenant no provisionamento, e uma checagem periódica que tenta decifrá-lo. Ela
+> detecta revogação **sem tráfego de usuário** e sem varrer dado de cliente — a
+> varredura de linhas reais leria segredo alheio para verificar saúde, o que troca
+> um risco por outro.
+>
+> **Não implementei:** cifrar um valor por tenant é comportamento novo em caminho
+> de segredo — T2 pela governança, e o tipo de mudança que merece a reunião mesmo
+> que a tabela `secrets` esteja vazia hoje. A métrica no caminho de leitura vale
+> como **complemento** (torna visível a falha real quando ela ocorre), nunca como
+> substituto.
+
   - a detecção distingue *chave revogada* de *dado corrompido*, porque a resposta a cada uma é diferente (uma é restaurar chave, a outra é restaurar backup)
   - se a decisão for **não** construir enquanto não houver segredo de cliente, isso está escrito com gatilho nomeado — como o `B-075` fez com o apagamento
 
