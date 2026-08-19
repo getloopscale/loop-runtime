@@ -3593,6 +3593,33 @@ dod:
   - os alertas de segurança (`LoopZeroUnsignedReleasePushed`, `LoopZeroSecretESOSyncFailing`, `LoopZeroAttestationSaveFailing`) têm runbook — estes não entram em exceção
   - só depois disso os dois gates são ligados no `quality:gates`
 
+> **Medido 2026-08-18. Bloqueado por permissão na bala 2, e o bloqueio não foi
+> contornado.**
+>
+> Os números se sustentam: `alert-runbooks` reprova com **33** alertas sem
+> `runbook_url`, e os quatro que o item nomeia estão entre eles, todos em
+> `infra/helm/monitoring/manifests/prometheusrule-deep-review-remediation.yaml`.
+> Do lado das migrations, o gate desligado não imprime a contagem no formato que
+> o item cita; não reafirmo os 43 sem medir de novo.
+>
+> **Bala 2 preparada e não entregue.** Levantei os três alertas de segurança até o
+> ponto de emissão para escrever runbook ancorado em código, e não genérico:
+> `loopzero_release_signed_total` ←
+> `api/internal/services/release/container_delivery.go:376`;
+> `loopzero_release_attestation_save_fail_total` ← `container_delivery.go:348`;
+> `loopzero_secret_externalsecret_total` ← `api/internal/routes/secrets/secrets.go:796`.
+> Escrever o documento em `docs/operations/` é **negado por permissão nesta
+> sessão** (regra de leitura cobre o diretório). Escrever o mesmo conteúdo noutro
+> caminho para escapar da regra seria contorná-la, então não escrevi.
+>
+> A convenção de `runbook_url` também importa para quem retomar: há duas na
+> árvore — `https://docs.loopzero.example/runbooks/<slug>` (site externo, conteúdo não
+> verificável daqui) e uma URL de blob do próprio repositório
+> (`infra/tests/performance/k6/manifests/soak-alerts.yaml:24`). A segunda é a que
+> não cria citação morta, porque aponta para arquivo que existe no repositório.
+>
+> Balas 1 e 3 seguem abertas por dependerem da 2 e de decisão de piso.
+
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
 > **Correção 2026-08-11, ao planejar a fatia 1.** Os dois números **já estavam no registro** desde 2026-08-06, em `quality_gate_wiring_test.go`, com rationale melhor do que o deste item: 42 migrations (hoje 43 — uma nova entrou) e 33 alertas, ambos classificados `failingGate`, e a observação decisiva de que os runbooks existentes **devolvem 404**, então o gate mede presença de string, não existência de runbook. O item continua válido como *dívida a pagar*, mas deixa de ser descoberta: a descoberta é anterior e melhor documentada.
