@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 47 · **In flight** 0 · **Closed** 117
+164 items — **Open** 44 · **In flight** 0 · **Closed** 120
 
-### Open (47)
+### Open (44)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -108,15 +108,12 @@ consequência do escopo per-repo declarado acima.
 | [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `triaged` | média |
 | [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média |
 | [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados---x) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `triaged` | baixa |
-| [`B-152`](#b-152--o-primeiro-build-do-fixture-falha-em-manifestos-e-a-mensagem-não-diz-qual-domínio----) | O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio | `triaged` | — |
-| [`B-153`](#b-153--seis-passos-do-build-não-conseguem-falhar-o-exit-1-deles-é-engolido-por-um-tee----) | Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee` | `triaged` | — |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `triaged` | — |
 | [`B-155`](#b-155--o-lockfile-so-e-procurado-na-raiz-do-bundle-e-a-mensagem-nao-diz-onde-procurou----) | O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou | `triaged` | — |
 | [`B-156`](#b-156--um-teste-de-chart-depende-de-rede-e-reprova-o-portao-de-entrega-sob-carga----) | Um teste de chart depende de rede e reprova o portao de entrega sob carga | `triaged` | — |
 | [`B-157`](#b-157--uma-ferramenta-com-imagem-config-e-testes-não-é-invocada-por-caminho-nenhum----) | Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum | `triaged` | média |
 | [`B-158`](#b-158--o-registro-que-o-loop-inteiro-le-nao-e-validado-por-nada----) | O registro que o loop inteiro le' nao e' validado por nada | `triaged` | — |
 | [`B-159`](#b-159--o-checklist-manda-escrever-o-changelog-num-arquivo-que-nao-existe----) | O checklist manda escrever o CHANGELOG num arquivo que nao existe | `triaged` | — |
-| [`B-160`](#b-160--a-guarda-de-comandos-junta-pedacos-de-comandos-diferentes-e-bloqueia-o-inocente----) | A guarda de comandos junta pedacos de comandos diferentes e bloqueia o inocente | `triaged` | media |
 | [`B-161`](#b-161--o-gate-de-runbook-mede-a-anotacao-nao-o-runbook-6-dos-7-links-nao-levam-a-lugar-nenhum----) | O gate de runbook mede a anotacao, nao o runbook: 6 dos 7 links nao levam a lugar nenhum | `triaged` | media |
 | [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta |
 | [`B-163`](#b-163--um-gate-exige-do-pulumi-o-que-a-propria-arquitetura-ja-aposentou----) | Um gate exige do Pulumi o que a propria arquitetura ja' aposentou | `triaged` | baixa |
@@ -126,7 +123,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (117)
+### Closed (120)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -247,6 +244,9 @@ _None._
 | [`B-148`](#b-148--155-arquivos-go-não-passam-pelo-gofmt-e-nenhum-gate-percebe---x) | 155 arquivos Go não passam pelo `gofmt`, e nenhum gate percebe | `shipped` | baixa |
 | [`B-150`](#b-150--o-webhook-apontava-para-um-hostname-que-o-repositório-removeu-de-propósito---x) | O webhook apontava para um hostname que o repositório removeu de propósito | `shipped` | — |
 | [`B-151`](#b-151--o-destino-do-webhook-atravessa-dois-repositórios-e-ninguém-decidiu-qual---x) | O destino do webhook atravessa dois repositórios e ninguém decidiu qual | `killed` | — |
+| [`B-152`](#b-152--o-primeiro-build-do-fixture-falha-em-manifestos-e-a-mensagem-não-diz-qual-domínio---x) | O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio | `shipped` | — |
+| [`B-153`](#b-153--seis-passos-do-build-não-conseguem-falhar-o-exit-1-deles-é-engolido-por-um-tee---x) | Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee` | `shipped` | — |
+| [`B-160`](#b-160--a-guarda-de-comandos-junta-pedacos-de-comandos-diferentes-e-bloqueia-o-inocente---x) | A guarda de comandos junta pedacos de comandos diferentes e bloqueia o inocente | `shipped` | media |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -9075,7 +9075,7 @@ dod:
 > falha alto ou entrega o arquivo. Registrado como hipótese medida, não como
 > conserto afirmado.
 
-## B-152 — O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio   [ ]
+## B-152 — O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio   [x]
 
 domain: engine-go
 repo: loopzero
@@ -9125,12 +9125,29 @@ why_now: |
   A mensagem sem o domínio é o que torna isso caro: `CLAUDE.md` já registra uma
   família de falhas nesse estágio (digest ausente por cosign que não rodou), e
   distinguir qual delas é esta exige ler log de workflow em vez de ler o erro.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19 — as duas balas, conferidas por execucao.**
+>
+> **Bala 2 — a mensagem nomeia o dominio e o app.** `motivoDaFalhaDeManifestos` passa o
+> erro real por `scrub.Text` e o anexa ao motivo; tres testes passam, entre eles
+> `TestMotivoDaFalhaNomeiaOAppDoErroReal` e `TestMotivoDaFalhaHigienizaTermoInterno` —
+> o segundo garante que nomear o dominio nao vaze termo interno proibido pela Regra 3
+> (`"ArgoCD sync failed…"` sai como `"the deployment system sync failed…"`).
+>
+> **Bala 1 — a causa foi identificada e esta' coberta, mas o teste vive noutro item, e
+> isso fica dito em vez de escondido.** A cadeia terminava em `open Dockerfile: no such
+> file`: o passo `generate-dockerfile` falhava e o `exit 1` dele era engolido por um
+> `tee`, entao o workflow seguia sem Dockerfile e a falha so' aparecia na montagem de
+> manifestos. Quem cobre isso sao os 8 testes do **B-153**
+> (`api/internal/buildplane/argo/loopzero_log_exit_test.go` e irmaos), escritos RED contra o
+> estado de entao. Contar aqui um teste que mora la' seria contar duas vezes; apontar
+> para ele e' o que mantem a cadeia legivel.
 dod:
   - a causa da falha de manifestos identificada e coberta por teste que falha no estado atual
   - a mensagem nomeia o domínio e o app envolvidos
 
-## B-153 — Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee`   [ ]
+## B-153 — Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee`   [x]
 
 domain: engine-go
 repo: loopzero
@@ -9216,7 +9233,27 @@ why_now: |
   E é a mesma classe de defeito que esta sessão vem fechando em outras superfícies: um verde
   que não distingue "passou" de "não verifiquei". Aqui ele está no caminho por onde todo
   build do produto passa.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19 — as tres balas, cada uma com o teste que a prova.**
+>
+> | bala | prova |
+> |---|---|
+> | passo nao-zero faz o pod terminar nao-zero | `TestWrapper_PropagatesNonZeroExit` + `TestWrapper_PreservesTheExactCode` (o codigo exato, nao so' "diferente de zero") |
+> | vale no shell do CONTAINER, nao so' em bash | o arnes roda `exec.Command("sh", "-c", script)`, e o comentario diz por que: o container roda `Command: []string{"sh","-c"}`, e afirmar em bash nao mediria o que roda |
+> | falha-fechada do runtime nao suportado reprova de ponta a ponta | `TestUnsupportedRuntimeStepsActuallyFail` executa os **cinco** passos que a estrategia constroi e exige nao-zero em cada um |
+>
+> Os 8 testes do pacote passam.
+>
+> **O que a terceira bala NAO e', e o item ja' sabia:** afirmar que o script *contem*
+> `exit 1` — que e' o que `TestResolveStrategy_UnsupportedRuntime_FailsClosed` faz — nao
+> prova nada aqui, porque o defeito era exatamente um `exit 1` presente e engolido pelo
+> `tee`. So' executar prova.
+>
+> Fica registrado tambem o irmao `TestRealStrategySteps_EmitNoUnguardedPipefail`, que e'
+> textual **de proposito**: executar os passos reais rodaria instalacao e auditoria de
+> verdade — lento, com rede e nao-deterministico — para observar um defeito inteiramente
+> visivel no texto emitido.
 delivered_in: 53e8b1302  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 dod:
   - um passo cujo script sai não-zero faz o pod terminar não-zero, provado por teste
@@ -9291,6 +9328,21 @@ why_now: |
   campo ausente, entao nao conduz a nenhuma acao. O fixture velho e o primeiro caso, nao o
   unico possivel.
 status: triaged
+
+> **Medido 2026-08-19 com o acesso ao GitHub restaurado — duas balas e meia fechadas.**
+>
+> Balas 1 e 2 entregues: `failStep` distingue **campo ausente** de **valor nao
+> suportado**, que sao erros diferentes e recebiam a mesma frase.
+>
+> Bala 3, primeira metade **confirmada na fonte**: `gh api` sobre
+> `getloopscale/loopzero-repotest/contents/loopzero.yaml` mostra `runtime: python` na linha 7. O
+> fixture esta' atualizado.
+>
+> A segunda metade — *"um push real chega ao construtor"* — **nao e' verificavel desta
+> sessao**: exige o plano de build de pe' e cai sob o mandato de LIVE
+> (`.claude/rules/cleanroom-up-live-test-mandate.md`). Nao a marco como feita; deixo dito
+> exatamente o que falta, para que a proxima sessao com ambiente vivo saiba que so' isso
+> resta.
 dod:
   - um `loopzero.yaml` sem `runtime` produz mensagem que nomeia o campo ausente e o que escrever
   - a mensagem distingue "campo ausente" de "valor nao suportado" — sao erros diferentes
@@ -9519,7 +9571,7 @@ dod:
 umbrella e migrar 1,16 MB" e' decisao de quem mantem o contrato do workspace, nao consequencia
 de uma medicao. As duas fecham o dod e tem custos muito diferentes.
 
-## B-160 — A guarda de comandos junta pedacos de comandos diferentes e bloqueia o inocente   [ ]
+## B-160 — A guarda de comandos junta pedacos de comandos diferentes e bloqueia o inocente   [x]
 
 domain: engine-go
 repo: loopzero
@@ -9528,7 +9580,22 @@ source: discover-review
 severity: media — falha para o lado SEGURO (bloqueia demais), mas o efeito observado foi eu contornar a guarda para deletar um arquivo, o que e' pior para auditoria do que o `rm` que ela barrou
 evidence: medido em 2026-08-19 por isolamento de quatro sondas. `.claude/hooks/validate-command.sh:224-231` casa TRES regex — `RM_INVOCATION_RE`, `RM_RECURSIVE_RE`, `DANGEROUS_PATH_RE` — **independentemente sobre a string inteira do comando** e faz AND. Nada as amarra a MESMA invocacao.
 why_now: bloqueou trabalho real hoje. O comando era `rm -f <arquivo do projeto>` seguido de `grep -rn ... | sed 's/^/   /'`: o `rm` veio do primeiro comando, o `-r` do `grep -rn`, e o "caminho perigoso" da expressao do `sed` (`/` seguido de espacos casa `/([[:space:]]|$)`). Nenhum `rm -r` existia.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19 — as tres balas, conferidas por execucao.**
+>
+> Os cinco testes de `cmd/loopzero-ops/hook_rm_guard_test.go` passam e executam o hook de
+> verdade: os 2 de regressao (a forma medida), as **13 formas destrutivas** que seguem
+> recusadas e as 4 que a mensagem declara permitidas, mais a varredura de populacao
+> (43 invocacoes da arvore, zero recusadas — registrado no proprio teste que a guarda
+> ANTERIOR tambem nao recusava nenhuma, entao ela e' catraca e nao achado).
+>
+> **A metade que fica fora e' de outro dono, e por isso nao impede o fechamento.** A
+> guarda que governa os comandos em tempo de execucao e' uma copia INSTALADA de plugin
+> (`~/.claude/plugins/...`, duas delas). Elas pertencem ao repositorio de origem do
+> plugin e sao sobrescritas na proxima atualizacao — edita-las seria conserto que se
+> apaga sozinho e some do rastro. Por `cycle-backlog.md § Output`, item que aponta para
+> outro projeto mora no registro daquele projeto, nao neste.
 delivered_in: (ver a nota abaixo — o conserto e os testes estao no mesmo commit)
 dod:
   - existe teste que reprova ANTES do conserto com a forma medida (`rm -f a.go` + `grep -rn` + `sed 's/^/   /'` no mesmo bloco) e passa depois
