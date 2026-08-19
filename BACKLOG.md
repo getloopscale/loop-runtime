@@ -3515,6 +3515,35 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
+> **2026-08-19 — TERCEIRA BALA FECHADA (a verificacao a prova de deriva), e ela achou dois
+> defeitos. As outras tres seguem abertas.**
+>
+> A fatia anterior registrou que `chi.Walk` sobre o router real era o caminho certo, mas que
+> `NewRouter(Config{})` monta router vazio e a varredura passaria por vacuidade. **Medido: o
+> julgamento estava certo, e a razao era maior que a registrada** — com `TokenValidator` e
+> `MemberStore` o router monta **6** rotas, nenhuma mutante. O que abre as rotas mutantes sao
+> os ~24 handlers, nao os dois portoes de auth.
+>
+> O fixture usa handlers de tipo PONTEIRO com valor-zero: registram rota e nunca sao
+> executados, porque a requisicao passa pelo **middleware de auditoria real** envolvendo um
+> handler inerte — quem deriva a acao em producao e' esse middleware, nao o handler.
+>
+> **Alcance: 17 das ~32 rotas mutantes, e isso esta ESCRITO no teste.** As restantes dependem
+> de campos de interface, cada um exigindo o seu duble. Chamar isso de "toda rota mutante"
+> seria a forma que este item existe para combater.
+>
+> **O mutante pegou o meu proprio teste.** A primeira versao passava com **zero** linhas de
+> auditoria gravadas — o middleware so' escreve com `tenantID != ""`, e eu nao injetava o
+> `UserContext`. Verde sobre nenhuma inspecao. Agora ha piso de inspecao alem do piso de
+> rotas, e o mutante `TestB059_ODetectorAcusaCaminhoNaoMapeado` prova que o detector dispara.
+>
+> **Dois defeitos achados pela varredura:** `POST /api/v1/billing/portal` e
+> `POST /internal/argocd-callback` gravavam `unknown.POST.<segmento>`. Ganharam acao
+> declarada (`billing.portal_opened`, `deploy.callback_received`).
+>
+> **Segue aberto:** identificador declarado, remocao do body-snooping de 64 KiB, e o
+> agrupamento do `middleware` pelos cinco concerns.
+
 ## B-060 — O único lugar onde os quatro planos se encontram é uma pasta de arquivos irmãos   [ ]
 
 domain: engine-go

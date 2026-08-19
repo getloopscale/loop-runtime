@@ -42,6 +42,15 @@ func deriveAction(method, path string) string {
 			return "rollback.executed"
 		case "checkout":
 			return "billing.checkout_started"
+		// B-059: `POST /api/v1/billing/portal` e `POST /internal/argocd-callback` caiam no
+		// fallback `unknown.POST.<segmento>`. O segmento aqui e' estatico, entao a cardinalidade
+		// nao era ilimitada como no caso do id de tenant — mas a acao continuava `unknown.*`, e
+		// nenhuma consulta de auditoria acha por nome estavel o que se chama "desconhecido".
+		// Achadas pela varredura sobre o router real, nao a mao.
+		case "portal":
+			return "billing.portal_opened"
+		case "argocd-callback":
+			return "deploy.callback_received"
 		case "domains":
 			return "domain.added"
 		case "verify":
