@@ -129,7 +129,17 @@ func TestDeliveryGate_RunsOneRealTargetThatCoversThisModule(t *testing.T) {
 		t.Fatalf("no target in the gate's task invocation: %v", argv)
 	}
 
-	// (3) That target's expansion runs this module's WHOLE suite.
+	// (3) A expansao do alvo roda a suite INTEIRA deste modulo.
+	//
+	// Esta assercao le' a saida de `task --dry`, e `--dry` SUPER-REPORTA: um
+	// `cmds:` em bloco (`- |`) e' impresso verbatim, sem avaliar o `if`/`exit` de
+	// dentro. Medido em 2026-08-19 injetando exatamente essa forma — o `--dry`
+	// imprimiu a chamada e a execucao real pulou (B-102). O complemento que fecha
+	// o furo e' `TestPernaHermeticaRodaDeFatoASuiteDesteModulo`, que roda o alvo
+	// com um substituto de `go` e observa o que foi EXECUTADO.
+	//
+	// Esta metade fica: ela cobre a LINHA exata, que a observacao nao distingue
+	// (o substituto ve' `test ./...`, nao a forma do comando que o produziu).
 	//
 	// One assertion on the exact line, not two loose substrings. The review
 	// showed that `cd cmd/loopzero-ops && go test ./internal/quality/...` plus any

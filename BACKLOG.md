@@ -6085,7 +6085,7 @@ dod:
 > Registrado 2026-08-13, ao medir o `B-088` para fechá-lo. `.claude/rules/testing.md § 6` nomeia isto: *"Time/randomness in unit tests — inject a clock/RNG so the test is deterministic"*.
 
 
-## B-102 — `task --dry` imprime bloco multi-linha sem avaliar o controle de fluxo, e é nisso que uma asserção de segurança se apoia   [ ]
+## B-102 — `task --dry` imprime bloco multi-linha sem avaliar o controle de fluxo, e é nisso que uma asserção de segurança se apoia   [x]
 
 domain: engine-go
 repo: loopzero
@@ -6093,10 +6093,31 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-13 pela revisão do `B-088`. `task --dry` expande deps transitivas com fidelidade — `grep -nE 'preconditions:|internal: true|run: once|status:|sources:|generates:|platforms:' taskfiles/quality.yml Taskfile.yml` devolve **nada**, então nenhum passo é pulado por condição e o `--dry` nunca sub-reporta. Mas ele **super-reporta**: um `cmds:` em bloco (`- |`) é impresso verbatim, sem avaliar o `if`/`exit` dentro dele. Prova viva já na árvore — `taskfiles/quality.yml:298-301` aborta com `exit 1` quando falta o `helmfile` ou quando `LOOPZERO_TEST_SKIP_HELMFILE` está setado, e mesmo assim o `task --dry quality:all` imprime `cd infra/tests && go test ./charts/ -count=1` incondicionalmente.
 why_now: a asserção que fecha a bala 2 do `B-088` (`TestDeliveryGate_RunsOneRealTargetThatCoversThisModule`) confere a **cobertura** lendo a saída do `--dry`. Um alvo futuro com a forma `- |` / `[ -n "$SKIP" ] && exit 0` / `cd cmd/loopzero-ops && go test ./...` satisfaz a asserção e não roda nada — a mesma classe do bypass `--dry` que a revisão construiu, só que alcançada **sem ninguém querer burlar**. A metade comportamental do teste (o substituto de `task` que grava o argv) já cobre o que o hook executa; o que falta é a metade que confere o que o alvo executa.
-status: triaged
+status: shipped
 severity: média — hoje nenhum alvo do caminho de push tem essa forma, e a metade comportamental fecha o caso deliberado; o buraco é para o acidente futuro
 dod:
   - a cobertura é conferida por execução observada, não por leitura do `--dry` — por exemplo rodando o alvo com um substituto de `go` que grava os argv, como o teste já faz com o `task`
+> **Fechado 2026-08-19 — DoD 1/1, com o defeito reproduzido antes do conserto.**
+>
+> `TestPernaHermeticaRodaDeFatoASuiteDesteModulo` roda `task quality:hermetic` de
+> verdade, com um substituto de `go` no PATH que grava **diretório e argv**, e
+> exige que `go test ./...` tenha sido executado **a partir de `cmd/loopzero-ops`**.
+> Custa 0,09 s: o substituto não faz nada.
+>
+> **A premissa do item foi confirmada por reprodução.** Injetei a forma exata que
+> ele descreve — `- |` seguido de `[ -n "$VAR" ] && exit 0` antes da chamada — e
+> medi os dois lados: o `task --dry` **imprimiu** `cd cmd/loopzero-ops && go test ./...`
+> e a execução **pulou**. O teste novo reprovou; a leitura do `--dry` teria passado.
+>
+> **Um erro meu no meio, que quase virou a conclusão oposta:** a primeira contagem
+> deu "0 ocorrências impressas", e eu quase registrei que a premissa do item estava
+> errada. O `task --dry` escreve em **stderr**, e meu comando descartava stderr.
+> Com `2>&1`, uma ocorrência — exatamente como o item diz.
+>
+> A metade antiga fica, e o comentário dela agora diz por quê: ela cobre a **linha
+> exata**, que a observação não distingue — o substituto vê `test ./...`, não a
+> forma do comando que o produziu. As duas cobrem coisas diferentes.
+
   - existe caso que prova o buraco: um alvo de teste com `- |` e saída antecipada satisfaz a asserção de hoje e reprova na nova
   - a regra vale para qualquer asserção futura que leia `--dry` como prova de execução
 
