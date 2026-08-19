@@ -47,6 +47,7 @@ var gateRegistry = []gateSpec{
 	{"alert-runbooks", "Every Prometheus alert has a linked runbook annotation.", runAlertRunbooks},
 	{"anonymous-auth", "Forbids anonymous/unauthenticated access on protected API surfaces.", runAnonymousAuth},
 	{"module-selfcontained", "Todo modulo Go precisa compilar sem o go.work, que e o que o CI faz.", runModuleSelfContained},
+	{"dashboard-root-parity", "O runbook do painel precisa nomear o caminho que a borda de fato serve.", runDashboardRootParity},
 	{"caddy-host-parity", "Hostname exigido pela verificacao de borda precisa de bloco de site que termine o TLS.", runCaddyHostParity},
 	{"runbook-parity", "Mensagem de rotacao de token nao pode nomear o ServiceAccount que o runbook proibe.", runRunbookParity},
 	{"lint-coverage", "Todo modulo Go e medido (lint + gofmt), com catraca por modulo contra regressao.", runLintCoverage},

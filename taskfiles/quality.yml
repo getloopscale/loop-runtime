@@ -142,6 +142,7 @@ tasks:
       - /tmp/loopzero-ops quality lint-coverage     # B-121/B-083/B-148: todo modulo Go medido, catraca por modulo
       - /tmp/loopzero-ops quality runbook-parity    # B-140: mensagem de erro nao manda fazer o que o runbook proibe
       - /tmp/loopzero-ops quality caddy-host-parity # B-150: hostname exigido pela verificacao precisa de bloco que termine o TLS
+      - /tmp/loopzero-ops quality dashboard-root-parity # B-039: o runbook nomeia o caminho que a borda serve
       - /tmp/loopzero-ops quality module-selfcontained  # B-140: todo modulo compila sem go.work (o CI usa GOWORK=off)
       - /tmp/loopzero-ops quality correlation-header   # T6.1 of plan 2026-06-01-p3-infra-observability-test-debt
       - /tmp/loopzero-ops quality helm-overlap-parity

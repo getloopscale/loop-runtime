@@ -32,6 +32,7 @@ credentials-sot	gates	T1.1 SoT drift audit — every Secret created by canonical
 dangling-data-refs	diff	Detects data/file references that no longer resolve after a change.
 dangling-script-refs	diff	Detects shell-script references that no longer resolve after a change.
 dashboard-promtool	gates	Validates Grafana dashboard + Prometheus rules via promtool.
+dashboard-root-parity	gates	O runbook do painel precisa nomear o caminho que a borda de fato serve.
 db-generated-boundary	gates	MA-7 Gate A: no services/routes/server imports internal/db/generated.
 decisions-deletion	gates	Guards deletion of decision/ADR records.
 dev-public-billing-portal-syntax	gates	Hermetic contract for infra/tests/e2e/live/dev-public-billing-portal_test.sh — 8 assertions (bash -n / strict-mode / log+assert / billing endpoint / exit-code contract / allowlisted). M20 T2.1 Wave A gate 1/18.

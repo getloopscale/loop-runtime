@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-156 items — **Open** 58 · **In flight** 0 · **Closed** 98
+156 items — **Open** 57 · **In flight** 0 · **Closed** 99
 
-### Open (58)
+### Open (57)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -79,7 +79,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `triaged` | média |
 | [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
 | [`B-035`](#b-035--o-segredo-que-verifica-pagamentos-não-existia-no-ambiente----) | O segredo que verifica pagamentos não existia no ambiente | `triaged` | — |
-| [`B-039`](#b-039--o-painel-não-tem-checkout-canônico-no-droplet----) | O painel não tem checkout canônico no droplet | `triaged` | — |
 | [`B-054`](#b-054--o-api-roda-dois-circuit-breakers-escritos-independentemente-sobre-o-mesmo-pool-postgres----) | O `api` roda dois circuit breakers escritos independentemente sobre o mesmo pool Postgres | `triaged` | média |
 | [`B-056`](#b-056--dois-charts-diferentes-têm-o-mesmo-nome-em-duas-árvores-com-ciclos-de-vida-distintos----) | Dois charts diferentes têm o mesmo nome, em duas árvores com ciclos de vida distintos | `triaged` | média |
 | [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `triaged` | média |
@@ -137,7 +136,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (98)
+### Closed (99)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -174,6 +173,7 @@ _None._
 | [`B-036`](#b-036--os-seeds-de-cobrança-pulam-sem-credencial-e-a-corrente-reporta-verde---x) | Os seeds de cobrança pulam sem credencial e a corrente reporta verde | `shipped` | — |
 | [`B-037`](#b-037--o-painel-monta-os-dois-segredos-de-cobrança-como-opcionais---x) | O painel monta os dois segredos de cobrança como opcionais | `shipped` | — |
 | [`B-038`](#b-038--nenhuma-camada-de-cobrança-pode-degradar-em-silêncio---x) | Nenhuma camada de cobrança pode degradar em silêncio | `shipped` | — |
+| [`B-039`](#b-039--o-painel-não-tem-checkout-canônico-no-droplet---x) | O painel não tem checkout canônico no droplet | `shipped` | — |
 | [`B-040`](#b-040--o-gate-que-garante-autenticação-em-toda-rota-pública-passa-enumerando-zero-rotas---x) | O gate que garante autenticação em toda rota pública passa enumerando zero rotas | `shipped` | alta |
 | [`B-041`](#b-041--routes-é-o-pior-módulo-de-148-e-é-onde-se-procura-a-resposta-a-o-que-é-secret---x) | `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?" | `shipped` | alta |
 | [`B-042`](#b-042--ninguém-decidiu-se-o-provisionamento-de-chave-transit-é-do-api-ou-do-operator---x) | Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator | `shipped` | alta |
@@ -2289,7 +2289,7 @@ Registrado como B-039.
 > As camadas 3 e 4 **continuam degradando** (`open:B-033`). Esta fatia não conserta a cadeia —
 > garante que ela seja enumerável, com dono, e impossível de encolher em silêncio.
 
-## B-039 — O painel não tem checkout canônico no droplet   [ ]
+## B-039 — O painel não tem checkout canônico no droplet   [x]
 
 domain: engine-go
 repo: loopzero
@@ -2305,7 +2305,39 @@ evidence: |
 why_now: implantar um conserto no painel exigiu descobrir onde o código mora, corrigir o
   refspec e desfazer um remendo local — três passos que não estão em runbook nenhum. A
   próxima pessoa que precisar implantar às pressas paga a mesma descoberta.
-status: triaged
+status: shipped
+resolution: |
+  Fechado 2026-08-18, e a medicao corrigiu a premissa: **o caminho canonico nunca esteve
+  quebrado.** O que faltava era alguem dizer qual dos quatro era ele.
+
+  Medido no droplet:
+
+      ~/loopzero-cloud                    clone do UMBRELLA (loopzero-workspace), nao do produto
+      ~/loopzero-cloud/loopzero-cloud         CANONICO — refspec completo, e o que o Caddy serve
+      ~/.buildmeta-cloud/loopzero-cloud   ad-hoc, refspec so `develop`
+      ~/.b017-prova/loopzero-cloud        ad-hoc, refspec so `workspace`, e de OUTRA organizacao
+
+  O item mediu os ad-hoc e concluiu que o caminho estava quebrado. Estava — **aqueles**. No
+  canonico, `git fetch` popula `origin/workspace` normalmente, entao a bala 2 do DoD ja
+  estava satisfeita ali o tempo todo.
+
+  Duas coisas que o item nao nomeava e a medicao encontrou: o caminho obvio `~/loopzero-cloud` e
+  o umbrella clonado com o nome do produto — por isso engana —, e os dois clones ad-hoc
+  apontam para **organizacoes diferentes** (`getloopscale` vs `getloopscale`).
+
+  **Bala 1 fechada**, e com uma amarra: o caminho esta documentado em
+  `docs/operations/local-public-dashboard.md`, e o gate `dashboard-root-parity` recusa o
+  runbook se ele divergir do `root *` que o Caddyfile serve. Documentacao sozinha apodrece na
+  direcao mais perigosa — quem mudar o Caddyfile deixaria o runbook apontando para caminho
+  nao servido, e ai a proxima pessoa paga a mesma descoberta COM um documento que confirma o
+  erro.
+
+  **Um gate existente me pegou no caminho**, e estava certo: `publish-hygiene` recusou minha
+  documentacao por carregar `/home/paulo/...` em arquivo versionado — *"historia publicada e
+  publica retroativamente"*. O `Caddyfile` carrega porque e isencao COM PRAZO, que e divida
+  reconhecida e nao licenca para espalhar. O runbook passou a usar `~/`, e a paridade
+  normaliza o prefixo antes de comparar.
+
 dod:
   - um caminho canônico e documentado de onde o painel é construído no droplet
   - `git fetch && git switch workspace` funciona ali sem intervenção
