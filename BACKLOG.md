@@ -251,27 +251,25 @@ _None._
 
 ## Items
 
-## Bloqueio de ambiente — 2026-08-19 (não é item; é estado da máquina)
+## Bloqueio de ambiente — 2026-08-19 — **RESOLVIDO no mesmo dia** (não é item; é estado da máquina)
 
-O toolchain **Go desapareceu do host** durante o dia (junto de Rust, `~/.ssh`, venvs do
-pipx e o `golangci-lint`; a cadeia Node sobreviveu). Medido:
+Durante algumas horas o toolchain **Go desapareceu do host** (junto de Rust, `~/.ssh`,
+venvs do pipx e o `golangci-lint`; a cadeia Node sobreviveu). Enquanto durou:
+`task quality:build` saía com **exit 127**, logo `quality:gates` e `quality:all` não
+rodavam, logo o `delivery-gate.sh` bloqueava todo push. Dos 48 abertos, **26 citavam
+arquivo `.go`** e ficaram impossíveis de consertar ou verificar.
 
-- `task quality:build` → **exit 127**, `"go": executable file not found in $PATH`
-- logo `quality:gates` e `quality:all` não rodam
-- logo o **`delivery-gate.sh` bloqueia todo push**, porque ele roda `quality:all` sem bypass
+**Resolvido no mesmo dia**, com autorização do Paulo: Go **1.26.6** em `~/.local/go`
+(a maior exigência dos `go.mod` da árvore é 1.26.1), Rust, Deno e Bun restaurados.
+Verificado por mim: `go version` responde, e o `~/.ssh` foi recriado — `git ls-remote`
+funciona.
 
-**O que isso custa, contado:** dos 48 itens abertos, **26 citam arquivo `.go` no corpo** e
-portanto não podem ser consertados nem verificados enquanto o compilador não voltar. Os
-outros 22 seguem trabalháveis — medição, decisão, YAML, chart, documentação, e os gates
-que ainda rodam pelo binário pré-compilado em `/tmp`.
+**O que NÃO voltou: `golangci-lint`.** Era binário instalado por `go install` em
+`~/go/bin`. Enquanto faltar, o gate `lint-coverage` reprova por ferramenta ausente, e
+essa reprovação não é achado do repositório.
 
-A contagem por citação de `.go` é **heurística e está declarada como tal**: um item pode
-citar um `.go` como evidência e ter conserto em YAML, ou o inverso. Ela dá a ordem de
-grandeza do custo, não uma lista de trabalho.
-
-**Regra em vigor enquanto durar:** nada de commitar mudança de código Go sem verificação —
-nem "para verificar depois". Medir, registrar e esperar é o comportamento correto aqui.
-
+Este bloco fica como registro datado, e não como estado corrente — um aviso que
+sobrevive ao próprio fim é a mesma classe de defeito que este backlog persegue.
 
 ## B-001 — Os quatro clusters da plataforma têm nomes que mentem sobre o que são   [ ]
 
