@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A verificacao de que o resumo de prontidao e' a ultima escrita antes de salvar passou a valer para os seis controladores, e nao para um.** Ela seguia so' a funcao onde a escrita acontece, e a forma usada por sete controladores registra o resumo no fim do ciclo, num nivel acima — para a verificacao antiga isso parecia ausencia. Medido depois da correcao: 33 pontos de escrita, 33 cobertos (B-138)
 
 ### Removed
+- **O pacote "tudo em um" da plataforma foi retirado.** Ele não instalava: qualquer tentativa de gerar os manifestos falhava, e assim estava desde junho, sem ninguém notar — nenhuma verificação o exercitava. Como não instalava, ninguém podia estar usando. A decisão de projeto que ele encarnava continua registrada; o que saiu foi a implementação que não funcionava (B-073)
 
 - **Um arquivo de configuração que parecia governar uma verificação não era lido por ninguém, e três dos quatro itens que ele listava já nem existiam.** Removido, e uma verificação nova impede que outro arquivo desse diretório passe a parecer contrato sem sê-lo. (B-091)
 

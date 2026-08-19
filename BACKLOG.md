@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 28 · **In flight** 0 · **Closed** 136
+164 items — **Open** 27 · **In flight** 0 · **Closed** 137
 
-### Open (28)
+### Open (27)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -84,7 +84,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-060`](#b-060--o-único-lugar-onde-os-quatro-planos-se-encontram-é-uma-pasta-de-arquivos-irmãos----) | O único lugar onde os quatro planos se encontram é uma pasta de arquivos irmãos | `triaged` | média |
 | [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `triaged` | média |
 | [`B-069`](#b-069--a-mesma-regra-de-env-reservada-descarta-em-silêncio-de-um-lado-e-mata-o-build-do-outro----) | A mesma regra de env reservada descarta em silêncio de um lado e mata o build do outro | `triaged` | média |
-| [`B-073`](#b-073--o-chart-guarda-chuva-não-tem-consumidor-conhecido-e-mantê-lo-custa----) | O chart guarda-chuva não tem consumidor conhecido, e mantê-lo custa | `triaged` | baixa |
 | [`B-074`](#b-074--deletar-o-environment-cr-direto-deixa-a-application-órfã-e-o-reaper-não-a-alcança----) | Deletar o Environment CR direto deixa a Application órfã, e o reaper não a alcança | `triaged` | média |
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `triaged` | média |
 | [`B-080`](#b-080--os-43-arquivos-de-routes-ainda-são-um-pacote-plano-e-mover-263-símbolos-exportados-é-t3----) | Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3 | `triaged` | alta |
@@ -107,7 +106,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (136)
+### Closed (137)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -173,6 +172,7 @@ _None._
 | [`B-070`](#b-070--env-aws_region-já-quebra-o-build-hoje-e-a-api-aceitaria-a-mesma-chave---x) | `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave | `shipped` | média ↑ |
 | [`B-071`](#b-071--task-testunit-está-vermelho-na-workspace-e-a-causa-é-um-par-que-se-desencontrou---x) | `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou | `shipped` | alta |
 | [`B-072`](#b-072--a-policy-versionada-nega-ao-api-a-criação-de-chave-que-o-api-faz---x) | A policy versionada nega ao `api` a criação de chave que o `api` faz | `shipped` | alta |
+| [`B-073`](#b-073--o-chart-guarda-chuva-não-tem-consumidor-conhecido-e-mantê-lo-custa---x) | O chart guarda-chuva não tem consumidor conhecido, e mantê-lo custa | `shipped` | baixa |
 | [`B-075`](#b-075--o-primitivo-de-crypto-shredding-não-tem-dono-e-o-adr-quase-o-deletou---x) | O primitivo de crypto-shredding não tem dono, e o ADR quase o deletou | `shipped` | alta |
 | [`B-076`](#b-076--21-divergências-entre-chart-publicado-e-de-bootstrap-estão-aprovadas-sem-que-ninguém-tenha-medido-por-quê---x) | 21 divergências entre chart publicado e de bootstrap estão aprovadas sem que ninguém tenha medido por quê | `shipped` | média |
 | [`B-077`](#b-077--a-cerca-de-forma-dos-crs-tenant-está-desligada-exatamente-no-cluster-onde-os-crs-vivem---x) | A cerca de forma dos CRs Tenant está desligada exatamente no cluster onde os CRs vivem | `shipped` | alta |
@@ -4141,7 +4141,7 @@ dod:
 > `pkg/vault/transit_client.go` e exige que o chart conceda esse prefixo nos três verbos. Mutante:
 > mudar o prefixo no Go e não no chart reprova, nomeando os paths.
 
-## B-073 — O chart guarda-chuva não tem consumidor conhecido, e mantê-lo custa   [ ]
+## B-073 — O chart guarda-chuva não tem consumidor conhecido, e mantê-lo custa   [x]
 
 domain: engine-go
 repo: loopzero
@@ -4149,7 +4149,43 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 ao decidir o `B-048`. Os únicos consumidores de `charts/loopzero-platform` são de teste ou template: `taskfiles/helm.yml:32,:37,:42,:108`, `infra/tests/helm/loopzero-platform/defaults_test.go`, `infra/tests/helm/envparity/envparity_test.go:51`, `infra/tests/helm/README.md:125-128`. O **bootstrap do ArgoCD não o usa** — os únicos `path: charts/*` em `infra/argocd-bootstrap/apps/` são quatro Applications, uma por operator. Zero referências em qualquer repositório irmão do workspace.
 why_now: a decisão do `B-048` foi tomada (é composição single-cluster, e isso passa a estar escrito no chart), mas ela levanta a pergunta que a evidência não fecha: **se o chart deveria existir**. Mantê-lo custa o gate `helm-overlap-parity`, os testes de envparity e a manutenção de 12 toggles. O dado que falta não é mensurável em disco — o README documenta instalação via `oci://registry.digitalocean.com/loopzero-system/helm/loopzero-platform`, e o conteúdo do registry não é visível daqui.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19 — REMOVIDO.** Registro:
+> `MEET-ASYNC-AMENDMENT-2026-08-19-remove-umbrella-chart.md` — pendente de ratificacao.
+>
+> **A bala 1 deixou de precisar de resposta.** Ela pedia medir se o chart publicado e'
+> consumido fora do workspace, e eu havia registrado que isso e' irrespondivel por
+> principio (o registry fala de publicacao, nao de consumo). Medido hoje:
+>
+> ```
+> helm template loopzero charts/loopzero-platform                        -> rc=1, 0 linhas
+> helm template … -f profiles/dev.yaml                           -> rc=1, 0 linhas
+> helm template … -f profiles/prod.yaml                          -> rc=1, 0 linhas
+> ```
+>
+> **Ele nao instala em nenhuma invocacao declarada.** Os `values.schema.json` dos subcharts
+> recusam `global` e `enabled` — as duas chaves que uma composicao guarda-chuva injeta. Nao
+> pode ter consumidor porque nao pode ser instalado.
+>
+> **Quebrado desde `1ce505758`, 2026-06-19 — dois meses**, e ninguem notou porque nenhum gate
+> o renderizava. Nao estava no bootstrap do ArgoCD nem no matrix de publicacao (o que esta'
+> la' e' o `loopzero-platform-operator`, chart diferente).
+>
+> **A objecao do Challenger foi respondida, nao ignorada:** ha' investimento registrado (o
+> ADR do `B-048`), e ele **nao morre com o chart** — vive em
+> `docs/wiki/decisions/2026-08-12-umbrella-chart-plane-separation` e no historico. O que saiu
+> foi a implementacao nao-funcional. E "o conserto pode ser pequeno" era hipotese: afrouxar
+> `global`/`enabled` em 12+ schemas desfaz a tipagem que `1ce505758` introduziu de proposito,
+> para servir um consumidor que a medicao nao encontra.
+>
+> **Removidos junto os quatro alvos de taskfile** que o invocavam — os quatro quebrados.
+> `task --list` segue com 281 alvos, `chart-pairs` PASS, `infra/CHART-PLANE-INDEX.md`
+> atualizado.
+>
+> **Consequencia medida, registrada e NAO executada:** `loopzero-monitoring` e `loopzero-dashboard`
+> tinham o guarda-chuva como unico consumidor declarado e agora ficam sem nenhum. Remove-los
+> e' decisao distinta, e este item nao a pediu.
 
 > **Bala 3 fechada 2026-08-19, e a medicao achou um custo que o item nao contava.**
 >
