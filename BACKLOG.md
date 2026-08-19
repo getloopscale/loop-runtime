@@ -6810,6 +6810,34 @@ status: triaged
 severity: média — não afirmo que `tag: dev` seja violação decidida: pode ser sobrescrita no install pelo ArgoCD, e nenhuma decisão registrada a proíbe. O que está medido é que a guarda cobre 1 de 16, e que os 15 restantes nunca foram julgados.
 dod:
   - está decidido se `tag: dev` nos charts publicados é aceito, sobrescrito no install, ou violação — com a evidência de qual dos três é
+> **Medido 2026-08-19 — a pergunta da DoD tem resposta, e as três hipóteses foram
+> discriminadas. É a terceira: violação.**
+>
+> **(1) `dev` não é tag aceita.** O ADR-0020 D1 é explícito e T3-ratificado:
+> `^(v\d+\.\d+\.\d+(-[a-z0-9]+)?|sha-[a-f0-9]+|[a-f0-9]+|latest)$`. `dev` não
+> casa — o `v` não pertence a `[a-f0-9]`, então nem o ramo hexadecimal a aceita.
+>
+> **(2) Não é sobrescrita no install.** A Application do ArgoCD para os charts de
+> operator (`infra/argocd-bootstrap/apps/mgmt-loopzero-app-operator.yaml`) aponta
+> `path` + `targetRevision: HEAD` e **não passa parâmetro helm nenhum** — sem
+> `valuesObject`, sem override de tag. O que está no values é o que vai para o
+> cluster.
+>
+> **(3) A guarda nunca as viu.** O próprio D1 nomeia sua aplicação:
+> `infra/pulumi/src/__tests__/image-tag-format.test.ts`. Medido: ela varre
+> **`infra/helm/`** (`const helmDir = path.join(REPO_ROOT, 'infra', 'helm')`). Os
+> sete charts violadores vivem em **`charts/`**, fora do alcance da regra que os
+> proíbe.
+>
+> **Não corrigi, e a razão não é só governança.** Trocar `tag: dev` nos sete é
+> mudança de Helm chart (T2) **e** pode quebrar deploy: se as imagens publicadas no
+> registry estão marcadas `dev`, apontar para semver instala uma tag que não
+> existe. Isso precisa ser conferido contra o registry — que, como medi no B-073,
+> exige credencial que esta sessão não tem.
+>
+> A pergunta da DoD está respondida com evidência; a remediação é T2 e depende de
+> uma leitura do registry.
+
   - a asserção passa a varrer a população de charts em vez de um caminho fixo, com isenção **nomeada** para chart de terceiro (cuja tag é a versão upstream e não nossa para policiar)
 
 > Registrado 2026-08-15 pela varredura de população do `B-092`. É a terceira vez nesta sessão que uma guarda verificada contra uma instância cobria uma fração da população — a classe está no `B-109`.
