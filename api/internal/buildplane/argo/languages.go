@@ -11,6 +11,7 @@ package argo
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
@@ -107,8 +108,23 @@ func (s *unsupportedStrategy) Name() string        { return "unsupported" }
 func (s *unsupportedStrategy) CacheKey() string    { return "" }
 func (s *unsupportedStrategy) CacheDirs() []string { return nil }
 
+// failStep emite o passo que falha alto quando o runtime nao e' da pilha fixa.
+//
+// CAMPO AUSENTE e VALOR NAO SUPORTADO sao erros diferentes e tinham a mesma
+// mensagem: um `loopzero.yaml` sem `runtime` produzia `runtime "" is not supported`,
+// que acusa o usuario de ter escrito errado algo que ele nao escreveu, e nao diz
+// o que escrever (B-154). Medido ao vivo em 2026-08-18, no ultimo elo da cadeia
+// do B-152.
 func (s *unsupportedStrategy) failStep(name string) *forge.Container {
-	msg := fmt.Sprintf("loopzero: runtime %q is not supported — LoopZeroCloud deploys the fixed LoopZeroKit stack (python, node) only", s.runtime)
+	var msg string
+	if strings.TrimSpace(s.runtime) == "" {
+		msg = "loopzero: o loopzero.yaml nao declara `runtime` para este app — " +
+			"acrescente `runtime: python` ou `runtime: node`. " +
+			"LoopZeroCloud implanta a pilha fixa LoopZeroKit, e o runtime nao tem default: " +
+			"adivinhar aqui construiria a imagem errada em silencio."
+	} else {
+		msg = fmt.Sprintf("loopzero: runtime %q is not supported — LoopZeroCloud deploys the fixed LoopZeroKit stack (python, node)", s.runtime)
+	}
 	return buildContainer(name, imageAlpine, forge.ResourcesTiny(), fmt.Sprintf("echo %q >&2\nexit 1", msg))
 }
 

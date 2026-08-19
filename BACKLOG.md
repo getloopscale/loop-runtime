@@ -8956,6 +8956,28 @@ dod:
   - a asserção vale no shell do container (POSIX/ash), não só em bash
   - o mecanismo de falha-fechada do runtime não suportado reprova o build de ponta a ponta
 
+> **Balas 1 e 2 entregues 2026-08-19; a 3 é do repositório de fixture e de um push ao vivo.**
+>
+> `unsupportedStrategy.failStep` passou a **distinguir os dois erros**, que tinham
+> a mesma mensagem:
+>
+> - **campo ausente** → *"o loopzero.yaml nao declara `runtime` para este app —
+>   acrescente `runtime: python` ou `runtime: node`"*, mais a razão de não haver
+>   default: adivinhar construiria a imagem errada em silêncio;
+> - **valor não suportado** → segue nomeando o valor recusado.
+>
+> A mensagem antiga (`runtime "" is not supported`) acusava o usuário de ter
+> escrito errado **algo que ele não escreveu**, e não dizia o que escrever.
+>
+> Há teste para os dois lados, e o segundo existe por um motivo: consertar o caso
+> ausente sem ele poderia apagar a distinção no outro sentido — um `runtime: rust`
+> deixando de nomear `rust`.
+>
+> **Bala 3 fica aberta e não é minha para fechar aqui:** o `loopzero.yaml` a corrigir
+> vive no repositório de fixture (`getloopscale/loopzero-repotest`), fora desta árvore, e
+> a segunda metade — *"um push real chega ao construtor com runtime não vazio"* —
+> é verificação ao vivo, não teste hermético.
+
 ## B-154 — Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported"   [ ]
 
 domain: engine-go
