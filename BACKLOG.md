@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 25 · **In flight** 0 · **Closed** 139
+164 items — **Open** 24 · **In flight** 0 · **Closed** 140
 
-### Open (25)
+### Open (24)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -86,7 +86,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `triaged` | média |
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `triaged` | média |
 | [`B-080`](#b-080--os-43-arquivos-de-routes-ainda-são-um-pacote-plano-e-mover-263-símbolos-exportados-é-t3----) | Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3 | `triaged` | alta |
-| [`B-094`](#b-094--a-metade-api-do-find_sec_004-guarda-um-campo-que-ninguém-popula----) | A metade API do `find_sec_004` guarda um campo que ninguém popula | `triaged` | média |
 | [`B-095`](#b-095--a-segunda-cerca-sobre-crs-loopzeroio-renderiza-em-lugar-nenhum----) | A segunda cerca sobre CRs `loopzero.io` renderiza em lugar nenhum | `triaged` | média |
 | [`B-098`](#b-098--duas-policies-do-openbao-são-declaradas-e-nunca-ligadas-a-role-nenhum----) | Duas policies do OpenBao são declaradas e nunca ligadas a role nenhum | `triaged` | média |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
@@ -104,7 +103,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (139)
+### Closed (140)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -189,6 +188,7 @@ _None._
 | [`B-091`](#b-091--infraqualitydry-run-baselinetxt-é-a-segunda-baseline-sem-leitor---x) | `infra/quality/dry-run-baseline.txt` é a segunda baseline sem leitor | `shipped` | baixa |
 | [`B-092`](#b-092--16-arquivos-de-teste-em-infratests-não-rodam-e-dois-subdiretórios-estão-vermelhos---x) 🔒 | 16 arquivos de teste em `infra/tests` não rodam, e dois subdiretórios estão vermelhos | `shipped` | alta |
 | [`B-093`](#b-093--o-validador-do-servicesjson-não-bloqueia-os-prefixos-que-a-plataforma-injeta---x) | O validador do `services.json` não bloqueia os prefixos que a plataforma injeta | `shipped` | média |
+| [`B-094`](#b-094--a-metade-api-do-find_sec_004-guarda-um-campo-que-ninguém-popula----) | A metade API do `find_sec_004` guarda um campo que ninguém popula | `shipped` | média |
 | [`B-096`](#b-096--o-chart-publicado-do-loopzero-api-renderiza-uma-sa-que-as-políticas-de-admissão-não-isentam---x) | O chart publicado do `loopzero-api` renderiza uma SA que as políticas de admissão não isentam | `shipped` | média |
 | [`B-097`](#b-097--o-cli-documenta-um-kubectl-patch-que-a-nova-cerca-nega---x) | O CLI documenta um `kubectl patch` que a nova cerca nega | `shipped` | baixa |
 | [`B-099`](#b-099--a-policy-corrigida-não-alcança-a-identidade-que-cria-a-chave-e-o-bootstrap-a-sobrescreve---x) | A policy corrigida não alcança a identidade que cria a chave, e o bootstrap a sobrescreve | `shipped` | alta |
@@ -6176,7 +6176,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-13 pela revisão da fatia `slice-15`. `api/internal/services/deploycontracts/build_plan.go:120` chama `isReservedEnvKey` dentro de `for k, v := range unit.Env` (`:114`). `unit.Env` vem de `app_unit.go:130` ← `raw.Env` ← `AppSpec.Env` (`shared_contracts.go:32`). **Nenhum site de produção popula esse campo**, e o tipo de fronteira HTTP `routes.AppInput` (`builds.go:53-67`) sequer o declara — verificado também em `adapters/build_adapter.go:39-52`, `api/cmd/autodeploy_adapters.go:131-137`, `loopzero_yaml_apps.go`, `workflow_builder.go` e `languages.go`. O laço nunca itera; a regra não dispara.
 why_now: três artefatos afirmavam, no presente, que essa regra **impede** sombreamento — o doc-comment de `validator_env.go`, o ADR `2026-08-13-reserved-env-two-rules` e a saída do gate `env-prefix-parity`. As três foram corrigidas na mesma fatia, mas o código continua: uma regra de segurança inalcançável que parece cobertura, e um gate verde comparando duas cópias dela.
-status: triaged
+status: shipped
 severity: média — não há vulnerabilidade aberta (o caminho que ela guardaria também não existe); o custo é a aparência de proteção, que é a classe do `B-055` e do `B-045`.
 dod:
   - está decidido se `AppSpec.Env` deve ser populado (e então a regra passa a valer) ou removido (e então a regra sai com ele)
@@ -6211,6 +6211,22 @@ dod:
 > Registrado 2026-08-13 pela revisão da fatia `slice-15`. É a terceira instância nesta série do padrão
 > *declarado + testado + nunca ligado* — as outras duas são `B-055` (helper sem chamador) e `B-045`
 > (gates que não rodam).
+
+> **Decidido e entregue 2026-08-19.** Direcao: **removido**, e a medicao dissolveu a
+> preocupacao de governanca que segurava a decisao.
+>
+> A regra alcancavel — `validateReservedEnvKeys` sobre `ServiceEntry.Env` — **fica**. O
+> caminho vivo foi rastreado inteiro: `services.schema.json` → `ServiceEntry` →
+> `AppManifestInput` → contêiner do Deployment **e** do Rollout. Nenhum deploy que passa
+> hoje muda de resultado, porque o laco removido nunca iterou.
+>
+> Saiu junto: `AppSpec.Env`, `AppUnit.Env`, o `isReservedEnvKey` local, e — descobertos pelo
+> compilador, nao pelo grep — `assertEnvNotSecret`, `envLines` e `secretEnvFragments`, que
+> escreviam `ENV` na imagem a partir do mesmo campo vazio. Dois testes afirmavam que
+> `services.json env` era injetado como `ENV`; passavam porque eles mesmos populavam o campo.
+>
+> Registro T2:
+> `MEET-ASYNC-AMENDMENT-2026-08-19-remove-dead-build-arg-env-rule.md`.
 
 ## B-095 — A segunda cerca sobre CRs `loopzero.io` renderiza em lugar nenhum   [ ]
 

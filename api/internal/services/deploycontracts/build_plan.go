@@ -6,39 +6,9 @@ package deploycontracts
 import (
 	"fmt"
 	"log/slog"
-	"regexp"
 
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
-
-// envKeyRegex validates environment variable key names.
-// SEC-002 fix: user-supplied env keys from loopzero.yaml flow into buildctl --opt build-arg:KEY=VALUE.
-// Without validation, a crafted key could inject additional buildctl flags.
-var envKeyRegex = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-
-// reservedEnvKeyPrefixes mirrors tools/loopzero-dockerfile-lint/main.go: keys
-// with these prefixes are reserved for platform injection and MUST NOT be
-// overridable by user-submitted loopzero.yaml env. T2.5 of
-// deep-review-remediation-plan (closes find_sec_004 MEDIUM).
-var reservedEnvKeyPrefixes = []string{
-	"LOOPZERO_",
-	"KUBERNETES_",
-	"AWS_",
-	"DO_",
-	"GOOGLE_",
-}
-
-// isReservedEnvKey returns true if the key starts with a reserved prefix.
-// Comparison is exact-prefix and case-sensitive (matching K8s + cloud SDK
-// conventions where these env names are uppercase).
-func isReservedEnvKey(k string) bool {
-	for _, p := range reservedEnvKeyPrefixes {
-		if len(k) >= len(p) && k[:len(p)] == p {
-			return true
-		}
-	}
-	return false
-}
 
 // BuildPlan contains resolved build instructions for all apps in a deploy.
 // This is the intermediary between "what the user wants" (AppUnit) and
@@ -110,20 +80,7 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 		// override platform-injected values. loopzero-dockerfile-lint already
 		// blocks these in user Dockerfiles (reservedEnvKeyPrefixes); this
 		// mirrors the check at the API submission layer for defense in depth.
-		buildArgs := make(map[string]string, len(unit.Env)+2)
-		for k, v := range unit.Env {
-			if !envKeyRegex.MatchString(k) {
-				slog.Warn("build plan: skipping env with invalid key name",
-					"key", k, "app", unit.Name, "reason", "must match [A-Za-z_][A-Za-z0-9_]*")
-				continue
-			}
-			if isReservedEnvKey(k) {
-				slog.Warn("build plan: skipping env with reserved key prefix",
-					"key", k, "app", unit.Name, "reason", "reserved by LoopZero platform — cannot be overridden by user")
-				continue
-			}
-			buildArgs[k] = v
-		}
+		buildArgs := make(map[string]string, 2)
 		buildArgs["COMMIT_SHA"] = commitSHA
 		buildArgs["APP_NAME"] = unit.Name
 

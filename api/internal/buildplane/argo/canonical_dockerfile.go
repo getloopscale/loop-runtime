@@ -17,7 +17,6 @@ package argo
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
@@ -34,11 +33,6 @@ const (
 	imagePythonBase = "python@sha256:d764629ce0ddd8c71fd371e9901efb324a95789d2315a47db7e4d27e78f1b0e9" // python:3.12-slim
 )
 
-// secretEnvPattern flags build-time env keys that look like secret material.
-// C6: build-args/ENV land in the provenance attestation + registry cache key,
-// so secret-shaped values must never be injected here.
-var secretEnvFragments = []string{"PASSWORD", "SECRET", "TOKEN", "PRIVATE", "CREDENTIAL", "APIKEY", "API_KEY"}
-
 // canonicalDockerfile returns the platform-controlled multi-stage Dockerfile
 // for an app on the fixed stack. runtime is "node" | "python" (resolved from
 // the strategy). The returned text is byte-stable for a given input.
@@ -46,10 +40,6 @@ func canonicalDockerfile(runtime string, app deploycontracts.AppSpec) (string, e
 	if app.Start == "" {
 		return "", fmt.Errorf("canonical Dockerfile: app %q has no declared start command (services.json `start` is required — no heuristic CMD)", app.Name)
 	}
-	if err := assertEnvNotSecret(app.Env); err != nil {
-		return "", err
-	}
-
 	appDir := strings.TrimSpace(app.Path)
 	if appDir == "" || appDir == "." {
 		appDir = ""
@@ -118,45 +108,12 @@ func renderDockerfile(base, install, build string, app deploycontracts.AppSpec, 
 	b.WriteString("FROM " + base + " AS runtime\n")
 	b.WriteString("WORKDIR " + runtimeWorkdir + "\n")
 	b.WriteString("COPY --from=build /app /app\n")
-	for _, line := range envLines(app.Env) {
-		b.WriteString(line + "\n")
-	}
 	if app.Type != "worker" { // EC-7: workers receive no traffic — no EXPOSE.
 		fmt.Fprintf(&b, "EXPOSE %d\n", app.Port)
 	}
 	// Shell-form CMD handles arbitrary declared start strings (e.g. "pnpm start").
 	b.WriteString("CMD " + app.Start + "\n")
 	return b.String()
-}
-
-// envLines renders the build-time env as deterministic (sorted) ENV lines.
-func envLines(env map[string]string) []string {
-	if len(env) == 0 {
-		return nil
-	}
-	keys := make([]string, 0, len(env))
-	for k := range env {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	lines := make([]string, 0, len(keys))
-	for _, k := range keys {
-		lines = append(lines, fmt.Sprintf("ENV %s=%q", k, env[k]))
-	}
-	return lines
-}
-
-// assertEnvNotSecret rejects secret-shaped build-time env keys (C6).
-func assertEnvNotSecret(env map[string]string) error {
-	for k := range env {
-		upper := strings.ToUpper(k)
-		for _, frag := range secretEnvFragments {
-			if strings.Contains(upper, frag) {
-				return fmt.Errorf("canonical Dockerfile: env key %q looks like secret material (matches %q) — build-time env is build-config only; use the secrets pipeline for secrets (C6)", k, frag)
-			}
-		}
-	}
-	return nil
 }
 
 // canonicalDockerfileStep returns the `generate-dockerfile` build step. It

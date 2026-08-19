@@ -29,7 +29,6 @@ type AppSpec struct {
 	Start       string              `json:"start,omitempty"`       // T0.2: declared services.json start command (canonical Dockerfile CMD)
 	Dockerfile  string              `json:"dockerfile,omitempty"`  // v2: Dockerfile path relative to app path
 	Rendering   string              `json:"rendering,omitempty"`   // v2: "static" or "server" (MEET-009)
-	Env         map[string]string   `json:"env,omitempty"`         // v2: build-time environment variables
 	Secrets     []string            `json:"secrets,omitempty"`     // declared secret names from loopzero.yaml
 	Replicas    int                 `json:"replicas,omitempty"`    // desired replica count (default: 1)
 	Autoscaling *AppAutoscalingSpec `json:"autoscaling,omitempty"` // HPA configuration

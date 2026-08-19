@@ -52,7 +52,6 @@ type AppUnit struct {
 	Start      string            `json:"start,omitempty"`      // T0.2b: declared services.json start command (canonical Dockerfile CMD)
 	Dockerfile string            `json:"dockerfile,omitempty"` // resolved Dockerfile path (relative to app path)
 	Rendering  string            `json:"rendering,omitempty"`  // "static" or "server" (MEET-009)
-	Env        map[string]string `json:"env,omitempty"`        // build-time environment variables
 	Secrets    []string          `json:"secrets,omitempty"`
 }
 
@@ -102,11 +101,6 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 		path = "."
 	}
 
-	env := raw.Env
-	if env == nil {
-		env = map[string]string{}
-	}
-
 	secrets := raw.Secrets
 	if secrets == nil {
 		secrets = []string{}
@@ -127,7 +121,6 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 		Start:      raw.Start, // T0.2b: declared start → canonical Dockerfile CMD
 		Dockerfile: dockerfile,
 		Rendering:  rendering,
-		Env:        env,
 		Secrets:    secrets,
 	}, nil
 }

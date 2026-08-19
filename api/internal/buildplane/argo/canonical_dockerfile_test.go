@@ -99,38 +99,14 @@ func TestCanonicalDockerfile_MissingStart_Errors(t *testing.T) {
 	}
 }
 
-func TestCanonicalBuild_InjectsServicesEnv(t *testing.T) {
-	// C6/EC-6 — build-time env surfaced as ENV lines (rendered in Go, not via shell).
-	df := mustDockerfile(t, "node", deploycontracts.AppSpec{
-		Name: "web", Type: "server", Port: 8080, Start: "node x.js",
-		Env: map[string]string{"API_BASE": "https://api.example.com"},
-	})
-	if !strings.Contains(df, "ENV API_BASE=") || !strings.Contains(df, "https://api.example.com") {
-		t.Errorf("services.json env must be injected as ENV; got:\n%s", df)
-	}
-}
-
-func TestCanonicalBuild_EnvNotSecret(t *testing.T) {
-	// C6 — secret-shaped env keys are rejected before reaching build-args/ENV
-	// (build-args land in provenance + cache).
-	_, err := canonicalDockerfile("node", deploycontracts.AppSpec{
-		Name: "web", Type: "server", Port: 8080, Start: "node x.js",
-		Env: map[string]string{"DATABASE_PASSWORD": "hunter2"},
-	})
-	if err == nil {
-		t.Fatal("expected error for secret-shaped env key, got nil")
-	}
-}
-
 func TestCanonicalDockerfile_Deterministic(t *testing.T) {
 	app := deploycontracts.AppSpec{
 		Name: "web", Type: "server", Port: 8080, Start: "node x.js",
-		Env: map[string]string{"B": "2", "A": "1", "C": "3"},
 	}
 	first := mustDockerfile(t, "node", app)
 	for i := 0; i < 20; i++ {
 		if got := mustDockerfile(t, "node", app); got != first {
-			t.Fatal("canonicalDockerfile must be deterministic (env ordering must be sorted)")
+			t.Fatal("canonicalDockerfile deve ser deterministico")
 		}
 	}
 }

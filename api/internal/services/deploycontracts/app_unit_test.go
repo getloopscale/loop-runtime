@@ -125,26 +125,19 @@ func TestNormalizeApp_DefaultsWhenEmpty(t *testing.T) {
 	if unit.Port != 8080 {
 		t.Errorf("Port = %d, want 8080 (default server port)", unit.Port)
 	}
-	if len(unit.Env) != 0 {
-		t.Errorf("Env = %v, want empty map", unit.Env)
-	}
 	if len(unit.Secrets) != 0 {
 		t.Errorf("Secrets = %v, want empty slice", unit.Secrets)
 	}
 }
 
-func TestNormalizeApp_WithEnvAndSecrets(t *testing.T) {
+func TestNormalizeApp_WithSecrets(t *testing.T) {
 	unit, err := NormalizeApp("api", AppSpec{
 		Runtime: "node",
 		Port:    3000,
-		Env:     map[string]string{"NODE_ENV": "production"},
 		Secrets: []string{"DATABASE_URL"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if unit.Env["NODE_ENV"] != "production" {
-		t.Errorf("Env[NODE_ENV] = %q, want production", unit.Env["NODE_ENV"])
 	}
 	if len(unit.Secrets) != 1 || unit.Secrets[0] != "DATABASE_URL" {
 		t.Errorf("Secrets = %v, want [DATABASE_URL]", unit.Secrets)
