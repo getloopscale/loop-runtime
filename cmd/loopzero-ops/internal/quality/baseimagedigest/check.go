@@ -31,7 +31,6 @@ var DefaultDockerfiles = []string{
 	"operators/Dockerfile.tenant-operator",
 	"operators/Dockerfile.preview-operator",
 	"operators/Dockerfile.platform-operator",
-	"tools/loopzero-dockerfile-lint/Dockerfile",
 	"infra/images/clone-runner/Dockerfile",
 	"infra/images/syft-scanner/Dockerfile",
 	"infra/images/cosign-signer/Dockerfile",

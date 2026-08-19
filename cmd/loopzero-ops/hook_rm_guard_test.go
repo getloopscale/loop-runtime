@@ -137,8 +137,17 @@ func TestGuardaContraOsApagamentosQueAArvoreDeFatoUsa(t *testing.T) {
 	// Piso MEDIDO em 2026-08-19: 43 invocacoes distintas, 13 delas recursivas. Um
 	// numero menor significa que a extracao encolheu (pasta movida, forma nova) e o
 	// verde passou a valer menos sem que nada avisasse.
-	if len(vistos) < 43 {
-		t.Errorf("so' %d invocacao(oes) alcancada(s); a arvore tinha 43 em 2026-08-19", len(vistos))
+	// Piso MEDIDO. Comecou em 43 e foi recongelado em **40** no mesmo dia, depois das
+	// remocoes deliberadas do `B-073` (chart guarda-chuva) e do `B-157`
+	// (`tools/loopzero-dockerfile-lint`) — as duas levaram consigo scripts que continham
+	// apagamentos.
+	//
+	// A catraca fez o que devia: acusou o encolhimento em vez de deixa-lo passar. Baixar o
+	// piso so' e' legitimo quando a causa e' conhecida e deliberada, e e' por isso que a
+	// causa esta' escrita aqui e nao so' no commit.
+	if len(vistos) < 40 {
+		t.Errorf("so' %d invocacao(oes) alcancada(s); a arvore tinha 40 em 2026-08-19 "+
+			"(recongelado apos as remocoes do B-073 e do B-157)", len(vistos))
 	}
 
 	var bloqueados []string

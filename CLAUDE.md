@@ -136,9 +136,9 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | `pkg/` | Shared libs: `statemachine`, `errors`, `naming`, `conditions`, `enforcement`, `circuitbreaker`, `healthcheck`, `id`, `logging`, `domain`, `events`, `vault`, `shellrun`, `pulumi`, `correlation` |
 | `cmd/loopzero-ops/` | Ops + quality binary: **126** wired quality gates (134 subpackages — the difference is helpers and not-yet-wired checks; `loopzero-ops quality --list` is the oracle) + `seed` / `drill` / `pulumi` / `chaos` subcommands |
 | `infra/helm/` (44 dirs) | Bootstrap charts — installed by **Helmfile L2** |
-| `charts/` (13) | Published OCI charts — consumed by **ArgoCD L3**; use the `loopzero-common` library |
+| `charts/` (12) | Published OCI charts — consumed by **ArgoCD L3**; use the `loopzero-common` library |
 | `infra/tests/` | Ginkgo e2e, chaos, load (k6), unit (own module) |
-| `tools/` | `loopzero-dockerfile-lint`, `gen-service-auth-ed25519` |
+| `tools/` | `gen-service-auth-ed25519` (era um par; `loopzero-dockerfile-lint` saiu em 2026-08-19, B-157 — validava Dockerfile do usuario, caminho removido na T2.2) |
 
 ### CRDs (8, all wired)
 

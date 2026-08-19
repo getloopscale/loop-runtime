@@ -153,9 +153,15 @@ func TestDeliveryGate_RunsOneRealTargetThatCoversThisModule(t *testing.T) {
 	// B-088 names cmd/loopzero-ops AND tools/ — the latter sits outside go.work by
 	// design, which is precisely why nobody reached it: those tests lived only
 	// in `test:unit`, a target the delivery gate never calls.
+	//
+	// B-088 named TWO binaries under tools/. `loopzero-dockerfile-lint` was removed on
+	// 2026-08-19 (B-157): it validated user-supplied Dockerfiles, and that path was
+	// deleted in T2.2 — the build now generates a canonical Dockerfile in-process, so
+	// nothing invoked it. Its expectation is gone with it; the surviving one stays,
+	// because the reason B-088 exists (tools/ sits outside go.work and is easy to miss)
+	// did not go away.
 	for _, want := range []string{
 		"cd cmd/loopzero-ops && go test ./...",
-		"cd tools/loopzero-dockerfile-lint && GOWORK=off go test ./...",
 		"cd tools/gen-service-auth-ed25519 && GOWORK=off go test ./...",
 	} {
 		if !strings.Contains(string(out), want) {

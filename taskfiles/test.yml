@@ -139,7 +139,9 @@ tasks:
       - cd cmd/loopzero-ops && go test ./... -short
       # Fora do go.work por desenho (constroem sozinhos, sem dependencia), entao
       # exigem GOWORK=off. Nunca foram nomeados por nenhuma task. B-088.
-      - cd tools/loopzero-dockerfile-lint && GOWORK=off go test ./... -short
+      #
+      # Eram dois; sobrou um. `tools/loopzero-dockerfile-lint` foi REMOVIDO em 2026-08-19
+      # (B-157): validava Dockerfile do usuario, caminho que saiu na T2.2.
       - cd tools/gen-service-auth-ed25519 && GOWORK=off go test ./... -short
 
   test:integration:

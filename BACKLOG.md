@@ -68,22 +68,22 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 27 · **In flight** 0 · **Closed** 137
+164 items — **Open** 26 · **In flight** 0 · **Closed** 138
 
-### Open (27)
+### Open (26)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) 🔒 | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `triaged` | — |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
 | [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `triaged` | média |
+| [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
 | [`B-054`](#b-054--o-api-roda-dois-circuit-breakers-escritos-independentemente-sobre-o-mesmo-pool-postgres----) | O `api` roda dois circuit breakers escritos independentemente sobre o mesmo pool Postgres | `triaged` | média |
 | [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `triaged` | média |
 | [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `triaged` | média |
 | [`B-059`](#b-059--o-transporte-carrega-o-schema-de-payload-de-cada-domínio-e-faz-body-snooping----) | O transporte carrega o schema de payload de cada domínio e faz body-snooping | `triaged` | média |
 | [`B-060`](#b-060--o-único-lugar-onde-os-quatro-planos-se-encontram-é-uma-pasta-de-arquivos-irmãos----) | O único lugar onde os quatro planos se encontram é uma pasta de arquivos irmãos | `triaged` | média |
 | [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `triaged` | média |
-| [`B-069`](#b-069--a-mesma-regra-de-env-reservada-descarta-em-silêncio-de-um-lado-e-mata-o-build-do-outro----) | A mesma regra de env reservada descarta em silêncio de um lado e mata o build do outro | `triaged` | média |
 | [`B-074`](#b-074--deletar-o-environment-cr-direto-deixa-a-application-órfã-e-o-reaper-não-a-alcança----) | Deletar o Environment CR direto deixa a Application órfã, e o reaper não a alcança | `triaged` | média |
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `triaged` | média |
 | [`B-080`](#b-080--os-43-arquivos-de-routes-ainda-são-um-pacote-plano-e-mover-263-símbolos-exportados-é-t3----) | Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3 | `triaged` | alta |
@@ -99,14 +99,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `triaged` | média |
 | [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `triaged` | — |
-| [`B-157`](#b-157--uma-ferramenta-com-imagem-config-e-testes-não-é-invocada-por-caminho-nenhum----) | Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum | `triaged` | média |
 | [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta |
 
 ### In flight (0)
 
 _None._
 
-### Closed (137)
+### Closed (138)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -139,7 +138,6 @@ _None._
 | [`B-030`](#b-030--uma-dependência-central-não-pertence-a-domínio-nenhum---x) | Uma dependência central não pertence a domínio nenhum | `shipped` | média |
 | [`B-031`](#b-031--a-mesma-capacidade-exige-owner-num-lado-e-nada-no-outro---x) | A mesma capacidade exige `owner` num lado e nada no outro | `shipped` | alta |
 | [`B-032`](#b-032--o-portal-do-cli-devolve-uma-url-construída-com-o-id-do-cliente---x) | O portal do CLI devolve uma URL construída com o id do cliente | `shipped` | alta |
-| [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece---x) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `shipped` | — |
 | [`B-034`](#b-034--a-cobrança-por-uso-não-tem-para-onde-reportar---x) | A cobrança por uso não tem para onde reportar | `killed` | — |
 | [`B-035`](#b-035--o-segredo-que-verifica-pagamentos-não-existia-no-ambiente---x) | O segredo que verifica pagamentos não existia no ambiente | `shipped` | — |
 | [`B-036`](#b-036--os-seeds-de-cobrança-pulam-sem-credencial-e-a-corrente-reporta-verde---x) | Os seeds de cobrança pulam sem credencial e a corrente reporta verde | `shipped` | — |
@@ -169,6 +167,7 @@ _None._
 | [`B-065`](#b-065--um-contexto-delimitado-vazio-está-pré-aprovado-no-dag-congelado---x) | Um contexto delimitado vazio está pré-aprovado no DAG congelado | `shipped` | baixa |
 | [`B-066`](#b-066--três-suítes-de-invariante-são-testes-go-comuns-invisíveis-ao-oráculo-de-gates---x) | Três suítes de invariante são testes Go comuns, invisíveis ao oráculo de gates | `shipped` | baixa |
 | [`B-068`](#b-068--um-ponto-de-variação-de-strategy-que-não-varia-mais-mantido-por-construir-e-descartar-um-objeto---x) | Um ponto de variação de Strategy que não varia mais, mantido por construir e descartar um objeto | `shipped` | baixa |
+| [`B-069`](#b-069--a-mesma-regra-de-env-reservada-descarta-em-silêncio-de-um-lado-e-mata-o-build-do-outro---x) | A mesma regra de env reservada descarta em silêncio de um lado e mata o build do outro | `shipped` | média |
 | [`B-070`](#b-070--env-aws_region-já-quebra-o-build-hoje-e-a-api-aceitaria-a-mesma-chave---x) | `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave | `shipped` | média ↑ |
 | [`B-071`](#b-071--task-testunit-está-vermelho-na-workspace-e-a-causa-é-um-par-que-se-desencontrou---x) | `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou | `shipped` | alta |
 | [`B-072`](#b-072--a-policy-versionada-nega-ao-api-a-criação-de-chave-que-o-api-faz---x) | A policy versionada nega ao `api` a criação de chave que o `api` faz | `shipped` | alta |
@@ -241,6 +240,7 @@ _None._
 | [`B-153`](#b-153--seis-passos-do-build-não-conseguem-falhar-o-exit-1-deles-é-engolido-por-um-tee---x) | Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee` | `shipped` | — |
 | [`B-155`](#b-155--o-lockfile-so-e-procurado-na-raiz-do-bundle-e-a-mensagem-nao-diz-onde-procurou---x) | O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou | `shipped` | — |
 | [`B-156`](#b-156--um-teste-de-chart-depende-de-rede-e-reprova-o-portao-de-entrega-sob-carga---x) | Um teste de chart depende de rede e reprova o portao de entrega sob carga | `shipped` | — |
+| [`B-157`](#b-157--uma-ferramenta-com-imagem-config-e-testes-não-é-invocada-por-caminho-nenhum---x) | Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum | `shipped` | média |
 | [`B-158`](#b-158--o-registro-que-o-loop-inteiro-le-nao-e-validado-por-nada---x) | O registro que o loop inteiro le' nao e' validado por nada | `shipped` | — |
 | [`B-159`](#b-159--o-checklist-manda-escrever-o-changelog-num-arquivo-que-nao-existe---x) | O checklist manda escrever o CHANGELOG num arquivo que nao existe | `shipped` | — |
 | [`B-160`](#b-160--a-guarda-de-comandos-junta-pedacos-de-comandos-diferentes-e-bloqueia-o-inocente---x) | A guarda de comandos junta pedacos de comandos diferentes e bloqueia o inocente | `shipped` | media |
@@ -2052,7 +2052,7 @@ que ainda tem a rota, agora exigindo `owner` — não participa.
 
 O B-029 está fechado por observação, não por argumento.
 
-## B-033 — O teto de custo está desligado, e o portão passa direto quando isso acontece   [x]
+## B-033 — O teto de custo está desligado, e o portão passa direto quando isso acontece   [ ]
 
 domain: control-plane
 repo: loopzero-cloud
@@ -2068,7 +2068,41 @@ evidence: |
 why_now: o agregador é a ÚNICA fonte de `cost_counters`, e o portão que lê essa tabela
   degrada para "passa" quando ela está vazia. As três métricas de custo — minutos de build,
   egresso, puxadas de registro — não têm teto no ambiente que serve o painel público.
-status: shipped
+status: triaged
+
+> **A regra que este episodio produz, e ela vale para todos os itens deste registro:**
+> *"o resto e' de outro repositorio" so' fecha um item quando NENHUMA superficie DESTE repo
+> declara o item como dono da divida.* Conferi os dois que fechei hoje com o mesmo
+> argumento — `B-035` e `B-064` — e nenhum e' citado como guarda por gate algum. O `B-033`
+> era, e eu nao conferi; o gate conferiu por mim.
+>
+> **AVANCO RETIRADO 2026-08-19, algumas horas depois de eu o marcar `shipped` — e quem o
+> retirou foi um gate, nao eu.**
+>
+> `billing-layers` reprovou com *"guarda declarada nao resolve: o item B-033 esta' shipped"*
+> em **duas** camadas (`cost-gate` e `cost-aggregator`). O contrato dele e' explicito e esta'
+> escrito no proprio codigo (`guard.go:113-118`):
+>
+> > *"Uma divida so' guarda enquanto tiver dono ativo. No instante em que o item vira
+> > `shipped` ou `killed`, a camada ficou descoberta — e e' ai' que o gate reprova, obrigando
+> > a trocar a guarda por `gate:` ou `test:`. Sem esta clausula, `open:` seria um tapete."*
+>
+> **Eu era o tapete.** Fechei o item argumentando que a bala restante pertence ao
+> `loopzero-cloud` — o que e' verdade — mas duas camadas de cobranca **deste** repositorio
+> declaram este item como dono da divida delas. Fechar aqui nao move a divida para la'; so'
+> apaga o dono.
+>
+> **O que continua valendo do que eu escrevi:** as balas 2 e 3 estao entregues (teste
+> provando 402, e `reason="disabled"` para o teto ausente aparecer como estado do sistema), e
+> a bala 1 depende do Deployment do `loopzero-cloud`, reconfirmado ao vivo. O que muda e' o
+> veredito: **isso nao fecha o item**, porque a camada segue descoberta enquanto o teto
+> estiver desligado.
+>
+> **Como fechar de verdade:** trocar a guarda `open: B-033` por `gate:` ou `test:` nas duas
+> camadas — ou seja, provar por verificacao que a camada esta' coberta, em vez de apontar
+> para um item aberto. Para `cost-gate` isso e' alcancavel (os testes de 402 e o
+> `reason="disabled"` existem). Para `cost-aggregator` nao e', enquanto a fonte estiver
+> desligada noutro repositorio.
 
 > **FECHADO 2026-08-19 — as duas balas deste repositorio; a primeira nao e' nossa.**
 >
@@ -3926,7 +3960,7 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
-## B-069 — A mesma regra de env reservada descarta em silêncio de um lado e mata o build do outro   [ ]
+## B-069 — A mesma regra de env reservada descarta em silêncio de um lado e mata o build do outro   [x]
 
 domain: engine-go
 repo: loopzero
@@ -3934,7 +3968,28 @@ suggested_mode: bug
 source: discover-review
 evidence: medido em 2026-08-11 ao planejar o `B-051`. As duas implementações da regra `find_sec_004` não diferem só na lista de prefixos — diferem na **severidade**. Lado API (`api/internal/services/deploycontracts/build_plan.go:120-124`): chave reservada gera `slog.Warn` e `continue` — a env é **descartada em silêncio** e o deploy prossegue. Lado linter (`tools/loopzero-dockerfile-lint/main.go:296` → `:158-159`): `SeverityReject` vira `os.Exit(1)` — o **build falha**. E o linter está no caminho de build real: `api/internal/argo/languages.go:36` e `workflow_builder.go:408` emitem o passo `dockerfile-lint` para `UserDockerfileStrategy`.
 why_now: o gate `env-prefix-parity` (`B-051`) compara os dois **conjuntos de prefixos**. Conjunto igual não é regra igual — ele passaria verde com esta divergência intacta, e um gate verde é lido como *"a regra está unificada"*. Sem este item registrado, o `B-051` fecharia deixando para trás a metade que importa: qual das duas severidades é a correta.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19 por CONSEQUENCIA — a divergencia deixou de existir junto com uma das
+> portas.**
+>
+> O item pedia decidir qual severidade e' a correta: descarte silencioso (API) ou rejeicao
+> (linter). A pergunta era sobre **duas portas discordando**. Com a remocao de
+> `tools/loopzero-dockerfile-lint` no `B-157`, sobra uma.
+>
+> **Isto nao e' a decisao tomada por eliminacao do rival, e a distincao importa:** o rival
+> eliminado **nao rodava**. Ele nao rejeitou um unico build — nenhum caminho o invocava. A
+> severidade "descarte silencioso" ja' era a unica em vigor; o que mudou foi o registro
+> parar de afirmar que havia duas.
+>
+> **A objecao esta' registrada no amendment**, nao varrida: se alguem quiser que a API
+> **rejeite** em vez de descartar, essa mudanca e' de uma linha em `build_plan.go` e nao
+> depende deste componente existir. Fica como decisao propria de quem a quiser, com o
+> caminho nomeado.
+>
+> As duas primeiras balas dependiam da decisao e caem com ela; a terceira ja' estava fechada
+> (o doc-comment do gate declarava que provava conjuntos, nao semantica) — e o gate saiu
+> junto com a ferramenta.
 
 > **Terceira bala JA' ESTAVA fechada — medido 2026-08-19, para ninguem refazer.**
 >
@@ -9856,7 +9911,7 @@ dod:
 > herdada da ferramenta, o que explica por que ninguém a declarou.
 
 
-## B-157 — Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum   [ ]
+## B-157 — Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum   [x]
 
 domain: engine-go
 repo: loopzero
@@ -9864,7 +9919,32 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-18 ao trabalhar o B-068/B-069. `tools/loopzero-dockerfile-lint` tem `Dockerfile`, `go.mod`, testes e é rodado por quatro invocações `GOWORK=off go test ./...` em `taskfiles/{test,quality}.yml` — mas **nada o invoca**: nenhum código de produção emite o passo `dockerfile-lint` (só comentários que descrevem um `UserDockerfileStrategy` removido em T2.2), `LOOPZERO_DOCKERFILE_LINT_IMAGE` não é lida por nenhum Go, e `infra/scripts/local/k3d-cross-cluster-heal.sh:961` diz que o seeding da imagem foi removido porque *"those images are no longer used ... the BYO-Dockerfile lint path was deleted"*. Mesmo assim `infra/helmfile/values/dev-public/loopzero-api.yaml.gotmpl:121` continua setando a env var, com um comentário que descreve um passo de heal que não existe mais.
 why_now: a ferramenta é a metade viva de uma regra de segurança duplicada (`find_sec_004`, B-051/B-069), então ela parece ser a defesa que rejeita — e não é, porque ninguém a chama. Enquanto ela existir com imagem e config, a leitura de quem chegar é que a rejeição está ativa. É a forma inversa do padrão *declarado, testado, nunca ligado*: aqui está **desligado e ainda anunciado**.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19 — REMOVIDA.** Registro:
+> `MEET-ASYNC-AMENDMENT-2026-08-19-remove-dockerfile-lint-tool.md` — pendente de ratificacao.
+>
+> **A decisao ja' estava tomada; faltava a limpeza.**
+> `api/internal/buildplane/argo/constants.go:47-50` registra: *"T4.1 … imageDockerfileLint
+> removed — the BYO-Dockerfile lint path (T2.2) are gone. The build uses canonical platform
+> Dockerfiles generated in-process"*. A ferramenta valida Dockerfile **fornecido pelo
+> usuario**, e o usuario nao fornece mais nenhum.
+>
+> **A remocao nao pode mudar comportamento**, e essa e' a forma mais segura de delecao que
+> existe: o componente nao executava. Nenhum taskfile, workflow ou passo de build o
+> invocava, e nao havia caminho de publicacao da imagem dele.
+>
+> **Saiu junto tudo o que a segunda bala pede:** o gate `env-prefix-parity` (que existia so'
+> para comparar a copia dela com a da API), a entrada do Dockerfile em `baseimagedigest`, o
+> modulo na lista de `testtargetcoverage`, as duas invocacoes de teste em `quality.yml` e
+> `test.yml`, e as mencoes no `CLAUDE.md`.
+>
+> **Quatro catracas reprovaram e cada uma foi tratada, nao silenciada:**
+> `TestTaskfilesDoNotCdIntoMissingDirs` (dois taskfiles ainda entravam no diretorio),
+> `TestDeliveryGate_RunsOneRealTarget...` (esperava a suite dela na expansao do portao),
+> `TestOracle_MatchesFrozenBaseline` (um gate a menos — recongelada de 141 para 140) e a
+> varredura de `rm` do `B-160` (piso de 43 caiu para 40, porque os arquivos removidos
+> continham apagamentos). Cada piso baixado tem a causa escrita ao lado.
 delivered_in: 9a5595e02  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — nenhuma quebra; o custo é uma defesa que parece existir e não roda, e config viva apontando para imagem que ninguém publica.
 dod:
