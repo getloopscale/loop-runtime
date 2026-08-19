@@ -16,6 +16,12 @@ spec:
     staticConfig:
       static:
         - http://loopzero-api.loopzero-system.svc:3000/api/v1/health
+        # B-022: o `loopzero-cloud` e' o proxy autenticador do motor — `r.Route("/engine")` tira o
+        # prefixo, aplica requireJWT e repassa. Quando ele cai, `/engine/*` e `/v1/*` devolvem
+        # 502 JUNTOS, mesmo com o `loopzero-api` saudavel (medido em 2026-08-10). Era o unico
+        # componente com esse acoplamento que ninguem sondava: sem serie, a bala do B-022 que
+        # pede indisponibilidade medida nao tinha como ser respondida.
+        - http://loopzero-cloud.loopzero-system.svc:13002/health
         - http://gitea-http.loopzero-system.svc:3000/api/v1/version
         - http://traefik.loopzero-system.svc:9000/ping
   interval: 30s

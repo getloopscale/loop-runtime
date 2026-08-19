@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **loopzero:** O painel de controle passa a ser monitorado quanto à disponibilidade, como os demais serviços da plataforma (B-022)
 
 - **A verificacao de que o resumo de prontidao e' a ultima escrita antes de salvar passou a valer para os seis controladores, e nao para um.** Ela seguia so' a funcao onde a escrita acontece, e a forma usada por sete controladores registra o resumo no fim do ciclo, num nivel acima — para a verificacao antiga isso parecia ausencia. Medido depois da correcao: 33 pontos de escrita, 33 cobertos (B-138)
 

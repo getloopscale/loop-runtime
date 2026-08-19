@@ -1423,6 +1423,33 @@ dod:
 
 > Registrado 2026-08-10, medido por acidente durante a remoção do `cloud-dev`.
 
+> **2026-08-19 — a segunda bala estava BLOQUEADA POR UM DADO IMPOSSIVEL. O bloqueio foi
+> removido; o item segue aberto na decisao T3, que e' o que ele sempre foi.**
+>
+> Ela pede indisponibilidade do `loopzero-cloud` no ultimo trimestre. Medido: esse numero
+> **nao pode existir**, por duas razoes independentes.
+>
+> 1. **Nao havia sonda sobre o `loopzero-cloud`.** `infra/helm/monitoring/manifests/probe-targets.yaml`
+>    cobria `loopzero-api`, `gitea`, `traefik` e `argocd`. Nao ha' serie desse alvo — nem do
+>    trimestre, nem de ontem. O unico componente cuja queda leva DOIS caminhos junto era
+>    justamente o que ninguem sondava.
+> 2. **A retencao do Prometheus e' de 15 dias** (`infra/helm/monitoring/values.yaml:6`).
+>    Um trimestre sao ~90.
+>
+> **Fechado agora:** o `loopzero-cloud` entrou nos alvos, e
+> `TestB022_SondaCobreOLoopZeroCloud` impede que saia — um alvo removido nao quebra nada
+> visivelmente, so' apaga o dado, e a falta do dado so' aparece quando alguem precisa dele.
+>
+> **A retencao fica registrada, nao alterada.** Subir para 90 dias e' decisao de capacidade
+> que ninguem pediu, e nao produziria historico retroativo de qualquer forma. Quinze dias
+> ja' distinguem "cai toda semana" de "nunca caiu"; se a resposta vier ambigua, ai' a
+> retencao vira o assunto, com o custo na mesa.
+>
+> **Nao decidi a fronteira de autenticacao.** E' T3, o DoD exige ADR, e a propria bala diz
+> que a decisao tem de ser sobre risco medido. Decidi-la hoje seria decidir no quadro.
+>
+> Registro T2: `MEET-ASYNC-AMENDMENT-2026-08-19-probe-loopzero-cloud.md`.
+
 ## B-023 — Um `helmfile sync` sem as variáveis grava marcador por cima de credencial   [x]
 
 domain: engine-go
