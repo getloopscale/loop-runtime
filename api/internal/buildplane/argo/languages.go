@@ -215,21 +215,25 @@ func (s *PythonStrategy) DockerfileStep(apps []deploycontracts.AppSpec, totalApp
 	return canonicalDockerfileStepOrFail("python", apps, totalApps)
 }
 
-// dockerfileStepTemplateName returns the template name a strategy's
-// DockerfileStep emits — used by buildMainDAG to wire dependencies
-// correctly. Avoids hardcoding "generate-dockerfile" in the orchestrator.
+// dockerfileStepTemplate e' o nome do passo que TODA estrategia emite hoje.
 //
-// build-mode-dispatch-and-dockerfile-security-plan T1.6 (2026-05-07).
-func dockerfileStepTemplateName(s LanguageStrategy) string {
-	// Probe with a single dummy app so we capture the actual container name.
-	// All strategies must return a container with a stable Name across calls.
-	c := s.DockerfileStep([]deploycontracts.AppSpec{{Name: "probe", Path: "."}}, 1)
-	if c == nil || c.Name == "" {
-		// Fallback to legacy default.
-		return "generate-dockerfile"
-	}
-	return c.Name
-}
+// Isto ja' foi um ponto de variacao de verdade: o caminho "traga seu Dockerfile"
+// emitia `dockerfile-lint` enquanto as estrategias de linguagem emitiam
+// `generate-dockerfile`, e `buildMainDAG` precisava perguntar a estrategia qual
+// passo ela emitia para ligar as dependencias. Esse caminho foi REMOVIDO em T2.2
+// — `user_dockerfile_strategy_test.go` assere a ausencia do passo — e a variacao
+// colapsou sem que nada registrasse.
+//
+// O que restou era pior que um literal: uma funcao que CONSTRUIA UM CONTAINER
+// DESCARTAVEL so' para ler o nome dele (B-068). Um objeto descartado nao diz a
+// leitor nenhum se ainda ha' variacao; ele obriga cada um a ir conferir.
+//
+// Se a variacao voltar — um novo modo de build que emita outro passo — o lugar de
+// restaurar o ponto de variacao e' aqui, e `TestTodaEstrategiaEmiteOMesmoNomeDePassoDeDockerfile`
+// reprova ate' que alguem o faca. NAO contorne fixando um literal no DAG: era
+// exatamente essa a armadilha registrada no `CLAUDE.md` quando os dois nomes
+// coexistiam.
+const dockerfileStepTemplate = "generate-dockerfile"
 
 // ---------------------------------------------------------------------------
 // Helper: forge container builder

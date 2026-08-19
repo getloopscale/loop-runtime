@@ -3625,7 +3625,7 @@ dod:
 > **Correção 2026-08-11, ao planejar a fatia 1.** Os dois números **já estavam no registro** desde 2026-08-06, em `quality_gate_wiring_test.go`, com rationale melhor do que o deste item: 42 migrations (hoje 43 — uma nova entrou) e 33 alertas, ambos classificados `failingGate`, e a observação decisiva de que os runbooks existentes **devolvem 404**, então o gate mede presença de string, não existência de runbook. O item continua válido como *dívida a pagar*, mas deixa de ser descoberta: a descoberta é anterior e melhor documentada.
 
 
-## B-068 — Um ponto de variação de Strategy que não varia mais, mantido por construir e descartar um objeto   [ ]
+## B-068 — Um ponto de variação de Strategy que não varia mais, mantido por construir e descartar um objeto   [x]
 
 domain: engine-go
 repo: loopzero
@@ -3633,11 +3633,38 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `api/internal/argo/languages.go:231` — `dockerfileStepTemplateName` **constrói um container descartável só para ler o nome dele**, mantendo um ponto de variação que as três implementações de `LanguageStrategy` já resolvem igual: todas retornam `generate-dockerfile`. O restante do padrão foi medido como **corretamente aplicado**: lookup por registry, sem `if app.Build ==` no orquestrador, interface coesa de 8 métodos, variação real entre estratégias de linguagem e de Dockerfile do usuário.
 why_now: é o resíduo de uma variação que existiu — o `UserDockerfileStrategy` emitia `dockerfile-lint`. Enquanto o ponto de variação ficar, todo leitor precisa checar se ainda varia, e a construção descartável esconde que não.
-status: triaged
+status: shipped
 severity: baixa — custo de leitura, sem defeito de comportamento.
 dod:
   - o nome do template vem de onde varia, ou a variação é removida junto com a construção descartável
   - se a variação deve voltar (por exemplo, se o `dockerfile-lint` for reintroduzido), isso está escrito no lugar em vez de mantido por um objeto descartado
+
+> **Fechado 2026-08-18 — DoD 2/2, e o item revelou duas citações mortas no `CLAUDE.md`.**
+>
+> Confirmado: `dockerfileStepTemplateName` construía um container-sonda só para
+> ler `c.Name`, e os três caminhos convergem — `canonicalDockerfileStep` (:192),
+> o fallback do `canonicalDockerfileStepOrFail` (:206) e o `failStep` da
+> estratégia não suportada nomeiam todos `generate-dockerfile`.
+>
+> **Por que a variação sumiu:** o caminho "traga seu Dockerfile" foi **removido em
+> T2.2** — `user_dockerfile_strategy_test.go` assere a ausência do passo
+> `dockerfile-lint`. A variação colapsou e nada registrou.
+>
+> **Bala 1:** a construção descartável saiu; os dois chamadores em
+> `workflow_builder.go` usam a constante `dockerfileStepTemplate`.
+>
+> **Bala 2 — e é o ponto do item:** o "se a variação voltar" não ficou num
+> comentário pedindo confiança.
+> `TestTodaEstrategiaEmiteOMesmoNomeDePassoDeDockerfile` percorre o
+> `runtimeRegistry` **mais o fallback** e reprova se algum divergir, com a
+> mensagem dizendo o que fazer — restaurar o ponto de variação, e não fixar um
+> segundo literal no DAG. Mutante que devolve `dockerfile-lint` ao `failStep` é
+> pego. Piso de 3 estratégias, para a varredura não encolher em silêncio.
+>
+> **Achado colateral:** duas linhas do `CLAUDE.md` descreviam `UserDockerfileStrategy`
+> emitindo `dockerfile-lint` — tipo que **não existe** desde T2.2. Uma delas
+> instruía justamente a usar o helper que este item removeu. Corrigidas, com a
+> história datada em vez de apagada.
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 

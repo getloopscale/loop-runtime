@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **O código deixou de construir e jogar fora um objeto só para descobrir um nome que nunca muda.** Isso restava de uma época em que havia dois caminhos de construção de imagem com nomes diferentes; um deles foi removido e a estrutura ficou, obrigando cada leitor a conferir se ainda variava. Um teste passou a garantir que, se a variação voltar, ela seja restaurada de verdade. (B-068)
 - **Três conjuntos de verificações deixaram de se passar por checagens permanentes de qualidade.** Eles confirmam que um trabalho já concluído continua no lugar, mas moravam junto das verificações permanentes e não apareciam na lista oficial delas — quem consultasse a lista não sabia que existiam. Mudaram para um lugar que diz o que são, e um teste novo impede que outro apareça ali sem pertencer. (B-066)
 - **A configuração do serviço agora diz que o cofre de segredos roda em outro agrupamento de máquinas, em vez de esconder isso numa reescrita de endereço.** O endereço parecia local e não era; quem lesse a configuração não tinha como descobrir a separação. O endereço continua o mesmo de propósito — trocá-lo quebraria a verificação do certificado — mas agora está escrito ali por quê. (B-064)
 - **O código que prepara um ambiente para uso deixou de morar dentro da suíte de testes.** Um utilitário de infraestrutura passava a arrastar a suíte inteira como dependência só para reaproveitar essa preparação; ela agora mora do lado da infraestrutura, e são os testes que a consomem. (B-063)

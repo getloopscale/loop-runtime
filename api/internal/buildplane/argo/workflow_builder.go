@@ -408,7 +408,7 @@ func (b *WorkflowBuilder) buildMainDAG(spec deploycontracts.WorkflowSpec, groups
 		// "dockerfile-lint" for UserDockerfileStrategy. Hardcoding "generate-
 		// dockerfile" broke build:dockerfile workflows ("invalid spec: template
 		// name 'generate-dockerfile' undefined").
-		dockerfileTemplateName := dockerfileStepTemplateName(g.Strategy)
+		dockerfileTemplateName := dockerfileStepTemplate
 		dockerfileName := dockerfileTemplateName + suffix
 		tasks = append(tasks, inlineTask(dockerfileName, dockerfileName, []string{buildName, scanName}))
 	}
@@ -432,7 +432,7 @@ func (b *WorkflowBuilder) buildMainDAG(spec deploycontracts.WorkflowSpec, groups
 		}
 		strategy := ResolveStrategyForApp(app)
 		suffix := suffixForStrategy(groups, strategy.Name())
-		dfTaskName := dockerfileStepTemplateName(strategy) + suffix
+		dfTaskName := dockerfileStepTemplate + suffix
 		if appPlan.DeliveryModel == "static" {
 			taskName := fmt.Sprintf("deliver-artifact-%s", appPlan.AppName)
 			tasks = append(tasks, inlineTask(taskName, taskName, []string{"build-apps" + suffix}))
