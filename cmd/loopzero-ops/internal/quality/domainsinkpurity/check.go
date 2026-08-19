@@ -111,10 +111,29 @@ var ErrUnqualifiedImport = errors.New("a watched package is dot-imported into th
 // FrozenDefault is the set measured on 2026-08-12 (slice-4). Each entry is a
 // leak that EXISTS and is tracked for removal — never an endorsement.
 var FrozenDefault = []string{
-	"db.Build",        // delivery.go:37 — Activate(ctx, build *db.Build, ...)
+	// Cada um destes fica por uma razao MEDIDA, e nao por omissao (B-079, DoD:
+	// "os 4 saem da superficie, OU cada um que fica tem razao escrita").
+	// Contagem refeita em 2026-08-19, linhas de producao em `api/`, regra unica.
+
+	// 34 call sites — o MAIOR custo dos quatro, e o unico que e' tambem risco.
+	// `WithLock` e' o primitivo do environment-lock que a Regra Inquebravel 6 poe
+	// em TODA mutacao de (tenant, project, environment). Trocar sua assinatura
+	// mexe no ponto por onde passa toda escrita do produto, e
+	// `cleanroom-up-live-test-mandate.md` torna a validacao LIVE obrigatoria para
+	// isso. Nao e' trabalho de refactor: e' trabalho de release.
+	"db.DBTX", // shared_contracts.go:207 — WithLock(..., fn func(tx db.DBTX) error)
+
+	// 18 call sites. Sai junto com o renderizador de manifestos, nao antes: o tipo
+	// atravessa a fronteira porque o sink descreve as apps que o manifesto vai
+	// renderizar, e trocar so' este lado obrigaria a converter nos 18 pontos para
+	// o mesmo formato de volta.
 	"db.BuildAppSpec", // manifest_builder.go:23 — Apps []db.BuildAppSpec
-	"db.DBTX",         // shared_contracts.go:207 — WithLock(..., fn func(tx db.DBTX) error)
-	"db.Release",      // delivery.go:55 — TargetRelease *db.Release
+
+	// 6 e 5 call sites — os dois mais baratos, e por isso o par que deve sair
+	// PRIMEIRO quando alguem retomar. Ambos vivem no mesmo arquivo
+	// (`delivery.go`), o que faz deles uma fatia unica em vez de duas.
+	"db.Release", // delivery.go:55 — TargetRelease *db.Release
+	"db.Build",   // delivery.go:37 — Activate(ctx, build *db.Build, ...)
 
 	// Application-layer types crossing the same boundary. ADR D2 promised these
 	// were frozen and the first implementation did not watch them at all — three

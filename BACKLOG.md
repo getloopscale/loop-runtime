@@ -4265,6 +4265,31 @@ scope_reduced: 2026-08-12 pela fatia slice-6 — a bala de `db.DBTX` na camada d
 severity: média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde.
 dod:
   - os 4 símbolos saem da superfície pública do sink, ou cada um que fica tem razão escrita
+> **Medido 2026-08-19 — DoD atendida pela segunda via, e a escolha é da medição.**
+>
+> Contagem refeita hoje, mesma regra do item (linhas de produção em `api/`):
+> `WithLock` **34**, `db.BuildAppSpec` **18**, `TargetRelease` **6**,
+> `Activate(ctx` **5** — **63**. Idêntica à de 12/08.
+>
+> A DoD oferece duas vias, e a medição decide qual: `WithLock` é o primitivo do
+> environment-lock que a **Regra Inquebrável 6** põe em toda mutação, então trocar
+> sua assinatura mexe no ponto por onde passa toda escrita do produto — e o
+> `cleanroom-up-live-test-mandate.md` torna a validação LIVE obrigatória para isso.
+> Não é trabalho de refactor, é trabalho de release, e fazê-lo no meio de um lote
+> acumulado sem push seria o oposto de prudente.
+>
+> **Entregue: cada um dos quatro agora tem razão escrita no próprio
+> `FrozenDefault`** — que é onde alguém que retome vai olhar. E as razões não são
+> prosa: (a) `db.DBTX` fica pelo custo **e** pelo risco, com o mandato citado;
+> (b) `db.BuildAppSpec` sai junto com o renderizador de manifestos, não antes,
+> senão os 18 pontos passam a converter de volta; (c) `db.Release` e `db.Build`
+> são os dois mais baratos, vivem no **mesmo arquivo** e por isso formam uma fatia
+> única — é por eles que se começa.
+>
+> A lista deixou de ser um congelamento por omissão e virou um congelamento
+> decidido, com ordem de ataque. O alargamento da cerca (51 + 18 arquivos) segue
+> aberto e é a outra metade do item.
+
   - `FrozenDefault` em `domainsinkpurity` encolhe na mesma medida — o gate reporta `REMOVIDO` para guiar
   - a cerca alarga para `services` (51) e `cmd` (18) — `routes` foi entregue na fatia slice-6 e `server` na slice-4 —, ou o custo de 69 arquivos é reavaliado com números novos
   - a mudança em `WithLock` é validada contra um Cleanroom, não só contra a suíte
