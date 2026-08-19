@@ -47,6 +47,27 @@ vaps:
   noRuntimeImageMutations: false
   protectPlatformNetworkpolicies: false
   argocdManagedBy: false
+
+  # loopzero-tenant-namespace: OFF aqui, e o motivo NAO e' mais o da lista acima — por isso
+  # ele esta escrito aqui, e nao so no values.yaml base (B-095).
+  #
+  # A politica exige uma coisa so: `object.metadata.namespace == "loopzero-system"` para
+  # `loopzero.io` tenants e environments. Medido em 2026-08-19 nos dois — e unicos —
+  # caminhos de criacao:
+  #
+  #   api/internal/k8s/tenant_cr_manager.go:32        const tenantNamespace = "loopzero-system"
+  #   operators/internal/tenant/tenant_controller.go:406  cria o Environment em tenant.Namespace
+  #
+  # Ou seja: **o invariante que ela guardaria ja e verdade no codigo**, e o estado que a
+  # migracao T3.3 produziria ja esta no lugar. O comentario do values.yaml base diz que
+  # ligar antes de limpar CRs mal colocados causa DoS auto-infligido; essa condicao nao
+  # se sustenta mais pela medicao acima.
+  #
+  # O que FALTA antes do toggle nao e a migracao — e a mesma medicao que a irma
+  # `tenantCrShape` recebeu antes de ser ligada: QUEM escreve estes CRs, para que o
+  # matchCondition de isencao nao fique vazio. O CLAUDE.md registra tres armadilhas de
+  # CEL dessa familia, incluindo uma em que lista de isencao vazia negou tudo — a forma
+  # `!(x in [])` e sempre verdadeira. E mudanca T2/T3: reuniao antes do codigo.
   tenantNamespace: false
 
 # ClusterImagePolicy is a sigstore/policy-controller CRD. The mgmt cluster runs no

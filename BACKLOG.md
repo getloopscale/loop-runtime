@@ -5938,7 +5938,7 @@ dod:
 > mudança T2/T3 com reunião antes do código.
 
   - se rodou, ela é habilitada no overlay do mgmt — e o teste de render passa a cobri-la
-  - se não rodou, isso está escrito no `values-mgmt.yaml`, e não só no base
+  - se não rodou, isso está escrito no `values-mgmt.yaml`, e não só no base  ← **FECHADA 2026-08-19**: o `values-mgmt.yaml` passou a carregar a medição (os dois caminhos de criação, com arquivo e linha), a razão de o toggle seguir OFF, e o que falta antes dele — a medição de quem escreve os CRs, que é T2/T3. Render conferido: idêntico antes e depois, porque é comentário. As outras duas balas seguem dependendo da reunião.
 
 > Registrado 2026-08-13 pela fatia `slice-16` (Q1 do plano). O teste
 > `infra/tests/helm/tenant_cr_fence_placement_test.go` já está no molde para cobri-la — basta a
