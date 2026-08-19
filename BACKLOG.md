@@ -3539,6 +3539,32 @@ dod:
   - as três suítes são registradas como gates, ou movidas para fora de `internal/quality/` para não parecerem gates
   - o oráculo `--list` volta a enumerar tudo que vive ali
 
+> **Medido 2026-08-18. Bala 1 entregue; bala 2 avançada e NÃO fechada.**
+>
+> Confirmado: os três tinham `doc.go` + dois `_test.go`, zero entradas no registry
+> e zero importadores. Lendo os `doc.go`, os três verificam **fases de um plano
+> concluído** (`2026-05-22-shell-script-strategic-plan` v1.3) — registrá-los como
+> gates seria pior que o defeito: encheria o inventário permanente de checagem de
+> obra acabada. Foi tomada a segunda saída da DoD: saíram de `internal/quality/`
+> para `cmd/loopzero-ops/internal/planregression/{opencost,phase2,phase3}`, sem o
+> sufixo `gate` que os fazia parecer o que não são. Seguem rodando e verdes.
+>
+> **A classe:** a varredura achou **7 de 148** diretórios fora do registry, e
+> quatro eram auxiliares legítimos — `baseline`, `coverageparse`, `qgshell`,
+> `qtestutil`, importados por 2, 2, 5 e 15 irmãos. O sinal que separa auxiliar de
+> fantasma é esse: fantasma tem **zero** importadores e zero registro.
+> `TestTodoPacoteDeQualityEGateOuAuxiliar` passou a exigir uma das duas coisas, e
+> reprovou nos três antes do movimento.
+>
+> **Bala 2 fica aberta, com o número medido.** Depois do movimento: 145
+> diretórios, 4 auxiliares, **141 importados pelo cmd** — e o oráculo lista
+> **139**. Dois pacotes são importados sem produzir entrada nomeada em `--list`.
+> Não identifiquei quais: nomes de diretório não mapeiam para nomes de gate por
+> regra (`advisorylock` → `advisory-lock-scope`, `caddyfilecspgate` → `caddyfile-csp`),
+> e minha tentativa pelo lado do registry usou um grep de `\.Check|\.Run` que não
+> distingue formas de ponto de entrada — **sinal grosso, não medição**. O oráculo
+> ainda não enumera tudo, e dizer o contrário seria trocar o defeito de lugar.
+
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
 ## B-067 — 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa   [ ]

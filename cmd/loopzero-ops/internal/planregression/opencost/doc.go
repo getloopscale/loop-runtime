@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package opencostgate provides hermetic validation that the OpenCost
+// Package opencost provides hermetic validation that the OpenCost
 // adoption (T7.2 of plan 2026-05-22-shell-script-strategic-plan.md v1.3)
 // is correctly wired:
 //
@@ -16,4 +16,4 @@
 //
 // LIVE validation (pod Running, metrics queryable in Prometheus) is
 // operator HARD STOP — runs in cleanroom or drill cluster, not hermetic CI.
-package opencostgate
+package opencost

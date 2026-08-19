@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package phase2gate provides hermetic validation that Phase 2 of plan
+// Package phase2 provides hermetic validation that Phase 2 of plan
 // docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3 was implemented
 // correctly:
 //
@@ -17,4 +17,4 @@
 //
 // Phase 2 T2.1 + T2.2 + T2.3 — engineering side. T2.4 (LIVE cleanroom) is
 // operator HARD STOP.
-package phase2gate
+package phase2

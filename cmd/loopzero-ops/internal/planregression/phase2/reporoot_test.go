@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package opencostgate
+package phase2
 
 import "github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 
