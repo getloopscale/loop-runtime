@@ -20,8 +20,8 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
-	"github.com/getloopscale/loopzero/api/internal/argo"
 	"github.com/getloopscale/loopzero/api/internal/argocd"
+	"github.com/getloopscale/loopzero/api/internal/buildplane/argo"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/gitops"

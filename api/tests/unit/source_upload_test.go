@@ -15,8 +15,8 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
 	sourceroutes "github.com/getloopscale/loopzero/api/internal/routes/source"
-	"github.com/getloopscale/loopzero/api/internal/source"
 )
 
 // fakeSourceStore is a test-only SourceStore that stores bundles in memory.
@@ -264,7 +264,7 @@ apps:
 		// Plan B v3.1 T-B.3 (2026-06-05) — skipped: this subtest validates the
 		// legacy loopzero.yaml `0 apps` message which no longer exists. The
 		// equivalent services.json validation (empty `services[]`) is covered
-		// in `api/internal/source/validator_services_test.go`.
+		// in `api/internal/buildplane/source/validator_services_test.go`.
 		t.Skip("legacy loopzero.yaml flow removed post Plan B v3.1 T-B.3 cutover")
 		// Arrange
 		store := newFakeSourceStore("abc123")

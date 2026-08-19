@@ -127,14 +127,14 @@ func TestPushBundleError_ScrubsInternalTerms(t *testing.T) {
 		},
 		// Negative-direction: legitimate user terms NOT scrubbed.
 		{
-			name:        "#35 negative — user project name 'my-argo-test' survives",
-			rawDetail:   "validation error on project my-argo-test",
-			wantSubs:    []string{"my-argo-test"},
+			name:      "#35 negative — user project name 'my-argo-test' survives",
+			rawDetail: "validation error on project my-argo-test",
+			wantSubs:  []string{"my-argo-test"},
 		},
 		{
-			name:        "#35 negative — github.com still NOT scrubbed (Sprint 5 regression)",
-			rawDetail:   "fetch from https://github.com/user/repo failed",
-			wantSubs:    []string{"github.com"},
+			name:      "#35 negative — github.com still NOT scrubbed (Sprint 5 regression)",
+			rawDetail: "fetch from https://github.com/user/repo failed",
+			wantSubs:  []string{"github.com"},
 		},
 		{
 			name:        "internal CIDR scrubbed",
@@ -188,9 +188,9 @@ func TestPushBundleError_ScrubsInternalTerms(t *testing.T) {
 		},
 		// F-sec-1 negative — public IP NOT scrubbed.
 		{
-			name:        "public IP NOT scrubbed (172.x outside RFC1918)",
-			rawDetail:   "dial tcp 172.4.5.6:443: connect: connection refused",
-			wantSubs:    []string{"172.4.5.6", "connection refused"},
+			name:      "public IP NOT scrubbed (172.x outside RFC1918)",
+			rawDetail: "dial tcp 172.4.5.6:443: connect: connection refused",
+			wantSubs:  []string{"172.4.5.6", "connection refused"},
 		},
 		// F-sec-2 — literal "Gitea" product name scrubbed (CR-9).
 		{
@@ -207,14 +207,14 @@ func TestPushBundleError_ScrubsInternalTerms(t *testing.T) {
 		},
 		// Negative direction: legitimate external hostnames MUST NOT be touched.
 		{
-			name:        "external github.com NOT touched",
-			rawDetail:   "fetch https://github.com/foo/bar: connection refused",
-			wantSubs:    []string{"github.com", "connection refused"},
+			name:      "external github.com NOT touched",
+			rawDetail: "fetch https://github.com/foo/bar: connection refused",
+			wantSubs:  []string{"github.com", "connection refused"},
 		},
 		{
-			name:        "external gitlab.com NOT touched",
-			rawDetail:   "https://gitlab.com/foo/bar.git: not found",
-			wantSubs:    []string{"gitlab.com"},
+			name:      "external gitlab.com NOT touched",
+			rawDetail: "https://gitlab.com/foo/bar.git: not found",
+			wantSubs:  []string{"gitlab.com"},
 		},
 	}
 	for _, tc := range cases {

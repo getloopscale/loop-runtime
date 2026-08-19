@@ -17,7 +17,7 @@ import (
 // com a mesma politica declarada (rejeitar mutacao sob saturacao, deixar leitura passar):
 //
 //	api/internal/middleware/pgcircuitbreaker.go   portao percentual SEM histerese
-//	api/internal/admission/pg_breaker.go         high/low-water COM histerese
+//	api/internal/buildplane/admission/pg_breaker.go         high/low-water COM histerese
 //
 // E a histerese nao e enfeite: o proprio arquivo do admission explica que sem ela o breaker
 // oscila a cada tick perto da linha de corte.
@@ -32,7 +32,11 @@ import (
 // tem de DIZER isso onde alguem leia, em vez de descrever um "usage pattern" que ninguem
 // segue.
 func TestAllowHasNoProductionCallerAndTheCodeSaysSo(t *testing.T) {
-	raiz := filepath.Join("..", "..", "..")
+	// A raiz e' PROCURADA, nao contada. Contar niveis quebra no primeiro movimento
+	// de pacote — foi o que aconteceu quando este pacote desceu para
+	// `api/internal/buildplane/admission` (B-062): tres `..` deixaram de chegar
+	// na raiz, e so' o piso de populacao abaixo impediu o verde sobre nada.
+	raiz := raizDoRepositorio(t)
 
 	chamadores, examinados := caçarChamadoresDeAllow(t, filepath.Join(raiz, "api"))
 
@@ -47,9 +51,9 @@ func TestAllowHasNoProductionCallerAndTheCodeSaysSo(t *testing.T) {
 		t.Fatalf("a varredura examinou %d arquivo(s) que importam o pacote; o filtro "+
 			"esvaziou a populacao e a guarda nao mede mais nada", examinados)
 	}
-	t.Logf("populacao real: %d arquivo(s) importam internal/admission, %d chamam Allow()",
+	t.Logf("populacao real: %d arquivo(s) importam "+caminhoDestePacote+", %d chamam Allow()",
 		examinados, len(chamadores))
-	doc := lerArquivo(t, filepath.Join(raiz, "api", "internal", "admission", "pg_breaker.go"))
+	doc := lerArquivo(t, filepath.Join(raiz, "api", "internal", "buildplane", "admission", "pg_breaker.go"))
 
 	if len(chamadores) > 0 {
 		// Alguem ligou o breaker: a advertencia deixou de valer e sai junto.
@@ -67,7 +71,7 @@ func TestAllowHasNoProductionCallerAndTheCodeSaysSo(t *testing.T) {
 
 // caçarChamadoresDeAllow procura consumo do `Allow()` DESTE breaker no modulo api.
 //
-// Exigir que o arquivo importe `internal/admission` e o que separa o `Allow` do breaker do
+// Exigir que o arquivo importe `internal/buildplane/admission` e o que separa o `Allow` do breaker do
 // `Allow` dos limitadores de taxa, que tem o mesmo nome e chamadores legitimos. Sem esse
 // filtro a primeira versao deste teste casava `rate_limit_vault.go` e passava pelo ramo
 // "tem chamador" — verde pelo motivo errado, sobre o defeito que ele existe para travar.
@@ -97,7 +101,7 @@ func caçarChamadoresDeAllow(t *testing.T, raizAPI string) (chamadores []string,
 		if err != nil {
 			return err
 		}
-		if !strings.Contains(string(b), "internal/admission") {
+		if !strings.Contains(string(b), caminhoDestePacote) {
 			return nil // nao importa o pacote: qualquer `Allow()` aqui e de outro tipo
 		}
 		examinados++
@@ -126,3 +130,32 @@ func lerArquivo(t *testing.T, p string) string {
 	}
 	return string(b)
 }
+
+// raizDoRepositorio sobe ate' o diretorio que contem `api/go.mod`. Independe de
+// quantos niveis fundo o pacote esta', que e' exatamente a fragilidade que
+// derrubou a versao anterior deste teste.
+func raizDoRepositorio(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("cwd: %v", err)
+	}
+	for i := 0; i < 12; i++ {
+		if _, err := os.Stat(filepath.Join(dir, "api", "go.mod")); err == nil {
+			return dir
+		}
+		pai := filepath.Dir(dir)
+		if pai == dir {
+			break
+		}
+		dir = pai
+	}
+	t.Fatal("nao achei a raiz do repositorio subindo a partir do cwd (procurei api/go.mod)")
+	return ""
+}
+
+// caminhoDestePacote e' o sufixo de import que identifica este pacote nos
+// importadores. Escrito UMA vez: quando o pacote desceu para `buildplane`
+// (B-062) o filtro literal parou de casar, a populacao zerou e so' o piso
+// abaixo impediu que a guarda ficasse verde sobre nada.
+const caminhoDestePacote = "internal/buildplane/admission"

@@ -14,7 +14,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/argo"
+	"github.com/getloopscale/loopzero/api/internal/buildplane/argo"
 )
 
 func TestRuntimeStrategyEndToEnd(t *testing.T) {

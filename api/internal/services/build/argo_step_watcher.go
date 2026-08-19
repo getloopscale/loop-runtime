@@ -426,7 +426,7 @@ var _ = fmt.Sprintf
 // =============================================================================
 
 // argoWorkflowGVR is the canonical GroupVersionResource for Argo Workflows.
-// Duplicated here to avoid importing api/internal/argo from services (cycle).
+// Duplicated here to avoid importing api/internal/buildplane/argo from services (cycle).
 var argoWorkflowGVR = schema.GroupVersionResource{
 	Group:    "argoproj.io",
 	Version:  "v1alpha1",

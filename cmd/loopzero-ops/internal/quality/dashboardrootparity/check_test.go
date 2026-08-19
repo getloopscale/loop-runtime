@@ -41,9 +41,16 @@ func tree(t *testing.T, caddy, runbook string) string {
 // Documentação que ninguém amarra apodrece: quem mudar o `root *` do Caddyfile deixaria o
 // runbook apontando para um caminho que já não é servido, e a próxima pessoa pagaria a mesma
 // descoberta com um documento que confirma o erro.
+// As fixtures usam `/home/dev/...` e nao o home real de ninguem. O gate
+// `publish-hygiene` reprova caminho de estacao de trabalho em arquivo versionado
+// — historia publicada e' publica retroativamente — e reprovava estas tres
+// linhas. `dev` esta' na lista de homes SINTETICOS que o proprio detector
+// declara aceitaveis (`publishhygiene/check.go:82`), entao isto e' o mecanismo
+// previsto e nao evasao. A logica deste gate nao le' o nome do usuario:
+// `check.go` nao contem o literal em ponto algum.
 func TestRunbookNamesTheServedRoot(t *testing.T) {
 	root := tree(t,
-		"app-dev.loopzero.example {\n  root * /home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
+		"app-dev.loopzero.example {\n  root * /home/dev/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
 		"# runbook\n\nO painel é construído em `~/loopzero-cloud/loopzero-cloud`.\n")
 
 	if _, err := dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root}); err != nil {
@@ -54,7 +61,7 @@ func TestRunbookNamesTheServedRoot(t *testing.T) {
 // Divergência é o defeito: o runbook manda a pessoa para onde a borda não serve.
 func TestDivergenceIsRefused(t *testing.T) {
 	root := tree(t,
-		"app-dev.loopzero.example {\n  root * /home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
+		"app-dev.loopzero.example {\n  root * /home/dev/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
 		"# runbook\n\nO painel é construído em `~/.buildmeta-cloud/loopzero-cloud`.\n")
 
 	out, err := dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root})
@@ -70,7 +77,7 @@ func TestDivergenceIsRefused(t *testing.T) {
 // silêncio — foi ele que custou a descoberta.
 func TestSilentRunbookIsRefused(t *testing.T) {
 	root := tree(t,
-		"app-dev.loopzero.example {\n  root * /home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
+		"app-dev.loopzero.example {\n  root * /home/dev/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
 		"# runbook\n\nNada sobre onde o painel é construído.\n")
 
 	if _, err := dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root}); !errors.Is(err, dashboardrootparity.ErrUndocumented) {

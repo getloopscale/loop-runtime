@@ -32,6 +32,7 @@ import (
 	// Apelidado porque `routes/metrics` (a familia de rotas do proxy, importada
 	// acima) ja ocupa o nome `metrics` neste arquivo. Mesma colisao que
 	// `routes/source` x `internal/source`, resolvida do mesmo jeito.
+	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
 	appmetrics "github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/routes/audit"
@@ -45,7 +46,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	sourceroutes "github.com/getloopscale/loopzero/api/internal/routes/source"
 	"github.com/getloopscale/loopzero/api/internal/server/surfaces"
-	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/enforcement"

@@ -3336,6 +3336,49 @@ dod:
   - existe gate `buildplanevocabulary`: os literais de build só aparecem sob os prefixos declarados
   - o sink de domínio deixa de declarar campo com semântica de BuildKit, ou está escrito por que ele precisa
 
+> **Medido 2026-08-18. Bala 1 e 3 entregues; bala 2 medida como mal-especificada.**
+> Os 15 pacotes com vocabulário de build seguem 15, exatamente como o item mediu.
+>
+> **Bala 1 — feita.** `argo`, `source`, `shellgen` e `admission` passaram para
+> `api/internal/buildplane/`. O pai chama-se `buildplane` e não `build` porque
+> `api/internal/services/build` já existe e a leitura ficaria ambígua — e porque
+> o próprio item chama o gate de `buildplanevocabulary`. 28 arquivos movidos, 18
+> reescritos, alcance confinado ao módulo `api` (Go proíbe importar `internal/`
+> de fora), então o compilador verifica o movimento por inteiro.
+>
+> **O que o compilador não vê, e como cada um apareceu:** `stackcoverage` guardava
+> o caminho por segmentos e **falhou alto** (não passou verde); a baseline do
+> `skip-link` guardava 11 entradas nos endereços antigos, que passaram a ler como
+> novas — reapontadas, não acrescentadas (segue 205 herdadas); `pkg-usage-matrix`
+> regenerado; e o `lint-coverage` pegou a consequência sutil — mudar o caminho muda
+> a **ordem alfabética** do bloco de imports, e o `gofmt` exige bloco ordenado.
+> Formatei só o que toquei: `api` foi de 68 para 59 arquivos fora de formato, e a
+> catraca foi recongelada na melhora.
+>
+> **Um teste do pacote movido calculava a raiz contando `..`** e quebrou. Só não
+> ficou verde sobre nada porque tinha piso de população — o próprio comentário
+> dele previa: "alguém move a árvore, todo arquivo é descartado". Agora ele
+> **procura** a raiz (`api/go.mod`) em vez de contar níveis.
+>
+> **Honestidade sobre a guarda nova:** o `sed` que reescreveu os imports alcançou
+> sozinho a chave do mapa do `domainsinkpurity`, então a guarda de caminho-vigiado
+> criada no commit anterior **não** foi exercitada ao vivo por este movimento —
+> só pelo mutante sintético.
+>
+> **Bala 2 — não construída, e o motivo é medição.** O item previu que, depois do
+> aninhamento, um gate precisaria enumerar **3** prefixos. Medido depois de
+> aninhar: **14**. O vocabulário não estava só nos quatro pacotes — vive em
+> `config`, `db`, `db/store`, `metrics`, `scrub`, `server` e quatro `services/*`,
+> e ali ele é legítimo: nomes de métrica `loopzero_cosign_*`, comentários de
+> proveniência de um dado guardado, a chave que escolhe modo de assinatura. Não é
+> orquestração de build vazando; é a plataforma guardar, medir e configurar uma
+> operação que acontece no plano de build. O gate como especificado exigiria os 14
+> prefixos — exatamente o que o item chamou de "um gate que ninguém mantém" — ou
+> reprovaria referência legítima. A forma que sobrevive à medição é mais estreita
+> (só os tipos de **orquestração**: `WorkflowSubmitter` e os tipos `argoproj`,
+> hoje em `buildplane` mais 4 costuras de wiring = 5 prefixos), e precisa de
+> desenho próprio. Registrado em vez de construído.
+
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
 ## B-063 — Um módulo de infraestrutura depende de uma suíte de testes, e `tools/` está fora do workspace   [ ]

@@ -844,7 +844,7 @@ tasks:
         2. vitest J-17 hooks + pages (use-deployments-list-stream,
            use-deployments, deployments.tsx — 7+4+4 tests)
         3. Go API tests for the J-17 backend surface
-           (api/internal/argo + loki + routes — covers Layer 1+2+3 wrap,
+           (api/internal/buildplane/argo + loki + routes — covers Layer 1+2+3 wrap,
            LogQL filter, build_list + logs handlers)
         4. T7.2 LIVE bash (4 cenários A/B/C/D against dev-public — REST
            list + SSE wiring + Loki marker pipeline + preflight)

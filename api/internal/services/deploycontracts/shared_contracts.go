@@ -89,7 +89,7 @@ type WorkflowSpec struct {
 	// NoCache carrega a INTENCAO do usuario — reconstruir do zero, sem reaproveitar
 	// trabalho anterior — e nao o mecanismo que a realiza. O comentario anterior
 	// dizia "Skip BuildKit layer cache", nomeando no contrato de dominio uma
-	// ferramenta que so' existe no construtor (`api/internal/argo/buildkit.go:82`,
+	// ferramenta que so' existe no construtor (`api/internal/buildplane/argo/buildkit.go:82`,
 	// o unico leitor que decide algo com este campo). Trocar de construtor nao
 	// muda o que o usuario pediu; mudava este comentario, e e' assim que o
 	// vocabulario de um plano vaza para onde ele nao tem endereco (B-062).

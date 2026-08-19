@@ -9,10 +9,10 @@ import (
 
 // Re-export error types for backward compatibility with existing tests.
 var (
-	ErrPathTraversal    = archive.ErrPathTraversal
-	ErrSymlinkInArchive = archive.ErrSymlinkInArchive
+	ErrPathTraversal      = archive.ErrPathTraversal
+	ErrSymlinkInArchive   = archive.ErrSymlinkInArchive
 	ErrDecompressionLimit = archive.ErrDecompressionLimit
-	ErrFileCountLimit   = archive.ErrFileCountLimit
+	ErrFileCountLimit     = archive.ErrFileCountLimit
 )
 
 // SafeExtractTarGz delegates to archive.SafeExtractTarGz with no strip components.

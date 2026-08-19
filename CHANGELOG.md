@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A sonda da borda passou a dizer QUAL parte caiu.** Quando o painel fica indisponível, o caminho do motor cai junto — porque ele passa por dentro do painel — e as duas falhas apareciam idênticas para quem estava de plantão, apesar de exigirem ações opostas. Agora o relatório separa os dois casos e diz para onde olhar, apoiado na medição de que as telas de produto do painel não dependem do motor. Em dia normal ele continua em silêncio. (B-022)
 - **Um teste do limite de requisições reprovava conforme a máquina estivesse ocupada, não conforme o comportamento.** Ele contava quantas chamadas passavam num intervalo curto, e como a permissão se renova com o tempo, uma máquina mais lenta deixava passar uma a mais e o teste acusava erro onde não havia. O contrato agora é verificado com o tempo controlado pelo próprio teste — a mesma lógica de produção, sem depender do relógio —, e a verificação antiga passou a afirmar só o que pode garantir: que o limite realmente está ligado no caminho público. (B-014)
 
+### Changed
+
+- **As quatro partes do código que constroem e assinam uma aplicação passaram a morar sob um mesmo lugar, que diz o que elas são.** Antes estavam espalhadas ao lado de assuntos sem relação, e não havia como responder "o que é build?" olhando para a árvore de código. Nada mudou de comportamento. (B-062)
+
 ## [0.76.6] - 2026-08-18
 
 ### Fixed

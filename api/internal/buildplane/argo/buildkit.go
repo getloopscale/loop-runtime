@@ -21,7 +21,7 @@ import (
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"
 
-	"github.com/getloopscale/loopzero/api/internal/shellgen"
+	"github.com/getloopscale/loopzero/api/internal/buildplane/shellgen"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
 

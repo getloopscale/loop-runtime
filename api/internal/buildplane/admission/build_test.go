@@ -231,7 +231,7 @@ func TestCheck_ZeroCaps_MeansNoLimit(t *testing.T) {
 	// Zero caps are a valid way to disable an individual check without
 	// disabling the whole gate (e.g. "enforce per-tenant but no cell cap").
 	cfg := Config{
-		MaxConcurrentPerCell:   0,   // disabled
+		MaxConcurrentPerCell:   0, // disabled
 		MaxConcurrentPerTenant: 2,
 		BaseRetryAfter:         1 * time.Second,
 		MaxRetryAfter:          10 * time.Second,

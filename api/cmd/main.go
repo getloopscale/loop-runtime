@@ -24,7 +24,7 @@ import (
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 	"github.com/getloopscale/loopzero/pkg/logging"
 
-	"github.com/getloopscale/loopzero/api/internal/admission"
+	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"

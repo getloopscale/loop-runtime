@@ -105,10 +105,10 @@ func TestValidateServicesJSON_V2_ProjectMissing_Returns422(t *testing.T) {
 
 func TestValidateServicesJSON_V2_ProjectInvalidDNS_Returns422(t *testing.T) {
 	for _, bad := range []string{
-		"Acme",            // uppercase
-		"acme/../passwd",  // path traversal
-		"_acme",           // leading underscore
-		"acme-",           // trailing hyphen
+		"Acme",                  // uppercase
+		"acme/../passwd",        // path traversal
+		"_acme",                 // leading underscore
+		"acme-",                 // trailing hyphen
 		strings.Repeat("a", 64), // too long
 	} {
 		content := validV2ServicesJSON(bad)

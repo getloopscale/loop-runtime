@@ -8,7 +8,7 @@ import "strings"
 // ShellQuote wraps a string in POSIX-safe single quotes.
 // This is the only correct way to embed arbitrary strings in shell scripts.
 //
-// Rule: wrap in single quotes, escape internal single quotes as '\'' (end quote,
+// Rule: wrap in single quotes, escape internal single quotes as '\” (end quote,
 // escaped literal quote, reopen quote). Inside single quotes, no other character
 // has special meaning — $, `, ", \, newlines are all literal.
 //

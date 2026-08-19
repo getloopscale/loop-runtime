@@ -40,12 +40,12 @@ func loopzeroSyftImage() string {
 // runtime activation of keyless is deferred to Sprint 9+ until cluster OIDC
 // infrastructure is provisioned.
 type CosignSignParams struct {
-	AppName           string
-	ImageTag          string
-	InsecureRegistry  bool
-	Keyless           bool   // true = OIDC + Fulcio + Rekor; false = key-based
-	FulcioURL         string // optional override; empty = sigstore.dev public Fulcio
-	RekorURL          string // optional override; empty = sigstore.dev public Rekor
+	AppName          string
+	ImageTag         string
+	InsecureRegistry bool
+	Keyless          bool   // true = OIDC + Fulcio + Rekor; false = key-based
+	FulcioURL        string // optional override; empty = sigstore.dev public Fulcio
+	RekorURL         string // optional override; empty = sigstore.dev public Rekor
 	// T1.2 of plan 2026-05-28-meet-001-engineering-closure v1.1 — CR-1 fix.
 	// InsecureSkipSCT renders `--insecure-skip-verify` in the cosign sign
 	// command. ONLY relevant when Keyless=true (keyed mode does not use SCT).
@@ -64,8 +64,8 @@ type CosignSignParams struct {
 // Mode selection (`params.Keyless`):
 //   - false (default): key-based — `cosign-signing-key` Secret mounts cosign.key + cosign.password.
 //   - true:            keyless — projected SA token mounted at /var/run/secrets/sigstore;
-//                      cosign reads it via SIGSTORE_ID_TOKEN env var; Fulcio issues cert;
-//                      Rekor records entry. No long-lived key material in the cluster.
+//     cosign reads it via SIGSTORE_ID_TOKEN env var; Fulcio issues cert;
+//     Rekor records entry. No long-lived key material in the cluster.
 //
 // The signing step reads the image digest from the BuildKit metadata file
 // (written to /workspace/metadata-{appName}.json) and signs by digest,
@@ -215,13 +215,13 @@ echo "Image signed successfully"
 // in Rekor (default: https://rekor.sigstore.dev) for transparency.
 //
 // Runtime requirements (Sprint 9+ deferred per MEET-B):
-//   1. Build cluster service account configured as OIDC issuer accepted by
-//      Fulcio. EITHER public Fulcio with custom issuer trust list (currently
-//      not supported by sigstore.dev public Fulcio) OR private Fulcio
-//      deployment trusting the cluster SA OIDC discovery doc OR Spire-issued
-//      SVID providing SPIFFE identity bridged to Fulcio.
-//   2. Cluster has egress to Fulcio + Rekor URLs.
-//   3. NetworkPolicy allows egress from build namespace to Fulcio/Rekor.
+//  1. Build cluster service account configured as OIDC issuer accepted by
+//     Fulcio. EITHER public Fulcio with custom issuer trust list (currently
+//     not supported by sigstore.dev public Fulcio) OR private Fulcio
+//     deployment trusting the cluster SA OIDC discovery doc OR Spire-issued
+//     SVID providing SPIFFE identity bridged to Fulcio.
+//  2. Cluster has egress to Fulcio + Rekor URLs.
+//  3. NetworkPolicy allows egress from build namespace to Fulcio/Rekor.
 //
 // Until those are met, callers should leave InfraParams.CosignKeyless=false
 // (the default), which routes through cosignSignTemplateKeyBased above.

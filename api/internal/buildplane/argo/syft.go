@@ -22,7 +22,7 @@ const (
 	// cosign-attest pod failed with "ERROR: SBOM file not found at
 	// /tmp/sbom-X.cdx.json (syft step did not produce output)" — SBOM was
 	// in /tmp of syft pod (gone after pod cleanup), not in shared PVC.
-	sbomLocalDir = workspaceMountPath
+	sbomLocalDir       = workspaceMountPath
 	sbomFormatCDXJSON  = "cyclonedx-json"
 	sbomS3PathTemplate = "sbom/%s/%s/%s/%s.cdx.json" // tenant/project/commit/app
 )
@@ -125,13 +125,13 @@ printf '%%s' "${COMPONENT_COUNT}" > %s
 
 echo "SBOM generated and uploaded successfully"
 `,
-		metadataFile,             // 1: metadata path
-		imageTag,                 // 2: image tag for echo
-		insecureEnv,              // 3: syft env vars for insecure registry (Plan T6.1)
-		imageTag,                 // 4: scan target
+		metadataFile,                     // 1: metadata path
+		imageTag,                         // 2: image tag for echo
+		insecureEnv,                      // 3: syft env vars for insecure registry (Plan T6.1)
+		imageTag,                         // 4: scan target
 		sbomFormatCDXJSON, sbomLocalPath, // 5,6: format + local path
-		sbomLocalPath,            // 7: existence check path
-		sbomLocalPath,            // 8: count source path
+		sbomLocalPath,               // 7: existence check path
+		sbomLocalPath,               // 8: count source path
 		s3BucketStaticAssets, s3Key, // 9,10: bucket + key (echo)
 		sbomLocalPath, s3BucketStaticAssets, s3Key, // 11,12,13: aws s3 cp
 		s3Key, outS3KeyPath, // 14,15: write s3 key output
@@ -161,10 +161,10 @@ echo "SBOM generated and uploaded successfully"
 		Env: []forge.EnvBuilder{
 			// MinIO (local dev) credentials. In prod, AWS_ACCESS_KEY/SECRET
 			// for DO Spaces are also injected via the same Secret.
-			forge.SecretEnv{Name: "AWS_ACCESS_KEY_ID", SecretName: secretMinIOCreds, SecretKey: "AWS_ACCESS_KEY_ID"}, //nolint:gosec // G101 false positive: env var KEY name, not credential value
+			forge.SecretEnv{Name: "AWS_ACCESS_KEY_ID", SecretName: secretMinIOCreds, SecretKey: "AWS_ACCESS_KEY_ID"},         //nolint:gosec // G101 false positive: env var KEY name, not credential value
 			forge.SecretEnv{Name: "AWS_SECRET_ACCESS_KEY", SecretName: secretMinIOCreds, SecretKey: "AWS_SECRET_ACCESS_KEY"}, //nolint:gosec // G101 false positive: env var KEY name, not credential value
-			forge.SecretEnv{Name: "AWS_DEFAULT_REGION", SecretName: secretMinIOCreds, SecretKey: "AWS_DEFAULT_REGION"}, //nolint:gosec // G101 false positive: env var KEY name, not credential value
-			forge.SecretEnv{Name: "AWS_ENDPOINT_URL", SecretName: secretMinIOCreds, SecretKey: "AWS_ENDPOINT_URL"}, //nolint:gosec // G101 false positive: env var KEY name, not credential value
+			forge.SecretEnv{Name: "AWS_DEFAULT_REGION", SecretName: secretMinIOCreds, SecretKey: "AWS_DEFAULT_REGION"},       //nolint:gosec // G101 false positive: env var KEY name, not credential value
+			forge.SecretEnv{Name: "AWS_ENDPOINT_URL", SecretName: secretMinIOCreds, SecretKey: "AWS_ENDPOINT_URL"},           //nolint:gosec // G101 false positive: env var KEY name, not credential value
 			// Docker config — syft needs this to read from private registries.
 			forge.Env{Name: "DOCKER_CONFIG", Value: buildkitRegistryMount},
 		},
