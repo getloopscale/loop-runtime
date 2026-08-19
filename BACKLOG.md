@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-157 items — **Open** 42 · **In flight** 0 · **Closed** 115
+158 items — **Open** 43 · **In flight** 0 · **Closed** 115
 
-### Open (42)
+### Open (43)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -116,6 +116,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-155`](#b-155--o-lockfile-so-e-procurado-na-raiz-do-bundle-e-a-mensagem-nao-diz-onde-procurou----) | O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou | `triaged` | — |
 | [`B-156`](#b-156--um-teste-de-chart-depende-de-rede-e-reprova-o-portao-de-entrega-sob-carga----) | Um teste de chart depende de rede e reprova o portao de entrega sob carga | `triaged` | — |
 | [`B-157`](#b-157--uma-ferramenta-com-imagem-config-e-testes-não-é-invocada-por-caminho-nenhum----) | Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum | `triaged` | média |
+| [`B-158`](#b-158--o-registro-que-o-loop-inteiro-le-nao-e-validado-por-nada----) | O registro que o loop inteiro le' nao e' validado por nada | `triaged` | — |
 
 ### In flight (0)
 
@@ -9269,4 +9270,30 @@ dod:
 > As duas balas de decisão seguem abertas: se o linter volta ao caminho de build
 > ou sai da árvore, e a limpeza de `LOOPZERO_DOCKERFILE_LINT_IMAGE` e das invocações
 > de teste que vem com ela.
+## B-158 — O registro que o loop inteiro le' nao e' validado por nada   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+evidence: medido em 2026-08-19. `check_backlog_structure.py BACKLOG.md` devolvia **INVALID** (1 blocker `renumbered`, 2 major `raw_with_evidence`+`index_stale`, 1 minor `vague_dod`) e ninguem sabia, porque **nada no caminho de qualidade o invoca**: `grep -rl check_backlog_structure taskfiles/ cmd/` nao devolve nada. O script existe em `.claude/skills/backlog-review/scripts/` desde que o kit foi sincronizado.
+why_now: o `cycle-maintenance` LE este arquivo a cada iteracao para escolher o proximo item, e o SELECT ordena por `status`. Com o B-157 preso em `raw` carregando evidencia, ele era ranqueado ABAIXO de itens nao medidos — exatamente a inversao que o ranking existe para evitar. O defeito nao apareceu em lugar nenhum ate' eu rodar o validador a mao.
+status: triaged
+tier: T2 (`.claude/rules/pre-release-governance.md` — "Pipeline/CI changes" e' gatilho automatico) — por isso NAO liguei o gate por conta propria
+dod:
+  - o validador roda num caminho que alguem executa de fato, e reprova quando o registro regride
+  - a escolha do caminho esta' decidida: os gates deste repo sao Go sob `cmd/loopzero-ops` e o validador e' Python do kit — ou ele entra via `task`, ou a checagem e' reescrita em Go; as duas tem custo e a decisao e' de quem mantem o pipeline
+  - o gate roda contra a populacao real e o resultado fica registrado, inclusive se for zero (`rules/testing.md` § 4.2)
+
+**Por que nao consertei junto.** O conserto do CONTEUDO era meu para fazer e esta' feito
+(`3997f3f33`): o registro voltou a SHIPPABLE. Ligar o validador a um alvo de qualidade e'
+mudanca de pipeline, gatilho T2 automatico, e a governanca deste repo pede reuniao ANTES do
+codigo. Registrar e parar e' o que a regra manda; ligar por conta propria seria o bypass que
+o item existe para descrever.
+
+**A licao, que vale alem deste item.** O sistema tem 126 gates sobre o codigo e nenhum sobre
+o registro que decide o que o sistema faz em seguida. Um verde sobre nada e' indistinguivel
+de um verde sobre algo — foi o defeito do B-040, do B-127 e do B-128, e aqui ele reaparece um
+nivel acima: nao no que os gates medem, mas em QUEM os manda medir.
+
 
