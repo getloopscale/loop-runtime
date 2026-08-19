@@ -7997,6 +7997,32 @@ why_now: o `B-116` acabou de decidir que a API **não sobe** sem banco, o que fe
 status: triaged
 dod:
   - a prontidão reflete a capacidade **desta instância** de servir, e existe estado observável em que o pod está vivo e fora do Service
+> **Medido 2026-08-19 — o endpoint que falta não falta; o que falta é a decisão
+> sobre o trade-off, e ela é T2.**
+>
+> Confirmado que as duas sondas apontam para `/api/v1/health`, e que esse handler
+> responde 200 incondicionalmente. **Mas `/api/v1/health/ready` já existe** e está
+> registrado (`server/router.go:120`), mapeado para `DeepHealth`, que pinga o banco
+> (`health.go:101`) e cada dependência de serviço. Não é preciso escrever endpoint
+> nenhum — é uma linha no `values.yaml`.
+>
+> **E é exatamente por isso que o item chama a correção óbvia de armadilha.**
+> `DeepHealth` degrada quando o **banco** está fora, e o banco é dependência
+> **compartilhada**: todos os pods reprovam ao mesmo tempo, o Service fica sem
+> endpoint e a degradação vira indisponibilidade total. Trocar erro em 27 das 36
+> superfícies por zero superfícies servidas não é conserto.
+>
+> **O que a DoD pede é mais fino do que apontar a sonda:** prontidão que reflita a
+> capacidade **desta instância**. A mesma checagem serve para isso — ela usa o pool
+> *deste* pod — no caso instância-específica (pool exaurido só aqui), e falha
+> exatamente onde não deveria no caso global. Distinguir os dois exige política que
+> não existe hoje: fail-open depois de N falhas globais, ou PDB garantindo piso de
+> endpoints.
+>
+> **Não apliquei:** mudar semântica de sonda em chart é T2 pelos dois critérios
+> (Helm chart e comportamento operacional), e a decisão entre "degradar servindo
+> erro" e "sair do Service" é de produto, não de implementação.
+
   - a decisão de qual dependência entra na prontidão está escrita, com a razão de cada uma
   - existe teste que reprova a forma que este item registra: prontidão e vivacidade apontando para o mesmo handler incondicional
 
