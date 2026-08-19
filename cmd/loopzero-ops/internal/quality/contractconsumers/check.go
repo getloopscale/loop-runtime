@@ -45,6 +45,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -78,11 +79,15 @@ type Finding struct {
 
 // Outcome reports the gate verdict.
 type Outcome struct {
-	Pass         bool
-	Findings     []Finding
-	DroppedTags  []string // sorted list of dropped JSON tags detected
-	ScanRoots    []string // consumer scan roots used
-	CommandError string   // populated if git or grep failed
+	Pass        bool
+	Findings    []Finding
+	DroppedTags []string // sorted list of dropped JSON tags detected
+	ScanRoots   []string // consumer scan roots used
+	// MissingRoots sao as raizes declaradas que NAO existem na arvore. `git grep`
+	// ignora pathspec que nao casa nada e devolve os matches dos que casam, entao
+	// uma raiz que sumiu vira cobertura perdida em silencio (B-100, B-040).
+	MissingRoots []string
+	CommandError string // populated if git or grep failed
 }
 
 // trackedFiles enumerates source files whose struct field drops trigger the gate.
@@ -122,16 +127,29 @@ func Check(cfg Config) (*Outcome, error) {
 		head = "HEAD"
 	}
 
+	// Calculado ANTES do primeiro retorno: no caminho de erro do git a cobertura
+	// tambem some, e e' o caminho em que ninguem olha.
+	ausentes := raizesAusentes(root)
+
 	droppedTags, err := collectDroppedJSONTags(root, base, head)
 	if err != nil {
-		return &Outcome{CommandError: err.Error()}, nil
+		return &Outcome{
+			CommandError: err.Error(),
+			ScanRoots:    consumerRoots,
+			MissingRoots: ausentes,
+		}, nil
 	}
 
 	out := &Outcome{
-		DroppedTags: droppedTags,
-		ScanRoots:   consumerRoots,
-		Pass:        true,
+		DroppedTags:  droppedTags,
+		ScanRoots:    consumerRoots,
+		MissingRoots: ausentes,
+		Pass:         true,
 	}
+	// Uma raiz declarada que nao existe e' cobertura perdida, e precisa aparecer
+	// mesmo quando nenhuma tag caiu: e' justamente no PASS que ela some sem deixar
+	// rastro. Nao derruba o gate sozinha — a decisao de para onde apontar esta' no
+	// B-100 — mas deixa de ser invisivel.
 	if len(droppedTags) == 0 {
 		return out, nil
 	}
@@ -269,6 +287,24 @@ func structsDeclaringTagAt(root, rev, tag string) (int, error) {
 		total += n
 	}
 	return total, nil
+}
+
+// raizesAusentes devolve as raizes declaradas que nao existem sob root.
+//
+// Existe porque `git grep -- a b c` ignora em silencio o pathspec que nao casa
+// nada. Duas das tres raizes declaradas sairam deste repositorio na decomposicao
+// (`cloud/dashboard/src/` -> ../loopzero-cloud, `cli/src/` -> ../loopzero-cli), e sao
+// justamente as de TypeScript — as que carregam o consumidor de FIO, que le' o
+// campo pelo nome do JSON e que o compilador nao ve'. O que sobrou e' Go, onde um
+// campo removido quebra a compilacao. Medido 2026-08-19.
+func raizesAusentes(root string) []string {
+	var ausentes []string
+	for _, r := range consumerRoots {
+		if _, err := os.Stat(filepath.Join(root, r)); err != nil {
+			ausentes = append(ausentes, r)
+		}
+	}
+	return ausentes
 }
 
 // grepConsumersForTag runs `git grep` for the dropped tag across consumer

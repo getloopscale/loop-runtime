@@ -157,11 +157,17 @@ func TestGuardaContraOsApagamentosQueAArvoreDeFatoUsa(t *testing.T) {
 // E o que a propria mensagem do hook declara permitido precisa passar, senao a guarda
 // contradiz o texto que ela mesma imprime.
 func TestGuardaPermiteOQueAPropriaMensagemDeclara(t *testing.T) {
+	// O caminho profundo e' construido em tempo de execucao, e nao escrito. Cravar
+	// `/home/<alguem>/...` num arquivo versionado e' vazamento de caminho de
+	// workstation — o gate `publish-hygiene` reprova, e reprovou esta linha quando
+	// eu a escrevi assim.
+	profundoAbsoluto := filepath.Join(repoRootDir(t), "cmd", "loopzero-ops", "testdata", "tmp")
+
 	for _, comando := range []string{
 		"rm -rf /tmp/scratch-dir",
 		"rm -rf cmd/loopzero-ops/testdata/tmp",
 		"rm -f BACKLOG.md.bak",
-		"rm -rf /home/paulo/Projetos/loopzero/loopzero-platform/loopzero/cmd/loopzero-ops/testdata/tmp",
+		"rm -rf " + profundoAbsoluto,
 	} {
 		if got := rodarHook(t, comando); got == 2 {
 			t.Errorf("%q foi bloqueado, mas a mensagem da guarda declara permitidos caminho "+

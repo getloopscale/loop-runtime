@@ -56,6 +56,15 @@ func runContractConsumers(args []string) int {
 		fmt.Fprintf(os.Stderr, "contract-consumers: %v\n", err)
 		return 5
 	}
+	// Cobertura perdida aparece SEMPRE — inclusive no PASS, que e' onde ela some sem
+	// deixar rastro. `git grep` ignora em silencio pathspec que nao casa nada, entao
+	// uma raiz declarada que sumiu da arvore vira menos varredura e mesmo veredito
+	// (B-100). Nao derruba o gate sozinha: para onde apontar e' decisao de reuniao.
+	if len(outcome.MissingRoots) > 0 {
+		fmt.Fprintf(os.Stderr, "contract-consumers: AVISO — %d de %d raiz(es) de consumidor nao existem "+
+			"nesta arvore e NAO foram varridas: %v\n", len(outcome.MissingRoots), len(outcome.ScanRoots),
+			outcome.MissingRoots)
+	}
 	if outcome.CommandError != "" {
 		fmt.Fprintf(os.Stderr, "contract-consumers: git/grep error: %s\n", outcome.CommandError)
 		return 5

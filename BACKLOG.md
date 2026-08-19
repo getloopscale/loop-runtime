@@ -6105,6 +6105,37 @@ source: discover-review
 evidence: medido em 2026-08-13, quando o gate bloqueou o push da fatia 19. Dois limites, ambos por trabalhar com **nome** em vez de referência. (1) `cmd/loopzero-ops/internal/quality/contractconsumers/check.go:212` — `tagExistsAt` pergunta se a tag existe em **qualquer** struct do conjunto rastreado. `api/internal/routes/repositories/repositories.go:105,117` declara `json:"repo"` duas vezes, então remover de uma é invisível. Coberto pelo teste `TestCollectDroppedJSONTags_ADuplicateTagMasksTheDrop`, que documenta o limite e diz para atualizá-lo — não apagá-lo — quando fechar. (2) `check.go:242` — `grepConsumersForTag` casa `\.<tag>\b`, o que pega **campo de struct homônimo** e **literal de string**: na ocorrência real, dos 9 "consumidores" de `repo`, 8 eram `p.repo.RepoURL(...)` (`p.repo` é `*gitclient.GiteaRepoManager` — `api/internal/gitops/gitea_pusher.go:45`) e 1 era `attribute.String("loopzero.github.repo", ...)`. Zero liam a tag.
 why_now: é o **mesmo defeito** que o review da fatia 19 achou na minha tabela de acoplamento — contar ocorrência de nome como referência — e nesta sessão ele apareceu de forma independente em dois lugares. Aqui ele custa: o gate bloqueou um push que não mudava contrato nenhum, e um gate que erra assim é um gate que as pessoas aprendem a contornar.
 status: triaged
+
+> **Medido 2026-08-19 — a segunda metade tem um defeito maior por baixo, e uma das
+> suas balas parte de premissa falsa.**
+>
+> A bala diz *"a detecção de consumidor em TypeScript continua funcionando — ali
+> `.repo` é de fato o acesso à propriedade"*. **Não há TypeScript neste repositório.**
+> Das três raízes declaradas em `consumerRoots`, duas **não existem**:
+> `cloud/dashboard/src/` saiu para `../loopzero-cloud` (M4) e `cli/src/` para
+> `../loopzero-cli` (M2). Sobra `api/internal/`.
+>
+> E `git grep -- a b c` **ignora em silêncio** o pathspec que não casa nada: medido,
+> a varredura de `\.repo\b` devolve 10 matches, **todos** `s.repo.RepoURL(...)` em
+> `api/internal/`. Zero leem tag.
+>
+> **Isso não é ruído acidental — é o único resultado possível.** Em Go, `.<tag>` só
+> pode ser seletor de campo, e um campo removido **quebra a compilação**: o
+> compilador já guarda esses consumidores. Quem o gate existia para pegar é o
+> consumidor de FIO, que lê pelo nome do JSON e que nenhum compilador vê — e ele
+> mora nos dois roots que sumiram. **O gate não consegue produzir um verdadeiro
+> positivo neste repositório.**
+>
+> **O que fiz:** a cobertura perdida deixou de ser invisível. `Outcome.MissingRoots`
+> passa a reportar as raízes declaradas que não existem, calculado **antes** do
+> retorno de erro do git (é no caminho de falha que ninguém olha), e o runner imprime
+> `AVISO — N de M raiz(es) ... NAO foram varridas`. Dois testes: um mutante e a
+> varredura de população, que registra **2 de 3 ausentes** e falha se piorar.
+>
+> **O que NÃO fiz, e por quê:** para onde apontar — repos irmãos, a tarefa
+> `quality:contract:cross-repo` que já existe, ou aposentar a metade de consumidor —
+> é decisão de desenho com custos diferentes, não consequência da medição. Um gate
+> que varre dois terços do nada em silêncio é defeito; escolher o destino é reunião.
 severity: média — não deixa contrato quebrado passar (o caminho de detecção continua fechado para a última declaração sair); gera ruído, que é como um gate perde autoridade
 dod:
   - a existência da tag é verificada na struct de onde ela saiu, não em qualquer uma do conjunto — e `TestCollectDroppedJSONTags_ADuplicateTagMasksTheDrop` é reescrito para exigir o contrário do que exige hoje
