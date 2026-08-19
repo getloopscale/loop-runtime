@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-161 items — **Open** 46 · **In flight** 0 · **Closed** 115
+163 items — **Open** 48 · **In flight** 0 · **Closed** 115
 
-### Open (46)
+### Open (48)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -120,6 +120,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-159`](#b-159--o-checklist-manda-escrever-o-changelog-num-arquivo-que-nao-existe----) | O checklist manda escrever o CHANGELOG num arquivo que nao existe | `triaged` | — |
 | [`B-160`](#b-160--a-guarda-de-comandos-junta-pedacos-de-comandos-diferentes-e-bloqueia-o-inocente----) | A guarda de comandos junta pedacos de comandos diferentes e bloqueia o inocente | `triaged` | media |
 | [`B-161`](#b-161--o-gate-de-runbook-mede-a-anotacao-nao-o-runbook-6-dos-7-links-nao-levam-a-lugar-nenhum----) | O gate de runbook mede a anotacao, nao o runbook: 6 dos 7 links nao levam a lugar nenhum | `triaged` | media |
+| [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta |
+| [`B-163`](#b-163--um-gate-exige-do-pulumi-o-que-a-propria-arquitetura-ja-aposentou----) | Um gate exige do Pulumi o que a propria arquitetura ja' aposentou | `triaged` | baixa |
 
 ### In flight (0)
 
@@ -9468,4 +9470,54 @@ motivo errado.
 **Por que isto nao e' o B-067.** Aquele conta alertas SEM anotacao; este mede as
 anotacoes QUE EXISTEM. Fixes opostos: la' se acrescenta, aqui se conserta ou remove. E
 a ordem importa — fechar o B-067 antes deste multiplica o defeito por seis.
+## B-162 — Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+severity: alta — e' criptografia de segredo de tenant, e o gate ja' saiu do periodo de aviso: ele REPROVA a arvore hoje
+evidence: |
+  Medido 2026-08-19 rodando os 141 gates com o binario. `loopzero-ops quality no-aes-remaining`:
+
+  ```
+  no-aes-remaining: FAIL (ENFORCED)
+    Enforcement starts: 2026-08-01 00:00 UTC
+    Now:                2026-08-19 12:12 UTC
+  ```
+
+  **5 sitios** em `api/internal/db/store/secret_wrapper.go` (linhas 22, 158, 162 e mais),
+  marcadores `crypto/aes`, `aes.NewCipher`, `cipher.NewGCM`. A T10.3 exigia que so' restasse
+  o caminho Transit (prefixo `vault:v1:`) em `encryptForStorage`.
+why_now: o gate nao esta' em periodo de aviso — ele entrou em vigor em 2026-08-01 e reprova ha' 18 dias. Nenhum item do backlog o citava (`grep no-aes-remaining BACKLOG.md` -> 0). E' a mesma forma do **B-146**, o prazo do cosign vencido em 10/08: um prazo decidido, a data chegou, e ninguem soube porque nada olhava o resultado.
+status: triaged
+dod:
+  - o ramo AES sai de `encryptForStorage`, ou o prazo e' emendado por decisao registrada — as duas fecham, "deixar reprovando" nao
+  - existe teste que prova que o caminho de escrita produz SO o prefixo Transit
+  - se sair, os dados ja' escritos em AES tem caminho de leitura declarado — remover o ramo de decifrar sem migrar o que existe torna segredo antigo ilegivel
+
+**Nao consertei, e a razao e' de ambiente, nao de escopo.** O conserto e' codigo Go e a
+maquina perdeu o toolchain hoje (ver o relatorio ao Paulo): sem compilador eu nao rodo o
+teste que provaria a mudanca, e mexer em cifragem de segredo sem verificar seria pior que
+esperar. Medi e registrei.
+
+## B-163 — Um gate exige do Pulumi o que a propria arquitetura ja' aposentou   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+severity: baixa — nao ha' regressao nova; o custo e' um gate que reprova por desenho e treina todo mundo a ignora-lo
+evidence: medido 2026-08-19. `loopzero-ops quality no-pulumi-inline-secrets` reprova com **9 violacoes** em `infra/pulumi/Pulumi.dev.yaml` e `infra/pulumi/Pulumi.prod.yaml` — segredos cifrados em linha, que a mensagem descreve como desvio do Vault. Nenhum item do backlog o citava.
+why_now: o `CLAUDE.md` declara `infra/pulumi*` como **legado AS-IS, vivo ate' o cutover do AM8**, e proibe adicionar Pulumi novo para a infra alvo. O gate cobra reescrita de secret exatamente na arvore que a arquitetura decidiu abandonar — entao ele reprova hoje, vai reprovar amanha, e ninguem vai consertar, porque consertar seria investir no que esta' sendo substituido.
+status: triaged
+dod:
+  - esta' decidido se o gate isenta o legado do Pulumi com prazo amarrado ao AM8, ou se as 9 violacoes sao migradas de fato
+  - se for isencao, ela nomeia os arquivos e a data — isencao sem prazo e' revogacao com outro nome
+  - o gate volta a PASS por uma das duas vias; "reprovando por desenho" nao e' estado aceitavel para uma catraca
+
+**A pergunta certa aqui nao e' "como migrar esses 9".** E' se um gate deve cobrar de uma
+arvore congelada a politica que ela nunca vai cumprir. Um gate que reprova por desenho
+ensina a ignorar gates — e o custo disso e' pago pelo proximo gate, que estara' certo.
+
 
