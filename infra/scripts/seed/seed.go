@@ -279,7 +279,7 @@ func EnsureTenantCR(kubeContext string) error {
 		"apiVersion": "loopzero.io/v1",
 		"kind":       "Tenant",
 		"metadata": map[string]interface{}{
-			"name":      TenantID,
+			"name": TenantID,
 			// Tenant-operator only reconciles CRs in loopzero-system namespace;
 			// "default" is invisible to its watch (verified empirically
 			// 2026-05-06 — Tenant in "default" stays with empty PHASE while

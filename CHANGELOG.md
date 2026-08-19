@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **O código que prepara um ambiente para uso deixou de morar dentro da suíte de testes.** Um utilitário de infraestrutura passava a arrastar a suíte inteira como dependência só para reaproveitar essa preparação; ela agora mora do lado da infraestrutura, e são os testes que a consomem. (B-063)
 - **As quatro partes do código que constroem e assinam uma aplicação passaram a morar sob um mesmo lugar, que diz o que elas são.** Antes estavam espalhadas ao lado de assuntos sem relação, e não havia como responder "o que é build?" olhando para a árvore de código. Nada mudou de comportamento. (B-062)
 
 ## [0.76.6] - 2026-08-18

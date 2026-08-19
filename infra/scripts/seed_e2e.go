@@ -3,7 +3,7 @@
 
 // Package main is a thin wrapper around the seed package for standalone use.
 //
-// It delegates all seeding logic to infra/tests/seed and adds an optional
+// It delegates all seeding logic to infra/scripts/seed and adds an optional
 // API health check. This avoids duplicating SQL, Tenant CR, and namespace
 // polling logic that already lives in the seed package.
 //
@@ -23,7 +23,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/getloopscale/loopzero/infra/tests/seed"
+	"github.com/getloopscale/loopzero/infra/scripts/seed"
 )
 
 func main() {

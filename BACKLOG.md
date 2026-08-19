@@ -3381,7 +3381,7 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
-## B-063 — Um módulo de infraestrutura depende de uma suíte de testes, e `tools/` está fora do workspace   [ ]
+## B-063 — Um módulo de infraestrutura depende de uma suíte de testes, e `tools/` está fora do workspace    [x]
 
 domain: engine-go
 repo: loopzero
@@ -3389,11 +3389,50 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11 lendo cada `go.mod`. `infra/scripts` (`layer=infrastructure`) declara dependência `require` em `infra/tests` (`layer=test`) — `infra/scripts/go.mod:5`, consumida por `seed_e2e.go:26` que importa `infra/tests/seed`. É a **única aresta em direção a teste** no grafo dos 8 módulos do workspace, que no mais é acíclico e com a direção correta (`pkg` na base, `api` importando `operators/api` e não o contrário). Separadamente: `tools/gen-service-auth-ed25519` e `tools/loopzero-dockerfile-lint` têm `go.mod` próprios e **não estão no `go.work`** — vivem na árvore, fora do workspace que o build cobre.
 why_now: o `seed` é usado por produção de fixtures e por teste, e hoje mora do lado de teste — então o módulo de scripts arrasta a suíte inteira. E `tools/` fora do workspace é a razão estrutural de o B-051 existir: não há caminho de import possível para compartilhar a regra.
-status: triaged
+status: shipped
 severity: baixa — compila e funciona; é direção de dependência que contraria a própria etiqueta de camada.
 dod:
   - o pacote `seed` mora onde a direção de dependência não inverte, ou a etiqueta `layer` de um dos dois é corrigida
   - está decidido se `tools/` entra no `go.work` — a decisão destrava o B-051 e é pré-requisito dele se a saída for fonte única compartilhada
+
+> **Fechado 2026-08-18 — DoD 2/2, e a segunda bala foi decidida por medição.**
+>
+> **Bala 1 — a aresta sumiu.** `seed` saiu de `infra/tests/seed` para
+> `infra/scripts/seed`. `infra/scripts/go.mod` deixou de exigir `infra/tests`, e
+> `infra/tests` passou a exigir `infra/scripts` — direção **teste → infraestrutura**,
+> que é a correta. Era a única aresta em direção a teste no grafo dos 8 módulos, e
+> não existe mais. O movimento foi limpo porque `seed/` não importava nada de
+> `infra/tests` e `infra/tests` não importava `infra/scripts`: sem risco de ciclo.
+> 14 imports reescritos, 4 citações em comentário reapontadas (incluindo
+> `CLAUDE.md:323`), os 6 módulos do workspace compilam e passam `vet`.
+>
+> **A segunda saída da bala 1 não tinha artefato.** O item propunha, como
+> alternativa, "corrigir a etiqueta `layer` de um dos dois". Medido: **não existe
+> etiqueta `layer` na árvore** — nenhum `go.mod`, gate, taskfile ou fonte a
+> declara. Ela vive nos relatórios de auditoria, não no código, então não havia o
+> que corrigir. Restava mover, e foi o que foi feito.
+>
+> **Bala 2 — decidido: `tools/` fica FORA do `go.work`.** Três medições sustentam:
+> (a) `loopzero-dockerfile-lint` tem `Dockerfile` próprio e vira **imagem** usada como
+> passo do pipeline (`buildplane/argo/workflow_builder.go:172`) — precisa construir
+> a partir do próprio módulo, sem arrastar os `replace` do workspace; (b) a exclusão
+> **já é explícita e coberta**: quatro invocações `GOWORK=off go test ./...` em
+> `taskfiles/test.yml:142-143` e `taskfiles/quality.yml:75-76`, mais o
+> `lint-coverage`, que mede os dois módulos; (c) a justificativa do item — "a
+> decisão destrava o B-051" — **envelheceu**: o B-051 fechou em 2026-08-16
+> mantendo a duplicação com gate de paridade e isenção datada, ou seja, a saída
+> **não** foi fonte única compartilhada, então nada dependia desta decisão.
+>
+> **A catraca de lint leu o movimento como regressão, e a contabilidade fecha.**
+> `infra/scripts` foi de 4 para 13 achados e `infra/tests` de 93 para 84: os mesmos
+> 9 do pacote `seed` (gosec 7, staticcheck 1, unused 1), medidos. 93−84 = 9 = 13−4, e
+> o **total geral seguiu 318**. A catraca é por módulo, então um movimento entre
+> módulos lê como regressão no que recebe; recongelada com a razão escrita no
+> próprio `lint-baseline.json`.
+>
+> Os dois binários ELF que aparecem em `ls tools/` **não estão rastreados** —
+> `git ls-files tools/` lista só `.sh`, `go.mod`, `main.go`, `main_test.go` e um
+> `Dockerfile`. A assimetria que o B-051 registrou continua fechada.
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 

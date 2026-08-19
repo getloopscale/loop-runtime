@@ -3,6 +3,7 @@ module github.com/getloopscale/loopzero/infra/tests
 go 1.26.1
 
 require (
+	github.com/getloopscale/loopzero/infra/scripts v0.0.0
 	github.com/gruntwork-io/terratest v1.0.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/onsi/ginkgo/v2 v2.31.0
@@ -136,6 +137,7 @@ require (
 
 replace (
 	github.com/getloopscale/loopzero/api => ../../api
+	github.com/getloopscale/loopzero/infra/scripts => ../scripts
 	github.com/getloopscale/loopzero/operators => ../../operators
 	github.com/getloopscale/loopzero/pkg => ../../pkg
 )

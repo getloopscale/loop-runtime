@@ -129,7 +129,7 @@ var buildTerminalStates = map[string]bool{
 
 // --- E2E Test Tenant Constants ---
 //
-// These match the values in infra/tests/seed/seed.go.
+// These match the values in infra/scripts/seed/seed.go.
 
 const (
 	// e2eTenantID is the seeded test tenant.

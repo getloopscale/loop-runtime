@@ -16,7 +16,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/getloopscale/loopzero/infra/tests/seed"
+	"github.com/getloopscale/loopzero/infra/scripts/seed"
 )
 
 var _ = Describe("Journey 06: Rollback", Ordered, Label("journey"), func() {
