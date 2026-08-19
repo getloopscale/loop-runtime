@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 35 · **In flight** 0 · **Closed** 129
+164 items — **Open** 33 · **In flight** 0 · **Closed** 131
 
-### Open (35)
+### Open (33)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -106,15 +106,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados---x) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `triaged` | baixa |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `triaged` | — |
 | [`B-157`](#b-157--uma-ferramenta-com-imagem-config-e-testes-não-é-invocada-por-caminho-nenhum----) | Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum | `triaged` | média |
-| [`B-161`](#b-161--o-gate-de-runbook-mede-a-anotacao-nao-o-runbook-6-dos-7-links-nao-levam-a-lugar-nenhum----) | O gate de runbook mede a anotacao, nao o runbook: 6 dos 7 links nao levam a lugar nenhum | `triaged` | media |
 | [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta |
-| [`B-164`](#b-164--o-gate-de-runbook-varre-110-dos-233-alertas-da-arvore-e-o-numero-que-ele-reporta-parece-o-total----) | O gate de runbook varre 110 dos 233 alertas da arvore, e o numero que ele reporta parece o total | `triaged` | media |
 
 ### In flight (0)
 
 _None._
 
-### Closed (129)
+### Closed (131)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -246,7 +244,9 @@ _None._
 | [`B-158`](#b-158--o-registro-que-o-loop-inteiro-le-nao-e-validado-por-nada---x) | O registro que o loop inteiro le' nao e' validado por nada | `shipped` | — |
 | [`B-159`](#b-159--o-checklist-manda-escrever-o-changelog-num-arquivo-que-nao-existe---x) | O checklist manda escrever o CHANGELOG num arquivo que nao existe | `shipped` | — |
 | [`B-160`](#b-160--a-guarda-de-comandos-junta-pedacos-de-comandos-diferentes-e-bloqueia-o-inocente---x) | A guarda de comandos junta pedacos de comandos diferentes e bloqueia o inocente | `shipped` | media |
+| [`B-161`](#b-161--o-gate-de-runbook-mede-a-anotacao-nao-o-runbook-6-dos-7-links-nao-levam-a-lugar-nenhum---x) | O gate de runbook mede a anotacao, nao o runbook: 6 dos 7 links nao levam a lugar nenhum | `shipped` | media |
 | [`B-163`](#b-163--um-gate-exige-do-pulumi-o-que-a-propria-arquitetura-ja-aposentou---x) | Um gate exige do Pulumi o que a propria arquitetura ja' aposentou | `killed` | baixa |
+| [`B-164`](#b-164--o-gate-de-runbook-varre-110-dos-233-alertas-da-arvore-e-o-numero-que-ele-reporta-parece-o-total---x) | O gate de runbook varre 110 dos 233 alertas da arvore, e o numero que ele reporta parece o total | `shipped` | media |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -9877,7 +9877,7 @@ que estava sendo verificado.
 > ser criado por heredoc de shell — o comando que o escreveria carrega os literais
 > destrutivos, e a guarda bloqueava a criacao do teste que a verifica. Precisei da
 > ferramenta de escrita de arquivo. Esta' anotado no topo do arquivo.
-## B-161 — O gate de runbook mede a anotacao, nao o runbook: 6 dos 7 links nao levam a lugar nenhum   [ ]
+## B-161 — O gate de runbook mede a anotacao, nao o runbook: 6 dos 7 links nao levam a lugar nenhum   [x]
 
 domain: engine-go
 repo: loopzero
@@ -9900,7 +9900,33 @@ evidence: |
   | `docs.loopzero.example/runbooks/vault-auth-failure-spike` | morto | HTTP 404 |
   | `docs.loopzero.example/runbooks/vault-policy-denial-spike` | morto | HTTP 404 |
 why_now: o B-067 propoe fechar os 33 alertas adicionando a anotacao. Feito do jeito que a arvore ja' faz, isso deixaria o gate VERDE com 40 links mortos em vez de 7 — uma piora medida, disfarcada de conserto.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19.** Registro do T2:
+> `MEET-ASYNC-AMENDMENT-2026-08-19-remove-dead-vault-runbook-links.md` — pendente de
+> ratificacao.
+>
+> **CORRECAO A ESTE PROPRIO ITEM: eram 4 links mortos, nao 6.** Os tres do GitHub
+> (`sigstore-storage-model.md`, `tuf-root-ceremony.md`, `vap-delete-guardrail.md`)
+> **resolvem**. Eu havia extraido URLs truncadas da saida, **inventado** os nomes de
+> arquivo que elas pareciam ter (`*-rotation.md`) e sondado ESSES nomes pela API. Os nomes
+> reais eram outros.
+>
+> | bala | resultado |
+> |---|---|
+> | o gate distingue anotacao de runbook | feito: caminho deste repo conferido em disco; externo contado como nao-verificavel |
+> | os links mortos consertados ou removidos | os 4 do `docs.loopzero.example` **removidos** (404 confirmado duas vezes; a raiz do site responde 200) |
+> | a org bate com a deste repo | fechada pela migracao de referencias — as 22 URLs do GitHub dizem `getloopscale` |
+> | varredura de populacao registrada | **4 diretorios, 22 links conferidos, 0 mortos, 0 nao-verificaveis** |
+>
+> **Remover PIORA o numero e MELHORA o sinal:** os quatro contavam como conformes, porque o
+> gate so' checava presenca da string. Agora juntam-se aos que nao tem runbook, e o
+> contador passa a ser verdadeiro. Um alerta sem link e' honesto; com link morto, promete e
+> falha as 3 da manha.
+>
+> Nao apontei para `vault-cluster-local-runbook.md` de proposito: e' documento do k3d
+> **local**, e mandar alerta de producao para ele repetiria, com outro nome, o erro de supor
+> caminhos que este item cometeu.
 
 > **Primeira bala fechada 2026-08-19 — o gate passou a distinguir, no que da' para
 > provar sem rede.**
@@ -10043,7 +10069,7 @@ dod:
 **A pergunta certa aqui nao e' "como migrar esses 9".** E' se um gate deve cobrar de uma
 arvore congelada a politica que ela nunca vai cumprir. Um gate que reprova por desenho
 ensina a ignorar gates — e o custo disso e' pago pelo proximo gate, que estara' certo.
-## B-164 — O gate de runbook varre 110 dos 233 alertas da arvore, e o numero que ele reporta parece o total   [ ]
+## B-164 — O gate de runbook varre 110 dos 233 alertas da arvore, e o numero que ele reporta parece o total   [x]
 
 domain: engine-go
 repo: loopzero
@@ -10062,7 +10088,33 @@ evidence: |
   | `charts/loopzero-admission-policies/templates` | 18 | nao |
   | **total** | **233** | **47%** |
 why_now: os dois diretorios de `admission-policies` sao onde vivem as URLs de runbook que apontam para a org `getloopscale` — e o B-161 mediu, com `gh api`, que os arquivos nao estao la'. Ou seja, os links comprovadamente mortos estao justamente na metade que o gate nao olha. E `charts/` sao os charts OCI publicados que o ArgoCD entrega aos tenants (L3), nao artefato de bootstrap.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19, e o fechamento foi FORCADO pelo B-161** — ao remover os 4 links do
+> unico diretorio varrido, a guarda de populacao passou a acusar "varredura nao alcancou
+> nada", que era verdade.
+>
+> **Duas ampliacoes, e a segunda so' apareceu porque a primeira nao bastou:**
+>
+> 1. **Diretorios**: de 1 para 4 (`infra/helm/monitoring/manifests`,
+>    `charts/loopzero-monitoring/templates` e os dois de `admission-policies`).
+> 2. **Filtro de NOME**: o gate exigia `prometheusrule` no nome do arquivo — heranca do
+>    script bash que ele substituiu. Os alertas de `admission-policies` vivem em
+>    `*-alerts.yaml`, entao ampliar diretorio sozinho ainda descartava **37 alertas e 22
+>    das 23 anotacoes** da arvore. Aceita as duas formas agora.
+>
+> Resultado: **de 110 para 233 alertas** olhados (100%), e o gate reporta **54** sem
+> anotacao em vez de 33. O numero subiu porque a cobertura subiu.
+>
+> **Terceira correcao, e e' a mais instrutiva: o defeito estava no MEU teste.** A varredura
+> de populacao somava `mortos + nao-verificaveis` e tratava zero como "nao alcancou nada".
+> Mas zero e' **tambem** o resultado de todos os links estarem bons — que e' o estado real.
+> Confundir "nao achei nada" com "nao ha' nada errado" e' a forma exata que este gate existe
+> para combater, e ela estava no teste que devia prova-lo. Agora conta
+> `LinksConferidos` (22), que inclui os saudaveis.
+>
+> Tambem trocada a tolerancia a diretorio ausente: um diretorio faltando segue tolerado (as
+> arvores de teste tem so' um), mas **zero encontrados agora reprova**.
 dod:
   - o gate varre onde os alertas de fato estao, ou esta' escrito por que cada diretorio de fora nao conta
   - o numero reportado passa a ser sobre a populacao inteira, e a nota do `failingGate` em `quality_gate_wiring_test.go` acompanha

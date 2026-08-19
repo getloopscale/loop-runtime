@@ -1,3 +1,18 @@
+# B-161 — estes alertas NAO carregam `runbook_url`, e a ausencia e' deliberada.
+#
+# Ate' 2026-08-19 os quatro apontavam para `docs.loopzero.example/runbooks/vault-*`, e as
+# quatro paginas devolvem 404 (a raiz do site responde 200, entao o 404 e' significativo).
+# Um alerta com link morto e' pior que um sem: ele promete socorro e falha as 3 da manha.
+#
+# Nao apontamos para `docs/operations/vault-cluster-local-runbook.md` de proposito — ele e'
+# do k3d LOCAL, e mandar alerta de producao para documento de ambiente local desinforma
+# com cara de conserto.
+#
+# Escrever os quatro runbooks e' trabalho nomeado no B-067, e exige saber o que a operacao
+# de fato faz (custodia dos shards, ordem de unseal sob incidente). Runbook inventado e'
+# pior que nenhum, porque e' seguido.
+#
+# MEET-ASYNC-AMENDMENT-2026-08-19-remove-dead-vault-runbook-links (pending ratification).
 # SPDX-License-Identifier: Apache-2.0
 # T8.4 of plan 2026-06-02-openbao-adoption v1.3 — 4 P1 alerts per Q14.
 #
@@ -51,7 +66,6 @@ spec:
               (c) misconfigured workload in retry loop.
               Triage: `bao audit list`, `bao audit-device read`, and grep
               recent audit log entries by source addr.
-            runbook_url: "https://docs.loopzero.example/runbooks/vault-auth-failure-spike"
 
         # Alert 2: Policy denial rate spike — workload attempting paths
         # outside its policy. Could be configuration drift or compromise.
@@ -73,7 +87,6 @@ spec:
               (legitimate misconfig OR adversary exploring scope).
               Triage: identify workload via audit log accessor; verify policy
               attached to its role; check for recent role changes.
-            runbook_url: "https://docs.loopzero.example/runbooks/vault-policy-denial-spike"
 
         # Alert 3: Vault sealed (engine down) — emergency. All loopzero-api
         # workloads using K8s auth login will fail; cached secrets continue
@@ -97,7 +110,6 @@ spec:
               secrets from pkg/vault.CachedClient (no rotation possible).
               Triage: `kubectl -n secrets-system get pods openbao-0` + check
               for recent restart events. Unseal procedure: see runbook.
-            runbook_url: "https://docs.loopzero.example/runbooks/vault-sealed"
 
         # Alert 4: Audit log stalled (no entries appended in 10min on a
         # Vault that has had recent traffic). Audit log silence is the
@@ -128,4 +140,3 @@ spec:
               Triage: `bao audit list` (verify all expected devices still
               enabled); check Vault file/syslog audit device target writable;
               compare /v1/sys/health to audit emit counter.
-            runbook_url: "https://docs.loopzero.example/runbooks/vault-audit-stalled"

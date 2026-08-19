@@ -178,12 +178,19 @@ func TestUrlExternaContaComoNaoVerificavelEmVezDeSilencio(t *testing.T) {
 // dispara; so' isto diz o que ele acha no que existe.
 func TestPopulacaoRealDosLinksDeRunbook(t *testing.T) {
 	out := Check(Config{Root: raizDoRepo(t)})
-	total := len(out.LinksMortos) + out.LinksNaoVerificaveis
-	if total == 0 {
+	// Conta os CONFERIDOS, nao os problematicos. A primeira versao somava mortos +
+	// nao-verificaveis e tratava zero como "nao alcancou nada" — mas zero e' TAMBEM o
+	// resultado de todos os links estarem bons, que e' o estado atual da arvore. Confundir
+	// "nao achei nada" com "nao ha' nada errado" e' a forma exata que este gate combate, e
+	// ela estava no teste que devia prova-lo.
+	if out.LinksConferidos == 0 {
 		t.Fatal("nenhum link de runbook alcancado — verde sobre nada nao e' verde")
 	}
-	t.Logf("populacao: %d link(s) morto(s), %d nao-verificavel(is)",
-		len(out.LinksMortos), out.LinksNaoVerificaveis)
+	if out.DirsVarridos == 0 {
+		t.Fatal("nenhum diretorio de regras varrido")
+	}
+	t.Logf("populacao: %d diretorio(s), %d link(s) conferido(s), %d morto(s), %d nao-verificavel(is)",
+		out.DirsVarridos, out.LinksConferidos, len(out.LinksMortos), out.LinksNaoVerificaveis)
 	for _, d := range out.LinksMortos {
 		t.Logf("  morto: %s [%s] %s — %s", d.Arquivo, d.Alerta, d.URL, d.Motivo)
 	}

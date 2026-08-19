@@ -113,10 +113,38 @@ func TestRunbookBeyondLookaheadStillFails(t *testing.T) {
 	}
 }
 
-func TestMissingRulesDirTolerated(t *testing.T) {
+// NENHUM diretorio de regras encontrado e' FALHA, e este teste afirmava o contrario ate'
+// 2026-08-19 — chamava-se `TestMissingRulesDirTolerated` e exigia `Pass`.
+//
+// Tolerar era o "verde sobre nada": um gate que nao acha diretorio nenhum reporta
+// exatamente o mesmo veredito de um que varreu tudo e nao achou defeito. E' a forma que o
+// B-040 e o B-127 nomeiam, e ela estava aqui.
+//
+// A tolerancia por diretorio INDIVIDUAL continua — as arvores de teste tem um dos quatro —
+// mas zero encontrados nao passa mais.
+func TestNenhumDiretorioDeRegrasEFalhaEmVezDeVerde(t *testing.T) {
 	root := t.TempDir()
-	if !Check(cfg(root)).Pass {
-		t.Error("missing rules dir should pass")
+	out := Check(cfg(root))
+	if out.Pass {
+		t.Error("varredura sem NENHUM diretorio de regras passou — verde sobre nada nao e' verde")
+	}
+	if out.DirsVarridos != 0 {
+		t.Errorf("DirsVarridos=%d numa arvore vazia", out.DirsVarridos)
+	}
+}
+
+// A contrapartida: UM diretorio presente entre os quatro basta, senao toda arvore de teste
+// (que so' cria um) reprovaria por motivo errado.
+func TestUmDiretorioPresenteEntreOsQuatroBasta(t *testing.T) {
+	root := rulesRepo(t, map[string]string{
+		"prometheusrule-x.yaml": "spec:\n  - alert: LoopZeroLockContention\n    expr: up == 0\n",
+	})
+	out := Check(Config{Root: root})
+	if out.DirsVarridos != 1 {
+		t.Errorf("queria 1 diretorio varrido, veio %d", out.DirsVarridos)
+	}
+	if !out.Pass {
+		t.Errorf("um diretorio valido devia bastar: %+v", out.Violations)
 	}
 }
 

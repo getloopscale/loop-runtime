@@ -19,7 +19,26 @@ import (
 )
 
 // DefaultRulesDir holds the PrometheusRule manifests, relative to repo root.
+//
+// Mantido para compatibilidade: e' o diretorio historico e segue sendo o primeiro da
+// lista. Quem varre e' `DefaultRulesDirs`.
 const DefaultRulesDir = "infra/helm/monitoring/manifests"
+
+// DefaultRulesDirs sao TODOS os diretorios onde alertas de fato vivem (B-164).
+//
+// Ate' 2026-08-19 o gate varria apenas o primeiro. Medido nessa data: a arvore tem **233**
+// alertas e ele olhava **110** — 47%. E os dois de `admission-policies` sao justamente onde
+// vivem 22 das 23 anotacoes `runbook_url`, entao a metade nao varrida concentrava quase
+// toda a evidencia que este gate existe para conferir.
+//
+// `charts/` nao e' artefato de bootstrap: sao os charts OCI publicados que o ArgoCD entrega
+// aos tenants.
+var DefaultRulesDirs = []string{
+	"infra/helm/monitoring/manifests",
+	"charts/loopzero-monitoring/templates",
+	"infra/helm/admission-policies/templates",
+	"charts/loopzero-admission-policies/templates",
+}
 
 // runbookLookahead is the per-alert-block window scanned for a runbook
 // annotation (matches the bash `blk[:1500]`).
@@ -42,7 +61,8 @@ var DefaultExceptionList = []string{
 // Config drives the gate.
 type Config struct {
 	Root          string
-	RulesDir      string   // default DefaultRulesDir (relative to Root)
+	RulesDir      string   // um unico diretorio (compat); vazio usa RulesDirs
+	RulesDirs     []string // default DefaultRulesDirs (relativos a Root)
 	ExceptionList []string // default DefaultExceptionList
 }
 
@@ -62,6 +82,16 @@ type Outcome struct {
 	// se `https://docs.loopzero.example/runbooks/x` esta viva; afirmar qualquer um dos dois
 	// seria inventar. Contar e' honesto, e o numero e' o que faz alguem conferir.
 	LinksNaoVerificaveis int
+	// DirsVarridos conta quantos diretorios de regras existiram de fato. Zero e' falha:
+	// e' a diferenca entre "nenhum alerta sem runbook" e "nenhum alerta olhado".
+	DirsVarridos int
+	// LinksConferidos conta TODAS as anotacoes examinadas, inclusive as saudaveis.
+	//
+	// Existe porque a varredura de populacao somava mortos + nao-verificaveis e tratava
+	// zero como "nao alcancou nada" — quando zero e' tambem o resultado de **todos os
+	// links estarem bons**. Confundir as duas coisas e' a forma exata que este gate existe
+	// para combater, e ela estava no teste que devia prova-lo.
+	LinksConferidos int
 }
 
 // LinkMorto e' uma anotacao de runbook provada inutil sem sair da maquina.
@@ -78,9 +108,13 @@ func Check(cfg Config) *Outcome {
 	if root == "" {
 		root = "."
 	}
-	rulesDir := cfg.RulesDir
-	if rulesDir == "" {
-		rulesDir = DefaultRulesDir
+	dirs := cfg.RulesDirs
+	if len(dirs) == 0 {
+		if cfg.RulesDir != "" {
+			dirs = []string{cfg.RulesDir}
+		} else {
+			dirs = DefaultRulesDirs
+		}
 	}
 	exc := cfg.ExceptionList
 	if exc == nil {
@@ -92,14 +126,42 @@ func Check(cfg Config) *Outcome {
 	}
 
 	out := &Outcome{Pass: true}
-	dir := filepath.Join(root, rulesDir)
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return out // missing rules dir → nothing to check
+	for _, rulesDir := range dirs {
+		dir := filepath.Join(root, rulesDir)
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			// Diretorio ausente e' tolerado — as arvores de teste tem so' um deles — mas
+			// NAO em silencio: `DirsVarridos` conta quantos existiram, e zero e' falha.
+			continue
+		}
+		out.DirsVarridos++
+		varrerDiretorio(root, dir, entries, excepted, out)
 	}
+	if out.DirsVarridos == 0 {
+		out.Pass = false
+		out.Violations = append(out.Violations,
+			"NENHUM diretorio de regras encontrado — varredura que nao alcanca nada nao e' verde")
+	}
+	if len(out.Violations) > 0 || len(out.LinksMortos) > 0 {
+		out.Pass = false
+	}
+	return out
+}
+
+func varrerDiretorio(root, dir string, entries []os.DirEntry, excepted map[string]struct{}, out *Outcome) {
 	for _, e := range entries {
-		// bash filter: filename contains "prometheusrule" AND ends ".yaml".
-		if e.IsDir() || !strings.Contains(e.Name(), "prometheusrule") || !strings.HasSuffix(e.Name(), ".yaml") {
+		// O filtro historico exigia "prometheusrule" no nome — herdado do script bash que
+		// este gate substituiu. Medido em 2026-08-19 (B-164): os alertas de
+		// `admission-policies` vivem em `*-alerts.yaml` (`sigstore-storage-alerts.yaml`,
+		// `tenant-namespace-alerts.yaml`, …), entao ampliar o escopo de diretorios nao
+		// bastava: o filtro de NOME continuava descartando 37 alertas e 22 das 23
+		// anotacoes `runbook_url` da arvore.
+		//
+		// Aceita as duas formas. O que decide e' o arquivo declarar alerta, e ambos os
+		// nomes sao convencao viva do repositorio.
+		nome := e.Name()
+		relevante := strings.Contains(nome, "prometheusrule") || strings.Contains(nome, "alert")
+		if e.IsDir() || !relevante || !strings.HasSuffix(nome, ".yaml") {
 			continue
 		}
 		data, rerr := os.ReadFile(filepath.Join(dir, e.Name()))
@@ -111,10 +173,6 @@ func Check(cfg Config) *Outcome {
 		}
 		conferirLinks(root, e.Name(), string(data), out)
 	}
-	if len(out.Violations) > 0 || len(out.LinksMortos) > 0 {
-		out.Pass = false
-	}
-	return out
 }
 
 // repoCanonico e' o NOME deste repositorio, tirado do caminho de modulo dos `go.mod`
@@ -161,6 +219,7 @@ func conferirLinks(root, arquivo, conteudo string, out *Outcome) {
 		if u == nil {
 			continue
 		}
+		out.LinksConferidos++
 		url := u[1]
 		b := blobRe.FindStringSubmatch(url)
 		if b == nil {
