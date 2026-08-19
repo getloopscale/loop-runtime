@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 38 · **In flight** 0 · **Closed** 126
+164 items — **Open** 36 · **In flight** 0 · **Closed** 128
 
-### Open (38)
+### Open (36)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -107,8 +107,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados---x) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `triaged` | baixa |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `triaged` | — |
 | [`B-157`](#b-157--uma-ferramenta-com-imagem-config-e-testes-não-é-invocada-por-caminho-nenhum----) | Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum | `triaged` | média |
-| [`B-158`](#b-158--o-registro-que-o-loop-inteiro-le-nao-e-validado-por-nada----) | O registro que o loop inteiro le' nao e' validado por nada | `triaged` | — |
-| [`B-159`](#b-159--o-checklist-manda-escrever-o-changelog-num-arquivo-que-nao-existe----) | O checklist manda escrever o CHANGELOG num arquivo que nao existe | `triaged` | — |
 | [`B-161`](#b-161--o-gate-de-runbook-mede-a-anotacao-nao-o-runbook-6-dos-7-links-nao-levam-a-lugar-nenhum----) | O gate de runbook mede a anotacao, nao o runbook: 6 dos 7 links nao levam a lugar nenhum | `triaged` | media |
 | [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta |
 | [`B-164`](#b-164--o-gate-de-runbook-varre-110-dos-233-alertas-da-arvore-e-o-numero-que-ele-reporta-parece-o-total----) | O gate de runbook varre 110 dos 233 alertas da arvore, e o numero que ele reporta parece o total | `triaged` | media |
@@ -117,7 +115,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (126)
+### Closed (128)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -245,6 +243,8 @@ _None._
 | [`B-153`](#b-153--seis-passos-do-build-não-conseguem-falhar-o-exit-1-deles-é-engolido-por-um-tee---x) | Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee` | `shipped` | — |
 | [`B-155`](#b-155--o-lockfile-so-e-procurado-na-raiz-do-bundle-e-a-mensagem-nao-diz-onde-procurou---x) | O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou | `shipped` | — |
 | [`B-156`](#b-156--um-teste-de-chart-depende-de-rede-e-reprova-o-portao-de-entrega-sob-carga---x) | Um teste de chart depende de rede e reprova o portao de entrega sob carga | `shipped` | — |
+| [`B-158`](#b-158--o-registro-que-o-loop-inteiro-le-nao-e-validado-por-nada---x) | O registro que o loop inteiro le' nao e' validado por nada | `shipped` | — |
+| [`B-159`](#b-159--o-checklist-manda-escrever-o-changelog-num-arquivo-que-nao-existe---x) | O checklist manda escrever o CHANGELOG num arquivo que nao existe | `shipped` | — |
 | [`B-160`](#b-160--a-guarda-de-comandos-junta-pedacos-de-comandos-diferentes-e-bloqueia-o-inocente---x) | A guarda de comandos junta pedacos de comandos diferentes e bloqueia o inocente | `shipped` | media |
 | [`B-163`](#b-163--um-gate-exige-do-pulumi-o-que-a-propria-arquitetura-ja-aposentou---x) | Um gate exige do Pulumi o que a propria arquitetura ja' aposentou | `killed` | baixa |
 
@@ -9657,7 +9657,7 @@ dod:
 > As duas balas de decisão seguem abertas: se o linter volta ao caminho de build
 > ou sai da árvore, e a limpeza de `LOOPZERO_DOCKERFILE_LINT_IMAGE` e das invocações
 > de teste que vem com ela.
-## B-158 — O registro que o loop inteiro le' nao e' validado por nada   [ ]
+## B-158 — O registro que o loop inteiro le' nao e' validado por nada   [x]
 
 domain: engine-go
 repo: loopzero
@@ -9665,7 +9665,28 @@ suggested_mode: evolve
 source: discover-review
 evidence: medido em 2026-08-19. `check_backlog_structure.py BACKLOG.md` devolvia **INVALID** (1 blocker `renumbered`, 2 major `raw_with_evidence`+`index_stale`, 1 minor `vague_dod`) e ninguem sabia, porque **nada no caminho de qualidade o invoca**: `grep -rl check_backlog_structure taskfiles/ cmd/` nao devolve nada. O script existe em `.claude/skills/backlog-review/scripts/` desde que o kit foi sincronizado.
 why_now: o `cycle-maintenance` LE este arquivo a cada iteracao para escolher o proximo item, e o SELECT ordena por `status`. Com o B-157 preso em `raw` carregando evidencia, ele era ranqueado ABAIXO de itens nao medidos — exatamente a inversao que o ranking existe para evitar. O defeito nao apareceu em lugar nenhum ate' eu rodar o validador a mao.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19 pela via de emenda assincrona.** Registro:
+> `MEET-ASYNC-AMENDMENT-2026-08-19-wire-backlog-validator.md` — **pendente de ratificacao**.
+>
+> Uma linha em `taskfiles/quality.yml`, dentro de `quality:gates`. **Nao precisei de logica
+> nova**: a semantica de saida do script ja' era a certa — `INVALID`→1 e `NEEDS_REVISION`→3
+> barram, `SHIPPABLE_WITH_CAVEATS`→0 nao. Id fora de ordem e indice obsoleto param a
+> entrega; DoD vago nao.
+>
+> **Mutante, contra a arvore real:** troquei a posicao dos blocos `B-002` e `B-003` e o
+> validador devolveu `BLOCKER/renumbered` com **exit 1**; restaurado, `SHIPPABLE` e exit 0.
+> A guarda nao e' vacuo.
+>
+> **Tres alternativas rejeitadas, com a razao medida:** reescrever em Go (degrau 4 da
+> parcimonia — o script existe e tem testes; uma segunda casa para o mesmo conhecimento e'
+> o defeito do `B-051`, e acrescentaria gate a uma contagem congelada); ligar so' como
+> aviso (o `alert-runbooks` e o `no-aes-remaining` sao exatamente gates que reprovam e
+> ninguem le'); e ligar num alvo separado que ninguem roda, que e' a forma sofisticada de
+> nao ligar — e foi o que aconteceu com este script ate' hoje.
+>
+> `gateset.frozen` intocado: e' invocacao de taskfile, nao gate do `loopzero-ops`.
 tier: T2 (`.claude/rules/pre-release-governance.md` — "Pipeline/CI changes" e' gatilho automatico) — por isso NAO liguei o gate por conta propria
 dod:
   - o validador roda num caminho que alguem executa de fato, e reprova quando o registro regride
@@ -9682,7 +9703,7 @@ o item existe para descrever.
 o registro que decide o que o sistema faz em seguida. Um verde sobre nada e' indistinguivel
 de um verde sobre algo — foi o defeito do B-040, do B-127 e do B-128, e aqui ele reaparece um
 nivel acima: nao no que os gates medem, mas em QUEM os manda medir.
-## B-159 — O checklist manda escrever o CHANGELOG num arquivo que nao existe   [ ]
+## B-159 — O checklist manda escrever o CHANGELOG num arquivo que nao existe   [x]
 
 domain: engine-go
 repo: loopzero
@@ -9690,7 +9711,20 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-19. `CLAUDE.md:19` diz que "the CHANGELOG live[s] in the UMBRELLA (`../CHANGELOG.md`)" e `CLAUDE.md:243` repete na lista de pre-conclusao: "CHANGELOG entry in the UMBRELLA (../CHANGELOG.md)". `ls ../CHANGELOG.md` -> **nao existe**. O que existe e' `CHANGELOG.md` neste repo, com 1,16 MB e **227 commits desde 2026-08-01**.
 why_now: bati nisso ao fechar o B-138 — segui a instrucao, o arquivo nao estava la', e o commit quase saiu sem entrada de CHANGELOG. Nao e' ambiguidade de redacao: a instrucao nomeia um caminho que nao resolve, e a pratica esmagadora do repositorio faz o oposto do que ela manda.
-status: triaged
+status: shipped
+
+> **Terceira bala conferida 2026-08-19, e a DoD fecha — mas a bala 3 fecha com a premissa
+> dela corrigida.**
+>
+> Ela pedia: *"se a decisao for manter o CHANGELOG local, o texto diz por que os OUTROS
+> artefatos de ciclo ficam no umbrella e este nao"*. **Nao ficam.** `../.claude/knowledge-base/`
+> tambem nao existe, e a regra `knowledge-base-location.md` diz literalmente
+> *"`<project>/.claude/knowledge-base/` is canonical. Always"*. Nao ha' assimetria a
+> explicar: o CHANGELOG e os artefatos de ciclo moram no MESMO lugar, aqui.
+>
+> O paragrafo corrigido diz exatamente isso e delimita o que de fato vive no umbrella — o
+> ADR da decomposicao e o `../CLAUDE.md`. As tres balas fecham; a terceira, por refutacao
+> da premissa em vez de cumprimento literal.
 
 > **Consertado 2026-08-19 — e a medicao decidiu, em vez de eu escolher.**
 >

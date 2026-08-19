@@ -148,6 +148,12 @@ tasks:
       - /tmp/loopzero-ops quality adapter-ports        # B-058: adaptador declara a porta que satisfaz
       - /tmp/loopzero-ops quality error-vocabulary   # B-081: Regra 3 nas mensagens de erro autoradas
       - /tmp/loopzero-ops quality readiness-summary   # B-138: o sumario de prontidao e a ultima mutacao antes de persistir, nos 6 reconcilers
+      # B-158: o registro que o cycle-maintenance le para escolher o proximo item. Ele esteve
+      # INVALID (id fora de ordem + indice obsoleto) sem ninguem saber, e o efeito nao foi
+      # cosmetico: um item MEDIDO preso em `raw` era ranqueado abaixo de itens nao medidos.
+      # Barra em blocker/major; DoD vago (minor) sai com 0 e nao barra.
+      # MEET-ASYNC-AMENDMENT-2026-08-19-wire-backlog-validator (pending ratification).
+      - python3 .claude/skills/backlog-review/scripts/check_backlog_structure.py BACKLOG.md
       - /tmp/loopzero-ops quality module-selfcontained  # B-140: todo modulo compila sem go.work (o CI usa GOWORK=off)
       - /tmp/loopzero-ops quality correlation-header   # T6.1 of plan 2026-06-01-p3-infra-observability-test-debt
       - /tmp/loopzero-ops quality helm-overlap-parity

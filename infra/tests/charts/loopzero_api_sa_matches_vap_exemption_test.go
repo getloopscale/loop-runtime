@@ -28,7 +28,12 @@ import (
 // release — e a segunda forma nao e' garantia nenhuma.
 func TestServiceAccountDoChartPublicadoBateComAIsencaoDasVAPs(t *testing.T) {
 	if _, err := exec.LookPath("helm"); err != nil {
-		t.Skip("helm nao esta' no PATH")
+		// FALHA, nao skip. `helm` e' pre-requisito declarado do repositorio (CLAUDE.md
+		// § Prerequisites, "Helm v3.14+"), e um skip apagaria esta guarda em silencio
+		// justamente na maquina onde alguem estaria renderizando charts sem ela. E' a
+		// mesma escolha do `hook_rm_guard_test.go`, e o gate `skip-link` recusa skip
+		// novo sem issue — com razao: skip e' divida invisivel.
+		t.Fatal("helm nao esta' no PATH, e e' pre-requisito declarado do repositorio")
 	}
 	raiz := repoRoot(t)
 
