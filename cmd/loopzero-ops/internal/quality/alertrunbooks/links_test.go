@@ -93,6 +93,36 @@ func TestAcusaOrgDiferenteDaDoRepositorio(t *testing.T) {
 	}
 }
 
+// A travessia nao pode alcancar arquivo fora da raiz. O mutante e' um arquivo REAL
+// plantado FORA — sem o tratamento, `Join(root, "../alvo.md")` resolveria nele e o
+// gate diria que o runbook existe. Com o tratamento, o `..` e' resolvido contra a
+// raiz e vira um caminho relativo comum que nao existe.
+//
+// Este teste substitui uma checagem de contencao que eu escrevi e removi: depois do
+// `Clean`, ela nao tinha como disparar. Guarda inalcancavel e' codigo morto que se
+// le' como protecao.
+func TestTravessiaNaoAlcancaArquivoForaDaRaiz(t *testing.T) {
+	base := t.TempDir()
+	raiz := filepath.Join(base, "repo")
+	if err := os.MkdirAll(raiz, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// O alvo da travessia, existente e fora da raiz.
+	if err := os.WriteFile(filepath.Join(base, "alvo.md"), []byte("# fora\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	escreverRegra(t, raiz, "prometheusrule-teste.yaml", regraCom(
+		"https://github.com/getloopscale/loopzero/blob/main/../alvo.md"))
+
+	out := Check(Config{Root: raiz})
+	if len(out.LinksMortos) != 1 {
+		t.Fatalf("a travessia alcancou o arquivo de fora e o link passou por vivo: %+v", out.LinksMortos)
+	}
+	if !strings.Contains(out.LinksMortos[0].Motivo, "nao existe") {
+		t.Errorf("motivo inesperado: %+v", out.LinksMortos[0])
+	}
+}
+
 // O que o gate NAO pode verificar sem rede fica contado, nao escondido. Uma URL
 // externa pode estar viva ou morta; afirmar qualquer um dos dois hermeticamente
 // seria inventar. Contar e' honesto — e o numero e' o que faz alguem conferir.

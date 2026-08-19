@@ -162,7 +162,22 @@ func conferirLinks(root, arquivo, conteudo string, out *Outcome) {
 			})
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(root, caminho)); err != nil {
+		// O caminho vem do CONTEUDO de um YAML — entrada nao confiavel. Sem tratamento,
+		// um `runbook_url` com `../../..` faria este `Stat` perguntar ao disco por um
+		// arquivo FORA da arvore, e um que existisse responderia "runbook ok". O gosec
+		// apontou (G703) e estava certo.
+		//
+		// `Clean("/"+caminho)` resolve os `..` contra a RAIZ e nao contra `root`, entao o
+		// resultado sempre comeca em `/` e sempre cai dentro de `root` depois do Join —
+		// a travessia vira um caminho relativo comum, que simplesmente nao existe.
+		//
+		// Escrevi tambem uma checagem de contencao aqui e a REMOVI: depois do `Clean` ela
+		// nao tinha como disparar. Guarda inalcancavel e' codigo morto que se le' como
+		// protecao, e este e' o repositorio errado para deixar uma dessas. Quem prova a
+		// neutralizacao e' `TestTravessiaNaoAlcancaArquivoForaDaRaiz`, que poe um arquivo
+		// REAL fora e exige que ele nao seja aceito.
+		alvo := filepath.Join(root, filepath.Clean("/"+caminho))
+		if _, err := os.Stat(alvo); err != nil {
 			out.LinksMortos = append(out.LinksMortos, LinkMorto{
 				Arquivo: arquivo, Alerta: alerta, URL: url,
 				Motivo: caminho + " nao existe neste repositorio",

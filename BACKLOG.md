@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 48 · **In flight** 0 · **Closed** 116
+164 items — **Open** 47 · **In flight** 0 · **Closed** 117
 
-### Open (48)
+### Open (47)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -104,7 +104,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-135`](#b-135--prontidão-e-vivacidade-apontam-para-a-mesma-sonda-rasa-e-a-correção-óbvia-é-uma-armadilha----) | Prontidão e vivacidade apontam para a mesma sonda rasa, e a correção óbvia é uma armadilha | `triaged` | média |
 | [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `triaged` | média |
 | [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `triaged` | média |
-| [`B-138`](#b-138--o-invariante-do-sumário-de-prontidão-é-afirmado-num-pacote-e-existe-em-seis----) | O invariante do sumário de prontidão é afirmado num pacote e existe em seis | `triaged` | média |
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `triaged` | média |
 | [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `triaged` | média |
 | [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média |
@@ -127,7 +126,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (116)
+### Closed (117)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -238,6 +237,7 @@ _None._
 | [`B-131`](#b-131--a-trava-de-higiene-varre-a-árvore-inteira-mas-o-gatilho-dela-exclui-parte-dessa-árvore---x) | A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore | `killed` | média |
 | [`B-132`](#b-132--o-publish-do-loopzero-rag-nunca-inicia-ele-chama-um-workflow-reutilizável-do-loopzero-que-não-resolve---x) | O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve | `killed` | alta |
 | [`B-133`](#b-133--a-issue-de-falha-de-ci-dedup-por-título-e-221-falhas-viraram-um-fio-que-nunca-fecha---x) | A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha | `killed` | média |
+| [`B-138`](#b-138--o-invariante-do-sumário-de-prontidão-é-afirmado-num-pacote-e-existe-em-seis---x) | O invariante do sumário de prontidão é afirmado num pacote e existe em seis | `shipped` | média |
 | [`B-140`](#b-140--um-push-real-nunca-disparou-um-build-nesta-instância-e-a-cadeia-que-permitiria-medi-lo-tem-quatro-elos-faltando---x) | Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando | `shipped` | alta |
 | [`B-141`](#b-141--há-um-segundo-pacote-go-chamado-helpers-e-o-b-061-afirmava-que-era-um-só---x) | Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só | `shipped` | baixa |
 | [`B-142`](#b-142--um-token-do-digitalocean-vivo-atravessou-cinco-meses-e-vários-pushes-sem-ser-barrado---x) 🔒 | Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado | `shipped` | P0 |
@@ -8346,7 +8346,7 @@ dod:
 
 > Registrado 2026-08-17 ao fechar o `B-106`. **107 arquivos e2e num produto cujo objeto É implantar não é obviamente um defeito** — pode ser que o alvo é que esteja errado. É decisão do sponsor, não minha.
 
-## B-138 — O invariante do sumário de prontidão é afirmado num pacote e existe em seis   [ ]
+## B-138 — O invariante do sumário de prontidão é afirmado num pacote e existe em seis   [x]
 
 domain: engine-go
 repo: loopzero
@@ -8355,7 +8355,7 @@ source: discover-review
 severity: média — o invariante é de ORDEM (o sumário é a última mutação antes de persistir), e ordem é o que uma tabela de contagem não vê. Foi assim que o `B-105` ficou escondido: a tabela do `B-085` pontuou o pacote como conforme porque contava `Patch` vs `Update`.
 evidence: varrido 2026-08-17 ao fechar o `B-109`. `TestApp_EveryStatusPersistFoldsTheReadinessSummary` afirma o invariante e roda em **um** pacote; a população são **seis**. Heurística sobre os seis (persistência de `.Status().Patch|Update(` cruzada com menção ao sumário na função que a envolve): **16 com sumário, 19 sem** — `app` 2/2, `environment` 5/1, `platform` 6/7, `preview` **0/6**, `reconcilehelpers` 1/0, `tenant` 2/3. **A limitação é parte do resultado:** a varredura divide por `func ` e procura o sumário por nome, sem seguir chamada — os 19 são **sítios a olhar**, não 19 defeitos.
 why_now: o `B-109` acabou de escrever a regra de que toda guarda roda contra a população real, e esta é a guarda que a motivou. O número acima é o que a regra produz quando aplicada a ela: o invariante **não é obviamente universal**, e a guarda cobre um sexto.
-status: triaged
+status: shipped
 delivered_in: (ver a nota abaixo — as tres balas do dod estao medidas e fechadas)
 dod:
   - cada um dos 19 sítios está classificado — dobra por helper que a heurística não seguiu, ou realmente não dobra
