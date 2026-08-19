@@ -4304,6 +4304,26 @@ dod:
 > Tentado, medido e revertido — registrado aqui para que a próxima pessoa não gaste a mesma hora. **As 57 chamadas são 57.** O trabalho real é tirar as três entidades de persistência da fronteira, e isso não tem atalho de alias.
 
 
+> **Remedido 2026-08-19 — o trabalho que este item descreve como pendente já foi
+> feito. 4 das 5 balas medidas verdes; a quinta é sobre o passado.**
+>
+> O item abre dizendo *"os 43 arquivos de `routes` ainda são um pacote plano"*.
+> Medido hoje: **zero** arquivos `.go` na raiz de `api/internal/routes/`, e **29
+> subpacotes** de família. O achatamento acabou.
+>
+> | bala | medição |
+> |---|---|
+> | famílias isomórficas ao `router.go` | **sim, no sentido que importa** — os handlers vivem nas famílias e o `router.go` só liga. Cheguei a listar três prefixos "sem diretório", e a checagem os dissolveu: `argocd-callback` tem `routes/argocd/argocd_callback.go`, `v` era artefato do meu regex sobre `/v1/version`, e `webhooks` registra apontando para `cfg.GitHubWebhookHandler` |
+> | cada família no allow-list do `routes-acyclic` | **0 não registrados** |
+> | `router.go` é o único lugar onde a superfície é lida | sim — é lá que a ligação acontece, e é por isso que a bala anterior "falha" numa comparação ingênua de nomes |
+> | nenhuma família importa uma irmã | **0 arestas entre irmãos** |
+> | reunião T3 antes do primeiro arquivo mover | **não verificável daqui** — os arquivos já se moveram, e se a reunião precedeu não é fato visível no repositório |
+>
+> Fica `triaged` por causa da quinta, e não por trabalho pendente conhecido.
+> Marcá-lo `shipped` afirmaria uma conformidade de processo que eu não consigo
+> checar; deixar sem nota faria alguém repetir a medição. Quem tiver o registro da
+> reunião fecha em um minuto.
+
 ## B-080 — Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3   [ ]
 
 domain: engine-go
