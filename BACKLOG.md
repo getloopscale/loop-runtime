@@ -3216,6 +3216,36 @@ dod:
   - `reconcilehelpers` deixa de carregar política de tenant compartilhada pelos quatro binários sem dono declarado (ver B-061)
   - o reconciler continua sendo um só — a divisão é de costura, não de binário (o split por perfil operacional dos 4 binários foi medido como deliberado e **não** deve ser desfeito)
 
+> **Medido 2026-08-18 (costura entregue; interface por plano recusada com motivo).**
+> A evidência afirmava quatro planos e envelheceu em cinco dias: o
+> provisionamento de chave Transit saiu do operator em **2026-08-16**
+> (`e19e6dea5`, provisionamento é api-side por ADR), então `tenant_vault.go`
+> não existe mais. Do plano SECRETS restou só a metade do shredder
+> (`DeleteTenantKey`), que é o **B-075** — já `shipped`, "o primitivo não tem
+> dono". Quase removi o campo `VaultClient` por parecer morto; `tenant_transit_
+> ownership_test.go` documenta que ele carrega essa metade e trava a decisão nos
+> dois sentidos. Medido hoje pelos usos reais de `r.<Cliente>`: BUILD em
+> `tenant_build.go`+`tenant_harbor.go`, CONTROL em `tenant_gitops.go`, e dois
+> arquivos que cruzam de propósito (`tenant_controller.go`, orquestrador;
+> `tenant_deletion.go`, desmonte por simetria com a criação).
+>
+> **Entregue:** `planes.go` declara o plano de cada arquivo e de cada cliente da
+> struct, e `planes_test.go` verifica a declaração contra o código — arquivo sem
+> declaração reprova, cliente novo sem plano reprova, e uso fora do plano
+> declarado reprova. Piso de 8 usos varridos, para que um regex que deixe de
+> casar não produza verde sobre nada (lição do B-040). Dois mutantes provaram os
+> dentes: declarar `tenant_gitops.go` como BUILD reprova nos dois clientes, e
+> remover um cliente do mapa reprova em duas guardas.
+>
+> **Recusado, com motivo:** a primeira bala pedia interface de provisioner **por
+> plano**, copiando os provisioners externos. O molde é fachada estreita sobre um
+> serviço **externo**, e os quatro já existem; repeti-lo aqui produziria
+> interfaces com um único implementador sobre código interno — o anti-padrão que
+> `rules/architecture.md` e a Regra 11 nomeiam. O dano que a própria linha de
+> severidade descreve não é falta de abstração ("o agrupamento é defensável"), é
+> falta de **costura**. Foi a costura que entrou. A segunda bala é o B-061; a
+> terceira é restrição e foi respeitada — nada foi dividido.
+
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
 ## B-061 — `reconcilehelpers` guarda três assuntos sem relação, e o doc dele ainda chama o pacote de `shared`   [x]
