@@ -5880,7 +5880,7 @@ dod:
 > Registrado 2026-08-13 pela revisão da fatia `slice-16`. Mesma família do `B-046`: os dois charts
 > divergem numa propriedade que só aparece no render.
 
-## B-097 — O CLI documenta um `kubectl patch` que a nova cerca nega   [ ]
+## B-097 — O CLI documenta um `kubectl patch` que a nova cerca nega   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5888,10 +5888,29 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-13 pela revisão da fatia `slice-16`. `api/internal/services/placement/cell_pinner.go:172` emite, como remédio manual, `kubectl -n loopzero-system patch tenant <id> --type=merge -p '{"spec":{"cellID":...}}'`. A validação de imutabilidade da `loopzero-tenant-cr-shape` (`vap-tenant-cr-shape.yaml:58-61`) nega exatamente isso, exceto para `system:masters` ou a SA do `loopzero-api`.
 why_now: a cerca foi habilitada no mgmt em 2026-08-13. O comportamento é provavelmente o desejado — a mensagem da própria política diz *"Use 'loopzero admin tenants pin' to move a team"* —, mas o código emite um remédio que a política bloqueia, e quem o seguir com um kubeconfig sem privilégio recebe um `Denied` sem entender por quê.
-status: triaged
+status: shipped
 severity: baixa — quem opera o mgmt normalmente tem kubeconfig admin (`system:masters`), que é isento; o custo é uma mensagem que engana.
 dod:
   - a mensagem de `cell_pinner.go:172` diz que o patch direto é negado pela política, ou deixa de oferecê-lo
+> **Fechado 2026-08-19 — DoD 1/1, e o conselho óbvio era o errado.**
+>
+> A dica agora **diz que o patch direto é negado**, nomeia a política
+> (`loopzero-tenant-cr-shape`), diz que `spec.cellID` é imutável por ela e quem está
+> isento (`system:masters` ou a ServiceAccount do `loopzero-api`). O comando segue
+> citado — para quem **é** isento ele continua sendo o caminho.
+>
+> **A sutileza que quase me fez escrever a mensagem errada:** o remédio natural
+> seria *"use `loopzero admin tenants pin`"*, que é o que a própria política sugere na
+> mensagem dela. Mas esta função **é** o caminho do pin, e foi ele que acabou de
+> falhar — mandar usá-lo seria mandar repetir o que não funcionou. O que de fato
+> destrava é re-executar o pin, para que o patch seja tentado **pela identidade do
+> `loopzero-api`**, que é justamente a isenta. A dica diz isso, e há teste para os dois
+> lados: que ela avisa da negação, e que **não** manda usar o comando que falhou.
+>
+> A dica saiu para `dicaDeConserto()`, uma função testável — antes era uma
+> `fmt.Sprintf` inline dentro de um `slog.Warn`, e testar a mensagem exigiria
+> capturar log.
+
   - está decidido se o remédio manual continua existindo
 
 > Registrado 2026-08-13 pela revisão da fatia `slice-16`.
