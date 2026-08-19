@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 40 · **In flight** 0 · **Closed** 124
+164 items — **Open** 39 · **In flight** 0 · **Closed** 125
 
-### Open (40)
+### Open (39)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -112,14 +112,13 @@ consequência do escopo per-repo declarado acima.
 | [`B-159`](#b-159--o-checklist-manda-escrever-o-changelog-num-arquivo-que-nao-existe----) | O checklist manda escrever o CHANGELOG num arquivo que nao existe | `triaged` | — |
 | [`B-161`](#b-161--o-gate-de-runbook-mede-a-anotacao-nao-o-runbook-6-dos-7-links-nao-levam-a-lugar-nenhum----) | O gate de runbook mede a anotacao, nao o runbook: 6 dos 7 links nao levam a lugar nenhum | `triaged` | media |
 | [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta |
-| [`B-163`](#b-163--um-gate-exige-do-pulumi-o-que-a-propria-arquitetura-ja-aposentou----) | Um gate exige do Pulumi o que a propria arquitetura ja' aposentou | `triaged` | baixa |
 | [`B-164`](#b-164--o-gate-de-runbook-varre-110-dos-233-alertas-da-arvore-e-o-numero-que-ele-reporta-parece-o-total----) | O gate de runbook varre 110 dos 233 alertas da arvore, e o numero que ele reporta parece o total | `triaged` | media |
 
 ### In flight (0)
 
 _None._
 
-### Closed (124)
+### Closed (125)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -247,6 +246,7 @@ _None._
 | [`B-155`](#b-155--o-lockfile-so-e-procurado-na-raiz-do-bundle-e-a-mensagem-nao-diz-onde-procurou---x) | O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou | `shipped` | — |
 | [`B-156`](#b-156--um-teste-de-chart-depende-de-rede-e-reprova-o-portao-de-entrega-sob-carga---x) | Um teste de chart depende de rede e reprova o portao de entrega sob carga | `shipped` | — |
 | [`B-160`](#b-160--a-guarda-de-comandos-junta-pedacos-de-comandos-diferentes-e-bloqueia-o-inocente---x) | A guarda de comandos junta pedacos de comandos diferentes e bloqueia o inocente | `shipped` | media |
+| [`B-163`](#b-163--um-gate-exige-do-pulumi-o-que-a-propria-arquitetura-ja-aposentou---x) | Um gate exige do Pulumi o que a propria arquitetura ja' aposentou | `killed` | baixa |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -9872,7 +9872,7 @@ maquina perdeu o toolchain hoje (ver o relatorio ao Paulo): sem compilador eu na
 teste que provaria a mudanca, e mexer em cifragem de segredo sem verificar seria pior que
 esperar. Medi e registrei.
 
-## B-163 — Um gate exige do Pulumi o que a propria arquitetura ja' aposentou   [ ]
+## B-163 — Um gate exige do Pulumi o que a propria arquitetura ja' aposentou   [x]
 
 domain: engine-go
 repo: loopzero
@@ -9881,7 +9881,37 @@ source: discover-review
 severity: baixa — nao ha' regressao nova; o custo e' um gate que reprova por desenho e treina todo mundo a ignora-lo
 evidence: medido 2026-08-19. `loopzero-ops quality no-pulumi-inline-secrets` reprova com **9 violacoes** em `infra/pulumi/Pulumi.dev.yaml` e `infra/pulumi/Pulumi.prod.yaml` — segredos cifrados em linha, que a mensagem descreve como desvio do Vault. Nenhum item do backlog o citava.
 why_now: o `CLAUDE.md` declara `infra/pulumi*` como **legado AS-IS, vivo ate' o cutover do AM8**, e proibe adicionar Pulumi novo para a infra alvo. O gate cobra reescrita de secret exatamente na arvore que a arquitetura decidiu abandonar — entao ele reprova hoje, vai reprovar amanha, e ninguem vai consertar, porque consertar seria investir no que esta' sendo substituido.
-status: triaged
+status: killed
+kill_reason: a premissa era minha e a medicao a refutou — a decisao ja existia, documentada em dois lugares, e o FAIL e forcing-function deliberada com evento de desbloqueio nomeado (migracao T9)
+
+> **MORTO 2026-08-19, no mesmo dia em que o registrei — e a medicao que o mata e' a que
+> eu devia ter feito antes de registrar.**
+>
+> Eu escrevi que o gate "reprova por desenho e ninguem vai consertar", tendo medido
+> apenas que ele reprova e que `grep no-pulumi-inline-secrets BACKLOG.md` devolvia zero.
+> Nao procurei se a **decisao** existia fora do backlog. Existia, em dois lugares:
+>
+> - `taskfiles/quality.yml:120-123`: *"operator-gated; do NOT add to task quality:gates
+>   until T9 Vault provider migration runs … Pre-migration FAIL is INTENTIONAL
+>   forcing-function (operator visibility)"*.
+> - `cmd/loopzero-ops/quality_gate_wiring_test.go:295-299`: as 9 entradas, e que fechar isso
+>   e' *"the T9 Vault-provider migration, on the legacy DO/Pulumi layer that the AWS
+>   re-platform is retiring (ADR 2026-06-17) — moving live production secrets, not an
+>   edit"*.
+>
+> Ou seja: o gate **nao** esta' no agregado, **nao** trava push, e o FAIL e' deliberado
+> com evento de desbloqueio nomeado. Nada do que o item temia acontece.
+>
+> **Uma correcao de fato, tambem minha:** os 9 valores nao sao segredo em texto claro —
+> sao entradas `secure:` do Pulumi, **cifradas em repouso** com a chave do stack. A
+> divergencia e' de POLITICA (nao vivem no Vault, logo nao seguem a rotacao central), nao
+> de exposicao. Meu registro deixava a leitura mais grave do que a medicao sustenta.
+>
+> **O unico residuo, e ele nao merece item:** a isencao esta' amarrada a um EVENTO (a
+> migracao T9) e nao a uma data. Pela minha propria formulacao — *"isencao sem prazo e'
+> revogacao com outro nome"* — isso seria fraco; mas nao e' isencao de allowlist, e' um
+> gate deliberadamente fora do agregado com o desbloqueio nomeado. Registrar isso como
+> item novo seria inflar o registro com uma observacao sobre uma decisao ja' tomada.
 dod:
   - esta' decidido se o gate isenta o legado do Pulumi com prazo amarrado ao AM8, ou se as 9 violacoes sao migradas de fato
   - se for isencao, ela nomeia os arquivos e a data — isencao sem prazo e' revogacao com outro nome
