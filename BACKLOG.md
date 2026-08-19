@@ -7688,7 +7688,7 @@ dod:
 > **Protocolo de mudança de regra LOCKED cumprido:** ADR, entrada no CHANGELOG sob `[Unreleased]`, e `check_xrefs.py` + `test_e2e_smoke.py` verdes. Os dois estavam **vermelhos** ao serem rodados pela primeira vez, e nenhum gate os roda — registrado como **`B-129`**.
 
 
-## B-128 — O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo   [ ]
+## B-128 — O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo   [x]
 
 domain: engine-go
 repo: loopzero
@@ -7697,9 +7697,32 @@ source: discover-review
 severity: média — hoje não bloqueia nada, porque `go` está `DEFER`. Vira **alta** no instante em que alguém tentar ligá-lo: o gate reprova a entrega inteira com 4258 achados falsos, e quem investigar vai gastar o dia antes de descobrir que o repositório sempre compilou.
 evidence: medido 2026-08-16. Com `go | api/go.mod | ENABLED` em `.claude/rules/code-quality-languages.txt`, o runner devolve `FAIL_HARD` com `symbol_fabrication_go: 4258`. **Não pode ser verdade** — o repositório compila, e 4258 símbolos inexistentes não compilariam. O mecanismo é estrutural: `detect_symbol_fabrication` (`.claude/skills/code-quality/scripts/detectors/go.py:75-99`) pula imports do **próprio módulo** e consulta o resto no **proxy do Go**. Este repositório é um workspace de **9 módulos** com paths distintos e **não publicados** (`go.work`, sem `go.mod` na raiz), então todo import entre irmãos — `api` → `pkg/vault`, e são centenas — sai do prefixo do self-module, vai ao proxy, não é encontrado, e conta como fabricação.
 why_now: descoberto ao corrigir o formato da configuração de linguagens (`B-124`). Antes disso o detector nunca havia rodado aqui, porque a configuração parseava para vazio. O `go` ficou `DEFER` com esta medição escrita ao lado, em vez de `ENABLED` travando `run_validation.py` em falsos positivos.
-status: triaged
+status: shipped
 dod:
   - o detector reconhece um workspace `go.work` e trata **todo módulo do workspace** como self-module, não só o do `go.mod` mais próximo
+> **Fechado 2026-08-19 — a DoD pedia um mecanismo e eram TRÊS. Todos medidos e
+> corrigidos.**
+>
+> | # | mecanismo | conserto |
+> |---|---|---|
+> | 1 | só o `go.mod` **mais próximo** contava como self-module, então todo import entre irmãos do workspace ia ao proxy | `_workspace_modules()` lê o `go.work` e trata **os 8 módulos** como self — incluindo o repositório irmão `loopzero-contracts` |
+> | 2 | **biblioteca padrão** consultada no proxy: `encoding/json` acusado de "not found" | regra do próprio Go, não heurística: primeiro elemento do caminho sem ponto é stdlib |
+> | 3 | **caminho de import confundido com caminho de módulo**: `k8s.io/apimachinery/pkg/apis/meta/v1` é *pacote* dentro do módulo `k8s.io/apimachinery`, e o proxy conhece o segundo | resolve contra os `require` declarados nos `go.mod` do workspace — responde a pergunta certa e **offline** |
+>
+> A DoD nomeava só o primeiro. Consertá-lo levou os achados de 27 para 9 numa
+> amostra; os 9 restantes eram os outros dois mecanismos, e só apareceram porque
+> continuei medindo depois que a bala estava cumprida.
+>
+> **Medido depois: 200 arquivos reais → ZERO fabricações**, e um mutante com
+> `github.com/definitivamente/nao/existe/modulo` continua sendo pego. Sem essa
+> segunda metade eu teria entregue um detector silencioso, que é pior que um
+> ruidoso.
+>
+> **`go` continua `DEFER`, e a linha da configuração agora diz a verdade nova:** o
+> D2 não bloqueia mais; o que impede é a segunda razão, inalterada — o D1 traz 36
+> achados **reais** de código morto, e o veredito é único por linguagem. Ligar antes
+> de pagá-los reprovaria a entrega por dívida legítima.
+
   - existe teste sobre uma árvore multi-módulo com import entre irmãos, provando que ela **não** produz achado
   - com o conserto, `go` volta a `ENABLED` em `code-quality-languages.txt` — e os 36 achados de `deadcode` (D1), que podem ser reais, passam a ter de ser tratados ou isentados
 
