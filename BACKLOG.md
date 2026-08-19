@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-156 items — **Open** 56 · **In flight** 0 · **Closed** 100
+157 items — **Open** 42 · **In flight** 0 · **Closed** 115
 
-### Open (56)
+### Open (42)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -85,57 +85,43 @@ consequência do escopo per-repo declarado acima.
 | [`B-059`](#b-059--o-transporte-carrega-o-schema-de-payload-de-cada-domínio-e-faz-body-snooping----) | O transporte carrega o schema de payload de cada domínio e faz body-snooping | `triaged` | média |
 | [`B-060`](#b-060--o-único-lugar-onde-os-quatro-planos-se-encontram-é-uma-pasta-de-arquivos-irmãos----) | O único lugar onde os quatro planos se encontram é uma pasta de arquivos irmãos | `triaged` | média |
 | [`B-062`](#b-062--o-vocabulário-do-plano-de-build-está-espalhado-por-quinze-pacotes-incluindo-o-sink-de-domínio----) | O vocabulário do plano de build está espalhado por quinze pacotes, incluindo o sink de domínio | `triaged` | média |
-| [`B-063`](#b-063--um-módulo-de-infraestrutura-depende-de-uma-suíte-de-testes-e-tools-está-fora-do-workspace----) | Um módulo de infraestrutura depende de uma suíte de testes, e `tools/` está fora do workspace | `triaged` | baixa |
 | [`B-064`](#b-064--o-control-plane-alcança-o-plano-de-secrets-por-um-nome-dns-reescrito-em-tempo-de-resolução----) | O control plane alcança o plano de secrets por um nome DNS reescrito em tempo de resolução | `triaged` | média |
-| [`B-065`](#b-065--um-contexto-delimitado-vazio-está-pré-aprovado-no-dag-congelado----) | Um contexto delimitado vazio está pré-aprovado no DAG congelado | `triaged` | baixa |
-| [`B-066`](#b-066--três-suítes-de-invariante-são-testes-go-comuns-invisíveis-ao-oráculo-de-gates----) | Três suítes de invariante são testes Go comuns, invisíveis ao oráculo de gates | `triaged` | baixa |
 | [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `triaged` | média |
-| [`B-068`](#b-068--um-ponto-de-variação-de-strategy-que-não-varia-mais-mantido-por-construir-e-descartar-um-objeto----) | Um ponto de variação de Strategy que não varia mais, mantido por construir e descartar um objeto | `triaged` | baixa |
 | [`B-069`](#b-069--a-mesma-regra-de-env-reservada-descarta-em-silêncio-de-um-lado-e-mata-o-build-do-outro----) | A mesma regra de env reservada descarta em silêncio de um lado e mata o build do outro | `triaged` | média |
 | [`B-073`](#b-073--o-chart-guarda-chuva-não-tem-consumidor-conhecido-e-mantê-lo-custa----) | O chart guarda-chuva não tem consumidor conhecido, e mantê-lo custa | `triaged` | baixa |
 | [`B-074`](#b-074--deletar-o-environment-cr-direto-deixa-a-application-órfã-e-o-reaper-não-a-alcança----) | Deletar o Environment CR direto deixa a Application órfã, e o reaper não a alcança | `triaged` | média |
-| [`B-078`](#b-078--o-gate-de-paridade-de-contexto-não-enxerga-scripts-e-não-pode-comparar-quando-um-lado-é-parametrizado----) | O gate de paridade de contexto não enxerga scripts, e não pode comparar quando um lado é parametrizado | `triaged` | média |
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `triaged` | média |
 | [`B-080`](#b-080--os-43-arquivos-de-routes-ainda-são-um-pacote-plano-e-mover-263-símbolos-exportados-é-t3----) | Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3 | `triaged` | alta |
-| [`B-081`](#b-081--as-277-mensagens-de-erro-autoradas-nos-handlers-não-têm-gate-de-vocabulário----) | As 277 mensagens de erro autoradas nos handlers não têm gate de vocabulário | `triaged` | média |
 | [`B-082`](#b-082--check-loopzero-api-vault-projected-token_testsh-reprova-de-forma-intermitente-dentro-do-qualitygates----) | `check-loopzero-api-vault-projected-token_test.sh` reprova de forma intermitente dentro do `quality:gates` | `triaged` | média |
-| [`B-086`](#b-086--um-documento-de-decisão-que-registra-a-ausência-de-um-adr-faz-esse-adr-resolver----) | Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver | `triaged` | média |
-| [`B-091`](#b-091--infraqualitydry-run-baselinetxt-é-a-segunda-baseline-sem-leitor----) | `infra/quality/dry-run-baseline.txt` é a segunda baseline sem leitor | `triaged` | baixa |
-| [`B-093`](#b-093--o-validador-do-servicesjson-não-bloqueia-os-prefixos-que-a-plataforma-injeta----) | O validador do `services.json` não bloqueia os prefixos que a plataforma injeta | `triaged` | média |
 | [`B-094`](#b-094--a-metade-api-do-find_sec_004-guarda-um-campo-que-ninguém-popula----) | A metade API do `find_sec_004` guarda um campo que ninguém popula | `triaged` | média |
 | [`B-095`](#b-095--a-segunda-cerca-sobre-crs-loopzeroio-renderiza-em-lugar-nenhum----) | A segunda cerca sobre CRs `loopzero.io` renderiza em lugar nenhum | `triaged` | média |
 | [`B-096`](#b-096--o-chart-publicado-do-loopzero-api-renderiza-uma-sa-que-as-políticas-de-admissão-não-isentam----) | O chart publicado do `loopzero-api` renderiza uma SA que as políticas de admissão não isentam | `triaged` | média |
-| [`B-097`](#b-097--o-cli-documenta-um-kubectl-patch-que-a-nova-cerca-nega----) | O CLI documenta um `kubectl patch` que a nova cerca nega | `triaged` | baixa |
 | [`B-098`](#b-098--duas-policies-do-openbao-são-declaradas-e-nunca-ligadas-a-role-nenhum----) | Duas policies do OpenBao são declaradas e nunca ligadas a role nenhum | `triaged` | média |
 | [`B-100`](#b-100--o-gate-de-contrato-trabalha-por-nome-de-tag-nos-dois-lados-e-chama-campo-homônimo-de-consumidor----) | O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor | `triaged` | média |
-| [`B-101`](#b-101--quatro-testes-herméticos-de-seed-queimam-390s-de-relógio-e-é-isso-que-mantém-a-suíte-fora-do-push----) | Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push | `triaged` | média |
-| [`B-102`](#b-102--task---dry-imprime-bloco-multi-linha-sem-avaliar-o-controle-de-fluxo-e-é-nisso-que-uma-asserção-de-segurança-se-apoia----) | `task --dry` imprime bloco multi-linha sem avaliar o controle de fluxo, e é nisso que uma asserção de segurança se apoia | `triaged` | média |
 | [`B-111`](#b-111--o-mesmo-controle-de-firewall-vive-em-três-repositórios-sem-dono-declarado----) | O mesmo controle de firewall vive em três repositórios sem dono declarado | `triaged` | média |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
-| [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe----) | Comentário afirma um gate de credenciais que não existe | `triaged` | baixa |
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
-| [`B-128`](#b-128--o-detector-de-fabricação-de-símbolo-acusa-4258-falsos-num-workspace-multi-módulo----) | O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo | `triaged` | média |
 | [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `triaged` | média |
 | [`B-135`](#b-135--prontidão-e-vivacidade-apontam-para-a-mesma-sonda-rasa-e-a-correção-óbvia-é-uma-armadilha----) | Prontidão e vivacidade apontam para a mesma sonda rasa, e a correção óbvia é uma armadilha | `triaged` | média |
 | [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `triaged` | média |
 | [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `triaged` | média |
 | [`B-138`](#b-138--o-invariante-do-sumário-de-prontidão-é-afirmado-num-pacote-e-existe-em-seis----) | O invariante do sumário de prontidão é afirmado num pacote e existe em seis | `triaged` | média |
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `triaged` | média |
-| [`B-141`](#b-141--há-um-segundo-pacote-go-chamado-helpers-e-o-b-061-afirmava-que-era-um-só----) | Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só | `triaged` | baixa |
 | [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `triaged` | média |
 | [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média |
-| [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados----) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `triaged` | baixa |
+| [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados---x) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `triaged` | baixa |
 | [`B-152`](#b-152--o-primeiro-build-do-fixture-falha-em-manifestos-e-a-mensagem-não-diz-qual-domínio----) | O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio | `triaged` | — |
 | [`B-153`](#b-153--seis-passos-do-build-não-conseguem-falhar-o-exit-1-deles-é-engolido-por-um-tee----) | Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee` | `triaged` | — |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `triaged` | — |
 | [`B-155`](#b-155--o-lockfile-so-e-procurado-na-raiz-do-bundle-e-a-mensagem-nao-diz-onde-procurou----) | O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou | `triaged` | — |
 | [`B-156`](#b-156--um-teste-de-chart-depende-de-rede-e-reprova-o-portao-de-entrega-sob-carga----) | Um teste de chart depende de rede e reprova o portao de entrega sob carga | `triaged` | — |
+| [`B-157`](#b-157--uma-ferramenta-com-imagem-config-e-testes-não-é-invocada-por-caminho-nenhum----) | Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum | `triaged` | média |
 
 ### In flight (0)
 
 _None._
 
-### Closed (100)
+### Closed (115)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -190,21 +176,33 @@ _None._
 | [`B-055`](#b-055--o-invariante-de-escritor-único-de-status-vale-em-2-de-8-controllers-e-o-helper-que-o-repara-não-tem-chamador---x) | O invariante de escritor único de status vale em 2 de 8 controllers, e o helper que o repara não tem chamador | `shipped` | alta |
 | [`B-056`](#b-056--dois-charts-diferentes-têm-o-mesmo-nome-em-duas-árvores-com-ciclos-de-vida-distintos---x) | Dois charts diferentes têm o mesmo nome, em duas árvores com ciclos de vida distintos | `shipped` | média |
 | [`B-061`](#b-061--reconcilehelpers-guarda-três-assuntos-sem-relação-e-o-doc-dele-ainda-chama-o-pacote-de-shared---x) | `reconcilehelpers` guarda três assuntos sem relação, e o doc dele ainda chama o pacote de `shared` | `shipped` | baixa |
+| [`B-063`](#b-063--um-módulo-de-infraestrutura-depende-de-uma-suíte-de-testes-e-tools-está-fora-do-workspace----x) | Um módulo de infraestrutura depende de uma suíte de testes, e `tools/` está fora do workspace | `shipped` | baixa |
+| [`B-065`](#b-065--um-contexto-delimitado-vazio-está-pré-aprovado-no-dag-congelado---x) | Um contexto delimitado vazio está pré-aprovado no DAG congelado | `shipped` | baixa |
+| [`B-066`](#b-066--três-suítes-de-invariante-são-testes-go-comuns-invisíveis-ao-oráculo-de-gates---x) | Três suítes de invariante são testes Go comuns, invisíveis ao oráculo de gates | `shipped` | baixa |
+| [`B-068`](#b-068--um-ponto-de-variação-de-strategy-que-não-varia-mais-mantido-por-construir-e-descartar-um-objeto---x) | Um ponto de variação de Strategy que não varia mais, mantido por construir e descartar um objeto | `shipped` | baixa |
 | [`B-070`](#b-070--env-aws_region-já-quebra-o-build-hoje-e-a-api-aceitaria-a-mesma-chave---x) | `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave | `shipped` | média ↑ |
 | [`B-071`](#b-071--task-testunit-está-vermelho-na-workspace-e-a-causa-é-um-par-que-se-desencontrou---x) | `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou | `shipped` | alta |
 | [`B-072`](#b-072--a-policy-versionada-nega-ao-api-a-criação-de-chave-que-o-api-faz---x) | A policy versionada nega ao `api` a criação de chave que o `api` faz | `shipped` | alta |
 | [`B-075`](#b-075--o-primitivo-de-crypto-shredding-não-tem-dono-e-o-adr-quase-o-deletou---x) | O primitivo de crypto-shredding não tem dono, e o ADR quase o deletou | `shipped` | alta |
 | [`B-076`](#b-076--21-divergências-entre-chart-publicado-e-de-bootstrap-estão-aprovadas-sem-que-ninguém-tenha-medido-por-quê---x) | 21 divergências entre chart publicado e de bootstrap estão aprovadas sem que ninguém tenha medido por quê | `shipped` | média |
 | [`B-077`](#b-077--a-cerca-de-forma-dos-crs-tenant-está-desligada-exatamente-no-cluster-onde-os-crs-vivem---x) | A cerca de forma dos CRs Tenant está desligada exatamente no cluster onde os CRs vivem | `shipped` | alta |
+| [`B-078`](#b-078--o-gate-de-paridade-de-contexto-não-enxerga-scripts-e-não-pode-comparar-quando-um-lado-é-parametrizado---x) | O gate de paridade de contexto não enxerga scripts, e não pode comparar quando um lado é parametrizado | `shipped` | média |
+| [`B-081`](#b-081--as-277-mensagens-de-erro-autoradas-nos-handlers-não-têm-gate-de-vocabulário---x) | As 277 mensagens de erro autoradas nos handlers não têm gate de vocabulário | `shipped` | média |
 | [`B-083`](#b-083--task-lint-continua-vermelho-por-88-achados-em-api-que-o-b-009-nunca-cobriu---x) | `task lint` continua vermelho por 88 achados em `api/`, que o B-009 nunca cobriu | `shipped` | média |
 | [`B-084`](#b-084--a-cerca-routes-acyclic-não-vigia-o-pacote-pai-e-o-risco-cresce-a-cada-família---x) | A cerca `routes-acyclic` não vigia o pacote pai, e o risco cresce a cada família | `shipped` | alta |
 | [`B-085`](#b-085--dez-arquivos-escrevem-status-fora-do-contrato-em-28-pontos---x) | Dez arquivos escrevem `.status` fora do contrato, em 28 pontos | `shipped` | alta |
+| [`B-086`](#b-086--um-documento-de-decisão-que-registra-a-ausência-de-um-adr-faz-esse-adr-resolver---x) | Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver | `shipped` | média |
 | [`B-087`](#b-087--task-qualityall-aborta-no-primeiro-passo-contra-um-diretório-que-não-existe-desde-o-m9---x) | `task quality:all` aborta no primeiro passo, contra um diretório que não existe desde o M9 | `shipped` | alta |
 | [`B-088`](#b-088--os-testes-de-cmdloopzero-ops-e-de-tools-não-são-rodados-por-nenhuma-task---x) | Os testes de `cmd/loopzero-ops` e de `tools/` não são rodados por nenhuma task | `shipped` | alta |
 | [`B-089`](#b-089--a-mesma-regra-de-env-reservada-tem-uma-terceira-implementação-com-um-terceiro-conjunto---x) | A mesma regra de env reservada tem uma TERCEIRA implementação, com um terceiro conjunto | `shipped` | alta |
 | [`B-090`](#b-090--a-asserção-de-caixa-do-gate-é-evadível-por-um-refactor-comum---x) | A asserção de caixa do gate é evadível por um refactor comum | `shipped` | média |
+| [`B-091`](#b-091--infraqualitydry-run-baselinetxt-é-a-segunda-baseline-sem-leitor---x) | `infra/quality/dry-run-baseline.txt` é a segunda baseline sem leitor | `shipped` | baixa |
 | [`B-092`](#b-092--16-arquivos-de-teste-em-infratests-não-rodam-e-dois-subdiretórios-estão-vermelhos---x) 🔒 | 16 arquivos de teste em `infra/tests` não rodam, e dois subdiretórios estão vermelhos | `shipped` | alta |
+| [`B-093`](#b-093--o-validador-do-servicesjson-não-bloqueia-os-prefixos-que-a-plataforma-injeta---x) | O validador do `services.json` não bloqueia os prefixos que a plataforma injeta | `shipped` | média |
+| [`B-097`](#b-097--o-cli-documenta-um-kubectl-patch-que-a-nova-cerca-nega---x) | O CLI documenta um `kubectl patch` que a nova cerca nega | `shipped` | baixa |
 | [`B-099`](#b-099--a-policy-corrigida-não-alcança-a-identidade-que-cria-a-chave-e-o-bootstrap-a-sobrescreve---x) | A policy corrigida não alcança a identidade que cria a chave, e o bootstrap a sobrescreve | `shipped` | alta |
+| [`B-101`](#b-101--quatro-testes-herméticos-de-seed-queimam-390s-de-relógio-e-é-isso-que-mantém-a-suíte-fora-do-push---x) | Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push | `shipped` | média |
+| [`B-102`](#b-102--task---dry-imprime-bloco-multi-linha-sem-avaliar-o-controle-de-fluxo-e-é-nisso-que-uma-asserção-de-segurança-se-apoia---x) | `task --dry` imprime bloco multi-linha sem avaliar o controle de fluxo, e é nisso que uma asserção de segurança se apoia | `shipped` | média |
 | [`B-103`](#b-103--43-itens-estão-raw-carregando-evidência-medida-e-o-loop-os-trata-como-não-medidos---x) | 43 itens estão `raw` carregando evidência medida, e o loop os trata como não medidos | `shipped` | média |
 | [`B-104`](#b-104--o-webhook-do-github-se-desliga-sozinho-em-silêncio-e-optional-true-é-o-que-permite---x) | O webhook do GitHub se desliga sozinho em silêncio, e `optional: true` é o que permite | `shipped` | alta |
 | [`B-105`](#b-105--o-application_controller-ancora-a-base-depois-de-um-re-fetch-e-pula-o-sumário-em-retorno-antecipado---x) | O `application_controller` ancora a base depois de um re-fetch, e pula o sumário em retorno antecipado | `shipped` | média |
@@ -222,16 +220,19 @@ _None._
 | [`B-119`](#b-119--o-gate-de-digest-está-em-modo-aviso-há-três-meses-e-a-chave-tem-dono-nomeado---x) 🔒 | O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado | `shipped` | média |
 | [`B-120`](#b-120--23-invocações-de-script-nas-skills-não-resolvem-no-layout-em-que-elas-rodam---x) | 23 invocações de script nas skills não resolvem no layout em que elas rodam | `shipped` | alta |
 | [`B-121`](#b-121--task-lint-para-no-primeiro-módulo-e-esconde-os-seguintes---x) | `task lint` para no primeiro módulo e esconde os seguintes | `shipped` | média |
+| [`B-122`](#b-122--comentário-afirma-um-gate-de-credenciais-que-não-existe---x) | Comentário afirma um gate de credenciais que não existe | `shipped` | baixa |
 | [`B-123`](#b-123--o-piso-do-route-auth-coverage-recusa-zero-rotas-mas-não-recusa-uma-queda---x) | O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda | `shipped` | média |
 | [`B-124`](#b-124--três-suítes-do-ecossistema-estão-vermelhas-e-ninguém-as-roda---x) | Três suítes do ecossistema estão vermelhas, e ninguém as roda | `shipped` | média |
 | [`B-125`](#b-125--os-dois-cronjobs-de-criptografia-invocam-um-subcomando-que-o-binário-não-tem---x) | Os dois CronJobs de criptografia invocam um subcomando que o binário não tem | `shipped` | alta |
 | [`B-127`](#b-127--o-code-quality-devolve-nota-máxima-quando-não-auditou-nada---x) | O `/code-quality` devolve nota máxima quando não auditou nada | `shipped` | alta |
+| [`B-128`](#b-128--o-detector-de-fabricação-de-símbolo-acusa-4258-falsos-num-workspace-multi-módulo---x) | O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo | `shipped` | média |
 | [`B-129`](#b-129--dois-validadores-do-ecossistema-não-são-rodados-por-gate-nenhum---x) | Dois validadores do ecossistema não são rodados por gate nenhum | `shipped` | média |
 | [`B-130`](#b-130--o-caminho-da-workstation-vazou-do-kit-para-nove-repositórios-e-só-um-tem-trava-que-pega---x) | O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega | `shipped` | média |
 | [`B-131`](#b-131--a-trava-de-higiene-varre-a-árvore-inteira-mas-o-gatilho-dela-exclui-parte-dessa-árvore---x) | A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore | `killed` | média |
 | [`B-132`](#b-132--o-publish-do-loopzero-rag-nunca-inicia-ele-chama-um-workflow-reutilizável-do-loopzero-que-não-resolve---x) | O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve | `killed` | alta |
 | [`B-133`](#b-133--a-issue-de-falha-de-ci-dedup-por-título-e-221-falhas-viraram-um-fio-que-nunca-fecha---x) | A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha | `killed` | média |
 | [`B-140`](#b-140--um-push-real-nunca-disparou-um-build-nesta-instância-e-a-cadeia-que-permitiria-medi-lo-tem-quatro-elos-faltando---x) | Um push real nunca disparou um build nesta instância, e a cadeia que permitiria medi-lo tem quatro elos faltando | `shipped` | alta |
+| [`B-141`](#b-141--há-um-segundo-pacote-go-chamado-helpers-e-o-b-061-afirmava-que-era-um-só---x) | Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só | `shipped` | baixa |
 | [`B-142`](#b-142--um-token-do-digitalocean-vivo-atravessou-cinco-meses-e-vários-pushes-sem-ser-barrado---x) 🔒 | Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado | `shipped` | P0 |
 | [`B-143`](#b-143--o-gate-de-segredos-deu-vereditos-diferentes-para-a-mesma-entrada-e-deixou-passar-cinco-meses---x) | O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses | `shipped` | alta |
 | [`B-144`](#b-144--o-contrato-manda-o-backlog-viver-no-umbrella-e-nenhum-projeto-faz-isso---x) | O contrato manda o backlog viver no umbrella, e nenhum projeto faz isso | `shipped` | — |
@@ -1229,7 +1230,7 @@ severity: alta — é uma jornada inteira do produto (conectar repositório → 
 > executá-la é do patrocinador.
 
 dod:
-  - a cadeia de seeds pós-cleanroom completa sem falhas de pré-requisito, ou a ordem dela garante que o namespace exista antes do seed que depende dele
+  - `seed-post-cleanroom-all.sh --verify` sai com codigo 0 num cleanroom recem-criado, e o passo que depende do namespace roda DEPOIS de quem o cria — verificavel pela ordem no script, nao pela ausencia de erro
   - `POST /api/v1/webhooks/github` deixa de devolver 404 — com assinatura inválida deve devolver 401, não 404
   - um push real no repositório de fixture dispara um build, medido ponta a ponta
   - existe verificação que reprova quando a rota do webhook não está registrada, senão o próximo apagamento é igualmente silencioso
@@ -1494,6 +1495,7 @@ source: discover-live-test
 evidence: medido em 2026-08-10 ao revalidar a topologia. `app.loopzero.example`, `auth.loopzero.example` e `cloud.loopzero.example` — **sem** o sufixo `-dev` — têm bloco próprio no Caddyfile e não servem nada: `app` devolve **502** porque encaminha para `localhost:5173`, um servidor Vite de desenvolvimento que não está rodando (`ss -ltn` na 5173 devolve zero sockets); `auth` e `cloud` devolvem **404**. Os três estão declarados em `infra/quality/proxy-exposure.txt`, e a declaração de `app.loopzero.example /sessions/whoami` diz literalmente *"now consumer-less, delete after the new bundle"*. O `setup-dev-public-dns.sh` só gerencia `auth-dev` e `app-dev`, então nem DNS eles têm por parte deste repositório.
 why_now: apareceu ao medir para onde a borda encaminha, e não por sondagem de host — a sonda `loopzero-ops leak live` só cobre `app-dev` e `auth-dev`, então estes três nunca foram medidos. O `app.loopzero.example` é o mais relevante: ele encaminha para um servidor de **desenvolvimento** (Vite), e o Red Team já fechou dois achados sobre justamente isso (loopzero-cloud#66 e #141, sobre o bundle de produção e o bloqueio de caminhos de dev-server). Um bloco vivo apontando para o Vite reabre a mesma superfície se alguém subir a 5173 na máquina.
 status: triaged
+delivered_in: 5c5595b3a  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — hoje não servem nada, então não vazam. O risco é o bloco existir e alguém subir o Vite: aí `app.loopzero.example` passa a servir código-fonte na internet, que é exatamente o que o #66 fechou.
 measurement_2026_08_18: |
   **A premissa do item esta refutada, e para pior.** Ele dizia "apontam para o vazio" e
@@ -2025,6 +2027,7 @@ why_now: o agregador é a ÚNICA fonte de `cost_counters`, e o portão que lê e
   degrada para "passa" quando ela está vazia. As três métricas de custo — minutos de build,
   egresso, puxadas de registro — não têm teto no ambiente que serve o painel público.
 status: triaged
+delivered_in: f49ca098a  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 progress_2026_08_18: |
   **Duas das tres balas fechadas — as que sao deste repositorio. A primeira e do `loopzero-cloud`.**
 
@@ -2970,6 +2973,7 @@ source: discover-review
 evidence: medido em 2026-08-11. `middleware/pgcircuitbreaker.go` é um portão percentual sem histerese; `admission/pg_breaker.go` é high/low-water atômico, e seu próprio doc cita **o modo de falha por flapping que o outro ainda tem**. Os dois são construídos no mesmo processo — `server/router.go:72` e `api/cmd/main.go:468`. E `pkg/circuitbreaker`, que existe no kernel compartilhado e é usado pelos operators, é importado por `api/` **zero vezes**.
 why_now: duas implementações do mesmo conceito no mesmo processo divergem em silêncio — uma já corrigiu um defeito que a outra tem, e nada força a segunda a aprender. É o mesmo padrão do B-051, uma camada acima.
 status: triaged
+delivered_in: 5c5595b3a  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — nenhum incidente conhecido; o custo é comportamento de proteção inconsistente sobre o mesmo recurso.
 measurement_2026_08_18: |
   **O item subestimou o achado.** Ele descreve "dois breakers que divergem em silencio". A
@@ -3121,6 +3125,7 @@ source: discover-review
 evidence: medido em 2026-08-11. Existem `pkg/domain` (vocabulário de produto), `api/internal/domain` (camada DIP) e `api/internal/services/domain` (domínios **DNS**). A colisão forçou `package domainsvc` (`services/domain/domain_provisioner.go:4`) e `package placementsvc` — as **únicas duas** divergências entre nome de diretório e nome de pacote em toda a árvore Go. E `api/internal/domain` não é modelo de domínio: `types.go` (21 KB) declara `DomainStore`(:87), `TeamStore`(:147), `AuditStore`(:184), `SecretStore`(:205), `ProjectStore`(:335) e `TenantCRManager`(:353) — seis contextos sem relação num arquivo. As portas são anuladas na prática por **49 alias re-exports** em `routes`, e cada porta de consumidor único tem como único consumidor a própria linha de alias. **Positivo medido:** o pacote importa somente a stdlib — a disciplina de camada que falta em outros lugares é demonstrável nele.
 why_now: a duplicação da palavra em dois níveis é consequência direta do topo em forma de camada (B-041); resolver ali torna o rename aqui quase mecânico. E o `types.go` único é o que faz uma porta de secrets e uma porta de billing mudarem no mesmo arquivo.
 status: triaged
+delivered_in: b31473a3c  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — não quebra nada; custa navegação e força dois nomes de pacote que mentem sobre o diretório.
 progress_2026_08_18: |
   **Bala 4 fechada. As balas 1-3 sao UMA mudanca, nao tres — e a medicao mostrou por que.**
@@ -3184,6 +3189,7 @@ source: discover-review
 evidence: medido em 2026-08-11. **`api/internal/k8s`** (coesão 3) agrupa três domínios pela biblioteca cliente que compartilham: tenancy (`tenant_cr_manager.go` 322L, `tenant_evictor.go` 333L), workload (`application_cr_manager.go`, `preview_cr_manager.go`) e secrets (`secret_k8s_manager.go` 371L). **`api/internal/adapters`** (coesão 3) é nomeado pelo padrão, então qualquer tipo-ponte qualifica — o próprio doc (`adapters.go:4`) é o critério de admissão, e por isso **não pode recusar nada**: 11 arquivos, 50 exports, cobrindo build, tenancy, release, secrets e SSE. Um deles, `vault_transit_adapter.go:9`, declara *"Signatures match byte-for-byte; only the method names differ"* — é ponte de código interno para código interno. **`services/platform`** (coesão 3) reúne 8 concerns de faxina sem par compartilhado; a propriedade comum real é "roda no binário controller", e o `servicesacyclic` agora defende esse agrupamento.
 why_now: são os três pacotes cuja regra de admissão não consegue dizer não. Enquanto ela for "usa client-go" / "é um adapter" / "é um loop de fundo", todo arquivo novo cabe — e a auditoria mediu que já cabem domínios diferentes em cada um.
 status: triaged
+delivered_in: 867e5d946  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — nenhum defeito de comportamento; é a superfície por onde a mistura de domínios entra sem ninguém decidir.
 progress_2026_08_18: |
   **Bala 2 fechada pela segunda alternativa; bala 4 ja estava feita; balas 1 e 3 ficam.**
@@ -3233,6 +3239,7 @@ source: discover-review
 evidence: medido em 2026-08-11. `middleware` mistura cinco concerns (autenticação, auditoria, rate limit, observabilidade, portões de política) e `audit.go:24` declara `projectIDBodyKeys = []string{"project_id","project","projectId"}` — com o comentário em `:21-23` explicando *"builds use project_id, domains use project"* — e faz buffer de até **64 KiB** do corpo da requisição para enriquecer `resource_id`. Isso é conhecimento por domínio dentro do transporte. **Refutação registrada:** a hipótese inicial de que o `CostEnforcer` misturava política em transporte **não se sustentou** — ele delega a decisão de cap para `pkg/enforcement` em `cost_enforcement.go:90`. O que sobra dele é uma heurística de negócio no caminho de cópia (`:154`, "1,5× do cap ⇒ downgrade de plano").
 why_now: o `audit.go` sabe, hoje, como cada domínio nomeia o próprio identificador de projeto — três grafias, mantidas à mão. Todo domínio novo que use uma quarta grafia perde `resource_id` no log de auditoria, em silêncio.
 status: triaged
+delivered_in: 123a9f008  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — o dado de auditoria degrada sem erro, que é o pior modo para dado de auditoria.
 dod:
   - o identificador de recurso chega ao middleware de auditoria **declarado**, não adivinhado do corpo
@@ -3401,6 +3408,7 @@ source: discover-review
 evidence: medido em 2026-08-11. Um grep por `BuildKit|cosign|WorkflowSubmitter|argoproj…Workflow` bate em **15 pacotes distintos** de `api/internal` — incluindo o sink de domínio: `services/deploycontracts/shared_contracts.go:89` declara `NoCache bool // Skip BuildKit layer cache (--no-cache)`. Do lado da infra o plano é explícito (`build.helmfile`, `build-cluster.yaml`, `charts/loopzero-build-cwts`); do lado do código não há endereço. Os quatro pacotes api-side que de fato são build (`argo`, `source`, `shellgen`, `admission`) somam 10 importadores de produção.
 why_now: é a metade de código do plano que a pergunta original nomeia em segundo lugar. E o custo do gate depende disto: uma verificação que confine o vocabulário de build precisaria hoje enumerar **15 prefixos**; depois de aninhar os quatro pacotes, **3** — a diferença entre um gate mantenível e um que ninguém mantém.
 status: triaged
+delivered_in: e0adb510a 698fd507d 61f5bf9c7  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — nada quebrado; é a razão de "o que é build?" não ter resposta no código.
 dod:
   - os quatro pacotes api-side de build vivem sob um pai que diz o plano
@@ -3516,6 +3524,7 @@ source: discover-review
 evidence: medido em 2026-08-11. `infra/helm/loopzero-api/values.yaml:118` aponta por padrão para um nome DNS **do mesmo cluster**, e a topologia de cluster separado mantém esse literal e o **reescreve no CoreDNS** (`values/dev-public/loopzero-api.yaml.gotmpl:69-76`). Ou seja: nem o código nem o chart conseguem distinguir se estão falando com um OpenBao no mesmo cluster ou no cluster `loopzero-secrets` — a diferença vive na resolução de nomes. Junto: um `role_id` de AppRole do plano de secrets está **commitado dentro do values file do control plane** (`values/dev-public/loopzero-api.yaml.gotmpl:77`). O `secret_id` está corretamente fora — **não é comprometimento**, é observação de fronteira.
 why_now: o `CLAUDE.md` classifica instalar OpenBao no core como violação de topologia em qualquer tier (ver B-047), mas o valor padrão do chart aponta para o mesmo cluster. As duas coisas não podem estar certas ao mesmo tempo, e hoje o que decide qual vale é uma reescrita de DNS que não aparece em nenhum dos dois lugares.
 status: triaged
+delivered_in: 8f19928d1  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — funciona hoje; o custo é que a fronteira mais forte da plataforma em infra é invisível no chart e no código.
 dod:
   - o endereço do plano de secrets é explícito no chart em vez de depender de reescrita de resolução
@@ -3755,6 +3764,7 @@ source: discover-review
 evidence: medido em 2026-08-11 ao planejar o `B-051`. As duas implementações da regra `find_sec_004` não diferem só na lista de prefixos — diferem na **severidade**. Lado API (`api/internal/services/deploycontracts/build_plan.go:120-124`): chave reservada gera `slog.Warn` e `continue` — a env é **descartada em silêncio** e o deploy prossegue. Lado linter (`tools/loopzero-dockerfile-lint/main.go:296` → `:158-159`): `SeverityReject` vira `os.Exit(1)` — o **build falha**. E o linter está no caminho de build real: `api/internal/argo/languages.go:36` e `workflow_builder.go:408` emitem o passo `dockerfile-lint` para `UserDockerfileStrategy`.
 why_now: o gate `env-prefix-parity` (`B-051`) compara os dois **conjuntos de prefixos**. Conjunto igual não é regra igual — ele passaria verde com esta divergência intacta, e um gate verde é lido como *"a regra está unificada"*. Sem este item registrado, o `B-051` fecharia deixando para trás a metade que importa: qual das duas severidades é a correta.
 status: triaged
+delivered_in: f05c7e7c9  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — nenhuma quebra nova; o custo é que o usuário recebe tratamentos opostos para a mesma violação, dependendo de por qual porta ele entrou.
 dod:
   - está decidido qual severidade é a correta para a regra — descarte silencioso ou rejeição
@@ -3793,41 +3803,6 @@ dod:
 > vigiado pelo gate. Este item — o eixo da **severidade** — segue aberto, e pela mesma razão do eixo
 > do conjunto: tornar o descarte silencioso da API explícito muda o resultado de deploys que hoje
 > sucedem. Continua sendo a única das três divergências em que nenhum lado é obviamente o certo.
-
-## B-157 — Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum   [ ]
-
-domain: engine-go
-repo: loopzero
-suggested_mode: review
-source: discover-review
-evidence: medido em 2026-08-18 ao trabalhar o B-068/B-069. `tools/loopzero-dockerfile-lint` tem `Dockerfile`, `go.mod`, testes e é rodado por quatro invocações `GOWORK=off go test ./...` em `taskfiles/{test,quality}.yml` — mas **nada o invoca**: nenhum código de produção emite o passo `dockerfile-lint` (só comentários que descrevem um `UserDockerfileStrategy` removido em T2.2), `LOOPZERO_DOCKERFILE_LINT_IMAGE` não é lida por nenhum Go, e `infra/scripts/local/k3d-cross-cluster-heal.sh:961` diz que o seeding da imagem foi removido porque *"those images are no longer used ... the BYO-Dockerfile lint path was deleted"*. Mesmo assim `infra/helmfile/values/dev-public/loopzero-api.yaml.gotmpl:121` continua setando a env var, com um comentário que descreve um passo de heal que não existe mais.
-why_now: a ferramenta é a metade viva de uma regra de segurança duplicada (`find_sec_004`, B-051/B-069), então ela parece ser a defesa que rejeita — e não é, porque ninguém a chama. Enquanto ela existir com imagem e config, a leitura de quem chegar é que a rejeição está ativa. É a forma inversa do padrão *declarado, testado, nunca ligado*: aqui está **desligado e ainda anunciado**.
-status: raw
-severity: média — nenhuma quebra; o custo é uma defesa que parece existir e não roda, e config viva apontando para imagem que ninguém publica.
-dod:
-  - está decidido se a ferramenta volta ao caminho de build ou sai da árvore
-  - se sair, saem junto a env var do values, os comentários que a descrevem como ativa e as invocações de teste
-  - se ficar, existe caminho que a invoque e um teste que prove a invocação
-> **Parcial 2026-08-19 — os comentários que a descreviam como ativa foram corrigidos.**
->
-> A segunda bala condiciona a limpeza à decisão ("se sair, saem junto…"), mas
-> **uma parte dela não depende da decisão**: os comentários que descrevem o linter
-> como invocado estão errados **em qualquer dos dois desfechos**, porque ele não é
-> invocado hoje.
->
-> Corrigidos cinco, todos em `buildplane/argo`, que descreviam
-> `UserDockerfileStrategy` no presente — um tipo removido em T2.2:
-> `workflow_builder.go:154`, `:174` (*"UserDockerfileStrategy invokes
-> loopzero-dockerfile-lint"*), `:432`, e `languages.go:37`. O de `languages.go:149`
-> ficou como está: ele **registra a remoção**, e é o único que estava certo.
->
-> Cada texto novo diz o que mudou e quando, em vez de apagar a história — quem
-> ler daqui a três meses precisa saber que houve dois caminhos e por que sobrou um.
->
-> As duas balas de decisão seguem abertas: se o linter volta ao caminho de build
-> ou sai da árvore, e a limpeza de `LOOPZERO_DOCKERFILE_LINT_IMAGE` e das invocações
-> de teste que vem com ela.
-
 
 ## B-070 — `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave   [x]
 
@@ -4359,6 +4334,7 @@ source: discover-review
 evidence: medido em 2026-08-12 na fatia slice-4. Quatro símbolos de `api/internal/db` atravessam a superfície pública de `services/deploycontracts` — `shared_contracts.go:207` (`WithLock(..., fn func(tx db.DBTX) error)`), `delivery.go:37` (`Activate(ctx, build *db.Build, ...)`), `delivery.go:55` (`TargetRelease *db.Release`) e `manifest_builder.go:23` (`Apps []db.BuildAppSpec`). **35 arquivos, em 10 pacotes, dependem do sink**, logo dependem transitivamente da persistência. Custo de remoção, contado: `WithLock` **34** call sites, `db.BuildAppSpec` **18**, `TargetRelease` **6**, `Activate(ctx` **5** — **63** no total (linhas fora de `_test.go` em `api/`, regra única; a primeira contagem citou 57 misturando três regras, e a revisão a desmentiu). Mais o alargamento da cerca `dbgeneratedboundary` para `api/internal/db`, que atingiria **71** arquivos (`services` 51, `cmd` 18, `routes` 2) sob a semântica do gate, que inclui `_test.go` de propósito — a DoD do `B-049` afirmava que isso era *"literalmente uma string"*, e a medição desmente.
 why_now: a fatia slice-4 travou o vazamento com o gate `domain-sink-purity`, mas travar não é fechar. Enquanto os 4 estiverem lá, os 35 dependentes carregam persistência que não pediram — e `WithLock` é o primitivo do environment-lock que a Regra Inquebrável 6 põe em toda mutação, então mexer nele exige o cleanroom que `cleanroom-up-live-test-mandate.md` torna obrigatório para validação LIVE.
 status: triaged
+delivered_in: a92dca92a  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 scope_reduced: 2026-08-12 pela fatia slice-6 — a bala de `db.DBTX` na camada de interface saiu deste item porque foi ENTREGUE. Resta: (a) os 4 tipos de persistencia + 3 de aplicacao na superficie de deploycontracts, e (b) alargar a cerca para `services` (51) e `cmd` (18). `server` e `routes` ja estao cercados.
 severity: média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde.
 dod:
@@ -8052,6 +8028,7 @@ severity: média — nada quebra hoje; o que fica preso são **duas** travas de 
 evidence: medido 2026-08-17 ao executar o `B-119`. `.github/workflows/build-publish.yml` **calcula** o digest e o usa: `steps.build.outputs.digest` aparece nas linhas 255 e 264, montando a referência que o cosign assina. Mas o bloco `workflow_call:` **não declara `outputs:`** — verificado por parse do próprio YAML. O valor existe dentro do workflow e morre nele. Consequência medida nos dois consumidores: os **sete** `charts/loopzero-*/values.yaml` não declaram `image.digest` (o `loopzero-common.image` cai para `tag: dev`), e `charts/loopzero-admission-policies/values.yaml:95` mantém `requireImageDigestEnforce: false` com o mesmo comentário de *"post-7d-soak"* que o gate carregava.
 why_now: o `B-119` acabou de separar as duas populações do gate e ligou a que o autor do chart conserta. A outra — os sete — só sai do aviso quando alguém emitir o valor, e a mensagem do próprio gate diz por que preenchê-lo à mão é pior que não preencher: *"um digest fixado à mão vira mentira na próxima publicação"*. Este item é o caminho declarado que a terceira bala do `B-119` exigia.
 status: triaged
+delivered_in: 6606ae063  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 dod:
   - `build-publish.yml` declara `outputs.digest` no `workflow_call`, e um consumidor o recebe
 > **Medido 2026-08-19 — confirmado, com consumidor identificado; a mudança é T2 e
@@ -8752,6 +8729,7 @@ why_now: eles estavam invisíveis porque `task lint` olhava 3 dos 9 módulos (`B
   Uma catraca que ninguém baixa vira carimbo; o gate imprime as melhorias justamente para
   que alguém recongele, mas nada obriga.
 status: triaged
+delivered_in: 65ab30a09  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: baixa — nada quebrado. O custo é que a ferramenta de qualidade é a menos verificada
   do repositório, e isso é desconfortável na exata medida em que ela julga todo o resto.
 dod:
@@ -9049,6 +9027,7 @@ why_now: |
   que não distingue "passou" de "não verifiquei". Aqui ele está no caminho por onde todo
   build do produto passa.
 status: triaged
+delivered_in: 53e8b1302  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 dod:
   - um passo cujo script sai não-zero faz o pod terminar não-zero, provado por teste
   - a asserção vale no shell do container (POSIX/ash), não só em bash
@@ -9254,4 +9233,40 @@ dod:
 > `Adding repo …` que o item observou vêm de dentro do próprio `helmfile template`.
 > Ou seja, a dependência de rede não está escrita em teste nenhum — ela é
 > herdada da ferramenta, o que explica por que ninguém a declarou.
+
+
+## B-157 — Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-18 ao trabalhar o B-068/B-069. `tools/loopzero-dockerfile-lint` tem `Dockerfile`, `go.mod`, testes e é rodado por quatro invocações `GOWORK=off go test ./...` em `taskfiles/{test,quality}.yml` — mas **nada o invoca**: nenhum código de produção emite o passo `dockerfile-lint` (só comentários que descrevem um `UserDockerfileStrategy` removido em T2.2), `LOOPZERO_DOCKERFILE_LINT_IMAGE` não é lida por nenhum Go, e `infra/scripts/local/k3d-cross-cluster-heal.sh:961` diz que o seeding da imagem foi removido porque *"those images are no longer used ... the BYO-Dockerfile lint path was deleted"*. Mesmo assim `infra/helmfile/values/dev-public/loopzero-api.yaml.gotmpl:121` continua setando a env var, com um comentário que descreve um passo de heal que não existe mais.
+why_now: a ferramenta é a metade viva de uma regra de segurança duplicada (`find_sec_004`, B-051/B-069), então ela parece ser a defesa que rejeita — e não é, porque ninguém a chama. Enquanto ela existir com imagem e config, a leitura de quem chegar é que a rejeição está ativa. É a forma inversa do padrão *declarado, testado, nunca ligado*: aqui está **desligado e ainda anunciado**.
+status: triaged
+delivered_in: 9a5595e02  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
+severity: média — nenhuma quebra; o custo é uma defesa que parece existir e não roda, e config viva apontando para imagem que ninguém publica.
+dod:
+  - está decidido se a ferramenta volta ao caminho de build ou sai da árvore
+  - se sair, saem junto a env var do values, os comentários que a descrevem como ativa e as invocações de teste
+  - se ficar, existe caminho que a invoque e um teste que prove a invocação
+> **Parcial 2026-08-19 — os comentários que a descreviam como ativa foram corrigidos.**
+>
+> A segunda bala condiciona a limpeza à decisão ("se sair, saem junto…"), mas
+> **uma parte dela não depende da decisão**: os comentários que descrevem o linter
+> como invocado estão errados **em qualquer dos dois desfechos**, porque ele não é
+> invocado hoje.
+>
+> Corrigidos cinco, todos em `buildplane/argo`, que descreviam
+> `UserDockerfileStrategy` no presente — um tipo removido em T2.2:
+> `workflow_builder.go:154`, `:174` (*"UserDockerfileStrategy invokes
+> loopzero-dockerfile-lint"*), `:432`, e `languages.go:37`. O de `languages.go:149`
+> ficou como está: ele **registra a remoção**, e é o único que estava certo.
+>
+> Cada texto novo diz o que mudou e quando, em vez de apagar a história — quem
+> ler daqui a três meses precisa saber que houve dois caminhos e por que sobrou um.
+>
+> As duas balas de decisão seguem abertas: se o linter volta ao caminho de build
+> ou sai da árvore, e a limpeza de `LOOPZERO_DOCKERFILE_LINT_IMAGE` e das invocações
+> de teste que vem com ela.
 
