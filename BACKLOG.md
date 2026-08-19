@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 33 · **In flight** 0 · **Closed** 131
+164 items — **Open** 31 · **In flight** 0 · **Closed** 133
 
-### Open (33)
+### Open (31)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -92,7 +92,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-094`](#b-094--a-metade-api-do-find_sec_004-guarda-um-campo-que-ninguém-popula----) | A metade API do `find_sec_004` guarda um campo que ninguém popula | `triaged` | média |
 | [`B-095`](#b-095--a-segunda-cerca-sobre-crs-loopzeroio-renderiza-em-lugar-nenhum----) | A segunda cerca sobre CRs `loopzero.io` renderiza em lugar nenhum | `triaged` | média |
 | [`B-098`](#b-098--duas-policies-do-openbao-são-declaradas-e-nunca-ligadas-a-role-nenhum----) | Duas policies do OpenBao são declaradas e nunca ligadas a role nenhum | `triaged` | média |
-| [`B-100`](#b-100--o-gate-de-contrato-trabalha-por-nome-de-tag-nos-dois-lados-e-chama-campo-homônimo-de-consumidor----) | O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor | `triaged` | média |
 | [`B-111`](#b-111--o-mesmo-controle-de-firewall-vive-em-três-repositórios-sem-dono-declarado----) | O mesmo controle de firewall vive em três repositórios sem dono declarado | `triaged` | média |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média |
 | [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média |
@@ -103,7 +102,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `triaged` | média |
 | [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `triaged` | média |
 | [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média |
-| [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados---x) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `triaged` | baixa |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `triaged` | — |
 | [`B-157`](#b-157--uma-ferramenta-com-imagem-config-e-testes-não-é-invocada-por-caminho-nenhum----) | Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum | `triaged` | média |
 | [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta |
@@ -112,7 +110,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (131)
+### Closed (133)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -197,6 +195,7 @@ _None._
 | [`B-096`](#b-096--o-chart-publicado-do-loopzero-api-renderiza-uma-sa-que-as-políticas-de-admissão-não-isentam---x) | O chart publicado do `loopzero-api` renderiza uma SA que as políticas de admissão não isentam | `shipped` | média |
 | [`B-097`](#b-097--o-cli-documenta-um-kubectl-patch-que-a-nova-cerca-nega---x) | O CLI documenta um `kubectl patch` que a nova cerca nega | `shipped` | baixa |
 | [`B-099`](#b-099--a-policy-corrigida-não-alcança-a-identidade-que-cria-a-chave-e-o-bootstrap-a-sobrescreve---x) | A policy corrigida não alcança a identidade que cria a chave, e o bootstrap a sobrescreve | `shipped` | alta |
+| [`B-100`](#b-100--o-gate-de-contrato-trabalha-por-nome-de-tag-nos-dois-lados-e-chama-campo-homônimo-de-consumidor---x) | O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor | `shipped` | média |
 | [`B-101`](#b-101--quatro-testes-herméticos-de-seed-queimam-390s-de-relógio-e-é-isso-que-mantém-a-suíte-fora-do-push---x) | Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push | `shipped` | média |
 | [`B-102`](#b-102--task---dry-imprime-bloco-multi-linha-sem-avaliar-o-controle-de-fluxo-e-é-nisso-que-uma-asserção-de-segurança-se-apoia---x) | `task --dry` imprime bloco multi-linha sem avaliar o controle de fluxo, e é nisso que uma asserção de segurança se apoia | `shipped` | média |
 | [`B-103`](#b-103--43-itens-estão-raw-carregando-evidência-medida-e-o-loop-os-trata-como-não-medidos---x) | 43 itens estão `raw` carregando evidência medida, e o loop os trata como não medidos | `shipped` | média |
@@ -235,6 +234,7 @@ _None._
 | [`B-144`](#b-144--o-contrato-manda-o-backlog-viver-no-umbrella-e-nenhum-projeto-faz-isso---x) | O contrato manda o backlog viver no umbrella, e nenhum projeto faz isso | `shipped` | — |
 | [`B-145`](#b-145--dez-itens-moram-no-backlog-do-projeto-errado---x) | Dez itens moram no backlog do projeto errado | `shipped` | — |
 | [`B-148`](#b-148--155-arquivos-go-não-passam-pelo-gofmt-e-nenhum-gate-percebe---x) | 155 arquivos Go não passam pelo `gofmt`, e nenhum gate percebe | `shipped` | baixa |
+| [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados---x) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `shipped` | baixa |
 | [`B-150`](#b-150--o-webhook-apontava-para-um-hostname-que-o-repositório-removeu-de-propósito---x) | O webhook apontava para um hostname que o repositório removeu de propósito | `shipped` | — |
 | [`B-151`](#b-151--o-destino-do-webhook-atravessa-dois-repositórios-e-ninguém-decidiu-qual---x) | O destino do webhook atravessa dois repositórios e ninguém decidiu qual | `killed` | — |
 | [`B-152`](#b-152--o-primeiro-build-do-fixture-falha-em-manifestos-e-a-mensagem-não-diz-qual-domínio---x) | O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio | `shipped` | — |
@@ -6322,7 +6322,7 @@ dod:
 > Preso por `TestOpenBaoInitAuth_NoScriptWritesAPolicyTheChartOwns`, que reprova se qualquer shell sob
 > `infra/` voltar a escrever policy. Mutante verificado.
 
-## B-100 — O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor   [ ]
+## B-100 — O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor   [x]
 
 domain: engine-go
 repo: loopzero
@@ -6330,7 +6330,34 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-13, quando o gate bloqueou o push da fatia 19. Dois limites, ambos por trabalhar com **nome** em vez de referência. (1) `cmd/loopzero-ops/internal/quality/contractconsumers/check.go:212` — `tagExistsAt` pergunta se a tag existe em **qualquer** struct do conjunto rastreado. `api/internal/routes/repositories/repositories.go:105,117` declara `json:"repo"` duas vezes, então remover de uma é invisível. Coberto pelo teste `TestCollectDroppedJSONTags_ADuplicateTagMasksTheDrop`, que documenta o limite e diz para atualizá-lo — não apagá-lo — quando fechar. (2) `check.go:242` — `grepConsumersForTag` casa `\.<tag>\b`, o que pega **campo de struct homônimo** e **literal de string**: na ocorrência real, dos 9 "consumidores" de `repo`, 8 eram `p.repo.RepoURL(...)` (`p.repo` é `*gitclient.GiteaRepoManager` — `api/internal/gitops/gitea_pusher.go:45`) e 1 era `attribute.String("loopzero.github.repo", ...)`. Zero liam a tag.
 why_now: é o **mesmo defeito** que o review da fatia 19 achou na minha tabela de acoplamento — contar ocorrência de nome como referência — e nesta sessão ele apareceu de forma independente em dois lugares. Aqui ele custa: o gate bloqueou um push que não mudava contrato nenhum, e um gate que erra assim é um gate que as pessoas aprendem a contornar.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19 — a DoD (que e' uma bala so') esta' cumprida, e a "segunda metade"
+> da prosa tem resolucao medida.**
+>
+> **A bala:** a existencia da tag passou a ser verificada por CONTAGEM de declaracoes, e o
+> teste que documentava o mascaramento foi reescrito exigindo o contrario — o antigo
+> `..._ADuplicateTagMasksTheDrop` nao existe mais (zero mencoes a "mask" no pacote), e no
+> lugar esta' `TestCollectDroppedJSONTags_UmaDeDuasDeclaracoes...`. **15 testes passam.**
+>
+> **A segunda metade da prosa — `grepConsumersForTag` contar campo homonimo como
+> consumidor — foi medida hoje e o quadro e' mais grave e mais simples do que o item
+> supunha:** das tres raizes de consumidor declaradas, **duas nao existem** neste
+> repositorio (`cloud/dashboard/src/` foi para `../loopzero-cloud` no M4 e `cli/src/` para
+> `../loopzero-cli` no M2), e `git grep` **ignora em silencio** pathspec que nao casa nada.
+>
+> Sobra `api/internal/`, e ali `.<tag>` so' pode ser seletor de campo Go — onde remover o
+> campo **quebra a compilacao**. Ou seja: a unica raiz viva e' aquela cujos consumidores ja'
+> tem outra guarda, e quem o gate existia para pegar — o consumidor de FIO, que le' pelo
+> nome do JSON e que nenhum compilador ve' — mora nas duas que sumiram. **O gate nao
+> consegue produzir um verdadeiro positivo aqui**, e por isso os 9 "consumidores" medidos
+> eram 8 acessos a campo Go e 1 literal.
+>
+> O conserto que fiz e' tornar a perda VISIVEL (`MissingRoots` + `AVISO — N de M raizes nao
+> foram varridas`, calculado antes do retorno de erro do git, porque e' no caminho de falha
+> que ninguem olha). Para onde apontar — repos irmaos, a tarefa `quality:contract:cross-repo`
+> que ja' existe, ou aposentar a metade de consumidor — e' decisao de desenho, nao
+> consequencia da medicao.
 
 > **Medido 2026-08-19 — a segunda metade tem um defeito maior por baixo, e uma das
 > suas balas parte de premissa falsa.**
@@ -9046,7 +9073,36 @@ why_now: eles estavam invisíveis porque `task lint` olhava 3 dos 9 módulos (`B
   bloco, 221, está no `cmd/loopzero-ops`: o binário que executa os 130 gates deste repositório.
   Uma catraca que ninguém baixa vira carimbo; o gate imprime as melhorias justamente para
   que alguém recongele, mas nada obriga.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19 — as duas balas, e a primeira pela via de CLASSIFICAR, nao de
+> reduzir.**
+>
+> **Bala 2 — `gofmt` chega a zero e a linha de base foi recongelada.** `cmd/loopzero-ops` esta'
+> em **0 arquivos fora de formato**. E dois modulos MELHORARAM hoje: `api` 59 -> 58 e
+> `infra/tests` 52 -> 51; a catraca foi recongelada na melhora.
+>
+> **Bala 1 — os 221 de `cmd/loopzero-ops` classificados, com o motivo medido:**
+>
+> | linter | n | o que sao |
+> |---|---:|---|
+> | `gosec` G304 | 89 | leitura de arquivo com caminho em variavel. E' o que um binario de GATES faz: recebe a raiz do repo e le' a arvore |
+> | `gosec` G204 | 45 | subprocesso com argumento em variavel — `helm`, `git`, `task`, `go`. Idem |
+> | `gosec` G101 | 19 | "credencial fixa". Medidos os 19: a maioria sao **nomes e caminhos** — `secretWrapperPath = "api/internal/db/store/secret_wrapper.go"`, `argocdInitialAdminSecret`, `argocdRepoCredsTypeLabel`. O gosec casa a PALAVRA `secret` no identificador |
+> | `staticcheck` | 22 | estilo e simplificacao |
+> | `errorlint` | 16 | `%v` onde caberia `%w` |
+> | `errcheck` | 9 | retorno de erro ignorado |
+> | `gosec` G306/G122/G104 | 14 | permissao de arquivo, e afins |
+> | `unused` | 2 | |
+>
+> **134 dos 221 (61%) sao G304+G204** — inerentes ao que a ferramenta e': ela le' a arvore
+> e roda ferramentas externas. Nao sao divida; sao a descricao do trabalho dela.
+>
+> **Duas excecoes que NAO dispenso, e ficam nomeadas em vez de somidas na estatistica:**
+> `pgDatabaseURLDefault` carrega `loopzero-dev-password` (o override deterministico de standalone,
+> documentado no `CLAUDE.md`) e `adminSeedPassword` e' uma senha literal de seed local. As
+> duas sao de ambiente local, mas sao literais de verdade — mexer nelas e' manejo de
+> credencial, gatilho **T2**, e fica registrado aqui em vez de ser classificado como ruido.
 delivered_in: 65ab30a09  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: baixa — nada quebrado. O custo é que a ferramenta de qualidade é a menos verificada
   do repositório, e isso é desconfortável na exata medida em que ela julga todo o resto.
