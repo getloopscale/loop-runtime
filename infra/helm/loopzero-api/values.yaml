@@ -115,6 +115,22 @@ kubeContexts:
 # of static token env var. Disabled by default (vault stack opt-in per env).
 vault:
   enabled: false
+  # TOPOLOGIA (B-064): este nome DNS parece intra-cluster e nem sempre e'.
+  # Sob o Jeito A (mandato INQUEBRAVEL 2026-06-19, `.claude/rules/cleanroom-up-live-test-mandate.md`),
+  # o OpenBao roda num cluster SEPARADO (`loopzero-secrets`), e instala-lo no core
+  # e' violacao de topologia em qualquer tier. Mesmo assim o literal abaixo
+  # continua sendo o nome intra-cluster, e a diferenca vive na RESOLUCAO: o
+  # CoreDNS do cluster core reescreve este nome para o NodePort do
+  # `loopzero-secrets` (ver `infra/helmfile/values/dev-public/loopzero-api.yaml.gotmpl:69-76`).
+  #
+  # O literal e' deliberado e NAO deve ser trocado pelo endereco real: o
+  # certificado do OpenBao tem SAN para ESTE nome, entao apontar direto para o
+  # NodePort quebraria a verificacao TLS (EC-2 do plano dev-public-cross-cluster-secrets).
+  # Trocar o endereco e' mudanca T2 e exige reunao antes do codigo
+  # (`.claude/rules/pre-release-governance.md`).
+  #
+  # Numa topologia de cluster unico (standalone-multi) o mesmo literal resolve
+  # normalmente, sem reescrita — por isso nao ha' split por ambiente.
   addr: "https://openbao.secrets-system.svc.cluster.local:8200"
   authMount: "k8s-core"
   role: "loopzero-api"

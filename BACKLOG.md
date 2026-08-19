@@ -3451,6 +3451,36 @@ dod:
   - está decidido se o `role_id` deve viver no values do control plane ou vir junto do `secret_id`
   - a topologia de cluster separado é legível a partir do chart, sem precisar do CoreDNS para descobri-la
 
+> **Medido 2026-08-18. Bala 2 já estava resolvida; balas 1 e 3 entregues na forma
+> que a medição permite; uma verificação ficou fora do meu alcance nesta sessão.**
+>
+> **Bala 2 — já decidida, e escrita.** O item procurou no values e a decisão vive
+> no template: `infra/helm/loopzero-api/templates/deployment.yaml:336-341` diz que
+> *"AppRole secret_id is the only OpenBao credential that MUST come from a K8s
+> Secret"* e que os quatro env não-sensíveis — incluindo `VAULT_ROLE_ID` — fluem
+> como literais, citando o plano `2026-06-10-j22-openbao-transit-eso-sync` e a
+> regra canônica `feedback_secret_canonical_no_hardcode`. Nada a decidir.
+>
+> **Bala 1 — refutada na forma literal.** "Tornar o endereço explícito no chart"
+> significaria apontar para o endereço real do cluster `loopzero-secrets`. O
+> `gotmpl:69-76` registra por que não: o certificado do OpenBao tem **SAN para o
+> nome intra-cluster**, então apontar para o NodePort quebraria a verificação TLS
+> (EC-2). O literal é a escolha, não o descuido. Trocá-lo é mudança **T2** e exige
+> reunião antes do código.
+>
+> **Bala 3 — entregue.** `infra/helm/loopzero-api/values.yaml` passou a declarar, no
+> próprio bloco `vault`, que o nome pode ser reescrito pelo CoreDNS, que o OpenBao
+> roda em cluster separado sob o Jeito A, por que o literal é deliberado (o SAN) e
+> onde a reescrita vive. A topologia deixou de exigir o CoreDNS para ser
+> descoberta. Chart renderiza e passa `helm lint`.
+>
+> **Bloqueio de permissão, não contornado.** Existe
+> `infra/tests/charts/cross_cluster_secrets_test.go`, e o diretório
+> `infra/tests/charts/` está **negado por permissão nesta sessão** — Bash e leitura
+> direta recusam. Não consigo medir se esse teste já verifica esta topologia, então
+> **não afirmo que a verificação falta**: afirmar seria inventar a lacuna. Item
+> segue `triaged` por isso, e não por trabalho pendente conhecido.
+
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
 ## B-065 — Um contexto delimitado vazio está pré-aprovado no DAG congelado   [ ]
