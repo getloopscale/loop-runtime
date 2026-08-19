@@ -21,6 +21,11 @@ import (
 
 	previewsvc "github.com/getloopscale/loopzero/api/internal/services/preview"
 
+	// Alias porque este arquivo importa TAMBEM `api/internal/placement`, e os
+	// dois pacotes se chamam `placement`. A desambiguacao vive aqui, no unico
+	// arquivo que precisa dela, em vez de ficar assada no nome do pacote para
+	// todo mundo (B-057). Medido: dos 21 arquivos que importam um dos dois,
+	// so este importa os dois.
 	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"

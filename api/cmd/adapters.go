@@ -10,7 +10,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
-	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
+	"github.com/getloopscale/loopzero/api/internal/services/placement"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
@@ -99,22 +99,22 @@ func buildAdminEvictor(cfg config.Config, dbAdapter *db.PgxAdapter) admin.Tenant
 			"error", err.Error(),
 			"consequence", "operators must run tools/admin-evict-tenants.sh for K8s cleanup",
 		)
-		return &tenantEvictorRouteAdapter{Inner: placementsvc.NewTenantEvictorWithDB(store, dbDeleter)}
+		return &tenantEvictorRouteAdapter{Inner: placement.NewTenantEvictorWithDB(store, dbDeleter)}
 	}
-	return &tenantEvictorRouteAdapter{Inner: placementsvc.NewTenantEvictorFull(
+	return &tenantEvictorRouteAdapter{Inner: placement.NewTenantEvictorFull(
 		store,
 		dbDeleter,
 		&adapters.TenantK8sEvictorAdapter{Evictor: k8sEv},
 	)}
 }
 
-// tenantEvictorRouteAdapter exposes *placementsvc.TenantEvictor via the
+// tenantEvictorRouteAdapter exposes *placement.TenantEvictor via the
 // routes.TenantEvictor interface. The concrete type's pointer-receiver
 // methods already satisfy the interface — this wrapper only exists to make
 // that relationship explicit (and would allow future per-route concerns
 // like logging/tracing to be layered in without touching services).
 type tenantEvictorRouteAdapter struct {
-	Inner *placementsvc.TenantEvictor
+	Inner *placement.TenantEvictor
 }
 
 func (a *tenantEvictorRouteAdapter) MatchTenants(ctx context.Context, pattern string, ids []string) ([]string, error) {

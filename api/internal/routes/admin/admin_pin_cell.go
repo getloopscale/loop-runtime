@@ -34,7 +34,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
-	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
+	"github.com/getloopscale/loopzero/api/internal/services/placement"
 )
 
 // AdminPinCellInput is the body for POST /api/v1/admin/tenants/pin.
@@ -136,13 +136,13 @@ func AdminPinCellHandler(pinner CellPinner, audit middleware.AuditWriter) http.H
 			status := http.StatusInternalServerError
 			code := "internal"
 			switch {
-			case errors.Is(err, placementsvc.ErrTenantNotFound):
+			case errors.Is(err, placement.ErrTenantNotFound):
 				status = http.StatusNotFound
 				code = "tenant_not_found"
-			case errors.Is(err, placementsvc.ErrCellNotFound):
+			case errors.Is(err, placement.ErrCellNotFound):
 				status = http.StatusNotFound
 				code = "cell_not_found"
-			case errors.Is(err, placementsvc.ErrCellNotPinnable):
+			case errors.Is(err, placement.ErrCellNotPinnable):
 				status = http.StatusConflict
 				code = "cell_not_pinnable"
 			case errors.Is(err, build.ErrCellAtCapacity):

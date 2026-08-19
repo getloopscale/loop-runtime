@@ -6,7 +6,7 @@
 // a real dynamic.Interface; these tests use the dynamic-fake builder to
 // exercise the patch path without a real K8s cluster.
 
-package placementsvc
+package placement
 
 import (
 	"context"

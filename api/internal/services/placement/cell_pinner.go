@@ -13,8 +13,14 @@
 //
 // Returns previous cell_id so callers can rollback (`pin tenant cell-prev`).
 
-// Package placementsvc is the cell-placement bounded context. Name avoids collision with internal/placement. M9 Step 6.
-package placementsvc
+// Package placement e' o contexto delimitado de colocacao de tenant em cell.
+//
+// Chamava-se `placementsvc`, e o sufixo existia para evitar colisao com
+// `api/internal/placement`. Medido em 2026-08-19 (B-057): dos 21 arquivos que
+// importam um dos dois, apenas UM importa os dois — a raiz de composicao, que
+// agora carrega o alias. O nome do pacote parou de impor a 18 consumidores uma
+// desambiguacao de que um arquivo precisava.. M9 Step 6.
+package placement
 
 import (
 	"context"

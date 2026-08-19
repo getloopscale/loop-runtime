@@ -3101,6 +3101,22 @@ dod:
   - os 49 alias re-exports são deletados — hoje eles fazem a porta e o consumidor serem a mesma linha
   - `domainsvc` e `placementsvc` voltam a ter nome de pacote igual ao do diretório
   - a propriedade de importar só stdlib é preservada, e verificada
+> **Metade da bala 3 entregue 2026-08-19 — a barata, e a medição é que disse qual era.**
+>
+> `placementsvc` volta a se chamar **`placement`**, igual ao diretório. O sufixo
+> existia para evitar colisão com `api/internal/placement`, e a medição mostrou o
+> tamanho real dessa colisão: dos **21** arquivos que importam um dos dois,
+> **apenas 1** importa os dois — `api/cmd/setup_server.go`, a raiz de composição.
+>
+> A desambiguação passou para lá, como alias, com o motivo escrito ao lado. É a
+> troca certa: o nome do pacote deixa de carregar, para todos os 18 consumidores,
+> um sufixo que existia por causa de **um** arquivo.
+>
+> **A outra metade fica, e é a cara:** `domainsvc` só pode virar `domain` depois
+> que `api/internal/domain` virar `ports` (bala 1), e essa família tem **114**
+> referências. As duas se movem juntas ou nenhuma — é a fatia acoplada que este
+> item registra desde o começo.
+
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
