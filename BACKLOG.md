@@ -8052,6 +8052,34 @@ dod:
   - está medido se mais alguma coisa foi renomeada por substituição cega nos três commits — o cabeçalho foi o que apareceu, não necessariamente o que existe
   - `pre-release-governance.md` ganha o que faltou: hoje a classificação T2/T3 é honor-system e o `governance-gate.py` cobre arquivos de produção; um `refactor` sobre schema e identidade de cluster passou entre os dois
 
+> **Bala 2 medida 2026-08-19 — e a primeira coisa que a medição achou foi que as
+> citações do item não resolvem.**
+>
+> Os três SHAs (`0d9567745`, `fbb246430`, `7a4740dc3`) **não existem** neste
+> repositório. Os commits existem com outros hashes — `148c04104` (fusão das
+> identidades), `a20ec802c`/`92d1674fc` (tabela 1:1) e `4d7a6b97a` (o conserto do
+> cabeçalho) — porque a história de `workspace` é reescrita antes da promoção. Não
+> é defeito do item; é o custo de citar hash de branch reescrita.
+>
+> **Varredura por resíduo de substituição cega, nas quatro formas que o item
+> descreve:**
+>
+> | termo | arquivos | veredito |
+> |---|---|---|
+> | `cell-default` | 7 | **não é resíduo** — no script é o comentário corretivo que documenta o episódio; o resto são testes da própria migração |
+> | `runtime-2` | 19 (infra) | 15 só em comentário; **4 com ocorrência viva** |
+> | `Cell-2` / `cell-2` | 10 | comentários e testes |
+>
+> **O único achado com forma de defeito:** `infra/helmfile/scripts/wire-clusters.sh:71-73`
+> passa `runtime-2` como **nome de cluster** para `scoped-kubeconfig.sh`, que resolve
+> um contêiner docker a partir desse nome — e `k3d-loopzero-runtime-2` não existe. Mas o
+> bloco é guardado por `LOOPZERO_RUNTIME2_KUBECONFIG`, e **nada no repositório define
+> essa variável** (zero referências fora do próprio script). É ramo morto, não
+> caminho quebrado — e a distinção é o que separa um achado de um alarme.
+>
+> Balas 1 e 3 seguem abertas: registro T3 retroativo e mudança em
+> `pre-release-governance.md` são atos de governança, não medição.
+
 > Registrado 2026-08-17 ao medir o `B-001`. **Não é acusação de má-fé**: os commits são bem escritos, o código resultante é o desenho certo (1:1), e a fusão é exatamente o que o CTO decidiu em 2026-08-09. O achado é que a decisão certa chegou por um caminho que a governança não viu.
 
 ## B-137 — A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore   [ ]
