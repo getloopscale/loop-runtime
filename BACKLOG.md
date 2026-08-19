@@ -4864,6 +4864,28 @@ severity: média — não indica defeito de produto; indica um gate em que não 
 dod:
   - a causa da intermitência está medida (render em paralelo? cache do helm? dependência de ordem entre os 15 sub-testes?)
   - o teste passa em 10 execuções consecutivas do `quality:gates` completo, ou é corrigido/removido
+> **Medido 2026-08-19 — duas hipóteses descartadas, causa ainda não encontrada, e
+> o teste não pode ser lido daqui.**
+>
+> **Bloqueio:** `infra/tests/secrets/` está **negado por permissão nesta sessão**
+> (mesma classe de `infra/tests/charts/`, ver B-064). Não consigo ler o script para
+> diagnosticar por dentro; o que segue foi medido por fora, observando comportamento.
+>
+> | hipótese | medição | veredito |
+> |---|---|---|
+> | o teste é instável em si | **5/5 exit 0** rodando isolado | descartada — confirma o que o item já observara |
+> | corrida entre duas renderizações do mesmo chart | `quality:all` roda `hermetic`, `gates` e `contract` como **deps paralelos**, e os dois primeiros renderizam `infra/helm/loopzero-api` (o gate Go `loopzeroapiopenbao/check.go:75` e o script). Rodei **20 pares concorrentes**: 0 falhas | **não reproduz** |
+> | vendoring de dependência do chart | `infra/helm/loopzero-api/Chart.yaml` declara **0 dependencies** e não há `charts/` | descartada — não há o estado mutável compartilhado óbvio |
+>
+> A observação que segue de pé e **muda o alvo**: o item diz que a falha apareceu
+> em `task quality:gates`, cujos `cmds` são **sequenciais**. Quem roda em paralelo
+> é `quality:all` — e é `quality:all` que o `delivery-gate` executa antes de todo
+> push. Se a falha veio de lá, o alvo da investigação é o paralelismo entre as três
+> pernas, não o script.
+>
+> Quatro execuções completas de `quality:all` foram disparadas para medir a
+> frequência. Sem a leitura do script, corrigir seria adivinhar.
+
   - se for dependência de ordem, ela é eliminada e não contornada com retry
 
 > Registrado 2026-08-12 durante a fatia slice-5. Não foi causado por ela: provado com a mudança em
