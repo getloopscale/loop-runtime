@@ -71,14 +71,14 @@ const nodeInstall = `RUN set -eu; \
 	if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile; \
 	elif [ -f yarn.lock ]; then corepack enable && yarn install --immutable; \
 	elif [ -f package-lock.json ]; then npm ci; \
-	else echo "loopzero: no lockfile (pnpm-lock.yaml / yarn.lock / package-lock.json) found — a committed lockfile is required for reproducible builds" >&2; exit 1; fi`
+	else echo "loopzero: no lockfile (pnpm-lock.yaml / yarn.lock / package-lock.json) found in $(pwd) — dependencies are installed from the repository root, not from the app directory. Commit one of these files at the root, or move the app so its lockfile is there" >&2; exit 1; fi`
 
 // pythonInstall — frozen install with build-time manager detection (C2).
 const pythonInstall = `RUN set -eu; \
 	if [ -f poetry.lock ]; then pip install --no-cache-dir poetry && poetry install --no-root --only main; \
 	elif [ -f uv.lock ]; then pip install --no-cache-dir uv && uv sync --frozen; \
 	elif [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; \
-	else echo "loopzero: no lockfile (requirements.txt / poetry.lock / uv.lock) found — required for reproducible builds" >&2; exit 1; fi`
+	else echo "loopzero: no lockfile (requirements.txt / poetry.lock / uv.lock) found in $(pwd) — dependencies are installed from the repository root, not from the app directory. Commit one of these files at the root, or move the app so its lockfile is there" >&2; exit 1; fi`
 
 // nodeBuild runs the project's build script if one is declared, in the target
 // app directory (monorepo-aware, EC-1). Pure build-time shell — no API-side

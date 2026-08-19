@@ -9029,6 +9029,29 @@ dod:
   - a mensagem distingue "campo ausente" de "valor nao suportado" — sao erros diferentes
   - o `loopzero.yaml` do repositorio de fixture atualizado para `runtime`, e um push real chega ao construtor com runtime nao vazio
 
+> **Bala 1 entregue 2026-08-19. As balas 2 e 3 são desenho de pipeline, não mensagem.**
+>
+> As duas mensagens (node e python) passaram a nomear **onde** procuraram —
+> `found in $(pwd)`, avaliado no próprio build — e a dizer de onde as dependências
+> são instaladas: *"dependencies are installed from the repository root, not from
+> the app directory. Commit one of these files at the root, or move the app so its
+> lockfile is there"*. A lista de arquivos procurados continua, e há teste para
+> isso: saber o diretório sem saber os arquivos não ajuda ninguém.
+>
+> Antes, um usuário com `api/requirements.txt` **commitado** lia "no lockfile
+> found" e não tinha como saber que a busca acontecera na raiz.
+>
+> **Balas 2 e 3 ficam abertas, e não por esforço:** decidir se lockfile por app é
+> suportado muda **onde o install roda**, o que altera o Dockerfile gerado para
+> todo monorepo. O comentário `EC-1` da própria função registra a escolha atual
+> como deliberada. Mudá-la é desenho de pipeline de build, com efeito em cache de
+> camada e em toda imagem produzida — fatia própria, não linha de mensagem.
+>
+> **Nota de cadeia:** este item confirma, por medição de outrem, a hipótese que
+> registrei no `B-152` — ele começa com *"depois que `generate-dockerfile` passou a
+> funcionar de verdade"*, que é o efeito do conserto do `B-153`. A cadeia avançou
+> um elo.
+
 ## B-155 — O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou   [ ]
 
 domain: engine-go
