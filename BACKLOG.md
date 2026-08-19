@@ -1364,6 +1364,21 @@ source: discover-live-test
 evidence: medido em 2026-08-10, por acidente. Ao sincronizar o Caddyfile canônico por cima do servidor, o `loopzero-cloud` ficou sem upstream alcançável — e **`/engine/*` e `/v1/*` devolveram 502 juntos**, embora o `loopzero-api` estivesse saudável o tempo todo (`curl http://localhost:13001/api/v1/health` → 200 durante toda a janela). A razão está em `loopzero-cloud/cmd/main.go:1678`: `r.Route("/engine")` tira o prefixo, aplica `requireJWT` e repassa ao motor. Ou seja, o painel é o proxy autenticador do motor, e cair leva os dois caminhos junto.
 why_now: o arranjo é deliberado e tem valor real — `r.Use(requireJWT)` no grupo `/engine` é o que mantém o `loopzero-api` **nunca exposto diretamente**: quem autentica é o plano de controle, e o motor só recebe o que já passou por ele. O que não está registrado é o custo: o CLI, que fala com o motor e não com o painel, fica sem deploy quando um componente de dashboard cai. Nenhum incidente até hoje veio disso — a medição veio de um acidente meu, não de uma queda real.
 status: triaged
+
+> **Quarta bala JA' ESTAVA fechada — conferido 2026-08-19, para ninguem refazer.**
+>
+> Ela pede que o `loopzero-ops leak live` distinga "o motor esta' fora" de "o painel esta'
+> fora". Existe: `leak.ClassifyUpstream(engineStatus, dashboardStatus)` em
+> `cmd/loopzero-ops/internal/leak/upstream.go`, **ligada** em `cmd/loopzero-ops/leak_subcmd.go:235`
+> com comentario citando este item, e coberta por 3 testes que passam.
+>
+> Ela so' fala quando ha' algo a separar — dois 502 iguais viram uma linha `UPSTREAM`
+> dizendo qual caiu; em dia normal e' silencio. Foi por isso que a sonda que rodei hoje
+> no B-025 nao mostrou a linha: as duas superficies estavam de pe'.
+>
+> As tres primeiras balas dependem da **decisao** — manter a dependencia do painel ou dar
+> rota propria autenticada ao motor — e uma delas pede medicao de indisponibilidade do
+> `loopzero-cloud` no ultimo trimestre, que esta sessao nao tem como levantar.
 severity: baixa hoje, alta no dia em que o `loopzero-cloud` cair sozinho em produção. O `B-002` registra que o cluster central é SPOF; este item é mais estreito e mais provável: não é o cluster que cai, é **um** processo, e ele carrega uma jornada (deploy) que não é dele.
 progress_2026_08_18: |
   **A quarta bala esta fechada; as tres primeiras seguem abertas, e de proposito.**
