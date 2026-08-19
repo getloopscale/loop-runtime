@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 42 · **In flight** 0 · **Closed** 122
+164 items — **Open** 41 · **In flight** 0 · **Closed** 123
 
-### Open (42)
+### Open (41)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -107,7 +107,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média |
 | [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados---x) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `triaged` | baixa |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `triaged` | — |
-| [`B-155`](#b-155--o-lockfile-so-e-procurado-na-raiz-do-bundle-e-a-mensagem-nao-diz-onde-procurou----) | O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou | `triaged` | — |
 | [`B-156`](#b-156--um-teste-de-chart-depende-de-rede-e-reprova-o-portao-de-entrega-sob-carga----) | Um teste de chart depende de rede e reprova o portao de entrega sob carga | `triaged` | — |
 | [`B-157`](#b-157--uma-ferramenta-com-imagem-config-e-testes-não-é-invocada-por-caminho-nenhum----) | Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum | `triaged` | média |
 | [`B-158`](#b-158--o-registro-que-o-loop-inteiro-le-nao-e-validado-por-nada----) | O registro que o loop inteiro le' nao e' validado por nada | `triaged` | — |
@@ -121,7 +120,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (122)
+### Closed (123)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -246,6 +245,7 @@ _None._
 | [`B-151`](#b-151--o-destino-do-webhook-atravessa-dois-repositórios-e-ninguém-decidiu-qual---x) | O destino do webhook atravessa dois repositórios e ninguém decidiu qual | `killed` | — |
 | [`B-152`](#b-152--o-primeiro-build-do-fixture-falha-em-manifestos-e-a-mensagem-não-diz-qual-domínio---x) | O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio | `shipped` | — |
 | [`B-153`](#b-153--seis-passos-do-build-não-conseguem-falhar-o-exit-1-deles-é-engolido-por-um-tee---x) | Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee` | `shipped` | — |
+| [`B-155`](#b-155--o-lockfile-so-e-procurado-na-raiz-do-bundle-e-a-mensagem-nao-diz-onde-procurou---x) | O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou | `shipped` | — |
 | [`B-160`](#b-160--a-guarda-de-comandos-junta-pedacos-de-comandos-diferentes-e-bloqueia-o-inocente---x) | A guarda de comandos junta pedacos de comandos diferentes e bloqueia o inocente | `shipped` | media |
 
 <!-- BACKLOG-INDEX:END -->
@@ -9438,7 +9438,7 @@ dod:
 > funcionar de verdade"*, que é o efeito do conserto do `B-153`. A cadeia avançou
 > um elo.
 
-## B-155 — O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou   [ ]
+## B-155 — O lockfile so e procurado na raiz do bundle, e a mensagem nao diz onde procurou   [x]
 
 domain: engine-go
 repo: loopzero
@@ -9479,7 +9479,31 @@ why_now: |
   entao a mensagem precisa dizer isso — ou o install deveria entrar no `path` do app, e e
   defeito de verdade. O comentario EC-1 sugere a primeira, mas nenhuma documentacao
   consultada declara a exigencia ao usuario.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19 — as tres balas, e a do meio fecha REGISTRANDO uma decisao que o
+> codigo ja' tinha tomado.**
+>
+> **Bala 1 — a mensagem nomeia o diretorio e o que fazer.** `found in $(pwd)` +
+> *"dependencies are installed from the repository root, not from the app directory.
+> Commit one of these files at the root, or move the app so its lockfile is there"*.
+>
+> **Bala 2 — o lockfile por app NAO e' suportado, e agora esta' escrito.** A instalacao
+> roda no WORKDIR da imagem, que e' a raiz; quem e' monorepo-aware e' a etapa de BUILD
+> (`nodeBuild(appDir)`), nao a de instalacao. Isso ja' era verdade no codigo e so' existia
+> implicito. `TestApenasOBuildEMonorepoAwareNaoAInstalacao` fixa os dois lados: exige que
+> o build cite o diretorio do app e que a instalacao **nao** o cite — se um dia citar, a
+> mensagem que promete a raiz virou mentira, e o teste manda revisitar este item.
+>
+> **Bala 3 — um app com lockfile so' no subdiretorio REPROVA dizendo por que.** Medido:
+> os dois ramos terminam em `>&2; exit 1`. `TestLockfileAusenteReprovaEmVezDeSoAvisar`
+> passa a exigir isso — sem ele, a instalacao seguiria sem dependencias e a falha
+> apareceria depois, noutro passo, com causa aparente errada. E' a familia do **B-153**.
+>
+> **Escrevi um arquivo de teste novo e o apaguei.** Ja' existia
+> `lockfile_msg_test.go` cobrindo `$(pwd)` e `repository root`; um segundo arquivo teria
+> duplicado o contrato em duas casas. As asserçoes novas foram para o arquivo que ja'
+> era a casa dele.
 dod:
   - a mensagem nomeia o diretorio onde procurou e o que fazer
   - decidido e registrado se o lockfile por app e suportado; se for, o install roda no `path`
