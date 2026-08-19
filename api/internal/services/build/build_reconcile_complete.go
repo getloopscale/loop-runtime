@@ -6,6 +6,7 @@ package build
 import (
 	"context"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/scrub"
 	"strconv"
 	"time"
 
@@ -88,7 +89,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	})
 	if err != nil {
 		r.logger.Error("reconcile loop: manifest building failed", "build_id", build.ID, "error", err)
-		r.failBuild(ctx, build, "Failed to build manifests with custom domains")
+		r.failBuild(ctx, build, motivoDaFalhaDeManifestos(err))
 		return
 	}
 
@@ -356,4 +357,23 @@ func emitSigstoreObservations(status *deploycontracts.WorkflowStatus, appName, r
 
 	// rekor_url null/populated SLI counter.
 	metrics.ObserveRekorURLPersist(rekorURL)
+}
+
+// motivoDaFalhaDeManifestos monta a mensagem que o usuario le' quando o estagio de
+// manifestos falha.
+//
+// Ate' 2026-08-19 ela era a CONSTANTE "Failed to build manifests with custom
+// domains": nomeava a etapa e nao o dominio, o app nem o motivo, enquanto o erro
+// de verdade — por exemplo `missing image digest for app "api"` — ia so' para o
+// log (B-152). Quem recebia a falha nao tinha como saber qual app parou.
+//
+// O motivo passa por `scrub.Text`, e e' isso que torna seguro carrega-lo: a mesma
+// tabela que impede termo interno de vazar no evento de timeline protege esta
+// mensagem. Sem ela, embutir texto de erro cru seria trocar uma mensagem inutil
+// por um vazamento da Regra 3.
+func motivoDaFalhaDeManifestos(err error) string {
+	if err == nil {
+		return "Manifest build failed"
+	}
+	return "Manifest build failed: " + scrub.Text(err.Error())
 }

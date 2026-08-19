@@ -8783,6 +8783,32 @@ why_now: |
 status: killed
 dod:
   - a decisão sobre a superfície de ingresso do webhook, localizada — estava em 3 artefatos
+> **Bala 2 entregue 2026-08-19; bala 1 tem hipótese medida e só fecha ao vivo.**
+>
+> **A mensagem passou a carregar o motivo real.** Os dois sítios
+> (`build_reconcile_complete.go:91` e `build_reconcile_retry.go:149`) trocaram a
+> constante por `motivoDaFalhaDeManifestos(err)`, que devolve
+> `"Manifest build failed: " + scrub.Text(err.Error())`. Com o erro medido ao vivo,
+> o usuário passa a ler o app que parou em vez de só a etapa.
+>
+> **O que torna seguro carregar o motivo — e sem isso eu não teria feito:** o texto
+> passa por `scrub.Text`, exportado agora sobre o `applyAll` que já existia. A mesma
+> tabela que impede termo interno de vazar no evento de timeline protege esta
+> mensagem. Verificado: `"ArgoCD sync failed…"` sai como
+> **`"the deployment system sync failed…"`**. Há teste para os dois lados — a
+> mensagem nomeia o app, e não deixa `argocd` passar. Sem o higienizador, embutir
+> erro cru trocaria uma mensagem inútil por um vazamento da Regra 3.
+>
+> **Bala 1 — a causa, e por que ela não fecha aqui.** A cadeia do item termina em
+> `build-image-api: failed to read dockerfile: open Dockerfile: no such file`, e o
+> passo que deveria ter produzido esse arquivo é o `generate-dockerfile`. **O
+> `B-153`, fechado nesta mesma sessão, era exatamente o defeito que permitia esse
+> passo falhar reportando sucesso** — o `exit 1` engolido pelo `tee`. A hipótese é
+> que aquele conserto remove esta causa, e ela **não é verificável por teste
+> hermético**: só um build novo, ao vivo, mostra se o `generate-dockerfile` agora
+> falha alto ou entrega o arquivo. Registrado como hipótese medida, não como
+> conserto afirmado.
+
 ## B-152 — O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio   [ ]
 
 domain: engine-go

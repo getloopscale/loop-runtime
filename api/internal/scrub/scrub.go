@@ -107,3 +107,16 @@ func applyAll(s string) (string, int) {
 	}
 	return s, replacements
 }
+
+// Text higieniza uma string solta — mensagem de erro, motivo de falha — antes de
+// ela cruzar a fronteira da API.
+//
+// `ScrubEvent` cobre o evento de timeline, que era o unico caminho que existia
+// quando este pacote nasceu. Uma mensagem de falha de build sai por outro caminho
+// e chegava ao usuario como CONSTANTE, sem o motivo, justamente para nao arriscar
+// vazar termo interno (B-152). Com isto ela pode carregar o motivo: a mesma tabela
+// de substituicoes que protege o evento protege a mensagem.
+func Text(s string) string {
+	out, _ := applyAll(s)
+	return out
+}
