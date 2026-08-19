@@ -188,7 +188,22 @@ resources:
 
 serviceAccount:
   create: true
-  name: ""
+  # FIXO de proposito, contra a convencao do Helm de derivar do release (B-096).
+  #
+  # As politicas de admissao isentam UMA identidade —
+  # `system:serviceaccount:loopzero-system:loopzero-api` (`vap-tenant-cr-shape.yaml:63` e
+  # `vap-protect-platform-deletes.yaml:88`). Com `name: ""` este chart rendia
+  # `<release>-loopzero-api`, entao um deploy por ele subia o loopzero-api com identidade que as
+  # proprias cercas da plataforma tratam como estranha — e a falha aparece como
+  # `Forbidden` na reconciliacao, nao como erro de instalacao.
+  #
+  # Duas instalacoes no mesmo namespace nao sao topologia suportada: e' a API da propria
+  # plataforma, uma por cluster, e a isencao das VAPs pressupoe identidade unica. Ampliar
+  # a isencao para um padrao (`*-loopzero-api`) foi a alternativa rejeitada, e e' a perigosa:
+  # transformaria nome de release em credencial.
+  #
+  # MEET-ASYNC-AMENDMENT-2026-08-19-published-loopzero-api-sa-name (pending ratification).
+  name: "loopzero-api"
   automountServiceAccountToken: true
 
 # T5.11 of plan 2026-06-02-openbao-adoption v1.3 — Vault K8s auth config.

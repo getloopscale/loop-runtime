@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 39 · **In flight** 0 · **Closed** 125
+164 items — **Open** 38 · **In flight** 0 · **Closed** 126
 
-### Open (39)
+### Open (38)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -92,7 +92,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-082`](#b-082--check-loopzero-api-vault-projected-token_testsh-reprova-de-forma-intermitente-dentro-do-qualitygates----) | `check-loopzero-api-vault-projected-token_test.sh` reprova de forma intermitente dentro do `quality:gates` | `triaged` | média |
 | [`B-094`](#b-094--a-metade-api-do-find_sec_004-guarda-um-campo-que-ninguém-popula----) | A metade API do `find_sec_004` guarda um campo que ninguém popula | `triaged` | média |
 | [`B-095`](#b-095--a-segunda-cerca-sobre-crs-loopzeroio-renderiza-em-lugar-nenhum----) | A segunda cerca sobre CRs `loopzero.io` renderiza em lugar nenhum | `triaged` | média |
-| [`B-096`](#b-096--o-chart-publicado-do-loopzero-api-renderiza-uma-sa-que-as-políticas-de-admissão-não-isentam----) | O chart publicado do `loopzero-api` renderiza uma SA que as políticas de admissão não isentam | `triaged` | média |
 | [`B-098`](#b-098--duas-policies-do-openbao-são-declaradas-e-nunca-ligadas-a-role-nenhum----) | Duas policies do OpenBao são declaradas e nunca ligadas a role nenhum | `triaged` | média |
 | [`B-100`](#b-100--o-gate-de-contrato-trabalha-por-nome-de-tag-nos-dois-lados-e-chama-campo-homônimo-de-consumidor----) | O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor | `triaged` | média |
 | [`B-111`](#b-111--o-mesmo-controle-de-firewall-vive-em-três-repositórios-sem-dono-declarado----) | O mesmo controle de firewall vive em três repositórios sem dono declarado | `triaged` | média |
@@ -118,7 +117,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (125)
+### Closed (126)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -199,6 +198,7 @@ _None._
 | [`B-091`](#b-091--infraqualitydry-run-baselinetxt-é-a-segunda-baseline-sem-leitor---x) | `infra/quality/dry-run-baseline.txt` é a segunda baseline sem leitor | `shipped` | baixa |
 | [`B-092`](#b-092--16-arquivos-de-teste-em-infratests-não-rodam-e-dois-subdiretórios-estão-vermelhos---x) 🔒 | 16 arquivos de teste em `infra/tests` não rodam, e dois subdiretórios estão vermelhos | `shipped` | alta |
 | [`B-093`](#b-093--o-validador-do-servicesjson-não-bloqueia-os-prefixos-que-a-plataforma-injeta---x) | O validador do `services.json` não bloqueia os prefixos que a plataforma injeta | `shipped` | média |
+| [`B-096`](#b-096--o-chart-publicado-do-loopzero-api-renderiza-uma-sa-que-as-políticas-de-admissão-não-isentam---x) | O chart publicado do `loopzero-api` renderiza uma SA que as políticas de admissão não isentam | `shipped` | média |
 | [`B-097`](#b-097--o-cli-documenta-um-kubectl-patch-que-a-nova-cerca-nega---x) | O CLI documenta um `kubectl patch` que a nova cerca nega | `shipped` | baixa |
 | [`B-099`](#b-099--a-policy-corrigida-não-alcança-a-identidade-que-cria-a-chave-e-o-bootstrap-a-sobrescreve---x) | A policy corrigida não alcança a identidade que cria a chave, e o bootstrap a sobrescreve | `shipped` | alta |
 | [`B-101`](#b-101--quatro-testes-herméticos-de-seed-queimam-390s-de-relógio-e-é-isso-que-mantém-a-suíte-fora-do-push---x) | Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push | `shipped` | média |
@@ -6107,7 +6107,7 @@ dod:
 > `infra/tests/helm/tenant_cr_fence_placement_test.go` já está no molde para cobri-la — basta a
 > decisão.
 
-## B-096 — O chart publicado do `loopzero-api` renderiza uma SA que as políticas de admissão não isentam   [ ]
+## B-096 — O chart publicado do `loopzero-api` renderiza uma SA que as políticas de admissão não isentam   [x]
 
 domain: engine-go
 repo: loopzero
@@ -6115,7 +6115,33 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-13 pela revisão da fatia `slice-16`. `charts/loopzero-api/templates/deployment.yaml:35` deriva a SA de `loopzero-common.fullname` (`charts/loopzero-common/templates/_helpers.tpl:170-176`) com `serviceAccount.name: ""` (`charts/loopzero-api/values.yaml:189-191`). `helm template t charts/loopzero-api` rende `t-loopzero-api`; como subchart de `charts/loopzero-platform` sob o release `loopzero-platform`, a regra de colapso (`_helpers.tpl:29-32`) não dispara e a SA vira `loopzero-platform-loopzero-api`. As VAPs isentam `system:serviceaccount:loopzero-system:loopzero-api` — **nenhum desses dois nomes**. O chart de bootstrap (`infra/helm/loopzero-api/templates/deployment.yaml:48`) usa o nome fixo e está correto.
 why_now: a fatia `slice-16` ligou a `loopzero-tenant-cr-shape` no mgmt, cuja validação de imutabilidade de `cellID` isenta o `loopzero-api`. Se algum dia o deploy passar pelo chart publicado, `cell_pinner.go:163` é negado — e `:170` registra um Warn **sem reverter o banco**, que é exatamente o split-brain DB/CR que o comentário da isenção existe para evitar.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19 pela via de emenda assincrona, com permissao do Paulo.**
+> Registro: `MEET-ASYNC-AMENDMENT-2026-08-19-published-loopzero-api-sa-name.md` — **pendente
+> de ratificacao**.
+>
+> `charts/loopzero-api/values.yaml` passou a fixar `serviceAccount.name: "loopzero-api"`. Medido
+> depois: o render devolve `loopzero-api` com release `loopzero` **e** com `um-release-qualquer` —
+> a garantia deixou de depender de quem instala escolher o nome certo.
+>
+> **A alternativa perigosa esta' registrada como rejeitada.** A DoD oferecia "as VAPs
+> cobrem as duas formas"; ampliar a isencao para um padrao (`*-loopzero-api`) faria qualquer
+> release com esse sufixo herdar a isencao das cercas de plataforma — nome de release
+> viraria credencial. As outras duas rejeitadas: documentar que o operador passe o nome
+> (transfere garantia de seguranca para nota de instalacao, com falha silenciosa) e nao
+> fazer nada por ser latente ("ninguem usa o chart publicado" dissolve-se no primeiro uso).
+>
+> **A objecao do Challenger foi respondida por medicao, nao por preferencia:** fixar nome
+> em chart publicado contraria a convencao do Helm e faz duas instalacoes colidirem — mas
+> duas instalacoes do `loopzero-api` no mesmo namespace nao sao topologia suportada, e a
+> propria isencao das VAPs pressupoe identidade unica.
+>
+> **Guarda, com mutante:** `loopzero_api_sa_matches_vap_exemption_test.go` compara o nome
+> renderizado com a lista de isencao lida dos templates das VAPs, e roda com DOIS nomes de
+> release — com um so', passaria tambem para um values que casualmente derivasse o nome
+> certo daquele release, que nao e' garantia nenhuma. Revertido o values para `name: ""`,
+> a guarda REPROVA nos dois releases; restaurado, passa.
 severity: média — **latente**: nenhum caminho de deploy usa o chart publicado para o `loopzero-api` hoje. Vira alta no dia em que usar.
 dod:
   - a SA renderizada pelo chart publicado é a mesma que as VAPs isentam, ou as VAPs cobrem as duas formas
