@@ -8572,6 +8572,24 @@ severity: média — nenhum serve tráfego, mas dois são guardas (prazo de assi
 dod:
   - está decidido onde cada um dos quatro roda — agendador in-cluster com runner publicado, CI
     externo, ou aposentadoria explícita de cada trabalho
+> **Medido 2026-08-19 — cada um dos quatro, antes de decidir onde roda.**
+>
+> | trabalho | alvo existe hoje? | o que a medição acrescenta |
+> |---|---|---|
+> | `drillWatchdog` | **sim** (`task drill:watchdog`) | só falta agendador |
+> | `weeklySoak` | **sim** (`task drill:l2-scale`) | só falta agendador |
+> | `coverageReport` | **NÃO** — o alvo declarado era `quality:coverage:report`, e o que existe é **`quality:test:coverage:report`** | estava quebrado por **dois** motivos, não um: além da imagem inexistente, o nome do alvo não resolve. Reagendá-lo como declarado produziria falha mesmo com runner publicado |
+> | `cosignDeadline` | script existe | mas o **B-146** mediu hoje que ele não tem entrada: o ConfigMap `loopzero-cosign-config` nunca existiu. Agendá-lo antes de provisionar a entrada produz execução que não checa nada — e provisionar a entrada faz a guarda **bloquear**, porque a condição de bloqueio é verdade agora |
+>
+> Ou seja: **dois dos quatro não são "só falta agendador"**. O `coverageReport`
+> precisa do nome certo antes de qualquer agendamento, e o `cosignDeadline` está
+> acoplado a uma decisão de operação que o B-146 registra.
+>
+> A decisão de **onde** os quatro rodam segue aberta — é infraestrutura de
+> agendamento, e escolher entre agendador in-cluster com runner publicado e CI
+> externo não é medição. O que esta medição faz é impedir que a decisão seja tomada
+> sobre uma tabela onde dois dos quatro não rodariam de qualquer forma.
+
   - o que ficar sem executor está declarado como tal, e não some em silêncio
   - o `cosignDeadline` tem entrada válida antes de ser reagendado, ou o `B-146` fecha primeiro
 
