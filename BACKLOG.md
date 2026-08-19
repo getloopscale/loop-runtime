@@ -68,16 +68,15 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-156 items — **Open** 59 · **In flight** 0 · **Closed** 97
+156 items — **Open** 58 · **In flight** 0 · **Closed** 98
 
-### Open (59)
+### Open (58)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) 🔒 | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `triaged` | — |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
 | [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `triaged` | média |
-| [`B-029`](#b-029--dois-caminhos-para-o-mesmo-endpoint-do-stripe----) | Dois caminhos para o mesmo endpoint do Stripe | `triaged` | média |
 | [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
 | [`B-035`](#b-035--o-segredo-que-verifica-pagamentos-não-existia-no-ambiente----) | O segredo que verifica pagamentos não existia no ambiente | `triaged` | — |
 | [`B-039`](#b-039--o-painel-não-tem-checkout-canônico-no-droplet----) | O painel não tem checkout canônico no droplet | `triaged` | — |
@@ -138,7 +137,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (97)
+### Closed (98)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -167,6 +166,7 @@ _None._
 | [`B-026`](#b-026--as-células-divergem-a-plataforma-só-era-instalada-na-primeira---x) | As células divergem: a plataforma só era instalada na primeira | `shipped` | alta |
 | [`B-027`](#b-027--o-diagnóstico-do-cli-manda-verificar-um-endereço-que-não-existe---x) | O diagnóstico do CLI manda verificar um endereço que não existe | `killed` | baixa ↑ |
 | [`B-028`](#b-028--17-portas-alcançáveis-da-internet-fora-de-qualquer-lista---x) 🔒 | 17 portas alcançáveis da internet fora de qualquer lista | `shipped` | P0 |
+| [`B-029`](#b-029--dois-caminhos-para-o-mesmo-endpoint-do-stripe---x) | Dois caminhos para o mesmo endpoint do Stripe | `killed` | média |
 | [`B-030`](#b-030--uma-dependência-central-não-pertence-a-domínio-nenhum---x) | Uma dependência central não pertence a domínio nenhum | `shipped` | média |
 | [`B-031`](#b-031--a-mesma-capacidade-exige-owner-num-lado-e-nada-no-outro---x) | A mesma capacidade exige `owner` num lado e nada no outro | `shipped` | alta |
 | [`B-032`](#b-032--o-portal-do-cli-devolve-uma-url-construída-com-o-id-do-cliente---x) | O portal do CLI devolve uma URL construída com o id do cliente | `shipped` | alta |
@@ -1735,7 +1735,7 @@ duas: já foi feito uma vez e trocou uma exposição por uma **cegueira**, porqu
 que detecta deploy.
 
 
-## B-029 — Dois caminhos para o mesmo endpoint do Stripe   [ ]
+## B-029 — Dois caminhos para o mesmo endpoint do Stripe   [x]
 
 domain: engine-go
 repo: loopzero
@@ -1743,8 +1743,42 @@ suggested_mode: review
 source: human
 evidence: medido em 2026-08-11 ao mapear a separação de domínios. O `loopzero-cloud` é o dono declarado do faturamento (`cycle-backlog.md` roteia `control-plane` para ele, e ele tem `internal/billing/` com 5+ arquivos), mas **os dois repositórios falam com o Stripe, por caminhos diferentes**: o `loopzero-cloud` monta requisições HTTP à mão contra `https://api.stripe.com/v1` (`internal/billing/stripe.go:28`), enquanto o `loopzero` importa a biblioteca oficial `github.com/stripe/stripe-go/v82` e abre sessão do portal em `api/internal/services/billing/stripe_portal.go`. São duas implementações da mesma integração, em domínios diferentes. Além disso, **21 arquivos do engine** conhecem limites de plano e 6 mencionam Stripe.
 why_now: apareceu ao responder se a separação de domínios está clara. A tabela de roteamento diz que faturamento é `control-plane`; o código diz que é dos dois. Enquanto ninguém precisa mudar a integração, o custo é zero — no dia em que a API do Stripe mudar, ou uma chave rotacionar, são dois lugares a acertar, em repositórios diferentes, com o risco de acertar um só.
-status: triaged
+status: killed
 severity: média — nada quebrado hoje. O risco é de divergência silenciosa: já aconteceu com este par (o `CLAUDE.md` documenta o bug do `Idempotency-Key` com janela de 1h no `cloud/internal/billing/stripe.go`, e o da ordem de webhooks no mesmo arquivo).
+kill_reason: |
+  A premissa foi refutada pela medicao de 2026-08-18: **nao ha dois caminhos.** O segundo
+  foi removido deliberadamente, com ADR, no mesmo dia em que este item foi registrado.
+
+  As tres balas do DoD, verificadas uma a uma:
+
+  **1 — a posse esta decidida e escrita.** `docs/decisions/2026-08-11-stripe-portal-ownership-adr.md`
+  existe e decide: o `loopzero-cloud` e o UNICO emissor de sessao de portal, porque e ele quem
+  cria o cliente Stripe quando falta (`EnsureStripeCustomer`) — o engine so exigia que ja
+  existisse. Manter a capacidade no engine punha a chave do Stripe no processo que atende o
+  CLI e o caminho critico de deploy, sem contrapartida.
+
+  **2 — medir consumo esta separado de conhecer preco.** O engine tem **zero** conhecimento
+  de preco: busca por `stripe_price`, `price_id`, `STRIPE_PRICE` e `unit_amount` em
+  `api/internal/` e `api/cmd/` (fora de teste e migracao) nao retorna nada. O que ele expoe
+  e `pkg/enforcement/cost_cap.go:76` — `CostStore.GetCounter` devolve um **contador** por
+  (tenant, metrica), nao dinheiro. O engine conta; o plano de controle precifica.
+
+  **3 — nao ha duas implementacoes a divergir.** O `go.mod` do engine nao declara biblioteca
+  do Stripe. O `WithPortalSessionCreator` continua no handler, e de proposito: e a costura
+  testavel. O que saiu foi a IMPLEMENTACAO. Sem emissor, `Portal` responde **503
+  BILLING_PORTAL_UNAVAILABLE** dizendo onde ir.
+
+  **E o caminho removido era pior do que "duplicado".** O comentario em
+  `api/internal/routes/billing/billing.go:253-263` registra o que ele fazia: montava
+  `https://billing.stripe.com/p/login/` + customerID e devolvia como se fosse sessao do
+  portal. Nao era — era uma URL com o identificador de cobranca do cliente dentro, que
+  trafega em historico de navegador, log de proxy e barra de enderecos. E era o caminho
+  **ATIVO** em app-dev, porque o Secret `loopzero-api-stripe` e `optional: true` e nao existe.
+
+  **Por que `killed` e nao `shipped`:** as balas estao satisfeitas, mas **este loop nao fez
+  esse trabalho** — ele chegou pronto, pelo ADR de 2026-08-11. Marcar `shipped` reivindicaria
+  trabalho que aconteceu noutro lugar. Mesmo criterio aplicado ao `B-005`.
+
 dod:
   - está decidido qual repositório é dono da integração com o Stripe, e o outro consome por contrato em vez de reimplementar
   - se o engine precisa medir consumo (legítimo — `metering/` é dele), isso está separado de conhecer PREÇO (não é dele)
