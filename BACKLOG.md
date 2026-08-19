@@ -5300,7 +5300,7 @@ dod:
 > pela outra bala: o sumário de prontidão inline é pulado em retorno antecipado, e o `ADR-0025 D3`
 > exige que ele seja a última mutação de status mesmo aí. Uma coisa por fatia.
 
-## B-086 — Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver   [ ]
+## B-086 — Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5308,11 +5308,37 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-12 pela revisão independente da fatia `slice-10`. O resolvedor de ADR do gate `docs-contract-refs` aceita como documentação qualquer `.md` sob `docs/` ou `.claude/` que **não** esteja em `cycleArtifactDirs` (`cmd/loopzero-ops/internal/quality/docsrefs/check.go:258-265`, `:286-317`) — e `docs/wiki/decisions/` não está na lista. O ADR `docs/wiki/decisions/2026-08-12-status-writer-contract.md` cita `ADR-0024` cinco vezes **para dizer que ele não existe**, e com isso `ADR-0024` passou a resolver. É textualmente o que o comentário do gate proíbe em `check.go:256` — *"Writing the document that records an absence must not manufacture a presence"* — e o que `TestCheck_CycleArtifactsAreNotADRDocumentation` (`check_test.go:257-275`) fecha para `.claude/knowledge-base/`, um diretório ao lado. Sem efeito hoje: nenhum comentário Go cita mais `ADR-0024`, e a isenção que os cobria foi retirada do allowlist na mesma fatia.
 why_now: a fatia `slice-10` deletou as 8 citações que o `B-052` registrou, então o gate ficou sem nada para resolver — e a armadilha ficou latente em vez de visível. A próxima citação a um ADR fantasma que já tenha sido tema de um ADR passa despercebida.
-status: triaged
+status: shipped
 severity: média — latente, não ativa. Vira alta na primeira citação nova a um id de ADR que algum documento de decisão já mencione.
 dod:
   - uma menção a `ADR-NNNN` dentro de um documento que **decide sobre** esse ADR deixa de contar como documentação dele
   - o critério que distingue "documenta" de "cita para decidir" está escrito, não inferido do diretório — `docs/wiki/decisions/` legítimo continua resolvendo os ADRs que ele de fato define
+> **Fechado 2026-08-19 — DoD 2/2, com o critério estrutural e sem excluir o diretório.**
+>
+> **O critério é o TÍTULO.** Um documento de decisão resolve apenas o ADR cujo id
+> aparece na sua **primeira linha não vazia** — ele *é* aquele ADR. Um id que
+> aparece só no corpo é referência, e o documento está falando *sobre* ele. Toda
+> outra documentação (runbook, arquitetura) segue resolvendo por menção, sem
+> mudança.
+>
+> Isso satisfaz a segunda bala sem inferir do diretório: o teste que já existia,
+> `TestCheck_DecisionRecordIsADRDocumentation`, protege um registro que abre com
+> *"This is ADR-0024."* — título, logo declara, e continua resolvendo. O documento
+> do B-086 abre com um título sobre contrato de status e só menciona o id a partir
+> da **linha 17**, cinco vezes, todas para dizer que ele não existe — não declara,
+> e a ausência parou de fabricar presença.
+>
+> **Estouro medido antes de implementar:** dos ~30 ids citados na árvore, apenas
+> **dois** resolviam exclusivamente por documento de decisão, e nenhum dos dois é
+> citado por código de produção. As 35 referências normativas seguem resolvendo.
+>
+> **A armadilha me pegou um nível acima, e ficou registrada no código.** A primeira
+> versão do meu comentário **nomeava os dois ids** para explicar a medição — e o
+> gate lê comentários Go, então a explicação virou duas citações normativas que não
+> resolviam. Escrever sobre um ADR ausente fabricou uma citação a ele, que é
+> exatamente o defeito deste item. O comentário agora descreve os dois sem
+> soletrá-los, e diz por quê.
+
   - uma fixture reproduz o caso: um `.go` citando `ADR-XXXX` mais um ADR que só fala sobre `ADR-XXXX` reprova
   - o teste de não-regressão continua verde: um ADR real em `docs/wiki/decisions/` resolve normalmente
 
