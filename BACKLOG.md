@@ -4035,6 +4035,35 @@ dod:
 
 > **Correção 2026-08-11, ao planejar a fatia 1.** Os dois números **já estavam no registro** desde 2026-08-06, em `quality_gate_wiring_test.go`, com rationale melhor do que o deste item: 42 migrations (hoje 43 — uma nova entrou) e 33 alertas, ambos classificados `failingGate`, e a observação decisiva de que os runbooks existentes **devolvem 404**, então o gate mede presença de string, não existência de runbook. O item continua válido como *dívida a pagar*, mas deixa de ser descoberta: a descoberta é anterior e melhor documentada.
 
+> **2026-08-19 — BALA 2 FECHADA. O bloqueio de permissao nao existe mais, e a medicao para
+> a bala 1 passou a existir. Balas 1 e 3 seguem abertas, por escopo e nao por bloqueio.**
+>
+> A escrita em `docs/operations/` estava negada na sessao anterior por uma regra ampla
+> demais, corrigida na origem. Testada agora: permitida.
+>
+> **Entregue:** `docs/operations/runbook-security-alerts.md`, ancorado nos pontos de emissao
+> das metricas (verificados em disco), com `runbook_url` nos **quatro** alertas — os tres do
+> DoD mais o irmao `LoopZeroSecretESOSyncSkipped`.
+>
+> **O quarto entrou porque o gate o mostrou, e ele corrigiu um erro meu.** Eu havia escrito
+> no runbook que o caso `skip` — secret gravado no cofre que nunca propaga, sem nenhuma
+> falha para contar — nao era coberto por alerta nenhum. Estava errado: o alerta irmao
+> existe, com limiar `> 0` porque nao ha volume aceitavel disso. A correcao esta escrita no
+> proprio documento, e nao apagada.
+>
+> **Ordem do B-161 respeitada:** consertei o link morto antes de acrescentar anotacao. A URL
+> de `soak-alerts.yaml` citava `infra/tests/k6/README.md`; o arquivo real esta em
+> `infra/tests/performance/k6/README.md`.
+>
+> **A medicao que faltava para a bala 1:** a arvore tem **113** alertas — 69 `warning`, 43
+> `critical`, 1 `info` — e **os 43 criticos estao todos sem runbook**. Ou seja, um piso por
+> severidade nao e' atalho: ele pede 43 runbooks. O gate, no escopo dele, reporta **50**
+> faltantes (era 54 antes desta fatia).
+>
+> **Nao decidi o piso nem liguei os gates**, e a razao nao e' permissao: escrever 43
+> excecoes datadas sem revisar cada alerta seria teatro de excecao, e ligar o gate com 50
+> violacoes quebraria o portao de entrega. A decisao agora e' informada por numero em vez de
+> impressao — que era o que faltava.
 
 ## B-068 — Um ponto de variação de Strategy que não varia mais, mantido por construir e descartar um objeto   [x]
 
