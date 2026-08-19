@@ -2906,6 +2906,32 @@ número não decide sozinho. Essa prova pertence a um build de imagem real, na p
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
+> **Medido 2026-08-19 — a premissa está errada: não são dois breakers sobre o pool.**
+>
+> | arquivo | o que MEDE | sobre o quê |
+> |---|---|---|
+> | `api/internal/middleware/pgcircuitbreaker.go` | **saturação de pool** — `ThresholdPct`, `pool_pct`, recusa com *"database pool at capacity"* | o pool Postgres |
+> | `api/internal/services/platform/pg_circuit_breaker.go` | **falhas consecutivas** — `OpenThreshold`, `CloseThreshold`, half-open | o **SyncClient**, e o doc-comment diz *"each replica detects ArgoCD failure"* |
+>
+> **Bala 1 respondida: existe UM breaker sobre o pool.** O segundo não toca o
+> Postgres — ele embrulha `deploycontracts.SyncClient` e protege contra o ArgoCD
+> fora do ar. São coisas diferentes porque **guardam recursos diferentes**, e não
+> porque medem o mesmo recurso de dois jeitos.
+>
+> **Bala 2 muda de alvo, e o alvo novo é pior.** O item propõe renomear o de
+> saturação para `PGPoolAdmissionGate`, e isso continua certo — ele é portão de
+> admissão, não breaker. Mas o nome mais enganoso é o **do arquivo**:
+> `pg_circuit_breaker.go` para algo que guarda ArgoCD. Foi o `pg_` que fez os dois
+> parecerem um par sobre o mesmo recurso — inclusive para quem registrou o item.
+>
+> **Bala 3 fica mais simples com isso:** a pergunta "os dois cabem no `Execute` de
+> `pkg/circuitbreaker`?" só se aplica ao segundo, que **já é** um contador de
+> falhas com máquina de estados. O primeiro não é breaker nenhum, então a questão
+> não o alcança.
+>
+> Renomear arquivo e tipo em código de produção é T2; fica registrado com a
+> medição que torna a decisão barata.
+
 ## B-054 — O `api` roda dois circuit breakers escritos independentemente sobre o mesmo pool Postgres   [ ]
 
 domain: engine-go
