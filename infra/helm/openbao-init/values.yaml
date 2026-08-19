@@ -125,6 +125,21 @@ authMethods:
     description: "T5.4 cell-1 workload cluster auth (ESO broker)"
 
 # Policies to provision. Each: { name, ruleHcl }.
+#
+# QUATRO NOMES PARECIDOS VIVEM NESTE ARQUIVO, e so' UM esta' ligado a alguma
+# identidade (B-098). Antes de editar "a policy do loopzero-api", confira qual:
+#
+#   loopzero-api-read             (aqui)  — declarada, NENHUM role a liga
+#   loopzero-api-transit-encrypt  (aqui)  — declarada, NENHUM role a liga
+#   loopzero-api                  (policy) — E' ESTA. O role de k8s-core a carrega.
+#   loopzero-api                  (role)   — role no mount k8s-core, nao e' policy
+#
+# Isto ja' custou um patch no lugar errado: ao corrigir o B-072 a mudanca foi
+# aplicada em `loopzero-api-transit-encrypt` porque o padrao casou primeiro, e so' um
+# teste novo pegou. Uma policy sem role nao concede nada a ninguem — o risco nao
+# e' de seguranca, e' de editar a inerte achando que editou a que vale.
+#
+# Se as duas inertes devem sair ou ser ligadas: B-098, decisao T2.
 policies:
   - name: loopzero-api-read
     ruleHcl: |

@@ -5927,6 +5927,27 @@ status: triaged
 severity: média — não há risco de segurança (uma policy sem role não concede nada a ninguém); o custo é o mesmo do `B-055` e do `B-045`, dívida que parece cobertura, e neste caso já custou um patch no lugar errado.
 dod:
   - está decidido se as duas são removidas ou ligadas a alguma identidade
+> **Medido 2026-08-19 — as duas seguem inertes; a decisão é T2 e não a tomei. O
+> custo real foi atacado onde ele acontece.**
+>
+> Reverificado: `loopzero-api-read` e `loopzero-api-transit-encrypt` aparecem **apenas na
+> própria declaração** sob a lista `policies:`; nenhum dos 15 roles do arquivo as
+> nomeia. O único binding `loopzero-api-*` é o do role de `k8s-core`, que carrega a
+> policy `loopzero-api`.
+>
+> **Não removi:** `infra/helm/openbao-init/values.yaml` é values de Helm chart e
+> toca provisionamento de credencial — a governança classifica os dois como T2.
+> Uma policy sem role não concede nada a ninguém, então não há pressa de
+> segurança; há dívida que parece cobertura.
+>
+> **O que dava para fazer sem reunião, e é onde o dano acontece:** o item registra
+> que quem for editar "a policy do loopzero-api" tem **quatro candidatos** de nome
+> parecido e três estão errados — e que isso *já* custou um patch no lugar errado
+> durante o B-072. O bloco `policies:` agora abre com essa tabela: quais são as
+> quatro, qual é a que vale, quais são inertes, e o registro do erro que o
+> descuido já produziu. O aviso fica no ponto onde o erro foi cometido, e não num
+> item que ninguém abre ao editar YAML.
+
   - se removidas, o `loopzero-api-read` e o `loopzero-api-transit-encrypt` saem do `values.yaml`
   - existe asserção de que toda policy declarada é referenciada por ao menos um role
 
