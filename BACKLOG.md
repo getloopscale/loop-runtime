@@ -5767,6 +5767,31 @@ severity: média — não há vulnerabilidade aberta (o caminho que ela guardari
 dod:
   - está decidido se `AppSpec.Env` deve ser populado (e então a regra passa a valer) ou removido (e então a regra sai com ele)
   - se for removido, o gate `env-prefix-parity` e o linter acompanham a decisão
+> **Medido 2026-08-19 — a inalcançabilidade virou fato vigiado; a decisão continua
+> sendo de reunião.**
+>
+> Reconfirmado: nenhum site de produção constrói `AppSpec` com `Env`, então o laço
+> de `build_plan.go` nunca itera e a regra não dispara.
+>
+> **Não tomei a decisão da DoD**, e a razão é de governança: remover a regra mexe
+> em validação de segurança e o campo faz parte do contrato de `AppSpec`; ativá-la
+> passa a **rejeitar deploys** que hoje passam. As duas direções são mudança
+> visível, e `pre-release-governance.md` pede reunião antes do código.
+>
+> **O que não depende de reunião foi entregue.** O fato que sustenta toda a análise
+> — "ninguém popula o campo" — vivia numa medição datada, e três artefatos já
+> afirmaram no presente que a regra protege.
+> `TestAppSpecEnvSegueSemPopuladorDeProducao` passou a vigiá-lo, e a mensagem de
+> falha diz o que fazer: a regra deixou de ser inalcançável, **reveja o B-094 antes
+> de seguir**, porque o conjunto de prefixos difere do validador do `services.json`
+> (B-093) e a severidade difere entre os dois lados (B-069).
+>
+> **Limite declarado na própria guarda:** ela vê **construção** (`AppSpec{Env: …}`)
+> e não atribuição posterior a campo. A primeira versão tentava cobrir as duas com
+> um regex sobre `.Env =` e casou `cmd.Env` de `exec.Command` — falso positivo que
+> teria feito a guarda acusar população onde não há. Entre estreita e honesta ou
+> larga e errada, a estreita.
+
   - a saída do gate deixa de sugerir cobertura de uma regra que não roda
 
 > Registrado 2026-08-13 pela revisão da fatia `slice-15`. É a terceira instância nesta série do padrão
