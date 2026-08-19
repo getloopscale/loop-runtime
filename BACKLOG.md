@@ -3515,6 +3515,17 @@ dod:
 > e a instrução de registrar de novo — conscientemente — se um dia existir código
 > de billing aqui.
 >
+> **Consequência que só apareceu ao rodar a varredura completa, e vale mais que o
+> item.** Remover `billing` do `allowed` fez o gate reprovar — ele varre o **disco**,
+> e o diretório vazio virou "contexto desconhecido". Como o diretório não é
+> rastreado, ele existe na máquina de quem já rodou o build e **não existe num clone
+> novo**: o mesmo commit reprovava aqui e passaria no CI. O gate passou a ignorar
+> diretório sem nenhum `.go`, com duas regressões — pasta vazia não é contexto, e
+> subpacote **com** código e sem registro continua reprovando, para a guarda não
+> virar isenção geral. Um teste que já existia (`NestedSubpackageEdgeCaught`) pegou
+> a primeira versão da minha guarda, que olhava só o topo do diretório e pulava
+> contexto com arquivos aninhados.
+>
 > **A classe, não só a instância:** `TestTodoContextoRegistradoTemCodigoRastreado`
 > exige que todo contexto do DAG tenha `.go` **rastreado pelo git**. Usa
 > `git ls-files` e não `os.Stat` de propósito — um diretório vazio existe na

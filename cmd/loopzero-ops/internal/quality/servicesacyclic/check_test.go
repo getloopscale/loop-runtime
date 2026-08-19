@@ -246,3 +246,43 @@ func TestCheck_ServicesPathNotADirErrors(t *testing.T) {
 		t.Fatalf("services path being a file must return an error, got Pass=%v", out.Pass)
 	}
 }
+
+// Um diretorio VAZIO nao e' contexto delimitado, e contar como um faz o veredito
+// depender do disco de quem roda: uma pasta vazia sobrevive na maquina de quem ja'
+// rodou o build e nao existe num clone novo. Medido em 2026-08-18 (B-065): ao
+// remover `billing` do DAG congelado — o codigo saiu para o `loopzero-cloud` no M4 — o
+// diretorio vazio que ficou passou a reprovar o gate LOCALMENTE enquanto o CI, com
+// clone limpo, passava. Mesmo commit, vereditos opostos.
+func TestCheck_DiretorioVazioNaoEContextoDesconhecido(t *testing.T) {
+	root := t.TempDir()
+	writeGo(t, root, "api/internal/services/deploycontracts/s.go", deploycontractsLeaf)
+	if err := os.MkdirAll(filepath.Join(root, "api/internal/services/billing"), 0o755); err != nil {
+		t.Fatalf("criando diretorio vazio: %v", err)
+	}
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if len(out.Unknown) != 0 {
+		t.Errorf("diretorio vazio virou contexto desconhecido: %v", out.Unknown)
+	}
+	if !out.Pass {
+		t.Errorf("arvore legal com uma pasta vazia deve PASSAR; violations=%+v", out.Violations)
+	}
+}
+
+// A contrapartida, para que a guarda acima nao vire uma isencao geral: um
+// subpacote com .go e sem registro CONTINUA reprovando — e' o proposito
+// deny-by-default do gate.
+func TestCheck_SubpacoteComCodigoESemRegistroAindaReprova(t *testing.T) {
+	root := t.TempDir()
+	writeGo(t, root, "api/internal/services/deploycontracts/s.go", deploycontractsLeaf)
+	writeGo(t, root, "api/internal/services/billing/b.go", "package billing\n\nvar X = 1\n")
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if len(out.Unknown) == 0 {
+		t.Error("subpacote com codigo e sem registro precisa ser reportado como desconhecido")
+	}
+}
