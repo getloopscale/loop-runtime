@@ -524,14 +524,14 @@ func TestCorrelationID_PreservesExisting(t *testing.T) {
 	}
 }
 
-// --- PG Circuit Breaker: zero total connections ---
+// --- PG Circuit Breaker: sem portao configurado ---
 
-func TestPGCircuitBreaker_ZeroTotal_PassesThrough(t *testing.T) {
-	cb := NewPGCircuitBreaker(PGCircuitBreakerConfig{
-		MaxConns:      25,
-		ThresholdPct:  90,
-		PoolStatsFunc: func() (inUse int32, total int32) { return 0, 0 },
-	})
+// Era `ZeroTotal_PassesThrough`, e guardava a divisao por zero do calculo de percentual que este
+// middleware fazia. Desde o B-054 quem mede saturacao e' o portao com histerese, e a degenerescencia
+// que sobra aqui e' outra: nenhum portao configurado. A propriedade e' a mesma — estado degenerado
+// nao pode barrar trafego — no lugar onde ela agora vive.
+func TestPGCircuitBreaker_SemPortao_DeixaPassar(t *testing.T) {
+	cb := NewPGCircuitBreaker(PGCircuitBreakerConfig{})
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

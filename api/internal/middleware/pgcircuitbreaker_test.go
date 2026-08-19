@@ -15,9 +15,7 @@ import (
 func TestPGCircuitBreaker_RejectAt90Percent(t *testing.T) {
 	// Fake pool stats: 23 of 25 connections in use = 92%.
 	cb := NewPGCircuitBreaker(PGCircuitBreakerConfig{
-		MaxConns:        25,
-		ThresholdPct:    90,
-		PoolStatsFunc:   func() (inUse int32, total int32) { return 23, 25 },
+		Gate: gateFixo(false), // pool saturado: o portao esta disparado
 	})
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -46,9 +44,7 @@ func TestPGCircuitBreaker_RejectAt90Percent(t *testing.T) {
 // is below the threshold, all requests pass through normally.
 func TestPGCircuitBreaker_AllowsBelowThreshold(t *testing.T) {
 	cb := NewPGCircuitBreaker(PGCircuitBreakerConfig{
-		MaxConns:      25,
-		ThresholdPct:  90,
-		PoolStatsFunc: func() (inUse int32, total int32) { return 15, 25 },
+		Gate: gateFixo(true), // pool folgado: o portao esta aberto
 	})
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -68,9 +64,7 @@ func TestPGCircuitBreaker_AllowsBelowThreshold(t *testing.T) {
 // includes a Retry-After header.
 func TestPGCircuitBreaker_RetryAfterHeader(t *testing.T) {
 	cb := NewPGCircuitBreaker(PGCircuitBreakerConfig{
-		MaxConns:      25,
-		ThresholdPct:  90,
-		PoolStatsFunc: func() (inUse int32, total int32) { return 24, 25 },
+		Gate: gateFixo(false), // pool saturado
 	})
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -86,3 +80,11 @@ func TestPGCircuitBreaker_RetryAfterHeader(t *testing.T) {
 		t.Error("503 response missing Retry-After header")
 	}
 }
+
+// gateFixo e' um portao de resposta constante. B-054: a saturacao deixou de ser expressa como
+// percentual instantaneo neste middleware — quem a mede, com histerese, e' o
+// `buildplane/admission.PGPoolBreaker`, que agora e' quem decide.
+type gateFixo bool
+
+func (g gateFixo) Allow() bool { return bool(g) }
+

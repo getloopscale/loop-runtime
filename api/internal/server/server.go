@@ -229,8 +229,10 @@ type Config struct {
 	// Wired by api/cmd/setup_server.go::setupCostEnforcer (T1.9 production wiring).
 	CostEnforcer                 *middleware.CostEnforcer
 	UpgradeURL                   string
-	PGPoolStatsFunc              func() (inUse int32, total int32)
-	PGCircuitBreakerThresholdPct int
+	// PGPoolGate decide se uma mutacao passa dado o estado do pool. B-054: eram dois campos
+	// (`PGPoolStatsFunc` + `PGCircuitBreakerThresholdPct`) que faziam o router calcular um
+	// percentual instantaneo, enquanto o portao COM histerese existia e nunca era consultado.
+	PGPoolGate middleware.PoolGate
 	CORSAllowedOrigin            string // CORS_ALLOWED_ORIGIN — empty in production blocks all cross-origin requests
 }
 

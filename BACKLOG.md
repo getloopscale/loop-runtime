@@ -68,16 +68,15 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-165 items — **Open** 22 · **In flight** 0 · **Closed** 143
+165 items — **Open** 21 · **In flight** 0 · **Closed** 144
 
-### Open (22)
+### Open (21)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) 🔒 | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `triaged` | — |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
 | [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
-| [`B-054`](#b-054--o-api-roda-dois-circuit-breakers-escritos-independentemente-sobre-o-mesmo-pool-postgres----) | O `api` roda dois circuit breakers escritos independentemente sobre o mesmo pool Postgres | `triaged` | média |
 | [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `triaged` | média |
 | [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `triaged` | média |
 | [`B-059`](#b-059--o-transporte-carrega-o-schema-de-payload-de-cada-domínio-e-faz-body-snooping----) | O transporte carrega o schema de payload de cada domínio e faz body-snooping | `triaged` | média |
@@ -101,7 +100,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (143)
+### Closed (144)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -155,6 +154,7 @@ _None._
 | [`B-051`](#b-051--uma-regra-de-segurança-vive-em-dois-módulos-e-as-duas-cópias-já-divergiram---x) | Uma regra de segurança vive em dois módulos e as duas cópias já divergiram | `shipped` | média |
 | [`B-052`](#b-052--o-claudemd-aponta-para-cinco-contratos-que-não-existem---x) | O `CLAUDE.md` aponta para cinco contratos que não existem | `shipped` | média |
 | [`B-053`](#b-053--apiv1version-responde-dev-em-toda-imagem-construída---x) | `/api/v1/version` responde `"dev"` em toda imagem construída | `shipped` | média |
+| [`B-054`](#b-054--o-api-roda-dois-circuit-breakers-escritos-independentemente-sobre-o-mesmo-pool-postgres----) | O `api` roda dois circuit breakers escritos independentemente sobre o mesmo pool Postgres | `shipped` | média |
 | [`B-055`](#b-055--o-invariante-de-escritor-único-de-status-vale-em-2-de-8-controllers-e-o-helper-que-o-repara-não-tem-chamador---x) | O invariante de escritor único de status vale em 2 de 8 controllers, e o helper que o repara não tem chamador | `shipped` | alta |
 | [`B-056`](#b-056--dois-charts-diferentes-têm-o-mesmo-nome-em-duas-árvores-com-ciclos-de-vida-distintos---x) | Dois charts diferentes têm o mesmo nome, em duas árvores com ciclos de vida distintos | `shipped` | média |
 | [`B-061`](#b-061--reconcilehelpers-guarda-três-assuntos-sem-relação-e-o-doc-dele-ainda-chama-o-pacote-de-shared---x) | `reconcilehelpers` guarda três assuntos sem relação, e o doc dele ainda chama o pacote de `shared` | `shipped` | baixa |
@@ -3176,7 +3176,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-11. `middleware/pgcircuitbreaker.go` é um portão percentual sem histerese; `admission/pg_breaker.go` é high/low-water atômico, e seu próprio doc cita **o modo de falha por flapping que o outro ainda tem**. Os dois são construídos no mesmo processo — `server/router.go:72` e `api/cmd/main.go:468`. E `pkg/circuitbreaker`, que existe no kernel compartilhado e é usado pelos operators, é importado por `api/` **zero vezes**.
 why_now: duas implementações do mesmo conceito no mesmo processo divergem em silêncio — uma já corrigiu um defeito que a outra tem, e nada força a segunda a aprender. É o mesmo padrão do B-051, uma camada acima.
-status: triaged
+status: shipped
 delivered_in: 5c5595b3a  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — nenhum incidente conhecido; o custo é comportamento de proteção inconsistente sobre o mesmo recurso.
 measurement_2026_08_18: |
@@ -3237,6 +3237,38 @@ dod:
   - fica decidido se `pkg/circuitbreaker` deve ser a primitiva compartilhada — **sem forçar**: o achado registra o contra-argumento de que os dois do `api` são medidores de saturação de pool, não contadores de falha, e podem não caber no `Execute`
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
+
+> **Decidido e entregue 2026-08-19: UM portao.**
+>
+> O middleware — que e' quem de fato barra requisicao — passou a consultar o breaker COM
+> histerese, e o calculo de percentual duplicado saiu. O breaker deixou de ser inerte:
+> `Allow()` tem chamador de producao.
+>
+> A dependencia e' declarada pelo CONSUMIDOR (`middleware.PoolGate`), como manda
+> `rules/architecture.md` § DIP — o middleware nao importa `buildplane/admission`, e o
+> breaker satisfaz a interface sem saber dela.
+>
+> **Efeito colateral que valia por si:** o breaker era construido dentro de
+> `setupBuildHandler`, que devolve so' o handler de builds. Ele protege a API inteira, nao
+> aquele handler — "codigo correto no lugar errado". Passou para onde a config do servidor
+> e' montada, e so' ali ele podia ser entregue a quem decide.
+>
+> **Segunda bala:** nao renomeei, porque a premissa nao se sustentou. Os dois declaravam a
+> MESMA politica sobre o MESMO pool; um so' a implementava melhor. Renomear seria documentar
+> a duplicacao em vez de remove-la.
+>
+> **Terceira bala — decidido que NAO.** `pkg/circuitbreaker` conta FALHAS e envolve chamadas
+> em `Execute`; este mede SATURACAO amostrada por ticker. Nao e' o mesmo conceito, e forcar
+> o encaixe trocaria uma duplicacao por uma abstracao errada. O proprio item registrava esse
+> contra-argumento.
+>
+> **O guarda anterior teve de ser INVERTIDO, e a razao e' o proprio conserto.** Ele varria
+> por importadores do pacote; como a ligacao e' por interface, o middleware nao importa nada
+> — ele continuaria reportando "sem chamador" com o breaker ligado. Verde sobre a pergunta
+> errada. `TestOPortaoDoPoolEstaLigadoAoMiddleware` segue a ATRIBUICAO, e um mutante que
+> remove `sc.PGPoolGate = pgGate` o faz reprovar.
+>
+> Registro T2: `MEET-ASYNC-AMENDMENT-2026-08-19-one-pg-pool-gate.md`.
 
 ## B-055 — O invariante de escritor único de status vale em 2 de 8 controllers, e o helper que o repara não tem chamador   [x]
 

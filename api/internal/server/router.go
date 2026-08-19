@@ -74,14 +74,9 @@ func NewRouter(cfg Config) *chi.Mux {
 	r.Use(middleware.RequestLogging(cfg.Logger))
 
 	// PG backpressure: reject mutations when connection pool is near saturation.
-	if cfg.PGPoolStatsFunc != nil {
-		threshold := cfg.PGCircuitBreakerThresholdPct
-		if threshold == 0 {
-			threshold = 90
-		}
+	if cfg.PGPoolGate != nil {
 		pgCB := middleware.NewPGCircuitBreaker(middleware.PGCircuitBreakerConfig{
-			ThresholdPct:  threshold,
-			PoolStatsFunc: cfg.PGPoolStatsFunc,
+			Gate: cfg.PGPoolGate,
 		})
 		r.Use(pgCB.Middleware())
 	}

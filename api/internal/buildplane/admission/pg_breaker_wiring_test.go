@@ -31,59 +31,49 @@ import (
 // Este teste trava a descoberta: enquanto `Allow` nao tiver chamador de producao, o codigo
 // tem de DIZER isso onde alguem leia, em vez de descrever um "usage pattern" que ninguem
 // segue.
-func TestAllowHasNoProductionCallerAndTheCodeSaysSo(t *testing.T) {
-	// A raiz e' PROCURADA, nao contada. Contar niveis quebra no primeiro movimento
-	// de pacote — foi o que aconteceu quando este pacote desceu para
-	// `api/internal/buildplane/admission` (B-062): tres `..` deixaram de chegar
-	// na raiz, e so' o piso de populacao abaixo impediu o verde sobre nada.
+func TestOPortaoDoPoolEstaLigadoAoMiddleware(t *testing.T) {
+	// A varredura por IMPORTADORES nao serve mais, e a razao e' o proprio conserto: o middleware
+	// consulta este breaker por uma INTERFACE que ele mesmo declara (`middleware.PoolGate`), entao
+	// nao importa este pacote. Um guarda que procurasse importadores continuaria reportando "sem
+	// chamador" com o breaker ligado — verde sobre a pergunta errada.
+	//
+	// O que prova a ligacao e' a atribuicao: alguem constroi o breaker e o entrega como o portao
+	// que o router consulta.
 	raiz := raizDoRepositorio(t)
 
-	chamadores, examinados := caçarChamadoresDeAllow(t, filepath.Join(raiz, "api"))
-
-	// Sem esta assercao a guarda fica verde para sempre se o filtro esvaziar a populacao —
-	// alguem renomeia o pacote, move a arvore ou muda o path do modulo, todo arquivo e
-	// descartado, `chamadores` volta vazio e o teste entra no ramo "nao tem chamador" com a
-	// advertencia congelada mesmo depois de alguem ligar o breaker. E a forma
-	// `PASS — 0 rotas` que `rules/testing.md § 4.2` nomeia.
-	//
-	// Hoje sao exatamente dois: `api/cmd/main.go` e `api/cmd/adapters.go`.
-	if examinados < 2 {
-		t.Fatalf("a varredura examinou %d arquivo(s) que importam o pacote; o filtro "+
-			"esvaziou a populacao e a guarda nao mede mais nada", examinados)
+	fiacao, err := os.ReadFile(filepath.Join(raiz, "api", "cmd", "setup_server.go"))
+	if err != nil {
+		t.Fatalf("lendo a fiacao: %v", err)
 	}
-	t.Logf("populacao real: %d arquivo(s) importam "+caminhoDestePacote+", %d chamam Allow()",
-		examinados, len(chamadores))
-	doc := lerArquivo(t, filepath.Join(raiz, "api", "internal", "buildplane", "admission", "pg_breaker.go"))
-
-	if len(chamadores) > 0 {
-		// Alguem ligou o breaker: a advertencia deixou de valer e sai junto.
-		if strings.Contains(doc, "NAO HA CHAMADOR") {
-			t.Errorf("o `Allow` passou a ter chamador (%v) — a advertencia no topo do "+
-				"arquivo ficou obsoleta e precisa sair", chamadores)
-		}
-		return
+	f := string(fiacao)
+	if !strings.Contains(f, "NewPGPoolBreaker(") {
+		t.Error("`setup_server.go` nao constroi o PGPoolBreaker: sem ele o portao do pool volta a " +
+			"ser o percentual instantaneo, que oscila na linha de corte (B-054)")
 	}
-	if !strings.Contains(doc, "NAO HA CHAMADOR") {
-		t.Error("`Allow` nao tem chamador de producao e o arquivo nao avisa; quem lê o " +
-			"\"usage pattern\" acredita que a protecao esta ligada")
+	if !strings.Contains(f, "sc.PGPoolGate = ") {
+		t.Error("o breaker e' construido mas nao e' entregue como `sc.PGPoolGate` — construido, " +
+			"iniciado, parado no shutdown e nunca consultado foi exatamente o estado que o B-054 mediu")
+	}
+
+	router, err := os.ReadFile(filepath.Join(raiz, "api", "internal", "server", "router.go"))
+	if err != nil {
+		t.Fatalf("lendo o router: %v", err)
+	}
+	if !strings.Contains(string(router), "cfg.PGPoolGate") {
+		t.Error("o router nao consulta `cfg.PGPoolGate`: o portao existe e ninguem pergunta a ele")
+	}
+
+	// E a advertencia de "sem chamador" tem de ter saido, senao o arquivo descreve no presente
+	// um estado que deixou de existir — que e' a forma que este guarda nasceu para impedir.
+	doc, err := os.ReadFile(filepath.Join(raiz, "api", "internal", "buildplane", "admission", "pg_breaker.go"))
+	if err != nil {
+		t.Fatalf("lendo o doc: %v", err)
+	}
+	if strings.Contains(string(doc), "NAO HA CHAMADOR") {
+		t.Error("o breaker esta' ligado, mas o doc do arquivo ainda diz que nao ha chamador")
 	}
 }
 
-// caçarChamadoresDeAllow procura consumo do `Allow()` DESTE breaker no modulo api.
-//
-// Exigir que o arquivo importe `internal/buildplane/admission` e o que separa o `Allow` do breaker do
-// `Allow` dos limitadores de taxa, que tem o mesmo nome e chamadores legitimos. Sem esse
-// filtro a primeira versao deste teste casava `rate_limit_vault.go` e passava pelo ramo
-// "tem chamador" — verde pelo motivo errado, sobre o defeito que ele existe para travar.
-//
-// E textual, e isso esta dito: um chamador que receba o breaker por interface declarada em
-// outro pacote escaparia. A alternativa seria analise de tipos, que custa mais do que este
-// achado justifica hoje. (A revisao mediu que hoje nenhuma interface no repositorio declara
-// `Allow() bool`, entao a evasao e possivel em tese e inexistente na pratica; e que o alias
-// de import NAO escapa, porque o filtro casa o path e nao o identificador.)
-//
-// Varrer so `api/` NAO e estreiteza, e prova: `internal/` torna o pacote inalcancavel de
-// fora do modulo por regra da linguagem, entao a varredura e completa por construcao.
 func caçarChamadoresDeAllow(t *testing.T, raizAPI string) (chamadores []string, examinados int) {
 	t.Helper()
 	re := regexp.MustCompile(`\bAllow\(\s*\)`)

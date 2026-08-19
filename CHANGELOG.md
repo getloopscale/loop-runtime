@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Um arquivo de configuração que parecia governar uma verificação não era lido por ninguém, e três dos quatro itens que ele listava já nem existiam.** Removido, e uma verificação nova impede que outro arquivo desse diretório passe a parecer contrato sem sê-lo. (B-091)
 
 ### Fixed
+- **loopzero:** Sob carga alta no banco, a proteção que recusa gravações oscilava entre recusar e aceitar a cada requisição; passa a usar o mecanismo estável que já existia e não era consultado (B-054)
 - **loopzero:** Removidas duas permissões de acesso ao cofre que ninguém usava e que concediam mais do que a permissão em vigor; uma verificação automática impede que voltem a se acumular (B-098)
 - **loopzero:** A instalação de produção criava o registro inicial da conta num lugar onde nada o processava; passa a criá-lo no lugar correto, e uma verificação automática impede que volte a desviar (B-095)
 - **loopzero:** Apagar um ambiente direto no cluster deixava de limpar a aplicação correspondente, que ficava apontando para um destino que já não existia; a limpeza agora acontece antes de o ambiente ser liberado (B-074)

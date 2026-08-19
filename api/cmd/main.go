@@ -506,16 +506,9 @@ func setupBuildHandler(
 			"max_per_cell", admissionCfg.MaxConcurrentPerCell,
 			"max_per_tenant", admissionCfg.MaxConcurrentPerTenant)
 	}
-	breaker := admission.NewPGPoolBreaker(dbAdapter.Pool, admission.DefaultBreakerConfig(cfg.DBMaxConns), logger)
-	breaker.Start(shutdownCtx)
-	// Quality-Gate Phase 2: ensure breaker cleanup on shutdown.
-	go func() {
-		<-shutdownCtx.Done()
-		breaker.Stop()
-	}()
-	if cfg.AdmissionControl {
-		logger.Info("pg pool circuit breaker enabled",
-			"high_water", 0.90, "low_water", 0.75, "max_conns", cfg.DBMaxConns)
-	}
+	// B-054: o breaker do pool Postgres era construido AQUI e nunca consultado — ele protege a
+	// API inteira, nao o handler de builds, e construi-lo neste ponto o deixava preso numa
+	// funcao que devolve so' o handler. Passou para `setup_server.go`, onde a config do servidor
+	// e' montada e onde ele pode ser entregue ao middleware que decide.
 	return buildHandler
 }

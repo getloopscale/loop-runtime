@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
@@ -157,22 +158,21 @@ func buildServerConfig(
 			cfg.SourceBucket,
 			logger,
 		),
-		EnvironmentHandler:           environmentHandler,
-		ShutdownCtx:                  shutdownCtx,
-		ShutdownCancel:               shutdownCancel,
-		RateLimiter:                  rateLimiter,
-		ReadHeaderTimeout:            cfg.ReadHeaderTimeout,
-		ReadTimeout:                  cfg.ReadTimeout,
-		IdleTimeout:                  cfg.IdleTimeout,
-		ShutdownTimeout:              cfg.GracefulShutdownTime,
-		SSEHeartbeatInterval:         cfg.SSEHeartbeatInterval,
-		SSEPollInterval:              cfg.SSEPollInterval,
-		SSESafetyTimeout:             cfg.SSESafetyTimeout,
-		SSEMaxConcurrentStreams:      int64(cfg.SSEMaxConcurrentStreams),
-		IsProduction:                 cfg.IsProduction(),
-		UpgradeURL:                   os.Getenv("BILLING_UPGRADE_URL"),
-		PGCircuitBreakerThresholdPct: 90,
-		CORSAllowedOrigin:            cfg.CORSAllowedOrigin,
+		EnvironmentHandler:      environmentHandler,
+		ShutdownCtx:             shutdownCtx,
+		ShutdownCancel:          shutdownCancel,
+		RateLimiter:             rateLimiter,
+		ReadHeaderTimeout:       cfg.ReadHeaderTimeout,
+		ReadTimeout:             cfg.ReadTimeout,
+		IdleTimeout:             cfg.IdleTimeout,
+		ShutdownTimeout:         cfg.GracefulShutdownTime,
+		SSEHeartbeatInterval:    cfg.SSEHeartbeatInterval,
+		SSEPollInterval:         cfg.SSEPollInterval,
+		SSESafetyTimeout:        cfg.SSESafetyTimeout,
+		SSEMaxConcurrentStreams: int64(cfg.SSEMaxConcurrentStreams),
+		IsProduction:            cfg.IsProduction(),
+		UpgradeURL:              os.Getenv("BILLING_UPGRADE_URL"),
+		CORSAllowedOrigin:       cfg.CORSAllowedOrigin,
 	}
 
 	if dbDeps != nil {
@@ -367,10 +367,20 @@ func buildServerConfig(
 				logger.Warn("audit write failed", "error", err)
 			}
 		}
-		sc.PGPoolStatsFunc = func() (int32, int32) {
-			stat := dbAdapter.Pool.Stat()
-			return stat.AcquiredConns(), stat.MaxConns()
-		}
+		// B-054: o portao do pool. Ate' 2026-08-19 este ponto entregava uma funcao de estatistica
+		// e o router calculava um percentual instantaneo a cada requisicao — que oscila perto da
+		// linha de corte. O `PGPoolBreaker` ja' existia, com histerese, construido e iniciado no
+		// `setupBuildHandler`, e NUNCA era consultado: o instrumento que resolvia a oscilacao
+		// estava desligado e o que decidia tinha o problema.
+		pgGate := admission.NewPGPoolBreaker(dbAdapter.Pool, admission.DefaultBreakerConfig(cfg.DBMaxConns), logger)
+		pgGate.Start(shutdownCtx)
+		go func() {
+			<-shutdownCtx.Done()
+			pgGate.Stop()
+		}()
+		sc.PGPoolGate = pgGate
+		logger.Info("pg pool gate enabled",
+			"high_water", 0.90, "low_water", 0.75, "max_conns", cfg.DBMaxConns)
 		// Sprint 5 / T2.3 + T1.1 — Preview environments handler + service.
 		// The handler exposes /api/v1/projects/{project}/previews; the
 		// service drives the dual-write (CR + DB) per ADR D7. When the
