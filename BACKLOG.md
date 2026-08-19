@@ -3413,16 +3413,16 @@ dod:
 > que corrigir. Restava mover, e foi o que foi feito.
 >
 > **Bala 2 — decidido: `tools/` fica FORA do `go.work`.** Três medições sustentam:
-> (a) `loopzero-dockerfile-lint` tem `Dockerfile` próprio e vira **imagem** usada como
-> passo do pipeline (`buildplane/argo/workflow_builder.go:172`) — precisa construir
-> a partir do próprio módulo, sem arrastar os `replace` do workspace; (b) a exclusão
-> **já é explícita e coberta**: quatro invocações `GOWORK=off go test ./...` em
-> `taskfiles/test.yml:142-143` e `taskfiles/quality.yml:75-76`, mais o
-> `lint-coverage`, que mede os dois módulos; (c) a justificativa do item — "a
-> decisão destrava o B-051" — **envelheceu**: o B-051 fechou em 2026-08-16
-> mantendo a duplicação com gate de paridade e isenção datada, ou seja, a saída
-> **não** foi fonte única compartilhada, então nada dependia desta decisão.
->
+> (a) `loopzero-dockerfile-lint` tem `Dockerfile` próprio e precisa construir a partir do
+> próprio módulo, sem arrastar os `replace` do workspace. **Correção 2026-08-18, mesma
+> sessão, ao medir o B-069:** eu havia escrito que ele *"vira imagem usada como passo do
+> pipeline"*, inferindo da existência do `Dockerfile` em vez de medir invocação. **Não é
+> invocado por caminho nenhum hoje** — o passo `dockerfile-lint` não é emitido por código
+> de produção, `LOOPZERO_DOCKERFILE_LINT_IMAGE` não é lida por nenhum Go, e
+> `k3d-cross-cluster-heal.sh:961` registra que o seeding da imagem foi removido porque
+> "those images are no longer used". A decisão de manter `tools/` fora do `go.work`
+> **não muda** — ela se sustenta em (b) e (c), que foram medidos — mas a razão (a) era
+> uma inferência apresentada como medição, e isso é o defeito que este ciclo persegue.
 > **A catraca de lint leu o movimento como regressão, e a contabilidade fecha.**
 > `infra/scripts` foi de 4 para 13 achados e `infra/tests` de 93 para 84: os mesmos
 > 9 do pacote `seed` (gosec 7, staticcheck 1, unused 1), medidos. 93−84 = 9 = 13−4, e
@@ -3683,12 +3683,53 @@ dod:
   - a decisão vale para as duas portas, ou está escrito por que elas devem divergir
   - o `env-prefix-parity` declara no doc-comment que prova conjuntos, não semântica — para verde não ser lido como mais do que é
 
+> **Medido 2026-08-18. Bala 3 já estava feita; as balas 1 e 2 perderam a urgência
+> porque uma das duas portas não está mais aberta.**
+>
+> **Bala 3 — feita em 2026-08-12**, um dia depois do registro do item, e melhor do
+> que ele pedia. O doc-comment de `envprefixparity/check.go` diz literalmente que
+> *"Equal sets are not an equal rule"* e que *"a reader who sees this gate green
+> must not conclude 'the rule is unified'"*, listando o eixo de **severidade** como
+> fora de escopo e citando este próprio item.
+>
+> **A premissa das balas 1 e 2 envelheceu.** O item justifica a urgência dizendo
+> que *"o linter está no caminho de build real"*, via `UserDockerfileStrategy`.
+> Medido hoje: esse tipo **não existe** (removido em T2.2, ver B-068), nenhum
+> código de produção emite o passo `dockerfile-lint`, `LOOPZERO_DOCKERFILE_LINT_IMAGE`
+> **não é lida por nenhum Go**, e `infra/scripts/local/k3d-cross-cluster-heal.sh:961`
+> registra que o seeding da imagem foi removido porque *"those images are no longer
+> used (… the BYO-Dockerfile lint path was deleted)"*. Só uma porta está viva: a do
+> `api`, que descarta em silêncio.
+>
+> **A decisão continua valendo a pena e é T2.** Descarte silencioso contradiz a
+> Regra 8 (falhar alto, nunca engolir): o usuário fica achando que sua variável
+> está setada. Mas trocar para rejeição faz falhar deploys que hoje passam — é
+> mudança de comportamento visível ao usuário, exige reunião antes do código, e
+> não a tomei aqui. Fica registrada a recomendação com a medição que a sustenta.
+>
+> O resíduo do linter morto virou item próprio: **B-157**.
+
 > Registrado 2026-08-11 pelo Challenger do `MEET-ASYNC-AMENDMENT-2026-08-11-001`, ao verificar o desenho do gate do `B-051`.
 
 > **2026-08-12 (fatia `slice-11`, `B-070`):** o eixo da **caixa** foi decidido e passou a ser
 > vigiado pelo gate. Este item — o eixo da **severidade** — segue aberto, e pela mesma razão do eixo
 > do conjunto: tornar o descarte silencioso da API explícito muda o resultado de deploys que hoje
 > sucedem. Continua sendo a única das três divergências em que nenhum lado é obviamente o certo.
+
+## B-157 — Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-18 ao trabalhar o B-068/B-069. `tools/loopzero-dockerfile-lint` tem `Dockerfile`, `go.mod`, testes e é rodado por quatro invocações `GOWORK=off go test ./...` em `taskfiles/{test,quality}.yml` — mas **nada o invoca**: nenhum código de produção emite o passo `dockerfile-lint` (só comentários que descrevem um `UserDockerfileStrategy` removido em T2.2), `LOOPZERO_DOCKERFILE_LINT_IMAGE` não é lida por nenhum Go, e `infra/scripts/local/k3d-cross-cluster-heal.sh:961` diz que o seeding da imagem foi removido porque *"those images are no longer used ... the BYO-Dockerfile lint path was deleted"*. Mesmo assim `infra/helmfile/values/dev-public/loopzero-api.yaml.gotmpl:121` continua setando a env var, com um comentário que descreve um passo de heal que não existe mais.
+why_now: a ferramenta é a metade viva de uma regra de segurança duplicada (`find_sec_004`, B-051/B-069), então ela parece ser a defesa que rejeita — e não é, porque ninguém a chama. Enquanto ela existir com imagem e config, a leitura de quem chegar é que a rejeição está ativa. É a forma inversa do padrão *declarado, testado, nunca ligado*: aqui está **desligado e ainda anunciado**.
+status: raw
+severity: média — nenhuma quebra; o custo é uma defesa que parece existir e não roda, e config viva apontando para imagem que ninguém publica.
+dod:
+  - está decidido se a ferramenta volta ao caminho de build ou sai da árvore
+  - se sair, saem junto a env var do values, os comentários que a descrevem como ativa e as invocações de teste
+  - se ficar, existe caminho que a invoque e um teste que prove a invocação
 
 ## B-070 — `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave   [x]
 
