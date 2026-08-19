@@ -11,13 +11,13 @@ import (
 )
 
 type mockDB struct {
-	getCalls    int
-	renewCalls  int
-	revokeCalls int
+	getCalls     int
+	renewCalls   int
+	revokeCalls  int
 	credToReturn *DatabaseCredential
-	getErr      error
-	renewErr    error
-	revokeErr   error
+	getErr       error
+	renewErr     error
+	revokeErr    error
 }
 
 func (m *mockDB) GetCredentials(_ context.Context, role string) (*DatabaseCredential, error) {

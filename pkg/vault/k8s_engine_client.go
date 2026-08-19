@@ -18,7 +18,7 @@ import (
 // pattern (long-lived static token) with short-lived (TTL bounded) JWTs
 // signed by the K8s cluster's TokenReview issuer.
 type SAToken struct {
-	Token         string
+	Token          string
 	ServiceAccount string
 	Namespace      string
 	LeaseID        string

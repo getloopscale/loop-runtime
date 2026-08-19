@@ -115,7 +115,8 @@ func WriteJSONWithErrors(w http.ResponseWriter, r *http.Request, err error, fiel
 }
 
 // kebabCase converts an UPPER_SNAKE_CASE code to lower-kebab-case.
-//   "LOCK_TIMEOUT" → "lock-timeout".
+//
+//	"LOCK_TIMEOUT" → "lock-timeout".
 func kebabCase(code string) string {
 	out := make([]byte, len(code))
 	for i := 0; i < len(code); i++ {
@@ -133,7 +134,8 @@ func kebabCase(code string) string {
 }
 
 // titleFromCode produces a human-readable title from an error code.
-//   "LOCK_TIMEOUT" → "Lock Timeout".
+//
+//	"LOCK_TIMEOUT" → "Lock Timeout".
 func titleFromCode(code string) string {
 	if code == "" {
 		return "Error"

@@ -11,10 +11,11 @@ package statemachine
 // the TenantMachine pattern.
 //
 // States:
-//   Pending       — route created, certificate not yet issued
-//   CertIssued    — TLS certificate is Ready
-//   Reachable     — route probe succeeded; user-facing
-//   Failed        — terminal failure on probe or cert (recoverable via Retry)
+//
+//	Pending       — route created, certificate not yet issued
+//	CertIssued    — TLS certificate is Ready
+//	Reachable     — route probe succeeded; user-facing
+//	Failed        — terminal failure on probe or cert (recoverable via Retry)
 const (
 	ExposedRouteEmpty      State = ""
 	ExposedRoutePending    State = "Pending"

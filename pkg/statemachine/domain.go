@@ -52,16 +52,19 @@ func IsDomainTerminal(state State) bool {
 // NewDomainMachine returns the domain state machine.
 //
 // v1 flow (TXT verification — legacy):
-//   pending_verification → verified → provisioning → active
+//
+//	pending_verification → verified → provisioning → active
 //
 // v2 flow (CF Zone Management):
-//   pending_ns → ns_active → provisioning → active
+//
+//	pending_ns → ns_active → provisioning → active
 //
 // Shared:
-//   provisioning → failed (on error/timeout)
-//   active → degraded → failed (CNAME grace period, v1 only)
-//   failed → verified/ns_active (retry)
-//   (any non-terminal) → removing
+//
+//	provisioning → failed (on error/timeout)
+//	active → degraded → failed (CNAME grace period, v1 only)
+//	failed → verified/ns_active (retry)
+//	(any non-terminal) → removing
 //
 // Terminal: removing (row deleted after gitops cleanup)
 func NewDomainMachine() *Machine {
@@ -97,7 +100,7 @@ func NewDomainMachine() *Machine {
 			{From: DomainDegraded, Event: DomainRemove, To: DomainRemoving},
 
 			// --- Shared: Failed recovery ---
-			{From: DomainFailed, Event: DomainRetry, To: DomainVerified},      // v1 retry (TXT flow)
+			{From: DomainFailed, Event: DomainRetry, To: DomainVerified},       // v1 retry (TXT flow)
 			{From: DomainFailed, Event: DomainNSActivated, To: DomainNSActive}, // v2 retry (NS came back)
 			{From: DomainFailed, Event: DomainRemove, To: DomainRemoving},
 

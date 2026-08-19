@@ -18,13 +18,14 @@ package statemachine
 // longer carries the manifest.
 //
 // States:
-//   Progressing — newly created or rolling update in progress
-//   Serving     — endpoints ready, ingress configured, route NOT yet reachable
-//   Reachable   — route probe succeeded; the app is user-facing
-//   Degraded    — was Reachable, now route probe fails; recoverable
-//   Down        — was Serving/Reachable, endpoints dropped to zero
-//   Cleaned     — terminal: GitOps source removed manifest; CR scheduled
-//                  for finalizer removal by reaper (no further reconcile).
+//
+//	Progressing — newly created or rolling update in progress
+//	Serving     — endpoints ready, ingress configured, route NOT yet reachable
+//	Reachable   — route probe succeeded; the app is user-facing
+//	Degraded    — was Reachable, now route probe fails; recoverable
+//	Down        — was Serving/Reachable, endpoints dropped to zero
+//	Cleaned     — terminal: GitOps source removed manifest; CR scheduled
+//	               for finalizer removal by reaper (no further reconcile).
 const (
 	ApplicationEmpty       State = ""
 	ApplicationProgressing State = "Progressing"
@@ -37,25 +38,27 @@ const (
 
 // LoopZeroApplication events.
 const (
-	ApplicationCreate           Event = "Create"           // initial reconcile
-	ApplicationEndpointsReady   Event = "EndpointsReady"   // Service has ≥1 ready endpoint
-	ApplicationEndpointsLost    Event = "EndpointsLost"    // Service has 0 ready endpoints
-	ApplicationRouteOK          Event = "RouteOK"          // ExposedRoute is Reachable
-	ApplicationRouteFail        Event = "RouteFail"        // ExposedRoute probe failed
-	ApplicationUpdate           Event = "Update"           // Spec changed, rolling update
-	ApplicationOrphaned         Event = "Orphaned"         // Reaper detected: GitOps source removed manifest + grace period elapsed
+	ApplicationCreate         Event = "Create"         // initial reconcile
+	ApplicationEndpointsReady Event = "EndpointsReady" // Service has ≥1 ready endpoint
+	ApplicationEndpointsLost  Event = "EndpointsLost"  // Service has 0 ready endpoints
+	ApplicationRouteOK        Event = "RouteOK"        // ExposedRoute is Reachable
+	ApplicationRouteFail      Event = "RouteFail"      // ExposedRoute probe failed
+	ApplicationUpdate         Event = "Update"         // Spec changed, rolling update
+	ApplicationOrphaned       Event = "Orphaned"       // Reaper detected: GitOps source removed manifest + grace period elapsed
 )
 
 // NewApplicationMachine returns the LoopZeroApplication state machine.
 //
 // Lifecycle (typical):
-//   Empty → Progressing → Serving → Reachable
+//
+//	Empty → Progressing → Serving → Reachable
 //
 // Cycles:
-//   Reachable ↔ Degraded (probe flapping)
-//   Reachable/Serving → Down (all endpoints lost)
-//   Down → Progressing (recovery via reconcile)
-//   Reachable/Degraded → Progressing (Update event, rolling deploy)
+//
+//	Reachable ↔ Degraded (probe flapping)
+//	Reachable/Serving → Down (all endpoints lost)
+//	Down → Progressing (recovery via reconcile)
+//	Reachable/Degraded → Progressing (Update event, rolling deploy)
 //
 // No terminal state — application lives until CR is deleted.
 func NewApplicationMachine() *Machine {

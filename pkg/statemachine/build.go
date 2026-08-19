@@ -31,17 +31,17 @@ const (
 
 // Build events as defined in spec section 5.1.
 const (
-	BuildStarted              Event = "BuildStarted"
-	BuildSucceededEvent       Event = "BuildSucceeded"       // image built → RELEASING
-	BuildReleaseCompleted     Event = "BuildReleaseCompleted" // release ACTIVE → SUCCEEDED
-	BuildReleaseFailedEvent   Event = "BuildReleaseFailed"    // release activation permanently failed → FAILED
-	BuildReleaseTimeoutEvent  Event = "BuildReleaseTimeout"   // RELEASING > 10min → FAILED
-	BuildFailedEvent          Event = "BuildFailed"
-	BuildCancelRequested      Event = "BuildCancelRequested"
-	BuildCancelConfirmed      Event = "BuildCancelConfirmed"
-	BuildQueueTimeout         Event = "BuildQueueTimeout"
-	BuildTimeout              Event = "BuildTimeout"
-	BuildCancelTimeout        Event = "BuildCancelTimeout"
+	BuildStarted             Event = "BuildStarted"
+	BuildSucceededEvent      Event = "BuildSucceeded"        // image built → RELEASING
+	BuildReleaseCompleted    Event = "BuildReleaseCompleted" // release ACTIVE → SUCCEEDED
+	BuildReleaseFailedEvent  Event = "BuildReleaseFailed"    // release activation permanently failed → FAILED
+	BuildReleaseTimeoutEvent Event = "BuildReleaseTimeout"   // RELEASING > 10min → FAILED
+	BuildFailedEvent         Event = "BuildFailed"
+	BuildCancelRequested     Event = "BuildCancelRequested"
+	BuildCancelConfirmed     Event = "BuildCancelConfirmed"
+	BuildQueueTimeout        Event = "BuildQueueTimeout"
+	BuildTimeout             Event = "BuildTimeout"
+	BuildCancelTimeout       Event = "BuildCancelTimeout"
 )
 
 // IsBuildTerminal returns true if the given state is a terminal build state
@@ -58,8 +58,9 @@ func IsBuildTerminal(state State) bool {
 // NewBuildMachine returns the build state machine per spec section 5.1.
 //
 // States: QUEUED → RUNNING → RELEASING → SUCCEEDED
-//                          ↘ FAILED       ↘ FAILED
-//                          ↘ CANCELLING → CANCELLED
+//
+//	↘ FAILED       ↘ FAILED
+//	↘ CANCELLING → CANCELLED
 //
 // RELEASING (MEET-2026-03-26-008): image built, release activation in progress.
 // Terminal: SUCCEEDED, FAILED, CANCELLED
@@ -75,16 +76,16 @@ func NewBuildMachine() *Machine {
 			{From: BuildQueued, Event: BuildFailedEvent, To: BuildFailed}, // REVIEW-BLOCKER-1: immediate failure on submit error
 
 			// RUNNING transitions
-			{From: BuildRunning, Event: BuildSucceededEvent, To: BuildReleasing},    // MEET-008: image built → RELEASING (not SUCCEEDED)
+			{From: BuildRunning, Event: BuildSucceededEvent, To: BuildReleasing}, // MEET-008: image built → RELEASING (not SUCCEEDED)
 			{From: BuildRunning, Event: BuildFailedEvent, To: BuildFailed},
 			{From: BuildRunning, Event: BuildCancelRequested, To: BuildCancelling},
 			{From: BuildRunning, Event: BuildTimeout, To: BuildFailed},
 
 			// RELEASING transitions (MEET-2026-03-26-008)
-			{From: BuildReleasing, Event: BuildReleaseCompleted, To: BuildSucceeded},       // release ACTIVE → deploy complete
-			{From: BuildReleasing, Event: BuildReleaseFailedEvent, To: BuildFailed},         // activation permanently failed
-			{From: BuildReleasing, Event: BuildReleaseTimeoutEvent, To: BuildFailed},        // 10min timeout
-			{From: BuildReleasing, Event: BuildCancelRequested, To: BuildCancelled},         // user cancel during release
+			{From: BuildReleasing, Event: BuildReleaseCompleted, To: BuildSucceeded}, // release ACTIVE → deploy complete
+			{From: BuildReleasing, Event: BuildReleaseFailedEvent, To: BuildFailed},  // activation permanently failed
+			{From: BuildReleasing, Event: BuildReleaseTimeoutEvent, To: BuildFailed}, // 10min timeout
+			{From: BuildReleasing, Event: BuildCancelRequested, To: BuildCancelled},  // user cancel during release
 
 			// CANCELLING transitions
 			{From: BuildCancelling, Event: BuildCancelConfirmed, To: BuildCancelled},

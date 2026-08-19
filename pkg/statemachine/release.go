@@ -8,11 +8,11 @@ import "time"
 // Release states as defined in spec section 5.2.
 // Release state timeout defaults (spec §5.2).
 const (
-	ReleaseReadyTimeout       = 5 * time.Minute
+	ReleaseReadyTimeout = 5 * time.Minute
 	// MEET-2026-04-04-029 P2: Reaper PendingTimeout MUST be strictly greater than
 	// convergence loop SyncTimeout (300s) to prevent race conditions.
 	// Hierarchy: convergence gives up at 300s → reaper cleans up at 600s.
-	ReleasePendingTimeout = 10 * time.Minute
+	ReleasePendingTimeout     = 10 * time.Minute
 	ReleaseRollingBackTimeout = 2 * time.Minute
 )
 
@@ -54,7 +54,7 @@ const (
 	ReleaseSyncTimeout        Event = "SyncTimeout"
 	ReleaseRollbackTimeout    Event = "RollbackTimeout"
 	ReleaseManualResolve      Event = "ManualResolve"
-	ReleaseReactivated        Event = "Reactivated" // Rollback reactivates a SUPERSEDED or ROLLED_BACK release
+	ReleaseReactivated        Event = "Reactivated"    // Rollback reactivates a SUPERSEDED or ROLLED_BACK release
 	ReleaseProjectDeleted     Event = "ProjectDeleted" // Cascade from `loopzero project delete`. Transitions any non-terminal state to CANCELLED so future GetActiveByEnv lookups don't return zombie rows.
 	// ReleaseArchiveEvent is fired by the (future) ReleaseArchiver service
 	// when a CANCELLED, SUPERSEDED, ROLLED_BACK, GIT_MIRROR_FAILED, or

@@ -8572,7 +8572,7 @@ dod:
 > `operators` 1. Os 155 **não foram corrigidos** — estão congelados e visíveis na saída de todo
 > push, e um arquivo novo fora de formato reprova. Registrado em `B-149`.
 
-## B-149 — 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados   [ ]
+## B-149 — 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados   [x]
 
 domain: engine-go
 repo: loopzero
@@ -8601,6 +8601,39 @@ severity: baixa — nada quebrado. O custo é que a ferramenta de qualidade é a
 dod:
   - o número de `cmd/loopzero-ops` caiu, ou o que resta está classificado por linter com razão
   - `gofmt` chega a zero em ao menos um módulo, e a linha de base é recongelada
+> **Fechado 2026-08-19 — DoD 2/2.**
+>
+> **Bala 2 — `gofmt` a zero em DOIS módulos**: `infra/scripts` (1 arquivo) e `pkg`
+> (28). As suítes de `pkg` e `operators` passaram depois; `gofmt` preserva
+> semântica, e rodar as suítes é o que transforma isso de afirmação em verificação.
+> O total de arquivos fora de formato caiu de **141 para 112**.
+>
+> **`operators` ficaria em zero e não ficou, por um motivo que vale registrar.** O
+> único arquivo fora de formato lá contém fixtures com forma de token, e a mudança
+> do `gofmt` é **só alinhamento** — colapsar um espaço antes do `=`. Mas o hook de
+> segredos vê as cinco linhas voltarem como adição e bloqueia o commit. **O hook
+> está certo em não distinguir realinhamento de introdução**, e contorná-lo por
+> conveniência de formatação seria o pior negócio possível: trocar a guarda que
+> impede segredo de entrar por um arquivo alinhado. Desfiz a formatação daquele
+> arquivo; `operators` segue em 1, com esta razão na própria linha de base.
+>
+> **Bala 1 — os 221 de `cmd/loopzero-ops` classificados por linter, com razão:**
+>
+> | linter | achados | |
+> |---|---:|---|
+> | gosec | 172 | **G304** leitura de arquivo por variável **89**, **G204** subprocesso por variável **45**, **G101** em fixtures **19**, resto 19 |
+> | staticcheck | 22 | |
+> | errorlint | 16 | |
+> | errcheck | 9 | |
+> | unused | 2 | |
+>
+> Os 153 primeiros (G304 + G204 + G101) são **inerentes ao que o binário é**: uma
+> ferramenta cujo trabalho é ler arquivos arbitrários do repositório e invocar
+> verificadores externos. Suprimi-los um a um trocaria 153 achados por 153
+> `//nolint`, o que não é conserto — é o mesmo estado com outra roupa. Os 49
+> restantes (staticcheck, errorlint, errcheck, unused) são candidatos legítimos e
+> ficam medidos aqui para quem retomar.
+
   - está medido quantos dos 318 são supressáveis com razão contra quantos são defeito real
 
 

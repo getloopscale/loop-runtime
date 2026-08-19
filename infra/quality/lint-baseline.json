@@ -1,5 +1,5 @@
 {
-  "note": "Contagens congeladas por MODULO de golangci-lint e gofmt, lidas por `loopzero-ops quality lint-coverage`. A catraca recusa REGRESSAO: um modulo em 0 que ganhe um achado reprova, mesmo com centenas congeladas ao lado. Melhorar passa e aparece na saida, para que alguem recongele com `--write`. Um modulo sem entrada aqui e reportado — ele entra declarado, nunca em silencio. Ver B-121, B-083 e B-148. | 2026-08-18 (B-063): `infra/scripts` sobe de 4 para 13 em lint e `infra/tests` cai de 93 para 84 porque o pacote `seed` MUDOU DE MODULO — 9 achados medidos nele (gosec 7, staticcheck 1, unused 1), e 93-84=9=13-4. Nao e' divida nova; e' a mesma divida do outro lado da fronteira. A catraca e' por modulo, entao um movimento entre modulos le' como regressao no que recebe.",
+  "note": "Contagens congeladas por MODULO de golangci-lint e gofmt, lidas por `loopzero-ops quality lint-coverage`. A catraca recusa REGRESSAO: um modulo em 0 que ganhe um achado reprova, mesmo com centenas congeladas ao lado. Melhorar passa e aparece na saida, para que alguem recongele com `--write`. Um modulo sem entrada aqui e reportado — ele entra declarado, nunca em silencio. Ver B-121, B-083 e B-148.",
   "lint": {
     "api": 0,
     "cmd/loopzero-ops": 221,
@@ -14,11 +14,11 @@
   "gofmt": {
     "api": 59,
     "cmd/loopzero-ops": 0,
-    "infra/scripts": 1,
+    "infra/scripts": 0,
     "infra/tests": 52,
     "operators": 1,
     "operators/api": 0,
-    "pkg": 28,
+    "pkg": 0,
     "tools/gen-service-auth-ed25519": 0,
     "tools/loopzero-dockerfile-lint": 0
   }

@@ -11,11 +11,11 @@ import (
 )
 
 type mockK8s struct {
-	genCalls    int
-	revokeCalls int
+	genCalls      int
+	revokeCalls   int
 	tokenToReturn *SAToken
-	genErr      error
-	revokeErr   error
+	genErr        error
+	revokeErr     error
 }
 
 func (m *mockK8s) GenerateSAToken(_ context.Context, role, namespace string) (*SAToken, error) {

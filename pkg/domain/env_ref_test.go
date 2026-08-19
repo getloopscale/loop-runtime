@@ -32,7 +32,7 @@ func TestNewEnvRef_WithCellID(t *testing.T) {
 
 func TestNewEnvRef_RejectsEmptyRequiredFields(t *testing.T) {
 	cases := []struct {
-		name           string
+		name              string
 		tenant, proj, env string
 	}{
 		{"empty tenant", "", "api", "production"},

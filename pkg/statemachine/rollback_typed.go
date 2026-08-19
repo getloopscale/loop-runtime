@@ -24,13 +24,13 @@ const (
 )
 
 const (
-	RbPEventValidationPassed     RollbackPhaseEvent = "ValidationPassed"
+	RbPEventValidationPassed      RollbackPhaseEvent = "ValidationPassed"
 	RbPEventUnacknowledgedEffects RollbackPhaseEvent = "UnacknowledgedEffects"
-	RbPEventNoPreviousRelease    RollbackPhaseEvent = "NoPreviousRelease"
-	RbPEventRevertCompleted      RollbackPhaseEvent = "RevertCompleted"
-	RbPEventRevertFailed         RollbackPhaseEvent = "RevertFailed"
-	RbPEventSyncCompleted        RollbackPhaseEvent = "SyncCompleted"
-	RbPEventSyncFailed           RollbackPhaseEvent = "SyncFailed"
+	RbPEventNoPreviousRelease     RollbackPhaseEvent = "NoPreviousRelease"
+	RbPEventRevertCompleted       RollbackPhaseEvent = "RevertCompleted"
+	RbPEventRevertFailed          RollbackPhaseEvent = "RevertFailed"
+	RbPEventSyncCompleted         RollbackPhaseEvent = "SyncCompleted"
+	RbPEventSyncFailed            RollbackPhaseEvent = "SyncFailed"
 )
 
 // RollbackTypedMachine is the typed wrapper around the shared *Machine.

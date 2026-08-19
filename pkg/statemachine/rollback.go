@@ -5,25 +5,25 @@ package statemachine
 
 // Rollback states as defined in spec section 5.5.
 const (
-	RollbackValidating  State = "VALIDATING"
-	RollbackReverting   State = "REVERTING"
-	RollbackSyncing     State = "SYNCING"
-	RollbackCompleted   State = "COMPLETED"
-	RollbackRejected    State = "REJECTED"
-	RollbackBlocked     State = "BLOCKED"
+	RollbackValidating   State = "VALIDATING"
+	RollbackReverting    State = "REVERTING"
+	RollbackSyncing      State = "SYNCING"
+	RollbackCompleted    State = "COMPLETED"
+	RollbackRejected     State = "REJECTED"
+	RollbackBlocked      State = "BLOCKED"
 	RollbackRevertFailed State = "REVERT_FAILED"
-	RollbackSyncFailed  State = "SYNC_FAILED"
+	RollbackSyncFailed   State = "SYNC_FAILED"
 )
 
 // Rollback events as defined in spec section 5.5.
 const (
-	RollbackValidationPassed    Event = "ValidationPassed"
+	RollbackValidationPassed      Event = "ValidationPassed"
 	RollbackUnacknowledgedEffects Event = "UnacknowledgedEffects"
-	RollbackNoPreviousRelease   Event = "NoPreviousRelease"
-	RollbackRevertCompleted     Event = "RevertCompleted"
-	RollbackRevertFailed_       Event = "RevertFailed"
-	RollbackSyncCompleted       Event = "SyncCompleted"
-	RollbackSyncFailed_         Event = "SyncFailed"
+	RollbackNoPreviousRelease     Event = "NoPreviousRelease"
+	RollbackRevertCompleted       Event = "RevertCompleted"
+	RollbackRevertFailed_         Event = "RevertFailed"
+	RollbackSyncCompleted         Event = "SyncCompleted"
+	RollbackSyncFailed_           Event = "SyncFailed"
 )
 
 // NewRollbackMachine returns the rollback state machine per spec section 5.5.
