@@ -8129,6 +8129,32 @@ dod:
   - a guarda cobre os seis pacotes, ou está escrito por que cada pacote de fora não precisa dela
   - o `preview` (0 de 6) tem atenção própria: é o único pacote em que a heurística não achou nenhuma cobertura
 
+> **Bala 3 medida 2026-08-19 — o `0 de 6` do `preview` é artefato da heurística, e
+> a razão explica boa parte dos outros 19.**
+>
+> O `preview` **dobra o sumário**: `preview_controller.go:181` registra
+> `defer reconcileloop.DeferReadinessSummary(...)` dentro do `Reconcile` (linha
+> 153). Os seis sítios de persistência vivem em helpers chamados por ele —
+> `failPreviewCondition` (269), `reconcileCreating` (366, 377), `reconcileActive`
+> (493) e `reconcileDelete` (608, 649) — então a dobra acontece **uma vez, no
+> retorno**, e não em cada sítio.
+>
+> É uma forma diferente, não uma ausência. E é precisamente o caso que a primeira
+> bala antecipa: *"dobra por helper que a heurística não seguiu"*. A varredura do
+> item procura o sumário **dentro da função que envolve cada Patch**, e um `defer`
+> no chamador é invisível para ela.
+>
+> **Isso não é local do `preview`:** medido, **cinco dos seis** pacotes referenciam
+> o helper de sumário — `app` (3 arquivos), `platform` (3), `environment` (1),
+> `preview` (1), `tenant` (1). Só `reconcilehelpers` não, e ele não tem arquivo
+> `.go` no topo. Ou seja, a heurística que produziu "16 com sumário, 19 sem" está
+> contando **sítio** contra um padrão que é **por reconciler**.
+>
+> Os 19 continuam precisando de classificação um a um — o item está certo em
+> recusar afirmá-los defeitos. O que esta medição acrescenta é que a hipótese mais
+> provável para a maioria deles é a mesma do `preview`, e que a guarda ampliada
+> precisa enxergar `defer` no chamador, ou vai medir a forma errada nos seis.
+
 > Registrado 2026-08-17 ao fechar o `B-109`. **Ampliar a guarda para seis pacotes é uma fatia, não uma nota de rodapé** — e afirmar que os 19 são defeitos sem classificá-los seria cometer, aqui, o erro que o `B-109` nomeia.
 
 ## B-139 — O dashboard e os serviços do droplet servem da casa de uma pessoa   [ ]
