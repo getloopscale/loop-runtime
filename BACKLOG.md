@@ -5852,6 +5852,28 @@ status: triaged
 severity: média — **latente**: nenhum caminho de deploy usa o chart publicado para o `loopzero-api` hoje. Vira alta no dia em que usar.
 dod:
   - a SA renderizada pelo chart publicado é a mesma que as VAPs isentam, ou as VAPs cobrem as duas formas
+> **Medido 2026-08-19 — confirmado, conserto identificado como uma linha, e é T2.**
+>
+> `helm template t charts/loopzero-api` rende a SA **`t-loopzero-api`**; as VAPs isentam
+> `system:serviceaccount:loopzero-system:loopzero-api`
+> (`vap-tenant-cr-shape.yaml:63`, `vap-protect-platform-deletes.yaml:88`). O chart
+> de bootstrap fixa `serviceAccountName: loopzero-api`
+> (`infra/helm/loopzero-api/templates/deployment.yaml:48`) e está certo; a divergência
+> vem de `charts/loopzero-api/values.yaml:190`, que deixa `serviceAccount.name: ""` e
+> por isso deriva o nome do release.
+>
+> **Das duas saídas da DoD, a primeira é a certa e a segunda é perigosa.** Alinhar
+> o chart publicado (`serviceAccount.name: loopzero-api`) é uma linha e faz os dois
+> charts concordarem. Alargar as isenções das VAPs para cobrir as duas formas
+> resolveria o sintoma **ampliando uma lista de isenção de admissão** — mais
+> superfície isenta, para acomodar um nome que ninguém precisa que varie. Uma
+> isenção existe para nomear quem pode; alargá-la por conveniência de template é
+> como elas deixam de significar algo.
+>
+> **Não apliquei:** `pre-release-governance.md` classifica modificação de Helm chart
+> como **T2**, e a linha muda o nome de uma ServiceAccount renderizada. Fica
+> registrada com o conserto pronto — quem tiver a reunião fecha em um minuto.
+
   - existe asserção que compara a SA renderizada com a lista de isenção, em vez de as duas serem mantidas à mão
   - está decidido se `cell_pinner.go:170` deve reverter o banco quando o patch do CR é negado
 
