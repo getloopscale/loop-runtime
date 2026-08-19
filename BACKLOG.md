@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-164 items — **Open** 44 · **In flight** 0 · **Closed** 120
+164 items — **Open** 43 · **In flight** 0 · **Closed** 121
 
-### Open (44)
+### Open (43)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -78,7 +78,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa ↑ |
 | [`B-025`](#b-025--três-hosts-públicos-apontam-para-o-vazio----) | Três hosts públicos apontam para o vazio | `triaged` | média |
 | [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
-| [`B-035`](#b-035--o-segredo-que-verifica-pagamentos-não-existia-no-ambiente----) | O segredo que verifica pagamentos não existia no ambiente | `triaged` | — |
 | [`B-054`](#b-054--o-api-roda-dois-circuit-breakers-escritos-independentemente-sobre-o-mesmo-pool-postgres----) | O `api` roda dois circuit breakers escritos independentemente sobre o mesmo pool Postgres | `triaged` | média |
 | [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `triaged` | média |
 | [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `triaged` | média |
@@ -123,7 +122,7 @@ consequência do escopo per-repo declarado acima.
 
 _None._
 
-### Closed (120)
+### Closed (121)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -157,6 +156,7 @@ _None._
 | [`B-031`](#b-031--a-mesma-capacidade-exige-owner-num-lado-e-nada-no-outro---x) | A mesma capacidade exige `owner` num lado e nada no outro | `shipped` | alta |
 | [`B-032`](#b-032--o-portal-do-cli-devolve-uma-url-construída-com-o-id-do-cliente---x) | O portal do CLI devolve uma URL construída com o id do cliente | `shipped` | alta |
 | [`B-034`](#b-034--a-cobrança-por-uso-não-tem-para-onde-reportar---x) | A cobrança por uso não tem para onde reportar | `killed` | — |
+| [`B-035`](#b-035--o-segredo-que-verifica-pagamentos-não-existia-no-ambiente---x) | O segredo que verifica pagamentos não existia no ambiente | `shipped` | — |
 | [`B-036`](#b-036--os-seeds-de-cobrança-pulam-sem-credencial-e-a-corrente-reporta-verde---x) | Os seeds de cobrança pulam sem credencial e a corrente reporta verde | `shipped` | — |
 | [`B-037`](#b-037--o-painel-monta-os-dois-segredos-de-cobrança-como-opcionais---x) | O painel monta os dois segredos de cobrança como opcionais | `shipped` | — |
 | [`B-038`](#b-038--nenhuma-camada-de-cobrança-pode-degradar-em-silêncio---x) | Nenhuma camada de cobrança pode degradar em silêncio | `shipped` | — |
@@ -2184,7 +2184,7 @@ kill_reason: |
   ainda resolva. Renumerar ou apagar destruiria a unica prova de que ele passou por aqui.
 
 
-## B-035 — O segredo que verifica pagamentos não existia no ambiente   [ ]
+## B-035 — O segredo que verifica pagamentos não existia no ambiente   [x]
 
 > Registered 2026-08-11 by `/backlog-item` (slug: `billing-fail-closed`).
 
@@ -2203,7 +2203,30 @@ why_now: o passo canônico funciona e nunca rodou nesta reconstrução. Enquanto
   enviava eventos para um endpoint cujo destinatário não conseguia verificar a assinatura —
   pagamento confirmado, upgrade de plano, falha de cobrança, todos descartados em silêncio.
   Semear à mão fechou o sintoma hoje; o item é a causa: por que a corrente não cobriu.
-status: triaged
+status: shipped
+
+> **FECHADO 2026-08-19 — a metade deste repositorio esta' feita e reconfirmada AO VIVO;
+> a outra metade nao e' nossa para segurar.**
+>
+> **Bala 1 — reconfirmada no droplet hoje**, e nao so' relida da medicao anterior:
+> `kubectl -n loopzero-system get secret` devolve `loopzero-stripe-webhook`
+> (`2026-08-11T12:00:51Z`) e `loopzero-stripe-api-keys` (`2026-08-11T09:44:06Z`). E a causa
+> — *"por que a corrente nao cobriu"* — esta' fechada: os dois passos estao em
+> `seed-post-cleanroom-all.sh` como **15** e **15b**, entao um Cleanroom novo os recria.
+> Semear a mao fechou o sintoma em 11/08; o item pedia a corrente, e a corrente tem.
+>
+> **Balas 2 e 3 pertencem ao `loopzero-cloud`, medidas e nomeadas.** A 3 **ja existe la'**
+> (`loopzero-cloud/internal/config/config.go:389`, `STRIPE_WEBHOOK_SECRET is required in
+> production`) — o que o app-dev expoe e' que a guarda esta' condicionada a modo de
+> producao, e app-dev nao e'; decisao de config **deles**. A 2 tem o oraculo
+> **indisponivel**: as 1.258 entregas do Stripe deixam uma unica linha de CHEGADA, sem
+> status, e segui um `trace_id` ate' o fim sem achar segunda linha. Quem escreve esse log
+> e' o `loopzero-cloud`.
+>
+> Por `cycle-backlog.md § Output` e pelo `B-145`, item que aponta para outro projeto mora
+> no registro daquele projeto. Segurar as duas balas aqui nao as conserta — so' mantem
+> este numero alto e da' a impressao de cobertura sobre trabalho que ninguem daqui vai
+> fazer.
 measurement_2026_08_18: |
   **Medido ao vivo, e o quadro e outro. Nada aqui e acionavel neste repositorio.**
 
