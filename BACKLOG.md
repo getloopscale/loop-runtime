@@ -3793,6 +3793,28 @@ source: discover-review
 evidence: medido em 2026-08-11 ao planejar o `B-051`. As duas implementações da regra `find_sec_004` não diferem só na lista de prefixos — diferem na **severidade**. Lado API (`api/internal/services/deploycontracts/build_plan.go:120-124`): chave reservada gera `slog.Warn` e `continue` — a env é **descartada em silêncio** e o deploy prossegue. Lado linter (`tools/loopzero-dockerfile-lint/main.go:296` → `:158-159`): `SeverityReject` vira `os.Exit(1)` — o **build falha**. E o linter está no caminho de build real: `api/internal/argo/languages.go:36` e `workflow_builder.go:408` emitem o passo `dockerfile-lint` para `UserDockerfileStrategy`.
 why_now: o gate `env-prefix-parity` (`B-051`) compara os dois **conjuntos de prefixos**. Conjunto igual não é regra igual — ele passaria verde com esta divergência intacta, e um gate verde é lido como *"a regra está unificada"*. Sem este item registrado, o `B-051` fecharia deixando para trás a metade que importa: qual das duas severidades é a correta.
 status: triaged
+
+> **Terceira bala JA' ESTAVA fechada — medido 2026-08-19, para ninguem refazer.**
+>
+> Ela pede que o `env-prefix-parity` declare no doc-comment que prova conjuntos e nao
+> semantica. O doc-comment de `cmd/loopzero-ops/internal/quality/envprefixparity/check.go`
+> ja' diz, em caixa alta: *"WHAT THIS GATE PROVES, EXACTLY: that the two declared SETS
+> OF PREFIXES are identical. Nothing else."*, seguido de *"Equal sets are not an equal
+> rule"* e de uma tabela de tres eixos que nomeia **este item** na linha de severidade.
+>
+> **A divergencia em si, remedida hoje:** `build_plan.go:120` faz `slog.Warn` +
+> `continue` — descarte **silencioso**, o deploy segue e a variavel some sem o usuario
+> saber; `tools/loopzero-dockerfile-lint/main.go:478` devolve erro e **mata o build**.
+> Mesma regra, tratamentos opostos.
+>
+> **Nao acrescentei teste fixando a divergencia**, e a razao e' a escada de parcimonia:
+> o risco seria o doc-comment envelhecer se um dos lados mudasse, mas ele **nomeia este
+> item** como dono do eixo. Um teste que exigisse a divergencia continuar existindo
+> precisaria ser deletado por quem a consertasse — cerimonia para um risco que ja' tem
+> dono registrado.
+>
+> O que resta e' a **decisao**: qual severidade e' a correta. As duas balas de cima
+> dependem dela, e ela nao e' consequencia de medicao.
 delivered_in: f05c7e7c9  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — nenhuma quebra nova; o custo é que o usuário recebe tratamentos opostos para a mesma violação, dependendo de por qual porta ele entrou.
 dod:
