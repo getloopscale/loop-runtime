@@ -8097,6 +8097,21 @@ dod:
   - se o alvo continuar, existe caminho declarado para sair de 10,8%; se mudar, o ADR é emendado
   - a distância deixa de ser reportada-e-não-bloqueante: ou ela some, ou ela vira catraca com prazo
 
+> **Remedido 2026-08-19 — o número mudou, e mudou para o lado que ninguém esperava.**
+>
+> `loopzero-ops quality test-pyramid` hoje: **1033 arquivos — unit 74,6% / integração
+> 15,0% / e2e 10,4%**. Contra 989 / 73,5% / 15,7% / 10,8% de 17/08.
+>
+> A árvore cresceu 44 arquivos em dois dias e a fração e2e **caiu** de 10,8% para
+> 10,4% — porque o que entrou foi majoritariamente unitário. A distância até o alvo
+> do ADR D7 diminuiu sem que ninguém tenha atacado a distância: é o efeito da
+> catraca, que impede piora enquanto o denominador cresce.
+>
+> Isso não decide nada — a decisão é do sponsor, como o item registra. O que muda é
+> que ela pode ser tomada sobre um número de hoje, e com a observação de que a
+> tendência já é favorável sem intervenção. Um alvo que a árvore se aproxima
+> sozinha é um alvo diferente de um que ela se afasta.
+
 > Registrado 2026-08-17 ao fechar o `B-106`. **107 arquivos e2e num produto cujo objeto É implantar não é obviamente um defeito** — pode ser que o alvo é que esteja errado. É decisão do sponsor, não minha.
 
 ## B-138 — O invariante do sumário de prontidão é afirmado num pacote e existe em seis   [ ]
