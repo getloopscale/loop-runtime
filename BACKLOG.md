@@ -3169,6 +3169,36 @@ dod:
   - existe verificação de que toda rota mutante continua gravando linha de auditoria com `resource_id` — hoje nenhum gate assere isso, e o achado não é validável por máquina sem ela
   - `middleware` fica agrupado pelos cinco concerns em vez de um pacote plano
 
+> **Medido 2026-08-18 (parcial entregue).** A premissa do item é o body-snooping;
+> medindo, o adivinhar da **ação** revelou-se pior que o do identificador.
+> `AuditLog` é montado uma única vez (`api/internal/server/router.go:239`), dentro
+> do grupo autenticado das linhas 237-327. Das **32** rotas mutantes do
+> repositório, **9** caíam no fallback de `extractSegment` e **4** delas estão sob
+> o middleware — as `/internal/*` (linhas 137-168), `/api/v1/webhooks/github`
+> (180) e `/api/v1/admin/tenants/pin` (212) ficam fora e por isso não foram
+> afirmadas. O fallback devolve o último segmento do caminho **concreto**, então
+> `DELETE /api/v1/tenants/{id}` gravava ação `unknown.DELETE.<id-do-tenant>` **e**
+> `resource_type` igual ao id: a operação mais destrutiva do produto tinha
+> cardinalidade ilimitada nos dois campos, e nenhuma consulta conseguia filtrar
+> exclusões de tenant. O fail-loud existia (`slog.Warn`, AUDIT-18) e pedia que
+> operadores "filtrassem em painéis" — aviso em log que ninguém observa não é
+> verificação.
+>
+> **Entregue:** os quatro segmentos ganharam ramo próprio em `deriveAction` e
+> `extractResourceType` (precedente do CHG-2026-04-23-AUDIT-19: sub-recurso com
+> ação própria, nunca colapsado na ação CRUD do pai), com teste de regressão
+> sobre a população medida — incluindo a asserção de que a ação **não varia com o
+> id do tenant**, que é o dano em si e não apenas o prefixo `unknown.`.
+>
+> **Sobra, e por quê:** (a) as duas primeiras balas — identificador **declarado**
+> e remoção do body-snooping de 64 KiB — são refactor das 32 rotas e continuam
+> abertas; (b) a verificação à prova de deriva. O caminho certo é `chi.Walk` sobre
+> o router real (recurso nativo, degrau 3 da escada), mas `NewRouter(Config{})`
+> monta um router vazio: o grupo auditado exige `TokenValidator` e `MemberStore`,
+> então a varredura andaria sobre zero rotas e passaria por vacuidade — o defeito
+> do B-040. Construir o fixture completo é fatia própria. A tabela de hoje é
+> **declarada**, e essa limitação está escrita nela.
+
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
 ## B-060 — O único lugar onde os quatro planos se encontram é uma pasta de arquivos irmãos   [ ]

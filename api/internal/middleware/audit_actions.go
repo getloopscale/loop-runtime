@@ -64,6 +64,15 @@ func deriveAction(method, path string) string {
 			// /api/v1/projects/{p}/previews — manual / webhook-driven create.
 			// CHG-2026-04-29-DOGFOOD iter 13 / Achado #27.
 			return "preview.created"
+		// B-059: sub-recursos com acao propria, seguindo o precedente do
+		// CHG-2026-04-23-AUDIT-19 — colapsa-los na acao CRUD do pai corrompe a
+		// forense. Medido: as tres caiam em `unknown.POST.*`.
+		case "restore":
+			return "tenant.restored"
+		case "bulk-delete":
+			return "tenant.bulk_deleted"
+		case "switch":
+			return "team.switched"
 		case "evict":
 			if strings.Contains(path, "/admin/") {
 				return "admin.tenants_evicted"
@@ -85,6 +94,11 @@ func deriveAction(method, path string) string {
 			if strings.Contains(path, "/projects/") {
 				return "repository.disconnected"
 			}
+		// B-059: sem este ramo o fallback devolvia o ID CONCRETO do tenant, entao
+		// a acao era diferente para cada tenant e nenhuma consulta conseguia
+		// filtrar exclusoes de tenant — a operacao mais destrutiva do produto.
+		case "tenants":
+			return "tenant.deleted"
 		case "previews":
 			// /api/v1/projects/{p}/previews/{id}
 			return "preview.deleted"
@@ -137,6 +151,13 @@ func extractResourceType(path string) string {
 		return "preview"
 	case "evict":
 		return "admin"
+	// B-059: sem estes ramos o `default` devolvia o proprio segmento — e para
+	// a exclusao de tenant o segmento era o ID, entao o TIPO do recurso variava
+	// por tenant. Singular, como todos os demais deste switch.
+	case "tenants", "restore", "bulk-delete":
+		return "tenant"
+	case "switch", "teams":
+		return "team"
 	default:
 		return segment
 	}
@@ -193,6 +214,7 @@ var knownCollections = map[string]bool{
 	"connect":      true,
 	"previews":     true,
 	"evict":        true,
+	"tenants":      true, "restore": true, "bulk-delete": true, "switch": true,
 }
 
 // extractSegment returns the last meaningful URL segment for action/resource mapping.
