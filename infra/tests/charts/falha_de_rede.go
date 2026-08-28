@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package charts reune os testes de render dos charts e os classificadores que eles usam.
+//
+// O comentario de pacote esta AQUI, e nao num `_test.go`, porque este e' o primeiro arquivo
+// nao-de-teste do pacote — enquanto ele so' tinha testes, o ST1000 nao disparava.
 package charts
 
 import "strings"
