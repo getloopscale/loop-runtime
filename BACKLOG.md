@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-165 items — **Open** 21 · **In flight** 0 · **Closed** 144
+166 items — **Open** 22 · **In flight** 0 · **Closed** 144
 
-### Open (21)
+### Open (22)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -95,6 +95,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `triaged` | — |
 | [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta — e' criptografia de segredo de tenant, e o gate ja' saiu do periodo de aviso: ele REPROVA a arvore hoje |
 | [`B-165`](#b-165--o-ambiente-standalone-public-ficou-sem-borda-que-o-sirva----) | O ambiente `standalone-public` ficou sem borda que o sirva | `raw` | baixa — o ambiente ja era legado e o canonico e outro; o custo e um default de task que aponta para um caminho que nao serve mais. |
+| [`B-166`](#b-166--duas-arvores-de-records-coexistem-e-uma-delas-nao-tem-nada-rastreado----) | Duas arvores de records coexistem, e uma delas nao tem nada rastreado | `raw` | media — nada quebra hoje; o custo e que qualquer varredura, gate ou pessoa pode ler a arvore vazia e concluir ausencia onde ha evidencia. |
 
 ### In flight (0)
 
@@ -5537,3 +5538,18 @@ dod:
   - esta decidido se `standalone-public` e aposentado junto com os hostnames ou se ganha borda propria
   - se aposentado: o default de `task infra:install:core-dashboard-only` passa a `dev-public`, e o doc de operacao acompanha
   - nenhuma task tem como default um ambiente sem borda que o sirva
+
+## B-166 — Duas arvores de records coexistem, e uma delas nao tem nada rastreado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: medido em 2026-08-19 ao escolher onde arquivar a narrativa do `BACKLOG.md`. `.claude/knowledge-base/` tem **154 arquivos rastreados**; `.claude/records/` existe em disco com as subpastas do schema (`acceptance`, `audits`, `backlog`, `discoveries`, `grills`, ...) e **zero arquivos rastreados**. O `CLAUDE.md` do projeto aponta a primeira como canonica; `rules/records-location.md` aponta a segunda.
+why_now: e a forma exata que a propria `records-location.md` descreve e mede em outros consumidores — "all three had both directories present", com uma auditoria lendo a arvore errada e reportando zero implementacoes onde havia seis. A falha e silenciosa por natureza: uma segunda arvore nunca da erro, so acumula metade da verdade. Apareceu agora porque um link do `BACKLOG.md` (versionado) para `.claude/records/` seria citacao morta para quem clona.
+status: raw
+severity: media — nada quebra hoje; o custo e que qualquer varredura, gate ou pessoa pode ler a arvore vazia e concluir ausencia onde ha evidencia.
+dod:
+  - esta decidido qual das duas arvores e canonica NESTE repo, e a regra que discorda e corrigida em vez de conviver
+  - a arvore perdedora ou e removida ou passa a ser um ponteiro, e nao um diretorio de subpastas vazias que aparenta ser o lugar certo
+  - existe verificacao que reprova quando as duas voltam a carregar `.md` ao mesmo tempo
