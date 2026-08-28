@@ -57,7 +57,15 @@ func TestHosts_MissingInventoryIsAnError(t *testing.T) {
 // A populacao real (rules/testing.md § 4.2): o inventario deste repositorio precisa
 // declarar os tres hosts que ninguem sondava. Um caso sintetico prova que a funcao le;
 // so isto diz o que ela encontra no que existe.
-func TestHosts_RealInventoryCoversTheUnprobedThree(t *testing.T) {
+func TestHosts_RealInventoryCoversTodosOsDeclarados(t *testing.T) {
+	// Era `...CoversTheUnprobedThree`, e cravava `app|cloud|auth.loopzero.example` — os tres hosts
+	// sem sufixo que a sonda nao alcancava. Eles foram REMOVIDOS em 2026-08-19 (B-025): serviam
+	// processos de desenvolvimento sob nome de producao, e o de identidade estava entre eles.
+	//
+	// Manter os nomes aqui faria o teste exigir de volta o que uma decisao tirou. O que ele
+	// existe para proteger nao eram aqueles tres: e' que `leak.Hosts` derive a lista do
+	// INVENTARIO em vez de nomes fixos — porque fixar nomes deixa o proximo host invisivel pelo
+	// mesmo motivo que deixou aqueles.
 	hosts, err := leak.Hosts(filepath.Join("..", "..", "..", "..", "infra", "quality", "proxy-exposure.txt"))
 	if err != nil {
 		t.Fatalf("inventario real: %v", err)
@@ -65,13 +73,19 @@ func TestHosts_RealInventoryCoversTheUnprobedThree(t *testing.T) {
 	if len(hosts) == 0 {
 		t.Fatal("zero hosts declarados — verde sobre nada")
 	}
-	tem := map[string]bool{}
-	for _, h := range hosts {
-		tem[h] = true
+	// Piso MEDIDO em 2026-08-19, depois da remocao do B-025: 4 hosts. Menos que isso significa
+	// que a extracao encolheu, e o verde passou a valer menos sem que nada avisasse.
+	if len(hosts) < 4 {
+		t.Errorf("so' %d host(s) alcancado(s) (%v); o inventario declarava 4 em 2026-08-19",
+			len(hosts), hosts)
 	}
-	for _, h := range []string{"app.loopzero.example", "cloud.loopzero.example", "auth.loopzero.example"} {
-		if !tem[h] {
-			t.Errorf("%s nao esta no inventario — a sonda nao teria como alcanca-lo", h)
+	// E o que a remocao do B-025 garantiu: nenhum nome de producao sem sufixo sobreviveu.
+	for _, h := range hosts {
+		for _, proibido := range []string{"app.loopzero.example", "cloud.loopzero.example", "auth.loopzero.example"} {
+			if h == proibido {
+				t.Errorf("%s voltou ao inventario; ele foi removido no B-025 por servir uma "+
+					"instancia de desenvolvimento sob nome de producao", h)
+			}
 		}
 	}
 	t.Logf("populacao real: %d hosts declarados: %v", len(hosts), hosts)

@@ -40,8 +40,16 @@ func TestProntidaoEVivacidadeNaoCompartilhamOMesmoHandler(t *testing.T) {
 			}
 			vivo := caminhoDaSonda(string(out), "livenessProbe:")
 			pronto := caminhoDaSonda(string(out), "readinessProbe:")
+			// Era um Skip, e o gate `skip-link` estava certo em recusa-lo. Um chart que nao
+			// declara as duas sondas nao e' um caso fora de escopo deste teste: e' o caso PIOR
+			// que ele existe para pegar. Sem prontidao, o Kubernetes usa a vivacidade para
+			// decidir trafego, que e' exatamente o defeito do B-135 na sua forma extrema.
+			//
+			// Um Skip aqui tornava a ausencia de sonda indistinguivel de um chart aprovado.
 			if vivo == "" || pronto == "" {
-				t.Skipf("chart nao declara as duas sondas (liveness=%q readiness=%q)", vivo, pronto)
+				t.Fatalf("o chart nao declara as duas sondas (liveness=%q readiness=%q). Sem "+
+					"prontidao propria, uma instancia que nao consegue servir continua no Service "+
+					"(B-135).", vivo, pronto)
 			}
 			if vivo == pronto {
 				t.Errorf("vivacidade e prontidao apontam para o MESMO caminho (%q). O handler de "+
