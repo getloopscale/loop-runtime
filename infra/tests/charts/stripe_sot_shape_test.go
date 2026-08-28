@@ -159,9 +159,17 @@ func TestStripeSoTShape_FixtureMode0644(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fixture stat failed: %v", err)
 	}
+	// The contract stated above is READABILITY, not an exact bit pattern: the fixture must not
+	// look like an owner-only secret. An exact `!= 0o644` check also asserts the checkout umask,
+	// which git does not track — a clone under umask 002 yields 0664, which honours the contract
+	// and still failed. Measured on a umask-002 host, 2026-08-28.
 	mode := info.Mode().Perm()
-	if mode != 0o644 {
-		t.Errorf("fixture mode %o; expected 0644 (public schema artifact, not 0600 secret SoT)", mode)
+	if mode&0o044 != 0o044 {
+		t.Errorf("fixture mode %o is not group+world readable; a public schema artifact must be "+
+			"readable by anyone running the test, unlike a 0600 secret SoT", mode)
+	}
+	if mode&0o111 != 0 {
+		t.Errorf("fixture mode %o is executable; a JSON schema artifact must not be", mode)
 	}
 }
 
