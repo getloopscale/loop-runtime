@@ -10,11 +10,11 @@ import (
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/advisorylock"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/crdsemanticdiff"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/platformcrnamespace"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dbgeneratedboundary"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/ma7statuslocality"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/migrationtestcoverage"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nomigrateforce"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/platformcrnamespace"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/renderschemagensql"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/sqlcsync"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/sqlctxprop"
