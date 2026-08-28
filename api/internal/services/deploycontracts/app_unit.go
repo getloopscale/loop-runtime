@@ -47,12 +47,12 @@ type AppUnit struct {
 	// backward compatibility per D1/D2).
 	Runtime string `json:"runtime,omitempty"`
 
-	Port       int               `json:"port"`
-	Build      string            `json:"build"`                // "dockerfile", "buildpack", "custom"
-	Start      string            `json:"start,omitempty"`      // T0.2b: declared services.json start command (canonical Dockerfile CMD)
-	Dockerfile string            `json:"dockerfile,omitempty"` // resolved Dockerfile path (relative to app path)
-	Rendering  string            `json:"rendering,omitempty"`  // "static" or "server" (MEET-009)
-	Secrets    []string          `json:"secrets,omitempty"`
+	Port       int      `json:"port"`
+	Build      string   `json:"build"`                // "dockerfile", "buildpack", "custom"
+	Start      string   `json:"start,omitempty"`      // T0.2b: declared services.json start command (canonical Dockerfile CMD)
+	Dockerfile string   `json:"dockerfile,omitempty"` // resolved Dockerfile path (relative to app path)
+	Rendering  string   `json:"rendering,omitempty"`  // "static" or "server" (MEET-009)
+	Secrets    []string `json:"secrets,omitempty"`
 }
 
 // Plan B v3.1 T-B.1 (2026-06-05) — `frontendFrameworks` map removed post

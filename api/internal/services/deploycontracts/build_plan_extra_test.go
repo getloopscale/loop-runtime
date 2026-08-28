@@ -102,4 +102,3 @@ func TestCreateBuildPlan_SystemBuildArgsSemprePresentes(t *testing.T) {
 		t.Errorf("APP_NAME = %q, want api", plan.Apps[0].BuildArgs["APP_NAME"])
 	}
 }
-

@@ -54,7 +54,6 @@ import (
 //
 // Uma ressalva que continua valendo: "deixar leitura passar" e' IMPOSTO pelo middleware, que
 // decide por metodo HTTP; o `Allow()` daqui nao ve a requisicao e nao pode impor isso sozinho.
-//
 type PGPoolBreaker struct {
 	pool *pgxpool.Pool
 	cfg  BreakerConfig

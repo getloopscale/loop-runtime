@@ -6,7 +6,6 @@ package admission_test
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 )
@@ -74,53 +73,6 @@ func TestOPortaoDoPoolEstaLigadoAoMiddleware(t *testing.T) {
 	}
 }
 
-func caçarChamadoresDeAllow(t *testing.T, raizAPI string) (chamadores []string, examinados int) {
-	t.Helper()
-	re := regexp.MustCompile(`\bAllow\(\s*\)`)
-	err := filepath.Walk(raizAPI, func(p string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return err
-		}
-		if !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
-			return nil
-		}
-		if strings.Contains(p, filepath.Join("internal", "admission")) {
-			return nil // o proprio pacote: definicao e doc, nao consumo
-		}
-		b, err := os.ReadFile(p) // #nosec G304 -- caminho vem do Walk sobre a arvore do repo
-		if err != nil {
-			return err
-		}
-		if !strings.Contains(string(b), caminhoDestePacote) {
-			return nil // nao importa o pacote: qualquer `Allow()` aqui e de outro tipo
-		}
-		examinados++
-		for _, linha := range strings.Split(string(b), "\n") {
-			if strings.HasPrefix(strings.TrimSpace(linha), "//") {
-				continue
-			}
-			if re.MatchString(linha) {
-				chamadores = append(chamadores, p)
-				break
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("varrer o modulo api: %v", err)
-	}
-	return chamadores, examinados
-}
-
-func lerArquivo(t *testing.T, p string) string {
-	t.Helper()
-	b, err := os.ReadFile(filepath.Clean(p))
-	if err != nil {
-		t.Fatalf("ler %s: %v", p, err)
-	}
-	return string(b)
-}
-
 // raizDoRepositorio sobe ate' o diretorio que contem `api/go.mod`. Independe de
 // quantos niveis fundo o pacote esta', que e' exatamente a fragilidade que
 // derrubou a versao anterior deste teste.
@@ -148,4 +100,3 @@ func raizDoRepositorio(t *testing.T) string {
 // importadores. Escrito UMA vez: quando o pacote desceu para `buildplane`
 // (B-062) o filtro literal parou de casar, a populacao zerou e so' o piso
 // abaixo impediu que a guarda ficasse verde sobre nada.
-const caminhoDestePacote = "internal/buildplane/admission"

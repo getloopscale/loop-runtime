@@ -65,7 +65,7 @@ type Output struct {
 var (
 	reKind      = regexp.MustCompile(`^\s*kind:\s*(Tenant|Environment)\s*$`)
 	reNamespace = regexp.MustCompile(`^\s*namespace:\s*["']?([A-Za-z0-9_.${}:-]+)["']?\s*$`)
-	reApiLoopZero   = regexp.MustCompile(`^\s*apiVersion:\s*loopzero\.io/`)
+	reAPILoopZero   = regexp.MustCompile(`^\s*apiVersion:\s*loopzero\.io/`)
 )
 
 // Check varre as arvores e devolve as violacoes.
@@ -90,6 +90,8 @@ func Check(cfg Config) (Output, error) {
 			default:
 				return nil
 			}
+			// #nosec G304,G122 -- `p` vem do WalkDir sobre as arvores declaradas em Config.Dirs,
+			// sob o proprio repositorio; nao ha entrada externa neste caminho.
 			b, rerr := os.ReadFile(filepath.Clean(p))
 			if rerr != nil {
 				return nil
@@ -153,7 +155,7 @@ func ocorrenciasEm(conteudo, arquivo string) []Ocorrencia {
 		}
 		// A ancora e' o `apiVersion: loopzero.io/` imediatamente acima — sem ela, `kind: Environment`
 		// casaria com qualquer CRD homonimo de outro grupo.
-		if i == 0 || !reApiLoopZero.MatchString(linhas[i-1]) {
+		if i == 0 || !reAPILoopZero.MatchString(linhas[i-1]) {
 			continue
 		}
 		ns := ""
