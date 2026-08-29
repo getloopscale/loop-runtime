@@ -132,3 +132,34 @@ func TestRealTreeIsClean(t *testing.T) {
 		t.Fatal("zero SKILL.md scanned — the scan found nothing to check, which is not the same as finding nothing wrong")
 	}
 }
+
+// Two blind spots this gate had, reported by the kit after it ran a wider sweep: it found 39
+// occurrences in 18 files where this gate saw 25 in 8.
+//
+// The gate matched only `skills/…` and read only each skill's SKILL.md. Both narrowings were
+// invisible from inside: every file it opened was clean, so it reported PASS over the subset
+// it could see. That is the shape this repository keeps finding — a green that measured less
+// than it appeared to.
+func TestPegaInvocacaoDeScriptsSemPrefixoDeSkills(t *testing.T) {
+	// `scripts/…` at the ecosystem root has the same defect and the same fix: it resolves in
+	// the standalone kit and nowhere else.
+	linha := `python3 scripts/check_xrefs.py --strict`
+	if achados := scanLine(linha); len(achados) == 0 {
+		t.Errorf("uma invocacao de `scripts/…` sem prefixo nao foi acusada; ela quebra num "+
+			"consumidor exatamente como `skills/…`, e o gate so' olhava a segunda forma: %q", linha)
+	}
+}
+
+func TestNaoAcusaAFormaQueResolveNosDoisLayouts(t *testing.T) {
+	// A contrapartida, e ela e' o que impede o conserto de virar ruido: a forma inline que o
+	// kit passou a enviar tem de passar.
+	for _, linha := range []string{
+		`python3 "$([ -d .claude/skills ] && echo .claude || echo .)/scripts/check_xrefs.py"`,
+		`python3 "$ECO/skills/release/scripts/compute_next_version.py"`,
+		`python3 .claude/scripts/check_xrefs.py`,
+	} {
+		if achados := scanLine(linha); len(achados) > 0 {
+			t.Errorf("acusou a forma que JA resolve nos dois layouts: %q", linha)
+		}
+	}
+}

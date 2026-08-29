@@ -69,7 +69,11 @@ var ErrSkillsRootMissing = errors.New("the skills root is absent — nothing was
 // The negative lookahead on `"` and the absence of `.claude/` or `$ECO/` before
 // `skills/` are what separate the broken form from the two accepted ones. Go's regexp
 // has no lookahead, so the prefix check is done in code — see scanLine.
-var invocationRE = regexp.MustCompile(`\b(?:python3|python|bash|sh)\s+("?)([A-Za-z0-9_./$-]*skills/[a-z0-9-]+/(?:scripts|tests)/[A-Za-z0-9_.-]+\.(?:py|sh))`)
+// The alternation covers BOTH shapes the kit ships: `skills/<name>/scripts/…` and a bare
+// `scripts/…` at the ecosystem root. Until 2026-08-29 it matched only the first, so a
+// `python3 scripts/check_xrefs.py` in rules/README.md was invisible — the kit's own sweep
+// found 39 occurrences where this gate saw 25.
+var invocationRE = regexp.MustCompile(`\b(?:python3|python|bash|sh)\s+("?)([A-Za-z0-9_./$-]*(?:skills/[a-z0-9-]+/(?:scripts|tests)|scripts)/[A-Za-z0-9_.-]+\.(?:py|sh))`)
 
 // Finding is one unreachable invocation.
 type Finding struct {
@@ -99,8 +103,22 @@ type Config struct {
 // Two forms pass: an explicit ecosystem prefix (`.claude/skills/...`), correct wherever
 // the plugin layout ships; and a shell-resolved prefix (`$ECO/skills/...`), correct in
 // both. Everything else is the bare form.
+// accepted decides whether an invocation resolves in BOTH layouts.
+//
+// It keys on `.claude/` and on the runtime-resolved prefix, not on `.claude/skills/`: once the
+// regex learned bare `scripts/…`, keying on the skills segment rejected `.claude/scripts/…`,
+// which is correct wherever the plugin layout holds. The counterpart test caught that within
+// the same change — widening WHAT is matched must not narrow WHAT is accepted.
 func accepted(path string) bool {
-	return strings.Contains(path, ".claude/skills/") || strings.Contains(path, "$ECO/")
+	// Any prefix resolved at RUNTIME is fine — the shell decides the layout, not the text.
+	// `$SKILL_DIR` is the kit's own variable for the skill's own directory; it was flagged as
+	// soon as the regex learned bare `scripts/…`, which is a false positive: those two lines
+	// already work in both layouts.
+	if strings.HasPrefix(strings.TrimPrefix(path, `"`), "$") {
+		return true
+	}
+	return strings.Contains(path, ".claude/") || strings.Contains(path, "$") ||
+		strings.Contains(path, "echo .claude")
 }
 
 func scanLine(line string) []string {
@@ -146,6 +164,41 @@ func Check(cfg Config) (Outcome, error) {
 				out.Findings = append(out.Findings, Finding{
 					File: rel, Line: i + 1, Path: p, Text: strings.TrimSpace(line),
 				})
+			}
+		}
+	}
+
+	// The second blind spot: instruction for an agent is not confined to SKILL.md. `rules/`,
+	// `commands/` and the ecosystem README carry the same invocations, and scanning only
+	// SKILL.md reported PASS over a subset — every file it opened WAS clean.
+	//
+	// Measured 2026-08-29: the kit's own sweep found 39 occurrences in 18 files where this
+	// gate saw 25 in 8. The difference was these directories plus the bare `scripts/…` form.
+	eco := filepath.Dir(filepath.Join(cfg.RepoRoot, cfg.SkillsRel))
+	for _, sub := range []string{"rules", "commands", "."} {
+		dir := filepath.Join(eco, sub)
+		items, derr := os.ReadDir(dir)
+		if derr != nil {
+			continue
+		}
+		for _, it := range items {
+			if it.IsDir() || !strings.HasSuffix(it.Name(), ".md") {
+				continue
+			}
+			doc := filepath.Join(dir, it.Name())
+			body, rerr := os.ReadFile(doc) // #nosec G304 -- path built from the ecosystem root
+			if rerr != nil {
+				continue
+			}
+			out.FilesScanned++
+			rel, _ := filepath.Rel(cfg.RepoRoot, doc)
+			for i, line := range strings.Split(string(body), "\n") {
+				for _, pth := range scanLine(line) {
+					out.Findings = append(out.Findings, Finding{
+						File: filepath.ToSlash(rel), Line: i + 1, Path: pth,
+						Text: strings.TrimSpace(line),
+					})
+				}
 			}
 		}
 	}
