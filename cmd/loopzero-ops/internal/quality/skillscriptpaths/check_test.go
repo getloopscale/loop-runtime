@@ -163,3 +163,28 @@ func TestNaoAcusaAFormaQueResolveNosDoisLayouts(t *testing.T) {
 		}
 	}
 }
+
+// Um `.local.md` na raiz do ecossistema e' estado de sessao, nao instrucao enviada: ele e'
+// gitignored e existe so' na maquina de quem rodou. Reprovar o repositorio por causa dele
+// seria o gate falhando por algo que nenhum consumidor recebe — e a raiz do `.claude/` carrega
+// um hoje (`codebase-architect-loop.local.md`, 16 invocacoes).
+func TestIgnoraArquivoLocalDeSessaoNaRaiz(t *testing.T) {
+	raiz := t.TempDir()
+	eco := filepath.Join(raiz, ".claude")
+	if err := os.MkdirAll(filepath.Join(eco, "skills", "alguma"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(eco, "skills", "alguma", "SKILL.md"), []byte("ok\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A forma quebrada, num arquivo que nunca sai desta maquina.
+	if err := os.WriteFile(filepath.Join(eco, "loop.local.md"),
+		[]byte("python3 scripts/route_domain.py x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := Check(Config{RepoRoot: raiz})
+	if err != nil {
+		t.Fatalf("err = %v; um .local.md nao pode reprovar o repositorio: %+v", err, out.Findings)
+	}
+}

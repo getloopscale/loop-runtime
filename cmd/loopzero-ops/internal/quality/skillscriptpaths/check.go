@@ -185,6 +185,13 @@ func Check(cfg Config) (Outcome, error) {
 			if it.IsDir() || !strings.HasSuffix(it.Name(), ".md") {
 				continue
 			}
+			// `*.local.md` is session state, not shipped instruction: gitignored, present only
+			// on the machine that ran the loop. Failing the repository over a file no consumer
+			// receives is the gate reporting on the wrong thing. The `.claude/` root carries one
+			// today with 16 invocations in it.
+			if strings.HasSuffix(it.Name(), ".local.md") {
+				continue
+			}
 			doc := filepath.Join(dir, it.Name())
 			body, rerr := os.ReadFile(doc) // #nosec G304 -- path built from the ecosystem root
 			if rerr != nil {

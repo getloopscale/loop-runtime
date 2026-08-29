@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Um arquivo de configuração que parecia governar uma verificação não era lido por ninguém, e três dos quatro itens que ele listava já nem existiam.** Removido, e uma verificação nova impede que outro arquivo desse diretório passe a parecer contrato sem sê-lo. (B-091)
 
 ### Fixed
+- **loopzero:** A mesma verificação deixou de reprovar o repositório por causa de arquivos de estado de sessão, que existem só na máquina de quem os gerou
 - **loopzero:** A verificação que impede instruções de rodar comandos por um caminho inexistente passou a cobrir mais dois formatos e mais três diretórios; ela encontrou cinco ocorrências que ninguém via
 - **loopzero:** Restaurada a verificação automática que roda antes de cada publicação, e a correção da guarda de exclusão de arquivos, ambas perdidas numa atualização de ferramenta (B-160)
 - **loopzero:** Os quatro alertas críticos do cofre voltaram a ter guia de plantão, agora apontando para um documento que existe — os endereços anteriores respondiam 404 (B-067)
