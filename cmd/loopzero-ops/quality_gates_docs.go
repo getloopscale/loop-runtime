@@ -82,7 +82,11 @@ func runSkillScriptPaths(args []string) int {
 		fmt.Fprintf(os.Stderr, "skill-script-paths: FAIL — %v\n", err)
 		return 1
 	}
-	fmt.Printf("skill-script-paths: PASS — %d SKILL.md across %d skill(s); every script invocation resolves in both layouts\n",
+	// "document(s)", not "SKILL.md": the scan reaches rules/, commands/ and the ecosystem root
+	// too, so the count stopped being SKILL.md the moment it was widened. It read 98 where 49
+	// SKILL.md exist on disk — the number was right and the noun was not, which reads as
+	// double-counting to anyone checking.
+	fmt.Printf("skill-script-paths: PASS — %d document(s) across %d skill(s) plus rules/, commands/ and the ecosystem root; every script invocation resolves in both layouts\n",
 		out.FilesScanned, out.SkillsScanned)
 	return 0
 }
