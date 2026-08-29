@@ -265,3 +265,6 @@ operators/app-operator
 # Artefatos de sessão do harness — nem versionados nem visíveis a um `git add -A`.
 .claude/.compaction-snapshots/
 .claude/.patch-backups/
+
+# Kit installer backups — timestamped copies of the previous install, not source.
+.claude/.install-backups/
