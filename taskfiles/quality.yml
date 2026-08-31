@@ -251,6 +251,10 @@ tasks:
       - bash infra/tests/secrets/check-generate-secrets-vault-fallback_test.sh         # openbao-adoption iter 34: T6.5 cold-bootstrap fallback Vault-skipped path (cleanroom)
       - bash infra/tests/secrets/check-scoped-kubeconfig-cold-bootstrap_test.sh        # openbao-adoption iter 34: T7.3 cold-bootstrap legacy SA-token Secret block (cell wiring)
       - bash infra/tests/secrets/check-promtail-vault-empty-targets_test.sh            # openbao-adoption iter 34: T8.1 promtail filter when secrets-system NS absent (dogfood compat)
+      # B-033 (2026-08-31): dev-public overlay MUST publish LOOPZERO_PROMETHEUS_URL for
+      # cost aggregator wiring — hermetic, no live cluster required. Sem essa var,
+      # cost_counters fica vazia em dev-public e CostEnforcer degrada para pass-through.
+      - bash infra/tests/check-loopzero-cloud-cost-aggregator-wiring_test.sh
       - /tmp/loopzero-ops quality credentials-sot                    # M-Migrate2 (2026-07-07): replaced infra/tests/docs/credentials-sot_test.sh with pure-logic Go gate. Doc-sync: credentials-required.md enumerates bootstrap Secrets.
       # J-22 openbao-transit v1.2 productive-idle hermetic tests (iters 20-26) — wired iter 27.
       # All 4 are anti-drift contract guards for the engineering deliverables
