@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - **loopzero:** Guia de plantão para os alertas de assinatura de release, atestado de proveniência e propagação de secret, com os passos de diagnóstico ancorados no código (B-067)
 - **loopzero:** O painel de controle passa a ser monitorado quanto à disponibilidade, como os demais serviços da plataforma (B-022)
+- **loopzero:** backlog B-167 — a verificação que checa se ligamos as verificações de qualidade de código foi ligada, e ela reprova quando nenhuma linguagem foi ligada; enquanto isso, nenhuma linguagem está ligada, então toda proposta de mudança para no acesso automático (B-167)
 
 - **A verificacao de que o resumo de prontidao e' a ultima escrita antes de salvar passou a valer para os seis controladores, e nao para um.** Ela seguia so' a funcao onde a escrita acontece, e a forma usada por sete controladores registra o resumo no fim do ciclo, num nivel acima — para a verificacao antiga isso parecia ausencia. Medido depois da correcao: 33 pontos de escrita, 33 cobertos (B-138)
 
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Um arquivo de configuração que parecia governar uma verificação não era lido por ninguém, e três dos quatro itens que ele listava já nem existiam.** Removido, e uma verificação nova impede que outro arquivo desse diretório passe a parecer contrato sem sê-lo. (B-091)
 
 ### Fixed
+- **A proteção de teto de custo no ambiente que serve o painel público voltou a ter dados para consultar.** Ela lê uma tabela de contadores que era populada por um agregador — e o agregador não subia porque uma coordenada estava faltando na configuração. Sem contador, a proteção degradava para "passa": build/egresso/pulls de registro ficavam sem teto. A coordenada canônica já estava em uso por um serviço vizinho no mesmo ambiente; agora está aqui também, com um teste hermético que impede a regressão. A verificação final de que os contadores começaram a receber linhas em app-dev acontece no próximo ciclo. (B-033)
 - **loopzero:** A mensagem dessa verificação passou a dizer quantos documentos ela leu, e não a chamá-los todos de um tipo só — o número parecia contagem dobrada
 - **loopzero:** A mesma verificação deixou de reprovar o repositório por causa de arquivos de estado de sessão, que existem só na máquina de quem os gerou
 - **loopzero:** A verificação que impede instruções de rodar comandos por um caminho inexistente passou a cobrir mais dois formatos e mais três diretórios; ela encontrou cinco ocorrências que ninguém via
