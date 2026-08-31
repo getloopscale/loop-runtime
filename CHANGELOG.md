@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **loopzero:** O painel de controle passa a ser monitorado quanto à disponibilidade, como os demais serviços da plataforma (B-022)
 - **loopzero:** backlog B-167 — a verificação que checa se ligamos as verificações de qualidade de código foi ligada, e ela reprova quando nenhuma linguagem foi ligada; enquanto isso, nenhuma linguagem está ligada, então toda proposta de mudança para no acesso automático (B-167)
 
+### Fixed
+- **loopzero:** A verificação automática de qualidade de código voltou a funcionar para o Go — as três raízes do workspace foram ligadas e os 36 achados pré-existentes de código morto ficaram registrados como dívida conhecida em `code-quality-baseline.txt`, permitindo que mudanças novas sejam avaliadas sem serem reprovadas por débito herdado. `/plan-confidence` deixa de emitir `no_languages_audited` como hard cap sistêmico (B-167)
+
 - **A verificacao de que o resumo de prontidao e' a ultima escrita antes de salvar passou a valer para os seis controladores, e nao para um.** Ela seguia so' a funcao onde a escrita acontece, e a forma usada por sete controladores registra o resumo no fim do ciclo, num nivel acima — para a verificacao antiga isso parecia ausencia. Medido depois da correcao: 33 pontos de escrita, 33 cobertos (B-138)
 
 ### Removed
