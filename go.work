@@ -11,4 +11,5 @@ use (
 	./operators
 	./operators/api
 	./pkg
+	./tools/gen-service-auth-ed25519
 )
