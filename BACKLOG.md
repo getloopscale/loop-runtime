@@ -5659,3 +5659,20 @@ dod:
   - alternativamente: o modulo sai do go.work se for standalone-buildable
 
 > Registrado 2026-08-31 por /implement iteration 3 ao investigar go tests FAIL.
+
+## B-172 — Detector Python depende de `vulture` no PATH mas nada verifica; teste falha em qualquer host sem o binário   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: human
+evidence: medido em 2026-08-31 durante /idea-to-release B-167. `test_a_python_defect_is_not_reported_as_PASS` em `.claude/skills/code-quality/tests/test_orchestrator.py:406` falha porque `assert exit_code != 0` reprova quando vulture binário não está no PATH. Detector em `.claude/skills/code-quality/scripts/detectors/python.py:59` faz `subprocess.run(["vulture", ...])` que retorna FileNotFoundError → auditor_unavailable_vulture soft cap → FAIL_SOFT → exit 0. O módulo Python `vulture` (2.16) está instalado como biblioteca (`python3 -m vulture --version` funciona) mas o binário `vulture` do PATH depende de a instalação vir via `pip install --user` OR `pipx install`. Fresh clone tem o módulo (via requirements) mas não o binário. Fix aplicado localmente via `pip install --user --break-system-packages vulture` que colocou `~/.local/bin/vulture`.
+why_now: apareceu durante execução de B-167 (fatia da Go audit ligação). O batch B-167 rodou 258/258 testes verdes apenas depois do fix env. Sem esse fix, qualquer sessão que rode `pytest .claude/skills/code-quality/` falha 1 de 259 por razão que não é código.
+status: triaged
+severity: baixa — o binário vulture geralmente está disponível em hosts de dev com Python, mas o requisito é hidden. O impacto é 1 teste flaky por env, não regressão de produção.
+dod:
+  - o detector Python invoca `python3 -m vulture` em vez de `vulture` (parsimony ladder rung 3: usar feature nativa do Python que já existe, elimina dependência de PATH)
+  - OU: `.claude/skills/code-quality/pyproject.toml` documenta explicitamente que `vulture` binário deve estar no PATH e há check de setup que falha loud com mensagem actionable
+  - o teste `test_a_python_defect_is_not_reported_as_PASS` passa em host sem `~/.local/bin` no PATH
+
+> Registrado 2026-08-31 durante execução de /idea-to-release B-167 (side-finding — vulture CLI ausente do PATH bloqueou a suíte de testes; env fix aplicado local mas o requisito hidden persiste no código).
