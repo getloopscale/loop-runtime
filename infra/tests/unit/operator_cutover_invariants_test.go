@@ -182,8 +182,15 @@ func TestT09_TilftileSplitOperatorMigrationStatus(t *testing.T) {
 }
 
 // T-10 — admin pin endpoint + CLI shipped (T5.5).
+//
+// B-169 (2026-08-31): admin_pin_cell.go moved into the `admin/` subdirectory
+// during a routes refactor; this test's path assertion was never updated and
+// reported the endpoint as "T5.5 incomplete" when the file existed the whole
+// time. The file lives at api/internal/routes/admin/admin_pin_cell.go, with
+// admin_evict.go, admin_release_inspect.go as siblings — the group makes sense
+// as a package. Test now checks the real path.
 func TestT10_AdminPinEndpointShipped(t *testing.T) {
-	path := filepath.Join(repoRoot(), "api", "internal", "routes", "admin_pin_cell.go")
+	path := filepath.Join(repoRoot(), "api", "internal", "routes", "admin", "admin_pin_cell.go")
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("admin_pin_cell.go missing — T5.5 incomplete: %v", err)
 	}
