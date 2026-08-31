@@ -148,6 +148,18 @@ env:
   # apenas `GET /v1/version`, auth-exempt por contrato do gateway.
   TRAEFIK_MCP_BASE_URL: "http://host.k3d.internal:18090"
 
+  # B-033 (2026-08-31) — o agregador de custo em loopzero-cloud/cmd/main.go lê esta
+  # variável no boot; se vazia, ele imprime `logger.Info("cost aggregator disabled
+  # (LOOPZERO_PROMETHEUS_URL not set)")` (main.go:1995) e não sobe. `cost_counters` fica
+  # vazia, e o CostEnforcer no api/ degrada para pass-through — os tetos de build
+  # minutes, egresso e pulls de registro ficam sem enforcement no ambiente que serve
+  # app-dev.loopzero.example. A URL canônica é a mesma que loopzero-app-operator já consome
+  # no mesmo overlay (loopzero-app-operator.yaml.gotmpl linha 28) — se mudar aqui, mudar
+  # lá em lockstep (D1 do plano b033-prometheus-url-dev-public). Guarda hermética:
+  # infra/tests/check-loopzero-cloud-cost-aggregator-wiring_test.sh afirma A1/A2/A3
+  # (presença + valor canônico + parity byte-idêntica com loopzero-app-operator).
+  LOOPZERO_PROMETHEUS_URL: "http://prometheus-server.monitoring.svc.cluster.local:80"
+
 # T2 CANONICAL 2026-07-16 (DELEGATION-M7-rag-ui.md § T2). Enable the
 # ExternalSecret that materializes k8s Secret `loopzero-rag-admin-key` from
 # OpenBao path `secret/loopzero/cloud` property `rag_platform_admin_key` via
