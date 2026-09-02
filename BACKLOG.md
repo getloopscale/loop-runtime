@@ -68,38 +68,45 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-166 items — **Open** 22 · **In flight** 0 · **Closed** 144
+172 items — **Open** 26 · **In flight** 2 · **Closed** 144 · **Blocked** 21
 
-### Open (22)
+### Open (26)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
-| [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `triaged` | — |
-| [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `triaged` | baixa hoje, alta no dia em que o `loopzero-cloud` cair sozinho em produção. O `B-002` registra que o cluster central é SPOF; este item é mais estreito e mais provável: não é o cluster que cai, é **um** processo, e ele carrega uma jornada (deploy) que não é dele. |
+| [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `blocked` · was `triaged` | waiting on a decision |
+| [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `blocked` · was `triaged` | waiting on a decision — baixa hoje, alta no dia em que o `loopzero-cloud` cair sozinho em produção. O `B-002` registra que o cluster central é SPOF; este item é mais estreito e mais provável: não é o cluster que cai, é **um** processo, e ele carrega uma jornada (deploy) que não é dele. |
 | [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
-| [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `triaged` | média — não quebra nada; custa navegação e força dois nomes de pacote que mentem sobre o diretório. |
-| [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `triaged` | média — nenhum defeito de comportamento; é a superfície por onde a mistura de domínios entra sem ninguém decidir. |
-| [`B-059`](#b-059--o-transporte-carrega-o-schema-de-payload-de-cada-domínio-e-faz-body-snooping----) | O transporte carrega o schema de payload de cada domínio e faz body-snooping | `triaged` | média — o dado de auditoria degrada sem erro, que é o pior modo para dado de auditoria. |
-| [`B-060`](#b-060--o-único-lugar-onde-os-quatro-planos-se-encontram-é-uma-pasta-de-arquivos-irmãos----) | O único lugar onde os quatro planos se encontram é uma pasta de arquivos irmãos | `triaged` | média — o agrupamento é defensável; o que falta é a costura que diga qual plano cada arquivo serve. |
-| [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `triaged` | média — dívida acumulada, não defeito ativo. **Deliberadamente separado do B-045**: ligar os gates e pagar a dívida são trabalhos diferentes, e ligá-los antes de ter plano transformaria 76 achados legítimos num muro que alguém desliga na sexta-feira. |
-| [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `triaged` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
-| [`B-080`](#b-080--os-43-arquivos-de-routes-ainda-são-um-pacote-plano-e-mover-263-símbolos-exportados-é-t3----) | Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3 | `triaged` | alta — é o achado central da auditoria de arquitetura, e agora está desbloqueado. |
-| [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `triaged` | média — não afirmo que `tag: dev` seja violação decidida: pode ser sobrescrita no install pelo ArgoCD, e nenhuma decisão registrada a proíbe. O que está medido é que a guarda cobre 1 de 16, e que os 15 restantes nunca foram julgados. |
-| [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `triaged` | média — nada quebra hoje (a tabela `secrets` tem zero linhas), e sobe para **alta** no dia em que houver segredo de cliente guardado. O modo de falha é o pior tipo: silencioso, e só aparece quando alguém tenta ler o segredo. |
-| [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `triaged` | média — nada quebra hoje; o que fica preso são **duas** travas de imutabilidade de imagem, uma no gate e outra na admissão, ambas paradas em modo aviso pela mesma ausência de um valor. |
+| [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `blocked` · was `triaged` | waiting on `B-168`, `B-169`, `B-170` — média — não quebra nada; custa navegação e força dois nomes de pacote que mentem sobre o diretório. |
+| [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `blocked` · was `triaged` | waiting on `B-171` — média — nenhum defeito de comportamento; é a superfície por onde a mistura de domínios entra sem ninguém decidir. |
+| [`B-059`](#b-059--o-transporte-carrega-o-schema-de-payload-de-cada-domínio-e-faz-body-snooping----) | O transporte carrega o schema de payload de cada domínio e faz body-snooping | `blocked` · was `triaged` | waiting on `B-059` — média — o dado de auditoria degrada sem erro, que é o pior modo para dado de auditoria. |
+| [`B-060`](#b-060--o-único-lugar-onde-os-quatro-planos-se-encontram-é-uma-pasta-de-arquivos-irmãos----) | O único lugar onde os quatro planos se encontram é uma pasta de arquivos irmãos | `blocked` · was `triaged` | waiting on `B-060` — média — o agrupamento é defensável; o que falta é a costura que diga qual plano cada arquivo serve. |
+| [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `blocked` · was `triaged` | waiting on `B-067` — média — dívida acumulada, não defeito ativo. **Deliberadamente separado do B-045**: ligar os gates e pagar a dívida são trabalhos diferentes, e ligá-los antes de ter plano transformaria 76 achados legítimos num muro que alguém desliga na sexta-feira. |
+| [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `blocked` · was `triaged` | waiting on `B-079`, `B-079` — média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
+| [`B-080`](#b-080--os-43-arquivos-de-routes-ainda-são-um-pacote-plano-e-mover-263-símbolos-exportados-é-t3----) | Os 43 arquivos de `routes` ainda são um pacote plano, e mover 263 símbolos exportados é T3 | `blocked` · was `triaged` | waiting on `B-080` — alta — é o achado central da auditoria de arquitetura, e agora está desbloqueado. |
+| [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `blocked` · was `triaged` | waiting on `B-060`, `B-113` — média — não afirmo que `tag: dev` seja violação decidida: pode ser sobrescrita no install pelo ArgoCD, e nenhuma decisão registrada a proíbe. O que está medido é que a guarda cobre 1 de 16, e que os 15 restantes nunca foram julgados. |
+| [`B-126`](#b-126--uma-chave-transit-revogada-orfaniza-ciphertext-e-nada-percebe----) | Uma chave transit revogada orfaniza ciphertext e nada percebe | `blocked` · was `triaged` | waiting on `B-126` — média — nada quebra hoje (a tabela `secrets` tem zero linhas), e sobe para **alta** no dia em que houver segredo de cliente guardado. O modo de falha é o pior tipo: silencioso, e só aparece quando alguém tenta ler o segredo. |
+| [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `blocked` · was `triaged` | waiting on `B-080`, `B-126`, `B-134` — média — nada quebra hoje; o que fica preso são **duas** travas de imutabilidade de imagem, uma no gate e outra na admissão, ambas paradas em modo aviso pela mesma ausência de um valor. |
 | [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `triaged` | média — o código resultante está **correto** e é 1:1; o que ficou errado foi a documentação dele, e o modo como errou é o registro mais nítido do risco que o `B-001` nomeia. |
-| [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `triaged` | média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número. |
-| [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `triaged` | média — nada quebra hoje, e é justamente isso que o mantém: o caminho resolve porque a conta existe. Vira **alta** no dia em que outra pessoa operar o host, ou em que a conta for removida. |
-| [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `triaged` | média — não quebra ambiente, mas é uma guarda de supply-chain que reporta sobre nada. |
-| [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média — nenhum serve tráfego, mas dois são guardas (prazo de assinatura, cobertura) e |
-| [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `triaged` | — |
+| [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `blocked` · was `triaged` | waiting on `B-137` — média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número. |
+| [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `blocked` · was `triaged` | waiting on `B-139` — média — nada quebra hoje, e é justamente isso que o mantém: o caminho resolve porque a conta existe. Vira **alta** no dia em que outra pessoa operar o host, ou em que a conta for removida. |
+| [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `blocked` · was `triaged` | waiting on `B-146` — média — não quebra ambiente, mas é uma guarda de supply-chain que reporta sobre nada. |
+| [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `blocked` · was `triaged` | waiting on `B-146`, `B-146`, `B-147` — média — nenhum serve tráfego, mas dois são guardas (prazo de assinatura, cobertura) e |
+| [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `blocked` · was `triaged` | waiting on `B-154` |
 | [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta — e' criptografia de segredo de tenant, e o gate ja' saiu do periodo de aviso: ele REPROVA a arvore hoje |
-| [`B-165`](#b-165--o-ambiente-standalone-public-ficou-sem-borda-que-o-sirva----) | O ambiente `standalone-public` ficou sem borda que o sirva | `triaged` | baixa — o ambiente ja era legado e o canonico e outro; o custo e um default de task que aponta para um caminho que nao serve mais. |
-| [`B-166`](#b-166--duas-arvores-de-records-coexistem-e-uma-delas-nao-tem-nada-rastreado----) | Duas arvores de records coexistem, e uma delas nao tem nada rastreado | `triaged` | media — nada quebra hoje; o custo e que qualquer varredura, gate ou pessoa pode ler a arvore vazia e concluir ausencia onde ha evidencia. |
+| [`B-165`](#b-165--o-ambiente-standalone-public-ficou-sem-borda-que-o-sirva----) | O ambiente `standalone-public` ficou sem borda que o sirva | `blocked` · was `triaged` | waiting on `B-165` — baixa — o ambiente ja era legado e o canonico e outro; o custo e um default de task que aponta para um caminho que nao serve mais. |
+| [`B-166`](#b-166--duas-arvores-de-records-coexistem-e-uma-delas-nao-tem-nada-rastreado----) | Duas arvores de records coexistem, e uma delas nao tem nada rastreado | `blocked` · was `triaged` | waiting on `B-079`, `B-080` — media — nada quebra hoje; o custo e que qualquer varredura, gate ou pessoa pode ler a arvore vazia e concluir ausencia onde ha evidencia. |
+| [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `blocked` · was `triaged` | waiting on `B-172` — alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
+| [`B-168`](#b-168--a-guarda-destrutiva-do-validate-commandsh-regrediu-teste-do-b-160-volta-a-reprovar----) | A guarda destrutiva do validate-command.sh regrediu; teste do B-160 volta a reprovar | `blocked` · was `triaged` | waiting on a decision — alta - o hook agora bloqueia trabalho legitimo (heredocs, comandos multi-parte com grep+sed), o que reduz a confianca no gate e leva as pessoas a rodearem. |
+| [`B-171`](#b-171--readsecret-em-settingsjson-bloqueia-arquivos-legítimos-como-secretsgo----) | `Read(**/*secret*)` em settings.json bloqueia arquivos legítimos como `secrets.go` | `triaged` | blocks `B-058` — media - bloqueia dead-citation cleanup no B-058 bala 4 + qualquer edit futuro em routes/secrets/. Nao ha bypass documentado. |
+| [`B-172`](#b-172--detector-python-depende-de-vulture-no-path-mas-nada-verifica-teste-falha-em-qualquer-host-sem-o-binário----) | Detector Python depende de `vulture` no PATH mas nada verifica; teste falha em qualquer host sem o binário | `triaged` | blocks `B-167` — baixa — o binário vulture geralmente está disponível em hosts de dev com Python, mas o requisito é hidden. O impacto é 1 teste flaky por env, não regressão de produção. |
 
-### In flight (0)
+### In flight (2)
 
-_None._
+| Item | Title | Status | Severity |
+|---|---|---|---|
+| [`B-169`](#b-169--infratestsoperator_cutover_invariants-espera-arquivos-removidos-por-m5-decomposition----) | infra/tests/operator_cutover_invariants espera arquivos removidos por M5 decomposition | `planned` | blocks `B-057` — media - o teste esta' factualmente errado (procura arquivo que nao existe por design), o que gera ruido no gate e mascara falhas reais. |
+| [`B-170`](#b-170--toolsgen-service-auth-ed25519-reprova-go-test-com-directory-prefix-no-go-workspace----) | tools/gen-service-auth-ed25519 reprova go test com "directory prefix" no go workspace | `planned` | blocks `B-057` — baixa - o modulo e' uma ferramenta de geracao de chaves e provavelmente nao tem testes proprios; o setup do go.work e' que precisa de ajuste. |
 
 ### Closed (144)
 
@@ -5628,6 +5635,22 @@ dod:
 
 > Registrado 2026-08-31 por /implement iteration 3 ao investigar go tests FAIL.
 
+## B-170 — tools/gen-service-auth-ed25519 reprova go test com "directory prefix" no go workspace   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: human
+evidence: medido em 2026-08-31 durante /implement B-033. `cd tools/gen-service-auth-ed25519 && go test ./...` reprova com `pattern ./...: directory prefix . does not contain modules listed in go.work or their selected dependencies`. Edge case do go workspace: o modulo esta listado em go.work mas seus testes internos batem contra o pattern `./...` expandido pela linha do modulo.
+why_now: aparece porque /implement B-033 roda check_go_tests que itera cada modulo do workspace e chama `go test ./...` em cada raiz. Nao causa de B-033 (toca zero codigo Go).
+status: planned
+severity: baixa - o modulo e' uma ferramenta de geracao de chaves e provavelmente nao tem testes proprios; o setup do go.work e' que precisa de ajuste.
+dod:
+  - `cd tools/gen-service-auth-ed25519 && go test ./...` PASS (ou skip explicito se o modulo genuinamente nao tem testes)
+  - alternativamente: o modulo sai do go.work se for standalone-buildable
+
+> Registrado 2026-08-31 por /implement iteration 3 ao investigar go tests FAIL.
+
 ## B-171 — `Read(**/*secret*)` em settings.json bloqueia arquivos legítimos como `secrets.go`   [ ]
 
 domain: engine-go
@@ -5645,22 +5668,6 @@ dod:
   - Testes que dependem de arquivos com "secret" no nome (ex: `check-seed-loopzero-secrets_test.sh` — filesystem) continuam operaveis
 
 > Registrado 2026-08-31 por /idea-to-release B-058 ao tentar bala 4 dead-citation cleanup.
-
-## B-170 — tools/gen-service-auth-ed25519 reprova go test com "directory prefix" no go workspace   [ ]
-
-domain: engine-go
-repo: loopzero
-suggested_mode: bug
-source: human
-evidence: medido em 2026-08-31 durante /implement B-033. `cd tools/gen-service-auth-ed25519 && go test ./...` reprova com `pattern ./...: directory prefix . does not contain modules listed in go.work or their selected dependencies`. Edge case do go workspace: o modulo esta listado em go.work mas seus testes internos batem contra o pattern `./...` expandido pela linha do modulo.
-why_now: aparece porque /implement B-033 roda check_go_tests que itera cada modulo do workspace e chama `go test ./...` em cada raiz. Nao causa de B-033 (toca zero codigo Go).
-status: planned
-severity: baixa - o modulo e' uma ferramenta de geracao de chaves e provavelmente nao tem testes proprios; o setup do go.work e' que precisa de ajuste.
-dod:
-  - `cd tools/gen-service-auth-ed25519 && go test ./...` PASS (ou skip explicito se o modulo genuinamente nao tem testes)
-  - alternativamente: o modulo sai do go.work se for standalone-buildable
-
-> Registrado 2026-08-31 por /implement iteration 3 ao investigar go tests FAIL.
 
 ## B-172 — Detector Python depende de `vulture` no PATH mas nada verifica; teste falha em qualquer host sem o binário   [ ]
 
