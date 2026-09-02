@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- **loopzero:** Atualizada a biblioteca de comunicação entre serviços (gRPC) para a versão que corrige a vulnerabilidade CVE-2026-84304, de severidade alta (B-038)
+
 ### Fixed
 - **loopzero:** O registro de camadas de cobrança passa a declarar o arquivo que executa as próprias verificações de cobrança, que estava faltando e reprovava toda proposta de mudança (B-038)
 
