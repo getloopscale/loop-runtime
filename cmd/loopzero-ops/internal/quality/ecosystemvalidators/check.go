@@ -52,8 +52,12 @@ type Validator struct {
 
 // DefaultValidators are the two the change protocol names.
 var DefaultValidators = []Validator{
-	{Name: "check_xrefs", Rel: "scripts/check_xrefs.py"},
-	{Name: "test_e2e_smoke", Rel: "scripts/test_e2e_smoke.py"},
+	// The kit renamed `scripts/` to `mechanisms/<family>/` on 2026-09-01, and
+	// `test_e2e_smoke.py` to `verify_ecosystem.py` before that. Both paths pointed
+	// at files that no longer exist, so this gate reported "the validators are not
+	// on disk" — correctly, and about its own stale map rather than about the kit.
+	{Name: "check_xrefs", Rel: "mechanisms/gates/check_xrefs.py"},
+	{Name: "verify_ecosystem", Rel: "mechanisms/gates/verify_ecosystem.py"},
 }
 
 // Result is one validator's outcome.
@@ -109,8 +113,13 @@ func resolveEco(root, rel string) string {
 	if rel != "" {
 		return filepath.Join(root, rel)
 	}
-	if fi, err := os.Stat(filepath.Join(root, ".claude", "scripts")); err == nil && fi.IsDir() {
-		return filepath.Join(root, ".claude")
+	// The marker follows the kit: `scripts/` became `mechanisms/` on 2026-09-01.
+	// Both are probed, because a checkout of an older commit still has the first
+	// and this gate should not report "no ecosystem" about a layout it can read.
+	for _, marker := range []string{"mechanisms", "scripts"} {
+		if fi, err := os.Stat(filepath.Join(root, ".claude", marker)); err == nil && fi.IsDir() {
+			return filepath.Join(root, ".claude")
+		}
 	}
 	return root
 }
