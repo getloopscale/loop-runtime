@@ -268,3 +268,10 @@ operators/app-operator
 
 # Kit installer backups — timestamped copies of the previous install, not source.
 .claude/.install-backups/
+
+# The kit's installer lives at `.claude/mechanisms/dist/`, and the bare `dist/`
+# rules above — meant for build output — swallowed it. A consumer then receives
+# the kit WITHOUT the script that installs or patches it, and the omission is
+# silent: everything else arrives.
+!.claude/mechanisms/dist/
+!.claude/mechanisms/dist/**
