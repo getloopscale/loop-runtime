@@ -54,3 +54,4 @@ cmd/loopzero-ops/internal/quality/devpublicenv/check.go | confere presença de v
 cmd/loopzero-ops/quality_gates_authz.go | fiação de subcomando do loopzero-ops
 infra/helmfile/environments/dev-public.yaml | declara o ambiente; o valor que liga a cobrança mora em values/dev-public/
 taskfiles/infra.yml | task de operador que IMPRIME o comando de criar o Secret à mão; instrução, não caminho de execução
+taskfiles/quality.yml | invoca as guardas de cobrança (`billing-secrets`, `billing-layers`); é o que faz uma guarda `gate:` valer, e por isso cita os insumos — quem decide cobrar são as camadas que ele verifica

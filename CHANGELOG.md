@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **loopzero:** O registro de camadas de cobrança passa a declarar o arquivo que executa as próprias verificações de cobrança, que estava faltando e reprovava toda proposta de mudança (B-038)
+
 ### Added
 - **loopzero:** Guia de plantão para os alertas de assinatura de release, atestado de proveniência e propagação de secret, com os passos de diagnóstico ancorados no código (B-067)
 - **loopzero:** O painel de controle passa a ser monitorado quanto à disponibilidade, como os demais serviços da plataforma (B-022)
