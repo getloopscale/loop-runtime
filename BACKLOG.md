@@ -2203,6 +2203,9 @@ dod:
 > analisado (32); so o gate, numa worktree ligada ao repo real e comparado contra
 > `HEAD`, mede o que o gate mede.
 >
+> **Rastreado em `getloopscale/loopzero#345`**, com a medicao, o metodo e os tres
+> metodos errados registrados la.
+>
 > **O que falta:** os 44 achados. Nao e remendo de fim de ciclo — 248 arquivos com
 > um refactor de cinco pacotes dentro pedem uma fatia propria.
 
