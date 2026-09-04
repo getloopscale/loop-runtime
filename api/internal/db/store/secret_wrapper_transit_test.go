@@ -79,29 +79,12 @@ func TestEncryptForStore_RoutesToVaultWhenSet(t *testing.T) {
 	}
 }
 
-func TestEncryptForStore_FallsBackToAESWhenNoVault(t *testing.T) {
-	// 32 bytes for AES-256
-	key := make([]byte, 32)
-	for i := range key {
-		key[i] = byte(i)
-	}
-	s, err := NewPostgresSecretStore(nil, key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := s.encryptForStore(context.Background(), "tenant-A", []byte("plain"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// AES path: should NOT start with vault prefix
-	if strings.HasPrefix(string(got), "vault:v1:") {
-		t.Errorf("expected AES path (no vault prefix), got %q", got)
-	}
-	// AES output should be different from plaintext (encrypted)
-	if string(got) == "plain" {
-		t.Errorf("expected encrypted output, got plaintext")
-	}
-}
+// T10.5: the AES write fallback this used to assert was deleted by T10.3.
+// Its replacement is
+// TestEncryptForStore_ProducesOnlyTransitCiphertextOrRefuses in
+// secret_wrapper_t103_write_path_test.go, which asserts the refusal that
+// took its place — including the crypto_mode=plaintext case this test
+// never covered, where the write path returned the secret unchanged.
 
 func TestEncryptForStore_PropagatesVaultError(t *testing.T) {
 	mv := &mockVault{encryptError: errors.New("vault down")}
@@ -204,10 +187,7 @@ func TestDecryptFromStore_FallsBackToAESForLegacyCiphertext(t *testing.T) {
 	// before Sprint D D3 (sec-001 closure) added tenant-bound AAD. The
 	// dual-decrypt window in decryptFromStore should still recover it via
 	// the nil-fallback path (try with tenantAAD first, fall back to nil).
-	encrypted, err := s.encrypt([]byte("legacydata"), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	encrypted := sealLegacyAES(t, key, []byte("legacydata"), nil)
 	got, err := s.decryptFromStore(context.Background(), "tenant-A", encrypted)
 	if err != nil {
 		t.Fatal(err)
