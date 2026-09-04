@@ -397,6 +397,91 @@ registro dessa reunião foi localizado. O código resultante é o desenho certo 
 decisão certa chegou por um caminho que a governança não viu.
 
 
+### Execution of 2026-09-04 — the delegated decision carried out, and the count re-measured
+
+Executed under the delegation recorded in `decided_by` (commit `7565db99c`,
+`.claude/rules/decision-delegation.txt`): freeze the survivors as a written dated exception list,
+write the ADR, rename no live resource, drop the cleanroom bullet.
+
+**The count was 8, and it still is — an earlier pass this same day recorded 7.** The 2026-08-17 table
+above writes one pair as `infra/pulumi-drill/src/index.ts` + `pulumi-shared/__tests__/contracts.test.ts`,
+where the second path is relative to `infra/`. A pass earlier today resolved it as
+`infra/pulumi-drill/pulumi-shared/…`, found nothing there, and recorded the row as *"delivered by
+deletion"*. That directory has never existed in this repository
+(`git log --diff-filter=D -- 'infra/pulumi-drill/pulumi-shared/*'` is empty); the file is
+`infra/pulumi-shared/__tests__/contracts.test.ts` and it carries `runtimeClusterName: "loopzero-runtime"` on
+line 99 at HEAD. Re-measured at `7649170a` over `cmd/ api/ operators/ pkg/ infra/ charts/ taskfiles/
+tools/` with the **old** identifiers only:
+
+```
+$ git grep -n 'loopzero-workload\|workload-cluster\|loopzero-runtime\|runtime-cluster\|loopzero-mgmt' \
+    -- cmd api operators pkg infra charts taskfiles tools
+infra/argocd-bootstrap/apps/cell-cluster-issuer.yaml:4
+infra/argocd-bootstrap/validate-sync-waves.py:53
+infra/pulumi-drill/src/index.ts:172
+infra/pulumi-shared/__tests__/contracts.test.ts:99
+operators/internal/argocd/real_provisioner.go:465
+operators/internal/preview/preview_controller.go:697
+operators/internal/tenant/tenant_controller.go:85
+taskfiles/k3d.yml:136
+```
+
+Eight lines. The exception list in `docs/decisions/2026-08-09-cluster-topology-naming-adr.md`
+§ *Exception list* now carries eight rows, one per line above, each with kind, revisit trigger and a
+one-sentence reason.
+
+**DoD-1's grep can no longer be run as written, and that is a property of the text, not drift.** The
+pattern includes `loopzero-core` and `core-cluster` — the names this item's own rename *introduced*. At HEAD
+those two account for **261 of the 267** executable-tree hits of the full pattern. The 8 above are what
+remains when only the pre-rename identifiers are matched. DoD-1 was written before the rename landed and
+was superseded by the delegation; the exception list, not the zero-grep, is the bar.
+
+**Bullet-by-bullet, measured at `7649170a`:**
+
+- *DoD-1 (grep returns zero)* — **superseded by the delegation**, satisfied in its amended form: the
+  written, dated exception list exists with 8 rows and an expiry condition on each (`AM8`,
+  `sponsor decision`, `never — historical`).
+- *`loopzero-build` untouched* — **satisfied in substance, baseline stale.** Today: 676 hits / 265 files for
+  `loopzero-build`, 139 / 81 for `build-cluster`, against the 2026-08-09 baseline of 657/253 and 122/69. The
+  numbers went **up**, from unrelated work in the four weeks since; a rename that had leaked into `build`
+  would have driven them toward zero. The falsifiable claim holds; the literal "antes e depois" figure
+  does not, because the tree moved under it.
+- *No false positive renamed* — **satisfied.** `runtimeClassName` (8 occurrences) and the Go `runtime`
+  import (82 files) are untouched, and the survivors above are the only pre-rename identifiers left.
+- *All quality gates pass* — **satisfied, and the first run's failure turned out to be an artefact of a
+  shared lint cache.** The first `task quality:gates` on the host exited non-zero at `lint-coverage`:
+  *"regressão contra a linha de base: api [lint] 0 → 43"*, against an `infra/quality/lint-baseline.json`
+  that freezes `api` at 0. The 43 findings were reported against paths under `/tmp/b162-verify/api/…` —
+  a verification worktree another lane had already deleted; that directory does not exist on this host.
+  `golangci-lint run ./...` inside `api/` with a private cache (`GOLANGCI_LINT_CACHE=/tmp/b001-lintcache`)
+  returns **`0 issues.`**, and the full suite re-run with the same private cache is green: **EXIT=0**,
+  137 gate invocations, zero gate FAIL, `lint-coverage: PASS — api=0/58 …`, which is the frozen baseline
+  exactly. This pass's whole diff is Markdown; no Go file was touched.
+  **Finding, recorded and not fixed here:** `lint-coverage` trusts golangci-lint's shared on-disk cache,
+  so a stale entry left by a deleted worktree made a global gate report a 43-finding regression in a
+  module that has none. A gate that can fail on files that do not exist teaches people to re-run until
+  green, which is the opposite of what a ratchet is for. It is not a B-001 defect and is left to its
+  owner.
+- *`infra/tests/snapshots/helmfile-*.yaml` + `docs/architecture/helm-topology.md` regenerated* —
+  **half void, half satisfied.** `infra/tests/snapshots/` no longer exists (already recorded in this
+  registry as the orphaned-helmfile-snapshots finding), so there is nothing to regenerate there.
+  `docs/architecture/helm-topology.md` is on disk and carries **zero** occurrences of any pre-rename
+  identifier.
+- *Cleanroom up from zero* — **DROPPED by the delegation as unexecutable**, not as unimportant. Nothing
+  was attempted: `k3d cluster list` is empty and `task clean:all` on the shared droplet would destroy
+  `app-dev.loopzero.example`.
+- *ADR written with the rejected alternatives + `CHANGELOG.md`* — **satisfied.** The ADR names and
+  rejects `control`, `platform`, `ops`, recycling `mgmt` (quarantine), and `bao`, each with its reason.
+  `CHANGELOG.md § [Unreleased]` carries the exception list under `§ Changed` and the count correction
+  under `§ Fixed`.
+
+**One gap this pass did not close, named rather than left implicit.** Three of the eight rows have
+revisit trigger `sponsor decision` (`operators/internal/{argocd,preview,tenant}` — `runtime` as cluster
+name and as domain term in the same file, which this item's own text says to escalate). The ADR's revisit
+protocol says that trigger closes via an ADR "filed as its own `B-NNN`", and **no such item exists**. The
+trigger names a condition with no owner. Recorded in the ADR next to the protocol.
+
+
 ## B-002 — O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso   [x]
 
 domain: engine-go
