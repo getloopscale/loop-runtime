@@ -699,6 +699,61 @@ var (
 		Help: "Broker secret-fetch audit write failures (T2.3 closes HIGH #16).",
 	}, []string{"event_type"})
 
+	// SecretDecryptFailedTotal counts failures on the secret READ path —
+	// every error return of PostgresSecretStore.decryptFromStore, which is
+	// the single dispatcher every decrypt in the store passes through.
+	//
+	// B-126: until this counter existed, a decrypt failure was reported ONLY
+	// as a per-request error. A revoked or rotated Transit key
+	// (transit/keys/loopzero-tenants-<id>) makes every ciphertext of that tenant
+	// undecryptable at once, and per-request errors do not add up into
+	// anything: the failure looked like one user's broken secret, not like a
+	// key that is gone. Aggregating the same failures turns that into a
+	// visible step change.
+	//
+	// What this counter does NOT do, said plainly: it still needs somebody to
+	// read a secret. A tenant whose secrets are not being read stays silent
+	// however revoked its key is. Detection that does not wait for a reader is
+	// the canary, deferred with a named trigger — see
+	// docs/wiki/decisions/2026-09-04-secret-decrypt-canary-deferral.md.
+	//
+	// Cardinality: ONLY label is `reason` ∈ {empty_ciphertext,
+	// vault_transit_error, aes_legacy_error} — 3 series total. NO tenant
+	// label, for the same reason SecretExternalSecretTotal (EC-3) and
+	// SecretAuditWriteFailedTotal state above: it would be unbounded with N
+	// tenants. The tenant identity survives in the error chain the caller
+	// logs, which is where a free-form, high-cardinality value belongs.
+	//
+	// The three reasons split the two failures whose responses differ
+	// (B-126 DoD bullet 2 — restoring a key and restoring a backup are not
+	// the same operation):
+	//
+	//   - "vault_transit_error"  — Transit refused or was unreachable. Key
+	//     side. A revoked key lands here; so does an unreachable OpenBao,
+	//     because the store talks to Transit through a consumer-defined
+	//     interface and deliberately does not import pkg/vault to tell the
+	//     typed errors apart. Distinguishing the two is the operator's first
+	//     step, from the logged error, not the metric's.
+	//   - "aes_legacy_error"     — a pre-T10.3 AES row would not open. Data
+	//     side, or a lost/rotated local AES key. Nothing writes this format
+	//     any more (B-162), so a non-zero rate here is a legacy row that has
+	//     become unreadable.
+	//   - "empty_ciphertext"     — the EC-06 NULL/empty row guard fired. Data
+	//     side: a row exists whose encrypted_value is empty, which no write
+	//     path in the tree can produce.
+	//
+	// Alert opportunity:
+	//   sum(rate(loopzero_secret_decrypt_failed_total
+// SCOPE: the store's resync read path only. The broker
+// secret-fetch path (cmd/setup_secret_fetch.go) decrypts via Transit
+// directly and does not increment this — see the 2026-09-04 deferral ADR.{reason="vault_transit_error"}[5m])) > 0
+	//   means secrets that were readable are not readable now. Page: the
+	//   ciphertext is orphaned until the key comes back.
+	SecretDecryptFailedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_secret_decrypt_failed_total",
+		Help: "Secret read-path decrypt failures, by reason (B-126).",
+	}, []string{"reason"})
+
 	// WorkqueueTerminalWriteFailTotal counts cases where the workqueue
 	// consumer's terminal-state write (Complete or Fail) FAILED — the
 	// underlying DB INSERT/UPDATE returned error. Without this metric,
