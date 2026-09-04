@@ -168,8 +168,8 @@ func TestB059AuditBaselineDump(t *testing.T) {
 	sb.WriteString("# Format: <METHOD> <path> | source=<url|none> | value=<id-or-empty>\n")
 	sb.WriteString("\n")
 	for _, r := range rows {
-		sb.WriteString(fmt.Sprintf("%s %s | source=%s | value=%s\n",
-			r.method, r.path, r.source, r.value))
+		fmt.Fprintf(&sb, "%s %s | source=%s | value=%s\n",
+			r.method, r.path, r.source, r.value)
 	}
 
 	if err := os.WriteFile(baselinePath, []byte(sb.String()), 0o644); err != nil {
