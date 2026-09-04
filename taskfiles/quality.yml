@@ -120,6 +120,12 @@ tasks:
       - /tmp/loopzero-ops quality postgresql-pdb-config
       - /tmp/loopzero-ops quality dockerfile-no-docker-hub
       - /tmp/loopzero-ops quality advisory-lock-scope
+      # records-tree-split (B-166): `.claude/records/` is the live trail and
+      # `.claude/knowledge-base/` is frozen at 150 records. Two written trees never
+      # error, they accumulate half the truth — an audit that read the wrong one
+      # reported 0 implementations / 0 reviews / 0 releases for a repo that had 6,
+      # 12 and 8 (`.claude/rules/records-location.md`). Hermetic, no git, ~5ms.
+      - /tmp/loopzero-ops quality records-tree-split
       - /tmp/loopzero-ops quality no-env-vault-secrets   # openbao-adoption T2.7 — forbid secrets-as-env-var regression (post D11 ESO migration)
       - /tmp/loopzero-ops quality transit-coverage       # openbao-adoption T3.7 — enforce dispatcher invariant (Set/ListForResync use encryptForStore/decryptFromStore)
       - /tmp/loopzero-ops quality cluster-role-no-secrets-star  # openbao-adoption T5.15 — forbid unconditional cluster-wide secrets/configmaps grants (deep review finding #1)

@@ -27,6 +27,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/gitdiff"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratospublicurls"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/proxyexposure"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/recordstreesplit"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skiplink"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/spotcheck"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/taskfileinterface"
@@ -428,6 +429,52 @@ func runDrillOutputsConsumers(args []string) int {
 	}
 	fmt.Println("✓ No legacy drill-outputs consumers found.")
 	return 0
+}
+
+// runRecordsTreeSplit is the Go home for the records-tree-split gate (B-166).
+//
+// This repository keeps two records trees on disk and writes only one of them.
+// Two written trees never error — they accumulate half the truth, and a reader
+// who checks the wrong one reports absence where evidence exists. The gate pins
+// the retired tree's `.md` set to a manifest and refuses drift either way.
+func runRecordsTreeSplit(args []string) int {
+	fs := flag.NewFlagSet("records-tree-split", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	o := recordstreesplit.Check(recordstreesplit.Config{RepoRoot: *root})
+	if o.Pass {
+		fmt.Printf("OK one live records tree (%s, %d records); %s frozen at %d\n",
+			recordstreesplit.DefaultLiveDir, o.LiveCount,
+			recordstreesplit.DefaultArchiveDir, o.FrozenSize)
+		return 0
+	}
+	for _, v := range o.Violations {
+		fmt.Fprintf(os.Stderr, "VIOLATION: %s\n", v)
+	}
+	for _, p := range o.Added {
+		fmt.Fprintf(os.Stderr, "VIOLATION: written to the frozen archive: %s/%s\n",
+			recordstreesplit.DefaultArchiveDir, p)
+	}
+	for _, p := range o.Removed {
+		fmt.Fprintf(os.Stderr, "VIOLATION: deleted from the frozen archive: %s/%s\n",
+			recordstreesplit.DefaultArchiveDir, p)
+	}
+	if len(o.Added) > 0 {
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintf(os.Stderr, "The records split reopened. Cycle artifacts belong in %s; %s is a\n",
+			recordstreesplit.DefaultLiveDir, recordstreesplit.DefaultArchiveDir)
+		fmt.Fprintln(os.Stderr, "read-only archive (see its README.md).")
+	}
+	if len(o.Removed) > 0 {
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Nothing in the archive is duplicated in the live tree, so a deleted record")
+		fmt.Fprintln(os.Stderr, "is the only copy of its evidence. Restore it, or re-freeze")
+		fmt.Fprintf(os.Stderr, "%s if the removal is deliberate.\n",
+			recordstreesplit.DefaultManifestPath)
+	}
+	return 1
 }
 
 func runDecisionsDeletion(args []string) int {

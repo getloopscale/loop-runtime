@@ -8,12 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **loopzero:** The project's audit trail now says which of its two directories is the live one. `.claude/records/` is where plans, reviews, audits and implementation logs are written; `.claude/knowledge-base/` is the same trail up to 2026-08-28, kept as a read-only archive with a README that says so. A new quality gate, `loopzero-ops quality records-tree-split`, refuses a record written into the archive and refuses one deleted from it (B-166)
 - **loopzero:** cross-lane placeholder — `cmd/loopzero-ops/internal/quality/{ecosystemvalidators,publishhygiene}/check.go` carry in-flight coverage-fix modifications for B-173 authored by another squad lane during this session's dispatch, plus an alignment brief for B-126 (`records/alignment/b126-secret-decrypt-metric-alignment.md`, ALIGNED 34/34, judge-signed) authored by squad2. This entry exists to satisfy the CHANGELOG stop gate at a multi-lane session boundary where the tree carries another lane's WIP; the lane committing the B-173 fix supersedes this placeholder with the final wording (B-173, B-126)
 - **loopzero:** Guia de plantão para os alertas de assinatura de release, atestado de proveniência e propagação de secret, com os passos de diagnóstico ancorados no código (B-067)
 - **loopzero:** O painel de controle passa a ser monitorado quanto à disponibilidade, como os demais serviços da plataforma (B-022)
 - **loopzero:** backlog B-167 — a verificação que checa se ligamos as verificações de qualidade de código foi ligada, e ela reprova quando nenhuma linguagem foi ligada; enquanto isso, nenhuma linguagem está ligada, então toda proposta de mudança para no acesso automático (B-167)
 
 ### Fixed
+- **loopzero:** `CLAUDE.md` pointed readers at the directory that stopped being written on 2026-08-28, and its section on that directory sent them to three files that do not exist (`index.md`, `concepts/`, `references/`). Anyone following it looked in the wrong tree and found none of the last week's records. Both halves corrected against what is on disk (B-166)
 - **loopzero:** A verificação automática de qualidade de código voltou a funcionar para o Go — as três raízes do workspace foram ligadas e os 36 achados pré-existentes de código morto ficaram registrados como dívida conhecida em `code-quality-baseline.txt`, permitindo que mudanças novas sejam avaliadas sem serem reprovadas por débito herdado. `/plan-confidence` deixa de emitir `no_languages_audited` como hard cap sistêmico (B-167)
 
 - **A verificacao de que o resumo de prontidao e' a ultima escrita antes de salvar passou a valer para os seis controladores, e nao para um.** Ela seguia so' a funcao onde a escrita acontece, e a forma usada por sete controladores registra o resumo no fim do ciclo, num nivel acima — para a verificacao antiga isso parecia ausencia. Medido depois da correcao: 33 pontos de escrita, 33 cobertos (B-138)

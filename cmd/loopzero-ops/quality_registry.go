@@ -96,6 +96,7 @@ var gateRegistry = []gateSpec{
 	{"dangling-script-refs", "Detects shell-script references that no longer resolve after a change.", runDanglingScriptRefs},
 	{"dashboard-promtool", "Validates Grafana dashboard + Prometheus rules via promtool.", runDashboardPromtool},
 	{"decisions-deletion", "Guards deletion of decision/ADR records.", runDecisionsDeletion},
+	{"records-tree-split", "One records tree is written; the retired one stays frozen (a second live tree accumulates half the truth).", runRecordsTreeSplit},
 	{"divergence-matrix", "Checks the local-vs-prod divergence matrix is current.", runDivergenceMatrix},
 	{"dockerfile-no-docker-hub", "Forbids unqualified docker.io/Docker Hub base images.", runDockerfileNoDockerHub},
 	{"drill-creds-isolation", "Ensures DR-drill credentials are isolated from production.", runDrillCredsIsolation},
