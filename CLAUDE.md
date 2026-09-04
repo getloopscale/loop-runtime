@@ -16,15 +16,15 @@ LoopZero is a **CLI-first managed cloud (Kubernetes-backed)** for monorepo deplo
 
 **Consequence:** if you are looking for a CLI command, a dashboard screen, Stripe billing, or a shared contract type, it is **not in this repo**. Do not re-implement it here. The decomposition ADR is `../decisions/2026-06-16-monorepo-decomposition.md` (umbrella root — **not** this repo's own `.claude/knowledge-base/decisions/`); the workspace contract is `../CLAUDE.md` (this used to also name an umbrella-scope rule file; it does not exist in the umbrella either — verified 2026-08-16, B-052).
 
-**Cycle artifacts (plans, reviews, audits, ADRs) and the CHANGELOG live in THIS repo** — `.claude/knowledge-base/` and `CHANGELOG.md`.
+**Cycle artifacts (plans, reviews, audits, ADRs) and the CHANGELOG live in THIS repo** — `.claude/records/` and `CHANGELOG.md`. `.claude/knowledge-base/` is the same trail up to 2026-08-28, frozen (see below).
 
 This paragraph said the opposite until 2026-08-19, and both halves of it were false (B-159). Measured: `../CHANGELOG.md` **does not exist**, `../.claude/knowledge-base/` **does not exist**, and **all 21 sibling repos keep their own `CHANGELOG.md`** — this one has 4,567 lines and took 227 commits since 2026-08-01 alone. The instruction named a path nothing resolved to, while the repo's overwhelming practice did the opposite.
 
-It also contradicted two neighbours: the paragraph immediately below points at *this* repo's `CHANGELOG.md` and `.claude/knowledge-base/` as the dated history, and the kit's rule file states it outright. That file was `knowledge-base-location.md` when this paragraph was written; the kit has since renamed the convention, and the rule now lives at `.claude/rules/records-location.md` saying *"`<project>/.claude/records/` is canonical. Always"*. The point stands unchanged — the canonical tree is THIS repo's, and consumers do **not** share one. WHICH of the two directories still on disk is the live one is `B-166`, open. Per this file's own precedence rule, the tree wins.
+It also contradicted two neighbours: the paragraph immediately below points at *this* repo's `CHANGELOG.md` and `.claude/knowledge-base/` as the dated history, and the kit's rule file states it outright. That file was `knowledge-base-location.md` when this paragraph was written; the kit has since renamed the convention, and the rule now lives at `.claude/rules/records-location.md` saying *"`<project>/.claude/records/` is canonical. Always"*. The point stands unchanged — the canonical tree is THIS repo's, and consumers do **not** share one. WHICH of the two directories on disk is the live one was `B-166`; it is settled: `.claude/records/`. Per this file's own precedence rule, the tree won — every cycle artifact since 2026-09-03 landed there, and `.claude/knowledge-base/` has taken no write since 2026-08-28.
 
 What genuinely lives at the umbrella root is narrower: the decomposition ADR named above, and `../CLAUDE.md`, the workspace contract.
 
-**The codebase is authoritative.** Where this file and the code disagree, the code wins. `CHANGELOG.md` (1 MB, exhaustive) and `.claude/knowledge-base/` hold the dated history — this file deliberately does not restate it.
+**The codebase is authoritative.** Where this file and the code disagree, the code wins. `CHANGELOG.md` (1 MB, exhaustive), `.claude/records/` (live) and `.claude/knowledge-base/` (frozen archive) hold the dated history — this file deliberately does not restate it.
 
 ## Multi-module Go workspace (read before any build command)
 
@@ -228,11 +228,15 @@ Five files this list used to name (`workflow.md`, `tdd-workflow.md`, `loopzero-d
 `meetings/records/`, `operations/findings/`, `reviews/`) that must never be edited to match the
 present. Rewriting a dated record to look current destroys the only evidence of what was true then.
 
-## Knowledge base (`.claude/knowledge-base/`)
+## Records (`.claude/records/` live, `.claude/knowledge-base/` frozen)
 
-Stores **WHY** — decisions, trade-offs, rationale that cannot be derived from code. Read `index.md` first. Consult `concepts/` before implementing in multi-cell, progressive delivery, or state machines; consult `decisions/` for ADRs. Evidence is classified `[MEASURED]` / `[REPORTED]` / `[ESTIMATED]`. Max 3 pages updated per task; never auto-generate as a coding side effect — **this sentence is the rule**; the `auto-docs.md` it used to cite does not exist (B-052).
+Both store **WHY** — decisions, trade-offs, rationale that cannot be derived from code. Evidence is classified `[MEASURED]` / `[REPORTED]` / `[ESTIMATED]`. Max 3 pages updated per task; never auto-generate as a coding side effect — **this sentence is the rule**; the `auto-docs.md` it used to cite does not exist (B-052).
 
-`.claude/knowledge-base/references/` holds **cloned third-party projects for study — read-only**. Never copy their bytes into this repo; read, understand, write your own, and cite the source in a blueprint.
+**Write to `.claude/records/`.** `.claude/rules/records-location.md` states it without a per-project option — *"`<project>/.claude/records/` is canonical. Always."* — and the kit's boundary hook lists `records/` among the paths a consumer owns, which `knowledge-base/` is not.
+
+**`.claude/knowledge-base/` is a read-only archive** of the same trail up to 2026-08-28. It is frozen rather than deleted because it holds 149 records with **zero** overlap with `.claude/records/` — no file in either tree has a byte-identical twin in the other, measured 2026-09-04 — so each is the only copy of its evidence, and 59 citations elsewhere in this repo still resolve into it. Its `.md` set is pinned by `.claude/rules/records-archive-frozen.txt` and enforced by `loopzero-ops quality records-tree-split`, which fails both ways: a record ADDED there means the split reopened, a record REMOVED means evidence was destroyed. `decisions/` (48 ADRs) is the subtree most often cited from it.
+
+This section used to send readers to `index.md`, `concepts/` and `references/` inside the archive. None of the three exists — verified 2026-09-04, B-166, same defect class as the `auto-docs.md` citation above.
 
 ## Pre-completion checklist
 
