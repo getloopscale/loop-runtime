@@ -743,7 +743,10 @@ var (
 	//     path in the tree can produce.
 	//
 	// Alert opportunity:
-	//   sum(rate(loopzero_secret_decrypt_failed_total{reason="vault_transit_error"}[5m])) > 0
+	//   sum(rate(loopzero_secret_decrypt_failed_total
+// SCOPE: the store's resync read path only. The broker
+// secret-fetch path (cmd/setup_secret_fetch.go) decrypts via Transit
+// directly and does not increment this — see the 2026-09-04 deferral ADR.{reason="vault_transit_error"}[5m])) > 0
 	//   means secrets that were readable are not readable now. Page: the
 	//   ciphertext is orphaned until the key comes back.
 	SecretDecryptFailedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
