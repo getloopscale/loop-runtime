@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-174 items — **Open** 24 · **In flight** 2 · **Closed** 148 · **Blocked** 13
+175 items — **Open** 25 · **In flight** 2 · **Closed** 148 · **Blocked** 13
 
-### Open (24)
+### Open (25)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -98,6 +98,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-171`](#b-171--readsecret-em-settingsjson-bloqueia-arquivos-legítimos-como-secretsgo----) | `Read(**/*secret*)` em settings.json bloqueia arquivos legítimos como `secrets.go` | `triaged` | blocks `B-058` — media - bloqueia dead-citation cleanup no B-058 bala 4 + qualquer edit futuro em routes/secrets/. Nao ha bypass documentado. |
 | [`B-172`](#b-172--detector-python-depende-de-vulture-no-path-mas-nada-verifica-teste-falha-em-qualquer-host-sem-o-binário----) | Detector Python depende de `vulture` no PATH mas nada verifica; teste falha em qualquer host sem o binário | `triaged` | blocks `B-167` — baixa — o binário vulture geralmente está disponível em hosts de dev com Python, mas o requisito é hidden. O impacto é 1 teste flaky por env, não regressão de produção. |
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
+| [`B-175`](#b-175--o-caminho-que-o-external-secrets-operator-usa-decifra-sem-contar-nada----) | O caminho que o External Secrets Operator usa decifra sem contar nada | `triaged` | alta — nao pelo risco de dado, mas porque a metrica cria a aparencia de cobertura no caminho errado. Um operador que veja o contador em zero conclui que nada quebrou, e o caminho que serve os usuarios nao esta sendo contado. |
 
 ### In flight (2)
 
@@ -5854,4 +5855,20 @@ dod:
   - se o dominio muda de nome: os tres arquivos acompanham, e o grep de `runtime-cluster` fora de ADRs e comentarios historicos retorna zero
   - se o dominio fica: as tres excecoes no ADR do `B-001` trocam o trigger `sponsor decision` por `never — dominio`, com a razao escrita
   - o protocolo de revisao do ADR do `B-001` deixa de apontar para um item que nao existe
+
+## B-175 — O caminho que o External Secrets Operator usa decifra sem contar nada   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: b126-audit
+evidence: medido em 2026-09-04 por uma auditoria do `B-126`. A metrica `loopzero_secret_decrypt_failed_total` instrumenta `PostgresSecretStore.decryptFromStore`, e o unico chamador nao-teste dessa funcao e `ListForResync` — um hook de deploy. O endpoint de producao `/internal/v1/secret-fetch/...` (montado em `main.go:431-451`), que o External Secrets Operator chama para **todo secret de usuario**, decifra via Transit direto da propria query SQL em `api/cmd/setup_secret_fetch.go:120` e nao incrementa nada.
+why_now: o `B-126` existe porque uma chave transit revogada orfaniza ciphertext e ninguem percebe. A metrica que ele entregou cobre o caminho de resync; no caminho que o ESO de fato usa, uma chave revogada continua produzindo exatamente os erros espalhados por requisicao que o item existe para eliminar. A alegacao de cobertura total sobreviveu ate a auditoria porque veio de um comentario de interface — `internal_secret_fetch.go:70` descreve uma delegacao que o implementador de producao nao faz, e ninguem seguiu o call graph alem da interface.
+status: triaged
+severity: alta — nao pelo risco de dado, mas porque a metrica cria a aparencia de cobertura no caminho errado. Um operador que veja o contador em zero conclui que nada quebrou, e o caminho que serve os usuarios nao esta sendo contado.
+dod:
+  - o caminho do broker (`cmd/setup_secret_fetch.go`) incrementa o mesmo contador, com as mesmas razoes
+  - um teste falha se um decrypt por aquele caminho nao mover o contador
+  - o comentario de `internal_secret_fetch.go:70` descreve a delegacao que o implementador realmente faz, ou e removido
+  - o escopo escrito no ADR de 2026-09-04 e no godoc do contador deixa de dizer "nao instrumentado" quando passar a estar
 
