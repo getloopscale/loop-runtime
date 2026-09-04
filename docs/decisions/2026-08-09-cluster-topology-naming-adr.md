@@ -1,7 +1,7 @@
 # ADR — Nomenclatura de topologia de clusters
 
 **Data:** 2026-08-09
-**Status:** **ACCEPTED** para `mgmt`→`core` e `vault`→`secrets`; **PROPOSED** para a metade `cell`
+**Status:** ACCEPTED with 2026-09-04 dated freeze on 7 named survivors (see § Exception list) — originally ACCEPTED for `mgmt`→`core` and `vault`→`secrets`; the `cell` half landed in code by 2026-08-17 (see § A metade bloqueada — cell); the remaining unrenamed occurrences are frozen AS-IS per the sponsor delegation of 2026-09-04 (`BACKLOG.md § B-001` `decided_by`, `.claude/rules/decision-delegation.txt`)
 **Tier:** T2+ (`.claude/rules/pre-release-governance.md`) — toca operações e o caminho crítico de deploy
 **Sponsor:** CTO
 **Emenda a:** `docs/decisions/2026-08-07-capi-byoc-cluster-lifecycle-adr.md` (PROPOSED, T3), onde o
@@ -102,6 +102,26 @@ Esta metade fica `PROPOSED` até a reunião T3 do `B-005` decidir quem passa a p
 
 **Rejeitada:** adiar o rename até depois do AM5. A janela é agora porque os clusters AWS ainda não
 existem — feito hoje, eles nascem com o nome certo. Feito depois, são quatro clusters vivos a migrar.
+
+## Exception list — 2026-09-04 dated freeze
+
+The 2026-08-17 re-measurement of B-001 identified 8 remaining occurrences of the old cluster identifiers. T1.0 re-measurement on 2026-09-04 (at HEAD `82d6c62b`) confirmed 7 of those are still on disk — the 8th (`infra/pulumi-drill/pulumi-shared/__tests__/contracts.test.ts`) has been deleted since. Per the sponsor delegation recorded in `BACKLOG.md § B-001` `decided_by` (governed by `.claude/rules/decision-delegation.txt`, commit `7565db99c`), the 7 survivors below are **frozen AS-IS** — rename no live resource, drop the cleanroom bullet, and record the freeze here so a reader who greps for the old identifier lands on the row that explains it.
+
+**How to read this section.** Each row names path, identifier, resource kind (from the closed set `live ArgoCD Application` / `live DOKS cluster` / `sponsor design decision` / `historical preservation`), revisit trigger (from the closed set `AM8` / `sponsor decision` / `never — historical`), and a one-sentence `why:` in the row itself so no citation-only reference is needed. The exception list is **NOT** extended without a delegation-authorised amendment: a new occurrence of an old identifier NOT in this list is drift, not a survivor.
+
+| Path | Identifier | Kind | Revisit trigger | Why |
+|---|---|---|---|---|
+| `infra/argocd-bootstrap/apps/cell-cluster-issuer.yaml` | `runtime-cluster-issuer` (`name:`) | live ArgoCD Application | AM8 | why: this is the ArgoCD Application object's `.metadata.name`; renaming means `argocd app delete` then re-create, which loses sync state and reconciliation history. The rename waits for AM8 because the DOKS re-provisioning re-creates it anyway. |
+| `infra/argocd-bootstrap/validate-sync-waves.py` | `("runtime-traefik", "runtime-cluster-issuer")` (pair in tuple list) | live ArgoCD Application | AM8 | why: companion validator that pins the Application name from the sibling row above; must move in lockstep with that row so the pair does not diverge mid-cutover. |
+| `infra/pulumi-drill/src/index.ts` | `${doProject}-runtime-cluster` (`clusterName:`) | live DOKS cluster | AM8 | why: this is the live DigitalOcean Kubernetes cluster's `clusterName`; renaming means destroy and re-create a running production cluster, which is what the delegation's "rename no live resource" clause explicitly forbids. Pulumi is legacy AS-IS until the AM8 AWS re-platform per `CLAUDE.md`. |
+| `operators/internal/argocd/real_provisioner.go` | `single-runtime-cluster` (comment L465) | sponsor design decision | sponsor decision | why: the identifier is both a historical cluster name and a Go domain-term describing the single-runtime-cluster legacy path. The item's own text mandates escalating this to the sponsor rather than renaming inside a slice, because a text rename here would either lie about the code's actual shape or force a code-shape change that is not documentation. |
+| `operators/internal/preview/preview_controller.go` | `runtime-cluster` (comment L697) | sponsor design decision | sponsor decision | why: same trap as the row above — the term describes the domain concept `every runtime-cluster` in a comment about the preview controller's cell mapping. A textual rename would decouple the comment from the concept it names. |
+| `operators/internal/tenant/tenant_controller.go` | `cell→runtime-cluster mapping` (comment L85) | sponsor design decision | sponsor decision | why: same trap; the comment describes the `ClusterCredentials` resolution as "cell→runtime-cluster mapping". The design call is whether to migrate the domain vocabulary here to `cell→cell-cluster` or keep the current term. Escalated. |
+| `taskfiles/k3d.yml` | `loopzero-mgmt` (comment ~L134-137) | historical preservation | never — historical | why: the comment describes the historical bug where `loopzero-mgmt` was inexistent while `core-cluster.yaml` was expected — the audit trail of a fixed defect. DoD-1 of B-001 explicitly preserves "documentos históricos" (historical documents), and rewriting this comment would erase the record of what was true before. |
+
+**Delivered by deletion since 2026-08-17.** `infra/pulumi-drill/pulumi-shared/__tests__/contracts.test.ts` and the entire `pulumi-shared/` subtree were removed from the tree; the row that named it in the B-001 2026-08-17 table is no longer a survivor and requires no entry above.
+
+**Revisit protocol.** For rows with trigger `AM8`: closed by the ADR amendment (or a superseding ADR) that ships alongside the AM8 cluster rename. For rows with trigger `sponsor decision`: closed by an ADR recording the design decision the escalation was for, filed as its own `B-NNN`. For the row with trigger `never — historical`: no revisit; the row documents a preserved artefact.
 
 ## Referências
 
