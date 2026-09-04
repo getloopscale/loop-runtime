@@ -12,16 +12,17 @@ package integrations
 import (
 	"context"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -112,7 +113,7 @@ func (h *IntegrationsGitHubHandler) withClock(now func() time.Time) *Integration
 // ListRepositories handles GET /api/v1/integrations/github/installations/{id}/repositories.
 func (h *IntegrationsGitHubHandler) ListRepositories(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return

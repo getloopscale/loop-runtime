@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -15,7 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -53,8 +54,8 @@ func (f *fakeSBOMSigner) Presign(_ context.Context, _, key string, _ time.Durati
 // request as authenticated.
 func withTenantContext(req *http.Request, tenantID string) *http.Request {
 	ctx := context.WithValue(req.Context(),
-		middleware.UserContextKeyPublic(),
-		&middleware.UserContext{
+		auth.UserContextKeyPublic(),
+		&auth.UserContext{
 			UserID:   "user-1",
 			Email:    "u@example.com",
 			TenantID: tenantID,

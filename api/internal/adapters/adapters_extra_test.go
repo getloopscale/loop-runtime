@@ -6,8 +6,9 @@ package adapters
 import (
 	"context"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 

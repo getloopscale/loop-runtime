@@ -27,9 +27,9 @@ type DNSRecord struct {
 	Type     string `json:"type"`               // A, AAAA, CNAME, MX, TXT, etc.
 	Name     string `json:"name"`               // FQDN or @ for apex
 	Content  string `json:"content"`            // Record value
-	TTL      int    `json:"ttl,omitempty"`       // 1 = auto (required when proxied)
-	Priority *int   `json:"priority,omitempty"`  // MX only
-	Proxied  *bool  `json:"proxied,omitempty"`   // CNAME/A only
+	TTL      int    `json:"ttl,omitempty"`      // 1 = auto (required when proxied)
+	Priority *int   `json:"priority,omitempty"` // MX only
+	Proxied  *bool  `json:"proxied,omitempty"`  // CNAME/A only
 }
 
 // ScanResult contains DNS records found by CF's automatic scan.

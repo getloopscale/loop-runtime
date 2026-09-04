@@ -7,14 +7,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/getloopscale/loopzero/api/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/domain"
+
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 type fakeReleaseLookup struct {
@@ -57,8 +58,8 @@ func newRollbackTestServer(svc RollbackService, lookup RollbackReleaseLookup, pr
 	r := chi.NewRouter()
 	r.Post("/api/v1/projects/{name}/rollback", func(w http.ResponseWriter, req *http.Request) {
 		ctx := context.WithValue(req.Context(),
-			middleware.UserContextKeyPublic(),
-			&middleware.UserContext{
+			auth.UserContextKeyPublic(),
+			&auth.UserContext{
 				UserID:   "u-1",
 				Email:    "x@y",
 				TenantID: "tn-1",

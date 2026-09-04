@@ -12,10 +12,10 @@ import (
 // ArgoCDAppStatus is the projection of ArgoCD Application status the
 // adapter needs. Decoupled from the K8s client (operators/internal/...).
 type ArgoCDAppStatus struct {
-	SyncStatus    string // Synced | OutOfSync | Unknown
-	HealthStatus  string // Healthy | Suspended | Progressing | Missing | Degraded | Unknown
-	UpdatedAt     time.Time
-	Message       string
+	SyncStatus   string // Synced | OutOfSync | Unknown
+	HealthStatus string // Healthy | Suspended | Progressing | Missing | Degraded | Unknown
+	UpdatedAt    time.Time
+	Message      string
 }
 
 // ArgoCDAppQuerier abstracts the K8s API watch. Production wires

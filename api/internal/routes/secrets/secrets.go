@@ -27,12 +27,13 @@ import (
 	"errors"
 
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
-	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
 	"log/slog"
 	"net/http"
 	"regexp"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
 
 	"github.com/go-chi/chi/v5"
 
@@ -40,7 +41,8 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -336,7 +338,7 @@ func (h *SecretHandler) Bulk(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -492,7 +494,7 @@ type bulkEnvAggregates struct {
 //  4. Emit one SECRET_CREATED audit row per successful entry.
 //
 // Returns a fully-populated secretBulkResult ready to append.
-func (h *SecretHandler) bulkProcessEntry(ctx context.Context, uc *middleware.UserContext, project string, entry secretBulkEntry) secretBulkResult {
+func (h *SecretHandler) bulkProcessEntry(ctx context.Context, uc *auth.UserContext, project string, entry secretBulkEntry) secretBulkResult {
 	result := secretBulkResult{
 		Name:       entry.Name,
 		Status:     "created",
@@ -528,7 +530,7 @@ func (h *SecretHandler) bulkProcessEntry(ctx context.Context, uc *middleware.Use
 // of one entry. Implements EC-01 continue-best-effort: a failure for
 // one env MUST NOT short-circuit the others. Returns the aggregates
 // the caller folds into the entry-level result.
-func (h *SecretHandler) bulkProcessEnvs(ctx context.Context, uc *middleware.UserContext, project string, entry secretBulkEntry) bulkEnvAggregates {
+func (h *SecretHandler) bulkProcessEnvs(ctx context.Context, uc *auth.UserContext, project string, entry secretBulkEntry) bulkEnvAggregates {
 	aggs := bulkEnvAggregates{
 		syncStatusPerEnv: make(map[string]string, len(entry.Envs)),
 	}
@@ -636,7 +638,7 @@ func (h *SecretHandler) bulkAggregateStatus(result *secretBulkResult, entry secr
 // Returns secret names only — NEVER values.
 func (h *SecretHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -675,7 +677,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -712,6 +714,10 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 
 	// Use project name from query or default
 	project := r.URL.Query().Get("project")
+
+	// B-059: declare the resource id for the audit row (was read out of
+	// the query string by the middleware).
+	auditctx.SetResourceID(ctx, project)
 
 	// T1.1 of deep-review-2026-05-10-remediation-plan: serialize mutations
 	// per (tenant, project, env) so concurrent `loopzero secret set` + a deploy
@@ -814,7 +820,7 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return

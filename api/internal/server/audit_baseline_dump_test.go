@@ -15,7 +15,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
+	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
+	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/billing"
@@ -35,7 +37,7 @@ import (
 
 // TestB059AuditBaselineDump — B-059 Phase 1 T1.1 (NFR-002 regression floor).
 //
-// PURPOSE
+// # PURPOSE
 //
 // Captures what `AuditLog` writes to `resourceID` today, per mutating route,
 // so Phase 2 (delete body-snooper + rewire to context-declared id) can be
@@ -44,7 +46,7 @@ import (
 // no route that was source=none today may drop out entirely (its slot must be
 // declared or remain empty with the same explanation).
 //
-// SCOPE OF THIS DUMP
+// # SCOPE OF THIS DUMP
 //
 // Bodyless synthetic requests, no query params — same shape as
 // `TestB059_TodaRotaMutanteGravaAcaoDeclarada`. That means:
@@ -68,7 +70,7 @@ import (
 // value=<the declared id>` in the post-migration dump, or the migration
 // regressed that route's audit path.
 //
-// NOT A BLACK-BOX TEST OF THE MIDDLEWARE
+// # NOT A BLACK-BOX TEST OF THE MIDDLEWARE
 //
 // The single assertion here is "the baseline file was written with ≥ 17 rows"
 // — enough to prove the dumper ran and the fixture reached the audited group.
@@ -81,7 +83,7 @@ func TestB059AuditBaselineDump(t *testing.T) {
 	// A capturing writer that records the last resourceID seen. Reset per
 	// request; the dump loop reads it after each ServeHTTP.
 	var lastResourceID string
-	writer := middleware.AuditWriter(func(_, _, _, _, resourceID, _ string, _ map[string]any) {
+	writer := mwaudit.AuditWriter(func(_, _, _, _, resourceID, _ string, _ map[string]any) {
 		lastResourceID = resourceID
 	})
 
@@ -93,9 +95,9 @@ func TestB059AuditBaselineDump(t *testing.T) {
 		BuildAttestationHandler:   &builds.BuildAttestationHandler{},
 		BuildSBOMHandler:          &builds.BuildSBOMHandler{},
 		ArgoCallbackHandler:       &argocd.ArgoCallbackHandler{},
-		RateLimiter:               &middleware.RateLimiter{},
-		IPRateLimit:               &middleware.IPRateLimiter{},
-		VerifyRateLimiter:         &middleware.VerifyRateLimiter{},
+		RateLimiter:               &ratelimit.RateLimiter{},
+		IPRateLimit:               &ratelimit.IPRateLimiter{},
+		VerifyRateLimiter:         &ratelimit.VerifyRateLimiter{},
 		LogsHandler:               &logs.LogsHandler{},
 		LogStreamHandler:          &logs.LogStreamHandler{},
 		RollbackHandler:           &rollback.RollbackHandler{},
@@ -112,7 +114,7 @@ func TestB059AuditBaselineDump(t *testing.T) {
 		AuditHandler:              &audit.AuditHandler{},
 		BillingHandler:            &billing.BillingHandler{},
 		PlanLimiter:               &enforcement.PlanLimiter{},
-		CostEnforcer:              &middleware.CostEnforcer{},
+		CostEnforcer:              &policy.CostEnforcer{},
 	}
 	r := NewRouter(cfg)
 
@@ -122,7 +124,7 @@ func TestB059AuditBaselineDump(t *testing.T) {
 			"(the same ≥17 floor that TestB059_TodaRotaMutanteGravaAcaoDeclarada enforces).", len(rotas))
 	}
 
-	auditar := middleware.AuditLog(slog.New(slog.NewTextHandler(io.Discard, nil)), writer)(http.HandlerFunc(
+	auditar := mwaudit.AuditLog(slog.New(slog.NewTextHandler(io.Discard, nil)), writer)(http.HandlerFunc(
 		func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 
 	for _, rt := range rotas {

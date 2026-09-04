@@ -4,18 +4,19 @@
 package k8s
 
 import (
-	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"context"
 	"errors"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/routes/environments"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
 // lockedClient wraps a controller-runtime client, serializing each individual

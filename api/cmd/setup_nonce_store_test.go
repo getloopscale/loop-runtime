@@ -11,7 +11,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 
 	"github.com/getloopscale/loopzero-contracts/serviceauth"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // TestSetupServiceAuthNonceStore_DefaultsToInMemory — when no Redis
@@ -26,8 +26,8 @@ func TestSetupServiceAuthNonceStore_DefaultsToInMemory(t *testing.T) {
 	// The in-memory store is a *InMemoryNonceStore concrete type.
 	// Type-assert to confirm operator did NOT accidentally end up
 	// with a nil store (which would panic on first Claim).
-	if _, ok := middleware.ServiceAuthNonceStore.(*serviceauth.InMemoryNonceStore); !ok {
-		t.Fatalf("expected InMemoryNonceStore default, got %T", middleware.ServiceAuthNonceStore)
+	if _, ok := auth.ServiceAuthNonceStore.(*serviceauth.InMemoryNonceStore); !ok {
+		t.Fatalf("expected InMemoryNonceStore default, got %T", auth.ServiceAuthNonceStore)
 	}
 }
 
@@ -42,8 +42,8 @@ func TestSetupServiceAuthNonceStore_InstallsRedisWhenAddrSet(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	setupServiceAuthNonceStore(logger)
 
-	if _, ok := middleware.ServiceAuthNonceStore.(*serviceauth.RedisNonceStore); !ok {
-		t.Fatalf("expected RedisNonceStore when env set, got %T", middleware.ServiceAuthNonceStore)
+	if _, ok := auth.ServiceAuthNonceStore.(*serviceauth.RedisNonceStore); !ok {
+		t.Fatalf("expected RedisNonceStore when env set, got %T", auth.ServiceAuthNonceStore)
 	}
 }
 
@@ -71,7 +71,7 @@ func TestSetupServiceAuthNonceStore_RedisUnreachable_FallsBackInMemory(t *testin
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	setupServiceAuthNonceStore(logger)
 
-	if _, ok := middleware.ServiceAuthNonceStore.(*serviceauth.InMemoryNonceStore); !ok {
-		t.Fatalf("expected InMemoryNonceStore fallback on unreachable Redis, got %T", middleware.ServiceAuthNonceStore)
+	if _, ok := auth.ServiceAuthNonceStore.(*serviceauth.InMemoryNonceStore); !ok {
+		t.Fatalf("expected InMemoryNonceStore fallback on unreachable Redis, got %T", auth.ServiceAuthNonceStore)
 	}
 }

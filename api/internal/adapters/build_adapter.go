@@ -5,8 +5,9 @@ package adapters
 
 import (
 	"context"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 

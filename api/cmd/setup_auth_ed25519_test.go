@@ -11,7 +11,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // TestLoadServiceAuthEd25519Trust_PopulatesCurrentOnly — happy path with
@@ -26,7 +26,7 @@ func TestLoadServiceAuthEd25519Trust_PopulatesCurrentOnly(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	loadServiceAuthEd25519Trust(logger)
 
-	if got := len(middleware.ServiceAuthEd25519PublicKeys); got != 1 {
+	if got := len(auth.ServiceAuthEd25519PublicKeys); got != 1 {
 		t.Fatalf("want 1 trusted key (current only), got %d", got)
 	}
 }
@@ -44,7 +44,7 @@ func TestLoadServiceAuthEd25519Trust_PopulatesCurrentAndPrevious(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	loadServiceAuthEd25519Trust(logger)
 
-	if got := len(middleware.ServiceAuthEd25519PublicKeys); got != 2 {
+	if got := len(auth.ServiceAuthEd25519PublicKeys); got != 2 {
 		t.Fatalf("want 2 trusted keys (current + previous), got %d", got)
 	}
 }
@@ -61,7 +61,7 @@ func TestLoadServiceAuthEd25519Trust_EmptyEnv_LeavesTrustSetEmpty(t *testing.T) 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	loadServiceAuthEd25519Trust(logger)
 
-	if got := len(middleware.ServiceAuthEd25519PublicKeys); got != 0 {
+	if got := len(auth.ServiceAuthEd25519PublicKeys); got != 0 {
 		t.Fatalf("want 0 trusted keys (Phase 1 unconfigured), got %d", got)
 	}
 }
@@ -107,7 +107,7 @@ func TestServiceAuthRequireSignatureFlag_DefaultFalse(t *testing.T) {
 
 	loadServiceAuthRequireSignatureFlag()
 
-	if middleware.ServiceAuthRequireSignature {
+	if auth.ServiceAuthRequireSignature {
 		t.Fatal("unset env var must default to false (Phase 1 accept-both)")
 	}
 }
@@ -119,10 +119,10 @@ func TestServiceAuthRequireSignatureFlag_TrueValue(t *testing.T) {
 	resetMiddlewareEd25519State(t)
 	for _, v := range []string{"true", "TRUE", "1", "yes", "YES"} {
 		t.Run(v, func(t *testing.T) {
-			middleware.ServiceAuthRequireSignature = false
+			auth.ServiceAuthRequireSignature = false
 			t.Setenv("LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE", v)
 			loadServiceAuthRequireSignatureFlag()
-			if !middleware.ServiceAuthRequireSignature {
+			if !auth.ServiceAuthRequireSignature {
 				t.Errorf("env=%q must enable Phase 2 require-signed", v)
 			}
 		})
@@ -134,12 +134,12 @@ func TestServiceAuthRequireSignatureFlag_TrueValue(t *testing.T) {
 // false greens.
 func resetMiddlewareEd25519State(t *testing.T) {
 	t.Helper()
-	oldKeys := middleware.ServiceAuthEd25519PublicKeys
-	oldFlag := middleware.ServiceAuthRequireSignature
-	middleware.ServiceAuthEd25519PublicKeys = nil
-	middleware.ServiceAuthRequireSignature = false
+	oldKeys := auth.ServiceAuthEd25519PublicKeys
+	oldFlag := auth.ServiceAuthRequireSignature
+	auth.ServiceAuthEd25519PublicKeys = nil
+	auth.ServiceAuthRequireSignature = false
 	t.Cleanup(func() {
-		middleware.ServiceAuthEd25519PublicKeys = oldKeys
-		middleware.ServiceAuthRequireSignature = oldFlag
+		auth.ServiceAuthEd25519PublicKeys = oldKeys
+		auth.ServiceAuthRequireSignature = oldFlag
 	})
 }

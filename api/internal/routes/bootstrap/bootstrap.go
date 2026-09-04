@@ -29,10 +29,11 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"sync"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/pkg/naming"

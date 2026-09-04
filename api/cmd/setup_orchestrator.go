@@ -5,6 +5,10 @@ package main
 
 import (
 	"context"
+	"log/slog"
+	"net/http"
+	"time"
+
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
@@ -13,9 +17,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
-	"log/slog"
-	"net/http"
-	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 

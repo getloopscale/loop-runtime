@@ -5,52 +5,103 @@ package audit_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/middleware/audit"
 )
 
-// TestSetResourceID_StoresValueInContext — a handler that declares its resource id
-// through this context surface must be able to read it back verbatim. This is the
-// whole reason the helper exists; anything else is a mismatch between declaration
-// and retrieval.
-func TestSetResourceID_StoresValueInContext(t *testing.T) {
+// TestSetResourceIDIsReadableFromTheSameSlot — a handler that declares its
+// resource id must be able to have it read back verbatim from the context the
+// middleware installed. This is the whole reason the helper exists; anything
+// else is a mismatch between declaration and retrieval.
+func TestSetResourceIDIsReadableFromTheSameSlot(t *testing.T) {
 	// Arrange.
-	base := context.Background()
+	ctx := audit.WithResourceIDSlot(context.Background())
 	const declared = "b42-project-slug"
 
 	// Act.
-	enriched := audit.SetResourceID(base, declared)
+	audit.SetResourceID(ctx, declared)
 
 	// Assert.
-	got := audit.GetResourceID(enriched)
-	if got != declared {
-		t.Fatalf("GetResourceID(SetResourceID(ctx, %q)) = %q; want %q", declared, got, declared)
+	if got := audit.GetResourceID(ctx); got != declared {
+		t.Fatalf("GetResourceID after SetResourceID(%q) = %q; want %q", declared, got, declared)
 	}
 }
 
-// TestGetResourceID_ReturnsEmptyWhenUnset — a bare context (no Set call in its
-// lineage) must return the empty string, not panic and not return a zero-valued
-// sentinel that a caller might misread as "unknown-declared". Absence is the
-// legitimate state and must be observable as such.
-func TestGetResourceID_ReturnsEmptyWhenUnset(t *testing.T) {
-	if got := audit.GetResourceID(context.Background()); got != "" {
-		t.Fatalf("GetResourceID(Background()) = %q; want empty string", got)
+// TestSetResourceIDReachesTheFrameThatInstalledTheSlot — the declaration
+// travels UP, from the handler to the middleware above it. A handler derives
+// its own context (`context.WithTimeout`, `r.WithContext`) before declaring;
+// the frame that installed the slot must still see the value. A plain
+// `context.WithValue` surface fails exactly here, which is why the slot exists.
+func TestSetResourceIDReachesTheFrameThatInstalledTheSlot(t *testing.T) {
+	// Arrange — installer's context, then a child the "handler" owns.
+	installer := audit.WithResourceIDSlot(context.Background())
+	handlerCtx, cancel := context.WithCancel(installer)
+	defer cancel()
+
+	// Act — the handler declares on its own derived context.
+	audit.SetResourceID(handlerCtx, "declared-below")
+
+	// Assert — the installer, which never saw handlerCtx, reads it.
+	if got := audit.GetResourceID(installer); got != "declared-below" {
+		t.Fatalf("installer read %q; want %q declared on a derived context", got, "declared-below")
 	}
 }
 
-// TestSetResourceID_ReturnsNewContext — the helper must NOT mutate the input
-// context. Go's `context.WithValue` returns a derived context; any test caller
-// that hands the same base context to two subtests must be able to trust that
-// setting an id in one does not leak into the other.
-func TestSetResourceID_ReturnsNewContext(t *testing.T) {
-	base := context.Background()
-	enriched := audit.SetResourceID(base, "will-not-leak")
-
-	if audit.GetResourceID(base) != "" {
-		t.Fatalf("SetResourceID mutated the input context — expected the base to remain unset")
+// TestGetResourceIDReturnsEmptyWhenNothingDeclared — a context with a slot but
+// no declaration reports absence, not a sentinel a caller might misread.
+func TestGetResourceIDReturnsEmptyWhenNothingDeclared(t *testing.T) {
+	if got := audit.GetResourceID(audit.WithResourceIDSlot(context.Background())); got != "" {
+		t.Fatalf("GetResourceID on a fresh slot = %q; want empty string", got)
 	}
-	if audit.GetResourceID(enriched) == "" {
-		t.Fatalf("SetResourceID did not enrich the returned context")
+}
+
+// TestSetResourceIDIsANoOpWithoutASlot — a handler tested in isolation, or
+// serving a route outside the audited group, calls SetResourceID against a
+// context that never passed through AuditLog. That must not panic: no handler
+// should have to ask whether it is being audited.
+func TestSetResourceIDIsANoOpWithoutASlot(t *testing.T) {
+	bare := context.Background()
+
+	audit.SetResourceID(bare, "nowhere-to-put-this")
+
+	if got := audit.GetResourceID(bare); got != "" {
+		t.Fatalf("GetResourceID on a slotless context = %q; want empty string", got)
+	}
+}
+
+// TestSlotsAreIsolatedPerRequest — two requests must not see each other's
+// declarations. The slot is allocated per WithResourceIDSlot call, so a second
+// request installing its own slot shadows the first.
+func TestSlotsAreIsolatedPerRequest(t *testing.T) {
+	first := audit.WithResourceIDSlot(context.Background())
+	second := audit.WithResourceIDSlot(context.Background())
+
+	audit.SetResourceID(first, "request-one")
+
+	if got := audit.GetResourceID(second); got != "" {
+		t.Fatalf("second request read %q; want its own empty slot", got)
+	}
+}
+
+// TestSetResourceIDIsSafeUnderConcurrentDeclaration — a handler that declares
+// from a goroutine it spawned while the middleware reads after ServeHTTP is a
+// real shape (fire-and-forget enrichment). Run under `-race` this catches an
+// unguarded slot.
+func TestSetResourceIDIsSafeUnderConcurrentDeclaration(t *testing.T) {
+	ctx := audit.WithResourceIDSlot(context.Background())
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); audit.SetResourceID(ctx, "concurrent") }()
+		wg.Add(1)
+		go func() { defer wg.Done(); _ = audit.GetResourceID(ctx) }()
+	}
+	wg.Wait()
+
+	if got := audit.GetResourceID(ctx); got != "concurrent" {
+		t.Fatalf("after concurrent declaration GetResourceID = %q; want %q", got, "concurrent")
 	}
 }

@@ -124,6 +124,7 @@ func firstRouteLiteral(args []ast.Expr) (string, bool) {
 // string or a comment shifts a counter and silently moves the range, which is the
 // class of defect this whole change removes.
 func authRanges(fset *token.FileSet, file *ast.File) (authStart, authEnd, protStart, protEnd int) {
+	qualifiers := authQualifiers(file)
 	ast.Inspect(file, func(n ast.Node) bool {
 		if fn, ok := n.(*ast.FuncDecl); ok && fn.Name.Name == "registerProtectedRoutes" && fn.Body != nil {
 			protStart = fset.Position(fn.Body.Lbrace).Line
@@ -139,7 +140,7 @@ func authRanges(fset *token.FileSet, file *ast.File) (authStart, authEnd, protSt
 			return true
 		}
 		lit, ok := call.Args[0].(*ast.FuncLit)
-		if !ok || lit.Body == nil || !mentionsAuth(lit.Body) {
+		if !ok || lit.Body == nil || !mentionsAuth(lit.Body, qualifiers) {
 			return true
 		}
 		authStart = fset.Position(lit.Body.Lbrace).Line
@@ -149,16 +150,55 @@ func authRanges(fset *token.FileSet, file *ast.File) (authStart, authEnd, protSt
 	return
 }
 
-// mentionsAuth reports whether a block references middleware.Auth — the proof that a
-// chi Group is THE auth group and not some other grouping.
-func mentionsAuth(block *ast.BlockStmt) bool {
+// authPackagePaths are the import paths that own the `Auth` middleware: the
+// concern package it lives in today, and the flat package it lived in before
+// B-059 split that one into five. Both are listed so this gate reads a tree
+// from either side of that split.
+var authPackagePaths = map[string]bool{
+	"github.com/getloopscale/loopzero/api/internal/middleware/auth": true,
+	"github.com/getloopscale/loopzero/api/internal/middleware":      true,
+}
+
+// authQualifiers returns the local names under which router.go imports the
+// package that owns `Auth` — the alias when it has one, the path's last segment
+// otherwise.
+//
+// Resolving the name from the import rather than hard-coding it is the
+// difference between a gate that survives a rename and one that goes blind on
+// it. Measured: when `internal/middleware` split into concern packages,
+// router.go had to import the auth one as `mwauth`, because
+// `internal/routes/auth` already owns the plain name — and a gate matching the
+// letters `middleware.Auth` reported "could not locate the auth group" instead
+// of the violations it exists to report. Failing to find its own subject is the
+// one way an invariant gate can fail open.
+func authQualifiers(file *ast.File) map[string]bool {
+	names := map[string]bool{}
+	for _, imp := range file.Imports {
+		path, err := strconv.Unquote(imp.Path.Value)
+		if err != nil || !authPackagePaths[path] {
+			continue
+		}
+		if imp.Name != nil {
+			names[imp.Name.Name] = true
+			continue
+		}
+		names[path[strings.LastIndex(path, "/")+1:]] = true
+	}
+	return names
+}
+
+// mentionsAuth reports whether a block references the auth middleware's `Auth`
+// — the proof that a chi Group is THE auth group and not some other grouping.
+// `qualifiers` comes from authQualifiers, so an unrelated package that happens
+// to export an `Auth` symbol does not qualify.
+func mentionsAuth(block *ast.BlockStmt, qualifiers map[string]bool) bool {
 	found := false
 	ast.Inspect(block, func(n ast.Node) bool {
 		sel, ok := n.(*ast.SelectorExpr)
 		if !ok || sel.Sel.Name != "Auth" {
 			return true
 		}
-		if id, ok := sel.X.(*ast.Ident); ok && id.Name == "middleware" {
+		if id, ok := sel.X.(*ast.Ident); ok && qualifiers[id.Name] {
 			found = true
 		}
 		return true

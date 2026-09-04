@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
 
@@ -35,16 +35,16 @@ const (
 )
 
 // tenantAContext returns a UserContext for the victim (tenant A).
-func tenantAContext() *middleware.UserContext {
-	return &middleware.UserContext{
+func tenantAContext() *auth.UserContext {
+	return &auth.UserContext{
 		TenantID: xtTenantA,
 		UserID:   "user-a",
 	}
 }
 
 // tenantBContext returns a UserContext for the attacker (tenant B).
-func tenantBContext() *middleware.UserContext {
-	return &middleware.UserContext{
+func tenantBContext() *auth.UserContext {
+	return &auth.UserContext{
 		UserID:   xtUserB,
 		Email:    "xt-user-b@example.com",
 		TenantID: xtTenantB,

@@ -8,7 +8,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 )
 
 // idempotency_store_pg_test.go — RESHAPED in T2.1 (Batch A) of plan
@@ -49,5 +49,5 @@ import (
 // guard that PostgresIdempotencyStore satisfies the middleware
 // contract. Survives T2.1 because no runtime DB calls are needed.
 func TestPostgresIdempotencyStoreImplementsInterface(t *testing.T) {
-	var _ middleware.IdempotencyStore = (*store.PostgresIdempotencyStore)(nil)
+	var _ policy.IdempotencyStore = (*store.PostgresIdempotencyStore)(nil)
 }

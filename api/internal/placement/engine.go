@@ -34,9 +34,10 @@ type TenantCellQuerier interface {
 
 // ExtractRegion derives a region label from a cell_id.
 // Convention: cell-{region}-{nn}. Examples:
-//   "cell-0" → "default" (legacy single-cell installs)
-//   "cell-sfo3-02" → "sfo3"
-//   "cell-0"       → "1" (no region encoded; rare)
+//
+//	"cell-0" → "default" (legacy single-cell installs)
+//	"cell-sfo3-02" → "sfo3"
+//	"cell-0"       → "1" (no region encoded; rare)
 //
 // Used by services/cell_service.go to populate CellStatus.Region in
 // API responses.

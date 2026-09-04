@@ -13,19 +13,19 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 )
 
-// fakeIdempotencyStore implements middleware.IdempotencyStore for tests.
+// fakeIdempotencyStore implements policy.IdempotencyStore for tests.
 type fakeIdempotencyStore struct {
-	keys map[string]*middleware.IdempotencyRecord
+	keys map[string]*policy.IdempotencyRecord
 }
 
 func newFakeIdempotencyStore() *fakeIdempotencyStore {
-	return &fakeIdempotencyStore{keys: make(map[string]*middleware.IdempotencyRecord)}
+	return &fakeIdempotencyStore{keys: make(map[string]*policy.IdempotencyRecord)}
 }
 
-func (f *fakeIdempotencyStore) Get(ctx context.Context, key string, tenantID string) (*middleware.IdempotencyRecord, error) {
+func (f *fakeIdempotencyStore) Get(ctx context.Context, key string, tenantID string) (*policy.IdempotencyRecord, error) {
 	rec, ok := f.keys[key]
 	if !ok {
 		return nil, nil
@@ -36,7 +36,7 @@ func (f *fakeIdempotencyStore) Get(ctx context.Context, key string, tenantID str
 	return rec, nil
 }
 
-func (f *fakeIdempotencyStore) Store(ctx context.Context, rec *middleware.IdempotencyRecord) error {
+func (f *fakeIdempotencyStore) Store(ctx context.Context, rec *policy.IdempotencyRecord) error {
 	f.keys[rec.Key] = rec
 	return nil
 }
@@ -58,7 +58,7 @@ func dummyHandler() http.Handler {
 func TestIdempotencyMiddleware(t *testing.T) {
 	t.Run("request without Idempotency-Key returns 400", func(t *testing.T) {
 		store := newFakeIdempotencyStore()
-		mw := middleware.Idempotency(store)
+		mw := policy.Idempotency(store)
 		handler := mw(dummyHandler())
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(`{"name":"test"}`))
@@ -81,7 +81,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 
 	t.Run("new key → processes request and stores result", func(t *testing.T) {
 		store := newFakeIdempotencyStore()
-		mw := middleware.Idempotency(store)
+		mw := policy.Idempotency(store)
 		handler := mw(dummyHandler())
 
 		body := `{"name":"my-saas"}`
@@ -109,7 +109,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 		body := `{"name":"my-saas"}`
 
 		// Pre-populate cache
-		store.keys["key-123"] = &middleware.IdempotencyRecord{
+		store.keys["key-123"] = &policy.IdempotencyRecord{
 			Key:            "key-123",
 			RequestHash:    hashBody(body),
 			ResponseStatus: http.StatusCreated,
@@ -122,7 +122,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 			w.WriteHeader(http.StatusCreated)
 		})
 
-		mw := middleware.Idempotency(store)
+		mw := policy.Idempotency(store)
 		handler := mw(inner)
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(body))
@@ -149,14 +149,14 @@ func TestIdempotencyMiddleware(t *testing.T) {
 		store := newFakeIdempotencyStore()
 
 		// Pre-populate with different payload
-		store.keys["key-456"] = &middleware.IdempotencyRecord{
+		store.keys["key-456"] = &policy.IdempotencyRecord{
 			Key:            "key-456",
 			RequestHash:    hashBody(`{"name":"original"}`),
 			ResponseStatus: http.StatusCreated,
 			ResponseBody:   []byte(`{"id":"proj-original"}`),
 		}
 
-		mw := middleware.Idempotency(store)
+		mw := policy.Idempotency(store)
 		handler := mw(dummyHandler())
 
 		differentBody := `{"name":"different"}`
@@ -178,7 +178,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 
 	t.Run("body larger than 10MB is truncated by LimitReader", func(t *testing.T) {
 		store := newFakeIdempotencyStore()
-		mw := middleware.Idempotency(store)
+		mw := policy.Idempotency(store)
 		handler := mw(dummyHandler())
 
 		// Create a body larger than 10MB (10MB + 1 byte)

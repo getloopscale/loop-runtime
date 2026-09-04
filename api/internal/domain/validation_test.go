@@ -97,11 +97,11 @@ func TestValidator_PlatformDomainProtection(t *testing.T) {
 		"anything.dev.loopzero.example",
 		"deep.sub.dev.loopzero.example",
 		// SEC-001 fix: parent zone apex and ALL subdomains
-		"loopzero.example",             // root zone apex
-		"www.loopzero.example",         // unlisted subdomain
-		"staging.loopzero.example",     // unlisted subdomain
-		"app.loopzero.example",         // unlisted subdomain
-		"docs.loopzero.example",        // unlisted subdomain
+		"loopzero.example",         // root zone apex
+		"www.loopzero.example",     // unlisted subdomain
+		"staging.loopzero.example", // unlisted subdomain
+		"app.loopzero.example",     // unlisted subdomain
+		"docs.loopzero.example",    // unlisted subdomain
 		// Named infra subdomains (still blocked)
 		"api.loopzero.example",
 		"argocd.loopzero.example",
@@ -150,9 +150,9 @@ func TestValidator_PunycodeRejected(t *testing.T) {
 	v := NewValidator("dev.loopzero.example", nil)
 
 	punycode := []string{
-		"xn--pi-8cd.mycompany.com",    // Cyrillic "а" homograph for "api"
-		"xn--nxasmq6b.example.com",    // Greek domain
-		"sub.xn--test-cua.com",        // punycode in subdomain
+		"xn--pi-8cd.mycompany.com", // Cyrillic "а" homograph for "api"
+		"xn--nxasmq6b.example.com", // Greek domain
+		"sub.xn--test-cua.com",     // punycode in subdomain
 	}
 
 	for _, domain := range punycode {

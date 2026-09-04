@@ -22,9 +22,9 @@
 // authoritative source.
 //
 // Deprecation timeline (ADR D5):
-//   * v1: helper accepts BOTH headers; WARN logs each `X-Correlation-ID`
+//   - v1: helper accepts BOTH headers; WARN logs each `X-Correlation-ID`
 //     hit so operators can identify lagging callers.
-//   * v2 (next major): helper drops the fallback. Callers that still
+//   - v2 (next major): helper drops the fallback. Callers that still
 //     send `X-Correlation-ID` will get correlationID="" and downstream
 //     tracing degrades — surface explicitly in the CHANGELOG.
 package correlation

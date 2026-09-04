@@ -17,8 +17,8 @@ import (
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 )
 

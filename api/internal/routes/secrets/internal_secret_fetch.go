@@ -37,7 +37,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // EC-08 MUST FIX P1: secret_name regex validation uses the same
@@ -116,13 +116,13 @@ var (
 
 // NewSecretFetchHandler returns an http.HandlerFunc for T4.1.
 // The caller is expected to wrap this with the cross-cluster TokenReview
-// middleware so r.Context() carries a *middleware.TokenReviewResult.
+// middleware so r.Context() carries a *auth.TokenReviewResult.
 func NewSecretFetchHandler(deps SecretFetchHandlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
 		// Pull validated identity from middleware-injected context.
-		identity, ok := middleware.CrossClusterFromContext(ctx)
+		identity, ok := auth.CrossClusterFromContext(ctx)
 		if !ok || identity == nil || !identity.Authenticated {
 			writeSecretFetchError(w, http.StatusUnauthorized, "auth_failed", "AUTH_TOKEN_INVALID", "")
 			return

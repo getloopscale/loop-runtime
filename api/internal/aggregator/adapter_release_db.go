@@ -13,7 +13,7 @@ import (
 // releases for the deploy_timeline aggregator. Decoupled from the db
 // package so this adapter remains hermetic-testable without sqlmock.
 type ReleaseStatusRow struct {
-	State     string    // matches DTStatus + DEGRADED in deploy phase
+	State     string // matches DTStatus + DEGRADED in deploy phase
 	UpdatedAt time.Time
 	Reason    string
 }

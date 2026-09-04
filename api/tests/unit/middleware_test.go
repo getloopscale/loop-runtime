@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	observability "github.com/getloopscale/loopzero/api/internal/middleware/observability"
 )
 
 func TestCorrelationIDMiddleware(t *testing.T) {
@@ -22,7 +22,7 @@ func TestCorrelationIDMiddleware(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})
 
-		handler := middleware.CorrelationID(inner)
+		handler := observability.CorrelationID(inner)
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		rec := httptest.NewRecorder()
 
@@ -49,7 +49,7 @@ func TestCorrelationIDMiddleware(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})
 
-		handler := middleware.CorrelationID(inner)
+		handler := observability.CorrelationID(inner)
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		req.Header.Set("Correlation-ID", "client-provided-id")
 		rec := httptest.NewRecorder()
@@ -75,7 +75,7 @@ func TestRequestLoggingMiddleware(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		})
 
-		handler := middleware.RequestLogging(nil)(inner)
+		handler := observability.RequestLogging(nil)(inner)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
 		rec := httptest.NewRecorder()
 

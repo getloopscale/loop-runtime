@@ -6,8 +6,9 @@ package manifests
 import (
 	"fmt"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
 	"strings"
+
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // buildService creates a Service resource for an app.

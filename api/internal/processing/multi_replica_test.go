@@ -123,10 +123,10 @@ func TestAPI_MultiReplica_NoDuplicateProcessing(t *testing.T) {
 	// Correct behavior: each build is claimed exactly once across all
 	// replicas, so total successes == 20 and total ErrClaimHeld == 60.
 	var (
-		wg        sync.WaitGroup
-		claimed   int64
-		notHeld   int64
-		otherErr  int64
+		wg       sync.WaitGroup
+		claimed  int64
+		notHeld  int64
+		otherErr int64
 	)
 
 	// Track which replica got which build so we can verify distribution.

@@ -248,7 +248,6 @@ type testClient struct {
 	baseURL string
 }
 
-
 // Proxy methods that use the test base URL
 func (tc *testClient) CreateZone(ctx context.Context, domain string) (*ZoneInfo, error) {
 	body := map[string]interface{}{

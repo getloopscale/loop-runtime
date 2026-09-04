@@ -40,7 +40,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/logging"
@@ -213,20 +213,20 @@ func (f *fakeSyncClient) GetAppStatus(ctx context.Context, appName string, deplo
 
 type fakeTokenValidator struct{}
 
-func (f *fakeTokenValidator) ValidateToken(ctx context.Context, token string) (*middleware.TokenValidationResult, error) {
+func (f *fakeTokenValidator) ValidateToken(ctx context.Context, token string) (*auth.TokenValidationResult, error) {
 	if token == "valid-token" {
-		return &middleware.TokenValidationResult{
+		return &auth.TokenValidationResult{
 			UserID: "user-test",
 			Email:  "test@example.com",
 		}, nil
 	}
-	return nil, middleware.ErrInvalidToken
+	return nil, auth.ErrInvalidToken
 }
 
 type fakeMembershipStore struct{}
 
-func (f *fakeMembershipStore) GetMemberships(ctx context.Context, userID string) ([]middleware.TenantMembership, error) {
-	return []middleware.TenantMembership{
+func (f *fakeMembershipStore) GetMemberships(ctx context.Context, userID string) ([]auth.TenantMembership, error) {
+	return []auth.TenantMembership{
 		{TenantID: "tenant-test", Role: "owner"},
 	}, nil
 }

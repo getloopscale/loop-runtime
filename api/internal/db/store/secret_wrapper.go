@@ -24,6 +24,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"fmt"
+
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 
 	"github.com/getloopscale/loopzero/api/internal/db"

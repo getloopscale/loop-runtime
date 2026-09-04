@@ -15,16 +15,17 @@ package status
 
 import (
 	"context"
-	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"sort"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/naming"
@@ -241,7 +242,7 @@ type statusResponse struct {
 // CC 22 → ≤ 12 via 3 helper extracts (findLastBuild + buildActiveRelease +
 // computeScalingInfo). Behavior preserved verbatim.
 func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return

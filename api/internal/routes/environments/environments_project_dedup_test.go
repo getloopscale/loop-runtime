@@ -24,10 +24,11 @@ package environments
 
 import (
 	"encoding/json"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
 
 // listEnvNamesFiltered drives List with a `?project=` filter and returns the

@@ -12,7 +12,6 @@ package logs
 import (
 	"context"
 	"crypto/subtle"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"net/http"
 	"os"
 	"regexp"
@@ -20,10 +19,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -146,7 +147,7 @@ func NewLogsHandler(builds LogBuildStore, querier LogQuerier) *LogsHandler {
 
 // Get handles GET /api/v1/builds/{id}/logs.
 func (h *LogsHandler) Get(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return

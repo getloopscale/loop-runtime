@@ -23,9 +23,9 @@ import (
 // SecretK8sManager creates K8s Secrets on mgmt cluster and ExternalSecret CRs
 // on the workload (runtime) cluster for ESO to sync.
 type SecretK8sManager struct {
-	mgmtClient    kubernetes.Interface
+	mgmtClient     kubernetes.Interface
 	runtimeDynamic dynamic.Interface
-	mgmtNamespace string
+	mgmtNamespace  string
 }
 
 var externalSecretGVR = schema.GroupVersionResource{

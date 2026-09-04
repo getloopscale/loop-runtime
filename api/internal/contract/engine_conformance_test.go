@@ -5,7 +5,6 @@ package contract
 
 import (
 	"context"
-	"github.com/getloopscale/loopzero/api/internal/routes/version"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/version"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"

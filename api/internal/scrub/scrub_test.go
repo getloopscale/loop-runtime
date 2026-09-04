@@ -22,9 +22,9 @@ func TestScrubEvent_PreservesCleanInput(t *testing.T) {
 // counter contract per T5.2 wiring + H2 review fix.
 func TestScrubEventWithCount_ReturnsAccurateReplacementCount(t *testing.T) {
 	tests := []struct {
-		name        string
-		in          PhaseEvent
-		wantMin     int
+		name    string
+		in      PhaseEvent
+		wantMin int
 	}{
 		{"no replacements on clean input", PhaseEvent{Phase: "build", Status: "in_progress"}, 0},
 		{"one replacement on ArgoCD term", PhaseEvent{DegradedReason: "ArgoCD sync failed"}, 1},

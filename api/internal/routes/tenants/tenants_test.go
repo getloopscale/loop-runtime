@@ -6,11 +6,12 @@ package tenants
 import (
 	"context"
 	"encoding/json"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 
 	"log/slog"
 )

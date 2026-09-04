@@ -97,8 +97,8 @@ func (r *fakeRows) Scan(dest ...any) error {
 	return nil
 }
 
-func (r *fakeRows) Err() error  { return r.errVal }
-func (r *fakeRows) Close()      {}
+func (r *fakeRows) Err() error { return r.errVal }
+func (r *fakeRows) Close()     {}
 
 func TestNewPostgresEventStore(t *testing.T) {
 	store := NewPostgresEventStore(nil, nil)

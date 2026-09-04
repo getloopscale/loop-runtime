@@ -62,9 +62,9 @@ apps:
     language: go
 `
 	tarball := makeTarGz(t, map[string]string{
-		"owner-repo-abc123/loopzero.yaml":     yamlContent,
-		"owner-repo-abc123/main.go":       "package main",
-		"owner-repo-abc123/go.mod":        "module example",
+		"owner-repo-abc123/loopzero.yaml": yamlContent,
+		"owner-repo-abc123/main.go":   "package main",
+		"owner-repo-abc123/go.mod":    "module example",
 	})
 
 	// Act

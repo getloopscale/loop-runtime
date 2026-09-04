@@ -5,11 +5,12 @@ package builds
 
 import (
 	"context"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"net/http"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -79,7 +80,7 @@ func (h *BuildStatsHandler) Stats(w http.ResponseWriter, r *http.Request) {
 
 	// Fail-closed: a missing tenant context MUST NOT run an unscoped aggregate
 	// (the #106/#111 class — RLS is not a backstop). 401, never an empty/global scan.
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return

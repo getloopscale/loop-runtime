@@ -14,12 +14,12 @@ import (
 
 func TestSubdomain(t *testing.T) {
 	tests := []struct {
-		name        string
-		tenant      string
-		project     string
-		app         string
-		env         string
-		want        string
+		name    string
+		tenant  string
+		project string
+		app     string
+		env     string
+		want    string
 	}{
 		{
 			name:    "simple names",

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 type fakeEvictor struct {
@@ -42,10 +42,10 @@ func doEvict(t *testing.T, input AdminEvictInput, ev TenantEvictor, setEnv map[s
 	}
 	w := httptest.NewRecorder()
 	// qa-sprint2-cleanup-2026-06-24 T1.2: route handler is wrapped with
-	// middleware.RequireAdminService at the router layer. Tests exercise the
+	// auth.RequireAdminService at the router layer. Tests exercise the
 	// SAME chain (middleware → handler) so the auth-gate behavior is covered
 	// alongside the handler logic.
-	middleware.RequireAdminService(AdminEvictHandler(ev)).ServeHTTP(w, req)
+	auth.RequireAdminService(AdminEvictHandler(ev)).ServeHTTP(w, req)
 	return w
 }
 

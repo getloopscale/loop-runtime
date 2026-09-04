@@ -15,7 +15,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
+	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/billing"
@@ -49,7 +52,7 @@ import (
 // middleware estar de fato montado sobre a rota.
 func TestB059_TodaRotaMutanteGravaAcaoDeclarada(t *testing.T) {
 	var gravadas []linhaDeAuditoria
-	escritor := middleware.AuditWriter(func(tenantID, action, actor, resourceType, resourceID,
+	escritor := mwaudit.AuditWriter(func(tenantID, action, actor, resourceType, resourceID,
 		correlationID string, metadata map[string]any) {
 		gravadas = append(gravadas, linhaDeAuditoria{acao: action, tipo: resourceType, id: resourceID})
 	})
@@ -61,9 +64,9 @@ func TestB059_TodaRotaMutanteGravaAcaoDeclarada(t *testing.T) {
 		BuildAttestationHandler:   &builds.BuildAttestationHandler{},
 		BuildSBOMHandler:          &builds.BuildSBOMHandler{},
 		ArgoCallbackHandler:       &argocd.ArgoCallbackHandler{},
-		RateLimiter:               &middleware.RateLimiter{},
-		IPRateLimit:               &middleware.IPRateLimiter{},
-		VerifyRateLimiter:         &middleware.VerifyRateLimiter{},
+		RateLimiter:               &ratelimit.RateLimiter{},
+		IPRateLimit:               &ratelimit.IPRateLimiter{},
+		VerifyRateLimiter:         &ratelimit.VerifyRateLimiter{},
 		LogsHandler:               &logs.LogsHandler{},
 		LogStreamHandler:          &logs.LogStreamHandler{},
 		RollbackHandler:           &rollback.RollbackHandler{},
@@ -80,7 +83,7 @@ func TestB059_TodaRotaMutanteGravaAcaoDeclarada(t *testing.T) {
 		AuditHandler:              &audit.AuditHandler{},
 		BillingHandler:            &billing.BillingHandler{},
 		PlanLimiter:               &enforcement.PlanLimiter{},
-		CostEnforcer:              &middleware.CostEnforcer{},
+		CostEnforcer:              &policy.CostEnforcer{},
 	}
 	r := NewRouter(cfg)
 
@@ -105,7 +108,7 @@ func TestB059_TodaRotaMutanteGravaAcaoDeclarada(t *testing.T) {
 	// deriva a acao em producao — envolvendo um handler inerte. Continua sendo codigo de
 	// producao a decidir; o que nao se exercita e' o corpo do handler, que nao participa da
 	// derivacao.
-	auditar := middleware.AuditLog(slog.New(slog.NewTextHandler(io.Discard, nil)), escritor)(http.HandlerFunc(
+	auditar := mwaudit.AuditLog(slog.New(slog.NewTextHandler(io.Discard, nil)), escritor)(http.HandlerFunc(
 		func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 
 	t.Logf("rotas mutantes alcancadas pelo fixture: %d", len(rotas))
@@ -143,8 +146,8 @@ func TestB059_TodaRotaMutanteGravaAcaoDeclarada(t *testing.T) {
 // auditoria nao grava linha nenhuma (`audit.go`: escreve so' quando `tenantID != ""`), e o teste
 // passaria sem inspecionar coisa alguma — foi o mutante abaixo que pegou isso.
 func comUsuario(req *http.Request) *http.Request {
-	uc := &middleware.UserContext{UserID: "u-fixo", Email: "u@example.test", TenantID: "tn-fixo"}
-	return req.WithContext(context.WithValue(req.Context(), middleware.UserContextKeyPublic(), uc))
+	uc := &auth.UserContext{UserID: "u-fixo", Email: "u@example.test", TenantID: "tn-fixo"}
+	return req.WithContext(context.WithValue(req.Context(), auth.UserContextKeyPublic(), uc))
 }
 
 type linhaDeAuditoria struct{ acao, tipo, id string }
@@ -192,14 +195,14 @@ func concretizar(padrao string) string {
 
 type validadorFixo struct{}
 
-func (validadorFixo) ValidateToken(_ context.Context, _ string) (*middleware.TokenValidationResult, error) {
-	return &middleware.TokenValidationResult{UserID: "u-fixo", Email: "u@example.test"}, nil
+func (validadorFixo) ValidateToken(_ context.Context, _ string) (*auth.TokenValidationResult, error) {
+	return &auth.TokenValidationResult{UserID: "u-fixo", Email: "u@example.test"}, nil
 }
 
 type membroFixo struct{}
 
-func (membroFixo) GetMemberships(_ context.Context, _ string) ([]middleware.TenantMembership, error) {
-	return []middleware.TenantMembership{{TenantID: "tn-fixo"}}, nil
+func (membroFixo) GetMemberships(_ context.Context, _ string) ([]auth.TenantMembership, error) {
+	return []auth.TenantMembership{{TenantID: "tn-fixo"}}, nil
 }
 
 // O mutante: sem ele, um PASS acima seria indistinguivel de um detector que nunca dispara.
@@ -207,10 +210,10 @@ func (membroFixo) GetMemberships(_ context.Context, _ string) ([]middleware.Tena
 // segmento do caminho concreto, que e' o dano: a acao varia com o id.
 func TestB059_ODetectorAcusaCaminhoNaoMapeado(t *testing.T) {
 	var gravadas []linhaDeAuditoria
-	escritor := middleware.AuditWriter(func(_, action, _, _, _, _ string, _ map[string]any) {
+	escritor := mwaudit.AuditWriter(func(_, action, _, _, _, _ string, _ map[string]any) {
 		gravadas = append(gravadas, linhaDeAuditoria{acao: action})
 	})
-	auditar := middleware.AuditLog(slog.New(slog.NewTextHandler(io.Discard, nil)), escritor)(
+	auditar := mwaudit.AuditLog(slog.New(slog.NewTextHandler(io.Discard, nil)), escritor)(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 
 	auditar.ServeHTTP(httptest.NewRecorder(),

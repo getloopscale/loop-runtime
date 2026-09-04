@@ -11,20 +11,21 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	observability "github.com/getloopscale/loopzero/api/internal/middleware/observability"
 )
 
 func TestWhoamiRoute(t *testing.T) {
 	t.Run("returns 200 with user info when authenticated", func(t *testing.T) {
 		handler := auth.NewAuthHandler(nil)
 
-		uc := &middleware.UserContext{
+		uc := &mwauth.UserContext{
 			UserID:   "github-lucas",
 			Email:    "lucas@acme.dev",
 			TenantID: "acme",
 			Role:     "owner",
 		}
-		ctx := context.WithValue(context.Background(), middleware.UserContextKeyPublic(), uc)
+		ctx := context.WithValue(context.Background(), mwauth.UserContextKeyPublic(), uc)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami", nil).WithContext(ctx)
 		rec := httptest.NewRecorder()
@@ -67,13 +68,13 @@ func TestWhoamiRoute(t *testing.T) {
 	t.Run("returns noreply email when GitHub email is empty", func(t *testing.T) {
 		handler := auth.NewAuthHandler(nil)
 
-		uc := &middleware.UserContext{
+		uc := &mwauth.UserContext{
 			UserID:   "github-getloopscale",
 			Email:    "", // GitHub /user returns null for private emails
 			TenantID: "acme",
 			Role:     "owner",
 		}
-		ctx := context.WithValue(context.Background(), middleware.UserContextKeyPublic(), uc)
+		ctx := context.WithValue(context.Background(), mwauth.UserContextKeyPublic(), uc)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami", nil).WithContext(ctx)
 		rec := httptest.NewRecorder()
@@ -94,17 +95,17 @@ func TestWhoamiRoute(t *testing.T) {
 	t.Run("response has Correlation-ID header when present in request", func(t *testing.T) {
 		handler := auth.NewAuthHandler(nil)
 
-		uc := &middleware.UserContext{
+		uc := &mwauth.UserContext{
 			UserID: "github-lucas", Email: "lucas@acme.dev", TenantID: "acme", Role: "owner",
 		}
-		ctx := context.WithValue(context.Background(), middleware.UserContextKeyPublic(), uc)
+		ctx := context.WithValue(context.Background(), mwauth.UserContextKeyPublic(), uc)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami", nil).WithContext(ctx)
 		req.Header.Set("Correlation-ID", "test-corr-123")
 		rec := httptest.NewRecorder()
 
 		// Wrap with correlation middleware
-		mw := middleware.CorrelationID(http.HandlerFunc(handler.Whoami))
+		mw := observability.CorrelationID(http.HandlerFunc(handler.Whoami))
 		mw.ServeHTTP(rec, req)
 
 		corrID := rec.Header().Get("Correlation-ID")

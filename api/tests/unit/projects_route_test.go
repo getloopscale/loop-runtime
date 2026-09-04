@@ -16,7 +16,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 type fakeProjectStore struct {
@@ -124,13 +124,13 @@ func (f *fakeTenantCRManager) EnsureTenant(ctx context.Context, tenantID string,
 }
 
 func makeAuthCtx(userID, tenantID, role string) context.Context {
-	uc := &middleware.UserContext{
+	uc := &auth.UserContext{
 		UserID:   userID,
 		Email:    userID + "@test.com",
 		TenantID: tenantID,
 		Role:     role,
 	}
-	return context.WithValue(context.Background(), middleware.UserContextKeyPublic(), uc)
+	return context.WithValue(context.Background(), auth.UserContextKeyPublic(), uc)
 }
 
 func TestProjectsRoute(t *testing.T) {

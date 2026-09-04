@@ -6,6 +6,13 @@ package server
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/routes/admin"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
@@ -20,12 +27,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
@@ -34,7 +35,10 @@ import (
 	// `routes/source` x `internal/source`, resolvida do mesmo jeito.
 	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
 	appmetrics "github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
+	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
+	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/billing"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
@@ -68,8 +72,8 @@ type Config struct {
 	ContextLogger  *pkglogging.ContextLogger
 	DB             health.DBHealthChecker
 	HealthServices []health.ServiceHealthChecker
-	TokenValidator middleware.TokenValidator
-	MemberStore    middleware.MembershipStore
+	TokenValidator mwauth.TokenValidator
+	MemberStore    mwauth.MembershipStore
 	ProjectStore   domain.ProjectStore
 	TenantCRMgr    domain.TenantCRManager
 	ProjectDeleter domain.ProjectDeleter
@@ -90,7 +94,7 @@ type Config struct {
 	// environments row writes. nil-safe: when nil, ProjectHandler.Create
 	// behaves identically to the pre-T4.1 handler (TestProjectCreate_BackwardCompatNoEnsurer).
 	ProjectEnvEnsurer promote.EnvironmentEnsurer
-	IdempotencyStore  middleware.IdempotencyStore
+	IdempotencyStore  policy.IdempotencyStore
 	SourceStore       source.SourceStore
 	ObjectUploader    sourceroutes.ObjectUploader // optional: upload bundles to S3/Spaces for build access
 	SourceBucket      string                      // S3 bucket name for source bundles (env: SOURCE_BUCKET)
@@ -114,15 +118,15 @@ type Config struct {
 	// per-app SBOM metadata + presigned download URLs from S3.
 	BuildSBOMHandler    *builds.BuildSBOMHandler
 	ArgoCallbackHandler *argocd.ArgoCallbackHandler
-	RateLimiter         *middleware.RateLimiter
+	RateLimiter         *ratelimit.RateLimiter
 	// IPRateLimit is the optional pre-auth IP-based rate limiter (T2.4).
 	// When non-nil, mounted as the FIRST middleware so brute-force attempts
 	// on /api/v1/auth/* are dropped at the edge.
-	IPRateLimit *middleware.IPRateLimiter
+	IPRateLimit *ratelimit.IPRateLimiter
 	// VerifyRateLimiter is the per-(tenant, domain) limiter for
 	// POST /api/v1/domains/{domain}/verify per J11D7 LOCKED ADR
 	// (1 reverify per 30 seconds per (tenant, domain)).
-	VerifyRateLimiter *middleware.VerifyRateLimiter
+	VerifyRateLimiter *ratelimit.VerifyRateLimiter
 	// HTTP server timeouts (configurable via env vars)
 	ReadHeaderTimeout time.Duration
 	ReadTimeout       time.Duration
@@ -206,7 +210,7 @@ type Config struct {
 	IntegrationsGitHubHandler *integrations.IntegrationsGitHubHandler
 	PreviewHandler            *preview.PreviewHandler // Sprint 5 / T2.3 — preview environments
 	IsProduction              bool
-	AuditWriter               middleware.AuditWriter
+	AuditWriter               mwaudit.AuditWriter
 	AuditHandler              *audit.AuditHandler
 	TenantDeletionStore       tenants.TenantDeletionStore
 	// BillingHandler — T1.6 of deep-review-remediation-plan (closes
@@ -227,12 +231,12 @@ type Config struct {
 	// Distinct from PlanLimiter which gates rate-style limits (builds/month,
 	// concurrent deploys). Nil-safe — when unset, the middleware pass-through.
 	// Wired by api/cmd/setup_server.go::setupCostEnforcer (T1.9 production wiring).
-	CostEnforcer *middleware.CostEnforcer
+	CostEnforcer *policy.CostEnforcer
 	UpgradeURL   string
 	// PGPoolGate decide se uma mutacao passa dado o estado do pool. B-054: eram dois campos
 	// (`PGPoolStatsFunc` + `PGCircuitBreakerThresholdPct`) que faziam o router calcular um
 	// percentual instantaneo, enquanto o portao COM histerese existia e nunca era consultado.
-	PGPoolGate        middleware.PoolGate
+	PGPoolGate        policy.PoolGate
 	CORSAllowedOrigin string // CORS_ALLOWED_ORIGIN — empty in production blocks all cross-origin requests
 }
 
