@@ -54,3 +54,4 @@ cmd/loopzero-ops/internal/quality/devpublicenv/check.go | confere presença de v
 cmd/loopzero-ops/quality_gates_authz.go | fiação de subcomando do loopzero-ops
 infra/helmfile/environments/dev-public.yaml | declara o ambiente; o valor que liga a cobrança mora em values/dev-public/
 taskfiles/infra.yml | task de operador que IMPRIME o comando de criar o Secret à mão; instrução, não caminho de execução
+taskfiles/quality.yml | comentário citando `LOOPZERO_PROMETHEUS_URL` e `CostEnforcer` para justificar o wire do gate `check-loopzero-cloud-cost-aggregator-wiring` sob `quality:gates`; é documentação da razão do gate, não caminho de cobrança
