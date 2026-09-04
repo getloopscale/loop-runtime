@@ -735,7 +735,7 @@ func TestDynamicRouter_SkipsEmptyCellID(t *testing.T) {
 	store := &fakeCellStore{
 		cells: []CellConfig{
 			{CellID: "cell-a"},
-			{CellID: ""},  // should be skipped
+			{CellID: ""}, // should be skipped
 			{CellID: "cell-b"},
 		},
 	}

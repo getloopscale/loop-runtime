@@ -6,10 +6,11 @@ package adapters
 import (
 	"context"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"testing"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
+	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 

@@ -16,13 +16,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
-	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
 
 	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/domain"

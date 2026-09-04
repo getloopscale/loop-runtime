@@ -5,8 +5,9 @@ package main
 
 import (
 	"context"
-	"github.com/getloopscale/loopzero/api/internal/routes/admin"
 	"log/slog"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/admin"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 

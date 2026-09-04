@@ -16,12 +16,13 @@ package auth
 import (
 	"context"
 	"encoding/json"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -39,7 +40,7 @@ type UsernameLookup interface {
 // by store.PostgresMembershipStore.GetMemberships. A nil lookup is legal — the
 // handler degrades gracefully to single-team output.
 type MembershipLookup interface {
-	GetMemberships(ctx context.Context, userID string) ([]middleware.TenantMembership, error)
+	GetMemberships(ctx context.Context, userID string) ([]auth.TenantMembership, error)
 }
 
 // ActiveTeamStore is the contract AuthHandler.Switch needs to persist
@@ -93,7 +94,7 @@ type SwitchTeamRequest struct {
 // the user is a member. Returns 403 if not a member, 400 if invalid input.
 // Plan T2.5 D8 full.
 func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -170,7 +171,7 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 // CC 18 → ≤ 10 via 3 helper extracts (deriveEmail + lookupUsername +
 // resolveActiveTeam). Behavior preserved verbatim.
 func (h *AuthHandler) Whoami(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -271,7 +272,7 @@ func (h *AuthHandler) resolveActiveTeam(ctx context.Context, userID, fallback st
 func (h *AuthHandler) selfHealActiveTeam(
 	ctx context.Context,
 	userID, jwtTenantID, activeTeam string,
-	memberships []middleware.TenantMembership,
+	memberships []auth.TenantMembership,
 	payload map[string]any,
 ) string {
 	if h.activeStore == nil || activeTeam == jwtTenantID {

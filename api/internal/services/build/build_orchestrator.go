@@ -72,10 +72,10 @@ type BuildOrchestratorDeps struct {
 	Locker            deploycontracts.EnvironmentLocker
 	GitOps            deploycontracts.GitOpsPusher
 	Delivery          deploycontracts.DeliveryActivator // MEET-009: polymorphic release activation
-	RegistryURL       string                   // Container registry URL for BuildPlan image tag resolution
-	ArgocdSyncTimeout time.Duration            // 0 = default 120s
-	KVClient          StaticRoutingClient      // CF KV client for static frontend routing (nil = disabled)
-	BaseDomain        string                   // Base domain for app hostnames
+	RegistryURL       string                            // Container registry URL for BuildPlan image tag resolution
+	ArgocdSyncTimeout time.Duration                     // 0 = default 120s
+	KVClient          StaticRoutingClient               // CF KV client for static frontend routing (nil = disabled)
+	BaseDomain        string                            // Base domain for app hostnames
 	// B15: plan-cap enforcement for per-service replica count. nil = disabled.
 	PlanCap PlanCapChecker
 	// KEDAEnabled gates scale-to-zero (MinReplicas=0). When false, min:0 is rejected.
@@ -139,7 +139,7 @@ type BuildOrchestrator struct {
 	locker              deploycontracts.EnvironmentLocker
 	gitops              deploycontracts.GitOpsPusher
 	delivery            deploycontracts.DeliveryActivator // MEET-009: polymorphic release activation
-	registryURL         string                   // Container registry URL for BuildPlan image tag resolution
+	registryURL         string                            // Container registry URL for BuildPlan image tag resolution
 	argocdSyncTimeout   time.Duration
 	kvClient            StaticRoutingClient // CF KV client for static frontend routing
 	baseDomain          string
@@ -181,7 +181,7 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 			Locker:              deps.Locker,
 			GitOps:              deps.GitOps,
 			ArgocdSyncTimeout:   syncTimeout,
-			AppAttestationStore: deps.AppAttestationStore,      // Sprint 6 / T3.1
+			AppAttestationStore: deps.AppAttestationStore,        // Sprint 6 / T3.1
 			DeployEventStore:    store.NewDeployEventStoreSqlc(), // J-16 slice 3 — deploy.succeeded outbox
 		})
 	}

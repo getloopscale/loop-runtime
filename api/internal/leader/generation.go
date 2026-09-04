@@ -28,12 +28,12 @@
 // A Lease returned by Acquire is valid until Heartbeat() or Validate()
 // returns an error. The caller must:
 //
-//   1. Call Heartbeat() at HeartbeatInterval (default 5s).
-//   2. Pass Lease.GenerationID into every state-mutating SQL WHERE clause.
-//   3. Release() the lease on clean shutdown (best effort; not required
-//      for correctness because a missed heartbeat is an adequate signal).
-//   4. Exit the process if Heartbeat() returns ErrFenced — another leader
-//      has taken over.
+//  1. Call Heartbeat() at HeartbeatInterval (default 5s).
+//  2. Pass Lease.GenerationID into every state-mutating SQL WHERE clause.
+//  3. Release() the lease on clean shutdown (best effort; not required
+//     for correctness because a missed heartbeat is an adequate signal).
+//  4. Exit the process if Heartbeat() returns ErrFenced — another leader
+//     has taken over.
 //
 // The package deliberately does NOT start goroutines. The caller owns the
 // heartbeat loop so tests and the controller main can drive it explicitly.

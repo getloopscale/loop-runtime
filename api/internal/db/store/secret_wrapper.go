@@ -23,8 +23,9 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"fmt"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"io"
+
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 

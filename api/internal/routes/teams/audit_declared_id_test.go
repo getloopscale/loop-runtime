@@ -5,10 +5,11 @@ package teams
 
 import (
 	"bytes"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
 
 // TestTeamsAddDeclaresUsernameAsResourceID — B-059 FR-002.

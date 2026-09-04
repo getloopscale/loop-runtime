@@ -5,8 +5,9 @@ package main
 
 import (
 	"encoding/hex"
-	"github.com/getloopscale/loopzero/api/internal/domain"
 	"log/slog"
+
+	"github.com/getloopscale/loopzero/api/internal/domain"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 

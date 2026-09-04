@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // fakeStatsStore records what the handler passed and returns canned rows.
@@ -31,7 +31,7 @@ func (f *fakeStatsStore) BuildStatsByDay(_ context.Context, tenantID string, sin
 func statsRequest(tenant, window string) *http.Request {
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/builds/stats?window="+window, nil)
 	if tenant != "" {
-		ctx := context.WithValue(r.Context(), middleware.UserContextKeyPublic(), &middleware.UserContext{TenantID: tenant})
+		ctx := context.WithValue(r.Context(), auth.UserContextKeyPublic(), &auth.UserContext{TenantID: tenant})
 		r = r.WithContext(ctx)
 	}
 	return r
@@ -68,7 +68,7 @@ func TestBuildStats_TenantIsolation_PassesJWTTenant(t *testing.T) {
 	store := &fakeStatsStore{}
 	// A ?tenant=/?project= param must be IGNORED — the handler only trusts the ctx.
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/builds/stats?window=7d&tenant=tn-attacker&project=other", nil)
-	r = r.WithContext(context.WithValue(r.Context(), middleware.UserContextKeyPublic(), &middleware.UserContext{TenantID: "tn-victim"}))
+	r = r.WithContext(context.WithValue(r.Context(), auth.UserContextKeyPublic(), &auth.UserContext{TenantID: "tn-victim"}))
 	NewBuildStatsHandler(store).Stats(httptest.NewRecorder(), r)
 	if store.gotTenant != "tn-victim" {
 		t.Fatalf("isolation: store MUST be called with the JWT tenant tn-victim, got %q", store.gotTenant)

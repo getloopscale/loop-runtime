@@ -96,11 +96,11 @@ func TestBuildRuntimeLogQL_M2CanonicalShapeIsCorrect_T22(t *testing.T) {
 // surface. Reject loudly.
 func TestBuildRuntimeLogQL_RejectsMalformedTenant(t *testing.T) {
 	cases := []string{
-		`runtime:bad"tenant:production:my-project`,            // double-quote injection
-		`runtime:tn-acme:bad"env:my-project`,                  // env injection
-		`runtime:tn-acme:production:bad"project`,              // project injection
-		`runtime:tn-acme:production:my-project:bad"app`,       // app injection
-		`runtime::production:my-project`,                      // empty tenant
+		`runtime:bad"tenant:production:my-project`,             // double-quote injection
+		`runtime:tn-acme:bad"env:my-project`,                   // env injection
+		`runtime:tn-acme:production:bad"project`,               // project injection
+		`runtime:tn-acme:production:my-project:bad"app`,        // app injection
+		`runtime::production:my-project`,                       // empty tenant
 		`runtime:` + strings.Repeat("a", 130) + `:env:project`, // tenant too long
 	}
 	for _, key := range cases {
@@ -117,8 +117,8 @@ func TestBuildRuntimeLogQL_RejectsMalformedTenant(t *testing.T) {
 // programming error (caller bug) and must surface.
 func TestBuildRuntimeLogQL_RejectsShortKey(t *testing.T) {
 	cases := []string{
-		"runtime:tn-acme",                  // 2 segments
-		"runtime:tn-acme:production",       // 3 segments
+		"runtime:tn-acme",            // 2 segments
+		"runtime:tn-acme:production", // 3 segments
 	}
 	for _, key := range cases {
 		_, err := buildRuntimeLogQL(key)

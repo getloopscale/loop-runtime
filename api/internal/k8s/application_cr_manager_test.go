@@ -116,7 +116,7 @@ func TestBuildLoopZeroApplicationCR_PropagatesCorrelationID(t *testing.T) {
 }
 
 // Inverse: an empty CorrelationID must NOT emit the annotation. Storing
-// "loopzero.io/correlation-id: ''" would pollute the CR + confuse operator-side
+// "loopzero.io/correlation-id: ”" would pollute the CR + confuse operator-side
 // readers that interpret presence-of-annotation as "I have a trace context".
 func TestBuildLoopZeroApplicationCR_OmitsAnnotationWhenCorrelationEmpty(t *testing.T) {
 	cr := buildLoopZeroApplicationCR("loopzero-system", LoopZeroApplicationInput{

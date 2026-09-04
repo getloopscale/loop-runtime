@@ -11,12 +11,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
 
 // fakeEnvEnsurer captures EnsureEnvironment calls so the T4.1 specs can

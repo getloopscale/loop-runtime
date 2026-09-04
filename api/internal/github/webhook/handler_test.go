@@ -237,7 +237,7 @@ func TestWebhook_PullRequestEvent_DispatchesToHandler(t *testing.T) {
 
 func TestPushEvent_BranchHelpers(t *testing.T) {
 	e := PushEvent{
-		Ref: "refs/heads/feature-x",
+		Ref:        "refs/heads/feature-x",
 		Repository: Repository{DefaultBranch: "main"},
 	}
 	if e.Branch() != "feature-x" {

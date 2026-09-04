@@ -9,7 +9,7 @@ import (
 
 	loopzerodb "github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 )
 
 // The idempotency key is chosen by the CLIENT — it arrives in the
@@ -53,7 +53,7 @@ func TestIdempotencyKey_SameKeyTwoTenants(t *testing.T) {
 	st := &store.PostgresIdempotencyStore{DB: &loopzerodb.PgxAdapter{Pool: pool}}
 
 	for _, tenant := range []string{tenantA, tenantB} {
-		rec := &middleware.IdempotencyRecord{
+		rec := &policy.IdempotencyRecord{
 			Key:            key,
 			Endpoint:       "POST /api/v1/builds",
 			TenantID:       tenant,

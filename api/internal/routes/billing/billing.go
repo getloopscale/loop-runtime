@@ -37,14 +37,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 
 	"github.com/jackc/pgx/v5"
 
 	planpkg "github.com/getloopscale/loopzero-contracts/plan"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -146,7 +147,7 @@ type PortalResponse struct {
 // Get handles GET /api/v1/billing — returns plan + usage for the
 // authenticated tenant.
 func (h *BillingHandler) Get(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -230,7 +231,7 @@ func (h *BillingHandler) buildUsage(ctx context.Context, tenantID, plan string) 
 // customer ID (Starter free tier) MUST get 400 NO_STRIPE_CUSTOMER with a
 // product-language message, NOT 500.
 func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return

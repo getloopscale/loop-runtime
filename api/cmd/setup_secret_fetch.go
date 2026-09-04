@@ -25,7 +25,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/pkg/vault"
@@ -187,9 +187,9 @@ func setupSecretFetchDeps(pool *pgxpool.Pool, transit vault.Transit, cellStore *
 // simple — both consumers read from a single source of truth (OpenBao via
 // ExternalSecrets in production, or directly from the Secret in dev).
 //
-// Successful auth injects a synthetic middleware.TokenReviewResult into
+// Successful auth injects a synthetic auth.TokenReviewResult into
 // the request context so the existing handler at routes/internal_secret_fetch.go
-// (which calls middleware.CrossClusterFromContext) does not need a parallel
+// (which calls auth.CrossClusterFromContext) does not need a parallel
 // auth code path. CellID is derived SERVER-SIDE from the package-canonical
 // `placement.DefaultCellID` constant — the caller-supplied X-Cell-ID
 // header is intentionally ignored (T1.1 of plan
@@ -226,8 +226,8 @@ func brokerBearerMiddleware(expectedToken string, next http.HandlerFunc) http.Ha
 		_ = r.Header.Get("X-Cell-ID")
 		cellID := brokerSingleClusterCellID
 		// Inject synthetic TokenReviewResult so the handler's
-		// middleware.CrossClusterFromContext check still passes.
-		ctx := middleware.InjectCrossClusterResultForBroker(r.Context(), &middleware.TokenReviewResult{
+		// auth.CrossClusterFromContext check still passes.
+		ctx := auth.InjectCrossClusterResultForBroker(r.Context(), &auth.TokenReviewResult{
 			Authenticated: true,
 			Username:      "broker:eso-webhook",
 			CellID:        cellID,

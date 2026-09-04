@@ -13,16 +13,17 @@ package tenants
 import (
 	"context"
 	"encoding/json"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
 	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -63,7 +64,7 @@ func (h *TenantHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -86,7 +87,7 @@ func (h *TenantHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// previously used `r.Header.Get("X-Admin-Key") != ""` which checked only
 	// header presence — any authenticated user could spoof. Now validates the
 	// key value against AdminAPIKey via constant-time compare.
-	isAdmin := middleware.ValidateAdminAPIKey(r.Header.Get("X-Admin-Key"))
+	isAdmin := auth.ValidateAdminAPIKey(r.Header.Get("X-Admin-Key"))
 	if !isAdmin && uc.TenantID != tenantID {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
 		return
@@ -157,7 +158,7 @@ func (h *TenantHandler) Restore(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -178,7 +179,7 @@ func (h *TenantHandler) Restore(w http.ResponseWriter, r *http.Request) {
 	// IDOR protection
 	// T0.2 of deep-review-remediation-plan (closes find_sec_001 CRITICAL):
 	// validates key value, not header presence.
-	isAdmin := middleware.ValidateAdminAPIKey(r.Header.Get("X-Admin-Key"))
+	isAdmin := auth.ValidateAdminAPIKey(r.Header.Get("X-Admin-Key"))
 	if !isAdmin && uc.TenantID != tenantID {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
 		return

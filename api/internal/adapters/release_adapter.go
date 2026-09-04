@@ -6,6 +6,7 @@ package adapters
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
 
 	"github.com/getloopscale/loopzero/api/internal/db"

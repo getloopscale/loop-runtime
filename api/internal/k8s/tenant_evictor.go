@@ -22,11 +22,11 @@ import (
 // TenantK8sEvictor performs the K8s cluster teardown portion of bulk tenant
 // eviction (T-02 phase 2). It replaces steps 1-4 of tools/admin-evict-tenants.sh:
 //
-//   step 1: delete Argo workflows in the build cluster
-//   step 2: delete mgmt CRs (tenants, environments, loopzeroapplications,
-//           exposedroutes, applications.argoproj.io)
-//   step 3: force-null finalizers on stuck mgmt CRs (3-pass retry)
-//   step 4: force-finalize runtime namespaces (loopzero-{tenantID}*)
+//	step 1: delete Argo workflows in the build cluster
+//	step 2: delete mgmt CRs (tenants, environments, loopzeroapplications,
+//	        exposedroutes, applications.argoproj.io)
+//	step 3: force-null finalizers on stuck mgmt CRs (3-pass retry)
+//	step 4: force-finalize runtime namespaces (loopzero-{tenantID}*)
 //
 // Step 5 (DB cleanup) remains in db.PostgresTenantStore.DeleteTenantsFKOrdered.
 //

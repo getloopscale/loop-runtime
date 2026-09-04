@@ -119,7 +119,6 @@ func TestSumComputeRequests_InitAndSidecar(t *testing.T) {
 	}
 }
 
-
 // TestCollectNamespaces_SumsAcrossNamespaces — collect lists pods across all a
 // tenant's (project,env) namespaces on a cell and sums the effective request.
 func TestCollectNamespaces_SumsAcrossNamespaces(t *testing.T) {

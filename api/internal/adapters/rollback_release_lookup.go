@@ -6,6 +6,7 @@ package adapters
 import (
 	"context"
 	"fmt"
+
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 
 	"github.com/getloopscale/loopzero/api/internal/db"

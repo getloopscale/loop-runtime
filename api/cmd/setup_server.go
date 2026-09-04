@@ -6,15 +6,16 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
-	"log/slog"
-	"os"
-	"strings"
-	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
@@ -40,7 +41,9 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/aggregator"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
+	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/billing"
@@ -81,8 +84,8 @@ func buildServerConfig(
 	domainHandler *domains.DomainHandler,
 	buildHandler *builds.BuildHandler,
 	healthServices []health.ServiceHealthChecker,
-	tokenValidator middleware.TokenValidator,
-	rateLimiter *middleware.RateLimiter,
+	tokenValidator auth.TokenValidator,
+	rateLimiter *ratelimit.RateLimiter,
 	shutdownCtx context.Context,
 	shutdownCancel context.CancelFunc,
 	logger *slog.Logger,
@@ -208,7 +211,7 @@ func buildServerConfig(
 		// is single-source-of-truth.
 		limitsStore := enforcement.NewSQLLimitsStore(dbDeps.StdDB)
 		planReader := store.NewPlanReader(limitsStore)
-		sc.CostEnforcer = middleware.NewCostEnforcer(costChecker, planReader, logger)
+		sc.CostEnforcer = policy.NewCostEnforcer(costChecker, planReader, logger)
 		// Wire PlanTierStore into ScaleHandler + ProjectHandler so they
 		// resolve the canonical tier (per ADR D4 of plan
 		// 2026-06-15-code-review-49-findings-remediation). Without this,

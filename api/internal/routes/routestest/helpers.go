@@ -28,13 +28,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
 	"github.com/getloopscale/loopzero/api/internal/middleware/audit"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // WithAuth injects a UserContext into the request context for tests.
-func WithAuth(r *http.Request, uc *middleware.UserContext) *http.Request {
-	ctx := context.WithValue(r.Context(), middleware.UserContextKeyPublic(), uc)
+func WithAuth(r *http.Request, uc *auth.UserContext) *http.Request {
+	ctx := context.WithValue(r.Context(), auth.UserContextKeyPublic(), uc)
 	return r.WithContext(ctx)
 }
 
@@ -47,8 +47,8 @@ func WithChiParam(r *http.Request, key, value string) *http.Request {
 }
 
 // DefaultUserContext returns a standard authenticated user for tests.
-func DefaultUserContext() *middleware.UserContext {
-	return &middleware.UserContext{
+func DefaultUserContext() *auth.UserContext {
+	return &auth.UserContext{
 		UserID:   "github-testuser",
 		Email:    "test@example.com",
 		TenantID: "tn-test-123",
@@ -57,8 +57,8 @@ func DefaultUserContext() *middleware.UserContext {
 }
 
 // MemberUserContext returns a non-admin user for permission tests.
-func MemberUserContext() *middleware.UserContext {
-	return &middleware.UserContext{
+func MemberUserContext() *auth.UserContext {
+	return &auth.UserContext{
 		UserID:   "github-memberuser",
 		Email:    "member@example.com",
 		TenantID: "tn-test-123",

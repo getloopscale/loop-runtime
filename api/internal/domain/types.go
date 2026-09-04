@@ -28,22 +28,22 @@ func GenerateDomainID() string {
 
 // CustomDomain represents a custom domain record.
 type CustomDomain struct {
-	ID                      string     `json:"id"`
-	TenantID                string     `json:"-"`
-	ProjectName             string     `json:"project"`
-	AppName                 string     `json:"app"`
-	Environment             string     `json:"environment"`
-	Domain                  string     `json:"domain"`
-	Status                  string     `json:"status"`
-	VerificationToken       string     `json:"-"`
-	VerifiedAt              *time.Time `json:"verified_at,omitempty"`
-	TLSStatus               *string    `json:"tls_status,omitempty"`
-	TLSExpiresAt            *time.Time `json:"tls_expires_at,omitempty"`
-	FailureReason           *string    `json:"failure_reason,omitempty"`
-	LastCNAMECheck          *time.Time `json:"-"`
-	CNAMEConsecutiveFailures int       `json:"-"`
-	CreatedAt               time.Time  `json:"created_at"`
-	UpdatedAt               time.Time  `json:"updated_at"`
+	ID                       string     `json:"id"`
+	TenantID                 string     `json:"-"`
+	ProjectName              string     `json:"project"`
+	AppName                  string     `json:"app"`
+	Environment              string     `json:"environment"`
+	Domain                   string     `json:"domain"`
+	Status                   string     `json:"status"`
+	VerificationToken        string     `json:"-"`
+	VerifiedAt               *time.Time `json:"verified_at,omitempty"`
+	TLSStatus                *string    `json:"tls_status,omitempty"`
+	TLSExpiresAt             *time.Time `json:"tls_expires_at,omitempty"`
+	FailureReason            *string    `json:"failure_reason,omitempty"`
+	LastCNAMECheck           *time.Time `json:"-"`
+	CNAMEConsecutiveFailures int        `json:"-"`
+	CreatedAt                time.Time  `json:"created_at"`
+	UpdatedAt                time.Time  `json:"updated_at"`
 
 	// v2: CF Zone Management fields
 	CFZoneID           *string  `json:"cf_zone_id,omitempty"`
@@ -466,18 +466,18 @@ type TenantDeletionStore interface {
 // output (Rule 3 — internal terms) by being unexported via `json:"-"` for
 // the wire format; the Go struct keeps it for store routing.
 type Preview struct {
-	ID            string `json:"id"`
-	TenantID      string `json:"-"`
-	ProjectID     string `json:"project_id"`
-	PRNumber      int    `json:"pr_number"`
-	Branch        string `json:"branch"`
-	CommitSHA     string `json:"commit_sha,omitempty"`
-	Status        string `json:"status"`
-	URL           string `json:"url,omitempty"`
-	BuildID       string `json:"build_id,omitempty"`
-	ReleaseID     string `json:"release_id,omitempty"`
-	RepoFullName  string `json:"repo_full_name,omitempty"`
-	CreatedAt     string `json:"created_at"`
-	UpdatedAt     string `json:"updated_at,omitempty"`
-	TTLExpiresAt  string `json:"ttl_expires_at,omitempty"`
+	ID           string `json:"id"`
+	TenantID     string `json:"-"`
+	ProjectID    string `json:"project_id"`
+	PRNumber     int    `json:"pr_number"`
+	Branch       string `json:"branch"`
+	CommitSHA    string `json:"commit_sha,omitempty"`
+	Status       string `json:"status"`
+	URL          string `json:"url,omitempty"`
+	BuildID      string `json:"build_id,omitempty"`
+	ReleaseID    string `json:"release_id,omitempty"`
+	RepoFullName string `json:"repo_full_name,omitempty"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at,omitempty"`
+	TTLExpiresAt string `json:"ttl_expires_at,omitempty"`
 }

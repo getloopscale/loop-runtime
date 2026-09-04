@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **loopzero:** backlog B-167 — a verificação que checa se ligamos as verificações de qualidade de código foi ligada, e ela reprova quando nenhuma linguagem foi ligada; enquanto isso, nenhuma linguagem está ligada, então toda proposta de mudança para no acesso automático (B-167)
 
 ### Changed
+- **loopzero:** A camada de middleware da API, que misturava cinco assuntos em trinta arquivos irmãos — autenticação, auditoria, limite de requisições, observabilidade e portões de política —, passa a ter um pacote por assunto. Nenhum comportamento muda; o que muda é que quem for corrigir um dos cinco não precisa mais ler os outros quatro. A verificação automática que exige autenticação em toda rota reconhecia o grupo protegido pelo nome local do pacote e ficou cega com a divisão: passou a reconhecê-lo pelo endereço de importação, então uma renomeação futura não a apaga em silêncio (B-059)
+
 - **loopzero:** O histórico de auditoria deixa de adivinhar qual recurso cada operação tocou. Antes, para as operações cujo identificador não aparece no endereço — enviar build, criar domínio, gravar secret, criar ambiente — a plataforma lia até 64 KiB do corpo da requisição e procurava por três grafias de "projeto" mantidas à mão; toda operação que usasse uma quarta grafia ficava sem identificador no histórico, em silêncio. Agora cada operação informa o próprio identificador, e mais quatro que não registravam nada passaram a registrar: criação de projeto, adição de membro, e a exclusão e a restauração de conta — esta última a operação mais destrutiva do produto, que até aqui aparecia no histórico sem dizer qual conta foi excluída (B-059)
 
 ### Fixed

@@ -17,8 +17,8 @@ import (
 
 // countingRouter wraps a placement.Router and counts Resolve calls per cellID.
 type countingRouter struct {
-	inner   placement.Router
-	calls   atomic.Int64
+	inner placement.Router
+	calls atomic.Int64
 }
 
 func (r *countingRouter) Resolve(ctx context.Context, cellID string) (*placement.CellConfig, error) {

@@ -8,20 +8,21 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 type stubMembershipLookup struct {
-	memberships []middleware.TenantMembership
+	memberships []auth.TenantMembership
 	err         error
 }
 
-func (s *stubMembershipLookup) GetMemberships(_ context.Context, _ string) ([]middleware.TenantMembership, error) {
+func (s *stubMembershipLookup) GetMemberships(_ context.Context, _ string) ([]auth.TenantMembership, error) {
 	return s.memberships, s.err
 }
 
@@ -52,7 +53,7 @@ func (s *stubActiveTeamStore) ClearActiveTenant(_ context.Context, _ string) err
 	return nil
 }
 
-func makeWhoamiRequest(uc *middleware.UserContext) *http.Request {
+func makeWhoamiRequest(uc *auth.UserContext) *http.Request {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami", nil)
 	if uc != nil {
 		return routestest.WithAuth(req, uc)
@@ -66,14 +67,14 @@ func makeWhoamiRequest(uc *middleware.UserContext) *http.Request {
 // Plan T2.5 RED #1.
 func TestWhoami_ReturnsTeamsArrayAndActiveTeam(t *testing.T) {
 	handler := NewAuthHandler(nil).WithMembershipLookup(&stubMembershipLookup{
-		memberships: []middleware.TenantMembership{
+		memberships: []auth.TenantMembership{
 			{TenantID: "tn-e2etest", Role: "owner"},
 			{TenantID: "e2e-tenant", Role: "developer"},
 		},
 	})
 
 	rec := httptest.NewRecorder()
-	req := makeWhoamiRequest(&middleware.UserContext{
+	req := makeWhoamiRequest(&auth.UserContext{
 		UserID:   "user-1",
 		TenantID: "e2e-tenant",
 		Role:     "developer",
@@ -106,13 +107,13 @@ func TestWhoami_ReturnsTeamsArrayAndActiveTeam(t *testing.T) {
 // Plan T2.5 RED #2.
 func TestWhoami_BackwardsCompatTeamField(t *testing.T) {
 	handler := NewAuthHandler(nil).WithMembershipLookup(&stubMembershipLookup{
-		memberships: []middleware.TenantMembership{
+		memberships: []auth.TenantMembership{
 			{TenantID: "tn-e2etest", Role: "owner"},
 		},
 	})
 
 	rec := httptest.NewRecorder()
-	req := makeWhoamiRequest(&middleware.UserContext{
+	req := makeWhoamiRequest(&auth.UserContext{
 		UserID:   "user-1",
 		TenantID: "tn-e2etest",
 		Role:     "owner",
@@ -139,7 +140,7 @@ func TestWhoami_NoMembershipLookupDegrades(t *testing.T) {
 	handler := NewAuthHandler(nil) // No membershipLookup
 
 	rec := httptest.NewRecorder()
-	req := makeWhoamiRequest(&middleware.UserContext{
+	req := makeWhoamiRequest(&auth.UserContext{
 		UserID:   "user-1",
 		TenantID: "tn-solo",
 		Role:     "owner",
@@ -165,7 +166,7 @@ func TestWhoami_NoMembershipLookupDegrades(t *testing.T) {
 // Plan T2.5 RED #4.
 func TestWhoami_ActiveFlagOnCorrectTeam(t *testing.T) {
 	handler := NewAuthHandler(nil).WithMembershipLookup(&stubMembershipLookup{
-		memberships: []middleware.TenantMembership{
+		memberships: []auth.TenantMembership{
 			{TenantID: "tn-a", Role: "developer"},
 			{TenantID: "tn-b", Role: "owner"},
 			{TenantID: "tn-c", Role: "viewer"},
@@ -173,7 +174,7 @@ func TestWhoami_ActiveFlagOnCorrectTeam(t *testing.T) {
 	})
 
 	rec := httptest.NewRecorder()
-	req := makeWhoamiRequest(&middleware.UserContext{
+	req := makeWhoamiRequest(&auth.UserContext{
 		UserID:   "user-1",
 		TenantID: "tn-b",
 		Role:     "owner",
@@ -206,7 +207,7 @@ func TestWhoami_ActiveFlagOnCorrectTeam(t *testing.T) {
 func TestWhoami_ActiveStorePersistedWins(t *testing.T) {
 	handler := NewAuthHandler(nil).
 		WithMembershipLookup(&stubMembershipLookup{
-			memberships: []middleware.TenantMembership{
+			memberships: []auth.TenantMembership{
 				{TenantID: "tn-a", Role: "developer"},
 				{TenantID: "tn-b", Role: "owner"},
 			},
@@ -215,7 +216,7 @@ func TestWhoami_ActiveStorePersistedWins(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	// JWT says active = tn-a, but persisted store says tn-b. Persisted wins.
-	req := makeWhoamiRequest(&middleware.UserContext{
+	req := makeWhoamiRequest(&auth.UserContext{
 		UserID:   "user-1",
 		TenantID: "tn-a",
 		Role:     "developer",
@@ -239,14 +240,14 @@ func TestWhoami_SelfHealsDanglingActiveTenant(t *testing.T) {
 	store := &stubActiveTeamStore{active: "tn-deleted"}
 	handler := NewAuthHandler(nil).
 		WithMembershipLookup(&stubMembershipLookup{
-			memberships: []middleware.TenantMembership{
+			memberships: []auth.TenantMembership{
 				{TenantID: "tn-a", Role: "developer"},
 			},
 		}).
 		WithActiveTeamStore(store)
 
 	rec := httptest.NewRecorder()
-	req := makeWhoamiRequest(&middleware.UserContext{
+	req := makeWhoamiRequest(&auth.UserContext{
 		UserID:   "user-1",
 		TenantID: "tn-a",
 		Role:     "developer",
@@ -273,7 +274,7 @@ func TestSwitchTeam_HappyPath(t *testing.T) {
 	store := &stubActiveTeamStore{}
 	handler := NewAuthHandler(nil).
 		WithMembershipLookup(&stubMembershipLookup{
-			memberships: []middleware.TenantMembership{
+			memberships: []auth.TenantMembership{
 				{TenantID: "tn-a", Role: "developer"},
 				{TenantID: "tn-b", Role: "owner"},
 			},
@@ -282,7 +283,7 @@ func TestSwitchTeam_HappyPath(t *testing.T) {
 
 	body := bytes.NewBufferString(`{"name": "tn-b"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/team/switch", body)
-	req = routestest.WithAuth(req, &middleware.UserContext{
+	req = routestest.WithAuth(req, &auth.UserContext{
 		UserID:   "user-1",
 		TenantID: "tn-a",
 		Role:     "developer",
@@ -307,7 +308,7 @@ func TestSwitchTeam_NotMemberReturns403(t *testing.T) {
 	store := &stubActiveTeamStore{}
 	handler := NewAuthHandler(nil).
 		WithMembershipLookup(&stubMembershipLookup{
-			memberships: []middleware.TenantMembership{
+			memberships: []auth.TenantMembership{
 				{TenantID: "tn-a", Role: "developer"},
 			},
 		}).
@@ -315,7 +316,7 @@ func TestSwitchTeam_NotMemberReturns403(t *testing.T) {
 
 	body := bytes.NewBufferString(`{"name": "tn-not-mine"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/team/switch", body)
-	req = routestest.WithAuth(req, &middleware.UserContext{
+	req = routestest.WithAuth(req, &auth.UserContext{
 		UserID:   "user-1",
 		TenantID: "tn-a",
 		Role:     "developer",
@@ -339,7 +340,7 @@ func TestSwitchTeam_InvalidBody(t *testing.T) {
 
 	body := bytes.NewBufferString(`not json`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/team/switch", body)
-	req = routestest.WithAuth(req, &middleware.UserContext{UserID: "u", TenantID: "t", Role: "r"})
+	req = routestest.WithAuth(req, &auth.UserContext{UserID: "u", TenantID: "t", Role: "r"})
 	rec := httptest.NewRecorder()
 	handler.SwitchTeam(rec, req)
 
@@ -354,7 +355,7 @@ func TestSwitchTeam_MissingActiveStore(t *testing.T) {
 
 	body := bytes.NewBufferString(`{"name": "tn-x"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/team/switch", body)
-	req = routestest.WithAuth(req, &middleware.UserContext{UserID: "u", TenantID: "t", Role: "r"})
+	req = routestest.WithAuth(req, &auth.UserContext{UserID: "u", TenantID: "t", Role: "r"})
 	rec := httptest.NewRecorder()
 	handler.SwitchTeam(rec, req)
 

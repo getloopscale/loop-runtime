@@ -17,12 +17,12 @@ import (
 	loopzerojwt "github.com/getloopscale/loopzero-contracts/jwt"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // AuthDeps holds authentication and authorization components.
 type AuthDeps struct {
-	TokenValidator middleware.TokenValidator
+	TokenValidator auth.TokenValidator
 }
 
 // WireAuthFailureAuditor wires the package-level DefaultAuthAuditor used by
@@ -49,7 +49,7 @@ func WireAuthFailureAuditor(dbAdapter *db.PgxAdapter, logger *slog.Logger) {
 			Metadata:      metadata,
 		})
 	}
-	middleware.DefaultAuthAuditor = middleware.NewAuthFailureAuditor(writer, logger)
+	auth.DefaultAuthAuditor = auth.NewAuthFailureAuditor(writer, logger)
 	logger.Info("auth failure auditor wired", "component", "audit_log")
 }
 
@@ -72,18 +72,18 @@ func setupAuth(logger *slog.Logger) *AuthDeps {
 		[]string{"loopzero-engine", "loopzero-cloud"})
 
 	// B3: Engine drops HMAC entirely — RSA-only validation.
-	tokenValidator := middleware.NewJWTOnlyValidator(rsaValidator, nil)
+	tokenValidator := auth.NewJWTOnlyValidator(rsaValidator, nil)
 	logger.Info("JWT auth enabled (RSA-only)", "jwks_url", jwksURL)
 
 	// Service-to-service auth for internal proxy calls (cloud->engine).
 	// S1.2: Dual-key rotation — accepts current OR previous during rotation window.
-	middleware.ServiceAuthSecret = os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET")
-	middleware.ServiceAuthSecretPrevious = os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS")
+	auth.ServiceAuthSecret = os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET")
+	auth.ServiceAuthSecretPrevious = os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS")
 
 	// MEET-052: Platform admin API key for cross-tenant operations.
 	// Dual-key rotation: accepts current OR previous during rotation window.
-	middleware.AdminAPIKey = os.Getenv("LOOPZERO_ADMIN_API_KEY")
-	middleware.AdminAPIKeyPrevious = os.Getenv("LOOPZERO_ADMIN_API_KEY_PREVIOUS")
+	auth.AdminAPIKey = os.Getenv("LOOPZERO_ADMIN_API_KEY")
+	auth.AdminAPIKeyPrevious = os.Getenv("LOOPZERO_ADMIN_API_KEY_PREVIOUS")
 
 	// Ed25519 dual-control (ADR 2026-05-13-service-auth-ed25519-adoption).
 	// Reads LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT (+ optional ...PREVIOUS
@@ -105,7 +105,7 @@ func setupAuth(logger *slog.Logger) *AuthDeps {
 }
 
 // loadServiceAuthEd25519Trust reads the public-key env vars and
-// populates middleware.ServiceAuthEd25519PublicKeys. Panics via
+// populates auth.ServiceAuthEd25519PublicKeys. Panics via
 // logger.Error + os.Exit(1) on parse failure per Q5 fail-closed.
 //
 // Split from the error-returning variant for caller ergonomics: tests
@@ -118,7 +118,7 @@ func loadServiceAuthEd25519Trust(logger *slog.Logger) {
 		logger.Error("service-auth Ed25519 trust-set load failed (fail-closed)", "error", err)
 		os.Exit(1)
 	}
-	if n := len(middleware.ServiceAuthEd25519PublicKeys); n > 0 {
+	if n := len(auth.ServiceAuthEd25519PublicKeys); n > 0 {
 		logger.Info("service-auth Ed25519 dual-control enabled", "trusted_keys", n)
 	} else {
 		logger.Warn("service-auth Ed25519 trust set is empty — dual-control inert; signed requests will fail-closed (set LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT to enable)")
@@ -148,7 +148,7 @@ func loadServiceAuthEd25519TrustE() error {
 		}
 		trust = append(trust, pub)
 	}
-	middleware.ServiceAuthEd25519PublicKeys = trust
+	auth.ServiceAuthEd25519PublicKeys = trust
 	return nil
 }
 
@@ -178,8 +178,8 @@ func decodeEd25519PublicKey(encoded string) (ed25519.PublicKey, error) {
 func loadServiceAuthRequireSignatureFlag() {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE"))) {
 	case "true", "1", "yes":
-		middleware.ServiceAuthRequireSignature = true
+		auth.ServiceAuthRequireSignature = true
 	default:
-		middleware.ServiceAuthRequireSignature = false
+		auth.ServiceAuthRequireSignature = false
 	}
 }

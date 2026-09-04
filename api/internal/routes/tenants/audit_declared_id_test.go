@@ -4,11 +4,12 @@
 package tenants
 
 import (
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
 
 // TestTenantsDeleteDeclaresTenantIDAsResourceID — B-059 FR-002.

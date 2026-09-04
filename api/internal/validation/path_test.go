@@ -168,12 +168,12 @@ func TestValidateAppName_ShellInjection(t *testing.T) {
 
 func TestValidateAppName_InvalidFormat(t *testing.T) {
 	invalid := []string{
-		"MyApp",         // uppercase not allowed
-		"123app",        // must start with letter
-		"-app",          // must start with letter
-		"app_name",      // underscores not allowed (RFC 1123)
-		"app.name",      // dots not allowed
-		"app/name",      // slashes not allowed
+		"MyApp",                 // uppercase not allowed
+		"123app",                // must start with letter
+		"-app",                  // must start with letter
+		"app_name",              // underscores not allowed (RFC 1123)
+		"app.name",              // dots not allowed
+		"app/name",              // slashes not allowed
 		strings.Repeat("a", 64), // too long (max 63)
 	}
 

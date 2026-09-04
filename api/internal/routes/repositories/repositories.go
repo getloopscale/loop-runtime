@@ -23,7 +23,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/getloopscale/loopzero/api/internal/github"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -132,7 +132,7 @@ type connectResponse struct {
 // CC 18 → ≤ 11 via 2 helper extracts (parseConnectRequest + checkRepoLinkConflict).
 func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -254,7 +254,7 @@ func (h *RepositoryHandler) checkRepoLinkConflict(
 // Disconnect unlinks a GitHub repository from a LoopZero project (DELETE /api/v1/projects/{name}/connect).
 func (h *RepositoryHandler) Disconnect(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -295,7 +295,7 @@ func (h *RepositoryHandler) Disconnect(w http.ResponseWriter, r *http.Request) {
 // GetConnection returns the linked repository for a project (GET /api/v1/projects/{name}/connect).
 func (h *RepositoryHandler) GetConnection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return

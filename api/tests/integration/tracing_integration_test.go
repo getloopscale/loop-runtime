@@ -15,7 +15,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	observability "github.com/getloopscale/loopzero/api/internal/middleware/observability"
 )
 
 // setupTestTracer configures an in-memory span exporter for tests.
@@ -45,7 +45,7 @@ func TestOtelHTTPMiddleware_GeneratesSpan(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := middleware.OtelHTTP(inner)
+	handler := observability.OtelHTTP(inner)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
 	rec := httptest.NewRecorder()
 
@@ -73,7 +73,7 @@ func TestOtelHTTPMiddleware_CorrelationIDRemainsUUID(t *testing.T) {
 	})
 
 	// Chain: OtelHTTP -> CorrelationID -> inner (same order as production)
-	handler := middleware.OtelHTTP(middleware.CorrelationID(inner))
+	handler := observability.OtelHTTP(observability.CorrelationID(inner))
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
@@ -95,7 +95,7 @@ func TestOtelHTTPMiddleware_WithTraceparentHeader(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := middleware.OtelHTTP(inner)
+	handler := observability.OtelHTTP(inner)
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	// Inject a W3C traceparent header (version-traceId-parentSpanId-flags)
 	req.Header.Set("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
@@ -123,7 +123,7 @@ func TestOtelHTTPMiddleware_WithoutTraceparentGeneratesNewTrace(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := middleware.OtelHTTP(inner)
+	handler := observability.OtelHTTP(inner)
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
@@ -149,7 +149,7 @@ func TestTracingDisabled_NoSpansGenerated(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := middleware.OtelHTTP(inner)
+	handler := observability.OtelHTTP(inner)
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
