@@ -26,6 +26,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -125,6 +126,11 @@ func (h *TeamHandler) Add(w http.ResponseWriter, r *http.Request) {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("username is required"))
 		return
 	}
+
+	// B-059: declare the resource id for the audit row. member.removed and
+	// member.role_changed already carry the username (it is in their URL);
+	// member.added carried nothing, so the three could not be joined.
+	auditctx.SetResourceID(ctx, req.Username)
 	if req.Role == "" {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("role is required"))
 		return

@@ -33,6 +33,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/correlation"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	"github.com/getloopscale/loopzero/api/internal/validation"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -327,6 +328,11 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		))
 		return
 	}
+
+	// B-059: declare the resource id for the audit row. The middleware used
+	// to buffer this body and scan it for `project_id` to find the same
+	// value; the handler already decoded it, so it says so.
+	auditctx.SetResourceID(ctx, req.ProjectID)
 	// T1.3 follow-up (CR-2 regression caught during cleanroom Final Phase
 	// 2026-05-29): an empty `apps` array used to be silently accepted —
 	// SubmitBuild would create a Build row, build an empty WorkflowSpec, and

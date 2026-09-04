@@ -29,6 +29,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/correlation"
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -224,6 +225,10 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidName.Wrap("project name must be lowercase, alphanumeric, and may contain hyphens"))
 		return
 	}
+
+	// B-059: declare the resource id for the audit row. project.deleted
+	// carries the name from its URL; project.created carried nothing.
+	auditctx.SetResourceID(ctx, req.Name)
 
 	// Create project in DB
 	result, err := h.store.CreateProject(ctx, CreateProjectInput{

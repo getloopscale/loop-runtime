@@ -29,6 +29,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/middleware/audit"
 )
 
 // WithAuth injects a UserContext into the request context for tests.
@@ -63,4 +64,18 @@ func MemberUserContext() *middleware.UserContext {
 		TenantID: "tn-test-123",
 		Role:     "member",
 	}
+}
+
+// WithAuditSlot installs the audit declaration slot the AuditLog middleware
+// installs in production, so a handler test can read back what the handler
+// declared through `audit.SetResourceID`. Without it the declaration is a
+// silent no-op and a test asserting on it would pass over nothing.
+func WithAuditSlot(r *http.Request) *http.Request {
+	return r.WithContext(audit.WithResourceIDSlot(r.Context()))
+}
+
+// DeclaredResourceID returns the id the handler declared on a request shaped by
+// WithAuditSlot — the exact value AuditLog would write to the audit row.
+func DeclaredResourceID(r *http.Request) string {
+	return audit.GetResourceID(r.Context())
 }

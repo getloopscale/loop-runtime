@@ -22,6 +22,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -73,6 +74,12 @@ func (h *TenantHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("tenant ID is required"))
 		return
 	}
+
+	// B-059: declare the resource id for the audit row. `extractResourceID`
+	// does not know the `tenants` collection, so tenant.deleted and
+	// tenant.restored — the most destructive operations the product has —
+	// recorded an empty resource_id.
+	auditctx.SetResourceID(ctx, tenantID)
 
 	// MEET-052 IDOR protection: non-admin callers can only delete their own tenant.
 	// T0.2 of deep-review-remediation-plan (closes find_sec_001 CRITICAL):
@@ -161,6 +168,12 @@ func (h *TenantHandler) Restore(w http.ResponseWriter, r *http.Request) {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("tenant ID is required"))
 		return
 	}
+
+	// B-059: declare the resource id for the audit row. `extractResourceID`
+	// does not know the `tenants` collection, so tenant.deleted and
+	// tenant.restored — the most destructive operations the product has —
+	// recorded an empty resource_id.
+	auditctx.SetResourceID(ctx, tenantID)
 
 	// IDOR protection
 	// T0.2 of deep-review-remediation-plan (closes find_sec_001 CRITICAL):

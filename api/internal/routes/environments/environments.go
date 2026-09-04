@@ -26,6 +26,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -416,6 +417,10 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project is required: pass the project slug (not the project UUID) in the request body"))
 		return
 	}
+
+	// B-059: declare the resource id for the audit row (was body-snooped
+	// from the `project` key).
+	auditctx.SetResourceID(ctx, req.Project)
 
 	// M2 v1.2 T4.1 EC-1 — cross-tenant project gate (SEPA-CRITICAL).
 	// Even when project field is set, it MUST belong to the caller's

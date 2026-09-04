@@ -41,6 +41,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -712,6 +713,10 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 
 	// Use project name from query or default
 	project := r.URL.Query().Get("project")
+
+	// B-059: declare the resource id for the audit row (was read out of
+	// the query string by the middleware).
+	auditctx.SetResourceID(ctx, project)
 
 	// T1.1 of deep-review-2026-05-10-remediation-plan: serialize mutations
 	// per (tenant, project, env) so concurrent `loopzero secret set` + a deploy

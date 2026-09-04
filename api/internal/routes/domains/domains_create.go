@@ -16,6 +16,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -54,6 +55,10 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// B-059: declare the resource id for the audit row (was body-snooped
+	// from the `project` key).
+	auditctx.SetResourceID(ctx, req.Project)
 
 	// Validate domain format.
 	// Red Team loopzero-cloud#103 closure: was `code: INTERNAL_ERROR` which

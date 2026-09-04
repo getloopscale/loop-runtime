@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **loopzero:** O painel de controle passa a ser monitorado quanto à disponibilidade, como os demais serviços da plataforma (B-022)
 - **loopzero:** backlog B-167 — a verificação que checa se ligamos as verificações de qualidade de código foi ligada, e ela reprova quando nenhuma linguagem foi ligada; enquanto isso, nenhuma linguagem está ligada, então toda proposta de mudança para no acesso automático (B-167)
 
+### Changed
+- **loopzero:** O histórico de auditoria deixa de adivinhar qual recurso cada operação tocou. Antes, para as operações cujo identificador não aparece no endereço — enviar build, criar domínio, gravar secret, criar ambiente — a plataforma lia até 64 KiB do corpo da requisição e procurava por três grafias de "projeto" mantidas à mão; toda operação que usasse uma quarta grafia ficava sem identificador no histórico, em silêncio. Agora cada operação informa o próprio identificador, e mais quatro que não registravam nada passaram a registrar: criação de projeto, adição de membro, e a exclusão e a restauração de conta — esta última a operação mais destrutiva do produto, que até aqui aparecia no histórico sem dizer qual conta foi excluída (B-059)
+
 ### Fixed
 - **loopzero:** A verificação automática de qualidade de código voltou a funcionar para o Go — as três raízes do workspace foram ligadas e os 36 achados pré-existentes de código morto ficaram registrados como dívida conhecida em `code-quality-baseline.txt`, permitindo que mudanças novas sejam avaliadas sem serem reprovadas por débito herdado. `/plan-confidence` deixa de emitir `no_languages_audited` como hard cap sistêmico (B-167)
 
