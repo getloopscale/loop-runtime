@@ -1,8 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package middleware provides HTTP middleware for the LoopZero API.
-// This file implements a simple fixed-window rate limiter per tenant.
+// Package ratelimit counts requests over a window and refuses the ones above
+// the quota.
+//
+// Four limiters share the package because they differ only in what they key
+// on: the tenant (this file), the client IP (iprate.go, mounted ahead of auth
+// so an unauthenticated flood dies at the edge), the calling cell of the
+// secret broker (rate_limit_vault.go), and the (tenant, domain) pair of a
+// domain re-verification (verify_rate_limit.go).
+//
+// Three of the four read the caller from auth, which is why the dependency
+// runs ratelimit -> auth and never the other way (B-059). iprate.go is the
+// exception, and deliberately so: it has to answer before anyone is
+// authenticated.
+//
+// This file implements the fixed-window limiter keyed by tenant.
 package ratelimit
 
 import (

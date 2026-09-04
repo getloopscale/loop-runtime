@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package observability makes a request describable while it is being served.
+//
+// It carries the correlation id from the edge into the request context
+// (correlation.go), builds the request-scoped logger every handler log line
+// inherits from it (request_logger.go), opens the OpenTelemetry span
+// (tracing.go), and writes the access log (this file). Nothing here decides
+// whether a request proceeds — that is auth and policy. This package only
+// records what happened.
+//
+// StatusWriter is exported rather than package-private because the audit
+// middleware records the same response status the access log does, and after
+// B-059 the two live in different packages.
 package observability
 
 import (

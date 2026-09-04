@@ -1,6 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Package policy holds the request gates that do not turn on who is calling.
+//
+// A plan's cost cap (this file), a replayed idempotency key (idempotency.go),
+// a maintenance window (maintenance.go), a database pool that has stopped
+// answering (pgcircuitbreaker.go), and the security headers every response
+// must carry (security_headers.go): each is a rule the transport applies to a
+// request whose identity is already settled.
+//
+// Identity itself lives in auth, which this package imports and which imports
+// nothing back. Quotas live in ratelimit rather than here, because a quota is
+// counted over a window instead of decided per request (B-059).
 package policy
 
 import (

@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
 
@@ -146,7 +145,3 @@ func (r *VaultRateLimiter) Middleware(next http.Handler) http.Handler {
 func (r *VaultRateLimiter) AsHandlerFunc() func(http.Handler) http.Handler {
 	return r.Middleware
 }
-
-// rateNow returns wall clock — exposed for test stub if we ever need it.
-// nolint:unused
-var rateNow = time.Now
