@@ -27,12 +27,12 @@ func TestSecret_D3_CrossTenantTransplantFails(t *testing.T) {
 
 	plaintext := []byte("tenant-A-confidential-DB_PASSWORD=hunter2")
 
-	// 1. Tenant A writes a secret.
+	// 1. A row Tenant A wrote while the AES write path still existed.
+	//    T10.3 deleted that path, so the fixture seals the blob; the
+	//    attack this test describes is against a row already on disk,
+	//    which is exactly the population the AES read branch still serves.
 	ctA := context.Background()
-	encryptedA, err := s.encryptForStore(ctA, "tenant-A", plaintext)
-	if err != nil {
-		t.Fatalf("encryptForStore for tenant-A: %v", err)
-	}
+	encryptedA := sealLegacyAES(t, key, plaintext, tenantAAD("tenant-A"))
 
 	// 2. Confirm same-tenant decrypt works (sanity).
 	got, err := s.decryptFromStore(ctA, "tenant-A", encryptedA)
@@ -68,12 +68,11 @@ func TestSecret_D3_DualDecryptWindowAcceptsLegacy(t *testing.T) {
 
 	plaintext := []byte("legacy-pre-d3-ciphertext")
 
-	// Simulate pre-D3 ciphertext by calling encrypt directly with nil AAD.
-	// This is what s.encrypt produced before Sprint D D3.
-	legacyEncrypted, err := s.encrypt(plaintext, nil)
-	if err != nil {
-		t.Fatalf("legacy encrypt with nil AAD: %v", err)
-	}
+	// Simulate pre-D3 ciphertext: sealed with nil AAD, which is what the
+	// store's own encrypt() produced before Sprint D D3. T10.3 deleted
+	// that seal from production code, so the fixture builds the blob
+	// itself — a legacy row is precisely a shape nothing writes any more.
+	legacyEncrypted := sealLegacyAES(t, key, plaintext, nil)
 
 	// decryptFromStore now uses tenantAAD by default — the first gcm.Open
 	// will fail because the legacy blob was sealed with nil AAD, NOT
@@ -101,11 +100,16 @@ func TestSecret_D3_AADFormatIsStable(t *testing.T) {
 	}
 }
 
-// TestSecret_D3_NewWritesAreAADBound verifies that decrypt(_, nil) on a
-// post-D3 ciphertext fails because the tag was computed with AAD. This
-// is the inverse of TestSecret_D3_DualDecryptWindowAcceptsLegacy and
+// TestSecret_D3_AADBoundRowsRejectTheNilAAD verifies that decrypt(_, nil)
+// on an AAD-bound ciphertext fails because the tag was computed with AAD.
+// This is the inverse of TestSecret_D3_DualDecryptWindowAcceptsLegacy and
 // proves the binding is actually enforced (not just decorative).
-func TestSecret_D3_NewWritesAreAADBound(t *testing.T) {
+//
+// Renamed from TestSecret_D3_NewWritesAreAADBound by T10.3: there are no
+// new AES writes any more. What the assertion covers is unchanged — the
+// post-D3 rows already on disk — and the guarantee about new writes now
+// lives in TestEncryptForStore_ProducesOnlyTransitCiphertextOrRefuses.
+func TestSecret_D3_AADBoundRowsRejectTheNilAAD(t *testing.T) {
 	key := make([]byte, 32)
 	for i := range key {
 		key[i] = byte(i)
@@ -115,17 +119,13 @@ func TestSecret_D3_NewWritesAreAADBound(t *testing.T) {
 	plaintext := []byte("post-d3-ciphertext")
 	const tenantID = "tenant-D3"
 
-	// Write with the new AAD-bound path.
-	encrypted, err := s.encryptForStore(context.Background(), tenantID, plaintext)
-	if err != nil {
-		t.Fatalf("encryptForStore: %v", err)
-	}
+	encrypted := sealLegacyAES(t, key, plaintext, tenantAAD(tenantID))
 
 	// Direct call to decrypt with nil AAD MUST fail (the tag binding is
 	// real). decrypt() itself tries aad first then nil fallback — when
 	// we pass nil explicitly the first attempt is also nil, then the
 	// fallback retries with nil, both fail → error returned.
-	_, err = s.decrypt(encrypted, nil)
+	_, err := s.decrypt(encrypted, nil)
 	if err == nil {
 		t.Fatal("post-D3 ciphertext decrypted with nil AAD — binding is NOT enforced")
 	}
