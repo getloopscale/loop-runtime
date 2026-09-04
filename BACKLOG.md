@@ -467,9 +467,16 @@ was superseded by the delegation; the exception list, not the zero-grep, is the 
   registry as the orphaned-helmfile-snapshots finding), so there is nothing to regenerate there.
   `docs/architecture/helm-topology.md` is on disk and carries **zero** occurrences of any pre-rename
   identifier.
-- *Cleanroom up from zero* — **DROPPED by the delegation as unexecutable**, not as unimportant. Nothing
-  was attempted: `k3d cluster list` is empty and `task clean:all` on the shared droplet would destroy
-  `app-dev.loopzero.example`.
+- *Cleanroom up from zero* — **this bullet is satisfied the day `task clean:all` can run against a
+  host that is not shared, and is open until then.** Dropped by the delegation as unexecutable, not as
+  unimportant. Nothing was attempted, on one ground and not two. The valid one: `task clean:all` runs against the
+  SHARED droplet and would destroy `app-dev.loopzero.example`, so the rename cannot be proven from zero
+  without taking a live environment down. The invalid one, corrected 2026-09-04 by an auditor who ran
+  the command: this note first said `k3d cluster list` was empty. It is not — five clusters are up and
+  have been for three weeks (`loopzero-build`, `loopzero-cell-0`, `loopzero-cell-1`, `loopzero-core`, `loopzero-secrets`),
+  every one already carrying a post-rename name, which is evidence FOR the rename rather than against
+  it. The false half was carried forward from the delegation record without measuring, in a pass whose
+  own finding was that a survivor had been recorded as deleted without measuring.
 - *ADR written with the rejected alternatives + `CHANGELOG.md`* — **satisfied.** The ADR names and
   rejects `control`, `platform`, `ops`, recycling `mgmt` (quarantine), and `bao`, each with its reason.
   `CHANGELOG.md § [Unreleased]` carries the exception list under `§ Changed` and the count correction
