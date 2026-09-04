@@ -85,11 +85,26 @@ const handWrittenDBPath = "github.com/getloopscale/loopzero/api/internal/db"
 //
 // B-049's DoD asserts that widening the fence from `db/generated` to `db` is
 // "literally a string". Measured 2026-08-12, it is not. Under the semantics this
-// gate actually uses — test files INCLUDED, see walkDir — `api/internal/services`
-// carries 51 importers and `api/cmd` 18: 69 files that would fail the day the
-// fence widened (71 before slice-6 took routes to zero). A gate that fails 43 files on arrival is
-// not a fence; it is an exemption at birth, which is the debt slice-1 spent
-// itself removing.
+// gate actually uses — test files INCLUDED, see walkDir — the cost was recorded
+// as `api/internal/services` 51 and `api/cmd` 18: 69 files that would fail the
+// day the fence widened (71 before slice-6 took routes to zero). A gate that
+// fails files on arrival is not a fence; it is an exemption at birth, which is
+// the debt slice-1 spent itself removing.
+//
+// RE-MEASURED 2026-09-04 (B-079), because a count carried forward is the defect
+// this fence keeps finding: `api/cmd` is **19**, not 18 — that number was stale
+// on arrival and nothing had re-run it. `api/internal/services` is **54**, and
+// three of those are this slice's own doing: `delivery.go` left the list when
+// `db.Build` and `db.Release` came off the sink, and four files arrived —
+// `services/build/activation_build.go`, `services/release/rollback_target.go`
+// and their tests — because an adapter that translates a persistence row into a
+// contract type has to import both sides. Net **73**, up from the recorded 69.
+//
+// That is the honest shape of this fence: taking persistence off a CONTRACT does
+// not take it out of the layer, it concentrates it at a named boundary. The
+// files that would fail on widening went up by four and down by one; what
+// changed is that they are now two small adapters instead of a type on an
+// interface every consumer inherits.
 //
 // `api/internal/server` was measured at ZERO, so the fence lands there green and
 // permanent: from today the first persistence import into the server layer is
@@ -147,8 +162,9 @@ func ActionableFix() string {
 		"    api/internal/db/store/ instead.\n" +
 		"  · " + handWrittenDBPath + " — forbidden in " + strings.Join(dirsForbiddenFromHandWrittenDB, ", ") +
 		" only.\n    That fence is deliberately narrower than the generated one: the other\n" +
-		"    layers — services and cmd — carry 69 importers today, and a gate that fails\n" +
-		"    arrival is an exemption at birth. Widening it is B-079."
+		"    layers — services and cmd — carry 73 importers (re-measured 2026-09-04:\n" +
+		"    services 54, cmd 19), and a gate that fails on arrival is an exemption at\n" +
+		"    birth. Widening it is B-079."
 }
 
 // walkDir walks dir for .go files (test files INCLUDED — a test that imports

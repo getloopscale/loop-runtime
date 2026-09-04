@@ -10,22 +10,47 @@
 // # It is the sink, and it is NOT pure
 //
 // This doc-comment said "the pure sink" until 2026-08-12. Measured, it is not:
-// four persistence types and three application types cross its public boundary,
-// and 35 files in 10 packages depend on this package, so all of them depend
-// transitively on persistence.
+// persistence and application types cross its public boundary, and every file
+// that depends on this package depends transitively on them. Re-measured
+// 2026-09-04: **38 production files in 11 packages** import the sink — the
+// figure carried here since 2026-08-12 was 35 in 10, and it had drifted.
 //
-//	shared_contracts.go:207   WithLock(..., fn func(tx db.DBTX) error) error
-//	delivery.go:37            Activate(ctx, build *db.Build, ...) error
-//	delivery.go:55            TargetRelease *db.Release
+//	shared_contracts.go:213   WithLock(..., fn func(tx db.DBTX) error) error
 //	manifest_builder.go:23    Apps []db.BuildAppSpec
 //
 // Plus manifest_builder.go:11, which imports api/internal/manifests — an
 // application-layer package.
 //
-// Removing them costs 63 call sites, 34 of them `WithLock`, the environment-lock
-// primitive Unbreakable Rule 6 puts on every mutation. That work is tracked as
-// B-079. Until it lands, the `domain-sink-purity` gate freezes exactly this set
-// and refuses a fifth: the leak is not closed, but it has stopped growing.
+// # Two of the four are gone (B-079, 2026-09-04)
+//
+// `db.Build` and `db.Release` left this surface on 2026-09-04. They were the
+// cheapest pair — both lived in delivery.go, together 11 of the 63 measured call
+// sites — and they were replaced by types this package owns: ActivationBuild
+// (7 of the build row's 16 fields) and RollbackTarget (2 of the release row's
+// 18) — counted with reflect, not by eye. The build
+// and release contexts translate at their own boundary, in
+// build/activation_build.go and release/rollback_target.go. delivery.go no
+// longer imports persistence at all.
+//
+// What did NOT shrink is the call-site count: those 11 lines still exist, they
+// just name a contract type now. The 63 was always the cost of removal, not a
+// backlog that removal burns down — reading a smaller number here as progress
+// would be the same mistake this comment was written to prevent.
+//
+// # `db.DBTX` and `db.BuildAppSpec` stay, and each says why
+//
+// `db.DBTX` is 34 of the 63, and the only one that is also risk: `WithLock` is
+// the environment-lock primitive Unbreakable Rule 6 puts on every mutation, so
+// changing its signature touches the point every write in the product passes
+// through, and `cleanroom-up-live-test-mandate.md` makes LIVE validation
+// mandatory for that. It is release work, not refactor work.
+//
+// `db.BuildAppSpec` is 18, and it leaves WITH the manifest renderer, not before:
+// the type crosses because the sink describes the apps the manifest will render,
+// and converting only this side would force all 18 points to convert back.
+//
+// The `domain-sink-purity` gate freezes exactly this set and refuses a new one:
+// the leak is not closed, but it has stopped growing and it is two smaller.
 //
 // Claiming purity here would have been the cheapest thing to keep and the most
 // expensive thing to believe — every new consumer reads this comment first.

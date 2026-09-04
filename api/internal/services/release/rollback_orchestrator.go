@@ -187,7 +187,7 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 			ProjectID:     req.ProjectID,
 			ProjectName:   req.ProjectName,
 			Environment:   req.Environment,
-			TargetRelease: targetRelease,
+			TargetRelease: rollbackTargetFrom(targetRelease),
 			CorrelationID: req.CorrelationID,
 		}); err != nil {
 			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID, fmt.Errorf("rollback: delivery failed: %w", err))
