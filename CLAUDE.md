@@ -20,7 +20,7 @@ LoopZero is a **CLI-first managed cloud (Kubernetes-backed)** for monorepo deplo
 
 This paragraph said the opposite until 2026-08-19, and both halves of it were false (B-159). Measured: `../CHANGELOG.md` **does not exist**, `../.claude/knowledge-base/` **does not exist**, and **all 21 sibling repos keep their own `CHANGELOG.md`** — this one has 4,567 lines and took 227 commits since 2026-08-01 alone. The instruction named a path nothing resolved to, while the repo's overwhelming practice did the opposite.
 
-It also contradicted two neighbours: the paragraph immediately below points at *this* repo's `CHANGELOG.md` and `.claude/knowledge-base/` as the dated history, and `.claude/rules/knowledge-base-location.md` states the rule outright — *"`<project>/.claude/knowledge-base/` is canonical. Always"*, and consumers do **not** share one. Per this file's own precedence rule, the tree wins.
+It also contradicted two neighbours: the paragraph immediately below points at *this* repo's `CHANGELOG.md` and `.claude/knowledge-base/` as the dated history, and the kit's rule file states it outright. That file was `knowledge-base-location.md` when this paragraph was written; the kit has since renamed the convention, and the rule now lives at `.claude/rules/records-location.md` saying *"`<project>/.claude/records/` is canonical. Always"*. The point stands unchanged — the canonical tree is THIS repo's, and consumers do **not** share one. WHICH of the two directories still on disk is the live one is `B-166`, open. Per this file's own precedence rule, the tree wins.
 
 What genuinely lives at the umbrella root is narrower: the decomposition ADR named above, and `../CLAUDE.md`, the workspace contract.
 
