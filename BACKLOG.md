@@ -2175,6 +2175,37 @@ dod:
   - existe verificação de que toda rota mutante continua gravando linha de auditoria com `resource_id` — hoje nenhum gate assere isso, e o achado não é validável por máquina sem ela — **[AMENDED 2026-09-04, delegation 7565db99c]** CLOSED by the 2026-08-19 chi.Walk fixture: an inspection floor plus a route floor over 17 of ~32 mutating routes, with the mutant TestB059_ODetectorAcusaCaminhoNaoMapeado proving the detector fires. The 2026-08-31 measurement that reopened this was contaminated by a fixture that never populated UserContext.tenantID, and was retracted the same day.
   - `middleware` fica agrupado pelos cinco concerns em vez de um pacote plano
 
+> **Medido 2026-09-04 — a branch `halt/B-059` existe e NAO pode entrar como esta.**
+>
+> Tres commits reais em `halt/B-059`: `f49b813c0` (o transporte parou de adivinhar
+> qual recurso uma mutacao toca — o trabalho que o item pede), `15dd9891a` (cinco
+> concerns que dividiam um pacote agora tem cinco) e `d49c70f1d` (quatro dos cinco
+> pacotes novos nao tinham doc). **248 arquivos, +3299 -2403.**
+>
+> O gate `lint-coverage` recusa:
+>
+>     HEAD:            PASS — api = 0 achados
+>     halt/B-059:      FAIL — api  0 -> 44
+>
+> A baseline em `infra/quality/lint-baseline.json` fixa o modulo `api` em zero e
+> recusa regressao. O gate oferece `--write` para recongelar; recongelar para
+> passar e o que este projeto proibe, entao o numero fica.
+>
+> **Como o DONE passou duas vezes:** a cadeia `task quality:gates` aborta no
+> primeiro erro, e `lint-coverage` fica 45 linhas depois de onde a execucao da
+> branch parava por uma falha ambiental. O gate que a mudanca quebra nunca rodava.
+> Cerca de 94 gates tambem nao rodaram contra aquele merge — **44 achados sao o
+> piso do custo, nao o total.**
+>
+> **Tres medicoes erradas no caminho, registradas para nao se repetirem:**
+> `golangci-lint` num clone resolve caminhos para `/home/paulo/dev/loopzero` via
+> `go.work` e mede o repo original (44, coincidencia); `GOWORK=off` muda o que e
+> analisado (32); so o gate, numa worktree ligada ao repo real e comparado contra
+> `HEAD`, mede o que o gate mede.
+>
+> **O que falta:** os 44 achados. Nao e remendo de fim de ciclo — 248 arquivos com
+> um refactor de cinco pacotes dentro pedem uma fatia propria.
+
 > **Medido 2026-08-18 (parcial entregue).** A premissa do item é o body-snooping;
 > medindo, o adivinhar da **ação** revelou-se pior que o do identificador.
 > `AuditLog` é montado uma única vez (`api/internal/server/router.go:239`), dentro
