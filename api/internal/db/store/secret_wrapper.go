@@ -31,6 +31,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
 // VaultTransitClient is the minimal interface PostgresSecretStore requires from the
@@ -259,18 +260,47 @@ func (s *PostgresSecretStore) encryptForStore(ctx context.Context, tenantID stri
 // Prefix detection: "vault:v1:" → Transit decrypt; else → AES legacy.
 // Sprint D D3: AES path passes tenantAAD; decrypt tries AAD first then
 // falls back to nil for backward compat with pre-D3 ciphertexts.
+//
+// B-126: every error exit here also increments
+// metrics.SecretDecryptFailedTotal under the reason that says which response
+// the failure calls for. This function is the ONLY place in the store that
+// increments it — callers (ListForResync) re-wrap the error on the way up and
+// must not count the same failure twice. Adding a new error exit to this
+// function without a counter puts the read path back where B-126 found it:
+// one error per request, nothing that adds up.
+//
+// The counter aggregates; it does not probe. A tenant whose secrets nobody
+// reads stays silent no matter what happened to its key, which is why the
+// canary in the item's DoD is a separate design and not this one — see
+// docs/wiki/decisions/2026-09-04-secret-decrypt-canary-deferral.md for the
+// deferral and its trigger.
 func (s *PostgresSecretStore) decryptFromStore(ctx context.Context, tenantID string, ciphertext []byte) ([]byte, error) {
 	if len(ciphertext) == 0 {
+		metrics.SecretDecryptFailedTotal.WithLabelValues("empty_ciphertext").Inc()
 		return nil, fmt.Errorf("secret_store: empty ciphertext for tenant %s (EC-06 NULL row guard)", tenantID)
 	}
 	if s.vault != nil && bytesHasPrefix(ciphertext, vaultPrefix) {
 		plain, err := s.vault.Decrypt(ctx, tenantID, string(ciphertext))
 		if err != nil {
+			// Key side: a revoked or rotated transit key lands here, and so
+			// does an unreachable OpenBao. The store reaches Transit through a
+			// consumer-defined interface and does not import pkg/vault, so the
+			// typed error stays in the chain for the log rather than becoming
+			// a label.
+			metrics.SecretDecryptFailedTotal.WithLabelValues("vault_transit_error").Inc()
 			return nil, fmt.Errorf("secret_store: vault transit decrypt: %w", err)
 		}
 		return plain, nil
 	}
-	return s.decrypt(ciphertext, tenantAAD(tenantID))
+	plain, err := s.decrypt(ciphertext, tenantAAD(tenantID))
+	if err != nil {
+		// Data side: a pre-T10.3 AES row that will not open. Nothing writes
+		// this format any more (B-162), so a non-zero rate is a legacy row
+		// that has become unreadable — restore-a-backup, not restore-a-key.
+		metrics.SecretDecryptFailedTotal.WithLabelValues("aes_legacy_error").Inc()
+		return nil, err
+	}
+	return plain, nil
 }
 
 // bytesHasPrefix returns true if b starts with prefix. Inlined to avoid
