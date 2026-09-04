@@ -285,6 +285,7 @@ tier: T2+ (`.claude/rules/pre-release-governance.md`) — toca operações e o c
 evidence: `.claude/knowledge-base/discoveries/opportunities/cluster-topology-naming-opportunity.md` — inventário classificado medido em 2026-08-09 sobre a árvore `26ba1340`, com lista de padrões congelada antes da execução e classificador determinístico (duas execuções byte-idênticas). **2.569 ocorrências-alvo vivas** (não 2.024, e não as 2.990 da primeira contagem — uma emenda datada aos caminhos histórico-imutáveis, derivada de `docs/README.md:16`, reclassificou 421 delas: a contagem do briefing perde identidade em forma nua — contexto kubectl derivado, chave de kubeconfig, env var, alvo de Taskfile, argumento de script). **14.346 ambíguas**, das quais **3.257 vivas em código executável**, 1.614 em `infra/` por 287 arquivos. Artefatos em `.claude/knowledge-base/discoveries/snapshots/cluster-topology-naming-*`. Controle negativo (`build`) validou o instrumento e pegou uma contaminação cruzada no classificador antes de ela virar número neste registro.
 why_now: o gatilho já estava registrado neste repo — `.claude/knowledge-base/plans/helm-topology-index-plan.md:198-200` deixou `mgmt`→`core` fora de escopo *"deliberadamente"*, com a razão **"renomear antes significa renomear duas vezes"**. Por isso os quatro renames vão juntos. E a janela é agora: **os clusters AWS ainda não existem** (`AM5 — [ ]` em `loopzero-workspace/ROADMAP_AWS.md:79`), então o custo hoje é renomear dev loop k3d, helmfiles, ArgoCD apps e secrets. Depois, são quatro clusters vivos a migrar.
 status: triaged
+blocked_by: B-173
 decided_by: system under sponsor delegation, recorded in commit 7565db99c and governed by `.claude/rules/decision-delegation.txt` — Freeze the 8 remaining occurrences as a written, dated exception list and write the ADR; rename no live resource and drop the cleanroom bullet. Rationale: The 2026-08-17 re-measurement shows the rename already landed (infra/k3d/ has core-cluster.yaml, secrets-cluster.yaml, cell-0/1-cluster.yaml); the 8 survivors are live-resource renames held AS-IS until AM8, and the cleanroom bullet is unexecutable because k3d cluster list is empty and task clean:all on the shared droplet would destroy app-dev.loopzero.example. Prior wall: **decisão de sponsor sobre o mapa da metade `cell`** (D2 da opportunity). A medição refutou `loopzero-workload` → `cell-1` / `loopzero-runtime-2` → `cell-2`: `infra/hel
 dod:
   - `git grep -n "loopzero-core\|core-cluster\|loopzero-workload\|workload-cluster\|loopzero-runtime\|runtime-cluster"` retorna zero fora de `CHANGELOG.md`, ADRs e documentos históricos — que **preservam** os nomes antigos, porque descrevem o passado — **[AMENDED 2026-09-04, delegation 7565db99c]** superseded: the rename already landed 2026-08-17 (infra/k3d/ carries core-cluster.yaml, secrets-cluster.yaml, cell-0/1-cluster.yaml). The 8 survivors are held AS-IS as a dated exception list, not renamed — they are live resources (ArgoCD issuer, Pulumi/DOKS) plus the design question this item escalates. Zero-grep is no longer the bar; the written exception list is.
@@ -1365,6 +1366,7 @@ why_now: o agregador é a ÚNICA fonte de `cost_counters`, e o portão que lê e
   degrada para "passa" quando ela está vazia. As três métricas de custo — minutos de build,
   egresso, puxadas de registro — não têm teto no ambiente que serve o painel público.
 status: triaged
+blocked_by: B-168, B-169, B-170
 
 > **A regra que este episodio produz, e ela vale para todos os itens deste registro:**
 > *"o resto e' de outro repositorio" so' fecha um item quando NENHUMA superficie DESTE repo
@@ -2664,6 +2666,7 @@ source: discover-review
 evidence: medido em 2026-08-12 na fatia slice-4. Quatro símbolos de `api/internal/db` atravessam a superfície pública de `services/deploycontracts` — `shared_contracts.go:207` (`WithLock(..., fn func(tx db.DBTX) error)`), `delivery.go:37` (`Activate(ctx, build *db.Build, ...)`), `delivery.go:55` (`TargetRelease *db.Release`) e `manifest_builder.go:23` (`Apps []db.BuildAppSpec`). **35 arquivos, em 10 pacotes, dependem do sink**, logo dependem transitivamente da persistência. Custo de remoção, contado: `WithLock` **34** call sites, `db.BuildAppSpec` **18**, `TargetRelease` **6**, `Activate(ctx` **5** — **63** no total (linhas fora de `_test.go` em `api/`, regra única; a primeira contagem citou 57 misturando três regras, e a revisão a desmentiu). Mais o alargamento da cerca `dbgeneratedboundary` para `api/internal/db`, que atingiria **71** arquivos (`services` 51, `cmd` 18, `routes` 2) sob a semântica do gate, que inclui `_test.go` de propósito — a DoD do `B-049` afirmava que isso era *"literalmente uma string"*, e a medição desmente.
 why_now: a fatia slice-4 travou o vazamento com o gate `domain-sink-purity`, mas travar não é fechar. Enquanto os 4 estiverem lá, os 35 dependentes carregam persistência que não pediram — e `WithLock` é o primitivo do environment-lock que a Regra Inquebrável 6 põe em toda mutação, então mexer nele exige o cleanroom que `cleanroom-up-live-test-mandate.md` torna obrigatório para validação LIVE.
 status: triaged
+blocked_by: B-173
 decided_by: system under sponsor delegation, recorded in commit 7565db99c and governed by `.claude/rules/decision-delegation.txt` — The kit-sync half of the wall has expired; start with the db.Release + db.Build slice and re-measure the fence-widening scope (51 services + 18 cmd), leaving WithLock unchanged. Rationale: Verified on the host: git status --porcelain returns 0 on branch workspace at HEAD 91b51e7a2, so the 91 dirty files in .claude/** no longer exist. The 2026-08-19 re-count reproduced 63 call sites identically and named db.Release/db.Build as the cheapest pair in one file; WithLock stays frozen as the Rule 6 environment-lock primitive requiring LIVE cleanroom validation. Prior wall: aguardando (1) commit do batch de kit-sync não commitado (91 arquivos dirty em .claude/**, backlog de consolidação de sync anterior; --allow-dirty-tree misturar
 delivered_in: a92dca92a  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 scope_reduced: 2026-08-12 pela fatia slice-6 — a bala de `db.DBTX` na camada de interface saiu deste item porque foi ENTREGUE. Resta: (a) os 4 tipos de persistencia + 3 de aplicacao na superficie de deploycontracts, e (b) alargar a cerca para `services` (51) e `cmd` (18). `server` e `routes` ja estao cercados.
@@ -4706,6 +4709,7 @@ why_now: apareceu ao medir a bala 3 do `B-019` — *"o que se perdeu no interval
   ADR-2026-05-12 declara um corte keyed→keyless com prazo duro, e a verificação que o protege
   depende de um objeto que ninguém provisionou.
 status: triaged
+blocked_by: B-173
 decided_by: system under sponsor delegation, recorded in commit 7565db99c and governed by `.claude/rules/decision-delegation.txt` — Do NOT provision loopzero-cosign-config; amend the ADR-2026-05-12 deadline to a new cutover of 2026-12-03 (90 days from this decision, the same T0+90d window the original ADR chose, restarted rather than reinterpreted) and write into check-cosign-cutover-deadline.sh why the ConfigMap does not exist, so the missing input fails loudly. Rationale: The 2026-08-19 measurement establishes all three block conditions true at once — deadline expired 2026-08-10 (check-cosign-cutover-deadline.sh:93), cosign runs keyed, ConfigMap NotFound — so provisioning makes the gate exit 1 = BLOCK immediately. DoD bullet 2 accepts 'or it is written why it does not exist'. PRODUCTION-AFFECTING alternatives — provisioning the ConfigMap, or the keyless cut — are explicitly NOT taken by this decision. Prior wall: aguardando decisão operacional: prazo ADR-2026-05-12 venceu há 21 dias (2026-08-10 + 90d). Bala 1 CLOSED 2026-08-19 (medição: keyed + prazo vencido + ConfigMap 
 severity: média — não quebra ambiente, mas é uma guarda de supply-chain que reporta sobre nada.
   A mesma forma dos B-124/B-127/B-129/B-143 desta sessão, agora num prazo de assinatura.
@@ -5551,6 +5555,7 @@ source: discover-review
 evidence: medido em 2026-08-19 ao fechar o `B-025`. Os tres hostnames sem sufixo (`app|cloud|auth.loopzero.example`) sairam do `infra/local/Caddyfile` porque serviam processos de desenvolvimento sob nome de producao. O ambiente `infra/helmfile/environments/standalone-public.yaml` usa exatamente esses nomes (`uiBaseUrl: https://app.loopzero.example`, linha 76) e e o **default** de `task infra:install:core-dashboard-only` (`taskfiles/infra.yml:141`). Sem os blocos, esse caminho nao tem borda.
 why_now: a remocao do `B-025` foi deliberada e esta registrada em `MEET-ASYNC-AMENDMENT-2026-08-19-remove-legacy-prod-hostnames.md`, mas o acoplamento com o ambiente nao estava no escopo daquele DoD. Registrar e o que impede que um default documentado quebre em silencio — `docs/operations/local-public-dashboard.md:216` ja rotula o ambiente como "(legacy)", e o canonico e `dev-public`.
 status: triaged
+blocked_by: B-173
 decided_by: system under sponsor delegation, recorded in commit 7565db99c and governed by `.claude/rules/decision-delegation.txt` — Retire standalone-public: repoint the default of task infra:install:core-dashboard-only (taskfiles/infra.yml:141) to dev-public and update the operations doc; add no Caddyfile blocks and delete no YAML. Rationale: docs/operations/local-public-dashboard.md:216 already lists the env as 'Helmfile env (legacy)' alongside 'Helmfile env (dev-public)' (verified on the host), and the B-025 hostname removal was deliberate and recorded in MEET-ASYNC-AMENDMENT-2026-08-19-remove-legacy-prod-hostnames.md; leaving the YAML in place while moving the default satisfies all three DoD bullets without deleting anything. Prior wall: aguardando decisão binária DoD bala 1: retire standalone-public (alinhando com rótulo legacy em docs/operations/local-public-dashboard.md:216 — canonical é dev-
 severity: baixa — o ambiente ja era legado e o canonico e outro; o custo e um default de task que aponta para um caminho que nao serve mais.
 dod:
@@ -5567,7 +5572,7 @@ source: discover-review
 evidence: medido em 2026-08-19 ao escolher onde arquivar a narrativa do `BACKLOG.md`. `.claude/knowledge-base/` tem **154 arquivos rastreados**; `.claude/records/` existe em disco com as subpastas do schema (`acceptance`, `audits`, `backlog`, `discoveries`, `grills`, ...) e **zero arquivos rastreados**. O `CLAUDE.md` do projeto aponta a primeira como canonica; `rules/records-location.md` aponta a segunda.
 why_now: e a forma exata que a propria `records-location.md` descreve e mede em outros consumidores — "all three had both directories present", com uma auditoria lendo a arvore errada e reportando zero implementacoes onde havia seis. A falha e silenciosa por natureza: uma segunda arvore nunca da erro, so acumula metade da verdade. Apareceu agora porque um link do `BACKLOG.md` (versionado) para `.claude/records/` seria citacao morta para quem clona.
 status: triaged
-blocked_by: aguardando commit do batch de kit-sync (94 arquivos .claude/* dirty; mesma prose que B-079 e B-080; /idea-to-release refuses per Hard gates #2). E aguardando fix em squad_boss.HALT_DIRS para incluir 'maintenance-runs' — meus BLOCKED reports desta data ficam invisiveis ao SELECT ate isso
+resolved_wall: the kit-sync batch this waited on was committed in 91b51e7a2 on 2026-09-04; git status --porcelain returns 0. Wall cleared 2026-09-04 by fleet triage.
 severity: media — nada quebra hoje; o custo e que qualquer varredura, gate ou pessoa pode ler a arvore vazia e concluir ausencia onde ha evidencia.
 dod:
   - esta decidido qual das duas arvores e canonica NESTE repo, e a regra que discorda e corrigida em vez de conviver
@@ -5663,6 +5668,21 @@ dod:
   - alternativamente: o modulo sai do go.work se for standalone-buildable
 
 > Registrado 2026-08-31 por /implement iteration 3 ao investigar go tests FAIL.
+
+## B-173 — Three Go packages sit below the coverage floor, and every unrelated slice pays for it   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: fleet-triage
+evidence: medido em 2026-09-04 por quatro lanes independentes, cada uma parando no mesmo lugar. `task quality:gates` reprova em `test-coverage-report` para `ecosystemvalidators`, `billinglayers` e `publishhygiene` — a divida e anterior a qualquer fatia de hoje e nenhum commit desde `648ed12f4` toca os tres pacotes.
+why_now: o gate e global e a divida e local, entao ele cobra de quem passa perto. B-146 e B-165 editam apenas Markdown e YAML — zero Go, zero sobreposicao com os pacotes que falham — e mesmo assim nao conseguem fechar, porque o portao mede a arvore inteira. B-001 e B-079 batem no mesmo muro. Quatro itens parados por uma divida que nenhum deles criou e nenhum deles pode pagar de dentro da propria fatia. Registrar isso como item proprio e o que permite que os quatro andem.
+status: triaged
+severity: alta — nao pelo risco do codigo descoberto, mas porque o gate transforma uma divida de tres pacotes num imposto sobre toda fatia que passa pelo portao.
+dod:
+  - `ecosystemvalidators`, `billinglayers` e `publishhygiene` atingem o piso de cobertura declarado, ou cada um que ficar abaixo tem excecao datada e escrita com a razao
+  - `task quality:gates` passa numa arvore limpa sem que a fatia sob teste toque Go
+  - esta escrito por que o piso e o que e, ou o piso e ajustado com a medicao que sustenta o novo valor
 
 ## B-172 — Detector Python depende de `vulture` no PATH mas nada verifica; teste falha em qualquer host sem o binário   [ ]
 
