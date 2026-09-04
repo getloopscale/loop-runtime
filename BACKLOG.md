@@ -5643,6 +5643,22 @@ dod:
 
 > Registrado 2026-08-31 por /implement iteration 3 ao investigar go tests FAIL.
 
+## B-170 — tools/gen-service-auth-ed25519 reprova go test com "directory prefix" no go workspace   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: human
+evidence: medido em 2026-08-31 durante /implement B-033. `cd tools/gen-service-auth-ed25519 && go test ./...` reprova com `pattern ./...: directory prefix . does not contain modules listed in go.work or their selected dependencies`. Edge case do go workspace: o modulo esta listado em go.work mas seus testes internos batem contra o pattern `./...` expandido pela linha do modulo.
+why_now: aparece porque /implement B-033 roda check_go_tests que itera cada modulo do workspace e chama `go test ./...` em cada raiz. Nao causa de B-033 (toca zero codigo Go).
+status: planned
+severity: baixa - o modulo e' uma ferramenta de geracao de chaves e provavelmente nao tem testes proprios; o setup do go.work e' que precisa de ajuste.
+dod:
+  - `cd tools/gen-service-auth-ed25519 && go test ./...` PASS (ou skip explicito se o modulo genuinamente nao tem testes)
+  - alternativamente: o modulo sai do go.work se for standalone-buildable
+
+> Registrado 2026-08-31 por /implement iteration 3 ao investigar go tests FAIL.
+
 ## B-171 — `Read(**/*secret*)` em settings.json bloqueia arquivos legítimos como `secrets.go`   [ ]
 
 domain: engine-go
@@ -5661,38 +5677,6 @@ dod:
 
 > Registrado 2026-08-31 por /idea-to-release B-058 ao tentar bala 4 dead-citation cleanup.
 
-## B-170 — tools/gen-service-auth-ed25519 reprova go test com "directory prefix" no go workspace   [ ]
-
-domain: engine-go
-repo: loopzero
-suggested_mode: bug
-source: human
-evidence: medido em 2026-08-31 durante /implement B-033. `cd tools/gen-service-auth-ed25519 && go test ./...` reprova com `pattern ./...: directory prefix . does not contain modules listed in go.work or their selected dependencies`. Edge case do go workspace: o modulo esta listado em go.work mas seus testes internos batem contra o pattern `./...` expandido pela linha do modulo.
-why_now: aparece porque /implement B-033 roda check_go_tests que itera cada modulo do workspace e chama `go test ./...` em cada raiz. Nao causa de B-033 (toca zero codigo Go).
-status: planned
-severity: baixa - o modulo e' uma ferramenta de geracao de chaves e provavelmente nao tem testes proprios; o setup do go.work e' que precisa de ajuste.
-dod:
-  - `cd tools/gen-service-auth-ed25519 && go test ./...` PASS (ou skip explicito se o modulo genuinamente nao tem testes)
-  - alternativamente: o modulo sai do go.work se for standalone-buildable
-
-> Registrado 2026-08-31 por /implement iteration 3 ao investigar go tests FAIL.
-
-## B-173 — Three Go packages sit below the coverage floor, and every unrelated slice pays for it   [ ]
-
-domain: engine-go
-repo: loopzero
-suggested_mode: evolve
-source: fleet-triage
-evidence: medido em 2026-09-04 por quatro lanes independentes, cada uma parando no mesmo lugar. `task quality:gates` reprova em `test-coverage-report` para `ecosystemvalidators`, `billinglayers` e `publishhygiene` — a divida e anterior a qualquer fatia de hoje e nenhum commit desde `648ed12f4` toca os tres pacotes. Re-medido 2026-09-04 pos-fix: nenhum era divida de cobertura (todos 86-93%); os tres eram TESTES FALHOS por defeitos concretos e ortogonais (paths obsoletos, referencia nao-declarada, tree de records nao-audit-trail). Ver commit 2ba21c182 pra o diagnostico e o fix por pacote.
-why_now: o gate e global e a divida e local, entao ele cobra de quem passa perto. B-146 e B-165 editam apenas Markdown e YAML — zero Go, zero sobreposicao com os pacotes que falham — e mesmo assim nao conseguem fechar, porque o portao mede a arvore inteira. B-001 e B-079 batem no mesmo muro. Quatro itens parados por uma divida que nenhum deles criou e nenhum deles pode pagar de dentro da propria fatia. Registrar isso como item proprio e o que permite que os quatro andem.
-status: triaged
-delivered_in: 2ba21c182  (test-coverage-report agora PASS coverage=85.59% threshold=75.00%; classe destravada — B-001, B-146, B-165, B-079 podem prosseguir. Status fica triaged aguardando decisao do sponsor sobre shipped-vs-followup: o fix mudou tres testes ortogonais e a DoD-1 do item pedia "raise coverage OR dated exception"; o fix escolheu o terceiro caminho — corrigir a causa raiz dos testes falhos — que nao aparecia explicitamente na DoD mas resolve o mesmo problema.)
-severity: alta — nao pelo risco do codigo descoberto, mas porque o gate transforma uma divida de tres pacotes num imposto sobre toda fatia que passa pelo portao.
-dod:
-  - `ecosystemvalidators`, `billinglayers` e `publishhygiene` atingem o piso de cobertura declarado, ou cada um que ficar abaixo tem excecao datada e escrita com a razao
-  - `task quality:gates` passa numa arvore limpa sem que a fatia sob teste toque Go
-  - esta escrito por que o piso e o que e, ou o piso e ajustado com a medicao que sustenta o novo valor
-
 ## B-172 — Detector Python depende de `vulture` no PATH mas nada verifica; teste falha em qualquer host sem o binário   [ ]
 
 domain: engine-go
@@ -5709,3 +5693,19 @@ dod:
   - o teste `test_a_python_defect_is_not_reported_as_PASS` passa em host sem `~/.local/bin` no PATH
 
 > Registrado 2026-08-31 durante execução de /idea-to-release B-167 (side-finding — vulture CLI ausente do PATH bloqueou a suíte de testes; env fix aplicado local mas o requisito hidden persiste no código).
+## B-173 — Three Go packages sit below the coverage floor, and every unrelated slice pays for it   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: fleet-triage
+evidence: medido em 2026-09-04 por quatro lanes independentes, cada uma parando no mesmo lugar. `task quality:gates` reprova em `test-coverage-report` para `ecosystemvalidators`, `billinglayers` e `publishhygiene` — a divida e anterior a qualquer fatia de hoje e nenhum commit desde `648ed12f4` toca os tres pacotes. Re-medido 2026-09-04 pos-fix: nenhum era divida de cobertura (todos 86-93%); os tres eram TESTES FALHOS por defeitos concretos e ortogonais (paths obsoletos, referencia nao-declarada, tree de records nao-audit-trail). Ver commit 2ba21c182 pra o diagnostico e o fix por pacote.
+why_now: o gate e global e a divida e local, entao ele cobra de quem passa perto. B-146 e B-165 editam apenas Markdown e YAML — zero Go, zero sobreposicao com os pacotes que falham — e mesmo assim nao conseguem fechar, porque o portao mede a arvore inteira. B-001 e B-079 batem no mesmo muro. Quatro itens parados por uma divida que nenhum deles criou e nenhum deles pode pagar de dentro da propria fatia. Registrar isso como item proprio e o que permite que os quatro andem.
+status: triaged
+delivered_in: 2ba21c182  (test-coverage-report agora PASS coverage=85.59% threshold=75.00%; classe destravada — B-001, B-146, B-165, B-079 podem prosseguir. Status fica triaged aguardando decisao do sponsor sobre shipped-vs-followup: o fix mudou tres testes ortogonais e a DoD-1 do item pedia "raise coverage OR dated exception"; o fix escolheu o terceiro caminho — corrigir a causa raiz dos testes falhos — que nao aparecia explicitamente na DoD mas resolve o mesmo problema.)
+severity: alta — nao pelo risco do codigo descoberto, mas porque o gate transforma uma divida de tres pacotes num imposto sobre toda fatia que passa pelo portao.
+dod:
+  - `ecosystemvalidators`, `billinglayers` e `publishhygiene` atingem o piso de cobertura declarado, ou cada um que ficar abaixo tem excecao datada e escrita com a razao
+  - `task quality:gates` passa numa arvore limpa sem que a fatia sob teste toque Go
+  - esta escrito por que o piso e o que e, ou o piso e ajustado com a medicao que sustenta o novo valor
+
