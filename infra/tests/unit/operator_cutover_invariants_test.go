@@ -181,33 +181,48 @@ func TestT09_TilftileSplitOperatorMigrationStatus(t *testing.T) {
 	}
 }
 
-// T-10 — admin pin endpoint + CLI shipped (T5.5).
+// T-10 — admin pin endpoint shipped (T5.5).
 //
-// B-169 (2026-08-31): admin_pin_cell.go moved into the `admin/` subdirectory
-// during a routes refactor; this test's path assertion was never updated and
-// reported the endpoint as "T5.5 incomplete" when the file existed the whole
-// time. The file lives at api/internal/routes/admin/admin_pin_cell.go, with
-// admin_evict.go, admin_release_inspect.go as siblings — the group makes sense
-// as a package. Test now checks the real path.
+// B-169. Two defects lived here and they share one shape: the guard could not
+// find its subject, and instead of saying so it reported a CONCLUSION about the
+// feature it had never observed.
+//
+//  1. The endpoint path went stale. admin_pin_cell.go moved into the `admin/`
+//     subdirectory during a routes refactor (siblings: admin_evict.go,
+//     admin_release_inspect.go). The assertion still named the pre-move path and
+//     announced "T5.5 incomplete" for an endpoint that had shipped and never
+//     left. Path corrected in eb4ae31b1; the message below no longer draws that
+//     conclusion from a failed lookup.
+//
+//  2. The CLI half asserted a file in ANOTHER REPOSITORY. `cli/` was extracted
+//     to sibling `../loopzero-cli` at M5 (CLAUDE.md § "Was here, now extracted").
+//     The code stat'd cli/src/register/infra.ts and, on IsNotExist, called
+//     t.Logf and returned. Measured 2026-09-05: that path exists nowhere in the
+//     umbrella checkout, and `loopzero-cli` is not cloned beside this repo at all —
+//     so the early
+//     return was the ONLY branch ever taken since M5, and the ReadFile +
+//     Contains assertion beneath it was unreachable code. t.Logf is invisible
+//     without -v, so the suite printed "ok" while verifying nothing.
+//
+// The CLI assertion is REMOVED, not skipped. A permanent t.Skip would be a
+// dead-Skip (this repo swept those in 339b9edfe) and, worse, would mark the
+// WHOLE test skipped — discarding the endpoint check that genuinely is ours.
+// A sibling repo's source is not this repo's to guarantee. What this repo does
+// guarantee is pinned where it can actually be executed:
+//   - api/tests/unit/control_surfaces_observable_test.go builds the router and
+//     asserts the AdminPin surface is recorded with its route.
+//   - api/internal/routes/admin/admin_pin_cell_test.go covers the handler and
+//     its 403 without X-Service-Auth.
+//   - the cli<->engine seam has its own target: `task quality:contract:cross-repo`.
 func TestT10_AdminPinEndpointShipped(t *testing.T) {
 	path := filepath.Join(repoRoot(), "api", "internal", "routes", "admin", "admin_pin_cell.go")
 	if _, err := os.Stat(path); err != nil {
-		t.Errorf("admin_pin_cell.go missing — T5.5 incomplete: %v", err)
-	}
-	// F27 (M23 audit 2026-07-10): cli/ moved to sibling loopzero-cli/ repo per
-	// M5 monorepo decomposition. CLI wiring assertion skipped — cross-repo
-	// contract test lives in sibling repo now.
-	cliPath := filepath.Join(repoRoot(), "cli", "src", "register", "infra.ts")
-	if _, err := os.Stat(cliPath); os.IsNotExist(err) {
-		t.Logf("cli/src/register/infra.ts absent (moved to sibling loopzero-cli/ repo per M5 decomposition) — CLI wiring assertion skipped")
-		return
-	}
-	data, err := os.ReadFile(cliPath)
-	if err != nil {
-		t.Fatalf("infra.ts missing: %v", err)
-	}
-	if !strings.Contains(string(data), "admin/tenants/pin") {
-		t.Error("CLI infra.ts must reference admin/tenants/pin endpoint")
+		t.Errorf("this guard could not find its subject at %s: %v\n"+
+			"Read that as: the GUARD is stale or the handler moved. It does not by "+
+			"itself mean T5.5 regressed — the last time this fired (B-169) the "+
+			"endpoint had shipped and only this path was wrong. Check the "+
+			"registration in api/internal/server/router.go before concluding "+
+			"anything about the feature.", path, err)
 	}
 }
 
