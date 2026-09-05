@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-183 items — **Open** 15 · **In flight** 5 · **Closed** 163 · **Blocked** 7
+185 items — **Open** 17 · **In flight** 5 · **Closed** 163 · **Blocked** 7
 
-### Open (15)
+### Open (17)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -89,6 +89,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
 | [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
 | [`B-183`](#b-183--o-gate-de-skip-por-caminho-ausente-para-a-grafia-nao-a-classe-um-helper-booleano-o-evade----) | O gate de skip-por-caminho-ausente para a grafia, nao a classe: um helper booleano o evade | `triaged` | media — o gate existe para impedir que a classe volte, e a classe volta com |
+| [`B-184`](#b-184--dois-testes-pulam-incondicionalmente-e-leem-um-arquivo-logo-abaixo-com-tfatalf-que-nunca-roda----) | Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda | `triaged` | media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a |
+| [`B-185`](#b-185--o-gate-cli-exit-codes-imprime-skip-e-sai-0-desde-sempre-porque-o-diretorio-que-ele-mede-nunca-esteve-na-arvore----) | O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore | `triaged` | media — um gate na cadeia que nunca mediu nada. Ele nao mente na saida (diz |
 
 ### In flight (5)
 
@@ -6817,4 +6819,89 @@ dod:
     direcao
   - mutacao com efeito conferido: para cada capacidade nova, um mutante que a desliga
     e o teste nomeado que morre por causa dele
+
+## B-184 — Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b180-nemesis-audit
+severity: media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a
+  assercao e acredita que ela roda. Dois testes de regressao nao afirmam nada, e a
+  suite os reporta como verdes.
+evidence: |
+  Confirmado 2026-09-05 por auditoria independente, com binario proprio:
+
+    infra/tests/config/regression_adr_test.go:36
+      TestADR0018C2C5_StartupMisplacementScan
+    infra/tests/config/regression_bugs_late_test.go:360
+      TestB69GiteaOrgConfigurable
+
+  Os dois carregam um `t.Skip` NU — sem guarda nenhuma — e logo abaixo
+  `os.ReadFile("../../../operators/cmd/main.go")` seguido de `t.Fatalf`. O `t.Skip`
+  marca o teste inteiro como pulado, entao nada abaixo executa nunca.
+
+  E' a mesma classe do `F-06`, com FORMA diferente: sem sonda de sistema de arquivos
+  na guarda, o gate `test-skip-absent-path` deliberadamente NAO os detecta — o limite
+  esta declarado no `SCOPE` do pacote, primeiro item.
+
+  MEDIDO 2026-09-05, e isso decide a forma do conserto: `operators/cmd/main.go` NAO
+  existe nesta arvore. Entao tirar o `t.Skip` sozinho nao ressuscita a assercao — faz
+  o teste reprovar no `os.ReadFile`. A bifurcacao e' a mesma do `B-180`: ou o teste
+  volta a afirmar algo que esta aqui, ou sai com a razao escrita nomeando quem cobre
+  o contrato no lugar dele.
+why_now: o `B-180` fechou a forma guardada-por-caminho e declarou esta como fora de
+  escopo. Declarada nao e' consertada: os dois seguem verdes e sem afirmar nada.
+status: triaged
+dod:
+  - para cada um dos dois: ou a assercao volta a rodar (o `t.Skip` sai e o teste
+    afirma algo deste repositorio), ou o teste e' removido com a razao escrita
+    nomeando o que cobre o contrato no lugar dele — a mesma barra que o `B-180` usou
+  - o `os.ReadFile` + `t.Fatalf` inalcancavel nao sobrevive a nenhuma das duas saidas
+  - a decisao cita a medicao do `evidence` (`operators/cmd/main.go` ausente) em vez
+    de re-perguntar: quem for fazer ja sabe que a saida ingenua nao serve
+  - se a decisao for uma verificacao que reprova a forma NUA (skip incondicional com
+    codigo abaixo), ela nao pode virar o que vigia: um detector que para de
+    reconhecer a forma reprova, nao passa
+
+## B-185 — O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b180-nemesis-audit
+severity: media — um gate na cadeia que nunca mediu nada. Ele nao mente na saida (diz
+  SKIP), mas conta como gate executado e sai 0, entao a cadeia fica verde com uma
+  verificacao a menos do que o numero sugere.
+evidence: |
+  Confirmado 2026-09-05 por auditoria independente:
+
+    cmd/loopzero-ops/internal/quality/cliexitcodes/check.go:42
+      retorna Outcome{Pass: true, Skipped: true} quando cli/src esta ausente
+
+  `cli/` nao esta nesta arvore e `loopzero-cli` nao esta em nenhum dos 23 irmaos de
+  `/home/paulo/dev` (medido durante o `B-180`). Entao o ramo de skip e' o UNICO que
+  ja rodou.
+
+  Duas vizinhas da mesma forma: `api/internal/contract/cli_consumer_test.go` tem
+  `TestCLIConsumer_KnownGapsAreReal` e `TestCLIConsumer_ListMatchesSource`, ambas
+  guardadas por `cliSrcPresent()`, ambas pulando sempre. Elas sao o `B-183` (o gate
+  novo nao as ve porque a sonda esta dentro de um helper booleano).
+
+  Contraste que mostra o padrao certo ao lado: o `B-181` estabeleceu a "ausencia
+  rastreada" — o gate `cost-series-producers` imprime a ausencia em TODA execucao,
+  com a medicao escrita, e `PARTIAL` nunca e' impresso como `PASS`.
+why_now: o `B-180` e o `B-181` trataram a mesma pergunta — o que um gate pode
+  afirmar quando o assunto nao esta la — e este ficou de fora por nao ser um teste
+  sob `infra/tests/`. A regra que os dois estabeleceram vale aqui igual.
+status: triaged
+dod:
+  - o gate declara a ausencia em toda execucao com a medicao que a sustenta, no molde
+    do `cost-series-producers` (`B-181`), ou e' removido da cadeia com a razao escrita
+  - o que ele NAO cobre enquanto `cli/` estiver fora e' nomeado explicitamente, nao
+    implicado por um SKIP
+  - se a decisao for manter e declarar: quando `cli/src` VOLTAR, o gate tem de sair do
+    modo declarado sozinho e reprovar se a declaracao ficar — a mesma propriedade que
+    o pin do `test-skip-absent-path` tem
+  - medido, nao argumentado: a saida do gate antes e depois, colada no item
 
