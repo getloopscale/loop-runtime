@@ -199,6 +199,13 @@ func (m *SecretK8sManager) CreateSecret(ctx context.Context, tenantID, projectID
 		_, err = m.mgmtClient.CoreV1().Secrets(m.mgmtNamespace).Update(ctx, secret, metav1.UpdateOptions{})
 	}
 	if err != nil {
+		// B-177: count this exit. By the time CreateSecret runs, the caller in
+		// routes/secrets has already persisted the row via store.Set, so
+		// returning here leaves a row in `secrets` behind. The `result="fail"`
+		// series is the observable form of that — see the comment on
+		// metrics.SecretExternalSecretTotal for why every exit of this
+		// function has to move it.
+		metrics.SecretExternalSecretTotal.WithLabelValues("fail").Inc()
 		return fmt.Errorf("create k8s secret on mgmt: %w", err)
 	}
 
@@ -215,6 +222,9 @@ func (m *SecretK8sManager) CreateSecret(ctx context.Context, tenantID, projectID
 	// `tenantNamespaceFor(...)` wrapper above. Errors surface (never silent).
 	tenantNS, err := tenantNamespaceFor(tenantID, projectID, env)
 	if err != nil {
+		// B-177: same reason as the mgmt-write exit above — the row is already
+		// persisted when this return is taken.
+		metrics.SecretExternalSecretTotal.WithLabelValues("fail").Inc()
 		return err
 	}
 	esName := externalSecretName(app, name)

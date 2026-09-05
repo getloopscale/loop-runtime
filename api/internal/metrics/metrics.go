@@ -665,10 +665,25 @@ var (
 	//
 	// Use:
 	//   - "success" — ExternalSecret CR created or updated successfully
-	//   - "fail" — runtime client returned error (RBAC, network, etc.)
+	//   - "fail" — SecretK8sManager.CreateSecret returned an error. ANY of its
+	//     error exits, not only the runtime client's (RBAC, network, etc.):
+	//     also the mgmt-cluster Secret write and the namespace derivation.
+	//     B-177 widened this from "runtime client returned error", which had
+	//     been the description AND the implementation.
 	//   - "skip" — manager nil at boot (CELL_0_KUBECONFIG missing) so the
 	//     entire path was bypassed. THIS IS THE INVISIBLE-FAILURE SIGNAL
 	//     that F-2 was originally caused by.
+	//
+	// The invariant behind those three, and the reason B-176 and B-177 both
+	// exist: `POST /secrets` persists the row BEFORE any of this runs, so
+	// every way out of the sync path must move exactly one series. An exit
+	// that counts nothing leaves a row in `secrets` while
+	// sum(loopzero_secret_externalsecret_total) reads zero — and that sum is what
+	// the B-126 canary deferral
+	// (docs/wiki/decisions/2026-09-04-secret-decrypt-canary-deferral.md § 2)
+	// uses as its trigger. Adding an early return here without an increment
+	// re-opens that hole. TestCreateSecret_EveryExitMovesTheCounter
+	// (api/internal/k8s/secretsync) is the guard.
 	//
 	// Alert opportunity: rate(loopzero_secret_externalsecret_total{result="skip"}[5m]) > 0
 	// indicates the API silently no-ops `loopzero secret set` calls.
