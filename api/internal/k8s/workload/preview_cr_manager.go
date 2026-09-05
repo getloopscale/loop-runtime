@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package k8s
+package workload
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/getloopscale/loopzero/api/internal/k8s"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
@@ -66,7 +67,7 @@ func (m *PreviewCRManager) EnsurePreviewCR(ctx context.Context, spec PreviewCRSp
 
 	// Exists — fetch, overwrite spec (preserving resourceVersion), update.
 	var existing apiv1.PreviewEnvironment
-	if getErr := m.Client.Get(ctx, client.ObjectKey{Namespace: tenantNamespace, Name: spec.Name}, &existing); getErr != nil {
+	if getErr := m.Client.Get(ctx, client.ObjectKey{Namespace: k8s.ControlPlaneNamespace, Name: spec.Name}, &existing); getErr != nil {
 		return fmt.Errorf("preview CR get-after-conflict: %w", getErr)
 	}
 	existing.Spec = desired.Spec
@@ -89,7 +90,7 @@ func (m *PreviewCRManager) GetPhases(ctx context.Context, previewIDs []string) (
 	}
 	for _, id := range previewIDs {
 		var pe apiv1.PreviewEnvironment
-		err := m.Client.Get(ctx, client.ObjectKey{Namespace: tenantNamespace, Name: id}, &pe)
+		err := m.Client.Get(ctx, client.ObjectKey{Namespace: k8s.ControlPlaneNamespace, Name: id}, &pe)
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
 				continue
@@ -117,7 +118,7 @@ func (m *PreviewCRManager) GetPhases(ctx context.Context, previewIDs []string) (
 func (m *PreviewCRManager) DeletePreviewCR(ctx context.Context, tenantID, projectID string, prNumber int) error {
 	var list apiv1.PreviewEnvironmentList
 	if err := m.Client.List(ctx, &list,
-		client.InNamespace(tenantNamespace),
+		client.InNamespace(k8s.ControlPlaneNamespace),
 		client.MatchingLabels{
 			"loopzero.io/tenant":    tenantID,
 			"loopzero.io/project":   projectID,
@@ -146,7 +147,7 @@ func buildPreviewCR(spec PreviewCRSpec) *apiv1.PreviewEnvironment {
 	return &apiv1.PreviewEnvironment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      spec.Name,
-			Namespace: tenantNamespace,
+			Namespace: k8s.ControlPlaneNamespace,
 			Labels: map[string]string{
 				"loopzero.io/tenant":     spec.TenantID,
 				"loopzero.io/project":    spec.ProjectID,

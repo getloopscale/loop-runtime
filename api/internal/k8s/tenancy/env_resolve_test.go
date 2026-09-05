@@ -23,7 +23,7 @@
 // only safe while a name is unambiguous; the ambiguous case is asserted
 // below, because guessing there returns the WRONG project's environment,
 // which is worse than the not-found being fixed.
-package k8s
+package tenancy
 
 import (
 	"testing"

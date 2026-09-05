@@ -19,7 +19,8 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
+	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
 	"github.com/getloopscale/loopzero/pkg/correlation"
 )
 
@@ -50,16 +51,16 @@ func (q *buildStoreAdmissionQuerier) ActiveBuilds(ctx context.Context, cellID st
 	}, nil
 }
 
-// appCRAdapter bridges k8s.ApplicationCRManager to build.ApplicationCREnsurer.
+// appCRAdapter bridges workload.ApplicationCRManager to build.ApplicationCREnsurer.
 type appCRAdapter struct {
-	mgr *k8s.ApplicationCRManager
+	mgr *workload.ApplicationCRManager
 }
 
 func (a *appCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input build.ApplicationCRInput) error {
 	// Audit gap M08 #10 / §6.C.1: propagate the originating correlation_id
 	// from ctx into the CR annotation so the operator reconcile can attach
 	// it back into audit_log rows + structured logs.
-	return a.mgr.EnsureLoopZeroApplication(ctx, k8s.LoopZeroApplicationInput{
+	return a.mgr.EnsureLoopZeroApplication(ctx, workload.LoopZeroApplicationInput{
 		TenantID:      input.TenantID,
 		Project:       input.Project,
 		Environment:   input.Environment,
@@ -89,7 +90,7 @@ func buildAdminEvictor(cfg config.Config, dbAdapter *db.PgxAdapter) admin.Tenant
 	store := store.NewTenantStoreSqlc(dbAdapter)
 	dbDeleter := &adapters.TenantDBDeleterAdapter{Store: store}
 
-	k8sEv, err := k8s.NewTenantK8sEvictor(
+	k8sEv, err := tenancy.NewTenantK8sEvictor(
 		cfg.MgmtKubeconfig, cfg.MgmtKubeContext,
 		cfg.BuildKubeconfig, cfg.BuildKubeContext,
 		cfg.RuntimeKubeconfig, cfg.RuntimeKubeContext,

@@ -10,7 +10,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
 )
 
 // TenantDBDeleterAdapter implements placement.TenantDBDeleter by translating
@@ -45,10 +45,10 @@ func (a *TenantDBDeleterAdapter) DeleteTenantsFKOrdered(ctx context.Context, ten
 }
 
 // TenantK8sEvictorAdapter implements placement.TenantK8sEvictor by wrapping
-// k8s.TenantK8sEvictor and translating K8sEvictionCounts across the package
+// tenancy.TenantK8sEvictor and translating K8sEvictionCounts across the package
 // boundary. Mirrors the TenantDBDeleterAdapter pattern.
 type TenantK8sEvictorAdapter struct {
-	Evictor *k8s.TenantK8sEvictor
+	Evictor *tenancy.TenantK8sEvictor
 }
 
 func (a *TenantK8sEvictorAdapter) EvictTenantsFromClusters(ctx context.Context, tenantIDs []string) (placement.K8sEvictionCounts, error) {

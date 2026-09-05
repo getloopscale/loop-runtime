@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package k8s
+package workload
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/getloopscale/loopzero/api/internal/k8s"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
@@ -19,7 +20,7 @@ import (
 // fake typed client (M8). UNIT test — no live cluster, no envtest.
 func newPreviewMgr(t *testing.T) *PreviewCRManager {
 	t.Helper()
-	scheme, err := NewScheme()
+	scheme, err := k8s.NewScheme()
 	if err != nil {
 		t.Fatalf("NewScheme: %v", err)
 	}
@@ -47,7 +48,7 @@ func TestEnsurePreviewCR_CreateWhenNotFound(t *testing.T) {
 	}
 
 	var got apiv1.PreviewEnvironment
-	if err := mgr.Client.Get(context.Background(), client.ObjectKey{Namespace: tenantNamespace, Name: spec.Name}, &got); err != nil {
+	if err := mgr.Client.Get(context.Background(), client.ObjectKey{Namespace: k8s.ControlPlaneNamespace, Name: spec.Name}, &got); err != nil {
 		t.Fatalf("expected PreviewEnvironment CR to exist: %v", err)
 	}
 	if got.Spec.TenantID != "tn-loopzero" {
@@ -92,7 +93,7 @@ func TestEnsurePreviewCR_UpsertOnConflict(t *testing.T) {
 	}
 
 	var got apiv1.PreviewEnvironment
-	if err := mgr.Client.Get(context.Background(), client.ObjectKey{Namespace: tenantNamespace, Name: spec.Name}, &got); err != nil {
+	if err := mgr.Client.Get(context.Background(), client.ObjectKey{Namespace: k8s.ControlPlaneNamespace, Name: spec.Name}, &got); err != nil {
 		t.Fatalf("get after upsert: %v", err)
 	}
 	if got.Spec.Branch != "feat/x-rev2" {
@@ -157,7 +158,7 @@ func TestDeletePreviewCR_FindsByLabelSelector(t *testing.T) {
 	}
 
 	var got apiv1.PreviewEnvironment
-	err := mgr.Client.Get(context.Background(), client.ObjectKey{Namespace: tenantNamespace, Name: spec.Name}, &got)
+	err := mgr.Client.Get(context.Background(), client.ObjectKey{Namespace: k8s.ControlPlaneNamespace, Name: spec.Name}, &got)
 	if !k8serrors.IsNotFound(err) {
 		t.Errorf("expected CR deleted (NotFound), got err=%v", err)
 	}

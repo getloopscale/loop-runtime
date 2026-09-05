@@ -19,7 +19,7 @@ import (
 
 // runRegressionScript invokes regression-checks.sh and returns combined output.
 func TestADR0018C1_NoEnvVarOverride(t *testing.T) {
-	data, err := os.ReadFile("../../../api/internal/k8s/tenant_cr_manager.go")
+	data, err := os.ReadFile("../../../api/internal/k8s/tenancy/tenant_cr_manager.go")
 	if err != nil {
 		t.Fatalf("read tenant_cr_manager.go: %v", err)
 	}

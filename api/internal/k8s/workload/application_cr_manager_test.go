@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package k8s
+package workload
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/getloopscale/loopzero/api/internal/k8s"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
@@ -18,7 +19,7 @@ import (
 // fake typed client (M8). UNIT test — no live cluster, no envtest.
 func newAppMgr(t *testing.T) *ApplicationCRManager {
 	t.Helper()
-	scheme, err := NewScheme()
+	scheme, err := k8s.NewScheme()
 	if err != nil {
 		t.Fatalf("NewScheme: %v", err)
 	}
