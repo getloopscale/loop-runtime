@@ -133,12 +133,19 @@ tasks:
     desc: |
       Install only the 16 core-cluster releases the dashboard demo needs (skips
       harbor, opencost, chaos-mesh, monitoring, loki, tempo, otel, blackbox,
-      smoke-test, velero, nfs). Defaults to ENV=standalone-public; override
-      with ENV=<env>. Per T0.1 of plan 2026-05-29-dashboard-public-integration-
+      smoke-test, velero, nfs). Defaults to ENV=dev-public; override with
+      ENV=<env>. Per T0.1 of plan 2026-05-29-dashboard-public-integration-
       canonicalization-plan.md.
+
+      The default was standalone-public until B-165. B-025 removed the three
+      bare hostnames that env serves (app|cloud|auth.loopzero.example) from
+      infra/local/Caddyfile, so the default named an environment no edge
+      answered for. dev-public is the canonical replacement and its hostnames
+      do have site blocks. The standalone-public env file is kept and still
+      selectable with ENV=standalone-public.
     deps: [helm:repos]
     vars:
-      ENV: '{{.ENV | default "standalone-public"}}'
+      ENV: '{{.ENV | default "dev-public"}}'
     cmds:
       # v1.1 EC-01 guard: helmfile sync --selector exits 0 even when zero
       # releases match. Block silent-empty installs.
@@ -1191,7 +1198,7 @@ tasks:
     desc: |
       Composite: bring up the entire local-public dashboard demo. Runs
       port-forward → caddy → demo seed (skip if data already present).
-      Use after `task infra:install:core-dashboard-only ENV=standalone-public`.
+      Use after `task infra:install:core-dashboard-only` (ENV=dev-public).
     cmds:
       - task: cloud:port-forward:up
       - task: cloud:caddy:up
