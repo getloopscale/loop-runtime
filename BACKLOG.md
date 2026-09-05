@@ -6975,7 +6975,7 @@ repo: loopzero
 suggested_mode: bug
 source: b183-nemesis-audit
 severity: alta — dois testes afirmam "the delivery gate is the CI substitute; it must
-  exist", e o arquivo nao existe. Enquanto o `main` esta 273 commits atras e o PR de
+  exist", e o arquivo nao existe. Enquanto o `main` esta 281 commits atras e o PR de
   promocao nao tem check real, o substituto declarado de CI e' o unico portao que
   sobraria — e ele nao esta la.
 evidence: |
@@ -7087,7 +7087,7 @@ resolution: |
       M4 wiring tirado do settings.json   -> morto por IsWiredIntoThePreToolUseBashHook
       M5 o arquivo do hook e' apagado     -> morto por 5 testes (o estado em que este item comecou)
 
-  **Bala 4 — a relacao com a promocao, dita nos dois lugares que viajam.** Escrita no
+  **Bala 4 — a relacao com a promocao, dita nos quatro lugares que viajam.** Escrita no
   cabecalho do proprio hook e repetida aqui: este hook NAO substitui CI na promocao. Ele
   bloqueia o que sai DESTA maquina, num `git push` de uma sessao que o tenha ligado. Nao roda
   no GitHub, nao roda no PR, e nao ve um merge em que nao esteve presente. `main` continua 273
