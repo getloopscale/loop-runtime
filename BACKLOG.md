@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-176 items — **Open** 20 · **In flight** 3 · **Closed** 153 · **Blocked** 11
+176 items — **Open** 20 · **In flight** 3 · **Closed** 153 · **Blocked** 10
 
 ### Open (20)
 
@@ -85,7 +85,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `triaged` | média — o código resultante está **correto** e é 1:1; o que ficou errado foi a documentação dele, e o modo como errou é o registro mais nítido do risco que o `B-001` nomeia. |
 | [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `blocked` · was `triaged` | waiting on `B-137` — média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número. |
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `blocked` · was `triaged` | waiting on `B-139` — média — nada quebra hoje, e é justamente isso que o mantém: o caminho resolve porque a conta existe. Vira **alta** no dia em que outra pessoa operar o host, ou em que a conta for removida. |
-| [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `blocked` · was `triaged` | waiting on `B-147` — média — nenhum serve tráfego, mas dois são guardas (prazo de assinatura, cobertura) e |
+| [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média — nenhum serve tráfego, mas dois são guardas (prazo de assinatura, cobertura) e |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `blocked` · was `triaged` | waiting on `B-154` |
 | [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta — e' criptografia de segredo de tenant, e o gate ja' saiu do periodo de aviso: ele REPROVA a arvore hoje |
 | [`B-165`](#b-165--o-ambiente-standalone-public-ficou-sem-borda-que-o-sirva----) | O ambiente `standalone-public` ficou sem borda que o sirva | `triaged` | baixa — o ambiente ja era legado e o canonico e outro; o custo e um default de task que aponta para um caminho que nao serve mais. |
@@ -4958,7 +4958,6 @@ why_now: os quatro **já não rodavam** — a imagem não existe em registro nen
   o `B-146` mediu que o ConfigMap que ele lê nunca existiu, então ele estaria vazio de qualquer
   forma.
 status: triaged
-blocked_by: B-146 — block-on-item explícito no DoD bala 3: 'cosignDeadline tem entrada válida antes de ser reagendado, ou B-146 fecha primeiro'. Ademais decisão de infra pendente para todos os 4: agendador in-cluster com runner publicado (imagem loopzero-ops aposentada em B-019, precisa novo caminho de publicação) vs CI externo vs aposentar explicitamente cada trabalho. Bala 1 do item exige decisão sponsor/operator. Vide report /idea-to-release B-147 de 2026-08-31.
 severity: média — nenhum serve tráfego, mas dois são guardas (prazo de assinatura, cobertura) e
   hoje ninguém os executa em lugar nenhum.
 dod:
