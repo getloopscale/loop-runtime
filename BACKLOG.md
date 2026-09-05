@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-178 items — **Open** 19 · **In flight** 3 · **Closed** 156 · **Blocked** 10
+178 items — **Open** 18 · **In flight** 4 · **Closed** 156 · **Blocked** 10
 
-### Open (19)
+### Open (18)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -78,7 +78,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `blocked` · was `triaged` | waiting on a decision — baixa hoje, alta no dia em que o `loopzero-cloud` cair sozinho em produção. O `B-002` registra que o cluster central é SPOF; este item é mais estreito e mais provável: não é o cluster que cai, é **um** processo, e ele carrega uma jornada (deploy) que não é dele. |
 | [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `blocked` · was `triaged` | waiting on `B-168`, `B-169`, `B-170` |
 | [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `blocked` · was `triaged` | waiting on `B-168`, `B-169`, `B-170` — média — não quebra nada; custa navegação e força dois nomes de pacote que mentem sobre o diretório. |
-| [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `triaged` | média — nenhum defeito de comportamento; é a superfície por onde a mistura de domínios entra sem ninguém decidir. |
 | [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `triaged` | média — dívida acumulada, não defeito ativo. **Deliberadamente separado do B-045**: ligar os gates e pagar a dívida são trabalhos diferentes, e ligá-los antes de ter plano transformaria 76 achados legítimos num muro que alguém desliga na sexta-feira. |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `blocked` · was `triaged` | waiting on `B-113` — média — não afirmo que `tag: dev` seja violação decidida: pode ser sobrescrita no install pelo ArgoCD, e nenhuma decisão registrada a proíbe. O que está medido é que a guarda cobre 1 de 16, e que os 15 restantes nunca foram julgados. |
 | [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `blocked` · was `triaged` | waiting on `B-134` — média — nada quebra hoje; o que fica preso são **duas** travas de imutabilidade de imagem, uma no gate e outra na admissão, ambas paradas em modo aviso pela mesma ausência de um valor. |
@@ -94,10 +93,11 @@ consequência do escopo per-repo declarado acima.
 | [`B-177`](#b-177--duas-saidas-de-erro-escrevem-a-linha-e-nao-movem-contador-e-o-gatilho-do-b-126-ainda-e-limite-inferior----) | Duas saidas de erro escrevem a linha e nao movem contador, e o gatilho do B-126 ainda e' limite inferior | `triaged` | baixa — menor que o `B-176` que o precedeu, e pela mesma razao: nao quebra comportamento, estreita deteccao. As duas saidas exigem que o cluster de mgmt ou a derivacao de namespace falhe, o que e' bem mais raro que "nao ha sync configurado"; mas o efeito e' identico, uma linha em `secrets` sem serie nenhuma. |
 | [`B-178`](#b-178--tres-testes-de-metricas-reprovam-em-qualquer-worktree-vinculado-porque-procuram-git-como-diretorio----) | Tres testes de metricas reprovam em qualquer worktree vinculado, porque procuram `.git` como diretorio | `triaged` | media — nao ha defeito de produto, mas o efeito e' um falso vermelho no fluxo de trabalho que passou a ser obrigatorio. Uma lane que rode a suite do proprio worktree ve tres reprovacoes que nao tem relacao com a mudanca dela, e o custo previsivel e' alguem "consertar" o que nao esta quebrado, ou aprender a ignorar vermelho. |
 
-### In flight (3)
+### In flight (4)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
+| [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `approved` | média — nenhum defeito de comportamento; é a superfície por onde a mistura de domínios entra sem ninguém decidir. |
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
 | [`B-169`](#b-169--infratestsoperator_cutover_invariants-espera-arquivos-removidos-por-m5-decomposition----) | infra/tests/operator_cutover_invariants espera arquivos removidos por M5 decomposition | `planned` | blocks `B-033`, `B-057` — media - o teste esta' factualmente errado (procura arquivo que nao existe por design), o que gera ruido no gate e mascara falhas reais. |
 | [`B-170`](#b-170--toolsgen-service-auth-ed25519-reprova-go-test-com-directory-prefix-no-go-workspace----) | tools/gen-service-auth-ed25519 reprova go test com "directory prefix" no go workspace | `planned` | blocks `B-033`, `B-057` — baixa - o modulo e' uma ferramenta de geracao de chaves e provavelmente nao tem testes proprios; o setup do go.work e' que precisa de ajuste. |
@@ -2212,7 +2212,7 @@ suggested_mode: evolve
 source: discover-review
 evidence: medido em 2026-08-11. **`api/internal/k8s`** (coesão 3) agrupa três domínios pela biblioteca cliente que compartilham: tenancy (`tenant_cr_manager.go` 322L, `tenant_evictor.go` 333L), workload (`application_cr_manager.go`, `preview_cr_manager.go`) e secrets (`secret_k8s_manager.go` 371L). **`api/internal/adapters`** (coesão 3) é nomeado pelo padrão, então qualquer tipo-ponte qualifica — o próprio doc (`adapters.go:4`) é o critério de admissão, e por isso **não pode recusar nada**: 11 arquivos, 50 exports, cobrindo build, tenancy, release, secrets e SSE. Um deles, `vault_transit_adapter.go:9`, declara *"Signatures match byte-for-byte; only the method names differ"* — é ponte de código interno para código interno. **`services/platform`** (coesão 3) reúne 8 concerns de faxina sem par compartilhado; a propriedade comum real é "roda no binário controller", e o `servicesacyclic` agora defende esse agrupamento.
 why_now: são os três pacotes cuja regra de admissão não consegue dizer não. Enquanto ela for "usa client-go" / "é um adapter" / "é um loop de fundo", todo arquivo novo cabe — e a auditoria mediu que já cabem domínios diferentes em cada um.
-status: triaged
+status: approved
 delivered_in: 867e5d946  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — nenhum defeito de comportamento; é a superfície por onde a mistura de domínios entra sem ninguém decidir.
 progress_2026_08_18: |
