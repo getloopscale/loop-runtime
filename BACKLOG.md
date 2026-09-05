@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-176 items — **Open** 20 · **In flight** 3 · **Closed** 153 · **Blocked** 10
+176 items — **Open** 19 · **In flight** 3 · **Closed** 154 · **Blocked** 10
 
-### Open (20)
+### Open (19)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -88,7 +88,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média — nenhum serve tráfego, mas dois são guardas (prazo de assinatura, cobertura) e |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `blocked` · was `triaged` | waiting on `B-154` |
 | [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta — e' criptografia de segredo de tenant, e o gate ja' saiu do periodo de aviso: ele REPROVA a arvore hoje |
-| [`B-165`](#b-165--o-ambiente-standalone-public-ficou-sem-borda-que-o-sirva----) | O ambiente `standalone-public` ficou sem borda que o sirva | `triaged` | baixa — o ambiente ja era legado e o canonico e outro; o custo e um default de task que aponta para um caminho que nao serve mais. |
 | [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `triaged` | alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
 | [`B-168`](#b-168--a-guarda-destrutiva-do-validate-commandsh-regrediu-teste-do-b-160-volta-a-reprovar----) | A guarda destrutiva do validate-command.sh regrediu; teste do B-160 volta a reprovar | `blocked` · was `triaged` | waiting on a decision — alta - o hook agora bloqueia trabalho legitimo (heredocs, comandos multi-parte com grep+sed), o que reduz a confianca no gate e leva as pessoas a rodearem. |
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
@@ -103,7 +102,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-169`](#b-169--infratestsoperator_cutover_invariants-espera-arquivos-removidos-por-m5-decomposition----) | infra/tests/operator_cutover_invariants espera arquivos removidos por M5 decomposition | `planned` | blocks `B-033`, `B-057` — media - o teste esta' factualmente errado (procura arquivo que nao existe por design), o que gera ruido no gate e mascara falhas reais. |
 | [`B-170`](#b-170--toolsgen-service-auth-ed25519-reprova-go-test-com-directory-prefix-no-go-workspace----) | tools/gen-service-auth-ed25519 reprova go test com "directory prefix" no go workspace | `planned` | blocks `B-033`, `B-057` — baixa - o modulo e' uma ferramenta de geracao de chaves e provavelmente nao tem testes proprios; o setup do go.work e' que precisa de ajuste. |
 
-### Closed (153)
+### Closed (154)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -256,6 +255,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-161`](#b-161--o-gate-de-runbook-mede-a-anotacao-nao-o-runbook-6-dos-7-links-nao-levam-a-lugar-nenhum---x) | O gate de runbook mede a anotacao, nao o runbook: 6 dos 7 links nao levam a lugar nenhum | `shipped` | media — nada quebra em producao, mas o alerta que dispara as 3 da manha manda o operador para um 404, e o gate declara esse alerta CONFORME |
 | [`B-163`](#b-163--um-gate-exige-do-pulumi-o-que-a-propria-arquitetura-ja-aposentou---x) | Um gate exige do Pulumi o que a propria arquitetura ja' aposentou | `killed` | baixa — nao ha' regressao nova; o custo e' um gate que reprova por desenho e treina todo mundo a ignora-lo |
 | [`B-164`](#b-164--o-gate-de-runbook-varre-110-dos-233-alertas-da-arvore-e-o-numero-que-ele-reporta-parece-o-total---x) | O gate de runbook varre 110 dos 233 alertas da arvore, e o numero que ele reporta parece o total | `shipped` | media — o gate ja' reprova e esta' deliberadamente nao-ligado, entao nada quebra hoje; o custo e' que "33 alertas sem runbook" e' lido como o tamanho da divida, e ele e' menos da metade dela |
+| [`B-165`](#b-165--o-ambiente-standalone-public-ficou-sem-borda-que-o-sirva----) | O ambiente `standalone-public` ficou sem borda que o sirva | `shipped` | baixa — o ambiente ja era legado e o canonico e outro; o custo e um default de task que aponta para um caminho que nao serve mais. |
 | [`B-166`](#b-166--duas-arvores-de-records-coexistem-e-uma-delas-nao-tem-nada-rastreado----) | Duas arvores de records coexistem, e uma delas nao tem nada rastreado | `shipped` | media — nada quebra hoje; o custo e que qualquer varredura, gate ou pessoa pode ler a arvore vazia e concluir ausencia onde ha evidencia. |
 | [`B-171`](#b-171--readsecret-em-settingsjson-bloqueia-arquivos-legítimos-como-secretsgo----) | `Read(**/*secret*)` em settings.json bloqueia arquivos legítimos como `secrets.go` | `shipped` | media - bloqueia dead-citation cleanup no B-058 bala 4 + qualquer edit futuro em routes/secrets/. Nao ha bypass documentado. |
 | [`B-172`](#b-172--detector-python-depende-de-vulture-no-path-mas-nada-verifica-teste-falha-em-qualquer-host-sem-o-binário----) | Detector Python depende de `vulture` no PATH mas nada verifica; teste falha em qualquer host sem o binário | `shipped` | baixa — o binário vulture geralmente está disponível em hosts de dev com Python, mas o requisito é hidden. O impacto é 1 teste flaky por env, não regressão de produção. |
@@ -5745,7 +5745,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-19 ao fechar o `B-025`. Os tres hostnames sem sufixo (`app|cloud|auth.loopzero.example`) sairam do `infra/local/Caddyfile` porque serviam processos de desenvolvimento sob nome de producao. O ambiente `infra/helmfile/environments/standalone-public.yaml` usa exatamente esses nomes (`uiBaseUrl: https://app.loopzero.example`, linha 76) e e o **default** de `task infra:install:core-dashboard-only` (`taskfiles/infra.yml:141`). Sem os blocos, esse caminho nao tem borda.
 why_now: a remocao do `B-025` foi deliberada e esta registrada em `MEET-ASYNC-AMENDMENT-2026-08-19-remove-legacy-prod-hostnames.md`, mas o acoplamento com o ambiente nao estava no escopo daquele DoD. Registrar e o que impede que um default documentado quebre em silencio — `docs/operations/local-public-dashboard.md:216` ja rotula o ambiente como "(legacy)", e o canonico e `dev-public`.
-status: triaged
+status: shipped
 was_blocked_by: **retired 2026-09-04 by measurement, not by decision.** The wall was `B-173` -- the global `test-coverage-report` gate. Like `B-146` this item touches no Go and was still held by a tree-wide measurement. Commit 2ba21c182 retired the cause and the suite was re-run on the host on 2026-09-04: EXIT=0, 0 gates FAIL, coverage=85.59% against a 75.00% floor, `pkg-usage-matrix` PASS. `B-173` is now `killed`. The binary decision on retiring `standalone-public` was retired separately and is recorded in `decided_by` above.
 decided_by: system under sponsor delegation, recorded in commit 7565db99c and governed by `.claude/rules/decision-delegation.txt` — Retire standalone-public: repoint the default of task infra:install:core-dashboard-only (taskfiles/infra.yml:141) to dev-public and update the operations doc; add no Caddyfile blocks and delete no YAML. Rationale: docs/operations/local-public-dashboard.md:216 already lists the env as 'Helmfile env (legacy)' alongside 'Helmfile env (dev-public)' (verified on the host), and the B-025 hostname removal was deliberate and recorded in MEET-ASYNC-AMENDMENT-2026-08-19-remove-legacy-prod-hostnames.md; leaving the YAML in place while moving the default satisfies all three DoD bullets without deleting anything. Prior wall: aguardando decisão binária DoD bala 1: retire standalone-public (alinhando com rótulo legacy em docs/operations/local-public-dashboard.md:216 — canonical é dev-
 severity: baixa — o ambiente ja era legado e o canonico e outro; o custo e um default de task que aponta para um caminho que nao serve mais.
