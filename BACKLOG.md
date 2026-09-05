@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-179 items — **Open** 15 · **In flight** 4 · **Closed** 160 · **Blocked** 9
+179 items — **Open** 15 · **In flight** 2 · **Closed** 162 · **Blocked** 7
 
 ### Open (15)
 
@@ -76,8 +76,8 @@ consequência do escopo per-repo declarado acima.
 |---|---|---|---|
 | [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `blocked` · was `triaged` | waiting on `B-174` |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `blocked` · was `triaged` | waiting on a decision — baixa hoje, alta no dia em que o `loopzero-cloud` cair sozinho em produção. O `B-002` registra que o cluster central é SPOF; este item é mais estreito e mais provável: não é o cluster que cai, é **um** processo, e ele carrega uma jornada (deploy) que não é dele. |
-| [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `blocked` · was `triaged` | waiting on `B-169`, `B-170` |
-| [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `blocked` · was `triaged` | waiting on `B-169`, `B-170` — média — não quebra nada; custa navegação e força dois nomes de pacote que mentem sobre o diretório. |
+| [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `triaged` | — |
+| [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `triaged` | média — não quebra nada; custa navegação e força dois nomes de pacote que mentem sobre o diretório. |
 | [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `triaged` | média — dívida acumulada, não defeito ativo. **Deliberadamente separado do B-045**: ligar os gates e pagar a dívida são trabalhos diferentes, e ligá-los antes de ter plano transformaria 76 achados legítimos num muro que alguém desliga na sexta-feira. |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `blocked` · was `triaged` | waiting on `B-113` — média — não afirmo que `tag: dev` seja violação decidida: pode ser sobrescrita no install pelo ArgoCD, e nenhuma decisão registrada a proíbe. O que está medido é que a guarda cobre 1 de 16, e que os 15 restantes nunca foram julgados. |
 | [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `blocked` · was `triaged` | waiting on `B-134` — média — nada quebra hoje; o que fica preso são **duas** travas de imutabilidade de imagem, uma no gate e outra na admissão, ambas paradas em modo aviso pela mesma ausência de um valor. |
@@ -90,16 +90,14 @@ consequência do escopo per-repo declarado acima.
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
 
-### In flight (4)
+### In flight (2)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `approved` | média — nenhum defeito de comportamento; é a superfície por onde a mistura de domínios entra sem ninguém decidir. |
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
-| [`B-169`](#b-169--infratestsoperator_cutover_invariants-espera-arquivos-removidos-por-m5-decomposition----) | infra/tests/operator_cutover_invariants espera arquivos removidos por M5 decomposition | `planned` | blocks `B-033`, `B-057` — media - o teste esta' factualmente errado (procura arquivo que nao existe por design), o que gera ruido no gate e mascara falhas reais. |
-| [`B-170`](#b-170--toolsgen-service-auth-ed25519-reprova-go-test-com-directory-prefix-no-go-workspace----) | tools/gen-service-auth-ed25519 reprova go test com "directory prefix" no go workspace | `planned` | blocks `B-033`, `B-057` — baixa - o modulo e' uma ferramenta de geracao de chaves e provavelmente nao tem testes proprios; o setup do go.work e' que precisa de ajuste. |
 
-### Closed (160)
+### Closed (162)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -256,6 +254,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-165`](#b-165--o-ambiente-standalone-public-ficou-sem-borda-que-o-sirva----) | O ambiente `standalone-public` ficou sem borda que o sirva | `shipped` | baixa — o ambiente ja era legado e o canonico e outro; o custo e um default de task que aponta para um caminho que nao serve mais. |
 | [`B-166`](#b-166--duas-arvores-de-records-coexistem-e-uma-delas-nao-tem-nada-rastreado----) | Duas arvores de records coexistem, e uma delas nao tem nada rastreado | `shipped` | media — nada quebra hoje; o custo e que qualquer varredura, gate ou pessoa pode ler a arvore vazia e concluir ausencia onde ha evidencia. |
 | [`B-168`](#b-168--a-guarda-destrutiva-do-validate-commandsh-regrediu-teste-do-b-160-volta-a-reprovar----) | A guarda destrutiva do validate-command.sh regrediu; teste do B-160 volta a reprovar | `shipped` | alta - o hook agora bloqueia trabalho legitimo (heredocs, comandos multi-parte com grep+sed), o que reduz a confianca no gate e leva as pessoas a rodearem. |
+| [`B-169`](#b-169--infratestsoperator_cutover_invariants-espera-arquivos-removidos-por-m5-decomposition----) | infra/tests/operator_cutover_invariants espera arquivos removidos por M5 decomposition | `shipped` | media - o teste esta' factualmente errado (procura arquivo que nao existe por design), o que gera ruido no gate e mascara falhas reais. |
+| [`B-170`](#b-170--toolsgen-service-auth-ed25519-reprova-go-test-com-directory-prefix-no-go-workspace----) | tools/gen-service-auth-ed25519 reprova go test com "directory prefix" no go workspace | `shipped` | baixa - o modulo e' uma ferramenta de geracao de chaves e provavelmente nao tem testes proprios; o setup do go.work e' que precisa de ajuste. |
 | [`B-171`](#b-171--readsecret-em-settingsjson-bloqueia-arquivos-legítimos-como-secretsgo----) | `Read(**/*secret*)` em settings.json bloqueia arquivos legítimos como `secrets.go` | `shipped` | media - bloqueia dead-citation cleanup no B-058 bala 4 + qualquer edit futuro em routes/secrets/. Nao ha bypass documentado. |
 | [`B-172`](#b-172--detector-python-depende-de-vulture-no-path-mas-nada-verifica-teste-falha-em-qualquer-host-sem-o-binário----) | Detector Python depende de `vulture` no PATH mas nada verifica; teste falha em qualquer host sem o binário | `shipped` | baixa — o binário vulture geralmente está disponível em hosts de dev com Python, mas o requisito é hidden. O impacto é 1 teste flaky por env, não regressão de produção. |
 | [`B-173`](#b-173--three-go-packages-sit-below-the-coverage-floor-and-every-unrelated-slice-pays-for-it----) | Three Go packages sit below the coverage floor, and every unrelated slice pays for it | `killed` | alta — nao pelo risco do codigo descoberto, mas porque o gate transforma uma divida de tres pacotes num imposto sobre toda fatia que passa pelo portao. |
@@ -1473,7 +1473,6 @@ why_now: o agregador é a ÚNICA fonte de `cost_counters`, e o portão que lê e
   degrada para "passa" quando ela está vazia. As três métricas de custo — minutos de build,
   egresso, puxadas de registro — não têm teto no ambiente que serve o painel público.
 status: triaged
-blocked_by: B-169, B-170
 
 > **A regra que este episodio produz, e ela vale para todos os itens deste registro:**
 > *"o resto e' de outro repositorio" so' fecha um item quando NENHUMA superficie DESTE repo
@@ -2149,7 +2148,6 @@ source: discover-review
 evidence: medido em 2026-08-11. Existem `pkg/domain` (vocabulário de produto), `api/internal/domain` (camada DIP) e `api/internal/services/domain` (domínios **DNS**). A colisão forçou `package domainsvc` (`services/domain/domain_provisioner.go:4`) e `package placementsvc` — as **únicas duas** divergências entre nome de diretório e nome de pacote em toda a árvore Go. E `api/internal/domain` não é modelo de domínio: `types.go` (21 KB) declara `DomainStore`(:87), `TeamStore`(:147), `AuditStore`(:184), `SecretStore`(:205), `ProjectStore`(:335) e `TenantCRManager`(:353) — seis contextos sem relação num arquivo. As portas são anuladas na prática por **49 alias re-exports** em `routes`, e cada porta de consumidor único tem como único consumidor a própria linha de alias. **Positivo medido:** o pacote importa somente a stdlib — a disciplina de camada que falta em outros lugares é demonstrável nele.
 why_now: a duplicação da palavra em dois níveis é consequência direta do topo em forma de camada (B-041); resolver ali torna o rename aqui quase mecânico. E o `types.go` único é o que faz uma porta de secrets e uma porta de billing mudarem no mesmo arquivo.
 status: triaged
-blocked_by: B-169, B-170
 delivered_in: b31473a3c  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — não quebra nada; custa navegação e força dois nomes de pacote que mentem sobre o diretório.
 progress_2026_08_18: |
@@ -5965,7 +5963,47 @@ suggested_mode: bug
 source: human
 evidence: medido em 2026-08-31 durante /implement B-033. `cd infra/tests && go test ./unit/...` reprova em `operator_cutover_invariants_test.go:188` esperando `api/internal/routes/admin_pin_cell.go` (marca T5.5 como incomplete) e :195 esperando `cli/src/register/infra.ts` (movido para sibling repo loopzero-cli/ per M5 decomposition, documentado em CLAUDE.md § "Was here, now extracted"). O teste nao foi atualizado quando a decomposition ocorreu.
 why_now: aparece porque /implement B-033 roda run_validation.py que roda go test em cada modulo, e infra/tests reprova. Nao causa de B-033 (toca zero codigo Go). O teste precisa ou (a) skip explicito para CLI wiring (o arquivo esta em sibling repo por design), ou (b) mover a assercao para pool multi-repo.
-status: planned
+status: shipped
+
+progress_2026_09_05: |
+  **Fechado. Metade ja estava feita e nao tinha sido registrada; a outra metade era o
+  defeito de verdade.**
+
+  A assercao `:188` (`api/internal/routes/admin_pin_cell.go`) foi corrigida em `eb4ae31b1`
+  em 2026-08-31 — o arquivo tinha mudado para `routes/admin/` e o teste nunca acompanhou.
+  O item ficou `planned` porque ninguem voltou para fecha-lo. Re-medido hoje:
+  `cd infra/tests && go test ./unit/...` ja passava.
+
+  **A assercao `:195` (CLI) era o que sobrava, e a opcao tomada foi REMOVER, nao skipar.**
+  Medicao que decidiu: `cli/src/register/infra.ts` nao existe em lugar nenhum na arvore
+  guarda-chuva, e o repo irmao `loopzero-cli` **nao esta sequer clonado** ao lado deste. Logo
+  o `os.Stat` caia sempre no `os.IsNotExist`, e o `ReadFile` + `Contains` abaixo dele era
+  **codigo inalcancavel** desde o M5. Pior: o ramo chamava `t.Logf`, que nao aparece sem
+  `-v` — a suite imprimia `ok` sem anunciar que nao verificara nada.
+
+  Por que remover e nao `t.Skip` (a opcao que o proprio item propunha):
+  - um `t.Skip` permanente e um dead-Skip, e este repo ja varreu esses em `339b9edfe`;
+  - `t.Skip` no meio da funcao marcaria o teste INTEIRO como skipped, jogando fora a
+    assercao do endpoint, que essa sim e' deste repo;
+  - o contrato do endpoint ja tem guarda executavel: `control_surfaces_observable_test.go`
+    sobe o router e afirma a superficie `AdminPin`, e `admin_pin_cell_test.go` cobre o 403
+    sem `X-Service-Auth`. A costura cli<->engine tem alvo proprio
+    (`task quality:contract:cross-repo`).
+
+  **A licao do item virou codigo:** a mensagem de falha dizia "T5.5 incomplete" a partir de
+  um `stat` que falhou — concluia sobre a FEATURE a partir de um lookup perdido. Foi
+  exatamente isso que fez o item existir (o endpoint estava no lugar o tempo todo). A
+  mensagem agora diz que **a guarda** perdeu o sujeito, e manda conferir o registro em
+  `router.go` antes de concluir qualquer coisa.
+
+  **Achado colateral, medido, e maior que o item:** a suite `infra/tests/unit` inteira era
+  **cega ao cache do Go**. Ela afirma sobre arquivos FORA do seu modulo (Tiltfile, `api/**`,
+  `infra/helm/**`, `go.work`), e o cache do `go test` chaveia so nos inputs do proprio
+  modulo. Medido com `GOCACHE` isolado: aqueci a suite verde, **apaguei**
+  `api/internal/routes/admin/admin_pin_cell.go` — o arquivo que o T-10 existe para vigiar —
+  e `go test ./unit/...` respondeu `ok (cached)`. A guarda reportava sobre uma arvore que
+  nunca leu. `taskfiles/test.yml` agora passa `-count=1` (custo medido: 1.31s -> 2.31s).
+
 severity: media - o teste esta' factualmente errado (procura arquivo que nao existe por design), o que gera ruido no gate e mascara falhas reais.
 dod:
   - `cd infra/tests && go test ./unit/...` PASS
@@ -5981,7 +6019,52 @@ suggested_mode: bug
 source: human
 evidence: medido em 2026-08-31 durante /implement B-033. `cd tools/gen-service-auth-ed25519 && go test ./...` reprova com `pattern ./...: directory prefix . does not contain modules listed in go.work or their selected dependencies`. Edge case do go workspace: o modulo esta listado em go.work mas seus testes internos batem contra o pattern `./...` expandido pela linha do modulo.
 why_now: aparece porque /implement B-033 roda check_go_tests que itera cada modulo do workspace e chama `go test ./...` em cada raiz. Nao causa de B-033 (toca zero codigo Go).
-status: planned
+status: shipped
+
+progress_2026_09_05: |
+  **Fechado, e o mecanismo — nao o diretorio — foi o que se investigou.**
+
+  A causa ja tinha sido corrigida em `0f8a2e5f9` (2026-08-31): `go.work` listava 8 dos 9
+  modulos, e `./tools/gen-service-auth-ed25519` faltava. O item ficou `planned` porque
+  ninguem voltou para fecha-lo. Re-medido hoje: `cd tools/gen-service-auth-ed25519 && go
+  test ./...` **PASSA**. (De passagem: o palpite do item de que o modulo "provavelmente nao
+  tem testes proprios" estava errado — ele tem `main_test.go`.)
+
+  **Mecanismo, que e o que o item pedia.** Um `go.work` na raiz poe TODO subdiretorio em
+  workspace mode: a toolchain sobe a arvore e acha o arquivo, entao nao existe
+  "subdiretorio fora do workspace". Em workspace mode o padrao `./...` so resolve contra os
+  modulos que o `use` lista (mais dependencias selecionadas). Um diretorio com `go.mod`
+  proprio mas ausente do `use` nao e' parte do build aos olhos do workspace: o prefixo `.`
+  nao casa com modulo nenhum e a toolchain recusa com *"directory prefix . does not contain
+  modules listed in go.work"*.
+
+  **O mesmo erro na raiz do repo tem a mesma causa e NAO e' defeito.** A raiz nao tem
+  `go.mod` e nao esta no `use` — ela CONTEM modulos sem ser um. `./...` ali e' sem sentido
+  por construcao, e o runner do kit ja itera a lista do `use` em vez de rodar na raiz.
+  Nada a corrigir na raiz.
+
+  **Guarda nova, mutante confirmado:** `TestGoWorkListsEveryModuleInRepo`
+  (`infra/tests/unit/go_workspace_inventory_test.go`) afirma que todo `go.mod` do repo esta
+  no `use`. O que torna isso necessario e' que a falha e' SILENCIOSA na direcao perigosa: o
+  runner deriva a lista de modulos DO `use`, entao um modulo ausente nao aparece vermelho —
+  ele simplesmente nunca roda, e a suite reporta PASS sobre testes que nao executou.
+  Mutacao verificada: removi a linha do `go.work`, confirmei o diff, reproduzi o erro
+  original literal, e a guarda reprovou nomeando o modulo e a correcao; restaurado, verde.
+
+  **Assercao que eu NAO escrevi, e por que:** a direcao inversa (uma entrada `use` apontando
+  para modulo inexistente) e' inalcancavel — medido: a toolchain recusa carregar o workspace
+  inteiro antes de qualquer teste rodar, com mensagem melhor que a minha. Uma assercao que
+  nao pode disparar nao e' cobertura; e' o mesmo ponto cego que este arquivo existe para
+  fechar.
+
+  **Tensao registrada, nao resolvida no escondido:** dois comentarios de taskfile diziam que
+  `tools/` esta "FORA do go.work por desenho" e por isso usam `GOWORK=off`. Isso deixou de
+  ser verdade em `0f8a2e5f9`. Corrigi os dois comentarios para descrever o arquivo como ele
+  e'. `GOWORK=off` continua certo — por hermeticidade, nao por ausencia. Medido: o modulo
+  nao declara `require` nenhum, entao pertencer ao workspace nao muda resolucao de
+  dependencia. Se um dia se decidir tirar `tools/` do workspace, a guarda reprova primeiro
+  e a decisao e' tomada de proposito, em vez de reaparecer como erro misterioso.
+
 severity: baixa - o modulo e' uma ferramenta de geracao de chaves e provavelmente nao tem testes proprios; o setup do go.work e' que precisa de ajuste.
 dod:
   - `cd tools/gen-service-auth-ed25519 && go test ./...` PASS (ou skip explicito se o modulo genuinamente nao tem testes)

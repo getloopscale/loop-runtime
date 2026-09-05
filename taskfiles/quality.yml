@@ -68,10 +68,17 @@ tasks:
       # TestTaskfilesDoNotCdIntoMissingDirs. Os dois ultimos sao guardas contra
       # exatamente a familia de defeito do B-087 — e nao rodavam. Custo: ~12s.
       - cd cmd/loopzero-ops && go test ./... -count=1
-      # `tools/` esta FORA do go.work por desenho (os binarios constroem
-      # sozinhos), entao exige GOWORK=off — e era exatamente por estar fora que
-      # ninguem os alcancava: viviam so em `test:unit`, que o gate de entrega
-      # nao chama. O B-088 nomeia os dois no titulo.
+      # Os binarios de `tools/` constroem sozinhos (o modulo nao declara require
+      # nenhum), e GOWORK=off mantem a invocacao hermetica. Ninguem os alcancava:
+      # viviam so em `test:unit`, que o gate de entrega nao chama. O B-088 nomeia
+      # os dois no titulo.
+      #
+      # ATENCAO: este comentario afirmava que `tools/` esta "FORA do go.work por
+      # desenho". Isso deixou de ser verdade em 0f8a2e5f9 (B-170) —
+      # `./tools/gen-service-auth-ed25519` esta no `use` do go.work desde
+      # 2026-08-31, senao `cd tools/... && go test ./...` falha com "directory
+      # prefix . does not contain modules listed in go.work". A pertinencia ao
+      # workspace e pinada por TestGoWorkListsEveryModuleInRepo.
       #
       # Era um par; virou um. `tools/loopzero-dockerfile-lint` foi REMOVIDO em 2026-08-19
       # (B-157): ele validava Dockerfile fornecido pelo usuario, e esse caminho saiu na
