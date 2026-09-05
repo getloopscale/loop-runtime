@@ -90,8 +90,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `triaged` | alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
 | [`B-168`](#b-168--a-guarda-destrutiva-do-validate-commandsh-regrediu-teste-do-b-160-volta-a-reprovar----) | A guarda destrutiva do validate-command.sh regrediu; teste do B-160 volta a reprovar | `blocked` · was `triaged` | waiting on a decision — alta - o hook agora bloqueia trabalho legitimo (heredocs, comandos multi-parte com grep+sed), o que reduz a confianca no gate e leva as pessoas a rodearem. |
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
-| [`B-177`](#b-177--duas-saidas-de-erro-escrevem-a-linha-e-nao-movem-contador-e-o-gatilho-do-b-126-ainda-e-limite-inferior----) | Duas saidas de erro escrevem a linha e nao movem contador, e o gatilho do B-126 ainda e' limite inferior | `triaged` | baixa — menor que o `B-176` que o precedeu, e pela mesma razao: nao quebra comportamento, estreita deteccao. As duas saidas exigem que o cluster de mgmt ou a derivacao de namespace falhe, o que e' bem mais raro que "nao ha sync configurado"; mas o efeito e' identico, uma linha em `secrets` sem serie nenhuma. |
-| [`B-178`](#b-178--tres-testes-de-metricas-reprovam-em-qualquer-worktree-vinculado-porque-procuram-git-como-diretorio----) | Tres testes de metricas reprovam em qualquer worktree vinculado, porque procuram `.git` como diretorio | `triaged` | media — nao ha defeito de produto, mas o efeito e' um falso vermelho no fluxo de trabalho que passou a ser obrigatorio. Uma lane que rode a suite do proprio worktree ve tres reprovacoes que nao tem relacao com a mudanca dela, e o custo previsivel e' alguem "consertar" o que nao esta quebrado, ou aprender a ignorar vermelho. |
+| [`B-177`](#b-177--duas-saidas-de-erro-escrevem-a-linha-e-nao-movem-contador-e-o-gatilho-do-b-126-ainda-e-limite-inferior----) | Duas saidas de erro escrevem a linha e nao movem contador, e o gatilho do B-126 ainda e' limite inferior | `shipped` | baixa — menor que o `B-176` que o precedeu, e pela mesma razao: nao quebra comportamento, estreita deteccao. As duas saidas exigem que o cluster de mgmt ou a derivacao de namespace falhe, o que e' bem mais raro que "nao ha sync configurado"; mas o efeito e' identico, uma linha em `secrets` sem serie nenhuma. |
+| [`B-178`](#b-178--tres-testes-de-metricas-reprovam-em-qualquer-worktree-vinculado-porque-procuram-git-como-diretorio----) | Tres testes de metricas reprovam em qualquer worktree vinculado, porque procuram `.git` como diretorio | `shipped` | media — nao ha defeito de produto, mas o efeito e' um falso vermelho no fluxo de trabalho que passou a ser obrigatorio. Uma lane que rode a suite do proprio worktree ve tres reprovacoes que nao tem relacao com a mudanca dela, e o custo previsivel e' alguem "consertar" o que nao esta quebrado, ou aprender a ignorar vermelho. |
 
 ### In flight (4)
 
@@ -6095,7 +6095,7 @@ source: b176-close
 severity: baixa — menor que o `B-176` que o precedeu, e pela mesma razao: nao quebra comportamento, estreita deteccao. As duas saidas exigem que o cluster de mgmt ou a derivacao de namespace falhe, o que e' bem mais raro que "nao ha sync configurado"; mas o efeito e' identico, uma linha em `secrets` sem serie nenhuma.
 evidence: medido 2026-09-04 ao fechar o `B-176`. `SecretK8sManager.CreateSecret` (`api/internal/k8s/secret_k8s_manager.go:164`) so' incrementa `loopzero_secret_externalsecret_total` em `:320` (`fail`) e `:334` (`success`), ambos depois da criacao da CR ExternalSecret. Duas saidas de erro retornam antes de qualquer um dos dois: a falha de create/update do Secret no cluster de mgmt (`:192`, `return fmt.Errorf("create k8s secret on mgmt: %w", err)`) e a falha de derivacao de namespace (`:206-208`, `tenantNS, err := tenantNamespaceFor(...)` seguido de `return err`). As duas ocorrem **depois** de `store.Set` ja ter persistido a linha, entao a linha existe e `sum(loopzero_secret_externalsecret_total)` fica em zero.
 why_now: o `B-176` fechou o furo do caminho em lote e por isso pode afirmar que os dois caminhos de escrita emitem para `k8sSync == nil`. Nao fechou este, que e' de outra natureza — nao e' assimetria entre rotas, e' cobertura incompleta dentro do proprio `CreateSecret`. O `§2` do ADR de 2026-09-04 foi atualizado para dizer que o proxy segue sendo limite inferior e para citar este item; sem o item existindo, aquela citacao aponta para nada, que e' exatamente o defeito que originou o `B-176`.
-status: triaged
+status: shipped
 dod:
   - as duas saidas de erro de `CreateSecret` anteriores aos contadores ou emitem serie, ou tem razao escrita de por que nao devem
   - existe teste que falha se uma delas voltar a persistir linha sem mover contador
@@ -6104,6 +6104,40 @@ dod:
 > Registrado 2026-09-04 ao fechar o `B-175`/`B-176`. O ADR ja tinha sido escrito citando
 > `B-177` antes de o item existir — o mesmo erro que o `B-176` foi aberto para corrigir,
 > cometido de novo no ato de corrigi-lo. O item existe agora; a citacao resolve.
+
+> **Fechado 2026-09-05.** Antes de tudo, as linhas do `evidence` acima estao **obsoletas** e
+> foram re-medidas: o `B-058` moveu o arquivo de `api/internal/k8s/` para
+> `api/internal/k8s/secretsync/` e acrescentou o comentario de pacote, deslocando tudo em
+> +10 linhas. Os numeros abaixo sao os desta arvore, medidos hoje.
+>
+> 1. **Primeiro ramo do bullet 1 — as duas saidas emitem.** Ambas incrementam
+>    `loopzero_secret_externalsecret_total{result="fail"}`:
+>    `api/internal/k8s/secretsync/secret_k8s_manager.go:208` (falha de create/update do
+>    Secret no cluster de mgmt) e `:227` (falha de derivacao de namespace). As duas que ja
+>    contavam continuam onde estavam, agora em `:340` (`fail` da CR) e `:354` (`success`).
+>    O comentario de `metrics.SecretExternalSecretTotal` deixou de descrever `fail` como
+>    "runtime client returned error" — era a descricao E a implementacao — e passa a dizer
+>    a invariante: a linha ja esta persistida quando esta funcao roda, entao toda saida
+>    move exatamente uma serie.
+> 2. **`TestCreateSecret_EveryExitMovesTheCounter`**
+>    (`api/internal/k8s/secretsync/createsecret_counter_coverage_test.go`) afirma as
+>    **quatro** saidas. Provado RED antes do fix — as duas novas falhavam, as duas antigas
+>    passavam — e cada incremento novo foi provado por mutacao **isolada**: removido so' o
+>    de `:208`, falha so' o subteste `mgmt secret write fails`; removido so' o de `:227`,
+>    falha so' `namespace derivation fails`. As duas mutacoes foram conferidas como
+>    aplicadas pelo `git diff --numstat` (10 linhas adicionadas com o fix inteiro, 9 com
+>    cada mutante), nao pela mensagem de erro.
+> 3. **Bullet 3 nao se aplica** — ele abre com "se a decisao for aceitar o limite inferior",
+>    e a decisao foi a oposta. O `§2` do ADR do `B-126` registra o fechamento em vez da
+>    recusa, e os caminhos que ele repetia (`api/internal/k8s/secret_k8s_manager.go:320,334`
+>    e `secrets.go:830`/`:600`) foram re-medidos: `secretsync/secret_k8s_manager.go:340,354`
+>    e `secrets.go:839`/`:609`.
+>
+> **O que o fechamento nao afirma, dito aqui e no ADR:** as quatro saidas sao as que existem
+> hoje. A garantia e' "toda saida conta", nao "o conjunto de saidas nao cresce" — um `return`
+> novo sem incremento reabre o furo e o teste continuaria verde, porque ele enumera as saidas
+> que conhece. A invariante ficou escrita onde quem adicionar uma vai ler (o comentario da
+> metrica); nada a impoe mecanicamente.
 
 ## B-178 — Tres testes de metricas reprovam em qualquer worktree vinculado, porque procuram `.git` como diretorio   [ ]
 
@@ -6114,7 +6148,7 @@ source: b175-lane
 severity: media — nao ha defeito de produto, mas o efeito e' um falso vermelho no fluxo de trabalho que passou a ser obrigatorio. Uma lane que rode a suite do proprio worktree ve tres reprovacoes que nao tem relacao com a mudanca dela, e o custo previsivel e' alguem "consertar" o que nao esta quebrado, ou aprender a ignorar vermelho.
 evidence: medido 2026-09-04 na lane do `B-175`, rodando de `/tmp/lane-b175` (worktree vinculado criado com `git worktree add`). `TestSigstoreMetrics_AllDeclaredAreVisualized`, `TestSigstoreMetrics_DashboardRefsAreDeclared` e `TestSigstoreMetrics_AllDeclaredHaveWrapper` reprovam com `could not locate repo root from /`. A causa esta em `api/internal/metrics/sigstore_observability_mirror_test.go:63`, que exige `os.Stat(dir/".git")` **com `st.IsDir()` verdadeiro**. Num worktree vinculado o `.git` e' um ARQUIVO de 54 bytes contendo `gitdir: ...`, nao um diretorio — confirmado por `file .git` (`ASCII text`) e `os.path.isdir` = `False`. O laco entao sobe ate `/` e falha. As tres reprovacoes acontecem dentro do helper, antes de qualquer leitura do conteudo que os testes afirmam, portanto nenhuma mudanca de codigo as provoca ou as evita. O resto do pacote passa: `go test ./internal/metrics/ -skip TestSigstoreMetrics` e' `ok`.
 why_now: o fluxo de lanes passou a exigir um worktree por lane depois da colisao de 2026-09-04 em `/home/paulo/dev/loopzero`. A partir dai estes tres testes reprovam para toda lane, sempre, por uma razao que nao e' a lane. Um gate que so' reprova no ambiente novo e nunca no antigo e' a forma mais eficiente de ensinar o time a nao confiar no gate.
-status: triaged
+status: shipped
 dod:
   - o helper de raiz de repositorio aceita `.git` como arquivo (worktree vinculado) alem de diretorio, ou localiza a raiz por outro marcador que valha nos dois casos
   - os tres testes passam rodando de um worktree vinculado e continuam passando do checkout principal — as duas execucoes medidas, nao so' a segunda
@@ -6133,4 +6167,47 @@ dod:
 > fatos medidos (o `.git` do worktree e' arquivo; a condicao exige `IsDir()`), nao uma
 > comparacao observada entre os dois ambientes. Quem for fechar o item deve rodar as duas
 > formas — e' o primeiro bullet da DoD por essa razao.
+
+> **Fechado 2026-09-05.** A comparacao que faltava foi feita **antes** de qualquer mudanca,
+> que era o ponto: a causa deixou de ser deducao.
+>
+> 1. **Bullet 1, primeiro ramo — o helper aceita as duas formas.** `repoRoot` foi partido em
+>    `findRepoRoot(start string) (string, error)` puro mais um wrapper fino de `t.Fatal`
+>    (`api/internal/metrics/sigstore_observability_mirror_test.go`), e a condicao passou de
+>    `os.Stat(gitPath); err == nil && st.IsDir()` para so' `err == nil`. A metade
+>    `CHANGELOG.md` do marcador continua e agora e' ela que segura a checagem relaxada — um
+>    `.git` solto acima da arvore nao basta mais para parar o laco.
+> 2. **Bullet 2 — as duas execucoes medidas, nas duas direcoes.** Quatro rodadas, nao duas:
+>
+>    | ambiente | `.git` | antes do fix | depois do fix |
+>    |---|---|---|---|
+>    | worktree vinculado `/tmp/lane-counters` | arquivo de **58** bytes | 3 REPROVAM (`could not locate repo root from /`) | 3 PASSAM |
+>    | checkout comum `/home/paulo/dev/loopzero` | diretorio | 3 PASSAM | nao medido — a arvore principal nao pode ser modificada por uma lane |
+>    | clone comum `/tmp/b178-ordinary` | diretorio | 3 PASSAM | 3 PASSAM |
+>
+>    O `evidence` acima diz 54 bytes; nesta lane sao 58 — o conteudo e' o caminho do
+>    worktree, entao o tamanho varia com o nome. Re-medido, nao copiado. A celula vazia e'
+>    declarada em vez de preenchida: o eixo que importa e' `.git` ser diretorio, e o clone
+>    comum tem exatamente isso, mas nao e' literalmente o checkout principal.
+> 3. **Bullet 3 — a arvore foi varrida.** Dois sitios usam `IsDir()` sobre `.git`: o do item,
+>    e `RepoRootFromCwd` em
+>    `cmd/loopzero-ops/internal/quality/quarantineprotect/check.go` — codigo de gate, nao de
+>    teste, com o mesmo defeito. Acompanhou. Honestidade sobre esse segundo: ele **nao tem
+>    chamador nenhum** hoje (`grep -rn RepoRootFromCwd --include=*.go` devolve so' a
+>    declaracao), entao a correcao e' preventiva e nao esta apoiada num gate observado
+>    falhando. O que foi encontrado e **nao** mudou, com a razao: `api/internal/gitclient/
+>    runner_test.go:24` ja faz `os.Stat` sem `IsDir()`, portanto ja estava certo; os demais
+>    `.git` da arvore sao filtros de caminhada (`d.Name() == ".git"` → `fs.SkipDir`) e todos
+>    estao guardados por `d.IsDir()` antes, entao um `.git` ARQUIVO nao e' pulado como se
+>    fosse diretorio — conferido em `ldflagsymbols` e `pkgusagematrix`, que sao a forma que
+>    os outros repetem; e os outros helpers de raiz da arvore (`api/internal/events/
+>    boundary_test.go`, `infra/tests/helm/chartrender/helpers.go`) localizam a raiz por
+>    `go.work` e `Taskfile.yml`, marcadores que valem nos dois ambientes.
+>
+> **Guarda nova:** `TestFindRepoRoot_AcceptsGitAsFileAndAsDirectory`
+> (`api/internal/metrics/repo_root_test.go`) monta as duas formas de `.git` num `t.TempDir()`
+> e afirma as duas, mais o caso negativo do `CHANGELOG.md` ausente. Provado RED com o
+> refactor aplicado e o `IsDir()` ainda no lugar: falha so' o subteste do arquivo, com a
+> mesma mensagem do mundo real. A prova de regressao de verdade continua sendo a tabela
+> acima — "rode a suite de um worktree" nao cabe num teste Go.
 
