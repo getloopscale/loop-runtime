@@ -33,7 +33,19 @@ var ErrSiblingAbsent = errors.New("repositório irmão ausente")
 // O custo de excluí-lo era concreto: o gate travaria TODO push do repositório justamente
 // na janela em que alguém implementa o conserto, o que é desproporcional ao risco e é o
 // jeito conhecido de uma trava ser desligada — a mesma razão que decidiu o B-127 e o B-143.
-var openStatuses = map[string]bool{"raw": true, "triaged": true, "planned": true}
+// `approved` was added to the contract on 2026-09-04 and belongs here for the same
+// reason `planned` does, only more so: an approved item is a commitment somebody
+// with the authority made, so it is MORE owned than a hypothesis, not less. It was
+// missing until 2026-09-05, when moving B-033 to `approved` took the
+// cost-aggregator layer's guard out from under it and failed the chain at step 8.
+//
+// This map is the sixth reader of `status:` in this ecosystem and the first one in
+// Go. The kit pins the other five against each other, and all five are Python and
+// all five live in the kit — so the invariant was pinned one repository short.
+// `guard_open_statuses_test.go` closes that from this side.
+var openStatuses = map[string]bool{
+	"raw": true, "triaged": true, "approved": true, "planned": true,
+}
 
 var statusRE = regexp.MustCompile(`(?m)^status:\s*(\S+)`)
 
