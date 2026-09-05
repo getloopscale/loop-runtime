@@ -43,8 +43,11 @@ func TestFindRepoRoot_AcceptsGitAsFileAndAsDirectory(t *testing.T) {
 				t.Fatalf("mkdir .git: %v", err)
 			}
 		} else {
-			// Byte-for-byte the shape `git worktree add` writes.
-			if err := os.WriteFile(gitPath, []byte("gitdir: /home/u/repo/.git/worktrees/lane\n"), 0o644); err != nil {
+			// The shape `git worktree add` writes: a single `gitdir:` line. The path
+			// inside it is a placeholder on purpose — findRepoRoot checks that .git
+			// EXISTS and never reads it, so a real absolute path would add nothing
+			// here except a workstation-path leak, which `publish-hygiene` refuses.
+			if err := os.WriteFile(gitPath, []byte("gitdir: <repo>/.git/worktrees/lane\n"), 0o644); err != nil {
 				t.Fatalf("write .git file: %v", err)
 			}
 		}
