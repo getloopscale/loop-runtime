@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-181 items — **Open** 14 · **In flight** 5 · **Closed** 162 · **Blocked** 7
+183 items — **Open** 15 · **In flight** 5 · **Closed** 163 · **Blocked** 7
 
-### Open (14)
+### Open (15)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -87,8 +87,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `triaged` | alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
-| [`B-180`](#b-180--quatro-assercoes-de-cli-pulam-sempre-e-uma-delas-torna-um-tfatalf-inalcancavel----) | Quatro assercoes de `cli/` pulam sempre, e uma delas torna um `t.Fatalf` inalcancavel | `shipped` | media — nada quebra; o que falha e' a **deteccao**, e num pacote que a suite reporta como verde. Quatro guardas de regressao nao afirmam nada desde o M5, e uma delas contem codigo morto que um leitor razoavel toma por assercao ativa. |
-| [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — estao declarados e impressos em toda execucao do `test-skip-absent-path`; falta a decisao sobre cada um e a correcao de uma premissa que o proprio skip afirma. |
+| [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
+| [`B-183`](#b-183--o-gate-de-skip-por-caminho-ausente-para-a-grafia-nao-a-classe-um-helper-booleano-o-evade----) | O gate de skip-por-caminho-ausente para a grafia, nao a classe: um helper booleano o evade | `triaged` | media — o gate existe para impedir que a classe volte, e a classe volta com |
 
 ### In flight (5)
 
@@ -100,7 +100,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
 | [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `approved` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 
-### Closed (162)
+### Closed (163)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -266,6 +266,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-176`](#b-176--a-escrita-em-lote-de-segredos-nao-move-contador-e-um-adiamento-se-apoia-nele----) | A escrita em lote de segredos nao move contador, e um adiamento se apoia nele | `shipped` | media — nada quebra; o que falha e' a **deteccao**. O `B-126` fecha adiando a canaria com o gatilho "a primeira linha escrita na tabela `secrets`", e o unico sinal desse gatilho que dispara sem alguem olhar tem um furo exatamente por onde o evento pode passar. |
 | [`B-177`](#b-177--duas-saidas-de-erro-escrevem-a-linha-e-nao-movem-contador-e-o-gatilho-do-b-126-ainda-e-limite-inferior----) | Duas saidas de erro escrevem a linha e nao movem contador, e o gatilho do B-126 ainda e' limite inferior | `shipped` | baixa — menor que o `B-176` que o precedeu, e pela mesma razao: nao quebra comportamento, estreita deteccao. As duas saidas exigem que o cluster de mgmt ou a derivacao de namespace falhe, o que e' bem mais raro que "nao ha sync configurado"; mas o efeito e' identico, uma linha em `secrets` sem serie nenhuma. |
 | [`B-178`](#b-178--tres-testes-de-metricas-reprovam-em-qualquer-worktree-vinculado-porque-procuram-git-como-diretorio----) | Tres testes de metricas reprovam em qualquer worktree vinculado, porque procuram `.git` como diretorio | `shipped` | media — nao ha defeito de produto, mas o efeito e' um falso vermelho no fluxo de trabalho que passou a ser obrigatorio. Uma lane que rode a suite do proprio worktree ve tres reprovacoes que nao tem relacao com a mudanca dela, e o custo previsivel e' alguem "consertar" o que nao esta quebrado, ou aprender a ignorar vermelho. |
+| [`B-180`](#b-180--quatro-assercoes-de-cli-pulam-sempre-e-uma-delas-torna-um-tfatalf-inalcancavel----) | Quatro assercoes de `cli/` pulam sempre, e uma delas torna um `t.Fatalf` inalcancavel | `shipped` | media — nada quebra; o que falha e' a **deteccao**, e num pacote que a suite reporta como verde. Quatro guardas de regressao nao afirmam nada desde o M5, e uma delas contem codigo morto que um leitor razoavel toma por assercao ativa. |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -6640,6 +6641,23 @@ dod:
 > `workflow-hygiene.yml` — nenhum com os quatro jobs de operator. O pin diz isso; a
 > mensagem dos testes nao.
 >
+> **AUDITORIA INDEPENDENTE, 2026-09-05 — o que este item pode afirmar e menor do
+> que a primeira redacao dizia.** O gate para a GRAFIA INLINE da classe, nao a
+> classe. Uma auditoria injetou dentro de `infra/tests/config/` — escopo do proprio
+> gate — a mesma forma que o `B-180` removeu, com a sonda movida um nivel para
+> dentro de um helper booleano (`func xPresent() bool { os.Stat(...) }`), e **o gate
+> nao viu**. Nao e forma inventada: e literalmente a que ja vive em
+> `api/internal/contract/cli_consumer_test.go`, onde dois skips permanentes de `cli/`
+> passam despercebidos, e apontar o gate para `api/` reporta 1 guarda em 504 arquivos
+> e sai 0. Helpers de CAMINHO sao resolvidos; helpers booleanos de PRESENCA nao. Um
+> refactor de uma linha reabre a classe. Registrado no `SCOPE` do pacote e rastreado
+> como `B-183`.
+>
+> Duas correcoes menores da mesma auditoria, ja aplicadas: o doc dos pisos dizia que
+> os quatro saem com codigo 5, e o piso do pin-anchor sai 1 (a propriedade que
+> protege — nunca 0 — vale para todos); e a descricao no `quality_registry.go` estava
+> em portugues num arquivo que o git versiona, contra a regra do repositorio.
+>
 > **Oraculos verificados por mutacao, com o EFEITO conferido e nao a aplicacao:**
 > 15 mutantes no codigo do gate, cada um nomeando o teste que DEVE morrer — 15
 > mortos pelo teste nomeado, 0 sobreviventes; e 10 mutacoes da ARVORE e do PIN
@@ -6725,7 +6743,7 @@ severity: baixa — nada quebra e nada esta silencioso: as tres estao no pin do
   `test-skip-absent-path` e sao impressas em toda execucao do gate. O que falta e a
   decisao sobre cada uma, e a correcao de uma premissa que o proprio skip afirma.
 evidence: medido 2026-09-05 na worktree `/tmp/lane-b180` durante o `B-180`. Tres skips sob `infra/tests/` continuam guardados por caminho que nao existe: (1) `infra/tests/unit/build_images_split_operators_test.go::readBuildImagesYaml` por `.github/workflows/build-images.yml`, que serve TRES testes; (2) `infra/tests/unit/operator_cutover_invariants_test.go::TestT06_MultiCellWorkflowExists` por `.github/workflows/multi-cell.yml`; (3) `infra/tests/config/regression_test.go::TestBootstrapClusterScript` por `infra/scripts/bootstrap-cluster.sh`. Os dois primeiros caminhos sairam em `5b32b76f0` (2026-05-23, "remove GitHub Actions CI/CD — not used"); o terceiro em `346215cf0` (mesmo dia, "superseded by `task setup`"). **A premissa escrita nos dois primeiros nao vale mais:** eles dizem "GitHub Actions removed 2026-05-23", e o Actions voltou em `32bb066b3` — `.github/workflows/` hoje tem `build-publish.yml`, `ci.yml`, `release-artifacts.yml` e `workflow-hygiene.yml`. Nenhum carrega os quatro jobs de split-operator, entao o teste segue certo em nao achar; a RAZAO que ele imprime e que envelheceu. O `multi-cell` afirma que os invariantes de Phase 5 "now in task quality:*" — nao verificado.
-why_now: o `B-180` fechou a classe e escolheu deliberadamente nao ampliar o diff para alem das quatro que aquele item nomeia. As tres ficaram declaradas com medicao escrita em `infra/quality/test-skip-absent-path.txt`, e sair do pin e' o unico jeito de a linha morrer. Enquanto isso, tres testes de `unit/` nao afirmam nada e um deles imprime uma premissa falsa a quem for ler.
+why_now: o `B-180` fechou a GRAFIA INLINE da classe (uma auditoria independente evadiu o gate movendo a sonda para um helper booleano — `B-183`) e escolheu deliberadamente nao ampliar o diff para alem das quatro que aquele item nomeia. As tres ficaram declaradas com medicao escrita em `infra/quality/test-skip-absent-path.txt`, e sair do pin e' o unico jeito de a linha morrer. Enquanto isso, tres testes de `unit/` nao afirmam nada e um deles imprime uma premissa falsa a quem for ler.
 status: triaged
 dod:
   - cada um dos tres ou volta a afirmar algo desta arvore, ou e removido com razao escrita, e a linha correspondente sai do `infra/quality/test-skip-absent-path.txt`
@@ -6735,5 +6753,68 @@ dod:
 > Registrado 2026-09-05 pelo `B-180`, cuja re-medicao achou uma quinta ocorrencia da
 > forma que o item nomeava como quatro, e uma premissa desatualizada em outras duas.
 
+## B-183 — O gate de skip-por-caminho-ausente para a grafia, nao a classe: um helper booleano o evade   [ ]
 
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b180-nemesis-audit
+severity: media — o gate existe para impedir que a classe volte, e a classe volta com
+  um refactor de uma linha. Duas instancias vivas ja passam despercebidas hoje. Nada
+  quebra; o que falha e' a DETECCAO, que e' exatamente o defeito que o `B-180` foi
+  aberto para consertar.
+evidence: |
+  Medido 2026-09-05 por auditoria independente na worktree `/tmp/lane-b180`, com
+  binario proprio, DENTRO da arvore que o gate varre.
+
+  Injetado em `infra/tests/config/`:
+
+      const nemesisCliDir = "../../../cli/src"
+      func nemesisCliPresent() bool { info, err := os.Stat(nemesisCliDir); return err == nil && info.IsDir() }
+      func TestNemesisEvadeViaHelper(t *testing.T) {
+          if !nemesisCliPresent() { t.Skip("cli/ not present") }
+          t.Fatal("dead assertion")
+      }
+
+  `loopzero-ops quality test-skip-absent-path` NAO reprovou. E' a forma que o `B-180`
+  removeu, com a sonda um nivel abaixo: o guarda vira uma CHAMADA, e o gate so
+  reconhece a sonda quando ela e' a propria expressao do guarda.
+
+  Nao e' hipotese. `api/internal/contract/cli_consumer_test.go` usa `cliSrcPresent()`
+  para guardar dois skips permanentes de `cli/` — `TestCLIConsumer_KnownGapsAreReal` e
+  `TestCLIConsumer_ListMatchesSource`. Apontar o gate para `api/` reporta **1**
+  guarda em 504 arquivos de teste e sai 0, sem ver nenhum dos dois.
+
+  O gate JA resolve helpers de CAMINHO (`repoRoot()` e afins, `check.go:911`). O que
+  falta e' o caso booleano: um helper de zero argumentos que retorna `bool` e cujo
+  corpo faz a sonda.
+
+  SEGUNDO DEFEITO, mesma auditoria: caminho absoluto literal e' juntado a raiz do
+  repo. `os.Stat("/usr/bin/helmfile")` e' reportado como
+  `infra/tests/config/usr/bin/helmfile ... ABSENT from this tree` — um caminho que
+  nao existe como escrito e nunca poderia. A classe EXTERNAL cobre raizes fora do
+  repo, mas so as baseadas em variavel. Nenhuma instancia viva sob `infra/tests/`
+  hoje; varrer `cmd/` produz 11 violacoes dominadas por essa classe
+  (`orykratospublicurls/check_test.go:35` sozinho gera duas).
+why_now: o `B-180` entregou o gate e o `SCOPE` do pacote agora declara os dois
+  limites honestamente, entao nada esta silencioso. Mas a razao de o `B-180` existir
+  era impedir a classe de voltar, e ela volta. Enquanto isso as duas instancias de
+  `api/` seguem sem guarda que as veja.
+status: triaged
+dod:
+  - o gate reconhece um guarda cuja sonda esta dentro de um helper booleano de zero
+    argumentos no mesmo pacote, e o oraculo e' a forma exata do `evidence` acima:
+    injeta-la em `infra/tests/config/` faz o gate sair 1 nomeando arquivo, funcao e
+    caminho — medido, nao argumentado
+  - apontar o gate para `api/internal/contract/` reporta os dois skips guardados por
+    `cliSrcPresent()`, e a decisao sobre cada um (remover, rastrear no pin, ou
+    declarar coberto) esta escrita com a medicao que a sustenta
+  - um caminho absoluto literal nao e' mais reportado sob uma raiz que nao existe:
+    ou vira EXTERNAL com a razao escrita, ou e' nomeado como absoluto — o que NAO
+    pode e' o gate imprimir um caminho que ele mesmo fabricou
+  - o `SCOPE` do pacote perde os dois limites que este item fechar, e mantem os que
+    continuarem valendo; um `SCOPE` que descreve limite ja resolvido mente na outra
+    direcao
+  - mutacao com efeito conferido: para cada capacidade nova, um mutante que a desliga
+    e o teste nomeado que morre por causa dele
 

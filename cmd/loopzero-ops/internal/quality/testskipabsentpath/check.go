@@ -49,8 +49,13 @@
 //     unmatched and the gate goes red naming them. A declaration nobody
 //     re-finds is the detector's own obituary.
 //
-// All four are reported as a BROKEN SETUP with a distinct exit code, never as
-// a pass.
+// None of the four is ever reported as a pass, which is the property that
+// protects. They do not share an exit code, and the difference is deliberate:
+// the first three are SETUP BROKEN (exit 5) because the gate could not run; the
+// pin re-find is a FAIL (exit 1) because the gate ran and found a declaration
+// that protects nothing. An earlier draft of this comment called all four a
+// BROKEN SETUP, which sent a reader auditing the floors by exit code looking for
+// a fifth 5 that is not there.
 //
 // SCOPE, stated so it is not mistaken for more.
 //
@@ -59,10 +64,35 @@
 //     is at least honest about being unconditional, its damage (dead
 //     assertions below it) is a different defect, and classifying WHY a bare
 //     skip exists means reading its prose.
+//
 //   - A guard on a path rooted in an environment variable is reported EXTERNAL
 //     and not judged. This is a declared limit, not an oversight: such a path
 //     is not a claim about this repository, and a gate that guessed about
 //     $HOME would fail on one machine and pass on the next.
+//
+//   - THE BIGGEST LIMIT, and the one that bounds what this gate may be said to
+//     prove: the guard must be the filesystem probe ITSELF. A probe moved one
+//     level into a boolean helper --
+//
+//     func cliSrcPresent() bool { _, err := os.Stat(cliSrcDir); return err == nil }
+//     if !cliSrcPresent() { t.Skip("cli/ not present") }
+//
+//     -- is not recognised, because the guard expression is a call and not a
+//     probe. Path helpers ARE resolved (repoRoot() and friends, below); boolean
+//     presence helpers are not. This is not hypothetical: it is the shape at
+//     api/internal/contract/cli_consumer_test.go, where two permanent cli/ skips
+//     sit unflagged, and a one-line refactor of any test in scope reopens the
+//     class here. So what this gate stops is the INLINE SPELLING of the class,
+//     not the class. Demonstrated by an independent audit on 2026-09-05 by
+//     injecting exactly that shape into infra/tests/config/; the gate passed it.
+//     Closing it is B-183.
+//
+//   - An ABSOLUTE literal path is joined onto the repo root and reported under a
+//     path that cannot exist: os.Stat("/usr/bin/helmfile") is named as
+//     "infra/tests/config/usr/bin/helmfile ... ABSENT from this tree". EXTERNAL
+//     exists for out-of-repo roots but recognises only variable-based ones. No
+//     instance is live under infra/tests/ today; scanning cmd/ produces 11
+//     violations dominated by this class. Also B-183.
 package testskipabsentpath
 
 import (
