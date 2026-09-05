@@ -9,6 +9,33 @@
 #   - ConfigMap loopzero-system/loopzero-cosign-config: mode + cutover_deadline keys
 #   - Current date (UTC)
 #
+# THAT CONFIGMAP DOES NOT EXIST, AND THIS GUARD HAS THEREFORE NEVER EVALUATED.
+# Measured 2026-08-18, re-measured 2026-08-19 and 2026-09-04 against `loopzero-core`:
+# `kubectl -n loopzero-system get cm loopzero-cosign-config` -> NotFound. Nothing in this
+# repository creates it — `grep -rn 'name: loopzero-cosign-config' --include='*.yaml'`
+# returns nothing, and no script applies or patches it. Four places READ the name
+# (this script, infra/scripts/local/baseline-capture.sh:126, and the alert
+# remediation text in both copies of sigstore-alerts.yaml:105); none writes it.
+#
+# It is absent rather than pending, and the reason is that creating it is not an
+# edit. The block condition below — deadline passed AND still keyed — is TRUE as
+# of 2026-08-10:
+#   * ADR-2026-05-12 + 90d = 2026-08-10, the same date this script carries as its
+#     dry-run stub at line ~93;
+#   * the live loopzero-core deployment sets no LOOPZERO_COSIGN_KEYLESS, and config.go:109
+#     documents the `false` default as keyed.
+# So the first `kubectl apply` that creates this ConfigMap makes this guard start
+# blocking immediately. That is correct behaviour for an expired deadline and it
+# is a production-affecting change, which makes it the cutover owner's call:
+# either do the keyed->keyless cutover and provision with mode: keyless, or amend
+# the deadline in ADR-2026-05-12 with a new date and a reason and provision with
+# that. Tracked as issue #348. Do not provision it as a side effect of unrelated
+# work — the point of writing this here is that the absence is a held decision,
+# not an oversight someone should quietly fix.
+#
+# Registered by B-146, whose DoD offers exactly this alternative: provision it
+# declaratively, or write down why it is not provisioned.
+#
 # Exit codes:
 #   0 = OK (within window OR keyless mode active)
 #   1 = BLOCK (past deadline AND still in keyed mode)

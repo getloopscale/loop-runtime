@@ -68,11 +68,11 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-176 items — **Open** 21 · **In flight** 2 · **Closed** 152 · **Blocked** 11
+176 items — **Open** 20 · **In flight** 2 · **Closed** 153 · **Blocked** 11
 
 > **1 item(s) carry a status this index does not know**: B-079. They are counted in the total and listed nowhere else — a status outside the declared set means the contract moved and this table did not follow it.
 
-### Open (21)
+### Open (20)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -87,8 +87,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `triaged` | média — o código resultante está **correto** e é 1:1; o que ficou errado foi a documentação dele, e o modo como errou é o registro mais nítido do risco que o `B-001` nomeia. |
 | [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `blocked` · was `triaged` | waiting on `B-137` — média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número. |
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `blocked` · was `triaged` | waiting on `B-139` — média — nada quebra hoje, e é justamente isso que o mantém: o caminho resolve porque a conta existe. Vira **alta** no dia em que outra pessoa operar o host, ou em que a conta for removida. |
-| [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `triaged` | blocks `B-147`, `B-147` — média — não quebra ambiente, mas é uma guarda de supply-chain que reporta sobre nada. |
-| [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `blocked` · was `triaged` | waiting on `B-146`, `B-146`, `B-147` — média — nenhum serve tráfego, mas dois são guardas (prazo de assinatura, cobertura) e |
+| [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `blocked` · was `triaged` | waiting on `B-147` — média — nenhum serve tráfego, mas dois são guardas (prazo de assinatura, cobertura) e |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `blocked` · was `triaged` | waiting on `B-154` |
 | [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta — e' criptografia de segredo de tenant, e o gate ja' saiu do periodo de aviso: ele REPROVA a arvore hoje |
 | [`B-165`](#b-165--o-ambiente-standalone-public-ficou-sem-borda-que-o-sirva----) | O ambiente `standalone-public` ficou sem borda que o sirva | `triaged` | baixa — o ambiente ja era legado e o canonico e outro; o custo e um default de task que aponta para um caminho que nao serve mais. |
@@ -105,7 +104,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-169`](#b-169--infratestsoperator_cutover_invariants-espera-arquivos-removidos-por-m5-decomposition----) | infra/tests/operator_cutover_invariants espera arquivos removidos por M5 decomposition | `planned` | blocks `B-033`, `B-057` — media - o teste esta' factualmente errado (procura arquivo que nao existe por design), o que gera ruido no gate e mascara falhas reais. |
 | [`B-170`](#b-170--toolsgen-service-auth-ed25519-reprova-go-test-com-directory-prefix-no-go-workspace----) | tools/gen-service-auth-ed25519 reprova go test com "directory prefix" no go workspace | `planned` | blocks `B-033`, `B-057` — baixa - o modulo e' uma ferramenta de geracao de chaves e provavelmente nao tem testes proprios; o setup do go.work e' que precisa de ajuste. |
 
-### Closed (152)
+### Closed (153)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -242,6 +241,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-143`](#b-143--o-gate-de-segredos-deu-vereditos-diferentes-para-a-mesma-entrada-e-deixou-passar-cinco-meses---x) | O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses | `shipped` | alta — é um gate de **segurança** cujo resultado depende de rede e de cache. Ele falhou para o lado inseguro por cinco meses, e o modo de falha é silencioso: um `PASS` não distingue *"não há segredo"* de *"não consegui verificar"*. |
 | [`B-144`](#b-144--o-contrato-manda-o-backlog-viver-no-umbrella-e-nenhum-projeto-faz-isso---x) | O contrato manda o backlog viver no umbrella, e nenhum projeto faz isso | `shipped` | — |
 | [`B-145`](#b-145--dez-itens-moram-no-backlog-do-projeto-errado---x) | Dez itens moram no backlog do projeto errado | `shipped` | — |
+| [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `shipped` | média — não quebra ambiente, mas é uma guarda de supply-chain que reporta sobre nada. |
 | [`B-148`](#b-148--155-arquivos-go-não-passam-pelo-gofmt-e-nenhum-gate-percebe---x) | 155 arquivos Go não passam pelo `gofmt`, e nenhum gate percebe | `shipped` | baixa — não muda comportamento. O custo é de atrito: diffs poluídos por |
 | [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados---x) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `shipped` | baixa — nada quebrado. O custo é que a ferramenta de qualidade é a menos verificada |
 | [`B-150`](#b-150--o-webhook-apontava-para-um-hostname-que-o-repositório-removeu-de-propósito---x) | O webhook apontava para um hostname que o repositório removeu de propósito | `shipped` | — |
@@ -4901,7 +4901,7 @@ why_now: apareceu ao medir a bala 3 do `B-019` — *"o que se perdeu no interval
   checar um prazo por causa da imagem quebrada; **ele nunca teve entrada para checar**. O
   ADR-2026-05-12 declara um corte keyed→keyless com prazo duro, e a verificação que o protege
   depende de um objeto que ninguém provisionou.
-status: triaged
+status: shipped
 was_blocked_by: **retired 2026-09-04 by measurement, not by decision.** The wall was `B-173` -- the global `test-coverage-report` gate. This item edits Markdown and YAML only, zero Go, zero overlap with the three packages that were failing, and still could not close, because the gate measures the whole tree. Commit 2ba21c182 retired the cause and the suite was re-run on the host on 2026-09-04: EXIT=0, 0 gates FAIL, coverage=85.59% against a 75.00% floor, `pkg-usage-matrix` PASS. `B-173` is now `killed`. The cosign deadline decision this item also waited on was retired separately and is recorded in `decided_by` above.
 decided_by: system under sponsor delegation, recorded in commit 7565db99c and governed by `.claude/rules/decision-delegation.txt` — Do NOT provision loopzero-cosign-config; amend the ADR-2026-05-12 deadline to a new cutover of 2026-12-03 (90 days from this decision, the same T0+90d window the original ADR chose, restarted rather than reinterpreted) and write into check-cosign-cutover-deadline.sh why the ConfigMap does not exist, so the missing input fails loudly. Rationale: The 2026-08-19 measurement establishes all three block conditions true at once — deadline expired 2026-08-10 (check-cosign-cutover-deadline.sh:93), cosign runs keyed, ConfigMap NotFound — so provisioning makes the gate exit 1 = BLOCK immediately. DoD bullet 2 accepts 'or it is written why it does not exist'. PRODUCTION-AFFECTING alternatives — provisioning the ConfigMap, or the keyless cut — are explicitly NOT taken by this decision. Prior wall: aguardando decisão operacional: prazo ADR-2026-05-12 venceu há 21 dias (2026-08-10 + 90d). Bala 1 CLOSED 2026-08-19 (medição: keyed + prazo vencido + ConfigMap 
 severity: média — não quebra ambiente, mas é uma guarda de supply-chain que reporta sobre nada.
