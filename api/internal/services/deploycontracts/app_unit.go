@@ -32,7 +32,8 @@
 // build/activation_build.go and release/rollback_target.go. delivery.go no
 // longer imports persistence at all.
 //
-// What did NOT shrink is the call-site count: those 11 lines still exist, they
+// What did NOT shrink is the line count: 9 of those 11 still exist (this commit
+// deleted two doc-comment lines here), and they
 // just name a contract type now. The 63 was always the cost of removal, not a
 // backlog that removal burns down — reading a smaller number here as progress
 // would be the same mistake this comment was written to prevent.

@@ -13,8 +13,10 @@ import (
 //
 // This adapter is where the sink stopped importing persistence (B-079): the
 // build context knows db.Build, deploycontracts does not, and the translation
-// happens once here instead of leaking the row to all 35 packages that depend
-// on the sink. A nil row yields the zero value rather than panicking — the
+// happens once here instead of leaking the row to the 38 production files, in
+// 11 packages, that depend on the sink. (35-in-10 was the figure carried in
+// this tree since 2026-08-12; re-measured 2026-09-04. It was also written
+// here as "35 packages", which mixed the two units.) A nil row yields the zero value rather than panicking — the
 // reconcile loop must fail a build, not crash on one.
 func activationBuildFrom(b *db.Build) deploycontracts.ActivationBuild {
 	if b == nil {

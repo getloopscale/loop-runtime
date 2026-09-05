@@ -2849,17 +2849,30 @@ dod:
 > o numero retratado.
 >
 > **O que mudou.** `delivery.go` nao importa mais persistencia. `Activate` recebe
-> `deploycontracts.ActivationBuild` (7 dos 17 campos da linha de build) e
-> `RollbackDeliveryRequest.TargetRelease` e' `*deploycontracts.RollbackTarget` (2 dos 17 da
+> `deploycontracts.ActivationBuild` (7 dos 16 campos da linha de build) e
+> `RollbackDeliveryRequest.TargetRelease` e' `*deploycontracts.RollbackTarget` (2 dos 18 da
 > linha de release). A traducao acontece uma vez, em `services/build/activation_build.go` e
 > `services/release/rollback_target.go`, cada um com teste que fixa campo a campo — a
 > assinatura o compilador cobre, um campo esquecido no zero value ele nao cobre, e esse era
 > o unico risco real da fatia. `WithLock` NAO foi tocado.
 >
-> **O que NAO mudou, e vale escrever para nao ser lido como progresso:** as 63 chamadas
-> continuam 63. Recontadas depois da mudanca, as quatro dao os mesmos numeros — as 11 linhas
-> de `TargetRelease` e `Activate(ctx` agora nomeiam um tipo de contrato em vez de um de
-> persistencia. O 63 sempre foi o CUSTO da remocao, nunca um saldo que a remocao abate.
+> **O que NAO mudou, e vale escrever para nao ser lido como progresso:** as 63 linhas
+> continuam 63. O 63 sempre foi o CUSTO da remocao, nunca um saldo que a remocao abate.
+>
+> **Correcao, mesmo dia, por auditoria:** o paragrafo acima dizia que o detalhamento foi
+> recontado e deu os mesmos quatro numeros. Nao foi — foi carregado para frente, dentro do
+> proprio achado que acusa tres outros lugares de carregar numeros sem remedir. Medido na
+> branch por dois metodos independentes: `WithLock` **34**, `db.BuildAppSpec` **20**,
+> `TargetRelease` **5**, `Activate(ctx` **4**. O total sobrevive porque os deltas se anulam:
+> `BuildAppSpec` subiu 2 e os outros dois cairam 1 cada, tudo em `app_unit.go` e tudo
+> comentario. E das 11 linhas, **9** continuam — duas linhas de doc-comment foram deletadas
+> neste mesmo commit, entao "todas continuam la" era falso.
+>
+> **O que a metrica conta.** Nao sao call sites. E um grep de string sobre `.go` fora de
+> `_test.go`, e entre os 18 hits de `db.BuildAppSpec` no HEAD ha cinco comentarios e um
+> `var _ = db.BuildAppSpec{}` — placeholder de import, nao chamada. Cite como **63 linhas
+> fora de `_test.go`**, nunca como "63 call sites de producao". O aviso central nao muda: a
+> remocao nao puxou o numero para baixo. Muda o que o numero autoriza a dizer.
 >
 > **Numeros que estavam errados no registro, corrigidos por medicao:**
 >
