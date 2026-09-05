@@ -260,11 +260,25 @@ func runVaultPromAlerts(args []string) int {
 // file, or a tracked absence naming the work item.
 //
 // It prints THREE verdicts, never fewer:
+//
 //   - PASS      the producer contract holds AND the declaration was compared
 //     against loopzero-cloud's promQueries map.
+//
 //   - PARTIAL   the producer contract holds; loopzero-cloud is not on disk, so the
 //     drift comparison did NOT run. Never printed as PASS: the gate
 //     does not report a result it did not observe (B-169).
+//
+//     PARTIAL EXITS 0. The word is for whoever reads the log; the
+//     chain does not stop, and inside 140 gates that makes it
+//     operationally indistinguishable from a pass. The drift half is
+//     therefore opt-in by environment and its absence is free — and
+//     the default sibling path is the ABSENT case on any checkout
+//     that does not sit beside loopzero-cloud, which is most of them.
+//     Making PARTIAL exit non-zero would fail the chain on all of
+//     those, so it is a decision with a cost rather than an
+//     oversight; what is fixed here is the comment claiming more
+//     than the exit code delivers.
+//
 //   - FAIL      a series is queried and undeclared, a declared producer does not
 //     emit what it claims, or a tracked absence has quietly closed.
 //
