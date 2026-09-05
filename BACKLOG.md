@@ -6604,4 +6604,45 @@ dod:
 > Registrado 2026-09-05 pelo ciclo live-test do `B-033`, que mediu a corrente inteira em vez
 > de aceitar o elo que o item nomeava. O `B-033` continua dono da bala 1; este item é o que
 > a destrava, e sem ele aquele item não fecha nem com o deploy feito.
+>
+> **2026-09-05 — bala 2 FECHADA; balas 1 e 3 seguem abertas.**
+>
+> A verificação existe: `loopzero-ops quality cost-series-producers`, registrada em
+> `cmd/loopzero-ops/quality_registry.go`, wired na tarefa `gates` de `taskfiles/quality.yml` e
+> congelada em `cmd/loopzero-ops/testdata/gateset.frozen` (144 gates, era 143). O pin fica em
+> `api/internal/contract/testdata/cost-aggregator-series.txt`, ao lado do
+> `cli-consumed-paths.txt` — mesma ideia, outro vizinho: o que outro repositório consome
+> deste. Para cada série que o agregador consulta o gate responde UMA de três coisas, e diz
+> qual: produtor verificado (ele ABRE o arquivo declarado e confere o `Name:`, então a coluna
+> não decai para prosa), ausência RASTREADA sob um item, ou série consultada sem declaração —
+> esta reprova.
+>
+> **A armadilha do B-169 não foi reconstruída.** O gate é partido em duas metades. A metade
+> hermética (pin ⇄ produtores deste repo) roda sempre, sem irmão nenhum em disco. A metade de
+> drift (pin ⇄ `promQueries` do loopzero-cloud) precisa do irmão; quando ele não está lá o
+> veredito é `PARTIAL` e o gate NOMEIA o que não comparou, em vez de `t.Skip` silencioso. E o
+> ramo de drift não é código morto na ausência do irmão: `Check` recebe `SiblingRoot` como
+> dado, então os testes exercitam presente-e-igual, presente-e-divergente, presente-mas-arquivo
+> -mudou e ausente contra árvores sintéticas em toda execução.
+>
+> Medições de 2026-09-05, na worktree `/tmp/lane-b181`:
+> - com `--loopzero-cloud /home/paulo/dev/loopzero-cloud`: `PASS — 3 series queried by loopzero-cloud, all
+>   declared (1 producer(s) verified, 2 tracked absence(s))`, exit 0;
+> - sem o irmão (default `../loopzero-cloud`, que na worktree é `/tmp/loopzero-cloud`): `PARTIAL` +
+>   `DRIFT NOT CHECKED — loopzero-cloud is not on disk at /tmp/loopzero-cloud…`, exit 0;
+> - as duas ausências rastreadas são impressas nas DUAS execuções — é isso que troca silêncio
+>   por ausência rastreada, sem deixar o gate vermelho para sempre.
+>
+> Oráculos verificados por mutação: 10 mutantes no código do gate, todos mortos pelo teste que
+> os nomeia; e 6 mutações do PIN contra a árvore real + o loopzero-cloud real, todas pegas —
+> incluindo a que a bala pede (apagar `loopzero_docr_pulls_total` do pin ⇒ exit 1 nomeando a
+> série) e a inversa (declarar ABSENT algo que este repo emite ⇒ exit 1 pedindo que a linha
+> vire PRODUCER, para o registro não sobreviver ao buraco).
+>
+> **Bala 1** é um OU cujo segundo ramo é uma DECISÃO de produto — essas duas métricas de custo
+> saem ou não saem do produto — que não é do agente. O primeiro ramo é escrever dois
+> produtores (egresso e puxadas de registro) e instrumentá-los, trabalho de produto e não de
+> gate. **Bala 3** precisa do cluster E da bala 1: enquanto ninguém emitir, o agregador segue
+> consultando o vazio e `cost_counters` não recebe linha. O gate não fecha nenhuma das duas;
+> ele garante que a próxima divergência não nasça calada.
 

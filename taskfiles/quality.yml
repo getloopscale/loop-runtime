@@ -218,6 +218,14 @@ tasks:
       - /tmp/loopzero-ops quality no-migrate-force
       - /tmp/loopzero-ops quality no-shell-wrap
       - /tmp/loopzero-ops quality orphan-alerts
+      # B-181: o agregador de custo do loopzero-cloud consulta tres series `loopzero_*` e duas
+      # nao tem produtor em repositorio nenhum — medido ao vivo em 2026-09-05, vetor
+      # vazio nas tres. O desencontro era silencioso dos dois lados. O gate le o pin em
+      # api/internal/contract/testdata/cost-aggregator-series.txt e responde por serie:
+      # produtor verificado, ausencia RASTREADA (impressa, nao vermelha), ou nova serie
+      # sem declaracao (vermelho). Sem o loopzero-cloud em disco ele diz PARTIAL e nomeia o
+      # que nao comparou — nunca PASS sobre o que nao observou (B-169).
+      - /tmp/loopzero-ops quality cost-series-producers
       - /tmp/loopzero-ops quality test-deletion
       - /tmp/loopzero-ops quality test-pyramid
       - /tmp/loopzero-ops quality test-targets
