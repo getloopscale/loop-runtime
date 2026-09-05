@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-178 items — **Open** 18 · **In flight** 4 · **Closed** 156 · **Blocked** 10
+179 items — **Open** 16 · **In flight** 4 · **Closed** 159 · **Blocked** 10
 
-### Open (18)
+### Open (16)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -84,14 +84,12 @@ consequência do escopo per-repo declarado acima.
 | [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `triaged` | média — o código resultante está **correto** e é 1:1; o que ficou errado foi a documentação dele, e o modo como errou é o registro mais nítido do risco que o `B-001` nomeia. |
 | [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `blocked` · was `triaged` | waiting on `B-137` — média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número. |
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `blocked` · was `triaged` | waiting on `B-139` — média — nada quebra hoje, e é justamente isso que o mantém: o caminho resolve porque a conta existe. Vira **alta** no dia em que outra pessoa operar o host, ou em que a conta for removida. |
-| [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `triaged` | média — nenhum serve tráfego, mas dois são guardas (prazo de assinatura, cobertura) e |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `blocked` · was `triaged` | waiting on `B-154` |
 | [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta — e' criptografia de segredo de tenant, e o gate ja' saiu do periodo de aviso: ele REPROVA a arvore hoje |
 | [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `triaged` | alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
 | [`B-168`](#b-168--a-guarda-destrutiva-do-validate-commandsh-regrediu-teste-do-b-160-volta-a-reprovar----) | A guarda destrutiva do validate-command.sh regrediu; teste do B-160 volta a reprovar | `blocked` · was `triaged` | waiting on a decision — alta - o hook agora bloqueia trabalho legitimo (heredocs, comandos multi-parte com grep+sed), o que reduz a confianca no gate e leva as pessoas a rodearem. |
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
-| [`B-177`](#b-177--duas-saidas-de-erro-escrevem-a-linha-e-nao-movem-contador-e-o-gatilho-do-b-126-ainda-e-limite-inferior----) | Duas saidas de erro escrevem a linha e nao movem contador, e o gatilho do B-126 ainda e' limite inferior | `shipped` | baixa — menor que o `B-176` que o precedeu, e pela mesma razao: nao quebra comportamento, estreita deteccao. As duas saidas exigem que o cluster de mgmt ou a derivacao de namespace falhe, o que e' bem mais raro que "nao ha sync configurado"; mas o efeito e' identico, uma linha em `secrets` sem serie nenhuma. |
-| [`B-178`](#b-178--tres-testes-de-metricas-reprovam-em-qualquer-worktree-vinculado-porque-procuram-git-como-diretorio----) | Tres testes de metricas reprovam em qualquer worktree vinculado, porque procuram `.git` como diretorio | `shipped` | media — nao ha defeito de produto, mas o efeito e' um falso vermelho no fluxo de trabalho que passou a ser obrigatorio. Uma lane que rode a suite do proprio worktree ve tres reprovacoes que nao tem relacao com a mudanca dela, e o custo previsivel e' alguem "consertar" o que nao esta quebrado, ou aprender a ignorar vermelho. |
+| [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
 
 ### In flight (4)
 
@@ -102,7 +100,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-169`](#b-169--infratestsoperator_cutover_invariants-espera-arquivos-removidos-por-m5-decomposition----) | infra/tests/operator_cutover_invariants espera arquivos removidos por M5 decomposition | `planned` | blocks `B-033`, `B-057` — media - o teste esta' factualmente errado (procura arquivo que nao existe por design), o que gera ruido no gate e mascara falhas reais. |
 | [`B-170`](#b-170--toolsgen-service-auth-ed25519-reprova-go-test-com-directory-prefix-no-go-workspace----) | tools/gen-service-auth-ed25519 reprova go test com "directory prefix" no go workspace | `planned` | blocks `B-033`, `B-057` — baixa - o modulo e' uma ferramenta de geracao de chaves e provavelmente nao tem testes proprios; o setup do go.work e' que precisa de ajuste. |
 
-### Closed (156)
+### Closed (159)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -240,6 +238,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-144`](#b-144--o-contrato-manda-o-backlog-viver-no-umbrella-e-nenhum-projeto-faz-isso---x) | O contrato manda o backlog viver no umbrella, e nenhum projeto faz isso | `shipped` | — |
 | [`B-145`](#b-145--dez-itens-moram-no-backlog-do-projeto-errado---x) | Dez itens moram no backlog do projeto errado | `shipped` | — |
 | [`B-146`](#b-146--o-prazo-do-cosign-é-verificado-contra-um-configmap-que-nunca-existiu----) | O prazo do cosign é verificado contra um ConfigMap que nunca existiu | `shipped` | média — não quebra ambiente, mas é uma guarda de supply-chain que reporta sobre nada. |
+| [`B-147`](#b-147--quatro-trabalhos-periódicos-perderam-o-agendador-e-precisam-de-um----) | Quatro trabalhos periódicos perderam o agendador e precisam de um | `shipped` | média — nenhum serve tráfego, mas dois são guardas (prazo de assinatura, cobertura) e |
 | [`B-148`](#b-148--155-arquivos-go-não-passam-pelo-gofmt-e-nenhum-gate-percebe---x) | 155 arquivos Go não passam pelo `gofmt`, e nenhum gate percebe | `shipped` | baixa — não muda comportamento. O custo é de atrito: diffs poluídos por |
 | [`B-149`](#b-149--318-achados-de-lint-e-155-arquivos-fora-de-formato-estão-congelados-não-consertados---x) | 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados | `shipped` | baixa — nada quebrado. O custo é que a ferramenta de qualidade é a menos verificada |
 | [`B-150`](#b-150--o-webhook-apontava-para-um-hostname-que-o-repositório-removeu-de-propósito---x) | O webhook apontava para um hostname que o repositório removeu de propósito | `shipped` | — |
@@ -262,6 +261,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-173`](#b-173--three-go-packages-sit-below-the-coverage-floor-and-every-unrelated-slice-pays-for-it----) | Three Go packages sit below the coverage floor, and every unrelated slice pays for it | `killed` | alta — nao pelo risco do codigo descoberto, mas porque o gate transforma uma divida de tres pacotes num imposto sobre toda fatia que passa pelo portao. |
 | [`B-175`](#b-175--o-caminho-que-o-external-secrets-operator-usa-decifra-sem-contar-nada----) | O caminho que o External Secrets Operator usa decifra sem contar nada | `shipped` | alta — nao pelo risco de dado, mas porque a metrica cria a aparencia de cobertura no caminho errado. Um operador que veja o contador em zero conclui que nada quebrou, e o caminho que serve os usuarios nao esta sendo contado. |
 | [`B-176`](#b-176--a-escrita-em-lote-de-segredos-nao-move-contador-e-um-adiamento-se-apoia-nele----) | A escrita em lote de segredos nao move contador, e um adiamento se apoia nele | `shipped` | media — nada quebra; o que falha e' a **deteccao**. O `B-126` fecha adiando a canaria com o gatilho "a primeira linha escrita na tabela `secrets`", e o unico sinal desse gatilho que dispara sem alguem olhar tem um furo exatamente por onde o evento pode passar. |
+| [`B-177`](#b-177--duas-saidas-de-erro-escrevem-a-linha-e-nao-movem-contador-e-o-gatilho-do-b-126-ainda-e-limite-inferior----) | Duas saidas de erro escrevem a linha e nao movem contador, e o gatilho do B-126 ainda e' limite inferior | `shipped` | baixa — menor que o `B-176` que o precedeu, e pela mesma razao: nao quebra comportamento, estreita deteccao. As duas saidas exigem que o cluster de mgmt ou a derivacao de namespace falhe, o que e' bem mais raro que "nao ha sync configurado"; mas o efeito e' identico, uma linha em `secrets` sem serie nenhuma. |
+| [`B-178`](#b-178--tres-testes-de-metricas-reprovam-em-qualquer-worktree-vinculado-porque-procuram-git-como-diretorio----) | Tres testes de metricas reprovam em qualquer worktree vinculado, porque procuram `.git` como diretorio | `shipped` | media — nao ha defeito de produto, mas o efeito e' um falso vermelho no fluxo de trabalho que passou a ser obrigatorio. Uma lane que rode a suite do proprio worktree ve tres reprovacoes que nao tem relacao com a mudanca dela, e o custo previsivel e' alguem "consertar" o que nao esta quebrado, ou aprender a ignorar vermelho. |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -5045,7 +5046,7 @@ why_now: os quatro **já não rodavam** — a imagem não existe em registro nen
   O `cosignDeadline` é o mais sensível: ele guarda o corte keyed→keyless do ADR-2026-05-12 — e
   o `B-146` mediu que o ConfigMap que ele lê nunca existiu, então ele estaria vazio de qualquer
   forma.
-status: triaged
+status: shipped
 severity: média — nenhum serve tráfego, mas dois são guardas (prazo de assinatura, cobertura) e
   hoje ninguém os executa em lugar nenhum.
 dod:
@@ -5119,6 +5120,17 @@ dod:
 >   não fica válida por este caminho; o braço fechado não destrava o reagendamento, e
 >   quem ler a bala esperando o contrário se engana.
 
+> **Nota de 2026-09-05, sobre a propria transicao.** Este item foi movido para
+> `shipped` sem que a DoD fosse lida primeiro. A bala 1 pergunta onde cada um dos
+> **quatro** roda, e o documento que esta fatia escreveu declara `coverageReport`
+> como `none — open`. A bala 2 existe para trabalhos que terminam sem executor, o
+> que torna `shipped` defensavel; a bala 1 diz "cada um dos quatro", o que o torna
+> discutivel. As duas leituras se sustentam. O que nao se sustenta e' ter mexido no
+> status antes de ler qualquer uma delas.
+>
+> `shipped` e' terminal e nao foi revertido a mao — o mecanismo existe para impedir
+> exatamente isso. O recorte virou o `B-179`, para que a decisao pendente esteja num
+> item aberto em vez de numa bala pendurada num item fechado.
 
 ## B-148 — 155 arquivos Go não passam pelo `gofmt`, e nenhum gate percebe   [x]
 
@@ -6258,4 +6270,23 @@ dod:
 > refactor aplicado e o `IsDir()` ainda no lugar: falha so' o subteste do arquivo, com a
 > mesma mensagem do mundo real. A prova de regressao de verdade continua sendo a tabela
 > acima — "rode a suite de um worktree" nao cabe num teste Go.
+
+## B-179 — `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas   [ ]
+
+domain: infra-terraform
+repo: loopzero
+suggested_mode: evolve
+source: b147-shipped-with-one-job-open
+severity: baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita.
+evidence: medido 2026-09-05 na fatia do `B-147`. `docs/operations/retired-periodic-jobs.md:30` declara `coverageReport` com executor **`none — open`**. O comando gravado no chart (`task quality:coverage:report`) nunca existiu — `task --list-all` traz `quality:test:coverage:report` (`taskfiles/quality.yml:411`), confirmado hoje —, entao o trabalho estava quebrado por dois motivos e nao um. O nome foi corrigido no documento; o destino nao. As tres saidas que o `B-147` oferece: (a) agendador in-cluster com runner publicado — exige caminho de publicacao para a imagem `loopzero-ops`, que esta arvore nao tem; (b) CI externo — viavel em principio, o alvo e' hermetico e `.github/workflows/` nao tem gatilho `schedule:` hoje, mas `ci.yml:48` carrega decisao escrita de que aqueles workflows nao sao o portao; (c) aposentadoria explicita — nao foi escolhida, e o documento a registra como aberta em vez de decidida.
+why_now: o `B-147` foi para `shipped` com este trabalho ainda `none — open`. A transicao foi feita sem ler a DoD, e `shipped` e' terminal — entao o recorte vive aqui em vez de virar um bullet aberto pendurado num item fechado, onde ninguem o encontraria. Um item fechado com trabalho dentro e' a forma como trabalho desaparece.
+status: triaged
+dod:
+  - esta decidido onde `coverageReport` roda, entre as tres saidas que o `B-147` nomeia — e a aposentadoria explicita conta, desde que escrita
+  - se for agendador in-cluster: existe caminho de publicacao para a imagem `loopzero-ops`, medido e nao suposto
+  - o `docs/operations/retired-periodic-jobs.md` deixa de dizer `none — open` para este trabalho, seja qual for a saida
+
+> Registrado 2026-09-05 ao mergear o `B-147`. Nao e' trabalho que apareceu depois:
+> e' trabalho que o `B-147` mediu, declarou aberto, e que a transicao para `shipped`
+> teria sepultado.
 

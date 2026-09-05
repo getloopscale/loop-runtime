@@ -10,6 +10,21 @@
 #   - Current date (UTC)
 #
 # THAT CONFIGMAP DOES NOT EXIST, AND THIS GUARD HAS THEREFORE NEVER EVALUATED.
+#
+# CORRECTION, 2026-09-05: "therefore" was wrong, and the paragraph below is only
+# half the reason. The guard never reached the mode read at all — the v3
+# pre-check further down exited 1 first, on a DIFFERENT ConfigMap
+# (loopzero-cosign-version-config), because it treated any non-empty target_version
+# as an upgrade in progress and demanded a companion set_at. The chart ships
+# target_version=v2.4.3 with set_at omitted and documents that as the resting
+# state, so the guard refused its own shipped default and named the version
+# tracker in the failure.
+#
+# Anyone following the note as first written would have provisioned the ConfigMap
+# named below, watched the guard fail anyway, and been pointed at a third
+# artifact. Fixed the same day (see the V3_BASELINE_VERSION block); the guard now
+# falls through to exit 2 here, which is the loud missing-input failure this note
+# describes.
 # Measured 2026-08-18, re-measured 2026-08-19 and 2026-09-04 against `loopzero-core`:
 # `kubectl -n loopzero-system get cm loopzero-cosign-config` -> NotFound. Nothing in this
 # repository creates it — `grep -rn 'name: loopzero-cosign-config' --include='*.yaml'`
