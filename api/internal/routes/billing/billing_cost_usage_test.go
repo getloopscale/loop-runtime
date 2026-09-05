@@ -40,7 +40,8 @@ func TestBilling_Get_WithCostSource_PopulatesUsage(t *testing.T) {
 		counters: map[planpkg.CostMetric]planpkg.CostCounter{
 			planpkg.MetricBuildMinutes: {Value: 42},
 			planpkg.MetricEgressBytes:  {Value: 5 * 1024 * 1024 * 1024}, // 5 GB
-			// docr_pulls: absent → found=false → used=0
+			// docr_pulls: absent → found=false → used=0, measured=false (B-033:
+			// the zero is displayed, but it is no longer CLAIMED as a measurement)
 		},
 	}
 	h := NewBillingHandler(&fakeBillingPool{plan: "starter"}).WithCostSource(cost)
@@ -64,20 +65,22 @@ func TestBilling_Get_WithCostSource_PopulatesUsage(t *testing.T) {
 
 	// build_minutes: 42 used, 100 limit (starter)
 	bm := resp.Usage["build_minutes"]
-	if bm.Used != 42 || bm.Limit != 100 {
-		t.Errorf("build_minutes: got %+v, want used=42 limit=100", bm)
+	if bm.Used != 42 || bm.Limit != 100 || !bm.Measured {
+		t.Errorf("build_minutes: got %+v, want used=42 limit=100 measured=true", bm)
 	}
 
 	// egress_bytes: 5GB used, 100GB limit (starter)
 	eb := resp.Usage["egress_bytes"]
-	if eb.Used != 5*1024*1024*1024 || eb.Limit != 100*1024*1024*1024 {
-		t.Errorf("egress_bytes: got %+v, want used=5GB limit=100GB", eb)
+	if eb.Used != 5*1024*1024*1024 || eb.Limit != 100*1024*1024*1024 || !eb.Measured {
+		t.Errorf("egress_bytes: got %+v, want used=5GB limit=100GB measured=true", eb)
 	}
 
-	// docr_pulls: 0 used (not found), 1000 limit (starter)
+	// docr_pulls: 0 used (not found), 1000 limit (starter), and NOT measured —
+	// B-033: this row is the shape the whole table had on app-dev, and reading
+	// it as a measured zero is the defect the item names.
 	dp := resp.Usage["docr_pulls"]
-	if dp.Used != 0 || dp.Limit != 1000 {
-		t.Errorf("docr_pulls: got %+v, want used=0 limit=1000", dp)
+	if dp.Used != 0 || dp.Limit != 1000 || dp.Measured {
+		t.Errorf("docr_pulls: got %+v, want used=0 limit=1000 measured=false", dp)
 	}
 }
 
