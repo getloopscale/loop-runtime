@@ -180,6 +180,7 @@ var gateRegistry = []gateSpec{
 	{"tenant-predicate", "Enforces the multi-tenant isolation predicate (security veto-backed).", runTenantPredicate},
 	{"test-deletion", "Guards deletion of test files against coverage loss.", runTestDeletion},
 	{"test-pyramid", "Validates the unit/integration/e2e test-pyramid balance.", runTestPyramid},
+	{"test-skip-absent-path", "B-180: um teste em infra/tests/ nao pode pular por caminho ausente sem declaracao — o skip guardado por caminho que nao existe e incondicional na pratica, e tudo abaixo dele e codigo morto.", runTestSkipAbsentPath},
 	{"test-targets", "Verifies Taskfile test targets exist and are wired.", runTestTargets},
 	{"transit-coverage", "Enforces the OpenBao transit dispatcher invariant (encrypt/decrypt-for-store).", runTransitCoverage},
 	{"trivy-scan", "Runs Trivy CVE scanning on filesystem/images.", runTrivyScan},

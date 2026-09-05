@@ -87,7 +87,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `triaged` | alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
-| [`B-180`](#b-180--quatro-assercoes-de-cli-pulam-sempre-e-uma-delas-torna-um-tfatalf-inalcancavel----) | Quatro assercoes de `cli/` pulam sempre, e uma delas torna um `t.Fatalf` inalcancavel | `triaged` | media — nada quebra; o que falha e' a **deteccao**, e num pacote que a suite reporta como verde. Quatro guardas de regressao nao afirmam nada desde o M5, e uma delas contem codigo morto que um leitor razoavel toma por assercao ativa. |
+| [`B-180`](#b-180--quatro-assercoes-de-cli-pulam-sempre-e-uma-delas-torna-um-tfatalf-inalcancavel----) | Quatro assercoes de `cli/` pulam sempre, e uma delas torna um `t.Fatalf` inalcancavel | `shipped` | media — nada quebra; o que falha e' a **deteccao**, e num pacote que a suite reporta como verde. Quatro guardas de regressao nao afirmam nada desde o M5, e uma delas contem codigo morto que um leitor razoavel toma por assercao ativa. |
+| [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — estao declarados e impressos em toda execucao do `test-skip-absent-path`; falta a decisao sobre cada um e a correcao de uma premissa que o proprio skip afirma. |
 
 ### In flight (5)
 
@@ -6576,7 +6577,7 @@ source: b169-audit
 severity: media — nada quebra; o que falha e' a **deteccao**, e num pacote que a suite reporta como verde. Quatro guardas de regressao nao afirmam nada desde o M5, e uma delas contem codigo morto que um leitor razoavel toma por assercao ativa.
 evidence: medido 2026-09-05 na auditoria do `B-169`. `infra/tests/config/regression_features_test.go` pula `F-03` (:81), `F-05` (:109) e `F-06` (:136) com a mesma mensagem — *"cli/ moved to sibling loopzero-cli/ repo per M5 decomposition; cross-repo test wiring TBD"* — e `regression_test.go:138` pula `T1.2` igual. As quatro sao condicionais em forma e incondicionais na pratica: dependem de `os.Stat` sobre caminhos em `../../../cli/`, e `cli/` nao existe nesta arvore (`ls ../../cli/src/register/auth.ts` -> ausente; o repo irmao `loopzero-cli` nao esta clonado). Pior, o corpo do `F-06` segue apos o skip com `os.ReadFile("../../../cli/src/register/auth.ts")` **sem guarda** e um `t.Fatalf` (:150-154): codigo inalcancavel que le como assercao ativa. E' o defeito que o `B-169` acabou de fechar em `unit/`, um diretorio ao lado, dentro do alvo `test.yml` que a fatia rodou e reportou limpo.
 why_now: o `B-169` estabeleceu o padrao e o conserto — um guarda que nao acha o sujeito precisa dizer isso, e um skip permanente e' um teste deletado com boas maneiras. Estas quatro sobreviveram porque estao em `config/` e nao em `unit/`. Um pacote que reporta verde sobre quatro guardas que nunca rodam ensina que verde nesta suite nao significa nada, que e' exatamente o custo que o `B-169` mediu.
-status: triaged
+status: shipped
 dod:
   - cada uma das quatro ou volta a afirmar algo deste repositorio, ou e' removida com razao escrita — e a razao nomeia o guarda que cobre o contrato no lugar dela
   - o `os.ReadFile` + `t.Fatalf` inalcancavel no corpo do `F-06` some, seja qual for a saida
@@ -6585,6 +6586,74 @@ dod:
 > Registrado 2026-09-05 pela auditoria do `B-169`, que foi procurar a mesma forma
 > nos pacotes vizinhos em vez de aceitar o relatorio da fatia. As quatro estavam
 > dentro do alvo que a fatia rodou e declarou limpo.
+>
+> **2026-09-05 — as tres balas FECHADAS. Medido na worktree `/tmp/lane-b180`.**
+>
+> **Bala 1 — as quatro foram REMOVIDAS, com a razao escrita onde cada uma estava.**
+> Re-medido antes de decidir: `cli/` nao existe nesta arvore e `loopzero-cli` nao esta
+> entre os 23 irmaos de `/home/paulo/dev`, entao o ramo do skip era o unico ramo
+> desde o M5. Apliquei o padrao do `B-169` e cheguei na mesma resposta, pelas mesmas
+> tres razoes — dead-Skip, `t.Skip` no meio marca o teste INTEIRO, e o contrato ja
+> tem guarda que executa. O guarda nomeado: `api/internal/contract/cli_consumer_test.go`
+> (`TestCLIConsumer_AllPathsInSpec` e HERMETICO — le o pin
+> `testdata/cli-consumed-paths.txt` contra `api/openapi/engine.yaml` e nao precisa de
+> irmao em disco; verificado lendo o codigo, nao a promessa), mais
+> `task quality:contract:cross-repo`, que roda a metade do loopzero-cli quando o irmao
+> esta la e imprime SKIP explicito quando nao esta. O que NAO fica coberto esta dito
+> em texto no lugar das funcoes removidas: exitOverride do Commander, o vocabulario
+> AUTH_FAILED/PREFLIGHT_FAILED e o `hasToken` do logout sao comportamento do
+> loopzero-cli e pertencem a suite do loopzero-cli.
+>
+> **Bala 2 — o `os.ReadFile` + `t.Fatalf` inalcancavel do F-06 saiu junto**, porque a
+> funcao inteira saiu.
+>
+> **Bala 3 — a verificacao existe: `loopzero-ops quality test-skip-absent-path`**,
+> registrada em `cmd/loopzero-ops/quality_registry.go`, wired na tarefa `gates` de
+> `taskfiles/quality.yml` e congelada em `cmd/loopzero-ops/testdata/gateset.frozen`
+> (145 gates, era 144). O pin fica em `infra/quality/test-skip-absent-path.txt`.
+> Ele le a AST de todo `*_test.go` sob `infra/tests/` e, para cada skip cuja guarda
+> e uma sonda de sistema de arquivos, responde UMA de quatro coisas e diz qual:
+> CONDITIONAL (o caminho existe), TRACKED (ausencia declarada, impressa em TODA
+> execucao), EXTERNAL (caminho enraizado fora do repo — `$HOME/...` — que ele diz
+> que nao julga) ou ausente-e-nao-declarado, que REPROVA.
+>
+> **Ele nao pode virar o que vigia.** Quatro pisos, todos com codigo de saida 5 e
+> nunca 0: arvore de scan ausente; zero `*_test.go`; zero chamadas de skip na arvore
+> inteira (se o detector para de reconhecer a forma, isso e detector quebrado, nao
+> repo limpo); e pin ilegivel. O quinto piso e o mais forte: **toda linha do pin tem
+> de ser reencontrada pelo scan desta execucao**. O pin guarda ancoras vivas — se o
+> detector morrer em silencio, as tres ancoras ficam sem par e o gate fica vermelho
+> nomeando cada uma.
+>
+> **Re-medicao que corrigiu o proprio item:** as "quatro" sao CINCO da mesma forma.
+> `regression_test.go:125` (`TestBootstrapClusterScript`) pula por
+> `infra/scripts/bootstrap-cluster.sh`, que foi deletado de proposito em `346215cf0`
+> (2026-05-23, "superseded by `task setup`"). Nao removi: fica no pin com a medicao
+> escrita, para o diff do `B-180` nao passar das quatro que o item nomeia. Mais duas
+> da mesma forma vivem em `unit/` (`build-images.yml`, `multi-cell.yml`). As tres
+> estao rastreadas e a remocao delas e o `B-182`.
+>
+> **Segunda correcao de fato, esta contra a propria premissa dos skips:** a mensagem
+> dos dois testes de `unit/` diz "GitHub Actions removed 2026-05-23". Isso foi
+> verdade e deixou de ser: o Actions VOLTOU em `32bb066b3`, e `.github/workflows/`
+> hoje tem `build-publish.yml`, `ci.yml`, `release-artifacts.yml` e
+> `workflow-hygiene.yml` — nenhum com os quatro jobs de operator. O pin diz isso; a
+> mensagem dos testes nao.
+>
+> **Oraculos verificados por mutacao, com o EFEITO conferido e nao a aplicacao:**
+> 15 mutantes no codigo do gate, cada um nomeando o teste que DEVE morrer — 15
+> mortos pelo teste nomeado, 0 sobreviventes; e 10 mutacoes da ARVORE e do PIN
+> reais, cada uma exigindo o codigo de saida E o texto certo — 10 pegas. Entre elas
+> a que a bala pede: reintroduzir um skip guardado por `cli/src/index.ts` em
+> `config/` ⇒ exit 1 nomeando arquivo, funcao e caminho; e a inversa, criar
+> `.github/workflows/multi-cell.yml` ⇒ exit 1 dizendo `EXISTS in this tree` e
+> pedindo que a linha do pin saia.
+>
+> Medicoes: `infra/tests` `./unit/... ./config/...` passa com `-count=1`, 144 testes,
+> 16 SKIP (eram 148/20 — as quatro removidas sao a diferenca). `golangci-lint` no
+> pacote novo: 0 issues. Os dois FAIL de `TestDeliveryGate_*` em `cmd/loopzero-ops` sao
+> pre-existentes e ambientais: procuram `.claude/hooks/delivery-gate.sh`, e `.claude/`
+> nao e versionado, logo nao existe em worktree ligada.
 
 ## B-181 — Duas das três métricas de custo do produto não têm quem as emita   [ ]
 
@@ -6645,4 +6714,26 @@ dod:
 > gate. **Bala 3** precisa do cluster E da bala 1: enquanto ninguém emitir, o agregador segue
 > consultando o vazio e `cost_counters` não recebe linha. O gate não fecha nenhuma das duas;
 > ele garante que a próxima divergência não nasça calada.
+
+## B-182 — Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b180-remeasure
+severity: baixa — nada quebra e nada esta silencioso: as tres estao no pin do
+  `test-skip-absent-path` e sao impressas em toda execucao do gate. O que falta e a
+  decisao sobre cada uma, e a correcao de uma premissa que o proprio skip afirma.
+evidence: medido 2026-09-05 na worktree `/tmp/lane-b180` durante o `B-180`. Tres skips sob `infra/tests/` continuam guardados por caminho que nao existe: (1) `infra/tests/unit/build_images_split_operators_test.go::readBuildImagesYaml` por `.github/workflows/build-images.yml`, que serve TRES testes; (2) `infra/tests/unit/operator_cutover_invariants_test.go::TestT06_MultiCellWorkflowExists` por `.github/workflows/multi-cell.yml`; (3) `infra/tests/config/regression_test.go::TestBootstrapClusterScript` por `infra/scripts/bootstrap-cluster.sh`. Os dois primeiros caminhos sairam em `5b32b76f0` (2026-05-23, "remove GitHub Actions CI/CD — not used"); o terceiro em `346215cf0` (mesmo dia, "superseded by `task setup`"). **A premissa escrita nos dois primeiros nao vale mais:** eles dizem "GitHub Actions removed 2026-05-23", e o Actions voltou em `32bb066b3` — `.github/workflows/` hoje tem `build-publish.yml`, `ci.yml`, `release-artifacts.yml` e `workflow-hygiene.yml`. Nenhum carrega os quatro jobs de split-operator, entao o teste segue certo em nao achar; a RAZAO que ele imprime e que envelheceu. O `multi-cell` afirma que os invariantes de Phase 5 "now in task quality:*" — nao verificado.
+why_now: o `B-180` fechou a classe e escolheu deliberadamente nao ampliar o diff para alem das quatro que aquele item nomeia. As tres ficaram declaradas com medicao escrita em `infra/quality/test-skip-absent-path.txt`, e sair do pin e' o unico jeito de a linha morrer. Enquanto isso, tres testes de `unit/` nao afirmam nada e um deles imprime uma premissa falsa a quem for ler.
+status: triaged
+dod:
+  - cada um dos tres ou volta a afirmar algo desta arvore, ou e removido com razao escrita, e a linha correspondente sai do `infra/quality/test-skip-absent-path.txt`
+  - o invariante dos quatro jobs de split-operator ou volta para um workflow vivo (`.github/workflows/`), ou a decisao de nao ter esse invariante fica escrita — hoje as quatro imagens sao construidas por `Tiltfile` + `taskfiles/dev.yml` e so a metade de imagem e re-afirmada (`base-image-digest`, `prod-image-digests`)
+  - a afirmacao "Phase 5 invariants now in task quality:*" do `TestT06` e verificada ou corrigida; se os invariantes nao migraram, isso e um buraco de cobertura e nao uma nota de rodape
+
+> Registrado 2026-09-05 pelo `B-180`, cuja re-medicao achou uma quinta ocorrencia da
+> forma que o item nomeava como quatro, e uma premissa desatualizada em outras duas.
+
+
 

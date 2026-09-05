@@ -229,6 +229,17 @@ tasks:
       - /tmp/loopzero-ops quality test-deletion
       - /tmp/loopzero-ops quality test-pyramid
       - /tmp/loopzero-ops quality test-targets
+      # B-180: um teste em infra/tests/ que faz stat num caminho e pula quando ele
+      # falta e condicional na FORMA e incondicional no FATO assim que o caminho sai
+      # da arvore — o pacote segue imprimindo ok e tudo abaixo da guarda e codigo
+      # morto. Quatro skips assim viviam em config/ desde o M5, um deles com
+      # os.ReadFile + t.Fatalf inalcancaveis (B-169 fechou a mesma forma em unit/).
+      # O gate le o pin em infra/quality/test-skip-absent-path.txt e responde por
+      # skip: CONDITIONAL, TRACKED (impresso, nao vermelho), EXTERNAL (fora do repo,
+      # nao julgado) ou ausente-e-nao-declarado (vermelho). Sem sujeito — arvore
+      # movida, zero arquivos, zero skips, pin ilegivel — ele sai 5 dizendo o que
+      # faltou, nunca 0.
+      - /tmp/loopzero-ops quality test-skip-absent-path
       # Wired 2026-07-30 after its finding was fixed: it reprovava exigindo
       # `cli:link`/`cli:build`, removidas no #254 porque `cli/` saiu no M2. O
       # contrato declarava uma capacidade que o repo perdeu dois milestones

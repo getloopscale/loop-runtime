@@ -1,0 +1,25 @@
+# test-skip-absent-path — declared path-guarded skips (B-180)
+#
+# A test under infra/tests/ that stats a path and skips when it is missing is
+# conditional in FORM and unconditional in FACT once that path leaves the tree:
+# the skip branch becomes the only branch, the package still prints `ok`, and
+# every assertion below the guard is dead. B-169 removed one such test; B-180
+# removed four more and added this gate so the class cannot return silently.
+#
+# Every line here is an absence this repository has looked at and decided to
+# carry for now. The gate prints them on EVERY run, pass or fail — a tracked
+# absence must never be quieter than a fresh one — and it FAILS when:
+#   - a path-guarded skip is absent and NOT listed here;
+#   - a listed path comes BACK (the guard is conditional again, the line is
+#     stale prose);
+#   - a listed skip is not re-found by the scan (the skip went away, or the
+#     gate's detector stopped detecting — either way somebody must look).
+#
+# Format: four TAB-separated fields.
+#   <test file, repo-relative>  <enclosing func>  <guarded path, repo-relative>  <why, naming what covers this instead>
+#
+# The right way to leave this file is to delete the line, not to add one.
+#
+infra/tests/unit/build_images_split_operators_test.go	readBuildImagesYaml	.github/workflows/build-images.yml	Deleted in 5b32b76f0 (2026-05-23, "remove GitHub Actions CI/CD — not used"), so this guard has fired on every run since. Measured 2026-09-05, and the skip's own message is stale in its premise: GitHub Actions came BACK in 32bb066b3 (the AM6 supply-chain pipeline), and .github/workflows/ today holds build-publish.yml, ci.yml, release-artifacts.yml and workflow-hygiene.yml — none of which carries the four split-operator jobs this test indexes. The four Dockerfiles themselves are real (operators/Dockerfile.{tenant,app,preview,platform}-operator) and are built by the Tiltfile and taskfiles/dev.yml, and the image half is re-asserted by the base-image-digest and prod-image-digests gates. What nothing re-asserts is the four-JOB wiring, because the file that held it is gone. Settling that — restore the jobs in the live workflow, or delete the three tests that read it — is B-182.
+infra/tests/unit/operator_cutover_invariants_test.go	TestT06_MultiCellWorkflowExists	.github/workflows/multi-cell.yml	Deleted in the same commit, 5b32b76f0 (2026-05-23). The skip message claims the Phase 5 invariants now live in `task quality:*`; that claim is UNVERIFIED here, and it was written when this repository had no GitHub Actions at all — which stopped being true in 32bb066b3. B-182 owns settling whether the invariants really moved or merely stopped being checked.
+infra/tests/config/regression_test.go	TestBootstrapClusterScript	infra/scripts/bootstrap-cluster.sh	Measured 2026-09-05: the script was deleted deliberately in 346215cf0 (2026-05-23) as "superseded by `task setup`", which answers the open question the test's own comment left ("consolidated into task setup? test may be stale"). The idempotency assertion it carried has therefore been dead since that commit, and there is no in-repo guard that `task setup` is idempotent. It is listed rather than deleted only to keep B-180's diff to the four skips that item named; removal is tracked as B-182.
