@@ -91,7 +91,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-184`](#b-184--dois-testes-pulam-incondicionalmente-e-leem-um-arquivo-logo-abaixo-com-tfatalf-que-nunca-roda----) | Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda | `triaged` | media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a |
 | [`B-185`](#b-185--o-gate-cli-exit-codes-imprime-skip-e-sai-0-desde-sempre-porque-o-diretorio-que-ele-mede-nunca-esteve-na-arvore----) | O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore | `triaged` | media — um gate na cadeia que nunca mediu nada. Ele nao mente na saida (diz |
 | [`B-186`](#b-186--a-classe-ainda-volta-um-nivel-abaixo-um-predicado-que-chama-outro-predicado-e-invisivel-e-em-silencio----) | A classe ainda volta um nivel abaixo: um predicado que chama outro predicado e' invisivel, e em silencio | `triaged` | media — o `B-183` existiu para fechar a classe e fechou a grafia de UM |
-| [`B-187`](#b-187--o-hook-que-o-repositorio-declara-como-substituto-de-ci-nao-existe-em-maquina-nenhuma----) | O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma | `triaged` | alta — dois testes afirmam "the delivery gate is the CI substitute; it must |
+| [`B-187`](#b-187--o-hook-que-o-repositorio-declara-como-substituto-de-ci-nao-existe-em-maquina-nenhuma---x) | O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma | `shipped` | — |
 
 ### In flight (5)
 
@@ -6968,7 +6968,7 @@ dod:
   - o `SCOPE` perde o que este item fechar e mantem o que continuar valendo
   - mutacao com efeito conferido, e um mutante por capacidade nova
 
-## B-187 — O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma   [ ]
+## B-187 — O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma   [x]
 
 domain: infra
 repo: loopzero
@@ -7045,4 +7045,102 @@ dod:
   - a relacao com a promocao esta escrita: se `main` continua sem check real, o item
     diz explicitamente que este hook nao substitui isso sozinho, para nao virar uma
     segunda falsa garantia
+resolution: |
+  Fechado 2026-09-05, na branch `item/B-187`. O hook voltou. Ainda NAO foi promovido —
+  o commit esta na branch do item, e nada disto alcanca `develop` ou `main` sem o PR.
+
+  **Bala 1 — a restauracao usa a ultima versao viva e diz o que mudou.** Base:
+  `git show 53c1dc1ea:.claude/hooks/delivery-gate.sh` (79 linhas). Quatro mudancas, tres
+  delas da familia "o gate PASSA quando nao consegue rodar o proprio alvo", que era o que a
+  propria DoD proibia — e a versao viva tinha duas instancias dela:
+
+    1. `cd "$REPO_ROOT" || exit 0` virou `exit 2`. Um gate que nao entrou na arvore nao a
+       checou, e nao pode dizer que checou. Era literalmente um `exit 0` no caminho de erro.
+    2. A arvore passou a ser IDENTIFICADA, nao presumida: sem `Taskfile.yml` na raiz, o gate
+       diz onde esta parado e reprova. `CLAUDE_PROJECT_DIR` pode apontar para qualquer lugar
+       e o fallback e `pwd`.
+    3. Uma chamada de ferramenta ilegivel deixou de ser lida como "nao era push". O parser
+       antigo era `try/except: print("")` mais `|| true` — numa maquina sem `python3`, TODO
+       push passava o substituto de CI em silencio, sem um gate rodando e sem uma linha de
+       stderr. Agora o payload cru e casado num padrao deliberadamente abrangente e a
+       degradacao e anunciada.
+    4. Escrituracao, nao buraco: `task` sai 200 quando o alvo nao existe. "O gate esta
+       vermelho" e "o gate nao esta la" sao fatos diferentes e so um deles fala do codigo.
+
+  **Bala 2 — o hook existe e roda o que os testes dizem que ele roda.** Os dois testes
+  passam com binario e cache proprios (`-count=1`):
+  `TestDeliveryGate_RunsOneRealTargetThatCoversThisModule` e
+  `TestDeliveryGate_SourceCarriesExactlyOneTaskInvocation`. O alvo continua `quality:all`, e
+  `task --dry quality:all` expande para `cd cmd/loopzero-ops && go test ./... -count=1` e
+  `cd tools/gen-service-auth-ed25519 && GOWORK=off go test ./... -count=1`, que sao as duas
+  linhas exatas que o teste exige.
+
+  **Bala 3 — a familia de defeito tem teste, e o teste foi mutado.** Tres testes novos em
+  `cmd/loopzero-ops/quality_delivery_gate_covers_tests_test.go`:
+  `BlocksWhenItIsNotStandingInThisRepository`, `BlocksWhenTheProjectDirectoryDoesNotExist` e
+  `StillGatesAPushItCouldNotParse`. Cinco mutantes aplicados, cada um com o EFEITO conferido
+  (qual teste morreu, nao apenas que o patch aplicou):
+
+      M1 `cd` falho volta a sair 0        -> morto por BlocksWhenTheProjectDirectoryDoesNotExist
+      M2 checagem do Taskfile removida    -> morto por BlocksWhenItIsNotStandingInThisRepository
+      M3 parse falho vira leitura vazia   -> morto por StillGatesAPushItCouldNotParse
+      M4 wiring tirado do settings.json   -> morto por IsWiredIntoThePreToolUseBashHook
+      M5 o arquivo do hook e' apagado     -> morto por 5 testes (o estado em que este item comecou)
+
+  **Bala 4 — a relacao com a promocao, dita nos dois lugares que viajam.** Escrita no
+  cabecalho do proprio hook e repetida aqui: este hook NAO substitui CI na promocao. Ele
+  bloqueia o que sai DESTA maquina, num `git push` de uma sessao que o tenha ligado. Nao roda
+  no GitHub, nao roda no PR, e nao ve um merge em que nao esteve presente. `main` continua 273
+  commits atras de `workspace` e o unico check do `#344` continua sendo um servico de autofix
+  de terceiro que sai como skipping. Restaurar este arquivo nao fecha nada disso, e uma
+  segunda falsa garantia seria pior que o buraco conhecido, porque o buraco conhecido ainda
+  esta sendo contado.
+
+  **O que a auditoria do item nao tinha visto, e que teria feito a restauracao nascer inerte.**
+  O ARQUIVO era so metade. O wiring em `.claude/settings.json` sumiu ANTES, em `63cc51c48`
+  (2026-08-29), e nunca voltou:
+
+      for c in 433682862 b6f075ac3 a6722bbc9 63cc51c48 53c1dc1ea 9a6e6e903 HEAD; do
+        git show $c:.claude/settings.json | grep -c delivery-gate.sh
+      done
+      -> 1 0 1 0 0 0 0
+
+  Ou seja: `53c1dc1ea` — a segunda restauracao, a que este item mandou usar como base —
+  devolveu o arquivo no mesmo dia em que o wiring ja tinha ido embora. De 2026-08-29 a
+  2026-09-02 o substituto de CI deste repositorio existiu no disco, nao bloqueou nada, nunca
+  disparou, e foi citado em quatro documentos como razao de uma checagem estar coberta. **As
+  duas assercoes ficaram VERDES o tempo todo** — elas leem o arquivo, nao a ligacao. Por isso
+  o quarto teste, `TestDeliveryGate_IsWiredIntoThePreToolUseBashHook`, que e o unico que teria
+  pego aquela janela.
+
+  **A quarta delecao ja esta agendada, e nao da para consertar deste lado.** O `install.sh`
+  do kit e' dono da CHAVE `hooks` inteira (`mine["hooks"] = kit["hooks"]`, linha ~660), entao
+  o proximo `install.sh` apaga esta entrada de novo — enquanto o mesmo instalador preserva com
+  cuidado o ARQUIVO consumer-local ao lado. Foi exatamente isso que aconteceu em 63cc51c48. O
+  conserto pertence ao repo do kit (`squad`), nao a este; enquanto ele nao existe, o teste novo
+  transforma a delecao silenciosa em suite vermelha, que e o maximo que este lado alcanca.
+
+  **Efeito colateral obrigatorio, medido.** `mechanisms/gates/check_squad_map.py` varre
+  `hooks/` nas duas direcoes: um hook em disco que o mapa nao nomeia e' um achado. Restaurar o
+  arquivo deixou `TestRealValidatorsAreGreen` VERMELHO — verificado que passava sem a
+  restauracao e reprovava com ela, entao nao era pre-existente. `.claude/rules/squad-map.md`
+  passou a listar o hook na tabela da runtime layer (oito hooks viraram nove, com a diferenca
+  dita: oito sao do kit em `hooks.json`, o nono e' deste repo em `settings.json`). Gate verde
+  depois.
+
+  **Gates rodados, com binario e cache proprios:** `cmd/loopzero-ops` inteiro `-count=1` verde
+  com duas excecoes nomeadas — `trufflehogscan` reprova porque `.git` numa worktree ligada e'
+  um ARQUIVO e a varredura nao completa (artefato de worktree, avisado de antemao; nenhum
+  candidato novo foi impresso), e `no-new-bash` reprova com 12 achados, TODOS em
+  `.claude/mechanisms/*.sh` do kit e NENHUM neste hook — 12 achados com a restauracao e 12
+  sem ela, medido nas duas direcoes. `publish-hygiene` PASS (4823 arquivos, nenhum caminho de
+  workstation). `dangling-script-refs` PASS. `verify_ecosystem.py` ALL CHECKS PASSED.
+
+  **O que este item NAO mediu, dito em voz alta:** se `task quality:all` esta verde hoje no
+  checkout principal. Nao foi rodado — a instrucao da faixa proibe `quality:gates` a partir de
+  uma worktree ligada, e rodar no checkout principal do Paulo levaria minutos e escreveria
+  artefatos ali. Isso importa porque, com o wiring de volta, um `quality:all` vermelho por
+  divida pre-existente (o `test-coverage-report` que o `B-001` e o `B-079` ja nomearam) bloqueia
+  TODO push nesta maquina. Se isso acontecer, o conserto e' a divida, nao o hook — mas quem
+  encostar nisso deve medir antes de se surpreender.
 
