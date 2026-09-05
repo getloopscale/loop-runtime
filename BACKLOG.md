@@ -5709,7 +5709,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-19 ao escolher onde arquivar a narrativa do `BACKLOG.md`. `.claude/knowledge-base/` tem **154 arquivos rastreados**; `.claude/records/` existe em disco com as subpastas do schema (`acceptance`, `audits`, `backlog`, `discoveries`, `grills`, ...) e **zero arquivos rastreados**. O `CLAUDE.md` do projeto aponta a primeira como canonica; `rules/records-location.md` aponta a segunda.
 why_now: e a forma exata que a propria `records-location.md` descreve e mede em outros consumidores — "all three had both directories present", com uma auditoria lendo a arvore errada e reportando zero implementacoes onde havia seis. A falha e silenciosa por natureza: uma segunda arvore nunca da erro, so acumula metade da verdade. Apareceu agora porque um link do `BACKLOG.md` (versionado) para `.claude/records/` seria citacao morta para quem clona.
-status: triaged
+status: shipped
 resolved_wall: the kit-sync batch this waited on was committed in 91b51e7a2 on 2026-09-04; git status --porcelain returns 0. Wall cleared 2026-09-04 by fleet triage.
 severity: media — nada quebra hoje; o custo e que qualquer varredura, gate ou pessoa pode ler a arvore vazia e concluir ausencia onde ha evidencia.
 dod:
@@ -5797,7 +5797,7 @@ suggested_mode: bug
 source: human
 evidence: medido em 2026-08-31 durante /idea-to-release B-058 bala 4 (dead citation em `api/internal/routes/secrets/secrets.go:76` cita `*adapters.VaultTransitAdapter` tipo que nao existe). Tentativa de Read do arquivo retornou "File is in a directory that is denied by your permission settings." Investigacao: `.claude/settings.json § permissions.deny` tem padroes `Read(**/*secret*)` alem de `Read(**/credentials*)`, `Read(**/*.key)`, `Read(**/*.pem)`, `Read(**/.env*)`. O padrao `**/*secret*` foi presumivelmente escrito pra pegar `secret.txt`, `mysecret.yaml`, etc. — mas glob-matches TAMBEM em `secrets.go`, `check-seed-loopzero-secrets_test.sh`, e qualquer arquivo Go/shell cujo nome contem "secret". A sessao anterior (2026-08-18) ja tinha registrado o mesmo bloqueio na progress note de B-058: *"Nao pude corrigi-la — o diretorio api/internal/routes/secrets esta bloqueado por permissao nesta sessao."*
 why_now: aparece toda vez que alguem tenta editar codigo que legitimamente carrega "secret" no nome (routes/secrets/, seed scripts de secrets, tests). O false-positive e persistente (nao specific-sessao) e bloqueia trabalho real na camada de secrets — que e' onde muita coisa recente acontece.
-status: triaged
+status: shipped
 severity: media - bloqueia dead-citation cleanup no B-058 bala 4 + qualquer edit futuro em routes/secrets/. Nao ha bypass documentado.
 dod:
   - `.claude/settings.json § permissions.deny` remove `Read(**/*secret*)` (over-matches Go/shell filenames)
@@ -5815,7 +5815,7 @@ suggested_mode: bug
 source: human
 evidence: medido em 2026-08-31 durante /idea-to-release B-167. `test_a_python_defect_is_not_reported_as_PASS` em `.claude/skills/code-quality/tests/test_orchestrator.py:406` falha porque `assert exit_code != 0` reprova quando vulture binário não está no PATH. Detector em `.claude/skills/code-quality/scripts/detectors/python.py:59` faz `subprocess.run(["vulture", ...])` que retorna FileNotFoundError → auditor_unavailable_vulture soft cap → FAIL_SOFT → exit 0. O módulo Python `vulture` (2.16) está instalado como biblioteca (`python3 -m vulture --version` funciona) mas o binário `vulture` do PATH depende de a instalação vir via `pip install --user` OR `pipx install`. Fresh clone tem o módulo (via requirements) mas não o binário. Fix aplicado localmente via `pip install --user --break-system-packages vulture` que colocou `~/.local/bin/vulture`.
 why_now: apareceu durante execução de B-167 (fatia da Go audit ligação). O batch B-167 rodou 258/258 testes verdes apenas depois do fix env. Sem esse fix, qualquer sessão que rode `pytest .claude/skills/code-quality/` falha 1 de 259 por razão que não é código.
-status: triaged
+status: shipped
 severity: baixa — o binário vulture geralmente está disponível em hosts de dev com Python, mas o requisito é hidden. O impacto é 1 teste flaky por env, não regressão de produção.
 dod:
   - o detector Python invoca `python3 -m vulture` em vez de `vulture` (parsimony ladder rung 3: usar feature nativa do Python que já existe, elimina dependência de PATH)
