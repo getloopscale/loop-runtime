@@ -68,9 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-176 items — **Open** 20 · **In flight** 2 · **Closed** 153 · **Blocked** 11
-
-> **1 item(s) carry a status this index does not know**: B-079. They are counted in the total and listed nowhere else — a status outside the declared set means the contract moved and this table did not follow it.
+176 items — **Open** 20 · **In flight** 3 · **Closed** 153 · **Blocked** 11
 
 ### Open (20)
 
@@ -97,10 +95,11 @@ consequência do escopo per-repo declarado acima.
 | [`B-175`](#b-175--o-caminho-que-o-external-secrets-operator-usa-decifra-sem-contar-nada----) | O caminho que o External Secrets Operator usa decifra sem contar nada | `triaged` | alta — nao pelo risco de dado, mas porque a metrica cria a aparencia de cobertura no caminho errado. Um operador que veja o contador em zero conclui que nada quebrou, e o caminho que serve os usuarios nao esta sendo contado. |
 | [`B-176`](#b-176--a-escrita-em-lote-de-segredos-nao-move-contador-e-um-adiamento-se-apoia-nele----) | A escrita em lote de segredos nao move contador, e um adiamento se apoia nele | `triaged` | media — nada quebra; o que falha e' a **deteccao**. O `B-126` fecha adiando a canaria com o gatilho "a primeira linha escrita na tabela `secrets`", e o unico sinal desse gatilho que dispara sem alguem olhar tem um furo exatamente por onde o evento pode passar. |
 
-### In flight (2)
+### In flight (3)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
+| [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
 | [`B-169`](#b-169--infratestsoperator_cutover_invariants-espera-arquivos-removidos-por-m5-decomposition----) | infra/tests/operator_cutover_invariants espera arquivos removidos por M5 decomposition | `planned` | blocks `B-033`, `B-057` — media - o teste esta' factualmente errado (procura arquivo que nao existe por design), o que gera ruido no gate e mascara falhas reais. |
 | [`B-170`](#b-170--toolsgen-service-auth-ed25519-reprova-go-test-com-directory-prefix-no-go-workspace----) | tools/gen-service-auth-ed25519 reprova go test com "directory prefix" no go workspace | `planned` | blocks `B-033`, `B-057` — baixa - o modulo e' uma ferramenta de geracao de chaves e provavelmente nao tem testes proprios; o setup do go.work e' que precisa de ajuste. |
 
