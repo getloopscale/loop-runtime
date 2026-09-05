@@ -43,35 +43,78 @@ import (
 // (ADR 2026-07-03-m9-step7-gate-registration-mechanism).
 
 // runCLIExitCodes is the Go home for the cli-exit-codes gate (migrated from
-// infra/tests/scripts/check-cli-exit-codes_test.sh). Enforces Rule 4: cli/src
-// process.exit() codes are 0-5 only (130/143 allowed only in SIG handlers).
+// infra/tests/scripts/check-cli-exit-codes_test.sh). Enforces Rule 4: a CLI
+// process.exit() code is 0-5 only (130/143 allowed only in SIG handlers).
+//
+// Verdicts:
+//
+//   - PASS      a CLI source tree was found and walked, and every exit code is
+//     in contract. The line names the tree it walked and the file count, so
+//     "it passed" is separable from "it read nothing".
+//
+//   - PARTIAL   no CLI source tree exists and the absence is declared in
+//     infra/quality/cli-exit-codes-subject.txt. Exit 0 — a known gap that turns
+//     the chain red forever teaches that red is normal — but the word PASS is
+//     never printed, and both the tracked absence and what it leaves unchecked
+//     go to stdout on EVERY run. That is the B-181 shape, for the same reason:
+//     a gap nobody prints is indistinguishable from no gap.
+//
+//   - FAIL      an exit code is out of contract; or no source tree exists and
+//     nothing declares that; or a declared absence has CLOSED — the subject came
+//     back and the pin still says it is gone.
 func runCLIExitCodes(args []string) int {
 	fs := flag.NewFlagSet("cli-exit-codes", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
+	cliRoot := fs.String("loopzero-cli", os.Getenv("LOOPZERO_CLI_ROOT"),
+		"standalone loopzero-cli checkout (default $LOOPZERO_CLI_ROOT, else <root>/../loopzero-cli)")
+	pin := fs.String("pin", cliexitcodes.DefaultPinFile,
+		"declared-absence pin, relative to --root")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	resolveDotRoot(root)
 
-	outcome, err := cliexitcodes.Check(cliexitcodes.Config{RepoRoot: *root})
+	outcome, err := cliexitcodes.Check(cliexitcodes.Config{
+		RepoRoot: *root,
+		CLIRoot:  *cliRoot,
+		PinFile:  *pin,
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cli-exit-codes: %v\n", err)
 		return 5
 	}
-	if outcome.Skipped {
-		fmt.Println("cli-exit-codes: SKIP — cli/src/ not present")
-		return 0
+
+	// The tracked absence goes to stdout on every run — that is what turns a
+	// silent SKIP into an absence somebody can read.
+	for _, a := range outcome.TrackedAbsences {
+		fmt.Printf("cli-exit-codes: TRACKED ABSENCE — %s is not in this tree and not in any checkout beside it: %s\n",
+			a.Subject, a.Why)
 	}
-	if !outcome.Pass {
-		fmt.Fprintf(os.Stderr, "cli-exit-codes: FAIL — %d process.exit() call(s) outside 0-5 contract:\n", len(outcome.Violations))
+
+	if len(outcome.Violations) > 0 {
+		fmt.Fprintf(os.Stderr, "cli-exit-codes: FAIL — %d violation(s):\n", len(outcome.Violations))
 		for _, v := range outcome.Violations {
 			fmt.Fprintf(os.Stderr, "  %s\n", v)
 		}
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Permanent contract (Rule 4): 0/1/2/3/4/5 only. SIG handlers may use 130/143.")
+		fmt.Fprintf(os.Stderr, "When there is no CLI source to read, %s must say so in one line:\n", *pin)
+		fmt.Fprintln(os.Stderr, "  <subject path>\t<why it is absent, naming what covers the contract instead>")
 		return 1
 	}
-	fmt.Println("cli-exit-codes: PASS — all cli/src exit codes within 0-5 contract (signal handlers exempt)")
+
+	if !outcome.Checked {
+		fmt.Printf("cli-exit-codes: NOT COVERED — no process.exit() call in this repository is checked "+
+			"against Rule 4, and no other gate enforces the exit-code contract; it holds only where "+
+			"loopzero-cli's own CI runs it, which is UNVERIFIED from this tree (searched: %s)\n",
+			strings.Join(outcome.SearchedPaths, ", "))
+		fmt.Printf("cli-exit-codes: PARTIAL — 0 file(s) scanned, exit-code contract NOT CHECKED "+
+			"(%d tracked absence(s))\n", len(outcome.TrackedAbsences))
+		return 0
+	}
+
+	fmt.Printf("cli-exit-codes: PASS — %d file(s) under %s, all exit codes within the 0-5 contract "+
+		"(signal handlers exempt)\n", outcome.ScannedFiles, outcome.ScannedRoot)
 	return 0
 }
 

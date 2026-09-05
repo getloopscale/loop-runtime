@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-188 items — **Open** 18 · **In flight** 5 · **Closed** 165 · **Blocked** 7
+188 items — **Open** 17 · **In flight** 5 · **Closed** 166 · **Blocked** 7
 
-### Open (18)
+### Open (17)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -89,7 +89,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
 | [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
 | [`B-184`](#b-184--dois-testes-pulam-incondicionalmente-e-leem-um-arquivo-logo-abaixo-com-tfatalf-que-nunca-roda----) | Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda | `triaged` | media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a |
-| [`B-185`](#b-185--o-gate-cli-exit-codes-imprime-skip-e-sai-0-desde-sempre-porque-o-diretorio-que-ele-mede-nunca-esteve-na-arvore----) | O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore | `triaged` | media — um gate na cadeia que nunca mediu nada. Ele nao mente na saida (diz |
 | [`B-187`](#b-187--o-hook-que-o-repositorio-declara-como-substituto-de-ci-nao-existe-em-maquina-nenhuma---x) | O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma | `triaged` | alta — dois testes afirmam "the delivery gate is the CI substitute; it must |
 | [`B-188`](#b-188--tres-posicoes-de-skip-que-o-gate-nao-le-e-a-que-ele-passou-a-ler-custou-uma-auditoria-para-aparecer----) | Tres posicoes de skip que o gate nao le, e a que ele passou a ler custou uma auditoria para aparecer | `triaged` | media — o gate e a unica coisa que impede a classe de voltar, e ha tres |
 
@@ -103,7 +102,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
 | [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `approved` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 
-### Closed (165)
+### Closed (166)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -271,6 +270,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-178`](#b-178--tres-testes-de-metricas-reprovam-em-qualquer-worktree-vinculado-porque-procuram-git-como-diretorio----) | Tres testes de metricas reprovam em qualquer worktree vinculado, porque procuram `.git` como diretorio | `shipped` | media — nao ha defeito de produto, mas o efeito e' um falso vermelho no fluxo de trabalho que passou a ser obrigatorio. Uma lane que rode a suite do proprio worktree ve tres reprovacoes que nao tem relacao com a mudanca dela, e o custo previsivel e' alguem "consertar" o que nao esta quebrado, ou aprender a ignorar vermelho. |
 | [`B-180`](#b-180--quatro-assercoes-de-cli-pulam-sempre-e-uma-delas-torna-um-tfatalf-inalcancavel----) | Quatro assercoes de `cli/` pulam sempre, e uma delas torna um `t.Fatalf` inalcancavel | `shipped` | media — nada quebra; o que falha e' a **deteccao**, e num pacote que a suite reporta como verde. Quatro guardas de regressao nao afirmam nada desde o M5, e uma delas contem codigo morto que um leitor razoavel toma por assercao ativa. |
 | [`B-183`](#b-183--o-gate-de-skip-por-caminho-ausente-para-a-grafia-nao-a-classe-um-helper-booleano-o-evade----) | O gate de skip-por-caminho-ausente para a grafia, nao a classe: um helper booleano o evade | `shipped` | media — o gate existe para impedir que a classe volte, e a classe volta com |
+| [`B-185`](#b-185--o-gate-cli-exit-codes-imprime-skip-e-sai-0-desde-sempre-porque-o-diretorio-que-ele-mede-nunca-esteve-na-arvore---x) | O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore | `shipped` | media — um gate na cadeia que nunca mediu nada. Ele nao mente na saida (diz |
 | [`B-186`](#b-186--a-classe-ainda-volta-um-nivel-abaixo-um-predicado-que-chama-outro-predicado-e-invisivel-e-em-silencio---x) | A classe ainda volta um nivel abaixo: um predicado que chama outro predicado e' invisivel, e em silencio | `shipped` | media — o `B-183` existiu para fechar a classe e fechou a grafia de UM |
 
 <!-- BACKLOG-INDEX:END -->
@@ -6867,7 +6867,7 @@ dod:
     codigo abaixo), ela nao pode virar o que vigia: um detector que para de
     reconhecer a forma reprova, nao passa
 
-## B-185 — O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore   [ ]
+## B-185 — O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore   [x]
 
 domain: engine-go
 repo: loopzero
@@ -6897,7 +6897,7 @@ evidence: |
 why_now: o `B-180` e o `B-181` trataram a mesma pergunta — o que um gate pode
   afirmar quando o assunto nao esta la — e este ficou de fora por nao ser um teste
   sob `infra/tests/`. A regra que os dois estabeleceram vale aqui igual.
-status: triaged
+status: shipped
 dod:
   - o gate declara a ausencia em toda execucao com a medicao que a sustenta, no molde
     do `cost-series-producers` (`B-181`), ou e' removido da cadeia com a razao escrita
@@ -6907,6 +6907,111 @@ dod:
     modo declarado sozinho e reprovar se a declaracao ficar — a mesma propriedade que
     o pin do `test-skip-absent-path` tem
   - medido, nao argumentado: a saida do gate antes e depois, colada no item
+
+resolution: |
+  Fechado 2026-09-05. DECISAO: MANTER E DECLARAR, no molde do `B-181` — e ensinar o
+  gate a procurar o assunto onde ele foi parar, para que o ramo "a ausencia acabou"
+  tenha gatilho real em vez de ser mais um ramo que nunca roda.
+
+  **POR QUE NAO REMOVER.** A saida de remocao exige nomear o que cobre o contrato no
+  lugar. O que cobre e' "a CI do proprio loopzero-cli" — que e' exatamente a afirmacao
+  NAO VERIFICADA que o pin do `test-skip-absent-path` ja' registra, palavra por
+  palavra, para as duas vizinhas. Trocar um SKIP impresso por nada, com uma razao
+  escrita que o proprio repositorio ja' marcou como nao verificavel daqui, e' menos
+  informacao e nao mais. E removido, o dia em que alguem clonar `loopzero-cli` ao lado
+  nao re-arma coisa nenhuma.
+
+  **O QUE MUDOU (4 coisas).**
+
+  1. `Outcome.Pass` deixou de ser CAMPO e virou METODO derivado:
+     `func (o *Outcome) Pass() bool { return o.Checked && len(o.Violations) == 0 }`.
+     O defeito era UM literal — `Outcome{Pass: true, Skipped: true}` — e esse literal
+     agora e' inescrevivel. O campo `Skipped` nao existe mais.
+  2. O gate procura o fonte em DOIS lugares, em ordem: `<repo>/cli/src` e
+     `<loopzero-cli>/src` (padrao `<repo>/../loopzero-cli`; `--loopzero-cli` / `$LOOPZERO_CLI_ROOT`).
+     Isso e' o que da' gatilho plausivel ao ramo de retorno: `cli/` voltar para ca'
+     e' improvavel (o M2 a tirou de proposito), clonar `loopzero-cli` ao lado e' terca-feira.
+  3. A ausencia e' DECLARADA em `infra/quality/cli-exit-codes-subject.txt`, com a
+     medicao junto, impressa em TODA execucao. O veredito e' PARTIAL e sai 0; a
+     palavra PASS nunca e' impressa quando nada foi lido.
+  4. Ausencia NAO declarada REPROVA. Declaracao que sobrevive ao retorno do assunto
+     REPROVA, nomeando arquivo, linha e o conserto.
+
+  **MEDIDO, NAO ARGUMENTADO — binario proprio `/tmp/loopzero-ops-b185`, `-count=1`.**
+
+  ANTES (commit pai, arvore real):
+
+      cli-exit-codes: SKIP — cli/src/ not present
+      exit=0
+
+  DEPOIS (esta faixa, arvore real — 3 linhas, nenhuma diz PASS):
+
+      cli-exit-codes: TRACKED ABSENCE — cli/src is not in this tree and not in any
+        checkout beside it: Measured 2026-09-05: cli/ left this repository in
+        686b9a4c5 (2026-06-16, "remove cli/ — extracted to standalone loopzero-cli
+        (M2)") ... What this repository re-asserts about Rule 4 in the meantime is
+        NOTHING ... The contract holds only wherever loopzero-cli's own CI runs it, and
+        that claim is UNVERIFIED from this tree ...
+      cli-exit-codes: NOT COVERED — no process.exit() call in this repository is
+        checked against Rule 4, and no other gate enforces the exit-code contract ...
+        (searched: <root>/cli/src, <root>/../loopzero-cli/src)
+      cli-exit-codes: PARTIAL — 0 file(s) scanned, exit-code contract NOT CHECKED
+        (1 tracked absence(s))
+      exit=0
+
+  AS OUTRAS QUATRO SAIDAS, medidas com o mesmo binario contra arvores reais:
+
+      B. loopzero-cli aparece ao lado, linha do pin ainda la'  -> FAIL exit 1
+         infra/quality/cli-exit-codes-subject.txt:27: cli/src is declared ABSENT
+         here, but a CLI source tree EXISTS at <fake>/src -- the absence closed;
+         delete that line so this gate scans instead of declaring
+      C. mesma arvore, linha do pin apagada               -> PASS exit 0
+         "PASS — 1 file(s) under <fake>/src, all exit codes within the 0-5 contract"
+      D. mesma arvore, com `process.exit(7)` no checkout  -> FAIL exit 1
+         "../b185-fake-loopzero-cli/src/bad.ts:2: process.exit(7) outside 0-5 contract"
+      E. pin apagado E sem checkout (ausencia nao declarada) -> FAIL exit 1
+         "no CLI source tree was found (looked at ...) and
+         infra/quality/cli-exit-codes-subject.txt declares no absence"
+
+  A propriedade do `B-183` esta' em B: o gate sai do modo declarado SOZINHO (C, D
+  provam que ele passa a ler de verdade) e REPROVA enquanto a declaracao ficar.
+
+  **MUTACAO, com EFEITO conferido — um mutante por capacidade nova.** O harness
+  verifica o proprio baseline antes de emitir veredito:
+
+      BASELINE: GREEN
+      M1 Pass() esquece que nada foi lido       KILLED por TestCheck_SubjectAbsentAndDeclared_IsNotAPass
+      M2 ausencia nao declarada deixa de reprovar KILLED por TestCheck_SubjectAbsentAndUndeclared_Fails
+      M3 pin que sobrevive a ausencia nao reprova KILLED por TestCheck_SubjectReturnsInRepo_StalePinFails,
+                                                             TestCheck_SubjectReturnsInSibling_StalePinFails
+      M4 o checkout irmao nao e' mais procurado  KILLED por TestCheck_SearchedPathsAreReported,
+                                                             TestCheck_SiblingScannedWhenPinRetired,
+                                                             TestCheck_SubjectReturnsInSibling_StalePinFails
+      M5 a ordem de busca inverte                KILLED por TestCheck_InRepoSubjectWinsOverSibling,
+                                                             TestCheck_SearchedPathsAreReported
+      RESTORED: GREEN
+
+  **SUITE.** `go test -count=1 ./cmd/loopzero-ops/...` na worktree: tudo verde exceto
+  `trufflehogscan.TestArvoreRealEstaAdjudicada`, que reprova em QUALQUER worktree
+  vinculada (o `.git` e' arquivo, nao diretorio) — e' o `B-178`, nao esta faixa.
+  `gofmt -l cmd/loopzero-ops/` vazio. `TestTodoArquivoDeInfraQualityTemLeitor` verde: o
+  pin novo tem leitor (`DefaultPinFile` em `check.go`).
+
+  **AS DUAS VIZINHAS — nao mexidas, e o que esta decisao muda para elas.** Os dois
+  `cliSrcPresent()` de `api/internal/contract/cli_consumer_test.go` seguem no
+  `infra/quality/test-skip-absent-path.txt`, sem duplicacao de escrituracao aqui. O
+  que esta decisao muda: as duas linhas dizem "a checagem mudou para a CI do
+  loopzero-cli, e isso e' NAO VERIFICADO desta arvore", e agora existe um mecanismo que
+  torna o assunto legivel daqui — se `loopzero-cli` estiver clonado ao lado, este gate
+  o le'. A saida analoga para elas seria ler `../loopzero-cli/src` em vez de `cli/src`,
+  o que faria as duas assercoes voltarem a rodar quando o checkout existir e
+  obrigaria a remocao das duas linhas do pin. Fica NOMEADO e NAO FEITO: e' diff de
+  outro item (o `B-182` ja' possui a fila de saida daquele pin).
+
+  **O QUE CONTINUA SEM COBERTURA, dito e nao implicado.** Enquanto nao houver fonte
+  de CLI nesta arvore nem ao lado, NADA neste repositorio e' verificado contra a
+  Regra 4, e nenhum outro gate cobre o contrato de exit code. Essa frase e' impressa
+  em toda execucao, com os caminhos procurados.
 
 ## B-186 — A classe ainda volta um nivel abaixo: um predicado que chama outro predicado e' invisivel, e em silencio   [x]
 
