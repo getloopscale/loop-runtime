@@ -145,6 +145,11 @@ fi
 # to reset the clock.
 V3_CM_NS="${COSIGN_V3_CONFIG_NS:-loopzero-system}"
 V3_CM_NAME="${COSIGN_V3_CONFIG_NAME:-loopzero-cosign-version-config}"
+# The version the chart ships as its default, meaning "no upgrade pending".
+# charts/loopzero-admission-policies/templates/cosign-version-config.yaml emits
+# target_version=v2.4.3 with set_at omitted and documents that exact state as
+# the resting one, requiring set_at only when targetVersion != v2.4.3.
+V3_BASELINE_VERSION="${COSIGN_V3_BASELINE_VERSION:-v2.4.3}"
 
 v3_read_field() {
   local key="$1"
@@ -154,7 +159,12 @@ v3_read_field() {
 }
 
 V3_TARGET="$(v3_read_field target_version || true)"
-if [[ -n "$V3_TARGET" ]]; then
+# A pending upgrade is a target that DIFFERS from the shipped baseline. Treating
+# any non-empty target_version as pending made the chart's own default state
+# (target_version=v2.4.3, no set_at) exit 1 here, before the keyed/keyless logic
+# below ever ran — so the guard blocked on the version tracker instead of
+# reporting on the cutover it exists to enforce. Measured 2026-09-05.
+if [[ -n "$V3_TARGET" && "$V3_TARGET" != "$V3_BASELINE_VERSION" ]]; then
   V3_SET_AT="$(v3_read_field set_at || true)"
   if [[ -z "$V3_SET_AT" ]]; then
     log "FAIL: ConfigMap $V3_CM_NS/$V3_CM_NAME has target_version=$V3_TARGET but missing required 'set_at' field; refusing ambiguous deadline (ADR-2026-05-28-cosign-v2.4.3-deadline)"

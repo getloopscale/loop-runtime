@@ -5072,6 +5072,54 @@ dod:
   - o que ficar sem executor está declarado como tal, e não some em silêncio
   - o `cosignDeadline` tem entrada válida antes de ser reagendado, ou o `B-146` fecha primeiro
 
+> **Medido 2026-09-05, em worktree limpa — o que fechou, o que não fecha, e três números da própria evidência que não sobreviveram à remedição.**
+>
+> | afirmação carregada | medição de hoje |
+> |---|---|
+> | `task quality:coverage:report` não existe | **confirmado.** `task --list-all` traz só `quality:test:coverage:report` (`taskfiles/quality.yml:411`). A tabela de 2026-08-19 continua correta neste ponto |
+> | *"o gate de PR, que a `delivery-gate.sh` já cobre em todo push"* | **falso hoje: o arquivo não existe nesta árvore.** Os hooks são todos Python (`.claude/hooks/*.py`), e nenhum roda `task quality:gates`. Pior: `.github/workflows/ci.yml:48` justifica **não** rodar gate no PR apoiado exatamente nesse hook, e escreve o risco — *"deixa de ser [aceitável] se alguém empurrar com o hook desativado"*. O `git log` mostra o arquivo sendo levado pelo reinstall do kit (`9a6e6e903`). O quinto item da evidência é o único dos cinco que o item dava por coberto, e é o que está descoberto |
+> | *"o `cosignDeadline` estaria vazio de qualquer forma"* | **não: ele BLOQUEIA, e por um terceiro motivo que nem o B-146 nem este item registram.** Rodado hoje contra `k3d-loopzero-core`: **exit 1**, reclamando de `loopzero-cosign-version-config` — outro ConfigMap, que **existe** (Helm, release `admission-policies-mgmt`, criado 2026-08-10) com `target_version: v2.4.3` e sem `set_at`. O pré-cheque de v3 roda **antes** da lógica keyed/keyless e nunca a alcançava |
+> | CI externo como destino | `.github/workflows/` tem 4 workflows e **zero** gatilho `schedule:` |
+>
+> **A causa do exit 1 é defeito, não estado.** O chart declara em duas cópias
+> (`charts/loopzero-admission-policies/templates/cosign-version-config.yaml` e a de
+> `infra/helm/`) que `target_version=v2.4.3` sem `set_at` significa *"no upgrade
+> pending"*, e exige `set_at` só quando `targetVersion != v2.4.3`. O cabeçalho do
+> próprio script diz o mesmo. O **corpo** do script exigia `set_at` para qualquer
+> `target_version` não-vazio. Corrigido nesta fatia, com teste RED-first e mutante
+> verificado: o guarda agora atravessa o pré-cheque e falha alto em **exit 2** —
+> *"cannot read mode from ConfigMap loopzero-system/loopzero-cosign-config"* —, que é
+> exatamente a ausência que o B-146 decidiu manter. Antes: exit 1 sobre o artefato
+> errado. Depois: exit 2 sobre o artefato certo.
+>
+> **Estado das balas:**
+>
+> - **Bala 1 (onde cada um roda) — PARCIAL.** `drillWatchdog` e `weeklySoak`: decididos
+>   como **operador**, que é o que `taskfiles/drill.yml:20-26` já declara desde a
+>   remoção das cadências do GitHub Actions em 2026-05-23; o cron era a forma errada
+>   (o watchdog só tem o que destruir com stack ativo, e o soak provisiona 4 clusters
+>   DOKS, ~$0.35 e ~65min por run atrás de um preflight de 4 credenciais). Automatizar
+>   qualquer um dos dois é `access`, classe RETIDA em
+>   `.claude/rules/decision-delegation.txt`. `cosignDeadline`: **sem executor e
+>   bloqueado** na decisão do dono do corte (issue #348) — não é decisão de
+>   agendamento. `coverageReport`: **segue aberta** — as três alternativas custam,
+>   cada uma, algo que não é edição livre (registro publicado que a árvore não tem /
+>   contrariar a decisão escrita em `ci.yml` sobre o que os workflows são / largar o
+>   relatório). É a única bala que resta.
+> - **Bala 2 (o que fica sem executor é declarado) — FECHADA.**
+>   `docs/operations/retired-periodic-jobs.md` declara os quatro com cadência antiga,
+>   comando real e executor de hoje, incluindo os dois que ninguém roda. E
+>   `infra/tests/scripts/retired_periodic_jobs_test.go` reprova qualquer `task X`
+>   citado ali que não resolva — que é o defeito exato do `coverageReport`.
+> - **Bala 3 (`cosignDeadline` com entrada válida, ou `B-146` fecha antes) — FECHADA
+>   pelo segundo braço, e o braço vale menos do que parecia.** `B-146` está `shipped`.
+>   Mas o que ele decidiu (`decided_by`, commit `7565db99c`) foi **não provisionar** o
+>   `loopzero-cosign-config` e mover o prazo para 2026-12-03. Reconfirmado hoje:
+>   `kubectl -n loopzero-system get cm loopzero-cosign-config` → `NotFound`. Ou seja, a entrada
+>   não fica válida por este caminho; o braço fechado não destrava o reagendamento, e
+>   quem ler a bala esperando o contrário se engana.
+
+
 ## B-148 — 155 arquivos Go não passam pelo `gofmt`, e nenhum gate percebe   [x]
 
 domain: engine-go
