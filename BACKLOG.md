@@ -92,8 +92,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `triaged` | alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
 | [`B-168`](#b-168--a-guarda-destrutiva-do-validate-commandsh-regrediu-teste-do-b-160-volta-a-reprovar----) | A guarda destrutiva do validate-command.sh regrediu; teste do B-160 volta a reprovar | `blocked` · was `triaged` | waiting on a decision — alta - o hook agora bloqueia trabalho legitimo (heredocs, comandos multi-parte com grep+sed), o que reduz a confianca no gate e leva as pessoas a rodearem. |
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
-| [`B-175`](#b-175--o-caminho-que-o-external-secrets-operator-usa-decifra-sem-contar-nada----) | O caminho que o External Secrets Operator usa decifra sem contar nada | `triaged` | alta — nao pelo risco de dado, mas porque a metrica cria a aparencia de cobertura no caminho errado. Um operador que veja o contador em zero conclui que nada quebrou, e o caminho que serve os usuarios nao esta sendo contado. |
-| [`B-176`](#b-176--a-escrita-em-lote-de-segredos-nao-move-contador-e-um-adiamento-se-apoia-nele----) | A escrita em lote de segredos nao move contador, e um adiamento se apoia nele | `triaged` | media — nada quebra; o que falha e' a **deteccao**. O `B-126` fecha adiando a canaria com o gatilho "a primeira linha escrita na tabela `secrets`", e o unico sinal desse gatilho que dispara sem alguem olhar tem um furo exatamente por onde o evento pode passar. |
+| [`B-177`](#b-177--duas-saidas-de-erro-escrevem-a-linha-e-nao-movem-contador-e-o-gatilho-do-b-126-ainda-e-limite-inferior----) | Duas saidas de erro escrevem a linha e nao movem contador, e o gatilho do `B-126` ainda e' limite inferior | `triaged` | baixa — menor que o `B-176` que o precedeu, e pela mesma razao: nao quebra comportamento, estreita deteccao. As duas saidas exigem que o cluster de mgmt ou a derivacao de namespace falhe, o que e' bem mais raro que "nao ha sync configurado"; mas o efeito e' identico, uma linha em `secrets` sem serie nenhuma. |
+| [`B-178`](#b-178--tres-testes-de-metricas-reprovam-em-qualquer-worktree-vinculado-porque-procuram-git-como-diretorio----) | Tres testes de metricas reprovam em qualquer worktree vinculado, porque procuram `.git` como diretorio | `triaged` | media — nao ha defeito de produto, mas o efeito e' um falso vermelho no fluxo de trabalho que passou a ser obrigatorio. Uma lane que rode a suite do proprio worktree ve tres reprovacoes que nao tem relacao com a mudanca dela. |
 
 ### In flight (3)
 
@@ -103,7 +103,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-169`](#b-169--infratestsoperator_cutover_invariants-espera-arquivos-removidos-por-m5-decomposition----) | infra/tests/operator_cutover_invariants espera arquivos removidos por M5 decomposition | `planned` | blocks `B-033`, `B-057` — media - o teste esta' factualmente errado (procura arquivo que nao existe por design), o que gera ruido no gate e mascara falhas reais. |
 | [`B-170`](#b-170--toolsgen-service-auth-ed25519-reprova-go-test-com-directory-prefix-no-go-workspace----) | tools/gen-service-auth-ed25519 reprova go test com "directory prefix" no go workspace | `planned` | blocks `B-033`, `B-057` — baixa - o modulo e' uma ferramenta de geracao de chaves e provavelmente nao tem testes proprios; o setup do go.work e' que precisa de ajuste. |
 
-### Closed (153)
+### Closed (155)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -260,6 +260,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-171`](#b-171--readsecret-em-settingsjson-bloqueia-arquivos-legítimos-como-secretsgo----) | `Read(**/*secret*)` em settings.json bloqueia arquivos legítimos como `secrets.go` | `shipped` | media - bloqueia dead-citation cleanup no B-058 bala 4 + qualquer edit futuro em routes/secrets/. Nao ha bypass documentado. |
 | [`B-172`](#b-172--detector-python-depende-de-vulture-no-path-mas-nada-verifica-teste-falha-em-qualquer-host-sem-o-binário----) | Detector Python depende de `vulture` no PATH mas nada verifica; teste falha em qualquer host sem o binário | `shipped` | baixa — o binário vulture geralmente está disponível em hosts de dev com Python, mas o requisito é hidden. O impacto é 1 teste flaky por env, não regressão de produção. |
 | [`B-173`](#b-173--three-go-packages-sit-below-the-coverage-floor-and-every-unrelated-slice-pays-for-it----) | Three Go packages sit below the coverage floor, and every unrelated slice pays for it | `killed` | alta — nao pelo risco do codigo descoberto, mas porque o gate transforma uma divida de tres pacotes num imposto sobre toda fatia que passa pelo portao. |
+| [`B-175`](#b-175--o-caminho-que-o-external-secrets-operator-usa-decifra-sem-contar-nada----) | O caminho que o External Secrets Operator usa decifra sem contar nada | `shipped` | alta — nao pelo risco de dado, mas porque a metrica cria a aparencia de cobertura no caminho errado. Um operador que veja o contador em zero conclui que nada quebrou, e o caminho que serve os usuarios nao esta sendo contado. |
+| [`B-176`](#b-176--a-escrita-em-lote-de-segredos-nao-move-contador-e-um-adiamento-se-apoia-nele----) | A escrita em lote de segredos nao move contador, e um adiamento se apoia nele | `shipped` | media — nada quebra; o que falha e' a **deteccao**. O `B-126` fecha adiando a canaria com o gatilho "a primeira linha escrita na tabela `secrets`", e o unico sinal desse gatilho que dispara sem alguem olhar tem um furo exatamente por onde o evento pode passar. |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -5917,13 +5919,40 @@ suggested_mode: evolve
 source: b126-audit
 evidence: medido em 2026-09-04 por uma auditoria do `B-126`. A metrica `loopzero_secret_decrypt_failed_total` instrumenta `PostgresSecretStore.decryptFromStore`, e o unico chamador nao-teste dessa funcao e `ListForResync` — um hook de deploy. O endpoint de producao `/internal/v1/secret-fetch/...` (montado em `main.go:431-451`), que o External Secrets Operator chama para **todo secret de usuario**, decifra via Transit direto da propria query SQL em `api/cmd/setup_secret_fetch.go:120` e nao incrementa nada.
 why_now: o `B-126` existe porque uma chave transit revogada orfaniza ciphertext e ninguem percebe. A metrica que ele entregou cobre o caminho de resync; no caminho que o ESO de fato usa, uma chave revogada continua produzindo exatamente os erros espalhados por requisicao que o item existe para eliminar. A alegacao de cobertura total sobreviveu ate a auditoria porque veio de um comentario de interface — `internal_secret_fetch.go:70` descreve uma delegacao que o implementador de producao nao faz, e ninguem seguiu o call graph alem da interface.
-status: triaged
+status: shipped
 severity: alta — nao pelo risco de dado, mas porque a metrica cria a aparencia de cobertura no caminho errado. Um operador que veja o contador em zero conclui que nada quebrou, e o caminho que serve os usuarios nao esta sendo contado.
 dod:
   - o caminho do broker (`cmd/setup_secret_fetch.go`) incrementa o mesmo contador, com as mesmas razoes
   - um teste falha se um decrypt por aquele caminho nao mover o contador
   - o comentario de `internal_secret_fetch.go:70` descreve a delegacao que o implementador realmente faz, ou e removido
   - o escopo escrito no ADR de 2026-09-04 e no godoc do contador deixa de dizer "nao instrumentado" quando passar a estar
+
+> **Fechado 2026-09-04.** Os quatro bullets, com a medicao de cada um:
+>
+> 1. `rawSecretReader.ReadSecret` incrementa `SecretDecryptFailedTotal` nas suas tres
+>    saidas de decrypt, sob as mesmas tres razoes do dispatcher da store
+>    (`empty_ciphertext`, `vault_transit_error`, `aes_legacy_error`), entao um unico
+>    `sum(...)` cobre os dois leitores. Confirmado que `rawSecretReader` e' o unico
+>    implementador de producao de `InternalSecretReader`: assercao de compilacao em
+>    `cmd/setup_secret_fetch.go:168`, wiring em `:213`, endpoint montado em
+>    `cmd/main.go:431-451`.
+> 2. `TestBrokerReadSecret_DecryptFailureMovesCounter` cobre as tres razoes. Provado RED
+>    por mutacao: removida cada uma das tres linhas de `Inc()` isoladamente, o subteste
+>    correspondente falha com `expected: 1, actual: 0`. Dois testes irmaos travam o
+>    contrario — sucesso nao move contador, e `ErrSecretNotFound` (linha ausente) nao e'
+>    falha de decrypt, para o alerta nao disparar em trafego normal.
+> 3. Tomado o ramo **"ou e removido"** do bullet: o comentario descrevia uma delegacao
+>    que implementador nenhum jamais fez, entao foi substituido pela descricao correta
+>    (o contrato nao dita como se decifra) mais o registro de que a frase antiga foi a
+>    causa da alegacao de cobertura inflada.
+> 4. O godoc do contador passou a trazer uma lista SCOPE nomeando os dois leitores, e o
+>    ADR de 2026-09-04 registra a correcao. A unica ocorrencia remanescente de "not yet
+>    instrumented" na arvore esta no ADR em forma historica ("The honest wording at the
+>    time was"), imediatamente seguida da correcao. Medido por grep sobre `*.go` e `*.md`.
+>
+> Efeito colateral corrigido de quebra: o bloco `Alert opportunity` do godoc estava
+> corrompido — uma linha de comentario `// SCOPE:` fora injetada no meio da expressao
+> PromQL, partindo a query em duas. A query voltou a ser valida.
 
 ## B-176 — A escrita em lote de segredos nao move contador, e um adiamento se apoia nele   [ ]
 
@@ -5934,7 +5963,7 @@ source: adr-b126-canary-deferral
 severity: media — nada quebra; o que falha e' a **deteccao**. O `B-126` fecha adiando a canaria com o gatilho "a primeira linha escrita na tabela `secrets`", e o unico sinal desse gatilho que dispara sem alguem olhar tem um furo exatamente por onde o evento pode passar.
 evidence: medido 2026-09-04 ao fechar o `B-126`. Caminho unitario: `POST /secrets` incrementa `loopzero_secret_externalsecret_total` uma vez apos persistir a linha — `success`/`fail` de `SecretK8sManager.CreateSecret` (`api/internal/k8s/secret_k8s_manager.go:320,334`), ou `skip` quando nao ha sync de workload configurado (`api/internal/routes/secrets/secrets.go:802`). Caminho em lote: quando `h.k8sSync` e' nil, `api/internal/routes/secrets/secrets.go:578-580` registra a entrada como `pending` e retorna **sem tocar contador nenhum**. As duas rotas tratam a mesma condicao — sem sync de workload — e so uma emite serie. Uma escrita em lote contra um deployment sem sync portanto grava em `secrets` e deixa `sum(loopzero_secret_externalsecret_total)` em zero.
 why_now: o `docs/wiki/decisions/2026-09-04-secret-decrypt-canary-deferral.md` declara este furo em § "Its gap, stated rather than discovered later" e manda tratar o proxy como limite inferior. Declarar num ADR nao e' rastrear: quem abre aquele arquivo ve, quem pergunta o que falta nao. E o adiamento do `B-126` — a decisao de nao construir a canaria enquanto a tabela estiver vazia — depende de perceber quando ela deixa de estar.
-status: triaged
+status: shipped
 dod:
   - o caminho em lote emite a mesma serie que o unitario para a condicao `k8sSync == nil`, ou tem razao escrita de por que a assimetria e' correta
   - existe teste que falha se um dos dois caminhos parar de emitir — a assimetria voltou uma vez sem ninguem notar, e um teste que so olha o caminho unitario nao a teria pego
@@ -5942,4 +5971,80 @@ dod:
 
 > Registrado 2026-09-04 ao fechar o `B-126` pelo bullet 3. O ADR ja nomeava o furo;
 > o que faltava era ele existir onde alguem procura trabalho.
+
+> **Fechado 2026-09-04.** Os tres bullets, com a medicao de cada um:
+>
+> 1. Tomado o primeiro ramo — o caminho em lote **emite**, nao ganhou justificativa de
+>    assimetria. `bulkProcessEnvs` incrementa `SecretExternalSecretTotal{result="skip"}`
+>    uma vez por LINHA PERSISTIDA (`secrets.go:600`), casando com o contrato do caminho
+>    unitario (`:830`); emitir uma vez por entrada subcontaria uma escrita multi-ambiente.
+>    O status devolvido ao chamador continua `pending` — o furo era a metrica, nao o
+>    contrato da API, e o teste afirma isso explicitamente.
+> 2. `TestExternalSecretSkip_BothWritePathsEmitWhenSyncIsNil` afirma os dois caminhos num
+>    unico teste. Provado RED nas **duas** direcoes por mutacao, que e' o que o bullet
+>    pede: removido so' o `Inc()` do lote (`:600`), falha o subteste `bulk`
+>    ("moved the skip counter by 0 across 2 envs, want exactly 2"); removido so' o do
+>    unitario (`:830`), falha o subteste `single set` ("moved the skip counter by 0,
+>    want exactly 1"). Nenhuma das duas mutacoes passa despercebida.
+> 3. A condicao do bullet **disparou**: o proxy continua sendo limite inferior, por uma
+>    razao menor e agora nomeada. `SecretK8sManager.CreateSecret` tem duas saidas de erro
+>    anteriores aos dois contadores — a falha de create/update do Secret no cluster de
+>    mgmt (`api/internal/k8s/secret_k8s_manager.go:192`) e a falha de derivacao de
+>    namespace (`:206-208`), ambas dentro da funcao que comeca em `:164` e ambas depois de
+>    `store.Set` ja ter persistido a linha. Logo uma linha ainda pode aterrissar em
+>    `secrets` sem mover serie. O `§2` do ADR diz isso e cita o item que rastreia: `B-177`,
+>    aberto abaixo. Medido 2026-09-04 lendo as duas funcoes.
+>
+> Fora de escopo, verificado e nao um furo: o terceiro sitio `h.k8sSync != nil`
+> (`secrets.go:921`) e' o caminho de DELETE. Um delete nao escreve linha em `secrets`, e o
+> contador conta create/update de CR — o gatilho do `B-126` e' "a primeira linha escrita",
+> que um delete nao produz.
+
+## B-177 — Duas saidas de erro escrevem a linha e nao movem contador, e o gatilho do B-126 ainda e' limite inferior   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b176-close
+severity: baixa — menor que o `B-176` que o precedeu, e pela mesma razao: nao quebra comportamento, estreita deteccao. As duas saidas exigem que o cluster de mgmt ou a derivacao de namespace falhe, o que e' bem mais raro que "nao ha sync configurado"; mas o efeito e' identico, uma linha em `secrets` sem serie nenhuma.
+evidence: medido 2026-09-04 ao fechar o `B-176`. `SecretK8sManager.CreateSecret` (`api/internal/k8s/secret_k8s_manager.go:164`) so' incrementa `loopzero_secret_externalsecret_total` em `:320` (`fail`) e `:334` (`success`), ambos depois da criacao da CR ExternalSecret. Duas saidas de erro retornam antes de qualquer um dos dois: a falha de create/update do Secret no cluster de mgmt (`:192`, `return fmt.Errorf("create k8s secret on mgmt: %w", err)`) e a falha de derivacao de namespace (`:206-208`, `tenantNS, err := tenantNamespaceFor(...)` seguido de `return err`). As duas ocorrem **depois** de `store.Set` ja ter persistido a linha, entao a linha existe e `sum(loopzero_secret_externalsecret_total)` fica em zero.
+why_now: o `B-176` fechou o furo do caminho em lote e por isso pode afirmar que os dois caminhos de escrita emitem para `k8sSync == nil`. Nao fechou este, que e' de outra natureza — nao e' assimetria entre rotas, e' cobertura incompleta dentro do proprio `CreateSecret`. O `§2` do ADR de 2026-09-04 foi atualizado para dizer que o proxy segue sendo limite inferior e para citar este item; sem o item existindo, aquela citacao aponta para nada, que e' exatamente o defeito que originou o `B-176`.
+status: triaged
+dod:
+  - as duas saidas de erro de `CreateSecret` anteriores aos contadores ou emitem serie, ou tem razao escrita de por que nao devem
+  - existe teste que falha se uma delas voltar a persistir linha sem mover contador
+  - se a decisao for aceitar o limite inferior, o `§2` do ADR do `B-126` registra que este item foi avaliado e recusado, com a razao
+
+> Registrado 2026-09-04 ao fechar o `B-175`/`B-176`. O ADR ja tinha sido escrito citando
+> `B-177` antes de o item existir — o mesmo erro que o `B-176` foi aberto para corrigir,
+> cometido de novo no ato de corrigi-lo. O item existe agora; a citacao resolve.
+
+## B-178 — Tres testes de metricas reprovam em qualquer worktree vinculado, porque procuram `.git` como diretorio   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b175-lane
+severity: media — nao ha defeito de produto, mas o efeito e' um falso vermelho no fluxo de trabalho que passou a ser obrigatorio. Uma lane que rode a suite do proprio worktree ve tres reprovacoes que nao tem relacao com a mudanca dela, e o custo previsivel e' alguem "consertar" o que nao esta quebrado, ou aprender a ignorar vermelho.
+evidence: medido 2026-09-04 na lane do `B-175`, rodando de `/tmp/lane-b175` (worktree vinculado criado com `git worktree add`). `TestSigstoreMetrics_AllDeclaredAreVisualized`, `TestSigstoreMetrics_DashboardRefsAreDeclared` e `TestSigstoreMetrics_AllDeclaredHaveWrapper` reprovam com `could not locate repo root from /`. A causa esta em `api/internal/metrics/sigstore_observability_mirror_test.go:63`, que exige `os.Stat(dir/".git")` **com `st.IsDir()` verdadeiro**. Num worktree vinculado o `.git` e' um ARQUIVO de 54 bytes contendo `gitdir: ...`, nao um diretorio — confirmado por `file .git` (`ASCII text`) e `os.path.isdir` = `False`. O laco entao sobe ate `/` e falha. As tres reprovacoes acontecem dentro do helper, antes de qualquer leitura do conteudo que os testes afirmam, portanto nenhuma mudanca de codigo as provoca ou as evita. O resto do pacote passa: `go test ./internal/metrics/ -skip TestSigstoreMetrics` e' `ok`.
+why_now: o fluxo de lanes passou a exigir um worktree por lane depois da colisao de 2026-09-04 em `/home/paulo/dev/loopzero`. A partir dai estes tres testes reprovam para toda lane, sempre, por uma razao que nao e' a lane. Um gate que so' reprova no ambiente novo e nunca no antigo e' a forma mais eficiente de ensinar o time a nao confiar no gate.
+status: triaged
+dod:
+  - o helper de raiz de repositorio aceita `.git` como arquivo (worktree vinculado) alem de diretorio, ou localiza a raiz por outro marcador que valha nos dois casos
+  - os tres testes passam rodando de um worktree vinculado e continuam passando do checkout principal — as duas execucoes medidas, nao so' a segunda
+  - o mesmo padrao `IsDir()` sobre `.git` e' procurado no resto da arvore, e o que for encontrado acompanha ou tem razao escrita
+
+> Registrado 2026-09-04 pela lane do `B-175`, que topou com isso ao rodar a suite dos
+> pacotes que tocou. Nao e' regressao da lane, e isso foi medido, nao deduzido: as tres
+> reprovam com a mesma mensagem rodando do commit base `d61f22699` em outro worktree
+> vinculado (`/tmp/loopzero-base-b175`), onde nenhuma linha desta lane existe. O arquivo do
+> teste tambem e' byte a byte igual nos dois — mesmo blob,
+> `175cabb755a08a9e31ac490befd06985360c7754` — e a reprovacao acontece dentro do helper
+> de raiz, antes de o teste ler qualquer arquivo.
+>
+> O lado que falta medir, dito como tal: **nao** rodei estes testes de um checkout comum,
+> onde `.git` e' diretorio. A causa acima e' leitura do codigo do helper mais os dois
+> fatos medidos (o `.git` do worktree e' arquivo; a condicao exige `IsDir()`), nao uma
+> comparacao observada entre os dois ambientes. Quem for fechar o item deve rodar as duas
+> formas — e' o primeiro bullet da DoD por essa razao.
 
