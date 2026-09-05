@@ -66,6 +66,23 @@ func runContractConsumers(args []string) int {
 			"nesta arvore e NAO foram varridas: %v\n", len(outcome.MissingRoots), len(outcome.ScanRoots),
 			outcome.MissingRoots)
 	}
+	// A missing tracked path FAILS, and the difference from the warning above is
+	// deliberate. An absent consumer root shrinks where the gate hunts for the READER of
+	// the field, and where to repoint those is a meeting decision (B-100) — hence a
+	// warning. An absent tracked path takes away the gate's ability to see the field DROP
+	// at all: it starts answering PASS over a contract surface it never read, and nothing
+	// in the verdict text changes. That is not reduced coverage, it is a verdict without
+	// a subject, and the fix depends on no meeting — point the list at the new path.
+	if len(outcome.MissingTracked) > 0 {
+		fmt.Fprintf(os.Stderr, "contract-consumers: FAIL — %d of %d tracked path(s) do not exist "+
+			"in this tree: %v\n", len(outcome.MissingTracked), len(outcome.TrackedFiles),
+			outcome.MissingTracked)
+		fmt.Fprintf(os.Stderr, "  git diff/grep silently ignore a pathspec matching nothing, so this "+
+			"gate would be reporting PASS without reading that surface.\n"+
+			"  Fix: point trackedFiles in cmd/loopzero-ops/internal/quality/contractconsumers/check.go "+
+			"at the new path.\n")
+		return 1
+	}
 	if outcome.CommandError != "" {
 		fmt.Fprintf(os.Stderr, "contract-consumers: git/grep error: %s\n", outcome.CommandError)
 		return 5
