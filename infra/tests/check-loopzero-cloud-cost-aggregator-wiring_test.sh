@@ -13,6 +13,24 @@
 #       Absorves EC-1 do edge-case-plan: editar um dos dois arquivos sem o outro
 #       passa em silêncio; A3 pega o drift nomeando ambos os valores.
 #
+# WHAT THIS GATE DOES **NOT** PROVE — measured live on 2026-09-05, k3d-loopzero-core,
+# with every assertion above PASSING:
+#   - the rendered value is not the DEPLOYED value: `kubectl get deploy loopzero-cloud
+#     -n loopzero-system` had 19 env vars and ZERO matching `PROM|COST` (Deployment
+#     created 2026-08-10, pod started 2026-08-11, restarts=0 — the overlay change
+#     of 2026-08-31 was never applied to the cluster);
+#   - `select count(*) from cost_counters` returned **0**;
+#   - and even with the aggregator enabled it would write nothing for two of the
+#     three metrics: `loopzero_egress_bytes_total` and `loopzero_docr_pulls_total` — the
+#     PromQL the aggregator runs (loopzero-cloud internal/billing/cost_aggregator.go)
+#     — are emitted by NO repository (grepped across loopzero, loopzero-cloud, loopzero-engine,
+#     loopzero-data-plane, loopzero-ops, loopzero-forge, loopzero-lens-reconciler, loopzero-workspace);
+#     live Prometheus knows 48 `loopzero_*` series and none of the three.
+# The gate is the first link of a four-link chain (overlay → deploy → aggregator →
+# instrumentation). It asserts link 1. Its success line says so on purpose: a guard
+# that names the whole chain while observing one link is how B-033 stayed invisible
+# for three weeks after its "fix" landed in git.
+#
 # Sibling pattern (same class, same toolchain):
 #   infra/tests/check-loopzero-cloud-rag-dashboard-wiring_test.sh
 #   infra/tests/check-loopzero-cloud-lens-dashboard-wiring_test.sh
@@ -82,7 +100,10 @@ else
 fi
 
 if [ "$fail" -eq 0 ]; then
-  echo "OK — cost aggregator wiring intact"; exit 0
+  echo "OK — dev-public RENDER publishes LOOPZERO_PROMETHEUS_URL (link 1 of 4)."
+  echo "     NOT asserted here: that the cluster runs this manifest, that the aggregator"
+  echo "     started, or that anything emits the series it queries. See header + BACKLOG.md § B-033."
+  exit 0
 else
   echo "FAIL — $fail assertion(s) failed"; exit 1
 fi

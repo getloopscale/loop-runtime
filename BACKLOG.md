@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-180 items — **Open** 16 · **In flight** 2 · **Closed** 162 · **Blocked** 7
+181 items — **Open** 17 · **In flight** 2 · **Closed** 162 · **Blocked** 7
 
-### Open (16)
+### Open (17)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -90,6 +90,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
 | [`B-180`](#b-180--quatro-assercoes-de-cli-pulam-sempre-e-uma-delas-torna-um-tfatalf-inalcancavel----) | Quatro assercoes de `cli/` pulam sempre, e uma delas torna um `t.Fatalf` inalcancavel | `triaged` | media — nada quebra; o que falha e' a **deteccao**, e num pacote que a suite reporta como verde. Quatro guardas de regressao nao afirmam nada desde o M5, e uma delas contem codigo morto que um leitor razoavel toma por assercao ativa. |
+| [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `triaged` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 
 ### In flight (2)
 
@@ -1474,6 +1475,71 @@ why_now: o agregador é a ÚNICA fonte de `cost_counters`, e o portão que lê e
   degrada para "passa" quando ela está vazia. As três métricas de custo — minutos de build,
   egresso, puxadas de registro — não têm teto no ambiente que serve o painel público.
 status: triaged
+
+> **REMEDIDO AO VIVO 2026-09-05 (k3d-loopzero-core) — a corrente tem QUATRO elos, e o item só
+> conhecia dois. O elo que faltava torna a bala 1 inalcançável mesmo com deploy.**
+>
+> O que foi medido, comando a comando, com o gate hermético VERDE o tempo todo:
+>
+> | # | elo | estado em 2026-09-05 | como foi medido |
+> |---|---|---|---|
+> | 1 | overlay publica `LOOPZERO_PROMETHEUS_URL` | **OK** | `bash infra/tests/check-loopzero-cloud-cost-aggregator-wiring_test.sh` → exit 0, 35s |
+> | 2 | o cluster roda esse manifesto | **NÃO** | `kubectl get deploy loopzero-cloud -n loopzero-system` → 19 env vars, **zero** casando `PROM/COST`; Deployment criado 2026-08-10, pod iniciado 2026-08-11, `restarts=0` |
+> | 3 | o agregador escreve `cost_counters` | **NÃO** | `select count(*) from cost_counters` → **0** |
+> | 4 | alguém emite as séries que ele consulta | **NÃO** | Prometheus ao vivo conhece 48 nomes `loopzero_*`; nenhuma das três é uma delas |
+>
+> **O elo 4 é novo e é o que muda o veredito.** As três consultas PromQL do agregador
+> (`loopzero-cloud internal/billing/cost_aggregator.go:82-86`) devolvem vetor vazio hoje. Duas
+> delas devolveriam vazio para sempre: `loopzero_egress_bytes_total` e `loopzero_docr_pulls_total`
+> não são emitidas por repositório nenhum — grep em loopzero, loopzero-cloud, loopzero-engine,
+> loopzero-data-plane, loopzero-ops, loopzero-forge, loopzero-lens-reconciler e loopzero-workspace acha só o
+> CONSUMIDOR (a string PromQL do agregador e o teste dele). A terceira,
+> `loopzero_build_duration_seconds_sum`, tem produtor — `api/internal/metrics/metrics.go:42` —
+> mas é um `HistogramVec` rotulado, então a série só nasce depois do primeiro build
+> observado, e não há nenhuma no Prometheus de hoje.
+>
+> Consequência para a bala 1: **ligar o `LOOPZERO_PROMETHEUS_URL` e implantar NÃO produz linhas
+> em `cost_counters`.** Produz um agregador que roda a cada 5 min consultando três séries
+> inexistentes. O item media a corrente pelo elo 1; o elo 4 nunca foi olhado.
+>
+> **O gate hermético estava verde durante todas essas medições**, e dizia
+> *"OK — cost aggregator wiring intact"*. Ele prova o elo 1 e nomeava a corrente inteira —
+> exatamente a forma de fail-open que este item existe para nomear, um andar acima. A linha
+> de sucesso passou a dizer o que ele prova (`link 1 of 4`) e o que ele não observa, e o
+> cabeçalho carrega estas medições para quem chegar depois não redescobrir.
+>
+> **O que FECHOU hoje, por medição e não por argumento:**
+>
+> - **Os guardas do item mordem.** Cinco mutantes aplicados e confirmados (diff impresso
+>   antes de cada corrida): apagar o incremento `reason="disabled"` reprova
+>   `TestTetoDesligadoEmiteDecisaoEmVezDePassarEmSilencio`; trocar `AllowedUnmeasured` por
+>   `AllowedUnderCap` reprova o teste de razão **e** o de fiação do middleware; apagar o
+>   incremento por decisão quebra a compilação; apagar a `LOOPZERO_PROMETHEUS_URL` do overlay e
+>   trocá-la por outra porta reprovam o gate com as duas asserções (A1/A2 e A3). Nenhum
+>   guarda deste item é decorativo.
+> - **A camada `cost-gate` do `billing-layers` saiu de `open:B-033` para
+>   `test:api/internal/middleware/policy/cost_enforcement_disabled_test.go`.** É a troca que
+>   a nota de 2026-08-19 chamou de alcançável, e a cobertura existia desde então: o registro
+>   dizia que ninguém verificara a camada quando havia teste — com mutante — desde 2026-08-19.
+> - **A camada `cost-aggregator` NÃO foi trocada**, e a razão está escrita nela: o gate que
+>   seria o candidato natural estava verde enquanto os elos 2, 3 e 4 estavam mortos. Trocar
+>   ali seria o tapete que a catraca existe para impedir.
+> - **A tabela vazia deixou de ser servida como zero medido.** `GET /api/v1/billing`
+>   colapsava `found=false` em `{"used": 0, "limit": 100}` — o painel lia "você usou 0 de
+>   100" para um teto que nunca avaliou nada, e o teste existente afirmava esse colapso como
+>   intencional (`billing_cost_usage_test.go:43`). O portão distingue os dois casos desde a
+>   bala 3; o LADO DE LEITURA não distinguia, e era o único lugar onde a degradação voltava
+>   a ser silenciosa. Campo `measured` adicionado (aditivo, o contrato do CLI só congela
+>   `used`/`limit`), com polaridade deliberada: o zero de Go é `false`, então quem ignora o
+>   campo lê a afirmação pessimista.
+>
+> **O que continua aberto, e o que exatamente destrava:**
+>
+> - **Bala 1 — ABERTA.** Precisa dos elos 2, 3 e 4. O elo 2 é um `helmfile -e dev-public
+>   apply --selector name=loopzero-cloud` contra o k3d-loopzero-core (não feito aqui: é mutação de
+>   infraestrutura compartilhada, fora do escopo de uma lane). O elo 4 não tem dono e não
+>   está em item nenhum — duas das três métricas de custo do produto não têm emissor.
+> - **Balas 2 e 3 — fechadas**, e agora com os mutantes que provam os testes.
 
 > **A regra que este episodio produz, e ela vale para todos os itens deste registro:**
 > *"o resto e' de outro repositorio" so' fecha um item quando NENHUMA superficie DESTE repo
@@ -6391,4 +6457,23 @@ dod:
 > Registrado 2026-09-05 pela auditoria do `B-169`, que foi procurar a mesma forma
 > nos pacotes vizinhos em vez de aceitar o relatorio da fatia. As quatro estavam
 > dentro do alvo que a fatia rodou e declarou limpo.
+
+## B-181 — Duas das três métricas de custo do produto não têm quem as emita   [ ]
+
+domain: control-plane
+repo: loopzero
+suggested_mode: bug
+source: b033-live-test
+severity: alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05.
+evidence: medido ao vivo em 2026-09-05 contra o `k3d-loopzero-core`, durante o ciclo live-test do `B-033`. O agregador de custo do `loopzero-cloud` roda três consultas PromQL, declaradas em `internal/billing/cost_aggregator.go:82-86` — `sum by (tenant) (loopzero_egress_bytes_total)`, `sum by (tenant) (loopzero_docr_pulls_total)` e `sum by (tenant) (rate(loopzero_build_duration_seconds_sum[5m]) * 60)`. Contra o Prometheus do cluster as três devolvem `{"resultType":"vector","result":[]}`, e `/api/v1/series` devolve lista vazia para os três nomes. O Prometheus conhece **48** nomes de série `loopzero_*` e nenhum dos três está entre eles. Grep por `loopzero_egress_bytes_total` e `loopzero_docr_pulls_total` em oito repositórios clonados — loopzero, loopzero-cloud, loopzero-engine, loopzero-data-plane, loopzero-ops, loopzero-forge, loopzero-lens-reconciler, loopzero-workspace — acha **só o consumidor**: a string PromQL do próprio agregador e o teste dele. Nenhum produtor, em lugar nenhum. O terceiro, `loopzero_build_duration_seconds`, tem produtor (`api/internal/metrics/metrics.go:42`), mas é um `HistogramVec` rotulado por `tenant/environment/status`, então a série só nasce depois do primeiro build observado — e não há nenhuma no Prometheus de hoje.
+why_now: o `B-033` passou três semanas apontando para o elo errado. O overlay `dev-public` publica o `LOOPZERO_PROMETHEUS_URL` desde 2026-08-31 e o gate hermético que prova isso está verde; ninguém tinha ido ver se as séries do outro lado existem. Aparece agora porque o ciclo live-test do `B-033` foi conferir a corrente inteira em vez do elo que o item nomeava. Enquanto este item estiver aberto, `cost_counters` não recebe linha nenhuma nem com o agregador ligado, e o teto de custo de egresso e de puxadas de registro é estrutural, não configuracional.
+status: triaged
+dod:
+  - `loopzero_egress_bytes_total` e `loopzero_docr_pulls_total` têm produtor declarado — ou o item registra, com razão escrita, que essas duas métricas de custo saem do produto e o agregador deixa de consultá-las
+  - existe verificação que reprova quando uma consulta PromQL do agregador nomeia uma série que nenhum repositório emite — hoje esse desencontro é silencioso dos dois lados
+  - `cost_counters` recebe linha para cada métrica que sobreviver ao primeiro item, contra o `k3d-loopzero-core`, com data recente
+
+> Registrado 2026-09-05 pelo ciclo live-test do `B-033`, que mediu a corrente inteira em vez
+> de aceitar o elo que o item nomeava. O `B-033` continua dono da bala 1; este item é o que
+> a destrava, e sem ele aquele item não fecha nem com o deploy feito.
 
