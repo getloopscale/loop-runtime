@@ -18,8 +18,9 @@
 // like a live assertion -- one of the four skips B-180 removed carried an
 // unguarded os.ReadFile and a t.Fatalf below it.
 //
-// WHAT THIS GATE ANSWERS. For every path-guarded skip under infra/tests/,
-// exactly one of four things, named in the output:
+// WHAT THIS GATE ANSWERS. For every path-guarded skip under the trees it scans
+// (DefaultScanDirs: infra/tests and api), exactly one of four things, named in
+// the output:
 //
 //  1. CONDITIONAL -- the guarded path exists in this tree. The guard is
 //     genuinely conditional, the test runs here, nothing to declare.
@@ -28,9 +29,21 @@
 //     instead (B-169), or to declare it in the pin with a written reason.
 //  3. TRACKED -- an absence declared in the pin. Printed on EVERY run, pass or
 //     fail, so a tracked absence is never quieter than a fresh one.
-//  4. EXTERNAL -- the guard's path is rooted outside this repository (a
-//     $HOME/... backup directory, say). The gate states that it does not and
-//     cannot assert about it, rather than reporting a clean verdict over it.
+//  4. EXTERNAL -- the guard's path is rooted outside this repository: a
+//     $HOME/... backup directory, an absolute literal like /usr/bin/helmfile,
+//     or a relative path that climbs above the repository root. The gate states
+//     that it does not and cannot assert about it, rather than reporting a
+//     clean verdict over it -- and it prints the path AS WRITTEN. An earlier
+//     version joined an absolute literal onto the repository root and reported
+//     "infra/tests/config/usr/bin/helmfile ... ABSENT from this tree", a path
+//     that cannot exist as spelled; a gate that fabricates the path it names
+//     teaches its readers to distrust the ones it did not (B-183).
+//
+// The guard's probe may be written inline or moved one level into a
+// same-package predicate function -- `if !cliSrcPresent() { t.Skip() }` is read
+// exactly like the os.Stat it wraps (B-183). Before that, a one-line refactor
+// moving the probe into a helper made any guard in scope invisible here, which
+// is how an independent audit walked the class straight back in on 2026-09-05.
 //
 // A pin line whose path came BACK also fails: the guard is conditional again
 // and the declaration has become stale prose.
@@ -38,10 +51,12 @@
 // WHY IT CANNOT BECOME WHAT IT GUARDS. The failure mode of a scanner is
 // finding nothing and calling that clean. Four floors close that:
 //
-//   - the scan directory must exist -- a moved infra/tests/ is an error, not a
-//     pass;
-//   - the scan must find at least one *_test.go file;
-//   - the scan must find at least one skip call in the whole tree. If the AST
+//   - every configured scan directory must exist -- a moved infra/tests/ is an
+//     error, not a pass;
+//   - every configured scan directory must yield at least one *_test.go file,
+//     counted per root so one populous tree cannot cover for a root that
+//     drifted;
+//   - the scan must find at least one skip call across the roots. If the AST
 //     walk stops matching the shape of a skip, that is a broken detector, not
 //     a clean repository;
 //   - EVERY pin line must be re-found by this run's scan. The pin holds live
@@ -59,40 +74,30 @@
 //
 // SCOPE, stated so it is not mistaken for more.
 //
-//   - It detects a skip whose GUARD is a filesystem existence probe. It does
-//     NOT detect a bare unconditional `t.Skip(...)` with no guard: that shape
-//     is at least honest about being unconditional, its damage (dead
-//     assertions below it) is a different defect, and classifying WHY a bare
-//     skip exists means reading its prose.
+//   - It detects a skip whose GUARD is a filesystem existence probe, inline or
+//     one level down inside a same-package predicate. It does NOT detect a bare
+//     unconditional `t.Skip(...)` with no guard: that shape is at least honest
+//     about being unconditional, its damage (dead assertions below it) is a
+//     different defect, and classifying WHY a bare skip exists means reading its
+//     prose. Two live instances are tracked as B-184.
 //
-//   - A guard on a path rooted in an environment variable is reported EXTERNAL
-//     and not judged. This is a declared limit, not an oversight: such a path
-//     is not a claim about this repository, and a gate that guessed about
-//     $HOME would fail on one machine and pass on the next.
+//   - A guard on a path this repository does not contain -- rooted in an
+//     environment variable, spelled as an absolute literal, or climbing above
+//     the repository root -- is reported EXTERNAL and not judged. This is a
+//     declared limit, not an oversight: such a path is a fact about the machine
+//     the suite runs on and not a claim about this repository, and a gate that
+//     guessed about $HOME or /usr/bin would fail on one machine and pass on the
+//     next. What it must never do is judge it anyway under a path it invented.
 //
-//   - THE BIGGEST LIMIT, and the one that bounds what this gate may be said to
-//     prove: the guard must be the filesystem probe ITSELF. A probe moved one
-//     level into a boolean helper --
-//
-//     func cliSrcPresent() bool { _, err := os.Stat(cliSrcDir); return err == nil }
-//     if !cliSrcPresent() { t.Skip("cli/ not present") }
-//
-//     -- is not recognised, because the guard expression is a call and not a
-//     probe. Path helpers ARE resolved (repoRoot() and friends, below); boolean
-//     presence helpers are not. This is not hypothetical: it is the shape at
-//     api/internal/contract/cli_consumer_test.go, where two permanent cli/ skips
-//     sit unflagged, and a one-line refactor of any test in scope reopens the
-//     class here. So what this gate stops is the INLINE SPELLING of the class,
-//     not the class. Demonstrated by an independent audit on 2026-09-05 by
-//     injecting exactly that shape into infra/tests/config/; the gate passed it.
-//     Closing it is B-183.
-//
-//   - An ABSOLUTE literal path is joined onto the repo root and reported under a
-//     path that cannot exist: os.Stat("/usr/bin/helmfile") is named as
-//     "infra/tests/config/usr/bin/helmfile ... ABSENT from this tree". EXTERNAL
-//     exists for out-of-repo roots but recognises only variable-based ones. No
-//     instance is live under infra/tests/ today; scanning cmd/ produces 11
-//     violations dominated by this class. Also B-183.
+//   - A predicate the guard calls is READ, not trusted, and the reading has a
+//     floor: a function that reaches one of the probes in fsProbes but whose
+//     answer this resolver cannot follow is reported UNRESOLVED and FAILS,
+//     exactly as an unresolvable inline path does. The floor is deliberately
+//     narrow -- it triggers on a filesystem probe and nothing else -- so
+//     `if !clusterReachable() { t.Skip() }` over a predicate that dials a
+//     socket is left alone. Anything else in the guard position (a struct
+//     field, a package-level bool, a method on a value) is not a site, and a
+//     probe hidden behind one of those would still be invisible here.
 package testskipabsentpath
 
 import (
@@ -110,8 +115,16 @@ import (
 	"strings"
 )
 
-// DefaultScanDir is the tree this gate is responsible for, repo-relative.
-const DefaultScanDir = "infra/tests"
+// DefaultScanDirs are the trees this gate is responsible for, repo-relative.
+//
+// infra/tests is where B-180 found the class. api joined it in B-183, because
+// the two permanent cli/ skips in api/internal/contract/cli_consumer_test.go are
+// the live instances that opened the item, and a tree the gate does not scan is
+// a tree it cannot track: the pin's re-find floor rejects a declaration for a
+// file outside the scan, measured 2026-09-05. Scanning all of api/ rather than
+// the one package costs nothing measured -- those two are the only path-guarded
+// skips in its 504 test files.
+var DefaultScanDirs = []string{"infra/tests", "api"}
 
 // DefaultPinFile is the declaration of tracked path-guarded skips. It sits in
 // infra/quality/ beside the other pinned contracts this repo keeps for its own
@@ -132,8 +145,8 @@ const rootAnchor = "__LOOPZERO_REPO_ROOT__"
 type Config struct {
 	// RepoRoot is this repository's root. Defaults to ".".
 	RepoRoot string
-	// ScanDir overrides DefaultScanDir (repo-relative).
-	ScanDir string
+	// ScanDirs overrides DefaultScanDirs (repo-relative).
+	ScanDirs []string
 	// PinFile overrides DefaultPinFile (repo-relative).
 	PinFile string
 }
@@ -150,6 +163,11 @@ const (
 	Present
 	// Absent: the path is missing, so the skip always fires.
 	Absent
+	// Outside: the path resolved, but to a place this repository does not
+	// contain -- an absolute literal, or a climb above the repository root.
+	// Reported with the others under EXTERNAL, and never joined onto the repo
+	// root: the fabricated path was the whole defect (B-183).
+	Outside
 )
 
 // Site is one detected path-guarded skip.
@@ -164,7 +182,8 @@ type Site struct {
 	// Expr is the guard's path expression as written, for messages.
 	Expr string
 	// Path is the resolved repo-relative path. Empty unless Verdict is
-	// Present or Absent.
+	// Present, Absent or Outside -- and for Outside it is the path AS WRITTEN,
+	// which is the point: nothing is joined onto a root it does not share.
 	Path string
 	// Verdict is the gate's conclusion about Path.
 	Verdict Verdict
@@ -189,8 +208,8 @@ func (p Pin) Key() string { return p.File + "::" + p.Func + "::" + p.Path }
 type Outcome struct {
 	Pass bool
 
-	// ScanRoot is the directory that was walked, as resolved.
-	ScanRoot string
+	// ScanRoots are the directories that were walked, as resolved.
+	ScanRoots []string
 	// FilesScanned and SkipCalls are the floors' measurements, reported so a
 	// reader can see the gate had a subject.
 	FilesScanned int
@@ -240,20 +259,13 @@ func Check(cfg Config) (*Outcome, error) {
 	if root == "" {
 		root = "."
 	}
-	scanDir := cfg.ScanDir
-	if scanDir == "" {
-		scanDir = DefaultScanDir
+	scanDirs := cfg.ScanDirs
+	if len(scanDirs) == 0 {
+		scanDirs = DefaultScanDirs
 	}
 	pinFile := cfg.PinFile
 	if pinFile == "" {
 		pinFile = DefaultPinFile
-	}
-
-	scanRoot := filepath.Join(root, scanDir)
-	info, err := os.Stat(scanRoot)
-	if err != nil || !info.IsDir() {
-		return nil, fmt.Errorf("the scan tree %s is not a directory (%v) -- this gate has no subject, "+
-			"which is a broken setup and not a clean repository", scanRoot, err)
 	}
 
 	pins, err := parsePins(filepath.Join(root, pinFile))
@@ -261,15 +273,31 @@ func Check(cfg Config) (*Outcome, error) {
 		return nil, err
 	}
 
-	out := &Outcome{ScanRoot: scanRoot}
-	if err := scan(out, root, scanRoot); err != nil {
-		return nil, err
+	out := &Outcome{}
+	for _, dir := range scanDirs {
+		scanRoot := filepath.Join(root, dir)
+		info, err := os.Stat(scanRoot)
+		if err != nil || !info.IsDir() {
+			return nil, fmt.Errorf("the scan tree %s is not a directory (%v) -- this gate has no subject, "+
+				"which is a broken setup and not a clean repository", scanRoot, err)
+		}
+		out.ScanRoots = append(out.ScanRoots, scanRoot)
+		// The file floor is PER ROOT: a configured tree with no test file in it
+		// is a root that drifted, and averaging it away behind the other root's
+		// hundreds is how a scan quietly stops covering half its subject.
+		before := out.FilesScanned
+		if err := scan(out, root, scanRoot); err != nil {
+			return nil, err
+		}
+		if out.FilesScanned == before {
+			return nil, fmt.Errorf("%s: %w", scanRoot, errNoTestFiles)
+		}
 	}
-	if out.FilesScanned == 0 {
-		return nil, fmt.Errorf("%s: %w", scanRoot, errNoTestFiles)
-	}
+	// The skip floor is GLOBAL: it guards one AST matcher shared by every root,
+	// and per-root it would punish the right fix -- deleting a tree's last dead
+	// skip would turn the gate red for the deed it exists to encourage.
 	if out.SkipCalls == 0 {
-		return nil, fmt.Errorf("%s: %w", scanRoot, errNoSkipCalls)
+		return nil, fmt.Errorf("%s: %w", strings.Join(out.ScanRoots, ", "), errNoSkipCalls)
 	}
 
 	classify(out, pins, pinFile)
@@ -298,6 +326,14 @@ func classify(out *Outcome, pins []Pin, pinFile string) {
 			out.Externals = append(out.Externals, fmt.Sprintf(
 				"%s:%d %s -> `%s` (rooted outside this repository; NOT judged)",
 				s.File, s.Line, s.Func, s.Expr))
+		case Outside:
+			// Named as written, never rebased onto the repository root. The
+			// defect this replaces printed a path that could not exist as
+			// spelled, and a fabricated path is worse than a withheld verdict.
+			out.Externals = append(out.Externals, fmt.Sprintf(
+				"%s:%d %s -> `%s` resolves to %s, which this repository does not contain; NOT judged "+
+					"(whether it is on the machine running the suite is not a claim about this tree)",
+				s.File, s.Line, s.Func, s.Expr, s.Path))
 		case Present:
 			if pin, pinned := byKey[s.Key()]; pinned {
 				matched[s.Key()] = true
@@ -420,14 +456,23 @@ func scanDir(out *Outcome, root, dir string) error {
 		return nil
 	}
 
-	// Package-wide binding scope: zero-argument helpers and file-level
-	// const/var literals, from every file in the directory.
-	pkg := &pkgScope{helpers: map[string]helperDecl{}, consts: map[string]boundExpr{}}
+	// Package-wide binding scope: zero-argument PATH helpers (repoRoot() and
+	// friends), every non-method func by name so a guard's predicate can be
+	// read, and file-level const/var literals -- from every file in the
+	// directory.
+	pkg := &pkgScope{
+		helpers: map[string]helperDecl{},
+		funcs:   map[string]helperDecl{},
+		consts:  map[string]boundExpr{},
+	}
 	for _, pf := range files {
 		for _, decl := range pf.ast.Decls {
 			if fd, ok := decl.(*ast.FuncDecl); ok {
-				if fd.Recv == nil && fd.Type.Params.NumFields() == 0 {
-					pkg.helpers[fd.Name.Name] = helperDecl{decl: fd, file: pf.rel}
+				if fd.Recv == nil {
+					pkg.funcs[fd.Name.Name] = helperDecl{decl: fd, file: pf.rel}
+					if fd.Type.Params.NumFields() == 0 {
+						pkg.helpers[fd.Name.Name] = helperDecl{decl: fd, file: pf.rel}
+					}
 				}
 				continue
 			}
@@ -500,10 +545,11 @@ type siteWithPos struct {
 // guardedSkips walks one function and returns each skip whose control depends
 // on a filesystem probe.
 //
-// Two shapes occur in this repo and both are handled: the probe inline in the
-// if's init (`if _, err := os.Stat(p); os.IsNotExist(err) { t.Skip() }`), and
-// the probe on a preceding statement (`data, err := os.ReadFile(p)` followed by
-// `if err != nil { t.Skip() }`).
+// Three shapes occur in this repo and all are handled: the probe inline in the
+// if's init (`if _, err := os.Stat(p); os.IsNotExist(err) { t.Skip() }`), the
+// probe on a preceding statement (`data, err := os.ReadFile(p)` followed by
+// `if err != nil { t.Skip() }`), and the probe one level down inside a
+// same-package predicate the guard calls (`if !cliSrcPresent() { t.Skip() }`).
 func guardedSkips(fd *ast.FuncDecl, r *resolver) []siteWithPos {
 	var sites []siteWithPos
 	probes := map[string]ast.Expr{} // error variable -> the path it probed
@@ -531,8 +577,8 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver) []siteWithPos {
 						local[name] = pathExpr
 					}
 				}
-				if pathExpr, ok := notExistGuard(s.Cond, local); ok && bodyHasSkip(s.Body) {
-					sites = append(sites, r.newSite(pathExpr, skipPos(s.Body)))
+				if tgt, ok := r.absenceGuard(s.Cond, local); ok && bodyHasSkip(s.Body) {
+					sites = append(sites, r.newSite(tgt, skipPos(s.Body)))
 				}
 				if s.Body != nil {
 					walk(s.Body.List)
@@ -568,11 +614,28 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver) []siteWithPos {
 	return sites
 }
 
-// newSite resolves the guard's path expression into a classified site.
-func (r *resolver) newSite(pathExpr ast.Expr, pos token.Pos) siteWithPos {
+// newSite resolves the guard's path expression into a classified site. The
+// expression is resolved in the scope it was WRITTEN in, which for a predicate's
+// probe is the predicate's own body and not the test's -- resolving `p` against
+// the caller's `p` would answer about a different path with a straight face.
+func (r *resolver) newSite(t guardTarget, pos token.Pos) siteWithPos {
 	s := siteWithPos{pos: pos}
-	s.Expr = r.describe(pathExpr)
-	raw, kind := r.resolve(pathExpr, r.file, 0)
+	scope := t.scope
+	if scope == nil {
+		scope = r
+	}
+	inFile := t.file
+	if inFile == "" {
+		inFile = scope.file
+	}
+	if s.Expr = t.desc; s.Expr == "" {
+		s.Expr = scope.describe(t.expr)
+	}
+	if t.unreadable {
+		s.Verdict = Unresolved
+		return s
+	}
+	raw, kind := scope.resolve(t.expr, inFile, 0)
 	switch kind {
 	case kindExternal:
 		s.Verdict = External
@@ -584,10 +647,24 @@ func (r *resolver) newSite(pathExpr ast.Expr, pos token.Pos) siteWithPos {
 	var rel string
 	if anchored, ok := stripAnchor(raw); ok {
 		rel = anchored
+	} else if filepath.IsAbs(raw) || strings.HasPrefix(raw, "/") {
+		// An absolute literal names a place on the machine. Joining it onto the
+		// repository root produced "infra/tests/config/usr/bin/helmfile", a path
+		// that cannot exist as spelled, and then judged the tree by it (B-183).
+		s.Path = filepath.ToSlash(filepath.Clean(raw))
+		s.Verdict = Outside
+		return s
 	} else {
 		rel = filepath.Join(r.pkgDir, raw)
 	}
 	s.Path = filepath.ToSlash(filepath.Clean(rel))
+	// A relative path that climbs past the root lands outside the repository
+	// too. Same reasoning, different spelling: the class is "not in this tree",
+	// not "starts with a slash".
+	if s.Path == ".." || strings.HasPrefix(s.Path, "../") {
+		s.Verdict = Outside
+		return s
+	}
 	if _, err := os.Lstat(filepath.Join(r.root, filepath.FromSlash(s.Path))); err == nil {
 		s.Verdict = Present
 	} else {
@@ -641,46 +718,305 @@ func probeBinding(a *ast.AssignStmt) (string, ast.Expr, bool) {
 	return errIdent.Name, call.Args[argIdx], true
 }
 
-// notExistGuard reports the guarded path when cond tests a probe's error for
-// "the path is not there".
-func notExistGuard(cond ast.Expr, probes map[string]ast.Expr) (ast.Expr, bool) {
+// guardTarget is the path a guard tests, together with the scope its expression
+// must be read in. The scope is what makes a predicate safe to follow: the probe
+// inside `cliSrcPresent()` reads that function's locals and its file's consts,
+// not the test's.
+type guardTarget struct {
+	expr  ast.Expr
+	scope *resolver
+	file  string
+	// desc overrides the rendered expression, so a predicate's site names the
+	// predicate the reader will go looking for.
+	desc string
+	// unreadable marks a guard that reaches the filesystem through a predicate
+	// this gate could not follow. It becomes an UNRESOLVED violation rather
+	// than silence: a probe it cannot read is the one it must not pass.
+	unreadable bool
+}
+
+// here wraps an expression written in this resolver's own scope.
+func (r *resolver) here(e ast.Expr) guardTarget {
+	return guardTarget{expr: e, scope: r, file: r.file}
+}
+
+// absenceGuard reports the path a condition guards when the condition is true
+// exactly when that path is MISSING -- the only polarity that makes a skip fire
+// on absence. `err == nil` and `if present() { t.Skip() }` are the opposite
+// guard and are deliberately not sites.
+func (r *resolver) absenceGuard(cond ast.Expr, probes map[string]ast.Expr) (guardTarget, bool) {
+	t, whenMissing, ok := r.pathCondition(cond, probes, 0)
+	if !ok {
+		return guardTarget{}, false
+	}
+	// An unreadable predicate has no polarity to trust, so it is reported
+	// whichever way it is written. Withholding it under `if present()` would
+	// hand back the evasion this floor exists to close.
+	return t, whenMissing || t.unreadable
+}
+
+// pathCondition reads a boolean condition and reports the path it tests plus
+// whether it is true when that path is MISSING.
+func (r *resolver) pathCondition(cond ast.Expr, probes map[string]ast.Expr, depth int) (guardTarget, bool, bool) {
+	if depth > maxResolveDepth {
+		return guardTarget{}, false, false
+	}
 	switch c := cond.(type) {
+	case *ast.ParenExpr:
+		return r.pathCondition(c.X, probes, depth+1)
+	case *ast.UnaryExpr:
+		if c.Op != token.NOT {
+			return guardTarget{}, false, false
+		}
+		t, missing, ok := r.pathCondition(c.X, probes, depth+1)
+		return t, !missing, ok
 	case *ast.BinaryExpr:
-		if c.Op != token.NEQ {
-			return nil, false
+		switch c.Op {
+		case token.EQL, token.NEQ:
+			id, ok := c.X.(*ast.Ident)
+			if !ok {
+				return guardTarget{}, false, false
+			}
+			if nilIdent, ok := c.Y.(*ast.Ident); !ok || nilIdent.Name != "nil" {
+				return guardTarget{}, false, false
+			}
+			p, ok := probes[id.Name]
+			if !ok {
+				return guardTarget{}, false, false
+			}
+			// `err != nil` is true when the probe failed; `err == nil` when it
+			// found the path.
+			return r.here(p), c.Op == token.NEQ, true
+		case token.LAND, token.LOR:
+			// `err == nil && info.IsDir()` is the shape in the tree: one side
+			// carries the probe and the other narrows it. Two sides both
+			// carrying a probe is ambiguous, and this gate does not guess.
+			lt, lm, lok := r.pathCondition(c.X, probes, depth+1)
+			rt, rm, rok := r.pathCondition(c.Y, probes, depth+1)
+			switch {
+			case lok && !rok:
+				return lt, lm, true
+			case rok && !lok:
+				return rt, rm, true
+			}
+			return guardTarget{}, false, false
 		}
-		id, ok := c.X.(*ast.Ident)
-		if !ok {
-			return nil, false
-		}
-		if nilIdent, ok := c.Y.(*ast.Ident); !ok || nilIdent.Name != "nil" {
-			return nil, false
-		}
-		p, ok := probes[id.Name]
-		return p, ok
+		return guardTarget{}, false, false
 	case *ast.CallExpr:
-		sel, ok := c.Fun.(*ast.SelectorExpr)
-		if !ok || len(c.Args) == 0 {
-			return nil, false
+		if sel, ok := c.Fun.(*ast.SelectorExpr); ok {
+			if len(c.Args) == 0 {
+				return guardTarget{}, false, false
+			}
+			pkg, ok := sel.X.(*ast.Ident)
+			if !ok {
+				return guardTarget{}, false, false
+			}
+			switch {
+			case pkg.Name == "os" && sel.Sel.Name == "IsNotExist",
+				pkg.Name == "errors" && sel.Sel.Name == "Is":
+			default:
+				return guardTarget{}, false, false
+			}
+			id, ok := c.Args[0].(*ast.Ident)
+			if !ok {
+				return guardTarget{}, false, false
+			}
+			p, ok := probes[id.Name]
+			if !ok {
+				return guardTarget{}, false, false
+			}
+			return r.here(p), true, true
+		}
+		id, ok := c.Fun.(*ast.Ident)
+		if !ok {
+			return guardTarget{}, false, false
+		}
+		return r.predicateCondition(id.Name, c, depth)
+	}
+	return guardTarget{}, false, false
+}
+
+// predicateCondition reads a same-package predicate the guard calls -- the shape
+// B-183 was opened for:
+//
+//	func cliSrcPresent() bool { info, err := os.Stat(cliSrcDir); return err == nil && info.IsDir() }
+//	if !cliSrcPresent() { t.Skip("cli/ not present") }
+//
+// It returns the probed path and whether the predicate is TRUE when that path is
+// missing. A predicate that reaches a probe but whose answer cannot be followed
+// comes back marked unreadable, never as "not a site": that silence is exactly
+// the hole a one-line refactor used to open.
+func (r *resolver) predicateCondition(name string, call *ast.CallExpr, depth int) (guardTarget, bool, bool) {
+	h, ok := r.pkg.funcs[name]
+	if !ok || h.decl.Body == nil || !returnsBool(h.decl) {
+		return guardTarget{}, false, false
+	}
+
+	// The predicate's own scope, seeded with its parameters bound to whatever
+	// the CALLER passed -- resolved here, in the caller's scope, then carried
+	// across as a literal so the predicate's body cannot re-read the name.
+	sub := &resolver{root: r.root, pkgDir: r.pkgDir, file: h.file, pkg: r.pkg}
+	r.bindParams(sub, h.decl, call, depth)
+
+	probes := map[string]ast.Expr{}
+	var (
+		early    *ast.IfStmt // if <cond> { return <bool literal> }
+		earlyLit bool
+		tail     ast.Expr // the last top-level return's expression
+	)
+	record := func(a *ast.AssignStmt) {
+		sub.bindAssign(a)
+		if n, p, ok := probeBinding(a); ok {
+			probes[n] = p
+		}
+	}
+	for _, st := range h.decl.Body.List {
+		switch s := st.(type) {
+		case *ast.AssignStmt:
+			record(s)
+		case *ast.DeclStmt:
+			sub.bindDecl(s)
+		case *ast.IfStmt:
+			if init, ok := s.Init.(*ast.AssignStmt); ok {
+				record(init)
+			}
+			if lit, ok := singleBoolReturn(s.Body); ok && s.Else == nil {
+				early, earlyLit = s, lit
+			}
+		case *ast.ReturnStmt:
+			if len(s.Results) == 1 {
+				tail = s.Results[0]
+			}
+		}
+	}
+	if len(probes) == 0 && !bodyProbesFilesystem(h.decl.Body) {
+		// Not a filesystem predicate at all. `if !clusterReachable() { t.Skip() }`
+		// is honestly conditional on something this gate has no opinion about.
+		return guardTarget{}, false, false
+	}
+
+	unreadable := guardTarget{desc: name + "()", unreadable: true}
+	describe := func(t guardTarget) guardTarget {
+		t.desc = name + "() -> " + sub.describe(t.expr)
+		return t
+	}
+
+	// Shape 1: the answer IS the condition -- `return err == nil`.
+	if tail != nil {
+		if lit, isLit := boolLit(tail); !isLit {
+			t, missing, ok := sub.pathCondition(tail, probes, depth+1)
+			if !ok {
+				return unreadable, false, true
+			}
+			return describe(t), missing, true
+		} else if early != nil && lit != earlyLit {
+			// Shape 2: `if <cond> { return X }` then `return !X`. The predicate
+			// is X exactly when the condition holds.
+			t, missing, ok := sub.pathCondition(early.Cond, probes, depth+1)
+			if !ok {
+				return unreadable, false, true
+			}
+			if !earlyLit {
+				missing = !missing
+			}
+			return describe(t), missing, true
+		}
+	}
+	return unreadable, false, true
+}
+
+// bindParams resolves each argument in the CALLER's scope and binds it, as a
+// literal, to the parameter name inside the predicate's scope. An argument that
+// does not resolve is left unbound: the predicate may not need it, and a guess
+// would be worse than an unresolved verdict.
+func (r *resolver) bindParams(sub *resolver, fd *ast.FuncDecl, call *ast.CallExpr, depth int) {
+	if fd.Type.Params == nil {
+		return
+	}
+	i := 0
+	for _, field := range fd.Type.Params.List {
+		for _, pname := range field.Names {
+			if i >= len(call.Args) {
+				return
+			}
+			arg := call.Args[i]
+			i++
+			if v, kind := r.resolve(arg, r.file, depth+1); kind == kindResolved {
+				sub.bind(pname.Name, &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(v)}, r.file)
+			}
+		}
+	}
+}
+
+// returnsBool reports whether fd returns exactly one bool.
+func returnsBool(fd *ast.FuncDecl) bool {
+	if fd.Type.Results == nil || len(fd.Type.Results.List) != 1 {
+		return false
+	}
+	f := fd.Type.Results.List[0]
+	if len(f.Names) > 1 {
+		return false
+	}
+	id, ok := f.Type.(*ast.Ident)
+	return ok && id.Name == "bool"
+}
+
+// boolLit reports the value of a `true`/`false` literal.
+func boolLit(e ast.Expr) (bool, bool) {
+	id, ok := e.(*ast.Ident)
+	if !ok {
+		return false, false
+	}
+	switch id.Name {
+	case "true":
+		return true, true
+	case "false":
+		return false, true
+	}
+	return false, false
+}
+
+// singleBoolReturn reports the literal of a block whose only statement returns
+// one bool literal.
+func singleBoolReturn(b *ast.BlockStmt) (bool, bool) {
+	if b == nil || len(b.List) != 1 {
+		return false, false
+	}
+	ret, ok := b.List[0].(*ast.ReturnStmt)
+	if !ok || len(ret.Results) != 1 {
+		return false, false
+	}
+	return boolLit(ret.Results[0])
+}
+
+// bodyProbesFilesystem reports whether the block calls one of the probes in
+// fsProbes anywhere. It is the trigger for the unreadable-predicate floor, kept
+// narrow on purpose: a predicate that never touches the filesystem is none of
+// this gate's business.
+func bodyProbesFilesystem(b *ast.BlockStmt) bool {
+	found := false
+	ast.Inspect(b, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
 		}
 		pkg, ok := sel.X.(*ast.Ident)
 		if !ok {
-			return nil, false
+			return true
 		}
-		switch {
-		case pkg.Name == "os" && sel.Sel.Name == "IsNotExist",
-			pkg.Name == "errors" && sel.Sel.Name == "Is":
-		default:
-			return nil, false
+		if fns, ok := fsProbes[pkg.Name]; ok {
+			if _, ok := fns[sel.Sel.Name]; ok {
+				found = true
+				return false
+			}
 		}
-		id, ok := c.Args[0].(*ast.Ident)
-		if !ok {
-			return nil, false
-		}
-		p, ok := probes[id.Name]
-		return p, ok
-	}
-	return nil, false
+		return true
+	})
+	return found
 }
 
 // bodyHasSkip reports whether the block reaches a skip call.
@@ -760,8 +1096,13 @@ type boundExpr struct {
 
 // pkgScope is the binding scope shared by every file of one package directory.
 type pkgScope struct {
+	// helpers are the zero-argument funcs a PATH expression may call.
 	helpers map[string]helperDecl
-	consts  map[string]boundExpr
+	// funcs is every non-method func in the package, by name. A guard's
+	// predicate is looked up here rather than in helpers because a presence
+	// predicate may take the path as an argument.
+	funcs  map[string]helperDecl
+	consts map[string]boundExpr
 }
 
 // resolver turns a path expression into a string, using only bindings it can

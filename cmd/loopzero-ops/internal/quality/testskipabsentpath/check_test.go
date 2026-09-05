@@ -56,7 +56,12 @@ func ` + funcName + `(t *testing.T) {
 
 func run(t *testing.T, root string) (*Outcome, error) {
 	t.Helper()
-	return Check(Config{RepoRoot: root, ScanDir: "infra/tests", PinFile: "infra/quality/pin.txt"})
+	return runDirs(t, root, "infra/tests")
+}
+
+func runDirs(t *testing.T, root string, dirs ...string) (*Outcome, error) {
+	t.Helper()
+	return Check(Config{RepoRoot: root, ScanDirs: dirs, PinFile: "infra/quality/pin.txt"})
 }
 
 func mustRun(t *testing.T, root string) *Outcome {
@@ -695,12 +700,499 @@ func TestRealTreeIsClean(t *testing.T) {
 	if o.SkipCalls < 10 {
 		t.Errorf("expected the detector to see the tree's skip calls; got %d", o.SkipCalls)
 	}
-	// And the four B-180 removed must not come back by any route.
+	// B-183's own regression against the live tree: the two cli/ skips in
+	// api/internal/contract are guarded by a PREDICATE, and the gate was blind
+	// to them until this item. The pin's re-find floor would already go red if
+	// the predicate reader broke; naming them here says why they are in the pin.
+	seen := map[string]bool{}
 	for _, s := range o.Sites {
+		if s.File == "api/internal/contract/cli_consumer_test.go" && s.Verdict == Absent {
+			seen[s.Func] = true
+		}
+	}
+	for _, fn := range []string{"TestCLIConsumer_KnownGapsAreReal", "TestCLIConsumer_ListMatchesSource"} {
+		if !seen[fn] {
+			t.Errorf("%s guards a permanent cli/ skip behind cliSrcPresent(); the gate must see it, "+
+				"which is the defect B-183 closed", fn)
+		}
+	}
+	// And the four B-180 removed must not come back by any route. Scoped to
+	// infra/tests because B-183 widened the scan to api/, where two cli/ guards
+	// are declared in the pin and printed on every run -- those are tracked, not
+	// returned.
+	for _, s := range o.Sites {
+		if !strings.HasPrefix(s.File, "infra/tests/") {
+			continue
+		}
 		if strings.HasPrefix(s.Path, "cli/") {
 			t.Errorf("a guard on %s is back at %s:%d (%s) — those four were removed because this "+
 				"repository does not contain cli/ and loopzero-cli is not cloned beside it",
 				s.Path, s.File, s.Line, s.Func)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// B-183: the probe one level down, inside the predicate the guard calls
+// ---------------------------------------------------------------------------
+
+// nemesisSrc is the EXACT shape an independent audit used on 2026-09-05 to walk
+// the class back past B-180's gate: the probe moved into a boolean helper, so
+// the guard became a call and the detector stopped seeing it. Injected into
+// infra/tests/config/, the gate passed it. It is the oracle for this file.
+const nemesisSrc = `package config
+
+import (
+	"os"
+	"testing"
+)
+
+const nemesisCliDir = "../../../cli/src"
+
+func nemesisCliPresent() bool { info, err := os.Stat(nemesisCliDir); return err == nil && info.IsDir() }
+
+func TestNemesisEvadeViaHelper(t *testing.T) {
+	if !nemesisCliPresent() {
+		t.Skip("cli/ not present")
+	}
+	t.Fatal("dead assertion")
+}
+`
+
+func TestPredicateHelperGuardIsDetected(t *testing.T) {
+	root := tree(t, map[string]string{
+		"infra/quality/pin.txt":           pinHeader,
+		"infra/tests/config/a_test.go":    nemesisSrc,
+		"infra/tests/config/live_test.go": guardedTest("config", "TestLive", "../../../docs/live.md"),
+		"docs/live.md":                    "here\n",
+	})
+
+	o := mustRun(t, root)
+
+	if o.Pass {
+		t.Fatal("a probe moved into a boolean predicate guards the skip exactly as an inline os.Stat " +
+			"does; passing it is the one-line refactor that reopens the whole class")
+	}
+	v := joined(o.Violations)
+	// File, func and path: the three things the reader needs to act without
+	// re-deriving the finding.
+	for _, want := range []string{
+		"infra/tests/config/a_test.go",
+		"TestNemesisEvadeViaHelper",
+		"cli/src",
+		"ABSENT",
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("the violation must name %q; got:\n%s", want, v)
+		}
+	}
+	// The path must come from the PREDICATE's own scope, not be guessed.
+	var found bool
+	for _, s := range o.Sites {
+		if s.Func == "TestNemesisEvadeViaHelper" {
+			found = true
+			if s.Path != "cli/src" {
+				t.Errorf("the site's path must be the predicate's probed path resolved against the "+
+					"package directory; got %q", s.Path)
+			}
+			if s.Verdict != Absent {
+				t.Errorf("cli/src is not in this tree, so the verdict is Absent; got %v", s.Verdict)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("the predicate-guarded skip must be a site at all; got %+v", o.Sites)
+	}
+}
+
+func TestPredicateWithEarlyReturnIsDetected(t *testing.T) {
+	// The same evasion spelled with a branch instead of an expression. Reading
+	// only `return <cond>` would close the spelling and leave the class open.
+	src := `package unit
+
+import (
+	"os"
+	"testing"
+)
+
+const srcDir = "../../../cli/src"
+
+func present() bool {
+	if _, err := os.Stat(srcDir); err != nil {
+		return false
+	}
+	return true
+}
+
+func TestGuarded(t *testing.T) {
+	if !present() {
+		t.Skip("gone")
+	}
+	t.Fatal("dead assertion")
+}
+`
+	root := tree(t, map[string]string{
+		"infra/quality/pin.txt":      pinHeader,
+		"infra/tests/unit/a_test.go": src,
+	})
+
+	o := mustRun(t, root)
+	if o.Pass {
+		t.Fatalf("`if err != nil { return false }; return true` is the same predicate with a branch; "+
+			"sites=%+v", o.Sites)
+	}
+	if !strings.Contains(joined(o.Violations), "cli/src") {
+		t.Errorf("the violation must name the probed path; got:\n%s", joined(o.Violations))
+	}
+}
+
+func TestPredicateTakingThePathAsAnArgumentIsDetected(t *testing.T) {
+	// The path arrives from the CALLER, so it has to be resolved there and
+	// carried in. Resolving `p` inside the predicate would answer about a name
+	// the predicate never bound.
+	src := `package unit
+
+import (
+	"os"
+	"testing"
+)
+
+const cliDir = "../../../cli/src"
+
+func exists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+func TestGuarded(t *testing.T) {
+	if !exists(cliDir) {
+		t.Skip("gone")
+	}
+	t.Fatal("dead assertion")
+}
+`
+	root := tree(t, map[string]string{
+		"infra/quality/pin.txt":      pinHeader,
+		"infra/tests/unit/a_test.go": src,
+	})
+
+	o := mustRun(t, root)
+	if len(o.Sites) != 1 {
+		t.Fatalf("want 1 site, got %d: %+v", len(o.Sites), o.Sites)
+	}
+	if o.Sites[0].Path != "cli/src" {
+		t.Errorf("the argument must be resolved in the caller's scope and carried into the predicate; "+
+			"got path %q", o.Sites[0].Path)
+	}
+}
+
+func TestPredicateThatProbesButCannotBeReadFails(t *testing.T) {
+	// The floor under the predicate reader: a function that reaches the
+	// filesystem and then answers through something this resolver cannot follow
+	// is UNRESOLVED, not silence. Silence here is the evasion with one more
+	// hop.
+	src := `package unit
+
+import (
+	"os"
+	"testing"
+)
+
+const cliDir = "../../../cli/src"
+
+func decide(err error) bool { return err == nil }
+
+func cliSrcPresent() bool {
+	_, err := os.Stat(cliDir)
+	return decide(err)
+}
+
+func TestGuarded(t *testing.T) {
+	if !cliSrcPresent() {
+		t.Skip("gone")
+	}
+	t.Fatal("dead assertion")
+}
+`
+	root := tree(t, map[string]string{
+		"infra/quality/pin.txt":      pinHeader,
+		"infra/tests/unit/a_test.go": src,
+	})
+
+	o := mustRun(t, root)
+	if o.Pass {
+		t.Fatal("a predicate that probes the filesystem and hides its answer must FAIL as unresolved: " +
+			"reporting clean over a probe it could not read is exactly what this gate exists to prevent")
+	}
+	v := joined(o.Violations)
+	if !strings.Contains(v, "could not resolve") {
+		t.Errorf("the violation must say the gate could not resolve it; got:\n%s", v)
+	}
+	if !strings.Contains(v, "cliSrcPresent()") {
+		t.Errorf("the violation must name the predicate the reader has to go open; got:\n%s", v)
+	}
+}
+
+func TestUnreadablePredicateIsReportedInEitherPolarity(t *testing.T) {
+	// The floor above must not depend on the `!`. An evader who writes the
+	// predicate the other way round -- cliSrcAbsent() instead of
+	// cliSrcPresent() -- would otherwise walk back out through the very
+	// polarity this gate just admitted it could not read. Written because a
+	// mutant that deleted the polarity-independent half of that rule survived
+	// the first version of this file.
+	src := `package unit
+
+import (
+	"os"
+	"testing"
+)
+
+const cliDir = "../../../cli/src"
+
+func notNil(err error) bool { return err != nil }
+
+func cliSrcAbsent() bool {
+	_, err := os.Stat(cliDir)
+	return notNil(err)
+}
+
+func TestGuarded(t *testing.T) {
+	if cliSrcAbsent() {
+		t.Skip("gone")
+	}
+	t.Fatal("dead assertion")
+}
+`
+	root := tree(t, map[string]string{
+		"infra/quality/pin.txt":      pinHeader,
+		"infra/tests/unit/a_test.go": src,
+	})
+
+	o := mustRun(t, root)
+	if o.Pass {
+		t.Fatal("an unreadable filesystem predicate must be reported whichever way the guard is " +
+			"spelled: the gate does not know the polarity, which is precisely why it may not stay quiet")
+	}
+	if !strings.Contains(joined(o.Violations), "cliSrcAbsent()") {
+		t.Errorf("the violation must name the predicate; got:\n%s", joined(o.Violations))
+	}
+}
+
+func TestPredicateThatDoesNotTouchTheFilesystemIsNotASite(t *testing.T) {
+	// The floor above is deliberately narrow. A predicate that decides on the
+	// environment, a socket or a flag is honestly conditional on something this
+	// gate has no opinion about, and flagging it would make the gate cry wolf.
+	src := `package unit
+
+import (
+	"os"
+	"testing"
+)
+
+func clusterReachable() bool { return os.Getenv("KUBECONFIG") != "" }
+
+func TestGuarded(t *testing.T) {
+	if !clusterReachable() {
+		t.Skip("no cluster")
+	}
+}
+`
+	root := tree(t, map[string]string{
+		"infra/quality/pin.txt":      pinHeader,
+		"infra/tests/unit/a_test.go": src,
+	})
+
+	o := mustRun(t, root)
+	if len(o.Sites) != 0 {
+		t.Fatalf("a predicate that never probes the filesystem is not a path guard; got %+v", o.Sites)
+	}
+	if !o.Pass {
+		t.Errorf("nothing here should fail; violations:\n%s", joined(o.Violations))
+	}
+}
+
+func TestPredicateSkippingWhenPathIsPresentIsNotASite(t *testing.T) {
+	// The inverted guard, through a predicate: skip because the path IS there.
+	// It cannot be an always-fires skip caused by a missing path.
+	src := `package unit
+
+import (
+	"os"
+	"testing"
+)
+
+const cliDir = "../../../cli/src"
+
+func cliSrcPresent() bool {
+	_, err := os.Stat(cliDir)
+	return err == nil
+}
+
+func TestGuarded(t *testing.T) {
+	if cliSrcPresent() {
+		t.Skip("already migrated")
+	}
+}
+`
+	root := tree(t, map[string]string{
+		"infra/quality/pin.txt":      pinHeader,
+		"infra/tests/unit/a_test.go": src,
+	})
+
+	o := mustRun(t, root)
+	if len(o.Sites) != 0 {
+		t.Fatalf("`if present() { t.Skip() }` is the opposite guard and must not be reported; got %+v",
+			o.Sites)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// B-183: a path this repository does not contain is never rebased onto its root
+// ---------------------------------------------------------------------------
+
+func TestAbsoluteLiteralIsNamedAsWrittenAndNotJudged(t *testing.T) {
+	// The shape at orykratospublicurls/check_test.go:35. Before B-183 the gate
+	// joined it onto the repo root and reported
+	// "cmd/.../usr/bin/helmfile ... ABSENT from this tree" -- a path that cannot
+	// exist as spelled, judged as if it could.
+	src := `package unit
+
+import (
+	"os"
+	"testing"
+)
+
+func TestGuarded(t *testing.T) {
+	if _, err := os.Stat("/usr/bin/helmfile"); os.IsNotExist(err) {
+		t.Skip("helmfile not installed")
+	}
+}
+`
+	root := tree(t, map[string]string{
+		"infra/quality/pin.txt":      pinHeader,
+		"infra/tests/unit/a_test.go": src,
+	})
+
+	o := mustRun(t, root)
+
+	if !o.Pass {
+		t.Fatalf("whether /usr/bin/helmfile is on the machine is not a claim about this repository, so "+
+			"it must not fail the gate; violations:\n%s", joined(o.Violations))
+	}
+	if len(o.Externals) != 1 {
+		t.Fatalf("want 1 not-judged site, got %d: %v", len(o.Externals), o.Externals)
+	}
+	if !strings.Contains(o.Externals[0], "/usr/bin/helmfile") {
+		t.Errorf("the line must name the path AS WRITTEN; got %q", o.Externals[0])
+	}
+	if !strings.Contains(o.Externals[0], "NOT judged") {
+		t.Errorf("the line must say the gate did not judge it; got %q", o.Externals[0])
+	}
+	// The defect itself: a path the gate invented by joining an absolute
+	// literal onto the repository root. Asserting the fabricated spelling is
+	// ABSENT is what pins it -- a report that merely mentions helmfile would
+	// pass either way.
+	fabricated := "infra/tests/unit/usr/bin/helmfile"
+	if strings.Contains(o.Externals[0]+joined(o.Violations), fabricated) {
+		t.Errorf("the gate must never print %q: nothing is there and nothing could be; got %q",
+			fabricated, o.Externals[0])
+	}
+	if o.Sites[0].Path != "/usr/bin/helmfile" {
+		t.Errorf("the site's path is the absolute literal itself; got %q", o.Sites[0].Path)
+	}
+	if o.Sites[0].Verdict != Outside {
+		t.Errorf("an absolute literal is Outside, not Absent -- Absent is a claim about this tree; got %v",
+			o.Sites[0].Verdict)
+	}
+}
+
+func TestPathClimbingAboveTheRepositoryRootIsNotJudged(t *testing.T) {
+	// The same class, different spelling: api/internal/contract's dashboard
+	// guard probes ../../../../loopzero-cloud/dashboard/src, which lands beside this
+	// repository rather than inside it.
+	src := `package unit
+
+import (
+	"os"
+	"testing"
+)
+
+const siblingSrc = "../../../../loopzero-cloud/dashboard/src"
+
+func TestGuarded(t *testing.T) {
+	if _, err := os.Stat(siblingSrc); err != nil {
+		t.Skip("sibling not cloned")
+	}
+}
+`
+	root := tree(t, map[string]string{
+		"infra/quality/pin.txt":      pinHeader,
+		"infra/tests/unit/a_test.go": src,
+	})
+
+	o := mustRun(t, root)
+	if !o.Pass {
+		t.Fatalf("a path outside this repository must not be judged as absent FROM it; violations:\n%s",
+			joined(o.Violations))
+	}
+	if len(o.Sites) != 1 || o.Sites[0].Verdict != Outside {
+		t.Fatalf("want one Outside site, got %+v", o.Sites)
+	}
+	if o.Sites[0].Path != "../loopzero-cloud/dashboard/src" {
+		t.Errorf("the path is reported as it resolves, still outside the root; got %q", o.Sites[0].Path)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// B-183: more than one scan root, and a floor under each of them
+// ---------------------------------------------------------------------------
+
+func TestEveryScanRootIsWalked(t *testing.T) {
+	// api/ joined the scan because the two live instances of the class are
+	// there. A second root that is configured but not walked is the same
+	// silence with a longer config.
+	root := tree(t, map[string]string{
+		"infra/quality/pin.txt":      pinHeader,
+		"infra/tests/unit/a_test.go": guardedTest("unit", "TestInInfra", "../../../gone-one.txt"),
+		"api/internal/contract/b_test.go": guardedTest("contract", "TestInApi",
+			"../../../gone-two.txt"),
+	})
+
+	o, err := runDirs(t, root, "infra/tests", "api")
+	if err != nil {
+		t.Fatalf("Check returned a setup error it should not have: %v", err)
+	}
+	if len(o.ScanRoots) != 2 {
+		t.Fatalf("both configured roots must be reported as walked; got %v", o.ScanRoots)
+	}
+	v := joined(o.Violations)
+	for _, want := range []string{"TestInInfra", "TestInApi"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("a skip in every scanned root must be judged; %q missing from:\n%s", want, v)
+		}
+	}
+}
+
+func TestFloorScanRootWithNoTestFilesIsAnError(t *testing.T) {
+	// The file floor is per ROOT on purpose: with one global count, a root that
+	// drifted (renamed, moved, emptied) hides behind the other root's hundreds
+	// of files and the gate reports a confident verdict over half its subject.
+	root := tree(t, map[string]string{
+		"infra/quality/pin.txt":      pinHeader,
+		"infra/tests/unit/a_test.go": guardedTest("unit", "TestGuarded", "../../../docs/live.md"),
+		"docs/live.md":               "here\n",
+		"api/internal/doc.go":        "package internal\n",
+	})
+
+	o, err := runDirs(t, root, "infra/tests", "api")
+	if err == nil {
+		t.Fatalf("a configured root with no *_test.go must be an error, not a verdict carried by the "+
+			"other root; got Pass=%v", o.Pass)
+	}
+	if !strings.Contains(err.Error(), "no *_test.go") {
+		t.Errorf("the error must name what was missing; got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "api") {
+		t.Errorf("the error must name WHICH root came up empty; got: %v", err)
 	}
 }

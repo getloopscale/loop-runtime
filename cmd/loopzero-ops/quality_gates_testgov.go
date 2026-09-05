@@ -301,9 +301,10 @@ func runTestTargets(args []string) int {
 	return 0
 }
 
-// runTestSkipAbsentPath is the B-180 gate: a test under infra/tests/ may not
-// skip on a filesystem path that is absent from this tree unless the skip is
-// declared, with a written reason, in infra/quality/test-skip-absent-path.txt.
+// runTestSkipAbsentPath is the B-180 gate: a test under one of the scanned
+// trees may not skip on a filesystem path that is absent from this tree unless
+// the skip is declared, with a written reason, in
+// infra/quality/test-skip-absent-path.txt.
 //
 // Exit codes: 0 clean, 1 contract violated, 5 broken setup (no scan tree, no
 // test files, no skip calls found, unreadable or malformed pin). 5 rather than
@@ -311,16 +312,24 @@ func runTestTargets(args []string) int {
 func runTestSkipAbsentPath(args []string) int {
 	fs := flag.NewFlagSet("test-skip-absent-path", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
-	scanDir := fs.String("scan", testskipabsentpath.DefaultScanDir, "test tree to scan (repo-relative)")
+	scanDir := fs.String("scan", strings.Join(testskipabsentpath.DefaultScanDirs, ","),
+		"comma-separated test trees to scan (repo-relative)")
 	pin := fs.String("pin", testskipabsentpath.DefaultPinFile, "declaration file (repo-relative)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	resolveDotRoot(root)
 
+	var scanDirs []string
+	for _, d := range strings.Split(*scanDir, ",") {
+		if d = strings.TrimSpace(d); d != "" {
+			scanDirs = append(scanDirs, d)
+		}
+	}
+
 	o, err := testskipabsentpath.Check(testskipabsentpath.Config{
 		RepoRoot: *root,
-		ScanDir:  *scanDir,
+		ScanDirs: scanDirs,
 		PinFile:  *pin,
 	})
 	if err != nil {
@@ -329,7 +338,7 @@ func runTestSkipAbsentPath(args []string) int {
 	}
 
 	fmt.Printf("[test-skip-absent-path] scanned %d *_test.go file(s) under %s — %d skip call(s), %d path-guarded\n",
-		o.FilesScanned, o.ScanRoot, o.SkipCalls, len(o.Sites))
+		o.FilesScanned, strings.Join(o.ScanRoots, ", "), o.SkipCalls, len(o.Sites))
 	for _, c := range o.Conditional {
 		fmt.Printf("  CONDITIONAL  %s\n", c)
 	}
