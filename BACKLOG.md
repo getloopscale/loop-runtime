@@ -90,7 +90,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
 | [`B-184`](#b-184--dois-testes-pulam-incondicionalmente-e-leem-um-arquivo-logo-abaixo-com-tfatalf-que-nunca-roda----) | Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda | `triaged` | media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a |
 | [`B-185`](#b-185--o-gate-cli-exit-codes-imprime-skip-e-sai-0-desde-sempre-porque-o-diretorio-que-ele-mede-nunca-esteve-na-arvore----) | O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore | `triaged` | media — um gate na cadeia que nunca mediu nada. Ele nao mente na saida (diz |
-| [`B-186`](#b-186--a-classe-ainda-volta-um-nivel-abaixo-um-predicado-que-chama-outro-predicado-e-invisivel-e-em-silencio----) | A classe ainda volta um nivel abaixo: um predicado que chama outro predicado e' invisivel, e em silencio | `triaged` | media — o `B-183` existiu para fechar a classe e fechou a grafia de UM |
+| [`B-186`](#b-186--a-classe-ainda-volta-um-nivel-abaixo-um-predicado-que-chama-outro-predicado-e-invisivel-e-em-silencio----) | A classe ainda volta um nivel abaixo: um predicado que chama outro predicado e' invisivel, e em silencio | `shipped` | media — o `B-183` existiu para fechar a classe e fechou a grafia de UM |
 | [`B-187`](#b-187--o-hook-que-o-repositorio-declara-como-substituto-de-ci-nao-existe-em-maquina-nenhuma----) | O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma | `triaged` | alta — dois testes afirmam "the delivery gate is the CI substitute; it must |
 
 ### In flight (5)
@@ -6907,7 +6907,7 @@ dod:
     o pin do `test-skip-absent-path` tem
   - medido, nao argumentado: a saida do gate antes e depois, colada no item
 
-## B-186 — A classe ainda volta um nivel abaixo: um predicado que chama outro predicado e' invisivel, e em silencio   [ ]
+## B-186 — A classe ainda volta um nivel abaixo: um predicado que chama outro predicado e' invisivel, e em silencio   [x]
 
 domain: engine-go
 repo: loopzero
@@ -6954,7 +6954,7 @@ evidence: |
 why_now: o `SCOPE` do pacote agora declara as tres, entao nada esta silencioso para
   quem ler o codigo. Mas o gate segue sendo a unica coisa que impede a classe de
   voltar, e ela volta com duas funcoes.
-status: triaged
+status: shipped
 dod:
   - o oraculo e' o bloco de `evidence` verbatim: injetar o par
     `nemesisCliSrcPresent`/`nemesisDirExists` em `infra/tests/config/` faz o gate sair
@@ -6967,6 +6967,62 @@ dod:
     o doc do piso sugere que nao evadiriam
   - o `SCOPE` perde o que este item fechar e mantem o que continuar valendo
   - mutacao com efeito conferido, e um mutante por capacidade nova
+resolution: |
+  Fechado 2026-09-05. As tres formas viraram sitio; o `SCOPE` perdeu as tres e ganhou o
+  limite de profundidade que agora existe.
+
+  **ORACULO (o bloco de `evidence` verbatim), binario proprio, arvore real.** O par
+  `nemesisCliSrcPresent`/`nemesisDirExists` injetado em `infra/tests/config/`:
+
+      BEFORE (commit pai)  PASS -- 11 path-guarded skip(s)   exit 0
+      AFTER  (esta faixa)  FAIL -- 1 violation(s)             exit 1
+        infra/tests/config/nemesis_b186_test.go:13: TestNemesisEvadeViaHelper skips when
+        cli/src is missing, and that path is ABSENT from this tree ...
+
+  Arquivo, funcao e caminho, os tres na mensagem. Sem o fixture, BEFORE e AFTER imprimem
+  a MESMA linha na arvore real (11 sitios: 1 conditional, 5 tracked, 5 external) — a
+  mudanca nao inventou sitio nenhum.
+
+  **AS OUTRAS DUAS, medidas do mesmo jeito.** `(bool, error)`: BEFORE PASS exit 0 /
+  AFTER FAIL exit 1. Skip no ramo ELSE: BEFORE PASS exit 0 / AFTER FAIL exit 1. O
+  controle — skip que dispara na PRESENCA, nos dois ramos — segue PASS exit 0 nos dois
+  binarios, que e' a polaridade que o doc mantem deliberadamente fora.
+
+  **PROFUNDIDADE: o limite esta escrito e o nivel N+1 nao e' silencio.** A alcancabilidade
+  da sonda passou a ser transitiva com conjunto de visitados, entao ela e' EXATA (le cada
+  corpo alcancavel uma vez; um ciclo termina a caminhada em vez de trunca-la). O que tem
+  limite e' seguir a RESPOSTA: `maxResolveDepth` (24) saltos de expressao, uma delegacao
+  custando um deles. Passado o limite — cadeia mais longa, ou ciclo — o predicado sai
+  UNRESOLVED e o gate REPROVA. Medido: quatro niveis de delegacao com o caminho passado
+  como argumento resolvem para `cli/src` e REPROVAM; um par ciclico `ping/pong` sai
+  UNRESOLVED e REPROVA, com a cadeia colapsada em `ping() -> ... -> ping() (cyclic)` em vez
+  das 24 repeticoes que a primeira versao imprimia.
+
+  **MUTACAO, efeito conferido por nome (8 mutantes, 8 mortos).** M1 alcancabilidade de
+  volta ao corpo proprio (o defeito deste item) -> 3 testes; M2 `returnsBoolFirst` exigindo
+  um unico retorno -> 2; M3 `skipArm` lendo so o ramo THEN -> 2; M4 local ligado a um
+  predicado nao lido como guarda -> 2; M5 `skipArm` ignorando polaridade -> 3, entre eles
+  os dois controles pre-existentes de "skip na presenca"; M6 cadeia ciclica impressa em vez
+  de colapsada -> 1; M7 alem do limite o predicado fica SILENCIOSO em vez de UNRESOLVED ->
+  3; M8 `singleBoolReturn` exigindo um unico retorno -> 1.
+
+  Duas dessas medicoes nasceram erradas e foram corrigidas antes de valerem: M3 e M5, na
+  primeira rodada, apareceram como SOBREVIVENTES porque nao COMPILAVAM (variavel nao
+  usada) e o detector lia "nenhum teste vermelho" como "nenhum teste notou". Um mutante que
+  nao compila nao e' um mutante sobrevivente, e o detector agora reprova essa leitura.
+
+  **VACUIDADE.** Os sete testes de deteccao novos foram rodados contra o `check.go` do
+  commit pai: os sete REPROVAM la. Os dois controles passam nos dois lados, que e' o que um
+  controle deve fazer.
+
+  **O QUE CONTINUA FORA, e agora e' a unica coisa que continua.** A POSICAO da guarda: um
+  campo de struct, um bool de pacote, um metodo sobre um valor. A guarda tem de ser uma
+  chamada a funcao do mesmo pacote, ou um local ligado a uma. Isso esta no `SCOPE` como
+  limite nao medido, nao como limite fechado.
+
+  **REGISTRO.** A linha do registry passou a dizer o que o gate le hoje, e
+  `cmd/loopzero-ops/testdata/gateset.frozen` foi recongelado junto (145 linhas) — a string e a
+  congelada andam juntas por construcao, via `TestOracle_MatchesFrozenBaseline`.
 
 ## B-187 — O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma   [ ]
 

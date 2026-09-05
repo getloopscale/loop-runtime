@@ -39,11 +39,14 @@
 //     that cannot exist as spelled; a gate that fabricates the path it names
 //     teaches its readers to distrust the ones it did not (B-183).
 //
-// The guard's probe may be written inline or moved one level into a
-// same-package predicate function -- `if !cliSrcPresent() { t.Skip() }` is read
-// exactly like the os.Stat it wraps (B-183). Before that, a one-line refactor
-// moving the probe into a helper made any guard in scope invisible here, which
-// is how an independent audit walked the class straight back in on 2026-09-05.
+// The guard's probe may be written inline or moved into a same-package
+// predicate function -- `if !cliSrcPresent() { t.Skip() }` is read exactly like
+// the os.Stat it wraps (B-183) -- and that predicate may itself delegate to
+// another, for as far as the answer stays followable (B-186). Before B-183, a
+// one-line refactor moving the probe into a helper made any guard in scope
+// invisible here, which is how an independent audit walked the class straight
+// back in on 2026-09-05; a second refactor of the same size, moving the probe
+// one level further, walked it back in again the same day.
 //
 // A pin line whose path came BACK also fails: the guard is conditional again
 // and the declaration has become stale prose.
@@ -74,8 +77,9 @@
 //
 // SCOPE, stated so it is not mistaken for more.
 //
-//   - It detects a skip whose GUARD is a filesystem existence probe, inline or
-//     one level down inside a same-package predicate. It does NOT detect a bare
+//   - It detects a skip whose GUARD is a filesystem existence probe, written
+//     inline or reached through same-package predicates, in either arm of the
+//     guard. It does NOT detect a bare
 //     unconditional `t.Skip(...)` with no guard: that shape is at least honest
 //     about being unconditional, its damage (dead assertions below it) is a
 //     different defect, and classifying WHY a bare skip exists means reading its
@@ -90,26 +94,45 @@
 //     next. What it must never do is judge it anyway under a path it invented.
 //
 //   - A predicate the guard calls is READ, not trusted, and the reading has a
-//     floor: a function whose OWN BODY reaches one of the probes in fsProbes,
-//     but whose answer this resolver cannot follow, is reported UNRESOLVED and
-//     FAILS, exactly as an unresolvable inline path does. The floor is
-//     deliberately narrow -- it triggers on a filesystem probe and nothing
-//     else -- so `if !clusterReachable() { t.Skip() }` over a predicate that
-//     dials a socket is left alone.
+//     floor: a function that REACHES one of the probes in fsProbes, but whose
+//     answer this resolver cannot follow, is reported UNRESOLVED and FAILS,
+//     exactly as an unresolvable inline path does. The floor is deliberately
+//     narrow -- it triggers on a filesystem probe and nothing else -- so
+//     `if !clusterReachable() { t.Skip() }` over a predicate that dials a
+//     socket is left alone.
 //
-//     "OWN BODY" is load-bearing and was measured, not assumed. A predicate
-//     that DELEGATES to another predicate reaches no probe of its own, so the
-//     bail happens before its answer is ever read: it is invisible, and
-//     SILENTLY so rather than UNRESOLVED. An independent audit walked exactly
-//     that on 2026-09-05 -- `present() { return dirExists(p) }` -- and the gate
-//     printed PASS. Two more shapes evade the same way: a predicate returning
-//     `(bool, error)`, which is rejected before the probe check runs, and a
-//     skip in the ELSE arm of a presence predicate. All three are B-186.
+//     "REACHES" IS TRANSITIVE, and it was made so by measurement. It used to
+//     mean the predicate's OWN body, and a predicate that DELEGATES --
+//     `present() { return dirExists(p) }` -- reaches no probe of its own, so
+//     the bail fired before its answer was ever read: invisible, and SILENTLY
+//     so rather than UNRESOLVED. An independent audit walked exactly that on
+//     2026-09-05 and the gate printed PASS (B-186). Reachability now follows
+//     same-package calls under a visited set, so it reads every body the
+//     predicate can reach, exactly once, and a cycle ends the walk instead of
+//     truncating its answer.
 //
-//     So the honest statement of what this gate does is: it closes the ONE-LEVEL
-//     spelling of the class. It does not close the class. Anything else in the
-//     guard position (a struct field, a package-level bool, a method on a value)
-//     is not a site either, and a probe behind one of those is invisible here.
+//     THE DEPTH IS BOUNDED AND THE BOUND IS NOT SILENT. Following the answer
+//     costs maxResolveDepth (24) expression hops, a delegation being one of
+//     them. Past the bound -- a chain longer than that, or a cycle in the
+//     answer -- the predicate is UNRESOLVED and the gate FAILS. There is no
+//     depth at which this gate goes quiet: it either reads the answer or says
+//     it could not read it. Unbounded recursion is not the alternative -- a
+//     gate that hangs on a cyclic predicate is a gate nobody runs.
+//
+//     A predicate whose FIRST result is a bool is read even when it returns
+//     more. `ok, _ := cliSrcPresent()` followed by `if !ok { t.Skip() }` is the
+//     same guard spelled with an error result; it used to be rejected before
+//     the probe check ran, so the floor never got a chance (B-186).
+//
+//     BOTH ARMS ARE READ. `if present() { ... } else { t.Skip() }` fires the
+//     skip exactly on absence, so it is a site. The opposite polarity -- a skip
+//     that fires when the path IS there, in either arm -- remains deliberately
+//     not a site, because no missing path can cause it.
+//
+//   - What is still not a site is the GUARD POSITION itself: a struct field, a
+//     package-level bool, a method on a value. The guard has to be a call to a
+//     same-package function, or a local bound to one. A probe behind anything
+//     else is invisible here -- not measured shut, simply not read.
 package testskipabsentpath
 
 import (
@@ -143,7 +166,10 @@ var DefaultScanDirs = []string{"infra/tests", "api"}
 // test governance (test-pyramid-baseline.json, skip-link-baseline.txt).
 const DefaultPinFile = "infra/quality/test-skip-absent-path.txt"
 
-// maxResolveDepth bounds the expression resolver against a cyclic binding.
+// maxResolveDepth bounds the expression resolver against a cyclic binding, and
+// bounds how far a guard's answer is followed through predicates that delegate
+// to other predicates (B-186). Past it the guard is UNRESOLVED and the gate
+// FAILS -- the bound costs a verdict, never a silence.
 const maxResolveDepth = 24
 
 // rootAnchor marks a resolved path as already rooted at the repository root,
@@ -557,11 +583,13 @@ type siteWithPos struct {
 // guardedSkips walks one function and returns each skip whose control depends
 // on a filesystem probe.
 //
-// Three shapes occur in this repo and all are handled: the probe inline in the
-// if's init (`if _, err := os.Stat(p); os.IsNotExist(err) { t.Skip() }`), the
-// probe on a preceding statement (`data, err := os.ReadFile(p)` followed by
-// `if err != nil { t.Skip() }`), and the probe one level down inside a
-// same-package predicate the guard calls (`if !cliSrcPresent() { t.Skip() }`).
+// Four shapes occur and all are handled: the probe inline in the if's init
+// (`if _, err := os.Stat(p); os.IsNotExist(err) { t.Skip() }`), the probe on a
+// preceding statement (`data, err := os.ReadFile(p)` followed by
+// `if err != nil { t.Skip() }`), the probe down inside a same-package predicate
+// the guard calls (`if !cliSrcPresent() { t.Skip() }`), and that same predicate
+// bound to a local first (`ok, _ := cliSrcPresent()` then `if !ok { ... }`),
+// which is the only way a predicate returning `(bool, error)` can be spelled.
 func guardedSkips(fd *ast.FuncDecl, r *resolver) []siteWithPos {
 	var sites []siteWithPos
 	probes := map[string]ast.Expr{} // error variable -> the path it probed
@@ -572,6 +600,7 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver) []siteWithPos {
 			switch s := st.(type) {
 			case *ast.AssignStmt:
 				r.bindAssign(s)
+				r.bindBoolPred(s)
 				if name, pathExpr, ok := probeBinding(s); ok {
 					probes[name] = pathExpr
 				}
@@ -581,6 +610,7 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver) []siteWithPos {
 				local := probes
 				if init, ok := s.Init.(*ast.AssignStmt); ok {
 					r.bindAssign(init)
+					r.bindBoolPred(init)
 					if name, pathExpr, ok := probeBinding(init); ok {
 						local = make(map[string]ast.Expr, len(probes)+1)
 						for k, v := range probes {
@@ -589,8 +619,8 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver) []siteWithPos {
 						local[name] = pathExpr
 					}
 				}
-				if tgt, ok := r.absenceGuard(s.Cond, local); ok && bodyHasSkip(s.Body) {
-					sites = append(sites, r.newSite(tgt, skipPos(s.Body)))
+				if tgt, arm, ok := r.skipArm(s, local); ok {
+					sites = append(sites, r.newSite(tgt, skipPos(arm)))
 				}
 				if s.Body != nil {
 					walk(s.Body.List)
@@ -773,19 +803,32 @@ func (r *resolver) here(e ast.Expr) guardTarget {
 	return guardTarget{expr: e, scope: r, file: r.file}
 }
 
-// absenceGuard reports the path a condition guards when the condition is true
-// exactly when that path is MISSING -- the only polarity that makes a skip fire
-// on absence. `err == nil` and `if present() { t.Skip() }` are the opposite
-// guard and are deliberately not sites.
-func (r *resolver) absenceGuard(cond ast.Expr, probes map[string]ast.Expr) (guardTarget, bool) {
-	t, whenMissing, ok := r.pathCondition(cond, probes, 0)
+// skipArm reports the path an if-statement guards and WHICH ARM carries the
+// skip that fires on that path being MISSING -- the only polarity a missing
+// path can cause.
+//
+// Both arms are read (B-186). `if !present() { t.Skip() }` and
+// `if present() { t.Fatal() } else { t.Skip() }` are the same guard written two
+// ways, and reading only the then-arm made the second one silent while the doc
+// declared the OPPOSITE polarity -- a skip that fires on PRESENCE -- as the
+// deliberate non-site. That one still is: no missing path can cause it, in
+// either arm.
+func (r *resolver) skipArm(s *ast.IfStmt, probes map[string]ast.Expr) (guardTarget, *ast.BlockStmt, bool) {
+	t, whenMissing, ok := r.pathCondition(s.Cond, probes, 0)
 	if !ok {
-		return guardTarget{}, false
+		return guardTarget{}, nil, false
 	}
 	// An unreadable predicate has no polarity to trust, so it is reported
 	// whichever way it is written. Withholding it under `if present()` would
 	// hand back the evasion this floor exists to close.
-	return t, whenMissing || t.unreadable
+	elseBlock, _ := s.Else.(*ast.BlockStmt)
+	switch {
+	case (whenMissing || t.unreadable) && bodyHasSkip(s.Body):
+		return t, s.Body, true
+	case (!whenMissing || t.unreadable) && bodyHasSkip(elseBlock):
+		return t, elseBlock, true
+	}
+	return guardTarget{}, nil, false
 }
 
 // pathCondition reads a boolean condition and reports the path it tests plus
@@ -797,6 +840,20 @@ func (r *resolver) pathCondition(cond ast.Expr, probes map[string]ast.Expr, dept
 	switch c := cond.(type) {
 	case *ast.ParenExpr:
 		return r.pathCondition(c.X, probes, depth+1)
+	case *ast.Ident:
+		// `ok, _ := cliSrcPresent()` then `if !ok { t.Skip() }`. The local IS
+		// the predicate's answer, and this is the only spelling available to a
+		// predicate returning (bool, error) -- Go has no other way to use one in
+		// a condition (B-186).
+		call, bound := r.boolPreds[c.Name]
+		if !bound {
+			return guardTarget{}, false, false
+		}
+		id, ok := call.Fun.(*ast.Ident)
+		if !ok {
+			return guardTarget{}, false, false
+		}
+		return r.predicateCondition(id.Name, call, depth+1)
 	case *ast.UnaryExpr:
 		if c.Op != token.NOT {
 			return guardTarget{}, false, false
@@ -881,7 +938,7 @@ func (r *resolver) pathCondition(cond ast.Expr, probes map[string]ast.Expr, dept
 // the hole a one-line refactor used to open.
 func (r *resolver) predicateCondition(name string, call *ast.CallExpr, depth int) (guardTarget, bool, bool) {
 	h, ok := r.pkg.funcs[name]
-	if !ok || h.decl.Body == nil || !returnsBool(h.decl) {
+	if !ok || h.decl.Body == nil || !returnsBoolFirst(h.decl) {
 		return guardTarget{}, false, false
 	}
 
@@ -899,6 +956,7 @@ func (r *resolver) predicateCondition(name string, call *ast.CallExpr, depth int
 	)
 	record := func(a *ast.AssignStmt) {
 		sub.bindAssign(a)
+		sub.bindBoolPred(a)
 		if n, p, ok := probeBinding(a); ok {
 			probes[n] = p
 		}
@@ -917,19 +975,39 @@ func (r *resolver) predicateCondition(name string, call *ast.CallExpr, depth int
 				early, earlyLit = s, lit
 			}
 		case *ast.ReturnStmt:
-			if len(s.Results) == 1 {
+			// The FIRST result, not the only one: a predicate returning
+			// (bool, error) answers the same question with an error beside it,
+			// and reading only single-result returns left that shape with no
+			// tail to follow and therefore no site at all (B-186).
+			if len(s.Results) > 0 {
 				tail = s.Results[0]
 			}
 		}
 	}
-	if len(probes) == 0 && !bodyProbesFilesystem(h.decl.Body) {
-		// Not a filesystem predicate at all. `if !clusterReachable() { t.Skip() }`
-		// is honestly conditional on something this gate has no opinion about.
+	if len(probes) == 0 && !reachesFilesystemProbe(h.decl.Body, r.pkg, map[string]bool{name: true}) {
+		// Not a filesystem predicate at all, here or anywhere it delegates to.
+		// `if !clusterReachable() { t.Skip() }` is honestly conditional on
+		// something this gate has no opinion about.
 		return guardTarget{}, false, false
 	}
 
 	unreadable := guardTarget{desc: name + "()", unreadable: true}
 	describe := func(t guardTarget) guardTarget {
+		// A target that already carries a description came from a predicate this
+		// one delegates to; keeping the chain names every hop the reader has to
+		// open, instead of rendering a parameter name in a scope that never
+		// bound it.
+		if t.desc != "" {
+			// A chain that arrives back at this predicate is a cycle. Say that
+			// once: printing the loop until the depth bound runs out buries the
+			// one word the reader needs under two dozen repetitions of it.
+			if strings.Contains(t.desc, name+"()") {
+				t.desc = name + "() -> ... -> " + name + "() (cyclic)"
+				return t
+			}
+			t.desc = name + "() -> " + t.desc
+			return t
+		}
 		t.desc = name + "() -> " + sub.describe(t.expr)
 		return t
 	}
@@ -981,9 +1059,14 @@ func (r *resolver) bindParams(sub *resolver, fd *ast.FuncDecl, call *ast.CallExp
 	}
 }
 
-// returnsBool reports whether fd returns exactly one bool.
-func returnsBool(fd *ast.FuncDecl) bool {
-	if fd.Type.Results == nil || len(fd.Type.Results.List) != 1 {
+// returnsBoolFirst reports whether fd's FIRST result is a bool.
+//
+// It used to demand exactly one result, which rejected `(bool, error)` before
+// the filesystem-probe check ever ran -- so the UNRESOLVED floor never got a
+// chance and the shape evaded in silence (B-186). A predicate answering
+// "is it there?" with an error beside the answer is the same predicate.
+func returnsBoolFirst(fd *ast.FuncDecl) bool {
+	if fd.Type.Results == nil || len(fd.Type.Results.List) == 0 {
 		return false
 	}
 	f := fd.Type.Results.List[0]
@@ -1010,42 +1093,75 @@ func boolLit(e ast.Expr) (bool, bool) {
 }
 
 // singleBoolReturn reports the literal of a block whose only statement returns
-// one bool literal.
+// a bool literal FIRST. `return false, err` is that same early answer with an
+// error beside it (B-186).
 func singleBoolReturn(b *ast.BlockStmt) (bool, bool) {
 	if b == nil || len(b.List) != 1 {
 		return false, false
 	}
 	ret, ok := b.List[0].(*ast.ReturnStmt)
-	if !ok || len(ret.Results) != 1 {
+	if !ok || len(ret.Results) == 0 {
 		return false, false
 	}
 	return boolLit(ret.Results[0])
 }
 
-// bodyProbesFilesystem reports whether the block calls one of the probes in
-// fsProbes anywhere. It is the trigger for the unreadable-predicate floor, kept
-// narrow on purpose: a predicate that never touches the filesystem is none of
-// this gate's business.
-func bodyProbesFilesystem(b *ast.BlockStmt) bool {
+// reachesFilesystemProbe reports whether the block calls one of the probes in
+// fsProbes -- itself, or through any same-package function it calls. It is the
+// trigger for the unreadable-predicate floor, kept narrow on purpose: a
+// predicate that never touches the filesystem, at any depth, is none of this
+// gate's business.
+//
+// TRANSITIVE is the whole of B-186. This used to read the block ALONE, so
+// `present() { return dirExists(p) }` reached no probe of its own and the
+// caller bailed before ever reading the predicate's answer: not UNRESOLVED,
+// silent. An independent audit walked the class back in with exactly that
+// two-function refactor on 2026-09-05 and the gate printed PASS.
+//
+// `seen` is keyed by function name and must arrive holding the name of the
+// function b belongs to. It makes the walk exact rather than truncated: every
+// reachable body is read once, and a cycle ends the walk having read them all,
+// so a `false` here means "no probe anywhere reachable" and never "I stopped
+// early". The bound that CAN truncate is on following the answer, not on
+// finding the probe, and truncation there is UNRESOLVED, never silence.
+func reachesFilesystemProbe(b *ast.BlockStmt, pkg *pkgScope, seen map[string]bool) bool {
+	if b == nil {
+		return false
+	}
 	found := false
 	ast.Inspect(b, func(n ast.Node) bool {
+		if found {
+			return false
+		}
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
 		}
-		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok {
-			return true
-		}
-		pkg, ok := sel.X.(*ast.Ident)
-		if !ok {
-			return true
-		}
-		if fns, ok := fsProbes[pkg.Name]; ok {
-			if _, ok := fns[sel.Sel.Name]; ok {
-				found = true
-				return false
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+			pkgIdent, ok := sel.X.(*ast.Ident)
+			if !ok {
+				return true
 			}
+			if fns, ok := fsProbes[pkgIdent.Name]; ok {
+				if _, ok := fns[sel.Sel.Name]; ok {
+					found = true
+					return false
+				}
+			}
+			return true
+		}
+		id, ok := call.Fun.(*ast.Ident)
+		if !ok || seen[id.Name] {
+			return true
+		}
+		h, ok := pkg.funcs[id.Name]
+		if !ok || h.decl.Body == nil {
+			return true
+		}
+		seen[id.Name] = true
+		if reachesFilesystemProbe(h.decl.Body, pkg, seen) {
+			found = true
+			return false
 		}
 		return true
 	})
@@ -1146,6 +1262,12 @@ type resolver struct {
 	file   string
 	pkg    *pkgScope
 	locals map[string]boundExpr
+	// boolPreds maps a local to the same-package predicate call that produced
+	// it, so `ok, _ := cliSrcPresent()` followed by `if !ok { t.Skip() }` reads
+	// as the guard it is. It is a separate map from locals because the value is
+	// an ANSWER, not a path, and resolving it as a path would be a category
+	// error dressed as a verdict.
+	boolPreds map[string]*ast.CallExpr
 }
 
 func (r *resolver) bind(name string, e ast.Expr, file string) {
@@ -1191,6 +1313,35 @@ func (r *resolver) bindAssign(a *ast.AssignStmt) {
 			r.bind(id.Name, a.Rhs[i], r.file)
 		}
 	}
+}
+
+// bindBoolPred records `ok, _ := cliSrcPresent()` -- a local holding the answer
+// of a same-package predicate whose FIRST result is a bool. Only the first
+// result is bound: it is the one the guard reads.
+func (r *resolver) bindBoolPred(a *ast.AssignStmt) {
+	if len(a.Rhs) != 1 || len(a.Lhs) == 0 {
+		return
+	}
+	call, ok := a.Rhs[0].(*ast.CallExpr)
+	if !ok {
+		return
+	}
+	id, ok := call.Fun.(*ast.Ident)
+	if !ok {
+		return
+	}
+	h, ok := r.pkg.funcs[id.Name]
+	if !ok || h.decl.Body == nil || !returnsBoolFirst(h.decl) {
+		return
+	}
+	name, ok := a.Lhs[0].(*ast.Ident)
+	if !ok || name.Name == "_" {
+		return
+	}
+	if r.boolPreds == nil {
+		r.boolPreds = map[string]*ast.CallExpr{}
+	}
+	r.boolPreds[name.Name] = call
 }
 
 // bindDecl records `const p = "lit"` / `var p = "lit"` inside a function.
