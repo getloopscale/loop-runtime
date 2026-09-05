@@ -68,16 +68,16 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-179 items — **Open** 16 · **In flight** 4 · **Closed** 159 · **Blocked** 10
+179 items — **Open** 15 · **In flight** 4 · **Closed** 160 · **Blocked** 9
 
-### Open (16)
+### Open (15)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `blocked` · was `triaged` | waiting on `B-174` |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `blocked` · was `triaged` | waiting on a decision — baixa hoje, alta no dia em que o `loopzero-cloud` cair sozinho em produção. O `B-002` registra que o cluster central é SPOF; este item é mais estreito e mais provável: não é o cluster que cai, é **um** processo, e ele carrega uma jornada (deploy) que não é dele. |
-| [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `blocked` · was `triaged` | waiting on `B-168`, `B-169`, `B-170` |
-| [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `blocked` · was `triaged` | waiting on `B-168`, `B-169`, `B-170` — média — não quebra nada; custa navegação e força dois nomes de pacote que mentem sobre o diretório. |
+| [`B-033`](#b-033--o-teto-de-custo-está-desligado-e-o-portão-passa-direto-quando-isso-acontece----) | O teto de custo está desligado, e o portão passa direto quando isso acontece | `blocked` · was `triaged` | waiting on `B-169`, `B-170` |
+| [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `blocked` · was `triaged` | waiting on `B-169`, `B-170` — média — não quebra nada; custa navegação e força dois nomes de pacote que mentem sobre o diretório. |
 | [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `triaged` | média — dívida acumulada, não defeito ativo. **Deliberadamente separado do B-045**: ligar os gates e pagar a dívida são trabalhos diferentes, e ligá-los antes de ter plano transformaria 76 achados legítimos num muro que alguém desliga na sexta-feira. |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `blocked` · was `triaged` | waiting on `B-113` — média — não afirmo que `tag: dev` seja violação decidida: pode ser sobrescrita no install pelo ArgoCD, e nenhuma decisão registrada a proíbe. O que está medido é que a guarda cobre 1 de 16, e que os 15 restantes nunca foram julgados. |
 | [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `blocked` · was `triaged` | waiting on `B-134` — média — nada quebra hoje; o que fica preso são **duas** travas de imutabilidade de imagem, uma no gate e outra na admissão, ambas paradas em modo aviso pela mesma ausência de um valor. |
@@ -87,7 +87,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `blocked` · was `triaged` | waiting on `B-154` |
 | [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta — e' criptografia de segredo de tenant, e o gate ja' saiu do periodo de aviso: ele REPROVA a arvore hoje |
 | [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `triaged` | alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
-| [`B-168`](#b-168--a-guarda-destrutiva-do-validate-commandsh-regrediu-teste-do-b-160-volta-a-reprovar----) | A guarda destrutiva do validate-command.sh regrediu; teste do B-160 volta a reprovar | `blocked` · was `triaged` | waiting on a decision — alta - o hook agora bloqueia trabalho legitimo (heredocs, comandos multi-parte com grep+sed), o que reduz a confianca no gate e leva as pessoas a rodearem. |
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
 
@@ -100,7 +99,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-169`](#b-169--infratestsoperator_cutover_invariants-espera-arquivos-removidos-por-m5-decomposition----) | infra/tests/operator_cutover_invariants espera arquivos removidos por M5 decomposition | `planned` | blocks `B-033`, `B-057` — media - o teste esta' factualmente errado (procura arquivo que nao existe por design), o que gera ruido no gate e mascara falhas reais. |
 | [`B-170`](#b-170--toolsgen-service-auth-ed25519-reprova-go-test-com-directory-prefix-no-go-workspace----) | tools/gen-service-auth-ed25519 reprova go test com "directory prefix" no go workspace | `planned` | blocks `B-033`, `B-057` — baixa - o modulo e' uma ferramenta de geracao de chaves e provavelmente nao tem testes proprios; o setup do go.work e' que precisa de ajuste. |
 
-### Closed (159)
+### Closed (160)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -256,6 +255,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-164`](#b-164--o-gate-de-runbook-varre-110-dos-233-alertas-da-arvore-e-o-numero-que-ele-reporta-parece-o-total---x) | O gate de runbook varre 110 dos 233 alertas da arvore, e o numero que ele reporta parece o total | `shipped` | media — o gate ja' reprova e esta' deliberadamente nao-ligado, entao nada quebra hoje; o custo e' que "33 alertas sem runbook" e' lido como o tamanho da divida, e ele e' menos da metade dela |
 | [`B-165`](#b-165--o-ambiente-standalone-public-ficou-sem-borda-que-o-sirva----) | O ambiente `standalone-public` ficou sem borda que o sirva | `shipped` | baixa — o ambiente ja era legado e o canonico e outro; o custo e um default de task que aponta para um caminho que nao serve mais. |
 | [`B-166`](#b-166--duas-arvores-de-records-coexistem-e-uma-delas-nao-tem-nada-rastreado----) | Duas arvores de records coexistem, e uma delas nao tem nada rastreado | `shipped` | media — nada quebra hoje; o custo e que qualquer varredura, gate ou pessoa pode ler a arvore vazia e concluir ausencia onde ha evidencia. |
+| [`B-168`](#b-168--a-guarda-destrutiva-do-validate-commandsh-regrediu-teste-do-b-160-volta-a-reprovar----) | A guarda destrutiva do validate-command.sh regrediu; teste do B-160 volta a reprovar | `shipped` | alta - o hook agora bloqueia trabalho legitimo (heredocs, comandos multi-parte com grep+sed), o que reduz a confianca no gate e leva as pessoas a rodearem. |
 | [`B-171`](#b-171--readsecret-em-settingsjson-bloqueia-arquivos-legítimos-como-secretsgo----) | `Read(**/*secret*)` em settings.json bloqueia arquivos legítimos como `secrets.go` | `shipped` | media - bloqueia dead-citation cleanup no B-058 bala 4 + qualquer edit futuro em routes/secrets/. Nao ha bypass documentado. |
 | [`B-172`](#b-172--detector-python-depende-de-vulture-no-path-mas-nada-verifica-teste-falha-em-qualquer-host-sem-o-binário----) | Detector Python depende de `vulture` no PATH mas nada verifica; teste falha em qualquer host sem o binário | `shipped` | baixa — o binário vulture geralmente está disponível em hosts de dev com Python, mas o requisito é hidden. O impacto é 1 teste flaky por env, não regressão de produção. |
 | [`B-173`](#b-173--three-go-packages-sit-below-the-coverage-floor-and-every-unrelated-slice-pays-for-it----) | Three Go packages sit below the coverage floor, and every unrelated slice pays for it | `killed` | alta — nao pelo risco do codigo descoberto, mas porque o gate transforma uma divida de tres pacotes num imposto sobre toda fatia que passa pelo portao. |
@@ -1473,7 +1473,7 @@ why_now: o agregador é a ÚNICA fonte de `cost_counters`, e o portão que lê e
   degrada para "passa" quando ela está vazia. As três métricas de custo — minutos de build,
   egresso, puxadas de registro — não têm teto no ambiente que serve o painel público.
 status: triaged
-blocked_by: B-168, B-169, B-170
+blocked_by: B-169, B-170
 
 > **A regra que este episodio produz, e ela vale para todos os itens deste registro:**
 > *"o resto e' de outro repositorio" so' fecha um item quando NENHUMA superficie DESTE repo
@@ -2149,7 +2149,7 @@ source: discover-review
 evidence: medido em 2026-08-11. Existem `pkg/domain` (vocabulário de produto), `api/internal/domain` (camada DIP) e `api/internal/services/domain` (domínios **DNS**). A colisão forçou `package domainsvc` (`services/domain/domain_provisioner.go:4`) e `package placementsvc` — as **únicas duas** divergências entre nome de diretório e nome de pacote em toda a árvore Go. E `api/internal/domain` não é modelo de domínio: `types.go` (21 KB) declara `DomainStore`(:87), `TeamStore`(:147), `AuditStore`(:184), `SecretStore`(:205), `ProjectStore`(:335) e `TenantCRManager`(:353) — seis contextos sem relação num arquivo. As portas são anuladas na prática por **49 alias re-exports** em `routes`, e cada porta de consumidor único tem como único consumidor a própria linha de alias. **Positivo medido:** o pacote importa somente a stdlib — a disciplina de camada que falta em outros lugares é demonstrável nele.
 why_now: a duplicação da palavra em dois níveis é consequência direta do topo em forma de camada (B-041); resolver ali torna o rename aqui quase mecânico. E o `types.go` único é o que faz uma porta de secrets e uma porta de billing mudarem no mesmo arquivo.
 status: triaged
-blocked_by: B-168, B-169, B-170
+blocked_by: B-169, B-170
 delivered_in: b31473a3c  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 severity: média — não quebra nada; custa navegação e força dois nomes de pacote que mentem sobre o diretório.
 progress_2026_08_18: |
@@ -5948,8 +5948,7 @@ suggested_mode: bug
 source: human
 evidence: medido em 2026-08-31, iteration 3 do /implement B-033. Em `cd cmd/loopzero-ops` o teste `TestGuardaNaoBloqueiaRmSimplesQuandoOutroComandoTrazOMenosR` reprova com "bloqueou um comando comum porque OUTRO comando do bloco tinha `-r`". Esta e' EXATAMENTE a regressao que B-160 fechou (ver CHANGELOG.md linha 44 — "A protecao contra apagamento destrutivo juntava pedacos de comandos diferentes e barrava trabalho legitimo"). O `.claude/hooks/validate-command.sh` chegou com o kit-sync `63cc51c48` (2026-08-30) e provavelmente esta numa versao anterior a' fix de B-160. `TestGuardaNaoBloqueiaRmDeArquivoQuandoOCaminhoPerigosoVemDeOutroComando` reprova pela mesma causa raiz. EVIDENCIA VIVA: enquanto escrevia este proprio item, o hook bloqueou meu heredoc que continha essas literais em prose — o mesmo defeito, do outro lado.
 why_now: o teste esta no repo desde o fix de B-160; regrediu de forma silenciosa quando o kit-sync sobrescreveu o hook. Aparece agora porque /implement B-033 roda run_validation.py, que roda `go test` em cada modulo do workspace, e cmd/loopzero-ops reprova. Isto NAO e' causa de B-033 (que toca zero codigo Go); e' state pre-existente do repo pos-kit-sync.
-status: triaged
-blocked_by: fix estrutural pertence ao repo do kit /home/paulo/dev/loopzerokit — boundary-check.sh do próprio kit recusa edit em .claude/hooks/* no consumer by design. Kit source tem mesmo bug medido; requer fix lá + kit-sync back para loopzero. Cross-repo work fora do escopo deste registry.
+status: shipped
 severity: alta - o hook agora bloqueia trabalho legitimo (heredocs, comandos multi-parte com grep+sed), o que reduz a confianca no gate e leva as pessoas a rodearem.
 dod:
   - `.claude/hooks/validate-command.sh` volta a permitir comando comum de apagamento nao-recursivo mesmo quando OUTRO comando do bloco tem `-r`
