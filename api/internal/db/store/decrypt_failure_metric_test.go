@@ -140,8 +140,12 @@ func TestDecryptFromStore_SuccessCountsNothing(t *testing.T) {
 }
 
 // TestDecryptFromStore_OneFailureIsCountedOnce — the anti-double-count lock.
-// decryptFromStore is the ONLY place that increments; callers such as
-// ListForResync re-wrap the error on the way up and must NOT increment again.
+// decryptFromStore is the only place WITHIN PostgresSecretStore that
+// increments; callers such as ListForResync re-wrap the error on the way up
+// and must NOT increment again. (B-175: the broker reader in
+// api/cmd/setup_secret_fetch.go also increments this counter, but it is a
+// separate read path with its own rows, not a caller of this dispatcher, so it
+// cannot double-count a failure this test observes.)
 // Without this assertion, one orphaned ciphertext could show up as two events
 // and every "how many secrets are broken" query would be inflated.
 func TestDecryptFromStore_OneFailureIsCountedOnce(t *testing.T) {
