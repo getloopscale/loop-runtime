@@ -75,10 +75,19 @@ type SecretEnvLocker interface {
 // persisting to PG so the secrets.encrypted_value BYTEA column never
 // stores plaintext. Tenant-scoped (per-tenant transit key per D4 ADR).
 //
-// Production injects *adapters.VaultTransitAdapter (which wraps
-// *pkg/vault.TransitClient). Nil-safe: when transitClient is nil, Bulk
-// falls back to the legacy path where the existing AES key in
-// secret_wrapper.go encrypts at the store layer (legacy/test path).
+// Production injects pkg/vault.Transit directly — the value
+// setupTransitClient returns, which is a *vault.TransitClient. There is no
+// adapter in between: B-058 deleted api/internal/adapters/vault_transit_adapter.go
+// rather than moving it, because its own doc recorded that the signatures matched
+// byte-for-byte and only the method names differed, which makes the bridge a
+// no-op. The adapter went in 2f8910db3 on 2026-08-16; this comment went on
+// naming it for 19 more days, and nothing failed, because nothing checks a
+// comment. The claim is now asserted at compile time in
+// api/cmd/setup_transit.go instead of stated here.
+//
+// Nil-safe: when transitClient is nil, Bulk falls back to the legacy path where
+// the existing AES key in secret_wrapper.go encrypts at the store layer
+// (legacy/test path).
 type SecretTransit interface {
 	Encrypt(ctx context.Context, tenantID string, plaintext []byte) (ciphertext string, err error)
 }

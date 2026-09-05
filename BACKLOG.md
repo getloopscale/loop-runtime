@@ -2252,6 +2252,92 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
+> **Medido 2026-09-04 — balas 1, 2 e 4 fechadas com medição; a bala 3 está ABERTA e a
+> própria alternativa que o DoD sugere foi REFUTADA.**
+>
+> Herdei o commit WIP `7c3dce2ec`, que ninguém tinha verificado. **Verificado: compila.**
+> `go vet ./...` limpo nos cinco módulos que ele toca (api, cmd/loopzero-ops, infra/tests,
+> operators, pkg). O split é sólido e foi mantido.
+>
+> **Bala 1 — FECHADA.** `api/internal/k8s` era 7 arquivos não-teste e **1.520 linhas**
+> não-teste (2.945 com testes) servindo três responsabilidades. Agora são **3 arquivos e
+> 111 linhas**: `doc.go` (o critério), `namespace.go` (`ControlPlaneNamespace`, o endereço
+> que as duas casas de CR compartilham) e `typed_client.go`. As casas: `k8s/tenancy` (3
+> tipos exportados), `k8s/workload` (4), `k8s/secretsync` (1).
+>
+> **Sobre `env_resolve.go`, que o DoD parecia deixar em `k8s`:** a "resolução de env" do
+> DoD é `RestConfig` em `typed_client.go` (in-cluster, depois kubeconfig), e essa ficou.
+> `env_resolve.go` resolve entrada de `apiv1.TenantEnvironmentEntry` do CR de Tenant — é
+> lógica de tenancy com nome de plumbing. Além disso é **não exportada**
+> (`resolveEnvEntry`, chamada só de `tenant_cr_manager.go:265`), então ficar para trás
+> exigiria exportá-la sem motivo.
+>
+> **A REGRA, escrita e com portão.** O item é sobre critério de admissão, não sobre mover
+> arquivo, então o entregável é a frase que recusa: **plumbing não nomeia domínio.**
+> Arquivo do topo de `k8s` não pode carregar responsabilidade no nome nem em identificador
+> exportado. "Usa client-go" admite `tenant_cr_manager.go`, `application_cr_manager.go` e
+> `secret_k8s_manager.go` igualmente; esta recusa os três e recusa o próximo.
+> Escrita em `docs/architecture/package-admission.md` (o `doc.go` citava esse caminho e ele
+> **não existia** — citação morta criada pelo próprio commit WIP).
+>
+> **O portão estava MORTO e agora roda.** `packageadmission` existia com 8 testes verdes e
+> **não estava registrado em lugar nenhum** — nem em `gateRegistry`, nem em
+> `taskfiles/quality.yml`. Registrei primeiro, e o guarda do repo (`#255`,
+> `TestEveryGateIsWiredOrExempted`) ficou **VERMELHO** nomeando `package-admission` como
+> órfão; ligar no taskfile e recongelar `testdata/gateset.frozen` (1 linha, coluna TASKS =
+> `gates`) devolveu o verde. **Dentes provados contra a árvore REAL, não fixture:**
+> devolver `tenant_evictor.go` para `api/internal/k8s` faz sair 1 com três achados (nome do
+> arquivo, `TenantK8sEvictor`, `NewTenantK8sEvictor`); removido, volta a PASS com 3
+> arquivos varridos.
+>
+> **Bala 2 — confirmada fechada.** Re-medido hoje: `adapter-ports: PASS — 9 adaptador(es),
+> todos declarando a porta que satisfazem`.
+>
+> **Bala 4 — FECHADA, incluindo a citação morta que a nota de 2026-08-18 não pôde tocar.**
+> O `B-171` desbloqueou `api/internal/routes/secrets`. Havia **duas** citações mortas, não
+> uma: `secrets.go:78` e `pkg/vault/redaction_test.go:193`. O adaptador saiu em `2f8910db3`
+> em **2026-08-16** e as citações sobreviveram **19 dias** (não "três semanas" — medido).
+> Em vez de trocar prosa por prosa, a afirmação virou verificada:
+> `var _ secrets.SecretTransit = (vault.Transit)(nil)` em `api/cmd/setup_transit.go`, o
+> mesmo padrão da bala 2. **Mutante provou os dentes:** trocar a porta por
+> `secrets.SecretProjectChecker` faz o compilador recusar com *"vault.Transit does not
+> implement secrets.SecretProjectChecker (missing method GetByName)"*.
+>
+> **Bala 3 — ABERTA, e a razão importa: o parêntese do DoD é FALSO.**
+> O DoD oferece "ganha nome que diga a propriedade real **(roda no controller)**, ou é
+> dividido por concern". Medi todos os sítios de construção de símbolo `platform.*`:
+>
+> | Sítio | Binário | Constrói |
+> |---|---|---|
+> | `api/cmd/main.go` | **api** | `EnvManagerAdapter`, `EnvironmentEnsurer`, `EnvironmentCRReader`, `SecretResyncer` |
+> | `api/cmd/setup_background.go` | **api** | `IdempotencyCleaner`, `AuditLogPruner`, `OrphanDetector`, `KVReconciler` |
+> | `api/cmd/setup_orchestrator.go` | **api** | `ProjectDeleter` |
+> | `api/cmd/setup_workflows.go` | **api** | `CircuitBreakerWorkflowSubmitter`, `CircuitBreakerSyncClient` |
+> | `api/cmd/controller/setup_services.go` | **controller** | os mesmos três já construídos pelo api |
+>
+> Os loops de faxina também não são do controller: `main.go:266` → `startLeaderLoops`
+> (`setup_background.go:424`) → `createCoreLoops` (`:227`), tudo dentro do binário **api**
+> sob eleição de líder. **Todo membro roda no api; três também rodam no controller; nenhum
+> roda só no controller.** Renomear para "roda no controller" gravaria uma falsidade medida
+> num nome de pacote — pior que o critério não escrito, porque nome é acreditado.
+>
+> **O que é verdade e recusa:** nada dentro de `api/internal` importa `services/platform`;
+> os únicos importadores são a fiação de processo (`api/cmd`, `api/cmd/controller`) e
+> testes. Uma rota, um service ou um middleware que precisasse importá-lo seria recusado
+> por essa frase.
+>
+> **O que falta é uma DECISÃO, não código:** (a) emendar a bala para a propriedade medida,
+> ou (b) a divisão por concern — 11 arquivos não-teste, **1.922 linhas**, em pelo menos
+> quatro grupos (faxina de fundo; circuit breakers; provisionamento de ambiente; exclusão
+> de projeto) cujas fronteiras o item **não** nomeia. Escolher as fronteiras é a decisão, e
+> `platform` é contexto registrado no allow-list do `services-acyclic`, então os dois
+> caminhos mexem naquele portão também. **Não decidi sozinho.**
+>
+> **Achado colateral para quem pegar a bala 3:** `pg_circuit_breaker.go` contém
+> `CircuitBreakerSyncClient` — o breaker do ArgoCD, não do Postgres (esse é
+> `api/internal/middleware/policy/pgcircuitbreaker`). Os nomes de arquivo dentro de
+> `platform` também não descrevem o conteúdo.
+
 ## B-059 — O transporte carrega o schema de payload de cada domínio e faz body-snooping   [ ]
 
 domain: engine-go

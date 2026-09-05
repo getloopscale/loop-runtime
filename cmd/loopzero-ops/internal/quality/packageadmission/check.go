@@ -204,7 +204,10 @@ func Check(cfg Config) (Outcome, error) {
 
 	files, err := goFiles(dir)
 	if err != nil {
-		return out, fmt.Errorf("%w: %s: %v", ErrNothingScanned, governed, err)
+		// Both errors are wrapped: the sentinel so callers can errors.Is on it, and
+		// the cause so the reader learns WHY nothing was scanned (absent directory
+		// versus unreadable one) without the message having to guess.
+		return out, fmt.Errorf("%w: %s: %w", ErrNothingScanned, governed, err)
 	}
 	fset := token.NewFileSet()
 	for _, name := range files {

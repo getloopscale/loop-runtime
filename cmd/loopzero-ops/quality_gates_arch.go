@@ -19,6 +19,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/acyclicgraph"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/contractconsumers"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noshellwrap"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/packageadmission"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pkgusagematrix"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/servicesacyclic"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/stackcoverage"
@@ -343,6 +344,36 @@ func runServicesAcyclic(args []string) int {
 		return 1
 	}
 	fmt.Printf("services-acyclic: PASS \u2014 %d .go files scanned; services bounded-context import graph is the frozen acyclic DAG (M9 Step 6)\n", outcome.Scanned)
+	return 0
+}
+
+// runPackageAdmission — B-058.
+//
+// The item is about an admission CRITERION that can say no. api/internal/k8s
+// admitted by technology ("it uses client-go"), which admits every domain that
+// happens to speak to the API server. The criterion is now "plumbing names no
+// domain", and this gate is what makes it a rule rather than a paragraph.
+//
+// It fails in three distinguishable ways on purpose, because the fixes differ:
+// a domain name readmitted into the plumbing package (move it to a home), a home
+// that emptied out (the split was undone, and a gate green over a vacuum is the
+// failure adapter-ports records), and nothing scanned at all.
+func runPackageAdmission(args []string) int {
+	fs := flag.NewFlagSet("package-admission", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := packageadmission.Check(packageadmission.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "package-admission: FAIL \u2014 %v\n", err)
+		for _, v := range out.Violations {
+			fmt.Fprintf(os.Stderr, "  api/internal/k8s/%s: %s carries the domain word %q \u2014 move it to k8s/tenancy, k8s/workload or k8s/secretsync\n", v.File, v.Where, v.Word)
+		}
+		return 1
+	}
+	fmt.Printf("package-admission: PASS \u2014 %d plumbing file(s) in api/internal/k8s name no domain; homes %v are populated\n", out.Scanned, out.Homes)
 	return 0
 }
 
