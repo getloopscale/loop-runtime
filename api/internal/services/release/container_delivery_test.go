@@ -224,7 +224,7 @@ func TestContainerDelivery_Activate_HappyPath(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	build := &db.Build{
+	build := deploycontracts.ActivationBuild{
 		ID: "build-1", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "production", CreatedBy: "user-1",
 	}
@@ -292,7 +292,7 @@ func TestContainerDelivery_Activate_GitOpsPushFails(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	build := &db.Build{
+	build := deploycontracts.ActivationBuild{
 		ID: "build-2", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "production", CreatedBy: "user-1",
 	}
@@ -339,7 +339,7 @@ func TestContainerDelivery_Rollback_HappyPath(t *testing.T) {
 		TenantID:    "tn-1",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		TargetRelease: &db.Release{
+		TargetRelease: &deploycontracts.RollbackTarget{
 			ID:        "rel-old",
 			GitCommit: "old-commit-sha",
 		},
@@ -362,7 +362,7 @@ func TestContainerDelivery_Rollback_NoGitCommit(t *testing.T) {
 		TenantID:    "tn-1",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		TargetRelease: &db.Release{
+		TargetRelease: &deploycontracts.RollbackTarget{
 			ID:        "rel-old",
 			GitCommit: "", // no git commit
 		},
@@ -388,7 +388,7 @@ func TestContainerDelivery_Activate_SyncTriggerFails_NonRecoverable(t *testing.T
 		GitOps:         gitops,
 	})
 
-	build := &db.Build{
+	build := deploycontracts.ActivationBuild{
 		ID: "build-sync-fail", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "production", CreatedBy: "user-1",
 	}
@@ -425,7 +425,7 @@ func TestContainerDelivery_Activate_SyncTrigger404_StaysPending(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	build := &db.Build{
+	build := deploycontracts.ActivationBuild{
 		ID: "build-404", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "production", CreatedBy: "user-1",
 	}
@@ -463,7 +463,7 @@ func TestContainerDelivery_Rollback_GitOpsPushFails(t *testing.T) {
 		TenantID:    "tn-1",
 		ProjectID:   "proj-1",
 		Environment: "production",
-		TargetRelease: &db.Release{
+		TargetRelease: &deploycontracts.RollbackTarget{
 			ID:        "rel-old",
 			GitCommit: "old-sha",
 		},
@@ -490,7 +490,7 @@ func TestPhaseACreateRelease_PersistsSignatureColumns(t *testing.T) {
 		GitOps:         &fakeGitOpsContainer{commitSHA: "gitcommit123"},
 	})
 
-	build := &db.Build{
+	build := deploycontracts.ActivationBuild{
 		ID: "build-sig", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "production", CreatedBy: "user-1",
 	}
@@ -542,7 +542,7 @@ func TestPhaseACreateRelease_LegacyAppRelease_NullColumns(t *testing.T) {
 		GitOps:         &fakeGitOpsContainer{commitSHA: "gitcommit123"},
 	})
 
-	build := &db.Build{
+	build := deploycontracts.ActivationBuild{
 		ID: "build-legacy", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "production", CreatedBy: "user-1",
 	}
@@ -587,7 +587,7 @@ func TestPhaseACreateRelease_DigestWithoutSignature_NoSignedAt(t *testing.T) {
 		GitOps:         &fakeGitOpsContainer{commitSHA: "gitcommit123"},
 	})
 
-	build := &db.Build{
+	build := deploycontracts.ActivationBuild{
 		ID: "build-partial", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "production", CreatedBy: "user-1",
 	}
@@ -638,7 +638,7 @@ func TestPhaseACreateRelease_MultiApp_PrimaryOnly(t *testing.T) {
 		GitOps:         &fakeGitOpsContainer{commitSHA: "gitcommit123"},
 	})
 
-	build := &db.Build{
+	build := deploycontracts.ActivationBuild{
 		ID: "build-multi", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "production", CreatedBy: "user-1",
 	}

@@ -2836,9 +2836,63 @@ dod:
 > decidido, com ordem de ataque. O alargamento da cerca (51 + 18 arquivos) segue
 > aberto e é a outra metade do item.
 
-  - `FrozenDefault` em `domainsinkpurity` encolhe na mesma medida — o gate reporta `REMOVIDO` para guiar
-  - a cerca alarga para `services` (51) e `cmd` (18) — `routes` foi entregue na fatia slice-6 e `server` na slice-4 —, ou o custo de 69 arquivos é reavaliado com números novos
+  - `FrozenDefault` em `domainsinkpurity` encolhe na mesma medida — o gate reporta `REMOVIDO` para guiar — **ATENDIDA em 2026-09-04 para esta fatia: 7 → 5 no mesmo commit em que a superfície encolheu, gate PASS com `0 gone`**
+  - a cerca alarga para `services` (51) e `cmd` (18) — `routes` foi entregue na fatia slice-6 e `server` na slice-4 —, ou o custo de 69 arquivos é reavaliado com números novos — **ATENDIDA pela segunda via em 2026-09-04: 51/18/69 remedidos como 54/19/73; a cerca segue estreita, o custo agora está escrito com número medido em vez de herdado**
   - a mudança em `WithLock` é validada contra um Cleanroom, não só contra a suíte
+
+> **Fatia entregue 2026-09-04 — `db.Release` + `db.Build` sairam da superficie do sink.
+> Tres numeros re-medidos, dois deles diferentes do que este item carregava.**
+>
+> **Re-medicao antes de tocar em qualquer coisa** (linhas de producao em `api/`, regra unica
+> do item): `WithLock` **34**, `db.BuildAppSpec` **18**, `TargetRelease` **6**,
+> `Activate(ctx` **5** — **63**. Identica a 12/08 e a 19/08. O 57 do titulo continua sendo
+> o numero retratado.
+>
+> **O que mudou.** `delivery.go` nao importa mais persistencia. `Activate` recebe
+> `deploycontracts.ActivationBuild` (7 dos 16 campos da linha de build) e
+> `RollbackDeliveryRequest.TargetRelease` e' `*deploycontracts.RollbackTarget` (2 dos 18 da
+> linha de release). A traducao acontece uma vez, em `services/build/activation_build.go` e
+> `services/release/rollback_target.go`, cada um com teste que fixa campo a campo — a
+> assinatura o compilador cobre, um campo esquecido no zero value ele nao cobre, e esse era
+> o unico risco real da fatia. `WithLock` NAO foi tocado.
+>
+> **O que NAO mudou, e vale escrever para nao ser lido como progresso:** as 63 linhas
+> continuam 63. O 63 sempre foi o CUSTO da remocao, nunca um saldo que a remocao abate.
+>
+> **Correcao, mesmo dia, por auditoria:** o paragrafo acima dizia que o detalhamento foi
+> recontado e deu os mesmos quatro numeros. Nao foi — foi carregado para frente, dentro do
+> proprio achado que acusa tres outros lugares de carregar numeros sem remedir. Medido na
+> branch por dois metodos independentes: `WithLock` **34**, `db.BuildAppSpec` **20**,
+> `TargetRelease` **5**, `Activate(ctx` **4**. O total sobrevive porque os deltas se anulam:
+> `BuildAppSpec` subiu 2 e os outros dois cairam 1 cada, tudo em `app_unit.go` e tudo
+> comentario. E das 11 linhas, **9** continuam — duas linhas de doc-comment foram deletadas
+> neste mesmo commit, entao "todas continuam la" era falso.
+>
+> **O que a metrica conta.** Nao sao call sites. E um grep de string sobre `.go` fora de
+> `_test.go`, e entre os 18 hits de `db.BuildAppSpec` no HEAD ha cinco comentarios e um
+> `var _ = db.BuildAppSpec{}` — placeholder de import, nao chamada. Cite como **63 linhas
+> fora de `_test.go`**, nunca como "63 call sites de producao". O aviso central nao muda: a
+> remocao nao puxou o numero para baixo. Muda o que o numero autoriza a dizer.
+>
+> **Numeros que estavam errados no registro, corrigidos por medicao:**
+>
+> | o que | registrado | medido 2026-09-04 |
+> |---|---|---|
+> | dependentes do sink | 35 arquivos, 10 pacotes | **38 arquivos de producao, 11 pacotes** |
+> | cerca `api/cmd` | 18 | **19** — estava velho e ninguem tinha re-rodado |
+> | cerca `api/internal/services` | 51 | **54 nesta branch** (era 51 no HEAD) |
+> | total do alargamento | 69 | **73** |
+>
+> O `+3` em `services` e' desta fatia e e' honesto declarar: `delivery.go` saiu da lista, e
+> entraram quatro — os dois adaptadores e seus testes —, porque quem traduz uma linha de
+> persistencia num tipo de contrato precisa importar os dois lados. **Tirar persistencia de
+> um CONTRATO nao a tira da camada; concentra-a numa fronteira com nome.** O que melhorou
+> nao e' a contagem da cerca: e' que agora sao dois adaptadores pequenos em vez de um tipo
+> numa interface que 38 arquivos herdam.
+>
+> `FrozenDefault` encolheu de **7 para 5** no mesmo commit. Gate re-rodado na branch:
+> `8 file(s) parsed, 5 watched symbol(s) ... 0 new, 0 gone` — PASS. Um `gone` diferente de
+> zero significaria que a lista ficou maior que a realidade.
 
 > Registrado 2026-08-12 pela fatia slice-4. O `domain-sink-purity` imprime as 4 congeladas em toda
 > execução exatamente para que este item não seja esquecido — é o mesmo desenho do `B-076`.

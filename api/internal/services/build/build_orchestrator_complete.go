@@ -168,7 +168,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	// even if the ArgoCD sync (container delivery) takes longer or fails.
 	o.writeStaticRoutingEntries(ctx, build, result)
 
-	activationErr := o.delivery.Activate(ctx, build, result)
+	activationErr := o.delivery.Activate(ctx, activationBuildFrom(build), result)
 
 	if activationErr != nil {
 		// BRC-002 fix: if the delivery activator already handled the failure
