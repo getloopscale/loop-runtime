@@ -35,7 +35,9 @@ environments:
     # T2.2 of plan 2026-05-29-dashboard-public-integration-canonicalization.
     # Same topology as standalone-multi, but configured for the local-Caddy
     # public-DNS demo flow (app/cloud/auth.loopzero.example via Let's Encrypt).
-    # Used by `task infra:install:core-dashboard-only ENV=standalone-public`.
+    # Retired as the default of `task infra:install:core-dashboard-only` by
+    # B-165 (B-025 removed its hostnames from infra/local/Caddyfile, leaving
+    # no edge). Kept and still reachable with an explicit ENV=standalone-public.
     values:
       - environments/standalone-public.yaml
   dev-public:
