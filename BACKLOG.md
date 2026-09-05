@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-185 items — **Open** 17 · **In flight** 5 · **Closed** 163 · **Blocked** 7
+187 items — **Open** 19 · **In flight** 5 · **Closed** 163 · **Blocked** 7
 
-### Open (17)
+### Open (19)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -91,6 +91,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-183`](#b-183--o-gate-de-skip-por-caminho-ausente-para-a-grafia-nao-a-classe-um-helper-booleano-o-evade----) | O gate de skip-por-caminho-ausente para a grafia, nao a classe: um helper booleano o evade | `triaged` | media — o gate existe para impedir que a classe volte, e a classe volta com |
 | [`B-184`](#b-184--dois-testes-pulam-incondicionalmente-e-leem-um-arquivo-logo-abaixo-com-tfatalf-que-nunca-roda----) | Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda | `triaged` | media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a |
 | [`B-185`](#b-185--o-gate-cli-exit-codes-imprime-skip-e-sai-0-desde-sempre-porque-o-diretorio-que-ele-mede-nunca-esteve-na-arvore----) | O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore | `triaged` | media — um gate na cadeia que nunca mediu nada. Ele nao mente na saida (diz |
+| [`B-186`](#b-186--a-classe-ainda-volta-um-nivel-abaixo-um-predicado-que-chama-outro-predicado-e-invisivel-e-em-silencio----) | A classe ainda volta um nivel abaixo: um predicado que chama outro predicado e' invisivel, e em silencio | `triaged` | media — o `B-183` existiu para fechar a classe e fechou a grafia de UM |
+| [`B-187`](#b-187--o-hook-que-o-repositorio-declara-como-substituto-de-ci-nao-existe-em-maquina-nenhuma----) | O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma | `triaged` | alta — dois testes afirmam "the delivery gate is the CI substitute; it must |
 
 ### In flight (5)
 
@@ -6904,4 +6906,143 @@ dod:
     modo declarado sozinho e reprovar se a declaracao ficar — a mesma propriedade que
     o pin do `test-skip-absent-path` tem
   - medido, nao argumentado: a saida do gate antes e depois, colada no item
+
+## B-186 — A classe ainda volta um nivel abaixo: um predicado que chama outro predicado e' invisivel, e em silencio   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b183-nemesis-audit
+severity: media — o `B-183` existiu para fechar a classe e fechou a grafia de UM
+  nivel. Dois niveis evadem, com o mesmo refactor de duas funcoes, e sem virar
+  UNRESOLVED: o gate imprime PASS.
+evidence: |
+  Medido 2026-09-05 por auditoria independente, numa copia completa do repo, dentro
+  do escopo varrido (`infra/tests/config/`):
+
+      func nemesisDirExists(p string) bool { _, err := os.Stat(p); return err == nil }
+      func nemesisCliSrcPresent() bool { return nemesisDirExists("../../../cli/src") }
+
+      func TestNemesisEvadeViaHelper(t *testing.T) {
+          if !nemesisCliSrcPresent() { t.Skip("cli/ not present") }
+          t.Fatal("dead assertion")
+      }
+
+  Gate: `PASS — 11 path-guarded skip(s)`, exit 0. O mesmo arquivo, mesmo nome de
+  teste, mesmo caminho, com a sonda escrita DIRETO no predicado: `FAIL — 1
+  violation(s)`, 12 sitios. Reproduzido nas duas grafias — predicado interno no mesmo
+  arquivo e em outro arquivo, com caminho literal e com constante.
+
+  CAUSA, lida no codigo: `check.go` faz
+  `if len(probes) == 0 && !bodyProbesFilesystem(h.decl.Body)` e desiste ali.
+  `bodyProbesFilesystem` olha SO o corpo do proprio predicado, entao a expressao de
+  retorno — que `pathCondition` seguiria para dentro do predicado interno — nunca e'
+  lida. O piso documentado ("uma funcao que alcanca uma sonda mas cuja resposta o
+  resolver nao consegue seguir vira UNRESOLVED e REPROVA") nao dispara, porque para o
+  detector essa funcao nao alcanca sonda nenhuma.
+
+  MAIS DUAS FORMAS, tambem em silencio e tambem nao declaradas antes desta auditoria:
+
+  1. Predicado que retorna `(bool, error)`:
+     `if ok, _ := cliSrcPresentA3(); !ok { t.Skip() }` — `returnsBool()` rejeita antes
+     de `bodyProbesFilesystem` ser consultado, entao o piso nem tem chance.
+  2. Skip no ramo ELSE de um predicado de presenca:
+     `if cliSrcPresentB4() { t.Fatal(...) } else { t.Skip(...) }` — o doc declara
+     `if present() { t.Skip() }` como deliberadamente-nao-sitio, que e' a polaridade
+     OPOSTA; o skip no else dispara exatamente na ausencia. O analogo inline se
+     comporta igual no commit pai, entao essa metade e' pre-existente, nao introduzida.
+why_now: o `SCOPE` do pacote agora declara as tres, entao nada esta silencioso para
+  quem ler o codigo. Mas o gate segue sendo a unica coisa que impede a classe de
+  voltar, e ela volta com duas funcoes.
+status: triaged
+dod:
+  - o oraculo e' o bloco de `evidence` verbatim: injetar o par
+    `nemesisCliSrcPresent`/`nemesisDirExists` em `infra/tests/config/` faz o gate sair
+    1 nomeando arquivo, funcao e caminho — medido com binario proprio, nao argumentado
+  - a decisao sobre profundidade e' escrita e tem limite declarado: se o resolver
+    seguir N niveis, o que acontece no nivel N+1 esta no `SCOPE`, e nao pode ser
+    silencio — recursao sem limite tambem nao serve
+  - `(bool, error)` e o skip no ramo ELSE: cada um ou vira sitio, ou continua fora com
+    a razao escrita no `SCOPE`. O que nao pode e' a situacao de hoje, em que evadem e
+    o doc do piso sugere que nao evadiriam
+  - o `SCOPE` perde o que este item fechar e mantem o que continuar valendo
+  - mutacao com efeito conferido, e um mutante por capacidade nova
+
+## B-187 — O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma   [ ]
+
+domain: infra
+repo: loopzero
+suggested_mode: bug
+source: b183-nemesis-audit
+severity: alta — dois testes afirmam "the delivery gate is the CI substitute; it must
+  exist", e o arquivo nao existe. Enquanto o `main` esta 273 commits atras e o PR de
+  promocao nao tem check real, o substituto declarado de CI e' o unico portao que
+  sobraria — e ele nao esta la.
+evidence: |
+  Encontrado 2026-09-05 por auditoria independente, ao checar a PREMISSA de uma
+  dispensa. A faixa do `B-183` escreveu que `TestDeliveryGate_RunsOneRealTargetThatCoversThisModule`
+  e `TestDeliveryGate_SourceCarriesExactlyOneTaskInvocation` reprovam porque leem
+  `../../.claude/hooks/delivery-gate.sh`, "que uma worktree ligada nao carrega".
+
+  Isso e' falso, e o auditor mediu no checkout PRINCIPAL, nao na worktree:
+
+      ls /home/paulo/dev/loopzero/.claude/hooks/     -> 9 entradas, delivery-gate.sh nao esta entre elas
+      find /home/paulo/dev/loopzero/.claude -name 'delivery-gate*'  -> nada
+
+  O arquivo nao esta ausente da worktree. Esta ausente da maquina. As duas falhas sao
+  pre-existentes — verificadas identicas no commit pai — mas a razao escrita para
+  elas estava errada, e a razao certa importa muito mais: os proprios testes dizem
+  que esse hook e' o substituto de CI e que ele TEM de existir.
+
+  CAUSA, medida depois — e duas explicacoes erradas circularam antes desta:
+
+      git log --all --diff-filter=ADM --name-status -- "**/delivery-gate.sh"
+
+      1766aafd1  feat(quality): o gate que roda antes de todo push …        M
+      b6f075ac3  chore(.claude): sincroniza o kit instalado com o plugin    D
+      11a71762b  fix(hooks): "a atualizacao do plugin levou o portao"       A
+      a6722bbc9  chore(.claude): devolve o kit ao estado anterior           M
+      63cc51c48  chore(.claude): adopt the reconfigured kit                 D
+      53c1dc1ea  fix(.claude): "restore three files the repo gates require" A
+      9a6e6e903  chore: reinstall the Squad kit (2026-09-02)                D
+
+  Apagado TRES vezes, restaurado duas. A terceira ninguem viu, e as duas assercoes
+  reprovam desde 2026-09-02.
+
+  NAO e' o instalador do kit. O `install.sh` preserva arquivos que o kit nao envia
+  desde 2026-08-29 (`a7c71ce`), e o teste que garante isso nomeia
+  `hooks/delivery-gate.sh` LITERALMENTE, entre outros — verificado verde hoje.
+
+  NAO e' a worktree, que foi a razao escrita pela faixa do `B-183`. O arquivo esta
+  ausente do checkout PRINCIPAL: `ls /home/paulo/dev/loopzero/.claude/hooks/` lista 9
+  entradas e ele nao esta entre elas.
+
+  E' uma LIMPEZA MANUAL. O corpo de `9a6e6e903` diz "Cleaned before reinstalling" e o
+  commit apaga 95 arquivos sob `.claude/`, entre eles nove hooks shell descritos como
+  "left from renames the kit did months ago". Isso e' verdade para oito deles. O
+  `delivery-gate.sh` e' do PROJETO, nao do kit, e estava na mesma pasta — entao a
+  regra que limpou os obsoletos levou junto o unico que ninguem mais escreve.
+
+  O kit sabia a resposta e nao foi perguntado: `check_install_drift` classifica
+  `consumer-local`, exatamente a categoria em que esse arquivo cai.
+
+  Contexto que da o peso: o `main` do loopzero esta 273 commits atras do `workspace`, e o
+  PR de promocao `#344` tem como unico check um servico de autofix de terceiro que sai
+  como skipping. Nao ha CI de verdade na promocao. O `delivery-gate.sh` era o portao
+  que restava.
+why_now: uma faixa arquivou isso como ruido de worktree e a auditoria desarquivou.
+  Sem alguem escrever, some de novo na proxima vez que os dois testes reprovarem.
+status: triaged
+dod:
+  - a restauracao usa a ultima versao viva (`git show 53c1dc1ea:.claude/hooks/delivery-gate.sh`)
+    e diz o que mudou desde entao, em vez de reescrever o hook do zero — ele ja foi
+    escrito tres vezes
+  - o resultado e' um dos dois, com a razao escrita: o hook existe e roda o que os
+    testes dizem que ele roda, OU os dois testes saem nomeando o que cobre a entrega
+    no lugar dele — a mesma barra do `B-180`
+  - se o hook voltar: ele nao pode passar quando nao consegue rodar seu proprio alvo
+    (a familia de defeito medida seis vezes esta semana), e isso tem teste
+  - a relacao com a promocao esta escrita: se `main` continua sem check real, o item
+    diz explicitamente que este hook nao substitui isso sozinho, para nao virar uma
+    segunda falsa garantia
 

@@ -90,14 +90,26 @@
 //     next. What it must never do is judge it anyway under a path it invented.
 //
 //   - A predicate the guard calls is READ, not trusted, and the reading has a
-//     floor: a function that reaches one of the probes in fsProbes but whose
-//     answer this resolver cannot follow is reported UNRESOLVED and FAILS,
-//     exactly as an unresolvable inline path does. The floor is deliberately
-//     narrow -- it triggers on a filesystem probe and nothing else -- so
-//     `if !clusterReachable() { t.Skip() }` over a predicate that dials a
-//     socket is left alone. Anything else in the guard position (a struct
-//     field, a package-level bool, a method on a value) is not a site, and a
-//     probe hidden behind one of those would still be invisible here.
+//     floor: a function whose OWN BODY reaches one of the probes in fsProbes,
+//     but whose answer this resolver cannot follow, is reported UNRESOLVED and
+//     FAILS, exactly as an unresolvable inline path does. The floor is
+//     deliberately narrow -- it triggers on a filesystem probe and nothing
+//     else -- so `if !clusterReachable() { t.Skip() }` over a predicate that
+//     dials a socket is left alone.
+//
+//     "OWN BODY" is load-bearing and was measured, not assumed. A predicate
+//     that DELEGATES to another predicate reaches no probe of its own, so the
+//     bail happens before its answer is ever read: it is invisible, and
+//     SILENTLY so rather than UNRESOLVED. An independent audit walked exactly
+//     that on 2026-09-05 -- `present() { return dirExists(p) }` -- and the gate
+//     printed PASS. Two more shapes evade the same way: a predicate returning
+//     `(bool, error)`, which is rejected before the probe check runs, and a
+//     skip in the ELSE arm of a presence predicate. All three are B-186.
+//
+//     So the honest statement of what this gate does is: it closes the ONE-LEVEL
+//     spelling of the class. It does not close the class. Anything else in the
+//     guard position (a struct field, a package-level bool, a method on a value)
+//     is not a site either, and a probe behind one of those is invisible here.
 package testskipabsentpath
 
 import (
@@ -644,28 +656,49 @@ func (r *resolver) newSite(t guardTarget, pos token.Pos) siteWithPos {
 		s.Verdict = Unresolved
 		return s
 	}
+	// An absolute literal names a place on the machine. Joining it onto the
+	// repository root produced "infra/tests/config/usr/bin/helmfile", a path that
+	// cannot exist as spelled, and then judged the tree by it (B-183).
 	var rel string
+	absolute := false
 	if anchored, ok := stripAnchor(raw); ok {
 		rel = anchored
 	} else if filepath.IsAbs(raw) || strings.HasPrefix(raw, "/") {
-		// An absolute literal names a place on the machine. Joining it onto the
-		// repository root produced "infra/tests/config/usr/bin/helmfile", a path
-		// that cannot exist as spelled, and then judged the tree by it (B-183).
-		s.Path = filepath.ToSlash(filepath.Clean(raw))
-		s.Verdict = Outside
-		return s
+		absolute = true
+		rel = raw
 	} else {
 		rel = filepath.Join(r.pkgDir, raw)
 	}
-	s.Path = filepath.ToSlash(filepath.Clean(rel))
-	// A relative path that climbs past the root lands outside the repository
-	// too. Same reasoning, different spelling: the class is "not in this tree",
-	// not "starts with a slash".
-	if s.Path == ".." || strings.HasPrefix(s.Path, "../") {
+
+	// WHERE IT LANDS, not how it is written. The first version of this decided
+	// by string shape -- anything cleaning to a leading "../" was declared not
+	// this repository's problem -- and a path that climbs OUT of the tree and
+	// back IN under the repository's own directory name cleans to exactly that
+	// while naming a file inside the tree. It escaped judgement entirely.
+	//
+	// Measured by an independent audit on 2026-09-05: the same absent file,
+	// spelled "../../scripts/bootstrap-cluster.sh" and
+	// "../../../../<repo-dir>/infra/scripts/bootstrap-cluster.sh", FAILED and
+	// passed respectively. Fixing the fabricated path had traded it for a new
+	// silence that anyone could reach on purpose.
+	root, err := filepath.Abs(r.root)
+	if err != nil {
+		root = filepath.Clean(r.root)
+	}
+	full := filepath.Clean(rel)
+	if !absolute {
+		full = filepath.Clean(filepath.Join(root, filepath.FromSlash(rel)))
+	}
+	inside, rerr := filepath.Rel(root, full)
+	if rerr != nil || inside == ".." || strings.HasPrefix(inside, ".."+string(filepath.Separator)) {
+		// Genuinely elsewhere: a sibling checkout, a machine path. Reported as
+		// it stands and not judged, because it is not a claim about this tree.
+		s.Path = filepath.ToSlash(filepath.Clean(rel))
 		s.Verdict = Outside
 		return s
 	}
-	if _, err := os.Lstat(filepath.Join(r.root, filepath.FromSlash(s.Path))); err == nil {
+	s.Path = filepath.ToSlash(inside)
+	if _, err := os.Lstat(full); err == nil {
 		s.Verdict = Present
 	} else {
 		s.Verdict = Absent
