@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-179 items — **Open** 15 · **In flight** 2 · **Closed** 162 · **Blocked** 7
+180 items — **Open** 16 · **In flight** 2 · **Closed** 162 · **Blocked** 7
 
-### Open (15)
+### Open (16)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -89,6 +89,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `triaged` | alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
+| [`B-180`](#b-180--quatro-assercoes-de-cli-pulam-sempre-e-uma-delas-torna-um-tfatalf-inalcancavel----) | Quatro assercoes de `cli/` pulam sempre, e uma delas torna um `t.Fatalf` inalcancavel | `triaged` | media — nada quebra; o que falha e' a **deteccao**, e num pacote que a suite reporta como verde. Quatro guardas de regressao nao afirmam nada desde o M5, e uma delas contem codigo morto que um leitor razoavel toma por assercao ativa. |
 
 ### In flight (2)
 
@@ -6371,4 +6372,23 @@ dod:
 > Registrado 2026-09-05 ao mergear o `B-147`. Nao e' trabalho que apareceu depois:
 > e' trabalho que o `B-147` mediu, declarou aberto, e que a transicao para `shipped`
 > teria sepultado.
+
+## B-180 — Quatro assercoes de `cli/` pulam sempre, e uma delas torna um `t.Fatalf` inalcancavel   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b169-audit
+severity: media — nada quebra; o que falha e' a **deteccao**, e num pacote que a suite reporta como verde. Quatro guardas de regressao nao afirmam nada desde o M5, e uma delas contem codigo morto que um leitor razoavel toma por assercao ativa.
+evidence: medido 2026-09-05 na auditoria do `B-169`. `infra/tests/config/regression_features_test.go` pula `F-03` (:81), `F-05` (:109) e `F-06` (:136) com a mesma mensagem — *"cli/ moved to sibling loopzero-cli/ repo per M5 decomposition; cross-repo test wiring TBD"* — e `regression_test.go:138` pula `T1.2` igual. As quatro sao condicionais em forma e incondicionais na pratica: dependem de `os.Stat` sobre caminhos em `../../../cli/`, e `cli/` nao existe nesta arvore (`ls ../../cli/src/register/auth.ts` -> ausente; o repo irmao `loopzero-cli` nao esta clonado). Pior, o corpo do `F-06` segue apos o skip com `os.ReadFile("../../../cli/src/register/auth.ts")` **sem guarda** e um `t.Fatalf` (:150-154): codigo inalcancavel que le como assercao ativa. E' o defeito que o `B-169` acabou de fechar em `unit/`, um diretorio ao lado, dentro do alvo `test.yml` que a fatia rodou e reportou limpo.
+why_now: o `B-169` estabeleceu o padrao e o conserto — um guarda que nao acha o sujeito precisa dizer isso, e um skip permanente e' um teste deletado com boas maneiras. Estas quatro sobreviveram porque estao em `config/` e nao em `unit/`. Um pacote que reporta verde sobre quatro guardas que nunca rodam ensina que verde nesta suite nao significa nada, que e' exatamente o custo que o `B-169` mediu.
+status: triaged
+dod:
+  - cada uma das quatro ou volta a afirmar algo deste repositorio, ou e' removida com razao escrita — e a razao nomeia o guarda que cobre o contrato no lugar dela
+  - o `os.ReadFile` + `t.Fatalf` inalcancavel no corpo do `F-06` some, seja qual for a saida
+  - existe verificacao que reprova quando um teste em `infra/tests/` pula incondicionalmente por caminho ausente — o `B-169` consertou instancias, e isto impede a classe de voltar
+
+> Registrado 2026-09-05 pela auditoria do `B-169`, que foi procurar a mesma forma
+> nos pacotes vizinhos em vez de aceitar o relatorio da fatia. As quatro estavam
+> dentro do alvo que a fatia rodou e declarou limpo.
 

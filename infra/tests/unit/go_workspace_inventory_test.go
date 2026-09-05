@@ -114,8 +114,13 @@ func goWorkUseEntries(t *testing.T, goWorkPath string) []string {
 	return entries
 }
 
-// TestGoWorkListsEveryModuleInRepo pins the inventory both ways: every in-repo
-// go.mod is declared, and every in-repo declaration resolves to a real module.
+// TestGoWorkListsEveryModuleInRepo pins ONE direction: every in-repo `go.mod`
+// appears in `go.work`. The reverse — every declaration resolving to a real
+// module — is deliberately absent, and the header of this file explains why:
+// it was written, measured to be unreachable (the toolchain refuses to load
+// the workspace before any test runs, with a better message than this file
+// could produce), and deleted rather than shipped as an assertion that cannot
+// fire. This comment said "both ways" until an audit read the body.
 func TestGoWorkListsEveryModuleInRepo(t *testing.T) {
 	root := repoRoot()
 
