@@ -576,6 +576,28 @@ func (h *SecretHandler) bulkProcessEnvs(ctx context.Context, uc *auth.UserContex
 		// (k8sSync runs OUTSIDE lock; PG row is canonical even on sync
 		// failure — eventual consistency via ESO ExternalSecret CR).
 		if h.k8sSync == nil {
+			// B-176: emit the SAME series the single-set path emits for this
+			// exact condition (the else-branch at the end of Set). Until this
+			// line existed, a bulk write against a deployment with no workload
+			// sync persisted rows in `secrets` and left
+			// sum(loopzero_secret_externalsecret_total) at zero, because only one
+			// of the two paths that handle "no workload sync" was counting.
+			//
+			// That sum is load-bearing, not decoration:
+			// docs/wiki/decisions/2026-09-04-secret-decrypt-canary-deferral.md
+			// § 2 names it as the trigger that fires without anyone running a
+			// query — the signal that the `secrets` table stopped being empty
+			// and the deferred B-126 canary became work. The hole sat exactly
+			// where that event could pass.
+			//
+			// Once per PERSISTED ROW, matching the single-set contract. A
+			// per-entry emission would under-count a multi-env write.
+			//
+			// The API-facing status stays "pending" — the caller's contract is
+			// unchanged. "skip" is the metric's word for the sync path being
+			// bypassed; "pending" is the user's word for a row that is
+			// canonical in PG and not yet materialized.
+			metrics.SecretExternalSecretTotal.WithLabelValues("skip").Inc()
 			aggs.syncStatusPerEnv[env] = "pending"
 			continue
 		}
@@ -793,6 +815,12 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 	// nil — that path was the silent-failure cause, formerly invisible. Now
 	// `rate(loopzero_secret_externalsecret_total{result="skip"}[5m]) > 0` alerts
 	// that the API is silently no-opping `loopzero secret set`.
+	//
+	// B-176: bulkProcessEnvs handles the same condition and must emit the same
+	// series. It did not, and the gap was found by reading the two paths side
+	// by side rather than by anything failing. Change one of these two sites
+	// and TestExternalSecretSkip_BothWritePathsEmitWhenSyncIsNil fails, which
+	// is the point of asserting them in one test.
 	if h.k8sSync != nil {
 		if syncErr := h.k8sSync.CreateSecret(ctx, uc.TenantID, project, req.Environment, req.App, req.Name, req.Value); syncErr != nil {
 			// Log but don't fail — PG is source of truth, K8s sync is eventual

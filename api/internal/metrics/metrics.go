@@ -699,9 +699,27 @@ var (
 		Help: "Broker secret-fetch audit write failures (T2.3 closes HIGH #16).",
 	}, []string{"event_type"})
 
-	// SecretDecryptFailedTotal counts failures on the secret READ path —
-	// every error return of PostgresSecretStore.decryptFromStore, which is
-	// the single dispatcher every decrypt in the store passes through.
+	// SecretDecryptFailedTotal counts failures on the secret READ path.
+	//
+	// SCOPE — both readers, and the list is the whole list:
+	//
+	//   - PostgresSecretStore.decryptFromStore
+	//     (api/internal/db/store/secret_wrapper.go), the single dispatcher
+	//     every decrypt inside the store passes through. Its only non-test
+	//     caller is ListForResync, a deploy-time hook.
+	//   - rawSecretReader.ReadSecret (api/cmd/setup_secret_fetch.go), the
+	//     broker endpoint /internal/v1/secret-fetch/... that External Secrets
+	//     Operator calls for EVERY user secret. It queries the secrets table
+	//     itself and calls Transit directly — it does NOT go through the store
+	//     dispatcher, whatever the InternalSecretReader interface comment used
+	//     to claim.
+	//
+	// The second reader arrived with B-175. Between B-126 and that item this
+	// counter covered resync only while reading as though it covered
+	// everything, so a revoked key on the path that serves users left the
+	// series at zero and an operator would have concluded nothing broke. That
+	// is the failure this SCOPE list exists to prevent: when a third reader
+	// appears, it is named here or the counter starts lying again.
 	//
 	// B-126: until this counter existed, a decrypt failure was reported ONLY
 	// as a per-request error. A revoked or rotated Transit key
@@ -743,12 +761,10 @@ var (
 	//     path in the tree can produce.
 	//
 	// Alert opportunity:
-	//   sum(rate(loopzero_secret_decrypt_failed_total
-// SCOPE: the store's resync read path only. The broker
-// secret-fetch path (cmd/setup_secret_fetch.go) decrypts via Transit
-// directly and does not increment this — see the 2026-09-04 deferral ADR.{reason="vault_transit_error"}[5m])) > 0
+	//   sum(rate(loopzero_secret_decrypt_failed_total{reason="vault_transit_error"}[5m])) > 0
 	//   means secrets that were readable are not readable now. Page: the
-	//   ciphertext is orphaned until the key comes back.
+	//   ciphertext is orphaned until the key comes back. The `sum` is what
+	//   makes the query cover both readers without naming either.
 	SecretDecryptFailedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "loopzero_secret_decrypt_failed_total",
 		Help: "Secret read-path decrypt failures, by reason (B-126).",
