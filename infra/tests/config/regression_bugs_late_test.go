@@ -13,6 +13,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -282,10 +283,49 @@ func TestB75MinioBucketsCompleteness(t *testing.T) {
 			}
 		}
 	}
-	// Cross-reference: loopzero-static-assets must be in api/internal/argo/constants.go.
-	apiData, err := os.ReadFile("../../../api/internal/argo/constants.go")
+	// Cross-reference: loopzero-static-assets must be named in the argo constants.
+	//
+	// The path is SEARCHED, not hardcoded. It used to read
+	// `../../../api/internal/argo/constants.go` literally; commit 698fd507d moved
+	// the four build packages under a parent on 2026-08-18, the read started
+	// failing, and `t.Fatalf` sits one line above the assertion — so this
+	// cross-reference went unasserted for 18 days while the test reported red for
+	// a reason that had nothing to do with B-75. A real regression would have been
+	// indistinguishable from the breakage.
+	//
+	// Zero hits and several hits fail differently on purpose: zero means the file
+	// was renamed away and this guard is inert, several means it no longer knows
+	// which file it is asserting about. Both are worth different fixes.
+	var argoConstants []string
+	walkErr := filepath.WalkDir("../../../api", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil // an unreadable subtree is not this test's business
+		}
+		if d.IsDir() || d.Name() != "constants.go" {
+			return nil
+		}
+		if filepath.Base(filepath.Dir(path)) == "argo" {
+			argoConstants = append(argoConstants, path)
+		}
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("walk api/ for the argo constants: %v", walkErr)
+	}
+	switch len(argoConstants) {
+	case 1:
+		// the expected shape
+	case 0:
+		t.Fatalf("no constants.go under a directory named argo anywhere in api/ — " +
+			"the B75 cross-reference has nothing to assert against, which is a guard " +
+			"that stopped guarding rather than an invariant that held")
+	default:
+		t.Fatalf("%d candidates for the argo constants (%v) — this guard asserts "+
+			"against one file and no longer knows which", len(argoConstants), argoConstants)
+	}
+	apiData, err := os.ReadFile(argoConstants[0]) // #nosec G304 -- path comes from the walk above
 	if err != nil {
-		t.Fatalf("read constants.go: %v", err)
+		t.Fatalf("read %s: %v", argoConstants[0], err)
 	}
 	if !strings.Contains(string(apiData), `"loopzero-static-assets"`) {
 		t.Error("B75 regression: api code must reference loopzero-static-assets bucket name")

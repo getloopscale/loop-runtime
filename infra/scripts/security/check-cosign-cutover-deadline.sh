@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
+
+# Set before the header below, not after it: this is a safety directive and the
+# header is documentation. The `shell-hygiene` gate requires it inside the top 60
+# lines, and on 2026-09-05 a correction added to that header pushed it to line 63
+# and failed the chain. A long explanation should never be able to disarm
+# `errexit`, whichever way the gate happens to be written.
+#
+# Two words were missing from this comment for a few minutes, eaten by backticks:
+# it was written through `ssh host "... <<'QUOTED' ..."`, and the outer double
+# quotes are interpreted by the LOCAL shell before the remote heredoc ever
+# protects anything. Long text goes in a file that is copied over, never in a
+# command line.
+set -euo pipefail
 #
 # T3.3 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md
 # Enforces ADR 2026-05-12 hard deadline for cosign keyed → keyless cutover.
@@ -60,7 +73,6 @@
 #   --emergency-override="<reason>" forces exit 0 + audit_log entry
 #   Requires post-hoc Change Governor review within 24h.
 
-set -euo pipefail
 
 CONFIG_NS="${COSIGN_CONFIG_NS:-loopzero-system}"
 CONFIG_NAME="${COSIGN_CONFIG_NAME:-loopzero-cosign-config}"
