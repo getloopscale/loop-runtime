@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-181 items — **Open** 15 · **In flight** 4 · **Closed** 162 · **Blocked** 7
+181 items — **Open** 14 · **In flight** 5 · **Closed** 162 · **Blocked** 7
 
-### Open (15)
+### Open (14)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -88,9 +88,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
 | [`B-180`](#b-180--quatro-assercoes-de-cli-pulam-sempre-e-uma-delas-torna-um-tfatalf-inalcancavel----) | Quatro assercoes de `cli/` pulam sempre, e uma delas torna um `t.Fatalf` inalcancavel | `triaged` | media — nada quebra; o que falha e' a **deteccao**, e num pacote que a suite reporta como verde. Quatro guardas de regressao nao afirmam nada desde o M5, e uma delas contem codigo morto que um leitor razoavel toma por assercao ativa. |
-| [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `triaged` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 
-### In flight (4)
+### In flight (5)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -98,6 +97,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `approved` | média — não quebra nada; custa navegação e força dois nomes de pacote que mentem sobre o diretório. |
 | [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `approved` | média — nenhum defeito de comportamento; é a superfície por onde a mistura de domínios entra sem ninguém decidir. |
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
+| [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `approved` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 
 ### Closed (162)
 
@@ -6595,7 +6595,7 @@ source: b033-live-test
 severity: alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05.
 evidence: medido ao vivo em 2026-09-05 contra o `k3d-loopzero-core`, durante o ciclo live-test do `B-033`. O agregador de custo do `loopzero-cloud` roda três consultas PromQL, declaradas em `internal/billing/cost_aggregator.go:82-86` — `sum by (tenant) (loopzero_egress_bytes_total)`, `sum by (tenant) (loopzero_docr_pulls_total)` e `sum by (tenant) (rate(loopzero_build_duration_seconds_sum[5m]) * 60)`. Contra o Prometheus do cluster as três devolvem `{"resultType":"vector","result":[]}`, e `/api/v1/series` devolve lista vazia para os três nomes. O Prometheus conhece **48** nomes de série `loopzero_*` e nenhum dos três está entre eles. Grep por `loopzero_egress_bytes_total` e `loopzero_docr_pulls_total` em **sete** repositórios distintos — loopzero, loopzero-cloud, loopzero-data-plane, loopzero-ops, loopzero-forge, loopzero-lens-reconciler, loopzero-workspace — acha **só o consumidor** (a nota dizia oito e incluía `loopzero-engine`, cujo `git remote -v` é `getloopscale/loopzero.git`: um clone antigo do próprio `loopzero`, contado duas vezes. A evidência forte deste ponto é o Prometheus vivo, não o grep): a string PromQL do próprio agregador e o teste dele. Nenhum produtor, em lugar nenhum. O terceiro, `loopzero_build_duration_seconds`, tem produtor (`api/internal/metrics/metrics.go:42`), mas é um `HistogramVec` rotulado por `tenant/environment/status`, então a série só nasce depois do primeiro build observado — e não há nenhuma no Prometheus de hoje.
 why_now: o `B-033` passou três semanas apontando para o elo errado. O overlay `dev-public` publica o `LOOPZERO_PROMETHEUS_URL` desde 2026-08-31 e o gate hermético que prova isso está verde; ninguém tinha ido ver se as séries do outro lado existem. Aparece agora porque o ciclo live-test do `B-033` foi conferir a corrente inteira em vez do elo que o item nomeava. Enquanto este item estiver aberto, `cost_counters` não recebe linha nenhuma nem com o agregador ligado, e o teto de custo de egresso e de puxadas de registro é estrutural, não configuracional.
-status: triaged
+status: approved
 dod:
   - `loopzero_egress_bytes_total` e `loopzero_docr_pulls_total` têm produtor declarado — ou o item registra, com razão escrita, que essas duas métricas de custo saem do produto e o agregador deixa de consultá-las
   - existe verificação que reprova quando uma consulta PromQL do agregador nomeia uma série que nenhum repositório emite — hoje esse desencontro é silencioso dos dois lados
