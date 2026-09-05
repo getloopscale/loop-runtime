@@ -189,8 +189,11 @@ func TestRedaction_ConcurrentRace(t *testing.T) {
 }
 
 // TestRedaction_NilInnerReturnsNil — defensive: NewRedactionHandler(nil)
-// returns nil so callers can ?? fallback at wire time. Mirror of
-// adapters.NewVaultTransitAdapter contract.
+// returns nil so callers can fall back at wire time. It used to cite
+// adapters.NewVaultTransitAdapter as the mirror of this contract; B-058 deleted
+// that adapter and the citation survived it. The live mirror is
+// setupTransitClient (api/cmd/setup_transit.go), which returns (nil, nil) when
+// the resolved crypto mode is not "transit" so the caller keeps the legacy path.
 func TestRedaction_NilInnerReturnsNil(t *testing.T) {
 	if NewRedactionHandler(nil) != nil {
 		t.Errorf("NewRedactionHandler(nil) should return nil")

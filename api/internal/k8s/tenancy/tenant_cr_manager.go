@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package k8s provides Kubernetes client implementations.
-package k8s
+// Package tenancy owns the Tenant custom resource and tenant eviction.
+//
+// It is one of the three homes the B-058 split gave the responsibilities that used
+// to share api/internal/k8s because they shared client-go. Its admission criterion
+// is a subject, not a library: a file belongs here when it reads or writes the
+// Tenant CR, or removes a tenant's footprint from a cluster.
+package tenancy
 
 import (
 	"context"
@@ -18,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/k8s"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 )
@@ -46,11 +52,11 @@ type TenantCRManager struct {
 // It tries in-cluster config first (for when the API runs inside the cluster),
 // then falls back to kubeconfig with the specified context.
 func NewTenantCRManager(kubeconfig, kubeContext string) (*TenantCRManager, error) {
-	cfg, err := restConfig(kubeconfig, kubeContext)
+	cfg, err := k8s.RestConfig(kubeconfig, kubeContext)
 	if err != nil {
 		return nil, fmt.Errorf("k8s: tenant CR manager config: %w", err)
 	}
-	c, err := NewTypedClient(cfg)
+	c, err := k8s.NewTypedClient(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("k8s: tenant CR manager typed client: %w", err)
 	}

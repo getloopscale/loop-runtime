@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package k8s
+// Package workload owns the LoopZeroApplication and PreviewEnvironment custom
+// resources — the CRs that describe what runs, as opposed to who it runs for.
+//
+// One of the three homes the B-058 split gave the responsibilities that used to
+// share api/internal/k8s because they shared client-go. A file belongs here when it
+// reads or writes a workload CR.
+package workload
 
 import (
 	"context"
@@ -16,6 +22,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/getloopscale/loopzero/api/internal/k8s"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
@@ -53,10 +60,10 @@ type ApplicationCRManager struct {
 }
 
 // NewApplicationCRManager creates an ApplicationCRManager reusing an existing typed client.
-// If namespace is empty, defaults to tenantNamespace (loopzero-system).
+// If namespace is empty, defaults to k8s.ControlPlaneNamespace (loopzero-system).
 func NewApplicationCRManager(c client.Client, namespace string) *ApplicationCRManager {
 	if namespace == "" {
-		namespace = tenantNamespace
+		namespace = k8s.ControlPlaneNamespace
 	}
 	return &ApplicationCRManager{Client: c, namespace: namespace}
 }

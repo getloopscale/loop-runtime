@@ -1,4 +1,14 @@
-package k8s
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+// Package secretsync owns the Kubernetes half of secret delivery: the K8s Secret
+// written on the management cluster and the ExternalSecret CR written on the
+// runtime cluster for ESO to reconcile.
+//
+// One of the three homes the B-058 split gave the responsibilities that used to
+// share api/internal/k8s because they shared client-go. It is deliberately the K8s
+// half only — the value's encryption lives in pkg/vault and api/internal/db/store.
+package secretsync
 
 import (
 	"context"

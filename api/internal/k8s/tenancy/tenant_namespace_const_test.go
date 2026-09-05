@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package k8s
+package tenancy
 
 import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/k8s"
 )
 
 // T-01 (MEET-ADR-0018 / change-validation-planner) — assert that the
@@ -66,5 +68,18 @@ func TestTenantNamespace_NoEnvVarReadInSource(t *testing.T) {
 	}
 	if !strings.Contains(src, `const tenantNamespace = "loopzero-system"`) {
 		t.Error("ADR-0018 C1 regression: tenant_cr_manager.go must declare `const tenantNamespace = \"loopzero-system\"`")
+	}
+}
+
+// TestTenantNamespace_MatchesControlPlaneNamespace — the B-058 split left the
+// literal "loopzero-system" spelled out twice: here, because ADR-0018 C1's source-level
+// guard requires it spelled out in tenant_cr_manager.go, and in
+// k8s.ControlPlaneNamespace, which k8s/workload reads. Before the split the workload
+// files reached into this package's unexported constant, so there was one literal
+// and nothing to drift. Now there are two, and this pins them together.
+func TestTenantNamespace_MatchesControlPlaneNamespace(t *testing.T) {
+	if tenantNamespace != k8s.ControlPlaneNamespace {
+		t.Errorf("split drift: tenancy has %q, k8s.ControlPlaneNamespace has %q",
+			tenantNamespace, k8s.ControlPlaneNamespace)
 	}
 }

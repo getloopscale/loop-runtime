@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package k8s
+package tenancy
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/k8s"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
@@ -58,7 +59,7 @@ func (c *lockedClient) Update(ctx context.Context, obj client.Object, opts ...cl
 // lockedClient — for the concurrent-writer test (see lockedClient doc).
 func newTenantMgrLocked(t *testing.T) *TenantCRManager {
 	t.Helper()
-	scheme, err := NewScheme()
+	scheme, err := k8s.NewScheme()
 	if err != nil {
 		t.Fatalf("NewScheme: %v", err)
 	}
@@ -72,7 +73,7 @@ func newTenantMgrLocked(t *testing.T) *TenantCRManager {
 // fully unit-testable (and independent of the flaky tenant envtest suite).
 func newTenantMgr(t *testing.T) *TenantCRManager {
 	t.Helper()
-	scheme, err := NewScheme()
+	scheme, err := k8s.NewScheme()
 	if err != nil {
 		t.Fatalf("NewScheme: %v", err)
 	}
