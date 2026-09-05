@@ -28,9 +28,10 @@ func pacote(t *testing.T, corpo string) string {
 // O pacote de vocabulário compartilhado importa SÓ a biblioteca padrão, e isso precisa ser
 // verificado em vez de assumido.
 //
-// B-057, medido 2026-08-18: `api/internal/domain` é importado por **90 arquivos**, e a razão
-// de poder sê-lo é justamente não arrastar dependência nenhuma — hoje são 9 imports, todos
-// stdlib. Um único import externo ali se propaga para os 90, e nada impedia.
+// B-057, re-medido 2026-09-05: `api/internal/domain` é importado por **87 arquivos** (eram 90
+// em 2026-08-18), e a razão de poder sê-lo é justamente não arrastar dependência nenhuma —
+// hoje são 9 imports, todos stdlib. Um único import externo ali se propaga para os 87, e nada
+// impedia.
 func TestStdlibOnly_CleanPackagePasses(t *testing.T) {
 	root := pacote(t, `package domain
 

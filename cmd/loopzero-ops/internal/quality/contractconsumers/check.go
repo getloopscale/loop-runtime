@@ -83,15 +83,34 @@ type Outcome struct {
 	Findings    []Finding
 	DroppedTags []string // sorted list of dropped JSON tags detected
 	ScanRoots   []string // consumer scan roots used
+	// TrackedFiles is the declared contract surface, mirroring ScanRoots: without it a
+	// caller can say HOW MANY tracked paths went missing but not out of how many.
+	TrackedFiles []string
 	// MissingRoots sao as raizes declaradas que NAO existem na arvore. `git grep`
 	// ignora pathspec que nao casa nada e devolve os matches dos que casam, entao
 	// uma raiz que sumiu vira cobertura perdida em silencio (B-100, B-040).
 	MissingRoots []string
-	CommandError string // populated if git or grep failed
+	// MissingTracked holds the declared TRACKED paths that do not exist in the tree.
+	// Same cause as MissingRoots, and the graver half: trackedFiles decides WHICH tags
+	// the gate ever looks at, so a path missing here does not merely shrink the search
+	// for the reader — it makes the field drop never visible at all, and the verdict
+	// becomes PASS over an empty population.
+	MissingTracked []string
+	CommandError   string // populated if git or grep failed
 }
 
 // trackedFiles enumerates source files whose struct field drops trigger the gate.
 // Restricted to the backend API contract surface — see package doc.
+//
+// These paths are `git diff` and `git grep` pathspecs, and both SILENTLY IGNORE a
+// pathspec that matches nothing (measured: `git diff -- <nonexistent path>` exits 0,
+// with nothing on stderr). Absence is therefore measured by missingTrackedPaths and
+// reported; otherwise a path that moved becomes less coverage under the same verdict.
+//
+// Notice for whoever performs the rename: `api/internal/domain` is slated to become
+// `api/internal/ports` (B-057, bullet 1). This list has to move with it — it carries
+// 93 `json:` tags (measured 2026-09-05), among them ProjectSummary, the struct behind
+// the 2026-06-08 regression this package doc cites as the reason the gate exists.
 var trackedFiles = []string{
 	"api/internal/domain/types.go",
 	"api/internal/db/generated/", // any *.go under this dir
@@ -130,21 +149,26 @@ func Check(cfg Config) (*Outcome, error) {
 	// Calculado ANTES do primeiro retorno: no caminho de erro do git a cobertura
 	// tambem some, e e' o caminho em que ninguem olha.
 	ausentes := raizesAusentes(root)
+	rastreadosAusentes := missingTrackedPaths(root)
 
 	droppedTags, err := collectDroppedJSONTags(root, base, head)
 	if err != nil {
 		return &Outcome{
-			CommandError: err.Error(),
-			ScanRoots:    consumerRoots,
-			MissingRoots: ausentes,
+			CommandError:   err.Error(),
+			ScanRoots:      consumerRoots,
+			TrackedFiles:   trackedFiles,
+			MissingRoots:   ausentes,
+			MissingTracked: rastreadosAusentes,
 		}, nil
 	}
 
 	out := &Outcome{
-		DroppedTags:  droppedTags,
-		ScanRoots:    consumerRoots,
-		MissingRoots: ausentes,
-		Pass:         true,
+		DroppedTags:    droppedTags,
+		ScanRoots:      consumerRoots,
+		TrackedFiles:   trackedFiles,
+		MissingRoots:   ausentes,
+		MissingTracked: rastreadosAusentes,
+		Pass:           true,
 	}
 	// Uma raiz declarada que nao existe e' cobertura perdida, e precisa aparecer
 	// mesmo quando nenhuma tag caiu: e' justamente no PASS que ela some sem deixar
@@ -302,6 +326,26 @@ func raizesAusentes(root string) []string {
 	for _, r := range consumerRoots {
 		if _, err := os.Stat(filepath.Join(root, r)); err != nil {
 			ausentes = append(ausentes, r)
+		}
+	}
+	return ausentes
+}
+
+// missingTrackedPaths returns the paths declared in trackedFiles that do not exist
+// under root.
+//
+// Twin of raizesAusentes, and it exists because the asymmetry between the two WAS the
+// hole: the CONSUMER list got an absence guard on 2026-08-19 (B-100/B-040) while the
+// TRACKED list, handed to the very same `git diff --` and `git grep --`, got none.
+//
+// The missing half is the one that matters more. An absent consumer root still lets
+// the gate see a tag drop; an absent tracked path means the tag never shows up as
+// dropped at all, and the gate answers PASS over a contract surface it never read.
+func missingTrackedPaths(root string) []string {
+	var ausentes []string
+	for _, f := range trackedFiles {
+		if _, err := os.Stat(filepath.Join(root, f)); err != nil {
+			ausentes = append(ausentes, f)
 		}
 	}
 	return ausentes

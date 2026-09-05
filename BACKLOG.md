@@ -2268,6 +2268,134 @@ dod:
 > item registra desde o começo.
 
 
+> **Medido 2026-09-05 — a fatia principal está BLOQUEADA por governança, e o bloqueio é
+> real, não uma leitura conservadora. O que saiu é a guarda que o rename teria cegado.**
+>
+> **O bloqueio, com a regra citada.** O plano `.claude/records/plans/b057-domain-rename-to-ports-plan.md`
+> se auto-classifica **T3** e escreve, na própria linha de versão, *"MEET requerido ANTES de
+> código"*. `.claude/rules/pre-release-governance.md § Change Classification` confirma:
+> T3 → Meeting **YES**, ADR **Mandatory**; e § Agent Enforcement Contract, item 3:
+> *"If T2/T3: **STOP. Do not write code.**"* Procurei a MEET: `.claude/records/decisions/`
+> **não existe** como diretório, e `find .claude -iname '*MEET*' | grep -i b057` devolve
+> **zero**. A MEET não aconteceu.
+>
+> Não a fabriquei, e a razão está escrita no próprio plano: **EC-4** classifica escrever o
+> arquivo de MEET sem confirmação do sponsor como *"fabricação de sinal humano — mesma classe
+> da `alignment-threshold.md` que proíbe agent de tickar caixas de sign-off"*, e exige uma
+> linha `signed_by` que só o sponsor escreve. Um agente que produz o próprio approve anula o
+> portão inteiro; é o único desfecho pior que não entregar.
+>
+> **O `why_now` está correto e verificado:** `B-041` está `shipped` / `[x]` (linha 142 da
+> tabela, § 1823 marcado). A dependência declarada está satisfeita — o que bloqueia não é
+> técnico, é a MEET.
+>
+> **Re-medição da evidência (2026-09-05). Um número do `evidence` ficou obsoleto:**
+>
+> | Afirmação do `evidence` (2026-08-11) | Medido hoje |
+> |---|---|
+> | "as **únicas duas** divergências" nome-diretório/nome-pacote | **UMA**. `placementsvc` saiu em 2026-08-19 (a própria nota deste item registra). Sobra `domainsvc`. |
+> | `api/internal/domain` importado por 90 arquivos | **87** (47 de produção, 40 de teste) |
+> | 49 alias re-exports em `routes` | **49** — confere |
+> | pacote importa só a stdlib | confere — **9** imports, todos stdlib (`go list`) |
+> | 9 arquivos, 1.214 linhas | confere |
+>
+> Varri a árvore inteira em busca de divergência nome-pacote/nome-diretório: fora `package
+> main` (que nunca casa, por definição), dos diretórios com hífen (`loopzero-api` → `loopzeroapi_test`
+> — Go não aceita hífen em identificador) e de `dev_public` → `devpublic`, **`domainsvc` é a
+> única divergência que é uma escolha**. A frase "as únicas duas" deve ser lida como "a única"
+> a partir de 2026-08-19.
+>
+> **O que FOI entregue: a varredura do que o compilador não pega — e ela achou um defeito.**
+>
+> O rename é verificado pelo compilador nos imports. Não é verificado em doc comment, arquivo
+> de regra, allow-list de gate ou taskfile que nomeie o caminho como **string**. Varri, e a
+> lista está abaixo. Um dos achados não é documentação — é uma guarda que ficaria verde sobre
+> o próprio objeto:
+>
+> **`contract-consumers` reprovava por ausência de raiz, mas não por ausência de ARQUIVO
+> RASTREADO — e a metade desprotegida é a que decide o que o gate chega a olhar.**
+> `cmd/loopzero-ops/internal/quality/contractconsumers/check.go` declara `trackedFiles`, cujo
+> primeiro item é a string literal **`"api/internal/domain/types.go"`** — exatamente o
+> caminho que a bala 1 renomeia. Essa lista é passada como pathspec a
+> `git diff --unified=0 base..head -- <lista>` e a `git grep -cE ... -- <lista>`, e **os dois
+> ignoram em silêncio o pathspec que não casa nada** (medido nesta árvore: `git diff` com
+> caminho inexistente sai **0**, sem uma linha em stderr). A lista irmã, `consumerRoots`,
+> ganhou `raizesAusentes` em 2026-08-19 pelo B-100/B-040 — pela **mesma** causa. A de
+> rastreados não ganhou nada.
+>
+> **Provado contra a árvore REAL, com o binário de antes e o de depois:**
+>
+> | Binário | Árvore | Saída |
+> |---|---|---|
+> | pré-mudança | `api/internal/domain` renomeado para `ports` | `PASS — no JSON tag drops in tracked files`, **exit 0** |
+> | pós-mudança | idem | `FAIL — 1 de 3 arquivo(s) rastreado(s) nao existem: [api/internal/domain/types.go]`, **exit 1** |
+>
+> O que o PASS silencioso custava: **93 tags `json:`** deixariam de ser lidas — entre elas
+> `ProjectSummary` (`types.go:247`), que é *a struct da regressão de 2026-06-08 citada no doc
+> do próprio pacote como a razão de o gate existir*. A forma `PASS — 0` sobre o objeto que a
+> guarda protege.
+>
+> Dois mutantes, ambos com o mutante **confirmado aplicado** antes de rodar: (1) apontar
+> `trackedFiles[0]` para `api/internal/ports/types.go` → 2 testes vermelhos nomeando o
+> caminho; (2) `missingTrackedPaths` devolvendo sempre `nil` → 1 teste vermelho.
+> Restaurado, verde. Os comentários e testes novos foram escritos em inglês per
+> `.claude/rules/english-only.md`, ainda que o arquivo ao redor esteja em português — a
+> regra vale para o que se acrescenta, e o gate `check_english_only.py` já reprova a
+> árvore inteira por 28.922 linhas em 1.466 arquivos (medido hoje, pré-existente).
+>
+> **A escolha de reprovar, e não avisar.** `MissingRoots` avisa porque para onde reapontar as
+> raízes de TypeScript é decisão de reunião (B-100). `MissingTracked` **reprova** porque não
+> há decisão pendente: o conserto é apontar a lista para o caminho novo, e enquanto não for
+> feito o gate responde sobre uma superfície que não leu.
+>
+> **A varredura completa — o que nomeia `api/internal/domain` como string e não como import:**
+>
+> | Arquivo | O que é | Ação |
+> |---|---|---|
+> | `cmd/loopzero-ops/internal/quality/contractconsumers/check.go:96` | **allow-list de gate** | **CORRIGIDO** — ausência agora reprova |
+> | `cmd/loopzero-ops/internal/quality/stdlibonly/check.go:50` | `const guardado` | intocado — este gate **já** reprova por ausência, de propósito (nota de 2026-08-18) |
+> | `cmd/loopzero-ops/internal/quality/stdlibonly/{check.go:8,check_test.go:31}` | número medido em doc comment: "**90** arquivos" | **CORRIGIDO** para 87, com a data da re-medição |
+> | `api/internal/services/domain/domain_cf_reconciler.go:4` | doc do pacote: *"Name avoids collision with internal/domain"* | fica — é a frase que o rename apaga |
+> | `api/internal/db/store/tenant_types.go:21` | doc comment citando `types.go` | fica |
+> | `api/internal/routes/{bootstrap:21,teams:10,scale:10}` | doc comments citando `internal/domain` | ficam |
+> | `api/tests/unit/import_graph_test.go:62` | string em mensagem de erro | fica |
+> | `infra/quality/skip-link-baseline.txt:65` | baseline nomeando `validation_test.go` | fica |
+> | `docs/architecture/eraser-diagrams-index.md:151` | doc citando `types.go:49-57` | fica |
+> | `taskfiles/` | **nenhuma** ocorrência — medido | — |
+> | `rules/` e `.claude/rules/` | **nenhuma** ocorrência — medido | — |
+>
+> Os "fica" são para a fatia do rename, e estão listados aqui para que quem a executar não
+> precise varrer de novo. Nenhum deles quebra nada hoje; todos ficam mentindo no dia seguinte
+> ao rename, e nenhum compilador vai avisar.
+>
+> **Estado das balas, sem arredondar:**
+>
+> - **Bala 1** (`api/internal/domain` → `ports`, um arquivo por contexto) — **ABERTA**,
+>   bloqueada na MEET T3. Escopo medido: 87 importers, 9 arquivos, 1.214 linhas; `types.go`
+>   tem 483 linhas com 6 contextos.
+> - **Bala 2** (deletar os 49 alias re-exports) — **ABERTA**, 49 confirmados, e depende da
+>   bala 1 (os consumidores passam a importar `ports` direto).
+> - **Bala 3** (`domainsvc`/`placementsvc` com nome igual ao diretório) — **METADE FECHADA**
+>   (`placement`, 2026-08-19). `domainsvc` continua aberta e é a única divergência-escolha da
+>   árvore; só se move junto com a bala 1.
+> - **Bala 4** (stdlib-only preservada e verificada) — **FECHADA**, re-verificada hoje: 9
+>   imports, todos stdlib, gate reprovando por ausência. Só o número no doc estava velho.
+>
+> **Achado adjacente, NÃO consertado aqui (não é deste item e não é deste repositório).**
+> `cmd/loopzero-ops` tem **2 testes vermelhos** na `main`: `TestDeliveryGate_RunsOneRealTargetThatCoversThisModule`
+> e `TestDeliveryGate_SourceCarriesExactlyOneTaskInvocation`, ambos por
+> `.claude/hooks/delivery-gate.sh: No such file or directory`. O arquivo foi removido em
+> `9a6e6e903` ("chore: reinstall the Squad kit") e nunca voltou. Os testes **reprovam alto**,
+> que é o comportamento certo — mas uma suíte vermelha na base torna todo verde ao lado dela
+> menos informativo. O conserto pertence ao repo do kit, não a este (regra global: correção
+> dentro de `.claude/` não existe até chegar ao repo do kit).
+>
+> **O que a bala 1 precisa para destravar:** uma MEET T3 registrada com `signed_by` do
+> sponsor, decidindo as quatro questões abertas do plano (Q1 nomes dos 6 arquivos do split;
+> Q2 MEET síncrona ou async; Q3 e Q4). O plano já é o ADR da proposta — falta o approve
+> humano, e ele não é meu para dar.
+
+
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 
 ## B-058 — Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade   [ ]
