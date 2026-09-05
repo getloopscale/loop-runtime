@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-187 items — **Open** 18 · **In flight** 5 · **Closed** 164 · **Blocked** 7
+188 items — **Open** 18 · **In flight** 5 · **Closed** 165 · **Blocked** 7
 
 ### Open (18)
 
@@ -90,8 +90,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
 | [`B-184`](#b-184--dois-testes-pulam-incondicionalmente-e-leem-um-arquivo-logo-abaixo-com-tfatalf-que-nunca-roda----) | Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda | `triaged` | media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a |
 | [`B-185`](#b-185--o-gate-cli-exit-codes-imprime-skip-e-sai-0-desde-sempre-porque-o-diretorio-que-ele-mede-nunca-esteve-na-arvore----) | O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore | `triaged` | media — um gate na cadeia que nunca mediu nada. Ele nao mente na saida (diz |
-| [`B-186`](#b-186--a-classe-ainda-volta-um-nivel-abaixo-um-predicado-que-chama-outro-predicado-e-invisivel-e-em-silencio----) | A classe ainda volta um nivel abaixo: um predicado que chama outro predicado e' invisivel, e em silencio | `shipped` | media — o `B-183` existiu para fechar a classe e fechou a grafia de UM |
 | [`B-187`](#b-187--o-hook-que-o-repositorio-declara-como-substituto-de-ci-nao-existe-em-maquina-nenhuma----) | O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma | `triaged` | alta — dois testes afirmam "the delivery gate is the CI substitute; it must |
+| [`B-188`](#b-188--tres-posicoes-de-skip-que-o-gate-nao-le-e-a-que-ele-passou-a-ler-custou-uma-auditoria-para-aparecer----) | Tres posicoes de skip que o gate nao le, e a que ele passou a ler custou uma auditoria para aparecer | `triaged` | media — o gate e a unica coisa que impede a classe de voltar, e ha tres |
 
 ### In flight (5)
 
@@ -103,7 +103,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
 | [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `approved` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 
-### Closed (164)
+### Closed (165)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -271,6 +271,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-178`](#b-178--tres-testes-de-metricas-reprovam-em-qualquer-worktree-vinculado-porque-procuram-git-como-diretorio----) | Tres testes de metricas reprovam em qualquer worktree vinculado, porque procuram `.git` como diretorio | `shipped` | media — nao ha defeito de produto, mas o efeito e' um falso vermelho no fluxo de trabalho que passou a ser obrigatorio. Uma lane que rode a suite do proprio worktree ve tres reprovacoes que nao tem relacao com a mudanca dela, e o custo previsivel e' alguem "consertar" o que nao esta quebrado, ou aprender a ignorar vermelho. |
 | [`B-180`](#b-180--quatro-assercoes-de-cli-pulam-sempre-e-uma-delas-torna-um-tfatalf-inalcancavel----) | Quatro assercoes de `cli/` pulam sempre, e uma delas torna um `t.Fatalf` inalcancavel | `shipped` | media — nada quebra; o que falha e' a **deteccao**, e num pacote que a suite reporta como verde. Quatro guardas de regressao nao afirmam nada desde o M5, e uma delas contem codigo morto que um leitor razoavel toma por assercao ativa. |
 | [`B-183`](#b-183--o-gate-de-skip-por-caminho-ausente-para-a-grafia-nao-a-classe-um-helper-booleano-o-evade----) | O gate de skip-por-caminho-ausente para a grafia, nao a classe: um helper booleano o evade | `shipped` | media — o gate existe para impedir que a classe volte, e a classe volta com |
+| [`B-186`](#b-186--a-classe-ainda-volta-um-nivel-abaixo-um-predicado-que-chama-outro-predicado-e-invisivel-e-em-silencio---x) | A classe ainda volta um nivel abaixo: um predicado que chama outro predicado e' invisivel, e em silencio | `shipped` | media — o `B-183` existiu para fechar a classe e fechou a grafia de UM |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -7101,4 +7102,71 @@ dod:
   - a relacao com a promocao esta escrita: se `main` continua sem check real, o item
     diz explicitamente que este hook nao substitui isso sozinho, para nao virar uma
     segunda falsa garantia
+
+## B-188 — Tres posicoes de skip que o gate nao le, e a que ele passou a ler custou uma auditoria para aparecer   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b186-nemesis-audit
+severity: media — o gate e a unica coisa que impede a classe de voltar, e ha tres
+  posicoes onde ela volta sem custo nenhum. Nenhuma tem instancia viva hoje, entao
+  nao ha falso-negativo em producao; a evasao e alcancavel de proposito, que e a
+  barra que as auditorias anteriores estabeleceram.
+evidence: |
+  Medido 2026-09-05 por auditoria independente, com binario proprio, DENTRO da arvore
+  que o gate varre. Cinco grafias reabriram a classe; UMA foi fechada no `B-186`
+  (literais de funcao, ver abaixo) e TRES seguem abertas:
+
+  1. CONDICAO DE UM `case`:
+
+         switch {
+         case !cliPresent():
+             t.Skip("cli/ nao esta aqui")
+         }
+
+     `guardedSkips` percorre `s.Body` de um `CaseClause` e nunca le `s.List` — a
+     condicao. O skip e visto; a guarda nao.
+
+  2. SKIP MOVIDO PARA UM HELPER do mesmo pacote:
+
+         nemesisSkipUnless(t, cliPresent(), "cli/ nao esta aqui")
+
+     No sitio nao ha chamada `t.Skip` nenhuma, entao `isSkipCall` nao casa e o sitio
+     nao existe. O dano e identico: o teste inteiro pula e tudo abaixo e morto.
+
+  3. SELETOR DE DOIS NIVEIS:
+
+         h.t.Skip("...")
+
+     `isSkipCall` exige que `sel.X` seja `*ast.Ident`. Esta forma nao e sequer
+     CONTADA — a auditoria mediu 146 chamadas de skip em vez de 147 — entao ela
+     escapa tambem do piso "achei pelo menos um skip", que e a rede que existe para
+     detectar um detector morto.
+
+  FECHADA NO `B-186`, e vale o registro porque era a pior: literais de funcao.
+  `t.Run("x", func(t *testing.T){ ... })` e o idioma dominante de teste em Go, e o
+  caminhador nunca entrava neles. A grafia ORIGINAL do `B-180` — sonda `os.Stat`
+  inline, sem predicado — passava nos DOIS binarios dentro de um `t.Run`. Denominador
+  vivo: 6 das 146 chamadas de skip das arvores varridas ja estao dentro de um literal
+  (hoje todas skips nus, classe `B-184`).
+why_now: a serie `B-180` -> `B-183` -> `B-186` declarou a classe fechada tres vezes e
+  uma auditoria a reabriu tres vezes. O `SCOPE` do pacote agora declara estas tres,
+  entao nada esta silencioso para quem ler o codigo — mas declarada nao e' consertada,
+  e cada uma custa um refactor de uma linha.
+status: triaged
+dod:
+  - cada uma das tres ou vira sitio, ou continua fora com a razao escrita no `SCOPE`:
+    o que nao pode e' a situacao em que a auditoria as encontrou, evadindo em silencio
+    enquanto o doc do piso sugeria que nao evadiriam
+  - o seletor de dois niveis entra na CONTAGEM mesmo se nao virar sitio — um skip que
+    o contador nao ve enfraquece o piso "achei pelo menos um skip", que e a rede
+    contra detector morto
+  - o oraculo de cada uma e o bloco de `evidence` verbatim, injetado em
+    `infra/tests/config/`: exit 1 nomeando arquivo, funcao e caminho, medido com
+    binario proprio
+  - antes de fechar, tentar reabrir: a barra desta serie e que uma auditoria evadiu o
+    gate tres vezes seguidas. Grafias nao tentadas ainda incluem o skip dentro de um
+    `defer`, dentro de um `select`, e a guarda vinda de um metodo com receptor
+  - mutacao com efeito conferido, um mutante por capacidade nova
 

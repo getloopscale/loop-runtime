@@ -85,6 +85,17 @@
 //     different defect, and classifying WHY a bare skip exists means reading its
 //     prose. Two live instances are tracked as B-184.
 //
+//   - WHERE THE SKIP SITS is a limit too, and it was undeclared until an audit
+//     walked five spellings past this gate on 2026-09-05. Function literals are
+//     read now (`t.Run("x", func(t *testing.T){ ... })` and `func(){ ... }()`),
+//     which was the one with a live denominator -- 6 of 146 skip calls in the
+//     scanned trees sit inside one, and the ORIGINAL inline spelling this gate
+//     was opened for passed both binaries in that position. Still NOT read, and
+//     each is a way back in: the condition of a `switch { case !present(): }`
+//     clause; a skip moved into a same-package helper (`skipUnless(t, cond)`),
+//     which is not a `t.Skip` call at the site at all; and a two-level selector
+//     like `h.t.Skip()`, which is not even COUNTED. Tracked as B-188.
+//
 //   - A guard on a path this repository does not contain -- rooted in an
 //     environment variable, spelled as an absolute literal, or climbing above
 //     the repository root -- is reported EXTERNAL and not judged. This is a
@@ -96,10 +107,25 @@
 //   - A predicate the guard calls is READ, not trusted, and the reading has a
 //     floor: a function that REACHES one of the probes in fsProbes, but whose
 //     answer this resolver cannot follow, is reported UNRESOLVED and FAILS,
-//     exactly as an unresolvable inline path does. The floor is deliberately
-//     narrow -- it triggers on a filesystem probe and nothing else -- so
-//     `if !clusterReachable() { t.Skip() }` over a predicate that dials a
-//     socket is left alone.
+//     exactly as an unresolvable inline path does.
+//
+//     WHAT THAT COSTS, measured rather than promised away. Reachability is
+//     TRANSITIVE, so the floor now catches a predicate that touches a file
+//     ANYWHERE in its delegation chain, whether or not the file is what the
+//     predicate is about. An earlier draft of this comment said the floor
+//     "triggers on a filesystem probe and nothing else" and offered
+//     `if !clusterReachable() { t.Skip() }` as the shape it leaves alone; an
+//     independent audit measured that exact example failing once the predicate
+//     loads a kubeconfig before dialling. The claim was false the day it was
+//     written.
+//
+//     It is kept, not narrowed, because the alternative is worse in the
+//     direction this gate cares about: the resolver cannot tell a probe that
+//     DECIDES the answer from one incidental to computing it, and guessing
+//     would put the silence back. A predicate the gate cannot read costs a
+//     verdict, and the pin is where a human overrides it with a written
+//     reason. `if !dialCluster() { t.Skip() }` over a predicate that touches no
+//     file is still left alone.
 //
 //     "REACHES" IS TRANSITIVE, and it was made so by measurement. It used to
 //     mean the predicate's OWN body, and a predicate that DELEGATES --
@@ -649,6 +675,27 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver) []siteWithPos {
 				}
 			case *ast.CaseClause:
 				walk(s.Body)
+			case *ast.ExprStmt:
+				// `t.Run("name", func(t *testing.T){ ... })` and `func(){ ... }()`.
+				//
+				// This walker read statements and never entered a function
+				// literal, so a guard one closure down was invisible — including
+				// the ORIGINAL inline `os.Stat` spelling this gate was opened for
+				// (B-180), which passed both binaries inside a t.Run. Measured by
+				// an independent audit on 2026-09-05, with a live denominator: 6
+				// of 146 skip calls in the scanned trees already sit inside
+				// function literals.
+				//
+				// The probe map is shared with the enclosing body on purpose: a
+				// probe taken outside the closure and tested inside it is one
+				// guard, and scoping them apart would lose it.
+				ast.Inspect(s.X, func(n ast.Node) bool {
+					lit, ok := n.(*ast.FuncLit)
+					if ok && lit.Body != nil {
+						walk(lit.Body.List)
+					}
+					return true
+				})
 			}
 		}
 	}
