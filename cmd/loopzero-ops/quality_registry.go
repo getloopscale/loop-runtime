@@ -89,6 +89,7 @@ var gateRegistry = []gateSpec{
 	{"corrections-txt-closed", "Asserts CORRECTIONS.txt items are all closed.", runCorrectionsTxtClosed},
 	{"correlation-header", "Correlation-ID header is forwarded across the request path.", runCorrelationHeader},
 	{"cosign-cutover", "Enforces the cosign keyed→keyless cutover deadline ratchet.", runCosignCutover},
+	{"cost-series-producers", "B-181: every loopzero_* series the loopzero-cloud cost aggregator queries has a declared producer here, or a tracked absence.", runCostSeriesProducers},
 	{"coverage-diff", "Diffs test coverage against a baseline to catch regressions.", runCoverageDiff},
 	{"coverage-merge", "Merges per-package coverage profiles into one report.", runCoverageMerge},
 	{"crd-semantic-diff", "Semantic diff of CRD schemas to catch breaking spec changes.", runCRDSemanticDiff},

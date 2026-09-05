@@ -27,6 +27,7 @@ contract-consumers	gates	Verifies cross-repo contract consumers stay in sync wit
 corrections-txt-closed	gates	Asserts CORRECTIONS.txt items are all closed.
 correlation-header	gates	Correlation-ID header is forwarded across the request path.
 cosign-cutover	-	Enforces the cosign keyed→keyless cutover deadline ratchet.
+cost-series-producers	gates	B-181: every loopzero_* series the loopzero-cloud cost aggregator queries has a declared producer here, or a tracked absence.
 coverage-diff	-	Diffs test coverage against a baseline to catch regressions.
 coverage-merge	-	Merges per-package coverage profiles into one report.
 crd-semantic-diff	gates	Semantic diff of CRD schemas to catch breaking spec changes.

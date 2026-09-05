@@ -11,6 +11,7 @@ import (
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/alertrunbooks"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/correlationheader"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/costseriesproducers"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dashboardpromtool"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/k6loadrigor"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokiretentionschema"
@@ -251,5 +252,79 @@ func runVaultPromAlerts(args []string) int {
 		return 1
 	}
 	fmt.Println("vault-prom-alerts: PASS — 4 P1 alerts declared with severity=critical + runbook_url + team=platform-security + domain=vault (+ invariant marker on VaultAuditLogStalled)")
+	return 0
+}
+
+// runCostSeriesProducers is the B-181 gate: every `loopzero_*` series loopzero-cloud's
+// cost aggregator queries must have a declared answer in this repo — a producing
+// file, or a tracked absence naming the work item.
+//
+// It prints THREE verdicts, never fewer:
+//   - PASS      the producer contract holds AND the declaration was compared
+//     against loopzero-cloud's promQueries map.
+//   - PARTIAL   the producer contract holds; loopzero-cloud is not on disk, so the
+//     drift comparison did NOT run. Never printed as PASS: the gate
+//     does not report a result it did not observe (B-169).
+//   - FAIL      a series is queried and undeclared, a declared producer does not
+//     emit what it claims, or a tracked absence has quietly closed.
+//
+// Tracked absences are printed on EVERY run, pass or not. A known gap that is
+// silent is indistinguishable from no gap; a known gap that turns the gate red
+// forever teaches that red is normal. Naming it is the third option.
+func runCostSeriesProducers(args []string) int {
+	fs := flag.NewFlagSet("cost-series-producers", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	sibling := fs.String("loopzero-cloud", os.Getenv("LOOPZERO_CLOUD_ROOT"),
+		"loopzero-cloud checkout (default $LOOPZERO_CLOUD_ROOT, else <root>/../loopzero-cloud)")
+	declaration := fs.String("declaration", costseriesproducers.DefaultDeclarationFile,
+		"pinned series/producer contract, relative to --root")
+	aggregator := fs.String("aggregator", costseriesproducers.DefaultAggregatorFile,
+		"cost aggregator source, relative to --loopzero-cloud")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+
+	outcome, err := costseriesproducers.Check(costseriesproducers.Config{
+		RepoRoot:        *root,
+		SiblingRoot:     *sibling,
+		DeclarationFile: *declaration,
+		AggregatorFile:  *aggregator,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cost-series-producers: %v\n", err)
+		return 5
+	}
+
+	// The known, tracked gap goes to stdout on every run — that is what turns
+	// silence into a tracked absence.
+	for _, a := range outcome.TrackedAbsences {
+		fmt.Printf("cost-series-producers: TRACKED ABSENCE — %s is queried by the aggregator and emitted by no repository\n", a)
+	}
+
+	if !outcome.Pass {
+		fmt.Fprintf(os.Stderr, "cost-series-producers: FAIL — %d violation(s):\n", len(outcome.Violations))
+		for _, v := range outcome.Violations {
+			fmt.Fprintf(os.Stderr, "  %s\n", v)
+		}
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintf(os.Stderr, "The pin is %s. Every series the aggregator queries needs one line there:\n", *declaration)
+		fmt.Fprintln(os.Stderr, "  <series> PRODUCER <path in this repo that declares the metric>")
+		fmt.Fprintln(os.Stderr, "  <series> ABSENT   <work item tracking who will emit it, or the decision to drop it>")
+		return 1
+	}
+
+	if !outcome.SiblingChecked {
+		fmt.Fprintf(os.Stderr, "cost-series-producers: DRIFT NOT CHECKED — %s\n", outcome.SiblingSkipReason)
+		fmt.Printf("cost-series-producers: PARTIAL — producer contract holds for %d declared series "+
+			"(%d producer(s) verified, %d tracked absence(s)); drift vs loopzero-cloud NOT CHECKED\n",
+			len(outcome.Declarations), len(outcome.VerifiedProducers), len(outcome.TrackedAbsences))
+		return 0
+	}
+
+	fmt.Printf("cost-series-producers: PASS — %d series queried by loopzero-cloud, all declared "+
+		"(%d producer(s) verified, %d tracked absence(s)); drift CHECKED against %s\n",
+		len(outcome.QueriedSeries), len(outcome.VerifiedProducers), len(outcome.TrackedAbsences),
+		outcome.SiblingRoot)
 	return 0
 }

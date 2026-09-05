@@ -1,0 +1,42 @@
+# Cost-aggregator PromQL series <-> producer contract (B-181).
+#
+# loopzero-cloud's cost aggregator (internal/billing/cost_aggregator.go, the
+# `promQueries` map) runs one PromQL query per cost metric. The queries NAME
+# `loopzero_*` series; the producers that would EMIT them live in this repository.
+# Nothing joined the two sides, so a query naming a series nobody emits
+# returned an empty vector every five minutes and `cost_counters` stayed at
+# zero by construction -- silent on both sides.
+#
+# Measured 2026-09-05 against k3d-loopzero-core: all three queries returned
+# {"resultType":"vector","result":[]}, and Prometheus knew 48 `loopzero_*` series
+# names, none of them the three queried.
+#
+# This file is the pin. The `cost-series-producers` gate
+# (cmd/loopzero-ops/internal/quality/costseriesproducers) reads it and answers,
+# for every series the aggregator queries, exactly ONE of three things, and
+# says which:
+#
+#   PRODUCER <path>  the query names a series this repo emits. The gate OPENS
+#                    <path> and verifies the metric is declared there. A
+#                    producer path that does not declare the series FAILS, so
+#                    this column cannot decay into prose.
+#   ABSENT <item>    the query names a series NO repository emits, and the
+#                    absence is tracked under <item>. Printed on every run.
+#                    If a producer ever appears, the gate FAILS asking for
+#                    this line to become a PRODUCER line -- a closed gap must
+#                    not keep an open ledger entry.
+#   (unlisted)       a series the aggregator queries that is absent from this
+#                    file FAILS the gate.
+#
+# The third case is the point of the file: it freezes the mismatch B-181
+# measured, so the gate catches the NEXT mismatch instead of re-reporting this
+# one forever. A permanently red gate teaches that red is normal.
+#
+# Format: <series>  PRODUCER <repo-relative path>
+#         <series>  ABSENT <work item>
+# Histogram/summary-derived series (_sum, _count, _bucket) resolve to their
+# base metric name when the producer is looked up.
+
+loopzero_egress_bytes_total          ABSENT B-181
+loopzero_docr_pulls_total            ABSENT B-181
+loopzero_build_duration_seconds_sum  PRODUCER api/internal/metrics/metrics.go
