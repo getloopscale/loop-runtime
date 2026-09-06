@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-195 items — **Open** 17 · **In flight** 5 · **Closed** 173 · **Blocked** 7
+196 items — **Open** 18 · **In flight** 5 · **Closed** 173 · **Blocked** 7
 
-### Open (17)
+### Open (18)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -91,6 +91,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-193`](#b-193--uma-ligacao-local-restaura-o-silencio-em-todo-caso-unresolved-e-o-rebound-acusa-um-religamento-que-nao-houve----) | Uma ligacao LOCAL restaura o silencio em todo caso UNRESOLVED, e o `rebound` acusa um religamento que nao houve | `triaged` | media — quinta reabertura consecutiva da mesma classe. Sem instancia viva; |
 | [`B-194`](#b-194--o-ramo-aes-de-leitura-so-pode-sair-com-uma-contagem-que-cubra-a-frota-e-ninguem-e-dono-dela----) | O ramo AES de leitura so' pode sair com uma contagem que cubra a frota, e ninguem e' dono dela | `triaged` | media — nada quebra hoje (o caminho de escrita ja' recusa AES); o custo e' um gate que segue vermelho por uma divida real cujo desbloqueio depende de acesso a banco que nenhuma sessao tem |
 | [`B-195`](#b-195--o-gate-de-aes-varre-um-modulo-e-a-evasao-que-ele-fechou-continua-aberta-um-diretorio-ao-lado----) | O gate de AES varre um modulo, e a evasao que ele fechou continua aberta um diretorio ao lado | `triaged` | media — nao ha AES fora de `api/` hoje (medido), entao nao ha falso-negativo |
+| [`B-196`](#b-196--as-listas-soft-sao-montadas-antes-da-exclusao-de-baseline-entao-um-cap-inteiramente-baselineado-ainda-exige-um-adr----) | As listas soft sao montadas ANTES da exclusao de baseline, entao um cap inteiramente baselineado ainda exige um ADR | `triaged` | baixa — nada quebra; o custo e' um pedido de ADR por uma divida que ja' foi |
 
 ### In flight (5)
 
@@ -8312,4 +8313,42 @@ dod:
     positivos (hoje: zero `crypto/aes` fora de `api/`, medido — entao o custo esperado
     e' tempo, nao ruido)
   - nao mexer no ramo de leitura nem no prazo: isso e' o `B-194`
+
+## B-196 — As listas soft sao montadas ANTES da exclusao de baseline, entao um cap inteiramente baselineado ainda exige um ADR   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b167-nemesis-audit
+severity: baixa — nada quebra; o custo e' um pedido de ADR por uma divida que ja' foi
+  aceita como pre-existente, o que treina o leitor a ignorar o pedido.
+evidence: |
+  Medido 2026-09-06 por auditoria independente.
+
+  `emit_json_summary(findings, ...)` recebe a lista COMPLETA de findings; e'
+  `compute_verdict` que filtra o baseline, internamente. Entao as listas publicadas
+  sao montadas antes da exclusao.
+
+  Medido: os 15 findings de `orphan_export` estao todos em
+  `code-quality-baseline.txt`, e mesmo assim `soft_cap_orphan_export_go` aparece em
+  `soft_caps_triggered`. Essa lista alimenta `undismissed_soft_caps`, que trava a
+  progressao `FAIL_SOFT` — entao um cap inteiramente baselineado ainda pede um ADR.
+
+  E' pre-existente. O que o `B-167` acrescentou foi o campo NOVO
+  `soft_floors_triggered`, construido do mesmo jeito, entao ele nasce com o defeito.
+why_now: o `B-167` acabou de tornar essas listas confiaveis quanto a SEVERIDADE (elas
+  eram filtradas por prefixo de NOME). O filtro de baseline e' a segunda metade da
+  mesma pergunta — o que merece aparecer numa lista que um leitor usa para saber o que
+  o esta bloqueando.
+status: triaged
+dod:
+  - as listas publicadas refletem a mesma exclusao de baseline que o veredito usa, ou a
+    diferenca esta escrita onde o leitor a encontra — o que nao pode e' um cap
+    baselineado pedir ADR sem dizer que ja foi aceito
+  - o oraculo e' o `evidence`: os 15 `orphan_export` baselineados, medidos antes e
+    depois
+  - o campo novo `soft_floors_triggered` recebe a mesma decisao que os outros dois, seja
+    ela qual for
+  - `undismissed_soft_caps` e' o consumidor que importa: se a lista mudar, o efeito
+    dele esta medido nos dois sentidos
 
