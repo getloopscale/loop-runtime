@@ -61,6 +61,9 @@ package noaesremaining
 import (
 	"bufio"
 	"fmt"
+	"go/scanner"
+	"go/token"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -272,6 +275,45 @@ func Check(cfg Config) (Outcome, error) {
 	return out, nil
 }
 
+// maskGoComments blanks the CONTENT of Go comments, preserving every byte offset
+// and every newline so line numbers do not move.
+//
+// It fails toward MORE detection: a file the scanner cannot read cleanly is
+// returned unchanged, so a malformed file is still matched in full. A masker that
+// silently swallowed a marker would be the worse failure for a gate whose subject
+// is that the marker is gone.
+func maskGoComments(src []byte) []byte {
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(src))
+	var s scanner.Scanner
+	s.Init(file, src, func(token.Position, string) {}, scanner.ScanComments)
+
+	out := append([]byte(nil), src...)
+	for {
+		pos, tok, lit := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+		if tok != token.COMMENT {
+			continue
+		}
+		start := file.Offset(pos)
+		end := start + len(lit)
+		if start < 0 || end > len(out) {
+			continue
+		}
+		for i := start; i < end; i++ {
+			if out[i] != '\n' {
+				out[i] = ' '
+			}
+		}
+	}
+	if s.ErrorCount > 0 {
+		return src
+	}
+	return out
+}
+
 func scanFile(absPath, relPath string) ([]Hit, error) {
 	// #nosec G304 -- absPath comes from filepath.WalkDir of cfg.RepoRoot/api.
 	f, err := os.Open(absPath)
@@ -281,31 +323,35 @@ func scanFile(absPath, relPath string) ([]Hit, error) {
 	defer f.Close()
 
 	var hits []Hit
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	src, rerr := io.ReadAll(f)
+	if rerr != nil {
+		return nil, fmt.Errorf("read %s: %w", relPath, rerr)
+	}
 
+	// COMMENTS ARE MASKED WITH GO'S OWN SCANNER, not tracked line by line.
+	//
+	// The line-based version set inComment on any line holding `/*` and then
+	// `continue`d on any line holding `*/` -- so a line carrying BOTH discarded
+	// itself, live code included. An audit measured the consequence on
+	// 2026-09-06: a complete AES-256-GCM implementation whose three marker lines
+	// each ended in `/* ... */` compiled, was gofmt-clean, and returned PASS
+	// inside the very scan root this item had just widened. A one-token bypass in
+	// a gate whose whole subject is that AES is gone.
+	//
+	// STRINGS ARE NOT MASKED, and that is deliberate: the primary marker lives in
+	// one. `import "crypto/aes"` is an import path, which is a string literal, so
+	// masking strings would hide exactly what this gate is looking for.
+	//
+	// The technique is already in this repository -- skip-link masks comments and
+	// literals with go/scanner for the same reason. It was not carried across
+	// when this gate was written.
+	masked := maskGoComments(src)
 	lineNum := 0
-	inComment := false
+	scanner := bufio.NewScanner(strings.NewReader(string(masked)))
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 	for scanner.Scan() {
 		lineNum++
 		line := scanner.Text()
-		trimmed := strings.TrimSpace(line)
-
-		// Block-comment tracking (/* ... */).
-		if strings.Contains(line, "/*") {
-			inComment = true
-		}
-		if strings.Contains(line, "*/") {
-			inComment = false
-			continue
-		}
-		if inComment {
-			continue
-		}
-		// Line comments — skip if marker is in the // part.
-		if strings.HasPrefix(trimmed, "//") {
-			continue
-		}
 
 		for _, m := range aesMarkers {
 			if strings.Contains(line, m) {
