@@ -150,9 +150,22 @@ const (
 	// DefaultGiteaOrg is the Gitea organisation that owns the tenant gitops
 	// repositories when the GITEA_ORG environment variable is unset. It must agree
 	// with the default the API applies for the same variable (see the GiteaOrg
-	// field in api/internal/config): the API creates those repositories and the
-	// tenant operator pushes to them, so a disagreement splits one tenant across
-	// two organisations (B-069).
+	// field in api/internal/config), because both sides address the same
+	// repository and neither notices the other's organisation.
+	//
+	// B-191 corrected the direction this comment used to state. It is the TENANT
+	// OPERATOR that creates the repository -- reconcileGitRepo calls
+	// GitProvisioner.EnsureRepo on tenant.Spec.GitOps.RepoName and writes the
+	// resulting URL into Status.GitOpsRepo, which reconcileArgoCDApp then uses
+	// verbatim as the ArgoCD Application repoURL. The API is the side that PUSHES:
+	// its gitops pusher targets "{tenantID}-gitops" in the API's own organisation.
+	// So the operator's organisation is the one ArgoCD syncs and the API's is the
+	// one the manifests land in. A disagreement is silent in both directions --
+	// the pusher creates its own copy, so the push succeeds into a repository
+	// nothing watches while ArgoCD keeps syncing an empty one. That is B-069.
+	//
+	// Agreement across every declaring site is asserted by
+	// infra/tests/config/gitea_org_agreement_test.go, not by this sentence.
 	//
 	// Deliberately NOT written here as the API's call expression. The operator
 	// chart-completeness guard discovers a binary's env reads by grepping source
