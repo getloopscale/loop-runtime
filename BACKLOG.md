@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-190 items — **Open** 18 · **In flight** 5 · **Closed** 167 · **Blocked** 7
+191 items — **Open** 19 · **In flight** 5 · **Closed** 167 · **Blocked** 7
 
-### Open (18)
+### Open (19)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -92,6 +92,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-188`](#b-188--tres-posicoes-de-skip-que-o-gate-nao-le-e-a-que-ele-passou-a-ler-custou-uma-auditoria-para-aparecer----) | Tres posicoes de skip que o gate nao le, e a que ele passou a ler custou uma auditoria para aparecer | `triaged` | media — o gate e a unica coisa que impede a classe de voltar, e ha tres |
 | [`B-189`](#b-189--a-classe-volta-por-um-valor-de-funcao-e-o-gate-nem-diz-unresolved-seis-grafias-em-silencio----) | A classe volta por um VALOR de funcao, e o gate nem diz UNRESOLVED: seis grafias em silencio | `triaged` | media — quarta reabertura consecutiva da mesma classe, e a primeira em que |
 | [`B-190`](#b-190--o-pin-do-cli-exit-codes-promete-que-o-gate-reprova-quando-o-assunto-aparece-e-o-campo-do-assunto-nunca-e-lido----) | O pin do cli-exit-codes promete que o gate reprova quando o assunto aparece, e o campo do assunto nunca e lido | `triaged` | baixa — inofensivo com a unica linha de hoje, armadilha na segunda. A |
+| [`B-192`](#b-192--o-ci-e-pos-merge-porque-o-portao-local-seria-inescapavel-e-as-tres-premissas-dessa-decisao-foram-falsas-ao-mesmo-tempo----) | O CI e' pos-merge porque o portao local seria inescapavel, e as tres premissas dessa decisao foram falsas ao mesmo tempo | `triaged` | alta — nao ha nada quebrado agora (o `B-187` restaurou o hook e fechou os |
 
 ### In flight (5)
 
@@ -7602,4 +7603,71 @@ dod:
     param de prometer que verificam — o que nao pode e a promessa sem a checagem
   - a distincao entre "declarado e ausente" e "declarado e presente" aparece na saida
     de toda execucao, no molde do `B-181`
+
+## B-192 — O CI e' pos-merge porque o portao local seria inescapavel, e as tres premissas dessa decisao foram falsas ao mesmo tempo   [ ]
+
+domain: infra
+repo: loopzero
+suggested_mode: review
+source: cross-cutting-2026-09-05
+severity: alta — nao ha nada quebrado agora (o `B-187` restaurou o hook e fechou os
+  desvios hoje), e e' exatamente por isso que o item existe: a decisao continua valendo
+  e nada percebeu quando ela parou de valer por tres dias.
+evidence: |
+  `.github/workflows/ci.yml:43-55` declara o gatilho como POS-MERGE e escreve a razao:
+
+      "Validacao POS-MERGE, nao no PR (decisao de 2026-08-12). O portao que impede
+       um merge ruim neste repositorio e' local: o .claude/hooks/delivery-gate.sh
+       roda `task quality:gates` antes de todo `git push` e bloqueia em vermelho,
+       SEM BYPASS."
+
+  A consequencia esta dita honestamente no proprio comentario: "com o PR sem acao, o
+  primeiro sinal de CI chega DEPOIS do merge". Isso e' uma troca legitima — SE o
+  portao local existir, disparar, e nao ter bypass.
+
+  MEDIDO 2026-09-05, e as tres partes falharam juntas:
+
+  1. O ARQUIVO NAO EXISTIA. `.claude/hooks/delivery-gate.sh` foi apagado em
+     `9a6e6e903` (2026-09-02) e nao estava em `git ls-files` nem no disco. Terceira
+     delecao; as duas anteriores foram notadas e restauradas, esta nao (`B-187`).
+  2. O WIRING SUMIU ANTES DO ARQUIVO, e nunca voltou. Em `.claude/settings.json`:
+
+         433682862 b6f075ac3 a6722bbc9 63cc51c48 53c1dc1ea 9a6e6e903 HEAD
+             1         0         1         0         0         0       0
+
+     De 2026-08-29 a 2026-09-02 o hook existia no disco e NUNCA disparava. A
+     restauracao de `53c1dc1ea` — intitulada "restore three files the repo gates
+     still require" — devolveu o arquivo num dia em que o wiring ja estava fora.
+  3. "SEM BYPASS" ERA FALSO EM QUATRO GRAFIAS. Auditoria independente, cada uma um
+     push real que chega ao remoto com o portao decidindo nada:
+
+         git -C <path> push origin main
+         echo --dry-run ; git push origin main
+         git push origin main --force # --dry-run
+         git push origin main; ls --dry-run
+
+  As duas assercoes que existiam para proteger isso — `TestDeliveryGate_*` — ficaram
+  VERDES durante os quatro dias em que o wiring esteve fora: elas leem o ARQUIVO, nao
+  o wiring. Foi o `B-187` que adicionou a quarta, que le o wiring.
+why_now: os tres consertos ja entraram (`B-187` e as correcoes da auditoria). O que
+  NAO existe e' o que teria contado a alguem, em qualquer um dos quatro dias, que o
+  portao no qual o CI se apoia nao estava la. O `PR #344` esta `MERGEABLE`/`CLEAN` com
+  um unico check, de um servico de terceiro que sai como `skipping`.
+status: triaged
+dod:
+  - a decisao pos-merge fica ou muda, e a razao escrita no `ci.yml` passa a citar o
+    que VERIFICA cada premissa em vez de afirma-las: hoje o comentario as afirma
+  - existe UMA coisa que reprova quando o portao local nao esta armado, e ela nao pode
+    ser o proprio portao local — um guarda que verifica a si mesmo e a familia de
+    defeito que este repositorio mediu oito vezes esta semana
+  - a janela ja esta medida e o numero e' 21: `git log --oneline --since=2026-08-29
+    --until=2026-09-02 workspace` da 21 commits. Sao COMMITS, nao pushes — o
+    repositorio nao guarda quando cada push aconteceu, entao 21 e' o limite superior
+    do que passou sem gate, nao a contagem exata. Quem pegar o item nao precisa
+    remedir; precisa decidir se 21 muda a resposta
+  - se a resposta for "o CI passa a rodar no PR", o custo esta medido (o comentario do
+    `ci.yml` diz que `quality:gates` exige helmfile, kubeconform, actionlint, trivy e
+    golangci-lint no PATH) — e o subconjunto que roda sem eles esta nomeado
+  - nao ampliar para o `PR #11` do kit: la o CI morre por faturamento, que e outra
+    causa e outro dono
 
