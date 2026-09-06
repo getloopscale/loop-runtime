@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-196 items — **Open** 13 · **In flight** 6 · **Closed** 177 · **Blocked** 6
+196 items — **Open** 11 · **In flight** 6 · **Closed** 179 · **Blocked** 6
 
-### Open (13)
+### Open (11)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -84,9 +84,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `blocked` · was `triaged` | waiting on `B-139` — média — nada quebra hoje, e é justamente isso que o mantém: o caminho resolve porque a conta existe. Vira **alta** no dia em que outra pessoa operar o host, ou em que a conta for removida. |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `blocked` · was `triaged` | waiting on `B-154` |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
-| [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
 | [`B-194`](#b-194--o-ramo-aes-de-leitura-so-pode-sair-com-uma-contagem-que-cubra-a-frota-e-ninguem-e-dono-dela----) | O ramo AES de leitura so' pode sair com uma contagem que cubra a frota, e ninguem e' dono dela | `triaged` | media — nada quebra hoje (o caminho de escrita ja' recusa AES); o custo e' um gate que segue vermelho por uma divida real cujo desbloqueio depende de acesso a banco que nenhuma sessao tem |
-| [`B-196`](#b-196--as-listas-soft-sao-montadas-antes-da-exclusao-de-baseline-entao-um-cap-inteiramente-baselineado-ainda-exige-um-adr----) | As listas soft sao montadas ANTES da exclusao de baseline, entao um cap inteiramente baselineado ainda exige um ADR | `triaged` | baixa — nada quebra; o custo e' um pedido de ADR por uma divida que ja' foi |
 
 ### In flight (6)
 
@@ -99,7 +97,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `planned` | alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
 | [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `approved` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 
-### Closed (177)
+### Closed (179)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -268,6 +266,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-177`](#b-177--duas-saidas-de-erro-escrevem-a-linha-e-nao-movem-contador-e-o-gatilho-do-b-126-ainda-e-limite-inferior----) | Duas saidas de erro escrevem a linha e nao movem contador, e o gatilho do B-126 ainda e' limite inferior | `shipped` | baixa — menor que o `B-176` que o precedeu, e pela mesma razao: nao quebra comportamento, estreita deteccao. As duas saidas exigem que o cluster de mgmt ou a derivacao de namespace falhe, o que e' bem mais raro que "nao ha sync configurado"; mas o efeito e' identico, uma linha em `secrets` sem serie nenhuma. |
 | [`B-178`](#b-178--tres-testes-de-metricas-reprovam-em-qualquer-worktree-vinculado-porque-procuram-git-como-diretorio----) | Tres testes de metricas reprovam em qualquer worktree vinculado, porque procuram `.git` como diretorio | `shipped` | media — nao ha defeito de produto, mas o efeito e' um falso vermelho no fluxo de trabalho que passou a ser obrigatorio. Uma lane que rode a suite do proprio worktree ve tres reprovacoes que nao tem relacao com a mudanca dela, e o custo previsivel e' alguem "consertar" o que nao esta quebrado, ou aprender a ignorar vermelho. |
 | [`B-180`](#b-180--quatro-assercoes-de-cli-pulam-sempre-e-uma-delas-torna-um-tfatalf-inalcancavel----) | Quatro assercoes de `cli/` pulam sempre, e uma delas torna um `t.Fatalf` inalcancavel | `shipped` | media — nada quebra; o que falha e' a **deteccao**, e num pacote que a suite reporta como verde. Quatro guardas de regressao nao afirmam nada desde o M5, e uma delas contem codigo morto que um leitor razoavel toma por assercao ativa. |
+| [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `shipped` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
 | [`B-183`](#b-183--o-gate-de-skip-por-caminho-ausente-para-a-grafia-nao-a-classe-um-helper-booleano-o-evade----) | O gate de skip-por-caminho-ausente para a grafia, nao a classe: um helper booleano o evade | `shipped` | media — o gate existe para impedir que a classe volte, e a classe volta com |
 | [`B-184`](#b-184--dois-testes-pulam-incondicionalmente-e-leem-um-arquivo-logo-abaixo-com-tfatalf-que-nunca-roda---x) | Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda | `shipped` | media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a |
 | [`B-185`](#b-185--o-gate-cli-exit-codes-imprime-skip-e-sai-0-desde-sempre-porque-o-diretorio-que-ele-mede-nunca-esteve-na-arvore---x) | O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore | `shipped` | media — um gate na cadeia que nunca mediu nada. Ele nao mente na saida (diz |
@@ -280,6 +279,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-192`](#b-192--o-ci-e-pos-merge-porque-o-portao-local-seria-inescapavel-e-as-tres-premissas-dessa-decisao-foram-falsas-ao-mesmo-tempo----) | O CI e' pos-merge porque o portao local seria inescapavel, e as tres premissas dessa decisao foram falsas ao mesmo tempo | `shipped` | alta — nao ha nada quebrado agora (o `B-187` restaurou o hook e fechou os |
 | [`B-193`](#b-193--uma-ligacao-local-restaura-o-silencio-em-todo-caso-unresolved-e-o-rebound-acusa-um-religamento-que-nao-houve----) | Uma ligacao LOCAL restaura o silencio em todo caso UNRESOLVED, e o `rebound` acusa um religamento que nao houve | `shipped` | media — quinta reabertura consecutiva da mesma classe. Sem instancia viva; |
 | [`B-195`](#b-195--o-gate-de-aes-varre-um-modulo-e-a-evasao-que-ele-fechou-continua-aberta-um-diretorio-ao-lado----) | O gate de AES varre um modulo, e a evasao que ele fechou continua aberta um diretorio ao lado | `shipped` | media — nao ha AES fora de `api/` hoje (medido), entao nao ha falso-negativo |
+| [`B-196`](#b-196--as-listas-soft-sao-montadas-antes-da-exclusao-de-baseline-entao-um-cap-inteiramente-baselineado-ainda-exige-um-adr----) | As listas soft sao montadas ANTES da exclusao de baseline, entao um cap inteiramente baselineado ainda exige um ADR | `shipped` | baixa — nada quebra; o custo e' um pedido de ADR por uma divida que ja' foi |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -5198,6 +5198,28 @@ dod:
 > was never merged; the corrections are restated here so they survive it.
 
 > Registrado 2026-08-17 ao medir o `B-001`. **Não é acusação de má-fé**: os commits são bem escritos, o código resultante é o desenho certo (1:1), e a fusão é exatamente o que o CTO decidiu em 2026-08-09. O achado é que a decisão certa chegou por um caminho que a governança não viu.
+> **Medido 2026-09-06, e NAO fechado — por governanca, nao por dificuldade.**
+>
+> O item nomeia uma decisao tomada fora de ordem: a metade `cell` do rename foi
+> executada antes da reuniao T3 que a bloqueava. `rules/decision-delegation.txt` retem
+> a classe `governance` — "delegacao nao pode autorizar aquilo de que ela seria o
+> bypass" — entao terminar o rename aqui seria o bypass, e o `PARTIAL` e' a resposta.
+>
+> O que foi medido, que e' quase todo o valor disponivel: a substituicao cega deixou
+> chamadores passando ids que a validacao REJEITA.
+>
+> **A AUDITORIA MEDIU QUE A VARREDURA ACHOU 3 DE 5.** Sao **dez** invocacoes de
+> `--cell` na arvore executavel, **cinco** com valor rejeitado. As duas que faltaram
+> vivem num terceiro arquivo que o relatorio nunca nomeia,
+> `infra/scripts/drill/drill-helmfile-bootstrap.sh` (`:446 --cell default`,
+> `:454 --cell 2`) — e esse arquivo carrega o mesmo artefato de linha duplicada que o
+> item descreve: `:467` faz `for cell in cell-0 cell-0 cell-1`, remendando `cell-0`
+> duas vezes e nunca tocando um terceiro CR.
+>
+> **O metodo e' o achado.** A varredura procurou o NOME do script e reportou o que
+> reconheceu, em vez de enumerar invocacoes e conferir cada uma contra a validacao — a
+> mesma falha de que este item acusa o proprio sujeito: certo sobre o schema, nunca
+> olhou os chamadores.
 
 ## B-137 — A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore   [ ]
 
@@ -7243,7 +7265,7 @@ severity: baixa — nada quebra e nada esta silencioso: as tres estao no pin do
   decisao sobre cada uma, e a correcao de uma premissa que o proprio skip afirma.
 evidence: medido 2026-09-05 na worktree `/tmp/lane-b180` durante o `B-180`. Tres skips sob `infra/tests/` continuam guardados por caminho que nao existe: (1) `infra/tests/unit/build_images_split_operators_test.go::readBuildImagesYaml` por `.github/workflows/build-images.yml`, que serve TRES testes; (2) `infra/tests/unit/operator_cutover_invariants_test.go::TestT06_MultiCellWorkflowExists` por `.github/workflows/multi-cell.yml`; (3) `infra/tests/config/regression_test.go::TestBootstrapClusterScript` por `infra/scripts/bootstrap-cluster.sh`. Os dois primeiros caminhos sairam em `5b32b76f0` (2026-05-23, "remove GitHub Actions CI/CD — not used"); o terceiro em `346215cf0` (mesmo dia, "superseded by `task setup`"). **A premissa escrita nos dois primeiros nao vale mais:** eles dizem "GitHub Actions removed 2026-05-23", e o Actions voltou em `32bb066b3` — `.github/workflows/` hoje tem `build-publish.yml`, `ci.yml`, `release-artifacts.yml` e `workflow-hygiene.yml`. Nenhum carrega os quatro jobs de split-operator, entao o teste segue certo em nao achar; a RAZAO que ele imprime e que envelheceu. O `multi-cell` afirma que os invariantes de Phase 5 "now in task quality:*" — nao verificado.
 why_now: o `B-180` fechou a GRAFIA INLINE da classe (uma auditoria independente evadiu o gate movendo a sonda para um helper booleano — `B-183`) e escolheu deliberadamente nao ampliar o diff para alem das quatro que aquele item nomeia. As tres ficaram declaradas com medicao escrita em `infra/quality/test-skip-absent-path.txt`, e sair do pin e' o unico jeito de a linha morrer. Enquanto isso, tres testes de `unit/` nao afirmam nada e um deles imprime uma premissa falsa a quem for ler.
-status: triaged
+status: shipped
 dod:
   - cada um dos tres ou volta a afirmar algo desta arvore, ou e removido com razao escrita, e a linha correspondente sai do `infra/quality/test-skip-absent-path.txt`
   - o invariante dos quatro jobs de split-operator ou volta para um workflow vivo (`.github/workflows/`), ou a decisao de nao ter esse invariante fica escrita — hoje as quatro imagens sao construidas por `Tiltfile` + `taskfiles/dev.yml` e so a metade de imagem e re-afirmada (`base-image-digest`, `prod-image-digests`)
@@ -7251,6 +7273,22 @@ dod:
 
 > Registrado 2026-09-05 pelo `B-180`, cuja re-medicao achou uma quinta ocorrencia da
 > forma que o item nomeava como quatro, e uma premissa desatualizada em outras duas.
+> **Entregue 2026-09-06.** As tres ausencias rastreadas foram resolvidas e a premissa
+> que elas imprimiam — "GitHub Actions removed 2026-05-23" — parou de ser impressa,
+> porque o Actions voltou em `32bb066b3`.
+>
+> **A AUDITORIA ACHOU UM VERDE FALSO NO CODIGO NOVO, e e' a familia desta serie.** O
+> `T-12b`, escrito para notar que a chamada canonica perdeu o chamador, perguntava
+> `strings.Contains(Taskfile.yml, "bootstrap-cell-cc.sh --cell")` — e o Taskfile
+> menciona o script num COMENTARIO. Apagar as DUAS invocacoes vivas deixava o teste
+> verde: a condicao exata para a qual a mensagem de erro dele foi escrita. Comentarios
+> sao removidos antes da busca agora, e o oraculo da auditoria reprova.
+>
+> **E o mutante que deveria cobrir isso matava pelo motivo errado:** implementado como
+> um `replace` global nao-escopado, ele reescrevia o comentario junto com as chamadas.
+> Prova que o `T-12b` nota um rename do repositorio inteiro; nao prova nada sobre um
+> chamador perdido. O arnes nao pode pegar essa classe com as proprias guardas — o
+> mutante mudou o arquivo, compilou, e a baseline estava verde.
 
 ## B-183 — O gate de skip-por-caminho-ausente para a grafia, nao a classe: um helper booleano o evade   [ ]
 
@@ -8668,7 +8706,7 @@ why_now: o `B-167` acabou de tornar essas listas confiaveis quanto a SEVERIDADE 
   eram filtradas por prefixo de NOME). O filtro de baseline e' a segunda metade da
   mesma pergunta — o que merece aparecer numa lista que um leitor usa para saber o que
   o esta bloqueando.
-status: triaged
+status: shipped
 dod:
   - as listas publicadas refletem a mesma exclusao de baseline que o veredito usa, ou a
     diferenca esta escrita onde o leitor a encontra — o que nao pode e' um cap
@@ -8679,4 +8717,17 @@ dod:
     ela qual for
   - `undismissed_soft_caps` e' o consumidor que importa: se a lista mudar, o efeito
     dele esta medido nos dois sentidos
+> **Entregue 2026-09-06.** As listas publicadas passaram a refletir a mesma exclusao de
+> baseline que o veredito usa, e um cap inteiramente baselineado deixou de exigir ADR
+> por `undismissed_soft_caps`. O campo novo `baselined_caps` cobre as tres camadas, e o
+> `soft_floors_triggered` — que nascia com o defeito herdado — entrou junto.
+>
+> **A auditoria completou uma razao que estava pela metade**, e a metade que faltava e'
+> a que importa. O comentario dizia que o `hard_only` nao precisa de filtro porque a
+> entrada ja veio filtrada — verdade, e isso o faz parecer apenas redundante. Coisas
+> redundantes sao readicionadas por consistencia. A segunda metade torna o filtro
+> ATIVAMENTE ERRADO: `no_languages_audited` e `unaudited_manifest_present` chegam pelo
+> ORQUESTRADOR sem Finding atras, nao tem entrada em `cap_has_live`, e um filtro ali
+> nao deixaria de disparar — ele DISPARARIA ERRADO e apagaria exatamente os dois caps
+> que o `B-127` e o `B-167` existem para manter.
 
