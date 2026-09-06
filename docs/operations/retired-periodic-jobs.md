@@ -27,7 +27,7 @@ Re-measured 2026-09-05 in a clean worktree of `develop`.
 |---|---|---|---|---|
 | `drillWatchdog` | `0 */6 * * *` | `task drill:watchdog` | yes | **operator**, while a drill stack is active |
 | `weeklySoak` | `0 2 * * 0` | `task drill:l2-scale` | yes | **operator** |
-| `coverageReport` | `0 9 * * 1` | `task quality:coverage:report` | **no — no such target** | **none — open** |
+| `coverageReport` | `0 9 * * 1` | `task quality:coverage:report` | **no — no such target** | **retired**, and coverage is now measured on every push (see below) |
 | `cosignDeadline` | `0 0 * * *` | `bash infra/scripts/security/check-cosign-cutover-deadline.sh` | script exists | **none — blocked** |
 
 ### `drillWatchdog` — operator, and the cron was the wrong shape
@@ -56,18 +56,49 @@ responsibility. Note that the retired chart ran it weekly (`0 2 * * 0`) while
 `taskfiles/drill.yml` describes the cadence it replaced as bi-weekly; the two never
 agreed, and the operator cadence is the one that survived.
 
-### `coverageReport` — the recorded command never existed
+### `coverageReport` — retired, and the measurement it produced is now per-push
 
-This job was broken twice over, and only one of the two reasons was the missing image.
+Decided 2026-09-06 by `B-179` between the three alternatives `B-147` names. The choice
+is *explicit retirement*, and the reason is that coverage is already measured, more
+often, and enforced.
 
-The chart declared `task quality:coverage:report`. There is no such target. The target
-that exists is **`quality:test:coverage:report`** (`taskfiles/quality.yml`), confirmed
-by `task --list-all` on 2026-09-05. Rescheduling the job exactly as it was recorded
-would fail even with a published runner.
+`cmd/loopzero-ops/quality_registry.go:84` wires a quality gate named `test-coverage-report`.
+It runs on every invocation of `task quality:gates` (`taskfiles/quality.yml:111`), which
+`.claude/hooks/delivery-gate.sh` triggers before every `git push` on this machine and
+which the post-merge `.github/workflows/ci.yml` invocation runs against `develop` and
+`main`. The floor is 75% of production code and the current measurement is 85.33% in
+about nine seconds (comment beside the wiring). So the measurement the weekly report was
+going to produce is produced on every commit that leaves this repository, not once a
+week, and a regression through the floor fails the push instead of appearing on Monday.
 
-It is also the only one of the four that could run unattended without credentials: the
-target is hermetic and needs no live cluster. Where it should run is still open — see
-"What is still open" below.
+The on-demand form of the report remains: `task quality:test:coverage:report`
+(`taskfiles/quality.yml:450`) generates the full profile from
+`infra/tests/{charts,chaos,capacity,livetest}/...`, prints total coverage and leaves
+`/tmp/loopzero-infra-tests-coverage.out` for an operator to inspect. Retiring the schedule
+does not remove the report; it removes a scheduled email of a number that already fails
+the push if it regresses.
+
+The two alternatives were rejected on measurement, not preference:
+
+- *in-cluster scheduler with a published runner* — needs a publication path for the
+  `loopzero-ops` image, and this tree does not have one. `B-147` established that
+  (`loopzero-ci-workflows` was retired for exactly this reason); nothing has changed since.
+  This is not an editing decision.
+- *external CI* — feasible in principle. `.github/workflows/` has no `schedule:` today
+  and adding one is technically possible, but `.github/workflows/ci.yml` carries a
+  written decision (2026-09-06 header) that these workflows are not this repository's
+  quality gate, and that the gate is the local `delivery-gate.sh` running before every
+  push. Adding a scheduled workflow whose purpose is to be a gate contradicts that
+  decision. The drill cadences were deliberately taken out of GitHub Actions on
+  2026-05-23 for the same reason.
+
+What is lost by this decision: a weekly artefact separate from the per-push measurement,
+in a form that would be emailed or archived. The per-push gate does not do that, and
+nobody has asked for it since the schedule broke — verifiable because coverage has been
+unavailable on any weekly cadence since the DOCR was removed and no ticket, comment or
+CHANGELOG entry has requested it back. If someone does want the weekly artefact later,
+the target still resolves and can be wired then; the decision recorded here is that no
+one produces it as a scheduled job now.
 
 ### `cosignDeadline` — blocked, and not on a scheduler
 
@@ -84,23 +115,6 @@ Re-measured 2026-09-05 against `k3d-loopzero-core`: `loopzero-cosign-config` is 
 `NotFound`, and the guard exits **2** — the loud missing-input failure `B-146` intended.
 Scheduling it today would produce a daily red run whose only content is that a held
 decision is still held. It is recorded here as blocked rather than scheduled.
-
-## What is still open
-
-**Where `coverageReport` runs.** The three alternatives `B-147` names resolve like this:
-
-- *in-cluster scheduler with a published runner* — needs a publication path for the
-  `loopzero-ops` image, which this tree does not have. Not an editing decision.
-- *external CI* — feasible in principle: the target is hermetic and
-  `.github/workflows/` has no `schedule:` trigger today, so adding one is possible. But
-  `.github/workflows/ci.yml` carries a written decision that these workflows are not
-  this repository's quality gate, and the drill cadences were deliberately taken out of
-  GitHub Actions on 2026-05-23. Putting a scheduled job back in contradicts both.
-- *explicit retirement* — drops a coverage report that nothing else produces on a
-  cadence.
-
-None of the three is a free edit, so the choice is left to the sponsor rather than taken
-as a side effect of this pass.
 
 ## What keeps this file honest
 

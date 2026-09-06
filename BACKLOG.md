@@ -7071,7 +7071,7 @@ dod:
 > mesma mensagem do mundo real. A prova de regressao de verdade continua sendo a tabela
 > acima — "rode a suite de um worktree" nao cabe num teste Go.
 
-## B-179 — `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas   [ ]
+## B-179 — `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas   [x]
 
 domain: infra-terraform
 repo: loopzero
@@ -7080,7 +7080,7 @@ source: b147-shipped-with-one-job-open
 severity: baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita.
 evidence: medido 2026-09-05 na fatia do `B-147`. `docs/operations/retired-periodic-jobs.md:30` declara `coverageReport` com executor **`none — open`**. O comando gravado no chart (`task quality:coverage:report`) nunca existiu — `task --list-all` traz `quality:test:coverage:report` (`taskfiles/quality.yml:411`), confirmado hoje —, entao o trabalho estava quebrado por dois motivos e nao um. O nome foi corrigido no documento; o destino nao. As tres saidas que o `B-147` oferece: (a) agendador in-cluster com runner publicado — exige caminho de publicacao para a imagem `loopzero-ops`, que esta arvore nao tem; (b) CI externo — viavel em principio, o alvo e' hermetico e `.github/workflows/` nao tem gatilho `schedule:` hoje, mas `ci.yml:48` carrega decisao escrita de que aqueles workflows nao sao o portao; (c) aposentadoria explicita — nao foi escolhida, e o documento a registra como aberta em vez de decidida.
 why_now: o `B-147` foi para `shipped` com este trabalho ainda `none — open`. A transicao foi feita sem ler a DoD, e `shipped` e' terminal — entao o recorte vive aqui em vez de virar um bullet aberto pendurado num item fechado, onde ninguem o encontraria. Um item fechado com trabalho dentro e' a forma como trabalho desaparece.
-status: triaged
+status: shipped
 dod:
   - esta decidido onde `coverageReport` roda, entre as tres saidas que o `B-147` nomeia — e a aposentadoria explicita conta, desde que escrita
   - se for agendador in-cluster: existe caminho de publicacao para a imagem `loopzero-ops`, medido e nao suposto
@@ -7089,6 +7089,40 @@ dod:
 > Registrado 2026-09-05 ao mergear o `B-147`. Nao e' trabalho que apareceu depois:
 > e' trabalho que o `B-147` mediu, declarou aberto, e que a transicao para `shipped`
 > teria sepultado.
+
+> **2026-09-06 — decidido, escrito, e as bala 2 e 3 sao vacuas para (c).**
+>
+> **Bala 1 — decidido: (c) aposentadoria explicita.** `docs/operations/retired-periodic-jobs.md`
+> agora declara `coverageReport` como `retired`, com a razao registrada onde o
+> executor aparece e uma secao propria substituindo o que era `none — open`. O
+> item ja autorizava a decisao no proprio texto ("(c) 'aposentadoria explicita'
+> e a saida a maquina PODE tomar SE justificar por evidencia + o item
+> literalmente diz 'conta desde que escrita'"). A saida (a) exige caminho de
+> publicacao para a imagem `loopzero-ops` que a arvore nao tem — medido em `B-147`,
+> nao mudou. A saida (b) contradiz a decisao escrita em `.github/workflows/ci.yml`
+> (cabecalho de 2026-09-06) de que os workflows do repo nao sao o portao de
+> qualidade e que quem para uma mudanca ruim e' o `delivery-gate.sh` local antes
+> do push.
+>
+> A retirada nao apaga a medicao. `cmd/loopzero-ops/quality_registry.go:84` registra
+> um gate chamado `test-coverage-report` que roda em toda invocacao de
+> `task quality:gates` (`taskfiles/quality.yml:111`), disparada pelo
+> `delivery-gate.sh` antes de todo `git push` e pelo `ci.yml` pos-merge em
+> `develop`/`main`. Piso de 75% do codigo de producao, medicao atual 85.33% em
+> ~9s (comentario ao lado da wiring). E `task quality:test:coverage:report`
+> (`taskfiles/quality.yml:450`) continua disponivel para gerar o perfil completo
+> sob demanda. O que morre com a decisao e uma cadencia semanal separada — que
+> nao existia em cadencia nenhuma desde que o DOCR foi removido e por cuja
+> ausencia ninguem pediu (nenhuma issue, comentario ou entrada de CHANGELOG).
+>
+> **Bala 2 — vacua para (c).** So se aplica se a saida for in-cluster.
+>
+> **Bala 3 — FECHADA.** `docs/operations/retired-periodic-jobs.md` deixa de
+> dizer `none — open`; a linha da tabela agora diz `retired`, e a secao
+> `## What is still open` foi removida (o unico item aberto que ela listava era
+> exatamente este). Regression: `TestRetiredPeriodicJobsDoc_TaskRefsResolve` +
+> `TestCoverageReportTaskName_MeasuredNames` seguem PASS — o item continua no
+> doc como excecao historica (defeito medido) e o alvo real continua resolvendo.
 
 ## B-180 — Quatro assercoes de `cli/` pulam sempre, e uma delas torna um `t.Fatalf` inalcancavel   [ ]
 
