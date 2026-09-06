@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-196 items — **Open** 10 · **In flight** 6 · **Closed** 180 · **Blocked** 6
+197 items — **Open** 10 · **In flight** 7 · **Closed** 180 · **Blocked** 6
 
 ### Open (10)
 
@@ -85,7 +85,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `blocked` · was `triaged` | waiting on `B-154` |
 | [`B-194`](#b-194--o-ramo-aes-de-leitura-so-pode-sair-com-uma-contagem-que-cubra-a-frota-e-ninguem-e-dono-dela----) | O ramo AES de leitura so' pode sair com uma contagem que cubra a frota, e ninguem e' dono dela | `triaged` | media — nada quebra hoje (o caminho de escrita ja' recusa AES); o custo e' um gate que segue vermelho por uma divida real cujo desbloqueio depende de acesso a banco que nenhuma sessao tem |
 
-### In flight (6)
+### In flight (7)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -95,6 +95,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
 | [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `planned` | alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
 | [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `approved` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
+| [`B-197`](#b-197--governance-gatepy--2-agentes-restaurados-apos-delecao-de-2026-08-06----) | governance-gate.py + 2 agentes restaurados apos delecao de 2026-08-06 | `approved` | alta enquanto T2/T3 era HONOR-SYSTEM — apparatus mecanico ausente por 30d significou que um refactor T3 (`cell-cluster-unification`, commit 148c04104 em 2026-08-17) passou sem meeting nem ADR ratificado. |
 
 ### Closed (180)
 
@@ -8765,3 +8766,26 @@ dod:
 > nao deixaria de disparar — ele DISPARARIA ERRADO e apagaria exatamente os dois caps
 > que o `B-127` e o `B-167` existem para manter.
 
+
+## B-197 — governance-gate.py + 2 agentes restaurados apos delecao de 2026-08-06   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: human
+sponsor: paulohenriquevn
+tier: T3 (`.claude/rules/pre-release-governance.md`) — apparatus de governance; ADR obrigatorio (2026-09-06-restore-governance-gate-and-agents)
+evidence: medido 2026-09-06. Commit `8cb41f660` (2026-08-06 "Remove docs inconsistent") deletou `.claude/hooks/governance-gate.py` + 20+ agentes + `.claude/CHANGELOG.md` + `.claude/README.md`. B-136 halt (2026-09-04) documentou 11 agentes ausentes; medicao antes da restauracao confirmou 20+ deletados. Arquitetura de agentes MUDOU depois disso: os 14 novos em `~/dev/squad/agents/` (iris/kairos/hermes/daedalus/vera/eureka/nemesis/aesculapius/argus/clio/metis/leonardo/hecate/vigil) sao decision-role-based e sobrepoem varios deletados. Escolha aprovada pelo sponsor: restaurar SELETIVAMENTE apenas o que nao sobrepoe — `governance-gate.py` (hook enforcement sem substituto), `meeting-orchestrator.md`, `decision-record-moderator.md`. `change-governor` NAO restaurado (sobrepoe daedalus+hermes); `production-design-reviewer` NAO (sobrepoe vera); `cli-engineer`/`api-engineer`/`operator-engineer`/`infra-engineer` NAO (sao domain specialists per-project por design do README novo). Wire-up: `.claude/settings.json` PreToolUse Edit|Write ganhou governance-gate.py. Ledger inicial: `.claude/governance-gate.local.md` com Status: PENDING — zero producao autorizado.
+why_now: sponsor mandou restaurar em 2026-09-06 apos ver B-136 bala 3 (que apontava a lacuna) e a analise medindo o real blast radius da delecao. Fecha 30 dias de HONOR-SYSTEM sem enforcement mecanico.
+status: approved
+delivered_in: (this commit)  (governance-gate.py + meeting-orchestrator.md + decision-record-moderator.md restaurados; wire-up adicionado; ledger inicial escrito; verified via echo-fed PreToolUse simulation: production path exit 2, exempt path exit 0)
+severity: alta enquanto T2/T3 era HONOR-SYSTEM — apparatus mecanico ausente por 30d significou que um refactor T3 (`cell-cluster-unification`, commit 148c04104 em 2026-08-17) passou sem meeting nem ADR ratificado.
+dod:
+  - `.claude/hooks/governance-gate.py` existe + tem permissao executavel
+  - `.claude/agents/meeting-orchestrator.md` + `.claude/agents/decision-record-moderator.md` existem
+  - `.claude/settings.json` PreToolUse Edit|Write inclui governance-gate.py
+  - `.claude/governance-gate.local.md` existe com schema documentado (Status/Description/Approved Scope)
+  - simulacao verifica: production path (api/internal/foo.go) exit 2 BLOQUEADO; exempt path (CHANGELOG.md) exit 0 PASS
+  - ADR ratificado em `docs/decisions/2026-09-06-restore-governance-gate-and-agents.md`
+
+> Registrado 2026-09-06 pelo sponsor via aprovacao em chat, apos analise que mediu o blast radius do commit `8cb41f660` e identificou sobreposicoes com a arquitetura squad atual. Escolha (B) da matriz de opcoes apresentada.
