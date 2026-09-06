@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package domainsvc is the custom-domain bounded context (CF zone/DNS/TLS). Name avoids collision with internal/domain. M9 Step 6.
-package domainsvc
+package domain
 
 import (
 	"context"

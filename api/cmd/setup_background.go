@@ -18,7 +18,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
 
-	domainsvc "github.com/getloopscale/loopzero/api/internal/services/domain"
+	"github.com/getloopscale/loopzero/api/internal/services/domain"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
@@ -170,7 +170,7 @@ func setupDomains(
 	workflows *WorkflowDeps,
 	cfg config.Config,
 	logger *slog.Logger,
-) (*domains.DomainHandler, *domainsvc.DomainProvisioner, *domainsvc.DomainHealthChecker, *cfzone.Client) {
+) (*domains.DomainHandler, *domain.DomainProvisioner, *domain.DomainHealthChecker, *cfzone.Client) {
 	cnameTarget := "cname." + cfg.BaseDomain
 	domainValidator := ports.NewValidator(cfg.BaseDomain, nil)
 	dnsVerifier := &ports.DNSVerifier{}
@@ -184,10 +184,10 @@ func setupDomains(
 		logger.Info("custom domains: TXT verification mode (v1)")
 	}
 
-	domainProvisioner := domainsvc.NewDomainProvisioner(
+	domainProvisioner := domain.NewDomainProvisioner(
 		stores.DomainStore, stores.ReleaseStore, stores.BuildStore,
 		workflows.GitOpsPusher, stores.Locker, logger,
-		domainsvc.DomainProvisionerConfig{
+		domain.DomainProvisionerConfig{
 			Interval:          30 * time.Second,
 			BaseDomain:        cfg.BaseDomain,
 			RegistryURL:       cfg.RegistryURL,
@@ -199,8 +199,8 @@ func setupDomains(
 		domainProvisioner.WithCFZone(&cfZoneStatusAdapter{client: cfZoneClient})
 	}
 
-	domainHealthChecker := domainsvc.NewDomainHealthChecker(
-		stores.DomainStore, logger, domainsvc.DomainHealthCheckerConfig{
+	domainHealthChecker := domain.NewDomainHealthChecker(
+		stores.DomainStore, logger, domain.DomainHealthCheckerConfig{
 			CNAMETarget: cnameTarget,
 			GraceDays:   14,
 			StaleDays:   7,
@@ -231,8 +231,8 @@ func createCoreLoops(
 	orchDeps *OrchestratorDeps,
 	k8sDeps *K8sDeps,
 	cellRouter placement.Router,
-	domainProvisioner *domainsvc.DomainProvisioner,
-	domainHealthChecker *domainsvc.DomainHealthChecker,
+	domainProvisioner *domain.DomainProvisioner,
+	domainHealthChecker *domain.DomainHealthChecker,
 	cfg config.Config,
 	logger *slog.Logger,
 ) []bgLoop {
@@ -377,8 +377,8 @@ func createOptionalLoops(
 
 	// DomainCFReconciler (optional)
 	if cfg.CFZoneManagement && cfZoneClient != nil {
-		if cfStore, ok := interface{}(stores.DomainStore).(domainsvc.CFZoneReconcilerStore); ok {
-			domainCFReconciler := domainsvc.NewDomainCFReconciler(cfStore, cfZoneClient, logger, 15*time.Minute)
+		if cfStore, ok := interface{}(stores.DomainStore).(domain.CFZoneReconcilerStore); ok {
+			domainCFReconciler := domain.NewDomainCFReconciler(cfStore, cfZoneClient, logger, 15*time.Minute)
 			loops = append(loops, bgLoop{"domain-cf-reconciler", domainCFReconciler.Start})
 		}
 	}
@@ -431,8 +431,8 @@ func startLeaderLoops(
 	orchDeps *OrchestratorDeps,
 	k8sDeps *K8sDeps,
 	cellRouter placement.Router,
-	domainProvisioner *domainsvc.DomainProvisioner,
-	domainHealthChecker *domainsvc.DomainHealthChecker,
+	domainProvisioner *domain.DomainProvisioner,
+	domainHealthChecker *domain.DomainHealthChecker,
 	cfZoneClient *cfzone.Client,
 	cfg config.Config,
 	logger *slog.Logger,
