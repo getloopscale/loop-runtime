@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-196 items — **Open** 15 · **In flight** 6 · **Closed** 175 · **Blocked** 7
+196 items — **Open** 14 · **In flight** 6 · **Closed** 176 · **Blocked** 7
 
-### Open (15)
+### Open (14)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -86,7 +86,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
 | [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
-| [`B-192`](#b-192--o-ci-e-pos-merge-porque-o-portao-local-seria-inescapavel-e-as-tres-premissas-dessa-decisao-foram-falsas-ao-mesmo-tempo----) | O CI e' pos-merge porque o portao local seria inescapavel, e as tres premissas dessa decisao foram falsas ao mesmo tempo | `shipped` | alta — nao ha nada quebrado agora (o `B-187` restaurou o hook e fechou os |
 | [`B-194`](#b-194--o-ramo-aes-de-leitura-so-pode-sair-com-uma-contagem-que-cubra-a-frota-e-ninguem-e-dono-dela----) | O ramo AES de leitura so' pode sair com uma contagem que cubra a frota, e ninguem e' dono dela | `triaged` | media — nada quebra hoje (o caminho de escrita ja' recusa AES); o custo e' um gate que segue vermelho por uma divida real cujo desbloqueio depende de acesso a banco que nenhuma sessao tem |
 | [`B-196`](#b-196--as-listas-soft-sao-montadas-antes-da-exclusao-de-baseline-entao-um-cap-inteiramente-baselineado-ainda-exige-um-adr----) | As listas soft sao montadas ANTES da exclusao de baseline, entao um cap inteiramente baselineado ainda exige um ADR | `triaged` | baixa — nada quebra; o custo e' um pedido de ADR por uma divida que ja' foi |
 
@@ -101,7 +100,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `planned` | alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
 | [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `approved` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 
-### Closed (175)
+### Closed (176)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -278,6 +277,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-189`](#b-189--a-classe-volta-por-um-valor-de-funcao-e-o-gate-nem-diz-unresolved-seis-grafias-em-silencio----) | A classe volta por um VALOR de funcao, e o gate nem diz UNRESOLVED: seis grafias em silencio | `shipped` | media — quarta reabertura consecutiva da mesma classe, e a primeira em que |
 | [`B-190`](#b-190--o-pin-do-cli-exit-codes-promete-que-o-gate-reprova-quando-o-assunto-aparece-e-o-campo-do-assunto-nunca-e-lido----) | O pin do cli-exit-codes promete que o gate reprova quando o assunto aparece, e o campo do assunto nunca e lido | `shipped` | baixa — inofensivo com a unica linha de hoje, armadilha na segunda. A |
 | [`B-191`](#b-191--as-tres-declaracoes-da-org-do-gitea-divergem-e-a-que-diverge-nao-chega-a-lugar-nenhum---x) | As tres declaracoes da org do Gitea divergem, e a que diverge nao chega a lugar nenhum | `shipped` | media — o modo de falha do `B-069` voltou a ser alcancavel por |
+| [`B-192`](#b-192--o-ci-e-pos-merge-porque-o-portao-local-seria-inescapavel-e-as-tres-premissas-dessa-decisao-foram-falsas-ao-mesmo-tempo----) | O CI e' pos-merge porque o portao local seria inescapavel, e as tres premissas dessa decisao foram falsas ao mesmo tempo | `shipped` | alta — nao ha nada quebrado agora (o `B-187` restaurou o hook e fechou os |
 | [`B-193`](#b-193--uma-ligacao-local-restaura-o-silencio-em-todo-caso-unresolved-e-o-rebound-acusa-um-religamento-que-nao-houve----) | Uma ligacao LOCAL restaura o silencio em todo caso UNRESOLVED, e o `rebound` acusa um religamento que nao houve | `shipped` | media — quinta reabertura consecutiva da mesma classe. Sem instancia viva; |
 | [`B-195`](#b-195--o-gate-de-aes-varre-um-modulo-e-a-evasao-que-ele-fechou-continua-aberta-um-diretorio-ao-lado----) | O gate de AES varre um modulo, e a evasao que ele fechou continua aberta um diretorio ao lado | `shipped` | media — nao ha AES fora de `api/` hoje (medido), entao nao ha falso-negativo |
 
