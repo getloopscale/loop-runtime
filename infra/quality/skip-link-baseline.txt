@@ -62,7 +62,7 @@ api/internal/db/loopzero_worker_role_test.go	t.Skipf("T3.1 test skipped: loopzer
 api/internal/db/loopzero_worker_role_test.go	t.Skipf("T3.1 RLS test skipped: RLS not enabled on releases (migration 000009)")
 api/internal/db/loopzero_worker_role_test.go	t.Skipf("T3.1 RLS test skipped: SET ROLE loopzero_worker failed (grant membership: GRANT loopzero_worker TO loopzero;): %v", err)
 api/internal/db/loopzero_worker_role_test.go	t.Skipf("T3.1 RLS test skipped: SET ROLE no-op (current_user=%q); grant membership: GRANT loopzero_worker TO loopzero;", currentUser)
-api/internal/domain/validation_test.go	t.Skip("test string too short")
+api/internal/ports/validation_test.go	t.Skip("test string too short")
 api/internal/gitops/gitea_pusher_test.go	t.Skip("GITEA_TEST_URL not set — skipping Gitea integration test")
 api/internal/gitops/gitea_pusher_test.go	t.Skip("GITEA_TEST_TOKEN not set — skipping Gitea integration test")
 api/internal/lock/environment_lock_test.go	t.Skipf("skipping: cannot connect to PostgreSQL: %v", err)

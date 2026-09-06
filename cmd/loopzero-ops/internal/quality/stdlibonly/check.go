@@ -49,7 +49,7 @@ var ErrNothingScanned = errors.New("pacote guardado ausente — não achar nada 
 //
 // É um caminho só de propósito: a propriedade foi MEDIDA aqui, e estender a guarda a
 // pacotes cuja propriedade ninguém mediu afirmaria o que não se sabe.
-const guardado = "api/internal/domain"
+const guardado = "api/internal/ports"
 
 // Config drives the check.
 type Config struct {

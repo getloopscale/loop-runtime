@@ -6,7 +6,7 @@
 // k8s/tenant_cr_manager.go used to import routes.EnvironmentEntry; now
 // it imports these types from domain/ directly.
 
-package domain
+package ports
 
 import "fmt"
 

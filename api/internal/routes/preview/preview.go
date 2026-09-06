@@ -28,8 +28,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -38,9 +38,9 @@ import (
 // Mirrors store.PreviewStore (read-only subset). The handler does not write —
 // creation/updates flow through PreviewService (Sprint 5 / T1.1).
 type PreviewStore interface {
-	ListByTenant(ctx context.Context, tenantID string) ([]domain.Preview, error)
-	ListByProject(ctx context.Context, tenantID, projectID string) ([]domain.Preview, error)
-	GetByID(ctx context.Context, tenantID, previewID string) (*domain.Preview, error)
+	ListByTenant(ctx context.Context, tenantID string) ([]ports.Preview, error)
+	ListByProject(ctx context.Context, tenantID, projectID string) ([]ports.Preview, error)
+	GetByID(ctx context.Context, tenantID, previewID string) (*ports.Preview, error)
 	RequestDeletion(ctx context.Context, tenantID, previewID string) error
 }
 
@@ -48,8 +48,8 @@ type PreviewStore interface {
 // deep-review-remediation-plan, closes find_arch_001 partial). Aliases keep
 // existing handler call sites working without churn.
 type (
-	PreviewService       = domain.PreviewService
-	CreatePreviewRequest = domain.CreatePreviewRequest
+	PreviewService       = ports.PreviewService
+	CreatePreviewRequest = ports.CreatePreviewRequest
 )
 
 // PreviewCRPhaseLookup resolves the LIVE PreviewEnvironment CR phase
@@ -78,7 +78,7 @@ type PreviewCRPhaseLookup interface {
 // list, so the dashboard's Previews UI rendered functional UI for a
 // deleted/non-existent project.
 type PreviewProjectChecker interface {
-	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
+	GetByName(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error)
 }
 
 // PreviewHandler handles preview environment API endpoints.

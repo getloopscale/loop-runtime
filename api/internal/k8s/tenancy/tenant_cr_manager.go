@@ -22,8 +22,8 @@ import (
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 )
@@ -41,7 +41,7 @@ const tenantNamespace = "loopzero-system"
 var tenantsGroupResource = schema.GroupResource{Group: "loopzero.io", Resource: "tenants"}
 
 // TenantCRManager manages Tenant custom resources in Kubernetes.
-// It implements domain.TenantCRManager (DIP) using the TYPED controller-runtime
+// It implements ports.TenantCRManager (DIP) using the TYPED controller-runtime
 // client (M8): the api is now the second Go consumer of the operators/api
 // contract module, so the compiler checks every CR field at build time.
 type TenantCRManager struct {
@@ -71,7 +71,7 @@ func tenantKey(tenantID string) client.ObjectKey {
 // It is idempotent: calling it multiple times with the same tenantID is safe.
 // If the CR already exists, it updates the spec to match the desired state.
 // It uses retry-on-conflict to handle concurrent modifications by the TenantController.
-func (m *TenantCRManager) EnsureTenant(ctx context.Context, tenantID string, spec domain.TenantCRSpec) error {
+func (m *TenantCRManager) EnsureTenant(ctx context.Context, tenantID string, spec ports.TenantCRSpec) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		var existing apiv1.Tenant
 		err := m.Client.Get(ctx, tenantKey(tenantID), &existing)
@@ -226,18 +226,18 @@ func (m *TenantCRManager) RemoveEnvironment(ctx context.Context, tenantID, proje
 //
 // M2 v1.2 (2026-06-07): each entry carries the project field; legacy entries
 // (production) have empty project per ADR D2.
-func (m *TenantCRManager) ListEnvironments(ctx context.Context, tenantID string) ([]domain.EnvironmentEntry, error) {
+func (m *TenantCRManager) ListEnvironments(ctx context.Context, tenantID string) ([]ports.EnvironmentEntry, error) {
 	var t apiv1.Tenant
 	if err := m.Client.Get(ctx, tenantKey(tenantID), &t); err != nil {
 		return nil, fmt.Errorf("k8s: get tenant CR %q for ListEnvironments: %w", tenantID, err)
 	}
 
-	result := make([]domain.EnvironmentEntry, 0, len(t.Spec.Environments))
+	result := make([]ports.EnvironmentEntry, 0, len(t.Spec.Environments))
 	for _, e := range t.Spec.Environments {
 		if e.Name == "" {
 			continue
 		}
-		result = append(result, domain.EnvironmentEntry{
+		result = append(result, ports.EnvironmentEntry{
 			Name:    e.Name,
 			Status:  "active",
 			Project: e.Project, // empty for legacy entries
@@ -252,7 +252,7 @@ func (m *TenantCRManager) ListEnvironments(ctx context.Context, tenantID string)
 // M2 v1.2 (2026-06-07): filter by (name, project) tuple. Legacy lookups
 // with project="" target the production-legacy entry that was created
 // before the M2 migration (ADR D2).
-func (m *TenantCRManager) GetEnvironmentDetail(ctx context.Context, tenantID, project, envName string) (*domain.EnvironmentDetail, error) {
+func (m *TenantCRManager) GetEnvironmentDetail(ctx context.Context, tenantID, project, envName string) (*ports.EnvironmentDetail, error) {
 	var t apiv1.Tenant
 	if err := m.Client.Get(ctx, tenantKey(tenantID), &t); err != nil {
 		return nil, fmt.Errorf("k8s: get tenant CR %q for GetEnvironmentDetail: %w", tenantID, err)
@@ -270,16 +270,16 @@ func (m *TenantCRManager) GetEnvironmentDetail(ctx context.Context, tenantID, pr
 		return nil, nil // not found
 	}
 	e := t.Spec.Environments[idx]
-	return &domain.EnvironmentDetail{
+	return &ports.EnvironmentDetail{
 		Name:     e.Name,
 		Status:   "active",
-		Projects: []domain.EnvProjectInfo{},
+		Projects: []ports.EnvProjectInfo{},
 	}, nil
 }
 
 // buildTenant constructs a typed Tenant CR matching the CRD schema defined in
 // operators/api/v1/tenant_types.go. The compiler now enforces the spec shape.
-func buildTenant(tenantID string, spec domain.TenantCRSpec) *apiv1.Tenant {
+func buildTenant(tenantID string, spec ports.TenantCRSpec) *apiv1.Tenant {
 	t := &apiv1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tenantID,
@@ -296,7 +296,7 @@ func buildTenant(tenantID string, spec domain.TenantCRSpec) *apiv1.Tenant {
 // routes/projects.go appends the production env via EnvironmentEnsurer right
 // after EnsureTenant (CRD allows MinItems=0). Pre-populating an env without a
 // project caused the LIVE admission rejection 2026-06-09.
-func applyTenantSpec(t *apiv1.Tenant, spec domain.TenantCRSpec) {
+func applyTenantSpec(t *apiv1.Tenant, spec ports.TenantCRSpec) {
 	plan := spec.Plan
 	if plan == "" {
 		plan = "starter"

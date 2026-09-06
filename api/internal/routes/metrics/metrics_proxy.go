@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 
 	"github.com/go-chi/chi/v5"
@@ -61,7 +61,7 @@ type PrometheusQueryClient interface {
 // fourth package to make this call in the routes decomposition — the dependency
 // is on ONE method, not on a package (B-080, slice-39).
 type StatusProjectStore interface {
-	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
+	GetByName(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error)
 }
 
 // MetricsProxyHandler handles GET /api/v1/projects/{name}/metrics?range=7d&signal=uptime

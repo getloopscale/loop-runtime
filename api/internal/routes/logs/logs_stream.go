@@ -16,13 +16,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
-// StreamLogQuerier — alias to domain.StreamLogQuerier (T1.3 of
+// StreamLogQuerier — alias to ports.StreamLogQuerier (T1.3 of
 // deep-review-remediation-plan). The type is canonically defined in
 // domain/logs.go; the alias was promoted to the same routes/logs.go file
 // to keep existing handler call sites working without churn.
@@ -282,7 +282,7 @@ func (h *LogStreamHandler) streamLoop(
 func (h *LogStreamHandler) streamEntries(
 	w http.ResponseWriter,
 	flusher http.Flusher,
-	entries []domain.LogEntry,
+	entries []ports.LogEntry,
 	sinceNano *int64,
 ) bool {
 	for _, entry := range entries {

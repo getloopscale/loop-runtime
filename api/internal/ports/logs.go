@@ -9,7 +9,7 @@
 // breaks the cycle: services/db/k8s/loki/github now import domain/
 // directly; routes/ re-exports as type aliases for back-compat.
 
-package domain
+package ports
 
 import "context"
 

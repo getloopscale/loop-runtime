@@ -28,28 +28,28 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/correlation"
-	"github.com/getloopscale/loopzero/api/internal/domain"
 	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 var (
-	// ErrProjectExists is an alias for domain.ErrProjectExists (backward compatibility).
-	ErrProjectExists = domain.ErrProjectExists
+	// ErrProjectExists is an alias for ports.ErrProjectExists (backward compatibility).
+	ErrProjectExists = ports.ErrProjectExists
 )
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
 type (
-	CreateProjectInput  = domain.CreateProjectInput
-	ProjectResult       = domain.ProjectResult
-	ProjectSummary      = domain.ProjectSummary
-	ProjectStore        = domain.ProjectStore
-	TenantCRSpec        = domain.TenantCRSpec
-	TenantCRManager     = domain.TenantCRManager
-	ProjectDeleteInput  = domain.ProjectDeleteInput
-	ProjectDeleteOutput = domain.ProjectDeleteOutput
-	ProjectDeleter      = domain.ProjectDeleter
+	CreateProjectInput  = ports.CreateProjectInput
+	ProjectResult       = ports.ProjectResult
+	ProjectSummary      = ports.ProjectSummary
+	ProjectStore        = ports.ProjectStore
+	TenantCRSpec        = ports.TenantCRSpec
+	TenantCRManager     = ports.TenantCRManager
+	ProjectDeleteInput  = ports.ProjectDeleteInput
+	ProjectDeleteOutput = ports.ProjectDeleteOutput
+	ProjectDeleter      = ports.ProjectDeleter
 )
 
 // EnvironmentEnsurer creates the environment a new project needs.
@@ -66,7 +66,7 @@ type EnvironmentEnsurer interface {
 
 // ProjectHandler provides HTTP handlers for project operations.
 type ProjectHandler struct {
-	store         domain.ProjectStore
+	store         ports.ProjectStore
 	crMgr         TenantCRManager
 	deleter       ProjectDeleter
 	envEnsurer    EnvironmentEnsurer      // T4.1: auto-create production env on POST /api/v1/projects
@@ -74,7 +74,7 @@ type ProjectHandler struct {
 }
 
 // NewProjectHandler creates a new ProjectHandler.
-func NewProjectHandler(store domain.ProjectStore, crMgr TenantCRManager) *ProjectHandler {
+func NewProjectHandler(store ports.ProjectStore, crMgr TenantCRManager) *ProjectHandler {
 	return &ProjectHandler{store: store, crMgr: crMgr}
 }
 
@@ -87,7 +87,7 @@ func (h *ProjectHandler) SetDeleter(d ProjectDeleter) {
 // tenant's canonical plan before EnsureTenant. T2.3.b of plan
 // 2026-06-11-code-review-remediation v1.2 — closes H7 CRITICAL silent
 // downgrade by replacing the literal `Plan: "starter"` with a real DB
-// lookup via pkg/domain.ResolvePlanTier (ADR D4).
+// lookup via pkg/ports.ResolvePlanTier (ADR D4).
 //
 // Production main.go MUST call this with the canonical store. Tests
 // that don't set it fall back to PlanTierStarter (matching pre-T2.3.b
@@ -260,7 +260,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// causes cascading deploy failures (namespace not found, ArgoCD app missing).
 	//
 	// T2.3.b of plan 2026-06-11-code-review-remediation v1.2: resolve the
-	// tenant's canonical Plan via pkg/domain.ResolvePlanTier (ADR D4)
+	// tenant's canonical Plan via pkg/ports.ResolvePlanTier (ADR D4)
 	// instead of hardcoding "starter". Pre-T2.3.b code had:
 	//     EnsureTenant(ctx, uc.TenantID, TenantCRSpec{Plan: "starter"})
 	// which silently downgraded paying Pro/Team tenants on reconnect (H7

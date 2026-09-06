@@ -29,11 +29,11 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
-// PostgresBootstrapStore implements domain.BootstrapStore using
+// PostgresBootstrapStore implements ports.BootstrapStore using
 // PostgreSQL via sqlc. All INSERTs use ON CONFLICT DO NOTHING for
 // idempotency; the wrapper accumulates the per-statement
 // rows-affected so `created=true` reflects whether ANY of the 4
@@ -51,7 +51,7 @@ type PostgresBootstrapStore struct {
 //   - plan    → "starter"      when BootstrapRequest.Plan empty
 //   - display → tenant slug    when BootstrapRequest.TenantDisplayName empty
 //   - email   → "{login}@users.noreply.github.com" (GitHub convention)
-func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req domain.BootstrapRequest) (string, string, bool, error) {
+func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req ports.BootstrapRequest) (string, string, bool, error) {
 	userID := fmt.Sprintf("github-%s", req.AdminLogin)
 	tenantID := fmt.Sprintf("tn-%s", req.TenantSlug)
 
@@ -74,7 +74,7 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req domain.Boots
 	anyCreated := false
 
 	// 1. INSERT user (ON CONFLICT by id → DO NOTHING)
-	// AdminGitHubID is a string in domain.BootstrapRequest; sqlc emits
+	// AdminGitHubID is a string in ports.BootstrapRequest; sqlc emits
 	// users.github_id as *int64 (schema: BIGINT NULL). Parse to int64;
 	// non-numeric / empty values land as NULL (caller-visible record
 	// is identical to legacy which passed the string directly to

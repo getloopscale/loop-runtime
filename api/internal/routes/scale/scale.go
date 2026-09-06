@@ -23,7 +23,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 
 	"github.com/go-chi/chi/v5"
@@ -57,7 +57,7 @@ const DefaultPodCostPerHour float64 = 0.05
 
 // ScaleProjectStore abstracts project lookup for scale (DIP).
 type ScaleProjectStore interface {
-	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
+	GetByName(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error)
 }
 
 // ScaleConfigInput is the routes-local mirror of store.ScalingConfig fields the

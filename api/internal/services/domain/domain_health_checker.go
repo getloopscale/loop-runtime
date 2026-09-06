@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package domainsvc
+package domain
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // DomainHealthStore abstracts persistence needed by the health checker.
@@ -20,11 +20,11 @@ type DomainHealthStore interface {
 	// FindPendingForAutoVerify returns pending_verification domains owned by
 	// tenants belonging to the given cell (roadmap 03). Pass "cell-0"
 	// or "" for single-cell / backward-compatible behavior.
-	FindPendingForAutoVerify(ctx context.Context, cellID string) ([]domain.CustomDomain, error)
-	FindActiveForCNAMECheck(ctx context.Context, staleAfter time.Time) ([]domain.CustomDomain, error)
-	FindStalePending(ctx context.Context, maxAge time.Duration) ([]domain.CustomDomain, error)
-	FindStaleProvisioning(ctx context.Context, maxAge time.Duration) ([]domain.CustomDomain, error)
-	FindActiveWithTLSExpiry(ctx context.Context, withinDays int) ([]domain.CustomDomain, error)
+	FindPendingForAutoVerify(ctx context.Context, cellID string) ([]ports.CustomDomain, error)
+	FindActiveForCNAMECheck(ctx context.Context, staleAfter time.Time) ([]ports.CustomDomain, error)
+	FindStalePending(ctx context.Context, maxAge time.Duration) ([]ports.CustomDomain, error)
+	FindStaleProvisioning(ctx context.Context, maxAge time.Duration) ([]ports.CustomDomain, error)
+	FindActiveWithTLSExpiry(ctx context.Context, withinDays int) ([]ports.CustomDomain, error)
 	UpdateVerified(ctx context.Context, domain string, verifiedAt time.Time) error
 	UpdateCNAMECheck(ctx context.Context, domain string, checkTime time.Time, consecutiveFailures int) error
 	UpdateFailure(ctx context.Context, domain, status, reason string) error

@@ -21,18 +21,18 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
 	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
 type (
-	TenantDeletionStore = domain.TenantDeletionStore
-	DeletionRequest     = domain.DeletionRequest
-	DeletionRecord      = domain.DeletionRecord
-	TombstoneRecord     = domain.TombstoneRecord
+	TenantDeletionStore = ports.TenantDeletionStore
+	DeletionRequest     = ports.DeletionRequest
+	DeletionRecord      = ports.DeletionRecord
+	TombstoneRecord     = ports.TombstoneRecord
 )
 
 // TenantDeletionResponse is the 202 response for DELETE /api/v1/tenants/:id.

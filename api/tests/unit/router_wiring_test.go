@@ -6,7 +6,7 @@ package unit
 import (
 	"context"
 	"encoding/json"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
@@ -62,16 +62,16 @@ func (s *stubMemberStore) GetMemberships(_ context.Context, _ string) ([]auth.Te
 // stubProjectStore implements routes.ProjectStore.
 type stubProjectStore struct{}
 
-func (s *stubProjectStore) CreateProject(_ context.Context, _ domain.CreateProjectInput) (domain.ProjectResult, error) {
-	return domain.ProjectResult{}, nil
+func (s *stubProjectStore) CreateProject(_ context.Context, _ ports.CreateProjectInput) (ports.ProjectResult, error) {
+	return ports.ProjectResult{}, nil
 }
-func (s *stubProjectStore) GetByName(_ context.Context, _, _ string) (*domain.ProjectResult, error) {
-	return &domain.ProjectResult{Name: "test"}, nil
+func (s *stubProjectStore) GetByName(_ context.Context, _, _ string) (*ports.ProjectResult, error) {
+	return &ports.ProjectResult{Name: "test"}, nil
 }
-func (s *stubProjectStore) ListByTenant(_ context.Context, _ string) ([]domain.ProjectResult, error) {
+func (s *stubProjectStore) ListByTenant(_ context.Context, _ string) ([]ports.ProjectResult, error) {
 	return nil, nil
 }
-func (s *stubProjectStore) ListByTenantWithSummary(_ context.Context, _ string) ([]domain.ProjectSummary, error) {
+func (s *stubProjectStore) ListByTenantWithSummary(_ context.Context, _ string) ([]ports.ProjectSummary, error) {
 	return nil, nil
 }
 func (s *stubProjectStore) DeleteProject(_ context.Context, _, _ string) error { return nil }
@@ -79,7 +79,7 @@ func (s *stubProjectStore) DeleteProject(_ context.Context, _, _ string) error {
 // stubTenantCRManager implements routes.TenantCRManager.
 type stubTenantCRManager struct{}
 
-func (s *stubTenantCRManager) EnsureTenant(_ context.Context, _ string, _ domain.TenantCRSpec) error {
+func (s *stubTenantCRManager) EnsureTenant(_ context.Context, _ string, _ ports.TenantCRSpec) error {
 	return nil
 }
 
@@ -117,7 +117,7 @@ func (s *stubBuildReader) GetByID(_ context.Context, id string) (*sse.BuildInfo,
 // stubBootstrapStore implements routes.BootstrapStore.
 type stubBootstrapStore struct{}
 
-func (s *stubBootstrapStore) Bootstrap(_ context.Context, _ domain.BootstrapRequest) (string, string, bool, error) {
+func (s *stubBootstrapStore) Bootstrap(_ context.Context, _ ports.BootstrapRequest) (string, string, bool, error) {
 	return "user-1", "tenant-1", false, nil
 }
 

@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-198 items — **Open** 8 · **In flight** 10 · **Closed** 180 · **Blocked** 6
+199 items — **Open** 9 · **In flight** 10 · **Closed** 180 · **Blocked** 5
 
-### Open (8)
+### Open (9)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -82,6 +82,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `blocked` · was `triaged` | waiting on `B-154` |
 | [`B-194`](#b-194--o-ramo-aes-de-leitura-so-pode-sair-com-uma-contagem-que-cubra-a-frota-e-ninguem-e-dono-dela----) | O ramo AES de leitura so' pode sair com uma contagem que cubra a frota, e ninguem e' dono dela | `triaged` | media — nada quebra hoje (o caminho de escrita ja' recusa AES); o custo e' um gate que segue vermelho por uma divida real cujo desbloqueio depende de acesso a banco que nenhuma sessao tem |
 | [`B-198`](#b-198--remediar-tag-dev-nos-7-charts-publicados-substituindo-por-digest-imutavel----) | Remediar `tag: dev` nos 7 charts publicados substituindo por digest imutavel | `triaged` | — |
+| [`B-199`](#b-199--phase-2-do-b-057-split-de-apiinternalportstypesgo-em-7-arquivos-por-bounded-context----) | Phase 2 do B-057: split de `api/internal/ports/types.go` em 7 arquivos por bounded context | `triaged` | — |
 
 ### In flight (10)
 
@@ -93,7 +94,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `blocked` · was `approved` | waiting on `B-113` — média — não afirmo que `tag: dev` seja violação decidida: pode ser sobrescrita no install pelo ArgoCD, e nenhuma decisão registrada a proíbe. O que está medido é que a guarda cobre 1 de 16, e que os 15 restantes nunca foram julgados. |
 | [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `approved` | média — o código resultante está **correto** e é 1:1; o que ficou errado foi a documentação dele, e o modo como errou é o registro mais nítido do risco que o `B-001` nomeia. |
-| [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `blocked` · was `approved` | waiting on `B-137` — média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número. |
+| [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `approved` | média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número. |
 | [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `planned` | alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
 | [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `approved` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 | [`B-197`](#b-197--governance-gatepy--2-agentes-restaurados-apos-delecao-de-2026-08-06----) | governance-gate.py + 2 agentes restaurados apos delecao de 2026-08-06 | `approved` | alta enquanto T2/T3 era HONOR-SYSTEM — apparatus mecanico ausente por 30d significou que um refactor T3 (`cell-cluster-unification`, commit 148c04104 em 2026-08-17) passou sem meeting nem ADR ratificado. |
@@ -5225,7 +5226,7 @@ dod:
 > mesma falha de que este item acusa o proprio sujeito: certo sobre o schema, nunca
 > olhou os chamadores.
 
-## B-137 — A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore   [x]
+## B-137 — A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore   [ ]
 
 domain: engine-go
 repo: loopzero
@@ -5234,7 +5235,7 @@ source: discover-review
 severity: média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número.
 evidence: medido 2026-08-17 ao fechar o `B-106`, com a pirâmide **derivada** da árvore pela primeira vez: **989 arquivos — unit 73,5%, integração 15,7%, e2e 10,8%**. O alvo do ADR D7 é `e2e ≤ 5%`. Ele foi escolhido quando `infra/quality/test-inventory.json` **declarava 0,1%** — isto é, calibrado contra um número que descrevia 375 de 988 arquivos e excluía a suíte `infra/tests/e2e` inteira.
 why_now: o `B-106` tornou o número visível pela primeira vez, e fazer o gate reprovar contra o alvo do ADR hoje criaria uma trava que o repositório não consegue satisfazer — a mesma recusa do `B-127` (`HARD`) e do `B-119` (enforcement total). Enquanto isso, a catraca já impede piora.
-status: shipped
+status: approved
 decided_by: docs/decisions/2026-09-06-B-137-e2e-target-ratchet-ratification.md (Option A — ratify ratchet trajectory, amend ADR D7 to retire e2e ≤5% target; sponsor ratified 2026-09-06 via "TUDO APROVADOS")
 former_blocked_by: aguardando sponsor decision by design — o próprio item termina 'É decisão do sponsor, não minha' e a nota de 2026-08-19 delimita: 'O que continua sendo do sponsor: se 7,4% de jornada é certo para um produto cujo objeto É implantar'. Medição feita 3x (2026-08-17, 19, 19), análise decompõe faixa e2e em 4 subárvores mostrando 30/107 medem outro eixo (chaos/performance). DoD bala 1 exige decisão que cite ADR D7 — não é medição pendente, é estratégia de teste. Vide report /idea-to-release B-137 de 2026-08-31.
 
@@ -8812,3 +8813,23 @@ dod:
   - regression test que reprova qualquer futuro `tag: dev` em `charts/loopzero-*/values.yaml`
 
 > Filed 2026-09-06 as follow-up of B-113 (Option A per ratified alignment brief `.claude/records/alignment/b113-tag-dev-disposition-alignment.md`). Sponsor approved via chat "TUDO APROVADOS" 2026-09-06.
+
+## B-199 — Phase 2 do B-057: split de `api/internal/ports/types.go` em 7 arquivos por bounded context   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: b057-c2-followup
+sponsor: paulohenriquevn
+tier: T2 (`.claude/rules/pre-release-governance.md`) — package reorganization, zero behavior change
+evidence: filed 2026-09-06 como follow-up do B-057 (SHIPPED via Phases 1+3+4+5 no mesmo dia). Plan v1.1 do B-057 (`.claude/records/plans/b057-domain-rename-to-ports-plan.md § Phase 2`) pina os 7 target files: `{domain,team,audit,secret,project,tenant,bootstrap}.go`. Bootstrap symbols (BootstrapRequest, BootstrapStore, CellPlacementEngine) estao physically nested inside Projects block em types.go:353 — Phase 2 os move pra `bootstrap.go` per Blocker 6 do MEET record. Deferido deliberadamente do B-057 pra ser reviewable commit separado (pure org, zero behavior change).
+why_now: B-057 shipped 2026-09-06 com Phases 1+3+4+5 (rename atomico + services/domain rename + alias cleanup + CHANGELOG). Phase 2 (types.go split) foi explicitamente deferido no MEET record como reviewable commit separado. Sem esse item, o trabalho fica pendurado em item shipped e desaparece (mesmo failure pattern que B-198 file resolveu pro B-113).
+status: triaged
+dod:
+  - `api/internal/ports/types.go` deixa de existir OU tem so re-exports triviais
+  - existem os 7 files pinados no plan v1.1: `{domain,team,audit,secret,project,tenant,bootstrap}.go`, cada um com sua bounded context
+  - Bootstrap symbols (BootstrapRequest, BootstrapStore, CellPlacementEngine) vivem em `bootstrap.go`
+  - `go build ./...` PASS + testes do api/ verdes (comportamento inalterado; e reorganizacao pura)
+  - CHANGELOG entry mencionando split
+
+> Filed 2026-09-06 as follow-up do B-057 (Phase 2 deferred). Sponsor approved via chat "TUDO APROVADOS" 2026-09-06.

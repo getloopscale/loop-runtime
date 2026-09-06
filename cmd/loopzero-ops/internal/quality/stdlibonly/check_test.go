@@ -15,7 +15,7 @@ import (
 func pacote(t *testing.T, corpo string) string {
 	t.Helper()
 	root := t.TempDir()
-	p := filepath.Join(root, "api", "internal", "domain", "types.go")
+	p := filepath.Join(root, "api", "internal", "ports", "types.go")
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}

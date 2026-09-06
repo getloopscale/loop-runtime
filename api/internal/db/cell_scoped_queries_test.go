@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // osReadFile is an indirection point so tests can stub file reads if
@@ -195,7 +195,7 @@ func TestFindPendingCustomDomainsForAutoVerify_QuerySoT_ContainsJoinAndCellPredi
 	if !strings.Contains(queryBlock, "cd.status = 'pending_verification'") {
 		t.Errorf("FindPendingCustomDomainsForAutoVerify must filter status = 'pending_verification', got: %s", queryBlock)
 	}
-	_ = domain.CustomDomain{} // keep import anchored
+	_ = ports.CustomDomain{} // keep import anchored
 }
 
 // =============================================================================

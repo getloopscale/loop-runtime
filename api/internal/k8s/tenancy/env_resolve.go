@@ -6,7 +6,7 @@ package tenancy
 import (
 	"sort"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
@@ -77,5 +77,5 @@ func resolveEnvEntry(es []apiv1.TenantEnvironmentEntry, envName, project string)
 		projects = append(projects, es[i].Project)
 	}
 	sort.Strings(projects)
-	return -1, projects, &domain.ErrAmbiguousEnvironment{EnvName: envName, Projects: projects}
+	return -1, projects, &ports.ErrAmbiguousEnvironment{EnvName: envName, Projects: projects}
 }

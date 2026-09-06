@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -48,30 +48,30 @@ func TestProjects_Create_CapExceeded_Returns422(t *testing.T) {
 // --- Fake ProjectStore ---
 
 type fakeProjectStore struct {
-	projects       []domain.ProjectResult
+	projects       []ports.ProjectResult
 	projectSummary []ProjectSummary // T2.1: per-project summary fixture
-	project        *domain.ProjectResult
-	createResult   domain.ProjectResult
+	project        *ports.ProjectResult
+	createResult   ports.ProjectResult
 	createErr      error
 	deleteErr      error
 	summaryErr     error
 }
 
-func (f *fakeProjectStore) CreateProject(_ context.Context, input CreateProjectInput) (domain.ProjectResult, error) {
+func (f *fakeProjectStore) CreateProject(_ context.Context, input CreateProjectInput) (ports.ProjectResult, error) {
 	if f.createErr != nil {
-		return domain.ProjectResult{}, f.createErr
+		return ports.ProjectResult{}, f.createErr
 	}
 	return f.createResult, nil
 }
 
-func (f *fakeProjectStore) GetByName(_ context.Context, _, name string) (*domain.ProjectResult, error) {
+func (f *fakeProjectStore) GetByName(_ context.Context, _, name string) (*ports.ProjectResult, error) {
 	if f.project != nil && f.project.Name == name {
 		return f.project, nil
 	}
 	return nil, nil
 }
 
-func (f *fakeProjectStore) ListByTenant(_ context.Context, _ string) ([]domain.ProjectResult, error) {
+func (f *fakeProjectStore) ListByTenant(_ context.Context, _ string) ([]ports.ProjectResult, error) {
 	return f.projects, nil
 }
 
@@ -120,7 +120,7 @@ func (f *fakeTenantCRMgr) EnsureTenant(_ context.Context, _ string, s TenantCRSp
 
 // --- Fake PlanTierStore (T2.3.b) ---
 
-// fakePlanTierStore satisfies domain.PlanTierStore so the Create
+// fakePlanTierStore satisfies ports.PlanTierStore so the Create
 // handler's ResolvePlanTier call can be exercised without a real DB.
 type fakePlanTierStore struct {
 	plan string
@@ -146,7 +146,7 @@ func (f *fakeProjectDeleter) Delete(_ context.Context, _ ProjectDeleteInput) (*P
 
 func TestProjects_List_HappyPath(t *testing.T) {
 	store := &fakeProjectStore{
-		projects: []domain.ProjectResult{
+		projects: []ports.ProjectResult{
 			{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 			{ID: "p2", Name: "my-web", TeamID: "tn-test-123"},
 		},
@@ -166,8 +166,8 @@ func TestProjects_List_HappyPath(t *testing.T) {
 	// T2.3 pagination scaffold: response now carries `total` alongside
 	// `projects` — typed struct keeps the assertion focused.
 	var resp struct {
-		Projects []domain.ProjectResult `json:"projects"`
-		Total    int                    `json:"total"`
+		Projects []ports.ProjectResult `json:"projects"`
+		Total    int                   `json:"total"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -409,7 +409,7 @@ func TestProjects_Get_Found(t *testing.T) {
 		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
 	}
 
-	var resp domain.ProjectResult
+	var resp ports.ProjectResult
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -440,7 +440,7 @@ func TestProjects_Get_NotFound(t *testing.T) {
 // MUST be the value passed to the Tenant CR.
 func TestProjects_Create_ResolvedPlanTierFlowsToTenantCR(t *testing.T) {
 	store := &fakeProjectStore{
-		createResult: domain.ProjectResult{ID: "p1", Name: "api", TeamID: "tn-paying"},
+		createResult: ports.ProjectResult{ID: "p1", Name: "api", TeamID: "tn-paying"},
 	}
 	crMgr := &fakeTenantCRMgr{}
 	h := NewProjectHandler(store, crMgr)
@@ -469,7 +469,7 @@ func TestProjects_Create_ResolvedPlanTierFlowsToTenantCR(t *testing.T) {
 // must surface as canonical Pro at the CR boundary.
 func TestProjects_Create_LegacyGrowthMapsToProInCR(t *testing.T) {
 	store := &fakeProjectStore{
-		createResult: domain.ProjectResult{ID: "p1", Name: "api", TeamID: "tn-legacy"},
+		createResult: ports.ProjectResult{ID: "p1", Name: "api", TeamID: "tn-legacy"},
 	}
 	crMgr := &fakeTenantCRMgr{}
 	h := NewProjectHandler(store, crMgr)
@@ -497,7 +497,7 @@ func TestProjects_Create_LegacyGrowthMapsToProInCR(t *testing.T) {
 // surface 503 instead of silently downgrading to Starter.
 func TestProjects_Create_UnknownPlanReturns503(t *testing.T) {
 	store := &fakeProjectStore{
-		createResult: domain.ProjectResult{ID: "p1", Name: "api", TeamID: "tn-x"},
+		createResult: ports.ProjectResult{ID: "p1", Name: "api", TeamID: "tn-x"},
 	}
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
 	h.SetPlanTierStore(fakePlanTierStore{plan: "platinum-vip"})
@@ -523,7 +523,7 @@ func TestProjects_Create_UnknownPlanReturns503(t *testing.T) {
 // production wire-up in main.go IS the closure of the bug.
 func TestProjects_Create_NoStoreFallsBackToStarter(t *testing.T) {
 	store := &fakeProjectStore{
-		createResult: domain.ProjectResult{ID: "p1", Name: "api", TeamID: "tn-x"},
+		createResult: ports.ProjectResult{ID: "p1", Name: "api", TeamID: "tn-x"},
 	}
 	crMgr := &fakeTenantCRMgr{}
 	h := NewProjectHandler(store, crMgr) // no SetPlanTierStore call
@@ -547,7 +547,7 @@ func TestProjects_Create_NoStoreFallsBackToStarter(t *testing.T) {
 
 func TestProjects_Create_HappyPath(t *testing.T) {
 	store := &fakeProjectStore{
-		createResult: domain.ProjectResult{
+		createResult: ports.ProjectResult{
 			ID:     "p1",
 			Name:   "my-api",
 			TeamID: "tn-test-123",
@@ -566,7 +566,7 @@ func TestProjects_Create_HappyPath(t *testing.T) {
 		t.Fatalf("want 201, got %d body=%s", w.Code, w.Body.String())
 	}
 
-	var resp domain.ProjectResult
+	var resp ports.ProjectResult
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -624,7 +624,7 @@ func TestProjects_Create_InvalidJSON(t *testing.T) {
 
 func TestProjects_Delete_Success(t *testing.T) {
 	store := &fakeProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	deleter := &fakeProjectDeleter{
 		result: &ProjectDeleteOutput{

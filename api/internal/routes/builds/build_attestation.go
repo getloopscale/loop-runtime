@@ -10,14 +10,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // T1.3 of deep-review-remediation-plan (closes find_arch_001 partial):
 // canonical types live in domain/. Aliases preserve back-compat.
 type (
-	AttestationInfo  = domain.AttestationInfo
-	AttestationStore = domain.AttestationStore
+	AttestationInfo  = ports.AttestationInfo
+	AttestationStore = ports.AttestationStore
 )
 
 // BuildAttestationHandler serves GET /api/v1/builds/:id/attestation.

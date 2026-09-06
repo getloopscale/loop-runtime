@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 )
 
@@ -36,7 +36,7 @@ import (
 //
 // Best-effort: errors are logged at WARN; the function never returns an
 // error so it cannot be misused to block the build callback path.
-func emitCosignSignAudits(ctx context.Context, audit domain.AuditLogger, build *buildAuditContext, apps []deploycontracts.AppRelease, correlationID string) {
+func emitCosignSignAudits(ctx context.Context, audit ports.AuditLogger, build *buildAuditContext, apps []deploycontracts.AppRelease, correlationID string) {
 	if audit == nil || build == nil {
 		return
 	}

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
@@ -423,7 +423,7 @@ func buildServerConfig(
 			NewPreviewHandler(previewStore, previewService, logger).
 			WithPhaseLookup(k8sDeps.PreviewCRMgr).
 			WithProjectChecker(&store.PostgresProjectStore{DB: dbAdapter})
-		sc.CellPlacement = func() domain.CellPlacementEngine {
+		sc.CellPlacement = func() ports.CellPlacementEngine {
 			engine := placement.NewRoundRobinEngine(cellRouter, cellStore, cfg.MaxTenantsPerCell)
 			return engine.WithSerializer(placement.NewAdvisoryLockSerializer(dbAdapter.Pool))
 		}()

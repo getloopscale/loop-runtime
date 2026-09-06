@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -31,10 +31,10 @@ func (f *fakeRollbackService) Rollback(_ context.Context, _ RollbackInput) (*Rol
 // --- Fake RollbackProjectStore ---
 
 type fakeRollbackProjectStore struct {
-	project *domain.ProjectResult
+	project *ports.ProjectResult
 }
 
-func (f *fakeRollbackProjectStore) GetByName(_ context.Context, _, name string) (*domain.ProjectResult, error) {
+func (f *fakeRollbackProjectStore) GetByName(_ context.Context, _, name string) (*ports.ProjectResult, error) {
 	if f.project != nil && f.project.Name == name {
 		return f.project, nil
 	}
@@ -45,7 +45,7 @@ func (f *fakeRollbackProjectStore) GetByName(_ context.Context, _, name string) 
 
 func TestRollback_HappyPath(t *testing.T) {
 	projects := &fakeRollbackProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakeRollbackService{
 		result: &RollbackOutput{
@@ -98,7 +98,7 @@ func TestRollback_ProjectNotFound(t *testing.T) {
 
 func TestRollback_MissingEnvironment(t *testing.T) {
 	projects := &fakeRollbackProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakeRollbackService{}
 	h := NewRollbackHandler(projects, svc, "dev.loopzero.example")
@@ -118,7 +118,7 @@ func TestRollback_MissingEnvironment(t *testing.T) {
 
 func TestRollback_NoActiveRelease(t *testing.T) {
 	projects := &fakeRollbackProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakeRollbackService{
 		err: loopzeroerrors.ErrNoActiveRelease,
@@ -155,7 +155,7 @@ func TestRollback_Unauthenticated(t *testing.T) {
 
 func TestRollback_LockTimeout(t *testing.T) {
 	projects := &fakeRollbackProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakeRollbackService{
 		err: loopzeroerrors.ErrLockTimeout,

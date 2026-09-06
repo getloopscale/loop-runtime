@@ -23,8 +23,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -97,10 +97,10 @@ func parseSinceParam(raw string) int64 {
 // canonical types live in domain/. routes/ re-exports as type aliases for
 // back-compat with handler-adjacent code in this package.
 type (
-	LogEntry         = domain.LogEntry
-	LogQueryOpts     = domain.LogQueryOpts
-	LogQuerier       = domain.LogQuerier
-	StreamLogQuerier = domain.StreamLogQuerier
+	LogEntry         = ports.LogEntry
+	LogQueryOpts     = ports.LogQueryOpts
+	LogQuerier       = ports.LogQuerier
+	StreamLogQuerier = ports.StreamLogQuerier
 )
 
 // _ keeps the context import used (the type aliases above don't reference it).

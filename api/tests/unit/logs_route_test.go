@@ -6,7 +6,7 @@ package unit
 import (
 	"context"
 	"encoding/json"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"net/http"
 	"net/http/httptest"
@@ -17,11 +17,11 @@ import (
 
 // fakeLogQuerier implements routes.LogQuerier for testing.
 type fakeLogQuerier struct {
-	entries []domain.LogEntry
+	entries []ports.LogEntry
 	err     error
 }
 
-func (f *fakeLogQuerier) QueryBuildLogs(ctx context.Context, buildID string, opts domain.LogQueryOpts) ([]domain.LogEntry, error) {
+func (f *fakeLogQuerier) QueryBuildLogs(ctx context.Context, buildID string, opts ports.LogQueryOpts) ([]ports.LogEntry, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -87,7 +87,7 @@ func TestLogsRoute(t *testing.T) {
 			},
 		}
 		querier := &fakeLogQuerier{
-			entries: []domain.LogEntry{
+			entries: []ports.LogEntry{
 				{Step: "clone", Stream: "stdout", Content: "Cloning into '/workspace'...", Timestamp: "2026-03-25T14:30:01Z"},
 				{Step: "install-deps", Stream: "stdout", Content: "npm install", Timestamp: "2026-03-25T14:30:05Z"},
 			},
@@ -156,7 +156,7 @@ func TestLogsRoute(t *testing.T) {
 				Status:   "RUNNING",
 			},
 		}
-		querier := &fakeLogQuerier{entries: []domain.LogEntry{}}
+		querier := &fakeLogQuerier{entries: []ports.LogEntry{}}
 
 		handler := logs.NewLogsHandler(buildStore, querier)
 		req := newLogsRequest("build-abc123", "", true)
@@ -194,7 +194,7 @@ func TestLogsRoute(t *testing.T) {
 			},
 		}
 		querier := &fakeLogQuerier{
-			entries: []domain.LogEntry{
+			entries: []ports.LogEntry{
 				{Step: "build", Stream: "stdout", Content: "Done", Timestamp: "2026-03-25T14:31:00Z"},
 			},
 		}
@@ -232,7 +232,7 @@ func TestLogsRoute(t *testing.T) {
 			},
 		}
 		querier := &fakeLogQuerier{
-			entries: []domain.LogEntry{
+			entries: []ports.LogEntry{
 				{Step: "clone", Stream: "stdout", Content: "Cloning...", Timestamp: "2026-03-25T14:30:01Z"},
 			},
 		}

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/pagination"
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
@@ -221,7 +221,7 @@ func TestBuildEnvs_ReturnsDistinct(t *testing.T) {
 		buildEnvs: []string{"production", "staging"},
 	}
 	projectStore := &fakeProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	h := NewBuildListHandlerWithGate(store, projectStore)
 
@@ -256,7 +256,7 @@ func TestBuildEnvs_OrdersByRecency(t *testing.T) {
 		buildEnvs: []string{"qa", "staging", "production"},
 	}
 	projectStore := &fakeProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	h := NewBuildListHandlerWithGate(store, projectStore)
 
@@ -285,7 +285,7 @@ func TestBuildEnvs_EmptyForColdProject(t *testing.T) {
 		buildEnvs: nil,
 	}
 	projectStore := &fakeProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	h := NewBuildListHandlerWithGate(store, projectStore)
 
@@ -384,7 +384,7 @@ func TestBuildList_NonExistentProject_Returns404(t *testing.T) {
 func TestBuildList_ExistingProject_AllowsThrough(t *testing.T) {
 	store := &fakeBuildListStore{}
 	projectStore := &fakeProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	h := NewBuildListHandlerWithGate(store, projectStore)
 

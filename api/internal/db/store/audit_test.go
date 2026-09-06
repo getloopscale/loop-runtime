@@ -7,13 +7,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 func TestAuditStore_ListAuditEntries_NilDB(t *testing.T) {
 	store := &PostgresAuditStore{DB: nil}
 
-	entries, total, err := store.ListAuditEntries(context.Background(), "t1", domain.AuditFilter{})
+	entries, total, err := store.ListAuditEntries(context.Background(), "t1", ports.AuditFilter{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/admin"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/auth"
@@ -74,9 +74,9 @@ type Config struct {
 	HealthServices []health.ServiceHealthChecker
 	TokenValidator mwauth.TokenValidator
 	MemberStore    mwauth.MembershipStore
-	ProjectStore   domain.ProjectStore
-	TenantCRMgr    domain.TenantCRManager
-	ProjectDeleter domain.ProjectDeleter
+	ProjectStore   ports.ProjectStore
+	TenantCRMgr    ports.TenantCRManager
+	ProjectDeleter ports.ProjectDeleter
 	// PlanTierStore wires the canonical tier resolver (subscriptions.plan
 	// active row → PlanTier enum per ADR D4 of plan
 	// 2026-06-15-code-review-49-findings-remediation). nil-safe — when
@@ -103,9 +103,9 @@ type Config struct {
 	EventStore         sse.EventStore
 	BuildStoreReader   sse.BuildStoreReader
 	SecretStore        secrets.SecretStore
-	BootstrapStore     domain.BootstrapStore
+	BootstrapStore     ports.BootstrapStore
 	BootstrapSecret    string                      // SEC-003: shared secret for /internal/bootstrap auth
-	CellPlacement      domain.CellPlacementEngine  // ADR-0008: Cell assignment for new tenants
+	CellPlacement      ports.CellPlacementEngine   // ADR-0008: Cell assignment for new tenants
 	CellDiscovery      health.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
 	ShutdownCtx        context.Context
 	ShutdownCancel     context.CancelFunc

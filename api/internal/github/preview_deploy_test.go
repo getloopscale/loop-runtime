@@ -10,8 +10,8 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/github/webhook"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // =============================================================================
@@ -19,7 +19,7 @@ import (
 // =============================================================================
 
 type fakePreviewSvc struct {
-	createCalls []domain.CreatePreviewRequest
+	createCalls []ports.CreatePreviewRequest
 	deleteCalls []deleteCall
 	createErr   error
 	deleteErr   error
@@ -31,12 +31,12 @@ type deleteCall struct {
 	prNumber  int
 }
 
-func (f *fakePreviewSvc) CreatePreview(_ context.Context, req domain.CreatePreviewRequest) (*domain.Preview, error) {
+func (f *fakePreviewSvc) CreatePreview(_ context.Context, req ports.CreatePreviewRequest) (*ports.Preview, error) {
 	f.createCalls = append(f.createCalls, req)
 	if f.createErr != nil {
 		return nil, f.createErr
 	}
-	return &domain.Preview{ID: "prev-z", PRNumber: req.PRNumber, Branch: req.Branch, Status: "creating"}, nil
+	return &ports.Preview{ID: "prev-z", PRNumber: req.PRNumber, Branch: req.Branch, Status: "creating"}, nil
 }
 
 func (f *fakePreviewSvc) DeletePreviewByPR(_ context.Context, tenantID, projectID string, prNumber int) error {

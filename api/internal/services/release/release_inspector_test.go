@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md.
@@ -34,11 +34,11 @@ func (f *fakeReleaseStore) GetByID(ctx context.Context, id string) (*db.Release,
 }
 
 type fakeAudit struct {
-	entries []domain.AuditEntryResult
+	entries []ports.AuditEntryResult
 	err     error
 }
 
-func (f *fakeAudit) ListAuditEntries(_ context.Context, _ string, _ domain.AuditFilter) ([]domain.AuditEntryResult, int, error) {
+func (f *fakeAudit) ListAuditEntries(_ context.Context, _ string, _ ports.AuditFilter) ([]ports.AuditEntryResult, int, error) {
 	return f.entries, len(f.entries), f.err
 }
 
@@ -75,7 +75,7 @@ func TestReleaseInspector_Inspect_HappyPath(t *testing.T) {
 	rel.ImageAttestationRekorURL = &url
 
 	store := &fakeReleaseStore{get: func(_ context.Context, _ string) (*db.Release, error) { return rel, nil }}
-	audit := &fakeAudit{entries: []domain.AuditEntryResult{
+	audit := &fakeAudit{entries: []ports.AuditEntryResult{
 		{Action: "release.attestation_url_set", Actor: "system:release-attestation", ResourceType: "release", ResourceID: "rel-001", CreatedAt: time.Now().UTC()},
 		{Action: "release.attestation_url_set", Actor: "system:release-attestation", ResourceType: "release", ResourceID: "rel-OTHER", CreatedAt: time.Now().UTC()},
 	}}

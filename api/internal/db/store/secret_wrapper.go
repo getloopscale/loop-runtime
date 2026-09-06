@@ -30,8 +30,8 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // VaultTransitClient is the minimal interface PostgresSecretStore requires from the
@@ -455,7 +455,7 @@ func (s *PostgresSecretStore) ListForResync(ctx context.Context, tenantID, proje
 // matching the given tenant, project, and environment.
 // Results are ordered alphabetically by name.
 // SEC-001 defense-in-depth: never returns the value column.
-func (s *PostgresSecretStore) ListNames(ctx context.Context, tenantID, projectID, env string) ([]domain.SecretMetadata, error) {
+func (s *PostgresSecretStore) ListNames(ctx context.Context, tenantID, projectID, env string) ([]ports.SecretMetadata, error) {
 	bridge, err := s.bridge()
 	if err != nil {
 		return nil, err
@@ -471,9 +471,9 @@ func (s *PostgresSecretStore) ListNames(ctx context.Context, tenantID, projectID
 	}
 
 	// Return empty slice instead of nil to avoid null in JSON responses.
-	result := make([]domain.SecretMetadata, 0, len(rows))
+	result := make([]ports.SecretMetadata, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, domain.SecretMetadata{
+		result = append(result, ports.SecretMetadata{
 			Name:        row.Name,
 			Environment: row.Environment,
 			App:         row.App,

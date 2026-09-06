@@ -12,11 +12,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
 
-// fakePlanTierStore satisfies domain.PlanTierStore so the handler's
+// fakePlanTierStore satisfies ports.PlanTierStore so the handler's
 // ResolvePlanTier call can be exercised without a real DB.
 //
 // Duplicated from the parent's projects_test.go rather than exported from it:
@@ -36,10 +36,10 @@ func (f fakePlanTierStore) GetTenantPlan(_ context.Context, _ string) (string, e
 // --- Fake ScaleProjectStore ---
 
 type fakeScaleProjectStore struct {
-	project *domain.ProjectResult
+	project *ports.ProjectResult
 }
 
-func (f *fakeScaleProjectStore) GetByName(_ context.Context, _, name string) (*domain.ProjectResult, error) {
+func (f *fakeScaleProjectStore) GetByName(_ context.Context, _, name string) (*ports.ProjectResult, error) {
 	if f.project != nil && f.project.Name == name {
 		return f.project, nil
 	}
@@ -70,7 +70,7 @@ func scaleHandlerWithPlan(projects ScaleProjectStore, apply ScaleApplyFunc, keda
 
 func TestScale_HappyPath_Autoscaling(t *testing.T) {
 	projects := &fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	// J-20 v1.1 T1.1 EC-3 absorption: scale-to-zero (min=0) requires plan
 	// tier ≥ Pro. Inject pro to keep the happy path on the canonical
@@ -119,7 +119,7 @@ func TestScale_HappyPath_Autoscaling(t *testing.T) {
 
 func TestScale_HappyPath_FixedReplicas(t *testing.T) {
 	projects := &fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	h := NewScaleHandler(projects, nil, false)
 
@@ -148,7 +148,7 @@ func TestScale_HappyPath_FixedReplicas(t *testing.T) {
 
 func TestScale_MutualExclusion(t *testing.T) {
 	projects := &fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	h := NewScaleHandler(projects, nil, false)
 
@@ -169,7 +169,7 @@ func TestScale_MutualExclusion(t *testing.T) {
 
 func TestScale_MinZeroWithoutKEDA(t *testing.T) {
 	projects := &fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	// J-20 v1.1 T1.1: tier check passes (Pro), but cluster KEDA disabled.
 	// Two-layer defense — Pro tenant on a cluster without KEDA still
@@ -225,7 +225,7 @@ func TestScale_ProjectNotFound(t *testing.T) {
 
 func TestScale_MissingApp(t *testing.T) {
 	projects := &fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	h := NewScaleHandler(projects, nil, false)
 
@@ -244,7 +244,7 @@ func TestScale_MissingApp(t *testing.T) {
 
 func TestScale_NoScalingParams(t *testing.T) {
 	projects := &fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	h := NewScaleHandler(projects, nil, false)
 
@@ -263,7 +263,7 @@ func TestScale_NoScalingParams(t *testing.T) {
 
 func TestScale_DefaultEnvironment(t *testing.T) {
 	projects := &fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	h := NewScaleHandler(projects, nil, false)
 
@@ -290,7 +290,7 @@ func TestScale_DefaultEnvironment(t *testing.T) {
 
 func TestScale_RealPersistence_Applied(t *testing.T) {
 	projects := &fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	var captured ScaleConfigInput
 	apply := func(_ context.Context, c ScaleConfigInput) (bool, error) {
@@ -326,7 +326,7 @@ func TestScale_RealPersistence_Applied(t *testing.T) {
 
 func TestScale_RealPersistence_NoChange(t *testing.T) {
 	projects := &fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	apply := func(_ context.Context, _ ScaleConfigInput) (bool, error) {
 		return false, nil
@@ -405,7 +405,7 @@ func TestScaleHandler_EnsureProductionWired_NoPanicOnRealApply(t *testing.T) {
 // the client UI via raw API lands here, not in the cluster-KEDA branch.
 func TestScale_KEDARequires_Pro_ReturnsUpgradePrompt(t *testing.T) {
 	projects := &fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	// Cluster has KEDA installed, but tenant is Starter — must be rejected
 	// on tier check BEFORE cluster check (deterministic order: tier first
@@ -435,7 +435,7 @@ func TestScale_KEDARequires_Pro_ReturnsUpgradePrompt(t *testing.T) {
 // HTTP 400 + HPA_TARGET_OUT_OF_BOUNDS code + field=cpu_target.
 func TestScale_HPATargetBelowMin_Returns400(t *testing.T) {
 	projects := &fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	h := scaleHandlerWithPlan(projects, nil, false, "pro")
 
@@ -462,7 +462,7 @@ func TestScale_HPATargetBelowMin_Returns400(t *testing.T) {
 // rejected with HTTP 400 + field=memory_target.
 func TestScale_HPAMemoryAboveMax_Returns400(t *testing.T) {
 	projects := &fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	h := scaleHandlerWithPlan(projects, nil, false, "pro")
 
@@ -488,7 +488,7 @@ func TestScale_HPAMemoryAboveMax_Returns400(t *testing.T) {
 // tier for downstream CTA (eligible/upgrade) rendering.
 func TestScale_ResponseCarriesMonthlyCostAndPlanTier(t *testing.T) {
 	projects := &fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	h := scaleHandlerWithPlan(projects, nil, false, "pro")
 
@@ -535,7 +535,7 @@ func (f *fakeScaleReplicasChecker) CheckReplicasValue(_ string, requested int) (
 
 func TestScaleHandler_FixedReplicasOverCap_Returns422_RedTeam101(t *testing.T) {
 	h := NewScaleHandler(&fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
 	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
 		return true, nil
 	}, true)
@@ -563,7 +563,7 @@ func TestScaleHandler_FixedReplicasOverCap_Returns422_RedTeam101(t *testing.T) {
 
 func TestScaleHandler_AutoscalingMaxOverCap_Returns422_RedTeam101(t *testing.T) {
 	h := NewScaleHandler(&fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
 	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
 		return true, nil
 	}, true)
@@ -589,7 +589,7 @@ func TestScaleHandler_AutoscalingMaxOverCap_Returns422_RedTeam101(t *testing.T) 
 
 func TestScaleHandler_FixedReplicasUnderCap_AllowsThrough_RedTeam101(t *testing.T) {
 	h := NewScaleHandler(&fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
 	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
 		return true, nil
 	}, true)
@@ -618,7 +618,7 @@ func TestScaleHandler_FixedReplicasUnderCap_AllowsThrough_RedTeam101(t *testing.
 func TestScaleHandler_NilChecker_NoEnforcement_RedTeam101(t *testing.T) {
 	// Backwards-compat: no checker wired (tests/dev) → cap not enforced.
 	h := NewScaleHandler(&fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
 	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
 		return true, nil
 	}, true)
@@ -651,7 +651,7 @@ func TestScaleHandler_NilChecker_NoEnforcement_RedTeam101(t *testing.T) {
 
 func TestScaleHandler_FixedReplicasNegative_Returns400InvalidReplicas_RedTeam103(t *testing.T) {
 	h := NewScaleHandler(&fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
 	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
 		return true, nil
 	}, true)
@@ -679,7 +679,7 @@ func TestScaleHandler_FixedReplicasNegative_Returns400InvalidReplicas_RedTeam103
 
 func TestScaleHandler_AutoscalingMinNegative_Returns400InvalidReplicas_RedTeam103(t *testing.T) {
 	h := NewScaleHandler(&fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
 	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
 		return true, nil
 	}, true)
@@ -707,7 +707,7 @@ func TestScaleHandler_AutoscalingMinNegative_Returns400InvalidReplicas_RedTeam10
 
 func TestScaleHandler_AutoscalingMaxZero_Returns400InvalidReplicas_RedTeam103(t *testing.T) {
 	h := NewScaleHandler(&fakeScaleProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
 	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
 		return true, nil
 	}, true)

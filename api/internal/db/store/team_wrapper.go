@@ -14,7 +14,7 @@ package store
 // Invariants preserved:
 //   - AddMember idempotent (ON CONFLICT DO NOTHING)
 //   - RemoveMember idempotent (silent on missing rows)
-//   - UpdateMemberRole 0-rows-affected → domain.ErrMemberNotFound
+//   - UpdateMemberRole 0-rows-affected → ports.ErrMemberNotFound
 //   - GetMember / GetUsernameByID / GetUserByUsername NoRows →
 //     (nil, nil) / "" / (nil, nil) per legacy contract
 //   - AUDIT-7 username from users.username (JOIN-based, provider-
@@ -31,11 +31,11 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // ListMembers returns all members of a tenant with their roles.
-func (s *PostgresTeamStore) ListMembers(ctx context.Context, tenantID string) ([]domain.TeamMemberInfo, error) {
+func (s *PostgresTeamStore) ListMembers(ctx context.Context, tenantID string) ([]ports.TeamMemberInfo, error) {
 	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
@@ -46,9 +46,9 @@ func (s *PostgresTeamStore) ListMembers(ctx context.Context, tenantID string) ([
 	if err != nil {
 		return nil, fmt.Errorf("team store: list members failed: %w", err)
 	}
-	members := make([]domain.TeamMemberInfo, 0, len(rows))
+	members := make([]ports.TeamMemberInfo, 0, len(rows))
 	for _, r := range rows {
-		info := domain.TeamMemberInfo{
+		info := ports.TeamMemberInfo{
 			Username: r.Username,
 			Email:    r.Email,
 			Role:     r.Role,
@@ -96,7 +96,7 @@ func (s *PostgresTeamStore) RemoveMember(ctx context.Context, tenantID, userID s
 	return nil
 }
 
-// UpdateMemberRole changes a member's role. Returns domain.
+// UpdateMemberRole changes a member's role. Returns ports.
 // ErrMemberNotFound when the row doesn't exist.
 func (s *PostgresTeamStore) UpdateMemberRole(ctx context.Context, tenantID, userID, newRole string) error {
 	bridge, ok := s.DB.(db.SqlcBridge)
@@ -114,13 +114,13 @@ func (s *PostgresTeamStore) UpdateMemberRole(ctx context.Context, tenantID, user
 		return fmt.Errorf("team store: update role failed: %w", err)
 	}
 	if rows == 0 {
-		return domain.ErrMemberNotFound
+		return ports.ErrMemberNotFound
 	}
 	return nil
 }
 
 // GetMember returns a single member's info. NoRows → (nil, nil).
-func (s *PostgresTeamStore) GetMember(ctx context.Context, tenantID, userID string) (*domain.TeamMemberInfo, error) {
+func (s *PostgresTeamStore) GetMember(ctx context.Context, tenantID, userID string) (*ports.TeamMemberInfo, error) {
 	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
@@ -137,7 +137,7 @@ func (s *PostgresTeamStore) GetMember(ctx context.Context, tenantID, userID stri
 		}
 		return nil, fmt.Errorf("team store: get member failed: %w", err)
 	}
-	info := &domain.TeamMemberInfo{
+	info := &ports.TeamMemberInfo{
 		Username: row.Username,
 		Email:    row.Email,
 		Role:     row.Role,
@@ -169,7 +169,7 @@ func (s *PostgresTeamStore) GetUsernameByID(ctx context.Context, userID string) 
 
 // GetUserByUsername finds a user by their username. NoRows → (nil,
 // nil).
-func (s *PostgresTeamStore) GetUserByUsername(ctx context.Context, username string) (*domain.TeamUserInfo, error) {
+func (s *PostgresTeamStore) GetUserByUsername(ctx context.Context, username string) (*ports.TeamUserInfo, error) {
 	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
@@ -183,7 +183,7 @@ func (s *PostgresTeamStore) GetUserByUsername(ctx context.Context, username stri
 		}
 		return nil, fmt.Errorf("team store: get user by username failed: %w", err)
 	}
-	return &domain.TeamUserInfo{
+	return &ports.TeamUserInfo{
 		ID:          row.ID,
 		Email:       row.Email,
 		DisplayName: row.DisplayName,

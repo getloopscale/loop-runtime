@@ -4,7 +4,7 @@
 package unit
 
 import (
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"strings"
 	"testing"
 
@@ -24,7 +24,7 @@ import (
 //
 // KEEP-INVARIANT preserved structurally by sqlc-backed
 // PostgresProjectStore (project_wrapper.go):
-//   - 23505 unique_violation → domain.ErrProjectExists via
+//   - 23505 unique_violation → ports.ErrProjectExists via
 //     isPGUniqueViolation helper (covers both raw pgconn.PgError +
 //     legacy UniqueViolationError paths for defense-in-depth)
 //   - Tenant predicate on every multi-tenant query
@@ -42,7 +42,7 @@ import (
 
 // TestPostgresProjectStoreImplementsInterface — compile-time guard.
 func TestPostgresProjectStoreImplementsInterface(t *testing.T) {
-	var _ domain.ProjectStore = (*store.PostgresProjectStore)(nil)
+	var _ ports.ProjectStore = (*store.PostgresProjectStore)(nil)
 }
 
 func TestGenerateProjectID(t *testing.T) {

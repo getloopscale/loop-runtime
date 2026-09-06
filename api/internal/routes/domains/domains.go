@@ -24,17 +24,15 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
-// ErrDomainExists is an alias for domain.ErrDomainExists (backward compatibility).
-var ErrDomainExists = domain.ErrDomainExists
+// ErrDomainExists is an alias for ports.ErrDomainExists (backward compatibility).
 
-// GenerateDomainID is an alias for domain.GenerateDomainID (backward compatibility).
-var GenerateDomainID = domain.GenerateDomainID
+// GenerateDomainID is an alias for ports.GenerateDomainID (backward compatibility).
 
 // generateVerificationToken generates a TXT verification value.
 func generateVerificationToken() string {
@@ -45,14 +43,14 @@ func generateVerificationToken() string {
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
 type (
-	CustomDomain     = domain.CustomDomain
-	DomainListFilter = domain.DomainListFilter
-	CFZoneResult     = domain.CFZoneResult
-	CFDNSRecord      = domain.CFDNSRecord
-	DomainStore      = domain.DomainStore
-	DomainVerifier   = domain.DomainVerifier
-	DomainValidator  = domain.DomainValidator
-	CFZoneManager    = domain.CFZoneManager
+	CustomDomain     = ports.CustomDomain
+	DomainListFilter = ports.DomainListFilter
+	CFZoneResult     = ports.CFZoneResult
+	CFDNSRecord      = ports.CFDNSRecord
+	DomainStore      = ports.DomainStore
+	DomainVerifier   = ports.DomainVerifier
+	DomainValidator  = ports.DomainValidator
+	CFZoneManager    = ports.CFZoneManager
 )
 
 // domainMachine is the formal domain state machine (CRIT-02 fix).

@@ -14,7 +14,7 @@
 // LastDeployAt. Pointer + omitempty is the only shape that produces an
 // absent-key wire when the value is unknown.
 
-package domain
+package ports
 
 import (
 	"encoding/json"

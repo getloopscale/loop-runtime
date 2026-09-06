@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package domain provides custom domain validation and DNS verification logic.
+// Package ports provides custom domain validation and DNS verification logic.
 // MEET-2026-04-05-033 §6.4
-package domain
+package ports
 
 import (
 	"context"

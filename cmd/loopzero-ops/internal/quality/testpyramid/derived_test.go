@@ -5,9 +5,9 @@ package testpyramid
 
 import (
 	"errors"
-	"strings"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"

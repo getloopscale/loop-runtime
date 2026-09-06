@@ -16,7 +16,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // TenantDeletionStoreSqlc is the sqlc-backed soft-delete lifecycle store
@@ -60,7 +60,7 @@ func NewTenantDeletionStoreSqlc(pool db.DBTX) *TenantDeletionStoreSqlc {
 // This is the assertion whose absence let the type be deleted as an orphan: it
 // fails the moment the implementation stops existing, instead of the file
 // quietly decaying into a paragraph about nothing.
-var _ domain.TenantDeletionStore = (*TenantDeletionStoreSqlc)(nil)
+var _ ports.TenantDeletionStore = (*TenantDeletionStoreSqlc)(nil)
 
 func (s *TenantDeletionStoreSqlc) gen() generated.DBTX {
 	bridge, ok := s.pool.(db.SqlcBridge)
@@ -82,8 +82,8 @@ func (s *TenantDeletionStoreSqlc) gen() generated.DBTX {
 // a second delete request must not silently reset the grace window and buy the
 // tenant another N days.
 func (s *TenantDeletionStoreSqlc) RequestDeletion(
-	ctx context.Context, input domain.DeletionRequest,
-) (*domain.DeletionRecord, error) {
+	ctx context.Context, input ports.DeletionRequest,
+) (*ports.DeletionRecord, error) {
 	err := s.q.InsertPendingDeletion(ctx, s.gen(), generated.InsertPendingDeletionParams{
 		TenantID:    input.TenantID,
 		RequestedBy: input.RequestedBy,
@@ -118,7 +118,7 @@ func (s *TenantDeletionStoreSqlc) CancelDeletion(ctx context.Context, tenantID s
 // would let an outage read as "nothing is pending".
 func (s *TenantDeletionStoreSqlc) GetPendingDeletion(
 	ctx context.Context, tenantID string,
-) (*domain.DeletionRecord, error) {
+) (*ports.DeletionRecord, error) {
 	row, err := s.q.GetPendingDeletion(ctx, s.gen(), tenantID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -140,7 +140,7 @@ func (s *TenantDeletionStoreSqlc) GetPendingDeletion(
 // tombstone that silently loses the record of what was cleaned and what failed
 // is worse than no tombstone — it looks complete.
 func (s *TenantDeletionStoreSqlc) WriteTombstone(
-	ctx context.Context, tombstone domain.TombstoneRecord,
+	ctx context.Context, tombstone ports.TombstoneRecord,
 ) error {
 	cleaned, err := json.Marshal(tombstone.ResourcesCleaned)
 	if err != nil {
@@ -191,8 +191,8 @@ func timestamptzToTimePtr(ts pgtype.Timestamptz) *time.Time {
 func deletionRowToRecord(
 	tenantID string, requestedAt time.Time, requestedBy, reason string,
 	graceUntil *time.Time, force bool, attemptCount int,
-) domain.DeletionRecord {
-	return domain.DeletionRecord{
+) ports.DeletionRecord {
+	return ports.DeletionRecord{
 		TenantID:     tenantID,
 		RequestedAt:  requestedAt,
 		RequestedBy:  requestedBy,

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
 
@@ -169,7 +170,7 @@ func TestDomains_Create_InvalidDomainFormat(t *testing.T) {
 
 func TestDomains_Create_AlreadyExists(t *testing.T) {
 	store := &fakeDomainStore{
-		createErr: ErrDomainExists,
+		createErr: ports.ErrDomainExists,
 	}
 	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
