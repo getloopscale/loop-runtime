@@ -6334,6 +6334,66 @@ why_now: a fatia de B-033 é a primeira vez que `/idea-to-release` roda contra e
 status: triaged
 blocked_by: aguardando merge de PR #344 (https://github.com/getloopscale/loopzero/pull/344) — release phase emitiu PR_OPEN_AWAITING_APPROVAL em 2026-08-31T23:32:47Z. Fix entregue via commits 045719130 + 018501fe4 + fa2137e64 (B-172 side-finding). Envelope § 'A change is proposed, never merged' — merge é ação humana. Item volta à fila após ADVANCE reconhecer RELEASED event.
 delivered_in: 045719130  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
+progress_2026_09_06: |
+  **A premissa do titulo envelheceu e nao reproduz mais. O defeito vivo e outro, no
+  mesmo campo.**
+
+  Re-medido hoje, antes de escrever qualquer linha: `no_languages_audited` **nao
+  aparece**. O `code-quality-languages.txt` tem Go em `ENABLED` nos tres modulos
+  (`api/`, `pkg/`, `operators/`) desde `045719130`, entao o gate audita de verdade.
+
+      /code-quality      -> verdict FAIL_SOFT, hard_caps_triggered [], languages_audited [go]
+      /plan-confidence   -> verdict SHIPPABLE_WITH_CAVEATS, hard_caps_triggered []
+      (plano de referencia: .claude/records/plans/b033-prometheus-url-dev-public-plan.md)
+
+  As balas 1, 3 e 4 do dod fecham com essa medicao. A bala 2 fechou via
+  `code-quality-baseline.txt` (25 achados), decisao ja registrada em agosto.
+
+  **O que estava errado de verdade: `hard_caps_triggered` classificava pelo NOME.**
+  O filtro era `not sid.startswith("soft_")`, e tres familias nao sao HARD e nao se
+  escrevem `soft_*`:
+
+      symbol_fab_unverifiable_*  SOFT_FLOOR  o proxy nao respondeu; nada foi verificado
+      auditor_unavailable_*      SOFT_CAP    a ferramenta nao estava instalada
+      mutation_score_ok_*        INFO        o score ATINGIU o alvo
+
+  A terceira e a mais clara: um achado cuja mensagem inteira e "o codigo esta bem",
+  impresso no campo que o leitor le para saber o que o esta bloqueando. Medido em
+  duas formas: com um SOFT_FLOOR o campo trazia um nome, e ele era o unico achado da
+  rodada que NAO era bloqueio; com INFO + SOFT_CAP trazia dois, e nenhum era.
+
+  O split agora le a SEVERIDADE. O SOFT_FLOOR ganhou campo proprio
+  (`soft_floors_triggered`, propagado ate o relatorio do `/plan-confidence`) em vez de
+  ser descartado — descartar trocaria um sinal mal rotulado por sinal nenhum.
+
+  **O que o estreitamento NAO exclui, medido e nao argumentado.** Um identificador que
+  a tabela de severidade nao consegue classificar e MANTIDO. E isso que impede a
+  correcao de apagar justamente `no_languages_audited` e `unaudited_manifest_present`
+  — os dois caps que B-127 e este item existem para preservar, e que chegam sem
+  Finding classificavel. Harness de mutacao com 4 mutantes (incluindo o
+  estreitamento-demais e o filtro-por-nome original): suite verde antes, os 4 pegos,
+  verde de novo depois. Zero sobreviventes.
+
+  **Duas coisas corrigidas na propria entrega da rodada anterior:**
+  - o teste do caso INFO passava pela razao errada. Sozinho, um INFO faz
+    `compute_verdict` devolver `("PASS", [])`, entao `hard_caps_triggered` ja era `[]`
+    antes de qualquer filtro — a assercao passava no codigo defeituoso. Agora o INFO
+    vem pareado com um cap, que e a unica forma de ele alcancar o campo.
+  - o comentario citava uma medicao sem a condicao que a reproduz. O SOFT_FLOOR so
+    dispara quando o proxy do Go nao responde (host offline, proxy no caminho, ou o
+    budget de 30s do `_registry` esgotado). Duas rodadas na mesma arvore no mesmo dia
+    discordaram por isso. Sem a condicao escrita, quem re-roda ve `[]` e conclui que o
+    comentario mente.
+
+  **Escopo honesto:** isto e defeito de RELATORIO, nao de veredito. Medido:
+  `merge_verdict_into_plan_confidence` e `run_validation.py` derivam status de
+  `verdict`/`score_cap`, nunca da lista `hard_caps_triggered` — que so e anexada para
+  auditoria. Nenhum plano mudou de veredito por causa desta correcao. O custo era o do
+  item original ao contrario: um campo que nomeia o que nao bloqueia e ruido que o
+  leitor aprende a pular.
+
+  **Nao rodado:** nao ha `ruff` neste host, entao os arquivos tocados nao passaram por
+  lint. Suites: 772 passed, 17 skipped (code-quality + plan-confidence + implement).
 severity: alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre.
 dod:
   - está decidido qual das linguagens sobe para `ENABLED` primeiro (Go tem o maior débito de deadcode + os detectores estão consertados; TS é legacy Pulumi em retreat; Py/Rust não têm código de produto)
