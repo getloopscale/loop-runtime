@@ -91,7 +91,7 @@ func (f *fakeTeamStore) UpdateMemberRole(_ context.Context, tenantID, userID, ne
 			return nil
 		}
 	}
-	return teams.ErrMemberNotFound
+	return ports.ErrMemberNotFound
 }
 
 func (f *fakeTeamStore) GetMember(_ context.Context, tenantID, userID string) (*ports.TeamMemberInfo, error) {

@@ -31,10 +31,8 @@ import (
 )
 
 // ErrDomainExists is an alias for ports.ErrDomainExists (backward compatibility).
-var ErrDomainExists = ports.ErrDomainExists
 
 // GenerateDomainID is an alias for ports.GenerateDomainID (backward compatibility).
-var GenerateDomainID = ports.GenerateDomainID
 
 // generateVerificationToken generates a TXT verification value.
 func generateVerificationToken() string {

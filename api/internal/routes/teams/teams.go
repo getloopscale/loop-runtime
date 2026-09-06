@@ -25,14 +25,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
 	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
-// ErrMemberNotFound is an alias for ports.ErrMemberNotFound (backward compatibility).
-var ErrMemberNotFound = ports.ErrMemberNotFound
+// ports.ErrMemberNotFound is an alias for ports.ErrMemberNotFound (backward compatibility).
 
 // validRoles defines the allowed team member roles.
 var validRoles = map[string]bool{
@@ -311,7 +310,7 @@ func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.store.UpdateMemberRole(ctx, uc.TenantID, targetUserID, role); err != nil {
-		if errors.Is(err, ErrMemberNotFound) {
+		if errors.Is(err, ports.ErrMemberNotFound) {
 			httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
 				Code:    "MEMBER_NOT_FOUND",
 				Message: "member '" + username + "' not found in this team",

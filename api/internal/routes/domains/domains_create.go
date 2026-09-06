@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/ports"
+
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
@@ -97,7 +99,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 	token := generateVerificationToken()
 
 	domain := &CustomDomain{
-		ID:                GenerateDomainID(),
+		ID:                ports.GenerateDomainID(),
 		TenantID:          uc.TenantID,
 		ProjectName:       req.Project,
 		AppName:           req.App,
@@ -109,7 +111,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.store.Create(ctx, domain); err != nil {
-		if errors.Is(err, ErrDomainExists) {
+		if errors.Is(err, ports.ErrDomainExists) {
 			httpio.WriteJSON(w, http.StatusConflict, map[string]string{
 				"code":    "DOMAIN_ALREADY_EXISTS",
 				"message": "domain already registered",

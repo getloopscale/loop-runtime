@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/getloopscale/loopzero/api/internal/ports"
+
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
@@ -71,7 +73,7 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 	// Step 6: Save to DB
 	zoneID := zone.ZoneID
 	domain := &CustomDomain{
-		ID:                 GenerateDomainID(),
+		ID:                 ports.GenerateDomainID(),
 		TenantID:           uc.TenantID,
 		ProjectName:        req.Project,
 		AppName:            req.App,
@@ -86,7 +88,7 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 	}
 
 	if err := h.store.CreateWithCFZone(ctx, domain); err != nil {
-		if errors.Is(err, ErrDomainExists) {
+		if errors.Is(err, ports.ErrDomainExists) {
 			// Rollback zone
 			_ = h.cfZone.DeleteZone(ctx, zone.ZoneID)
 			httpio.WriteJSON(w, http.StatusConflict, map[string]string{
