@@ -75,6 +75,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import fnmatch
 import sys
 import traceback
 from pathlib import Path
@@ -253,27 +254,79 @@ def forbid_paths_filter(body: list[str], report: Report, label: str) -> None:
     report.ok(f"{label}: no `paths`/`paths-ignore` filter — it fires for a `.claude/**`-only commit")
 
 
-def require_paths_cover_github(body: list[str], report: Report, label: str) -> None:
-    """A filtered observer must at least see changes under `.github/`."""
+def require_paths_cover_watched(body: list[str], report: Report, label: str,
+                                watched: str) -> None:
+    """A filtered observer must see a change to the file it reports on.
+
+    It used to ask whether ANY pattern started with `.github/`. An audit measured
+    what that buys on 2026-09-06: `paths: ['.github/workflows/ci.yml']` satisfies it
+    literally, covers nothing else, and the script printed
+
+        ok  OBSERVER 2 ... any 'paths:' filter still covers '.github/'
+
+    while deleting the very file this observer exists to report would not start it.
+    The question is not where the pattern lives, it is whether the pattern MATCHES
+    the watched path -- so it is asked with fnmatch against that path.
+
+    `paths-ignore` is read too, and it was not read at all: naming the watched file
+    there excludes it outright, and the old check had nothing to say about a key it
+    never looked for. An exclusion is the same silence as a narrowing, spelled the
+    other way.
+    """
     for event in ("push", "pull_request"):
         idx = find_key(body, event)
         if idx is None:
             continue
         inner = block_body(body, idx)
+
         p_idx = find_key(inner, "paths")
-        if p_idx is None:
-            continue
-        patterns = value_list(inner, p_idx)
-        if patterns is None:
-            report.unchecked(f"{label}: could not read the `paths:` list under `{event}:`.")
-            continue
-        if not any(p.startswith(".github/") for p in patterns):
+        if p_idx is not None:
+            patterns = value_list(inner, p_idx)
+            if patterns is None:
+                report.unchecked(f"{label}: could not read the `paths:` list under `{event}:`.")
+            elif not any(fnmatch.fnmatch(watched, pat) for pat in patterns):
+                report.bad(
+                    f"{label}: `{event}.paths` is {patterns} and none of it matches "
+                    f"{watched!r}, so a change to the file this observer reports on "
+                    "would not start it."
+                )
+
+        i_idx = find_key(inner, "paths-ignore")
+        if i_idx is not None:
+            ignored = value_list(inner, i_idx)
+            if ignored is None:
+                report.unchecked(f"{label}: could not read `paths-ignore:` under `{event}:`.")
+            elif any(fnmatch.fnmatch(watched, pat) for pat in ignored):
+                report.bad(
+                    f"{label}: `{event}.paths-ignore` is {ignored}, which excludes "
+                    f"{watched!r} — the observer is switched off for exactly the change "
+                    "it exists to report."
+                )
+
+
+def require_verdict_reaches_the_check(path: Path, report: Report, label: str) -> None:
+    """A step that runs and whose failure is discarded is not a check.
+
+    `continue-on-error: true` makes the step execute, exit non-zero, and the check go
+    green; `if: false` stops the job running at all. Both were measured green by an
+    audit on 2026-09-06 against a script whose final line said the observers "still
+    invoke their checks". Invoking is not reporting, and the sentence was asserted
+    where the second was what mattered.
+    """
+    for marker, why in (
+        ("continue-on-error: true",
+         "the step runs, exits non-zero, and the check is green anyway"),
+        ("if: false",
+         "the job never runs, so its verdict never exists"),
+    ):
+        if marker in path.read_text(encoding="utf-8"):
             report.bad(
-                f"{label}: `{event}.paths` is {patterns} and matches nothing under `.github/`, so "
-                "deleting the workflow it is supposed to report would not start it."
+                f"{label}: contains `{marker}` — {why}. A verdict that cannot reach "
+                "the check is not a check."
             )
             return
-    report.ok(f"{label}: any `paths:` filter still covers `.github/`")
+    report.ok(f"{label}: every `paths:`/`paths-ignore:` filter still matches "
+              f"{ARMED_WORKFLOW}, and the verdict can reach the check")
 
 
 def require_runs(path: Path, needle: str, report: Report, label: str) -> None:
@@ -364,6 +417,8 @@ def main(argv: list[str] | None = None) -> int:
     # the push instead of after it.
     label = "OBSERVER 1 — assert-delivery-gate-armed.py"
     present(root, ARMED_SCRIPT, report, label)
+    if armed is not None:
+        require_verdict_reaches_the_check(armed, report, label)
 
     # OBSERVER 2 — the workflow that reports OBSERVER 1's deletion.
     label = "OBSERVER 2 — workflow-hygiene.yml"
@@ -373,8 +428,11 @@ def main(argv: list[str] | None = None) -> int:
         if body is not None:
             require_branches(body, "push", PUSH_BRANCHES, report, label)
             require_branches(body, "pull_request", PR_BRANCHES, report, label)
-            require_paths_cover_github(body, report, label)
+            # The watched path is OBSERVER 1's file: this observer exists to report
+            # its deletion, so a filter that does not match it is the whole defect.
+            require_paths_cover_watched(body, report, label, ARMED_WORKFLOW)
         require_runs(hygiene, OBSERVERS_SCRIPT, report, label)
+        require_verdict_reaches_the_check(hygiene, report, label)
 
     if report.failed:
         print()
@@ -389,7 +447,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print()
-    print("Both observers are present, triggered where a disarm happens, and still invoke their checks.")
+    print("Both observers are present, triggered where a disarm happens, and their\n"
+          "verdicts can still reach the check. `still invoke their checks` was what\n"
+          "this line said until 2026-09-06, when an audit made both steps run, fail,\n"
+          "and report green with one token of `continue-on-error`.")
     return 0
 
 
