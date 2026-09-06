@@ -2946,6 +2946,101 @@ dod:
 > violacoes quebraria o portao de entrega. A decisao agora e' informada por numero em vez de
 > impressao — que era o que faltava.
 
+> **RE-MEDIDO 2026-09-06 (lane B-067). OS DOIS NÚMEROS DO TÍTULO ESTÃO MORTOS, e não
+> pelo mesmo motivo. E a resposta à pergunta central — um problema ou dois — é: DOIS
+> como dívida, UM como defeito de instrumento.**
+>
+> Medido com o binário de gates na árvore da `workspace` (`cadadb9c9`).
+>
+> **Migrations: o título diz 43; o gate dizia 48; a dívida real era 43 — por coincidência.**
+> `migration-test-coverage` reprovava com **48 de 64** migrations. Cinco dessas violações
+> eram **falsas**: `migration_loopzero_api_keys_test.go`, `migration_memory_p3_test.go`,
+> `migration_api_key_rotation_test.go` e `migration_webhook_delivery_test.go` — 37 funções
+> de teste, 68 asserts, verdes — abrem o próprio `.up.sql` das migrations
+> 000024/000025/000026/000031/000033 e mesmo assim eram acusadas, porque o nome do arquivo
+> não começava com o número. O gate casa por **prefixo de nome de arquivo**.
+>
+> Isso significa que o "43" de 2026-08-11 também já continha ~5 falsos positivos (os quatro
+> arquivos são de junho). A dívida verdadeira era ~38 então e é 43 agora: **ela cresceu 5, e
+> o número do título ficou igual por acidente.** Um item que reafirmasse "43" estaria certo
+> pelo motivo errado — que é a forma exata do erro que o B-161 documentou do outro lado.
+>
+> **Alertas: o título diz 33; o gate dizia 46; existem 37.** As nove diferenças são cópias
+> espelhadas — 16 arquivos de alerta existem duas vezes (`infra/helm/...` e o `charts/...`
+> que o ArgoCD entrega), e a violação carregava só o *basename*. O relatório imprimia duas
+> linhas **idênticas** para `policy-controller-alerts.yaml:LoopZeroPolicyControllerDown` sem
+> dizer qual abrir, e consertar uma cópia deixava a outra reprovando com uma linha
+> indistinguível da que acabara de ser corrigida.
+>
+> ---
+>
+> **UM PROBLEMA OU DOIS — a resposta medida.**
+>
+> **Como dívida a pagar: DOIS, e separá-los vale mais que fechar uma fatia dos dois.**
+> Populações disjuntas (`api/internal/db/migrations` × `infra/helm` + `charts`), artefatos
+> disjuntos (um teste Go × um documento + anotação), consertos disjuntos, e crescimento
+> independente — a de migration cresce 1:1 com cada migration nova, a de runbook cresce com
+> cada alerta novo. Nada liga as duas exceto estarem no mesmo item.
+>
+> **Como defeito de instrumento: UM, e é o mesmo defeito.** Os dois gates medem o **nome**,
+> não a **coisa**. O de alerta conta a string `runbook_url` e não o runbook (B-161: 6 de 7
+> links mortos, todos contados como conformes). O de migration conta o prefixo do arquivo e
+> não o teste (medido acima: 5 migrations testadas, acusadas). E os dois erram em direções
+> **opostas** — o de alerta subestima a dívida, o de migration a inventa. É por isso que os
+> dois números do título vieram errados por caminhos diferentes.
+>
+> ---
+>
+> **O PISO (bala 1) FICOU DECIDÍVEL, e a razão é uma medição que derruba o argumento
+> de 2026-08-19.** Aquela nota diz: *"os 43 críticos estão todos sem runbook … um piso por
+> severidade não é atalho: ele pede 43 runbooks."* **Falso hoje.** Re-medido nos quatro
+> diretórios: **145 alertas distintos** (83 warning, 57 critical, 4 info, 1 page) em 233
+> sites. Dos **57 críticos, 18 estão sem runbook** — não todos. Trinta e nove já têm.
+>
+> Um piso "todo `critical` tem runbook" pede **18 runbooks, dos quais 16 o gate sinaliza**
+> (`BuildFailureRateHigh` e `PulumiOrphanStackDetected` estão silenciados pela
+> `DefaultExceptionList` — e **são críticos**, o que é achado próprio: a lista de exceção
+> silencia dois alertas de severidade máxima).
+>
+> Dezoito é decidível; quarenta e três era o número que fazia o piso parecer inviável. O
+> bloqueio da bala 1 não era permissão nem escopo — era um número errado.
+>
+> *Ressalva do método:* a atribuição de severidade e de "tem runbook" é por alerta e não por
+> site, e conta como tendo runbook o alerta anotado em **qualquer** cópia. É a pergunta certa
+> para dimensionar a dívida; a do gate (por site) é a certa para dimensionar o conserto.
+>
+> ---
+>
+> **ENTREGUE nesta fatia — instrumento, não dívida. Nenhum gate foi ligado, nenhum
+> afrouxado, nenhuma baseline movida.**
+>
+> 1. `alertrunbooks`: a violação passou a carregar o diretório, então os 9 pares espelhados
+>    deixam de sair como linhas iguais. `Outcome.AlertasDistintos()` separa alertas de sites,
+>    e a mensagem do gate diz os dois — antes dizia "46 alert(s)" contando sites, inflando a
+>    dívida em 24%. Dois testes novos, cada um verificado por mutante que **restaura o
+>    defeito** (chave só com basename → as duas violações voltam a ser indistinguíveis;
+>    contagem por site → 2 onde há 1 alerta).
+> 2. `TestAlertMissingRunbookFails` fixava o formato antigo — era o teste que **codificava** o
+>    defeito. Alterado de propósito, com a razão escrita nele.
+> 3. Quatro testes de migration renomeados para a convenção (`migration_000024_…`,
+>    `migration_000025_…`, `migration_000031_…`, `migration_000033_…`). O gate caiu de **48
+>    para 44** sem uma linha de gate alterada, e `api/tests/unit` segue verde.
+> 4. **Recusado de propósito:** alargar o casamento do gate de migration para conteúdo. Trocaria
+>    este falso positivo por um falso negativo pior — citar o nome da migration num comentário
+>    passaria a contar como teste. E recusado criar `migration_000026_*_test.go` vazio: é
+>    exatamente o stub contra o qual o gate existe.
+> 5. **Residual nomeado:** `000026_memory_exports` continua acusada e **é** testada — um arquivo
+>    só carrega um prefixo numérico, e ele já é o de 000025. Fechar honestamente exige separar
+>    o arquivo por migration. Escrito no cabeçalho de `migration_000025_memory_p3_test.go`.
+> 6. O comentário do `quality_gate_wiring_test.go` afirmava *"That is 42 pieces of real work,
+>    not a mislabel"* — **medidamente falso em 5 casos** — e ainda dizia que o gate de runbook
+>    varre 110 de 233 alertas (47%), estado **anterior** ao B-164, escrito no presente. Os dois
+>    corrigidos com o número de hoje.
+>
+> **Sobra para quem retomar:** as balas 1 e 3 seguem abertas — mas a 1 agora tem número (18
+> críticos, 16 sinalizados) em vez de impressão, e a recomendação desta lane é **partir o item
+> em dois** antes de pagar qualquer fatia.
+
 ## B-068 — Um ponto de variação de Strategy que não varia mais, mantido por construir e descartar um objeto   [x]
 
 domain: engine-go

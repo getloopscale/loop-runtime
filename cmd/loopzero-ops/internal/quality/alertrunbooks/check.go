@@ -68,8 +68,20 @@ type Config struct {
 
 // Outcome captures the result.
 type Outcome struct {
-	Pass       bool
-	Violations []string // "<file>:<alertName>"
+	Pass bool
+	// Violations sao SITES em violacao, no formato "<dir>/<arquivo>:<alerta>".
+	//
+	// O diretorio faz parte da chave desde 2026-09-06 (B-067) e a razao e' medida: 9 dos
+	// arquivos de alerta existem DUAS vezes na arvore — uma copia em `infra/helm/...` e a
+	// copia espelhada em `charts/...` que o ArgoCD entrega aos tenants. Com a chave so' no
+	// basename, esses 9 pares produziam linhas IDENTICAS: o relatorio dizia duas vezes
+	// `policy-controller-alerts.yaml:LoopZeroPolicyControllerDown` sem dizer qual abrir, e
+	// consertar uma copia deixava a outra reprovando com a mesma linha — indistinguivel do
+	// trabalho que acabara de ser feito.
+	Violations []string
+	// NomesEmViolacao guarda o nome de cada alerta em violacao, na ordem dos sites, para
+	// que `AlertasDistintos` possa separar "quantos alertas" de "quantos lugares".
+	NomesEmViolacao []string
 	// LinksMortos sao anotacoes de runbook que APONTAM PARA O NADA e que o gate
 	// consegue provar sem rede: caminho deste repositorio que nao existe em disco,
 	// ou URL do GitHub numa org diferente da identidade canonica do repo.
@@ -92,6 +104,19 @@ type Outcome struct {
 	// links estarem bons**. Confundir as duas coisas e' a forma exata que este gate existe
 	// para combater, e ela estava no teste que devia prova-lo.
 	LinksConferidos int
+}
+
+// AlertasDistintos conta ALERTAS, nao sites. Os dois numeros divergem exatamente quando um
+// alerta vive na copia `infra/helm` e na copia `charts` — e a diferenca importa porque sao
+// afirmacoes diferentes: "37 alertas nao dizem ao operador o que fazer" e' divida de
+// runbook; "46 lugares para editar" e' o tamanho do conserto. Reportar o segundo numero com
+// a palavra do primeiro infla a divida em 24% (medido 2026-09-06: 46 sites, 37 alertas).
+func (o *Outcome) AlertasDistintos() int {
+	vistos := make(map[string]struct{}, len(o.NomesEmViolacao))
+	for _, n := range o.NomesEmViolacao {
+		vistos[n] = struct{}{}
+	}
+	return len(vistos)
 }
 
 // LinkMorto e' uma anotacao de runbook provada inutil sem sair da maquina.
@@ -135,7 +160,7 @@ func Check(cfg Config) *Outcome {
 			continue
 		}
 		out.DirsVarridos++
-		varrerDiretorio(root, dir, entries, excepted, out)
+		varrerDiretorio(root, rulesDir, dir, entries, excepted, out)
 	}
 	if out.DirsVarridos == 0 {
 		out.Pass = false
@@ -148,7 +173,7 @@ func Check(cfg Config) *Outcome {
 	return out
 }
 
-func varrerDiretorio(root, dir string, entries []os.DirEntry, excepted map[string]struct{}, out *Outcome) {
+func varrerDiretorio(root, relDir, dir string, entries []os.DirEntry, excepted map[string]struct{}, out *Outcome) {
 	for _, e := range entries {
 		// O filtro historico exigia "prometheusrule" no nome — herdado do script bash que
 		// este gate substituiu. Medido em 2026-08-19 (B-164): os alertas de
@@ -169,7 +194,8 @@ func varrerDiretorio(root, dir string, entries []os.DirEntry, excepted map[strin
 			continue
 		}
 		for _, name := range missingRunbookAlerts(string(data), excepted) {
-			out.Violations = append(out.Violations, e.Name()+":"+name)
+			out.Violations = append(out.Violations, relDir+"/"+e.Name()+":"+name)
+			out.NomesEmViolacao = append(out.NomesEmViolacao, name)
 		}
 		conferirLinks(root, e.Name(), string(data), out)
 	}

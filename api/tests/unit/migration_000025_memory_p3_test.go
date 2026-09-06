@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
+// Renamed 2026-09-06 (B-067) from migration_memory_p3_test.go. The
+// migration-test-coverage gate credits a migration only when a test file starts with
+// `migration_<NNNNNN>`; this file had no numeric prefix, so BOTH migrations it validates
+// were reported as untested while 13 test functions and 20 assertions covered them.
+//
+// KNOWN RESIDUAL, do not "fix" with a stub: the prefix can name only ONE migration, so
+// 000026_memory_exports still counts as a violation even though it is validated below
+// (see the `000026_memory_exports.up.sql` assertions). Creating an empty
+// migration_000026_*_test.go to silence the gate would be exactly the stub the gate
+// exists to prevent. Closing it honestly means splitting this file per migration.
 // Plan 3 of dashboard-memory-section-roadmap.md, T3.2.
 // Structural validation of migrations 000025_memory_webhooks +
 // 000026_memory_exports. Hermetic — parses each SQL file as text and
