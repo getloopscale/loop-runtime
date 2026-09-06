@@ -467,6 +467,17 @@ func (p *RealProvisioner) DeleteAppProject(ctx context.Context, tenantID string)
 // (eg. "runtime-argocd-cluster") OR who use the in-cluster API server
 // directly.
 //
+// Vocabulary: the paragraph above uses "runtime" in two senses, on
+// purpose. The hyphenated compound names a TOPOLOGY — an install that
+// has exactly one runtime cluster. The quoted Secret name is DATA: a
+// literal object name that exists on such installs, not prose, and
+// rewording it here would make this comment describe a Secret that no
+// install actually has. Neither sense is Go's runtime package, imported
+// in this file as k8s.io/apimachinery/pkg/runtime/schema. The domain
+// term stays "runtime"; the cluster name is frozen until AM8.
+// See docs/decisions/2026-08-09-cluster-topology-naming-adr.md
+// § Decision on the domain term (2026-09-06).
+//
 // SEC-007 invariant preserved: destination is explicit, never wildcard.
 func buildDestination(spec ApplicationSpec) map[string]interface{} {
 	dest := map[string]interface{}{

@@ -698,6 +698,15 @@ func SetupPreviewController(mgr ctrl.Manager, runtimeClient client.Client, baseD
 // operation routes through factory.For(cellID) per the
 // runtimeClientForPreview() resolution chain.
 //
+// Vocabulary: the hyphenated term above is the domain term for the
+// cluster that runs tenant workloads, and this line carries that sense
+// only — it names no cluster and no package. In particular it is
+// not Go's runtime package (imported above as
+// k8s.io/apimachinery/pkg/runtime, used for the Scheme field), not
+// sigs.k8s.io/controller-runtime, and not any cluster's literal name.
+// See docs/decisions/2026-08-09-cluster-topology-naming-adr.md
+// § Decision on the domain term (2026-09-06).
+//
 // Audit gap (registration_test.go COMP-001 family, audit §6.F.1b
 // hygiene): made unexported because nothing outside this package calls
 // it directly — all callers route through SetupPreviewController(which
