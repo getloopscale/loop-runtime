@@ -80,7 +80,7 @@ The MEET identified 5 blockers that must close before Phase 1 code executes. Rat
 
 6. **types.go 6-vs-7 context ambiguity.** Bootstrap symbols (BootstrapRequest/BootstrapStore/CellPlacementEngine) are physically nested inside the Projects block at line 353. The plan must name explicitly where these land in the Phase 2 split (own `ports/bootstrap.go`, or folded into `ports/tenant.go`, or `ports/project.go`) BEFORE Phase 2 executes.
 7. **Quality-gate string literals hand-edited.** `stdlibonly/check.go:52` and `contractconsumers/check.go:115` carry `"api/internal/domain"` as tracked-path registry keys, not import paths. A blind sed would touch them semantically. Hand-edit with review of consumption logic.
-8. **EC-1 closure.** loopzero-cli is not cloned at `/home/paulo/dev/loopzero-cli` — either clone-and-verify OR document explicit accepted-risk in this ADR with rollback plan.
+8. **EC-1 closure.** loopzero-cli is not cloned at `~/dev/loopzero-cli` — either clone-and-verify OR document explicit accepted-risk in this ADR with rollback plan.
 
 **Minors (implementer discretion):**
 
