@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# check-workflow-hygiene.sh — duas propriedades dos workflows deste repo, verificadas a cada PR.
+# check-workflow-hygiene.sh — duas propriedades dos workflows deste repo.
+#
+# This line said "verificadas a cada PR" — checked on every PR. workflow-hygiene.yml has never had a
+# pull_request trigger: it runs on PUSH to develop/main, post-merge. Corrected 2026-09-06 (B-192). A
+# sentence promising a moment of verification that does not exist is the defect family that item measured.
 #
 # POR QUE EXISTE. Os dois defeitos abaixo ja foram corrigidos A MAO uma vez (#233 e #250) e nada
 # impedia a reintroducao. Este repo hospeda `build-publish.yml`, o reusable chamado por CINCO repos

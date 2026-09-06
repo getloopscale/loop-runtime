@@ -1,0 +1,84 @@
+# The premise check. This is the one thing in this repository that goes red when
+# the local delivery gate is not armed, and it is deliberately not the local
+# delivery gate.
+#
+# WHY IT IS A SEPARATE WORKFLOW AND NOT A JOB IN ci.yml. Three measured reasons,
+# each of which alone would be enough:
+#
+#   1. `on:` FILTERS ARE PER-WORKFLOW, NOT PER-JOB. ci.yml ignores `.claude/**`,
+#      and `.claude/**` is the only place the gate can be disarmed from. Of the
+#      three commits that falsified the premises, 9a6e6e903 (the deletion) and
+#      53c1dc1ea (the restore that missed the wiring) touched NOTHING outside
+#      `.claude/**`; 63cc51c48 (the wiring removal) touched `.gitignore` and
+#      `.claude/**` and nothing else. Two of the three would not have started
+#      ci.yml at all, merged. A job inside ci.yml inherits that blindness in the
+#      exact case it exists for. This file therefore carries no paths filter, and
+#      that is not an oversight to tidy up later.
+#
+#   2. ci.yml IS RED AND HAS BEEN. Its last 15 runs all failed (32084704925
+#      through 32197072865, measured 2026-09-06), the failing step is `Test the
+#      hermetic modules`, and `go test ./... -count=1` in cmd/loopzero-ops is red on
+#      `trufflehogscan.TestArvoreRealEstaAdjudicada` in a clean worktree today.
+#      A new signal added to an already-red job is not a signal. This one stands
+#      or falls on its own subject.
+#
+#   3. COST. ci.yml needs two checkouts, a deploy key for a private module and a
+#      Go toolchain, and runs 2-4 minutes; `task quality:gates` needs helmfile,
+#      kubeconform, actionlint, trivy and golangci-lint and fails high without
+#      them, by design. This needs python3 and bash, which every runner has, and
+#      finishes in seconds. That is what buys the pre-merge trigger below.
+#
+# WHAT IT DOES NOT COVER — read this before citing it. It answers exactly one
+# question: is the local gate armed? It does not build, does not vet, does not
+# run a test of this repository's product code, and says nothing about whether
+# the change under review is correct. Build/vet/test coverage before a merge
+# still does not exist here, and the reason is (2) above, not a decision.
+name: delivery-gate-armed
+
+# NO paths / paths-ignore, on purpose — see (1). A commit that touches only
+# `.claude/settings.json` is precisely the commit that must start this.
+on:
+  # `workspace` is in the list and it is the point of the list. The window the
+  # item measured was four days and 21 commits on `workspace`, and no workflow in
+  # this repository has a trigger that fires on a push to it — so the earliest a
+  # non-local check could possibly have spoken was the promotion PR, four days in.
+  #
+  # Measure this before trusting it, because the obvious measurement misleads:
+  # `gh run list --branch workspace` returns 50 rows. All 50 are `pull_request`
+  # events dated 2026-08-10..2026-08-12, from before 464b9d7e3 ("validacao
+  # pos-merge em develop e main; PR sem acao") removed the trigger that produced
+  # them. Nothing has run on this branch since. At seconds per run a push trigger
+  # is affordable, and the push is the earliest event there is.
+  push:
+    branches: [workspace, develop, main]
+  # The promotion. This is the check that can be made REQUIRED on
+  # `workspace -> develop -> main`, where PR #344 sat MERGEABLE/CLEAN with one
+  # check from a third-party service reporting as skipping.
+  pull_request:
+    branches: [develop, main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-armed-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  armed:
+    name: "delivery gate — file, wiring, no bypass"
+    # Frota Blacksmith, LITERAL label: `vars.CI_RUNNER` does not resolve in this
+    # repo and the `||` fallback returns the old fleet in silence (umbrella
+    # runbook). This is the same label ci.yml and workflow-hygiene.yml already
+    # prove works here; naming a smaller, cheaper-looking fleet size that has
+    # never been exercised in this repository would risk a job that queues
+    # forever, which is the one outcome a check like this cannot afford.
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
+
+      # If the script is missing, python3 exits non-zero and this step fails.
+      # Fail-closed by construction: deleting the checker cannot produce a pass.
+      - run: python3 .github/scripts/assert-delivery-gate-armed.py
