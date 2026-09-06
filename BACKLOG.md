@@ -68,7 +68,7 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-192 items — **Open** 18 · **In flight** 5 · **Closed** 169 · **Blocked** 7
+193 items — **Open** 18 · **In flight** 5 · **Closed** 170 · **Blocked** 7
 
 ### Open (18)
 
@@ -103,7 +103,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
 | [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `approved` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 
-### Closed (169)
+### Closed (170)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -276,6 +276,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-186`](#b-186--a-classe-ainda-volta-um-nivel-abaixo-um-predicado-que-chama-outro-predicado-e-invisivel-e-em-silencio---x) | A classe ainda volta um nivel abaixo: um predicado que chama outro predicado e' invisivel, e em silencio | `shipped` | media — o `B-183` existiu para fechar a classe e fechou a grafia de UM |
 | [`B-189`](#b-189--a-classe-volta-por-um-valor-de-funcao-e-o-gate-nem-diz-unresolved-seis-grafias-em-silencio----) | A classe volta por um VALOR de funcao, e o gate nem diz UNRESOLVED: seis grafias em silencio | `shipped` | media — quarta reabertura consecutiva da mesma classe, e a primeira em que |
 | [`B-190`](#b-190--o-pin-do-cli-exit-codes-promete-que-o-gate-reprova-quando-o-assunto-aparece-e-o-campo-do-assunto-nunca-e-lido----) | O pin do cli-exit-codes promete que o gate reprova quando o assunto aparece, e o campo do assunto nunca e lido | `shipped` | baixa — inofensivo com a unica linha de hoje, armadilha na segunda. A |
+| [`B-191`](#b-191--as-tres-declaracoes-da-org-do-gitea-divergem-e-a-que-diverge-nao-chega-a-lugar-nenhum---x) | As tres declaracoes da org do Gitea divergem, e a que diverge nao chega a lugar nenhum | `shipped` | media — o modo de falha do `B-069` voltou a ser alcancavel por |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -7734,3 +7735,168 @@ dod:
     `defer`, receptor por ponteiro vs valor, e o guarda vindo de um `map` com chave
     calculada
   - mutacao com efeito conferido, arnes provando o proprio baseline verde
+
+## B-191 — As tres declaracoes da org do Gitea divergem, e a que diverge nao chega a lugar nenhum   [x]
+
+domain: infra-helm
+repo: loopzero
+suggested_mode: bug
+source: b184-nemesis-audit
+severity: media — o modo de falha do `B-069` voltou a ser alcancavel por
+  configuracao, segurado por um comentario de doc. Nao esta vivo hoje (a linha
+  divergente e inerte), mas quem consertar a indentacao embarca o split na
+  primeira sincronizacao.
+evidence: |
+  Medido 2026-09-05 por auditoria independente do `B-184`.
+
+  O `B-184` tirou o hardcode da org do Gitea e a transformou em configuracao. Certo,
+  e criou um estado que o antes/depois do proprio item nao exibe:
+
+      infra/helm/loopzero-api/values.yaml:158          GITEA_ORG: "loopzero-platform"
+      charts/loopzero-api/values.yaml:57               giteaOrg:  "loopzero"
+      charts/loopzero-tenant-operator/values.yaml:28   giteaOrg:  "loopzero"
+
+  O overlay e' VIVO — `infra/argocd-bootstrap/apps/mgmt-loopzero-api.yaml` aponta para
+  `infra/helm/loopzero-api` — e nao ha overlay de operator em `infra/helm` nenhum. Nada
+  afirma que os dois lados concordam: o unico teste que nomeia a chave verifica que
+  cada lado DECLARA uma.
+why_now: o `B-069` existiu porque repositorios eram criados sob um nome e escritos
+  sob outro. O hardcode saiu; o mesmo modo de falha voltou a ser alcancavel por
+  configuracao, segurado por um comentario de doc que diz "It must agree with the
+  default the API applies".
+status: shipped
+dod:
+  - a pergunta binaria e respondida com medicao, nao com palpite: `loopzero-platform` e'
+    intencional (control plane dono da propria org, orgs de tenant vindas do spec)
+    ou e' divergencia
+  - se intencional: esta escrito por que diferem e onde cada valor vive
+  - se divergencia: os valores convergem COM um teste que reprova quando um lado se
+    move sem o outro
+  - nao mudar um valor deployado vivo por palpite — este e' o pior resultado
+    disponivel
+resolution: |
+  Fechado 2026-09-05. **Nao era intencional, e a linha divergente nem sequer chega
+  ao pod.** As duas hipoteses do item eram falsas, e a medicao produziu uma terceira
+  resposta melhor que qualquer uma das duas.
+
+  **A hipotese do "control plane dono da propria org" nao tem mecanismo.**
+  `pb.Spec.Gitea.Organizations` NAO seleciona org — e' a lista de criar-se-ausente
+  que `ensureGiteaOrgs` percorre
+  (`operators/internal/platform/platformbootstrap_gitea.go:132`), o mesmo servico que
+  `infra/scripts/production/bootstrap-platform.sh:75` presta com `for org in loopzero
+  loopzero-platform`. Nao existe caminho pelo qual o `GITEA_ORG` da API signifique "a org
+  do control plane".
+
+  **Os dois lados enderecam O MESMO repositorio.** `cfg.GiteaOrg` alcanca exatamente
+  tres construtores — o pusher de gitops duas vezes (`api/cmd/setup_workflows.go:135`,
+  `api/cmd/controller/setup_services.go:123`) e o source store uma
+  (`api/cmd/setup_stores.go:97`) — e todo repositorio que eles enderecam e' por
+  tenant: `{tenantID}-gitops` (`api/internal/gitops/gitea_pusher.go:97,209,319`) e
+  `loopzero-source-{tenantID}[-{projectID}]`. Do outro lado, o `tenant-operator` le
+  `GITEA_ORG` no provisionador, que faz `EnsureRepo` de
+  `tenant.Spec.GitOps.RepoName` — campo que a PROPRIA API preenche com
+  `fmt.Sprintf("%s-gitops", t.Name)` em
+  `api/internal/k8s/tenancy/tenant_cr_manager.go:307`. Mesmo repo, duas orgs.
+
+  E o silencio e' de mao dupla: o retorno do provisionador vira
+  `tenant.Status.GitOpsRepo`, que `reconcileArgoCDApp` usa verbatim como `repoURL` da
+  Application. Logo a org do OPERADOR e' a que o ArgoCD sincroniza e a da API e' onde
+  os manifests caem — e o pusher faz `EnsureRepo` da propria copia, entao o push tem
+  SUCESSO num repositorio que ninguem observa enquanto o ArgoCD sincroniza um vazio.
+  E' o `B-069` inteiro, agora sem hardcode nenhum para culpar.
+
+  **A LINHA VIVA NAO ESTA VIVA — e isso e' o achado que mudou o conserto.**
+  `infra/helm/loopzero-api/values.yaml:158` esta indentada sob `tracing:` (linha 140), nao
+  sob `env:`. O `templates/deployment.yaml` le apenas `.Values.tracing.enabled` desse
+  bloco (unica ocorrencia de `.Values.tracing` nos templates) e faz `range` sobre
+  `.Values.env` para env vars. Tres provas independentes:
+
+      fonte      linha 140 `tracing:`, linha 158 com 2 espacos -> filha de tracing
+      helm       `helm get values loopzero-api -n loopzero-system -a` devolve
+                 `tracing.GITEA_ORG: loopzero-platform`; o mapa `env` nao tem a chave
+      cluster    o Deployment renderizado e o pod NAO carregam GITEA_ORG nenhum
+
+  Ou seja: a API vive hoje no fallback `envOr("GITEA_ORG", "loopzero")` = `loopzero`, que
+  CONCORDA com os dois lados de `charts/`. A divergencia de tres vias era, na verdade,
+  quatro sitios concordando em `loopzero` mais um sitio inerte contradizendo todos.
+
+  Isto ja estava documentado e nunca foi consertado:
+  `docs/wiki/concepts/operations/finding-2026-05-18-drill-bootstrap-orchestration-gaps.md:36`
+  — bug #52, "infra/helm/loopzero-api/values.yaml YAML indent bug — vars under `tracing:`
+  instead of `env:` … LIVE patched via `kubectl set env`; T2 chart fix required". O
+  drill ainda carrega o contorno, e o valor que ele injeta ao vivo e' `GITEA_ORG=loopzero`
+  (`infra/scripts/drill/drill-helmfile-bootstrap.sh:750,855`).
+
+  **`loopzero-platform` e' uma org de verdade, so que nao esta.** Ela e' dona dos
+  repositorios do PROPRIO control plane (`loopzero-platform/charts.git`,
+  `loopzero-platform/argocd-bootstrap.git` — os `repoURL` de
+  `infra/argocd-bootstrap/apps/*.yaml`), alcancados por endereco e nao por esta chave.
+  Os scripts que provisionam o token da API garantem SO `loopzero`
+  (`infra/scripts/production/provision-api-tokens.sh:45`,
+  `infra/scripts/drill/drill-helmfile-bootstrap.sh:775`).
+
+  **MEDICAO NO CLUSTER VIVO (app-dev, 2026-09-05).** `GET /api/v1/admin/orgs` devolve
+  UMA org: `loopzero`. `loopzero-platform` NAO EXISTE naquele Gitea. Se a chave estivesse no
+  lugar certo com o valor que tinha, a API apontaria para uma org inexistente enquanto
+  o operador cria repos em `loopzero`.
+
+  **O CONSERTO, e o que foi deliberadamente NAO feito.** O valor da linha 158 virou
+  `loopzero`. Corrigir uma chave que nada renderiza e' no-op hoje em todo render, e desarma
+  a armadilha: quem consertar a indentacao embarcaria o split do `B-069` na primeira
+  sincronizacao. As chaves NAO foram movidas para `env:` — promove-las e' mudanca de
+  comportamento vivo no caminho do ArgoCD-bootstrap, atinge outras duas chaves
+  (`GITEA_URL`, `LOOPZERO_DYNAMIC_ROUTER`) e e' o defeito #52, que tem escopo proprio. O
+  bloco `tracing:` ganhou um cabecalho dizendo que as tres chaves sao inertes, por que,
+  e que a promocao ficou de fora de proposito, e apontando para a issue #354.
+
+  **O TESTE:** `infra/tests/config/gitea_org_agreement_test.go`. Ele nao le uma lista
+  de tres caminhos — DESCOBRE por padrao todo `values.yaml`/`values-*.yaml` sob
+  `charts/` e `infra/helm/` que declare `giteaOrg:`/`GITEA_ORG:`, extrai os DOIS
+  fallbacks do proprio codigo Go (`envOr("GITEA_ORG", ...)` e `DefaultGiteaOrg`) em vez
+  de repetir o literal, e exige que o conjunto inteiro tenha UM valor. Os fallbacks
+  entram no conjunto porque nao ha overlay de operator em `infra/helm`: naquele caminho
+  de instalacao o operador toma o default do Go, entao o lado que NAO declara ainda
+  contribui uma org efetiva.
+
+  Pisos, nenhum reportado como pass: raiz de scan ausente; menos sitios descobertos que
+  os fixados; um sitio fixado nao reencontrado; fallback do Go que a regex nao acha;
+  fallback vazio. Todos saem `SETUP BROKEN` por `t.Fatalf`.
+
+  **MUTACAO: 8 mutantes, 8 mortos, mais duas demonstracoes de nao-redundancia.**
+  Baseline VERDE antes da rodada e reconferida VERDE depois de reverter cada mutante;
+  toda ancora exigida unica no arquivo, sob pena de a harness abortar como HARNESS
+  BROKEN. M1 `charts/loopzero-api` sozinho; M2 `charts/loopzero-tenant-operator` sozinho; M3 o
+  overlay de volta a `loopzero-platform` (o defeito original); M4 o fallback da API
+  sozinho; M5 o `DefaultGiteaOrg` sozinho; M6 um values file NOVO que ninguem fixou,
+  com org divergente — morto por descoberta, nao pelo pin; M7 regex de descoberta
+  cegada -> `SETUP BROKEN` (piso de vacuidade); M8a scan encolhido com o pin intacto ->
+  `SETUP BROKEN`.
+
+  As duas demonstracoes existem porque um kill nao prova qual clausula matou. M8b:
+  scan encolhido E o pin removido -> PASSA sobre dois sitios, logo foi o pin que matou
+  M8a. M9: a clausula que injeta os fallbacks do Go no conjunto removida E o
+  `DefaultGiteaOrg` movido -> SOBREVIVE, logo e' aquela clausula que mata M5.
+
+  RED antes do conserto, e a mensagem nomeia os dois lados:
+
+      "loopzero"          -> config.go (fallback), charts/loopzero-api/values.yaml:57,
+                         charts/loopzero-tenant-operator/values.yaml:28,
+                         resources.go (DefaultGiteaOrg)
+      "loopzero-platform" -> infra/helm/loopzero-api/values.yaml:158
+
+  DENOMINADOR, medido pela saida do proprio teste e nao por grep: TRES sitios YAML
+  declaram a org em toda a arvore (`charts/` + `infra/helm/`), mais dois fallbacks em
+  Go. Cinco valores efetivos, um valor.
+
+  **UMA PREMISSA INVERTIDA, corrigida.** O comentario de `DefaultGiteaOrg` dizia "the
+  API creates those repositories and the tenant operator pushes to them". E' o
+  contrario no ponto que importa: o OPERADOR cria (via `EnsureRepo`) e registra a URL
+  no ArgoCD; a API PUSHA. O operador nunca pusha. Reescrito com a direcao medida — e a
+  frase "It must agree" deixou de ser a unica coisa segurando o contrato, porque agora
+  ha um teste.
+
+  **UM ACHADO DE LADO, filado em vez de contornado em silencio.** O defeito #52 — as
+  tres chaves inertes sob `tracing:` — foi filado como issue #354, com repro, a saida do
+  `helm get values` e o que muda para CADA uma das tres no dia em que forem promovidas
+  (o `GITEA_URL` e' o unico com efeito real: tira a API do default de namespace errado,
+  que e' justamente o que o B76 queria). Move-las e' T2 e nao cabia neste item.
