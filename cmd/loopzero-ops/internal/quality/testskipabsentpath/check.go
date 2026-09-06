@@ -190,12 +190,25 @@
 //     that fires when the path IS there, in either arm -- remains deliberately
 //     not a site, because no missing path can cause it.
 //
-//   - What is still not a site is the GUARD POSITION itself: a struct field
-//     (`if !h.havePath { t.Skip() }`) and a package-level bool. The guard has to
-//     be a CALL -- to a same-package function, to a method whose name is
-//     unambiguous in the package, or to a local bound to one. A probe behind a
-//     value has no body to read, so it is invisible here: not measured shut,
-//     simply not read.
+//   - What is still not a site is the GUARD POSITION itself, and the line is
+//     narrower than an earlier draft of this comment drew it. The guard has to be
+//     a call to a name DECLARED as a function in this package, or to a method
+//     whose name is unambiguous in it. Everything else is invisible:
+//
+//   - a BOOL value -- `if !h.havePath { t.Skip() }`, a package-level bool.
+//     There is no body to read, so this one is honestly out of reach.
+//
+//   - a FUNC value, which is NOT, and this comment used to imply it was
+//     covered by saying the guard may be "a local bound to one". An audit
+//     measured six spellings walking past on 2026-09-05, each one silent
+//     rather than UNRESOLVED: a package alias `var present = cliSrcPresent`,
+//     a package `var f = func() bool {...}`, a local `check := cliPresent`, a
+//     method value `p := h.Present`, a struct field holding a func, and
+//     `presentFn()()`. `pkgScope.callee` resolves an identifier only against
+//     FuncDecls, so a name bound to a func value is not found and not
+//     reported. Each is the same one-line refactor away from the live
+//     `if !cliSrcPresent() { t.Skip() }` that opened B-183, B-186 and B-188.
+//     Tracked as B-189.
 //
 //     A METHOD is read now (B-188), and reading one has two costs stated
 //     plainly. Without type information the receiver's type is unknown, so the
