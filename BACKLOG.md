@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-191 items — **Open** 19 · **In flight** 5 · **Closed** 167 · **Blocked** 7
+192 items — **Open** 20 · **In flight** 5 · **Closed** 167 · **Blocked** 7
 
-### Open (19)
+### Open (20)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -93,6 +93,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-189`](#b-189--a-classe-volta-por-um-valor-de-funcao-e-o-gate-nem-diz-unresolved-seis-grafias-em-silencio----) | A classe volta por um VALOR de funcao, e o gate nem diz UNRESOLVED: seis grafias em silencio | `triaged` | media — quarta reabertura consecutiva da mesma classe, e a primeira em que |
 | [`B-190`](#b-190--o-pin-do-cli-exit-codes-promete-que-o-gate-reprova-quando-o-assunto-aparece-e-o-campo-do-assunto-nunca-e-lido----) | O pin do cli-exit-codes promete que o gate reprova quando o assunto aparece, e o campo do assunto nunca e lido | `triaged` | baixa — inofensivo com a unica linha de hoje, armadilha na segunda. A |
 | [`B-192`](#b-192--o-ci-e-pos-merge-porque-o-portao-local-seria-inescapavel-e-as-tres-premissas-dessa-decisao-foram-falsas-ao-mesmo-tempo----) | O CI e' pos-merge porque o portao local seria inescapavel, e as tres premissas dessa decisao foram falsas ao mesmo tempo | `triaged` | alta — nao ha nada quebrado agora (o `B-187` restaurou o hook e fechou os |
+| [`B-193`](#b-193--uma-ligacao-local-restaura-o-silencio-em-todo-caso-unresolved-e-o-rebound-acusa-um-religamento-que-nao-houve----) | Uma ligacao LOCAL restaura o silencio em todo caso UNRESOLVED, e o `rebound` acusa um religamento que nao houve | `triaged` | media — quinta reabertura consecutiva da mesma classe. Sem instancia viva; |
 
 ### In flight (5)
 
@@ -7670,4 +7671,66 @@ dod:
     golangci-lint no PATH) — e o subconjunto que roda sem eles esta nomeado
   - nao ampliar para o `PR #11` do kit: la o CI morre por faturamento, que e outra
     causa e outro dono
+## B-193 — Uma ligacao LOCAL restaura o silencio em todo caso UNRESOLVED, e o `rebound` acusa um religamento que nao houve   [ ]
 
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b189-nemesis-audit
+severity: media — quinta reabertura consecutiva da mesma classe. Sem instancia viva;
+  a evasao e' uma linha (`f := <o que ja e' vermelho>`), e o silencio e' o unico
+  veredito que este gate promete nunca dar.
+evidence: |
+  Medido 2026-09-05 por auditoria independente, com o binario do proprio `B-189`,
+  dentro de `infra/tests/config/`. Oito grafias passam em SILENCIO total — sem sitio,
+  sem veredito, gate PASS — e todas realmente pulam, com `t.Fatal` morto embaixo.
+
+  CAUSA-RAIZ 1, e cobre cinco das oito: `unreadableFuncValue` aceita um `*ast.Ident`
+  so' quando o nome esta em `pkg.rebound` ou `pkg.consts`. Um nome LOCAL nao esta em
+  nenhum dos dois, entao o fallback que existe para transformar silencio em veredito
+  nunca roda para locais:
+
+      presentFn()()   ABSENT (vermelho)   |  f := presentFn(); f()   SILENCIO
+      s.probe()       UNRESOLVED          |  p := s.probe; p()       SILENCIO
+      probes[k]()     UNRESOLVED          |  f := probes[k]; f()     SILENCIO
+
+  E' a forma que um leitor escolhe PRIMEIRO ao fatorar um guarda.
+
+  CAUSA-RAIZ 2, e e' um veredito FALSO, nao um silencio: `indexFuncFields` marca
+  `pkg.rebound[name]` para QUALQUER `=` a um identificador em qualquer lugar do
+  pacote, locais inclusos — enquanto o doc de `pkgScope` diz "the package-level names
+  that get a second value after their declaration". Um alias de pacote que nunca e'
+  reatribuido vira UNRESOLVED porque alguma funcao nao relacionada sombreia o nome, e
+  a razao impressa — "name rebound to another func value" — afirma com confianca um
+  religamento que nao aconteceu. Distinguir exige rastrear escopo, que este resolver
+  nao faz.
+
+  MAIS DUAS, menores e independentes:
+  3. um campo declarado por TIPO NOMEADO (`type predicate func() bool`) nunca entra em
+     `pkg.funcFields`, porque `indexFuncFields` casa so' `*ast.FuncType` — entao e'
+     silencio, e a barra declarada ("algo ligado sob esse nome tem de tocar o
+     filesystem") ESTA satisfeita, o que torna isto propriedade documentada que o
+     codigo nao tem;
+  4. `pathCondition` roteia so' `*ast.Ident` e `*ast.IndexExpr` para
+     `predicateCondition`, entao `(cliPresent)()` — o predicado vivo entre um par de
+     parenteses, estavel sob gofmt — e um literal invocado na hora sao silencio,
+     embora o resolver do `B-189` ja soubesse ler os dois.
+why_now: `B-180` -> `B-183` -> `B-186` -> `B-188` -> `B-189`, e uma auditoria reabriu a
+  classe nas cinco. O `SCOPE` ja foi corrigido para nao prometer o que o binario nao
+  faz, entao nada esta silencioso para quem le o codigo — mas a evasao continua
+  custando uma linha.
+status: triaged
+dod:
+  - as tres grafias de local do `evidence` deixam de ser silencio. O veredito certo
+    para cada uma e' decisao escrita: ABSENT se o valor for seguivel, UNRESOLVED se
+    nao — o que nao pode e' PASS
+  - a barra nao baixa: um local que carrega um predicado que nao toca o filesystem
+    continua fora de escopo, e isso tem teste (`dialFn()` e o controle)
+  - `rebound` para de acusar religamento que nao houve: ou passa a distinguir escopo,
+    ou a razao impressa deixa de afirmar o que nao mediu
+  - o campo por tipo nomeado e o `(cliPresent)()` entram, ou saem declarados no
+    `SCOPE` com a razao
+  - antes de fechar, tentar reabrir. Cinco auditorias conseguiram; a sexta tenta
+    `defer`, receptor por ponteiro vs valor, e o guarda vindo de um `map` com chave
+    calculada
+  - mutacao com efeito conferido, arnes provando o proprio baseline verde

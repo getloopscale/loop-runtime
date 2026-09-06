@@ -203,25 +203,88 @@
 //     that fires when the path IS there, in either arm -- remains deliberately
 //     not a site, because no missing path can cause it.
 //
-//   - What is still not a site is the GUARD POSITION itself, and the line is
-//     narrower than an earlier draft of this comment drew it. The guard has to be
-//     a call to a name DECLARED as a function in this package, or to a method
-//     whose name is unambiguous in it. Everything else is invisible:
+//   - THE OPENING SENTENCE OF THIS BULLET USED TO READ "the GUARD POSITION
+//     reaches a body wherever a NAME can carry one". An audit measured that false
+//     on 2026-09-05, the day it was written: EIGHT spellings walk past in total
+//     silence, and one local binding is enough to produce most of them --
+//     `f := presentFn(); f()` where `presentFn()()` is red, `p := s.probe; p()`
+//     where `s.probe()` is UNRESOLVED, `f := probes[k]; f()` where `probes[k]()`
+//     is UNRESOLVED. `unreadableFuncValue` accepts an *ast.Ident only when the
+//     name is in `pkg.rebound` or `pkg.consts`, and a LOCAL name is in neither,
+//     so the fallback that turns a silence into a verdict never runs for the one
+//     shape a reader reaches for first when factoring a guard out. Two more:
+//     a field declared through a NAMED func type (`type predicate func() bool`)
+//     is never indexed, and a parenthesised call `(cliPresent)()` is not routed
+//     to the resolver that could read it. Tracked as B-193, with the audit's
+//     spellings as its oracle.
 //
-//   - a BOOL value -- `if !h.havePath { t.Skip() }`, a package-level bool.
-//     There is no body to read, so this one is honestly out of reach.
+//     So the honest opening is narrower: the GUARD POSITION reaches a body when a
+//     PACKAGE-LEVEL name carries one, or when the call is written directly. A call to
+//     a function declared in this package, a method whose name is unambiguous in
+//     it, and -- since B-189 -- a name bound to a func VALUE: a package alias
+//     `var present = cliSrcPresent`, a package `var f = func() bool {...}`, a
+//     local `check := cliPresent`, a method value `p := h.Present`, a struct
+//     field read from the composite literal the caller's own scope bound to the
+//     receiver, an entry of a table of predicates whose key is a literal
+//     (`probes["cli"]()`), and a func value the CALLER hands a helper as an
+//     argument (`runWith(t, cliPresent)`, reported at the call, by the same rule
+//     every delegated finding follows). `pkgScope.callee` used to resolve an
+//     identifier only against FuncDecls, so a name bound to a func value was not
+//     found, not read and not reported; an audit walked six such spellings past
+//     on 2026-09-05, each one SILENT rather than UNRESOLVED, each a one-line
+//     refactor from the live `if !cliSrcPresent() { t.Skip() }` that opened
+//     B-183, B-186 and B-188. Measured with a binary built from this package,
+//     injected into infra/tests/config/: 708 files, 144 skip calls, 11
+//     path-guarded, PASS, exit 0, with a dead t.Fatal under each of the six.
+//     The last three spellings above were measured walking past the FIRST fix
+//     for the other six, in the same silence, on the same day. A fourth round of
+//     the same audit then walked past THIS fix eight more times, which is why the
+//     opening sentence of this bullet is now a smaller claim than the work that
+//     earned it.
 //
-//   - a FUNC value, which is NOT, and this comment used to imply it was
-//     covered by saying the guard may be "a local bound to one". An audit
-//     measured six spellings walking past on 2026-09-05, each one silent
-//     rather than UNRESOLVED: a package alias `var present = cliSrcPresent`,
-//     a package `var f = func() bool {...}`, a local `check := cliPresent`, a
-//     method value `p := h.Present`, a struct field holding a func, and
-//     `presentFn()()`. `pkgScope.callee` resolves an identifier only against
-//     FuncDecls, so a name bound to a func value is not found and not
-//     reported. Each is the same one-line refactor away from the live
-//     `if !cliSrcPresent() { t.Skip() }` that opened B-183, B-186 and B-188.
-//     Tracked as B-189.
+//     ONE MORE THING THE CODE DOES THAT THIS COMMENT USED TO DENY: `pkg.rebound`
+//     is set by ANY `=` to an identifier anywhere in the package, locals
+//     included, while `pkgScope`'s own doc calls it "the package-level names that
+//     get a second value after their declaration". So a package alias that is
+//     never reassigned is downgraded to UNRESOLVED because some unrelated
+//     function happens to shadow its name -- and the printed reason, "name
+//     rebound to another func value", is a confident statement about a rebinding
+//     that did not happen. Telling the two apart needs scope tracking this
+//     resolver does not do; B-193 owns it.
+//
+//     WHAT A FUNC VALUE STILL COSTS, and it costs a verdict rather than a
+//     silence. Three shapes are UNRESOLVED and red:
+//
+//     A FIELD whose value the caller's scope does not spell -- `s.probe()` where
+//     `s` came from a constructor. Which value runs is dataflow, and this gate
+//     has none; saying so is the answer, and picking one of the package's
+//     assignments to that field would be the guess.
+//
+//     A TABLE ENTRY whose key this gate cannot read -- `probes[k]()`.
+//
+//     A NAME REBOUND after its declaration -- `var present = alwaysTrue` swapped
+//     in an init() to `cliSrcPresent`. The initializer is no longer the answer,
+//     and reading it would be worse than silence: a confident verdict about a
+//     function that never ran.
+//
+//     All three share one bar, the bar every unreadable guard here has to clear
+//     before it costs a verdict: something the package binds under that name has
+//     to touch the filesystem. A table of cluster predicates, or a field nothing
+//     fills with a probe, stays as much none of this gate's business as
+//     `if !dialCluster() { t.Skip() }` is.
+//
+//     `presentFn()()` -- calling the value another call returned -- is read only
+//     when the producer resolves to a same-package body whose WHOLE body is one
+//     return, and that return's first result names a func body by the same
+//     rules. One unconditional return is knowing where the value came from; a
+//     second return is a guess about which one ran. Past that line the guard is
+//     UNRESOLVED and red. The bar for asking at all is the one every unreadable
+//     guard here has to clear -- the producer must reach a filesystem probe --
+//     so a factory returning a cluster predicate stays none of this gate's
+//     business.
+//
+//     What remains genuinely out of reach is a BOOL value: `if !h.havePath
+//     { t.Skip() }` over a package-level bool has no body to read at all.
 //
 //     A METHOD is read now (B-188), and reading one has two costs stated
 //     plainly. Without type information the receiver's type is unknown, so the
@@ -599,14 +662,18 @@ func scanDir(out *Outcome, root, dir string) error {
 	// read, and file-level const/var literals -- from every file in the
 	// directory.
 	pkg := &pkgScope{
-		helpers: map[string]helperDecl{},
-		funcs:   map[string]helperDecl{},
-		methods: map[string][]helperDecl{},
-		imports: map[string]map[string]bool{},
-		consts:  map[string]boundExpr{},
+		helpers:    map[string]helperDecl{},
+		funcs:      map[string]helperDecl{},
+		methods:    map[string][]helperDecl{},
+		imports:    map[string]map[string]bool{},
+		consts:     map[string]boundExpr{},
+		funcFields: map[string]bool{},
+		boundFuncs: map[string][]boundExpr{},
+		rebound:    map[string]bool{},
 	}
 	for _, pf := range files {
 		pkg.imports[pf.rel] = importNames(pf.ast)
+		indexFuncFields(pkg, pf)
 		for _, decl := range pf.ast.Decls {
 			if fd, ok := decl.(*ast.FuncDecl); ok {
 				if fd.Recv == nil {
@@ -645,6 +712,64 @@ func scanDir(out *Outcome, root, dir string) error {
 		analyseFile(out, root, pkgDir, pkg, pf)
 	}
 	return nil
+}
+
+// indexFuncFields records this file's func-typed struct fields and every func
+// value the file assigns to a field, by field NAME.
+//
+// By name, for the same reason methods are indexed by name: without type
+// information there is no way to say which struct a `s.probe` belongs to. The
+// name is enough for the only two questions asked of this index -- "does this
+// package declare a func-typed field spelled this way?" and "does anything it
+// is ever given touch the filesystem?" -- and neither answer is a verdict on
+// its own.
+func indexFuncFields(pkg *pkgScope, pf parsedFile) {
+	ast.Inspect(pf.ast, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.StructType:
+			if x.Fields == nil {
+				return true
+			}
+			for _, f := range x.Fields.List {
+				if _, ok := f.Type.(*ast.FuncType); !ok {
+					continue
+				}
+				for _, name := range f.Names {
+					pkg.funcFields[name.Name] = true
+				}
+			}
+		case *ast.CompositeLit:
+			for _, elt := range x.Elts {
+				kv, ok := elt.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+				if key, ok := kv.Key.(*ast.Ident); ok {
+					pkg.boundFuncs[key.Name] = append(pkg.boundFuncs[key.Name],
+						boundExpr{expr: kv.Value, file: pf.rel})
+				}
+			}
+		case *ast.AssignStmt:
+			// ASSIGN, not DEFINE: `f = other` gives an existing name a second
+			// value, which is what makes the name's declaration stop being the
+			// answer. `f := other` introduces a new one.
+			if x.Tok != token.ASSIGN || len(x.Lhs) != len(x.Rhs) {
+				return true
+			}
+			for i, lhs := range x.Lhs {
+				switch target := lhs.(type) {
+				case *ast.SelectorExpr:
+					pkg.boundFuncs[target.Sel.Name] = append(pkg.boundFuncs[target.Sel.Name],
+						boundExpr{expr: x.Rhs[i], file: pf.rel})
+				case *ast.Ident:
+					pkg.boundFuncs[target.Name] = append(pkg.boundFuncs[target.Name],
+						boundExpr{expr: x.Rhs[i], file: pf.rel})
+					pkg.rebound[target.Name] = true
+				}
+			}
+		}
+		return true
+	})
 }
 
 // importNames is the set of names a file's imports bind, so `pkg.Present()` is
@@ -1258,11 +1383,7 @@ func (r *resolver) pathCondition(cond ast.Expr, probes map[string]ast.Expr, dept
 		if !bound {
 			return guardTarget{}, false, false
 		}
-		id, ok := call.Fun.(*ast.Ident)
-		if !ok {
-			return guardTarget{}, false, false
-		}
-		return r.predicateCondition(id.Name, call, depth+1)
+		return r.predicateCondition(call, depth+1)
 	case *ast.UnaryExpr:
 		if c.Op != token.NOT {
 			return guardTarget{}, false, false
@@ -1318,11 +1439,14 @@ func (r *resolver) pathCondition(cond ast.Expr, probes map[string]ast.Expr, dept
 			}
 			return r.methodCondition(sel, c, depth)
 		}
-		id, ok := c.Fun.(*ast.Ident)
-		if !ok {
-			return guardTarget{}, false, false
+		if inner, ok := c.Fun.(*ast.CallExpr); ok {
+			return r.returnedFuncCondition(inner, c, depth)
 		}
-		return r.predicateCondition(id.Name, c, depth)
+		switch c.Fun.(type) {
+		case *ast.Ident, *ast.IndexExpr:
+			return r.predicateCondition(c, depth)
+		}
+		return guardTarget{}, false, false
 	}
 	return guardTarget{}, false, false
 }
@@ -1337,12 +1461,168 @@ func (r *resolver) pathCondition(cond ast.Expr, probes map[string]ast.Expr, dept
 // missing. A predicate that reaches a probe but whose answer cannot be followed
 // comes back marked unreadable, never as "not a site": that silence is exactly
 // the hole a one-line refactor used to open.
-func (r *resolver) predicateCondition(name string, call *ast.CallExpr, depth int) (guardTarget, bool, bool) {
-	h, ok := r.pkg.funcs[name]
+// A name bound to a func VALUE rather than declared as a function is read the
+// same way (B-189): `check := cliPresent` and `var alias = cliSrcPresent` are
+// the same predicate reached through a binding, and looking only in pkg.funcs
+// found neither.
+func (r *resolver) predicateCondition(call *ast.CallExpr, depth int) (guardTarget, bool, bool) {
+	h, key, ok := r.funcValue(call.Fun, depth)
+	if !ok {
+		return r.unreadableFuncValue(call.Fun, depth)
+	}
+	t, missing, read := r.predicateBody(key, h, call, depth)
+	// A guard supplied by the CALLER is the caller's line to change, and is
+	// reported there rather than at the helper that received it -- the rule
+	// delegated findings already follow (B-188).
+	if id, isID := call.Fun.(*ast.Ident); isID && read {
+		if _, fromArg := r.condArgs[id.Name]; fromArg {
+			t.fromCaller = true
+		}
+	}
+	return t, missing, read
+}
+
+// unreadableFuncValue is what a guard costs when it names a func value this gate
+// cannot follow: an UNRESOLVED verdict, never a walk-past. The bar is the one
+// every other unreadable guard here has to clear -- something the package binds
+// to that name has to touch the filesystem -- so a table of cluster predicates
+// stays none of this gate's business.
+func (r *resolver) unreadableFuncValue(fn ast.Expr, depth int) (guardTarget, bool, bool) {
+	switch x := fn.(type) {
+	case *ast.Ident:
+		if !r.pkg.rebound[x.Name] {
+			if _, declared := r.pkg.consts[x.Name]; !declared {
+				return guardTarget{}, false, false
+			}
+		}
+		if !r.pkg.nameReachesProbe(x.Name) {
+			return guardTarget{}, false, false
+		}
+		return guardTarget{desc: x.Name + "() (name rebound to another func value)", unreadable: true}, false, true
+	case *ast.IndexExpr:
+		b, ok := r.bindingOf(x.X)
+		if !ok {
+			return guardTarget{}, false, false
+		}
+		lit, ok := unwrapCompositeLit(b.expr)
+		if !ok || !r.inFile(b.file).containerReachesProbe(lit, depth) {
+			return guardTarget{}, false, false
+		}
+		return guardTarget{desc: r.describe(x) + "() (entry of a table of predicates)", unreadable: true}, false, true
+	}
+	return guardTarget{}, false, false
+}
+
+// returnedFuncCondition reads `presentFn()()` -- a guard that calls the value
+// another call returned.
+//
+// THE LIMIT IS DECLARED, not guessed at, because following a returned value
+// means knowing where it came from. It is read only when the producing call
+// resolves to a same-package body whose WHOLE body is one return, and that
+// return's first result resolves to a func body by the same rules as any other
+// func value. One unconditional return is knowing; a second return is a guess
+// about which one ran, and this gate does not guess.
+//
+// Past that line the answer is UNRESOLVED and red, never silent -- and the bar
+// for asking at all is the one the rest of the gate uses: the producer has to
+// reach a filesystem probe. A factory that returns a cluster predicate stays
+// none of this gate's business.
+func (r *resolver) returnedFuncCondition(inner, outer *ast.CallExpr, depth int) (guardTarget, bool, bool) {
+	producer, key, ok := r.funcValue(inner.Fun, depth+1)
 	if !ok {
 		return guardTarget{}, false, false
 	}
-	return r.predicateBody(name, h, call, depth)
+	// THE BAR IS THE VALUES THE PRODUCER HANDS BACK, not the calls it makes.
+	// `func presentFn() func() bool { return cliPresent }` calls nothing at all,
+	// so asking its own body whether it reaches a probe answers about the wrong
+	// function -- measured returning this exact spelling to silence while the
+	// other five spellings were already red (2026-09-05).
+	sub := &resolver{root: r.root, pkgDir: r.pkgDir, file: producer.file, pkg: r.pkg}
+	body := producer.decl.Body
+	reaches := reachesFilesystemProbe(body, r.pkg, map[string]bool{key: true})
+	for _, ret := range returnedValues(body) {
+		h, vkey, ok := sub.funcValue(ret, depth+1)
+		if !ok || h.decl.Body == nil {
+			continue
+		}
+		if reachesFilesystemProbe(h.decl.Body, r.pkg, map[string]bool{vkey: true}) {
+			reaches = true
+			break
+		}
+	}
+	if !reaches {
+		return guardTarget{}, false, false
+	}
+
+	// One unconditional return IS knowing where the value came from.
+	if body != nil && len(body.List) == 1 {
+		if ret, ok := body.List[0].(*ast.ReturnStmt); ok && len(ret.Results) > 0 {
+			if h, vkey, ok := sub.funcValue(ret.Results[0], depth+1); ok {
+				return r.predicateBody(key+"() -> "+vkey, h, outer, depth)
+			}
+		}
+	}
+	// A second return is a guess about which one ran, and so is a value
+	// assembled at runtime or handed in from elsewhere. Said out loud, in red.
+	return guardTarget{desc: key + "()() (value returned by a call)", unreadable: true}, false, true
+}
+
+// returnedValues is the FIRST result of every return statement in a body,
+// without descending into function literals: a `return` inside a literal the
+// body carries belongs to the literal, not to the function returning it.
+func returnedValues(b *ast.BlockStmt) []ast.Expr {
+	if b == nil {
+		return nil
+	}
+	var out []ast.Expr
+	var walk func(stmts []ast.Stmt)
+	walk = func(stmts []ast.Stmt) {
+		for _, st := range stmts {
+			switch s := st.(type) {
+			case *ast.ReturnStmt:
+				if len(s.Results) > 0 {
+					out = append(out, s.Results[0])
+				}
+			case *ast.BlockStmt:
+				walk(s.List)
+			case *ast.IfStmt:
+				if s.Body != nil {
+					walk(s.Body.List)
+				}
+				if s.Else != nil {
+					walk([]ast.Stmt{s.Else})
+				}
+			case *ast.LabeledStmt:
+				walk([]ast.Stmt{s.Stmt})
+			case *ast.ForStmt:
+				if s.Body != nil {
+					walk(s.Body.List)
+				}
+			case *ast.RangeStmt:
+				if s.Body != nil {
+					walk(s.Body.List)
+				}
+			case *ast.SwitchStmt:
+				if s.Body != nil {
+					walk(s.Body.List)
+				}
+			case *ast.TypeSwitchStmt:
+				if s.Body != nil {
+					walk(s.Body.List)
+				}
+			case *ast.SelectStmt:
+				if s.Body != nil {
+					walk(s.Body.List)
+				}
+			case *ast.CaseClause:
+				walk(s.Body)
+			case *ast.CommClause:
+				walk(s.Body)
+			}
+		}
+	}
+	walk(b.List)
+	return out
 }
 
 // methodCondition reads a guard whose predicate is a METHOD -- `if !h.present()
@@ -1359,11 +1639,22 @@ func (r *resolver) methodCondition(sel *ast.SelectorExpr, call *ast.CallExpr, de
 	if r.pkg.ambiguousMethod(sel, r.file) {
 		return guardTarget{desc: "." + sel.Sel.Name + "()", unreadable: true}, false, true
 	}
-	h, _, ok := r.pkg.callee(call, r.file)
-	if !ok {
-		return guardTarget{}, false, false
+	if h, _, ok := r.pkg.callee(call, r.file); ok {
+		return r.predicateBody(sel.Sel.Name, h, call, depth)
 	}
-	return r.predicateBody(sel.Sel.Name, h, call, depth)
+	// Not a method of this package. It may still be a FUNC VALUE held in a
+	// field, and if the caller's own scope says which one, that is read (B-189).
+	if h, key, ok := r.funcValue(sel, depth+1); ok {
+		return r.predicateBody(key, h, call, depth)
+	}
+	// A func-typed field this gate cannot read the value of. WHICH value runs is
+	// dataflow, which this gate does not have -- so it says so instead of walking
+	// past. The bar is the same one every other unreadable guard has to clear:
+	// something the package puts in that field touches the filesystem.
+	if r.pkg.funcFieldReachesProbe(sel.Sel.Name) {
+		return guardTarget{desc: "." + sel.Sel.Name + "() (func-valued field)", unreadable: true}, false, true
+	}
+	return guardTarget{}, false, false
 }
 
 // predicateBody reads one predicate declaration with the caller's arguments
@@ -1585,11 +1876,16 @@ func reachesFilesystemProbe(b *ast.BlockStmt, pkg *pkgScope, seen map[string]boo
 		if !ok || seen[id.Name] {
 			return true
 		}
-		h, ok := pkg.funcs[id.Name]
-		if !ok || h.decl.Body == nil {
+		// Package scope only: a func VALUE bound at package level resolves here
+		// too, so a predicate that delegates through `var alias = cliSrcPresent`
+		// reaches the probe the alias reaches (B-189). A local binding needs the
+		// caller's scope, which a reachability walk does not carry.
+		h, key, ok := (&resolver{pkg: pkg}).funcValue(id, 0)
+		if !ok || h.decl.Body == nil || seen[key] {
 			return true
 		}
 		seen[id.Name] = true
+		seen[key] = true
 		if reachesFilesystemProbe(h.decl.Body, pkg, seen) {
 			found = true
 			return false
@@ -1733,6 +2029,47 @@ type pkgScope struct {
 	// the code does not call, which is a guess wearing a verdict's clothes.
 	imports map[string]map[string]bool
 	consts  map[string]boundExpr
+	// funcFields is the set of STRUCT FIELD names this package declares with a
+	// func type. boundFuncs is every value the package is seen assigning to a
+	// NAME, by any spelling -- a composite-literal key, an `x.f = v`, a plain
+	// `f = v`. rebound is the package-level names that get a second value after
+	// their declaration.
+	//
+	// None of the three ever produces a verdict on its own. They answer one
+	// question -- "does anything this package puts under that name touch the
+	// filesystem?" -- which is the bar an UNREADABLE guard has to clear before
+	// it is reported UNRESOLVED instead of walked past (B-189). Keying by name
+	// alone can pool a field and a var that share one; that costs an UNRESOLVED
+	// the reader can pin, which is the direction this gate errs on purpose.
+	funcFields map[string]bool
+	boundFuncs map[string][]boundExpr
+	rebound    map[string]bool
+}
+
+// funcValueCandidates is every expression this package is seen binding to the
+// name: its package-level initializer, plus every later assignment.
+func (p *pkgScope) funcValueCandidates(name string) []boundExpr {
+	var out []boundExpr
+	if b, ok := p.consts[name]; ok {
+		out = append(out, b)
+	}
+	return append(out, p.boundFuncs[name]...)
+}
+
+// nameReachesProbe reports whether any value this package binds to the name
+// resolves to a body that touches the filesystem.
+func (p *pkgScope) nameReachesProbe(name string) bool {
+	for _, v := range p.funcValueCandidates(name) {
+		r := &resolver{file: v.file, pkg: p}
+		h, key, ok := r.funcValue(v.expr, 0)
+		if !ok || h.decl.Body == nil {
+			continue
+		}
+		if reachesFilesystemProbe(h.decl.Body, p, map[string]bool{key: true}) {
+			return true
+		}
+	}
+	return false
 }
 
 // callee resolves a call to the same-package body it enters, if this gate can
@@ -1745,6 +2082,12 @@ type pkgScope struct {
 // declare the same method (rejected as ambiguous). Refusing is not silence here
 // -- pathCondition turns the ambiguous case into an UNRESOLVED verdict when the
 // bodies touch the filesystem at all.
+//
+// It reads DECLARATIONS only. A name bound to a func value is resolved by
+// resolver.funcValue instead, which needs the caller's locals and so cannot live
+// on the package scope (B-189). The two are kept apart on purpose: this one
+// answers where a SKIP is carried, where following a value is still a declared
+// limit, and that one answers what a GUARD calls.
 func (p *pkgScope) callee(call *ast.CallExpr, inFile string) (helperDecl, string, bool) {
 	switch fn := call.Fun.(type) {
 	case *ast.Ident:
@@ -1764,6 +2107,217 @@ func (p *pkgScope) callee(call *ast.CallExpr, inFile string) (helperDecl, string
 		return ms[0], "." + fn.Sel.Name, true
 	}
 	return helperDecl{}, "", false
+}
+
+// funcValue resolves an expression that NAMES A FUNCTION VALUE to the body a
+// call on it enters. It is the whole of B-189.
+//
+// `pkgScope.callee` answers the same question for a call spelled as a
+// declaration -- `f()` against pkg.funcs, `x.m()` against pkg.methods -- and a
+// name bound to a func VALUE is in neither index, so it was not found, not read
+// and not reported. Six spellings walked past the gate in silence on 2026-09-05,
+// each one a one-line refactor from the live `if !cliSrcPresent() { t.Skip() }`:
+//
+//	var alias = cliSrcPresent            // package alias
+//	var f = func() bool { ...os.Stat...} // package var holding a literal
+//	check := cliPresent                  // local
+//	p := h.Present                       // method value
+//	s.probe                              // struct field holding a func
+//
+// Resolution order is Go's own shadowing order -- locals, then package-level
+// vars and consts, then declarations -- so a local that shadows a package func
+// is read as the local, not as the name it hides.
+//
+// The returned key names the body for the reader and for the visited sets that
+// end a cycle. Nothing here guesses: an expression this cannot follow comes back
+// false, and the caller decides whether that costs a verdict or a silence.
+func (r *resolver) funcValue(e ast.Expr, depth int) (helperDecl, string, bool) {
+	if depth > maxResolveDepth || e == nil {
+		return helperDecl{}, "", false
+	}
+	switch x := e.(type) {
+	case *ast.ParenExpr:
+		return r.funcValue(x.X, depth+1)
+	case *ast.Ident:
+		// A PARAMETER of a skip-carrying helper is the CALLER's func value, read
+		// back in the caller's scope. `run(t, cliPresent)` over
+		// `func run(t *testing.T, present func() bool) { if !present() {...} }`
+		// puts the guard at the call and nowhere else, and reading `present` in
+		// the helper's own scope answers about nothing.
+		if bc, ok := r.condArgs[x.Name]; ok && bc.scope != nil {
+			return bc.scope.funcValue(bc.expr, depth+1)
+		}
+		if b, ok := r.locals[x.Name]; ok {
+			if h, key, ok := r.inFile(b.file).funcValue(b.expr, depth+1); ok {
+				return h, key, true
+			}
+			return helperDecl{}, "", false
+		}
+		if b, ok := r.pkg.consts[x.Name]; ok {
+			// A package-level name that is ASSIGNED again after its declaration
+			// no longer answers with its initializer: `var present = alwaysTrue`
+			// swapped in an init() to `cliSrcPresent` runs the second one, and
+			// reading the first is how the swap stayed silent. Refused here so
+			// the caller reports UNRESOLVED.
+			if r.pkg.rebound[x.Name] {
+				return helperDecl{}, "", false
+			}
+			if h, key, ok := r.inFile(b.file).funcValue(b.expr, depth+1); ok {
+				return h, key, true
+			}
+			return helperDecl{}, "", false
+		}
+		h, ok := r.pkg.funcs[x.Name]
+		if !ok || h.decl.Body == nil {
+			return helperDecl{}, "", false
+		}
+		return h, x.Name, true
+	case *ast.IndexExpr:
+		// `probes["cli"]()` -- a table of predicates. Read only when the
+		// container is a composite literal this scope binds AND the key is a
+		// literal that names one of its entries. Anything else is a guess about
+		// which entry ran, and the caller turns it into UNRESOLVED.
+		b, ok := r.bindingOf(x.X)
+		if !ok {
+			return helperDecl{}, "", false
+		}
+		lit, ok := unwrapCompositeLit(b.expr)
+		if !ok {
+			return helperDecl{}, "", false
+		}
+		want, ok := x.Index.(*ast.BasicLit)
+		if !ok {
+			return helperDecl{}, "", false
+		}
+		for _, elt := range lit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			got, ok := kv.Key.(*ast.BasicLit)
+			if !ok || got.Kind != want.Kind || got.Value != want.Value {
+				continue
+			}
+			return r.inFile(b.file).funcValue(kv.Value, depth+1)
+		}
+		return helperDecl{}, "", false
+	case *ast.FuncLit:
+		if x.Body == nil {
+			return helperDecl{}, "", false
+		}
+		// A literal has no name of its own. It is wrapped in a synthetic
+		// declaration so every reader downstream -- returnsBoolFirst,
+		// predicateBody, reachesFilesystemProbe -- reads it exactly as it reads
+		// a declared predicate, with no second code path to keep in step.
+		return helperDecl{
+			decl: &ast.FuncDecl{Name: ast.NewIdent("func literal"), Type: x.Type, Body: x.Body},
+			file: r.file,
+		}, "func literal", true
+	case *ast.SelectorExpr:
+		// A METHOD VALUE -- `p := h.Present` -- is the method, found by the same
+		// name rule a called method is found by.
+		if r.pkg.methodIsOurs(x, r.file) && !r.pkg.ambiguousMethod(x, r.file) {
+			ms := r.pkg.methods[x.Sel.Name]
+			if len(ms) == 1 && ms[0].decl.Body != nil {
+				return ms[0], "." + x.Sel.Name, true
+			}
+			return helperDecl{}, "", false
+		}
+		// A FIELD holding a func, read from the composite literal the caller's
+		// own scope bound to the receiver. This is the only field read that is
+		// not a guess: `s := holder{probe: cliPresent}` says which func value
+		// `s.probe` holds, right there, in the scope that asks. A receiver from
+		// anywhere else is dataflow, and the caller turns that into UNRESOLVED
+		// rather than reading some other assignment to the same field name.
+		recv, ok := x.X.(*ast.Ident)
+		if !ok {
+			return helperDecl{}, "", false
+		}
+		b, ok := r.locals[recv.Name]
+		if !ok {
+			return helperDecl{}, "", false
+		}
+		lit, ok := unwrapCompositeLit(b.expr)
+		if !ok {
+			return helperDecl{}, "", false
+		}
+		for _, elt := range lit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok || key.Name != x.Sel.Name {
+				continue
+			}
+			return r.inFile(b.file).funcValue(kv.Value, depth+1)
+		}
+		return helperDecl{}, "", false
+	}
+	return helperDecl{}, "", false
+}
+
+// inFile is this resolver seen from another file of the same package. A binding
+// carries the file it was written in, and a func literal's declaring file is
+// what a finding has to name.
+func (r *resolver) inFile(file string) *resolver {
+	if file == "" || file == r.file {
+		return r
+	}
+	return &resolver{root: r.root, pkgDir: r.pkgDir, file: file, pkg: r.pkg,
+		locals: r.locals, boolPreds: r.boolPreds, condArgs: r.condArgs}
+}
+
+// unwrapCompositeLit reads `holder{...}` and `&holder{...}` alike.
+func unwrapCompositeLit(e ast.Expr) (*ast.CompositeLit, bool) {
+	if u, ok := e.(*ast.UnaryExpr); ok && u.Op == token.AND {
+		e = u.X
+	}
+	lit, ok := e.(*ast.CompositeLit)
+	return lit, ok
+}
+
+// funcFieldReachesProbe reports whether this package declares a func-typed field
+// with this name AND ever puts a filesystem-touching func value in it. It is the
+// bar that keeps an unreadable field from becoming an opinion about conditions
+// this gate has none about: `if !c.ready() { t.Skip() }` over a field nothing
+// fills with a probe stays none of its business, exactly as
+// `if !dialCluster() { t.Skip() }` does.
+func (p *pkgScope) funcFieldReachesProbe(name string) bool {
+	return p.funcFields[name] && p.nameReachesProbe(name)
+}
+
+// containerReachesProbe reports whether any element of a composite literal of
+// predicates resolves to a body that touches the filesystem. It is the bar for
+// `probes[k]()` whose key this gate cannot read.
+func (r *resolver) containerReachesProbe(lit *ast.CompositeLit, depth int) bool {
+	for _, elt := range lit.Elts {
+		v := elt
+		if kv, ok := elt.(*ast.KeyValueExpr); ok {
+			v = kv.Value
+		}
+		h, key, ok := r.funcValue(v, depth+1)
+		if !ok || h.decl.Body == nil {
+			continue
+		}
+		if reachesFilesystemProbe(h.decl.Body, r.pkg, map[string]bool{key: true}) {
+			return true
+		}
+	}
+	return false
+}
+
+// bindingOf is the expression a name is bound to, local first, then package.
+func (r *resolver) bindingOf(e ast.Expr) (boundExpr, bool) {
+	id, ok := e.(*ast.Ident)
+	if !ok {
+		return boundExpr{}, false
+	}
+	if b, ok := r.locals[id.Name]; ok {
+		return b, true
+	}
+	b, ok := r.pkg.consts[id.Name]
+	return b, ok
 }
 
 // methodIsOurs reports whether `x.m` can name a method of this package: the
@@ -1885,11 +2439,10 @@ func (r *resolver) bindBoolPred(a *ast.AssignStmt) {
 	if !ok {
 		return
 	}
-	id, ok := call.Fun.(*ast.Ident)
-	if !ok {
-		return
-	}
-	h, ok := r.pkg.funcs[id.Name]
+	// Any spelling that names a body: a declared predicate, or a name bound to a
+	// func VALUE (B-189). `check := cliSrcPresent` then `ok, _ := check()` is the
+	// same answer reached through one more binding.
+	h, _, ok := r.funcValue(call.Fun, 0)
 	if !ok || h.decl.Body == nil || !returnsBoolFirst(h.decl) {
 		return
 	}
@@ -2110,6 +2663,8 @@ func exprString(e ast.Expr) string {
 		return exprString(x.X) + " " + x.Op.String() + " " + exprString(x.Y)
 	case *ast.ParenExpr:
 		return "(" + exprString(x.X) + ")"
+	case *ast.IndexExpr:
+		return exprString(x.X) + "[" + exprString(x.Index) + "]"
 	}
 	return "<expr>"
 }
