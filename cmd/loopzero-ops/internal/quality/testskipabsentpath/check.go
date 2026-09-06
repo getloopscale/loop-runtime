@@ -1374,12 +1374,18 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver, seen map[string]bool, depth int
 					}
 				})
 			case *ast.RangeStmt:
-				r.bindRangeValue(s)
+				// The binding is scoped to the body when the range DECLARES it.
+				// Binding it into the frame permanently let it answer for the
+				// outer name after the loop, and a guard reading that name went
+				// from a correct verdict to SILENCE -- the class this gate exists
+				// to close, introduced by a fix for it. Measured 2026-09-06.
+				restore := r.bindRangeValue(s)
 				r.underCondition(func() {
 					if s.Body != nil {
 						walk(s.Body.List)
 					}
 				})
+				restore()
 			case *ast.SwitchStmt:
 				local := probes
 				if init, ok := s.Init.(*ast.AssignStmt); ok {
@@ -1448,21 +1454,45 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver, seen map[string]bool, depth int
 // as rebound on top of that: a range runs its body zero times over an empty
 // container, so which of the two values a later guard reads is the same
 // undecidable question, asked by the other door.
-func (r *resolver) bindRangeValue(s *ast.RangeStmt) {
+//
+// It returns the UNDO, and which door the range used decides whether there is one.
+// `for _, f := range xs` DECLARES a variable whose scope is the loop: after the
+// loop Go reads whatever `f` held before, so the binding must not survive. Letting
+// it survive is what turned a live guard silent -- `f := cliPresent; for _, f :=
+// range ...; if !f()` reported the right path before the range spelling was taught
+// at all, and nothing after it.
+//
+// `for _, f = range xs` assigns to a name the frame already holds, and THAT does
+// outlive the loop: a range runs its body zero times over an empty container, so
+// which of the two values a later guard reads is the undecidable question the
+// rebound marking turns into UNRESOLVED. No undo for that one.
+func (r *resolver) bindRangeValue(s *ast.RangeStmt) func() {
+	noop := func() {}
 	if s.Value == nil || s.X == nil {
-		return
+		return noop
 	}
 	id, ok := s.Value.(*ast.Ident)
 	if !ok || id.Name == "_" {
-		return
+		return noop
 	}
-	if _, had := r.locals[id.Name]; had && s.Tok == token.ASSIGN {
+	prev, had := r.locals[id.Name]
+	if had && s.Tok == token.ASSIGN {
 		if r.reboundLocals == nil {
 			r.reboundLocals = map[string]bool{}
 		}
 		r.reboundLocals[id.Name] = true
 	}
 	r.bind(id.Name, &ast.IndexExpr{X: s.X, Index: ast.NewIdent("<range>")}, r.file)
+	if s.Tok != token.DEFINE {
+		return noop
+	}
+	return func() {
+		if had {
+			r.locals[id.Name] = prev
+			return
+		}
+		delete(r.locals, id.Name)
+	}
 }
 
 // withProbe copies a probe map with one more binding, so an if's own init does
@@ -2103,12 +2133,29 @@ func (r *resolver) unreadableFuncValue(fn ast.Expr, depth int) (guardTarget, boo
 		}
 		return guardTarget{desc: x.Name + "()" + reason, unreadable: true}, false, true
 	case *ast.IndexExpr:
-		b, ok := r.bindingOf(x.X)
-		if !ok {
-			return guardTarget{}, false, false
+		// The container may be written INLINE rather than named:
+		// `for _, f := range []func() bool{cliPresent}` binds f to an IndexExpr
+		// whose X is the literal itself, and bindingOf only resolves names — so a
+		// guard inside that loop was silent. Pre-existing, and the same family the
+		// range spelling was taught for: found by testing the shape rather than
+		// the spelling.
+		var lit *ast.CompositeLit
+		var inFile string
+		if direct, isLit := unwrapCompositeLit(x.X); isLit {
+			lit, inFile = direct, r.file
+		} else {
+			b, ok := r.bindingOf(x.X)
+			if !ok {
+				return guardTarget{}, false, false
+			}
+			var okLit bool
+			lit, okLit = unwrapCompositeLit(b.expr)
+			if !okLit {
+				return guardTarget{}, false, false
+			}
+			inFile = b.file
 		}
-		lit, ok := unwrapCompositeLit(b.expr)
-		if !ok || !r.inFile(b.file).containerReachesProbe(lit, depth) {
+		if !r.inFile(inFile).containerReachesProbe(lit, depth) {
 			return guardTarget{}, false, false
 		}
 		return guardTarget{desc: r.describe(x) + "() (entry of a table of predicates)", unreadable: true}, false, true
