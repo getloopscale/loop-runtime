@@ -378,8 +378,17 @@ func TestB71BuildHelmfileHasCWTs(t *testing.T) {
 // both chart paths this test used to read (infra/helm/tenant-controller/ and
 // infra/helm/loopzero-controller/), so dropping the skip alone would have failed at
 // the read rather than reviving anything. The assertions are re-pointed at what
-// owns the contract today: tenant-operator is the only split binary that imports
-// operators/internal/gitea, and charts/loopzero-tenant-operator is what deploys it.
+// owns the contract today: tenant-operator is the only split binary that
+// CONSTRUCTS the Gitea provisioner, and charts/loopzero-tenant-operator is what
+// deploys it.
+//
+// "Constructs", not "imports". An audit measured the earlier wording false on
+// 2026-09-05: `go list -deps ./cmd/platform-operator` resolves
+// operators/internal/gitea too, through operators/internal/platform. The
+// conclusion survives — NewRealProvisioner is called only at
+// tenant-operator/main.go:148, and the platform path takes its organisations from
+// pb.Spec.Gitea.Organizations rather than a literal — but the premise did not, and
+// a right conclusion through a false premise exonerates the wrong change next time.
 func TestB69GiteaOrgConfigurable(t *testing.T) {
 	const mainPath = "../../../operators/cmd/tenant-operator/main.go"
 	data, err := os.ReadFile(mainPath)

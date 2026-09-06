@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-188 items — **Open** 18 · **In flight** 5 · **Closed** 165 · **Blocked** 7
+191 items — **Open** 20 · **In flight** 5 · **Closed** 166 · **Blocked** 7
 
-### Open (18)
+### Open (20)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -88,12 +88,12 @@ consequência do escopo per-repo declarado acima.
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
 | [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
-| [`B-184`](#b-184--dois-testes-pulam-incondicionalmente-e-leem-um-arquivo-logo-abaixo-com-tfatalf-que-nunca-roda----) | Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda | `shipped` | media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a |
 | [`B-185`](#b-185--o-gate-cli-exit-codes-imprime-skip-e-sai-0-desde-sempre-porque-o-diretorio-que-ele-mede-nunca-esteve-na-arvore----) | O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore | `triaged` | media — um gate na cadeia que nunca mediu nada. Ele nao mente na saida (diz |
 | [`B-187`](#b-187--o-hook-que-o-repositorio-declara-como-substituto-de-ci-nao-existe-em-maquina-nenhuma---x) | O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma | `triaged` | alta — dois testes afirmam "the delivery gate is the CI substitute; it must |
 | [`B-188`](#b-188--tres-posicoes-de-skip-que-o-gate-nao-le-e-a-que-ele-passou-a-ler-custou-uma-auditoria-para-aparecer----) | Tres posicoes de skip que o gate nao le, e a que ele passou a ler custou uma auditoria para aparecer | `triaged` | media — o gate e a unica coisa que impede a classe de voltar, e ha tres |
-| [`B-189`](#b-189--a-metrica-loopzero_misplaced_tenant_total-nao-tem-escritor-e-dois-alertas-de-producao-perguntam-por-ela----) | A metrica `loopzero_misplaced_tenant_total` nao tem escritor, e dois alertas de producao perguntam por ela | `triaged` | media — dois alertas que nunca podem disparar; a deteccao que o ADR-0018 declara existir nao existe |
-| [`B-190`](#b-190--o-guarda-de-completude-de-env-dos-operadores-le-comentario-e-literal-como-leitura-de-env----) | O guarda de completude de env dos operadores le comentario e literal como leitura de env | `triaged` | media — um comentario reprova o guarda (medido) e um literal pode satisfaze-lo; o `skip-link` ja consertou esta mesma cegueira |
+| [`B-189`](#b-189--a-metrica-loopzero_misplaced_tenant_total-nao-tem-escritor-e-dois-alertas-de-producao-perguntam-por-ela----) | A metrica `loopzero_misplaced_tenant_total` nao tem escritor, e dois alertas de producao perguntam por ela | `triaged` | media — dois alertas que nunca podem disparar. Nao ha saida vermelha |
+| [`B-190`](#b-190--o-guarda-de-completude-de-env-dos-operadores-le-comentario-e-literal-como-leitura-de-env----) | O guarda de completude de env dos operadores le comentario e literal como leitura de env | `triaged` | media — o guarda decide, nos DOIS sentidos, o contrato de config de quatro |
+| [`B-191`](#b-191--o-chart-que-o-argocd-implanta-usa-uma-organizacao-gitea-diferente-da-que-os-operadores-assumem-e-nada-assevera-que-elas-concordam----) | O chart que o ArgoCD implanta usa uma organizacao Gitea diferente da que os operadores assumem, e nada assevera que elas concordam | `triaged` | alta se for divergencia, nenhuma se for intencional — e HOJE nao ha como |
 
 ### In flight (5)
 
@@ -105,7 +105,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
 | [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `approved` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 
-### Closed (165)
+### Closed (166)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -273,6 +273,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-178`](#b-178--tres-testes-de-metricas-reprovam-em-qualquer-worktree-vinculado-porque-procuram-git-como-diretorio----) | Tres testes de metricas reprovam em qualquer worktree vinculado, porque procuram `.git` como diretorio | `shipped` | media — nao ha defeito de produto, mas o efeito e' um falso vermelho no fluxo de trabalho que passou a ser obrigatorio. Uma lane que rode a suite do proprio worktree ve tres reprovacoes que nao tem relacao com a mudanca dela, e o custo previsivel e' alguem "consertar" o que nao esta quebrado, ou aprender a ignorar vermelho. |
 | [`B-180`](#b-180--quatro-assercoes-de-cli-pulam-sempre-e-uma-delas-torna-um-tfatalf-inalcancavel----) | Quatro assercoes de `cli/` pulam sempre, e uma delas torna um `t.Fatalf` inalcancavel | `shipped` | media — nada quebra; o que falha e' a **deteccao**, e num pacote que a suite reporta como verde. Quatro guardas de regressao nao afirmam nada desde o M5, e uma delas contem codigo morto que um leitor razoavel toma por assercao ativa. |
 | [`B-183`](#b-183--o-gate-de-skip-por-caminho-ausente-para-a-grafia-nao-a-classe-um-helper-booleano-o-evade----) | O gate de skip-por-caminho-ausente para a grafia, nao a classe: um helper booleano o evade | `shipped` | media — o gate existe para impedir que a classe volte, e a classe volta com |
+| [`B-184`](#b-184--dois-testes-pulam-incondicionalmente-e-leem-um-arquivo-logo-abaixo-com-tfatalf-que-nunca-roda---x) | Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda | `shipped` | media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a |
 | [`B-186`](#b-186--a-classe-ainda-volta-um-nivel-abaixo-um-predicado-que-chama-outro-predicado-e-invisivel-e-em-silencio---x) | A classe ainda volta um nivel abaixo: um predicado que chama outro predicado e' invisivel, e em silencio | `shipped` | media — o `B-183` existiu para fechar a classe e fechou a grafia de UM |
 
 <!-- BACKLOG-INDEX:END -->
@@ -7535,4 +7536,52 @@ dod:
   - piso anti-vacuidade: o teste ja falha com `len(reads) == 0` por binario; conferir que
     ele continua valendo depois da mascara (uma mascara com bug zera o conjunto, e um
     conjunto vazio nao pode virar verde)
+
+## B-191 — O chart que o ArgoCD implanta usa uma organizacao Gitea diferente da que os operadores assumem, e nada assevera que elas concordam   [ ]
+
+domain: infra
+repo: loopzero
+suggested_mode: review
+source: b184-nemesis-audit
+severity: alta se for divergencia, nenhuma se for intencional — e HOJE nao ha como
+  saber pelo repositorio, que e o problema. O `B-69` existiu porque repositorios eram
+  "criados sob um nome e escritos sob outro"; o hardcode saiu, e a mesma falha voltou
+  a ser alcancavel por configuracao.
+evidence: |
+  Medido 2026-09-05 por auditoria independente e re-medido em seguida:
+
+      infra/helm/loopzero-api/values.yaml:158          GITEA_ORG: "loopzero-platform"
+      charts/loopzero-api/values.yaml:57               giteaOrg:  "loopzero"
+      charts/loopzero-tenant-operator/values.yaml:28   giteaOrg:  "loopzero"
+
+  O overlay de `infra/helm/loopzero-api` e VIVO: `infra/argocd-bootstrap/apps/mgmt-loopzero-api.yaml`
+  aponta `path: infra/helm/loopzero-api`. E nao existe overlay de operador em `infra/helm`
+  — so o chart, com o default `loopzero`.
+
+  Nenhum teste assevera que os dois lados CONCORDAM.
+  `grep -rln "GITEA_ORG|giteaOrg" --include=*_test.go` devolve um unico arquivo, o do
+  `B-69`, e o que ele checa e que cada lado declara um knob — nao que os valores batem.
+
+  O que segura isso fechado hoje e prosa: o comentario de `DefaultGiteaOrg` diz "It
+  must agree with the default the API applies".
+why_now: o `B-184` removeu o hardcode e transformou a organizacao em configuracao. Isso
+  esta certo e e melhor — e cria a divergencia que o proprio item nao podia exibir,
+  porque um antes/depois sobre a arvore nao mostra uma configuracao que so existe no
+  overlay.
+status: triaged
+dod:
+  - PRIMEIRO medir, depois decidir, e a pergunta e binaria: `loopzero-platform` no overlay
+    do API e INTENCIONAL (o plano de controle usa uma org propria, e as orgs de tenant
+    vem de `pb.Spec.Gitea.Organizations`) ou e uma divergencia? A resposta vem de ler
+    o caminho de plataforma, nao de comparar os dois YAMLs
+  - se INTENCIONAL: fica escrito onde os dois valores vivem, dizendo por que sao
+    diferentes e qual e o dominio de cada um — hoje um leitor que compara os dois
+    arquivos so pode concluir que um esta errado
+  - se DIVERGENCIA: o valor converge e existe um teste que reprova quando um lado muda
+    sem o outro. O oraculo e o `evidence` acima
+  - de qualquer forma, a garantia deixa de ser um comentario: `DefaultGiteaOrg` diz
+    "It must agree with the default the API applies" e nada verifica isso
+  - nao ampliar para os charts duplicados (`infra/helm/admission-policies` e
+    `charts/loopzero-admission-policies` carregam copias do mesmo alerta) — isso e outro
+    item se alguem quiser abri-lo
 
