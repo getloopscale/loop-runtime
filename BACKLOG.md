@@ -88,10 +88,12 @@ consequência do escopo per-repo declarado acima.
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
 | [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
-| [`B-184`](#b-184--dois-testes-pulam-incondicionalmente-e-leem-um-arquivo-logo-abaixo-com-tfatalf-que-nunca-roda----) | Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda | `triaged` | media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a |
+| [`B-184`](#b-184--dois-testes-pulam-incondicionalmente-e-leem-um-arquivo-logo-abaixo-com-tfatalf-que-nunca-roda----) | Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda | `shipped` | media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a |
 | [`B-185`](#b-185--o-gate-cli-exit-codes-imprime-skip-e-sai-0-desde-sempre-porque-o-diretorio-que-ele-mede-nunca-esteve-na-arvore----) | O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore | `triaged` | media — um gate na cadeia que nunca mediu nada. Ele nao mente na saida (diz |
 | [`B-187`](#b-187--o-hook-que-o-repositorio-declara-como-substituto-de-ci-nao-existe-em-maquina-nenhuma---x) | O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma | `triaged` | alta — dois testes afirmam "the delivery gate is the CI substitute; it must |
 | [`B-188`](#b-188--tres-posicoes-de-skip-que-o-gate-nao-le-e-a-que-ele-passou-a-ler-custou-uma-auditoria-para-aparecer----) | Tres posicoes de skip que o gate nao le, e a que ele passou a ler custou uma auditoria para aparecer | `triaged` | media — o gate e a unica coisa que impede a classe de voltar, e ha tres |
+| [`B-189`](#b-189--a-metrica-loopzero_misplaced_tenant_total-nao-tem-escritor-e-dois-alertas-de-producao-perguntam-por-ela----) | A metrica `loopzero_misplaced_tenant_total` nao tem escritor, e dois alertas de producao perguntam por ela | `triaged` | media — dois alertas que nunca podem disparar; a deteccao que o ADR-0018 declara existir nao existe |
+| [`B-190`](#b-190--o-guarda-de-completude-de-env-dos-operadores-le-comentario-e-literal-como-leitura-de-env----) | O guarda de completude de env dos operadores le comentario e literal como leitura de env | `triaged` | media — um comentario reprova o guarda (medido) e um literal pode satisfaze-lo; o `skip-link` ja consertou esta mesma cegueira |
 
 ### In flight (5)
 
@@ -6823,7 +6825,7 @@ dod:
   - mutacao com efeito conferido: para cada capacidade nova, um mutante que a desliga
     e o teste nomeado que morre por causa dele
 
-## B-184 — Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda   [ ]
+## B-184 — Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda   [x]
 
 domain: engine-go
 repo: loopzero
@@ -6855,7 +6857,7 @@ evidence: |
   o contrato no lugar dele.
 why_now: o `B-180` fechou a forma guardada-por-caminho e declarou esta como fora de
   escopo. Declarada nao e' consertada: os dois seguem verdes e sem afirmar nada.
-status: triaged
+status: shipped
 dod:
   - para cada um dos dois: ou a assercao volta a rodar (o `t.Skip` sai e o teste
     afirma algo deste repositorio), ou o teste e' removido com a razao escrita
@@ -6866,6 +6868,139 @@ dod:
   - se a decisao for uma verificacao que reprova a forma NUA (skip incondicional com
     codigo abaixo), ela nao pode virar o que vigia: um detector que para de
     reconhecer a forma reprova, nao passa
+resolution: |
+  Fechado 2026-09-05. Os dois testes voltaram a afirmar; um deles estava escondendo uma
+  REGRESSAO VIVA. A forma nua virou gate, e a auditoria de mutacao dele mede no repo real
+  a propriedade que o ultimo bullet exige.
+
+  **O `B-069` tinha voltado, e o skip nu era o que impedia de ver.** Revivendo
+  `TestB69GiteaOrgConfigurable` contra o binario que hoje possui o provisionador
+  (`tenant-operator` e' o UNICO dos quatro que importa `operators/internal/gitea`),
+  o hardcode apareceu verbatim em `operators/cmd/tenant-operator/main.go:140`:
+
+      gitProvisionerRaw := gitea.NewRealProvisioner(giteaURL, giteaToken, "loopzero")
+
+  enquanto o lado da API lia `envOr("GITEA_ORG", "loopzero")` desde sempre. Quem
+  configurasse a org teria repo CRIADO numa e PUSHADO noutra. A razao escrita no skip —
+  "Gitea org env covered by per-split-binary main.go" — era falsa: o hardcode nao foi
+  coberto pelo split, ele MUDOU DE ARQUIVO junto com o provisionador. O operador passou
+  a ler `GITEA_ORG` (default `constants.DefaultGiteaOrg = "loopzero"`, comportamento
+  identico para quem nao configura), e o chart `loopzero-tenant-operator` expoe a chave
+  (`configmap.yaml`, `values.yaml`, `values.schema.json`, `CONFIG.md`, e a linha no
+  `infra/tests/fixtures/runtime-env-manifest.txt`) — ler o env sem o chart setar nao e'
+  configuravel em instalacao nenhuma.
+
+  **O ADR-0018 saiu partido, porque so uma metade tem sujeito aqui.** A medicao do
+  `evidence` foi usada, nao re-perguntada: `operators/cmd/main.go` nao existe, entao
+  tirar o skip so moveria a falha para o `os.ReadFile`. A metade C5 (metrica exportada)
+  voltou como `TestADR0018C5_MisplacedTenantMetricDeclared` e passa. A metade C2 saiu
+  com a razao escrita, e a razao inclui o que MEDI: `runMisplacedTenantScan` nao existe
+  em fonte Go nenhuma desta arvore, em nenhum dos quatro binarios — a afirmacao do
+  proprio skip ("now per-binary") tambem era falsa. O comentario nomeia quem cobre o
+  vetor no lugar (o `const` C1 em `TestADR0018C1_NoEnvVarOverride`; o cache scoping C9
+  em `infra/tests/unit/cache_scoping_test.go` e `operators/cmd/cache_scoping_test.go`) e
+  diz explicitamente que o SCAN em si nao e' coberto por nada — virou `B-189`.
+
+  **MAIS SEIS SITIOS que o item nao tinha medido.** Varrendo a arvore para o gate,
+  `api/tests/unit/source_upload_test.go` tinha SEIS subtestes `t.Run` com skip nu e
+  corpo completo de arrange/act/assert (11-12 statements cada). A razao deles era
+  verdadeira — o fluxo `loopzero.yaml` legado saiu — e eles nem passariam se rodassem
+  (passam YAML no parametro `servicesJSON`). O que substituiu o fluxo nao tinha teste
+  NENHUM: o handler rejeita `loopzero_yaml` com `E-009` e ninguem verificava. Os seis
+  viraram UM que exercita a rejeicao, com assercao na dica de migracao (nao so no 422,
+  que o ramo `E-008` tambem devolve).
+
+  **MUTACAO DOS TESTES REVIVIDOS: 11 mutantes, 11 mortos, efeito conferido POR NOME.**
+  M1 hardcode de volta; M9 hardcode com OUTRO literal (`"acme"`); M2 leitura do env
+  removida; M3 chave fora do ConfigMap; M4 fora do `values.yaml`; M5 nome da metrica
+  trocado; M6 variavel exportada renomeada; M7 metrica fora do registry; M8 metrica
+  des-exportada; M10 dica `E-009` trocada por texto generico; M11 rejeicao do
+  `loopzero_yaml` legado desligada. Baseline verde ANTES e DEPOIS de cada um.
+
+  M6 SOBREVIVEU na primeira rodada e o conserto e' o registro que importa: a assercao
+  herdada era `strings.Contains(s, "MisplacedTenantTotal")`, e renomear a variavel
+  deixava o identificador no proprio comentario de doc e na lista do `MustRegister` —
+  o teste passava sobre um pacote que nao a declarava mais. Um teste que a prosa do
+  proprio sujeito satisfaz nao afirma o sujeito. As tres assercoes viraram
+  DECLARATION-SHAPED (`MisplacedTenantTotal = prometheus.NewGaugeVec(`, a linha `Name:`,
+  e a linha do registry), e ai M6 e M8 morrem.
+
+  A MESMA licao foi aplicada de proposito ao B69 antes de M9 existir: a assercao herdada
+  era a AUSENCIA de um literal (`!Contains(..., 'giteaToken, "loopzero")')`), que qualquer
+  outro literal atravessa. Virou a presenca da FORMA DA CHAMADA
+  (`NewRealProvisioner(giteaURL, giteaToken, giteaOrg)`), e M9 — que hardcoda `"acme"` —
+  morre. M11 confirma a outra escolha deliberada: assertar a DICA `E-009` e nao so o 422,
+  porque o ramo `E-008` tambem devolve 422 e satisfaria um teste que so olhasse o status.
+
+  **O GATE, e a propriedade do ultimo bullet MEDIDA NO REPO REAL.**
+  `loopzero-ops quality test-skip-unconditional` reprova um skip que e' statement DIRETO de
+  um corpo de funcao (declaracao ou literal) e tem statement depois; deixa em paz o que
+  nao tem nada depois — esse e' honesto. Ele e a metade SEM guarda do
+  `test-skip-absent-path`: os dois particionam a classe pela POSICAO da guarda e nenhum
+  le a metade do outro.
+
+  Cinco pisos, nenhum reportado como pass: diretorio de scan ausente; raiz sem
+  `*_test.go` (contada POR RAIZ); zero chamadas de skip; zero skips INCONDICIONAIS (piso
+  proprio deste gate — ele casa forma mais estreita que "uma chamada de skip", entao o
+  piso de cima nao basta); e toda linha do pin reencontrada. Os quatro primeiros saem 5
+  (SETUP BROKEN), o do pin sai 1.
+
+  Nao ha isencao automatica, e a escolha e' deliberada: o unico sitio vivo com statement
+  depois e' um HELPER cujo `t.Skip` e' seguido de `return nil, nil` (a cauda que o Go
+  exige). Uma regra de tres linhas perdoando "returns triviais" deixaria o pin VAZIO — e
+  piso de reencontro sobre pin vazio nao protege nada. Declarar aquele sitio custa uma
+  linha de prosa e compra a ancora VIVA.
+
+  ORACULO, binario proprio, arvore real. Mutante `After: 0*(...)` — o detector de
+  "tem statement depois?" cega:
+
+      BEFORE  PASS -- 12 unconditional skip(s), 1 with code below, all 1 declared   exit 0
+      AFTER   scanned 707 file(s) -- 138 skip call(s), 12 unconditional, 0 with code below
+              FAIL -- 1 violation(s): ... pin line 30 declares openAnyRole ... e este run
+              nao a reencontrou. Ou o sitio foi corrigido e a linha e' prosa velha, ou o
+              gate parou de detectar a forma que declara                              exit 1
+
+  E' exatamente o bullet: o detector que para de reconhecer a forma REPROVA, nao passa.
+  A primeira versao deste mutante escrevia `After: 0` e NAO COMPILAVA (indice do loop sem
+  uso) — mutante que nao compila mede o compilador, nao o gate; corrigido antes de valer.
+
+  MUTACAO DO GATE: 10 mutantes, 10 mortos, cada um por teste nomeado. G1 ignora literais
+  de funcao; G2 acima; G3/G4/G5 removem um piso cada; G6 so `Skip` (perde `Skipf`/
+  `SkipNow`); G7 sem a guarda de ambiguidade do pin; G8 sem o piso de reencontro; G9 todo
+  bloco vira incondicional (invade a metade do gate irmao); G10 todo skip vira sitio.
+  Baseline verde antes e depois.
+
+  DENOMINADOR, re-medido da saida do proprio gate depois dos consertos (nao reaproveitado
+  de scan anterior): 707 arquivos `*_test.go`, 138 chamadas de skip, 12 incondicionais, 1
+  com codigo embaixo (declarada). Antes deste item eram 146 chamadas e 20 incondicionais;
+  a diferenca sao exatamente os 8 sitios fechados aqui (2 + 6).
+
+  **DOIS ACHADOS DE LADO, filados em vez de contornados em silencio.**
+
+  `B-189` — a metrica `loopzero_misplaced_tenant_total` nao tem escritor NENHUM (tres linhas
+  no repo: comentario, declaracao, registro) enquanto DOIS alertas de producao perguntam
+  por ela. E' o buraco que o `t.Skip` nu do ADR-0018 escondia; fechar o teste sem filar
+  isso trocaria um silencio por outro.
+
+  `B-190` — o guarda de completude de env dos operadores
+  (`loopzero_operators_install_contract_test.go:234`) descobre leitura de env com grep de
+  TEXTO, sem mascarar comentario nem literal. Medido aqui como reprovacao real: o
+  comentario de doc que este item escreveu em `constants/resources.go` citava
+  `envOr("GITEA_ORG", ...)` verbatim, e como `constants` e' importado pelos quatro
+  binarios, os TRES que nao leem a variavel reprovaram por under-injection. Contornado
+  reescrevendo o comentario (a correcao certa para este diff) e filado, porque o lado
+  perigoso e' o inverso: um `Getenv` dentro de literal de string CONTA como leitura. O
+  gate `skip-link` ja teve e ja consertou exatamente esta cegueira; a tecnica existe no
+  repo e este teste nunca a recebeu.
+
+  **RE-FREEZE conscientemente:** `cmd/loopzero-ops/testdata/gateset.frozen` foi de 145 para
+  146 linhas — o unico delta e' o gate novo, e ele aparece com wiring `gates`, que e' a
+  prova de que a entrada do `taskfiles/quality.yml` esta reconhecida.
+
+  RECADO PARA O `B-188`: o denominador do `evidence` dele — "6 das 146 chamadas ja estao
+  dentro de um literal (hoje todas skips nus, classe B-184)" — ficou velho com este item.
+  Aqueles 6 eram os do `source_upload_test.go` e nao existem mais. Re-medir antes de
+  repetir o numero.
 
 ## B-185 — O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore   [ ]
 
@@ -7267,4 +7402,137 @@ dod:
     gate tres vezes seguidas. Grafias nao tentadas ainda incluem o skip dentro de um
     `defer`, dentro de um `select`, e a guarda vinda de um metodo com receptor
   - mutacao com efeito conferido, um mutante por capacidade nova
+
+## B-189 — A metrica `loopzero_misplaced_tenant_total` nao tem escritor, e dois alertas de producao perguntam por ela   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b184-fix
+severity: media — dois alertas que nunca podem disparar. Nao ha saida vermelha
+  enganosa: ha uma deteccao que o ADR-0018 declara existir e que nao existe, e o
+  painel/alerta que a consome fica verde por construcao, que e' o pior tipo de verde.
+evidence: |
+  Medido 2026-09-05, durante o `B-184`, com grep sobre a arvore inteira:
+
+    operators/internal/metrics/metrics.go:111  MisplacedTenantTotal declarada
+    operators/internal/metrics/metrics.go:203  registrada no MustRegister
+
+  E NENHUM escritor. `grep -rn 'MisplacedTenantTotal' operators/ api/ pkg/` devolve
+  exatamente tres linhas: o comentario de doc, a declaracao e o registro. Nenhum
+  `.WithLabelValues(...).Set/Inc/Add` em lugar nenhum.
+
+  O comentario da propria metrica afirma o contrario, e e' o que faz um leitor
+  acreditar que a deteccao existe:
+
+    // Emitted by tenant-controller startup scan + every reconcile cycle that
+    // detects a misplaced CR.
+
+  O scan que ele nomeia — `runMisplacedTenantScan` — nao existe em fonte Go nenhuma
+  desta arvore. Ele vivia no `operators/cmd/main.go` monolitico, deletado no T1.4, e
+  nao foi reconstruido em nenhum dos quatro binarios do split.
+
+  DOIS CONSUMIDORES perguntam pela serie e por isso nunca disparam:
+
+    infra/helm/admission-policies/templates/tenant-namespace-alerts.yaml:30
+      alert MisplacedTenantDetected  — sum by (namespace) (loopzero_misplaced_tenant_total{...}) > 0
+    infra/helm/monitoring/manifests/prometheusrule-deep-review-remediation.yaml:172
+      alert LoopZeroMisplacedTenant      — sum(rate(loopzero_misplaced_tenant_total[10m])) > 0
+
+  O primeiro carrega, no proprio comentario, o mesmo endereco falso:
+  "(runMisplacedTenantScan in operators/cmd/tenant-operator/main.go)".
+
+  COMO ISSO FICOU INVISIVEL: o unico teste que afirmava o C2 —
+  `TestADR0018C2C5_StartupMisplacementScan` — abria com um `t.Skip` NU desde o T1.4,
+  entao a assercao "main.go deve invocar runMisplacedTenantScan" nunca rodou. Essa
+  metade saiu no `B-184` com a razao escrita; a metade C5 (a metrica e' declarada)
+  voltou e passa. O que sobrou sem dono e' a EMISSAO.
+why_now: o `B-184` fechou o teste morto e, ao fechar, nomeou o buraco que ele
+  escondia. Fechar o teste sem registrar a emissao ausente seria trocar um silencio
+  por outro — o `SCOPE` do C2 ficaria coberto por nada e sem ninguem sabendo.
+status: triaged
+dod:
+  - decidir e escrever qual das duas: reimplementar a varredura de startup (o C2 do
+    ADR-0018, com cliente NAO escopado — o cache scoping C9 e' justamente o que faz o
+    operador nao enxergar o CR mal colocado), ou retirar os dois alertas e a metrica
+    com a razao escrita, dizendo o que passa a cobrir o vetor de misplacement
+  - o comentario de `MisplacedTenantTotal` deixa de afirmar um emissor que nao existe,
+    em qualquer das duas saidas
+  - o comentario do `tenant-namespace-alerts.yaml` deixa de apontar para
+    `runMisplacedTenantScan in operators/cmd/tenant-operator/main.go`, que e' um
+    endereco falso hoje
+  - se a saida for reimplementar: um teste que MATA o emissor e ve o alerta ficar sem
+    serie — medido, nao argumentado. Alerta que so pode ficar verde nao e' alerta
+  - se a saida for remover: verificar antes se algum dashboard ou runbook cita a serie,
+    e limpar junto
+
+## B-190 — O guarda de completude de env dos operadores le comentario e literal como leitura de env   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b184-fix
+severity: media — o guarda decide, nos DOIS sentidos, o contrato de config de quatro
+  binarios. Um comentario pode reprova-lo (falso positivo, medido) e um literal pode
+  satisfaze-lo (falso negativo, nao medido). O primeiro custa tempo; o segundo deixa
+  passar exatamente a lacuna de injecao que ele existe para pegar.
+evidence: |
+  Medido 2026-09-05, durante o `B-184`, como REPROVACAO REAL — nao construida.
+
+    infra/tests/charts/loopzero_operators_install_contract_test.go:234
+      grep -rhoE --include='*.go' --exclude='*_test.go' \
+        '(Getenv|LookupEnv|envOr)\("[A-Z][A-Z0-9_]*"'
+
+  E' grep de TEXTO puro sobre o fonte. Nao mascara comentario nem literal de string,
+  e o conjunto que ele produz e' a resposta do guarda para as duas direcoes
+  (completude e ISP no-bleed).
+
+  COMO APARECEU: o `B-184` adicionou `DefaultGiteaOrg` em
+  `operators/internal/constants/resources.go` com um comentario de doc que citava a
+  chamada do lado da API verbatim:
+
+      // API reads (api/internal/config: envOr("GITEA_ORG", "loopzero")): the API
+
+  `constants` e' importado pelos QUATRO binarios de operador, e o guarda calcula as
+  leituras como o fecho transitivo via `go list -deps`. Resultado, com o comentario
+  no lugar:
+
+      --- FAIL: TestLoopZeroOperatorsEnvCompleteness
+        loopzero-app-operator: binary reads "GITEA_ORG" but chart does not inject it
+        loopzero-preview-operator: binary reads "GITEA_ORG" but chart does not inject it
+        loopzero-platform-operator: binary reads "GITEA_ORG" but chart does not inject it
+
+  Nenhum dos tres toca a variavel. Reescrevendo o MESMO comentario sem a grafia de
+  chamada, o teste fica verde — nada mais mudou. O `B-184` contornou reescrevendo o
+  comentario (a correcao certa para aquele diff), e o buraco continua aberto.
+
+  O LADO PERIGOSO NAO FOI MEDIDO, e e' o outro: um `os.Getenv("FOO")` dentro de um
+  literal de string, ou num bloco comentado, CONTA como leitura — entao a direcao
+  ISP no-bleed pode ser satisfeita por texto que nao executa, e a de completude pode
+  exigir chave para binario que nao le. Vale registrar que isso e' analise por
+  inferencia sobre o codigo do grep, nao reproducao: so o falso POSITIVO foi medido.
+
+  PRECEDENTE NO PROPRIO REPO, e e' o que torna isso um item e nao uma curiosidade: o
+  gate `skip-link` tinha exatamente este defeito e foi consertado — "lia `t.Skip(`
+  dentro de literais de string e de comentarios como se fosse um skip de verdade" —
+  mascarando literais e comentarios com o scanner do Go antes de casar, preservando
+  deslocamentos. A tecnica ja esta escrita neste repositorio; este teste nunca a
+  recebeu.
+why_now: o `B-184` bateu no falso positivo e teve de contornar. Contornar nao conserta:
+  o proximo comentario que citar uma chamada de env em pacote compartilhado reprova de
+  novo, e o falso negativo continua sem ninguem olhando.
+status: triaged
+dod:
+  - a descoberta de leituras de env para de casar dentro de comentario e de literal de
+    string — reusar a mascara que o `skip-link` ja usa (scanner do Go, deslocamentos
+    preservados), nao escrever uma segunda
+  - dois oraculos, medidos com binario proprio, nao argumentados: (a) o comentario do
+    `B-184` restaurado verbatim em `operators/internal/constants/resources.go` deixa o
+    teste VERDE; (b) um `os.Getenv("NOPE_NAO_LIDA")` dentro de literal de string em um
+    pacote importado por um operador NAO passa a exigir a chave no chart
+  - um arquivo que o scanner nao ler limpo e' casado SEM mascara, para falhar do lado da
+    deteccao — a mesma escolha que o `skip-link` fez, e pela mesma razao
+  - piso anti-vacuidade: o teste ja falha com `len(reads) == 0` por binario; conferir que
+    ele continua valendo depois da mascara (uma mascara com bug zera o conjunto, e um
+    conjunto vazio nao pode virar verde)
 

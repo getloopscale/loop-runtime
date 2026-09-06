@@ -79,11 +79,24 @@
 //
 //   - It detects a skip whose GUARD is a filesystem existence probe, written
 //     inline or reached through same-package predicates, in either arm of the
-//     guard. It does NOT detect a bare
-//     unconditional `t.Skip(...)` with no guard: that shape is at least honest
-//     about being unconditional, its damage (dead assertions below it) is a
-//     different defect, and classifying WHY a bare skip exists means reading its
-//     prose. Two live instances are tracked as B-184.
+//     guard. It does NOT detect a bare unconditional `t.Skip(...)` with no
+//     guard: that shape is at least honest about being unconditional, and
+//     classifying WHY a bare skip exists means reading its prose.
+//
+//     Its damage -- dead assertions underneath -- is a different defect and now
+//     has its own gate: `test-skip-unconditional` (B-184) fails a bare skip that
+//     carries statements below it, and leaves one that carries nothing alone.
+//     The two partition the class by GUARD POSITION and neither reads the
+//     other's half: a skip inside an if, a for, a switch case or a select clause
+//     is this gate's subject, and a skip that is a direct statement of a function
+//     body is that one's.
+//
+//     This SCOPE used to name two live instances here and call them tracked.
+//     Tracked is not fixed: both had asserted nothing since T1.4, and when B-184
+//     revived them one turned out to be hiding a live regression -- the org
+//     hardcode B-069 removed had moved into tenant-operator/main.go and stayed.
+//     The same measurement found SIX more sites the item had not counted, all in
+//     t.Run closures.
 //
 //   - WHERE THE SKIP SITS is a limit too, and it was undeclared until an audit
 //     walked five spellings past this gate on 2026-09-05. Function literals are

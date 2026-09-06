@@ -181,6 +181,7 @@ var gateRegistry = []gateSpec{
 	{"test-deletion", "Guards deletion of test files against coverage loss.", runTestDeletion},
 	{"test-pyramid", "Validates the unit/integration/e2e test-pyramid balance.", runTestPyramid},
 	{"test-skip-absent-path", "B-180/B-183/B-186: a test under infra/tests/ or api/ may not skip on an absent path without declaring it — a skip guarded by a path that does not exist is unconditional in practice, and everything below it is dead code. Reads the probe inline, or through same-package boolean predicates that delegate to one another, in either arm of the guard; past its depth bound it reports UNRESOLVED and fails rather than going quiet.", runTestSkipAbsentPath},
+	{"test-skip-unconditional", "B-184: a test under infra/tests/ or api/ may not open with a BARE t.Skip — no guard at all — and carry statements underneath it. A skip aborts the function, so everything below it is unreachable code that reads like a live assertion; two such tests had asserted nothing since T1.4 and six more sat in t.Run subtests. The unguarded half of the class test-skip-absent-path guards. Its pin holds live anchors, so a detector that stops recognising the shape goes red rather than quiet.", runTestSkipUnconditional},
 	{"test-targets", "Verifies Taskfile test targets exist and are wired.", runTestTargets},
 	{"transit-coverage", "Enforces the OpenBao transit dispatcher invariant (encrypt/decrypt-for-store).", runTransitCoverage},
 	{"trivy-scan", "Runs Trivy CVE scanning on filesystem/images.", runTrivyScan},
