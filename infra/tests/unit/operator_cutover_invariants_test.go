@@ -49,12 +49,12 @@ func TestT01_AtomicCutoverScriptExists(t *testing.T) {
 	text := string(data)
 
 	for _, must := range []string{
-		"ZERO_READY_THRESHOLD_SEC",       // C6 watcher threshold
-		"validate-matrix.sh",              // pre-flight gate
-		"AUTO_ROLLBACK",                   // safety trap
-		"helmfile",                        // sync invocation
-		"--for=condition=Available",       // explicit Ready wait
-		"PRE_FLIGHT_PASSED",               // trap discipline
+		"ZERO_READY_THRESHOLD_SEC",  // C6 watcher threshold
+		"validate-matrix.sh",        // pre-flight gate
+		"AUTO_ROLLBACK",             // safety trap
+		"helmfile",                  // sync invocation
+		"--for=condition=Available", // explicit Ready wait
+		"PRE_FLIGHT_PASSED",         // trap discipline
 	} {
 		if !strings.Contains(text, must) {
 			t.Errorf("cutover script missing: %s", must)
@@ -178,9 +178,9 @@ func TestT08_OperatorCutoverAlertsLoaded(t *testing.T) {
 	}
 	text := string(data)
 	for _, alert := range []string{
-		"OperatorRestartRate24h",                  // C15
-		"OperatorReconcileLatencyPostCutover24h",  // T2.1 paired
-		"ZeroReadyOperatorWindow",                 // C6 alert pair
+		"OperatorRestartRate24h",                 // C15
+		"OperatorReconcileLatencyPostCutover24h", // T2.1 paired
+		"ZeroReadyOperatorWindow",                // C6 alert pair
 	} {
 		if !strings.Contains(text, alert) {
 			t.Errorf("missing alert: %s", alert)
@@ -381,10 +381,39 @@ func TestT12b_WireClustersDoesNotRecreateLegacyClusterCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read Taskfile.yml: %v", err)
 	}
-	if !strings.Contains(string(root), "bootstrap-cell-cc.sh --cell") {
+	// COMMENTS FIRST. The Taskfile mentions this script in a comment
+	// ("# Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env"), and a
+	// plain Contains over the file was satisfied by it. An audit deleted BOTH live
+	// invocations on 2026-09-06 and this test stayed green — the exact condition the
+	// error message below is written for, and the guard had nothing to say.
+	if !strings.Contains(stripYAMLComments(string(root)), "bootstrap-cell-cc.sh --cell") {
 		t.Errorf("Taskfile.yml no longer invokes %s — the canonical replacement for the "+
 			"call removed from %s has lost its caller", canonical, wire)
 	}
+}
+
+// stripYAMLComments drops whole-line comments and trailing ` #...` from a YAML file,
+// so a mention in prose cannot stand in for a live invocation.
+//
+// Whole-line only, plus a trailing comment that follows whitespace: a `#` inside a
+// quoted string is left alone, because truncating a live command line would make this
+// guard fail for the wrong reason. Erring here costs a false RED, and the direction
+// matters -- a guard that asserts PRESENCE gets stricter by seeing less, which is the
+// safe side for this one.
+func stripYAMLComments(s string) string {
+	var out []string
+	for _, line := range strings.Split(s, "\n") {
+		trimmed := strings.TrimLeft(line, " \t")
+		if strings.HasPrefix(trimmed, "#") {
+			out = append(out, "")
+			continue
+		}
+		if i := strings.Index(line, " #"); i >= 0 {
+			line = line[:i]
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
 }
 
 // T-13 — live cell-1 canary stage 1 GREEN.
