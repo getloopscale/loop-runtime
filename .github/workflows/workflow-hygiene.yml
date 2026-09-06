@@ -9,8 +9,12 @@
 # se quebram juntos).
 name: workflow-hygiene
 on:
-  # Pos-merge nas duas branches, sem acao no PR (decisao de 2026-08-12) — mesma
-  # razao do ci.yml: o portao real e' o delivery-gate local.
+  # Post-merge on both branches, no action on the PR (decision of 2026-08-12) —
+  # same reason as ci.yml, and since 2026-09-06 the same correction. That reason
+  # is the local delivery gate, and its three premises were all false at once for
+  # four days with nothing to say so; they are now checked before the merge by
+  # `.github/workflows/delivery-gate-armed.yml`. This job's own trigger is
+  # unchanged: it is cheap, but it was never the check that was missing (B-192).
   push:
     branches: [develop, main]
     paths: [".github/**"]
