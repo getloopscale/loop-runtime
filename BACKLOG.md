@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-193 items — **Open** 16 · **In flight** 5 · **Closed** 172 · **Blocked** 7
+195 items — **Open** 17 · **In flight** 5 · **Closed** 173 · **Blocked** 7
 
-### Open (16)
+### Open (17)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -83,13 +83,14 @@ consequência do escopo per-repo declarado acima.
 | [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `blocked` · was `triaged` | waiting on `B-137` — média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número. |
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `blocked` · was `triaged` | waiting on `B-139` — média — nada quebra hoje, e é justamente isso que o mantém: o caminho resolve porque a conta existe. Vira **alta** no dia em que outra pessoa operar o host, ou em que a conta for removida. |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `blocked` · was `triaged` | waiting on `B-154` |
-| [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo----) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `triaged` | alta — e' criptografia de segredo de tenant, e o gate ja' saiu do periodo de aviso: ele REPROVA a arvore hoje |
 | [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `triaged` | alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
 | [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
 | [`B-192`](#b-192--o-ci-e-pos-merge-porque-o-portao-local-seria-inescapavel-e-as-tres-premissas-dessa-decisao-foram-falsas-ao-mesmo-tempo----) | O CI e' pos-merge porque o portao local seria inescapavel, e as tres premissas dessa decisao foram falsas ao mesmo tempo | `triaged` | alta — nao ha nada quebrado agora (o `B-187` restaurou o hook e fechou os |
 | [`B-193`](#b-193--uma-ligacao-local-restaura-o-silencio-em-todo-caso-unresolved-e-o-rebound-acusa-um-religamento-que-nao-houve----) | Uma ligacao LOCAL restaura o silencio em todo caso UNRESOLVED, e o `rebound` acusa um religamento que nao houve | `triaged` | media — quinta reabertura consecutiva da mesma classe. Sem instancia viva; |
+| [`B-194`](#b-194--o-ramo-aes-de-leitura-so-pode-sair-com-uma-contagem-que-cubra-a-frota-e-ninguem-e-dono-dela----) | O ramo AES de leitura so' pode sair com uma contagem que cubra a frota, e ninguem e' dono dela | `triaged` | media — nada quebra hoje (o caminho de escrita ja' recusa AES); o custo e' um gate que segue vermelho por uma divida real cujo desbloqueio depende de acesso a banco que nenhuma sessao tem |
+| [`B-195`](#b-195--o-gate-de-aes-varre-um-modulo-e-a-evasao-que-ele-fechou-continua-aberta-um-diretorio-ao-lado----) | O gate de AES varre um modulo, e a evasao que ele fechou continua aberta um diretorio ao lado | `triaged` | media — nao ha AES fora de `api/` hoje (medido), entao nao ha falso-negativo |
 
 ### In flight (5)
 
@@ -101,7 +102,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
 | [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `approved` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 
-### Closed (172)
+### Closed (173)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -253,6 +254,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-159`](#b-159--o-checklist-manda-escrever-o-changelog-num-arquivo-que-nao-existe---x) | O checklist manda escrever o CHANGELOG num arquivo que nao existe | `shipped` | — |
 | [`B-160`](#b-160--a-guarda-de-comandos-junta-pedacos-de-comandos-diferentes-e-bloqueia-o-inocente---x) | A guarda de comandos junta pedacos de comandos diferentes e bloqueia o inocente | `shipped` | media — falha para o lado SEGURO (bloqueia demais), mas o efeito observado foi eu contornar a guarda para deletar um arquivo, o que e' pior para auditoria do que o `rm` que ela barrou |
 | [`B-161`](#b-161--o-gate-de-runbook-mede-a-anotacao-nao-o-runbook-6-dos-7-links-nao-levam-a-lugar-nenhum---x) | O gate de runbook mede a anotacao, nao o runbook: 6 dos 7 links nao levam a lugar nenhum | `shipped` | media — nada quebra em producao, mas o alerta que dispara as 3 da manha manda o operador para um 404, e o gate declara esse alerta CONFORME |
+| [`B-162`](#b-162--um-gate-vencido-ha-18-dias-reprova-e-ninguem-registrou-o-caminho-aes-continua-vivo---x) | Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo | `shipped` | alta — e' criptografia de segredo de tenant, e o gate ja' saiu do periodo de aviso: ele REPROVA a arvore hoje |
 | [`B-163`](#b-163--um-gate-exige-do-pulumi-o-que-a-propria-arquitetura-ja-aposentou---x) | Um gate exige do Pulumi o que a propria arquitetura ja' aposentou | `killed` | baixa — nao ha' regressao nova; o custo e' um gate que reprova por desenho e treina todo mundo a ignora-lo |
 | [`B-164`](#b-164--o-gate-de-runbook-varre-110-dos-233-alertas-da-arvore-e-o-numero-que-ele-reporta-parece-o-total---x) | O gate de runbook varre 110 dos 233 alertas da arvore, e o numero que ele reporta parece o total | `shipped` | media — o gate ja' reprova e esta' deliberadamente nao-ligado, entao nada quebra hoje; o custo e' que "33 alertas sem runbook" e' lido como o tamanho da divida, e ele e' menos da metade dela |
 | [`B-165`](#b-165--o-ambiente-standalone-public-ficou-sem-borda-que-o-sirva----) | O ambiente `standalone-public` ficou sem borda que o sirva | `shipped` | baixa — o ambiente ja era legado e o canonico e outro; o custo e um default de task que aponta para um caminho que nao serve mais. |
@@ -6106,7 +6108,7 @@ a ordem importa — fechar o B-067 antes deste multiplica o defeito por seis.
 > As outras balas seguem abertas, e duas delas exigem tocar em chart — gatilho T2.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-161`
 
-## B-162 — Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo   [ ]
+## B-162 — Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo   [x]
 
 domain: engine-go
 repo: loopzero
@@ -6126,7 +6128,7 @@ evidence: |
   marcadores `crypto/aes`, `aes.NewCipher`, `cipher.NewGCM`. A T10.3 exigia que so' restasse
   o caminho Transit (prefixo `vault:v1:`) em `encryptForStorage`.
 why_now: o gate nao esta' em periodo de aviso — ele entrou em vigor em 2026-08-01 e reprova ha' 18 dias. Nenhum item do backlog o citava (`grep no-aes-remaining BACKLOG.md` -> 0). E' a mesma forma do **B-146**, o prazo do cosign vencido em 10/08: um prazo decidido, a data chegou, e ninguem soube porque nada olhava o resultado.
-status: triaged
+status: shipped
 
 > **Correcao ao meu proprio registro, 2026-08-19 — e dois bloqueios medidos.**
 >
@@ -6164,6 +6166,69 @@ dod:
 maquina perdeu o toolchain hoje (ver o relatorio ao Paulo): sem compilador eu nao rodo o
 teste que provaria a mudanca, e mexer em cifragem de segredo sem verificar seria pior que
 esperar. Medi e registrei.
+
+> **Re-medido 2026-09-06, com binario proprio — e a acusacao do titulo envelheceu duas vezes.**
+>
+> `/tmp/loopzero-ops-b162 quality no-aes-remaining` na arvore de hoje: **FAIL (ENFORCED)**, com
+> **3 sitios**, nao 5 — `secret_wrapper.go:24` (`crypto/aes`), `:183` (`aes.NewCipher`) e
+> `:187` (`cipher.NewGCM`). **Os tres pertencem a `decrypt()`, o caminho de LEITURA.**
+> Os dois que faltam eram de `encrypt()`, o selo, e ele nao existe mais.
+>
+> **O que aconteceu entre 08-19 e hoje, e que este bloco nao registrava.** Em 2026-09-04 o
+> ramo AES de ESCRITA saiu (`73851169b`), com ADR aceito em
+> `docs/wiki/decisions/2026-09-04-t103-aes-write-path-removal.md` e a contagem de linhas
+> nao-Transit medida contra o banco vivo (`0|0`, `54b7a8f3a`). O trabalho fechou, o item
+> nao: ele continuou `triaged`, que e' um dos dois status que o
+> `select_backlog_item.py` (`SELECTABLE = ("triaged", "raw")`) escolhe. **O custo nao e'
+> cosmetico e eu sou a prova dele:** este item me foi entregue como hipotese aberta com
+> evidencia de 18 dias, e a primeira metade da fatia foi redescobrir um ADR que ja'
+> estava no disco. E' exatamente o defeito que `1a42deb0d` corrigiu para B-166, B-171 e
+> B-172 no mesmo dia — B-162 ficou de fora.
+>
+> **DoD, bullet a bullet, medido hoje e nao lido do ADR:**
+>
+> 1. **Fechado.** `encryptForStore` tem dois desfechos: ciphertext Transit ou recusa com
+>    `ErrSecretsBackendUnavailable`. Nao ha' `encrypt()` na arvore.
+> 2. **Fechado, e provado por controle.** `TestEncryptForStore_ProducesOnlyTransitCiphertextOrRefuses`
+>    nao e' vacuo: reintroduzi o fallback pre-T10.3 (`return plaintext, nil` quando
+>    `s.vault == nil`) com harness que exige suite verde antes, ancora unica, mutante que
+>    compila — **KILLED**, com a mensagem `write path accepted a non-Transit configuration
+>    and returned "plain"`. Restauracao verde.
+> 3. **Fechado por decisao registrada, nao por remocao.** O ramo de leitura FICA, e o ADR
+>    diz por que. O que sobra dele virou **B-194**.
+>
+> **A tensao que o proprio DoD carrega, e que ninguem tinha nomeado.** O bullet 1 manda
+> tirar o AES de `encryptForStorage`; o bullet 3 manda manter caminho de leitura para o
+> que ja' foi escrito. O gate varre o ARQUIVO, nao o dispatcher de escrita — entao,
+> enquanto o bullet 3 valer, **nao existe estado em que este item feche e o gate fique
+> verde**. O gate seguir vermelho aqui e' correto e nao e' execucao malfeita.
+>
+> **O que eu MUDEI, e a direcao importa: o gate ficou mais ESTRITO, nunca mais frouxo.**
+> Medi duas evasoes no binario do dia, as duas dando **PASS**:
+>
+> | sonda | antes | depois |
+> |---|---|---|
+> | `-root` apontando para arvore sem `api/` | **PASS** (0 achados = "T10.3 concluido") | **FAIL** — "scanned 0 Go files" |
+> | AES movido para `secret_wrapper_aes.go`, ao lado | **PASS** | **FAIL** — 3 sitios no arquivo novo |
+>
+> A segunda e' literalmente a evasao que o ADR de 04/09 nomeia e rejeita *por juizo*
+> ("relocating the code would pass the implementation while defeating the stated
+> intent") — nada mecanico a impedia. O doc do pacote ja' prometia varrer *"any *.go file
+> in api/ that imports crypto/aes"*; a implementacao lia **um** caminho fixo. Agora varre
+> os **374** arquivos `.go` nao-teste de `api/`, e o veredito na arvore real e' **o mesmo
+> de antes: os mesmos 3 sitios, zero falso-positivo novo**. `_test.go` fica de fora de
+> proposito: nao compila em binario, e as fixtures AES legadas sao o que sustenta o
+> bullet 3.
+>
+> **`TestCheck_PostEnforcement_AESDeleted_PASS` fixava o defeito.** Ele escrevia
+> *nenhum* arquivo e exigia PASS, sob o comentario "No file written → secret_wrapper.go
+> absent → desired post-T10.3 state". Estava verde e estava errado: tornava "apagado" e
+> "nao lido" a mesma resposta. Reescrito para o estado que T10.3 de fato produz (store
+> presente, sem marcador), com o caso zero-lido virando teste do veredito oposto.
+>
+> **O que eu NAO fiz, de proposito:** nao apaguei o ramo de leitura, nao emendei o prazo,
+> nao afrouxei marcador nem escopo do gate, e nao mexi em nada de criptografia. As duas
+> condicoes de fecho continuam com o sponsor (B-194).
 
 ## B-163 — Um gate exige do Pulumi o que a propria arquitetura ja' aposentou   [x]
 
@@ -8105,3 +8170,86 @@ dod:
     `defer`, receptor por ponteiro vs valor, e o guarda vindo de um `map` com chave
     calculada
   - mutacao com efeito conferido, arnes provando o proprio baseline verde
+
+## B-194 — O ramo AES de leitura so' pode sair com uma contagem que cubra a frota, e ninguem e' dono dela   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: b162-remeasure
+severity: media — nada quebra hoje (o caminho de escrita ja' recusa AES); o custo e' um gate que segue vermelho por uma divida real cujo desbloqueio depende de acesso a banco que nenhuma sessao tem
+evidence: |
+  Medido 2026-09-06 com binario proprio, na sequencia do **B-162**. Depois que o ramo de
+  ESCRITA saiu (`73851169b`, 2026-09-04), `no-aes-remaining` segue **FAIL (ENFORCED)** com
+  exatamente 3 sitios, e os 3 sao de `decrypt()`:
+
+  ```
+  Scanned:  374 of 374 non-test .go files under api
+  api/internal/db/store/secret_wrapper.go:24  — crypto/aes
+  api/internal/db/store/secret_wrapper.go:183 — aes.NewCipher
+  api/internal/db/store/secret_wrapper.go:187 — cipher.NewGCM
+  ```
+
+  O ADR `docs/wiki/decisions/2026-09-04-t103-aes-write-path-removal.md` nomeia as DUAS
+  unicas condicoes que autorizam remove-los, e mediu uma delas parcialmente:
+  `count(*) filter (where encrypted_value not like 'vault:v1:%')` deu `0|0` no
+  `k3d-loopzero-core`, o unico banco alcancavel daquela maquina. O proprio ADR recusa tratar
+  isso como suficiente: *"one host is not the fleet"* — `values-prod.yaml` existe e nada
+  executavel dali enumera deployment fora da maquina.
+why_now: o gate reprova hoje e vai reprovar amanha por uma divida REAL, nao por desenho — e' o oposto do B-163. O que falta nao e' decisao nem codigo: e' uma contagem que cubra a frota, ou a migracao T10.1 que a torna desnecessaria. Enquanto ninguem for dono disso, o vermelho e' permanente, e vermelho permanente e' o que ensina a ignorar gate.
+status: triaged
+
+dod:
+  - existe contagem de `encrypted_value NOT LIKE 'vault:v1:%'` cobrindo TODA base viva, com a lista de bases enumerada e datada — ou a T10.1 esta' construida e rodada, e a contagem e' zero por construcao
+  - com a contagem em maos, o ramo AES de leitura, o campo `encryptionKey` e a T10.4 (crypto-shred de `LOOPZERO_SECRET_ENCRYPTION_KEY`) saem juntos ou ficam juntos, com a razao escrita
+  - o `no-aes-remaining` volta a PASS por remocao, e nao por afrouxamento de marcador, de escopo de varredura ou de prazo
+
+**Por que isto e' um item e nao um paragrafo no B-162.** O B-162 fechou o que dava para
+fechar sem banco: o caminho de escrita. Isto aqui e' irreversivel — depois da T10.4 o
+segredo antigo nao volta — e depende de um inventario de deployments que a arvore nao
+tem. Misturar os dois deixaria um item aberto para sempre esperando um recurso que nao e'
+codigo, que e' exatamente como o B-162 passou 18 dias parecendo descuido quando era
+espera.
+
+## B-195 — O gate de AES varre um modulo, e a evasao que ele fechou continua aberta um diretorio ao lado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b162-nemesis-audit
+severity: media — nao ha AES fora de `api/` hoje (medido), entao nao ha falso-negativo
+  vivo. O que ha e' um gate cuja evasao declarada por ADR esta fechada em um lugar e
+  aberta no vizinho, e a barreira e' uma linha de `mv`.
+evidence: |
+  Medido 2026-09-06 por auditoria independente. O `B-162` alargou o gate de um caminho
+  fixo para uma varredura de `api/` — certo, e fecha a evasao "mover o AES um arquivo
+  ao lado" que o ADR de 2026-09-04 nomeia e rejeita por julgamento.
+
+  Um diretorio ao lado continua aberto. Uma implementacao AES-256-GCM COMPLETA,
+  incluindo caminho de ESCRITA com `gcm.Seal`, movida para `pkg/vault/legacy_aes.go`,
+  com `secret_wrapper.go` delegando para ela:
+
+      go build ./internal/db/store/   exit 0
+      go build ./vault/               exit 0
+      no-aes-remaining                PASS (ENFORCED), "Scanned: 374 of 374"
+
+  E o doc justificava a raiz com uma premissa falsa: "everything the api module
+  compiles into a running binary lives under here". Medido: o proprio arquivo vigiado
+  importa `pkg/errors` (`secret_wrapper.go:28`), e quatro arquivos nao-teste de `api/`
+  importam `pkg/vault` — modulo separado no `go.work` da raiz. Ja corrigido no doc; a
+  raiz continua uma so.
+why_now: o `B-162` deixou o gate mais estrito e escreveu no doc por que a varredura tem
+  a forma que tem. A frase estava errada e o escopo esta estreito pela mesma razao — se
+  ninguem tratar, a proxima pessoa le a justificativa e conclui que esta coberto.
+status: triaged
+dod:
+  - a decisao sobre a raiz e' medida e escrita: varrer os modulos que compilam no
+    binario do `api` (quais, exatamente — `go list -deps` responde), ou manter uma raiz
+    so' com a razao verdadeira no lugar da que foi corrigida
+  - o oraculo e' o `evidence` verbatim: a implementacao AES em `pkg/vault/` com o
+    delegate, medida com binario proprio antes e depois
+  - se a raiz alargar, o custo esta medido: quantos arquivos a mais, quantos falsos
+    positivos (hoje: zero `crypto/aes` fora de `api/`, medido — entao o custo esperado
+    e' tempo, nao ruido)
+  - nao mexer no ramo de leitura nem no prazo: isso e' o `B-194`
+
