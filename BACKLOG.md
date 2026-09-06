@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-196 items — **Open** 18 · **In flight** 5 · **Closed** 173 · **Blocked** 7
+196 items — **Open** 15 · **In flight** 6 · **Closed** 175 · **Blocked** 7
 
-### Open (18)
+### Open (15)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -83,17 +83,14 @@ consequência do escopo per-repo declarado acima.
 | [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `blocked` · was `triaged` | waiting on `B-137` — média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número. |
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `blocked` · was `triaged` | waiting on `B-139` — média — nada quebra hoje, e é justamente isso que o mantém: o caminho resolve porque a conta existe. Vira **alta** no dia em que outra pessoa operar o host, ou em que a conta for removida. |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `blocked` · was `triaged` | waiting on `B-154` |
-| [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `triaged` | alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
 | [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
 | [`B-192`](#b-192--o-ci-e-pos-merge-porque-o-portao-local-seria-inescapavel-e-as-tres-premissas-dessa-decisao-foram-falsas-ao-mesmo-tempo----) | O CI e' pos-merge porque o portao local seria inescapavel, e as tres premissas dessa decisao foram falsas ao mesmo tempo | `triaged` | alta — nao ha nada quebrado agora (o `B-187` restaurou o hook e fechou os |
-| [`B-193`](#b-193--uma-ligacao-local-restaura-o-silencio-em-todo-caso-unresolved-e-o-rebound-acusa-um-religamento-que-nao-houve----) | Uma ligacao LOCAL restaura o silencio em todo caso UNRESOLVED, e o `rebound` acusa um religamento que nao houve | `triaged` | media — quinta reabertura consecutiva da mesma classe. Sem instancia viva; |
 | [`B-194`](#b-194--o-ramo-aes-de-leitura-so-pode-sair-com-uma-contagem-que-cubra-a-frota-e-ninguem-e-dono-dela----) | O ramo AES de leitura so' pode sair com uma contagem que cubra a frota, e ninguem e' dono dela | `triaged` | media — nada quebra hoje (o caminho de escrita ja' recusa AES); o custo e' um gate que segue vermelho por uma divida real cujo desbloqueio depende de acesso a banco que nenhuma sessao tem |
-| [`B-195`](#b-195--o-gate-de-aes-varre-um-modulo-e-a-evasao-que-ele-fechou-continua-aberta-um-diretorio-ao-lado----) | O gate de AES varre um modulo, e a evasao que ele fechou continua aberta um diretorio ao lado | `triaged` | media — nao ha AES fora de `api/` hoje (medido), entao nao ha falso-negativo |
 | [`B-196`](#b-196--as-listas-soft-sao-montadas-antes-da-exclusao-de-baseline-entao-um-cap-inteiramente-baselineado-ainda-exige-um-adr----) | As listas soft sao montadas ANTES da exclusao de baseline, entao um cap inteiramente baselineado ainda exige um ADR | `triaged` | baixa — nada quebra; o custo e' um pedido de ADR por uma divida que ja' foi |
 
-### In flight (5)
+### In flight (6)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -101,9 +98,10 @@ consequência do escopo per-repo declarado acima.
 | [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `approved` | média — não quebra nada; custa navegação e força dois nomes de pacote que mentem sobre o diretório. |
 | [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `approved` | média — nenhum defeito de comportamento; é a superfície por onde a mistura de domínios entra sem ninguém decidir. |
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
+| [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `planned` | alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
 | [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `approved` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 
-### Closed (173)
+### Closed (175)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -280,6 +278,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-189`](#b-189--a-classe-volta-por-um-valor-de-funcao-e-o-gate-nem-diz-unresolved-seis-grafias-em-silencio----) | A classe volta por um VALOR de funcao, e o gate nem diz UNRESOLVED: seis grafias em silencio | `shipped` | media — quarta reabertura consecutiva da mesma classe, e a primeira em que |
 | [`B-190`](#b-190--o-pin-do-cli-exit-codes-promete-que-o-gate-reprova-quando-o-assunto-aparece-e-o-campo-do-assunto-nunca-e-lido----) | O pin do cli-exit-codes promete que o gate reprova quando o assunto aparece, e o campo do assunto nunca e lido | `shipped` | baixa — inofensivo com a unica linha de hoje, armadilha na segunda. A |
 | [`B-191`](#b-191--as-tres-declaracoes-da-org-do-gitea-divergem-e-a-que-diverge-nao-chega-a-lugar-nenhum---x) | As tres declaracoes da org do Gitea divergem, e a que diverge nao chega a lugar nenhum | `shipped` | media — o modo de falha do `B-069` voltou a ser alcancavel por |
+| [`B-193`](#b-193--uma-ligacao-local-restaura-o-silencio-em-todo-caso-unresolved-e-o-rebound-acusa-um-religamento-que-nao-houve----) | Uma ligacao LOCAL restaura o silencio em todo caso UNRESOLVED, e o `rebound` acusa um religamento que nao houve | `shipped` | media — quinta reabertura consecutiva da mesma classe. Sem instancia viva; |
+| [`B-195`](#b-195--o-gate-de-aes-varre-um-modulo-e-a-evasao-que-ele-fechou-continua-aberta-um-diretorio-ao-lado----) | O gate de AES varre um modulo, e a evasao que ele fechou continua aberta um diretorio ao lado | `shipped` | media — nao ha AES fora de `api/` hoje (medido), entao nao ha falso-negativo |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -6332,7 +6332,7 @@ suggested_mode: review
 source: human
 evidence: medido em 2026-08-31, ao rodar `/idea-to-release B-033`. `/plan-confidence` chama `/code-quality` internamente (per ADR 0002 `cq-gate-in-validate`), e este devolve `verdict: INVALID` com `hard_caps_triggered: [no_languages_audited]` porque `.claude/rules/code-quality-languages.txt` tem todas as quatro linguagens em `DEFER`/`DISABLED` (go/typescript em DEFER, python/rust em DISABLED). O resultado é que TODO plano — inclusive um que passa nas outras 15 checks estruturais com weighted_avg 98.4 — cai em `INVALID` pelo cap sistêmico. O gate faz o certo per B-127 (recusar PASS silencioso quando não auditou nada), mas a configuração em DEFER, herdada de B-127 e B-128, deixa o gate ligado num estado onde ele reprova por omissão. Verificado: `records/plans/b033-prometheus-url-dev-public-plan.md` tem hard caps `alignment_not_reached` + `no_languages_audited`; sem o segundo, o plano progride até `AWAITING_REVIEW` (a barreira alignmnt é humana e prevista pelo `cycle-idea-to-release.md`).
 why_now: a fatia de B-033 é a primeira vez que `/idea-to-release` roda contra este repo depois que a estrutura do gate consolidou. O que muda é que agora o gate é REAL — B-127 fechou em 2026-08-19; enquanto isso, ninguém pagou os 36 achados de deadcode do D1 do Go que impediam `ENABLED`. O resultado é a cadeia autônoma quebrada exatamente onde ela deveria funcionar. Não é bug do gate; é dívida técnica registrada e reconhecida (B-124/B-127/B-128) mas nunca priorizada, e cuja consequência só apareceu quando um humano tentou rodar a chain completa.
-status: triaged
+status: planned
 blocked_by: aguardando merge de PR #344 (https://github.com/getloopscale/loopzero/pull/344) — release phase emitiu PR_OPEN_AWAITING_APPROVAL em 2026-08-31T23:32:47Z. Fix entregue via commits 045719130 + 018501fe4 + fa2137e64 (B-172 side-finding). Envelope § 'A change is proposed, never merged' — merge é ação humana. Item volta à fila após ADVANCE reconhecer RELEASED event.
 delivered_in: 045719130  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
 progress_2026_09_06: |
@@ -8216,7 +8216,7 @@ why_now: `B-180` -> `B-183` -> `B-186` -> `B-188` -> `B-189`, e uma auditoria re
   classe nas cinco. O `SCOPE` ja foi corrigido para nao prometer o que o binario nao
   faz, entao nada esta silencioso para quem le o codigo — mas a evasao continua
   custando uma linha.
-status: triaged
+status: shipped
 dod:
   - as tres grafias de local do `evidence` deixam de ser silencio. O veredito certo
     para cada uma e' decisao escrita: ABSENT se o valor for seguivel, UNRESOLVED se
@@ -8231,6 +8231,26 @@ dod:
     `defer`, receptor por ponteiro vs valor, e o guarda vindo de um `map` com chave
     calculada
   - mutacao com efeito conferido, arnes provando o proprio baseline verde
+> **Entregue 2026-09-06.** A ligacao local deixou de ser silencio: o `unreadableFuncValue`
+> passou a alcancar nomes locais, e o `rebound` parou de acusar religamento que nao
+> houve. As grafias que a auditoria da rodada anterior mediu passam a custar veredito.
+>
+> **A AUDITORIA MEDIU QUE O CONSERTO INTRODUZIU O SILENCIO QUE O ITEM EXISTE PARA
+> FECHAR**, e essa e' a parte que precisa sobreviver. Go escopa o valor de um `range`
+> com `:=` ao laco; a ligacao sobrevivia a ele, entao
+> `f := cliPresent; for _, f := range ...; if !f()` lia a coisa errada e o guarda vivo
+> DESAPARECIA. Medido na arvore real: antes, 14 path-guarded e 3 violacoes nomeando o
+> caminho certo; depois, 13 e 2. Corrigido: a ligacao e' escopada ao corpo quando o
+> range DECLARA, e nao quando ATRIBUI — porque um range roda zero vezes sobre um
+> contentor vazio, e ai qual valor um guarda posterior le e' indecidivel, que e'
+> `UNRESOLVED` e nao um palpite.
+>
+> **Um segundo silencio, pre-existente**, achado testando a FORMA em vez da grafia: um
+> guarda DENTRO do laco tambem era invisivel quando o contentor e' literal inline.
+>
+> Aberto e declarado: `:=` num ramo ainda produz caminho errado com confianca, e quatro
+> formas decidiveis por ordem de statement viraram `UNRESOLVED` onde o pai acertava.
+> Setima rodada desta classe; cada uma fechou uma grafia e a auditoria achou a proxima.
 
 ## B-194 — O ramo AES de leitura so' pode sair com uma contagem que cubra a frota, e ninguem e' dono dela   [ ]
 
@@ -8302,7 +8322,7 @@ evidence: |
 why_now: o `B-162` deixou o gate mais estrito e escreveu no doc por que a varredura tem
   a forma que tem. A frase estava errada e o escopo esta estreito pela mesma razao — se
   ninguem tratar, a proxima pessoa le a justificativa e conclui que esta coberto.
-status: triaged
+status: shipped
 dod:
   - a decisao sobre a raiz e' medida e escrita: varrer os modulos que compilam no
     binario do `api` (quais, exatamente — `go list -deps` responde), ou manter uma raiz
@@ -8313,6 +8333,24 @@ dod:
     positivos (hoje: zero `crypto/aes` fora de `api/`, medido — entao o custo esperado
     e' tempo, nao ruido)
   - nao mexer no ramo de leitura nem no prazo: isso e' o `B-194`
+> **Entregue 2026-09-06.** A raiz de varredura saiu de um diretorio para o conjunto
+> MEDIDO de modulos do repositorio (`go list -deps`, nao estimativa), com piso por raiz:
+> uma raiz que nao le nada reprova em vez de ser a passagem mais limpa possivel.
+>
+> **E a auditoria passou pela raiz nova com um token.** `scanFile` descartava qualquer
+> linha contendo `/*` E `*/` — codigo vivo junto. Uma implementacao AES-256-GCM completa
+> cujas tres linhas de marcador terminavam em comentario compilava, era `gofmt`-limpa, e
+> o binario NOVO retornava `PASS`. Um alargamento que um comentario derrota nao e'
+> alargamento.
+>
+> Comentarios sao mascarados com o scanner do proprio Go agora — tecnica que ja existia
+> no repositorio (o `skip-link` faz isso desde 2026-09-02) e nao tinha sido trazida.
+> **Strings NAO sao mascaradas, de proposito:** `import "crypto/aes"` e' um literal de
+> string, entao mascara-las esconderia o marcador principal. Tem teste, porque e' o tipo
+> de coisa que alguem "conserta" depois por consistencia.
+>
+> Veredito da arvore real inalterado nos dois lados: os mesmos tres sitios em
+> `secret_wrapper.go`, todos do caminho de leitura.
 
 ## B-196 — As listas soft sao montadas ANTES da exclusao de baseline, entao um cap inteiramente baselineado ainda exige um ADR   [ ]
 
