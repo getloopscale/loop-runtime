@@ -119,7 +119,7 @@ func TestB191GiteaOrgDeclarationsAgree(t *testing.T) {
 				return nil
 			}
 			name := d.Name()
-			if name != "values.yaml" && !(strings.HasPrefix(name, "values-") && strings.HasSuffix(name, ".yaml")) {
+			if name != "values.yaml" && (!strings.HasPrefix(name, "values-") || !strings.HasSuffix(name, ".yaml")) {
 				return nil
 			}
 			data, rerr := os.ReadFile(p)
