@@ -226,10 +226,25 @@ func Check(cfg Config) (*Outcome, error) {
 	out.Checked = true
 	out.ScannedRoot = srcDir
 
+	// The measurement is carried whichever branch runs. It was assigned only when
+	// no tree was found, so a line this run stat'd and did not find lost its
+	// verdict the moment some OTHER tree turned up (B-190's own audit).
+	out.TrackedAbsences = declaredAbsent
+
 	for _, a := range declaredAbsent {
+		// "this line's subject came back" and "some CLI tree was found" are
+		// different facts, and one sentence reported both. A line whose subject
+		// is still absent was told its absence had closed -- a false statement
+		// about the filesystem, printed by the gate that exists to stop those.
+		//
+		// A subject that is PRESENT is not in declaredAbsent at all; measurePins
+		// puts it in `contradicted`. So every line here is genuinely still
+		// absent, and what changed is that the gate now scans anyway.
 		out.Violations = append(out.Violations, fmt.Sprintf(
-			"%s:%d: %s is declared ABSENT here, but a CLI source tree EXISTS at %s -- "+
-				"the absence closed; delete that line so this gate scans instead of declaring",
+			"%s:%d: %s is still ABSENT -- this run stat'd it and did not find it -- but a "+
+				"CLI source tree EXISTS at %s, so this gate SCANS rather than declaring. "+
+				"The line no longer describes what happens: delete it, or point it at the "+
+				"subject that is actually missing",
 			pinFile, a.Line, a.Subject, srcDir))
 	}
 	// A pin the filesystem contradicts is fixed before this gate scans: whatever
@@ -303,6 +318,17 @@ func firstExistingDir(candidates []string) string {
 
 // parsePin reads the absence declaration. A missing pin file is not an error:
 // it is the same fact as an empty pin -- nothing is declared absent.
+//
+// The sibling gate testskipabsentpath makes the OPPOSITE call on the same question,
+// and the difference is worth stating because it looks like an inconsistency. There
+// a pin line is a live ANCHOR, so losing the file silently drops tracked sites and
+// the gate goes quiet about what it was told to watch: SETUP BROKEN, exit 5. Here a
+// pin line only ever ADDS a declaration, so without the file every absence is
+// undeclared -- which is precisely the condition this gate FAILS on. Losing it can
+// only make this gate stricter, never laxer, and a floor would buy nothing.
+//
+// Written down 2026-09-05 after measuring `--pin <missing>` and reaching for a floor
+// before checking which direction the loss pushes.
 func parsePin(path string) ([]Absence, error) {
 	data, err := os.ReadFile(path) // #nosec G304 -- path is <root>/<pin>, both operator-supplied.
 	if err != nil {
