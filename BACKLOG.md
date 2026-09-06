@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-195 items — **Open** 17 · **In flight** 5 · **Closed** 173 · **Blocked** 7
+196 items — **Open** 18 · **In flight** 5 · **Closed** 173 · **Blocked** 7
 
-### Open (17)
+### Open (18)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -91,6 +91,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-193`](#b-193--uma-ligacao-local-restaura-o-silencio-em-todo-caso-unresolved-e-o-rebound-acusa-um-religamento-que-nao-houve----) | Uma ligacao LOCAL restaura o silencio em todo caso UNRESOLVED, e o `rebound` acusa um religamento que nao houve | `triaged` | media — quinta reabertura consecutiva da mesma classe. Sem instancia viva; |
 | [`B-194`](#b-194--o-ramo-aes-de-leitura-so-pode-sair-com-uma-contagem-que-cubra-a-frota-e-ninguem-e-dono-dela----) | O ramo AES de leitura so' pode sair com uma contagem que cubra a frota, e ninguem e' dono dela | `triaged` | media — nada quebra hoje (o caminho de escrita ja' recusa AES); o custo e' um gate que segue vermelho por uma divida real cujo desbloqueio depende de acesso a banco que nenhuma sessao tem |
 | [`B-195`](#b-195--o-gate-de-aes-varre-um-modulo-e-a-evasao-que-ele-fechou-continua-aberta-um-diretorio-ao-lado----) | O gate de AES varre um modulo, e a evasao que ele fechou continua aberta um diretorio ao lado | `triaged` | media — nao ha AES fora de `api/` hoje (medido), entao nao ha falso-negativo |
+| [`B-196`](#b-196--as-listas-soft-sao-montadas-antes-da-exclusao-de-baseline-entao-um-cap-inteiramente-baselineado-ainda-exige-um-adr----) | As listas soft sao montadas ANTES da exclusao de baseline, entao um cap inteiramente baselineado ainda exige um ADR | `triaged` | baixa — nada quebra; o custo e' um pedido de ADR por uma divida que ja' foi |
 
 ### In flight (5)
 
@@ -6334,6 +6335,66 @@ why_now: a fatia de B-033 é a primeira vez que `/idea-to-release` roda contra e
 status: triaged
 blocked_by: aguardando merge de PR #344 (https://github.com/getloopscale/loopzero/pull/344) — release phase emitiu PR_OPEN_AWAITING_APPROVAL em 2026-08-31T23:32:47Z. Fix entregue via commits 045719130 + 018501fe4 + fa2137e64 (B-172 side-finding). Envelope § 'A change is proposed, never merged' — merge é ação humana. Item volta à fila após ADVANCE reconhecer RELEASED event.
 delivered_in: 045719130  (commits de codigo que citam este item; e ponteiro, NAO afirmacao de que o dod fechou)
+progress_2026_09_06: |
+  **A premissa do titulo envelheceu e nao reproduz mais. O defeito vivo e outro, no
+  mesmo campo.**
+
+  Re-medido hoje, antes de escrever qualquer linha: `no_languages_audited` **nao
+  aparece**. O `code-quality-languages.txt` tem Go em `ENABLED` nos tres modulos
+  (`api/`, `pkg/`, `operators/`) desde `045719130`, entao o gate audita de verdade.
+
+      /code-quality      -> verdict FAIL_SOFT, hard_caps_triggered [], languages_audited [go]
+      /plan-confidence   -> verdict SHIPPABLE_WITH_CAVEATS, hard_caps_triggered []
+      (plano de referencia: .claude/records/plans/b033-prometheus-url-dev-public-plan.md)
+
+  As balas 1, 3 e 4 do dod fecham com essa medicao. A bala 2 fechou via
+  `code-quality-baseline.txt` (25 achados), decisao ja registrada em agosto.
+
+  **O que estava errado de verdade: `hard_caps_triggered` classificava pelo NOME.**
+  O filtro era `not sid.startswith("soft_")`, e tres familias nao sao HARD e nao se
+  escrevem `soft_*`:
+
+      symbol_fab_unverifiable_*  SOFT_FLOOR  o proxy nao respondeu; nada foi verificado
+      auditor_unavailable_*      SOFT_CAP    a ferramenta nao estava instalada
+      mutation_score_ok_*        INFO        o score ATINGIU o alvo
+
+  A terceira e a mais clara: um achado cuja mensagem inteira e "o codigo esta bem",
+  impresso no campo que o leitor le para saber o que o esta bloqueando. Medido em
+  duas formas: com um SOFT_FLOOR o campo trazia um nome, e ele era o unico achado da
+  rodada que NAO era bloqueio; com INFO + SOFT_CAP trazia dois, e nenhum era.
+
+  O split agora le a SEVERIDADE. O SOFT_FLOOR ganhou campo proprio
+  (`soft_floors_triggered`, propagado ate o relatorio do `/plan-confidence`) em vez de
+  ser descartado — descartar trocaria um sinal mal rotulado por sinal nenhum.
+
+  **O que o estreitamento NAO exclui, medido e nao argumentado.** Um identificador que
+  a tabela de severidade nao consegue classificar e MANTIDO. E isso que impede a
+  correcao de apagar justamente `no_languages_audited` e `unaudited_manifest_present`
+  — os dois caps que B-127 e este item existem para preservar, e que chegam sem
+  Finding classificavel. Harness de mutacao com 4 mutantes (incluindo o
+  estreitamento-demais e o filtro-por-nome original): suite verde antes, os 4 pegos,
+  verde de novo depois. Zero sobreviventes.
+
+  **Duas coisas corrigidas na propria entrega da rodada anterior:**
+  - o teste do caso INFO passava pela razao errada. Sozinho, um INFO faz
+    `compute_verdict` devolver `("PASS", [])`, entao `hard_caps_triggered` ja era `[]`
+    antes de qualquer filtro — a assercao passava no codigo defeituoso. Agora o INFO
+    vem pareado com um cap, que e a unica forma de ele alcancar o campo.
+  - o comentario citava uma medicao sem a condicao que a reproduz. O SOFT_FLOOR so
+    dispara quando o proxy do Go nao responde (host offline, proxy no caminho, ou o
+    budget de 30s do `_registry` esgotado). Duas rodadas na mesma arvore no mesmo dia
+    discordaram por isso. Sem a condicao escrita, quem re-roda ve `[]` e conclui que o
+    comentario mente.
+
+  **Escopo honesto:** isto e defeito de RELATORIO, nao de veredito. Medido:
+  `merge_verdict_into_plan_confidence` e `run_validation.py` derivam status de
+  `verdict`/`score_cap`, nunca da lista `hard_caps_triggered` — que so e anexada para
+  auditoria. Nenhum plano mudou de veredito por causa desta correcao. O custo era o do
+  item original ao contrario: um campo que nomeia o que nao bloqueia e ruido que o
+  leitor aprende a pular.
+
+  **Nao rodado:** nao ha `ruff` neste host, entao os arquivos tocados nao passaram por
+  lint. Suites: 772 passed, 17 skipped (code-quality + plan-confidence + implement).
 severity: alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre.
 dod:
   - está decidido qual das linguagens sobe para `ENABLED` primeiro (Go tem o maior débito de deadcode + os detectores estão consertados; TS é legacy Pulumi em retreat; Py/Rust não têm código de produto)
@@ -8252,4 +8313,42 @@ dod:
     positivos (hoje: zero `crypto/aes` fora de `api/`, medido — entao o custo esperado
     e' tempo, nao ruido)
   - nao mexer no ramo de leitura nem no prazo: isso e' o `B-194`
+
+## B-196 — As listas soft sao montadas ANTES da exclusao de baseline, entao um cap inteiramente baselineado ainda exige um ADR   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b167-nemesis-audit
+severity: baixa — nada quebra; o custo e' um pedido de ADR por uma divida que ja' foi
+  aceita como pre-existente, o que treina o leitor a ignorar o pedido.
+evidence: |
+  Medido 2026-09-06 por auditoria independente.
+
+  `emit_json_summary(findings, ...)` recebe a lista COMPLETA de findings; e'
+  `compute_verdict` que filtra o baseline, internamente. Entao as listas publicadas
+  sao montadas antes da exclusao.
+
+  Medido: os 15 findings de `orphan_export` estao todos em
+  `code-quality-baseline.txt`, e mesmo assim `soft_cap_orphan_export_go` aparece em
+  `soft_caps_triggered`. Essa lista alimenta `undismissed_soft_caps`, que trava a
+  progressao `FAIL_SOFT` — entao um cap inteiramente baselineado ainda pede um ADR.
+
+  E' pre-existente. O que o `B-167` acrescentou foi o campo NOVO
+  `soft_floors_triggered`, construido do mesmo jeito, entao ele nasce com o defeito.
+why_now: o `B-167` acabou de tornar essas listas confiaveis quanto a SEVERIDADE (elas
+  eram filtradas por prefixo de NOME). O filtro de baseline e' a segunda metade da
+  mesma pergunta — o que merece aparecer numa lista que um leitor usa para saber o que
+  o esta bloqueando.
+status: triaged
+dod:
+  - as listas publicadas refletem a mesma exclusao de baseline que o veredito usa, ou a
+    diferenca esta escrita onde o leitor a encontra — o que nao pode e' um cap
+    baselineado pedir ADR sem dizer que ja foi aceito
+  - o oraculo e' o `evidence`: os 15 `orphan_export` baselineados, medidos antes e
+    depois
+  - o campo novo `soft_floors_triggered` recebe a mesma decisao que os outros dois, seja
+    ela qual for
+  - `undismissed_soft_caps` e' o consumidor que importa: se a lista mudar, o efeito
+    dele esta medido nos dois sentidos
 
