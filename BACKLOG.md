@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-190 items — **Open** 19 · **In flight** 5 · **Closed** 166 · **Blocked** 7
+190 items — **Open** 18 · **In flight** 5 · **Closed** 167 · **Blocked** 7
 
-### Open (19)
+### Open (18)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -88,7 +88,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
 | [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
-| [`B-184`](#b-184--dois-testes-pulam-incondicionalmente-e-leem-um-arquivo-logo-abaixo-com-tfatalf-que-nunca-roda----) | Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda | `triaged` | media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a |
 | [`B-187`](#b-187--o-hook-que-o-repositorio-declara-como-substituto-de-ci-nao-existe-em-maquina-nenhuma---x) | O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma | `triaged` | alta — dois testes afirmam "the delivery gate is the CI substitute; it must |
 | [`B-188`](#b-188--tres-posicoes-de-skip-que-o-gate-nao-le-e-a-que-ele-passou-a-ler-custou-uma-auditoria-para-aparecer----) | Tres posicoes de skip que o gate nao le, e a que ele passou a ler custou uma auditoria para aparecer | `triaged` | media — o gate e a unica coisa que impede a classe de voltar, e ha tres |
 | [`B-189`](#b-189--a-classe-volta-por-um-valor-de-funcao-e-o-gate-nem-diz-unresolved-seis-grafias-em-silencio----) | A classe volta por um VALOR de funcao, e o gate nem diz UNRESOLVED: seis grafias em silencio | `triaged` | media — quarta reabertura consecutiva da mesma classe, e a primeira em que |
@@ -104,7 +103,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
 | [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `approved` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 
-### Closed (166)
+### Closed (167)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -272,6 +271,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-178`](#b-178--tres-testes-de-metricas-reprovam-em-qualquer-worktree-vinculado-porque-procuram-git-como-diretorio----) | Tres testes de metricas reprovam em qualquer worktree vinculado, porque procuram `.git` como diretorio | `shipped` | media — nao ha defeito de produto, mas o efeito e' um falso vermelho no fluxo de trabalho que passou a ser obrigatorio. Uma lane que rode a suite do proprio worktree ve tres reprovacoes que nao tem relacao com a mudanca dela, e o custo previsivel e' alguem "consertar" o que nao esta quebrado, ou aprender a ignorar vermelho. |
 | [`B-180`](#b-180--quatro-assercoes-de-cli-pulam-sempre-e-uma-delas-torna-um-tfatalf-inalcancavel----) | Quatro assercoes de `cli/` pulam sempre, e uma delas torna um `t.Fatalf` inalcancavel | `shipped` | media — nada quebra; o que falha e' a **deteccao**, e num pacote que a suite reporta como verde. Quatro guardas de regressao nao afirmam nada desde o M5, e uma delas contem codigo morto que um leitor razoavel toma por assercao ativa. |
 | [`B-183`](#b-183--o-gate-de-skip-por-caminho-ausente-para-a-grafia-nao-a-classe-um-helper-booleano-o-evade----) | O gate de skip-por-caminho-ausente para a grafia, nao a classe: um helper booleano o evade | `shipped` | media — o gate existe para impedir que a classe volte, e a classe volta com |
+| [`B-184`](#b-184--dois-testes-pulam-incondicionalmente-e-leem-um-arquivo-logo-abaixo-com-tfatalf-que-nunca-roda---x) | Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda | `shipped` | media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a |
 | [`B-185`](#b-185--o-gate-cli-exit-codes-imprime-skip-e-sai-0-desde-sempre-porque-o-diretorio-que-ele-mede-nunca-esteve-na-arvore---x) | O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore | `shipped` | media — um gate na cadeia que nunca mediu nada. Ele nao mente na saida (diz |
 | [`B-186`](#b-186--a-classe-ainda-volta-um-nivel-abaixo-um-predicado-que-chama-outro-predicado-e-invisivel-e-em-silencio---x) | A classe ainda volta um nivel abaixo: um predicado que chama outro predicado e' invisivel, e em silencio | `shipped` | media — o `B-183` existiu para fechar a classe e fechou a grafia de UM |
 
@@ -6825,7 +6825,7 @@ dod:
   - mutacao com efeito conferido: para cada capacidade nova, um mutante que a desliga
     e o teste nomeado que morre por causa dele
 
-## B-184 — Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda   [ ]
+## B-184 — Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda   [x]
 
 domain: engine-go
 repo: loopzero
@@ -6857,7 +6857,7 @@ evidence: |
   o contrato no lugar dele.
 why_now: o `B-180` fechou a forma guardada-por-caminho e declarou esta como fora de
   escopo. Declarada nao e' consertada: os dois seguem verdes e sem afirmar nada.
-status: triaged
+status: shipped
 dod:
   - para cada um dos dois: ou a assercao volta a rodar (o `t.Skip` sai e o teste
     afirma algo deste repositorio), ou o teste e' removido com a razao escrita
@@ -6868,6 +6868,139 @@ dod:
   - se a decisao for uma verificacao que reprova a forma NUA (skip incondicional com
     codigo abaixo), ela nao pode virar o que vigia: um detector que para de
     reconhecer a forma reprova, nao passa
+resolution: |
+  Fechado 2026-09-05. Os dois testes voltaram a afirmar; um deles estava escondendo uma
+  REGRESSAO VIVA. A forma nua virou gate, e a auditoria de mutacao dele mede no repo real
+  a propriedade que o ultimo bullet exige.
+
+  **O `B-069` tinha voltado, e o skip nu era o que impedia de ver.** Revivendo
+  `TestB69GiteaOrgConfigurable` contra o binario que hoje possui o provisionador
+  (`tenant-operator` e' o UNICO dos quatro que importa `operators/internal/gitea`),
+  o hardcode apareceu verbatim em `operators/cmd/tenant-operator/main.go:140`:
+
+      gitProvisionerRaw := gitea.NewRealProvisioner(giteaURL, giteaToken, "loopzero")
+
+  enquanto o lado da API lia `envOr("GITEA_ORG", "loopzero")` desde sempre. Quem
+  configurasse a org teria repo CRIADO numa e PUSHADO noutra. A razao escrita no skip —
+  "Gitea org env covered by per-split-binary main.go" — era falsa: o hardcode nao foi
+  coberto pelo split, ele MUDOU DE ARQUIVO junto com o provisionador. O operador passou
+  a ler `GITEA_ORG` (default `constants.DefaultGiteaOrg = "loopzero"`, comportamento
+  identico para quem nao configura), e o chart `loopzero-tenant-operator` expoe a chave
+  (`configmap.yaml`, `values.yaml`, `values.schema.json`, `CONFIG.md`, e a linha no
+  `infra/tests/fixtures/runtime-env-manifest.txt`) — ler o env sem o chart setar nao e'
+  configuravel em instalacao nenhuma.
+
+  **O ADR-0018 saiu partido, porque so uma metade tem sujeito aqui.** A medicao do
+  `evidence` foi usada, nao re-perguntada: `operators/cmd/main.go` nao existe, entao
+  tirar o skip so moveria a falha para o `os.ReadFile`. A metade C5 (metrica exportada)
+  voltou como `TestADR0018C5_MisplacedTenantMetricDeclared` e passa. A metade C2 saiu
+  com a razao escrita, e a razao inclui o que MEDI: `runMisplacedTenantScan` nao existe
+  em fonte Go nenhuma desta arvore, em nenhum dos quatro binarios — a afirmacao do
+  proprio skip ("now per-binary") tambem era falsa. O comentario nomeia quem cobre o
+  vetor no lugar (o `const` C1 em `TestADR0018C1_NoEnvVarOverride`; o cache scoping C9
+  em `infra/tests/unit/cache_scoping_test.go` e `operators/cmd/cache_scoping_test.go`) e
+  diz explicitamente que o SCAN em si nao e' coberto por nada — virou `B-189`.
+
+  **MAIS SEIS SITIOS que o item nao tinha medido.** Varrendo a arvore para o gate,
+  `api/tests/unit/source_upload_test.go` tinha SEIS subtestes `t.Run` com skip nu e
+  corpo completo de arrange/act/assert (11-12 statements cada). A razao deles era
+  verdadeira — o fluxo `loopzero.yaml` legado saiu — e eles nem passariam se rodassem
+  (passam YAML no parametro `servicesJSON`). O que substituiu o fluxo nao tinha teste
+  NENHUM: o handler rejeita `loopzero_yaml` com `E-009` e ninguem verificava. Os seis
+  viraram UM que exercita a rejeicao, com assercao na dica de migracao (nao so no 422,
+  que o ramo `E-008` tambem devolve).
+
+  **MUTACAO DOS TESTES REVIVIDOS: 11 mutantes, 11 mortos, efeito conferido POR NOME.**
+  M1 hardcode de volta; M9 hardcode com OUTRO literal (`"acme"`); M2 leitura do env
+  removida; M3 chave fora do ConfigMap; M4 fora do `values.yaml`; M5 nome da metrica
+  trocado; M6 variavel exportada renomeada; M7 metrica fora do registry; M8 metrica
+  des-exportada; M10 dica `E-009` trocada por texto generico; M11 rejeicao do
+  `loopzero_yaml` legado desligada. Baseline verde ANTES e DEPOIS de cada um.
+
+  M6 SOBREVIVEU na primeira rodada e o conserto e' o registro que importa: a assercao
+  herdada era `strings.Contains(s, "MisplacedTenantTotal")`, e renomear a variavel
+  deixava o identificador no proprio comentario de doc e na lista do `MustRegister` —
+  o teste passava sobre um pacote que nao a declarava mais. Um teste que a prosa do
+  proprio sujeito satisfaz nao afirma o sujeito. As tres assercoes viraram
+  DECLARATION-SHAPED (`MisplacedTenantTotal = prometheus.NewGaugeVec(`, a linha `Name:`,
+  e a linha do registry), e ai M6 e M8 morrem.
+
+  A MESMA licao foi aplicada de proposito ao B69 antes de M9 existir: a assercao herdada
+  era a AUSENCIA de um literal (`!Contains(..., 'giteaToken, "loopzero")')`), que qualquer
+  outro literal atravessa. Virou a presenca da FORMA DA CHAMADA
+  (`NewRealProvisioner(giteaURL, giteaToken, giteaOrg)`), e M9 — que hardcoda `"acme"` —
+  morre. M11 confirma a outra escolha deliberada: assertar a DICA `E-009` e nao so o 422,
+  porque o ramo `E-008` tambem devolve 422 e satisfaria um teste que so olhasse o status.
+
+  **O GATE, e a propriedade do ultimo bullet MEDIDA NO REPO REAL.**
+  `loopzero-ops quality test-skip-unconditional` reprova um skip que e' statement DIRETO de
+  um corpo de funcao (declaracao ou literal) e tem statement depois; deixa em paz o que
+  nao tem nada depois — esse e' honesto. Ele e a metade SEM guarda do
+  `test-skip-absent-path`: os dois particionam a classe pela POSICAO da guarda e nenhum
+  le a metade do outro.
+
+  Cinco pisos, nenhum reportado como pass: diretorio de scan ausente; raiz sem
+  `*_test.go` (contada POR RAIZ); zero chamadas de skip; zero skips INCONDICIONAIS (piso
+  proprio deste gate — ele casa forma mais estreita que "uma chamada de skip", entao o
+  piso de cima nao basta); e toda linha do pin reencontrada. Os quatro primeiros saem 5
+  (SETUP BROKEN), o do pin sai 1.
+
+  Nao ha isencao automatica, e a escolha e' deliberada: o unico sitio vivo com statement
+  depois e' um HELPER cujo `t.Skip` e' seguido de `return nil, nil` (a cauda que o Go
+  exige). Uma regra de tres linhas perdoando "returns triviais" deixaria o pin VAZIO — e
+  piso de reencontro sobre pin vazio nao protege nada. Declarar aquele sitio custa uma
+  linha de prosa e compra a ancora VIVA.
+
+  ORACULO, binario proprio, arvore real. Mutante `After: 0*(...)` — o detector de
+  "tem statement depois?" cega:
+
+      BEFORE  PASS -- 12 unconditional skip(s), 1 with code below, all 1 declared   exit 0
+      AFTER   scanned 707 file(s) -- 138 skip call(s), 12 unconditional, 0 with code below
+              FAIL -- 1 violation(s): ... pin line 30 declares openAnyRole ... e este run
+              nao a reencontrou. Ou o sitio foi corrigido e a linha e' prosa velha, ou o
+              gate parou de detectar a forma que declara                              exit 1
+
+  E' exatamente o bullet: o detector que para de reconhecer a forma REPROVA, nao passa.
+  A primeira versao deste mutante escrevia `After: 0` e NAO COMPILAVA (indice do loop sem
+  uso) — mutante que nao compila mede o compilador, nao o gate; corrigido antes de valer.
+
+  MUTACAO DO GATE: 10 mutantes, 10 mortos, cada um por teste nomeado. G1 ignora literais
+  de funcao; G2 acima; G3/G4/G5 removem um piso cada; G6 so `Skip` (perde `Skipf`/
+  `SkipNow`); G7 sem a guarda de ambiguidade do pin; G8 sem o piso de reencontro; G9 todo
+  bloco vira incondicional (invade a metade do gate irmao); G10 todo skip vira sitio.
+  Baseline verde antes e depois.
+
+  DENOMINADOR, re-medido da saida do proprio gate depois dos consertos (nao reaproveitado
+  de scan anterior): 707 arquivos `*_test.go`, 138 chamadas de skip, 12 incondicionais, 1
+  com codigo embaixo (declarada). Antes deste item eram 146 chamadas e 20 incondicionais;
+  a diferenca sao exatamente os 8 sitios fechados aqui (2 + 6).
+
+  **DOIS ACHADOS DE LADO, filados em vez de contornados em silencio.**
+
+  `B-189` — a metrica `loopzero_misplaced_tenant_total` nao tem escritor NENHUM (tres linhas
+  no repo: comentario, declaracao, registro) enquanto DOIS alertas de producao perguntam
+  por ela. E' o buraco que o `t.Skip` nu do ADR-0018 escondia; fechar o teste sem filar
+  isso trocaria um silencio por outro.
+
+  `B-190` — o guarda de completude de env dos operadores
+  (`loopzero_operators_install_contract_test.go:234`) descobre leitura de env com grep de
+  TEXTO, sem mascarar comentario nem literal. Medido aqui como reprovacao real: o
+  comentario de doc que este item escreveu em `constants/resources.go` citava
+  `envOr("GITEA_ORG", ...)` verbatim, e como `constants` e' importado pelos quatro
+  binarios, os TRES que nao leem a variavel reprovaram por under-injection. Contornado
+  reescrevendo o comentario (a correcao certa para este diff) e filado, porque o lado
+  perigoso e' o inverso: um `Getenv` dentro de literal de string CONTA como leitura. O
+  gate `skip-link` ja teve e ja consertou exatamente esta cegueira; a tecnica existe no
+  repo e este teste nunca a recebeu.
+
+  **RE-FREEZE conscientemente:** `cmd/loopzero-ops/testdata/gateset.frozen` foi de 145 para
+  146 linhas — o unico delta e' o gate novo, e ele aparece com wiring `gates`, que e' a
+  prova de que a entrada do `taskfiles/quality.yml` esta reconhecida.
+
+  RECADO PARA O `B-188`: o denominador do `evidence` dele — "6 das 146 chamadas ja estao
+  dentro de um literal (hoje todas skips nus, classe B-184)" — ficou velho com este item.
+  Aqueles 6 eram os do `source_upload_test.go` e nao existem mais. Re-medir antes de
+  repetir o numero.
 
 ## B-185 — O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore   [x]
 

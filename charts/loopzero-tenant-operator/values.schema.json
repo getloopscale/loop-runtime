@@ -309,6 +309,9 @@
         "argocdNamespace": {
           "type": "string"
         },
+        "giteaOrg": {
+          "type": "string"
+        },
         "giteaUrl": {
           "type": "string"
         },

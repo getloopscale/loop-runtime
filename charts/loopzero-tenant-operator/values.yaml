@@ -25,6 +25,7 @@ service:
 # Operator configuration (environment variables via ConfigMap)
 config:
   argocdNamespace: "argocd"
+  giteaOrg: "loopzero"
   giteaUrl: ""
   harborAdminUsername: "admin"
   harborRegistryHost: ""

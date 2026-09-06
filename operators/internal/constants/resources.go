@@ -147,6 +147,21 @@ const (
 	// DefaultGiteaURL is the default in-cluster Gitea HTTP URL.
 	DefaultGiteaURL = "http://gitea-http.gitea.svc.cluster.local:3000"
 
+	// DefaultGiteaOrg is the Gitea organisation that owns the tenant gitops
+	// repositories when the GITEA_ORG environment variable is unset. It must agree
+	// with the default the API applies for the same variable (see the GiteaOrg
+	// field in api/internal/config): the API creates those repositories and the
+	// tenant operator pushes to them, so a disagreement splits one tenant across
+	// two organisations (B-069).
+	//
+	// Deliberately NOT written here as the API's call expression. The operator
+	// chart-completeness guard discovers a binary's env reads by grepping source
+	// text for the call spelling, without masking comments, and this package is
+	// imported by all four operator binaries -- so writing it that way made three
+	// binaries that never touch the variable appear to read it. That blind spot is
+	// B-190; this comment simply stays out of its way.
+	DefaultGiteaOrg = "loopzero"
+
 	// DefaultArgoCDNamespace is the default namespace where ArgoCD is installed.
 	DefaultArgoCDNamespace = "argocd"
 

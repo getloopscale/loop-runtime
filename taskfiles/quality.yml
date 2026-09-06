@@ -240,6 +240,19 @@ tasks:
       # movida, zero arquivos, zero skips, pin ilegivel — ele sai 5 dizendo o que
       # faltou, nunca 0.
       - /tmp/loopzero-ops quality test-skip-absent-path
+      # B-184: a metade SEM guarda da mesma classe. Um `t.Skip` nu — sem condicao
+      # nenhuma — nao e' um ramo: ele aborta a funcao, entao TUDO abaixo dele e'
+      # inalcancavel e mesmo assim se le como assercao viva. Dois testes de regressao
+      # estavam assim desde o T1.4 (um deles escondia o hardcode que o B-069 tinha
+      # removido, de volta em tenant-operator/main.go) e mais seis viviam dentro de
+      # closures `t.Run`. O gate reprova um skip nu COM codigo embaixo, e deixa em paz
+      # o que nao tem nada embaixo — esse e' honesto. O pin em
+      # infra/quality/test-skip-unconditional.txt guarda ancoras VIVAS: se o teste de
+      # "tem statement depois?" parar de funcionar, a linha declarada deixa de ser
+      # reencontrada e o gate fica vermelho em vez de silencioso. Sem sujeito — arvore
+      # movida, zero arquivos, zero skips, zero skips incondicionais, pin ilegivel ou
+      # ambiguo — ele sai 5, nunca 0.
+      - /tmp/loopzero-ops quality test-skip-unconditional
       # Wired 2026-07-30 after its finding was fixed: it reprovava exigindo
       # `cli:link`/`cli:build`, removidas no #254 porque `cli/` saiu no M2. O
       # contrato declarava uma capacidade que o repo perdeu dois milestones
