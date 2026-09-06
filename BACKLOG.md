@@ -5078,7 +5078,7 @@ dod:
 > accepts. Advertised set now equals accepted set (`{0,1}`); shellcheck clean; validation
 > untouched (`bootstrap-cell-cc.sh:105-108`).
 >
-> **NOT fixed here, deliberately.** Repairing the three call sites is a behaviour change on
+> **NOT fixed here, deliberately.** Repairing the three call sites — and an audit enumerated TEN invocations of which FIVE pass a value the validation rejects. The two this sweep missed are in a third file it never opened, infra/scripts/drill/drill-helmfile-bootstrap.sh (:446 `--cell default`, :454 `--cell 2`), which also carries the duplicate-row artifact this item describes: :467 loops `for cell in cell-0 cell-0 cell-1`, patching cell-0 twice and never touching a third CR. The sweep grepped the script's NAME and reported what it recognised instead of enumerating invocations — the same failure this item convicts its own subject of is a behaviour change on
 > drill and heal paths that need live infrastructure to verify, and each repair propagates a
 > fusion whose ADR (`docs/decisions/2026-08-09-cell-cluster-unification-adr.md`) is still
 > `PROPOSED` and still reads *"não implementar antes da ratificação"*. Deepening an
