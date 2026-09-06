@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-192 items — **Open** 20 · **In flight** 5 · **Closed** 167 · **Blocked** 7
+192 items — **Open** 18 · **In flight** 5 · **Closed** 169 · **Blocked** 7
 
-### Open (20)
+### Open (18)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -90,8 +90,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
 | [`B-187`](#b-187--o-hook-que-o-repositorio-declara-como-substituto-de-ci-nao-existe-em-maquina-nenhuma---x) | O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma | `triaged` | alta — dois testes afirmam "the delivery gate is the CI substitute; it must |
 | [`B-188`](#b-188--tres-posicoes-de-skip-que-o-gate-nao-le-e-a-que-ele-passou-a-ler-custou-uma-auditoria-para-aparecer----) | Tres posicoes de skip que o gate nao le, e a que ele passou a ler custou uma auditoria para aparecer | `triaged` | media — o gate e a unica coisa que impede a classe de voltar, e ha tres |
-| [`B-189`](#b-189--a-classe-volta-por-um-valor-de-funcao-e-o-gate-nem-diz-unresolved-seis-grafias-em-silencio----) | A classe volta por um VALOR de funcao, e o gate nem diz UNRESOLVED: seis grafias em silencio | `triaged` | media — quarta reabertura consecutiva da mesma classe, e a primeira em que |
-| [`B-190`](#b-190--o-pin-do-cli-exit-codes-promete-que-o-gate-reprova-quando-o-assunto-aparece-e-o-campo-do-assunto-nunca-e-lido----) | O pin do cli-exit-codes promete que o gate reprova quando o assunto aparece, e o campo do assunto nunca e lido | `triaged` | baixa — inofensivo com a unica linha de hoje, armadilha na segunda. A |
 | [`B-192`](#b-192--o-ci-e-pos-merge-porque-o-portao-local-seria-inescapavel-e-as-tres-premissas-dessa-decisao-foram-falsas-ao-mesmo-tempo----) | O CI e' pos-merge porque o portao local seria inescapavel, e as tres premissas dessa decisao foram falsas ao mesmo tempo | `triaged` | alta — nao ha nada quebrado agora (o `B-187` restaurou o hook e fechou os |
 | [`B-193`](#b-193--uma-ligacao-local-restaura-o-silencio-em-todo-caso-unresolved-e-o-rebound-acusa-um-religamento-que-nao-houve----) | Uma ligacao LOCAL restaura o silencio em todo caso UNRESOLVED, e o `rebound` acusa um religamento que nao houve | `triaged` | media — quinta reabertura consecutiva da mesma classe. Sem instancia viva; |
 
@@ -105,7 +103,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
 | [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `approved` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 
-### Closed (167)
+### Closed (169)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -276,6 +274,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-184`](#b-184--dois-testes-pulam-incondicionalmente-e-leem-um-arquivo-logo-abaixo-com-tfatalf-que-nunca-roda---x) | Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda | `shipped` | media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a |
 | [`B-185`](#b-185--o-gate-cli-exit-codes-imprime-skip-e-sai-0-desde-sempre-porque-o-diretorio-que-ele-mede-nunca-esteve-na-arvore---x) | O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore | `shipped` | media — um gate na cadeia que nunca mediu nada. Ele nao mente na saida (diz |
 | [`B-186`](#b-186--a-classe-ainda-volta-um-nivel-abaixo-um-predicado-que-chama-outro-predicado-e-invisivel-e-em-silencio---x) | A classe ainda volta um nivel abaixo: um predicado que chama outro predicado e' invisivel, e em silencio | `shipped` | media — o `B-183` existiu para fechar a classe e fechou a grafia de UM |
+| [`B-189`](#b-189--a-classe-volta-por-um-valor-de-funcao-e-o-gate-nem-diz-unresolved-seis-grafias-em-silencio----) | A classe volta por um VALOR de funcao, e o gate nem diz UNRESOLVED: seis grafias em silencio | `shipped` | media — quarta reabertura consecutiva da mesma classe, e a primeira em que |
+| [`B-190`](#b-190--o-pin-do-cli-exit-codes-promete-que-o-gate-reprova-quando-o-assunto-aparece-e-o-campo-do-assunto-nunca-e-lido----) | O pin do cli-exit-codes promete que o gate reprova quando o assunto aparece, e o campo do assunto nunca e lido | `shipped` | baixa — inofensivo com a unica linha de hoje, armadilha na segunda. A |
 
 <!-- BACKLOG-INDEX:END -->
 
@@ -7548,7 +7548,7 @@ evidence: |
 why_now: `B-180` -> `B-183` -> `B-186` -> `B-188`, e uma auditoria reabriu a classe
   nas quatro. O que muda aqui e que a evasao nao vira UNRESOLVED: o gate imprime PASS.
   Silencio e o unico resultado que este gate promete nunca dar.
-status: triaged
+status: shipped
 dod:
   - as seis grafias do `evidence`, injetadas verbatim em `infra/tests/config/`, fazem
     o gate sair 1 — ou, para as que nao puderem ser lidas, UNRESOLVED com a razao. O
@@ -7595,7 +7595,7 @@ evidence: |
 why_now: o `B-185` acabou de tornar este arquivo o lugar onde uma ausencia e
   declarada, entao a segunda linha e questao de tempo — e o cabecalho promete uma
   verificacao ao proximo editor.
-status: triaged
+status: shipped
 dod:
   - o campo subject de cada linha do pin e verificado no sistema de arquivos, e uma
     linha cujo assunto EXISTE reprova nomeando o caminho — o oraculo e a linha `docs`
