@@ -203,25 +203,39 @@
 //     that fires when the path IS there, in either arm -- remains deliberately
 //     not a site, because no missing path can cause it.
 //
-//   - THE OPENING SENTENCE OF THIS BULLET USED TO READ "the GUARD POSITION
-//     reaches a body wherever a NAME can carry one". An audit measured that false
-//     on 2026-09-05, the day it was written: EIGHT spellings walk past in total
-//     silence, and one local binding is enough to produce most of them --
-//     `f := presentFn(); f()` where `presentFn()()` is red, `p := s.probe; p()`
-//     where `s.probe()` is UNRESOLVED, `f := probes[k]; f()` where `probes[k]()`
-//     is UNRESOLVED. `unreadableFuncValue` accepts an *ast.Ident only when the
-//     name is in `pkg.rebound` or `pkg.consts`, and a LOCAL name is in neither,
-//     so the fallback that turns a silence into a verdict never runs for the one
-//     shape a reader reaches for first when factoring a guard out. Two more:
-//     a field declared through a NAMED func type (`type predicate func() bool`)
-//     is never indexed, and a parenthesised call `(cliPresent)()` is not routed
-//     to the resolver that could read it. Tracked as B-193, with the audit's
-//     spellings as its oracle.
+//   - THE GUARD POSITION REACHES A BODY WHEREVER A NAME CAN CARRY ONE, and this
+//     sentence has been earned twice rather than written once. B-189 made it true
+//     of package-level names; an audit then measured it false for LOCAL ones the
+//     day it was written, and B-193 made it true of those.
 //
-//     So the honest opening is narrower: the GUARD POSITION reaches a body when a
-//     PACKAGE-LEVEL name carries one, or when the call is written directly. A call to
-//     a function declared in this package, a method whose name is unambiguous in
-//     it, and -- since B-189 -- a name bound to a func VALUE: a package alias
+//     WHAT A LOCAL COST. One binding restored total silence over every
+//     UNRESOLVED case: `f := presentFn(); f()` where `presentFn()()` is red,
+//     `p := s.probe; p()` where `s.probe()` is UNRESOLVED, `f := probes[k]; f()`
+//     where `probes[k]()` is UNRESOLVED. `unreadableFuncValue` accepted an
+//     *ast.Ident only when the name was in `pkg.rebound` or `pkg.consts`, and a
+//     LOCAL name is in neither, so the fallback whose whole job is to turn a
+//     silence into a verdict never ran for the one shape a reader reaches for
+//     first when factoring a guard out. The fix is not a fourth index: a name
+//     that HOLDS an expression is followed to the expression, and the expression
+//     is routed to the same readers the spelling without the binding goes to
+//     (guardCall, predicateCondition, heldExpr). Probe-reachability over an
+//     expression, not over a name.
+//
+//     Measured 2026-09-06 with binaries built from this package, nine spellings
+//     injected into infra/tests/config/: BEFORE, 12 path-guarded and ONE
+//     violation -- and that one was FALSE, an alias accused of a rebinding that
+//     never happened. AFTER, 20 path-guarded and nine violations, the alias among
+//     them with the ABSENT verdict it always had. Eight silences and one false
+//     verdict, for nine spellings each one line from the live guard.
+//
+//     A twelve-spelling reopening attempt run against the fix caught all twelve;
+//     three of them the B-189 build had not: a parenthesised func literal
+//     invoked on the spot, a parenthesised local `(f)()`, and a local holding a
+//     field read in the condition of a tag-less switch case. All three are
+//     pinned in localbinding_test.go.
+//
+//     So: a call to a function declared in this package, a method whose name is
+//     unambiguous in it, and -- since B-189 -- a name bound to a func VALUE: a package alias
 //     `var present = cliSrcPresent`, a package `var f = func() bool {...}`, a
 //     local `check := cliPresent`, a method value `p := h.Present`, a struct
 //     field read from the composite literal the caller's own scope bound to the
@@ -238,19 +252,33 @@
 //     path-guarded, PASS, exit 0, with a dead t.Fatal under each of the six.
 //     The last three spellings above were measured walking past the FIRST fix
 //     for the other six, in the same silence, on the same day. A fourth round of
-//     the same audit then walked past THIS fix eight more times, which is why the
-//     opening sentence of this bullet is now a smaller claim than the work that
-//     earned it.
+//     the same audit then walked past THIS fix eight more times, which B-193
+//     closed.
 //
-//     ONE MORE THING THE CODE DOES THAT THIS COMMENT USED TO DENY: `pkg.rebound`
-//     is set by ANY `=` to an identifier anywhere in the package, locals
-//     included, while `pkgScope`'s own doc calls it "the package-level names that
-//     get a second value after their declaration". So a package alias that is
-//     never reassigned is downgraded to UNRESOLVED because some unrelated
-//     function happens to shadow its name -- and the printed reason, "name
-//     rebound to another func value", is a confident statement about a rebinding
-//     that did not happen. Telling the two apart needs scope tracking this
-//     resolver does not do; B-193 owns it.
+//     PUNCTUATION AND A NAMED TYPE were the two smaller halves of B-193, and both
+//     are read now. Parentheses are stripped before routing, so `(cliPresent)()`,
+//     `(f)()` and `(func() bool {...})()` reach the reader the unparenthesised
+//     spelling reaches; a func literal invoked on the spot is read as the
+//     predicate it is. And a struct field declared through a NAMED func type
+//     (`type predicate func() bool`, then `probe predicate`) is indexed like one
+//     declared with the literal type -- matching only *ast.FuncType left it out
+//     of funcFields entirely, so the bar the doc said such a field has to clear
+//     could be MET and the guard still walked past. That was a property this
+//     comment claimed and the code did not have, which is the worst kind to
+//     leave: a reader who trusts it stops looking.
+//
+//     `pkg.rebound` USED TO ACCUSE A REBINDING THAT DID NOT HAPPEN. It was set by
+//     ANY `=` to an identifier anywhere in the package, locals included, while
+//     `pkgScope`'s own doc called it "the package-level names that get a second
+//     value after their declaration" -- so a package alias nobody ever reassigned
+//     was downgraded to UNRESOLVED because an unrelated function shadowed its
+//     name, under a printed sentence stating a swap that never occurred. It is
+//     filled by indexRebindings now, which carries Go's own block scopes in
+//     declaration order: an `=` to a name the enclosing body declared rebinds the
+//     LOCAL and is not this index's business, and an `=` to any other identifier
+//     is the package-level swap B-189 refused to read past. The refusal that
+//     survives a name it simply could not follow says THAT instead, because a
+//     reason may not assert more than the check behind it (B-193).
 //
 //     WHAT A FUNC VALUE STILL COSTS, and it costs a verdict rather than a
 //     silence. Three shapes are UNRESOLVED and red:
@@ -267,11 +295,28 @@
 //     and reading it would be worse than silence: a confident verdict about a
 //     function that never ran.
 //
+//     ALL THREE SURVIVE A LOCAL BINDING. `p := s.probe; p()` and `f := probes[k];
+//     f()` cost the same verdict the spelling without the binding costs, which is
+//     the whole of B-193's first root cause: before it, the binding bought
+//     silence for one line of ordinary refactoring.
+//
+//     ONE SHAPE OF THAT FOLLOWING IS DECLARED, NOT DONE: a func value the CALLER
+//     handed over, which the helper then calls WITH ARGUMENTS. The value has to
+//     be read in the caller's scope and the arguments were written in the
+//     helper's, and reading them over there answers about names that frame never
+//     bound -- where both frames spell one name differently, that is a confident
+//     verdict about the wrong file. So this exact shape stays where B-189 left
+//     it rather than being traded for a possible wrong path; the zero-argument
+//     spelling, which is what a `func() bool` predicate uses, is read. Both have
+//     tests.
+//
 //     All three share one bar, the bar every unreadable guard here has to clear
 //     before it costs a verdict: something the package binds under that name has
 //     to touch the filesystem. A table of cluster predicates, or a field nothing
 //     fills with a probe, stays as much none of this gate's business as
-//     `if !dialCluster() { t.Skip() }` is.
+//     `if !dialCluster() { t.Skip() }` is -- and a LOCAL holding one of those
+//     stays out too. `dialFn := dialCluster; dialFn()` is the control the local
+//     work was measured against, and it has a test of its own.
 //
 //     `presentFn()()` -- calling the value another call returned -- is read only
 //     when the producer resolves to a same-package body whose WHOLE body is one
@@ -667,13 +712,22 @@ func scanDir(out *Outcome, root, dir string) error {
 		methods:    map[string][]helperDecl{},
 		imports:    map[string]map[string]bool{},
 		consts:     map[string]boundExpr{},
+		funcTypes:  map[string]bool{},
 		funcFields: map[string]bool{},
 		boundFuncs: map[string][]boundExpr{},
 		rebound:    map[string]bool{},
 	}
+	// Named func types first, across every file: a field spelled `probe
+	// predicate` cannot be recognised as func-typed until `type predicate
+	// func() bool` has been read, and the two may sit in different files of the
+	// same package.
+	for _, pf := range files {
+		indexFuncTypes(pkg, pf)
+	}
 	for _, pf := range files {
 		pkg.imports[pf.rel] = importNames(pf.ast)
 		indexFuncFields(pkg, pf)
+		indexRebindings(pkg, pf)
 		for _, decl := range pf.ast.Decls {
 			if fd, ok := decl.(*ast.FuncDecl); ok {
 				if fd.Recv == nil {
@@ -731,7 +785,7 @@ func indexFuncFields(pkg *pkgScope, pf parsedFile) {
 				return true
 			}
 			for _, f := range x.Fields.List {
-				if _, ok := f.Type.(*ast.FuncType); !ok {
+				if !pkg.isFuncType(f.Type) {
 					continue
 				}
 				for _, name := range f.Names {
@@ -753,6 +807,10 @@ func indexFuncFields(pkg *pkgScope, pf parsedFile) {
 			// ASSIGN, not DEFINE: `f = other` gives an existing name a second
 			// value, which is what makes the name's declaration stop being the
 			// answer. `f := other` introduces a new one.
+			//
+			// This records the VALUE only, under the name as spelled. Whether
+			// the name is the package's or a local shadowing it is decided by
+			// indexRebindings, because only that answer gets printed.
 			if x.Tok != token.ASSIGN || len(x.Lhs) != len(x.Rhs) {
 				return true
 			}
@@ -764,12 +822,322 @@ func indexFuncFields(pkg *pkgScope, pf parsedFile) {
 				case *ast.Ident:
 					pkg.boundFuncs[target.Name] = append(pkg.boundFuncs[target.Name],
 						boundExpr{expr: x.Rhs[i], file: pf.rel})
-					pkg.rebound[target.Name] = true
 				}
 			}
 		}
 		return true
 	})
+}
+
+// indexFuncTypes records the package's NAMED func types, so a struct field
+// declared through one is recognised as func-typed.
+//
+// `type predicate func() bool` then `probe predicate` is the same field as
+// `probe func() bool`, and matching only the literal *ast.FuncType left it out
+// of funcFields entirely -- which meant the bar an unreadable field has to
+// clear ("something the package puts in that field touches the filesystem")
+// could be MET and the guard still walked past in silence. A property the
+// documentation claimed and the code did not have (B-193).
+func indexFuncTypes(pkg *pkgScope, pf parsedFile) {
+	for _, decl := range pf.ast.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || gd.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			ts, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+			if _, ok := ts.Type.(*ast.FuncType); ok {
+				pkg.funcTypes[ts.Name.Name] = true
+			}
+		}
+	}
+}
+
+// isFuncType reports whether a field's declared type is a func type this
+// package can name: the literal `func(...)` or one of its own named func types.
+func (p *pkgScope) isFuncType(e ast.Expr) bool {
+	switch t := e.(type) {
+	case *ast.FuncType:
+		return true
+	case *ast.Ident:
+		return p.funcTypes[t.Name]
+	}
+	return false
+}
+
+// indexRebindings records the PACKAGE-LEVEL names this file gives a second
+// value to after their declaration -- and nothing else.
+//
+// WHY IT NEEDS SCOPES AT ALL. `pkg.rebound` is the one index here that turns
+// into a printed sentence: a name in it is refused by funcValue and reported
+// "name rebound to another func value". It used to be set by any `=` to an
+// identifier anywhere in the package, locals included, so
+//
+//	var present = cliSrcPresent          // never reassigned
+//	func unrelated() { present := ...; present = other }   // a LOCAL
+//
+// downgraded the alias to UNRESOLVED and printed a confident claim about a
+// rebinding that did not happen (B-193). A false reason is worse than a missing
+// one: the reader goes looking for an init() that is not there.
+//
+// WHAT IT TRACKS. Go's own block scopes, in declaration order: a name declared
+// by `:=`, by a `var`/`const` inside a body, or as a receiver, parameter,
+// result, range variable or type-switch binding is LOCAL from that point to the
+// end of the block that declared it. An `=` to such a name rebinds the local
+// and says nothing about the package-level name it shadows. An `=` to any other
+// identifier is a package-level rebinding, which is exactly what this index is
+// for -- an `init()` swapping an alias is the shape B-189 measured.
+//
+// It walks function literals with the enclosing scopes still visible, because a
+// closure assigning to a captured local is rebinding that local, not the
+// package's name.
+func indexRebindings(pkg *pkgScope, pf parsedFile) {
+	for _, decl := range pf.ast.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			if d.Body == nil {
+				continue
+			}
+			w := &rebindWalker{pkg: pkg}
+			w.push()
+			w.declare(d.Recv)
+			w.declare(d.Type.Params)
+			w.declare(d.Type.Results)
+			w.stmts(d.Body.List)
+			w.pop()
+		case *ast.GenDecl:
+			// A package-level `var x = func() { ... }` carries statements too.
+			for _, spec := range d.Specs {
+				vs, ok := spec.(*ast.ValueSpec)
+				if !ok {
+					continue
+				}
+				w := &rebindWalker{pkg: pkg}
+				w.push()
+				for _, v := range vs.Values {
+					w.expr(v)
+				}
+				w.pop()
+			}
+		}
+	}
+}
+
+// rebindWalker carries a stack of block scopes over one function body.
+type rebindWalker struct {
+	pkg    *pkgScope
+	scopes []map[string]bool
+}
+
+func (w *rebindWalker) push() { w.scopes = append(w.scopes, map[string]bool{}) }
+func (w *rebindWalker) pop()  { w.scopes = w.scopes[:len(w.scopes)-1] }
+
+// local reports whether the name is declared in any scope currently open.
+func (w *rebindWalker) local(name string) bool {
+	for _, s := range w.scopes {
+		if s[name] {
+			return true
+		}
+	}
+	return false
+}
+
+// bind declares a name in the innermost open scope.
+func (w *rebindWalker) bind(name string) {
+	if name == "" || name == "_" || len(w.scopes) == 0 {
+		return
+	}
+	w.scopes[len(w.scopes)-1][name] = true
+}
+
+// declare binds every name in a parameter, result or receiver list.
+func (w *rebindWalker) declare(fl *ast.FieldList) {
+	if fl == nil {
+		return
+	}
+	for _, f := range fl.List {
+		for _, n := range f.Names {
+			w.bind(n.Name)
+		}
+	}
+}
+
+// bindLHS declares the identifiers a `:=` introduces.
+func (w *rebindWalker) bindLHS(lhs []ast.Expr) {
+	for _, e := range lhs {
+		if id, ok := e.(*ast.Ident); ok {
+			w.bind(id.Name)
+		}
+	}
+}
+
+// expr walks an expression for the function literals inside it, which carry
+// statements of their own. It stops at each literal rather than descending: the
+// literal's body is walked by w.stmts, in a scope of its own.
+func (w *rebindWalker) expr(e ast.Expr) {
+	if e == nil {
+		return
+	}
+	ast.Inspect(e, func(n ast.Node) bool {
+		lit, ok := n.(*ast.FuncLit)
+		if !ok || lit.Body == nil {
+			return true
+		}
+		w.push()
+		w.declare(lit.Type.Params)
+		w.declare(lit.Type.Results)
+		w.stmts(lit.Body.List)
+		w.pop()
+		return false
+	})
+}
+
+func (w *rebindWalker) exprs(es []ast.Expr) {
+	for _, e := range es {
+		w.expr(e)
+	}
+}
+
+// block walks a statement list in a scope of its own.
+func (w *rebindWalker) block(b *ast.BlockStmt) {
+	if b == nil {
+		return
+	}
+	w.push()
+	w.stmts(b.List)
+	w.pop()
+}
+
+// stmt walks one statement in the CURRENT scope, which is what makes
+// declaration order matter: a name is local only from its declaration onward.
+func (w *rebindWalker) stmts(stmts []ast.Stmt) {
+	for _, st := range stmts {
+		w.stmt(st)
+	}
+}
+
+func (w *rebindWalker) stmt(st ast.Stmt) {
+	switch s := st.(type) {
+	case nil:
+		return
+	case *ast.AssignStmt:
+		w.exprs(s.Rhs)
+		if s.Tok == token.DEFINE {
+			w.bindLHS(s.Lhs)
+			return
+		}
+		w.exprs(s.Lhs)
+		if s.Tok != token.ASSIGN || len(s.Lhs) != len(s.Rhs) {
+			return
+		}
+		for _, lhs := range s.Lhs {
+			id, ok := lhs.(*ast.Ident)
+			if !ok || id.Name == "_" || w.local(id.Name) {
+				continue
+			}
+			w.pkg.rebound[id.Name] = true
+		}
+	case *ast.DeclStmt:
+		gd, ok := s.Decl.(*ast.GenDecl)
+		if !ok {
+			return
+		}
+		for _, spec := range gd.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			w.exprs(vs.Values)
+			for _, n := range vs.Names {
+				w.bind(n.Name)
+			}
+		}
+	case *ast.BlockStmt:
+		w.block(s)
+	case *ast.LabeledStmt:
+		w.stmt(s.Stmt)
+	case *ast.ExprStmt:
+		w.expr(s.X)
+	case *ast.SendStmt:
+		w.expr(s.Chan)
+		w.expr(s.Value)
+	case *ast.IncDecStmt:
+		w.expr(s.X)
+	case *ast.GoStmt:
+		w.expr(s.Call)
+	case *ast.DeferStmt:
+		w.expr(s.Call)
+	case *ast.ReturnStmt:
+		w.exprs(s.Results)
+	case *ast.IfStmt:
+		w.push()
+		w.stmt(s.Init)
+		w.expr(s.Cond)
+		w.block(s.Body)
+		w.stmt(s.Else)
+		w.pop()
+	case *ast.ForStmt:
+		w.push()
+		w.stmt(s.Init)
+		w.expr(s.Cond)
+		w.stmt(s.Post)
+		w.block(s.Body)
+		w.pop()
+	case *ast.RangeStmt:
+		w.push()
+		w.expr(s.X)
+		if s.Tok == token.DEFINE {
+			w.bindLHS(nonNilExprs(s.Key, s.Value))
+		} else {
+			// `for k = range xs` gives an EXISTING name a second value, and if
+			// that name is the package's, it is a rebinding like any other.
+			for _, e := range nonNilExprs(s.Key, s.Value) {
+				if id, ok := e.(*ast.Ident); ok && id.Name != "_" && !w.local(id.Name) {
+					w.pkg.rebound[id.Name] = true
+				}
+			}
+		}
+		w.block(s.Body)
+		w.pop()
+	case *ast.SwitchStmt:
+		w.push()
+		w.stmt(s.Init)
+		w.expr(s.Tag)
+		w.block(s.Body)
+		w.pop()
+	case *ast.TypeSwitchStmt:
+		w.push()
+		w.stmt(s.Init)
+		w.stmt(s.Assign)
+		w.block(s.Body)
+		w.pop()
+	case *ast.SelectStmt:
+		w.block(s.Body)
+	case *ast.CaseClause:
+		w.push()
+		w.exprs(s.List)
+		w.stmts(s.Body)
+		w.pop()
+	case *ast.CommClause:
+		w.push()
+		w.stmt(s.Comm)
+		w.stmts(s.Body)
+		w.pop()
+	}
+}
+
+// nonNilExprs drops the absent halves of a range clause.
+func nonNilExprs(es ...ast.Expr) []ast.Expr {
+	var out []ast.Expr
+	for _, e := range es {
+		if e != nil {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // importNames is the set of names a file's imports bind, so `pkg.Present()` is
@@ -1087,7 +1455,7 @@ func (r *resolver) delegatedSkips(call *ast.CallExpr, probes map[string]ast.Expr
 	if depth >= maxDelegatedSkipDepth {
 		return nil
 	}
-	h, name, ok := r.pkg.callee(call, r.file)
+	h, name, ok := r.pkg.callee(call.Fun, r.file)
 	if !ok || seen[name] {
 		return nil
 	}
@@ -1383,7 +1751,7 @@ func (r *resolver) pathCondition(cond ast.Expr, probes map[string]ast.Expr, dept
 		if !bound {
 			return guardTarget{}, false, false
 		}
-		return r.predicateCondition(call, depth+1)
+		return r.guardCall(call.Fun, call, depth+1)
 	case *ast.UnaryExpr:
 		if c.Op != token.NOT {
 			return guardTarget{}, false, false
@@ -1423,7 +1791,10 @@ func (r *resolver) pathCondition(cond ast.Expr, probes map[string]ast.Expr, dept
 		}
 		return guardTarget{}, false, false
 	case *ast.CallExpr:
-		if sel, ok := c.Fun.(*ast.SelectorExpr); ok {
+		// Parentheses are punctuation, not a reader. `(cliPresent)()` is stable
+		// under gofmt and used to reach no reader at all (B-193).
+		fn := unparen(c.Fun)
+		if sel, ok := fn.(*ast.SelectorExpr); ok {
 			if pkg, ok := sel.X.(*ast.Ident); ok && len(c.Args) > 0 &&
 				((pkg.Name == "os" && sel.Sel.Name == "IsNotExist") ||
 					(pkg.Name == "errors" && sel.Sel.Name == "Is")) {
@@ -1437,16 +1808,46 @@ func (r *resolver) pathCondition(cond ast.Expr, probes map[string]ast.Expr, dept
 				}
 				return r.here(p), true, true
 			}
-			return r.methodCondition(sel, c, depth)
 		}
-		if inner, ok := c.Fun.(*ast.CallExpr); ok {
-			return r.returnedFuncCondition(inner, c, depth)
+		return r.guardCall(fn, c, depth)
+	}
+	return guardTarget{}, false, false
+}
+
+// unparen strips the parentheses a reader may write around a callee. gofmt
+// keeps them, so `(cliPresent)()` is a stable spelling of a live guard; routing
+// on the *ast.ParenExpr instead of what it wraps sent it to no reader at all
+// and the gate said nothing (B-193).
+func unparen(e ast.Expr) ast.Expr {
+	for {
+		p, ok := e.(*ast.ParenExpr)
+		if !ok {
+			return e
 		}
-		switch c.Fun.(type) {
-		case *ast.Ident, *ast.IndexExpr:
-			return r.predicateCondition(c, depth)
-		}
+		e = p.X
+	}
+}
+
+// guardCall routes a call's CALLEE EXPRESSION to the reader that can answer it.
+//
+// It is one dispatcher rather than a switch inside pathCondition because the
+// same routing has to happen twice: once for the callee as written, and again
+// for the expression a NAME turns out to hold. `f := probes[k]; f()` is
+// `probes[k]()` with one binding in between, and before B-193 the second
+// spelling was UNRESOLVED while the first was silent -- one line of refactoring
+// apart, and the line a reader writes first when factoring a guard out.
+func (r *resolver) guardCall(fn ast.Expr, call *ast.CallExpr, depth int) (guardTarget, bool, bool) {
+	if depth > maxResolveDepth {
 		return guardTarget{}, false, false
+	}
+	fn = unparen(fn)
+	switch f := fn.(type) {
+	case *ast.SelectorExpr:
+		return r.methodCondition(f, call, depth)
+	case *ast.CallExpr:
+		return r.returnedFuncCondition(f, call, depth)
+	case *ast.Ident, *ast.IndexExpr, *ast.FuncLit:
+		return r.predicateCondition(fn, call, depth)
 	}
 	return guardTarget{}, false, false
 }
@@ -1465,21 +1866,93 @@ func (r *resolver) pathCondition(cond ast.Expr, probes map[string]ast.Expr, dept
 // same way (B-189): `check := cliPresent` and `var alias = cliSrcPresent` are
 // the same predicate reached through a binding, and looking only in pkg.funcs
 // found neither.
-func (r *resolver) predicateCondition(call *ast.CallExpr, depth int) (guardTarget, bool, bool) {
-	h, key, ok := r.funcValue(call.Fun, depth)
-	if !ok {
-		return r.unreadableFuncValue(call.Fun, depth)
+// A NAME THAT HOLDS AN EXPRESSION is followed to the expression, and the
+// expression is routed to the same readers the spelling without the binding
+// goes to (B-193). That is the whole of root cause 1: the fallback that turns a
+// silence into a verdict was reachable only through a package-level index, so
+// `f := <anything red>; f()` was silent while `<anything red>()` was red.
+func (r *resolver) predicateCondition(fn ast.Expr, call *ast.CallExpr, depth int) (guardTarget, bool, bool) {
+	if h, key, ok := r.funcValue(fn, depth); ok {
+		t, missing, read := r.predicateBody(key, h, call, depth)
+		return r.attribute(t, fn), missing, read
 	}
-	t, missing, read := r.predicateBody(key, h, call, depth)
-	// A guard supplied by the CALLER is the caller's line to change, and is
-	// reported there rather than at the helper that received it -- the rule
-	// delegated findings already follow (B-188).
-	if id, isID := call.Fun.(*ast.Ident); isID && read {
-		if _, fromArg := r.condArgs[id.Name]; fromArg {
-			t.fromCaller = true
+	if id, isID := fn.(*ast.Ident); isID {
+		// A CROSS-FRAME binding is read in the caller's scope, and the call's
+		// own arguments were written in this one. With no arguments there is
+		// nothing to mis-resolve; with arguments, reading them over there would
+		// answer about names this frame never bound -- a wrong path stated
+		// confidently, which is worse than the UNRESOLVED the fallback gives.
+		if b, scope, crossFrame, ok := r.heldExpr(id.Name); ok && (!crossFrame || len(call.Args) == 0) {
+			// An expression that answers is the answer. One that does not falls
+			// through to the name's own bar rather than returning a silence:
+			// what the package binds under the NAME may still clear it, and
+			// dropping that would have traded one silence for another.
+			if t, missing, read := scope.guardCall(b.expr, call, depth+1); read {
+				return r.attribute(t, fn), missing, read
+			}
 		}
 	}
-	return t, missing, read
+	return r.unreadableFuncValue(fn, depth)
+}
+
+// attribute marks a guard that came from the CALLER, so the finding lands on
+// the line whose author has to change it rather than on the helper that
+// received it -- the rule every delegated finding follows (B-188).
+func (r *resolver) attribute(t guardTarget, fn ast.Expr) guardTarget {
+	if !t.fromCaller && r.fromCallerScope(fn, 0) {
+		t.fromCaller = true
+	}
+	return t
+}
+
+// fromCallerScope reports whether a name IS the caller's condition -- either the
+// parameter the caller's value was bound to, or a local the helper bound that
+// parameter to in turn.
+//
+// The second hop is not decoration. `func runWith(t, present func() bool) { p
+// := present; if !p() {...} }` reads the caller's predicate correctly and then
+// attributed the finding to the helper, where delegatedSkips drops every
+// non-caller site to avoid reporting one guarded helper once per call -- so the
+// whole guard came back as a PASS. Read, attributed to the wrong line, and
+// therefore silent (B-193).
+func (r *resolver) fromCallerScope(e ast.Expr, depth int) bool {
+	if depth > maxResolveDepth || e == nil {
+		return false
+	}
+	id, ok := unparen(e).(*ast.Ident)
+	if !ok {
+		return false
+	}
+	if _, ok := r.condArgs[id.Name]; ok {
+		return true
+	}
+	if b, ok := r.locals[id.Name]; ok {
+		return r.inFile(b.file).fromCallerScope(b.expr, depth+1)
+	}
+	return false
+}
+
+// heldExpr is the expression a NAME holds, together with the scope that wrote
+// it: the condition a caller handed a helper, a local binding, or a
+// package-level declaration. The third result says the scope belongs to another
+// CALL FRAME, which is the caller's -- the one case where this resolver's own
+// expressions and the returned scope do not share a vocabulary.
+//
+// A REBOUND package name is deliberately not followed. Its initializer stopped
+// being the answer the moment something assigned over it, and reading it anyway
+// is the confident verdict about a function that never ran that B-189 refused;
+// unreadableFuncValue reports it instead.
+func (r *resolver) heldExpr(name string) (boundExpr, *resolver, bool, bool) {
+	if bc, ok := r.condArgs[name]; ok && bc.scope != nil {
+		return boundExpr{expr: bc.expr, file: bc.scope.file}, bc.scope, true, true
+	}
+	if b, ok := r.locals[name]; ok {
+		return b, r.inFile(b.file), false, true
+	}
+	if b, ok := r.pkg.consts[name]; ok && !r.pkg.rebound[name] {
+		return b, r.inFile(b.file), false, true
+	}
+	return boundExpr{}, nil, false, false
 }
 
 // unreadableFuncValue is what a guard costs when it names a func value this gate
@@ -1487,18 +1960,25 @@ func (r *resolver) predicateCondition(call *ast.CallExpr, depth int) (guardTarge
 // every other unreadable guard here has to clear -- something the package binds
 // to that name has to touch the filesystem -- so a table of cluster predicates
 // stays none of this gate's business.
+// THE REASON NAMES WHAT WAS MEASURED. It used to say "name rebound to another
+// func value" for every identifier it refused, including one it refused for a
+// different reason entirely -- a package name whose value this gate simply
+// could not follow. A reason that asserts more than the check behind it sends
+// the reader looking for an init() that is not there (B-193).
 func (r *resolver) unreadableFuncValue(fn ast.Expr, depth int) (guardTarget, bool, bool) {
-	switch x := fn.(type) {
+	switch x := unparen(fn).(type) {
 	case *ast.Ident:
+		reason := " (name rebound to another func value)"
 		if !r.pkg.rebound[x.Name] {
 			if _, declared := r.pkg.consts[x.Name]; !declared {
 				return guardTarget{}, false, false
 			}
+			reason = " (name bound to a func value this gate could not follow)"
 		}
 		if !r.pkg.nameReachesProbe(x.Name) {
 			return guardTarget{}, false, false
 		}
-		return guardTarget{desc: x.Name + "() (name rebound to another func value)", unreadable: true}, false, true
+		return guardTarget{desc: x.Name + "()" + reason, unreadable: true}, false, true
 	case *ast.IndexExpr:
 		b, ok := r.bindingOf(x.X)
 		if !ok {
@@ -1639,7 +2119,10 @@ func (r *resolver) methodCondition(sel *ast.SelectorExpr, call *ast.CallExpr, de
 	if r.pkg.ambiguousMethod(sel, r.file) {
 		return guardTarget{desc: "." + sel.Sel.Name + "()", unreadable: true}, false, true
 	}
-	if h, _, ok := r.pkg.callee(call, r.file); ok {
+	// The SELECTOR is what names the method, not the call's own Fun: a local
+	// that HOLDS `s.probe` is invoked as `p()`, and looking `p` up among this
+	// package's functions would read a body the code never enters (B-193).
+	if h, _, ok := r.pkg.callee(sel, r.file); ok {
 		return r.predicateBody(sel.Sel.Name, h, call, depth)
 	}
 	// Not a method of this package. It may still be a FUNC VALUE held in a
@@ -1971,7 +2454,7 @@ func reachesSkip(b *ast.BlockStmt, pkg *pkgScope, inFile string, seen map[string
 		if !ok {
 			return true
 		}
-		h, name, ok := pkg.callee(call, inFile)
+		h, name, ok := pkg.callee(call.Fun, inFile)
 		if !ok || seen[name] {
 			return true
 		}
@@ -2029,18 +2512,32 @@ type pkgScope struct {
 	// the code does not call, which is a guess wearing a verdict's clothes.
 	imports map[string]map[string]bool
 	consts  map[string]boundExpr
+	// funcTypes is the set of NAMED func types this package declares --
+	// `type predicate func() bool`. It exists so funcFields can recognise a
+	// field declared through the name as the func-typed field it is; matching
+	// only a literal *ast.FuncType left `probe predicate` unindexed, and an
+	// unindexed field is a silence rather than the UNRESOLVED the declared bar
+	// asks for (B-193).
+	funcTypes map[string]bool
 	// funcFields is the set of STRUCT FIELD names this package declares with a
 	// func type. boundFuncs is every value the package is seen assigning to a
 	// NAME, by any spelling -- a composite-literal key, an `x.f = v`, a plain
 	// `f = v`. rebound is the package-level names that get a second value after
 	// their declaration.
 	//
-	// None of the three ever produces a verdict on its own. They answer one
+	// None of the four ever produces a verdict on its own. They answer one
 	// question -- "does anything this package puts under that name touch the
 	// filesystem?" -- which is the bar an UNREADABLE guard has to clear before
 	// it is reported UNRESOLVED instead of walked past (B-189). Keying by name
 	// alone can pool a field and a var that share one; that costs an UNRESOLVED
 	// the reader can pin, which is the direction this gate errs on purpose.
+	//
+	// rebound is the exception that had to be made exact, because it is the one
+	// that PRINTS A CLAIM: "name rebound to another func value". It used to be
+	// set by any `=` to an identifier anywhere in the package, locals included,
+	// so an alias nobody ever reassigned was downgraded to UNRESOLVED under a
+	// sentence asserting a rebinding that did not happen (B-193). It is filled
+	// by indexRebindings, which carries Go's own block scopes.
 	funcFields map[string]bool
 	boundFuncs map[string][]boundExpr
 	rebound    map[string]bool
@@ -2088,8 +2585,8 @@ func (p *pkgScope) nameReachesProbe(name string) bool {
 // on the package scope (B-189). The two are kept apart on purpose: this one
 // answers where a SKIP is carried, where following a value is still a declared
 // limit, and that one answers what a GUARD calls.
-func (p *pkgScope) callee(call *ast.CallExpr, inFile string) (helperDecl, string, bool) {
-	switch fn := call.Fun.(type) {
+func (p *pkgScope) callee(callee ast.Expr, inFile string) (helperDecl, string, bool) {
+	switch fn := unparen(callee).(type) {
 	case *ast.Ident:
 		h, ok := p.funcs[fn.Name]
 		if !ok || h.decl.Body == nil {
