@@ -5,6 +5,7 @@ package testpyramid
 
 import (
 	"errors"
+	"strings"
 	"os"
 	"path/filepath"
 	"testing"
@@ -125,5 +126,34 @@ func TestRealTreeMatchesTheFrozenBaseline(t *testing.T) {
 	}
 	if out.Total < 900 {
 		t.Fatalf("total=%d — a derivação está enxergando menos que a árvore inteira", out.Total)
+	}
+}
+
+// A distância especifica de e2e foi RATIFICADA pelo ADR de 2026-09-06 (Option A):
+// para um produto cujo objeto É implantar, ~9% de e2e é cobertura genuína — a catraca
+// é o mecanismo de enforcement, o alvo ≤5% do ADR D7 fica retirado para o eixo e2e.
+// O aspiration gap de e2e passa a ser SILENCIADO; unit e integração continuam
+// reportados (não foram amenizados).
+func TestE2EAspirationGapIsSilencedAfterADRAmendment(t *testing.T) {
+	root := treeWith(t, 5, 1, 4) // 50/10/40 — e2e muito acima do alvo D7
+	out, err := CheckDerived(root, freeze(t, root), DefaultThresholds())
+	if err != nil {
+		t.Fatalf("catraca não deve reprovar a árvore congelada: %v", err)
+	}
+	for _, gap := range out.AspirationGaps {
+		if strings.Contains(gap, "e2e") {
+			t.Fatalf("gap de e2e devia estar silenciado pela emenda 2026-09-06 do ADR D7; achado: %q", gap)
+		}
+	}
+	// Contra-teste: unit gap continua reportado (unit=50% < alvo 70%).
+	foundUnit := false
+	for _, gap := range out.AspirationGaps {
+		if strings.Contains(gap, "unit") {
+			foundUnit = true
+			break
+		}
+	}
+	if !foundUnit {
+		t.Fatal("gap de unit precisa continuar reportado — a emenda cobre e2e, não a pirâmide inteira")
 	}
 }
