@@ -37,9 +37,9 @@
 // building a legacy blob from a fixture. Flagging those files would demand
 // deleting the tests that prove the read path works.
 //
-// # Zero files found is a violation, not a pass
+// # Zero files FOUND is a violation, not a pass -- and `found`, not `scanned`, is the line. An allowlisted file was found; the operator excused it on purpose, and a declared exemption is not the blindness this floor is for
 //
-// A scan that read nothing proves nothing. If the walk finds no candidate
+// A scan that found nothing proves nothing. A scan that found files and read none of them proves nothing either, but it says so: see the all-excused line below, added 2026-09-06 after an audit read this paragraph as promising a floor on `scanned` that the code does not have. If the walk finds no candidate
 // file at all, the gate reports a violation instead of PASS, because the
 // alternative is that a mistyped `-root` or a moved tree reads as a clean
 // bill of health. Same shape as the `runbook-parity` floor (B-164): a
@@ -95,8 +95,22 @@ type Hit struct {
 	Suggestion string
 }
 
-// scanRoots are the directory trees walked for AES markers. Everything the
-// api module compiles into a running binary lives under here, which is what
+// scanRoots are the directory trees walked for AES markers.
+//
+// ONE ROOT, AND THE REASON FIRST WRITTEN FOR IT WAS FALSE. It read "everything the
+// api module compiles into a running binary lives under here". Measured 2026-09-06:
+// the gated file itself imports pkg/errors (secret_wrapper.go:28), and four non-test
+// api files import pkg/vault -- a separate go.work module at the repo root. The
+// widening from one hardcoded path to a walk is right; that justification for its
+// SHAPE was not, and a right answer through a false premise is what exonerates the
+// wrong scan root next time.
+//
+// What the narrow root costs is measured, not guessed: a complete AES-256-GCM
+// implementation -- write path included -- moved into pkg/vault/ compiles, is
+// reachable from api, and PASSES this gate. That is the same evasion the 2026-09-04
+// ADR names and rejects, closed one file sideways and open one directory over.
+// Tracked as B-195. There is no crypto/aes outside api/ today, so nothing is hiding
+// now; what is missing is the mechanism, which is what
 // makes a tree walk the right shape: the invariant is about the code that
 // runs, not about one filename.
 var scanRoots = []string{"api"}
@@ -263,6 +277,16 @@ func scanFile(absPath, relPath string) ([]Hit, error) {
 
 // FormatOutcome renders the outcome for CLI output.
 func FormatOutcome(out Outcome) string {
+	// Every candidate excused: the walk found files and read none of them. The
+	// operator's allowlist did that on purpose and the decision stands -- but a
+	// plain PASS over it cannot be told apart from a scan that happened, which is
+	// what an audit called this on 2026-09-06. The floor stays on FOUND (a declared
+	// exemption is not blindness); what changes is that the exemption is audible.
+	var excused string
+	if out.FilesFound > 0 && out.FilesScanned == 0 {
+		excused = fmt.Sprintf("no-aes-remaining: ALL EXCUSED — %d file(s) found, 0 read: "+
+			"every candidate is on the allowlist, so this run checked nothing\n", out.FilesFound)
+	}
 	var sb strings.Builder
 	mode := "ENFORCED"
 	if !out.Enforced {
@@ -288,5 +312,5 @@ func FormatOutcome(out Outcome) string {
 	for _, w := range out.Warnings {
 		fmt.Fprintf(&sb, "  %s\n", w)
 	}
-	return sb.String()
+	return excused + sb.String()
 }

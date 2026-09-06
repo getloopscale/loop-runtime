@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-194 items — **Open** 16 · **In flight** 5 · **Closed** 173 · **Blocked** 7
+195 items — **Open** 17 · **In flight** 5 · **Closed** 173 · **Blocked** 7
 
-### Open (16)
+### Open (17)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -90,6 +90,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-192`](#b-192--o-ci-e-pos-merge-porque-o-portao-local-seria-inescapavel-e-as-tres-premissas-dessa-decisao-foram-falsas-ao-mesmo-tempo----) | O CI e' pos-merge porque o portao local seria inescapavel, e as tres premissas dessa decisao foram falsas ao mesmo tempo | `triaged` | alta — nao ha nada quebrado agora (o `B-187` restaurou o hook e fechou os |
 | [`B-193`](#b-193--uma-ligacao-local-restaura-o-silencio-em-todo-caso-unresolved-e-o-rebound-acusa-um-religamento-que-nao-houve----) | Uma ligacao LOCAL restaura o silencio em todo caso UNRESOLVED, e o `rebound` acusa um religamento que nao houve | `triaged` | media — quinta reabertura consecutiva da mesma classe. Sem instancia viva; |
 | [`B-194`](#b-194--o-ramo-aes-de-leitura-so-pode-sair-com-uma-contagem-que-cubra-a-frota-e-ninguem-e-dono-dela----) | O ramo AES de leitura so' pode sair com uma contagem que cubra a frota, e ninguem e' dono dela | `triaged` | media — nada quebra hoje (o caminho de escrita ja' recusa AES); o custo e' um gate que segue vermelho por uma divida real cujo desbloqueio depende de acesso a banco que nenhuma sessao tem |
+| [`B-195`](#b-195--o-gate-de-aes-varre-um-modulo-e-a-evasao-que-ele-fechou-continua-aberta-um-diretorio-ao-lado----) | O gate de AES varre um modulo, e a evasao que ele fechou continua aberta um diretorio ao lado | `triaged` | media — nao ha AES fora de `api/` hoje (medido), entao nao ha falso-negativo |
 
 ### In flight (5)
 
@@ -8209,3 +8210,46 @@ segredo antigo nao volta — e depende de um inventario de deployments que a arv
 tem. Misturar os dois deixaria um item aberto para sempre esperando um recurso que nao e'
 codigo, que e' exatamente como o B-162 passou 18 dias parecendo descuido quando era
 espera.
+
+## B-195 — O gate de AES varre um modulo, e a evasao que ele fechou continua aberta um diretorio ao lado   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b162-nemesis-audit
+severity: media — nao ha AES fora de `api/` hoje (medido), entao nao ha falso-negativo
+  vivo. O que ha e' um gate cuja evasao declarada por ADR esta fechada em um lugar e
+  aberta no vizinho, e a barreira e' uma linha de `mv`.
+evidence: |
+  Medido 2026-09-06 por auditoria independente. O `B-162` alargou o gate de um caminho
+  fixo para uma varredura de `api/` — certo, e fecha a evasao "mover o AES um arquivo
+  ao lado" que o ADR de 2026-09-04 nomeia e rejeita por julgamento.
+
+  Um diretorio ao lado continua aberto. Uma implementacao AES-256-GCM COMPLETA,
+  incluindo caminho de ESCRITA com `gcm.Seal`, movida para `pkg/vault/legacy_aes.go`,
+  com `secret_wrapper.go` delegando para ela:
+
+      go build ./internal/db/store/   exit 0
+      go build ./vault/               exit 0
+      no-aes-remaining                PASS (ENFORCED), "Scanned: 374 of 374"
+
+  E o doc justificava a raiz com uma premissa falsa: "everything the api module
+  compiles into a running binary lives under here". Medido: o proprio arquivo vigiado
+  importa `pkg/errors` (`secret_wrapper.go:28`), e quatro arquivos nao-teste de `api/`
+  importam `pkg/vault` — modulo separado no `go.work` da raiz. Ja corrigido no doc; a
+  raiz continua uma so.
+why_now: o `B-162` deixou o gate mais estrito e escreveu no doc por que a varredura tem
+  a forma que tem. A frase estava errada e o escopo esta estreito pela mesma razao — se
+  ninguem tratar, a proxima pessoa le a justificativa e conclui que esta coberto.
+status: triaged
+dod:
+  - a decisao sobre a raiz e' medida e escrita: varrer os modulos que compilam no
+    binario do `api` (quais, exatamente — `go list -deps` responde), ou manter uma raiz
+    so' com a razao verdadeira no lugar da que foi corrigida
+  - o oraculo e' o `evidence` verbatim: a implementacao AES em `pkg/vault/` com o
+    delegate, medida com binario proprio antes e depois
+  - se a raiz alargar, o custo esta medido: quantos arquivos a mais, quantos falsos
+    positivos (hoje: zero `crypto/aes` fora de `api/`, medido — entao o custo esperado
+    e' tempo, nao ruido)
+  - nao mexer no ramo de leitura nem no prazo: isso e' o `B-194`
+
