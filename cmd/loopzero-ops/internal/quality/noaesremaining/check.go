@@ -12,10 +12,14 @@
 //
 // # Scope
 //
-// Every non-test `*.go` file under `api/` is scanned. The package doc used
-// to claim exactly this — "secret_wrapper.go plus any *.go file in api/
-// that imports crypto/aes" — while the implementation read one hardcoded
-// path, `api/internal/db/store/secret_wrapper.go`, and nothing else. The
+// Every non-test `*.go` file under each entry of scanRoots is scanned:
+// `api/`, `pkg/` and `operators/api/`, which is where the modules that
+// compile into an api binary live inside this repository. See scanRoots for
+// the `go list -deps` measurement behind that set, and for the one module it
+// cannot reach. The package doc used to claim one directory — and before
+// that, "secret_wrapper.go plus any *.go file in api/ that imports
+// crypto/aes" — while the implementation read one hardcoded path,
+// `api/internal/db/store/secret_wrapper.go`, and nothing else. The
 // difference was not academic. Measured on 2026-09-05 (B-162), against the
 // binary of the day:
 //
@@ -24,6 +28,11 @@
 //     migration from a wrong `-root`;
 //   - a full AES-256-GCM implementation moved one file sideways, into
 //     `api/internal/db/store/secret_wrapper_aes.go` → PASS.
+//
+// And measured on 2026-09-06 (B-195), against the binary of that day: the
+// same implementation moved one DIRECTORY over, into `pkg/vault/`, → PASS
+// again, because the walk stopped at `api/`. Same evasion, same ADR, one
+// `mv` further out.
 //
 // `docs/wiki/decisions/2026-09-04-t103-aes-write-path-removal.md` names that
 // second move and rejects it on judgment ("relocating the code would pass
@@ -95,25 +104,54 @@ type Hit struct {
 	Suggestion string
 }
 
-// scanRoots are the directory trees walked for AES markers.
+// scanRoots are the directory trees walked for AES markers: the in-repo homes
+// of every module that compiles into an api binary.
 //
-// ONE ROOT, AND THE REASON FIRST WRITTEN FOR IT WAS FALSE. It read "everything the
-// api module compiles into a running binary lives under here". Measured 2026-09-06:
-// the gated file itself imports pkg/errors (secret_wrapper.go:28), and four non-test
-// api files import pkg/vault -- a separate go.work module at the repo root. The
-// widening from one hardcoded path to a walk is right; that justification for its
-// SHAPE was not, and a right answer through a false premise is what exonerates the
-// wrong scan root next time.
+// MEASURED, NOT ASSUMED. `go list -deps ./cmd ./cmd/controller`, run in the api
+// module on 2026-09-06, returns 943 packages. The first-party ones belong to
+// four modules, and only three of those live under this repository root:
 //
-// What the narrow root costs is measured, not guessed: a complete AES-256-GCM
-// implementation -- write path included -- moved into pkg/vault/ compiles, is
-// reachable from api, and PASSES this gate. That is the same evasion the 2026-09-04
-// ADR names and rejects, closed one file sideways and open one directory over.
-// Tracked as B-195. There is no crypto/aes outside api/ today, so nothing is hiding
-// now; what is missing is the mechanism, which is what
-// makes a tree walk the right shape: the invariant is about the code that
-// runs, not about one filename.
-var scanRoots = []string{"api"}
+//	github.com/getloopscale/loopzero/api            85 pkgs  ->  api/
+//	github.com/getloopscale/loopzero/pkg            10 pkgs  ->  pkg/
+//	github.com/getloopscale/loopzero/operators/api   1 pkg   ->  operators/api/
+//	github.com/getloopscale/loopzero-contracts       3 pkgs  ->  outside this repo, see GAP
+//
+// The root used to be `api` alone, and the reason first written for it was
+// false: "everything the api module compiles into a running binary lives under
+// here". The gated file itself imports pkg/errors. The list above is what a
+// measurement says in place of that sentence.
+//
+// WHAT THE NARROW ROOT COST, measured on the tree before this widening: a
+// complete AES-256-GCM implementation -- write path, `gcm.Seal` and all --
+// moved into `pkg/vault/legacy_aes.go`, with `secret_wrapper.go` delegating to
+// it, builds clean (`go build ./internal/db/store/` and `go build ./vault/`,
+// both exit 0) and drew `PASS (ENFORCED)`, `Scanned: 374 of 374`. That is the
+// evasion the 2026-09-04 ADR names and rejects ("relocating the code would pass
+// the implementation while defeating the stated intent"), closed one file
+// sideways and left open one directory over. Walking the modules that actually
+// link is that rejection made mechanical at the boundary that matters.
+//
+// GRANULARITY IS THE MODULE DIRECTORY, NOT THE PACKAGE LIST, and it over-scans
+// on purpose: pkg/ holds 65 non-test .go files while only 10 of its packages
+// reach an api binary. Pinning the exact package list would be tighter and
+// would rot in silence the first time an import changed -- and a stale scope in
+// a security gate reads, from the outside, exactly like coverage. A directory
+// does not rot. The over-scan is priced: 374 -> 451 non-test files (+77), and
+// zero new findings -- the same three hits in secret_wrapper.go before and
+// after, none from the two added roots, because no file under pkg/ or
+// operators/api/ names AES at all. (Repo-wide the one other non-test match is
+// aesMarkers in this file; cmd/loopzero-ops is not a scan root and does not link
+// into an api binary, so it is out of scope rather than excused.) If some pkg/
+// package that never links into api ever needs AES for a legitimate reason,
+// -allowlist is the declared way to say so.
+//
+// GAP, NAMED RATHER THAN PAPERED OVER: loopzero-contracts is a separate repository
+// (`use ../loopzero-contracts` in go.work), so three packages of the api binary sit
+// outside any path a `-root`-relative walk can reach. This gate does not cover
+// them and cannot; a gate in that repository would have to. The widening below
+// changes nothing about that, and writing it down costs less than the next
+// reader inferring from "we scan what links" that it was handled.
+var scanRoots = []string{"api", "pkg", "operators/api"}
 
 // canonicalStoreFile is the file T10.3 is actually about. It is not the
 // scan's boundary any more — it is kept only so the suggestion text can
@@ -151,6 +189,7 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	for _, rootRel := range scanRoots {
+		foundBefore := out.FilesFound
 		absRoot := filepath.Join(cfg.RepoRoot, rootRel)
 		walkErr := filepath.WalkDir(absRoot, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -191,23 +230,34 @@ func Check(cfg Config) (Outcome, error) {
 		if walkErr != nil {
 			return Outcome{}, fmt.Errorf("noaesremaining: walking %s: %w", rootRel, walkErr)
 		}
+		if out.FilesFound == foundBefore {
+			// PER ROOT, and that is the point of putting it here rather than
+			// after the loop. The floor exists so a mistyped -root or a moved
+			// tree cannot read as a clean bill of health. Summed over three
+			// roots it would only catch the case where ALL of them are empty:
+			// api/ present and pkg/ relocated would keep the total above zero,
+			// the gate would report PASS, and its stated scope would once again
+			// exceed the tree it actually read -- which is the exact defect
+			// B-195 exists to fix. Widening the roots without also splitting
+			// this floor would have rebuilt that defect inside its own repair.
+			out.Hits = append(out.Hits, Hit{
+				File: rootRel,
+				Reason: fmt.Sprintf(
+					"scanned 0 Go files under %s — a scan that read nothing there cannot show T10.3 is done",
+					rootRel),
+				Suggestion: fmt.Sprintf(
+					"check -root: it must point at the repository root, the one holding %s — "+
+						"or, if -root is right, %s moved and scanRoots must follow it",
+					canonicalStoreFile, rootRel),
+			})
+		}
 	}
 
-	if out.FilesFound == 0 {
-		// Found-but-unread, inverted: the gate read nothing and would
-		// otherwise report the cleanest possible result. Deleting the AES
-		// path and pointing the gate at the wrong tree are indistinguishable
-		// from the outside, and only one of them is the desired state.
-		out.Hits = append(out.Hits, Hit{
-			File: strings.Join(scanRoots, ", "),
-			Reason: fmt.Sprintf(
-				"scanned 0 Go files under %s — a scan that read nothing cannot show T10.3 is done",
-				strings.Join(scanRoots, ", ")),
-			Suggestion: fmt.Sprintf(
-				"check -root: it must point at the repository root, the one holding %s",
-				canonicalStoreFile),
-		})
-	}
+	// Found-but-unread, inverted: the gate read nothing and would otherwise
+	// report the cleanest possible result. Deleting the AES path and pointing
+	// the gate at the wrong tree are indistinguishable from the outside, and
+	// only one of them is the desired state. The check now lives inside the
+	// walk loop above, once per root, for the reason written there.
 
 	if enforced {
 		out.Pass = len(out.Hits) == 0
