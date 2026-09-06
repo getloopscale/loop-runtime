@@ -10,9 +10,40 @@
 // any AES code path remains in the secret store (vault:v1: prefix is the
 // only acceptable on-the-wire format).
 //
-// Scope of the AES grep: `api/internal/db/store/secret_wrapper.go` (canonical
-// store file) plus any *.go file in api/ that imports crypto/aes from
-// a path touching secret encryption.
+// # Scope
+//
+// Every non-test `*.go` file under `api/` is scanned. The package doc used
+// to claim exactly this — "secret_wrapper.go plus any *.go file in api/
+// that imports crypto/aes" — while the implementation read one hardcoded
+// path, `api/internal/db/store/secret_wrapper.go`, and nothing else. The
+// difference was not academic. Measured on 2026-09-05 (B-162), against the
+// binary of the day:
+//
+//   - a tree with the canonical file absent → PASS, because a missing file
+//     was read as "T10.3 completed"; the gate could not tell a finished
+//     migration from a wrong `-root`;
+//   - a full AES-256-GCM implementation moved one file sideways, into
+//     `api/internal/db/store/secret_wrapper_aes.go` → PASS.
+//
+// `docs/wiki/decisions/2026-09-04-t103-aes-write-path-removal.md` names that
+// second move and rejects it on judgment ("relocating the code would pass
+// the implementation while defeating the stated intent"). Walking the tree
+// is that rejection made mechanical.
+//
+// Test files are deliberately excluded. `_test.go` never compiles into a
+// running binary, so no production key path can hide there, and the legacy
+// AES fixtures are what B-162 DoD bullet 3 leans on — the read path stays
+// alive so pre-T10.3 rows stay readable, and it can only be tested by
+// building a legacy blob from a fixture. Flagging those files would demand
+// deleting the tests that prove the read path works.
+//
+// # Zero files found is a violation, not a pass
+//
+// A scan that read nothing proves nothing. If the walk finds no candidate
+// file at all, the gate reports a violation instead of PASS, because the
+// alternative is that a mistyped `-root` or a moved tree reads as a clean
+// bill of health. Same shape as the `runbook-parity` floor (B-164): a
+// missing directory stays tolerated, zero found does not.
 //
 // The Day-60 enforcement deletes the AES code path (T10.3) — the gate
 // catches REGRESSIONS that reintroduce the path before final removal.
@@ -21,6 +52,7 @@ package noaesremaining
 import (
 	"bufio"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,20 +83,28 @@ type Outcome struct {
 	Enforced        bool      // false → gate emits WARN only (pre-T+60d)
 	EnforcementTime time.Time // T0 + 60d UTC
 	Now             time.Time // resolved Now() for trace
+	FilesFound      int       // candidate non-test .go files under scanRoots
+	FilesScanned    int       // of those, the ones not allowlisted away
 }
 
 // Hit is a single violation location.
 type Hit struct {
 	File       string
-	Line       int
+	Line       int // 0 when the finding is about the scan itself, not a line
 	Reason     string
 	Suggestion string
 }
 
-// scanPaths are the canonical AES-bearing files (post-T2.6 migration).
-var scanPaths = []string{
-	"api/internal/db/store/secret_wrapper.go",
-}
+// scanRoots are the directory trees walked for AES markers. Everything the
+// api module compiles into a running binary lives under here, which is what
+// makes a tree walk the right shape: the invariant is about the code that
+// runs, not about one filename.
+var scanRoots = []string{"api"}
+
+// canonicalStoreFile is the file T10.3 is actually about. It is not the
+// scan's boundary any more — it is kept only so the suggestion text can
+// point somewhere useful.
+const canonicalStoreFile = "api/internal/db/store/secret_wrapper.go"
 
 // aesMarkers are heuristics flagging a remaining AES code path.
 var aesMarkers = []string{
@@ -95,22 +135,64 @@ func Check(cfg Config) (Outcome, error) {
 		EnforcementTime: enforcementTime,
 		Now:             now,
 	}
-	for _, rel := range scanPaths {
-		if allowSet[filepath.Clean(rel)] {
-			continue
-		}
-		abs := filepath.Join(cfg.RepoRoot, rel)
-		hits, err := scanFile(abs, rel)
-		if err != nil {
-			if os.IsNotExist(err) {
-				// File deleted (T10.3 completed) — that's the desired state.
-				continue
+
+	for _, rootRel := range scanRoots {
+		absRoot := filepath.Join(cfg.RepoRoot, rootRel)
+		walkErr := filepath.WalkDir(absRoot, func(p string, d fs.DirEntry, err error) error {
+			if err != nil {
+				// An absent tree is not an error here: the zero-found floor
+				// below is what turns "nothing was read" into a violation,
+				// and it does so with a message that says which root was empty.
+				if os.IsNotExist(err) {
+					return nil
+				}
+				return err
 			}
-			out.Warnings = append(out.Warnings,
-				fmt.Sprintf("%s: scan error: %v", rel, err))
-			continue
+			if d.IsDir() {
+				return nil
+			}
+			name := d.Name()
+			if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+				return nil
+			}
+			rel, relErr := filepath.Rel(cfg.RepoRoot, p)
+			if relErr != nil {
+				return relErr
+			}
+			rel = filepath.ToSlash(rel)
+			out.FilesFound++
+			if allowSet[filepath.Clean(rel)] {
+				return nil
+			}
+			out.FilesScanned++
+			hits, scanErr := scanFile(p, rel)
+			if scanErr != nil {
+				out.Warnings = append(out.Warnings,
+					fmt.Sprintf("%s: scan error: %v", rel, scanErr))
+				return nil
+			}
+			out.Hits = append(out.Hits, hits...)
+			return nil
+		})
+		if walkErr != nil {
+			return Outcome{}, fmt.Errorf("noaesremaining: walking %s: %w", rootRel, walkErr)
 		}
-		out.Hits = append(out.Hits, hits...)
+	}
+
+	if out.FilesFound == 0 {
+		// Found-but-unread, inverted: the gate read nothing and would
+		// otherwise report the cleanest possible result. Deleting the AES
+		// path and pointing the gate at the wrong tree are indistinguishable
+		// from the outside, and only one of them is the desired state.
+		out.Hits = append(out.Hits, Hit{
+			File: strings.Join(scanRoots, ", "),
+			Reason: fmt.Sprintf(
+				"scanned 0 Go files under %s — a scan that read nothing cannot show T10.3 is done",
+				strings.Join(scanRoots, ", ")),
+			Suggestion: fmt.Sprintf(
+				"check -root: it must point at the repository root, the one holding %s",
+				canonicalStoreFile),
+		})
 	}
 
 	if enforced {
@@ -127,6 +209,7 @@ func Check(cfg Config) (Outcome, error) {
 }
 
 func scanFile(absPath, relPath string) ([]Hit, error) {
+	// #nosec G304 -- absPath comes from filepath.WalkDir of cfg.RepoRoot/api.
 	f, err := os.Open(absPath)
 	if err != nil {
 		return nil, err
@@ -192,8 +275,14 @@ func FormatOutcome(out Outcome) string {
 	}
 	fmt.Fprintf(&sb, "  Enforcement starts: %s\n", out.EnforcementTime.Format("2006-01-02 15:04 UTC"))
 	fmt.Fprintf(&sb, "  Now:                %s\n", out.Now.Format("2006-01-02 15:04 UTC"))
+	fmt.Fprintf(&sb, "  Scanned:            %d of %d non-test .go files under %s\n",
+		out.FilesScanned, out.FilesFound, strings.Join(scanRoots, ", "))
 	for _, h := range out.Hits {
-		fmt.Fprintf(&sb, "  %s:%d — %s\n", h.File, h.Line, h.Reason)
+		if h.Line > 0 {
+			fmt.Fprintf(&sb, "  %s:%d — %s\n", h.File, h.Line, h.Reason)
+		} else {
+			fmt.Fprintf(&sb, "  %s — %s\n", h.File, h.Reason)
+		}
 		fmt.Fprintf(&sb, "    Suggestion: %s\n", h.Suggestion)
 	}
 	for _, w := range out.Warnings {
