@@ -17,6 +17,8 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // runRegressionScript invokes regression-checks.sh and returns combined output.
@@ -115,18 +117,104 @@ func TestK3dBuildConfigOneAgent(t *testing.T) {
 	}
 }
 
-func TestBootstrapClusterScript(t *testing.T) {
-	// M23 T6.1 stale-path guard: bootstrap-cluster.sh was removed sometime
-	// after this test was written. Test skips when the file is missing rather
-	// than FAIL — either the script was consolidated into task setup OR the
-	// test is genuinely stale and should be deleted in a follow-up cleanup PR.
-	scriptPath := "../../scripts/bootstrap-cluster.sh"
-	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-		t.Skipf("bootstrap-cluster.sh missing (consolidated into task setup? test may be stale — follow-up cleanup TBD)")
+// taskCmds returns the `cmds` of one task, with each entry as either the shell
+// string it runs or the `task:` it delegates to. Two shapes, one accessor.
+type taskCmds struct {
+	Tasks map[string]struct {
+		Cmds []yaml.Node `yaml:"cmds"`
+	} `yaml:"tasks"`
+}
+
+func loadTaskCmds(t *testing.T, path, task string) []yaml.Node {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
 	}
-	data, _ := os.ReadFile(scriptPath)
-	if !strings.Contains(string(data), "k3d cluster list") {
-		t.Error("bootstrap-cluster.sh must check existing cluster (idempotent)")
+	var tf taskCmds
+	if err := yaml.Unmarshal(data, &tf); err != nil {
+		t.Fatalf("%s is not valid YAML: %v", path, err)
+	}
+	def, ok := tf.Tasks[task]
+	if !ok {
+		t.Fatalf("%s declares no task %q \u2014 re-point this test at the task that owns the "+
+			"contract now; do NOT add a skip (B-182)", path, task)
+	}
+	if len(def.Cmds) == 0 {
+		t.Fatalf("%s: task %q has no cmds", path, task)
+	}
+	return def.Cmds
+}
+
+// The `task setup` cluster-creation step is idempotent: re-running it does not
+// destroy and recreate a cluster that is already there.
+//
+// B-182. This was TestBootstrapClusterScript, which read
+// `infra/scripts/bootstrap-cluster.sh` and skipped when it was missing. That
+// script was deleted deliberately in 346215cf0 (2026-05-23, "delete 3 standalone
+// tools not wired into any automation"), and the commit message answers the exact
+// question the old comment left open — "consolidated into task setup? test may be
+// stale" — with "bootstrap-cluster.sh — superseded by `task setup` (k3d cluster
+// create)". So the skip had been the only branch since that commit, and the
+// idempotency assertion had been dead for three and a half months while the
+// package printed `ok`.
+//
+// The CONTRACT outlived the script. `task setup` calls `clusters:create`, and every
+// cluster there is created behind the same guard the deleted script used, in the
+// same idiom:
+//
+//	k3d cluster list -o json | grep -q '"name":"loopzero-core"' || k3d cluster create ...
+//
+// That is what "idempotent" means here, and it is what this test asserts now, on
+// the live file. It is a stronger check than the one it replaces: the old test
+// proved the string "k3d cluster list" appeared SOMEWHERE in a script, so a second,
+// unguarded create in the same file would have passed. This one requires every
+// create in the task to carry its own guard, and it fails on the fifth cluster
+// added without one.
+//
+// Scope is `clusters:create` alone, on purpose. `clusters:recreate` in the same
+// file runs `k3d cluster delete` followed by an unguarded `k3d cluster create` —
+// that is its whole reason to exist, it is not on the `task setup` path, and a
+// check that swept the file would fail on correct code.
+func TestClusterCreateIsIdempotent(t *testing.T) {
+	const (
+		rootTaskfile = "../../../Taskfile.yml"
+		k3dTaskfile  = "../../../taskfiles/k3d.yml"
+		createTask   = "clusters:create"
+	)
+
+	// `task setup` must still reach clusters:create, or the guard below protects a
+	// task nobody runs — which is how the previous version of this test died.
+	delegatesToCreate := false
+	for _, cmd := range loadTaskCmds(t, rootTaskfile, "setup") {
+		var delegate struct {
+			Task string `yaml:"task"`
+		}
+		if cmd.Decode(&delegate) == nil && delegate.Task == createTask {
+			delegatesToCreate = true
+			break
+		}
+	}
+	if !delegatesToCreate {
+		t.Fatalf("%s: task `setup` no longer calls %q \u2014 whatever creates the clusters now is "+
+			"what this idempotency test must follow", rootTaskfile, createTask)
+	}
+
+	creates := 0
+	for _, cmd := range loadTaskCmds(t, k3dTaskfile, createTask) {
+		var shell string
+		if cmd.Decode(&shell) != nil || !strings.Contains(shell, "k3d cluster create") {
+			continue
+		}
+		creates++
+		if !strings.Contains(shell, "k3d cluster list") {
+			t.Errorf("%s: task %q creates a cluster with no existence check, so a re-run of "+
+				"`task setup` would not be idempotent:\n\t%s", k3dTaskfile, createTask, shell)
+		}
+	}
+	if creates == 0 {
+		t.Fatalf("%s: task %q creates no k3d cluster at all \u2014 this test is reading the wrong "+
+			"task and is asserting nothing", k3dTaskfile, createTask)
 	}
 }
 
