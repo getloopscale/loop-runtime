@@ -94,7 +94,7 @@ var tenantSM = statemachine.NewTenantTypedMachine()
 // "cell→cell-cluster" — the migration the cluster-topology-naming ADR
 // floated for this row, considered and rejected on 2026-09-06 — would
 // make the sentence circular and erase the mapping it names. Nor is
-// "runtime" here Go's runtime package, imported as
+// "runtime" here apimachinery's runtime package (k8s.io/apimachinery/pkg/runtime, NOT Go's stdlib runtime — the stdlib one has no Scheme type, which is what `*runtime.Scheme` in this tree proves), imported as
 // k8s.io/apimachinery/pkg/runtime and used for the Scheme field below.
 // See docs/decisions/2026-08-09-cluster-topology-naming-adr.md
 // § Decision on the domain term (2026-09-06).

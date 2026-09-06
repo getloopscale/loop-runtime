@@ -472,7 +472,7 @@ func (p *RealProvisioner) DeleteAppProject(ctx context.Context, tenantID string)
 // has exactly one runtime cluster. The quoted Secret name is DATA: a
 // literal object name that exists on such installs, not prose, and
 // rewording it here would make this comment describe a Secret that no
-// install actually has. Neither sense is Go's runtime package, imported
+// install actually has. Neither sense is apimachinery's runtime package (k8s.io/apimachinery/pkg/runtime, NOT Go's stdlib runtime — the stdlib one has no Scheme type, which is what `*runtime.Scheme` in this tree proves), imported
 // in this file as k8s.io/apimachinery/pkg/runtime/schema. The domain
 // term stays "runtime"; the cluster name is frozen until AM8.
 // See docs/decisions/2026-08-09-cluster-topology-naming-adr.md
