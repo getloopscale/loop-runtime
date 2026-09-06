@@ -78,7 +78,7 @@ func TestNewLogger(t *testing.T) {
 
 func TestParseLogLevel_AllVariants(t *testing.T) {
 	tests := []struct {
-		env      string
+		env            string
 		wantSuppressed string // a message at this level should be suppressed
 		wantVisible    string // a message at this level should be visible
 	}{
@@ -89,9 +89,9 @@ func TestParseLogLevel_AllVariants(t *testing.T) {
 		{"warn", "info suppressed", "warn message"},
 		{"ERROR", "warn suppressed", "error message"},
 		{"error", "warn suppressed", "error message"},
-		{"", "debug suppressed", "info message"},         // default = info
-		{"INVALID", "debug suppressed", "info message"},  // unknown = info
-		{"  WARN  ", "info suppressed", "warn message"},  // whitespace trimmed
+		{"", "debug suppressed", "info message"},        // default = info
+		{"INVALID", "debug suppressed", "info message"}, // unknown = info
+		{"  WARN  ", "info suppressed", "warn message"}, // whitespace trimmed
 	}
 
 	for _, tt := range tests {

@@ -338,11 +338,11 @@ func (h *harborInit) verifyStorage(ctx context.Context) error {
 // idempotent (PUT overwrites).
 func (h *harborInit) setSystemConfig(ctx context.Context) error {
 	payload := map[string]any{
-		"auth_mode":                     "db_auth",
-		"project_creation_restriction":  "adminonly",
-		"robot_name_prefix":             "robot$",
-		"robot_token_duration":          1440,
-		"self_registration":             false,
+		"auth_mode":                    "db_auth",
+		"project_creation_restriction": "adminonly",
+		"robot_name_prefix":            "robot$",
+		"robot_token_duration":         1440,
+		"self_registration":            false,
 	}
 	body, _ := json.Marshal(payload)
 

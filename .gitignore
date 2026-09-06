@@ -265,3 +265,14 @@ operators/app-operator
 # Artefatos de sessão do harness — nem versionados nem visíveis a um `git add -A`.
 .claude/.compaction-snapshots/
 .claude/.patch-backups/
+
+# Kit installer backups — timestamped copies of the previous install, not source.
+.claude/.install-backups/
+
+# Kept for history: the kit's installer used to live at `.claude/mechanisms/dist/`
+# and the bare `dist/` rules above — meant for build output — swallowed it, so
+# this project received the kit without the script that installs or patches it.
+# The kit renamed that family to `distribution/`, which no build rule claims, and
+# these two lines only matter for checkouts of commits older than that rename.
+!.claude/mechanisms/dist/
+!.claude/mechanisms/dist/**

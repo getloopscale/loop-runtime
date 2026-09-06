@@ -15,7 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // fakeTenantDeletionStore is a test double for TenantDeletionStore.
@@ -70,8 +70,8 @@ func setupTenantRouter(store tenants.TenantDeletionStore) *chi.Mux {
 	return r
 }
 
-func withUserContext(r *http.Request, uc *middleware.UserContext) *http.Request {
-	ctx := context.WithValue(r.Context(), middleware.UserContextKeyPublic(), uc)
+func withUserContext(r *http.Request, uc *auth.UserContext) *http.Request {
+	ctx := context.WithValue(r.Context(), auth.UserContextKeyPublic(), uc)
 	return r.WithContext(ctx)
 }
 
@@ -80,7 +80,7 @@ func TestTenantDelete_SoftDelete_Returns202(t *testing.T) {
 	router := setupTenantRouter(store)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/tenants/tn-test123", nil)
-	req = withUserContext(req, &middleware.UserContext{
+	req = withUserContext(req, &auth.UserContext{
 		UserID:   "user-1",
 		Email:    "test@example.com",
 		TenantID: "tn-test123",
@@ -113,7 +113,7 @@ func TestTenantDelete_Idempotent(t *testing.T) {
 	store := newFakeDeletionStore()
 	router := setupTenantRouter(store)
 
-	uc := &middleware.UserContext{
+	uc := &auth.UserContext{
 		UserID: "user-1", Email: "test@example.com",
 		TenantID: "tn-test123", Role: "owner",
 	}
@@ -141,7 +141,7 @@ func TestTenantDelete_IDOR_Blocked(t *testing.T) {
 
 	// User belongs to tn-alice but tries to delete tn-bob
 	req := httptest.NewRequest("DELETE", "/api/v1/tenants/tn-bob", nil)
-	req = withUserContext(req, &middleware.UserContext{
+	req = withUserContext(req, &auth.UserContext{
 		UserID: "user-1", Email: "alice@example.com",
 		TenantID: "tn-alice", Role: "owner",
 	})
@@ -159,7 +159,7 @@ func TestTenantDelete_NonOwner_Blocked(t *testing.T) {
 	router := setupTenantRouter(store)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/tenants/tn-test123", nil)
-	req = withUserContext(req, &middleware.UserContext{
+	req = withUserContext(req, &auth.UserContext{
 		UserID: "user-1", Email: "member@example.com",
 		TenantID: "tn-test123", Role: "member",
 	})
@@ -177,7 +177,7 @@ func TestTenantDelete_ForceRequiresAdmin(t *testing.T) {
 	router := setupTenantRouter(store)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/tenants/tn-test123?force=true", nil)
-	req = withUserContext(req, &middleware.UserContext{
+	req = withUserContext(req, &auth.UserContext{
 		UserID: "user-1", Email: "owner@example.com",
 		TenantID: "tn-test123", Role: "owner",
 	})
@@ -204,7 +204,7 @@ func TestTenantRestore_CancelsPendingDeletion(t *testing.T) {
 	router := setupTenantRouter(store)
 
 	req := httptest.NewRequest("POST", "/api/v1/tenants/tn-test123/restore", nil)
-	req = withUserContext(req, &middleware.UserContext{
+	req = withUserContext(req, &auth.UserContext{
 		UserID: "user-1", Email: "test@example.com",
 		TenantID: "tn-test123", Role: "owner",
 	})
@@ -235,7 +235,7 @@ func TestTenantRestore_ExpiredGrace_Returns410(t *testing.T) {
 	router := setupTenantRouter(store)
 
 	req := httptest.NewRequest("POST", "/api/v1/tenants/tn-test123/restore", nil)
-	req = withUserContext(req, &middleware.UserContext{
+	req = withUserContext(req, &auth.UserContext{
 		UserID: "user-1", Email: "test@example.com",
 		TenantID: "tn-test123", Role: "owner",
 	})
@@ -253,7 +253,7 @@ func TestTenantRestore_NoPending_Returns404(t *testing.T) {
 	router := setupTenantRouter(store)
 
 	req := httptest.NewRequest("POST", "/api/v1/tenants/tn-test123/restore", nil)
-	req = withUserContext(req, &middleware.UserContext{
+	req = withUserContext(req, &auth.UserContext{
 		UserID: "user-1", Email: "test@example.com",
 		TenantID: "tn-test123", Role: "owner",
 	})

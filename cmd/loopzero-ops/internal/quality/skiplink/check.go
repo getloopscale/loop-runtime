@@ -13,6 +13,8 @@ package skiplink
 
 import (
 	"fmt"
+	"go/scanner"
+	"go/token"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -153,16 +155,74 @@ func skipFileByName(name string) bool {
 }
 
 // scanFile finds skip calls lacking an issue URL within ±contextRadius lines.
+// maskGoLiterals blanks the CONTENT of Go string and rune literals, preserving
+// every byte offset and every newline, so a later line-based match sees code and
+// not data.
+//
+// Why this exists: the Go detector below is a regexp over raw text, and a test
+// that builds Go source as a fixture contains the literal bytes `t.Skip(`. On
+// 2026-09-05 that reported ten violations in one file whose skips were all inside
+// raw strings feeding an AST detector's fixtures -- data being read as code. The
+// two escapes the gate offers were both wrong for it: the baseline is for
+// grandfathered real skips, and renaming to *_skip_test.go would exempt every
+// FUTURE real skip in a file of ordinary tests.
+//
+// It fails toward MORE detection, never less. A file the scanner cannot read
+// cleanly is returned unchanged, so a malformed file is still matched in full: a
+// masker that silently swallowed a real skip would be the worse failure, and this
+// gate exists to find skips.
+func maskGoLiterals(src []byte) []byte {
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(src))
+	var s scanner.Scanner
+	s.Init(file, src, func(token.Position, string) {}, scanner.ScanComments)
+
+	out := append([]byte(nil), src...)
+	for {
+		pos, tok, lit := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+		// Comments are masked for the same reason literals are: `// t.Skip(...)`
+		// is prose about a skip, not one. Safe for the URL check, which reads the
+		// ORIGINAL lines, so an issue link in a comment beside a real skip is
+		// still found.
+		if tok != token.STRING && tok != token.CHAR && tok != token.COMMENT {
+			continue
+		}
+		start := file.Offset(pos)
+		end := start + len(lit)
+		if start < 0 || end > len(out) {
+			continue
+		}
+		for i := start; i < end; i++ {
+			if out[i] != '\n' {
+				out[i] = ' '
+			}
+		}
+	}
+	if s.ErrorCount > 0 {
+		return src
+	}
+	return out
+}
+
 func scanFile(path, targetDir string, skipRe, urlRe *regexp.Regexp) []violation {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
 	lines := strings.Split(string(data), "\n")
+	// Matched against masked source; reported and URL-checked against the
+	// original, so a violation still shows the line a person wrote.
+	matchOn := lines
+	if strings.HasSuffix(path, ".go") {
+		matchOn = strings.Split(string(maskGoLiterals(data)), "\n")
+	}
 	rel, _ := filepath.Rel(targetDir, path)
 	var out []violation
 	for i, line := range lines {
-		if !skipRe.MatchString(line) {
+		if i >= len(matchOn) || !skipRe.MatchString(matchOn[i]) {
 			continue
 		}
 		// Context window ±contextRadius.

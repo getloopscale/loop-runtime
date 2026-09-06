@@ -90,7 +90,7 @@ type Config struct {
 //
 //     cb := circuitbreaker.New(circuitbreaker.Config{...}, nil)
 //     result, err := circuitbreaker.Execute(ctx, cb, func(ctx context.Context) (Result, error) {
-//         return doSomething(ctx)
+//     return doSomething(ctx)
 //     })
 //
 // The Execute helper is a package-level generic function (not a method)
@@ -103,11 +103,11 @@ type Breaker struct {
 	retryInterval  time.Duration
 	isExcluded     func(error) bool
 
-	mu           sync.RWMutex
-	state        State
-	failureCount int
-	successCount int
-	openedAt     time.Time
+	mu            sync.RWMutex
+	state         State
+	failureCount  int
+	successCount  int
+	openedAt      time.Time
 	onStateChange func(name string, from, to State)
 }
 

@@ -125,11 +125,17 @@ func TestCheck_RealTreeIsFullyCovered(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err = %v; uncovered=%v", err, out.Uncovered)
 	}
-	if len(out.Modules) < 9 {
-		t.Errorf("modules = %d (%v); the repository carries nine — a walk that found fewer "+
-			"is measuring less than the tree", len(out.Modules), out.Modules)
+	// Eram nove; sao OITO desde 2026-08-19. `tools/loopzero-dockerfile-lint` foi removido
+	// (B-157): ele validava Dockerfile fornecido pelo usuario, e esse caminho saiu na T2.2 —
+	// o build gera Dockerfile canonico em processo, entao nenhum caminho o invocava.
+	//
+	// Baixar o piso so' e' legitimo quando a causa e' conhecida e deliberada, e e' por isso
+	// que ela esta' escrita aqui: um piso que cede sem razao registrada deixa de ser piso.
+	if len(out.Modules) < 8 {
+		t.Errorf("modules = %d (%v); a arvore carrega oito desde a remocao do B-157 — uma "+
+			"varredura que achou menos esta' medindo menos que a arvore", len(out.Modules), out.Modules)
 	}
-	for _, want := range []string{"cmd/loopzero-ops", "tools/loopzero-dockerfile-lint"} {
+	for _, want := range []string{"cmd/loopzero-ops"} {
 		var found bool
 		for _, c := range out.Covered {
 			if c == want {

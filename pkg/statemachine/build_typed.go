@@ -43,17 +43,17 @@ const (
 
 // Typed event constants.
 const (
-	BPEventStarted              BuildPhaseEvent = "BuildStarted"
-	BPEventSucceeded            BuildPhaseEvent = "BuildSucceeded"
-	BPEventReleaseCompleted     BuildPhaseEvent = "BuildReleaseCompleted"
-	BPEventReleaseFailed        BuildPhaseEvent = "BuildReleaseFailed"
-	BPEventReleaseTimeout       BuildPhaseEvent = "BuildReleaseTimeout"
-	BPEventFailed               BuildPhaseEvent = "BuildFailed"
-	BPEventCancelRequested      BuildPhaseEvent = "BuildCancelRequested"
-	BPEventCancelConfirmed      BuildPhaseEvent = "BuildCancelConfirmed"
-	BPEventQueueTimeout         BuildPhaseEvent = "BuildQueueTimeout"
-	BPEventTimeout              BuildPhaseEvent = "BuildTimeout"
-	BPEventCancelTimeout        BuildPhaseEvent = "BuildCancelTimeout"
+	BPEventStarted          BuildPhaseEvent = "BuildStarted"
+	BPEventSucceeded        BuildPhaseEvent = "BuildSucceeded"
+	BPEventReleaseCompleted BuildPhaseEvent = "BuildReleaseCompleted"
+	BPEventReleaseFailed    BuildPhaseEvent = "BuildReleaseFailed"
+	BPEventReleaseTimeout   BuildPhaseEvent = "BuildReleaseTimeout"
+	BPEventFailed           BuildPhaseEvent = "BuildFailed"
+	BPEventCancelRequested  BuildPhaseEvent = "BuildCancelRequested"
+	BPEventCancelConfirmed  BuildPhaseEvent = "BuildCancelConfirmed"
+	BPEventQueueTimeout     BuildPhaseEvent = "BuildQueueTimeout"
+	BPEventTimeout          BuildPhaseEvent = "BuildTimeout"
+	BPEventCancelTimeout    BuildPhaseEvent = "BuildCancelTimeout"
 )
 
 // BuildMachine is the typed wrapper around the shared *Machine
@@ -156,4 +156,3 @@ func IsBuildPhaseTerminal(phase BuildPhase) bool {
 	}
 	return false
 }
-

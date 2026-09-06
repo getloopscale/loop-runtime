@@ -22,11 +22,11 @@ type BuildLookup interface {
 
 // StatusNotifier updates GitHub commit status when builds complete.
 type StatusNotifier struct {
-	appClient  *AppClient
-	repoLookup RepositoryLookup
+	appClient   *AppClient
+	repoLookup  RepositoryLookup
 	buildLookup BuildLookup
-	logger     *slog.Logger
-	baseDomain string
+	logger      *slog.Logger
+	baseDomain  string
 }
 
 // NewStatusNotifier creates a new StatusNotifier. Returns nil if AppClient is nil.

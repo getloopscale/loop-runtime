@@ -6,10 +6,11 @@ package adapters
 import (
 	"context"
 	"encoding/json"
+	"time"
+
 	buildroutes "github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
-	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
@@ -236,3 +237,11 @@ func (a *BuildStatsStoreAdapter) BuildStatsByDay(ctx context.Context, tenantID s
 	}
 	return out, nil
 }
+
+// A porta que este adaptador satisfaz, afirmada em tempo de compilacao.
+//
+// B-058: o pacote se chama `adapters` e o criterio de admissao dele era "e um adapter" —
+// que nao recusa nada. Medido em 2026-08-18: dos nove adaptadores, cinco NOMEAVAM a porta em
+// prosa e apenas UM a verificava. Prosa nao compila; esta linha sim, e e ela que faz o
+// criterio conseguir dizer nao.
+var _ sse.BuildStoreReader = (*BuildStoreReaderAdapter)(nil)

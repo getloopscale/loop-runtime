@@ -19,16 +19,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -128,7 +129,7 @@ const previewRequestTimeout = 30 * time.Second
 // project belongs to another tenant or doesn't exist anywhere (no
 // existence leak per CWE-204).
 func (h *PreviewHandler) authAndProject(w http.ResponseWriter, r *http.Request) (string, string, bool) {
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return "", "", false

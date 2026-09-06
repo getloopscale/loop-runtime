@@ -9,27 +9,29 @@ package store
 //
 // PostgresSecretStore struct + NewPostgresSecretStore constructor
 // live in this file (inline — no separate _types.go needed; the
-// store is small and the AES-256-GCM encrypt() helper is tightly
-// coupled to the wrapper methods).
+// store is small and the legacy AES-256-GCM decrypt() helper is
+// tightly coupled to the wrapper methods).
 //
-// SEC-001 invariant: encryptionKey != nil → AES-256-GCM
-// (nonce || ciphertext) before INSERT. nil key = plaintext (local
-// dev only — never in production). ListSecretNames NEVER returns
-// the value column.
+// SEC-001 invariant, post-T10.3: the ONLY blob this store writes to
+// secrets.encrypted_value is Vault Transit ciphertext ("vault:v1:"
+// prefix). A store without a Transit client refuses writes instead of
+// falling back to a local AES key or to plaintext. The AES branch
+// survives on the READ side only, so rows written before T10.3 stay
+// readable. ListSecretNames NEVER returns the value column.
 
 import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"fmt"
+
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"io"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
 	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
 // VaultTransitClient is the minimal interface PostgresSecretStore requires from the
@@ -61,30 +63,38 @@ var vaultPrefix = []byte("vault:v1:")
 
 // PostgresSecretStore manages secrets in PostgreSQL.
 //
-// Dual-encryption mode (T3.4/T3.5 of openbao-adoption v1.3):
-//   - WRITE: when vault != nil → Transit encrypt per-tenant (canonical post-T10).
-//     When vault == nil → fall back to AES-256-GCM (legacy / dev).
-//   - READ: detect prefix "vault:v1:" → Transit decrypt; otherwise → AES decrypt.
-//     This supports coexistence during migration window (Day 0-60).
+// Asymmetric encryption mode (T3.4/T3.5 of openbao-adoption v1.3, as
+// amended by T10.3):
+//   - WRITE: vault != nil → Transit encrypt per-tenant. vault == nil →
+//     refuse. There is no AES write branch: the fallback that used to
+//     fire here wrote tenant secrets under a local key (crypto_mode=
+//     aes-local) or in the clear (crypto_mode=plaintext), both of which
+//     config.Validate still accepts.
+//   - READ: detect prefix "vault:v1:" → Transit decrypt; otherwise →
+//     AES decrypt. The read branch stays because rows written before
+//     T10.3 are only readable through it (B-162 DoD bullet 3).
 //
-// SEC-001 invariant: encryptionKey != nil → AES-256-GCM (legacy path).
-// Vault path is canonical post-F10 / T10.2 AES code deletion.
+// SEC-001 invariant: every blob this store writes carries the Transit
+// prefix, or the write returned an error and nothing was persisted.
 //
 // EC-06 (MUST FIX P2): all read paths check `len(ciphertext) == 0` BEFORE
 // prefix detection to avoid panic on NULL/empty PG rows (e.g., legacy data
 // or partial-write race conditions).
 type PostgresSecretStore struct {
 	DB            db.DBTX
-	encryptionKey []byte // 32-byte key for AES-256-GCM; nil disables encryption (read AES fallback only)
+	encryptionKey []byte // 32-byte legacy AES-256-GCM key, READ path only; nil = pre-T10.3 rows are unreadable
 
-	// Vault transit client (T3.4/T3.5 — optional). When set, write path
-	// encrypts via Transit. Read path always handles both Vault + AES.
+	// Vault transit client (T3.4/T3.5). REQUIRED for writes since T10.3:
+	// nil means encryptForStore refuses. Read path handles both Vault + AES.
 	vault VaultTransitClient
 }
 
-// NewPostgresSecretStore creates a secret store with optional AES encryption.
-// key must be exactly 32 bytes (AES-256) or nil to disable encryption.
-// Use NewPostgresSecretStoreWithVault for FAANG dual-path (T3.5 canonical).
+// NewPostgresSecretStore creates a READ-ONLY-for-secrets store: since
+// T10.3 removed the AES write branch, a store built here can decrypt
+// legacy rows but every write through encryptForStore refuses with
+// ErrSecretsBackendUnavailable. key must be exactly 32 bytes (AES-256)
+// or nil. Use NewPostgresSecretStoreWithVault for the canonical
+// write-capable store.
 func NewPostgresSecretStore(db db.DBTX, key []byte) (*PostgresSecretStore, error) {
 	if key != nil && len(key) != 32 {
 		return nil, fmt.Errorf("secret_store: encryption key must be 32 bytes, got %d", len(key))
@@ -95,9 +105,9 @@ func NewPostgresSecretStore(db db.DBTX, key []byte) (*PostgresSecretStore, error
 // NewPostgresSecretStoreWithVault creates a secret store with Vault transit
 // as the canonical write path + dual-read (Vault prefix detect; AES fallback).
 //
-// vaultClient is REQUIRED (use NewPostgresSecretStore for AES-only mode).
+// vaultClient is REQUIRED — it is the only write path there is.
 // legacyAESKey is OPTIONAL legacy AES key for reading pre-T3.5 ciphertexts;
-// post-T10.2 (Day 60 AES delete cron) this can be nil.
+// it is never used to write. Pass nil once no AES-written row remains.
 //
 // T3.5 of openbao-adoption v1.3 (FAANG dual-path per user "Siga o que for
 // mais FAANG" decision iter 27).
@@ -143,40 +153,15 @@ func tenantAAD(tenantID string) []byte {
 	return []byte("loopzero-secret-v1|tenant=" + tenantID)
 }
 
-// encrypt encrypts plaintext using AES-256-GCM with tenant-bound AAD.
-// SEC-001 invariant: only path that turns user-provided bytes into the
-// blob persisted in secrets.encrypted_value.
-//
-// Sprint D D3 (closes sec-001): the aad parameter binds the ciphertext to
-// a tenant identity. Pass tenantAAD(tenantID) at the call site so
-// cross-tenant ciphertext transplant fails decrypt rather than returning
-// wrong-tenant plaintext.
-func (s *PostgresSecretStore) encrypt(plaintext, aad []byte) ([]byte, error) {
-	if s.encryptionKey == nil {
-		return plaintext, nil // no encryption (local dev)
-	}
-	block, err := aes.NewCipher(s.encryptionKey)
-	if err != nil {
-		return nil, fmt.Errorf("secret_store: create cipher: %w", err)
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("secret_store: create GCM: %w", err)
-	}
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, fmt.Errorf("secret_store: generate nonce: %w", err)
-	}
-	return gcm.Seal(nonce, nonce, plaintext, aad), nil
-}
-
-// decrypt is the inverse of encrypt. Reads nonce || ciphertext as written
+// decrypt reads the legacy AES-256-GCM format. Reads nonce || ciphertext as written
 // by encrypt(), returns plaintext. V9 L20: required by ListForResync so
 // the deploy hook can repopulate ExternalSecrets with the original values.
 //
-// SEC-001 invariant: only path that turns persisted bytes back into
-// plaintext. Bypasses the encrypt() when encryptionKey is nil (matches
-// the local-dev no-encryption mode).
+// SEC-001 invariant: only path that turns AES-persisted bytes back into
+// plaintext. T10.3 deleted the seal side, so this format is read-only:
+// nothing in the tree can produce a new blob in it. A nil encryptionKey
+// means any pre-T10.3 row is unreadable, and the pass-through below
+// exists only so a plaintext-mode dev database keeps round-tripping.
 //
 // Sprint D D3 (closes sec-001): dual-decrypt window. The aad parameter
 // binds new (post-D3) ciphertexts to a tenant identity. Open is tried
@@ -220,10 +205,19 @@ func (s *PostgresSecretStore) decrypt(encrypted, aad []byte) ([]byte, error) {
 	return plain, nil
 }
 
-// encryptForStore is the write-path dispatcher (T3.5).
-// When vault present → Transit encrypt per-tenant (canonical post-T10).
-// Otherwise → legacy AES-256-GCM. Sprint D D3: AES path now binds tenantID
-// via AAD so cross-tenant ciphertext transplant fails auth.
+// encryptForStore is the write-path dispatcher (T3.5, amended by T10.3).
+//
+// It has exactly two outcomes: Transit ciphertext, or a refusal. The
+// AES-256-GCM fallback that fired when s.vault was nil is gone (B-162).
+// It was reachable in any deployment that booted without
+// OPENBAO_TRANSIT_ENABLED — config.Validate accepts crypto_mode=aes-local
+// and, outside production, crypto_mode=plaintext — and the only thing
+// that distinguished a secret it wrote from a Transit one was the absent
+// "vault:v1:" prefix on a column nobody reads by eye.
+//
+// The refusal wraps ErrSecretsBackendUnavailable: from the caller's side,
+// a store wired without Transit and a Transit backend that cannot be
+// reached are the same condition, and both deserve 503 over a generic 500.
 //
 // T2.5 wire-up (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): the
 // Bulk handler MAY pre-encrypt via h.transitClient.Encrypt (T2.3 contract).
@@ -240,21 +234,25 @@ func (s *PostgresSecretStore) encryptForStore(ctx context.Context, tenantID stri
 		// Pass-through — no double-encrypt.
 		return plaintext, nil
 	}
-	if s.vault != nil {
-		ct, err := s.vault.Encrypt(ctx, tenantID, plaintext)
-		if err != nil {
-			// #138 — tag the failure so the HTTP boundary can answer
-			// SECRETS_BACKEND_UNAVAILABLE (503) instead of a generic 500.
-			// Before this, an unreachable backend was indistinguishable from a
-			// database outage and `loopzero secret set` said only "Something went
-			// wrong", leaving the operator to guess which subsystem refused.
-			// The original error stays in the chain for the logs.
-			return nil, fmt.Errorf("secret_store: vault transit encrypt: %w: %w",
-				loopzeroerrors.ErrSecretsBackendUnavailable, err)
-		}
-		return []byte(ct), nil
+	if s.vault == nil {
+		// T10.3: no AES fallback. Refusing loses the write; falling back
+		// would have kept it under a key the platform stopped managing.
+		return nil, fmt.Errorf(
+			"secret_store: no transit client wired, refusing to write secret for tenant %s: %w",
+			tenantID, loopzeroerrors.ErrSecretsBackendUnavailable)
 	}
-	return s.encrypt(plaintext, tenantAAD(tenantID))
+	ct, err := s.vault.Encrypt(ctx, tenantID, plaintext)
+	if err != nil {
+		// #138 — tag the failure so the HTTP boundary can answer
+		// SECRETS_BACKEND_UNAVAILABLE (503) instead of a generic 500.
+		// Before this, an unreachable backend was indistinguishable from a
+		// database outage and `loopzero secret set` said only "Something went
+		// wrong", leaving the operator to guess which subsystem refused.
+		// The original error stays in the chain for the logs.
+		return nil, fmt.Errorf("secret_store: vault transit encrypt: %w: %w",
+			loopzeroerrors.ErrSecretsBackendUnavailable, err)
+	}
+	return []byte(ct), nil
 }
 
 // decryptFromStore is the read-path dispatcher (T3.4).
@@ -262,18 +260,47 @@ func (s *PostgresSecretStore) encryptForStore(ctx context.Context, tenantID stri
 // Prefix detection: "vault:v1:" → Transit decrypt; else → AES legacy.
 // Sprint D D3: AES path passes tenantAAD; decrypt tries AAD first then
 // falls back to nil for backward compat with pre-D3 ciphertexts.
+//
+// B-126: every error exit here also increments
+// metrics.SecretDecryptFailedTotal under the reason that says which response
+// the failure calls for. This function is the ONLY place in the store that
+// increments it — callers (ListForResync) re-wrap the error on the way up and
+// must not count the same failure twice. Adding a new error exit to this
+// function without a counter puts the read path back where B-126 found it:
+// one error per request, nothing that adds up.
+//
+// The counter aggregates; it does not probe. A tenant whose secrets nobody
+// reads stays silent no matter what happened to its key, which is why the
+// canary in the item's DoD is a separate design and not this one — see
+// docs/wiki/decisions/2026-09-04-secret-decrypt-canary-deferral.md for the
+// deferral and its trigger.
 func (s *PostgresSecretStore) decryptFromStore(ctx context.Context, tenantID string, ciphertext []byte) ([]byte, error) {
 	if len(ciphertext) == 0 {
+		metrics.SecretDecryptFailedTotal.WithLabelValues("empty_ciphertext").Inc()
 		return nil, fmt.Errorf("secret_store: empty ciphertext for tenant %s (EC-06 NULL row guard)", tenantID)
 	}
 	if s.vault != nil && bytesHasPrefix(ciphertext, vaultPrefix) {
 		plain, err := s.vault.Decrypt(ctx, tenantID, string(ciphertext))
 		if err != nil {
+			// Key side: a revoked or rotated transit key lands here, and so
+			// does an unreachable OpenBao. The store reaches Transit through a
+			// consumer-defined interface and does not import pkg/vault, so the
+			// typed error stays in the chain for the log rather than becoming
+			// a label.
+			metrics.SecretDecryptFailedTotal.WithLabelValues("vault_transit_error").Inc()
 			return nil, fmt.Errorf("secret_store: vault transit decrypt: %w", err)
 		}
 		return plain, nil
 	}
-	return s.decrypt(ciphertext, tenantAAD(tenantID))
+	plain, err := s.decrypt(ciphertext, tenantAAD(tenantID))
+	if err != nil {
+		// Data side: a pre-T10.3 AES row that will not open. Nothing writes
+		// this format any more (B-162), so a non-zero rate is a legacy row
+		// that has become unreadable — restore-a-backup, not restore-a-key.
+		metrics.SecretDecryptFailedTotal.WithLabelValues("aes_legacy_error").Inc()
+		return nil, err
+	}
+	return plain, nil
 }
 
 // bytesHasPrefix returns true if b starts with prefix. Inlined to avoid
@@ -294,15 +321,15 @@ func bytesHasPrefix(b, prefix []byte) bool {
 // (ON CONFLICT DO UPDATE returning xmax=0 to distinguish INSERT
 // from UPDATE).
 //
-// SEC-001: Values are encrypted via s.encrypt before persistence.
+// SEC-001: Values are encrypted via s.encryptForStore before persistence.
 // Returns true if the secret was created, false if updated.
 // Single atomic statement — no race condition between concurrent
 // Set calls for the same secret (the legacy SELECT+INSERT race
 // is structurally absent).
 func (s *PostgresSecretStore) Set(ctx context.Context, tenantID, projectID, env, app, name string, value []byte) (created bool, err error) {
-	// SEC-001 + T3.5: Dispatch to Vault Transit OR AES legacy.
-	// Vault path returns "vault:v1:..." prefixed bytes (per-tenant key).
-	// AES path returns nonce || ciphertext (legacy).
+	// SEC-001 + T3.5 + T10.3: the only blob that reaches encrypted_value
+	// is Transit ciphertext ("vault:v1:...", per-tenant key). Without a
+	// Transit client this errors out before the UPSERT.
 	encrypted, err := s.encryptForStore(ctx, tenantID, value)
 	if err != nil {
 		return false, fmt.Errorf("secret_store: encrypt: %w", err)
@@ -373,8 +400,8 @@ func (s *PostgresSecretStore) Delete(ctx context.Context, tenantID, projectID, e
 // SecretResyncEntry is a (name, app, plaintext-value) tuple returned by
 // ListForResync. V9 L20: only consumed by the deploy-time resync hook
 // in builds.go which (re)creates ExternalSecrets on the workload cluster
-// after the namespace has been ensured. Wrapper decrypts via SEC-001
-// AES-GCM before returning, so the caller gets plaintext values.
+// after the namespace has been ensured. Wrapper decrypts via the read
+// dispatcher before returning, so the caller gets plaintext values.
 type SecretResyncEntry struct {
 	Name  string
 	App   string

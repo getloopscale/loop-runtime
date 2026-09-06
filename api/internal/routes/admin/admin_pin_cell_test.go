@@ -19,7 +19,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
-	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
+	"github.com/getloopscale/loopzero/api/internal/services/placement"
 )
 
 // osReadFileC11 — local alias avoiding clash with any other test helper named
@@ -236,7 +236,7 @@ func TestAdminPinCell_TenantNotFound_Returns404(t *testing.T) {
 	headers := map[string]string{"X-Service-Auth": "secret"}
 	// T6.1 migration: pinner now returns the sentinel directly so the
 	// handler's errors.Is mapping fires (was string-match before).
-	pinner := &fakePinner{err: placementsvc.ErrTenantNotFound}
+	pinner := &fakePinner{err: placement.ErrTenantNotFound}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, pinner, env, headers)
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
@@ -246,7 +246,7 @@ func TestAdminPinCell_TenantNotFound_Returns404(t *testing.T) {
 func TestAdminPinCell_CellNotPinnable_Returns409(t *testing.T) {
 	env := map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
-	pinner := &fakePinner{err: placementsvc.ErrCellNotPinnable}
+	pinner := &fakePinner{err: placement.ErrCellNotPinnable}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, pinner, env, headers)
 	if rec.Code != http.StatusConflict {
 		t.Errorf("expected 409, got %d", rec.Code)
@@ -394,19 +394,19 @@ func TestAdminPinCell_ErrorMappingViaErrorsIs(t *testing.T) {
 	}{
 		{
 			name:       "wrapped ErrTenantNotFound returns 404",
-			err:        fmt.Errorf("pin failed: %w", placementsvc.ErrTenantNotFound),
+			err:        fmt.Errorf("pin failed: %w", placement.ErrTenantNotFound),
 			wantStatus: http.StatusNotFound,
 			wantCode:   "tenant_not_found",
 		},
 		{
 			name:       "wrapped ErrCellNotFound returns 404",
-			err:        fmt.Errorf("pin failed: %w", placementsvc.ErrCellNotFound),
+			err:        fmt.Errorf("pin failed: %w", placement.ErrCellNotFound),
 			wantStatus: http.StatusNotFound,
 			wantCode:   "cell_not_found",
 		},
 		{
 			name:       "wrapped ErrCellNotPinnable returns 409",
-			err:        fmt.Errorf("pin failed: %w", placementsvc.ErrCellNotPinnable),
+			err:        fmt.Errorf("pin failed: %w", placement.ErrCellNotPinnable),
 			wantStatus: http.StatusConflict,
 			wantCode:   "cell_not_pinnable",
 		},

@@ -25,12 +25,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
@@ -42,8 +43,8 @@ import (
 // stubTokenValidator always returns a valid user.
 type stubTokenValidator struct{}
 
-func (s *stubTokenValidator) ValidateToken(_ context.Context, _ string) (*middleware.TokenValidationResult, error) {
-	return &middleware.TokenValidationResult{
+func (s *stubTokenValidator) ValidateToken(_ context.Context, _ string) (*auth.TokenValidationResult, error) {
+	return &auth.TokenValidationResult{
 		UserID: "test-user",
 		Email:  "test@test.dev",
 	}, nil
@@ -52,8 +53,8 @@ func (s *stubTokenValidator) ValidateToken(_ context.Context, _ string) (*middle
 // stubMemberStore always returns one membership.
 type stubMemberStore struct{}
 
-func (s *stubMemberStore) GetMemberships(_ context.Context, _ string) ([]middleware.TenantMembership, error) {
-	return []middleware.TenantMembership{
+func (s *stubMemberStore) GetMemberships(_ context.Context, _ string) ([]auth.TenantMembership, error) {
+	return []auth.TenantMembership{
 		{TenantID: "test-tenant", Role: "owner"},
 	}, nil
 }
@@ -161,13 +162,13 @@ type stubReleaseActivator struct{}
 
 func (s *stubReleaseActivator) OnSyncCompleted(_ string, _ string) error { return nil }
 
-// stubIdempotencyStore implements middleware.IdempotencyStore.
+// stubIdempotencyStore implements policy.IdempotencyStore.
 type stubIdempotencyStore struct{}
 
-func (s *stubIdempotencyStore) Get(_ context.Context, _ string, _ string) (*middleware.IdempotencyRecord, error) {
+func (s *stubIdempotencyStore) Get(_ context.Context, _ string, _ string) (*policy.IdempotencyRecord, error) {
 	return nil, nil
 }
-func (s *stubIdempotencyStore) Store(_ context.Context, _ *middleware.IdempotencyRecord) error {
+func (s *stubIdempotencyStore) Store(_ context.Context, _ *policy.IdempotencyRecord) error {
 	return nil
 }
 

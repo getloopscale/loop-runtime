@@ -32,7 +32,7 @@ func TestSplitOperators_OnlyTenantOpGrantsClusterRoleEscalation(t *testing.T) {
 		mayGrantCR bool
 	}
 	cases := []chartCheck{
-		{"loopzero-tenant-operator", true},  // legitimate
+		{"loopzero-tenant-operator", true}, // legitimate
 		{"loopzero-app-operator", false},
 		{"loopzero-preview-operator", false},
 		{"loopzero-platform-operator", false},

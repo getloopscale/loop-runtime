@@ -14,6 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/ma7statuslocality"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/migrationtestcoverage"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nomigrateforce"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/platformcrnamespace"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/renderschemagensql"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/sqlcsync"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/sqlctxprop"
@@ -112,6 +113,28 @@ func runCRDSemanticDiff(args []string) int {
 	if !outcome.Pass {
 		return 1
 	}
+	return 0
+}
+
+// runPlatformCRNamespace recusa manifesto versionado que aplique Tenant/Environment fora de
+// `loopzero-system` (B-095). Fora do lugar o CR fica invisivel ao operator, cujo cache e' restrito a
+// esse namespace — e indeletavel se a cerca de admissao for ligada, porque remover finalizer e'
+// um UPDATE.
+func runPlatformCRNamespace(args []string) int {
+	fs := flag.NewFlagSet("platform-cr-namespace", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+
+	out, err := platformcrnamespace.Check(platformcrnamespace.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "platform-cr-namespace: %v\n", err)
+		return 1
+	}
+	fmt.Printf("platform-cr-namespace: PASS — %d CR(s) de plataforma, todos em %s (%d arquivo(s))\n",
+		len(out.Conferidas), platformcrnamespace.NamespaceCanonico, out.Arquivos)
 	return 0
 }
 

@@ -1,4 +1,5 @@
 acyclic-graph	gates	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
+adapter-ports	gates	Todo adaptador declara em tempo de compilacao qual porta satisfaz.
 advisory-lock-scope	gates	Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.
 agpl-isolation	gates	Verifies AGPL-licensed code stays isolated from proprietary import paths.
 alert-runbooks	-	Every Prometheus alert has a linked runbook annotation.
@@ -16,6 +17,7 @@ caddyfile-dev-server-deny	gates	Defense-in-depth: app-dev block MUST 404 dev-ser
 caddyfile-no-docker-ip	gates	Blocks hardcoded 172.18.x.x Docker network IPs in infra/local/Caddyfile + enforces canonical https://127.0.0.1:8443 upstream in both wildcard blocks (M-Migrate2 2026-07-07 replaces infra/tests/check-caddyfile-no-docker-network-ip_test.sh — closes Red Team loopzero-cloud#127 guard).
 canonical-fixture-repo	gates	Rejects legacy loopzero-repotest fixture in LIVE test/seed scripts; canonical is getloopscale/loopzerokit-example (M-Migrate2 2026-07-07 replaces infra/tests/check-canonical-fixture-repo_test.sh).
 chart-default-tags	gates	loopzero-owned charts must not default their image tag to a mutable ref (#232).
+chart-pairs	gates	Chart que existe nas duas arvores com o mesmo nome precisa estar declarado.
 check-allowlist-sunsets	gates	Hermetic contract test for .claude/scripts/check-allowlist-sunsets.py (T5.2.a): 5 fixture cases + missing-file + LIVE rules/code-review-allowlist.txt check. Exits 0 for future/today/missing/live-clean; catches past-sunset (exit 1) and malformed/bad-date (exit 2). Requires python3. M-Migrate2 2026-07-07 replaces infra/tests/check-allowlist-sunsets_test.sh.
 cli-exit-codes	gates	Enforces the permanent CLI exit-code contract (0/1/2/3/4/5 only).
 cluster-rename-guard	gates	Proves the cluster rename (B-001: mgmt->core, vault->secrets) touched only cluster identifiers. Asserts every line a pre-rename baseline classified GENERIC still exists byte-for-byte — `vault` carries 74 such lines naming OpenBao, `mgmt` carries zero. Refuses to run when the baseline cannot be proven an ancestor of HEAD, because a baseline captured after the first edit compares the new state with itself and passes forever. T0.1 of plans/cluster-rename-core-secrets-plan.md.
@@ -25,6 +27,7 @@ contract-consumers	gates	Verifies cross-repo contract consumers stay in sync wit
 corrections-txt-closed	gates	Asserts CORRECTIONS.txt items are all closed.
 correlation-header	gates	Correlation-ID header is forwarded across the request path.
 cosign-cutover	-	Enforces the cosign keyed→keyless cutover deadline ratchet.
+cost-series-producers	gates	B-181: every loopzero_* series the loopzero-cloud cost aggregator queries has a declared producer here, or a tracked absence.
 coverage-diff	-	Diffs test coverage against a baseline to catch regressions.
 coverage-merge	-	Merges per-package coverage profiles into one report.
 crd-semantic-diff	gates	Semantic diff of CRD schemas to catch breaking spec changes.
@@ -32,6 +35,7 @@ credentials-sot	gates	T1.1 SoT drift audit — every Secret created by canonical
 dangling-data-refs	diff	Detects data/file references that no longer resolve after a change.
 dangling-script-refs	diff	Detects shell-script references that no longer resolve after a change.
 dashboard-promtool	gates	Validates Grafana dashboard + Prometheus rules via promtool.
+dashboard-root-parity	gates	O runbook do painel precisa nomear o caminho que a borda de fato serve.
 db-generated-boundary	gates	MA-7 Gate A: no services/routes/server imports internal/db/generated.
 decisions-deletion	gates	Guards deletion of decision/ADR records.
 dev-public-billing-portal-syntax	gates	Hermetic contract for infra/tests/e2e/live/dev-public-billing-portal_test.sh — 8 assertions (bash -n / strict-mode / log+assert / billing endpoint / exit-code contract / allowlisted). M20 T2.1 Wave A gate 1/18.
@@ -45,7 +49,7 @@ domain-sink-purity	gates	Ratchet: the services DAG sink must not grow its persis
 drill-creds-isolation	-	Ensures DR-drill credentials are isolated from production.
 drill-outputs-consumers	gates	Verifies drill Pulumi-output consumers use the canonical schema.
 ecosystem-validators	gates	Roda `check_xrefs.py` e `test_e2e_smoke.py`, que o protocolo de mudanca de golden rule exige verdes e que nenhum gate rodava (B-129). Reporta FAIL e WARN SEPARADOS: somar faria o aviso apagar a falha.
-env-prefix-parity	gates	As duas declaracoes de reservedEnvKeyPrefixes (API e dockerfile-lint) casam prefixo do MESMO jeito (exato, sensivel a caixa) e so divergem de conjunto no que tem isencao datada.
+error-vocabulary	gates	Mensagem de erro autorada nao pode carregar termo interno proibido pela Regra 3.
 git-diff-to-lines	-	Utility: converts a git diff into a changed-line set for other gates.
 gomod-auth-org	gates	The org build files authenticate to matches the org go.mod requires (a drift makes git fetch unauthenticated and GitHub answer 'not found').
 helm-diff-structural	-	Structural pre-sync Helm diff to catch drift before apply.
@@ -78,7 +82,9 @@ option-b-eso-deploy-doc	gates	Locks docs/operations/option-b-mgmt-helmfile-eso-d
 orphan-alerts	gates	Detects Prometheus alerts with no owning dashboard/runbook.
 ory-kratos-lifespan	gates	Locks canonical self-service flow lifespans in infra/helm/ory-kratos/values.yaml.gotmpl: login=10m + registration=10m + recovery=15m (defense pair with edge rate_limit for Red Team #89 email-bomb closure). Section-scoped stricter than bash grep -A N (sibling lifespan can NOT leak). M-Migrate2 2026-07-07 replaces infra/tests/helm/ory-kratos-lifespan_test.sh.
 ory-kratos-public-urls	gates	Hermetic helm-template golden test for Ory Kratos serve.public.base_url + CORS + cookie.domain + allowed_return_urls + dashboardRoute-mapped ui_url across standalone-public + dev envs. Advisory-fallthrough when helmfile absent. M22 empirical follow-up (the ONLY M22 target allowlisted — delivers allowlist -1).
+package-admission	gates	B-058: o pacote de plumbing k8s nao admite vocabulario de dominio, e cada casa do split segue povoada.
 pkg-usage-matrix	gates	Verifies the pkg/ cross-component usage matrix is current.
+platform-cr-namespace	gates	Tenant/Environment CRs em manifesto versionado devem viver em loopzero-system.
 postgresql-pdb-config	gates	Validates the PostgreSQL PodDisruptionBudget configuration.
 prod-image-digests	gates	Production manifests reference images by digest.
 prod-image-tags	gates	Forbids mutable :latest-style image tags in production manifests.
@@ -86,6 +92,8 @@ proxy-exposure	gates	Every edge reverse_proxy declares what it lets through.
 publish-hygiene	gates	Nenhum arquivo versionado VIVO carrega caminho de workstation. Registro datado e isento por desenho (docs/README.md proibe reescreve-lo). A metade de IP do gate irmao do loopzero-rag NAO foi transportada: contra esta arvore ela deu 104 achados quase todos falsos (strings de versao, CIDRs da Cloudflare, o alvo vivo declarado). B-130.
 pulumi-required-secrets	gates	T1.5 — every Pulumi.<env>.yaml enumerates required secret keys (as `secure:` entry OR comment). Prod=6 keys, staging=4, drill=3 (DO token via env var per D7' sponsor override). Cross-checks prod keys also appear backticked in docs/operations/credentials-required.md. M-Migrate2 2026-07-07 replaces infra/tests/docs/pulumi-required-secrets_test.sh.
 quarantine-protect	diff	Protects the canonical-tests-v1 quarantine from accidental edits.
+readiness-summary	gates	O sumario de prontidao e a ultima mutacao de status antes de persistir, nos seis reconcilers.
+records-tree-split	gates	One records tree is written; the retired one stays frozen (a second live tree accumulates half the truth).
 regression-matrix	gates	Verifies the regression-test matrix covers required scenarios.
 regression-test	-	Asserts a regression test exists for tracked fixed bugs.
 render-schema-gen-sql	gates	T0.2 sqlc schema render pipeline: ephemeral PG16 + golang-migrate replay + pg_dump inside container + post-process (drop ALTER OWNER TO, banners, SET, restrict, orphan --, collapse blanks, trim trailing WS) + sqlc compile pre-flight with throwaway probe. Default check-only mode validates toolchain + migrations dir. Pass --render for destructive pipeline. M-Migrate2 2026-07-07 replaces infra/scripts/ci/render-schema-gen-sql.sh.
@@ -112,6 +120,7 @@ sqlc-sync	gates	Committed sqlc generated/ is in sync with the schema codegen.
 sqlc-tx-prop	gates	Enforces pool-bound vs tx-bound query propagation inside withEnvironmentLock.
 stack-coverage	gates	Verifies the tool-inventory stack-coverage claims via grep.
 status-writer-contract	gates	Refuses a bare Status().Update anywhere in operators production code, including the local-alias and SubResource spellings (ADR 2026-08-12-status-writer-contract, B-085).
+stdlib-only	gates	O pacote de vocabulario compartilhado nao pode importar fora da biblioteca padrao.
 taskfile-interface	gates	Validates the Taskfile public-interface contract.
 template-compliance	-	Checks documents comply with their canonical templates.
 tenant-csp-passthrough	gates	Static-CSP Traefik middleware must not be attached to tenant routes (#59).
@@ -119,6 +128,8 @@ tenant-predicate	gates	Enforces the multi-tenant isolation predicate (security v
 test-coverage-report	gates	Hermetic coverage gate for infra/tests/{unit,charts}/... — runs `go test -cover -json` against configured scope + threshold (default 30%). Advisory-fallthrough when `go` binary missing. M23 T5.1 closes F22 (coverage_pct not measured).
 test-deletion	gates	Guards deletion of test files against coverage loss.
 test-pyramid	gates	Validates the unit/integration/e2e test-pyramid balance.
+test-skip-absent-path	gates	B-180/B-183/B-186/B-188: a test under infra/tests/ or api/ may not skip on an absent path without declaring it — a skip guarded by a path that does not exist is unconditional in practice, and everything below it is dead code. Reads the probe inline, through same-package predicates (functions or unambiguously-named methods) that delegate to one another, in either arm of the guard; and reads the SKIP wherever it sits — inside a function literal, a defer, a select or type-switch clause, in the condition of a tag-less switch case, one same-package call away from the arm, or handed to a helper as an argument. Past its depth bound it reports UNRESOLVED and fails rather than going quiet.
+test-skip-unconditional	gates	B-184: a test under infra/tests/ or api/ may not open with a BARE t.Skip — no guard at all — and carry statements underneath it. A skip aborts the function, so everything below it is unreachable code that reads like a live assertion; two such tests had asserted nothing since T1.4 and six more sat in t.Run subtests. The unguarded half of the class test-skip-absent-path guards. Its pin holds live anchors, so a detector that stops recognising the shape goes red rather than quiet.
 test-target-coverage	gates	Todo PACOTE com teste e rodado por um alvo do Taskfile, ou tem isencao NOMEADA com razao e sunset. Granularidade de pacote, nao de modulo: um `./unit/...` marcava o modulo inteiro coberto enquanto 41 arquivos em tres subarvores nao rodavam (B-114). `go build` nao conta (B-087/B-088).
 test-targets	gates	Verifies Taskfile test targets exist and are wired.
 loopzero-api-openbao-approle-envfrom	gates	T6.1 of plan 2026-06-10-j22-openbao-transit-eso-sync: loopzero-api chart unconditionally wires AppRole secret_id via envFrom.secretRef to K8s Secret loopzero-openbao-approle (optional=true). Anti-hardcode gate — NO inline value: for OPENBAO_VAULT_SECRET_ID. Renders chart via helm template subprocess (Anti-Pattern #8 legitimate); advisory fallthrough when helm absent. M-Migrate2 2026-07-07 replaces infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh.

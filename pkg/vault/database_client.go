@@ -15,12 +15,12 @@ import (
 // Username + password are ephemeral (TTL bounded by Vault role); LeaseID tracks
 // the lease for renewal/revocation.
 type DatabaseCredential struct {
-	Username   string
-	Password   string
-	LeaseID    string
-	LeaseDur   time.Duration
-	IssuedAt   time.Time
-	Renewable  bool
+	Username  string
+	Password  string
+	LeaseID   string
+	LeaseDur  time.Duration
+	IssuedAt  time.Time
+	Renewable bool
 }
 
 // Expired reports whether the credential is past its lease duration.
@@ -52,10 +52,10 @@ type DatabaseClient interface {
 // (>30 min remaining). Otherwise it locks, re-checks (DCL), and refreshes.
 // Stale credential window: maximum 30 min before refresh kicks in.
 type CachingDatabaseClient struct {
-	inner       DatabaseClient
-	mu          sync.Mutex
-	cache       map[string]*DatabaseCredential
-	refreshWin  time.Duration // refresh when remaining < this (default 30m)
+	inner      DatabaseClient
+	mu         sync.Mutex
+	cache      map[string]*DatabaseCredential
+	refreshWin time.Duration // refresh when remaining < this (default 30m)
 }
 
 // NewCachingDatabaseClient wraps a base client with caching semantics.

@@ -17,6 +17,8 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // runRegressionScript invokes regression-checks.sh and returns combined output.
@@ -115,49 +117,133 @@ func TestK3dBuildConfigOneAgent(t *testing.T) {
 	}
 }
 
-func TestBootstrapClusterScript(t *testing.T) {
-	// M23 T6.1 stale-path guard: bootstrap-cluster.sh was removed sometime
-	// after this test was written. Test skips when the file is missing rather
-	// than FAIL — either the script was consolidated into task setup OR the
-	// test is genuinely stale and should be deleted in a follow-up cleanup PR.
-	scriptPath := "../../scripts/bootstrap-cluster.sh"
-	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-		t.Skipf("bootstrap-cluster.sh missing (consolidated into task setup? test may be stale — follow-up cleanup TBD)")
+// taskCmds returns the `cmds` of one task, with each entry as either the shell
+// string it runs or the `task:` it delegates to. Two shapes, one accessor.
+type taskCmds struct {
+	Tasks map[string]struct {
+		Cmds []yaml.Node `yaml:"cmds"`
+	} `yaml:"tasks"`
+}
+
+func loadTaskCmds(t *testing.T, path, task string) []yaml.Node {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
 	}
-	data, _ := os.ReadFile(scriptPath)
-	if !strings.Contains(string(data), "k3d cluster list") {
-		t.Error("bootstrap-cluster.sh must check existing cluster (idempotent)")
+	var tf taskCmds
+	if err := yaml.Unmarshal(data, &tf); err != nil {
+		t.Fatalf("%s is not valid YAML: %v", path, err)
+	}
+	def, ok := tf.Tasks[task]
+	if !ok {
+		t.Fatalf("%s declares no task %q \u2014 re-point this test at the task that owns the "+
+			"contract now; do NOT add a skip (B-182)", path, task)
+	}
+	if len(def.Cmds) == 0 {
+		t.Fatalf("%s: task %q has no cmds", path, task)
+	}
+	return def.Cmds
+}
+
+// The `task setup` cluster-creation step is idempotent: re-running it does not
+// destroy and recreate a cluster that is already there.
+//
+// B-182. This was TestBootstrapClusterScript, which read
+// `infra/scripts/bootstrap-cluster.sh` and skipped when it was missing. That
+// script was deleted deliberately in 346215cf0 (2026-05-23, "delete 3 standalone
+// tools not wired into any automation"), and the commit message answers the exact
+// question the old comment left open — "consolidated into task setup? test may be
+// stale" — with "bootstrap-cluster.sh — superseded by `task setup` (k3d cluster
+// create)". So the skip had been the only branch since that commit, and the
+// idempotency assertion had been dead for three and a half months while the
+// package printed `ok`.
+//
+// The CONTRACT outlived the script. `task setup` calls `clusters:create`, and every
+// cluster there is created behind the same guard the deleted script used, in the
+// same idiom:
+//
+//	k3d cluster list -o json | grep -q '"name":"loopzero-core"' || k3d cluster create ...
+//
+// That is what "idempotent" means here, and it is what this test asserts now, on
+// the live file. It is a stronger check than the one it replaces: the old test
+// proved the string "k3d cluster list" appeared SOMEWHERE in a script, so a second,
+// unguarded create in the same file would have passed. This one requires every
+// create in the task to carry its own guard, and it fails on the fifth cluster
+// added without one.
+//
+// Scope is `clusters:create` alone, on purpose. `clusters:recreate` in the same
+// file runs `k3d cluster delete` followed by an unguarded `k3d cluster create` —
+// that is its whole reason to exist, it is not on the `task setup` path, and a
+// check that swept the file would fail on correct code.
+func TestClusterCreateIsIdempotent(t *testing.T) {
+	const (
+		rootTaskfile = "../../../Taskfile.yml"
+		k3dTaskfile  = "../../../taskfiles/k3d.yml"
+		createTask   = "clusters:create"
+	)
+
+	// `task setup` must still reach clusters:create, or the guard below protects a
+	// task nobody runs — which is how the previous version of this test died.
+	delegatesToCreate := false
+	for _, cmd := range loadTaskCmds(t, rootTaskfile, "setup") {
+		var delegate struct {
+			Task string `yaml:"task"`
+		}
+		if cmd.Decode(&delegate) == nil && delegate.Task == createTask {
+			delegatesToCreate = true
+			break
+		}
+	}
+	if !delegatesToCreate {
+		t.Fatalf("%s: task `setup` no longer calls %q \u2014 whatever creates the clusters now is "+
+			"what this idempotency test must follow", rootTaskfile, createTask)
+	}
+
+	creates := 0
+	for _, cmd := range loadTaskCmds(t, k3dTaskfile, createTask) {
+		var shell string
+		if cmd.Decode(&shell) != nil || !strings.Contains(shell, "k3d cluster create") {
+			continue
+		}
+		creates++
+		if !strings.Contains(shell, "k3d cluster list") {
+			t.Errorf("%s: task %q creates a cluster with no existence check, so a re-run of "+
+				"`task setup` would not be idempotent:\n\t%s", k3dTaskfile, createTask, shell)
+		}
+	}
+	if creates == 0 {
+		t.Fatalf("%s: task %q creates no k3d cluster at all \u2014 this test is reading the wrong "+
+			"task and is asserting nothing", k3dTaskfile, createTask)
 	}
 }
 
-func TestT12ExitCodeContractTestExists(t *testing.T) {
-	// M23 T6.1 post-M5 monorepo-decomposition guard: cli/ moved to sibling
-	// loopzero-cli/ repo. Cross-repo contract-test wiring is a follow-up milestone.
-	const path = "../../../cli/tests/integration/exit-code-contract.test.ts"
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		t.Skipf("T1.2 skipped: cli/ moved to sibling loopzero-cli/ repo per M5 decomposition; cross-repo test wiring TBD")
-	}
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("T1.2 regression: contract test stat error: %v", err)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read contract test: %v", err)
-	}
-	s := string(data)
-	if !strings.Contains(s, "spawnSync") {
-		t.Error("T1.2 regression: contract test must use child_process.spawnSync to invoke real process")
-	}
-	for _, cmd := range []string{"whoami", "deploy", "validate", "build", "secret", "rollback"} {
-		if !strings.Contains(s, "'"+cmd+"'") && !strings.Contains(s, `"`+cmd+`"`) {
-			t.Errorf("T1.2 regression: contract matrix must cover %q command", cmd)
-		}
-	}
-	// help/version SÃO exit 0, não erros — contract deve testar isso.
-	if !strings.Contains(s, "--help") || !strings.Contains(s, "--version") {
-		t.Error("T1.2 regression: contract test must cover --help / --version (exit 0 expected)")
-	}
-}
+// T1.2 was REMOVED, not skipped (B-180, applying B-169's standard).
+//
+// It asserted that `cli/tests/integration/exit-code-contract.test.ts` exists and
+// covers six commands plus --help/--version. That file moved to the sibling
+// `loopzero-cli` repository in the M5 decomposition; `cli/` is not in this tree and
+// `loopzero-cli` is not cloned beside it, so the stat always failed and the skip was
+// the only branch ever taken. Everything below it -- the whole contract matrix --
+// had not run since M5 while the package reported `ok`.
+//
+// It was also the weakest KIND of assertion: meta-coverage. It checked that
+// another repository's test FILE exists and mentions some strings, which is a
+// claim about a file listing rather than about behaviour. B-169 retired the same
+// shape (`TestT04_InvariantsDocExists`) for the same reason: once each invariant
+// has its own executable guard, an index that says the guards exist adds no
+// signal and rots on its own schedule.
+//
+// What covers the exit-code contract now: loopzero-cli owns its own suite
+// (`npm test -- tests/contract/engine-contract.test.ts`), invoked from this
+// repository by `task quality:contract:cross-repo`, which prints an explicit SKIP
+// when the sibling is absent instead of passing silently. The engine side of the
+// same seam is `api/internal/contract/cli_consumer_test.go`, which is hermetic
+// and runs here on every `task quality:contract`. The seam is tabulated in
+// `docs/cross-repo-contract-matrix.md`.
+//
+// The class is now guarded: `loopzero-ops quality test-skip-absent-path` fails when a
+// test under infra/tests/ skips on a path absent from this tree.
 
 func TestT61DogfoodLoopH1TestExists(t *testing.T) {
 	const path = "../../../infra/tests/e2e/dogfood_loop_h1_test.go"

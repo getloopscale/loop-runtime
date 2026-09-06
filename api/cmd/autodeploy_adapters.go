@@ -18,7 +18,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/github"
-	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
 )
 
 // buildLookupAdapter bridges db.BuildStore → github.BuildLookup.
@@ -149,15 +149,15 @@ func (a *previewAppsLookupAdapter) LatestSucceededApps(ctx context.Context, tena
 }
 
 // previewCRCreatorAdapter bridges preview.PreviewCRCreator (services
-// package's spec type) to k8s.PreviewCRManager (k8s package's spec
+// package's spec type) to workload.PreviewCRManager (k8s package's spec
 // type). Two spec types exist to avoid the k8s↔services import cycle;
 // fields are identical so the conversion is a flat copy.
 type previewCRCreatorAdapter struct {
-	mgr *k8s.PreviewCRManager
+	mgr *workload.PreviewCRManager
 }
 
 func (a *previewCRCreatorAdapter) EnsurePreviewCR(ctx context.Context, spec preview.PreviewCRSpec) error {
-	return a.mgr.EnsurePreviewCR(ctx, k8s.PreviewCRSpec{
+	return a.mgr.EnsurePreviewCR(ctx, workload.PreviewCRSpec{
 		Name:      spec.Name,
 		TenantID:  spec.TenantID,
 		ProjectID: spec.ProjectID,

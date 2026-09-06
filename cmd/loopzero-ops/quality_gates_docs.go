@@ -14,7 +14,6 @@ import (
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/docsrefs"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/ecosystemvalidators"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/envprefixparity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/publishhygiene"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillscriptpaths"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillsuites"
@@ -83,7 +82,11 @@ func runSkillScriptPaths(args []string) int {
 		fmt.Fprintf(os.Stderr, "skill-script-paths: FAIL — %v\n", err)
 		return 1
 	}
-	fmt.Printf("skill-script-paths: PASS — %d SKILL.md across %d skill(s); every script invocation resolves in both layouts\n",
+	// "document(s)", not "SKILL.md": the scan reaches rules/, commands/ and the ecosystem root
+	// too, so the count stopped being SKILL.md the moment it was widened. It read 98 where 49
+	// SKILL.md exist on disk — the number was right and the noun was not, which reads as
+	// double-counting to anyone checking.
+	fmt.Printf("skill-script-paths: PASS — %d document(s) across %d skill(s) plus rules/, commands/ and the ecosystem root; every script invocation resolves in both layouts\n",
 		out.FilesScanned, out.SkillsScanned)
 	return 0
 }
@@ -167,70 +170,6 @@ func runTestTargetCoverage(args []string) int {
 	return 0
 }
 
-func runEnvPrefixParity(args []string) int {
-	fs := flag.NewFlagSet("env-prefix-parity", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	resolveDotRoot(root)
-
-	out, err := envprefixparity.Check(envprefixparity.Config{RepoRoot: *root})
-	switch {
-	case errors.Is(err, envprefixparity.ErrCaseFoldingInMatch):
-		fmt.Fprintln(os.Stderr, "env-prefix-parity: FAIL — a reserved-prefix comparison folds case:")
-		fmt.Fprint(os.Stderr, envprefixparity.FormatCaseFindings(out.CaseFindings))
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Matching is exact per ADR 2026-08-12-reserved-env-case-matching: env vars are")
-		fmt.Fprintln(os.Stderr, "case-sensitive on Linux and every name LoopZero injects is uppercase, so a lowercase")
-		fmt.Fprintln(os.Stderr, "key cannot shadow one. Folding rejects builds over a collision the OS forbids.")
-		fmt.Fprintln(os.Stderr, "The INSTRUCTION keyword (ARG/ENV) may still be folded — this looks only inside")
-		fmt.Fprintln(os.Stderr, "the loop over the prefix slice.")
-		return 1
-	case errors.Is(err, envprefixparity.ErrPrefixSetsDiverge):
-		fmt.Fprintln(os.Stderr, "env-prefix-parity: FAIL — the two reservedEnvKeyPrefixes declarations hold different sets:")
-		for _, d := range out.Declarations {
-			fmt.Fprintf(os.Stderr, "  %s: %v\n", d.File, d.Prefixes)
-		}
-		for file, only := range out.OnlyIn {
-			fmt.Fprintf(os.Stderr, "  only in %s: %v\n", file, only)
-		}
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "This gate proves the two PREFIX SETS match, and nothing else. The same rule also")
-		fmt.Fprintln(os.Stderr, "diverges on severity (B-069: silent discard vs hard build failure) and on case")
-		fmt.Fprintln(os.Stderr, "matching (B-070). Green here does not mean the rule is unified.")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "If this divergence is a KNOWN gap, it belongs in")
-		fmt.Fprintln(os.Stderr, "cmd/loopzero-ops/internal/quality/envprefixparity/allowlist.txt with a sunset —")
-		fmt.Fprintln(os.Stderr, "an entry there may also have EXPIRED, which is why a gap can reappear.")
-		return 1
-	case err != nil:
-		fmt.Fprintf(os.Stderr, "env-prefix-parity: %v\n", err)
-		return 2
-	}
-	// An exemption is PRINTED on the green path, not swallowed by it. A gap
-	// nobody sees on a passing run is a gap nobody retires — which is how the
-	// 21 inherited approvals of helm-drift (B-076) became invisible.
-	if len(out.Exempted) > 0 {
-		fmt.Printf("env-prefix-parity: PASS — the %d find_sec_004 copies agree on case matching; "+
-			"%d prefix(es) exempt with a sunset: %v. This compares the two copies to each other and "+
-			"says nothing about whether the rule is reachable (B-094).\n",
-			len(out.Declarations), len(out.Exempted), out.Exempted)
-		return 0
-	}
-	fmt.Printf("env-prefix-parity: PASS — the %d find_sec_004 copies hold the same prefix set and "+
-		"the same case matching. This compares them to each other and says nothing about whether "+
-		"the rule is reachable (B-094).\n", len(out.Declarations))
-	return 0
-}
-
-// runEcosystemValidators roda os dois validadores que o protocolo de mudança de
-// golden rule exige — e que nenhum gate rodava.
-//
-// `rules/cycle-rule-schema.md § Golden Rule Change Protocol` pede que
-// `check_xrefs.py` e `test_e2e_smoke.py` estejam verdes em toda mudança numa regra
-// LOCKED. Medido no B-127: nenhuma task, gate ou hook os invocava, e ao serem
-// rodados pela primeira vez o `check_xrefs` saiu FAIL com 4 achados do mesmo dia.
 func runEcosystemValidators(args []string) int {
 	fs := flag.NewFlagSet("ecosystem-validators", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")

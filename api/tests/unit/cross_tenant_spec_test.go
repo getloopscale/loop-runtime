@@ -42,7 +42,7 @@
 // REFERENCES
 //   - Plan: plans/2026-05-12-launch-readiness-waves-plan.md § T1.4
 //   - Async amendment: meetings/MEET-ASYNC-AMENDMENT-2026-05-12-001.md
-//   - Fixture: infra/tests/seed/cross_tenant_fixture.go
+//   - Fixture: infra/scripts/seed/cross_tenant_fixture.go
 //   - RLS policies: api/internal/db/migrations/000001_initial_schema.up.sql:476-522
 
 package unit

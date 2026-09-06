@@ -8,11 +8,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 
 	"github.com/go-chi/chi/v5"
 

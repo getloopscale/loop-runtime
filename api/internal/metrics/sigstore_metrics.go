@@ -152,13 +152,13 @@ func ObserveRekorURLPersist(rekorURL string) {
 // 2026-05-28-meet-001-engineering-closure.
 //
 // The wrapper exists today so:
-//   1. The metrics-to-emit-mirror defensive test
-//      (TestSigstoreMetrics_AllDeclaredHaveWrapper) finds a wrapper
-//      for every declared metric, catching the orphan-metric class.
-//   2. Operator can wire `ObserveFulcioCertIssuance(seconds)` at the
-//      cosign script output extraction site once the duration is
-//      surfaced — no need to invent the API at LIVE-instrumentation
-//      time.
+//  1. The metrics-to-emit-mirror defensive test
+//     (TestSigstoreMetrics_AllDeclaredHaveWrapper) finds a wrapper
+//     for every declared metric, catching the orphan-metric class.
+//  2. Operator can wire `ObserveFulcioCertIssuance(seconds)` at the
+//     cosign script output extraction site once the duration is
+//     surfaced — no need to invent the API at LIVE-instrumentation
+//     time.
 //
 // Negative or implausible durations are silently dropped per the
 // "trust the caller's guard at the emission site" contract documented

@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -15,7 +14,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/source"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+
+	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
 )
 
 // Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.3 — handler-level discriminator

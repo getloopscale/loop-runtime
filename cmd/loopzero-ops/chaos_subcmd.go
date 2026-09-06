@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/chaosslo"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/chaos/slo"
 )
 
 const chaosHelpText = `loopzero-ops chaos — pure-logic helpers for the chaos resilience runner
@@ -52,21 +52,21 @@ func runChaosSLOCompare(args []string) int {
 		fmt.Fprintln(os.Stderr, "chaos slo-compare: requires 3 args: <baseline.json> <during.json> <post.json>")
 		return 1
 	}
-	samples := make([]chaosslo.Sample, 3)
+	samples := make([]slo.Sample, 3)
 	for i, path := range []string{fs.Arg(0), fs.Arg(1), fs.Arg(2)} {
 		data, err := os.ReadFile(path) // #nosec G304 -- operator-supplied sample path
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "chaos slo-compare: read %s: %v\n", path, err)
 			return 5 // unreadable input → INCONCLUSIVE (re-run)
 		}
-		s, err := chaosslo.ParseSample(data)
+		s, err := slo.ParseSample(data)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "chaos slo-compare: parse %s: %v\n", path, err)
 			return 5
 		}
 		samples[i] = s
 	}
-	v := chaosslo.Compare(samples[0], samples[1], samples[2], chaosslo.DefaultThresholds())
+	v := slo.Compare(samples[0], samples[1], samples[2], slo.DefaultThresholds())
 	fmt.Printf("chaos slo-compare: %s\n", v.Result)
 	for _, r := range v.Reasons {
 		fmt.Printf("  - %s\n", r)

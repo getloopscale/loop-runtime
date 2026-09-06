@@ -18,7 +18,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
 	"github.com/getloopscale/loopzero/api/internal/leader"
 	"github.com/getloopscale/loopzero/pkg/correlation"
 
@@ -60,12 +60,12 @@ func silenceKlog() {
 	_ = klogFlags.Set("stderrthreshold", "FATAL")
 }
 
-// appCRAdapter bridges k8s.ApplicationCRManager to build.ApplicationCREnsurer.
+// appCRAdapter bridges workload.ApplicationCRManager to build.ApplicationCREnsurer.
 // Duplicated from api/cmd/main.go — the two binaries intentionally do not
 // share a package here because cmd/main.go has HTTP-specific helpers the
 // controller should never import.
 type appCRAdapter struct {
-	mgr *k8s.ApplicationCRManager
+	mgr *workload.ApplicationCRManager
 }
 
 func (a *appCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input build.ApplicationCRInput) error {
@@ -75,7 +75,7 @@ func (a *appCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input buil
 	// reconcile-internal flows. correlation.IDFromContext returns empty
 	// string in that case, which LoopZeroApplicationInput interprets as "omit
 	// the annotation" rather than "store empty value".
-	return a.mgr.EnsureLoopZeroApplication(ctx, k8s.LoopZeroApplicationInput{
+	return a.mgr.EnsureLoopZeroApplication(ctx, workload.LoopZeroApplicationInput{
 		TenantID:      input.TenantID,
 		Project:       input.Project,
 		Environment:   input.Environment,

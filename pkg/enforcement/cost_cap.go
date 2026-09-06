@@ -103,25 +103,84 @@ func NewCapChecker(store CostStore) *CapChecker {
 //
 // Note the >= : reaching the cap blocks the NEXT mutation.
 func (c *CapChecker) Check(ctx context.Context, tenantID string, p Plan, metric CostMetric) error {
+	_, err := c.CheckReason(ctx, tenantID, p, metric)
+	return err
+}
+
+// AllowReason diz POR QUE o portao decidiu como decidiu.
+//
+// # Por que existe
+//
+// B-033, medido no app-dev em 2026-08-11: o agregador que preenche `cost_counters` estava
+// desligado, a tabela tinha zero linhas, e o contrato abaixo trata linha ausente como
+// consumo zero. Resultado: **todo** teto de custo liberava, e nada distinguia isso de "o
+// tenant realmente nao consumiu". As tres metricas de custo ficavam sem teto no ambiente
+// que serve o painel publico, e o unico sinal era uma linha de log no boot de OUTRO
+// processo.
+//
+// Devolver a razao NAO muda veredito nenhum — libera exatamente o mesmo. Muda o que o
+// sistema consegue observar sobre a propria protecao: a degradacao silenciosa vira estado
+// observavel, que e o que o item pedia.
+//
+// A razao para aqui, em `pkg/`: este pacote nao conhece Prometheus nem logger. Quem
+// traduz a razao em metrica e a camada de middleware, que ja tem os dois.
+type AllowReason int
+
+const (
+	// AllowedUnderCap — havia contador, e ele esta abaixo do teto. A unica razao em que a
+	// protecao de fato avaliou alguma coisa.
+	AllowedUnderCap AllowReason = iota
+	// AllowedUnmeasured — nao havia linha de contador. Pode ser tenant novo sem consumo, ou
+	// agregador que nunca rodou. O portao NAO distingue os dois, e por isso o chamador
+	// precisa saber que caiu aqui.
+	AllowedUnmeasured
+	// AllowedUnlimited — o plano nao tem teto para esta metrica.
+	AllowedUnlimited
+	// AllowedStoreError — a leitura falhou e o portao liberou (fail-open deliberado: um
+	// agregador ruidoso nao deve barrar producao). Segunda porta silenciosa.
+	AllowedStoreError
+	// Blocked — o contador alcancou o teto.
+	Blocked
+)
+
+// String descreve a razao para log e rotulo de metrica.
+func (r AllowReason) String() string {
+	switch r {
+	case AllowedUnderCap:
+		return "under_cap"
+	case AllowedUnmeasured:
+		return "unmeasured"
+	case AllowedUnlimited:
+		return "unlimited"
+	case AllowedStoreError:
+		return "store_error"
+	case Blocked:
+		return "blocked"
+	}
+	return "unknown"
+}
+
+// CheckReason e o `Check` que tambem devolve a razao da decisao.
+func (c *CapChecker) CheckReason(ctx context.Context, tenantID string, p Plan, metric CostMetric) (AllowReason, error) {
 	counter, found, err := c.store.GetCounter(ctx, tenantID, metric)
 	if err != nil {
 		// Fail-open on store errors. A noisy aggregator should not block
 		// production traffic. The middleware logs the error.
-		return nil
+		return AllowedStoreError, nil
 	}
 
 	cap := CapFor(p, metric)
 	if cap == Unlimited {
-		return nil
+		return AllowedUnlimited, nil
 	}
 
 	// Missing counter row = 0 usage so far this period = allow.
 	if !found {
-		return nil
+		return AllowedUnmeasured, nil
 	}
 
 	if counter.Value >= cap {
-		return &ExceededError{
+		return Blocked, &ExceededError{
 			TenantID: tenantID,
 			Plan:     p,
 			Metric:   metric,
@@ -131,7 +190,7 @@ func (c *CapChecker) Check(ctx context.Context, tenantID string, p Plan, metric 
 		}
 	}
 
-	return nil
+	return AllowedUnderCap, nil
 }
 
 // formatPeriod converts a unix-seconds period start into "YYYY-MM" UTC.

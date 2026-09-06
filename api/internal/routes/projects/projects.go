@@ -17,18 +17,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
-	"github.com/getloopscale/loopzero/api/internal/routes/pagination"
-	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	"github.com/getloopscale/loopzero/api/internal/routes/pagination"
+	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/correlation"
 	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -112,7 +114,7 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -165,7 +167,7 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -207,7 +209,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -224,6 +226,10 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidName.Wrap("project name must be lowercase, alphanumeric, and may contain hyphens"))
 		return
 	}
+
+	// B-059: declare the resource id for the audit row. project.deleted
+	// carries the name from its URL; project.created carried nothing.
+	auditctx.SetResourceID(ctx, req.Name)
 
 	// Create project in DB
 	result, err := h.store.CreateProject(ctx, CreateProjectInput{
@@ -364,7 +370,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 300*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -419,7 +425,7 @@ func (h *ProjectHandler) DeleteEnvironment(w http.ResponseWriter, r *http.Reques
 	ctx, cancel := context.WithTimeout(r.Context(), 300*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return

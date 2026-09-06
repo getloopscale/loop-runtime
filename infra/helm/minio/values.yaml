@@ -53,7 +53,7 @@ consoleService:
 #   loopzero-artifacts    → BuildKit layer cache (cwt-cache-save/restore.yaml).
 #   loopzero-logs         → Loki long-term storage when S3 backend configured.
 #   loopzero-static-assets→ Frontend delivery + SBOMs + attestations
-#                       (api/internal/argo/constants.go:s3BucketStaticAssets).
+#                       (api/internal/buildplane/argo/constants.go:s3BucketStaticAssets).
 #                       In LoopZero Cloud this is DO Spaces (worker.mjs); in
 #                       standalone (no external S3) it MUST live in MinIO.
 buckets:

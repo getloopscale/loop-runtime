@@ -87,6 +87,17 @@ var tenantSM = statemachine.NewTenantTypedMachine()
 // otherwise tenant-operator crashes with "User \"system:serviceaccount:
 // loopzero-system:loopzero-tenant-operator\" cannot list resource clustercredentials"
 // on every reconcile of any cell-aware Tenant.
+//
+// Vocabulary: the mapping named above relates two DIFFERENT things.
+// A cell is a logical tenancy partition (the cell_id column); a runtime
+// cluster is the machine that cell's workloads run on. Rewriting this as
+// "cell→cell-cluster" — the migration the cluster-topology-naming ADR
+// floated for this row, considered and rejected on 2026-09-06 — would
+// make the sentence circular and erase the mapping it names. Nor is
+// "runtime" here apimachinery's runtime package (k8s.io/apimachinery/pkg/runtime, NOT Go's stdlib runtime — the stdlib one has no Scheme type, which is what `*runtime.Scheme` in this tree proves), imported as
+// k8s.io/apimachinery/pkg/runtime and used for the Scheme field below.
+// See docs/decisions/2026-08-09-cluster-topology-naming-adr.md
+// § Decision on the domain term (2026-09-06).
 type TenantReconciler struct {
 	client.Client
 	Scheme             *runtime.Scheme

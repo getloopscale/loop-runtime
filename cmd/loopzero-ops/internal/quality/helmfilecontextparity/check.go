@@ -134,12 +134,44 @@ const invocationWindow = 10
 
 // Check walks every taskfile, pairs each helmfile invocation with the file it
 // targets, and compares the two declarations of the target cluster.
+// globsPadrao e' a UNICA declaracao do conjunto varrido. O contador
+// independente de `TestCheck_RealTree` le' daqui em vez de repetir a lista:
+// duas listas que precisam concordar acabam discordando, e quando isso
+// acontece a reconciliacao passa a comparar duas arvores diferentes e falha
+// por uma razao que nada tem a ver com o parser — que e' o proprio aviso
+// escrito no comentario daquele contador (B-078).
+var globsPadrao = []string{
+	"Taskfile.yml",
+	filepath.Join("taskfiles", "*.yml"),
+	// Os invocadores em SCRIPT ficam DE FORA, e a razao foi medida em 2026-08-18
+	// (B-078), nao suposta:
+	//
+	//  1. Nao comprariam comparacao nenhuma. As quatro invocacoes em script
+	//     (`vault-bootstrap-dev.sh:267`, `operator-cutover-execute.sh:142,:204`,
+	//     `enable-vault-backup.sh:205`) parametrizam TANTO o contexto
+	//     (`$CTX`, `$SECRETS_CONTEXT`, `$OPENBAO_CONTEXT`) QUANTO o caminho
+	//     (`-f "$HELMFILE_PATH"`, `-f "${REPO_ROOT}/..."`). Todas cairiam em
+	//     "fora de alcance estatico".
+	//
+	//  2. E o parser nao as pareia de forma confiavel. Ele exige `-f` e
+	//     `--kube-context` na MESMA janela, e invocacao em shell quebra em
+	//     continuacoes: com os scripts incluidos, a arvore carregava 37
+	//     ocorrencias de `--kube-context` e a varredura pareava 28 — 9 caiam em
+	//     silencio, que e' precisamente o defeito que a reconciliacao de
+	//     `TestCheck_RealTree` existe para impedir.
+	//
+	// Meio-varrer produz um denominador que nao e' nem 24 nem 28, e um
+	// denominador instavel e' pior que um escopo declarado. O escopo esta'
+	// declarado aqui e a fracao aparece no `Summary()`.
+}
+
 func Check(cfg Config) (Outcome, error) {
 	var out Outcome
 
 	globs := cfg.TaskfileGlobs
 	if len(globs) == 0 {
-		globs = []string{"Taskfile.yml", filepath.Join("taskfiles", "*.yml")}
+		globs = globsPadrao
+
 	}
 	var taskfiles []string
 	for _, g := range globs {
@@ -162,11 +194,31 @@ func Check(cfg Config) (Outcome, error) {
 		rel, _ := filepath.Rel(cfg.RepoRoot, tf)
 		lines := strings.Split(string(raw), "\n")
 
+		// Uma invocacao pode casar o token `helmfile` em MAIS DE UMA linha — o
+		// proprio caminho o contem (`-f infra/helmfile/...`), e em script a
+		// invocacao quebra em varias linhas com `\`. Sem esta desduplicacao a
+		// mesma ocorrencia de `--kube-context` era pareada uma vez por linha que
+		// casasse, e a varredura reportava 36 pareamentos para 24 ocorrencias
+		// reais. Quem pegou foi a reconciliacao contra a contagem independente em
+		// `TestCheck_RealTree`, que existe exatamente para isso (B-078).
+		contextoJaPareado := map[int]bool{}
+
 		for i, line := range lines {
 			if !helmfileTokenRe.MatchString(line) {
 				continue
 			}
-			window := joinNonComment(windowFrom(lines, i))
+			janela := windowFrom(lines, i)
+			ctxLinha := -1
+			for k, l := range janela {
+				if contextFlagRe.MatchString(l) {
+					ctxLinha = i + k
+					break
+				}
+			}
+			if ctxLinha >= 0 && contextoJaPareado[ctxLinha] {
+				continue
+			}
+			window := joinNonComment(janela)
 
 			fm := fileFlagRe.FindStringSubmatch(window)
 			cm := contextFlagRe.FindStringSubmatch(window)
@@ -174,6 +226,22 @@ func Check(cfg Config) (Outcome, error) {
 				continue // not a targeted invocation (e.g. a bare `helmfile sync` in a doc block)
 			}
 			hfRel, invoked := fm[1], cm[1]
+
+			// O CAMINHO tambem pode ser parametrizado, e nao so' o contexto — e' o
+			// caso comum nos invocadores em script (`-f "$HELMFILE_PATH"`,
+			// `-f "${REPO_ROOT}/infra/..."`). Sem esta guarda o gate tentava ler o
+			// literal como arquivo, falhava, e classificava como "helmfile que NAO
+			// declara contexto" — uma acusacao grave inventada por um caminho que
+			// ele simplesmente nao consegue resolver. Fora de alcance estatico e'
+			// a classificacao honesta (B-078).
+			if ctxLinha >= 0 {
+				contextoJaPareado[ctxLinha] = true
+			}
+
+			if parameterised(hfRel) {
+				out.SkippedParameterised++
+				continue
+			}
 
 			declared, seen := declaredCache[hfRel]
 			if !seen {
@@ -339,6 +407,9 @@ func readDeclaredContext(root, rel string) string {
 
 // Summary renders the one-line gate verdict.
 func (o Outcome) Summary() string {
-	return fmt.Sprintf("%d invocation(s) compared, %d parameterised (out of static reach), %d divergence(s), %d helmfile(s) declaring no context, %d missing env var(s)",
-		o.ComparedCount, o.SkippedParameterised, len(o.Divergences), len(o.Undeclared), len(o.MissingEnv))
+	total := o.ComparedCount + o.SkippedParameterised
+	return fmt.Sprintf("%d of %d invocation(s) compared, %d parameterised (out of static reach), "+
+		"%d divergence(s), %d helmfile(s) declaring no context, %d missing env",
+		o.ComparedCount, total, o.SkippedParameterised,
+		len(o.Divergences), len(o.Undeclared), len(o.MissingEnv))
 }

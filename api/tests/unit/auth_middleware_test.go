@@ -11,31 +11,31 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 type fakeTokenValidator struct {
-	result *middleware.TokenValidationResult
+	result *auth.TokenValidationResult
 	err    error
 	calls  int
 }
 
-func (f *fakeTokenValidator) ValidateToken(ctx context.Context, token string) (*middleware.TokenValidationResult, error) {
+func (f *fakeTokenValidator) ValidateToken(ctx context.Context, token string) (*auth.TokenValidationResult, error) {
 	f.calls++
 	return f.result, f.err
 }
 
 type fakeMembershipStore struct {
-	memberships []middleware.TenantMembership
+	memberships []auth.TenantMembership
 }
 
-func (f *fakeMembershipStore) GetMemberships(ctx context.Context, userID string) ([]middleware.TenantMembership, error) {
+func (f *fakeMembershipStore) GetMemberships(ctx context.Context, userID string) ([]auth.TenantMembership, error) {
 	return f.memberships, nil
 }
 
 func TestAuthMiddleware(t *testing.T) {
 	okHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		uc := middleware.GetUserContext(r.Context())
+		uc := auth.GetUserContext(r.Context())
 		if uc == nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -51,7 +51,7 @@ func TestAuthMiddleware(t *testing.T) {
 	t.Run("no Authorization header → 401", func(t *testing.T) {
 		validator := &fakeTokenValidator{}
 		store := &fakeMembershipStore{}
-		mw := middleware.Auth(validator, store)
+		mw := auth.Auth(validator, store)
 		handler := mw(okHandler)
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -70,9 +70,9 @@ func TestAuthMiddleware(t *testing.T) {
 	})
 
 	t.Run("invalid token → 401", func(t *testing.T) {
-		validator := &fakeTokenValidator{result: nil, err: middleware.ErrInvalidToken}
+		validator := &fakeTokenValidator{result: nil, err: auth.ErrInvalidToken}
 		store := &fakeMembershipStore{}
-		mw := middleware.Auth(validator, store)
+		mw := auth.Auth(validator, store)
 		handler := mw(okHandler)
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -87,17 +87,17 @@ func TestAuthMiddleware(t *testing.T) {
 
 	t.Run("valid token + 1 tenant → auto-resolve + UserContext", func(t *testing.T) {
 		validator := &fakeTokenValidator{
-			result: &middleware.TokenValidationResult{
+			result: &auth.TokenValidationResult{
 				UserID: "github-lucas",
 				Email:  "lucas@acme.dev",
 			},
 		}
 		store := &fakeMembershipStore{
-			memberships: []middleware.TenantMembership{
+			memberships: []auth.TenantMembership{
 				{TenantID: "acme", Role: "owner"},
 			},
 		}
-		mw := middleware.Auth(validator, store)
+		mw := auth.Auth(validator, store)
 		handler := mw(okHandler)
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -124,17 +124,17 @@ func TestAuthMiddleware(t *testing.T) {
 
 	t.Run("valid token + N tenants + X-LoopZero-Tenant → resolve", func(t *testing.T) {
 		validator := &fakeTokenValidator{
-			result: &middleware.TokenValidationResult{
+			result: &auth.TokenValidationResult{
 				UserID: "github-lucas", Email: "lucas@acme.dev",
 			},
 		}
 		store := &fakeMembershipStore{
-			memberships: []middleware.TenantMembership{
+			memberships: []auth.TenantMembership{
 				{TenantID: "acme", Role: "owner"},
 				{TenantID: "globex", Role: "member"},
 			},
 		}
-		mw := middleware.Auth(validator, store)
+		mw := auth.Auth(validator, store)
 		handler := mw(okHandler)
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -156,17 +156,17 @@ func TestAuthMiddleware(t *testing.T) {
 
 	t.Run("valid token + N tenants + no X-LoopZero-Tenant → 409 TENANT_REQUIRED", func(t *testing.T) {
 		validator := &fakeTokenValidator{
-			result: &middleware.TokenValidationResult{
+			result: &auth.TokenValidationResult{
 				UserID: "github-lucas", Email: "lucas@acme.dev",
 			},
 		}
 		store := &fakeMembershipStore{
-			memberships: []middleware.TenantMembership{
+			memberships: []auth.TenantMembership{
 				{TenantID: "acme", Role: "owner"},
 				{TenantID: "globex", Role: "member"},
 			},
 		}
-		mw := middleware.Auth(validator, store)
+		mw := auth.Auth(validator, store)
 		handler := mw(okHandler)
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -187,12 +187,12 @@ func TestAuthMiddleware(t *testing.T) {
 
 	t.Run("valid token + 0 tenants → 403 NO_TENANT", func(t *testing.T) {
 		validator := &fakeTokenValidator{
-			result: &middleware.TokenValidationResult{
+			result: &auth.TokenValidationResult{
 				UserID: "github-lucas", Email: "lucas@acme.dev",
 			},
 		}
 		store := &fakeMembershipStore{memberships: nil}
-		mw := middleware.Auth(validator, store)
+		mw := auth.Auth(validator, store)
 		handler := mw(okHandler)
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -213,17 +213,17 @@ func TestAuthMiddleware(t *testing.T) {
 
 	t.Run("X-LoopZero-Tenant with non-member tenant → 403", func(t *testing.T) {
 		validator := &fakeTokenValidator{
-			result: &middleware.TokenValidationResult{
+			result: &auth.TokenValidationResult{
 				UserID: "github-lucas", Email: "lucas@acme.dev",
 			},
 		}
 		store := &fakeMembershipStore{
-			memberships: []middleware.TenantMembership{
+			memberships: []auth.TenantMembership{
 				{TenantID: "acme", Role: "owner"},
 				{TenantID: "globex", Role: "member"},
 			},
 		}
-		mw := middleware.Auth(validator, store)
+		mw := auth.Auth(validator, store)
 		handler := mw(okHandler)
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -239,16 +239,16 @@ func TestAuthMiddleware(t *testing.T) {
 
 	t.Run("cache hit: second call with same token does not call validator again", func(t *testing.T) {
 		validator := &fakeTokenValidator{
-			result: &middleware.TokenValidationResult{
+			result: &auth.TokenValidationResult{
 				UserID: "github-lucas", Email: "lucas@acme.dev",
 			},
 		}
 		store := &fakeMembershipStore{
-			memberships: []middleware.TenantMembership{
+			memberships: []auth.TenantMembership{
 				{TenantID: "acme", Role: "owner"},
 			},
 		}
-		mw := middleware.Auth(validator, store)
+		mw := auth.Auth(validator, store)
 		handler := mw(okHandler)
 
 		// First call
@@ -270,17 +270,17 @@ func TestAuthMiddleware(t *testing.T) {
 
 	t.Run("cache expired: validator called again after TTL elapses", func(t *testing.T) {
 		validator := &fakeTokenValidator{
-			result: &middleware.TokenValidationResult{
+			result: &auth.TokenValidationResult{
 				UserID: "github-lucas", Email: "lucas@acme.dev",
 			},
 		}
 		store := &fakeMembershipStore{
-			memberships: []middleware.TenantMembership{
+			memberships: []auth.TenantMembership{
 				{TenantID: "acme", Role: "owner"},
 			},
 		}
 		// Use 1ms TTL so the cache expires almost immediately
-		mw := middleware.AuthWithTTL(validator, store, 1*time.Millisecond)
+		mw := auth.AuthWithTTL(validator, store, 1*time.Millisecond)
 		handler := mw(okHandler)
 
 		// First call — populates cache

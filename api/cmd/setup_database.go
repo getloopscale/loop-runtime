@@ -7,10 +7,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/domain"
 	"log/slog"
 	"os"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/domain"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
@@ -21,14 +22,14 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/routes/health"
 )
 
 // DatabaseDeps holds everything produced by setupDatabase.
 type DatabaseDeps struct {
 	DBAdapter    *db.PgxAdapter
-	MemberStore  middleware.MembershipStore
+	MemberStore  auth.MembershipStore
 	ProjectStore domain.ProjectStore
 	DBHealth     health.DBHealthChecker
 	PlanLimiter  *enforcement.PlanLimiter

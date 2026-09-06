@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 	coreV1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/yaml"
 )
@@ -57,13 +57,13 @@ type promRule struct {
 
 func renderAllRules(t *testing.T) []promRule {
 	t.Helper()
-	chartPath, err := helpers.ChartPath(chartName)
+	chartPath, err := chartrender.ChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(chartPath, "")
+	opts, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
-	out := helpers.RenderTemplate(t, opts, chartPath, releaseName, nil)
+	out := chartrender.RenderTemplate(t, opts, chartPath, releaseName, nil)
 
-	docs := helpers.SplitYAMLByKind(out, "PrometheusRule")
+	docs := chartrender.SplitYAMLByKind(out, "PrometheusRule")
 	rules := make([]promRule, 0, len(docs))
 	for _, d := range docs {
 		var r promRule
@@ -75,13 +75,13 @@ func renderAllRules(t *testing.T) []promRule {
 
 func renderAllConfigMaps(t *testing.T) []coreV1.ConfigMap {
 	t.Helper()
-	chartPath, err := helpers.ChartPath(chartName)
+	chartPath, err := chartrender.ChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(chartPath, "")
+	opts, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
-	out := helpers.RenderTemplate(t, opts, chartPath, releaseName, nil)
+	out := chartrender.RenderTemplate(t, opts, chartPath, releaseName, nil)
 
-	docs := helpers.SplitYAMLByKind(out, "ConfigMap")
+	docs := chartrender.SplitYAMLByKind(out, "ConfigMap")
 	cms := make([]coreV1.ConfigMap, 0, len(docs))
 	for _, d := range docs {
 		var cm coreV1.ConfigMap

@@ -39,10 +39,10 @@ type CachedClient struct {
 	cache    sync.Map // map[string]cacheEntry
 
 	// Circuit breaker state
-	cbThreshold   int           // consecutive failures before tripping
-	cbCooldown    time.Duration // open-state cooldown
-	cbFailures    atomic.Int32  // current consecutive failure count
-	cbOpenedAt    atomic.Int64  // unix nano when CB opened (0 = closed)
+	cbThreshold int           // consecutive failures before tripping
+	cbCooldown  time.Duration // open-state cooldown
+	cbFailures  atomic.Int32  // current consecutive failure count
+	cbOpenedAt  atomic.Int64  // unix nano when CB opened (0 = closed)
 }
 
 type cacheEntry struct {

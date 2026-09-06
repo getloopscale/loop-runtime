@@ -21,18 +21,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"regexp"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/correlation"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/validation"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -280,7 +282,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -327,6 +329,11 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		))
 		return
 	}
+
+	// B-059: declare the resource id for the audit row. The middleware used
+	// to buffer this body and scan it for `project_id` to find the same
+	// value; the handler already decoded it, so it says so.
+	auditctx.SetResourceID(ctx, req.ProjectID)
 	// T1.3 follow-up (CR-2 regression caught during cleanroom Final Phase
 	// 2026-05-29): an empty `apps` array used to be silently accepted —
 	// SubmitBuild would create a Build row, build an empty WorkflowSpec, and
@@ -509,7 +516,7 @@ func (h *BuildHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -546,7 +553,7 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return

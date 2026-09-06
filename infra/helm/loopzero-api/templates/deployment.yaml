@@ -408,12 +408,27 @@ spec:
               port: {{ .Values.service.port }}
             initialDelaySeconds: 30
             periodSeconds: 30
+          # B-135 — DEEP de proposito, e diferente da liveness.
+          #
+          # Ate' 2026-08-19 as duas apontavam para `/api/v1/health`, que responde 200
+          # INCONDICIONALMENTE. O pod ficava `Ready` com o banco fora, recebendo trafego e
+          # devolvendo erro. `/api/v1/health/ready` (`server/router.go:120` -> DeepHealth)
+          # devolve 503 quando o banco nao responde, quando um servico declarado esta'
+          # inalcancavel, ou quando a descoberta encontra ZERO cells.
+          #
+          # A liveness NAO muda: aponta-la para o deep faria o banco fora MATAR o pod, e o
+          # pod novo tambem nao teria banco — laco de reinicio sem convergencia.
+          #
+          # Este chart e' o que de fato roda; o irmao publicado foi corrigido junto, e a
+          # guarda `probes_readiness_is_deep_test.go` cobre os dois.
+          #
+          # MEET-ASYNC-AMENDMENT-2026-08-19-readiness-deep-probe (pending ratification).
           readinessProbe:
             httpGet:
-              path: /api/v1/health
+              path: /api/v1/health/ready
               port: {{ .Values.service.port }}
             initialDelaySeconds: 5
-            periodSeconds: 10
+            periodSeconds: 15
           # T3.3 of deep-review-2026-05-10-remediation-plan (find_infra_no_startup_probe):
           # slow boots (DB pool warm-up, advisory-lock-on-startup) should
           # not get killed by livenessProbe before the binary is ready.

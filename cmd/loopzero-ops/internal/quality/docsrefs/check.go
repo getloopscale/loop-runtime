@@ -303,9 +303,37 @@ func (adrResolver) resolves(repoRoot string, ref Reference) bool {
 				return nil
 			}
 			b, rerr := os.ReadFile(p)
-			if rerr == nil && strings.Contains(string(b), ref.Raw) {
-				found = true
+			if rerr != nil {
+				return nil
 			}
+			if !strings.Contains(string(b), ref.Raw) {
+				return nil
+			}
+			// Um DOCUMENTO DE DECISAO resolve apenas o ADR que ele DECLARA ser, e
+			// nao todo id que menciona. Sem isto, o documento que registra a
+			// AUSENCIA de um ADR fabricava a presenca dele — foi o que aconteceu
+			// com `ADR-0024`, citado cinco vezes por um ADR justamente para dizer
+			// que nao existe (B-086). E' textualmente o que o comentario de
+			// `cycleArtifactDirs` acima proibe, uma pasta ao lado.
+			//
+			// O criterio e' ESTRUTURAL e nao vem do diretorio: qualquer outra
+			// documentacao — runbook, doc de arquitetura — segue resolvendo por
+			// mencao, e um documento de decisao que declare o id no proprio
+			// cabecalho resolve normalmente. Medido em 2026-08-19: nenhum
+			// documento de decisao declara id de ADR hoje (eles se identificam por
+			// data + slug), e so' DOIS ids resolviam exclusivamente por eles — um e'
+			// fixture de teste deste pacote, o outro nao e' citado por codigo de
+			// producao. Estouro zero sobre as 35 referencias que resolvem.
+			//
+			// Os dois ids nao aparecem escritos aqui de proposito: este gate le'
+			// comentarios Go, entao nomea-los transformaria ESTA explicacao em duas
+			// citacoes normativas que nao resolvem. Foi o que aconteceu na primeira
+			// versao deste comentario — a mesma armadilha do B-086, um nivel acima:
+			// escrever sobre um ADR ausente fabricou uma citacao a ele.
+			if isDecisionDoc(repoRoot, p) && !declaresADR(string(b), ref.Raw) {
+				return nil
+			}
+			found = true
 			return nil
 		})
 		if found {
@@ -423,4 +451,52 @@ func Check(cfg Config) (Outcome, error) {
 		return out, ErrNoReferencesEnumerated
 	}
 	return out, nil
+}
+
+// decisionDocDirs sao as arvores onde vivem documentos que DECIDEM sobre ADRs.
+// Um documento aqui e' um ator no assunto, nao uma descricao neutra dele.
+var decisionDocDirs = []string{
+	filepath.Join("docs", "decisions"),
+	filepath.Join("docs", "wiki", "decisions"),
+	filepath.Join(".claude", "knowledge-base", "decisions"),
+}
+
+func isDecisionDoc(repoRoot, path string) bool {
+	rel, err := filepath.Rel(repoRoot, path)
+	if err != nil {
+		return false
+	}
+	for _, d := range decisionDocDirs {
+		if strings.HasPrefix(rel, d+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
+}
+
+// declaresADR diz se o documento se IDENTIFICA como aquele ADR, e nao apenas o
+// menciona.
+//
+// O criterio e' o TITULO: a primeira linha nao vazia, mais os campos de metadado
+// do cabecalho. Um documento cujo titulo carrega o id E' aquele ADR; um que so' o
+// cita no corpo esta' falando SOBRE ele.
+//
+// Medido em 2026-08-19 nos dois casos que existem:
+//   - `.claude/knowledge-base/decisions/2026-01-01-thing.md` abre com
+//     "This is ADR-0024." — titulo, logo declara. E' o caso que
+//     `TestCheck_DecisionRecordIsADRDocumentation` protege desde antes deste item.
+//   - `docs/wiki/decisions/2026-08-12-status-writer-contract.md` abre com um
+//     titulo sobre contrato de status e so' menciona `ADR-0024` a partir da
+//     linha 17, no corpo, cinco vezes, todas para dizer que ele NAO EXISTE.
+//     Nao declara, e por isso deixa de fabricar a presenca (B-086).
+func declaresADR(conteudo, raw string) bool {
+	for _, l := range strings.Split(conteudo, "\n") {
+		t := strings.TrimSpace(l)
+		if t == "" {
+			continue
+		}
+		// primeira linha nao vazia — o titulo
+		return strings.Contains(t, raw)
+	}
+	return false
 }

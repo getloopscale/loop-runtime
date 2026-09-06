@@ -5,16 +5,18 @@ package domains
 
 import (
 	"context"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 )
 
 // T3.1 of plan m3-verify-rate-limit-middleware (v1.1 SHIPPABLE 90.4).
@@ -25,7 +27,7 @@ import (
 //
 // Per J11D7 LOCKED ADR: 1 reverify per 30 seconds per (tenant, domain).
 
-func mountVerifyRoute(t *testing.T, vrl *middleware.VerifyRateLimiter, h *DomainHandler) http.Handler {
+func mountVerifyRoute(t *testing.T, vrl *ratelimit.VerifyRateLimiter, h *DomainHandler) http.Handler {
 	t.Helper()
 	r := chi.NewRouter()
 	r.With(vrl.Middleware()).Post("/api/v1/domains/{domain}/verify", h.Verify)
@@ -54,12 +56,12 @@ func TestVerifyRateLimit_IntegrationFirstAllowedSecondDenied(t *testing.T) {
 	verifier := &fakeDomainVerifier{verified: true}
 	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
-	vrl := middleware.NewVerifyRateLimiter(1, 30*time.Second)
+	vrl := ratelimit.NewVerifyRateLimiter(1, 30*time.Second)
 	defer vrl.Stop()
 
 	router := mountVerifyRoute(t, vrl, h)
 	ctx := context.WithValue(context.Background(),
-		middleware.UserContextKeyPublic(), routestest.DefaultUserContext())
+		auth.UserContextKeyPublic(), routestest.DefaultUserContext())
 
 	// 1st call — passes middleware, reaches handler
 	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/verify", nil).WithContext(ctx)
@@ -104,12 +106,12 @@ func TestVerifyRateLimit_IntegrationPerDomainIsolation(t *testing.T) {
 	verifier := &fakeDomainVerifier{verified: true}
 	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
-	vrl := middleware.NewVerifyRateLimiter(1, 30*time.Second)
+	vrl := ratelimit.NewVerifyRateLimiter(1, 30*time.Second)
 	defer vrl.Stop()
 
 	router := mountVerifyRoute(t, vrl, h)
 	ctx := context.WithValue(context.Background(),
-		middleware.UserContextKeyPublic(), routestest.DefaultUserContext())
+		auth.UserContextKeyPublic(), routestest.DefaultUserContext())
 
 	for _, domain := range []string{"a.example.com", "b.example.com"} {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/"+domain+"/verify", nil).WithContext(ctx)

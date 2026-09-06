@@ -12,11 +12,12 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/domain"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )

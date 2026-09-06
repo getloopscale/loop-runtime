@@ -179,14 +179,20 @@ func TestCheck_RealTree(t *testing.T) {
 func countKubeContextLines(t *testing.T) int {
 	t.Helper()
 	root := repoRoot(t)
-	paths, err := filepath.Glob(filepath.Join(root, "taskfiles", "*.yml"))
-	if err != nil {
-		t.Fatal(err)
+	// Le' o conjunto varrido de `globsPadrao`, a declaracao unica do gate, em vez
+	// de repetir a lista aqui. O aviso que este comentario substitui ja' dizia o
+	// porque: omitir uma fonte faz a reconciliacao comparar DUAS ARVORES
+	// DIFERENTES e falhar por uma razao que nada tem a ver com o parser. Foi
+	// exatamente o que aconteceu quando o gate passou a varrer os invocadores em
+	// script e esta lista ficou para tras (B-078).
+	var paths []string
+	for _, g := range globsPadrao {
+		found, err := filepath.Glob(filepath.Join(root, g))
+		if err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, found...)
 	}
-	// The root Taskfile.yml carries 12 invocations of its own — omitting it here
-	// would make the reconciliation compare two different trees and disagree for
-	// a reason that has nothing to do with the parser.
-	paths = append(paths, filepath.Join(root, "Taskfile.yml"))
 	n := 0
 	for _, p := range paths {
 		raw, err := os.ReadFile(p)

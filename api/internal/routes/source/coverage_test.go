@@ -6,11 +6,12 @@ package source
 import (
 	"bytes"
 	"context"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
 
 // =============================================================================

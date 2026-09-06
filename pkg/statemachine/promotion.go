@@ -5,13 +5,13 @@ package statemachine
 
 // Promotion states as defined in spec section 5.4.
 const (
-	PromotionValidating  State = "VALIDATING"
-	PromotionCommitting  State = "COMMITTING"
-	PromotionSyncing     State = "SYNCING"
-	PromotionCompleted   State = "COMPLETED"
-	PromotionRejected    State = "REJECTED"
+	PromotionValidating   State = "VALIDATING"
+	PromotionCommitting   State = "COMMITTING"
+	PromotionSyncing      State = "SYNCING"
+	PromotionCompleted    State = "COMPLETED"
+	PromotionRejected     State = "REJECTED"
 	PromotionCommitFailed State = "COMMIT_FAILED"
-	PromotionSyncFailed  State = "SYNC_FAILED"
+	PromotionSyncFailed   State = "SYNC_FAILED"
 )
 
 // Promotion events as defined in spec section 5.4.

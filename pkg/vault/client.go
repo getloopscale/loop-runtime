@@ -43,8 +43,8 @@ func NewClient(cfg *Config) (*Client, error) {
 	sdkCfg.Address = cfgCopy.Address
 	if cfgCopy.CACertPath != "" {
 		tlsCfg := &openbao.TLSConfig{
-			CACert:     cfgCopy.CACertPath,
-			Insecure:   cfgCopy.TLSInsecureSkipVerify,
+			CACert:   cfgCopy.CACertPath,
+			Insecure: cfgCopy.TLSInsecureSkipVerify,
 		}
 		if err := sdkCfg.ConfigureTLS(tlsCfg); err != nil {
 			return nil, fmt.Errorf("%w: configure TLS: %w", ErrInvalidConfig, err)

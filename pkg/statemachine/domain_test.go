@@ -44,8 +44,8 @@ func TestDomainMachine_TransitionSequences(t *testing.T) {
 			name: "CNAMELost_GracePeriodElapsed",
 			from: DomainActive,
 			steps: []step{
-				{DomainDegrade, DomainDegraded},     // CNAME lost, enters grace
-				{DomainCNAMELost, DomainFailed},     // Grace expired
+				{DomainDegrade, DomainDegraded}, // CNAME lost, enters grace
+				{DomainCNAMELost, DomainFailed}, // Grace expired
 			},
 		},
 		{

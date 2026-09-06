@@ -715,14 +715,14 @@ tasks:
           (cd pkg && gotestsum --junitfile "${ROOT}/{{.REPORT_DIR}}/pkg-unit.xml" -- ./... -short)
           (cd operators && gotestsum --junitfile "${ROOT}/{{.REPORT_DIR}}/operators-unit.xml" -- ./... -short)
           (cd api && gotestsum --junitfile "${ROOT}/{{.REPORT_DIR}}/api-unit.xml" -- ./... -short)
-          (cd infra/tests && gotestsum --junitfile "${ROOT}/{{.REPORT_DIR}}/infra-unit.xml" -- ./unit/... -short)
+          (cd infra/tests && gotestsum --junitfile "${ROOT}/{{.REPORT_DIR}}/infra-unit.xml" -- ./unit/... -short -count=1)
         else
           echo "gotestsum not found — running go test (no JUnit output)"
           echo "  Install: go install gotest.tools/gotestsum@latest"
           (cd pkg && go test ./... -short -v)
           (cd operators && go test ./... -short -v)
           (cd api && go test ./... -short -v)
-          (cd infra/tests && go test ./unit/... -short -v)
+          (cd infra/tests && go test ./unit/... -short -v -count=1)
         fi
       # CLI unit tests + JUnit report moved to the standalone loopzero-cli repo (M2 — 2026-06-16).
 

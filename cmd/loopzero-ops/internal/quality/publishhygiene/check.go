@@ -101,6 +101,15 @@ var auditTrailPrefixes = []string{
 	".claude/knowledge-base/",
 	".claude/agents/",
 	".claude/.compaction-snapshots/",
+	// `.claude/records/` is the canonical cycle-artifact tree (`rules/records-location.md`):
+	// alignment briefs, plans, edge-case reviews, deps-audit reports, implementation logs,
+	// mini-reviews, maintenance-runs, and cycle events. Every one of these is DATED evidence
+	// that the docs/README convention explicitly forbids editing to match the present —
+	// which is exactly what a workstation-path scrub of an already-written brief would do.
+	// A brief's "Measured on <date> in <workstation path> at <sha>" line is the measurement,
+	// not code, and rewriting it retroactively destroys the only evidence of what was true
+	// when the measurement was taken.
+	".claude/records/",
 	"archive/",
 	"CHANGELOG.md",
 	"BACKLOG.md",

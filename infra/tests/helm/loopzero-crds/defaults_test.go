@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 	apiextV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/yaml"
 )
@@ -53,13 +53,13 @@ var orphanCRDs = []string{
 
 func renderAllCRDs(t *testing.T) []apiextV1.CustomResourceDefinition {
 	t.Helper()
-	chartPath, err := helpers.ChartPath(chartName)
+	chartPath, err := chartrender.ChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(chartPath, "")
+	opts, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
-	output := helpers.RenderTemplate(t, opts, chartPath, releaseName, nil)
+	output := chartrender.RenderTemplate(t, opts, chartPath, releaseName, nil)
 
-	docs := helpers.SplitYAMLByKind(output, "CustomResourceDefinition")
+	docs := chartrender.SplitYAMLByKind(output, "CustomResourceDefinition")
 	crds := make([]apiextV1.CustomResourceDefinition, 0, len(docs))
 	for _, d := range docs {
 		var crd apiextV1.CustomResourceDefinition

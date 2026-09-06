@@ -15,20 +15,26 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/agplisolation"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/anonymousauth"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/adapterports"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/billinglayers"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/billingsecrets"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyhostparity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/chartpairs"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clusterrolenosecretsstar"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dashboardrootparity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/deadlineratchet"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/errorvocabulary"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lintcoverage"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/moduleselfcontained"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nolegacysatoken"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/oidccredadminloopzero"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratoslifespan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/readinesssummary"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routeauthcoverage"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/runbookparity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scheduledimage"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/securitycontext"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/stdlibonly"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/tenantpredicate"
 )
 
@@ -427,6 +433,121 @@ func runRunbookParity(args []string) int {
 		return 2
 	}
 	fmt.Printf("runbook-parity: PASS — %s\n", out.Reason)
+	return 0
+}
+
+func runAdapterPorts(args []string) int {
+	fs := flag.NewFlagSet("adapter-ports", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := adapterports.Check(adapterports.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "adapter-ports: FAIL — %v\n", err)
+		return 2
+	}
+	fmt.Printf("adapter-ports: PASS — %d adaptador(es), todos declarando a porta que satisfazem\n", out.Scanned)
+	return 0
+}
+
+func runErrorVocabulary(args []string) int {
+	fs := flag.NewFlagSet("error-vocabulary", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := errorvocabulary.Check(errorvocabulary.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error-vocabulary: FAIL — %v\n", err)
+		return 2
+	}
+	if !out.Pass {
+		fmt.Fprintf(os.Stderr, "error-vocabulary: FAIL — %s\n", out.Summary())
+		for _, v := range out.Violacoes {
+			fmt.Fprintf(os.Stderr, "  %s:%d carrega %q em saida ao usuario: %q\n", v.Arquivo, v.Linha, v.Termo, v.Mensagem)
+		}
+		fmt.Fprintln(os.Stderr, "  A Regra Inquebravel 3 proibe estes termos na saida ao usuario. Use linguagem de produto.")
+		return 1
+	}
+	fmt.Printf("error-vocabulary: PASS — %s\n", out.Summary())
+	return 0
+}
+
+func runReadinessSummary(args []string) int {
+	fs := flag.NewFlagSet("readiness-summary", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := readinesssummary.Check(readinesssummary.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "readiness-summary: FAIL — %v\n", err)
+		return 2
+	}
+	if !out.Pass {
+		fmt.Fprintf(os.Stderr, "readiness-summary: FAIL — %s\n", out.Summary())
+		for _, v := range out.Violacoes {
+			fmt.Fprintf(os.Stderr, "  %s:%d — %s() persiste .status (%s) sem dobrar o sumario de prontidao, "+
+				"nem em linha nem por defer em quem a chama. Uma passagem por aqui deixa a condicao Ready "+
+				"com o que a passagem ANTERIOR calculou, e isso e lido como atual (ADR-0025 D3, B-105).\n",
+				v.Arquivo, v.Linha, v.Funcao, v.Forma)
+		}
+		return 1
+	}
+	fmt.Printf("readiness-summary: PASS — %s\n", out.Summary())
+	return 0
+}
+
+func runStdlibOnly(args []string) int {
+	fs := flag.NewFlagSet("stdlib-only", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := stdlibonly.Check(stdlibonly.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "stdlib-only: FAIL — %v\n", err)
+		return 2
+	}
+	fmt.Printf("stdlib-only: PASS — %d import(s), todos da biblioteca padrao\n", out.Scanned)
+	return 0
+}
+
+func runChartPairs(args []string) int {
+	fs := flag.NewFlagSet("chart-pairs", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := chartpairs.Check(chartpairs.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "chart-pairs: FAIL — %v\n", err)
+		return 2
+	}
+	fmt.Printf("chart-pairs: PASS — %d em infra/helm, %d em charts/, %d par(es) declarado(s): %v\n",
+		out.InfraHelm, out.Charts, len(out.Pairs), out.Pairs)
+	return 0
+}
+
+func runDashboardRootParity(args []string) int {
+	fs := flag.NewFlagSet("dashboard-root-parity", flag.ContinueOnError)
+	root := fs.String("repo-root", ".", "repository root")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dashboard-root-parity: FAIL — %v\n", err)
+		return 2
+	}
+	fmt.Printf("dashboard-root-parity: PASS — a borda serve %s e o runbook o nomeia\n", out.Served)
 	return 0
 }
 

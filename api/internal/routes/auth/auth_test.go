@@ -6,12 +6,13 @@ package auth
 import (
 	"context"
 	"encoding/json"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // fakeUsernameLookup implements UsernameLookup for tests (AUDIT-10).
@@ -77,7 +78,7 @@ func TestAuth_Whoami_Unauthenticated(t *testing.T) {
 func TestAuth_Whoami_PrivateEmail_DeriveNoreply(t *testing.T) {
 	h := NewAuthHandler(nil)
 
-	uc := &middleware.UserContext{
+	uc := &auth.UserContext{
 		UserID:   "github-jdoe",
 		Email:    "", // private email
 		TenantID: "tn-test-123",
@@ -109,7 +110,7 @@ func TestAuth_Whoami_PrivateEmail_DeriveNoreply(t *testing.T) {
 func TestAuth_Whoami_ServiceAccount_UsesUsername(t *testing.T) {
 	h := NewAuthHandler(&fakeUsernameLookup{byID: map[string]string{"loopzero-e2e": "loopzero-e2e"}})
 
-	uc := &middleware.UserContext{
+	uc := &auth.UserContext{
 		UserID:   "loopzero-e2e", // no github- prefix
 		Email:    "",         // no email for client_credentials
 		TenantID: "e2e-tenant",

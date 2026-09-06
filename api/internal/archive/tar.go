@@ -25,10 +25,10 @@ const (
 
 // Errors returned by SafeExtractTarGz.
 var (
-	ErrPathTraversal    = errors.New("tar entry path traversal detected")
-	ErrSymlinkInArchive = errors.New("tar entry contains symlink or hardlink")
+	ErrPathTraversal      = errors.New("tar entry path traversal detected")
+	ErrSymlinkInArchive   = errors.New("tar entry contains symlink or hardlink")
 	ErrDecompressionLimit = errors.New("tar archive exceeds decompression size limit")
-	ErrFileCountLimit   = errors.New("tar archive exceeds file count limit")
+	ErrFileCountLimit     = errors.New("tar archive exceeds file count limit")
 )
 
 // ExtractOpts configures extraction behavior.

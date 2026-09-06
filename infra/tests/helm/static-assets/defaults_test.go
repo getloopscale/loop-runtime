@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 	appsV1 "k8s.io/api/apps/v1"
 	coreV1 "k8s.io/api/core/v1"
 )
@@ -22,40 +22,40 @@ const (
 
 func TestStaticAssets_HasDeployment(t *testing.T) {
 	t.Parallel()
-	cp, err := helpers.ChartPath(chartName)
+	cp, err := chartrender.ChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(cp, "")
+	opts, err := chartrender.NewOptions(cp, "")
 	require.NoError(t, err)
-	out := helpers.RenderTemplate(t, opts, cp, releaseName, nil)
+	out := chartrender.RenderTemplate(t, opts, cp, releaseName, nil)
 
-	docs := helpers.SplitYAMLByKind(out, "Deployment")
+	docs := chartrender.SplitYAMLByKind(out, "Deployment")
 	require.NotEmpty(t, docs, "must emit at least one Deployment")
 }
 
 func TestStaticAssets_HasService(t *testing.T) {
 	t.Parallel()
-	cp, err := helpers.ChartPath(chartName)
+	cp, err := chartrender.ChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(cp, "")
+	opts, err := chartrender.NewOptions(cp, "")
 	require.NoError(t, err)
-	out := helpers.RenderTemplate(t, opts, cp, releaseName, nil)
+	out := chartrender.RenderTemplate(t, opts, cp, releaseName, nil)
 
-	docs := helpers.SplitYAMLByKind(out, "Service")
+	docs := chartrender.SplitYAMLByKind(out, "Service")
 	require.NotEmpty(t, docs, "must emit Service for the Deployment")
 }
 
 func TestStaticAssets_ServicePortMatchesContainerPort(t *testing.T) {
 	t.Parallel()
-	cp, err := helpers.ChartPath(chartName)
+	cp, err := chartrender.ChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(cp, "")
+	opts, err := chartrender.NewOptions(cp, "")
 	require.NoError(t, err)
-	out := helpers.RenderTemplate(t, opts, cp, releaseName, nil)
+	out := chartrender.RenderTemplate(t, opts, cp, releaseName, nil)
 
 	var deploy appsV1.Deployment
-	helpers.MustUnmarshalK8SYamlByKind(t, out, "Deployment", &deploy)
+	chartrender.MustUnmarshalK8SYamlByKind(t, out, "Deployment", &deploy)
 	var svc coreV1.Service
-	helpers.MustUnmarshalK8SYamlByKind(t, out, "Service", &svc)
+	chartrender.MustUnmarshalK8SYamlByKind(t, out, "Service", &svc)
 
 	require.NotEmpty(t, deploy.Spec.Template.Spec.Containers)
 	require.NotEmpty(t, svc.Spec.Ports)

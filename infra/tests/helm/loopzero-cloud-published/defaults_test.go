@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 	appsV1 "k8s.io/api/apps/v1"
 	coreV1 "k8s.io/api/core/v1"
 )
@@ -32,14 +32,14 @@ const (
 
 func renderDeploy(t *testing.T) appsV1.Deployment {
 	t.Helper()
-	chartPath, err := helpers.PublishedChartPath(chartName)
+	chartPath, err := chartrender.PublishedChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(chartPath, "")
+	opts, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
-	out := helpers.RenderTemplate(t, opts, chartPath, releaseName,
+	out := chartrender.RenderTemplate(t, opts, chartPath, releaseName,
 		[]string{"templates/deployment.yaml"})
 	var d appsV1.Deployment
-	helpers.MustUnmarshalK8SYamlByKind(t, out, "Deployment", &d)
+	chartrender.MustUnmarshalK8SYamlByKind(t, out, "Deployment", &d)
 	return d
 }
 
@@ -129,53 +129,53 @@ func TestCloudPublished_HasResourceLimits(t *testing.T) {
 
 func TestCloudPublished_SeparateServiceTemplate(t *testing.T) {
 	t.Parallel()
-	chartPath, err := helpers.PublishedChartPath(chartName)
+	chartPath, err := chartrender.PublishedChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(chartPath, "")
+	opts, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
-	out := helpers.RenderTemplate(t, opts, chartPath, releaseName,
+	out := chartrender.RenderTemplate(t, opts, chartPath, releaseName,
 		[]string{"templates/service.yaml"})
 	var svc coreV1.Service
-	helpers.MustUnmarshalK8SYamlByKind(t, out, "Service", &svc)
+	chartrender.MustUnmarshalK8SYamlByKind(t, out, "Service", &svc)
 	require.NotEmpty(t, svc.Spec.Ports,
 		"published variant must declare Service with at least one port")
 }
 
 func TestCloudPublished_HasNetworkPolicy(t *testing.T) {
 	t.Parallel()
-	chartPath, err := helpers.PublishedChartPath(chartName)
+	chartPath, err := chartrender.PublishedChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(chartPath, "")
+	opts, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
-	out := helpers.RenderTemplate(t, opts, chartPath, releaseName,
+	out := chartrender.RenderTemplate(t, opts, chartPath, releaseName,
 		[]string{"templates/networkpolicy.yaml"})
-	docs := helpers.SplitYAMLByKind(out, "NetworkPolicy")
+	docs := chartrender.SplitYAMLByKind(out, "NetworkPolicy")
 	require.NotEmpty(t, docs,
 		"published loopzero-cloud must declare NetworkPolicy")
 }
 
 func TestCloudPublished_ServiceMonitorConditionalToggle(t *testing.T) {
 	t.Parallel()
-	chartPath, err := helpers.PublishedChartPath(chartName)
+	chartPath, err := chartrender.PublishedChartPath(chartName)
 	require.NoError(t, err)
 
 	// Default OFF — full-chart render must produce zero ServiceMonitor.
 	// (Cannot use --show-only on a fully-conditional template — helm
 	// errors out when the named template produces no output.)
-	optsOff, err := helpers.NewOptions(chartPath, "")
+	optsOff, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
-	outOff := helpers.RenderTemplate(t, optsOff, chartPath, releaseName, nil)
-	require.Empty(t, helpers.SplitYAMLByKind(outOff, "ServiceMonitor"),
+	outOff := chartrender.RenderTemplate(t, optsOff, chartPath, releaseName, nil)
+	require.Empty(t, chartrender.SplitYAMLByKind(outOff, "ServiceMonitor"),
 		"ServiceMonitor must be OFF by default (opt-in toggle)")
 
 	// Toggled ON — full-chart render must produce exactly one ServiceMonitor.
-	optsOn, err := helpers.NewOptions(chartPath, "")
+	optsOn, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
 	optsOn.SetValues = map[string]string{
 		"metrics.serviceMonitor.enabled": "true",
 	}
-	outOn := helpers.RenderTemplate(t, optsOn, chartPath, releaseName, nil)
-	docs := helpers.SplitYAMLByKind(outOn, "ServiceMonitor")
+	outOn := chartrender.RenderTemplate(t, optsOn, chartPath, releaseName, nil)
+	docs := chartrender.SplitYAMLByKind(outOn, "ServiceMonitor")
 	require.NotEmpty(t, docs,
 		"with metrics.serviceMonitor.enabled=true, chart MUST emit "+
 			"ServiceMonitor — silent no-op = broken Prometheus discovery")

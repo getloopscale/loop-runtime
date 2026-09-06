@@ -25,7 +25,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/pkg/vault"
@@ -78,6 +79,15 @@ type rawSecretReader struct {
 // by (tenant_id, name) which silently leaked production-env secret values
 // into preview-env Secret materializations when the same `name` existed
 // across envs.
+//
+// B-175: every decrypt failure here increments
+// metrics.SecretDecryptFailedTotal under the SAME reason vocabulary
+// PostgresSecretStore.decryptFromStore uses, so one PromQL query covers both
+// readers. It matters more here than there: this is the endpoint External
+// Secrets Operator calls for every user secret, while the instrumented store
+// dispatcher is reached only by ListForResync, a deploy-time hook. Between
+// B-126 and this item the counter existed, read zero on a revoked key, and an
+// operator would have concluded nothing had broken.
 func (r *rawSecretReader) ReadSecret(ctx context.Context, tenantID, project, env, secretName string) ([]byte, error) {
 	if r == nil || r.pool == nil {
 		return nil, errors.New("secret_fetch: pool not configured")
@@ -113,12 +123,42 @@ func (r *rawSecretReader) ReadSecret(ctx context.Context, tenantID, project, env
 		return nil, fmt.Errorf("secret_fetch: load: %w", err)
 	}
 
+	// B-175: the three exits below are the decrypt failures on this path, and
+	// each carries the reason that names the recovery it calls for. Two error
+	// exits are deliberately NOT counted, because neither is a decrypt: the
+	// "not configured" guards above run only when setupSecretFetchDeps handed
+	// back nil and the route was never registered, and ErrSecretNotFound means
+	// a row that is absent — absent is not ciphertext, and counting it would
+	// make the alert fire on ordinary "the user has not created that secret
+	// yet" traffic.
+
+	if len(encryptedValue) == 0 {
+		// Data side, mirroring the store dispatcher's EC-06 NULL/empty guard:
+		// a row exists whose encrypted_value is empty, which no write path in
+		// this tree can produce. Before B-175 this case fell through to the
+		// prefix check below and was reported as "not vault-encoded", which
+		// sent the reader looking for a legacy row that was never there.
+		metrics.SecretDecryptFailedTotal.WithLabelValues("empty_ciphertext").Inc()
+		return nil, fmt.Errorf("secret_fetch: empty ciphertext for tenant %s (EC-06 NULL row guard)", tenantID)
+	}
+
 	// T3.4 dual-path dispatch: vault:v1: prefix → transit decrypt.
 	if !strings.HasPrefix(string(encryptedValue), "vault:v1:") {
+		// Data side. The store dispatcher reaches this same conclusion by
+		// attempting the AES decrypt and failing; this path refuses before
+		// attempting, because the legacy branch is disabled here post-J22.
+		// The operator's response is identical either way — restore a backup,
+		// not restore a key — so the reason is the same one.
+		metrics.SecretDecryptFailedTotal.WithLabelValues("aes_legacy_error").Inc()
 		return nil, errors.New("secret_fetch: row is not vault-encoded (legacy AES path disabled post-J22 cutover)")
 	}
 	plain, derr := r.transit.Decrypt(ctx, tenantID, string(encryptedValue))
 	if derr != nil {
+		// Key side: a revoked or rotated transit key lands here, and so does an
+		// unreachable OpenBao. This is the exact failure B-126 was filed for,
+		// on the path that serves users. The typed error stays in the chain for
+		// the log rather than becoming a label, matching the store dispatcher.
+		metrics.SecretDecryptFailedTotal.WithLabelValues("vault_transit_error").Inc()
 		return nil, fmt.Errorf("secret_fetch: transit decrypt: %w", derr)
 	}
 	return plain, nil
@@ -187,9 +227,9 @@ func setupSecretFetchDeps(pool *pgxpool.Pool, transit vault.Transit, cellStore *
 // simple — both consumers read from a single source of truth (OpenBao via
 // ExternalSecrets in production, or directly from the Secret in dev).
 //
-// Successful auth injects a synthetic middleware.TokenReviewResult into
+// Successful auth injects a synthetic auth.TokenReviewResult into
 // the request context so the existing handler at routes/internal_secret_fetch.go
-// (which calls middleware.CrossClusterFromContext) does not need a parallel
+// (which calls auth.CrossClusterFromContext) does not need a parallel
 // auth code path. CellID is derived SERVER-SIDE from the package-canonical
 // `placement.DefaultCellID` constant — the caller-supplied X-Cell-ID
 // header is intentionally ignored (T1.1 of plan
@@ -226,8 +266,8 @@ func brokerBearerMiddleware(expectedToken string, next http.HandlerFunc) http.Ha
 		_ = r.Header.Get("X-Cell-ID")
 		cellID := brokerSingleClusterCellID
 		// Inject synthetic TokenReviewResult so the handler's
-		// middleware.CrossClusterFromContext check still passes.
-		ctx := middleware.InjectCrossClusterResultForBroker(r.Context(), &middleware.TokenReviewResult{
+		// auth.CrossClusterFromContext check still passes.
+		ctx := auth.InjectCrossClusterResultForBroker(r.Context(), &auth.TokenReviewResult{
 			Authenticated: true,
 			Username:      "broker:eso-webhook",
 			CellID:        cellID,

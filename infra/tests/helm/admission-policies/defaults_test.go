@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 	"sigs.k8s.io/yaml"
 )
 
@@ -48,16 +48,16 @@ type vapDoc struct {
 
 func renderAll(t *testing.T) string {
 	t.Helper()
-	cp, err := helpers.ChartPath(chartName)
+	cp, err := chartrender.ChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(cp, "")
+	opts, err := chartrender.NewOptions(cp, "")
 	require.NoError(t, err)
-	return helpers.RenderTemplate(t, opts, cp, releaseName, nil)
+	return chartrender.RenderTemplate(t, opts, cp, releaseName, nil)
 }
 
 func renderVAPs(t *testing.T) []vapDoc {
 	t.Helper()
-	out := helpers.SplitYAMLByKind(renderAll(t), "ValidatingAdmissionPolicy")
+	out := chartrender.SplitYAMLByKind(renderAll(t), "ValidatingAdmissionPolicy")
 	vaps := make([]vapDoc, 0, len(out))
 	for _, d := range out {
 		var v vapDoc
@@ -78,8 +78,8 @@ func TestBootstrapAdmission_VAPCount(t *testing.T) {
 func TestBootstrapAdmission_VAPAndBindingCountsMatch(t *testing.T) {
 	t.Parallel()
 	out := renderAll(t)
-	vaps := helpers.SplitYAMLByKind(out, "ValidatingAdmissionPolicy")
-	bindings := helpers.SplitYAMLByKind(out, "ValidatingAdmissionPolicyBinding")
+	vaps := chartrender.SplitYAMLByKind(out, "ValidatingAdmissionPolicy")
+	bindings := chartrender.SplitYAMLByKind(out, "ValidatingAdmissionPolicyBinding")
 	require.Equal(t, len(vaps), len(bindings),
 		"every VAP MUST have a binding (1:1)")
 }
@@ -125,7 +125,7 @@ func TestBootstrapAdmission_PodTargetingVAPsExemptSystemActors(t *testing.T) {
 
 func TestBootstrapAdmission_ClusterImagePolicyCount(t *testing.T) {
 	t.Parallel()
-	docs := helpers.SplitYAMLByKind(renderAll(t), "ClusterImagePolicy")
+	docs := chartrender.SplitYAMLByKind(renderAll(t), "ClusterImagePolicy")
 	require.Equalf(t, expectedCIPs, len(docs),
 		"bootstrap ClusterImagePolicy count must match published variant (%d)",
 		expectedCIPs)
@@ -133,7 +133,7 @@ func TestBootstrapAdmission_ClusterImagePolicyCount(t *testing.T) {
 
 func TestBootstrapAdmission_PrometheusRuleCount(t *testing.T) {
 	t.Parallel()
-	docs := helpers.SplitYAMLByKind(renderAll(t), "PrometheusRule")
+	docs := chartrender.SplitYAMLByKind(renderAll(t), "PrometheusRule")
 	require.Equalf(t, expectedPRs, len(docs),
 		"bootstrap PrometheusRule count must match published variant (%d)",
 		expectedPRs)

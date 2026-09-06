@@ -13,10 +13,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strings"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
 	sourceroutes "github.com/getloopscale/loopzero/api/internal/routes/source"
-	"github.com/getloopscale/loopzero/api/internal/source"
 )
 
 // fakeSourceStore is a test-only SourceStore that stores bundles in memory.
@@ -227,21 +228,47 @@ func TestSourceUpload(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid loopzero_yaml with missing name returns 422", func(t *testing.T) {
-		// Plan B v3.1 T-B.3 — services.json has no top-level `name` field
-		// (platform-neutral manifest per ADR-0015). Skipped: legacy behavior.
-		t.Skip("legacy loopzero.yaml flow removed post Plan B v3.1 T-B.3 cutover")
-		// Arrange
-		store := newFakeSourceStore("abc123")
+	t.Run("legacy loopzero_yaml is rejected with the E-009 migration hint", func(t *testing.T) {
+		// B-184. This subtest replaces SIX that stood here asserting the legacy
+		// loopzero.yaml flow (missing name -> 422, 0 apps -> 422, ambiguous app type ->
+		// 422, worker type -> 200, server-without-port -> 422, frontend type ->
+		// 200). Each opened with a BARE t.Skip and no guard --
+		//
+		//	t.Skip("legacy loopzero.yaml flow removed post Plan B v3.1 T-B.3 cutover")
+		//	store := newFakeSourceStore("abc123")
+		//	... eleven more statements ...
+		//
+		// -- so a skip marked each whole closure skipped and none of those bodies
+		// had run since the T-B.3 cutover. Their reason was true: the flow is gone,
+		// and they passed a YAML document into newMultipartRequest's servicesJSON
+		// parameter, so they could not have passed if they had run.
+		//
+		// What replaced the flow had no test at all: the handler now REJECTS a
+		// legacy loopzero_yaml field with an E-009 migration hint
+		// (api/internal/routes/source/source.go, EC-B3-7). Six dead assertions
+		// about a deleted behaviour become one live assertion about the behaviour
+		// that deleted it.
+		store := newFakeSourceStore("sha-legacy-reject")
 		handler := sourceroutes.NewSourceHandler(store)
 
-		loopzeroYAML := `
-apps:
-  api:
-    type: server
-    port: 3000
-`
-		req := newMultipartRequest(t, []byte("fake-bundle"), loopzeroYAML)
+		// Arrange -- a bundle plus the legacy loopzero_yaml field and NO services_json.
+		body := &bytes.Buffer{}
+		writer := multipart.NewWriter(body)
+		part, err := writer.CreateFormFile("bundle", "bundle.git")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write([]byte("fake-bundle")); err != nil {
+			t.Fatal(err)
+		}
+		if err := writer.WriteField("loopzero_yaml", "apps:\n  api:\n    type: server\n    port: 3000\n"); err != nil {
+			t.Fatal(err)
+		}
+		if err := writer.Close(); err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/source/upload", body)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
 		req = req.WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
 		rec := httptest.NewRecorder()
 
@@ -249,84 +276,25 @@ apps:
 		handler.Upload(rec, req)
 
 		// Assert
-		if rec.Code != 422 {
-			t.Fatalf("expected 422, got %d: %s", rec.Code, rec.Body.String())
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("expected 422 for legacy loopzero_yaml, got %d: %s", rec.Code, rec.Body.String())
 		}
-
-		var errResp map[string]string
-		_ = json.NewDecoder(rec.Body).Decode(&errResp)
+		var errResp map[string]any
+		if err := json.NewDecoder(rec.Body).Decode(&errResp); err != nil {
+			t.Fatalf("failed to decode error response: %v", err)
+		}
 		if errResp["code"] != "VALIDATION_FAILED" {
-			t.Errorf("expected code VALIDATION_FAILED, got '%s'", errResp["code"])
+			t.Errorf("expected code VALIDATION_FAILED, got %v", errResp["code"])
 		}
-	})
-
-	t.Run("0 apps in loopzero_yaml returns 422 with no apps message", func(t *testing.T) {
-		// Plan B v3.1 T-B.3 (2026-06-05) — skipped: this subtest validates the
-		// legacy loopzero.yaml `0 apps` message which no longer exists. The
-		// equivalent services.json validation (empty `services[]`) is covered
-		// in `api/internal/source/validator_services_test.go`.
-		t.Skip("legacy loopzero.yaml flow removed post Plan B v3.1 T-B.3 cutover")
-		// Arrange
-		store := newFakeSourceStore("abc123")
-		handler := sourceroutes.NewSourceHandler(store)
-
-		loopzeroYAML := `
-name: my-saas
-apps: {}
-`
-		req := newMultipartRequest(t, []byte("fake-bundle"), loopzeroYAML)
-		req = req.WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
-		rec := httptest.NewRecorder()
-
-		// Act
-		handler.Upload(rec, req)
-
-		// Assert
-		if rec.Code != 422 {
-			t.Fatalf("expected 422, got %d: %s", rec.Code, rec.Body.String())
-		}
-
-		var errResp map[string]string
-		_ = json.NewDecoder(rec.Body).Decode(&errResp)
-		if errResp["message"] != "No apps defined in loopzero.yaml" {
-			t.Errorf("expected message 'No apps defined in loopzero.yaml', got '%s'", errResp["message"])
-		}
-	})
-
-	t.Run("app type ambiguous (no port and no worker/frontend type) returns 422", func(t *testing.T) {
-		// Plan B v3.1 T-B.3 — services.json schema requires `port` (minimum
-		// 1024) on every service; ambiguity contract differs. Skipped: legacy.
-		t.Skip("legacy loopzero.yaml flow removed post Plan B v3.1 T-B.3 cutover")
-		// Arrange
-		store := newFakeSourceStore("abc123")
-		handler := sourceroutes.NewSourceHandler(store)
-
-		loopzeroYAML := `
-name: my-saas
-apps:
-  api:
-    path: ./api
-`
-		req := newMultipartRequest(t, []byte("fake-bundle"), loopzeroYAML)
-		req = req.WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
-		rec := httptest.NewRecorder()
-
-		// Act
-		handler.Upload(rec, req)
-
-		// Assert
-		if rec.Code != 422 {
-			t.Fatalf("expected 422, got %d: %s", rec.Code, rec.Body.String())
-		}
-
-		var errResp map[string]string
-		_ = json.NewDecoder(rec.Body).Decode(&errResp)
-		if errResp["code"] != "VALIDATION_FAILED" {
-			t.Errorf("expected code VALIDATION_FAILED, got '%s'", errResp["code"])
-		}
-		// Should mention the app name and the issue
-		if errResp["message"] == "" {
-			t.Error("expected a specific error message about the ambiguous app type")
+		// The message must carry the migration hint, not just a generic refusal:
+		// E-009 is what tells a caller on old LoopZeroKit what to do next. Asserting
+		// only the 422 would pass against the E-008 "services.json is required"
+		// branch, which is a different answer to a different mistake.
+		msg, _ := errResp["message"].(string)
+		for _, want := range []string{"E-009", "services.json", "LoopZeroKit"} {
+			if !strings.Contains(msg, want) {
+				t.Errorf("E-009 rejection message must mention %q; got %q", want, msg)
+			}
 		}
 	})
 
@@ -375,79 +343,6 @@ apps:
 		// Assert
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
-		}
-	})
-
-	t.Run("valid app with type worker (no port needed) returns 200", func(t *testing.T) {
-		// Plan B v3.1 T-B.3 — services.json doesn't model worker type
-		// (sidecar shape only). Worker semantics now expressed via dedicated
-		// loopzerokit primitive (`defineJob`) outside the deploy bundle. Skipped.
-		t.Skip("legacy loopzero.yaml worker-type flow removed post Plan B v3.1")
-		// Arrange
-		store := newFakeSourceStore("sha-worker-ok")
-		handler := sourceroutes.NewSourceHandler(store)
-
-		loopzeroYAML := `
-name: my-saas
-apps:
-  background-job:
-    type: worker
-    path: ./jobs
-`
-		req := newMultipartRequest(t, []byte("fake-bundle"), loopzeroYAML)
-		req = req.WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
-		rec := httptest.NewRecorder()
-
-		// Act
-		handler.Upload(rec, req)
-
-		// Assert
-		if rec.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
-		}
-
-		var resp sourceroutes.SourceUploadResponse
-		_ = json.NewDecoder(rec.Body).Decode(&resp)
-		if resp.CommitSHA != "sha-worker-ok" {
-			t.Errorf("expected commit_sha 'sha-worker-ok', got '%s'", resp.CommitSHA)
-		}
-		if len(resp.Apps) != 1 || resp.Apps[0] != "background-job" {
-			t.Errorf("expected apps ['background-job'], got %v", resp.Apps)
-		}
-	})
-
-	t.Run("server type without port returns 422", func(t *testing.T) {
-		// Plan B v3.1 T-B.3 — services.json schema enforces `port` as required
-		// (1024-65535) at the JSON Schema layer. Validator tests in
-		// `validator_services_test.go` cover the equivalent contract.
-		t.Skip("legacy loopzero.yaml port-validation flow removed post Plan B v3.1")
-		// Arrange
-		store := newFakeSourceStore("abc123")
-		handler := sourceroutes.NewSourceHandler(store)
-
-		loopzeroYAML := `
-name: my-saas
-apps:
-  api:
-    type: server
-    path: ./api
-`
-		req := newMultipartRequest(t, []byte("fake-bundle"), loopzeroYAML)
-		req = req.WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
-		rec := httptest.NewRecorder()
-
-		// Act
-		handler.Upload(rec, req)
-
-		// Assert
-		if rec.Code != 422 {
-			t.Fatalf("expected 422, got %d: %s", rec.Code, rec.Body.String())
-		}
-
-		var errResp map[string]string
-		_ = json.NewDecoder(rec.Body).Decode(&errResp)
-		if errResp["code"] != "VALIDATION_FAILED" {
-			t.Errorf("expected code VALIDATION_FAILED, got '%s'", errResp["code"])
 		}
 	})
 
@@ -515,38 +410,4 @@ apps:
 		}
 	})
 
-	t.Run("valid app with type frontend (no port needed) returns 200", func(t *testing.T) {
-		// Plan B v3.1 T-B.3 — services.json doesn't model frontend type
-		// (CDN-static frontends are loopzerokit-build emitted separately; the
-		// services.json payload only models polyglot sidecars). Skipped.
-		t.Skip("legacy loopzero.yaml frontend-type flow removed post Plan B v3.1")
-		// Arrange
-		store := newFakeSourceStore("sha-frontend-ok")
-		handler := sourceroutes.NewSourceHandler(store)
-
-		loopzeroYAML := `
-name: my-saas
-apps:
-  web:
-    type: frontend
-    path: ./web
-`
-		req := newMultipartRequest(t, []byte("fake-bundle"), loopzeroYAML)
-		req = req.WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
-		rec := httptest.NewRecorder()
-
-		// Act
-		handler.Upload(rec, req)
-
-		// Assert
-		if rec.Code != http.StatusOK {
-			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
-		}
-
-		var resp sourceroutes.SourceUploadResponse
-		_ = json.NewDecoder(rec.Body).Decode(&resp)
-		if len(resp.Apps) != 1 || resp.Apps[0] != "web" {
-			t.Errorf("expected apps ['web'], got %v", resp.Apps)
-		}
-	})
 }

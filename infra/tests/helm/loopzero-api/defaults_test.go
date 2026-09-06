@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 	appsV1 "k8s.io/api/apps/v1"
 	coreV1 "k8s.io/api/core/v1"
 )
@@ -41,18 +41,18 @@ const (
 func renderDefaultDeployment(t *testing.T) appsV1.Deployment {
 	t.Helper()
 
-	chartPath, err := helpers.ChartPath(chartName)
+	chartPath, err := chartrender.ChartPath(chartName)
 	require.NoError(t, err, "resolve chart path")
 
-	opts, err := helpers.NewOptions(chartPath, "")
+	opts, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err, "build helm options")
 
-	output := helpers.RenderTemplate(t, opts, chartPath, releaseName,
+	output := chartrender.RenderTemplate(t, opts, chartPath, releaseName,
 		[]string{"templates/deployment.yaml"})
 	require.NotEmpty(t, output, "render produced empty output")
 
 	var deploy appsV1.Deployment
-	helpers.MustUnmarshalK8SYamlByKind(t, output, "Deployment", &deploy)
+	chartrender.MustUnmarshalK8SYamlByKind(t, output, "Deployment", &deploy)
 
 	return deploy
 }

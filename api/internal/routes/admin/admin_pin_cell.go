@@ -31,10 +31,10 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/api/internal/correlation"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	audit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
-	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
+	"github.com/getloopscale/loopzero/api/internal/services/placement"
 )
 
 // AdminPinCellInput is the body for POST /api/v1/admin/tenants/pin.
@@ -87,7 +87,7 @@ var validCellIDPattern = regexp.MustCompile(`^cell-[a-z0-9-]+$`)
 // pinner-only wiring). The actor is the fixed string "admin:service-auth": this
 // route authenticates via a shared secret (LOOPZERO_ADMIN_SERVICE_AUTH_SECRET), which
 // carries no per-user subject — the raw secret is NEVER written to the audit body.
-func AdminPinCellHandler(pinner CellPinner, audit middleware.AuditWriter) http.HandlerFunc {
+func AdminPinCellHandler(pinner CellPinner, audit audit.AuditWriter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Feature flag gate (matches admin_evict semantics).
 		if os.Getenv("LOOPZERO_ADMIN_API") != "true" {
@@ -136,13 +136,13 @@ func AdminPinCellHandler(pinner CellPinner, audit middleware.AuditWriter) http.H
 			status := http.StatusInternalServerError
 			code := "internal"
 			switch {
-			case errors.Is(err, placementsvc.ErrTenantNotFound):
+			case errors.Is(err, placement.ErrTenantNotFound):
 				status = http.StatusNotFound
 				code = "tenant_not_found"
-			case errors.Is(err, placementsvc.ErrCellNotFound):
+			case errors.Is(err, placement.ErrCellNotFound):
 				status = http.StatusNotFound
 				code = "cell_not_found"
-			case errors.Is(err, placementsvc.ErrCellNotPinnable):
+			case errors.Is(err, placement.ErrCellNotPinnable):
 				status = http.StatusConflict
 				code = "cell_not_pinnable"
 			case errors.Is(err, build.ErrCellAtCapacity):

@@ -21,7 +21,7 @@ import (
 // ErrRepositoryNotLinked is returned by UnlinkRepository when no
 // link row exists for the (tenant, project) pair.
 // CHG-2026-04-23-AUDIT-21 — mirrors the sentinel pattern in
-// k8s.ErrEnvironmentNotFound (AUDIT-12), replacing the silent-success
+// tenancy.ErrEnvironmentNotFound (AUDIT-12), replacing the silent-success
 // behaviour where DELETE returned nil regardless of rows affected.
 var ErrRepositoryNotLinked = errors.New("repository store: no repository linked to project")
 

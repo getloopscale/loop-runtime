@@ -13,30 +13,30 @@ import (
 	"os"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/server"
 )
 
-// fakeTokenValidator implements middleware.TokenValidator for server tests.
+// fakeTokenValidator implements auth.TokenValidator for server tests.
 type fakeServerTokenValidator struct {
-	result *middleware.TokenValidationResult
+	result *auth.TokenValidationResult
 	err    error
 }
 
-func (f *fakeServerTokenValidator) ValidateToken(ctx context.Context, token string) (*middleware.TokenValidationResult, error) {
+func (f *fakeServerTokenValidator) ValidateToken(ctx context.Context, token string) (*auth.TokenValidationResult, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
 	return f.result, nil
 }
 
-// fakeServerMembershipStore implements middleware.MembershipStore for server tests.
+// fakeServerMembershipStore implements auth.MembershipStore for server tests.
 type fakeServerMembershipStore struct {
-	memberships []middleware.TenantMembership
+	memberships []auth.TenantMembership
 	err         error
 }
 
-func (f *fakeServerMembershipStore) GetMemberships(ctx context.Context, userID string) ([]middleware.TenantMembership, error) {
+func (f *fakeServerMembershipStore) GetMemberships(ctx context.Context, userID string) ([]auth.TenantMembership, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -45,13 +45,13 @@ func (f *fakeServerMembershipStore) GetMemberships(ctx context.Context, userID s
 
 func TestServerRouting(t *testing.T) {
 	validator := &fakeServerTokenValidator{
-		result: &middleware.TokenValidationResult{
+		result: &auth.TokenValidationResult{
 			UserID: "github-lucas",
 			Email:  "lucas@acme.dev",
 		},
 	}
 	memberStore := &fakeServerMembershipStore{
-		memberships: []middleware.TenantMembership{
+		memberships: []auth.TenantMembership{
 			{TenantID: "acme", Role: "owner"},
 		},
 	}

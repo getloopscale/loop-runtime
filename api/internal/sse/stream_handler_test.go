@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -204,13 +204,13 @@ func hasHeartbeat(body string) bool {
 func injectUserContext(tenantID string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			uc := &middleware.UserContext{
+			uc := &auth.UserContext{
 				UserID:   "user-test",
 				Email:    "test@example.com",
 				TenantID: tenantID,
 				Role:     "owner",
 			}
-			ctx := context.WithValue(r.Context(), middleware.UserContextKeyPublic(), uc)
+			ctx := context.WithValue(r.Context(), auth.UserContextKeyPublic(), uc)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

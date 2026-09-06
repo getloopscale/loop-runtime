@@ -11,19 +11,23 @@ package server
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/getloopscale/loopzero/api/internal/routes/admin"
 	"github.com/getloopscale/loopzero/api/internal/routes/auth"
 	"github.com/getloopscale/loopzero/api/internal/routes/projects"
 	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
 	"github.com/getloopscale/loopzero/api/internal/routes/version"
-	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
 	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	audit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
+	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	observability "github.com/getloopscale/loopzero/api/internal/middleware/observability"
+	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	"github.com/getloopscale/loopzero/api/internal/routes/bootstrap"
 	"github.com/getloopscale/loopzero/api/internal/routes/health"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
@@ -52,7 +56,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	}
 
 	// Security headers — before CORS so they are always present.
-	r.Use(middleware.SecurityHeaders)
+	r.Use(policy.SecurityHeaders)
 
 	// CORS — allow dashboard (cloud.{domain}) to call API (api.{domain}).
 	// Must be early middleware so preflight OPTIONS get handled before auth.
@@ -60,28 +64,23 @@ func NewRouter(cfg Config) *chi.Mux {
 
 	// Maintenance mode: block mutating requests during infrastructure operations
 	// (e.g., PG resize). Must come before auth so 503 is returned without token check.
-	r.Use(middleware.MaintenanceMode)
+	r.Use(policy.MaintenanceMode)
 
 	// Middleware chain: metrics → otel-tracing → correlation-id → request-logger → logging → backpressure
 	r.Use(metrics.HTTPMetrics)
-	r.Use(middleware.OtelHTTP)
-	r.Use(middleware.CorrelationID)
+	r.Use(observability.OtelHTTP)
+	r.Use(observability.CorrelationID)
 	// Beta Logs Gate: RequestLogger MUST come after CorrelationID so the
 	// enrichment can read the id from ctx. Every handler's
 	// `pkglogging.LoggerFromContext` now returns a logger bound with
 	// correlation_id (+ trace_id when an extractor is configured).
-	r.Use(middleware.RequestLogger(cfg.ContextLogger))
-	r.Use(middleware.RequestLogging(cfg.Logger))
+	r.Use(observability.RequestLogger(cfg.ContextLogger))
+	r.Use(observability.RequestLogging(cfg.Logger))
 
 	// PG backpressure: reject mutations when connection pool is near saturation.
-	if cfg.PGPoolStatsFunc != nil {
-		threshold := cfg.PGCircuitBreakerThresholdPct
-		if threshold == 0 {
-			threshold = 90
-		}
-		pgCB := middleware.NewPGCircuitBreaker(middleware.PGCircuitBreakerConfig{
-			ThresholdPct:  threshold,
-			PoolStatsFunc: cfg.PGPoolStatsFunc,
+	if cfg.PGPoolGate != nil {
+		pgCB := policy.NewPGCircuitBreaker(policy.PGCircuitBreakerConfig{
+			Gate: cfg.PGPoolGate,
 		})
 		r.Use(pgCB.Middleware())
 	}
@@ -189,7 +188,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	// middleware that requires identity headers.
 	//
 	// qa-sprint2-cleanup-2026-06-24 T1.2 (closes loopzero-cloud#16): /evict now
-	// wraps the handler with middleware.RequireAdminService (chi canonical
+	// wraps the handler with mwauth.RequireAdminService (chi canonical
 	// r.With form). The middleware reads only LOOPZERO_ADMIN_SERVICE_AUTH_SECRET
 	// (canonical) + _PREVIOUS — NOT the legacy LOOPZERO_SERVICE_AUTH_SECRET that
 	// the cloud /engine/* proxy carries on user-JWT requests. The handler
@@ -199,7 +198,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			"que exige `dbAdapter`. A ausência do Secret `loopzero-api-admin` NÃO desliga "+
 			"esta rota: ele alimenta a chave que o middleware confere, e sem ela o "+
 			"acesso é NEGADO (falha fechada), não aberto") {
-		r.With(middleware.RequireAdminService).Post(
+		r.With(mwauth.RequireAdminService).Post(
 			"/api/v1/admin/tenants/evict",
 			admin.AdminEvictHandler(cfg.AdminEvictor),
 		)
@@ -235,8 +234,8 @@ func NewRouter(cfg Config) *chi.Mux {
 			"sempre construido (setup_auth.go:75), logo na pratica isto significa "+
 			"MemberStore ausente — que depende do banco") {
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.Auth(cfg.TokenValidator, cfg.MemberStore))
-			r.Use(middleware.AuditLog(cfg.Logger, cfg.AuditWriter))
+			r.Use(mwauth.Auth(cfg.TokenValidator, cfg.MemberStore))
+			r.Use(audit.AuditLog(cfg.Logger, cfg.AuditWriter))
 
 			// Auth routes
 			// AUDIT-10: pass UsernameLookup so Whoami can resolve display-friendly
@@ -272,12 +271,12 @@ func NewRouter(cfg Config) *chi.Mux {
 			idempotentMiddlewares := make([]func(http.Handler) http.Handler, 0, 2)
 			idempotentMiddlewares = append(idempotentMiddlewares, rateLimitMiddlewares...)
 			if cfg.IdempotencyStore != nil {
-				idempotentMiddlewares = append(idempotentMiddlewares, middleware.Idempotency(cfg.IdempotencyStore))
+				idempotentMiddlewares = append(idempotentMiddlewares, policy.Idempotency(cfg.IdempotencyStore))
 			}
 
 			// Plan enforcement middlewares (Phase 1).
 			tenantFromCtx := func(r *http.Request) string {
-				uc := middleware.GetUserContext(r.Context())
+				uc := mwauth.GetUserContext(r.Context())
 				if uc == nil {
 					return ""
 				}
@@ -544,12 +543,12 @@ func registerProtectedRoutes(
 	}
 	// T5.1 — canonical Deploy Timeline SSE stream per plan
 	// deploy-timeline-canonical-5-phases. The TenantResolver pulls
-	// tenant from middleware.GetUserContext (same auth contract as
+	// tenant from mwauth.GetUserContext (same auth contract as
 	// every other authenticated route in this group).
 	if cfg.DeployTimelineStore != nil {
 		timeline.RegisterDeployTimelineRoute(r, cfg.DeployTimelineStore,
 			func(ctx context.Context) (string, bool) {
-				uc := middleware.GetUserContext(ctx)
+				uc := mwauth.GetUserContext(ctx)
 				if uc == nil || uc.TenantID == "" {
 					return "", false
 				}
@@ -599,7 +598,7 @@ func registerProtectedRoutes(
 		tenantHandler := tenants.NewTenantHandler(cfg.TenantDeletionStore, cfg.Logger)
 		r.With(rateLimitMiddlewares...).Delete("/api/v1/tenants/{id}", tenantHandler.Delete)
 		r.With(rateLimitMiddlewares...).Post("/api/v1/tenants/{id}/restore", tenantHandler.Restore)
-		r.With(append(rateLimitMiddlewares, middleware.RequireAdmin)...).Post("/api/v1/tenants/bulk-delete", tenantHandler.Delete)
+		r.With(append(rateLimitMiddlewares, mwauth.RequireAdmin)...).Post("/api/v1/tenants/bulk-delete", tenantHandler.Delete)
 	}
 
 	// Billing routes — T1.6 of deep-review-remediation-plan (closes
@@ -614,7 +613,7 @@ func registerProtectedRoutes(
 		// escalonamento horizontal — qualquer membro do time abria o portal de cobranca
 		// dele, com fatura, meio de pagamento e historico. As duas hierarquias sao
 		// identicas (`owner: 3`), entao alinhar foi aplicar o middleware que ja existia.
-		r.With(append(rateLimitMiddlewares, middleware.RequireRole("owner"))...).Post("/api/v1/billing/portal", cfg.BillingHandler.Portal)
+		r.With(append(rateLimitMiddlewares, mwauth.RequireRole("owner"))...).Post("/api/v1/billing/portal", cfg.BillingHandler.Portal)
 	}
 
 	// Environment routes
@@ -678,7 +677,7 @@ func registerProtectedRoutes(
 	}
 	// NOTE: Admin endpoints are deliberately registered OUTSIDE this function
 	// (in registerRoutes, alongside the GitHub webhook). They use only
-	// X-Service-Auth — putting them under middleware.Auth (which requires
+	// X-Service-Auth — putting them under mwauth.Auth (which requires
 	// X-LoopZero-User-ID/Tenant identity headers too) breaks operator CLI auth.
 	// See Achado #25 (CHG-2026-04-29-DOGFOOD iter 13).
 }

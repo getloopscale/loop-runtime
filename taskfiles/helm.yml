@@ -26,21 +26,6 @@ tasks:
         fi
         echo "All charts passed lint --strict"
 
-  helm:template:
-    desc: Render all chart templates (dry-run)
-    cmds:
-      - helm template loopzero charts/loopzero-platform
-
-  helm:template:dev:
-    desc: Render templates with dev profile
-    cmds:
-      - helm template loopzero charts/loopzero-platform -f charts/loopzero-platform/profiles/dev.yaml
-
-  helm:template:prod:
-    desc: Render templates with prod profile
-    cmds:
-      - helm template loopzero charts/loopzero-platform -f charts/loopzero-platform/profiles/prod.yaml
-
   helm:dep:update:
     desc: Update dependencies for all charts (regenerates Chart.lock)
     cmds:
@@ -100,12 +85,6 @@ tasks:
           COUNT=$((COUNT + 1))
         done
         echo "Synced $COUNT CRDs from $SRC to $DST"
-
-  helm:install:dev:
-    desc: Install umbrella chart with dev profile on k3d
-    cmds:
-      - helm upgrade --install loopzero-crds charts/loopzero-crds -n loopzero-system --create-namespace
-      - helm upgrade --install loopzero charts/loopzero-platform -n loopzero-system -f charts/loopzero-platform/profiles/dev.yaml
 
   helm:install:test:
     desc: Run helm test hooks post-install

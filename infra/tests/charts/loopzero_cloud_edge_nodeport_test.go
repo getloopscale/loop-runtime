@@ -70,6 +70,12 @@ func renderLoopZeroCloudService(t *testing.T) string {
 		"-f", "infra/helmfile/core.helmfile.yaml.gotmpl",
 		"-e", "dev-public",
 		"--selector", "name=loopzero-cloud",
+		// B-156: sem isto o `helmfile template` roda `helm repo add/update` contra os
+		// repositorios remotos declarados no arquivo, mesmo com o seletor apontando para um
+		// unico release. Medido em 2026-08-19: 17 chamadas de repo e 10s com rede boa; sob
+		// carga foram 123,89s e FALHA, barrando um commit que so' tocava CHANGELOG e BACKLOG.
+		// Com a flag: 0s e zero chamadas.
+		"--skip-deps",
 		"template",
 	)
 	cmd.Dir = root

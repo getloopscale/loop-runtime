@@ -6,12 +6,12 @@ package statemachine
 // Tenant states as defined in the CRD (loopzero.io/v1 Tenant).
 // TenantEmpty represents the initial zero-value before first reconcile.
 const (
-	TenantEmpty            State = ""
-	TenantProvisioning     State = "Provisioning"
-	TenantActive           State = "Active"
-	TenantSuspended        State = "Suspended"
-	TenantPendingDeletion  State = "PendingDeletion" // MEET-052: grace period before hard delete
-	TenantDeleting         State = "Deleting"
+	TenantEmpty           State = ""
+	TenantProvisioning    State = "Provisioning"
+	TenantActive          State = "Active"
+	TenantSuspended       State = "Suspended"
+	TenantPendingDeletion State = "PendingDeletion" // MEET-052: grace period before hard delete
+	TenantDeleting        State = "Deleting"
 )
 
 // Tenant events that trigger state transitions.

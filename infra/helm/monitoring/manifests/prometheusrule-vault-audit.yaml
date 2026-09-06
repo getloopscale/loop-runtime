@@ -1,3 +1,12 @@
+# B-161/B-067 — os quatro alertas voltaram a carregar `runbook_url`, agora para um caminho
+# que EXISTE: `docs/operations/runbook-vault-audit-alerts.md`.
+#
+# Ate' 2026-08-19 eles apontavam para `docs.loopzero.example/runbooks/vault-*`, que responde 404. Os
+# links mortos sairam naquele dia (B-161) e os quatro ficaram mudos — o gate `vault-prom-alerts`,
+# que exige >= 4 anotacoes, reprovou por isso, e reprovou com razao: remover um link morto conserta
+# a citacao e nao o alerta.
+#
+# Registro: MEET-ASYNC-AMENDMENT-2026-08-19-remove-dead-vault-runbook-links (pending ratification).
 # SPDX-License-Identifier: Apache-2.0
 # T8.4 of plan 2026-06-02-openbao-adoption v1.3 — 4 P1 alerts per Q14.
 #
@@ -42,6 +51,7 @@ spec:
             team: platform-security
             domain: vault
           annotations:
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/operations/runbook-vault-audit-alerts.md#vaultauthfailureratehigh"
             summary: "Vault auth failure rate > 10/min on {{ $labels.path }}"
             description: |
               The Vault auth method at path `{{ $labels.path }}` is rejecting
@@ -51,7 +61,6 @@ spec:
               (c) misconfigured workload in retry loop.
               Triage: `bao audit list`, `bao audit-device read`, and grep
               recent audit log entries by source addr.
-            runbook_url: "https://docs.loopzero.example/runbooks/vault-auth-failure-spike"
 
         # Alert 2: Policy denial rate spike — workload attempting paths
         # outside its policy. Could be configuration drift or compromise.
@@ -66,6 +75,7 @@ spec:
             team: platform-security
             domain: vault
           annotations:
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/operations/runbook-vault-audit-alerts.md#vaultpolicydenialratehigh"
             summary: "Vault policy denial rate > 5/min for {{ $labels.request_path }}"
             description: |
               Policy denials at `{{ $labels.request_path }}` exceed 5/min over
@@ -73,7 +83,6 @@ spec:
               (legitimate misconfig OR adversary exploring scope).
               Triage: identify workload via audit log accessor; verify policy
               attached to its role; check for recent role changes.
-            runbook_url: "https://docs.loopzero.example/runbooks/vault-policy-denial-spike"
 
         # Alert 3: Vault sealed (engine down) — emergency. All loopzero-api
         # workloads using K8s auth login will fail; cached secrets continue
@@ -89,6 +98,7 @@ spec:
             team: platform-security
             domain: vault
           annotations:
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/operations/runbook-vault-audit-alerts.md#vaultsealedordown"
             summary: "OpenBao Vault is sealed OR scrape down"
             description: |
               vault_core_unsealed=0 (sealed) OR the metrics scrape itself is
@@ -97,7 +107,6 @@ spec:
               secrets from pkg/vault.CachedClient (no rotation possible).
               Triage: `kubectl -n secrets-system get pods openbao-0` + check
               for recent restart events. Unseal procedure: see runbook.
-            runbook_url: "https://docs.loopzero.example/runbooks/vault-sealed"
 
         # Alert 4: Audit log stalled (no entries appended in 10min on a
         # Vault that has had recent traffic). Audit log silence is the
@@ -119,6 +128,7 @@ spec:
             domain: vault
             invariant: "audit-log-must-flow"
           annotations:
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/operations/runbook-vault-audit-alerts.md#vaultauditlogstalled"
             summary: "OpenBao audit log silent > 10min despite active traffic"
             description: |
               Vault is processing requests (vault_audit_log_request_count > 0)
@@ -128,4 +138,3 @@ spec:
               Triage: `bao audit list` (verify all expected devices still
               enabled); check Vault file/syslog audit device target writable;
               compare /v1/sys/health to audit emit counter.
-            runbook_url: "https://docs.loopzero.example/runbooks/vault-audit-stalled"

@@ -38,6 +38,25 @@ spec:
     # Status/scale subresource updates by the controller pass through.
     - name: skip-status-subresource
       expression: '!has(request.subResource)'
+    # B-095 / anti-B33: nunca barrar os proprios controllers da plataforma.
+    #
+    # Espelha a lista MEDIDA da irma `vap-tenant-cr-shape`, e existe pela mesma razao que la':
+    # remover finalizer e' um UPDATE, e este policy casa UPDATE. Sem esta isencao, um CR cujo
+    # namespace nao satisfaca a validacao fica IMPOSSIVEL DE APAGAR — o operator nunca conclui
+    # a delecao e o requeue nunca converge.
+    #
+    # Dois nomes de SA do operator porque o caminho de instalacao difere:
+    # `loopzero-tenant-operator` em prod/ArgoCD, `tenant-operator` sob Tilt.
+    - name: exclude-system-actors
+      expression: >
+        !(request.userInfo.username.startsWith('system:serviceaccount:kube-system:')) &&
+        request.userInfo.username != 'system:kube-controller-manager' &&
+        !(request.userInfo.username in [
+          'system:serviceaccount:loopzero-system:loopzero-api',
+          'system:serviceaccount:loopzero-system:loopzero-tenant-operator',
+          'system:serviceaccount:loopzero-system:tenant-operator'
+        ]) &&
+        !('system:masters' in request.userInfo.groups)
   validations:
     - expression: 'object.metadata.namespace == "loopzero-system"'
       messageExpression: '"LoopZero platform CRDs (Tenant, Environment) must be created in the platform namespace, not " + object.metadata.namespace + ". This is a protected namespace boundary; contact your platform admin."'

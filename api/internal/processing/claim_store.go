@@ -19,10 +19,10 @@
 // columns (`processing_by`, `processing_since`). A worker that wants to
 // process build `b` runs:
 //
-//   UPDATE builds
-//      SET processing_by = $me, processing_since = now()
-//    WHERE id = $b
-//      AND (processing_by IS NULL OR processing_since < $stale)
+//	UPDATE builds
+//	   SET processing_by = $me, processing_since = now()
+//	 WHERE id = $b
+//	   AND (processing_by IS NULL OR processing_since < $stale)
 //
 // If `RowsAffected == 1`, the claim is ours. If `RowsAffected == 0`,
 // another live worker holds the claim and we back off. When the worker is

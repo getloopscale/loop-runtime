@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -17,7 +16,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/source"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+
+	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
 )
 
 // fakeRaceySourceStore simulates the concurrent-upload race observed in

@@ -84,35 +84,21 @@ func TestCreateBuildPlan_MultiApp_DockerfileNaming(t *testing.T) {
 	}
 }
 
-func TestCreateBuildPlan_InvalidEnvKeySkipped(t *testing.T) {
+func TestCreateBuildPlan_SystemBuildArgsSemprePresentes(t *testing.T) {
+	// B-094: este teste cobria o filtro de chave invalida sobre `AppUnit.Env`. O campo e o
+	// filtro sairam com a copia morta da regra de env reservado — nenhum site de producao
+	// populava o campo, entao o laco nunca iterava. O que sobrevive, e continua real, e' a
+	// garantia de que os build-args injetados pela plataforma chegam ao plano.
 	units := []AppUnit{
-		{
-			Name:    "api",
-			Type:    "server",
-			Port:    3000,
-			Path:    ".",
-			Runtime: "node",
-			Build:   "buildpack",
-			Env: map[string]string{
-				"VALID_KEY":   "ok",
-				"invalid-key": "should-be-skipped",
-			},
-		},
+		{Name: "api", Type: "server", Port: 3000, Path: ".", Runtime: "node", Build: "buildpack"},
 	}
 
 	plan := CreateBuildPlan(units, "tn-1", "my-app", "sha123", "registry.example.com")
 
-	if _, ok := plan.Apps[0].BuildArgs["VALID_KEY"]; !ok {
-		t.Error("expected VALID_KEY in build args")
-	}
-	if _, ok := plan.Apps[0].BuildArgs["invalid-key"]; ok {
-		t.Error("expected invalid-key to be skipped")
-	}
-	// System vars should always be present
 	if plan.Apps[0].BuildArgs["COMMIT_SHA"] != "sha123" {
-		t.Errorf("expected COMMIT_SHA=sha123, got %q", plan.Apps[0].BuildArgs["COMMIT_SHA"])
+		t.Errorf("COMMIT_SHA = %q, want sha123", plan.Apps[0].BuildArgs["COMMIT_SHA"])
 	}
 	if plan.Apps[0].BuildArgs["APP_NAME"] != "api" {
-		t.Errorf("expected APP_NAME=api, got %q", plan.Apps[0].BuildArgs["APP_NAME"])
+		t.Errorf("APP_NAME = %q, want api", plan.Apps[0].BuildArgs["APP_NAME"])
 	}
 }

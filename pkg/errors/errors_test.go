@@ -488,8 +488,8 @@ func TestDisplayPlanName_AllValues(t *testing.T) {
 		{"pro", "Pro"},
 		{"team", "Team"},
 		{"enterprise", "Enterprise"},
-		{"unknown-plan", "unknown-plan"},  // default branch
-		{"", ""},                          // empty defaults
+		{"unknown-plan", "unknown-plan"}, // default branch
+		{"", ""},                         // empty defaults
 	}
 	for _, c := range cases {
 		got := displayPlanName(c.in)
@@ -793,11 +793,11 @@ func TestNewSourceUploadFailedFromPushReasonWithTrace(t *testing.T) {
 			wantNotSubs: []string{"<orchestrator>", "<op>"},
 		},
 		{
-			name:        "Sprint 8 #35 fallback — empty detail + trace-id present",
-			reason:      "BundleMalformed",
-			detail:      "",
-			traceID:     "tid-empty",
-			wantSubs:    []string{"source bundle is malformed", "Reference: tid-empty"},
+			name:     "Sprint 8 #35 fallback — empty detail + trace-id present",
+			reason:   "BundleMalformed",
+			detail:   "",
+			traceID:  "tid-empty",
+			wantSubs: []string{"source bundle is malformed", "Reference: tid-empty"},
 		},
 		{
 			name:        "Sprint 5 backward-compat — empty trace-id leaves summary without Reference suffix",
@@ -808,11 +808,11 @@ func TestNewSourceUploadFailedFromPushReasonWithTrace(t *testing.T) {
 			wantNotSubs: []string{"Reference:", "Contact support"},
 		},
 		{
-			name:        "Unknown reason + trace-id — neutral generic + Reference",
-			reason:      "BogusUnknownLabel",
-			detail:      "ignored",
-			traceID:     "tid-unknown",
-			wantSubs:    []string{"Reference: tid-unknown"},
+			name:     "Unknown reason + trace-id — neutral generic + Reference",
+			reason:   "BogusUnknownLabel",
+			detail:   "ignored",
+			traceID:  "tid-unknown",
+			wantSubs: []string{"Reference: tid-unknown"},
 		},
 	}
 	for _, tc := range cases {

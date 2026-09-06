@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // --- mocks ---
@@ -84,20 +84,20 @@ func (m *mockAuditWriter) eventTypes() []string {
 // mockReviewer is a programmable CrossClusterTokenReviewer that satisfies the
 // real middleware interface.
 type mockReviewer struct {
-	identity *middleware.TokenReviewResult
+	identity *auth.TokenReviewResult
 }
 
-func (m *mockReviewer) Review(_ context.Context, _ /*cellID*/, _ /*token*/ string) (*middleware.TokenReviewResult, error) {
+func (m *mockReviewer) Review(_ context.Context, _ /*cellID*/, _ /*token*/ string) (*auth.TokenReviewResult, error) {
 	return m.identity, nil
 }
 func (m *mockReviewer) ClientVersion(_ string) string { return "v1" }
 
 // newTestServerWithCrossCluster runs the route behind the real cross-cluster
 // middleware so the handler sees a proper context injection.
-func newTestServerWithCrossCluster(t *testing.T, deps SecretFetchHandlerDeps, identity *middleware.TokenReviewResult) *httptest.Server {
+func newTestServerWithCrossCluster(t *testing.T, deps SecretFetchHandlerDeps, identity *auth.TokenReviewResult) *httptest.Server {
 	t.Helper()
 	r := chi.NewRouter()
-	r.Use(middleware.NewCrossClusterMiddleware(middleware.CrossClusterMiddlewareConfig{
+	r.Use(auth.NewCrossClusterMiddleware(auth.CrossClusterMiddlewareConfig{
 		Reviewer: &mockReviewer{identity: identity},
 	}))
 	r.Post("/internal/v1/secret-fetch/{tenant_id}/{secret_name}", NewSecretFetchHandler(deps))
@@ -121,7 +121,7 @@ func TestSecretFetch_HappyPath(t *testing.T) {
 		},
 		AuditWriter: &mockAuditWriter{},
 	}
-	identity := &middleware.TokenReviewResult{
+	identity := &auth.TokenReviewResult{
 		Authenticated: true,
 		Username:      "system:serviceaccount:external-secrets:eso",
 		CellID:        "cell-0",
@@ -172,7 +172,7 @@ func TestSecretFetch_EC08_InvalidSecretName_400(t *testing.T) {
 		"123_STARTS_WITH_NUMBER",
 		"",
 	}
-	identity := &middleware.TokenReviewResult{
+	identity := &auth.TokenReviewResult{
 		Authenticated: true, CellID: "cell-0",
 	}
 	for _, badName := range cases {
@@ -223,7 +223,7 @@ func TestSecretFetch_EC07_CellTenantBindingMismatch_403(t *testing.T) {
 		SecretReader:  &mockSecretReader{plaintextByKey: map[string][]byte{"tenant-a:testproj:production:S": []byte("x")}},
 		AuditWriter:   &mockAuditWriter{},
 	}
-	identity := &middleware.TokenReviewResult{
+	identity := &auth.TokenReviewResult{
 		Authenticated: true,
 		Username:      "system:serviceaccount:external-secrets:eso",
 		// A cell do atacante tem de ser OUTRA cell. Antes da unificacao 1:1 este par
@@ -274,7 +274,7 @@ func TestSecretFetch_TenantNotFound_404(t *testing.T) {
 		SecretReader:  &mockSecretReader{},
 		AuditWriter:   &mockAuditWriter{},
 	}
-	identity := &middleware.TokenReviewResult{Authenticated: true, CellID: "cell-0"}
+	identity := &auth.TokenReviewResult{Authenticated: true, CellID: "cell-0"}
 	srv := newTestServerWithCrossCluster(t, deps, identity)
 	defer srv.Close()
 
@@ -296,7 +296,7 @@ func TestSecretFetch_SecretNotFound_404(t *testing.T) {
 		SecretReader:  &mockSecretReader{plaintextByKey: map[string][]byte{}},
 		AuditWriter:   &mockAuditWriter{},
 	}
-	identity := &middleware.TokenReviewResult{Authenticated: true, CellID: "cell-0"}
+	identity := &auth.TokenReviewResult{Authenticated: true, CellID: "cell-0"}
 	srv := newTestServerWithCrossCluster(t, deps, identity)
 	defer srv.Close()
 
@@ -318,7 +318,7 @@ func TestSecretFetch_TenantBindingError_500(t *testing.T) {
 		SecretReader:  &mockSecretReader{},
 		AuditWriter:   &mockAuditWriter{},
 	}
-	identity := &middleware.TokenReviewResult{Authenticated: true, CellID: "cell-0"}
+	identity := &auth.TokenReviewResult{Authenticated: true, CellID: "cell-0"}
 	srv := newTestServerWithCrossCluster(t, deps, identity)
 	defer srv.Close()
 

@@ -115,12 +115,47 @@ kubeContexts:
 # of static token env var. Disabled by default (vault stack opt-in per env).
 vault:
   enabled: false
+  # TOPOLOGIA (B-064): este nome DNS parece intra-cluster e nem sempre e'.
+  # Sob o Jeito A (mandato INQUEBRAVEL 2026-06-19, `.claude/rules/cleanroom-up-live-test-mandate.md`),
+  # o OpenBao roda num cluster SEPARADO (`loopzero-secrets`), e instala-lo no core
+  # e' violacao de topologia em qualquer tier. Mesmo assim o literal abaixo
+  # continua sendo o nome intra-cluster, e a diferenca vive na RESOLUCAO: o
+  # CoreDNS do cluster core reescreve este nome para o NodePort do
+  # `loopzero-secrets` (ver `infra/helmfile/values/dev-public/loopzero-api.yaml.gotmpl:69-76`).
+  #
+  # O literal e' deliberado e NAO deve ser trocado pelo endereco real: o
+  # certificado do OpenBao tem SAN para ESTE nome, entao apontar direto para o
+  # NodePort quebraria a verificacao TLS (EC-2 do plano dev-public-cross-cluster-secrets).
+  # Trocar o endereco e' mudanca T2 e exige reunao antes do codigo
+  # (`.claude/rules/pre-release-governance.md`).
+  #
+  # Numa topologia de cluster unico (standalone-multi) o mesmo literal resolve
+  # normalmente, sem reescrita — por isso nao ha' split por ambiente.
   addr: "https://openbao.secrets-system.svc.cluster.local:8200"
   authMount: "k8s-core"
   role: "loopzero-api"
   audience: "vault.loopzero.io"
   tokenExpirationSeconds: 3600
 
+# WARNING — the three env keys below (LOOPZERO_DYNAMIC_ROUTER, GITEA_URL,
+# GITEA_ORG) are INERT. They are indented under `tracing:`, and
+# templates/deployment.yaml reads only `.Values.tracing.enabled` from this block
+# while ranging over `.Values.env` for env vars. Nothing renders them; the API
+# falls back to its own Go defaults for all three. This is bug #52 of
+# docs/wiki/concepts/operations/finding-2026-05-18-drill-bootstrap-orchestration-gaps.md
+# ("YAML indent bug — vars under `tracing:` instead of `env:`"), which was patched
+# LIVE via `kubectl set env` and never fixed in the chart; the drill script still
+# carries the same workaround (infra/scripts/drill/drill-helmfile-bootstrap.sh).
+#
+# Left in place deliberately by B-191 rather than moved: promoting them to `env:`
+# is a live-behaviour change on the ArgoCD bootstrap path
+# (infra/argocd-bootstrap/apps/mgmt-loopzero-api.yaml renders this file), and this
+# item's mandate was to measure the org before moving anything. Filed as
+# https://github.com/getloopscale/loopzero/issues/354, which also records what changes
+# for each of the three keys the day they are promoted.
+# The org VALUE was corrected here because correcting a key nothing renders is a
+# no-op today and disarms the trap: whoever fixes the indent would otherwise ship
+# the B-069 split on the first sync.
 tracing:
   enabled: false
   # CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.4 — DynamicRouter
@@ -137,9 +172,29 @@ tracing:
   # B77 (end-to-end-deploy-validation-plan iter 11) — Gitea org where
   # tenant gitops repos live. Default "loopzero" was hardcoded in 3 setup
   # files (setup_workflows.go, setup_stores.go, controller/setup_services.go).
-  # Now reads from this env var via cfg.GiteaOrg; in standalone-multi the
-  # org is "loopzero-platform" (created by bootstrap scripts).
-  GITEA_ORG: "loopzero-platform"
+  # Now reads from this env var via cfg.GiteaOrg.
+  #
+  # B-191 — was "loopzero-platform", corrected to "loopzero" on 2026-09-05. This key
+  # names the org that owns the PER-TENANT repos: cfg.GiteaOrg reaches only the
+  # gitops pusher ({tenantID}-gitops) and the source store
+  # (loopzero-source-{tenantID}[-{projectID}]). The tenant operator provisions that
+  # same {tenant}-gitops repo in ITS org and hands the resulting URL to ArgoCD as
+  # the Application repoURL, so a disagreement is B-069 again — silently, because
+  # the pusher creates its own copy and the push succeeds into a repository
+  # nothing syncs. The operator's org is "loopzero" (charts/loopzero-tenant-operator,
+  # constants.DefaultGiteaOrg), the API's Go fallback is "loopzero", and the
+  # token-provisioning scripts ensure "loopzero". Measured on app-dev the same day:
+  # Gitea holds exactly one org, "loopzero" — "loopzero-platform" did not exist there.
+  #
+  # "loopzero-platform" is a real org, but not this one: it owns the CONTROL PLANE's
+  # own repositories (loopzero-platform/charts.git, loopzero-platform/argocd-bootstrap.git
+  # — see infra/argocd-bootstrap/apps/*.yaml). bootstrap-platform.sh creates both;
+  # nothing routes loopzero-platform through GITEA_ORG.
+  #
+  # Asserted by infra/tests/config/gitea_org_agreement_test.go, which discovers
+  # every values file declaring the org and compares them against both Go
+  # fallbacks. Changing this line alone turns that test red.
+  GITEA_ORG: "loopzero"
 
 # Service-auth Ed25519 dual-control (ADR 2026-05-13). The deployment
 # template injects 4 env vars from this block:

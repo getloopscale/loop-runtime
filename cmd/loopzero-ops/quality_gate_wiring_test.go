@@ -220,12 +220,47 @@ var gateWiringExemptions = map[string]wiringReason{
 	// present, not that a runbook exists, so adding 33 more dead links would
 	// buy a green gate and nothing else. An on-call operator following a 404 at
 	// 3am is worse off than one who knows there is no runbook.
+	// Duas correcoes medidas em 2026-08-19 (B-161, B-164), porque o paragrafo acima
+	// contava metade da historia:
+	//
+	//  1. O gate JA' distingue link de runbook, na parte que da' para provar sem rede:
+	//     caminho deste repositorio que nao existe em disco, e URL do GitHub em org
+	//     diferente da canonica (`getloopscale`, tirada do caminho de modulo dos go.mod).
+	//     O que ele nao pode afirmar — se `docs.loopzero.example/runbooks/x` esta' viva —
+	//     fica CONTADO como nao-verificavel em vez de silenciado.
+	//
+	//  2. "33 alertas" era o numero de UM diretorio. O B-164 fechou esse escopo: o gate
+	//     varre os QUATRO diretorios de `DefaultRulesDirs`. Re-medido 2026-09-06 (B-067):
+	//     110 + 86 + 19 + 18 = **233 sites, e o gate ve os 233** — o "47%" acima descrevia
+	//     o estado ANTERIOR ao conserto e ficou no presente do indicativo depois dele.
+	//
+	//  3. Sites e alertas nao sao o mesmo numero, e confundi-los infla a divida. Os 233
+	//     sites sao **145 alertas distintos**: `infra/helm/...` e `charts/...` sao copias
+	//     espelhadas, entao 88 sites repetem um alerta ja' contado. Na parte que reprova,
+	//     a diferenca e' 46 sites para **37 alertas**. A mensagem do gate agora diz os
+	//     dois numeros, e a violacao carrega o diretorio — sem ele, os 9 pares espelhados
+	//     saiam como linhas identicas e consertar uma copia deixava a outra reprovando
+	//     com a mesma string.
 	"alert-runbooks": failingGate,
-	// 42 migrations with no matching api/tests/unit/migration_*_test.go. The
-	// gate only checks that the FILE exists, so 42 stubs would turn it green
-	// without testing anything — the bar is the canonical shape in
-	// migration_012_fk_on_delete_test.go, which asserts invariants specific to
-	// its migration. That is 42 pieces of real work, not a mislabel.
+	// 44 migrations with no matching api/tests/unit/migration_*_test.go (re-measured
+	// 2026-09-06, B-067; era 42 aqui, 43 no item e 48 antes desta fatia).
+	//
+	// A parte "That is 42 pieces of real work, not a mislabel" ERA FALSA e foi medida:
+	// CINCO das violacoes eram mislabel. `migration_loopzero_api_keys_test.go`,
+	// `migration_memory_p3_test.go`, `migration_api_key_rotation_test.go` e
+	// `migration_webhook_delivery_test.go` — 37 funcoes de teste e 68 asserts, verdes —
+	// abrem o proprio `.up.sql` das migrations 000024/000025/000026/000031/000033 e
+	// mesmo assim eram acusadas, porque o nome do arquivo nao comecava com o numero.
+	// Renomear os quatro derrubou a contagem de 48 para 44 sem afrouxar o gate.
+	//
+	// O que continua verdadeiro, e e' a razao de nao alargar o casamento: o gate confere
+	// que o ARQUIVO existe, entao stubs vazios o deixariam verde sem testar nada — a
+	// barra e' a forma canonica de migration_012_fk_on_delete_test.go. Casar por
+	// CONTEUDO trocaria este falso positivo por um falso negativo pior (mencionar o nome
+	// da migration num comentario passaria a contar como teste).
+	//
+	// Residual conhecido: 000026_memory_exports segue acusada e E' testada — um arquivo
+	// so' pode carregar um prefixo numerico. Ver a nota em migration_000025_memory_p3_test.go.
 	"migration-test-coverage": failingGate,
 	// Virou ENFORCED em 2026-08-01 (prazo T+60d) com o branch AES legado ainda no
 	// dispatcher — 4 achados em api/internal/db/store/secret_wrapper.go:{148,152,188,192}.

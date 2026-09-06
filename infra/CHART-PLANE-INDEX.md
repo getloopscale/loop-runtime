@@ -38,27 +38,32 @@ A atribuição de plano é **medível**, e a medição tem um degrau que não po
 | `loopzero-monitoring` | — | **não declarado em lugar nenhum**; não há contraparte em `infra/helm/` |
 | `loopzero-dashboard` | — | **não declarado em lugar nenhum**; idem |
 | `loopzero-common` | — | biblioteca (`type: library`), não instala nada por si |
-| `loopzero-platform` | **os três de uma vez** | é o guarda-chuva — ver abaixo |
+| ~~`loopzero-platform`~~ | — | **removido em 2026-08-19** — ver abaixo |
 
-## O guarda-chuva instala três planos num cluster, e isso é o desenho
+## O guarda-chuva foi REMOVIDO em 2026-08-19, e por que
 
-`charts/loopzero-platform` declara 12 dependências que atravessam **core**, **build** e **cell**, e as
-instala como **um único release Helm**. O ADR decidiu que isso é **composição single-cluster
-deliberada**, não descuido — e a limitação está escrita no próprio chart
-(`charts/loopzero-platform/README.md` e a anotação `loopzero.io/topology` no `Chart.yaml`).
+`charts/loopzero-platform` declarava 12 dependências atravessando **core**, **build** e **cell**,
+instaladas como um único release. O `B-048` decidiu que isso era composição single-cluster
+**deliberada**, não descuido.
 
-**O que se perde ao usá-lo:** a separação de planos que os quatro helmfiles constroem. O plano de
-build deixa de ser um cluster próprio; o isolamento entre control plane e workload some; e um
-`helm uninstall` alcança os três de uma vez.
+**Ele foi removido porque não instalava.** Medido em 2026-08-19: `helm template` sai com
+`rc=1` e **zero linhas** — sem profile, com `profiles/dev.yaml` e com `profiles/prod.yaml`.
+Os `values.schema.json` dos subcharts recusam `global` e `enabled`, que são exatamente as
+chaves que uma composição guarda-chuva injeta.
 
-**Quem o usa hoje: ninguém em produção.** Os consumidores medidos são todos de teste ou de template
-(`taskfiles/helm.yml:32,:37,:42,:108`, `infra/tests/helm/loopzero-platform/defaults_test.go`,
-`infra/tests/helm/envparity/envparity_test.go:51`). O bootstrap do ArgoCD referencia
-**sub-charts individualmente, nunca o guarda-chuva** — os únicos `path: charts/*` em
-`infra/argocd-bootstrap/apps/` são quatro Applications, uma por operator.
+Quebrado desde `1ce505758` (**2026-06-19**), dois meses, sem ninguém notar — porque nenhum
+gate o renderizava. Não estava no bootstrap do ArgoCD nem no matrix de publicação, e o único
+caminho de install era um alvo manual de taskfile, também quebrado.
 
-Se ele deve continuar existindo é a pergunta do **`B-073`**, e ela é diferente desta: aqui está
-decidido *o que ele é*; lá se decide *se vale mantê-lo*.
+**A decisão do `B-048` não morreu com ele:** vive no ADR
+`docs/wiki/decisions/2026-08-12-umbrella-chart-plane-separation` e no histórico do git. O que
+saiu foi a implementação não-funcional.
+
+**Consequência medida, para quem for decidir depois:** `loopzero-monitoring` e `loopzero-dashboard`
+tinham o guarda-chuva como **único** consumidor declarado. Com ele fora, ficam sem nenhum.
+Removê-los é decisão distinta, e o `B-073` não a pediu.
+
+Registro: `MEET-ASYNC-AMENDMENT-2026-08-19-remove-umbrella-chart.md`.
 
 ## Manutenção
 

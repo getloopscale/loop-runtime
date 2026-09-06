@@ -17,11 +17,10 @@
 //	domain    → deploycontracts
 //	platform  → deploycontracts
 //	placement → (pure leaf)
-//	billing   → (pure leaf)
 //	deploycontracts    → (pure leaf — imports NO other services subpackage)
 //
 // Any edge not in the allow-list FAILs: a new reverse edge (e.g. release → build)
-// would re-introduce a cycle; a new cross-leaf edge (placement → billing) would
+// would re-introduce a cycle; a new cross-leaf edge (placement → deploycontracts) would
 // erode the leaf invariant; a new subpackage not registered here forces a
 // conscious decision instead of silently widening the graph.
 //
@@ -33,6 +32,7 @@ import (
 	"fmt"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -73,6 +73,16 @@ const servicesImportPrefix = "github.com/getloopscale/loopzero/api/internal/serv
 // It cannot collide with a real subpackage (dir names never contain '<').
 const missingRootMarker = "<services-root-missing-or-empty>"
 
+// `billing` NAO esta aqui, e a ausencia e' deliberada (B-065). O dominio foi
+// extraido para `../loopzero-cloud` no M4; `api/internal/services/billing` ficou como
+// diretorio VAZIO e nao rastreado, e o registro sobreviveu ao codigo. Um contexto
+// registrado para codigo inexistente GASTA ADIANTADO a decisao que este gate
+// existe para forcar: quem criasse o diretorio depois comecaria a importar sem
+// que nada perguntasse. A rota `GET /api/v1/billing` continua servida deste
+// repositorio (`api/internal/server/router.go:610`) delegando ao handler; a
+// LOGICA de billing mora no `loopzero-cloud`. Se um dia existir codigo de billing
+// aqui, registrar de novo — conscientemente.
+//
 // allowed is the deny-by-default adjacency allow-list. allowed[A] is the set of
 // subpackages A is permitted to import. A subpackage absent from this map is
 // unknown → fail-closed. An empty set means "pure leaf" (imports no sibling).
@@ -84,7 +94,6 @@ var allowed = map[string]map[string]bool{
 	"domain":          {"deploycontracts": true},
 	"platform":        {"deploycontracts": true},
 	"placement":       {},
-	"billing":         {},
 	"deploycontracts": {},
 }
 
@@ -134,6 +143,18 @@ func Check(cfg Config) (Outcome, error) {
 			continue
 		}
 		ctx := e.Name()
+		// Um diretorio SEM nenhum .go nao e' contexto delimitado — e' pasta vazia.
+		// Sem esta guarda o veredito dependia do DISCO de quem roda: um diretorio
+		// vazio sobrevive na maquina de quem ja' rodou o build e nao existe num
+		// clone novo, entao o mesmo commit reprovava aqui e passava no CI (B-065,
+		// onde `services/billing` ficou vazio depois do M4). Um subpacote de
+		// verdade — com .go — continua reprovando se nao estiver registrado, que
+		// e' o proposito deny-by-default deste gate.
+		if temGo, err := contemGo(filepath.Join(root, ctx)); err != nil {
+			return Outcome{}, err
+		} else if !temGo {
+			continue
+		}
 		allowedTargets, known := allowed[ctx]
 		if !known {
 			unknown = append(unknown, ctx)
@@ -220,4 +241,27 @@ func ActionableFix() string {
 		"in servicesacyclic/check.go with an ADR justifying why it does not create " +
 		"a cycle. Reverse edges (e.g. release importing build) are forbidden — " +
 		"they re-introduce the cycle the split removed."
+}
+
+// contemGo diz se o diretorio tem ao menos um arquivo .go em QUALQUER
+// profundidade. Descer e' obrigatorio: um contexto pode guardar seus arquivos
+// num subdiretorio, e `TestCheck_NestedSubpackageEdgeCaught` cobre exatamente
+// essa forma — uma primeira versao desta funcao olhou so' o topo e passou a
+// PULAR esses contextos, que e' o oposto do que ela existe para fazer.
+func contemGo(dir string) (bool, error) {
+	var achou bool
+	err := filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.HasSuffix(d.Name(), ".go") {
+			achou = true
+			return fs.SkipAll
+		}
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return achou, nil
 }

@@ -47,6 +47,37 @@ vaps:
   noRuntimeImageMutations: false
   protectPlatformNetworkpolicies: false
   argocdManagedBy: false
+
+  # loopzero-tenant-namespace: OFF aqui, e o motivo NAO e' mais o da lista acima — por isso
+  # ele esta escrito aqui, e nao so no values.yaml base (B-095).
+  #
+  # A politica exige uma coisa so: `object.metadata.namespace == "loopzero-system"` para
+  # `loopzero.io` tenants e environments. Medido em 2026-08-19 nos dois — e unicos —
+  # caminhos de criacao:
+  #
+  #   api/internal/k8s/tenant_cr_manager.go:32        const tenantNamespace = "loopzero-system"
+  #   operators/internal/tenant/tenant_controller.go:406  cria o Environment em tenant.Namespace
+  #
+  # Ou seja: **o invariante que ela guardaria ja e verdade no codigo**, e o estado que a
+  # migracao T3.3 produziria ja esta no lugar. O comentario do values.yaml base diz que
+  # ligar antes de limpar CRs mal colocados causa DoS auto-infligido; essa condicao nao
+  # se sustenta mais pela medicao acima.
+  #
+  # A MEDICAO DE ESCRITORES FOI FEITA (2026-08-19, B-095) e a politica ganhou o
+  # `exclude-system-actors` espelhado da irma. Os seeds versionados tambem foram medidos, e
+  # um estava fora: `infra/scripts/production/bootstrap-platform.sh` aplicava o Tenant em
+  # `default` — corrigido no mesmo dia, e agora vigiado pelo gate `platform-cr-namespace`.
+  #
+  # O QUE AINDA FALTA, e e' a unica coisa: confirmar que nenhum Tenant/Environment vive fora
+  # de `loopzero-system` num cluster ATIVO. Corrigir o script nao remove um CR que uma execucao
+  # anterior dele ja aplicou, e esse e' fato de runtime — nao se apura a partir do repo.
+  #
+  # Por que isso bloqueia: a politica casa CREATE **e UPDATE**. Remover finalizer e' um
+  # UPDATE. Um Tenant sobrevivente em `default` viraria INDELETAVEL no instante em que o
+  # toggle subisse — a mesma classe de deadlock que o cabecalho da irma descreve.
+  #
+  # Para ligar: `kubectl get tenants,environments -A` em cada cluster mgmt; se so houver em
+  # `loopzero-system`, o toggle sobe.
   tenantNamespace: false
 
 # ClusterImagePolicy is a sigstore/policy-controller CRD. The mgmt cluster runs no

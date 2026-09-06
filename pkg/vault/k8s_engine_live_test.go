@@ -33,9 +33,9 @@ func TestLIVE_K8sEngine_Roles_Provisioned(t *testing.T) {
 	defer cancel()
 
 	roles := []struct {
-		name              string
+		name               string
 		expectedNamespaces []string
-		expectedSAName    string
+		expectedSAName     string
 	}{
 		{"loopzero-cell-0-mgmt", []string{"argocd", "external-secrets", "loopzero-system"}, "loopzero-cell-0"},
 		{"loopzero-cell-0-build", []string{"argo"}, "loopzero-build"},

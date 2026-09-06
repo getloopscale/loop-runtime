@@ -13,8 +13,14 @@
 //
 // Returns previous cell_id so callers can rollback (`pin tenant cell-prev`).
 
-// Package placementsvc is the cell-placement bounded context. Name avoids collision with internal/placement. M9 Step 6.
-package placementsvc
+// Package placement e' o contexto delimitado de colocacao de tenant em cell.
+//
+// Chamava-se `placementsvc`, e o sufixo existia para evitar colisao com
+// `api/internal/placement`. Medido em 2026-08-19 (B-057): dos 21 arquivos que
+// importam um dos dois, apenas UM importa os dois — a raiz de composicao, que
+// agora carrega o alias. O nome do pacote parou de impor a 18 consumidores uma
+// desambiguacao de que um arquivo precisava.. M9 Step 6.
+package placement
 
 import (
 	"context"
@@ -169,7 +175,7 @@ func (p *CellPinner) Pin(ctx context.Context, tenantID, cellID string) (string, 
 			metrics.CellPinnerCRPatchFailTotal.Inc()
 			slog.Warn("cell pinner: DB updated but Tenant CR patch failed after 3 retries — operator will continue using previous cellID until the CR is patched manually",
 				"tenant", tenantID, "new_cell", cellID, "error", patchErr,
-				"manual_fix", fmt.Sprintf("kubectl -n %s patch tenant %s --type=merge -p '{\"spec\":{\"cellID\":%q}}'", p.mgmtNS, tenantID, cellID))
+				"manual_fix", dicaDeConserto(p.mgmtNS, tenantID, cellID))
 		}
 	}
 	return prev, nil
@@ -254,3 +260,24 @@ var _ = pinTenantToCellSQL
 // _ Tx is a type-system check that the store-side will need pgx.Tx-like
 // semantics. Documented here so any future driver swap doesn't drift.
 type _ pgx.Tx
+
+// dicaDeConserto monta a dica emitida quando o banco ja' foi atualizado e o patch
+// no Tenant CR falhou. Os dois lados divergiram, e o CR e' o lado atrasado.
+//
+// A versao anterior oferecia o `kubectl patch` seco, e desde 2026-08-13 a
+// ValidatingAdmissionPolicy `loopzero-tenant-cr-shape` NEGA exatamente essa mudanca —
+// `spec.cellID` e' imutavel por ela — exceto para `system:masters` ou para a SA do
+// proprio `loopzero-api`. Quem seguisse a dica com um kubeconfig sem privilegio
+// receberia um `Denied` sem entender por que (B-097).
+//
+// A dica NAO manda "usar `loopzero admin tenants pin`", que e' o conselho obvio e
+// errado aqui: esta funcao E' o caminho do pin, e foi ele que acabou de falhar.
+func dicaDeConserto(ns, tenantID, cellID string) string {
+	return fmt.Sprintf(
+		"o banco ja' registra a nova cell; o Tenant CR e' o lado atrasado. "+
+			"Re-execute o pin para que o patch seja tentado de novo pela identidade do loopzero-api. "+
+			"O patch direto `kubectl -n %s patch tenant %s --type=merge -p '{\"spec\":{\"cellID\":%q}}'` "+
+			"e' NEGADO pela politica de admissao loopzero-tenant-cr-shape (spec.cellID e' imutavel) "+
+			"para qualquer identidade que nao seja system:masters ou a ServiceAccount do loopzero-api",
+		ns, tenantID, cellID)
+}

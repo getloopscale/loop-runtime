@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"

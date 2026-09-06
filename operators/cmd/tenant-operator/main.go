@@ -137,7 +137,15 @@ func main() {
 		setupLog.Error(nil, "GITEA_TOKEN is required")
 		os.Exit(1)
 	}
-	gitProvisionerRaw := gitea.NewRealProvisioner(giteaURL, giteaToken, "loopzero")
+	// B-069: the organisation is configuration, not a literal. It was a
+	// hardcoded "loopzero" here, while the API side reads GITEA_ORG -- so any
+	// deployment that set the org got repos created in one organisation and
+	// pushed to another. Same envOr shape as GITEA_URL above.
+	giteaOrg := os.Getenv("GITEA_ORG")
+	if giteaOrg == "" {
+		giteaOrg = constants.DefaultGiteaOrg
+	}
+	gitProvisionerRaw := gitea.NewRealProvisioner(giteaURL, giteaToken, giteaOrg)
 	giteaCB := cb.New(cb.Config{
 		Name: "gitea", OpenThreshold: 5, CloseThreshold: 1,
 		RetryInterval: 120 * time.Second,

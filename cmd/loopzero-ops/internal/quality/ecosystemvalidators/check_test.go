@@ -26,11 +26,15 @@ func pythonAvailable() bool {
 	return err == nil
 }
 
+// fakeEco writes scripts under `.claude/mechanisms/gates/` to match the
+// post-relocation kit layout (formerly `.claude/scripts/`). The Rels supplied
+// by the tests below use `mechanisms/gates/<name>` so `resolveEco` returns
+// `<root>/.claude` and the joined path lands on the fixture file.
 func fakeEco(t *testing.T, scripts map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
 	for name, body := range scripts {
-		p := filepath.Join(root, ".claude", "scripts", name)
+		p := filepath.Join(root, ".claude", "mechanisms", "gates", name)
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -47,7 +51,7 @@ func TestGreenValidatorsPass(t *testing.T) {
 		"b.py": "print('ok')\n",
 	})
 	cfg := Config{RepoRoot: root, Validators: []Validator{
-		{Name: "a", Rel: "scripts/a.py"}, {Name: "b", Rel: "scripts/b.py"},
+		{Name: "a", Rel: "mechanisms/gates/a.py"}, {Name: "b", Rel: "mechanisms/gates/b.py"},
 	}, Timeout: 30 * time.Second}
 
 	out, err := Check(cfg)
@@ -71,7 +75,7 @@ func TestRedValidatorFails(t *testing.T) {
 		"bad.py": "import sys; sys.exit(1)\n",
 	})
 	cfg := Config{RepoRoot: root, Validators: []Validator{
-		{Name: "ok", Rel: "scripts/ok.py"}, {Name: "bad", Rel: "scripts/bad.py"},
+		{Name: "ok", Rel: "mechanisms/gates/ok.py"}, {Name: "bad", Rel: "mechanisms/gates/bad.py"},
 	}, Timeout: 30 * time.Second}
 
 	out, err := Check(cfg)
@@ -92,7 +96,7 @@ func TestWarningsAreCountedButDoNotFail(t *testing.T) {
 	root := fakeEco(t, map[string]string{
 		"warn.py": "print('  [WARN] a')\nprint('  [WARN] b')\nprint('Overall: PASS')\n",
 	})
-	cfg := Config{RepoRoot: root, Validators: []Validator{{Name: "warn", Rel: "scripts/warn.py"}}, Timeout: 30 * time.Second}
+	cfg := Config{RepoRoot: root, Validators: []Validator{{Name: "warn", Rel: "mechanisms/gates/warn.py"}}, Timeout: 30 * time.Second}
 
 	out, err := Check(cfg)
 	if !pythonAvailable() {
@@ -116,17 +120,18 @@ func TestMissingValidatorsIsAFailure(t *testing.T) {
 }
 
 // Os dois layouts. Fixar um faria o gate reportar ausência no outro — o defeito do
-// B-120, noutro lugar.
+// B-120, noutro lugar. A sonda mudou de `scripts/` para `mechanisms/` porque o kit
+// relocou tudo em `mechanisms/<família>/`; o teste segue esse contrato.
 func TestBothLayoutsResolve(t *testing.T) {
 	plugin := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(plugin, ".claude", "scripts"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(plugin, ".claude", "mechanisms"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if got := resolveEco(plugin, ""); got != filepath.Join(plugin, ".claude") {
 		t.Errorf("layout plugin: got %q", got)
 	}
 	standalone := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(standalone, "scripts"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(standalone, "mechanisms"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if got := resolveEco(standalone, ""); got != standalone {

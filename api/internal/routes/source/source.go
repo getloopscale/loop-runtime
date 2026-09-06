@@ -26,7 +26,7 @@
 //
 // # On the name
 //
-// This package and `api/internal/source` (the services.json validator) share a
+// This package and `api/internal/buildplane/source` (the services.json validator) share a
 // name, which is not a conflict for the compiler but is one for a reader. Files
 // importing both alias the ROUTES side as `sourceroutes`, following the tree's
 // convention of suffixing whichever party is not the subject of the file.
@@ -37,7 +37,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"io"
 	"log/slog"
 	"net/http"
@@ -46,9 +45,11 @@ import (
 	"sort"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+
+	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
 	"github.com/getloopscale/loopzero/api/internal/correlation"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
-	"github.com/getloopscale/loopzero/api/internal/source"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
 )
@@ -125,7 +126,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return

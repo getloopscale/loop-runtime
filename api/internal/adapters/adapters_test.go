@@ -6,11 +6,12 @@ package adapters
 import (
 	"context"
 	"errors"
+	"testing"
+	"time"
+
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
-	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 

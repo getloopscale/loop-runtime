@@ -22,13 +22,13 @@ const (
 
 // PreviewEnvironment events as defined in spec section 5.3.
 const (
-	PreviewCreationCompleted  Event = "CreationCompleted"
-	PreviewCreationFailed     Event = "CreationFailed"
+	PreviewCreationCompleted   Event = "CreationCompleted"
+	PreviewCreationFailed      Event = "CreationFailed"
 	PreviewExpirationTriggered Event = "ExpirationTriggered"
-	PreviewDeletionTriggered  Event = "DeletionTriggered"
-	PreviewCleanupCompleted   Event = "CleanupCompleted"
-	PreviewCleanupFailed_     Event = "CleanupFailed"
-	PreviewGarbageCollected   Event = "GarbageCollected"
+	PreviewDeletionTriggered   Event = "DeletionTriggered"
+	PreviewCleanupCompleted    Event = "CleanupCompleted"
+	PreviewCleanupFailed_      Event = "CleanupFailed"
+	PreviewGarbageCollected    Event = "GarbageCollected"
 )
 
 // NewPreviewMachine returns the preview environment state machine per spec section 5.3.

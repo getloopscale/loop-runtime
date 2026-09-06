@@ -98,8 +98,17 @@ func TestTargetsReportaFamíliaSemRepresentante(t *testing.T) {
 	if len(alvos) != 0 {
 		t.Errorf("família sem representante não deveria virar alvo: %+v", alvos)
 	}
-	if len(sem) != 1 || sem[0] != "/v1/faturamento/*" {
-		t.Fatalf("queria a família reportada como sem representante, veio %v", sem)
+	// O buraco passou a carregar o host (B-025): sem isso o relatório mostrava várias
+	// linhas idênticas dizendo só a família, e quem lia não sabia qual host estava
+	// descoberto. A asserção verifica os dois, não o formato exato.
+	if len(sem) != 1 {
+		t.Fatalf("queria exatamente um buraco reportado, veio %v", sem)
+	}
+	if !strings.Contains(sem[0], "/v1/faturamento/*") {
+		t.Errorf("o buraco não nomeia a família: %q", sem[0])
+	}
+	if !strings.Contains(sem[0], "app-dev.loopzero.example") {
+		t.Errorf("o buraco não nomeia o host: %q", sem[0])
 	}
 }
 
@@ -483,7 +492,7 @@ func TestTodaCelulaApareceEmTodaListaQueAsEnumera(t *testing.T) {
 
 // TestTodoRepoImportadoTemDominio fecha a lacuna que deixou o loopzero-forge invisível.
 //
-// A tabela de domínios em `.claude/rules/cycle-backlog.md` lista repositórios, e nada a
+// A tabela de domínios em `.claude/rules/domain-routing.txt` lista repositórios, e nada a
 // compara com o que o código realmente importa. Foi assim que `loopzero-forge` passou: 18
 // arquivos do engine dependem dele — incluindo o construtor de workflows, o coração do
 // caminho de build — e ele não aparecia na tabela, não tinha especialista e não tinha
@@ -498,11 +507,46 @@ func TestTodaCelulaApareceEmTodaListaQueAsEnumera(t *testing.T) {
 func TestTodoRepoImportadoTemDominio(t *testing.T) {
 	raiz := repoRootFromTest(t)
 
-	tabela, err := os.ReadFile(filepath.Join(raiz, ".claude", "rules", "cycle-backlog.md"))
+	// `domain-routing.txt`, e não `cycle-backlog.md`. A tabela mudou de casa quando
+	// `detect_domains.py` passou a derivá-la do disco, e a regra diz isso com todas as
+	// letras: "The script reads the topology from disk — not from an inventory". Pior
+	// que estar no arquivo errado: a seção `## Domain routing` de `cycle-backlog.md` é
+	// um span que `detect_domains.py --write` SUBSTITUI, então um nome de repositório
+	// escrito lá é apagado na próxima vez que alguém roda o comando que aquele mesmo
+	// arquivo prescreve.
+	tabela, err := os.ReadFile(filepath.Join(raiz, ".claude", "rules", "domain-routing.txt"))
 	if err != nil {
 		t.Fatalf("ler a tabela de domínios: %v", err)
 	}
-	texto := string(tabela)
+
+	// A coluna do meio, e não o arquivo inteiro. O formato é
+	// `dominio | repo, repo | agents/x.md` e não usa crases, então um Contains sobre o
+	// texto casaria `loopzero` dentro de `loopzero-cloud` e daria por roteado um repositório
+	// que não está lá. Isto espelha como `route_domain.py` lê o mesmo arquivo.
+	roteados := map[string]bool{}
+	for _, linha := range strings.Split(string(tabela), "\n") {
+		if i := strings.Index(linha, "#"); i >= 0 {
+			linha = linha[:i]
+		}
+		colunas := strings.Split(linha, "|")
+		if len(colunas) < 2 {
+			continue
+		}
+		for _, repo := range strings.Split(colunas[1], ",") {
+			// `repo/subdir` roteia o subdiretório; o repositório em si conta como roteado.
+			nome := strings.TrimSpace(repo)
+			if nome == "" {
+				continue
+			}
+			if i := strings.Index(nome, "/"); i >= 0 {
+				nome = nome[:i]
+			}
+			roteados[nome] = true
+		}
+	}
+	if len(roteados) == 0 {
+		t.Fatal("a tabela de roteamento não declarou repositório nenhum — o guarda perderia o alvo e passaria vazio")
+	}
 
 	// Todo `loopzero-*` importado por qualquer go.mod deste repositório.
 	importados := map[string]bool{}
@@ -531,8 +575,7 @@ func TestTodoRepoImportadoTemDominio(t *testing.T) {
 
 	var semDominio []string
 	for repo := range importados {
-		// A tabela cita o repositório entre crases, na coluna de repositórios.
-		if strings.Contains(texto, "`"+repo+"`") {
+		if roteados[repo] {
 			continue
 		}
 		semDominio = append(semDominio, repo)
@@ -543,7 +586,7 @@ func TestTodoRepoImportadoTemDominio(t *testing.T) {
 		t.Errorf("%d repositório(s) importado(s) sem domínio na tabela: %s\n"+
 			"Um repositório sem domínio não tem especialista e não pode receber um achado: "+
 			"route_domain.py o recusa e o gate G1 do intake bloqueia o item. Declare-o em "+
-			"`.claude/rules/cycle-backlog.md`, ou declare-o explicitamente como dependência de "+
+			"`.claude/rules/domain-routing.txt`, ou declare-o explicitamente como dependência de "+
 			"terceiros — as duas respostas servem, o silêncio não.",
 			len(semDominio), strings.Join(semDominio, ", "))
 	}

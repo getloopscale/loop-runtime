@@ -73,11 +73,6 @@ auth-dev.loopzero.example /self-service/registration/methods/password | reviewed
 # Same Caddy process and same upstreams as the -dev hosts (see the file header:
 # one edge, several hostnames). Classified identically, not separately, because
 # the exposure is identical.
-app.loopzero.example /sessions/whoami | reviewed | same as app-dev: narrowed, now consumer-less, delete after the new bundle ships
-app.loopzero.example /self-service/* | reviewed | Kratos self-service flow UI
-app.loopzero.example - | internal | dashboard SPA bundle from the vite server; static assets, no user data
-cloud.loopzero.example - | reviewed | loopzero-cloud BFF; authenticated, caller's own tenant data
-auth.loopzero.example - | reviewed | Kratos public surface by design, as auth-dev
 
 # --- tenant app wildcards ----------------------------------------------------
 # These proxy to Traefik, which routes to the tenant's OWN application. The

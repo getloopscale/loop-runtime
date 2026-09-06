@@ -9,7 +9,7 @@ import (
 
 func TestCreateBuildPlan_SingleApp(t *testing.T) {
 	units := []AppUnit{
-		{Name: "api", Type: "server", Path: ".", Runtime: "node", Port: 3000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
+		{Name: "api", Type: "server", Path: ".", Runtime: "node", Port: 3000, Build: "buildpack", Secrets: []string{}},
 	}
 	plan := CreateBuildPlan(units, "acme", "my-app", "abc123", "registry.do.com")
 
@@ -43,8 +43,8 @@ func TestCreateBuildPlan_SingleApp(t *testing.T) {
 
 func TestCreateBuildPlan_MultiApp_Monorepo(t *testing.T) {
 	units := []AppUnit{
-		{Name: "api", Type: "server", Path: "apps/api", Runtime: "node", Port: 3000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
-		{Name: "worker", Type: "worker", Path: "apps/worker", Runtime: "node", Port: 0, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
+		{Name: "api", Type: "server", Path: "apps/api", Runtime: "node", Port: 3000, Build: "buildpack", Secrets: []string{}},
+		{Name: "worker", Type: "worker", Path: "apps/worker", Runtime: "node", Port: 0, Build: "buildpack", Secrets: []string{}},
 	}
 	plan := CreateBuildPlan(units, "acme", "monorepo", "def456", "reg.io")
 
@@ -79,7 +79,7 @@ func TestCreateBuildPlan_MultiApp_Monorepo(t *testing.T) {
 // canonical /workspace/Dockerfile and the context is the whole workspace.
 func TestCreateBuildPlan_UserDockerfileIgnored_D4(t *testing.T) {
 	units := []AppUnit{
-		{Name: "web", Type: "server", Path: "apps/web", Runtime: "node", Port: 3000, Build: "dockerfile", Dockerfile: "Dockerfile.prod", Env: map[string]string{}, Secrets: []string{}},
+		{Name: "web", Type: "server", Path: "apps/web", Runtime: "node", Port: 3000, Build: "dockerfile", Dockerfile: "Dockerfile.prod", Secrets: []string{}},
 	}
 	plan := CreateBuildPlan(units, "acme", "app", "sha1", "reg.io")
 
@@ -94,32 +94,9 @@ func TestCreateBuildPlan_UserDockerfileIgnored_D4(t *testing.T) {
 	}
 }
 
-func TestCreateBuildPlan_WithEnv(t *testing.T) {
-	units := []AppUnit{
-		{Name: "api", Type: "server", Path: ".", Runtime: "node", Port: 3000, Build: "buildpack",
-			Env: map[string]string{"NODE_ENV": "production", "LOG_LEVEL": "info"}, Secrets: []string{}},
-	}
-	plan := CreateBuildPlan(units, "acme", "app", "sha1", "reg.io")
-
-	args := plan.Apps[0].BuildArgs
-	if args["NODE_ENV"] != "production" {
-		t.Errorf("BuildArgs[NODE_ENV] = %q", args["NODE_ENV"])
-	}
-	if args["LOG_LEVEL"] != "info" {
-		t.Errorf("BuildArgs[LOG_LEVEL] = %q", args["LOG_LEVEL"])
-	}
-	// System vars always present
-	if args["COMMIT_SHA"] != "sha1" {
-		t.Errorf("BuildArgs[COMMIT_SHA] = %q", args["COMMIT_SHA"])
-	}
-}
-
-// TestCreateBuildPlan_GoFramework removed — go is not in the fixed LoopZeroKit
-// stack (simplify-deploy-loopzerokit-runtime-wiring T2.1 / F-dom-2).
-
 func TestCreateBuildPlan_PythonRuntime(t *testing.T) {
 	units := []AppUnit{
-		{Name: "api", Type: "server", Path: ".", Runtime: "python", Port: 8000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
+		{Name: "api", Type: "server", Path: ".", Runtime: "python", Port: 8000, Build: "buildpack", Secrets: []string{}},
 	}
 	plan := CreateBuildPlan(units, "t", "p", "sha", "r")
 
@@ -137,8 +114,8 @@ func TestCreateBuildPlan_PythonRuntime(t *testing.T) {
 // runtimes (node + python) resolves each app's strategy by its declared runtime.
 func TestCreateBuildPlan_MixedRuntimes(t *testing.T) {
 	units := []AppUnit{
-		{Name: "api", Type: "server", Path: "apps/api", Runtime: "node", Port: 3000, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
-		{Name: "ml", Type: "worker", Path: "apps/ml", Runtime: "python", Port: 0, Build: "buildpack", Env: map[string]string{}, Secrets: []string{}},
+		{Name: "api", Type: "server", Path: "apps/api", Runtime: "node", Port: 3000, Build: "buildpack", Secrets: []string{}},
+		{Name: "ml", Type: "worker", Path: "apps/ml", Runtime: "python", Port: 0, Build: "buildpack", Secrets: []string{}},
 	}
 	plan := CreateBuildPlan(units, "acme", "mono", "sha", "reg.io")
 

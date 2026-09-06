@@ -4,7 +4,7 @@
 //
 // Plan 2026-05-20-helm-render-time-testing-terratest v1.1 — T3.1 (chart 1/10).
 //
-// CRITICAL: Per ADR D1 lookup order, `helpers.ChartPath("loopzero-cloud")`
+// CRITICAL: Per ADR D1 lookup order, `chartrender.ChartPath("loopzero-cloud")`
 // resolves to `infra/helm/loopzero-cloud/` (bootstrap variant, used by Helmfile
 // L2 at install time). The `charts/loopzero-cloud/` published variant (used by
 // ArgoCD L3 Day-2) is structurally different (full Service template +
@@ -29,7 +29,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 	appsV1 "k8s.io/api/apps/v1"
 	coreV1 "k8s.io/api/core/v1"
 )
@@ -43,37 +43,37 @@ const (
 func renderDefaultDeployment(t *testing.T) appsV1.Deployment {
 	t.Helper()
 
-	chartPath, err := helpers.ChartPath(chartName)
+	chartPath, err := chartrender.ChartPath(chartName)
 	require.NoError(t, err)
 
-	opts, err := helpers.NewOptions(chartPath, "")
+	opts, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
 
-	output := helpers.RenderTemplate(t, opts, chartPath, releaseName,
+	output := chartrender.RenderTemplate(t, opts, chartPath, releaseName,
 		[]string{"templates/deployment.yaml"})
 	require.NotEmpty(t, output)
 
 	var deploy appsV1.Deployment
-	helpers.MustUnmarshalK8SYamlByKind(t, output, "Deployment", &deploy)
+	chartrender.MustUnmarshalK8SYamlByKind(t, output, "Deployment", &deploy)
 	return deploy
 }
 
 func renderDefaultService(t *testing.T) coreV1.Service {
 	t.Helper()
 
-	chartPath, err := helpers.ChartPath(chartName)
+	chartPath, err := chartrender.ChartPath(chartName)
 	require.NoError(t, err)
 
-	opts, err := helpers.NewOptions(chartPath, "")
+	opts, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
 
 	// Service is in the SAME multi-doc file (deployment.yaml), not service.yaml
-	output := helpers.RenderTemplate(t, opts, chartPath, releaseName,
+	output := chartrender.RenderTemplate(t, opts, chartPath, releaseName,
 		[]string{"templates/deployment.yaml"})
 	require.NotEmpty(t, output)
 
 	var svc coreV1.Service
-	helpers.MustUnmarshalK8SYamlByKind(t, output, "Service", &svc)
+	chartrender.MustUnmarshalK8SYamlByKind(t, output, "Service", &svc)
 	return svc
 }
 

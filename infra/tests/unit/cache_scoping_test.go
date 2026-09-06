@@ -103,4 +103,3 @@ func TestCacheScoping_AppOperatorDoesNOTScope_WorkloadCRDs(t *testing.T) {
 		}
 	}
 }
-

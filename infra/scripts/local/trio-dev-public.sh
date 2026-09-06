@@ -12,7 +12,7 @@
 #   /dogfood      → soft-replaced by "user journey probe" (billing portal
 #                   e2e: login + JWT + portal — proves dashboard backend)
 #   /chaos-test   → soft-replaced by "service availability probe" (curl
-#                   all 6 hostnames + verify TLS + reachability)
+#                   all 3 hostnames -dev + verify TLS + reachability)
 #   /live-proof   → ran in its full form
 #
 # True full versions (destructive cleanroom + chaos injection) require
@@ -104,10 +104,11 @@ soft_cleanroom() {
   return 0
 }
 
-# Soft chaos: probe all 6 hostnames + TLS validity
+# Soft chaos: probe os 3 hostnames -dev + TLS validity (eram 6 ate o B-025)
 soft_chaos() {
+  # B-025 (2026-08-19): os tres sem sufixo sairam do Caddyfile. `cloud-dev` fica: ele tem
+  # bloco proprio e e' o par de desenvolvimento que continua servindo.
   local hosts=(
-    "auth.loopzero.example" "app.loopzero.example" "cloud.loopzero.example"
     "auth-dev.loopzero.example" "app-dev.loopzero.example" "cloud-dev.loopzero.example"
   )
   local fails=0
@@ -134,7 +135,7 @@ log "starting (auth=$AUTH_HOST app=$APP_HOST cloud=$CLOUD_HOST)"
 echo "" >&2
 
 phase "cleanroom-soft (config drift assertion)" "soft_cleanroom"
-phase "chaos-soft (6/6 hostnames TLS LE)"      "soft_chaos"
+phase "chaos-soft (3/3 hostnames TLS LE)"      "soft_chaos"
 phase "dogfood-soft (billing portal e2e)"      "bash $REPO_ROOT/infra/tests/e2e/live/dev-public-billing-portal_test.sh"
 phase "live-proof (3 checks × 3 layers)"        "bash $REPO_ROOT/archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh"
 

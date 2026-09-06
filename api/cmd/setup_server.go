@@ -6,14 +6,16 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/environments"
-	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"log/slog"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
+	"github.com/getloopscale/loopzero/api/internal/routes/environments"
+	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
@@ -21,6 +23,11 @@ import (
 
 	previewsvc "github.com/getloopscale/loopzero/api/internal/services/preview"
 
+	// Alias porque este arquivo importa TAMBEM `api/internal/placement`, e os
+	// dois pacotes se chamam `placement`. A desambiguacao vive aqui, no unico
+	// arquivo que precisa dela, em vez de ficar assada no nome do pacote para
+	// todo mundo (B-057). Medido: dos 21 arquivos que importam um dos dois,
+	// so este importa os dois.
 	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -34,7 +41,9 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/aggregator"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
+	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/billing"
@@ -75,8 +84,8 @@ func buildServerConfig(
 	domainHandler *domains.DomainHandler,
 	buildHandler *builds.BuildHandler,
 	healthServices []health.ServiceHealthChecker,
-	tokenValidator middleware.TokenValidator,
-	rateLimiter *middleware.RateLimiter,
+	tokenValidator auth.TokenValidator,
+	rateLimiter *ratelimit.RateLimiter,
 	shutdownCtx context.Context,
 	shutdownCancel context.CancelFunc,
 	logger *slog.Logger,
@@ -152,22 +161,21 @@ func buildServerConfig(
 			cfg.SourceBucket,
 			logger,
 		),
-		EnvironmentHandler:           environmentHandler,
-		ShutdownCtx:                  shutdownCtx,
-		ShutdownCancel:               shutdownCancel,
-		RateLimiter:                  rateLimiter,
-		ReadHeaderTimeout:            cfg.ReadHeaderTimeout,
-		ReadTimeout:                  cfg.ReadTimeout,
-		IdleTimeout:                  cfg.IdleTimeout,
-		ShutdownTimeout:              cfg.GracefulShutdownTime,
-		SSEHeartbeatInterval:         cfg.SSEHeartbeatInterval,
-		SSEPollInterval:              cfg.SSEPollInterval,
-		SSESafetyTimeout:             cfg.SSESafetyTimeout,
-		SSEMaxConcurrentStreams:      int64(cfg.SSEMaxConcurrentStreams),
-		IsProduction:                 cfg.IsProduction(),
-		UpgradeURL:                   os.Getenv("BILLING_UPGRADE_URL"),
-		PGCircuitBreakerThresholdPct: 90,
-		CORSAllowedOrigin:            cfg.CORSAllowedOrigin,
+		EnvironmentHandler:      environmentHandler,
+		ShutdownCtx:             shutdownCtx,
+		ShutdownCancel:          shutdownCancel,
+		RateLimiter:             rateLimiter,
+		ReadHeaderTimeout:       cfg.ReadHeaderTimeout,
+		ReadTimeout:             cfg.ReadTimeout,
+		IdleTimeout:             cfg.IdleTimeout,
+		ShutdownTimeout:         cfg.GracefulShutdownTime,
+		SSEHeartbeatInterval:    cfg.SSEHeartbeatInterval,
+		SSEPollInterval:         cfg.SSEPollInterval,
+		SSESafetyTimeout:        cfg.SSESafetyTimeout,
+		SSEMaxConcurrentStreams: int64(cfg.SSEMaxConcurrentStreams),
+		IsProduction:            cfg.IsProduction(),
+		UpgradeURL:              os.Getenv("BILLING_UPGRADE_URL"),
+		CORSAllowedOrigin:       cfg.CORSAllowedOrigin,
 	}
 
 	if dbDeps != nil {
@@ -203,7 +211,7 @@ func buildServerConfig(
 		// is single-source-of-truth.
 		limitsStore := enforcement.NewSQLLimitsStore(dbDeps.StdDB)
 		planReader := store.NewPlanReader(limitsStore)
-		sc.CostEnforcer = middleware.NewCostEnforcer(costChecker, planReader, logger)
+		sc.CostEnforcer = policy.NewCostEnforcer(costChecker, planReader, logger)
 		// Wire PlanTierStore into ScaleHandler + ProjectHandler so they
 		// resolve the canonical tier (per ADR D4 of plan
 		// 2026-06-15-code-review-49-findings-remediation). Without this,
@@ -362,10 +370,20 @@ func buildServerConfig(
 				logger.Warn("audit write failed", "error", err)
 			}
 		}
-		sc.PGPoolStatsFunc = func() (int32, int32) {
-			stat := dbAdapter.Pool.Stat()
-			return stat.AcquiredConns(), stat.MaxConns()
-		}
+		// B-054: o portao do pool. Ate' 2026-08-19 este ponto entregava uma funcao de estatistica
+		// e o router calculava um percentual instantaneo a cada requisicao — que oscila perto da
+		// linha de corte. O `PGPoolBreaker` ja' existia, com histerese, construido e iniciado no
+		// `setupBuildHandler`, e NUNCA era consultado: o instrumento que resolvia a oscilacao
+		// estava desligado e o que decidia tinha o problema.
+		pgGate := admission.NewPGPoolBreaker(dbAdapter.Pool, admission.DefaultBreakerConfig(cfg.DBMaxConns), logger)
+		pgGate.Start(shutdownCtx)
+		go func() {
+			<-shutdownCtx.Done()
+			pgGate.Stop()
+		}()
+		sc.PGPoolGate = pgGate
+		logger.Info("pg pool gate enabled",
+			"high_water", 0.90, "low_water", 0.75, "max_conns", cfg.DBMaxConns)
 		// Sprint 5 / T2.3 + T1.1 — Preview environments handler + service.
 		// The handler exposes /api/v1/projects/{project}/previews; the
 		// service drives the dual-write (CR + DB) per ADR D7. When the

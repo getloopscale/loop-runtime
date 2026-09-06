@@ -125,24 +125,23 @@ authMethods:
     description: "T5.4 cell-1 workload cluster auth (ESO broker)"
 
 # Policies to provision. Each: { name, ruleHcl }.
+#
+# DOIS NOMES PARECIDOS ainda vivem aqui, e so' um e' policy (B-098):
+#
+#   loopzero-api  (policy) — E' ESTA. O role de k8s-core a carrega.
+#   loopzero-api  (role)   — role no mount k8s-core, nao e' policy
+#
+# Eram QUATRO ate' 2026-08-19. `loopzero-api-read` e `loopzero-api-transit-encrypt` sairam: nenhum
+# role as carregava, e as duas eram versoes ANTERIORES e MAIS LARGAS da `loopzero-api` corrente
+# (`transit/encrypt/+` contra `transit/encrypt/loopzero-tenants-*`; a arvore inteira do tenant
+# contra o ramo `+/api/*`). Nao eram resto neutro: liga-las por engano concederia DEMAIS.
+#
+# A confusao ja' custou um patch no lugar errado — ao corrigir o B-072 a mudanca foi aplicada
+# em `loopzero-api-transit-encrypt` porque o padrao casou primeiro, e so' um teste novo pegou.
+#
+# O gate `openbao-init-auth-mounts` agora recusa policy declarada que nenhum role carregue,
+# para que a lista de candidatos nao volte a crescer em silencio.
 policies:
-  - name: loopzero-api-read
-    ruleHcl: |
-      path "secret/data/loopzero/+/*" {
-        capabilities = ["read"]
-      }
-  # ORPHAN, measured 2026-08-13: no role in THIS file binds it. Thirteen roles
-  # declare `policies:`, and the only one naming a `loopzero-api-*` policy is the
-  # k8s-core role below, which binds `loopzero-api`. Kept as-is by this slice
-  # (B-072 scopes the bound policy); registered as B-098.
-  - name: loopzero-api-transit-encrypt
-    ruleHcl: |
-      path "transit/encrypt/+" {
-        capabilities = ["update"]
-      }
-      path "transit/decrypt/+" {
-        capabilities = ["update"]
-      }
   - name: eso-read
     ruleHcl: |
       path "secret/data/loopzero/*" {

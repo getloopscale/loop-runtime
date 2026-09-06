@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/events"
 	cloudmetrics "github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/sse"
-	"github.com/getloopscale/loopzero/api/internal/events"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -426,7 +426,7 @@ var _ = fmt.Sprintf
 // =============================================================================
 
 // argoWorkflowGVR is the canonical GroupVersionResource for Argo Workflows.
-// Duplicated here to avoid importing api/internal/argo from services (cycle).
+// Duplicated here to avoid importing api/internal/buildplane/argo from services (cycle).
 var argoWorkflowGVR = schema.GroupVersionResource{
 	Group:    "argoproj.io",
 	Version:  "v1alpha1",

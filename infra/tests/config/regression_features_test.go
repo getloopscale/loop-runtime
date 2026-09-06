@@ -73,91 +73,39 @@ func TestF01DefaultProfileKeepsClusterIP(t *testing.T) {
 	}
 }
 
-func TestF03CommanderExitOverrideRegistered(t *testing.T) {
-	// M23 T6.1 post-M5 monorepo-decomposition guard: cli/ moved to sibling
-	// loopzero-cli/ repo. Cross-repo test wiring is a follow-up milestone.
-	const indexPath = "../../../cli/src/index.ts"
-	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
-		t.Skipf("F-03 skipped: cli/ moved to sibling loopzero-cli/ repo per M5 decomposition; cross-repo test wiring TBD")
-	}
-	data, err := os.ReadFile(indexPath)
-	if err != nil {
-		t.Fatalf("read cli index.ts: %v", err)
-	}
-	s := string(data)
-	// writeErr seta exitCode=1 (cobre parse errors via configureOutput path).
-	if !strings.Contains(s, "process.exitCode = 1") {
-		t.Error("F-03 regression: index.ts writeErr/exitOverride must set process.exitCode = 1 for parse errors")
-	}
-	// exitOverride com lista de codes Commander.
-	for _, code := range []string{
-		"commander.unknownCommand",
-		"commander.unknownOption",
-		"commander.missingArgument",
-	} {
-		if !strings.Contains(s, code) {
-			t.Errorf("F-03 regression: exitOverride must handle %q", code)
-		}
-	}
-}
-
-func TestF05InitPreflightAuthDep(t *testing.T) {
-	// M23 T6.1 post-M5 monorepo-decomposition guard: cli/ moved to sibling
-	// loopzero-cli/ repo. Cross-repo test wiring is a follow-up milestone.
-	const initPath = "../../../cli/src/commands/init.ts"
-	if _, err := os.Stat(initPath); os.IsNotExist(err) {
-		t.Skipf("F-05 skipped: cli/ moved to sibling loopzero-cli/ repo per M5 decomposition; cross-repo test wiring TBD")
-	}
-	data, err := os.ReadFile(initPath)
-	if err != nil {
-		t.Fatalf("read init.ts: %v", err)
-	}
-	s := string(data)
-	if !strings.Contains(s, "preflightAuth?:") {
-		t.Error("F-05 regression: InitDeps must declare optional preflightAuth")
-	}
-	if !strings.Contains(s, "offline?:") {
-		t.Error("F-05 regression: InitOptions must declare optional offline flag")
-	}
-	if !strings.Contains(s, "AUTH_FAILED") {
-		t.Error("F-05 regression: init must emit code=AUTH_FAILED on 401/403 preflight")
-	}
-	if !strings.Contains(s, "PREFLIGHT_FAILED") {
-		t.Error("F-05 regression: init must emit code=PREFLIGHT_FAILED on 5xx/network preflight")
-	}
-}
-
-func TestF06LogoutHasTokenDep(t *testing.T) {
-	// M23 T6.1 post-M5 monorepo-decomposition guard: cli/ moved to sibling
-	// loopzero-cli/ repo per CLAUDE.md § Workspace layout. Skip when missing
-	// (cross-repo test wiring is a follow-up milestone).
-	logoutPath := "../../../cli/src/commands/logout.ts"
-	if _, err := os.Stat(logoutPath); os.IsNotExist(err) {
-		t.Skipf("F-06 skipped: cli/ moved to sibling loopzero-cli/ repo per M5 decomposition; cross-repo test wiring TBD")
-	}
-	data, err := os.ReadFile(logoutPath)
-	if err != nil {
-		t.Fatalf("read logout.ts: %v", err)
-	}
-	s := string(data)
-	if !strings.Contains(s, "hasToken?:") {
-		t.Error("F-06 regression: LogoutDeps must declare optional hasToken")
-	}
-	if !strings.Contains(s, "Already logged out") {
-		t.Error("F-06 regression: logout must emit \"Already logged out\" when hasToken=false")
-	}
-	if !strings.Contains(s, "already_logged_out") {
-		t.Error("F-06 regression: logout JSON must set status=already_logged_out")
-	}
-	// Wire-up no register.
-	regData, err := os.ReadFile("../../../cli/src/register/auth.ts")
-	if err != nil {
-		t.Fatalf("read register/auth.ts: %v", err)
-	}
-	if !strings.Contains(string(regData), "hasToken: () => Boolean") {
-		t.Error("F-06 regression: register/auth.ts must wire hasToken to LogoutCommand")
-	}
-}
+// F-03, F-05 and F-06 were REMOVED, not skipped (B-180, applying B-169's standard).
+//
+// All three asserted about `cli/src/**`, which the M5 decomposition moved to the
+// sibling `loopzero-cli` repository. Each stat'd a path under `../../../cli/` and
+// skipped when it was missing -- conditional in form, unconditional in fact:
+// `cli/` is not in this tree and `loopzero-cli` is not cloned beside it, so the skip
+// branch was the only branch ever taken since M5. F-06 was worse than dead: its
+// body continued past the skip with an UNGUARDED os.ReadFile of
+// `../../../cli/src/register/auth.ts` and a t.Fatalf, unreachable code that read
+// as a live assertion.
+//
+// Why removed rather than left skipping (B-169's three reasons, re-measured here):
+//   - a permanent t.Skip is a dead-Skip: a deleted test with good manners, and
+//     without `-v` the package still prints `ok`;
+//   - a mid-function t.Skip marks the WHOLE test skipped, so it cannot be used
+//     to fence off the part of an assertion that IS this repo's;
+//   - the seam these three probed already has guards that execute. The cli<->
+//     engine contract is enumerated in `docs/cross-repo-contract-matrix.md` and
+//     enforced from this side by `api/internal/contract/cli_consumer_test.go`
+//     (TestCLIConsumer_AllPathsInSpec is hermetic: it reads the pinned
+//     `testdata/cli-consumed-paths.txt` against `api/openapi/engine.yaml` and
+//     needs no sibling on disk), plus `task quality:contract:cross-repo`, which
+//     runs loopzero-cli's half when the sibling IS present and prints an explicit
+//     SKIP line when it is not.
+//
+// What is genuinely NOT covered here, said plainly rather than implied: the CLI's
+// own internals -- Commander's exitOverride codes (F-03), init's AUTH_FAILED /
+// PREFLIGHT_FAILED vocabulary (F-05) and logout's hasToken wiring (F-06) -- are
+// loopzero-cli's behaviour and belong to loopzero-cli's suite. Asserting about them from
+// a repository that does not contain them is what produced three permanent skips.
+//
+// The class is now guarded: `loopzero-ops quality test-skip-absent-path` fails when a
+// test under infra/tests/ skips on a path absent from this tree.
 
 func TestF07VersionEndpointRegistered(t *testing.T) {
 	data, err := os.ReadFile("../../../api/internal/server/router.go")

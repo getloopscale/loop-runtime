@@ -132,14 +132,31 @@ tasks:
       #
       # `e2e/`, `chaos/`, `charts/` e `livetest/` seguem fora deste alvo por
       # terem alvo proprio ou exigirem cluster, que e outra classe.
-      - cd infra/tests && go test ./unit/... ./helm/... ./scripts/... ./config/... ./performance/... -short
+      # -count=1: these suites assert on files OUTSIDE their own module (Tiltfile,
+      # api/**, infra/helm/**, go.work). Go's test cache keys on THIS module's
+      # inputs, so none of those reads invalidate it. Measured 2026-09-05 with an
+      # isolated GOCACHE: prime green, then DELETE
+      # api/internal/routes/admin/admin_pin_cell.go — the file T-10 exists to guard —
+      # and the suite still reports `ok (cached)`. Same for dropping a module from
+      # go.work. Without the flag these guards report on a tree they never read.
+      # Cost measured on this target: 1.31s -> 2.31s. B-169/B-170.
+      - cd infra/tests && go test -count=1 ./unit/... ./helm/... ./scripts/... ./config/... ./performance/... -short
       # cmd/loopzero-ops e onde vivem os 123 quality gates. Os testes que provam que
       # um gate reprova o que deve reprovar nao rodavam por caminho nenhum —
       # `quality:hermetic` fazia `go build`, nao `go test`. B-088.
       - cd cmd/loopzero-ops && go test ./... -short
-      # Fora do go.work por desenho (constroem sozinhos, sem dependencia), entao
-      # exigem GOWORK=off. Nunca foram nomeados por nenhuma task. B-088.
-      - cd tools/loopzero-dockerfile-lint && GOWORK=off go test ./... -short
+      # Construem sozinhos (o modulo nao declara require nenhum), entao GOWORK=off
+      # continua sendo a invocacao correta e hermetica. Nunca foram nomeados por
+      # task nenhuma. B-088.
+      #
+      # Este comentario dizia "Fora do go.work por desenho" e deixou de ser verdade
+      # em 0f8a2e5f9 (B-170): `./tools/gen-service-auth-ed25519` ESTA no `use` do
+      # go.work desde 2026-08-31, porque sem isso `cd tools/... && go test ./...`
+      # falhava com "directory prefix . does not contain modules listed in go.work".
+      # GOWORK=off aqui e escolha de hermeticidade, nao consequencia de ausencia.
+      #
+      # Eram dois; sobrou um. `tools/loopzero-dockerfile-lint` foi REMOVIDO em 2026-08-19
+      # (B-157): validava Dockerfile do usuario, caminho que saiu na T2.2.
       - cd tools/gen-service-auth-ed25519 && GOWORK=off go test ./... -short
 
   test:integration:
@@ -844,7 +861,7 @@ tasks:
         2. vitest J-17 hooks + pages (use-deployments-list-stream,
            use-deployments, deployments.tsx — 7+4+4 tests)
         3. Go API tests for the J-17 backend surface
-           (api/internal/argo + loki + routes — covers Layer 1+2+3 wrap,
+           (api/internal/buildplane/argo + loki + routes — covers Layer 1+2+3 wrap,
            LogQL filter, build_list + logs handlers)
         4. T7.2 LIVE bash (4 cenários A/B/C/D against dev-public — REST
            list + SSE wiring + Loki marker pipeline + preflight)

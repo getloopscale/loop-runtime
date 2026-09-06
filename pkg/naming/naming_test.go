@@ -668,15 +668,15 @@ func TestIsPreviewEnv_RedTeam41(t *testing.T) {
 		envName string
 		want    bool
 	}{
-		{"preview-pr-123", true},   // canonical pattern
-		{"preview-pr-1", true},     // canonical pattern (single digit)
-		{"preview", true},          // legacy CLI literal — Red Team #41 catch
-		{"preview-feature", true},  // broader "preview-*" prefix
-		{"production", false},      // explicit non-preview
-		{"staging", false},         // explicit non-preview
-		{"prod", false},            // short form
-		{"", false},                // empty
-		{"my-preview", false},      // contains "preview" but doesn't start with it
+		{"preview-pr-123", true},  // canonical pattern
+		{"preview-pr-1", true},    // canonical pattern (single digit)
+		{"preview", true},         // legacy CLI literal — Red Team #41 catch
+		{"preview-feature", true}, // broader "preview-*" prefix
+		{"production", false},     // explicit non-preview
+		{"staging", false},        // explicit non-preview
+		{"prod", false},           // short form
+		{"", false},               // empty
+		{"my-preview", false},     // contains "preview" but doesn't start with it
 	}
 	for _, tt := range tests {
 		t.Run(tt.envName, func(t *testing.T) {

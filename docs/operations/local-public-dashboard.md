@@ -38,6 +38,45 @@ For component-isolated debug (no public DNS needed), legacy `task setup` +
 
 ---
 
+
+## Onde o painel é construído no droplet (B-039)
+
+**Caminho canônico:** `~/loopzero-cloud/loopzero-cloud`
+
+A borda serve `~/loopzero-cloud/loopzero-cloud/dashboard/dist` — é o `root *` dos blocos
+`app-dev` em `infra/local/Caddyfile`, e o gate `dashboard-root-parity` recusa este runbook se
+os dois divergirem.
+
+### Por que o caminho óbvio engana
+
+`~/loopzero-cloud` **não é o produto**: é um clone do **umbrella** (`loopzero-workspace`), e o
+loopzero-cloud vive dentro dele. O nome do diretório é o do produto, o conteúdo é o do umbrella.
+
+Medido em 2026-08-18, existem quatro caminhos no droplet e só um presta:
+
+| caminho | remoto | refspec | serve? |
+|---|---|---|---|
+| `~/loopzero-cloud` | `getloopscale/loopzero-workspace` | completo | é o umbrella |
+| `~/loopzero-cloud/loopzero-cloud` | `getloopscale/loopzero-cloud` | completo | **sim — canônico** |
+| `~/.buildmeta-cloud/loopzero-cloud` | `getloopscale/loopzero-cloud` | só `develop` | não |
+| `~/.b017-prova/loopzero-cloud` | **`getloopscale`**`/loopzero-cloud` | só `workspace` | não |
+
+Os dois últimos foram criados ad-hoc por sessões anteriores. Ambos têm refspec restrito, e é
+por isso que `git switch workspace` falha neles com `invalid reference` — o branch nunca é
+buscado. O terceiro aponta para uma organização diferente do canônico.
+
+**Não os conserte: eles não servem nada.** Use o canônico.
+
+### Verificação
+
+```bash
+cd ~/loopzero-cloud/loopzero-cloud
+git fetch origin && git switch workspace   # funciona sem intervenção
+```
+
+Medido em 2026-08-18: `fetch` ok, `origin/workspace` existe, refspec `+refs/heads/*`.
+
+
 ## Prerequisites (one-time droplet setup)
 
 1. A host with a public IP and `:80` + `:443` reachable from the Internet.
@@ -61,7 +100,7 @@ task k3d:up                                 # 4 clusters (mgmt+build+workload+ru
 #    Skips harbor/opencost/chaos-mesh/monitoring/loki/tempo/otel/blackbox/etc.
 #    v1.1 EC-01 guards against empty selector + v1.1 EC-02 includes the
 #    platform/preview operators that are essential for tenant provisioning.
-task infra:install:core-dashboard-only ENV=standalone-public
+task infra:install:core-dashboard-only     # defaults to ENV=dev-public
 
 # 3. Bring up the public-flow plumbing (port-forwards + Caddy + seed data)
 task cloud:port-forward:up                  # 4 persistent port-forwards w/ backoff
@@ -174,8 +213,11 @@ See [service-auth-rotation.md](./service-auth-rotation.md). Zero-downtime via
 
 - Plan (parent): `.claude/knowledge-base/plans/2026-05-29-dashboard-public-integration-canonicalization-plan.md`
 - Plan (dev-public): `.claude/knowledge-base/plans/2026-06-04-dev-public-domain-canonicalization-plan.md`
-- Helmfile env (legacy): `infra/helmfile/environments/standalone-public.yaml`
-- Helmfile env (dev-public): `infra/helmfile/environments/dev-public.yaml`
+- Helmfile env (retired as a default, B-165): `infra/helmfile/environments/standalone-public.yaml`
+  — still selectable with `ENV=standalone-public`, but the three bare hostnames it
+  serves (`app|cloud|auth.loopzero.example`) were removed from `infra/local/Caddyfile` by
+  B-025, so nothing answers for it unless you add an edge yourself.
+- Helmfile env (canonical, default): `infra/helmfile/environments/dev-public.yaml`
 - Caddy config: `infra/local/Caddyfile`
 - DNS bootstrap: `infra/scripts/local/setup-dev-public-dns.sh`
 - Caddy bootstrap: `infra/scripts/local/caddy-up-dev-public.sh`

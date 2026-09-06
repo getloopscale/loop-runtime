@@ -328,7 +328,7 @@ type fakeDeliveryActivator struct {
 	rollbackErr    error
 }
 
-func (f *fakeDeliveryActivator) Activate(_ context.Context, _ *db.Build, _ deploycontracts.BuildCallbackRequest) error {
+func (f *fakeDeliveryActivator) Activate(_ context.Context, _ deploycontracts.ActivationBuild, _ deploycontracts.BuildCallbackRequest) error {
 	return nil
 }
 func (f *fakeDeliveryActivator) Rollback(_ context.Context, _ deploycontracts.RollbackDeliveryRequest) error {

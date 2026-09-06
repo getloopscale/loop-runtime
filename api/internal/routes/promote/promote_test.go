@@ -7,12 +7,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )

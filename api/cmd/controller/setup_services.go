@@ -20,12 +20,13 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
-	"github.com/getloopscale/loopzero/api/internal/argo"
 	"github.com/getloopscale/loopzero/api/internal/argocd"
+	"github.com/getloopscale/loopzero/api/internal/buildplane/argo"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/gitops"
-	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
+	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
@@ -123,12 +124,12 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	})
 
 	// ---- k8s managers (mgmt cluster) ----
-	tenantCRMgr, err := k8s.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
+	tenantCRMgr, err := tenancy.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
 	if err != nil {
 		logger.Error("failed to create tenant CR manager", "error", err)
 		panic("fatal: tenant CR manager creation failed") // unreachable after os.Exit
 	}
-	appCRMgr := &appCRAdapter{mgr: k8s.NewApplicationCRManager(tenantCRMgr.Client, "")}
+	appCRMgr := &appCRAdapter{mgr: workload.NewApplicationCRManager(tenantCRMgr.Client, "")}
 
 	// ---- Build orchestrator (required by reconcile loop) ----
 	// M5 (#106) note: this orchestrator's project store is DELIBERATELY left

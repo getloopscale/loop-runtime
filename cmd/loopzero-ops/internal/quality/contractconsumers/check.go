@@ -45,10 +45,12 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -77,15 +79,38 @@ type Finding struct {
 
 // Outcome reports the gate verdict.
 type Outcome struct {
-	Pass         bool
-	Findings     []Finding
-	DroppedTags  []string // sorted list of dropped JSON tags detected
-	ScanRoots    []string // consumer scan roots used
-	CommandError string   // populated if git or grep failed
+	Pass        bool
+	Findings    []Finding
+	DroppedTags []string // sorted list of dropped JSON tags detected
+	ScanRoots   []string // consumer scan roots used
+	// TrackedFiles is the declared contract surface, mirroring ScanRoots: without it a
+	// caller can say HOW MANY tracked paths went missing but not out of how many.
+	TrackedFiles []string
+	// MissingRoots sao as raizes declaradas que NAO existem na arvore. `git grep`
+	// ignora pathspec que nao casa nada e devolve os matches dos que casam, entao
+	// uma raiz que sumiu vira cobertura perdida em silencio (B-100, B-040).
+	MissingRoots []string
+	// MissingTracked holds the declared TRACKED paths that do not exist in the tree.
+	// Same cause as MissingRoots, and the graver half: trackedFiles decides WHICH tags
+	// the gate ever looks at, so a path missing here does not merely shrink the search
+	// for the reader — it makes the field drop never visible at all, and the verdict
+	// becomes PASS over an empty population.
+	MissingTracked []string
+	CommandError   string // populated if git or grep failed
 }
 
 // trackedFiles enumerates source files whose struct field drops trigger the gate.
 // Restricted to the backend API contract surface — see package doc.
+//
+// These paths are `git diff` and `git grep` pathspecs, and both SILENTLY IGNORE a
+// pathspec that matches nothing (measured: `git diff -- <nonexistent path>` exits 0,
+// with nothing on stderr). Absence is therefore measured by missingTrackedPaths and
+// reported; otherwise a path that moved becomes less coverage under the same verdict.
+//
+// Notice for whoever performs the rename: `api/internal/domain` is slated to become
+// `api/internal/ports` (B-057, bullet 1). This list has to move with it — it carries
+// 93 `json:` tags (measured 2026-09-05), among them ProjectSummary, the struct behind
+// the 2026-06-08 regression this package doc cites as the reason the gate exists.
 var trackedFiles = []string{
 	"api/internal/domain/types.go",
 	"api/internal/db/generated/", // any *.go under this dir
@@ -121,16 +146,34 @@ func Check(cfg Config) (*Outcome, error) {
 		head = "HEAD"
 	}
 
+	// Calculado ANTES do primeiro retorno: no caminho de erro do git a cobertura
+	// tambem some, e e' o caminho em que ninguem olha.
+	ausentes := raizesAusentes(root)
+	rastreadosAusentes := missingTrackedPaths(root)
+
 	droppedTags, err := collectDroppedJSONTags(root, base, head)
 	if err != nil {
-		return &Outcome{CommandError: err.Error()}, nil
+		return &Outcome{
+			CommandError:   err.Error(),
+			ScanRoots:      consumerRoots,
+			TrackedFiles:   trackedFiles,
+			MissingRoots:   ausentes,
+			MissingTracked: rastreadosAusentes,
+		}, nil
 	}
 
 	out := &Outcome{
-		DroppedTags: droppedTags,
-		ScanRoots:   consumerRoots,
-		Pass:        true,
+		DroppedTags:    droppedTags,
+		ScanRoots:      consumerRoots,
+		TrackedFiles:   trackedFiles,
+		MissingRoots:   ausentes,
+		MissingTracked: rastreadosAusentes,
+		Pass:           true,
 	}
+	// Uma raiz declarada que nao existe e' cobertura perdida, e precisa aparecer
+	// mesmo quando nenhuma tag caiu: e' justamente no PASS que ela some sem deixar
+	// rastro. Nao derruba o gate sozinha — a decisao de para onde apontar esta' no
+	// B-100 — mas deixa de ser invisivel.
 	if len(droppedTags) == 0 {
 		return out, nil
 	}
@@ -196,11 +239,18 @@ func collectDroppedJSONTags(root, base, head string) ([]string, error) {
 	// a wire break is a gate people learn to push past.
 	tags := make([]string, 0, len(seen))
 	for t := range seen {
-		still, err := tagExistsAt(root, head, t)
+		antes, err := structsDeclaringTagAt(root, base, t)
 		if err != nil {
 			return nil, err
 		}
-		if still {
+		depois, err := structsDeclaringTagAt(root, head, t)
+		if err != nil {
+			return nil, err
+		}
+		// Uma declaracao a MENOS e' a queda. Igual ou mais significa que a tag
+		// mudou de nome de struct, de arquivo ou de pacote — nada disso mexe no
+		// contrato de fio.
+		if depois >= antes {
 			continue
 		}
 		tags = append(tags, t)
@@ -209,33 +259,96 @@ func collectDroppedJSONTags(root, base, head string) ([]string, error) {
 	return tags, nil
 }
 
-// tagExistsAt reports whether `json:"<tag>"` is still declared anywhere in the
-// tracked files at the given revision.
+// structsDeclaringTagAt conta QUANTAS structs declaram `json:"<tag>"` nos
+// arquivos rastreados, na revisao dada.
 //
-// It deliberately does NOT care which file holds it: moving a struct between
-// packages does not change the wire contract, and the whole point of this
-// check is to answer "does the field still exist" rather than "did this line
-// survive".
-func tagExistsAt(root, rev, tag string) (bool, error) {
-	// The tag ends at a quote or at the option list (`,omitempty`).
+// A versao anterior perguntava apenas se a tag existia em ALGUMA struct, e isso
+// tinha um furo medido: `repositories.go` declarava `json:"repo"` DUAS vezes, e
+// tirar de uma ficava invisivel porque a outra respondia "ainda existe" (B-100).
+//
+// Contar, e nao identificar a struct pelo NOME, e' deliberado. Escopar por nome
+// pegaria o furo, mas criaria um falso positivo novo: renomear a struct — ou
+// move-la de pacote, que o desenho original protege explicitamente — nao muda o
+// contrato de fio e passaria a ser reportado como quebra. Um gate que acusa
+// renomeacao e' um gate que as pessoas aprendem a contornar, que e' o custo que
+// este proprio item registra. A contagem cai quando uma declaracao some e nao se
+// mexe quando uma declaracao muda de nome ou de lugar.
+//
+// LIMITE QUE FICA, declarado: se um mesmo commit TIRA a tag de uma struct e a
+// ACRESCENTA noutra, a contagem nao se move e a troca passa. E' mais estreito que
+// o furo anterior e nao tem cura sem informacao de tipo nos dois lados.
+func structsDeclaringTagAt(root, rev, tag string) (int, error) {
 	pattern := `json:"` + regexp.QuoteMeta(tag) + `[",]`
 
-	args := []string{"-C", root, "grep", "-lE", pattern, rev, "--"}
+	args := []string{"-C", root, "grep", "-cE", pattern, rev, "--"}
 	args = append(args, trackedFiles...)
 	cmd := exec.Command("git", args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
-	if stdout.Len() > 0 {
-		return true, nil
-	}
-	// `git grep` exits 1 on no match, which is the answer, not a failure.
+
+	// `git grep -c` exits 1 sem nenhuma ocorrencia, que e' a resposta e nao falha.
 	var exitErr *exec.ExitError
 	if err != nil && (!errors.As(err, &exitErr) || exitErr.ExitCode() != 1) {
-		return false, fmt.Errorf("git grep for %q at %s failed: %v (stderr: %s)", tag, rev, err, stderr.String())
+		return 0, fmt.Errorf("git grep for %q at %s failed: %v (stderr: %s)", tag, rev, err, stderr.String())
 	}
-	return false, nil
+
+	total := 0
+	for _, linha := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+		if linha == "" {
+			continue
+		}
+		// formato: `<rev>:<arquivo>:<n>`
+		idx := strings.LastIndex(linha, ":")
+		if idx < 0 {
+			continue
+		}
+		n, cerr := strconv.Atoi(strings.TrimSpace(linha[idx+1:]))
+		if cerr != nil {
+			continue
+		}
+		total += n
+	}
+	return total, nil
+}
+
+// raizesAusentes devolve as raizes declaradas que nao existem sob root.
+//
+// Existe porque `git grep -- a b c` ignora em silencio o pathspec que nao casa
+// nada. Duas das tres raizes declaradas sairam deste repositorio na decomposicao
+// (`cloud/dashboard/src/` -> ../loopzero-cloud, `cli/src/` -> ../loopzero-cli), e sao
+// justamente as de TypeScript — as que carregam o consumidor de FIO, que le' o
+// campo pelo nome do JSON e que o compilador nao ve'. O que sobrou e' Go, onde um
+// campo removido quebra a compilacao. Medido 2026-08-19.
+func raizesAusentes(root string) []string {
+	var ausentes []string
+	for _, r := range consumerRoots {
+		if _, err := os.Stat(filepath.Join(root, r)); err != nil {
+			ausentes = append(ausentes, r)
+		}
+	}
+	return ausentes
+}
+
+// missingTrackedPaths returns the paths declared in trackedFiles that do not exist
+// under root.
+//
+// Twin of raizesAusentes, and it exists because the asymmetry between the two WAS the
+// hole: the CONSUMER list got an absence guard on 2026-08-19 (B-100/B-040) while the
+// TRACKED list, handed to the very same `git diff --` and `git grep --`, got none.
+//
+// The missing half is the one that matters more. An absent consumer root still lets
+// the gate see a tag drop; an absent tracked path means the tag never shows up as
+// dropped at all, and the gate answers PASS over a contract surface it never read.
+func missingTrackedPaths(root string) []string {
+	var ausentes []string
+	for _, f := range trackedFiles {
+		if _, err := os.Stat(filepath.Join(root, f)); err != nil {
+			ausentes = append(ausentes, f)
+		}
+	}
+	return ausentes
 }
 
 // grepConsumersForTag runs `git grep` for the dropped tag across consumer

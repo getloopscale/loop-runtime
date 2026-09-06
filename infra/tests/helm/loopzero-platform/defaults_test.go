@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/getloopscale/loopzero/infra/tests/helm/helpers"
+	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 	"sigs.k8s.io/yaml"
 )
 
@@ -40,14 +40,14 @@ type metaOnly struct {
 
 func renderUmbrella(t *testing.T, setValues map[string]string) string {
 	t.Helper()
-	chartPath, err := helpers.ChartPath(chartName)
+	chartPath, err := chartrender.ChartPath(chartName)
 	require.NoError(t, err)
-	opts, err := helpers.NewOptions(chartPath, "")
+	opts, err := chartrender.NewOptions(chartPath, "")
 	require.NoError(t, err)
 	if setValues != nil {
 		opts.SetValues = setValues
 	}
-	return helpers.RenderTemplate(t, opts, chartPath, releaseName, nil)
+	return chartrender.RenderTemplate(t, opts, chartPath, releaseName, nil)
 }
 
 func TestPlatform_AllSubChartsEnabledByDefault(t *testing.T) {
@@ -76,7 +76,7 @@ func TestPlatform_DisableCRDsRemovesAllCRDs(t *testing.T) {
 	// Verify conditional dep gating: disabling loopzero-crds should leave
 	// zero CRD manifests in the render.
 	out := renderUmbrella(t, map[string]string{"loopzero-crds.enabled": "false"})
-	docs := helpers.SplitYAMLByKind(out, "CustomResourceDefinition")
+	docs := chartrender.SplitYAMLByKind(out, "CustomResourceDefinition")
 	require.Empty(t, docs,
 		"disabling loopzero-crds should leave zero CRDs; found %d", len(docs))
 }
@@ -90,11 +90,11 @@ func TestPlatform_DisableMonitoringRemovesNineRules(t *testing.T) {
 	//   loopzero-admission-policies:  2 rules (policy-controller-alerts,
 	//                                      tenant-namespace-alerts)
 	// Disabling monitoring should remove the 9 it owns, leaving 2.
-	baseline := helpers.SplitYAMLByKind(renderUmbrella(t, nil),
+	baseline := chartrender.SplitYAMLByKind(renderUmbrella(t, nil),
 		"PrometheusRule")
 	out := renderUmbrella(t,
 		map[string]string{"loopzero-monitoring.enabled": "false"})
-	after := helpers.SplitYAMLByKind(out, "PrometheusRule")
+	after := chartrender.SplitYAMLByKind(out, "PrometheusRule")
 
 	require.Equalf(t, 11, len(baseline),
 		"baseline PrometheusRule count drifted (want 11 = 9 monitoring + "+
@@ -108,10 +108,10 @@ func TestPlatform_DisableAdmissionPoliciesRemovesAllVAPs(t *testing.T) {
 	t.Parallel()
 	out := renderUmbrella(t,
 		map[string]string{"loopzero-admission-policies.enabled": "false"})
-	vaps := helpers.SplitYAMLByKind(out, "ValidatingAdmissionPolicy")
-	bindings := helpers.SplitYAMLByKind(out,
+	vaps := chartrender.SplitYAMLByKind(out, "ValidatingAdmissionPolicy")
+	bindings := chartrender.SplitYAMLByKind(out,
 		"ValidatingAdmissionPolicyBinding")
-	cips := helpers.SplitYAMLByKind(out, "ClusterImagePolicy")
+	cips := chartrender.SplitYAMLByKind(out, "ClusterImagePolicy")
 	require.Empty(t, vaps,
 		"disabling admission-policies should leave zero VAPs; found %d",
 		len(vaps))
@@ -138,7 +138,7 @@ func TestPlatform_NoDuplicateResourceNamesPerKind(t *testing.T) {
 		"ValidatingAdmissionPolicy", "ValidatingAdmissionPolicyBinding",
 		"CustomResourceDefinition", "PrometheusRule", "ClusterImagePolicy",
 	} {
-		for _, d := range helpers.SplitYAMLByKind(out, kind) {
+		for _, d := range chartrender.SplitYAMLByKind(out, kind) {
 			var m metaOnly
 			require.NoError(t, yaml.Unmarshal([]byte(d), &m))
 			key := kind + "/" + m.Metadata.Namespace + "/" + m.Metadata.Name
@@ -163,7 +163,7 @@ func TestPlatform_GlobalRegistryOverridePropagates(t *testing.T) {
 	// may not honor global.registry yet — finding to track); we assert
 	// AT LEAST ONE Deployment uses the custom registry. Stronger drift
 	// guard for full propagation is a follow-up.
-	deploys := helpers.SplitYAMLByKind(out, "Deployment")
+	deploys := chartrender.SplitYAMLByKind(out, "Deployment")
 	require.NotEmpty(t, deploys, "umbrella has Deployments")
 	found := false
 	for _, d := range deploys {

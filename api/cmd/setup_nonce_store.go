@@ -12,7 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/getloopscale/loopzero-contracts/serviceauth"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // nonceStoreBootstrapTimeout caps how long bootstrap waits for the
@@ -25,7 +25,7 @@ import (
 // for the rationale.
 const nonceStoreBootstrapTimeout = 2 * time.Second
 
-// setupServiceAuthNonceStore wires `middleware.ServiceAuthNonceStore`.
+// setupServiceAuthNonceStore wires `auth.ServiceAuthNonceStore`.
 //
 // Env: LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR (e.g., "redis.loopzero-system:6379").
 // When empty OR unreachable, falls back to *InMemoryNonceStore.
@@ -45,7 +45,7 @@ func setupServiceAuthNonceStore(logger *slog.Logger) {
 		// Default: in-memory store (already installed by middleware init).
 		// Re-install explicitly so the bootstrap is deterministic regardless
 		// of test pollution from prior runs.
-		middleware.ServiceAuthNonceStore = serviceauth.NewInMemoryNonceStore(5 * time.Minute)
+		auth.ServiceAuthNonceStore = serviceauth.NewInMemoryNonceStore(5 * time.Minute)
 		logger.Info("service-auth nonce store: in-memory (set LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR for multi-replica Redis)")
 		return
 	}
@@ -63,12 +63,12 @@ func setupServiceAuthNonceStore(logger *slog.Logger) {
 	defer cancel()
 	if err := client.Ping(ctx).Err(); err != nil {
 		_ = client.Close()
-		middleware.ServiceAuthNonceStore = serviceauth.NewInMemoryNonceStore(5 * time.Minute)
+		auth.ServiceAuthNonceStore = serviceauth.NewInMemoryNonceStore(5 * time.Minute)
 		logger.Warn("service-auth nonce store: Redis ping failed at bootstrap; falling back to in-memory",
 			"addr", addr, "error", err)
 		return
 	}
 
-	middleware.ServiceAuthNonceStore = serviceauth.NewRedisNonceStore(client, 5*time.Minute)
+	auth.ServiceAuthNonceStore = serviceauth.NewRedisNonceStore(client, 5*time.Minute)
 	logger.Info("service-auth nonce store: Redis", "addr", addr)
 }

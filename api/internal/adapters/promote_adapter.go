@@ -5,6 +5,7 @@ package adapters
 
 import (
 	"context"
+
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
@@ -40,3 +41,10 @@ func (a *PromoteServiceAdapter) Promote(ctx context.Context, req promote.Promote
 		URL:             result.URL,
 	}, nil
 }
+
+// A porta que este adaptador satisfaz, afirmada em tempo de compilacao.
+//
+// B-058: este arquivo NAO declarava, nem em prosa, o que adaptava — e o criterio de admissao
+// do pacote era "e um adapter", que nao recusa nada. A porta foi descoberta pelo consumidor,
+// e agora esta escrita onde o compilador a verifica.
+var _ promote.PromoteService = (*PromoteServiceAdapter)(nil)

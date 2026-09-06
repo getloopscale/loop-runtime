@@ -193,13 +193,18 @@ bootstrap_tenant() {
   log "=== Tenant CR ==="
 
   ensure_exists "Tenant tn-loopzero" \
-    "kubectl get tenant tn-loopzero -n default 2>/dev/null" \
+    "kubectl get tenant tn-loopzero -n loopzero-system 2>/dev/null" \
     "kubectl apply -f - <<'TENANT_EOF'
 apiVersion: loopzero.io/v1
 kind: Tenant
 metadata:
   name: tn-loopzero
-  namespace: default
+  # B-095: era `default`, e o CR ficava INVISIVEL ao tenant-operator, cujo cache e' restrito a
+  # `loopzero-system` (operators/cmd/tenant-operator/main.go). O seed reportava sucesso e nada
+  # reconciliava. Fora do lugar ele tambem seria indeletavel se a cerca
+  # `loopzero-tenant-namespace-policy` fosse ligada: remover finalizer e' um UPDATE, e ela nega
+  # UPDATE fora deste namespace.
+  namespace: loopzero-system
 spec:
   displayName: LoopZero Platform
   plan: growth

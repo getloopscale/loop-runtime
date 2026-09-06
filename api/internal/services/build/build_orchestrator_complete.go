@@ -11,9 +11,9 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/cfkv"
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/events"
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/api/internal/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -168,7 +168,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	// even if the ArgoCD sync (container delivery) takes longer or fails.
 	o.writeStaticRoutingEntries(ctx, build, result)
 
-	activationErr := o.delivery.Activate(ctx, build, result)
+	activationErr := o.delivery.Activate(ctx, activationBuildFrom(build), result)
 
 	if activationErr != nil {
 		// BRC-002 fix: if the delivery activator already handled the failure

@@ -15,12 +15,12 @@ type TenantPhase string
 type TenantPhaseEvent string
 
 const (
-	TPhEmpty            TenantPhase = ""
-	TPhProvisioning     TenantPhase = "Provisioning"
-	TPhActive           TenantPhase = "Active"
-	TPhSuspended        TenantPhase = "Suspended"
-	TPhPendingDeletion  TenantPhase = "PendingDeletion"
-	TPhDeleting         TenantPhase = "Deleting"
+	TPhEmpty           TenantPhase = ""
+	TPhProvisioning    TenantPhase = "Provisioning"
+	TPhActive          TenantPhase = "Active"
+	TPhSuspended       TenantPhase = "Suspended"
+	TPhPendingDeletion TenantPhase = "PendingDeletion"
+	TPhDeleting        TenantPhase = "Deleting"
 )
 
 const (

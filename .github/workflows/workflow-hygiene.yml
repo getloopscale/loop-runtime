@@ -1,17 +1,41 @@
-# workflow-hygiene — as duas propriedades de #233 e #250, verificadas antes do merge.
+# workflow-hygiene — as propriedades de #233 e #250, MAIS a integridade do observador do portao.
 #
 # Este repo hospeda `build-publish.yml`, o reusable que CINCO repos consumidores chamam. Um defeito
 # nele nao fica nele: propaga no proximo build de todos. Os dois defeitos que este gate cobre ja
 # foram corrigidos a mao uma vez, e nada impedia a reintroducao.
 #
-# Os DOIS gatilhos tem escopos diferentes, nao sao redundancia: o de PR mata o defeito antes de
-# entrar no trunk; o de push pega o que so existe depois do merge (dois PRs verdes isoladamente que
-# se quebram juntos).
+# O TERCEIRO ASSUNTO, adicionado em 2026-09-06 (B-192), e' de outra natureza e esta' aqui por um
+# motivo estrutural, nao por conveniencia: `delivery-gate-armed.yml` e' o unico check que reprova
+# quando o portao local de entrega nao esta' armado, E UM WORKFLOW NAO CONSEGUE REPORTAR A PROPRIA
+# DELECAO. Apagado, ele nao fica vermelho: ele some, e um check ausente le, num PR, igualzinho a um
+# repositorio que nunca o teve. Quem reporta essa delecao tem de ser um arquivo que o commit da
+# delecao nao apaga junto — e' este. Ver `.github/scripts/assert-gate-observers-intact.py`.
 name: workflow-hygiene
 on:
-  # Pos-merge nas duas branches, sem acao no PR (decisao de 2026-08-12) — mesma
-  # razao do ci.yml: o portao real e' o delivery-gate local.
+  # OS TRES GATILHOS, e cada um cobre um momento que os outros nao alcancam.
+  #
+  # Ate' 2026-09-06 este bloco era so' `push: [develop, main]`. O cabecalho acima
+  # descrevia "os DOIS gatilhos ... o de PR mata o defeito antes de entrar no
+  # trunk" — verdade quando foi escrito, e falsa desde 464b9d7e3 (2026-08-12),
+  # o commit que removeu o `pull_request` e criou a decisao pos-merge cujas tres
+  # premissas o B-192 mediu falsas. A frase sobreviveu ao gatilho por todo esse
+  # tempo; a rodada anterior do B-192 corrigiu a mesma mentira em
+  # `check-workflow-hygiene.sh` e em `ci.yml` e deixou esta duas telas acima.
+  #
+  # `workspace` entra porque a janela medida foi de quatro dias e 21 commits NELE.
+  # Sem `workspace`, o primeiro momento em que este arquivo poderia falar sobre um
+  # observador apagado seria o PR de promocao — que e' o mesmo atraso de quatro
+  # dias reaparecendo com outro nome.
+  #
+  # `pull_request` volta porque e' o unico momento PRE-MERGE em que a delecao do
+  # observador aparece: num PR que apaga `delivery-gate-armed.yml`, aquele
+  # workflow nao roda (foi apagado) e este roda e reprova. Sem ele, esse PR fica
+  # verde. Custa segundos; `ci.yml` continua pos-merge por custo e por estar
+  # vermelho, o que nao vale para este arquivo.
   push:
+    branches: [workspace, develop, main]
+    paths: [".github/**"]
+  pull_request:
     branches: [develop, main]
     paths: [".github/**"]
   # Disparo manual: e' o gate mais barato do repo (segundos), entao e' com ele
@@ -26,13 +50,23 @@ jobs:
   hygiene:
     # Aspas obrigatorias: um `name:` terminado em `run:` o YAML le como mapping aninhado e o workflow
     # morre em `startup_failure` — sem job algum, portanto sem sinal vermelho util.
-    name: "workflows — actionlint + SHA-pin + sem interpolacao em run:"
+    name: "workflows — observador do portao intacto + actionlint + SHA-pin + sem interpolacao em run:"
     # Frota Blacksmith, habilitada com a transferencia para a org `getloopscale`
     # (2026-07-30). Label LITERAL: `vars.CI_RUNNER` nao resolve no repo e o
     # fallback devolve a frota antiga em silencio (runbook do umbrella).
     runs-on: blacksmith-8vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      # PRIMEIRO passo, e a ordem e' deliberada. Os passos param no primeiro que
+      # falha, entao um actionlint vermelho por qualquer outro motivo esconderia
+      # este veredito — e este e' o unico assunto deste arquivo que nenhum outro
+      # arquivo cobre. Custa milissegundos: le' dois YAML e sai.
+      #
+      # Se o script sumir, `python3` sai diferente de zero e o passo reprova.
+      # Fecha por construcao: apagar o verificador nao produz um verde.
+      - name: o observador do portao de entrega esta' intacto
+        run: python3 .github/scripts/assert-gate-observers-intact.py
 
       # actionlint entra AQUI, e nao num workflow proprio como no loopzero-memory.
       #

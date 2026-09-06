@@ -8,13 +8,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )

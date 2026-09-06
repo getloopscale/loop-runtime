@@ -29,7 +29,6 @@ type AppSpec struct {
 	Start       string              `json:"start,omitempty"`       // T0.2: declared services.json start command (canonical Dockerfile CMD)
 	Dockerfile  string              `json:"dockerfile,omitempty"`  // v2: Dockerfile path relative to app path
 	Rendering   string              `json:"rendering,omitempty"`   // v2: "static" or "server" (MEET-009)
-	Env         map[string]string   `json:"env,omitempty"`         // v2: build-time environment variables
 	Secrets     []string            `json:"secrets,omitempty"`     // declared secret names from loopzero.yaml
 	Replicas    int                 `json:"replicas,omitempty"`    // desired replica count (default: 1)
 	Autoscaling *AppAutoscalingSpec `json:"autoscaling,omitempty"` // HPA configuration
@@ -81,12 +80,19 @@ type AppRelease struct {
 
 // WorkflowSpec contains everything needed to submit a build workflow.
 type WorkflowSpec struct {
-	BuildID       string
-	TenantID      string
-	ProjectID     string
-	Environment   string
-	CommitSHA     string
-	NoCache       bool // Skip BuildKit layer cache (full rebuild via --no-cache)
+	BuildID     string
+	TenantID    string
+	ProjectID   string
+	Environment string
+	CommitSHA   string
+	// NoCache carrega a INTENCAO do usuario — reconstruir do zero, sem reaproveitar
+	// trabalho anterior — e nao o mecanismo que a realiza. O comentario anterior
+	// dizia "Skip BuildKit layer cache", nomeando no contrato de dominio uma
+	// ferramenta que so' existe no construtor (`api/internal/buildplane/argo/buildkit.go:82`,
+	// o unico leitor que decide algo com este campo). Trocar de construtor nao
+	// muda o que o usuario pediu; mudava este comentario, e e' assim que o
+	// vocabulario de um plano vaza para onde ele nao tem endereco (B-062).
+	NoCache       bool
 	Apps          []AppSpec
 	Plan          *BuildPlan // v2: resolved build plan (when present, WorkflowBuilder uses this instead of Apps)
 	CorrelationID string
