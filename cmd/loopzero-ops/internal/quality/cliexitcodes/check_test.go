@@ -81,21 +81,29 @@ func TestCheck_SignalCodeOutsideHandler_Fails(t *testing.T) {
 }
 
 func TestCheck_TestFilesIgnored(t *testing.T) {
+	// The exemption is real: an out-of-contract exit inside a *.test.ts is not a
+	// violation. What changed on 2026-09-05 is the second half of what this test
+	// used to assert — that a tree of ONLY exempt files is a pass. It is not: the
+	// gate read nothing, and an audit walked that exact shape into a printed PASS
+	// over an unread `process.exit`. A real file is scanned here so the exemption
+	// is measured against a check that happened.
 	root := t.TempDir()
-	write(t, root, "cli/src/a.test.ts", "process.exit(99)\n")
-	write(t, root, "cli/src/__tests__/b.ts", "process.exit(98)\n")
+	write(t, root, "cli/src/main.test.ts", "process.exit(9)\n")
+	write(t, root, "cli/src/main.ts", "process.exit(0)\n")
+
 	out := check(t, Config{RepoRoot: root})
-	if !out.Pass() {
-		t.Fatalf("test files must be ignored: %+v", out)
+
+	if len(out.Violations) != 0 {
+		t.Fatalf("the *.test.ts exit must be ignored: %v", out.Violations)
 	}
-	if out.ScannedFiles != 0 {
-		t.Fatalf("exempt files must not be counted as scanned: %d", out.ScannedFiles)
+	if out.ScannedFiles != 1 {
+		t.Fatalf("exactly the non-test file should be read; got %d", out.ScannedFiles)
+	}
+	if !out.Pass() {
+		t.Fatalf("one in-contract file was read and nothing was wrong: %+v", out)
 	}
 }
 
-// --- B-185: what the gate may claim when the subject is not here -----------
-
-// The defect: an absent subject used to be Pass:true, Skipped:true, exit 0.
 func TestCheck_SubjectAbsentAndDeclared_IsNotAPass(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "api/main.go", "package main\n")

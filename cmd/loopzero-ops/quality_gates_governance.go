@@ -103,17 +103,24 @@ func runCLIExitCodes(args []string) int {
 		return 1
 	}
 
-	if !outcome.Checked {
-		fmt.Printf("cli-exit-codes: NOT COVERED — no process.exit() call in this repository is checked "+
+	// `!Checked` is "no subject found"; `ScannedFiles == 0` is "found and read
+	// nothing", and the second used to fall through to PASS. Both are the same fact
+	// for a reader: the contract was not checked.
+	if !outcome.Checked || outcome.ScannedFiles == 0 {
+		fmt.Printf("cli-exit-codes: NOT COVERED — no process.exit() call reachable from this tree is checked "+
 			"against Rule 4, and no other gate enforces the exit-code contract; it holds only where "+
 			"loopzero-cli's own CI runs it, which is UNVERIFIED from this tree (searched: %s)\n",
 			strings.Join(outcome.SearchedPaths, ", "))
+		where := "no CLI source tree was found"
+		if outcome.Checked {
+			where = fmt.Sprintf("%s exists and held no file this gate could read", outcome.ScannedRoot)
+		}
 		fmt.Printf("cli-exit-codes: PARTIAL — 0 file(s) scanned, exit-code contract NOT CHECKED "+
-			"(%d tracked absence(s))\n", len(outcome.TrackedAbsences))
+			"(%s; %d tracked absence(s))\n", where, len(outcome.TrackedAbsences))
 		return 0
 	}
 
-	fmt.Printf("cli-exit-codes: PASS — %d file(s) under %s, all exit codes within the 0-5 contract "+
+	fmt.Printf("cli-exit-codes: PASS — %d file(s) under %s, no literal decimal process.exit() outside 0-5 "+
 		"(signal handlers exempt)\n", outcome.ScannedFiles, outcome.ScannedRoot)
 	return 0
 }

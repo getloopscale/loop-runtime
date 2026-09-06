@@ -127,7 +127,20 @@ type Outcome struct {
 // -- which let "there was nothing to check" be read downstream as "checked and
 // fine". Derived from Checked, that literal cannot be written: no caller can
 // claim a pass for a scan that did not happen.
-func (o *Outcome) Pass() bool { return o.Checked && len(o.Violations) == 0 }
+// Pass reports a check that HAPPENED and found nothing wrong.
+//
+// `Checked` alone is not that. It becomes true when a directory is located, before
+// a file is opened, so a subject that exists and yields nothing scored a pass over
+// zero files. An audit walked this gate's own prescribed workflow into that state
+// on 2026-09-05: loopzero-cli vendored under node_modules with `process.exit(42)` in it,
+// the gate FAILs and tells the operator the absence has ended and to delete the pin
+// line, the operator does, and the next run prints PASS with the call unread.
+//
+// Strictly worse than the SKIP this item replaced, which at least said something.
+// So a pass requires a file to have been read.
+func (o *Outcome) Pass() bool {
+	return o.Checked && o.ScannedFiles > 0 && len(o.Violations) == 0
+}
 
 var exitRe = regexp.MustCompile(`process\.exit\((\d+)\)`)
 
@@ -194,7 +207,7 @@ func Check(cfg Config) (*Outcome, error) {
 		if err != nil {
 			return err
 		}
-		if !info.Mode().IsRegular() || isExcludedFile(path) {
+		if !info.Mode().IsRegular() || isExcludedFile(srcDir, path) {
 			return nil
 		}
 		out.ScannedFiles++
@@ -253,9 +266,19 @@ func parsePin(path string) ([]Absence, error) {
 	return out, nil
 }
 
-func isExcludedFile(path string) bool {
-	return strings.Contains(path, ".test.") || strings.Contains(path, ".spec.") ||
-		strings.Contains(path, "/__tests__/") || strings.Contains(path, "/node_modules/")
+func isExcludedFile(root, path string) bool {
+	// Matched against the path RELATIVE to the scanned root, never the absolute
+	// one. A checkout reached through a node_modules directory -- the ordinary way
+	// a CLI is consumed -- or any parent directory whose name contains ".test."
+	// excluded every file beneath it, and the gate reported the scan as done. The
+	// rule is about what a FILE is, not about where its tree happens to live.
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		rel = path
+	}
+	rel = "/" + filepath.ToSlash(rel)
+	return strings.Contains(rel, ".test.") || strings.Contains(rel, ".spec.") ||
+		strings.Contains(path, "/__tests__/") || strings.Contains(rel, "/node_modules/")
 }
 
 // scanFile reads one file and reports out-of-contract exits, naming the path
