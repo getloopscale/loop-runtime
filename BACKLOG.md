@@ -68,24 +68,22 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-197 items — **Open** 10 · **In flight** 7 · **Closed** 180 · **Blocked** 6
+198 items — **Open** 8 · **In flight** 10 · **Closed** 180 · **Blocked** 6
 
-### Open (10)
+### Open (8)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
 | [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `triaged` | — |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `blocked` · was `triaged` | waiting on a decision — baixa hoje, alta no dia em que o `loopzero-cloud` cair sozinho em produção. O `B-002` registra que o cluster central é SPOF; este item é mais estreito e mais provável: não é o cluster que cai, é **um** processo, e ele carrega uma jornada (deploy) que não é dele. |
 | [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `triaged` | média — dívida acumulada, não defeito ativo. **Deliberadamente separado do B-045**: ligar os gates e pagar a dívida são trabalhos diferentes, e ligá-los antes de ter plano transformaria 76 achados legítimos num muro que alguém desliga na sexta-feira. |
-| [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `blocked` · was `triaged` | waiting on `B-113` — média — não afirmo que `tag: dev` seja violação decidida: pode ser sobrescrita no install pelo ArgoCD, e nenhuma decisão registrada a proíbe. O que está medido é que a guarda cobre 1 de 16, e que os 15 restantes nunca foram julgados. |
 | [`B-134`](#b-134--o-publicador-tem-o-digest-da-imagem-e-não-o-expõe-então-ninguém-consegue-recebê-lo----) | O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo | `blocked` · was `triaged` | waiting on `B-134` — média — nada quebra hoje; o que fica preso são **duas** travas de imutabilidade de imagem, uma no gate e outra na admissão, ambas paradas em modo aviso pela mesma ausência de um valor. |
-| [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `triaged` | média — o código resultante está **correto** e é 1:1; o que ficou errado foi a documentação dele, e o modo como errou é o registro mais nítido do risco que o `B-001` nomeia. |
-| [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `blocked` · was `triaged` | waiting on `B-137` — média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número. |
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `blocked` · was `triaged` | waiting on `B-139` — média — nada quebra hoje, e é justamente isso que o mantém: o caminho resolve porque a conta existe. Vira **alta** no dia em que outra pessoa operar o host, ou em que a conta for removida. |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `blocked` · was `triaged` | waiting on `B-154` |
 | [`B-194`](#b-194--o-ramo-aes-de-leitura-so-pode-sair-com-uma-contagem-que-cubra-a-frota-e-ninguem-e-dono-dela----) | O ramo AES de leitura so' pode sair com uma contagem que cubra a frota, e ninguem e' dono dela | `triaged` | media — nada quebra hoje (o caminho de escrita ja' recusa AES); o custo e' um gate que segue vermelho por uma divida real cujo desbloqueio depende de acesso a banco que nenhuma sessao tem |
+| [`B-198`](#b-198--remediar-tag-dev-nos-7-charts-publicados-substituindo-por-digest-imutavel----) | Remediar `tag: dev` nos 7 charts publicados substituindo por digest imutavel | `triaged` | — |
 
-### In flight (7)
+### In flight (10)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -93,6 +91,9 @@ consequência do escopo per-repo declarado acima.
 | [`B-057`](#b-057--três-pacotes-chamados-domain-significam-três-coisas-e-o-registro-de-portas-não-é-um-modelo-de-domínio----) | Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio | `approved` | média — não quebra nada; custa navegação e força dois nomes de pacote que mentem sobre o diretório. |
 | [`B-058`](#b-058--três-pacotes-admitem-membro-pela-tecnologia-ou-pelo-padrão-não-pela-responsabilidade----) | Três pacotes admitem membro pela tecnologia ou pelo padrão, não pela responsabilidade | `approved` | média — nenhum defeito de comportamento; é a superfície por onde a mistura de domínios entra sem ninguém decidir. |
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
+| [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `blocked` · was `approved` | waiting on `B-113` — média — não afirmo que `tag: dev` seja violação decidida: pode ser sobrescrita no install pelo ArgoCD, e nenhuma decisão registrada a proíbe. O que está medido é que a guarda cobre 1 de 16, e que os 15 restantes nunca foram julgados. |
+| [`B-136`](#b-136--a-metade-cell-do-rename-foi-executada-antes-da-reunião-t3-que-a-bloqueava-e-o-cabeçalho-ficou-mentindo----) | A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo | `approved` | média — o código resultante está **correto** e é 1:1; o que ficou errado foi a documentação dele, e o modo como errou é o registro mais nítido do risco que o `B-001` nomeia. |
+| [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `blocked` · was `approved` | waiting on `B-137` — média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número. |
 | [`B-167`](#b-167--no_languages_audited-reprova-plan-confidence-para-todo-plano-nesta-fatia----) | `no_languages_audited` reprova `/plan-confidence` para todo plano nesta fatia | `planned` | alta enquanto a chain autônoma existir — o portão bloqueia toda `/idea-to-release`, então qualquer trabalho maintenance no repo requer humano bypassando `/plan-confidence` ou aceitando o custo de re-rodar tudo manualmente. É a mesma classe do B-025 e B-159: a configuração ficou apontando para um caminho que ninguém percorre. |
 | [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `approved` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 | [`B-197`](#b-197--governance-gatepy--2-agentes-restaurados-apos-delecao-de-2026-08-06----) | governance-gate.py + 2 agentes restaurados apos delecao de 2026-08-06 | `approved` | alta enquanto T2/T3 era HONOR-SYSTEM — apparatus mecanico ausente por 30d significou que um refactor T3 (`cell-cluster-unification`, commit 148c04104 em 2026-08-17) passou sem meeting nem ADR ratificado. |
@@ -4505,7 +4506,7 @@ suggested_mode: review
 source: discover-review
 evidence: medido em 2026-08-15 ao executar o `B-092`. `TestB31ImageTagsPinned` lê **um** arquivo — `infra/helm/loopzero-api/values.yaml`. Varrendo `infra/helm/**/values.yaml` e `charts/**/values.yaml`, **16** charts declaram `image.tag`: 2 usam a sentinela `SET-BY-CI`, 1 usa semver, 5 são de terceiros com versão upstream (`1.22.6`, `2.5.4`, `0.96.0`, `1.32.5`, `2024.12.2`), 1 usa `latest-20260420`, e **7 — todos os `charts/loopzero-*` publicados — declaram `tag: dev`**.
 why_now: os sete são justamente os charts OCI publicados que o ArgoCD entrega aos tenants (L3), e `dev` é mutável: dois deploys do mesmo chart em momentos diferentes podem trazer imagens distintas sem que nada mude no git. O `ADR-0020 D1` existe contra exatamente isso, e a asserção que deveria vigiá-lo cobre o único chart que **não** é publicado.
-status: triaged
+status: approved
 blocked_by: aguardando disposição (mesmo padrão de B-060): DoD atendida — bala 1 (decidir se tag:dev é violação) fechada 2026-08-19 com evidência (é violação per ADR-0020 D1), bala 2 (expandir asserção para toda população) fechada 2026-08-16 (prod-image-digests agora cobre charts/loopzero-* e reporta 10 violações vs 3 anteriores). Remediação (trocar tag:dev por digest nos 7 charts publicados) é T2 + requer credencial de registry per B-073 — deve ser follow-up item, não parte deste. Decisão pendente: (A) --to shipped e filar follow-up para remediação, ou (B) manter triaged aguardando remediação landing. Vide report /idea-to-release B-113 de 2026-08-31.
 severity: média — não afirmo que `tag: dev` seja violação decidida: pode ser sobrescrita no install pelo ArgoCD, e nenhuma decisão registrada a proíbe. O que está medido é que a guarda cobre 1 de 16, e que os 15 restantes nunca foram julgados.
 dod:
@@ -5090,7 +5091,7 @@ source: discover-review
 severity: média — o código resultante está **correto** e é 1:1; o que ficou errado foi a documentação dele, e o modo como errou é o registro mais nítido do risco que o `B-001` nomeia.
 evidence: medido 2026-08-17. O `B-005` declara `blocks: a metade cell do B-001` e é **T3 com reunião obrigatória antes de código**. Os três commits `0d9567745` (rename dos clusters), `fbb246430` (fusão das identidades de cell) e `7a4740dc3` (tabela 1:1) executaram as duas coisas. **Não localizei registro de reunião T3 para nenhum dos dois** — nem ADR em `.claude/knowledge-base/decisions/` nem em `docs/wiki/meetings/`. O produto colateral está em `infra/helmfile/scripts/bootstrap-cell-cc.sh`: uma substituição de `cell-default` → `cell-0` sobre o texto anterior deixou **duas linhas da tabela com o mesmo id**, dois nomes de arquivo repetidos, a frase *"cell-0 reuses cell-0's cluster"*, citações a `Cell-2` e `runtime-2` (que não existem) e — o pior — `--cell <default|1|2>` no Usage, mandando o operador passar valores que o `case` do próprio script **rejeita**.
 why_now: o cabeçalho foi corrigido hoje ao medir o `B-001`, então o dano visível acabou. O que não foi tratado é o processo: uma mudança T3 sobre schema, placement e identidade de cluster aconteceu sem o registro que a governança exige, e a única razão de isso ter sido descoberto é alguém ter ido medir outra coisa.
-status: triaged
+status: approved
 dod:
   - existe registro T3 (retroativo, se for o caso) cobrindo a fusão das identidades de cell e o rename dos clusters, ou está escrito por que ele não é necessário
   - está medido se mais alguma coisa foi renomeada por substituição cega nos três commits — o cabeçalho foi o que apareceu, não necessariamente o que existe
@@ -5231,7 +5232,7 @@ source: discover-review
 severity: média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número.
 evidence: medido 2026-08-17 ao fechar o `B-106`, com a pirâmide **derivada** da árvore pela primeira vez: **989 arquivos — unit 73,5%, integração 15,7%, e2e 10,8%**. O alvo do ADR D7 é `e2e ≤ 5%`. Ele foi escolhido quando `infra/quality/test-inventory.json` **declarava 0,1%** — isto é, calibrado contra um número que descrevia 375 de 988 arquivos e excluía a suíte `infra/tests/e2e` inteira.
 why_now: o `B-106` tornou o número visível pela primeira vez, e fazer o gate reprovar contra o alvo do ADR hoje criaria uma trava que o repositório não consegue satisfazer — a mesma recusa do `B-127` (`HARD`) e do `B-119` (enforcement total). Enquanto isso, a catraca já impede piora.
-status: triaged
+status: approved
 blocked_by: aguardando sponsor decision by design — o próprio item termina 'É decisão do sponsor, não minha' e a nota de 2026-08-19 delimita: 'O que continua sendo do sponsor: se 7,4% de jornada é certo para um produto cujo objeto É implantar'. Medição feita 3x (2026-08-17, 19, 19), análise decompõe faixa e2e em 4 subárvores mostrando 30/107 medem outro eixo (chaos/performance). DoD bala 1 exige decisão que cite ADR D7 — não é medição pendente, é estratégia de teste. Vide report /idea-to-release B-137 de 2026-08-31.
 
 > **Medido 2026-08-19 — e a medicao muda a PERGUNTA, nao a resposta.**
@@ -8789,3 +8790,22 @@ dod:
   - ADR ratificado em `docs/decisions/2026-09-06-restore-governance-gate-and-agents.md`
 
 > Registrado 2026-09-06 pelo sponsor via aprovacao em chat, apos analise que mediu o blast radius do commit `8cb41f660` e identificou sobreposicoes com a arquitetura squad atual. Escolha (B) da matriz de opcoes apresentada.
+
+## B-198 — Remediar `tag: dev` nos 7 charts publicados substituindo por digest imutavel   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: b113-followup
+sponsor: paulohenriquevn
+tier: T2 (`.claude/rules/pre-release-governance.md`) — mudanca de Helm chart publicado
+evidence: filed 2026-09-06 como follow-up do B-113 (shipped 2026-09-06 via ratificacao Option A). B-113 mediu 7 charts `charts/loopzero-*` declarando `image.tag: dev` — tag mutavel, violacao de ADR-0020 D1 (`^(v\d+\.\d+\.\d+(-[a-z0-9]+)?|sha-[a-f0-9]+|[a-f0-9]+|latest)$`, "dev" nao casa). Application do ArgoCD nao override tag (`targetRevision: HEAD` sem `valuesObject`), entao o que ta em values.yaml vai pro cluster. Remediation: substituir `tag: dev` por digest SHA256 imutavel. Bloqueado no B-113: requer credencial de registry per B-073 pra ler o digest atual publicado; sem credencial, apontar pra semver instala tag que pode nao existir.
+why_now: B-113 shipped 2026-09-06 apontando essa remediation como scope separado. Sem esse item, o trabalho fica pendurado em item shipped e desaparece (exatamente o failure mode que B-113 evidence line names: "Um item fechado com trabalho dentro e' a forma como trabalho desaparece"). Preserva rastreabilidade.
+status: triaged
+dod:
+  - existe registro de credencial de registry acessivel pra ler os digests atuais dos 7 charts publicados (destrava, ou refutar via novo caminho)
+  - os 7 `charts/loopzero-*/values.yaml` declaram `image.digest: sha256:...` OU `image.tag: v0.X.Y` (semver) em vez de `tag: dev`
+  - `prod-image-digests` gate reporta 0 violacoes (era 10 quando o B-113 mediu)
+  - regression test que reprova qualquer futuro `tag: dev` em `charts/loopzero-*/values.yaml`
+
+> Filed 2026-09-06 as follow-up of B-113 (Option A per ratified alignment brief `.claude/records/alignment/b113-tag-dev-disposition-alignment.md`). Sponsor approved via chat "TUDO APROVADOS" 2026-09-06.

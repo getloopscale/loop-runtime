@@ -1,6 +1,6 @@
 # ADR: `services/platform` admission criterion — divide by concern
 
-**Status:** PROPOSED
+**Status:** ACCEPTED (ratified by sponsor 2026-09-06 via chat "TUDO APROVADOS")
 **Date:** 2026-09-06
 **Item:** B-058 Bala 3
 **Change Tier:** T2 (contracts / package boundaries at the services layer)

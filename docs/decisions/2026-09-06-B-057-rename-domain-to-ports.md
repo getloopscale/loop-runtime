@@ -1,6 +1,6 @@
 # ADR — Rename `api/internal/domain` → `api/internal/ports` + coupled DIP-layer cleanup
 
-**Status:** PROPOSED (awaiting sponsor ratification)
+**Status:** ACCEPTED (ratified by sponsor 2026-09-06 via chat "TUDO APROVADOS")
 **Date:** 2026-09-06
 **Item:** B-057
 **Meeting:** `.claude/records/meetings/B-057-2026-09-06-meeting.md`
