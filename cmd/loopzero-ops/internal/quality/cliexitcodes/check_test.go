@@ -243,6 +243,110 @@ func TestCheck_SearchedPathsAreReported(t *testing.T) {
 	}
 }
 
+// --- B-190: the SUBJECT field of a pinned line is measured, every run -------
+
+// writePinLines writes the pin with an arbitrary number of already-formatted
+// `subject\twhy` lines, after the same two header lines writePin uses, so a
+// line number in a violation is checkable against a known offset.
+func writePinLines(t *testing.T, root string, lines ...string) {
+	t.Helper()
+	write(t, root, DefaultPinFile, "# header comment\n\n"+strings.Join(lines, "\n")+"\n")
+}
+
+// The oracle from B-190's evidence, run against the code instead of the binary:
+// a pin line naming a subject that is RIGHT HERE. Before this, the subject field
+// was never stat'd — only the two hardcoded candidates were — so the gate printed
+// "docs is not in this tree and not in any checkout beside it" and exited 0.
+func TestCheck_PinnedSubjectThatExists_Fails(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "docs/index.md", "# docs\n")
+	writePinLines(t, root,
+		"cli/src\tmeasured: extracted to loopzero-cli in 686b9a4c5, no checkout beside",
+		"docs\tthis subject is right here and present")
+
+	out := check(t, Config{RepoRoot: root, CLIRoot: filepath.Join(root, "no-such-sibling")})
+
+	if out.Pass() {
+		t.Fatalf("a pin the filesystem contradicts must never pass: %+v", out)
+	}
+	if len(out.Violations) != 1 {
+		t.Fatalf("exactly the `docs` line must fail: %v", out.Violations)
+	}
+	v := out.Violations[0]
+	for _, want := range []string{DefaultPinFile, ":4:", "docs", filepath.Join(root, "docs"), "delete that line"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("the failure must name the pin, the line, the subject and the path it found (%q): %s", want, v)
+		}
+	}
+	// And the false sentence is not printed at all: `docs` never becomes an
+	// absence the runner would announce.
+	if len(out.TrackedAbsences) != 1 || out.TrackedAbsences[0].Subject != "cli/src" {
+		t.Fatalf("only the genuinely absent subject may be carried as an absence: %+v", out.TrackedAbsences)
+	}
+}
+
+// The declaration travels with the path that produced it, so the printed line
+// is a measurement rather than prose about the filesystem.
+func TestCheck_TrackedAbsenceCarriesThePathItStatd(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "api/main.go", "package main\n")
+	writePin(t, root, "cli/src", "measured: extracted to loopzero-cli, no checkout beside")
+
+	out := check(t, Config{RepoRoot: root})
+
+	if len(out.TrackedAbsences) != 1 {
+		t.Fatalf("the declared absence must survive: %+v", out.TrackedAbsences)
+	}
+	got := out.TrackedAbsences[0].ResolvedPath
+	if want := filepath.Join(root, "cli", "src"); got != want {
+		t.Fatalf("the absence must name where it was looked for: got %q want %q", got, want)
+	}
+	if _, err := os.Stat(got); !os.IsNotExist(err) {
+		t.Fatalf("the path named as absent must really be absent (err=%v)", err)
+	}
+}
+
+// A pin whose only line names a present subject declares NO absence: the CLI
+// tree is still missing and still undeclared, which is the B-185 failure, and
+// the stale line is the B-190 one. Both are true and both are printed.
+func TestCheck_PinWithOnlyAPresentSubject_LeavesTheAbsenceUndeclared(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "docs/index.md", "# docs\n")
+	writePinLines(t, root, "docs\tthis subject is right here and present")
+
+	out := check(t, Config{RepoRoot: root, CLIRoot: filepath.Join(root, "no-such-sibling")})
+
+	if len(out.Violations) != 2 {
+		t.Fatalf("the stale line AND the undeclared absence must both be reported: %v", out.Violations)
+	}
+	joined := strings.Join(out.Violations, "\n")
+	for _, want := range []string{"but it EXISTS at", "declares no absence"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("missing %q in: %s", want, joined)
+		}
+	}
+	if len(out.TrackedAbsences) != 0 {
+		t.Fatalf("a present subject is not an absence: %+v", out.TrackedAbsences)
+	}
+}
+
+// A subject that comes back AND a source tree that turns up are two different
+// facts; the stale line must not be reported twice for one line.
+func TestCheck_SubjectPresentAndTreeFound_ReportsOneViolationPerLine(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "cli/src/a.ts", "process.exit(0)\n")
+	writePin(t, root, "cli/src", "stale prose: says gone, tree says otherwise")
+
+	out := check(t, Config{RepoRoot: root})
+
+	if len(out.Violations) != 1 {
+		t.Fatalf("one stale line is one violation, not two: %v", out.Violations)
+	}
+	if out.ScannedFiles != 0 {
+		t.Fatalf("a contradicted pin is fixed before this gate scans; got %d file(s)", out.ScannedFiles)
+	}
+}
+
 func TestParsePin_MalformedLine_IsAnError(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, DefaultPinFile, "cli/src has no tab at all\n")

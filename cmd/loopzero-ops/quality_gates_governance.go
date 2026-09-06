@@ -60,8 +60,11 @@ import (
 //     a gap nobody prints is indistinguishable from no gap.
 //
 //   - FAIL      an exit code is out of contract; or no source tree exists and
-//     nothing declares that; or a declared absence has CLOSED — the subject came
-//     back and the pin still says it is gone.
+//     nothing declares that; or a declared absence has CLOSED — the pinned
+//     SUBJECT path itself exists, or a CLI source tree turned up, and the pin
+//     still says it is gone. Both halves are measured on every run; before
+//     B-190 only the second one was, so a line could name a directory sitting
+//     right here and still print as an absence.
 func runCLIExitCodes(args []string) int {
 	fs := flag.NewFlagSet("cli-exit-codes", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
@@ -85,10 +88,14 @@ func runCLIExitCodes(args []string) int {
 	}
 
 	// The tracked absence goes to stdout on every run — that is what turns a
-	// silent SKIP into an absence somebody can read.
+	// silent SKIP into an absence somebody can read — and it names the path
+	// that was stat'd this run to produce it. The sentence it replaces ("… is
+	// not in this tree and not in any checkout beside it") was printed without
+	// the subject ever being stat'd, so it was false for any subject that was
+	// in fact right here (B-190).
 	for _, a := range outcome.TrackedAbsences {
-		fmt.Printf("cli-exit-codes: TRACKED ABSENCE — %s is not in this tree and not in any checkout beside it: %s\n",
-			a.Subject, a.Why)
+		fmt.Printf("cli-exit-codes: TRACKED ABSENCE — %s: stat'd at %s on this run and NOT present: %s\n",
+			a.Subject, a.ResolvedPath, a.Why)
 	}
 
 	if len(outcome.Violations) > 0 {

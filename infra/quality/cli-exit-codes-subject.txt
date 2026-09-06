@@ -8,16 +8,24 @@
 # 2026-09-05, and is what B-185 closed.
 #
 # Every line here is a subject this repository has looked for, not found, and
-# decided to carry in the open. The gate prints these lines on EVERY run — a
-# tracked absence must never be quieter than a fresh one — it reports PARTIAL
-# rather than PASS, and its Pass boolean is false, so nothing downstream can
-# read "nothing to check" as "checked and fine".
+# decided to carry in the open. The gate re-measures each line's SUBJECT with a
+# stat on EVERY run and prints it together with the path it stat'd — a tracked
+# absence must never be quieter than a fresh one, and must never be a sentence
+# about a filesystem nobody read. It reports PARTIAL rather than PASS, and its
+# Pass boolean is false, so nothing downstream can read "nothing to check" as
+# "checked and fine".
 #
 # The gate FAILS when:
 #   - no CLI source tree is found and NOTHING here declares that;
-#   - a subject listed here is FOUND (in this tree, or in the loopzero-cli checkout
-#     beside it) — the absence closed, the line is stale prose, and the gate
-#     must go back to scanning instead of declaring.
+#   - a subject listed here is FOUND — either the SUBJECT path on the line
+#     exists (stat'd against this repository's root, every run), or a CLI
+#     source tree turned up in this tree or in the loopzero-cli checkout beside it.
+#     Either way the absence closed, the line is stale prose, and the gate must
+#     go back to scanning instead of declaring.
+#
+#     Until 2026-09-05 only the second half was measured: the subject field was
+#     never stat'd, so a line naming `docs` in a tree that contains docs/ was
+#     printed as an absence at exit 0 (B-190).
 #
 # Format: two TAB-separated fields.
 #   <subject path this gate would scan>	<why it is absent, naming what covers the contract instead>

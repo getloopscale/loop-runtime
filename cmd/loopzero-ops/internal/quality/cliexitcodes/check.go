@@ -46,6 +46,19 @@
 // the same property infra/quality/test-skip-absent-path.txt has (B-180/B-183),
 // for the same reason: the right way to leave the pin is to delete the line.
 //
+// The contradiction is looked for in TWO places, and until 2026-09-05 only one
+// of them was (B-190). A pinned line is stale if a CLI source tree turned up in
+// either candidate, and it is equally stale if the line's own SUBJECT path
+// exists -- but the subject field was never stat'd. An audit pinned
+//
+//	docs	this subject is right here and present
+//
+// in a root that CONTAINS docs/, and the gate printed "docs is not in this tree
+// and not in any checkout beside it" at exit 0: a false sentence about the
+// filesystem, from the gate whose reason to exist is not to print those. Every
+// subject is stat'd on every run now, and the path that was stat'd is printed
+// beside the declaration it produced.
+//
 // And the fail-on-return branch is not decorative. Searching the sibling is
 // what gives it a realistic trigger: cli/ coming HOME to this tree is unlikely
 // (M2 extracted it on purpose), but somebody cloning loopzero-cli beside this
@@ -101,6 +114,11 @@ type Absence struct {
 	Subject string
 	Why     string
 	Line    int
+	// ResolvedPath is where Subject was looked for on THIS run, resolved
+	// against the repository root. It travels with the absence so the printed
+	// declaration carries the measurement that produced it instead of a
+	// sentence about a filesystem nobody read (B-190).
+	ResolvedPath string
 }
 
 // Outcome is the verdict.
@@ -114,7 +132,12 @@ type Outcome struct {
 	// SearchedPaths lists every candidate looked at, in order. Never empty.
 	SearchedPaths []string
 
-	// TrackedAbsences are the pinned lines that the filesystem confirms.
+	// TrackedAbsences are the pinned lines whose Subject this run stat'd and
+	// did NOT find. A line whose subject EXISTS never reaches this field: it
+	// is a violation. Until 2026-09-05 this doc said "the pinned lines that
+	// the filesystem confirms" while no subject was ever stat'd -- only the
+	// two hardcoded candidates were -- so a line naming a directory sitting
+	// right here was reported as an absence (B-190).
 	TrackedAbsences []Absence
 
 	Violations []string
@@ -174,17 +197,27 @@ func Check(cfg Config) (*Outcome, error) {
 		return nil, err
 	}
 
+	// Every pinned SUBJECT is stat'd before anything else is decided. A
+	// declaration nobody re-measures is prose (B-190).
+	declaredAbsent, contradicted, err := measurePins(root, pinned, pinFile)
+	if err != nil {
+		return nil, err
+	}
+	out.Violations = append(out.Violations, contradicted...)
+
 	srcDir := firstExistingDir(out.SearchedPaths)
 
 	if srcDir == "" {
-		if len(pinned) == 0 {
+		// `len(declaredAbsent)`, not `len(pinned)`: a pin whose only line names
+		// a subject that is right here declares no absence at all, so the
+		// absence of the CLI tree is still undeclared and still the bug.
+		if len(declaredAbsent) == 0 {
 			out.Violations = append(out.Violations, fmt.Sprintf(
 				"no CLI source tree was found (looked at %s) and %s declares no absence -- "+
 					"an absence nobody wrote down is indistinguishable from a check that ran",
 				strings.Join(out.SearchedPaths, ", "), pinFile))
-			return out, nil
 		}
-		out.TrackedAbsences = pinned
+		out.TrackedAbsences = declaredAbsent
 		// Checked stays false, so Pass() is false: nothing was scanned, so
 		// nothing passed. The runner turns this into PARTIAL, never PASS.
 		return out, nil
@@ -193,13 +226,30 @@ func Check(cfg Config) (*Outcome, error) {
 	out.Checked = true
 	out.ScannedRoot = srcDir
 
-	if len(pinned) > 0 {
-		for _, a := range pinned {
-			out.Violations = append(out.Violations, fmt.Sprintf(
-				"%s:%d: %s is declared ABSENT here, but a CLI source tree EXISTS at %s -- "+
-					"the absence closed; delete that line so this gate scans instead of declaring",
-				pinFile, a.Line, a.Subject, srcDir))
-		}
+	// The measurement is carried whichever branch runs. It was assigned only when
+	// no tree was found, so a line this run stat'd and did not find lost its
+	// verdict the moment some OTHER tree turned up (B-190's own audit).
+	out.TrackedAbsences = declaredAbsent
+
+	for _, a := range declaredAbsent {
+		// "this line's subject came back" and "some CLI tree was found" are
+		// different facts, and one sentence reported both. A line whose subject
+		// is still absent was told its absence had closed -- a false statement
+		// about the filesystem, printed by the gate that exists to stop those.
+		//
+		// A subject that is PRESENT is not in declaredAbsent at all; measurePins
+		// puts it in `contradicted`. So every line here is genuinely still
+		// absent, and what changed is that the gate now scans anyway.
+		out.Violations = append(out.Violations, fmt.Sprintf(
+			"%s:%d: %s is still ABSENT -- this run stat'd it and did not find it -- but a "+
+				"CLI source tree EXISTS at %s, so this gate SCANS rather than declaring. "+
+				"The line no longer describes what happens: delete it, or point it at the "+
+				"subject that is actually missing",
+			pinFile, a.Line, a.Subject, srcDir))
+	}
+	// A pin the filesystem contradicts is fixed before this gate scans: whatever
+	// it read would be reported under a declaration that is already wrong.
+	if len(out.Violations) > 0 {
 		return out, nil
 	}
 
@@ -224,6 +274,39 @@ func Check(cfg Config) (*Outcome, error) {
 	return out, nil
 }
 
+// measurePins stats the SUBJECT of every pinned line and splits the pin into
+// the lines the filesystem still agrees with (absent) and the lines it
+// contradicts (contradicted, already worded as violations). It reads the
+// filesystem and reports; the caller decides what the report means.
+//
+// This is the half B-190 found missing: the pin's header promised the gate
+// FAILS when "a subject listed here is FOUND", and only the two hardcoded
+// candidates were ever stat'd, so the promise held for `cli/src` by accident
+// and for nothing else.
+//
+// A subject that cannot be stat'd at all -- a permission error, not an absence
+// -- is returned as an error rather than counted absent. Reporting a clean
+// absence over a measurement that failed is the same lie in a quieter voice.
+func measurePins(root string, pinned []Absence, pinFile string) (absent []Absence, contradicted []string, err error) {
+	for _, a := range pinned {
+		a.ResolvedPath = filepath.Join(root, a.Subject)
+		_, statErr := os.Stat(a.ResolvedPath)
+		switch {
+		case statErr == nil:
+			contradicted = append(contradicted, fmt.Sprintf(
+				"%s:%d: %s is declared ABSENT here, but it EXISTS at %s -- the subject is in this "+
+					"tree, so the line is a false statement about the filesystem; delete that line",
+				pinFile, a.Line, a.Subject, a.ResolvedPath))
+		case os.IsNotExist(statErr):
+			absent = append(absent, a)
+		default:
+			return nil, nil, fmt.Errorf("%s:%d: cannot stat declared-absent subject %s at %s: %w",
+				pinFile, a.Line, a.Subject, a.ResolvedPath, statErr)
+		}
+	}
+	return absent, contradicted, nil
+}
+
 func firstExistingDir(candidates []string) string {
 	for _, c := range candidates {
 		if fi, err := os.Stat(c); err == nil && fi.IsDir() {
@@ -235,6 +318,17 @@ func firstExistingDir(candidates []string) string {
 
 // parsePin reads the absence declaration. A missing pin file is not an error:
 // it is the same fact as an empty pin -- nothing is declared absent.
+//
+// The sibling gate testskipabsentpath makes the OPPOSITE call on the same question,
+// and the difference is worth stating because it looks like an inconsistency. There
+// a pin line is a live ANCHOR, so losing the file silently drops tracked sites and
+// the gate goes quiet about what it was told to watch: SETUP BROKEN, exit 5. Here a
+// pin line only ever ADDS a declaration, so without the file every absence is
+// undeclared -- which is precisely the condition this gate FAILS on. Losing it can
+// only make this gate stricter, never laxer, and a floor would buy nothing.
+//
+// Written down 2026-09-05 after measuring `--pin <missing>` and reaching for a floor
+// before checking which direction the loss pushes.
 func parsePin(path string) ([]Absence, error) {
 	data, err := os.ReadFile(path) // #nosec G304 -- path is <root>/<pin>, both operator-supplied.
 	if err != nil {
