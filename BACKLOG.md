@@ -5028,6 +5028,80 @@ dod:
 > Balas 1 e 3 seguem abertas: registro T3 retroativo e mudança em
 > `pre-release-governance.md` são atos de governança, não medição.
 
+> **Re-measured 2026-09-06 at `cadadb9c9` — the `cell` half is fully executed in code, and
+> three live call sites are BROKEN by it. `severity` and `why_now` are both wrong.**
+>
+> The item says *"o código resultante está **correto** e é 1:1"* and *"o cabeçalho foi corrigido
+> hoje […] então o dano visível acabou"*. The first is right about the schema and never looked
+> at the callers; the second is false.
+>
+> **The rename itself is complete.** In the executable tree (`cmd api operators pkg infra
+> charts taskfiles tools`) `cell-default` has **71 lines in 17 files**, and they decompose
+> exactly: **59 in migrations**, **9 in tests of those migrations**, **3 in the narrative
+> comment** of `bootstrap-cell-cc.sh`. **Zero live code reads it as a value.** The migration
+> lines are not residue — 32 of the 59 are `000061_cell_identity_unification` itself, which
+> retires the id, and the rest are the earlier migrations that created it; the migrator
+> re-applies every file on each run (`000061` says so and is written to be re-runnable), so
+> `000006` must keep inserting what `000061` merges. `DefaultCellID = "cell-0"`
+> (`api/internal/placement/cells.go:30`), and the trigger no longer uses the sentinel at all
+> — `000061` phase 4 replaces it with `NULL` plus an explicit `RAISE`. Cluster half
+> re-measured at this HEAD too: the ADR exception list is **8 rows and the grep returns 8
+> lines**, still one-to-one.
+>
+> **What is broken is the call sites.**
+>
+> | site | passes | `case "$CELL"` verdict | effect |
+> |---|---|---|---|
+> | `taskfiles/drill.yml:234` | `--cell default` | `exit 1` | **task aborts** — body is `set -euo pipefail` (`drill.yml:163`) |
+> | `taskfiles/drill.yml:236` | `--cell 2` | `exit 1` | unreachable — 234 already aborted |
+> | `infra/scripts/local/k3d-cross-cluster-heal.sh:812` | `--cell 2` | `exit 1` | **silent** — wrapped in `if/else`, always takes the `warn` arm |
+>
+> Reproduced deterministically, no cluster required:
+>
+> ```
+> $ bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell default --env drill
+> [bootstrap-cell-cc] --cell must be one of: 0, 1 (got: default)     # exit 1
+> ```
+>
+> So `task drill:l2-scale` cannot reach Phase 6 — the 50-concurrent load test the task exists
+> for — while `infra/scripts/drill/preflight.sh:351` still signs off with *"Operator may
+> proceed: 'task drill:l2-scale'"*. The heal path is worse for being quiet: the lines around
+> `k3d-cross-cluster-heal.sh:812` were renamed to say `cell-1` three times while the argument
+> stayed `2`, so the H14 self-heal has not healed since the fusion landed. **This is the
+> answer the item did not have: the split does not merely leave naming debt, it breaks a
+> lookup.**
+>
+> **Fixed in this pass (one line, no behaviour change).** `usage()` still printed
+> `--cell <default|1|2>` — the exact string this file's own header calls *"o pior"* and
+> declares corrected. The 2026-08-17 header fix corrected the **comment** copy and missed the
+> **executable** copy, so the script advertised two values it rejects and hid the one it
+> accepts. Advertised set now equals accepted set (`{0,1}`); shellcheck clean; validation
+> untouched (`bootstrap-cell-cc.sh:105-108`).
+>
+> **NOT fixed here, deliberately.** Repairing the three call sites is a behaviour change on
+> drill and heal paths that need live infrastructure to verify, and each repair propagates a
+> fusion whose ADR (`docs/decisions/2026-08-09-cell-cluster-unification-adr.md`) is still
+> `PROPOSED` and still reads *"não implementar antes da ratificação"*. Deepening an
+> unratified decision is the bypass this item is about. The mapping is unambiguous for
+> whoever holds the authority: `000061` merges `{cell-default, cell-1} → cell-0` and
+> renumbers `cell-2 → cell-1`, and `bootstrap-cell-cc.sh:141-142` maps `0 → runtimeCluster`,
+> `1 → runtimeCluster2` — so drill's three invocations collapse to two (`--cell 0`,
+> `--cell 1`) and the heal's `2` becomes `1`.
+>
+> **Why no gate caught it.** `danglingrefs` catches a *deleted* script still referenced by a
+> live caller. Nothing checks that a *live* script is invoked with an argument its own
+> validation accepts. That is the shape bullet 3's gate would need, and naming it is
+> measurement — not the governance act bullet 3 asks for.
+>
+> Prior lane `halt/B-136` (`56b516980`, 2026-09-04) refused bullets 1 and 3 and corrected two
+> facts — the ADR exists in `docs/decisions/` (unratified, not missing), and
+> `governance-gate.py` was **deleted** by `8cb41f660` (*"Remove docs inconsistent"*, 2026-08-06)
+> while wired as a `PreToolUse` hook. Both re-verified here, and one number in that report is
+> corrected: the gap is **four days**, not eleven — the fusion migration was added by
+> `148c04104` on **2026-08-10** (`git log --diff-filter=A -- …000061_cell_identity_unification.up.sql`).
+> Eleven days is the distance to the 2026-08-17 header fix, not to the T3 change. That branch
+> was never merged; the corrections are restated here so they survive it.
+
 > Registrado 2026-08-17 ao medir o `B-001`. **Não é acusação de má-fé**: os commits são bem escritos, o código resultante é o desenho certo (1:1), e a fusão é exatamente o que o CTO decidiu em 2026-08-09. O achado é que a decisão certa chegou por um caminho que a governança não viu.
 
 ## B-137 — A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore   [ ]

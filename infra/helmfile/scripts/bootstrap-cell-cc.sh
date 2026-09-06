@@ -49,9 +49,14 @@
 # Idempotent. Shellcheck clean.
 set -euo pipefail
 
+# The Usage string below is the SECOND copy of the one in the header above. The
+# 2026-08-17 header fix corrected the comment copy and left this one printing
+# `--cell <default|1|2>` -- the very defect the header declares fixed -- until it was
+# re-measured on 2026-09-06 (B-136). Both copies must move together, and `case "$CELL"`
+# below is the only authority on which values are accepted.
 usage() {
   cat <<USAGE
-Usage: $0 --cell <default|1|2> --env <dev|drill|prod|standalone|standalone-multi> [--dry-run]
+Usage: $0 --cell <0|1> --env <dev|drill|prod|standalone|standalone-multi> [--dry-run]
 
 Bootstraps a ClusterCredential CR + bearer-token Secret for the given
 (cell, env) pair. See plan v1.2 T4.2 + EC-4 mapping table.
