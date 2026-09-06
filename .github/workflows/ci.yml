@@ -72,6 +72,22 @@ on:
   # commits that falsified the premises touched nothing outside `.claude/**` and
   # would not have started this workflow at all.
   #
+  # AND WHAT CHECKS THAT CHECK. An audit of the paragraph above measured the hole
+  # it left, and the hole has the shape of the fix: A WORKFLOW CANNOT REPORT ITS
+  # OWN DELETION. Delete `delivery-gate-armed.yml` and it does not go red — it
+  # stops existing, and an absent check reads on a pull request exactly like a
+  # repository that never had one. Same outcome, harder to see: leave it in place
+  # and give it a `paths:` filter, and it survives every listing while never
+  # firing for the `.claude/**`-only commit that is the shape of all three
+  # historical disarms. So since 2026-09-06 a THIRD file reports on the second:
+  # `.github/scripts/assert-gate-observers-intact.py` asserts that
+  # `delivery-gate-armed.yml` is present, carries no paths filter, still triggers
+  # on `workspace`/`develop`/`main` and on PRs into `develop`/`main`, and still
+  # invokes its script. It runs from two substrates that fail independently —
+  # `workflow-hygiene.yml` on GitHub, and `task quality:hermetic` on the pusher's
+  # machine BEFORE the push, which is the only moment a deletion can be refused
+  # at a cost of zero ungated pushes.
+  #
   # WHY THIS JOB STAYS POST-MERGE — measured 2026-09-06, not assumed:
   #   - it costs 2-4 minutes and needs two checkouts, a deploy key for a private
   #     module and a Go toolchain; `task quality:gates` on top of that needs
@@ -80,10 +96,31 @@ on:
   #   - it is RED, and has been. Runs 32084704925 through 32197072865 — the last
   #     fifteen — all failed, the failing step being `Test the hermetic modules`,
   #     and `go test ./... -count=1` in cmd/loopzero-ops is red in a clean worktree
-  #     today on `trufflehogscan.TestArvoreRealEstaAdjudicada`. Making a
-  #     permanently-red job a required PR check blocks every promotion for a
-  #     cause unrelated to the change under review, which is how required checks
-  #     get switched off.
+  #     today on `trufflehogscan.TestArvoreRealEstaAdjudicada` (re-measured
+  #     2026-09-06). Promoting a permanently-red job to a gate on the PR would
+  #     block every promotion for a cause unrelated to the change under review,
+  #     which is how gates get switched off.
+  #
+  # AND THE THING NONE OF THE ABOVE DOES — measured, not assumed, because the
+  # sentence this paragraph replaces assumed it. NOTHING IN THIS REPOSITORY CAN
+  # BLOCK A MERGE. Every check here, this one included, NOTIFIES; a red check
+  # stops nothing until branch protection marks it required, and on 2026-09-06
+  # that setting was not merely unset — it is unavailable:
+  #
+  #     gh api repos/getloopscale/loopzero/branches/develop/protection  -> 403
+  #     gh api repos/getloopscale/loopzero/branches/main/protection     -> 403
+  #     gh api repos/getloopscale/loopzero/rulesets                     -> 403
+  #     "Upgrade to GitHub Pro or make this repository public to enable this
+  #      feature."
+  #
+  # The org `getloopscale` is on the `free` plan and `loopzero` is PRIVATE, and that
+  # combination is what the API is refusing. So "make the armed-check a required
+  # check" is not a checkbox anyone forgot to tick — it is a purchase (org Team
+  # plan) or a visibility change (make the repo public), and until one of those
+  # happens the honest description of every gate in this file is that it tells
+  # someone, and that someone has to act. Written here rather than left implied,
+  # because the previous version of this comment reasoned about required checks
+  # as though this repository had them.
   #
   # THE CONSEQUENCE, STILL SAID OUT LOUD: with this job not acting on the PR, its
   # first signal arrives AFTER the merge, and fixing a red `develop` is a

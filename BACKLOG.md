@@ -86,7 +86,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
 | [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
-| [`B-192`](#b-192--o-ci-e-pos-merge-porque-o-portao-local-seria-inescapavel-e-as-tres-premissas-dessa-decisao-foram-falsas-ao-mesmo-tempo----) | O CI e' pos-merge porque o portao local seria inescapavel, e as tres premissas dessa decisao foram falsas ao mesmo tempo | `triaged` | alta — nao ha nada quebrado agora (o `B-187` restaurou o hook e fechou os |
+| [`B-192`](#b-192--o-ci-e-pos-merge-porque-o-portao-local-seria-inescapavel-e-as-tres-premissas-dessa-decisao-foram-falsas-ao-mesmo-tempo----) | O CI e' pos-merge porque o portao local seria inescapavel, e as tres premissas dessa decisao foram falsas ao mesmo tempo | `shipped` | alta — nao ha nada quebrado agora (o `B-187` restaurou o hook e fechou os |
 | [`B-194`](#b-194--o-ramo-aes-de-leitura-so-pode-sair-com-uma-contagem-que-cubra-a-frota-e-ninguem-e-dono-dela----) | O ramo AES de leitura so' pode sair com uma contagem que cubra a frota, e ninguem e' dono dela | `triaged` | media — nada quebra hoje (o caminho de escrita ja' recusa AES); o custo e' um gate que segue vermelho por uma divida real cujo desbloqueio depende de acesso a banco que nenhuma sessao tem |
 | [`B-196`](#b-196--as-listas-soft-sao-montadas-antes-da-exclusao-de-baseline-entao-um-cap-inteiramente-baselineado-ainda-exige-um-adr----) | As listas soft sao montadas ANTES da exclusao de baseline, entao um cap inteiramente baselineado ainda exige um ADR | `triaged` | baixa — nada quebra; o custo e' um pedido de ADR por uma divida que ja' foi |
 
@@ -8150,7 +8150,7 @@ why_now: os tres consertos ja entraram (`B-187` e as correcoes da auditoria). O 
   NAO existe e' o que teria contado a alguem, em qualquer um dos quatro dias, que o
   portao no qual o CI se apoia nao estava la. O `PR #344` esta `MERGEABLE`/`CLEAN` com
   um unico check, de um servico de terceiro que sai como `skipping`.
-status: triaged
+status: shipped
 dod:
   - a decisao pos-merge fica ou muda, e a razao escrita no `ci.yml` passa a citar o
     que VERIFICA cada premissa em vez de afirma-las: hoje o comentario as afirma
@@ -8167,6 +8167,69 @@ dod:
     golangci-lint no PATH) — e o subconjunto que roda sem eles esta nomeado
   - nao ampliar para o `PR #11` do kit: la o CI morre por faturamento, que e outra
     causa e outro dono
+
+> **Entregue 2026-09-06 (segunda rodada, branch `item/B-192-r2` — `item/B-192` ja' existia
+> e esta' mergeada).** A decisao pos-merge FICA, e a razao escrita no `ci.yml` agora cita o
+> que verifica cada premissa. A rodada anterior entregou isso; esta fecha as duas coisas que
+> a auditoria mediu em cima dela.
+>
+> **1. A DELECAO DO PROPRIO OBSERVADOR passou a ser reportada.** Um workflow nao consegue
+> reportar a propria delecao: apagado, ele nao fica vermelho — ele some, e um check ausente
+> le, num PR, igual a um repositorio que nunca o teve. Agora
+> `.github/scripts/assert-gate-observers-intact.py` afirma que o `delivery-gate-armed.yml`
+> existe, nao ganhou `paths:`, ainda dispara em `workspace`/`develop`/`main` e nos PRs, e
+> ainda invoca seu script. Roda de DOIS substratos que falham independentemente: do
+> `workflow-hygiene.yml` no GitHub, e do `task quality:hermetic` na maquina de quem empurra
+> — este ultimo ANTES do push, que e' o unico momento em que a delecao custa zero pushes
+> sem portao. O `workflow-hygiene.yml` recuperou o gatilho `pull_request` que o `464b9d7e3`
+> tirou, e ganhou `workspace`; sem isso o primeiro momento de fala seria o PR de promocao,
+> que e' o atraso de quatro dias com outro nome.
+>
+> **2. "UM CHECK VERMELHO SO' NOTIFICA" — e nao e' um checkbox esquecido, e' plano.** Medido
+> 2026-09-06: `branches/develop/protection`, `branches/main/protection` e `rulesets` todos
+> devolvem **403 — "Upgrade to GitHub Pro or make this repository public"**. A org
+> `getloopscale` esta' no plano `free` e o `loopzero` e' PRIVADO. Entao NENHUM check deste
+> repositorio pode ser marcado como obrigatorio — nem este, nem o `ci.yml`. **Isto o item
+> nao muda e nada dentro do repositorio pode mudar**: e' compra (plano Team) ou mudanca de
+> visibilidade. Ficou escrito nos tres lugares que raciocinavam como se houvesse required
+> check.
+>
+> **A ordem, dita porque e' sempre a mesma.** Portao morre → push sem portao → relatorio.
+> Para o portao local a ordem e' irredutivel: o commit que desarma precede o push que o
+> carrega, entao custa exatamente UM push sem portao (o `delivery-gate-armed.yml` fala
+> naquele mesmo push, em `workspace`). Para a delecao do OBSERVADOR o custo cai a zero
+> pushes quando o portao local esta' armado, porque a recusa acontece no `quality:hermetic`
+> antes do push.
+>
+> **Onde o anel termina, declarado.** Um unico commit que desarme o portao local E apague os
+> dois workflows nao e' reportado por nada — todos os relatores estao dentro dele. Fechar
+> isso exige autoridade fora da arvore de arquivos, e a unica que o GitHub oferece e' o
+> required check, que este plano nao vende (ver 2).
+>
+> **Onde 21 nao muda a resposta.** Re-medido: `git log --since=2026-08-29 --until=2026-09-02
+> workspace` = 21, igual. Continua sendo limite superior (commits, nao pushes). A decisao que
+> 21 poderia mudar seria "o CI passa a rodar no PR", e essa foi respondida por custo e por
+> cor, nao por volume: o job custa 2-4 min, dois checkouts, deploy key e toolchain Go, o
+> `quality:gates` por cima exige helmfile/kubeconform/actionlint/trivy/golangci-lint e falha
+> alto sem eles, e o job esta' VERMELHO — re-medido hoje em worktree limpo,
+> `trufflehogscan.TestArvoreRealEstaAdjudicada`. O subconjunto que roda no PR sem nada disso
+> e' nomeado e e' pequeno: presenca/fiacao/nao-bypass do portao local, integridade dos dois
+> observadores, `actionlint`, SHA-pin e ausencia de `${{ }}` em `run:`. **Nao cobre** build,
+> vet, teste de codigo de produto, nem se a mudanca sob revisao esta' correta.
+>
+> **Uma mentira de doc de mesma safra, corrigida.** O cabecalho do `workflow-hygiene.yml`
+> dizia "os DOIS gatilhos ... o de PR mata o defeito antes de entrar no trunk" — verdade
+> quando escrita, falsa desde `464b9d7e3`. A rodada anterior corrigiu essa mesma frase no
+> `check-workflow-hygiene.sh` e no `ci.yml` e deixou esta duas telas acima, no arquivo que
+> editou.
+>
+> **Arnes de mutacao, com o proprio baseline provado.** 7 mutantes no verificador novo, cada
+> um unico, compilando e alterando o arquivo; baseline verde antes, verde depois. Os 7
+> foram mortos pelo teste nomeado. O primeiro run reprovou dois: o parser de nomes do arnes
+> lia a duracao no lugar do nome, e o mutante `unchecked-folded-into-pass` SOBREVIVEU —
+> o teste de fail-closed passava pelo motivo errado (a fixture tambem quebrava o `run:`,
+> entao morria ali e nao na regra que dizia pinar). A fixture foi reduzida ao unico defeito
+> que pretende medir, com uma asercao de que exatamente UM veredito pode ficar vermelho nela.
 
 ## B-193 — Uma ligacao LOCAL restaura o silencio em todo caso UNRESOLVED, e o `rebound` acusa um religamento que nao houve   [ ]
 

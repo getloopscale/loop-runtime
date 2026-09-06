@@ -2,6 +2,26 @@
 # the local delivery gate is not armed, and it is deliberately not the local
 # delivery gate.
 #
+# AND SOMETHING ELSE WATCHES THIS FILE, since 2026-09-06. An audit measured that
+# the sentence above had a hole exactly its own size: a workflow cannot report
+# its own deletion. Delete this file and no run is queued, no check appears, and
+# an absent check reads on a pull request like a repository that never had one.
+# `.github/scripts/assert-gate-observers-intact.py` is what reports that now —
+# it asserts this file exists, keeps the triggers below, carries no paths filter
+# and still runs its script. It is invoked from `workflow-hygiene.yml` (on
+# GitHub, at the push and on the promotion PR) and from `task quality:hermetic`
+# (on the pusher's machine, BEFORE the push). Neither of those is this file, and
+# that is the whole requirement.
+#
+# WHERE THE RING ENDS, said plainly: one commit that disarms the local gate AND
+# deletes both workflows is reported by nothing, because every reporter is in it.
+# Terminating that needs an authority outside the file tree — a REQUIRED status
+# check — and this repository cannot have one. Measured 2026-09-06: branch
+# protection and rulesets both return 403, "Upgrade to GitHub Pro or make this
+# repository public" (org `getloopscale` is on the `free` plan; `loopzero` is PRIVATE).
+# So this check NOTIFIES and does not block, and no amount of work inside the
+# repository changes that — it is a purchase or a visibility change.
+#
 # WHY IT IS A SEPARATE WORKFLOW AND NOT A JOB IN ci.yml. Three measured reasons,
 # each of which alone would be enough:
 #
@@ -51,9 +71,16 @@ on:
   # is affordable, and the push is the earliest event there is.
   push:
     branches: [workspace, develop, main]
-  # The promotion. This is the check that can be made REQUIRED on
-  # `workspace -> develop -> main`, where PR #344 sat MERGEABLE/CLEAN with one
-  # check from a third-party service reporting as skipping.
+  # The promotion — `workspace -> develop -> main`, where PR #344 sat
+  # MERGEABLE/CLEAN with one check from a third-party service reporting as
+  # skipping.
+  #
+  # This comment used to call it "the check that CAN BE MADE REQUIRED". Measured
+  # 2026-09-06 and it cannot: branch protection and rulesets are both 403 on this
+  # plan (see the header). What this trigger buys is therefore narrower and worth
+  # stating exactly — the verdict EXISTS on the promotion PR, in red, before the
+  # merge, for a human to read. It does not stop the merge, and nothing in this
+  # repository does.
   pull_request:
     branches: [develop, main]
   workflow_dispatch: {}
