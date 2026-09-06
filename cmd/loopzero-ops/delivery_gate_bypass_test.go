@@ -120,3 +120,52 @@ func TestDeliveryGate_TheControlsStillGate(t *testing.T) {
 		}
 	}
 }
+
+// A SECOND ROUND OF BYPASSES, one of them introduced by the fix for the first.
+//
+// Measured 2026-09-06 by an independent audit, same method as the first round: a real
+// push that reaches the remote while the gate decides nothing.
+//
+//   (git push origin main)                                  the anchor class had no `(`
+//   $(git push origin main)                                 nor `$`
+//   git push --dry-run origin main; git push origin main    PUSH_SEGMENT did `head -1`
+//
+// The third is mine. Scoping the --dry-run check to "the segment the push is in" was
+// the fix for the first round; taking only the FIRST such segment meant a flag
+// belonging to one command waved through the command beside it. The skip exists for a
+// push that changes nothing on the remote, so it applies only when EVERY push in the
+// line is a dry run.
+
+func TestDeliveryGate_SeesAPushInsideASubshell(t *testing.T) {
+	for _, command := range []string{
+		"(git push origin main)",
+		"$(git push origin main)",
+	} {
+		if !gateRuns(t, command) {
+			t.Errorf("a push inside a subshell is a push: %q", command)
+		}
+	}
+}
+
+func TestDeliveryGate_CountsEveryPushSegmentNotTheFirst(t *testing.T) {
+	for _, command := range []string{
+		"git push --dry-run origin main; git push origin main",
+		"git push origin main; git push --dry-run origin main",
+	} {
+		if !gateRuns(t, command) {
+			t.Errorf("one dry run does not make the real push beside it a dry run: %q", command)
+		}
+	}
+}
+
+func TestDeliveryGate_StillSkipsWhenEveryPushIsADryRun(t *testing.T) {
+	// The skip must survive the narrowing, or every dry run pays for the suite.
+	for _, command := range []string{
+		"git push origin main --dry-run",
+		"git push --dry-run origin main; git push --dry-run origin dev",
+	} {
+		if gateRuns(t, command) {
+			t.Errorf("every push here is a dry run and changes nothing on the remote: %q", command)
+		}
+	}
+}
