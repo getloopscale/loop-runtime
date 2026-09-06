@@ -449,6 +449,9 @@ func isSkipCall(n ast.Node) bool {
 // honour, and continuing would turn tracked sites into fresh violations or, if
 // the file were skipped entirely, fresh violations into silence.
 func readPin(abs, rel string) (map[string]pinLine, error) {
+	// #nosec G304 -- abs is the pin file the gate is configured to read; same
+	// annotation and same reason as testskipabsentpath/check.go:2127, which reads
+	// its own declaration file the same way.
 	f, err := os.Open(abs)
 	if err != nil {
 		return nil, fmt.Errorf("pin file %s: %w", rel, err)
