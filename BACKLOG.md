@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-188 items — **Open** 17 · **In flight** 5 · **Closed** 166 · **Blocked** 7
+190 items — **Open** 19 · **In flight** 5 · **Closed** 166 · **Blocked** 7
 
-### Open (17)
+### Open (19)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -91,6 +91,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-184`](#b-184--dois-testes-pulam-incondicionalmente-e-leem-um-arquivo-logo-abaixo-com-tfatalf-que-nunca-roda----) | Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda | `triaged` | media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a |
 | [`B-187`](#b-187--o-hook-que-o-repositorio-declara-como-substituto-de-ci-nao-existe-em-maquina-nenhuma---x) | O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma | `triaged` | alta — dois testes afirmam "the delivery gate is the CI substitute; it must |
 | [`B-188`](#b-188--tres-posicoes-de-skip-que-o-gate-nao-le-e-a-que-ele-passou-a-ler-custou-uma-auditoria-para-aparecer----) | Tres posicoes de skip que o gate nao le, e a que ele passou a ler custou uma auditoria para aparecer | `triaged` | media — o gate e a unica coisa que impede a classe de voltar, e ha tres |
+| [`B-189`](#b-189--a-classe-volta-por-um-valor-de-funcao-e-o-gate-nem-diz-unresolved-seis-grafias-em-silencio----) | A classe volta por um VALOR de funcao, e o gate nem diz UNRESOLVED: seis grafias em silencio | `triaged` | media — quarta reabertura consecutiva da mesma classe, e a primeira em que |
+| [`B-190`](#b-190--o-pin-do-cli-exit-codes-promete-que-o-gate-reprova-quando-o-assunto-aparece-e-o-campo-do-assunto-nunca-e-lido----) | O pin do cli-exit-codes promete que o gate reprova quando o assunto aparece, e o campo do assunto nunca e lido | `triaged` | baixa — inofensivo com a unica linha de hoje, armadilha na segunda. A |
 
 ### In flight (5)
 
@@ -7372,4 +7374,99 @@ dod:
     gate tres vezes seguidas. Grafias nao tentadas ainda incluem o skip dentro de um
     `defer`, dentro de um `select`, e a guarda vinda de um metodo com receptor
   - mutacao com efeito conferido, um mutante por capacidade nova
+
+## B-189 — A classe volta por um VALOR de funcao, e o gate nem diz UNRESOLVED: seis grafias em silencio   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b188-nemesis-audit
+severity: media — quarta reabertura consecutiva da mesma classe, e a primeira em que
+  o `SCOPE` do pacote sugeria cobertura que nao existe. Sem instancia viva hoje; a
+  evasao custa um refactor de uma linha a partir da forma que JA vive no repo.
+evidence: |
+  Medido 2026-09-05 por auditoria independente, com o binario do proprio `B-188`,
+  DENTRO de `infra/tests/config/`, cada teste com um `t.Fatal` morto abaixo de um
+  skip que sempre dispara:
+
+      708 arquivos, 149 chamadas de skip, 11 path-guarded — PASS, EXIT 0
+
+  Seis grafias, todas SILENCIOSAS (nao UNRESOLVED):
+
+      var cliSrcPresentAlias = cliSrcPresent          // alias de pacote
+      var f = func() bool { ... os.Stat ... }         // var de pacote com literal
+      check := cliPresent                             // local
+      p := h.Present                                  // method value
+      s.probe                                         // campo de struct com func
+      presentFn()()                                   // chamada de valor retornado
+
+  CAUSA, lida no codigo: `pkgScope.callee` resolve um `*ast.Ident` apenas contra
+  `pkg.funcs`, que guarda `FuncDecl`s. Um nome ligado a um VALOR de funcao nao e
+  encontrado — entao a guarda nao e lida nem reportada.
+
+  O `SCOPE` dizia que a guarda podia ser "a call to a same-package function, to a
+  method whose name is unambiguous in the package, **or to a local bound to one**".
+  `cliSrcPresentAlias()` E uma chamada a uma funcao do pacote, e `check := cliPresent`
+  E um local ligado a uma. A exclusao declarada estava desenhada em torno de um valor
+  BOOL (`if !h.havePath`), que de fato nao tem corpo para ler — a linha estava no
+  lugar errado, nao apenas frouxa. Ja corrigido no `SCOPE`; o codigo e este item.
+why_now: `B-180` -> `B-183` -> `B-186` -> `B-188`, e uma auditoria reabriu a classe
+  nas quatro. O que muda aqui e que a evasao nao vira UNRESOLVED: o gate imprime PASS.
+  Silencio e o unico resultado que este gate promete nunca dar.
+status: triaged
+dod:
+  - as seis grafias do `evidence`, injetadas verbatim em `infra/tests/config/`, fazem
+    o gate sair 1 — ou, para as que nao puderem ser lidas, UNRESOLVED com a razao. O
+    que nao pode continuar e PASS/0
+  - a decisao sobre `presentFn()()` e escrita: seguir um valor retornado exige saber
+    de onde ele veio, e um limite declarado vale mais que uma heuristica
+  - o `SCOPE` perde o que este item fechar e mantem o que continuar valendo
+  - antes de fechar, tentar reabrir: quatro auditorias seguidas conseguiram. Grafias
+    nao tentadas ainda incluem a guarda vinda de um parametro do proprio teste e de
+    um `map[string]func() bool`
+  - mutacao com efeito conferido, com o arnes provando o proprio baseline verde antes
+    de qualquer veredito
+
+## B-190 — O pin do cli-exit-codes promete que o gate reprova quando o assunto aparece, e o campo do assunto nunca e lido   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b185-nemesis-audit
+severity: baixa — inofensivo com a unica linha de hoje, armadilha na segunda. A
+  promessa esta escrita no cabecalho do proprio arquivo que alguem edita para
+  declarar uma ausencia.
+evidence: |
+  Medido 2026-09-05 por auditoria independente.
+
+  O cabecalho de `infra/quality/cli-exit-codes-subject.txt` afirma que o gate REPROVA
+  quando "a subject listed here is FOUND (in this tree, or in the loopzero-cli checkout
+  beside it)", e `check.go` documenta `TrackedAbsences` como "the pinned lines that
+  the filesystem confirms".
+
+  Nenhuma das duas vale: o campo SUBJECT de uma linha do pin nunca e passado por
+  `stat`. Só os dois candidatos fixos (`<repo>/cli/src` e o checkout de `loopzero-cli`)
+  sao. A auditoria acrescentou a linha
+
+      docs<TAB>this subject is right here and present
+
+  a uma raiz que CONTEM `docs/`, e o gate imprimiu
+
+      cli-exit-codes: TRACKED ABSENCE — docs is not in this tree and not in any
+      checkout beside it
+
+  saindo 0. Uma frase falsa sobre o sistema de arquivos, impressa pelo gate cuja
+  razao de existir e nao imprimir frases falsas sobre o sistema de arquivos.
+why_now: o `B-185` acabou de tornar este arquivo o lugar onde uma ausencia e
+  declarada, entao a segunda linha e questao de tempo — e o cabecalho promete uma
+  verificacao ao proximo editor.
+status: triaged
+dod:
+  - o campo subject de cada linha do pin e verificado no sistema de arquivos, e uma
+    linha cujo assunto EXISTE reprova nomeando o caminho — o oraculo e a linha `docs`
+    do `evidence`, medida com binario proprio
+  - ou, se a decisao for nao verificar, o cabecalho e o doc de `TrackedAbsences`
+    param de prometer que verificam — o que nao pode e a promessa sem a checagem
+  - a distincao entre "declarado e ausente" e "declarado e presente" aparece na saida
+    de toda execucao, no molde do `B-181`
 

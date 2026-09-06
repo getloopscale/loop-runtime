@@ -85,16 +85,51 @@
 //     different defect, and classifying WHY a bare skip exists means reading its
 //     prose. Two live instances are tracked as B-184.
 //
-//   - WHERE THE SKIP SITS is a limit too, and it was undeclared until an audit
-//     walked five spellings past this gate on 2026-09-05. Function literals are
-//     read now (`t.Run("x", func(t *testing.T){ ... })` and `func(){ ... }()`),
-//     which was the one with a live denominator -- 6 of 146 skip calls in the
-//     scanned trees sit inside one, and the ORIGINAL inline spelling this gate
-//     was opened for passed both binaries in that position. Still NOT read, and
-//     each is a way back in: the condition of a `switch { case !present(): }`
-//     clause; a skip moved into a same-package helper (`skipUnless(t, cond)`),
-//     which is not a `t.Skip` call at the site at all; and a two-level selector
-//     like `h.t.Skip()`, which is not even COUNTED. Tracked as B-188.
+//   - WHERE THE SKIP SITS was the other half of the class, and it was undeclared
+//     until an audit walked five spellings past this gate on 2026-09-05. Every
+//     one of them is read now (B-186 closed the first, B-188 the rest):
+//     function literals (`t.Run("x", func(t *testing.T){ ... })`, `func(){}()`,
+//     and a literal bound to a local), `defer` and `go`, `select` and
+//     type-switch clauses, the CONDITION of a tag-less `switch` case, a skip one
+//     same-package call away from the arm that fires it, a skip handed to a
+//     helper as an argument (`skipUnless(t, cliPresent(), "...")`, which carries
+//     no `t.Skip` at the site at all), and a receiver of any depth --
+//     `h.t.Skip()` used to be invisible to the COUNTER as well as to the scan,
+//     which is worse than a missed site: it weakens the floor that exists to
+//     notice a dead detector. Measured on 2026-09-05 with a binary built from
+//     this package, the three spellings injected into infra/tests/config/: the
+//     skip count moved 146 -> 148 for three added skips, and the gate said PASS.
+//
+//     WHERE A DELEGATED FINDING IS REPORTED follows one rule: at the line whose
+//     author has to change it. A guard the CALLER hands to a helper is reported
+//     at the call; a guard the helper writes for itself is reported at the
+//     helper, once, and not again at every caller. Reporting it at both turned a
+//     single guarded helper with two callers into three violations naming three
+//     functions -- and three pin lines for one line of code -- measured while
+//     building this (2026-09-05). The exception is a helper in a NON-test file of
+//     the same package, which this scan never walks in its own right: there the
+//     call site is the only place the finding can appear, and the alternative is
+//     not a duplicate but a silence.
+//
+//     THE SKIP'S POSITION IS STILL NOT UNLIMITED, and these are the ways back
+//     in, measured rather than assumed:
+//
+//     A skip reached through a FUNCTION VALUE -- `skip := t.Skip` then `skip()`
+//     -- is neither a site nor counted. `t.Skip` there is a selector that is not
+//     called and `skip()` is a call that is not a selector, so neither half
+//     looks like a skip without following the binding. It is the sharpest hole
+//     left and it is declared, not measured shut.
+//
+//     A skip carried by a helper in ANOTHER PACKAGE is not read: this gate's
+//     scope is one directory at a time, and `helpers.SkipUnlessCLI(t)` is a body
+//     it never parsed.
+//
+//     Following a skip through helpers is bounded at maxDelegatedSkipDepth call
+//     frames, and past the bound the walk is SILENT rather than UNRESOLVED --
+//     the one place in this gate where a bound costs a silence. The reason is
+//     that at the bound it is not yet known whether a guard exists at all, and
+//     reporting every deeply-nested skip helper as unreadable would bury the
+//     real ones. A chain that long is declared, not defended.
 //
 //   - A guard on a path this repository does not contain -- rooted in an
 //     environment variable, spelled as an absolute literal, or climbing above
@@ -155,10 +190,36 @@
 //     that fires when the path IS there, in either arm -- remains deliberately
 //     not a site, because no missing path can cause it.
 //
-//   - What is still not a site is the GUARD POSITION itself: a struct field, a
-//     package-level bool, a method on a value. The guard has to be a call to a
-//     same-package function, or a local bound to one. A probe behind anything
-//     else is invisible here -- not measured shut, simply not read.
+//   - What is still not a site is the GUARD POSITION itself, and the line is
+//     narrower than an earlier draft of this comment drew it. The guard has to be
+//     a call to a name DECLARED as a function in this package, or to a method
+//     whose name is unambiguous in it. Everything else is invisible:
+//
+//   - a BOOL value -- `if !h.havePath { t.Skip() }`, a package-level bool.
+//     There is no body to read, so this one is honestly out of reach.
+//
+//   - a FUNC value, which is NOT, and this comment used to imply it was
+//     covered by saying the guard may be "a local bound to one". An audit
+//     measured six spellings walking past on 2026-09-05, each one silent
+//     rather than UNRESOLVED: a package alias `var present = cliSrcPresent`,
+//     a package `var f = func() bool {...}`, a local `check := cliPresent`, a
+//     method value `p := h.Present`, a struct field holding a func, and
+//     `presentFn()()`. `pkgScope.callee` resolves an identifier only against
+//     FuncDecls, so a name bound to a func value is not found and not
+//     reported. Each is the same one-line refactor away from the live
+//     `if !cliSrcPresent() { t.Skip() }` that opened B-183, B-186 and B-188.
+//     Tracked as B-189.
+//
+//     A METHOD is read now (B-188), and reading one has two costs stated
+//     plainly. Without type information the receiver's type is unknown, so the
+//     method is found by NAME: two types declaring the same name make it
+//     AMBIGUOUS, and an ambiguous name whose bodies touch the filesystem is
+//     UNRESOLVED and red rather than a pass over a body nobody chose. And a path
+//     that lives in the receiver's own fields -- `os.Stat(p.dir)` -- is
+//     UNRESOLVED for the same reason any unreadable expression is: there is no
+//     value here to read it from. A `pkg.Present()` whose `pkg` is an import
+//     name in that file is never read as this package's method, which is the
+//     guess that would have been worse than the silence it replaces.
 package testskipabsentpath
 
 import (
@@ -527,9 +588,12 @@ func scanDir(out *Outcome, root, dir string) error {
 	pkg := &pkgScope{
 		helpers: map[string]helperDecl{},
 		funcs:   map[string]helperDecl{},
+		methods: map[string][]helperDecl{},
+		imports: map[string]map[string]bool{},
 		consts:  map[string]boundExpr{},
 	}
 	for _, pf := range files {
+		pkg.imports[pf.rel] = importNames(pf.ast)
 		for _, decl := range pf.ast.Decls {
 			if fd, ok := decl.(*ast.FuncDecl); ok {
 				if fd.Recv == nil {
@@ -537,6 +601,9 @@ func scanDir(out *Outcome, root, dir string) error {
 					if fd.Type.Params.NumFields() == 0 {
 						pkg.helpers[fd.Name.Name] = helperDecl{decl: fd, file: pf.rel}
 					}
+				} else {
+					pkg.methods[fd.Name.Name] = append(pkg.methods[fd.Name.Name],
+						helperDecl{decl: fd, file: pf.rel})
 				}
 				continue
 			}
@@ -567,6 +634,25 @@ func scanDir(out *Outcome, root, dir string) error {
 	return nil
 }
 
+// importNames is the set of names a file's imports bind, so `pkg.Present()` is
+// never read as a method of this package. A dot-import binds no name this
+// resolver can see, so it is recorded under "." and never matches a receiver.
+func importNames(f *ast.File) map[string]bool {
+	names := map[string]bool{}
+	for _, spec := range f.Imports {
+		if spec.Name != nil {
+			names[spec.Name.Name] = true
+			continue
+		}
+		path, err := strconv.Unquote(spec.Path.Value)
+		if err != nil {
+			continue
+		}
+		names[path[strings.LastIndex(path, "/")+1:]] = true
+	}
+	return names
+}
+
 func mustRel(root, dir string) string {
 	rel, err := filepath.Rel(root, dir)
 	if err != nil {
@@ -590,7 +676,7 @@ func analyseFile(out *Outcome, root, pkgDir string, pkg *pkgScope, pf parsedFile
 			continue
 		}
 		r := &resolver{root: root, pkgDir: pkgDir, file: pf.rel, pkg: pkg}
-		for _, sp := range guardedSkips(fd, r) {
+		for _, sp := range guardedSkips(fd, r, map[string]bool{fd.Name.Name: true}, 0) {
 			s := sp.Site
 			s.File = pf.rel
 			s.Func = fd.Name.Name
@@ -600,27 +686,78 @@ func analyseFile(out *Outcome, root, pkgDir string, pkg *pkgScope, pf parsedFile
 	}
 }
 
-// siteWithPos carries the token position until the FileSet turns it into a line.
+// siteWithPos carries the token position until the FileSet turns it into a line,
+// plus whether the guard came from the caller of a skip-carrying helper.
 type siteWithPos struct {
 	Site
-	pos token.Pos
+	pos        token.Pos
+	fromCaller bool
 }
+
+// maxDelegatedSkipDepth bounds how far a skip is followed through helpers that
+// CARRY it -- `skipUnless(t, cliPresent(), "...")` being one hop. It is a
+// separate bound from maxResolveDepth because it counts call frames entered, not
+// expression hops followed, and entering a frame costs a whole body walk.
+const maxDelegatedSkipDepth = 8
 
 // guardedSkips walks one function and returns each skip whose control depends
 // on a filesystem probe.
 //
-// Four shapes occur and all are handled: the probe inline in the if's init
-// (`if _, err := os.Stat(p); os.IsNotExist(err) { t.Skip() }`), the probe on a
-// preceding statement (`data, err := os.ReadFile(p)` followed by
+// WHERE THE PROBE IS. Four shapes occur and all are handled: the probe inline in
+// the if's init (`if _, err := os.Stat(p); os.IsNotExist(err) { t.Skip() }`), the
+// probe on a preceding statement (`data, err := os.ReadFile(p)` followed by
 // `if err != nil { t.Skip() }`), the probe down inside a same-package predicate
 // the guard calls (`if !cliSrcPresent() { t.Skip() }`), and that same predicate
 // bound to a local first (`ok, _ := cliSrcPresent()` then `if !ok { ... }`),
 // which is the only way a predicate returning `(bool, error)` can be spelled.
-func guardedSkips(fd *ast.FuncDecl, r *resolver) []siteWithPos {
+//
+// WHERE THE SKIP IS is the other half, and it is the half three audits kept
+// walking through (B-188). A guard is read wherever the statement walk reaches:
+// inside a function literal (B-186), inside a `defer`/`go`, inside a `select` or
+// type-switch clause, in the CONDITION of a tag-less `switch` case, and inside a
+// same-package helper the test hands its predicate to. Every one of those was a
+// one-line refactor away from a guard this walker could not see.
+//
+// `seen` holds the names of the bodies already entered on this path, so a helper
+// that calls back into one ends the walk instead of running it forever.
+func guardedSkips(fd *ast.FuncDecl, r *resolver, seen map[string]bool, depth int) []siteWithPos {
 	var sites []siteWithPos
+	if fd.Body == nil {
+		return nil
+	}
 	probes := map[string]ast.Expr{} // error variable -> the path it probed
 
 	var walk func(stmts []ast.Stmt)
+
+	// enterLits walks every function literal written inside an expression. The
+	// probe map is shared with the enclosing body on purpose: a probe taken
+	// outside the closure and tested inside it is one guard, and scoping them
+	// apart would lose it.
+	enterLits := func(e ast.Expr) {
+		if e == nil {
+			return
+		}
+		ast.Inspect(e, func(n ast.Node) bool {
+			if lit, ok := n.(*ast.FuncLit); ok && lit.Body != nil {
+				walk(lit.Body.List)
+			}
+			return true
+		})
+	}
+	// enterHelper follows a call to a same-package helper that CARRIES a skip,
+	// reading the helper's body with the caller's arguments bound. The site is
+	// reported at the CALL, which is the line a reader has to change.
+	enterHelper := func(e ast.Expr, local map[string]ast.Expr) {
+		call, ok := e.(*ast.CallExpr)
+		if !ok {
+			return
+		}
+		for _, s := range r.delegatedSkips(call, local, seen, depth) {
+			s.pos = call.Pos()
+			sites = append(sites, s)
+		}
+	}
+
 	walk = func(stmts []ast.Stmt) {
 		for _, st := range stmts {
 			switch s := st.(type) {
@@ -630,6 +767,9 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver) []siteWithPos {
 				if name, pathExpr, ok := probeBinding(s); ok {
 					probes[name] = pathExpr
 				}
+				for _, rhs := range s.Rhs {
+					enterLits(rhs)
+				}
 			case *ast.DeclStmt:
 				r.bindDecl(s)
 			case *ast.IfStmt:
@@ -638,11 +778,7 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver) []siteWithPos {
 					r.bindAssign(init)
 					r.bindBoolPred(init)
 					if name, pathExpr, ok := probeBinding(init); ok {
-						local = make(map[string]ast.Expr, len(probes)+1)
-						for k, v := range probes {
-							local[k] = v
-						}
-						local[name] = pathExpr
+						local = withProbe(probes, name, pathExpr)
 					}
 				}
 				if tgt, arm, ok := r.skipArm(s, local); ok {
@@ -661,6 +797,8 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver) []siteWithPos {
 				}
 			case *ast.BlockStmt:
 				walk(s.List)
+			case *ast.LabeledStmt:
+				walk([]ast.Stmt{s.Stmt})
 			case *ast.ForStmt:
 				if s.Body != nil {
 					walk(s.Body.List)
@@ -670,32 +808,43 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver) []siteWithPos {
 					walk(s.Body.List)
 				}
 			case *ast.SwitchStmt:
+				local := probes
+				if init, ok := s.Init.(*ast.AssignStmt); ok {
+					r.bindAssign(init)
+					r.bindBoolPred(init)
+					if name, pathExpr, ok := probeBinding(init); ok {
+						local = withProbe(probes, name, pathExpr)
+					}
+				}
+				sites = append(sites, r.switchSkips(s, local)...)
+				if s.Body != nil {
+					walk(s.Body.List)
+				}
+			case *ast.TypeSwitchStmt:
+				// `switch v := x.(type)` never carries a path condition, but its
+				// clauses carry statements, and this walker used to match only
+				// *ast.SwitchStmt -- so a guard in one was not read at all.
+				if s.Body != nil {
+					walk(s.Body.List)
+				}
+			case *ast.SelectStmt:
 				if s.Body != nil {
 					walk(s.Body.List)
 				}
 			case *ast.CaseClause:
 				walk(s.Body)
+			case *ast.CommClause:
+				walk(s.Body)
 			case *ast.ExprStmt:
-				// `t.Run("name", func(t *testing.T){ ... })` and `func(){ ... }()`.
-				//
-				// This walker read statements and never entered a function
-				// literal, so a guard one closure down was invisible — including
-				// the ORIGINAL inline `os.Stat` spelling this gate was opened for
-				// (B-180), which passed both binaries inside a t.Run. Measured by
-				// an independent audit on 2026-09-05, with a live denominator: 6
-				// of 146 skip calls in the scanned trees already sit inside
-				// function literals.
-				//
-				// The probe map is shared with the enclosing body on purpose: a
-				// probe taken outside the closure and tested inside it is one
-				// guard, and scoping them apart would lose it.
-				ast.Inspect(s.X, func(n ast.Node) bool {
-					lit, ok := n.(*ast.FuncLit)
-					if ok && lit.Body != nil {
-						walk(lit.Body.List)
-					}
-					return true
-				})
+				// `t.Run("name", func(t *testing.T){ ... })`, `func(){ ... }()`,
+				// and `skipUnless(t, cliPresent(), "...")`.
+				enterLits(s.X)
+				enterHelper(s.X, probes)
+			case *ast.DeferStmt:
+				enterLits(s.Call)
+				enterHelper(s.Call, probes)
+			case *ast.GoStmt:
+				enterLits(s.Call)
 			}
 		}
 	}
@@ -703,12 +852,199 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver) []siteWithPos {
 	return sites
 }
 
+// withProbe copies a probe map with one more binding, so an if's own init does
+// not leak its probe into the statements that follow it.
+func withProbe(probes map[string]ast.Expr, name string, path ast.Expr) map[string]ast.Expr {
+	local := make(map[string]ast.Expr, len(probes)+1)
+	for k, v := range probes {
+		local[k] = v
+	}
+	local[name] = path
+	return local
+}
+
+// switchSkips reads the CONDITIONS of a tag-less switch, which is an if-chain
+// written with different punctuation:
+//
+//	switch {
+//	case !cliPresent():
+//	        t.Skip("cli/ is not here")
+//	}
+//
+// The walker descended into a CaseClause's Body and never read its List, so the
+// skip was seen and the guard was not, and the whole statement was not a site.
+// Measured evading the gate on 2026-09-05 (B-188).
+//
+// A tagged switch is deliberately left alone: `switch x { case ok: }` compares
+// values, so a bound predicate appearing there is not the predicate's own
+// polarity and reading it would be a guess.
+func (r *resolver) switchSkips(s *ast.SwitchStmt, probes map[string]ast.Expr) []siteWithPos {
+	if s.Tag != nil || s.Body == nil {
+		return nil
+	}
+	var (
+		sites  []siteWithPos
+		def    *ast.CaseClause
+		conds  int
+		sole   guardTarget
+		soleM  bool
+		soleOK bool
+	)
+	for _, cl := range s.Body.List {
+		cc, ok := cl.(*ast.CaseClause)
+		if !ok {
+			continue
+		}
+		if len(cc.List) == 0 {
+			def = cc
+			continue
+		}
+		conds++
+		var (
+			tgt     guardTarget
+			missing bool
+			read    bool
+		)
+		for _, cond := range cc.List {
+			if t, m, ok := r.pathCondition(cond, probes, 0); ok {
+				tgt, missing, read = t, m, true
+				break
+			}
+		}
+		if !read {
+			continue
+		}
+		// The clause runs when its condition holds, so a skip in it fires on a
+		// MISSING path exactly when the condition is the missing-polarity one.
+		if (missing || tgt.unreadable) && r.reaches(cc.Body) {
+			sites = append(sites, r.newSite(tgt, stmtsSkipPos(cc.Body, cc.Pos())))
+			continue
+		}
+		sole, soleM, soleOK = tgt, missing, true
+	}
+	// `switch { case cliPresent(): ... default: t.Skip() }` is the else arm of
+	// one guard, read for the same reason skipArm reads both arms. Only with a
+	// single condition: with two, which one the default answers is a guess.
+	if soleOK && conds == 1 && def != nil && (!soleM || sole.unreadable) && r.reaches(def.Body) {
+		sites = append(sites, r.newSite(sole, stmtsSkipPos(def.Body, def.Pos())))
+	}
+	return sites
+}
+
+// delegatedSkips reads a call to a same-package helper that carries a skip,
+// with the caller's arguments bound into the helper's parameters:
+//
+//	func skipUnless(t *testing.T, ok bool, msg string) { if !ok { t.Skip(msg) } }
+//	skipUnless(t, cliPresent(), "cli/ is not here")
+//
+// There is no `t.Skip` at the call site at all, so the site did not exist for
+// this gate while the damage -- the whole test skips, everything under it dead
+// -- was exactly the damage the gate is for. Measured evading it on 2026-09-05
+// (B-188).
+//
+// The helper's body is walked, not guessed at: the polarity comes from the
+// helper's own `if`, so `skipUnless` and `skipIf` are told apart by reading them
+// rather than by their names.
+func (r *resolver) delegatedSkips(call *ast.CallExpr, probes map[string]ast.Expr, seen map[string]bool, depth int) []siteWithPos {
+	if depth >= maxDelegatedSkipDepth {
+		return nil
+	}
+	h, name, ok := r.pkg.callee(call, r.file)
+	if !ok || seen[name] {
+		return nil
+	}
+	if !reachesSkip(h.decl.Body, r.pkg, h.file, map[string]bool{name: true}) {
+		return nil
+	}
+	sub := &resolver{root: r.root, pkgDir: r.pkgDir, file: h.file, pkg: r.pkg}
+	r.bindParams(sub, h.decl, call, depth)
+	r.bindCondArgs(sub, h.decl, call, probes)
+	next := make(map[string]bool, len(seen)+1)
+	for k := range seen {
+		next[k] = true
+	}
+	next[name] = true
+
+	// A guard the HELPER writes for itself belongs to the helper, and a helper
+	// declared in a _test.go file is already walked as a function in its own
+	// right -- reporting it again at every call site turns one line of code into
+	// one finding and one pin line per caller. Measured on 2026-09-05: a single
+	// guarded helper with two callers produced three violations naming three
+	// different functions for one guard. Only a guard the CALLER supplied is
+	// reported here, plus everything inside a helper this scan never analyses on
+	// its own (a non-test file in the same package), where the alternative is not
+	// a duplicate but a silence.
+	sites := guardedSkips(h.decl, sub, next, depth+1)
+	if !strings.HasSuffix(h.file, "_test.go") {
+		return sites
+	}
+	var fromCaller []siteWithPos
+	for _, s := range sites {
+		if s.fromCaller {
+			fromCaller = append(fromCaller, s)
+		}
+	}
+	return fromCaller
+}
+
+// bindCondArgs binds each parameter to the argument expression the CALLER wrote,
+// carrying the caller's scope with it. A condition is only itself in the scope
+// that spelled it: `cliPresent()`, `!cliPresent()` and a local `ok` are all the
+// same guard handed across a call, and re-reading their names inside the
+// helper's scope would answer about nothing.
+func (r *resolver) bindCondArgs(sub *resolver, fd *ast.FuncDecl, call *ast.CallExpr, probes map[string]ast.Expr) {
+	if fd.Type.Params == nil {
+		return
+	}
+	i := 0
+	for _, field := range fd.Type.Params.List {
+		for _, pname := range field.Names {
+			if i >= len(call.Args) {
+				return
+			}
+			arg := call.Args[i]
+			i++
+			if pname.Name == "" || pname.Name == "_" {
+				continue
+			}
+			if sub.condArgs == nil {
+				sub.condArgs = map[string]boundCond{}
+			}
+			sub.condArgs[pname.Name] = boundCond{expr: arg, scope: r, probes: probes}
+		}
+	}
+}
+
+// reaches reports whether a list of statements reaches a skip call, directly or
+// through a same-package helper.
+func (r *resolver) reaches(stmts []ast.Stmt) bool {
+	return reachesSkip(&ast.BlockStmt{List: stmts}, r.pkg, r.file, map[string]bool{})
+}
+
+// stmtsSkipPos is the position of the first skip call among the statements, or
+// fallback when the skip is one call away and has no position here.
+func stmtsSkipPos(stmts []ast.Stmt, fallback token.Pos) token.Pos {
+	pos := fallback
+	found := false
+	ast.Inspect(&ast.BlockStmt{List: stmts}, func(n ast.Node) bool {
+		if found {
+			return false
+		}
+		if isSkipCall(n) {
+			pos, found = n.Pos(), true
+			return false
+		}
+		return true
+	})
+	return pos
+}
+
 // newSite resolves the guard's path expression into a classified site. The
 // expression is resolved in the scope it was WRITTEN in, which for a predicate's
 // probe is the predicate's own body and not the test's -- resolving `p` against
 // the caller's `p` would answer about a different path with a straight face.
 func (r *resolver) newSite(t guardTarget, pos token.Pos) siteWithPos {
-	s := siteWithPos{pos: pos}
+	s := siteWithPos{pos: pos, fromCaller: t.fromCaller}
 	scope := t.scope
 	if scope == nil {
 		scope = r
@@ -843,6 +1179,11 @@ type guardTarget struct {
 	// this gate could not follow. It becomes an UNRESOLVED violation rather
 	// than silence: a probe it cannot read is the one it must not pass.
 	unreadable bool
+	// fromCaller marks a guard the CALLER handed to a skip-carrying helper. It
+	// decides where the finding belongs: a guard the caller supplied is the
+	// caller's line to change, while a guard written inside the helper is the
+	// helper's, and is reported there once instead of once per call site.
+	fromCaller bool
 }
 
 // here wraps an expression written in this resolver's own scope.
@@ -870,9 +1211,9 @@ func (r *resolver) skipArm(s *ast.IfStmt, probes map[string]ast.Expr) (guardTarg
 	// hand back the evasion this floor exists to close.
 	elseBlock, _ := s.Else.(*ast.BlockStmt)
 	switch {
-	case (whenMissing || t.unreadable) && bodyHasSkip(s.Body):
+	case (whenMissing || t.unreadable) && r.armSkips(s.Body):
 		return t, s.Body, true
-	case (!whenMissing || t.unreadable) && bodyHasSkip(elseBlock):
+	case (!whenMissing || t.unreadable) && r.armSkips(elseBlock):
 		return t, elseBlock, true
 	}
 	return guardTarget{}, nil, false
@@ -888,6 +1229,14 @@ func (r *resolver) pathCondition(cond ast.Expr, probes map[string]ast.Expr, dept
 	case *ast.ParenExpr:
 		return r.pathCondition(c.X, probes, depth+1)
 	case *ast.Ident:
+		// A parameter of a skip-carrying helper IS the caller's condition, read
+		// back in the caller's scope (B-188). It is tried first because the
+		// caller's spelling is the guard; the callee only decides its polarity.
+		if bc, ok := r.condArgs[c.Name]; ok && bc.scope != nil {
+			t, missing, read := bc.scope.pathCondition(bc.expr, bc.probes, depth+1)
+			t.fromCaller = true
+			return t, missing, read
+		}
 		// `ok, _ := cliSrcPresent()` then `if !ok { t.Skip() }`. The local IS
 		// the predicate's answer, and this is the only spelling available to a
 		// predicate returning (bool, error) -- Go has no other way to use one in
@@ -941,28 +1290,20 @@ func (r *resolver) pathCondition(cond ast.Expr, probes map[string]ast.Expr, dept
 		return guardTarget{}, false, false
 	case *ast.CallExpr:
 		if sel, ok := c.Fun.(*ast.SelectorExpr); ok {
-			if len(c.Args) == 0 {
-				return guardTarget{}, false, false
+			if pkg, ok := sel.X.(*ast.Ident); ok && len(c.Args) > 0 &&
+				((pkg.Name == "os" && sel.Sel.Name == "IsNotExist") ||
+					(pkg.Name == "errors" && sel.Sel.Name == "Is")) {
+				id, ok := c.Args[0].(*ast.Ident)
+				if !ok {
+					return guardTarget{}, false, false
+				}
+				p, ok := probes[id.Name]
+				if !ok {
+					return guardTarget{}, false, false
+				}
+				return r.here(p), true, true
 			}
-			pkg, ok := sel.X.(*ast.Ident)
-			if !ok {
-				return guardTarget{}, false, false
-			}
-			switch {
-			case pkg.Name == "os" && sel.Sel.Name == "IsNotExist",
-				pkg.Name == "errors" && sel.Sel.Name == "Is":
-			default:
-				return guardTarget{}, false, false
-			}
-			id, ok := c.Args[0].(*ast.Ident)
-			if !ok {
-				return guardTarget{}, false, false
-			}
-			p, ok := probes[id.Name]
-			if !ok {
-				return guardTarget{}, false, false
-			}
-			return r.here(p), true, true
+			return r.methodCondition(sel, c, depth)
 		}
 		id, ok := c.Fun.(*ast.Ident)
 		if !ok {
@@ -985,7 +1326,37 @@ func (r *resolver) pathCondition(cond ast.Expr, probes map[string]ast.Expr, dept
 // the hole a one-line refactor used to open.
 func (r *resolver) predicateCondition(name string, call *ast.CallExpr, depth int) (guardTarget, bool, bool) {
 	h, ok := r.pkg.funcs[name]
-	if !ok || h.decl.Body == nil || !returnsBoolFirst(h.decl) {
+	if !ok {
+		return guardTarget{}, false, false
+	}
+	return r.predicateBody(name, h, call, depth)
+}
+
+// methodCondition reads a guard whose predicate is a METHOD -- `if !h.present()
+// { t.Skip() }`. The receiver's type is unknown here (this package parses without
+// type information), so the method is found by NAME and only when that name is
+// unambiguous in the package and is not an import's function.
+//
+// An ambiguous name that touches the filesystem is UNRESOLVED, not a pass: which
+// receiver's body runs is exactly the question this gate cannot answer, and a
+// guess would be the silence it exists to remove. A path that lives in the
+// receiver's own fields lands there too -- the resolver has no value to read it
+// from, so it reports that rather than inventing one.
+func (r *resolver) methodCondition(sel *ast.SelectorExpr, call *ast.CallExpr, depth int) (guardTarget, bool, bool) {
+	if r.pkg.ambiguousMethod(sel, r.file) {
+		return guardTarget{desc: "." + sel.Sel.Name + "()", unreadable: true}, false, true
+	}
+	h, _, ok := r.pkg.callee(call, r.file)
+	if !ok {
+		return guardTarget{}, false, false
+	}
+	return r.predicateBody(sel.Sel.Name, h, call, depth)
+}
+
+// predicateBody reads one predicate declaration with the caller's arguments
+// bound, and is shared by the function and method spellings of a guard.
+func (r *resolver) predicateBody(name string, h helperDecl, call *ast.CallExpr, depth int) (guardTarget, bool, bool) {
+	if h.decl.Body == nil || !returnsBoolFirst(h.decl) {
 		return guardTarget{}, false, false
 	}
 
@@ -1215,19 +1586,14 @@ func reachesFilesystemProbe(b *ast.BlockStmt, pkg *pkgScope, seen map[string]boo
 	return found
 }
 
-// bodyHasSkip reports whether the block reaches a skip call.
-func bodyHasSkip(b *ast.BlockStmt) bool {
+// armSkips reports whether an if-arm reaches a skip call -- written there, or
+// one same-package call away. `if !cliPresent() { bailOut(t) }` is the same
+// guard as the one that spells the skip inline (B-188).
+func (r *resolver) armSkips(b *ast.BlockStmt) bool {
 	if b == nil {
 		return false
 	}
-	found := false
-	ast.Inspect(b, func(n ast.Node) bool {
-		if isSkipCall(n) {
-			found = true
-		}
-		return !found
-	})
-	return found
+	return reachesSkip(b, r.pkg, r.file, map[string]bool{})
 }
 
 // skipPos is the position of the first skip call in the block.
@@ -1243,10 +1609,18 @@ func skipPos(b *ast.BlockStmt) token.Pos {
 	return pos
 }
 
-// isSkipCall reports whether n is `<x>.Skip(...)`, `.Skipf(...)` or
+// isSkipCall reports whether n is `<expr>.Skip(...)`, `.Skipf(...)` or
 // `.SkipNow()`. The receiver is not type-checked: this package parses without
 // type information on purpose (it reads a tree it does not build), and in a
 // _test.go file those three selectors are testing.TB's.
+//
+// THE RECEIVER IS ANY EXPRESSION, and it had to become so. This required
+// `sel.X` to be a bare `*ast.Ident`, so `h.t.Skip("...")` -- a testing.TB
+// reached through one field -- was not a skip here. That is worse than a missed
+// site: the SkipCalls floor exists to notice a detector that stopped matching,
+// and a skip the counter cannot see cannot hold the floor up. Measured
+// 2026-09-05 inside the scanned trees: three skips added to
+// infra/tests/config/, the count moved 146 -> 148.
 func isSkipCall(n ast.Node) bool {
 	call, ok := n.(*ast.CallExpr)
 	if !ok {
@@ -1256,14 +1630,50 @@ func isSkipCall(n ast.Node) bool {
 	if !ok {
 		return false
 	}
-	if _, ok := sel.X.(*ast.Ident); !ok {
-		return false
-	}
 	switch sel.Sel.Name {
 	case "Skip", "Skipf", "SkipNow":
 		return true
 	}
 	return false
+}
+
+// reachesSkip reports whether the block reaches a skip call -- itself, or
+// through any same-package function or uniquely-named method it calls.
+//
+// TRANSITIVE for the same reason reachesFilesystemProbe is (B-186, B-188): the
+// skip may have been moved one call away. `if !cliPresent() { bailOut(t) }`
+// carries no `t.Skip` at the site, and reading the site alone made the whole
+// guard vanish while the damage -- the test skips, everything below it is dead
+// -- was unchanged. `seen` is keyed by function name and ends a cycle.
+func reachesSkip(b *ast.BlockStmt, pkg *pkgScope, inFile string, seen map[string]bool) bool {
+	if b == nil {
+		return false
+	}
+	found := false
+	ast.Inspect(b, func(n ast.Node) bool {
+		if found {
+			return false
+		}
+		if isSkipCall(n) {
+			found = true
+			return false
+		}
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		h, name, ok := pkg.callee(call, inFile)
+		if !ok || seen[name] {
+			return true
+		}
+		seen[name] = true
+		if reachesSkip(h.decl.Body, pkg, h.file, seen) {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
 }
 
 // ---------------------------------------------------------------------------
@@ -1297,8 +1707,83 @@ type pkgScope struct {
 	// funcs is every non-method func in the package, by name. A guard's
 	// predicate is looked up here rather than in helpers because a presence
 	// predicate may take the path as an argument.
-	funcs  map[string]helperDecl
-	consts map[string]boundExpr
+	funcs map[string]helperDecl
+	// methods is every METHOD in the package, keyed by method name, carrying
+	// every declaration that name has. A guard written `if !h.present() {...}`
+	// names a function this gate can read; what it cannot read without type
+	// information is WHICH receiver's, so the index keeps them all and callee()
+	// refuses the ambiguous ones rather than picking one (B-188).
+	methods map[string][]helperDecl
+	// imports is the set of import names visible in each file, so a call
+	// spelled `pkg.Present()` is never mistaken for a method of this package
+	// that happens to share the name. Without it the resolver would read a body
+	// the code does not call, which is a guess wearing a verdict's clothes.
+	imports map[string]map[string]bool
+	consts  map[string]boundExpr
+}
+
+// callee resolves a call to the same-package body it enters, if this gate can
+// name that body without type information. It returns the declaration and a key
+// that is unique per body, for the visited sets that end a cycle.
+//
+// A plain `f()` is looked up among the package's functions. A `x.m()` is looked
+// up among its METHODS, and only when the name is unambiguous: `sel.X` may be an
+// imported package (rejected via the file's import set) and two types may
+// declare the same method (rejected as ambiguous). Refusing is not silence here
+// -- pathCondition turns the ambiguous case into an UNRESOLVED verdict when the
+// bodies touch the filesystem at all.
+func (p *pkgScope) callee(call *ast.CallExpr, inFile string) (helperDecl, string, bool) {
+	switch fn := call.Fun.(type) {
+	case *ast.Ident:
+		h, ok := p.funcs[fn.Name]
+		if !ok || h.decl.Body == nil {
+			return helperDecl{}, "", false
+		}
+		return h, fn.Name, true
+	case *ast.SelectorExpr:
+		if !p.methodIsOurs(fn, inFile) {
+			return helperDecl{}, "", false
+		}
+		ms := p.methods[fn.Sel.Name]
+		if len(ms) != 1 || ms[0].decl.Body == nil {
+			return helperDecl{}, "", false
+		}
+		return ms[0], "." + fn.Sel.Name, true
+	}
+	return helperDecl{}, "", false
+}
+
+// methodIsOurs reports whether `x.m` can name a method of this package: the
+// method name must be declared here, and the receiver expression must not be an
+// import name visible in the file that wrote it. An unknown file (no import set)
+// is treated as unknown, not as ours.
+func (p *pkgScope) methodIsOurs(sel *ast.SelectorExpr, inFile string) bool {
+	if len(p.methods[sel.Sel.Name]) == 0 {
+		return false
+	}
+	imports, known := p.imports[inFile]
+	if !known {
+		return false
+	}
+	if id, ok := sel.X.(*ast.Ident); ok && imports[id.Name] {
+		return false
+	}
+	return true
+}
+
+// ambiguousMethod reports whether `x.m` names methods of this package that this
+// gate cannot tell apart, and whether any of them touches the filesystem. A
+// guard on one of those is UNRESOLVED, never a pass.
+func (p *pkgScope) ambiguousMethod(sel *ast.SelectorExpr, inFile string) bool {
+	if !p.methodIsOurs(sel, inFile) || len(p.methods[sel.Sel.Name]) < 2 {
+		return false
+	}
+	for _, m := range p.methods[sel.Sel.Name] {
+		if reachesFilesystemProbe(m.decl.Body, p, map[string]bool{}) {
+			return true
+		}
+	}
+	return false
 }
 
 // resolver turns a path expression into a string, using only bindings it can
@@ -1315,6 +1800,20 @@ type resolver struct {
 	// an ANSWER, not a path, and resolving it as a path would be a category
 	// error dressed as a verdict.
 	boolPreds map[string]*ast.CallExpr
+	// condArgs maps a parameter of a skip-carrying helper to the condition the
+	// CALLER handed it, together with the caller's scope. It is how
+	// `skipUnless(t, cliPresent(), "...")` is read as the guard it is (B-188).
+	condArgs map[string]boundCond
+}
+
+// boundCond is a boolean expression carried across a call boundary: the
+// expression as the CALLER wrote it, plus the scope and probes that give its
+// names meaning. Re-reading it in the callee's scope would answer about
+// different bindings with the same confidence.
+type boundCond struct {
+	expr   ast.Expr
+	scope  *resolver
+	probes map[string]ast.Expr
 }
 
 func (r *resolver) bind(name string, e ast.Expr, file string) {
