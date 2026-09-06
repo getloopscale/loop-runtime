@@ -162,10 +162,12 @@ func CheckDerived(repoRoot, baselinePath string, thresholds Thresholds) (Derived
 		out.AspirationGaps = append(out.AspirationGaps, fmt.Sprintf(
 			"integração %.1f%% > alvo %.1f%% (ADR D7)", out.IntegPct, thresholds.IntegrationMaxPct))
 	}
-	if out.E2EPct > thresholds.E2EMaxPct {
-		out.AspirationGaps = append(out.AspirationGaps, fmt.Sprintf(
-			"e2e %.1f%% > alvo %.1f%% (ADR D7)", out.E2EPct, thresholds.E2EMaxPct))
-	}
+	// e2e RATIFICADO pela emenda do ADR D7 em 2026-09-06 (Option A do B-137):
+	// docs/decisions/2026-09-06-B-137-e2e-target-ratchet-ratification.md. Para um
+	// produto cujo objeto É implantar, ~9% de e2e é cobertura genuína — o alvo ≤5%
+	// foi calibrado contra ficção (0,1% declarados vs 10,8% reais) e a catraca já
+	// é o mecanismo canonical de enforcement (trajetória 10,8→9,6% em 20d sem
+	// intervenção). O gap de e2e deixa de ser reportado; a catraca continua ativa.
 
 	if !out.Pass() {
 		return out, ErrRegressed

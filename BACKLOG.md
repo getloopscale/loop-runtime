@@ -4701,6 +4701,7 @@ dod:
   - as 7 dos charts publicados têm caminho declarado: quem preenche `image.digest` e quando (um digest fixado à mão vira mentira na próxima publicação)
 
 > Medido depois: `prod-image-digests` → `PASS`, 0 bloqueantes, 7 avisos. Antes: 10 avisos, `EXIT=0`, três deles consertáveis e invisíveis.
+> **Classe do defeito settled 2026-09-06 pela emenda do ADR D7:** a decisão *por espécie* aqui — `literal_tag` liga, `missing_digest` fica em aviso até publicador — é a mesma forma que `B-137` adotou para a pirâmide (ratchet real, target aspiracional para eixos onde o alvo não foi medido contra a árvore). Vide `docs/decisions/2026-09-06-B-137-e2e-target-ratchet-ratification.md`.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-119`
 
 ## B-120 — 23 invocações de script nas skills não resolvem no layout em que elas rodam   [x]
@@ -4872,6 +4873,7 @@ dod:
   - existe teste que prova o novo comportamento com configuração vazia, e ele roda no gate `skill-suites`
 
 > Protocolo de mudança de regra LOCKED cumprido: ADR, entrada no CHANGELOG sob `[Unreleased]`, e `check_xrefs.py` + `test_e2e_smoke.py` verdes. Os dois estavam vermelhos ao serem rodados pela primeira vez, e nenhum gate os…
+> **Classe do defeito settled 2026-09-06 pela emenda do ADR D7:** o `HARD` refusado aqui vinha da mesma tensão que o `B-137` mediu — target contra ficção, ratchet como mecanismo real. A ratificação do ratchet em `docs/decisions/2026-09-06-B-137-e2e-target-ratchet-ratification.md` canoniza a leitura *"um gate cuja única falha é uma isenção conhecida não é ligado"* aplicada aqui.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-127`
 
 ## B-128 — O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo   [x]
@@ -5223,7 +5225,7 @@ dod:
 > mesma falha de que este item acusa o proprio sujeito: certo sobre o schema, nunca
 > olhou os chamadores.
 
-## B-137 — A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore   [ ]
+## B-137 — A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore   [x]
 
 domain: engine-go
 repo: loopzero
@@ -5232,8 +5234,9 @@ source: discover-review
 severity: média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número.
 evidence: medido 2026-08-17 ao fechar o `B-106`, com a pirâmide **derivada** da árvore pela primeira vez: **989 arquivos — unit 73,5%, integração 15,7%, e2e 10,8%**. O alvo do ADR D7 é `e2e ≤ 5%`. Ele foi escolhido quando `infra/quality/test-inventory.json` **declarava 0,1%** — isto é, calibrado contra um número que descrevia 375 de 988 arquivos e excluía a suíte `infra/tests/e2e` inteira.
 why_now: o `B-106` tornou o número visível pela primeira vez, e fazer o gate reprovar contra o alvo do ADR hoje criaria uma trava que o repositório não consegue satisfazer — a mesma recusa do `B-127` (`HARD`) e do `B-119` (enforcement total). Enquanto isso, a catraca já impede piora.
-status: approved
-blocked_by: aguardando sponsor decision by design — o próprio item termina 'É decisão do sponsor, não minha' e a nota de 2026-08-19 delimita: 'O que continua sendo do sponsor: se 7,4% de jornada é certo para um produto cujo objeto É implantar'. Medição feita 3x (2026-08-17, 19, 19), análise decompõe faixa e2e em 4 subárvores mostrando 30/107 medem outro eixo (chaos/performance). DoD bala 1 exige decisão que cite ADR D7 — não é medição pendente, é estratégia de teste. Vide report /idea-to-release B-137 de 2026-08-31.
+status: shipped
+decided_by: docs/decisions/2026-09-06-B-137-e2e-target-ratchet-ratification.md (Option A — ratify ratchet trajectory, amend ADR D7 to retire e2e ≤5% target; sponsor ratified 2026-09-06 via "TUDO APROVADOS")
+former_blocked_by: aguardando sponsor decision by design — o próprio item termina 'É decisão do sponsor, não minha' e a nota de 2026-08-19 delimita: 'O que continua sendo do sponsor: se 7,4% de jornada é certo para um produto cujo objeto É implantar'. Medição feita 3x (2026-08-17, 19, 19), análise decompõe faixa e2e em 4 subárvores mostrando 30/107 medem outro eixo (chaos/performance). DoD bala 1 exige decisão que cite ADR D7 — não é medição pendente, é estratégia de teste. Vide report /idea-to-release B-137 de 2026-08-31.
 
 > **Medido 2026-08-19 — e a medicao muda a PERGUNTA, nao a resposta.**
 >
