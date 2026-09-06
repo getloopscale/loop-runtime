@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-193 items — **Open** 18 · **In flight** 5 · **Closed** 170 · **Blocked** 7
+193 items — **Open** 16 · **In flight** 5 · **Closed** 172 · **Blocked** 7
 
-### Open (18)
+### Open (16)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -88,8 +88,6 @@ consequência do escopo per-repo declarado acima.
 | [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
 | [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
-| [`B-187`](#b-187--o-hook-que-o-repositorio-declara-como-substituto-de-ci-nao-existe-em-maquina-nenhuma---x) | O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma | `triaged` | alta — dois testes afirmam "the delivery gate is the CI substitute; it must |
-| [`B-188`](#b-188--tres-posicoes-de-skip-que-o-gate-nao-le-e-a-que-ele-passou-a-ler-custou-uma-auditoria-para-aparecer----) | Tres posicoes de skip que o gate nao le, e a que ele passou a ler custou uma auditoria para aparecer | `triaged` | media — o gate e a unica coisa que impede a classe de voltar, e ha tres |
 | [`B-192`](#b-192--o-ci-e-pos-merge-porque-o-portao-local-seria-inescapavel-e-as-tres-premissas-dessa-decisao-foram-falsas-ao-mesmo-tempo----) | O CI e' pos-merge porque o portao local seria inescapavel, e as tres premissas dessa decisao foram falsas ao mesmo tempo | `triaged` | alta — nao ha nada quebrado agora (o `B-187` restaurou o hook e fechou os |
 | [`B-193`](#b-193--uma-ligacao-local-restaura-o-silencio-em-todo-caso-unresolved-e-o-rebound-acusa-um-religamento-que-nao-houve----) | Uma ligacao LOCAL restaura o silencio em todo caso UNRESOLVED, e o `rebound` acusa um religamento que nao houve | `triaged` | media — quinta reabertura consecutiva da mesma classe. Sem instancia viva; |
 
@@ -103,7 +101,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-079`](#b-079--remover-os-quatro-tipos-de-persistência-da-fronteira-do-sink-custa-57-call-sites----) | Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites | `approved` | média — o vazamento existe e está contido; o risco é ele parecer resolvido porque um gate ficou verde. |
 | [`B-181`](#b-181--duas-das-três-métricas-de-custo-do-produto-não-têm-quem-as-emita----) | Duas das três métricas de custo do produto não têm quem as emita | `approved` | alta — o `B-033` mede a corrente de cobrança por custo e conta três elos; este é o quarto, e é o que torna a bala 1 daquele item inalcançável mesmo depois do deploy. Enquanto ninguém emitir as séries, o agregador roda a cada 5 min consultando o vazio e `cost_counters` fica em zero por construção — que é exatamente o estado que o `B-033` mediu em 2026-08-11 e que continua valendo em 2026-09-05. |
 
-### Closed (170)
+### Closed (172)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -274,6 +272,8 @@ consequência do escopo per-repo declarado acima.
 | [`B-184`](#b-184--dois-testes-pulam-incondicionalmente-e-leem-um-arquivo-logo-abaixo-com-tfatalf-que-nunca-roda---x) | Dois testes pulam incondicionalmente e leem um arquivo logo abaixo, com `t.Fatalf` que nunca roda | `shipped` | media — mesmo dano do `F-06` que o `B-180` removeu: um leitor razoavel le a |
 | [`B-185`](#b-185--o-gate-cli-exit-codes-imprime-skip-e-sai-0-desde-sempre-porque-o-diretorio-que-ele-mede-nunca-esteve-na-arvore---x) | O gate `cli-exit-codes` imprime SKIP e sai 0 desde sempre, porque o diretorio que ele mede nunca esteve na arvore | `shipped` | media — um gate na cadeia que nunca mediu nada. Ele nao mente na saida (diz |
 | [`B-186`](#b-186--a-classe-ainda-volta-um-nivel-abaixo-um-predicado-que-chama-outro-predicado-e-invisivel-e-em-silencio---x) | A classe ainda volta um nivel abaixo: um predicado que chama outro predicado e' invisivel, e em silencio | `shipped` | media — o `B-183` existiu para fechar a classe e fechou a grafia de UM |
+| [`B-187`](#b-187--o-hook-que-o-repositorio-declara-como-substituto-de-ci-nao-existe-em-maquina-nenhuma---x) | O hook que o repositorio declara como substituto de CI nao existe em maquina nenhuma | `shipped` | alta — dois testes afirmam "the delivery gate is the CI substitute; it must |
+| [`B-188`](#b-188--tres-posicoes-de-skip-que-o-gate-nao-le-e-a-que-ele-passou-a-ler-custou-uma-auditoria-para-aparecer----) | Tres posicoes de skip que o gate nao le, e a que ele passou a ler custou uma auditoria para aparecer | `shipped` | media — o gate e a unica coisa que impede a classe de voltar, e ha tres |
 | [`B-189`](#b-189--a-classe-volta-por-um-valor-de-funcao-e-o-gate-nem-diz-unresolved-seis-grafias-em-silencio----) | A classe volta por um VALOR de funcao, e o gate nem diz UNRESOLVED: seis grafias em silencio | `shipped` | media — quarta reabertura consecutiva da mesma classe, e a primeira em que |
 | [`B-190`](#b-190--o-pin-do-cli-exit-codes-promete-que-o-gate-reprova-quando-o-assunto-aparece-e-o-campo-do-assunto-nunca-e-lido----) | O pin do cli-exit-codes promete que o gate reprova quando o assunto aparece, e o campo do assunto nunca e lido | `shipped` | baixa — inofensivo com a unica linha de hoje, armadilha na segunda. A |
 | [`B-191`](#b-191--as-tres-declaracoes-da-org-do-gitea-divergem-e-a-que-diverge-nao-chega-a-lugar-nenhum---x) | As tres declaracoes da org do Gitea divergem, e a que diverge nao chega a lugar nenhum | `shipped` | media — o modo de falha do `B-069` voltou a ser alcancavel por |
@@ -7468,7 +7468,7 @@ evidence: |
   que restava.
 why_now: uma faixa arquivou isso como ruido de worktree e a auditoria desarquivou.
   Sem alguem escrever, some de novo na proxima vez que os dois testes reprovarem.
-status: triaged
+status: shipped
 dod:
   - a restauracao usa a ultima versao viva (`git show 53c1dc1ea:.claude/hooks/delivery-gate.sh`)
     e diz o que mudou desde entao, em vez de reescrever o hook do zero — ele ja foi
@@ -7579,6 +7579,33 @@ resolution: |
   divida pre-existente (o `test-coverage-report` que o `B-001` e o `B-079` ja nomearam) bloqueia
   TODO push nesta maquina. Se isso acontecer, o conserto e' a divida, nao o hook — mas quem
   encostar nisso deve medir antes de se surpreender.
+> **Entregue 2026-09-05.** `.claude/hooks/delivery-gate.sh` restaurado da ultima versao
+> viva (`git show 53c1dc1ea:...`, 79 linhas) em vez de reescrito pela quarta vez, com
+> quatro mudancas enumeradas no cabecalho — tres delas da familia "o portao passa
+> quando nao consegue rodar o proprio alvo", que a versao anterior carregava.
+>
+> **O ARQUIVO ERA METADE.** O wiring em `.claude/settings.json` sumiu ANTES dele, em
+> `63cc51c48` (2026-08-29), e nunca voltou: `1 0 1 0 0 0 0` ao longo dos sete commits
+> que tocaram o arquivo. De 2026-08-29 a 2026-09-02 o substituto de CI existia no
+> disco e NUNCA disparava, citado em quatro documentos como razao de uma checagem
+> estar coberta. As duas assercoes que o protegiam ficaram VERDES o tempo todo —
+> elas leem o ARQUIVO, nao o wiring. A quarta assercao, que le o wiring, nasceu aqui.
+>
+> **A AUDITORIA FALSIFICOU A FRASE CENTRAL.** "There is NO bypass flag" era falso em
+> quatro grafias, cada uma um push real que chega ao remoto sem o portao decidir nada:
+> `git -C <path> push`, e `--dry-run` em qualquer outro ponto de um comando composto.
+> As duas causas eram herdadas e estavam no caminho de CASAMENTO, nao nos caminhos de
+> erro que a faixa auditou. Fechadas em `2a3652b26`, com cinco mutantes.
+>
+> E "the tree is identified" era `[ -f Taskfile.yml ]` — presenca vestindo o nome de
+> identidade. Um diretorio com um Taskfile que ecoa "I am not loopzero" produzia
+> `quality:all GREEN — push allowed`. Agora sao tres marcos, e a recusa nomeia qual falta.
+>
+> Quatro numeros re-medidos: LOC 181 -> 66 de codigo, `main` 273 -> 281 commits atras,
+> duas falhas pre-existentes -> uma, e o caveat da promocao viaja em quatro lugares e
+> nao dois. A quarta delecao ja esta agendada e nao se conserta deste lado: o
+> `install.sh` do kit possui a CHAVE `hooks` inteira do `settings.json` enquanto
+> preserva o ARQUIVO — filado como `paulohenriquevn/squad#34`.
 
 ## B-188 — Tres posicoes de skip que o gate nao le, e a que ele passou a ler custou uma auditoria para aparecer   [ ]
 
@@ -7631,7 +7658,7 @@ why_now: a serie `B-180` -> `B-183` -> `B-186` declarou a classe fechada tres ve
   uma auditoria a reabriu tres vezes. O `SCOPE` do pacote agora declara estas tres,
   entao nada esta silencioso para quem ler o codigo — mas declarada nao e' consertada,
   e cada uma custa um refactor de uma linha.
-status: triaged
+status: shipped
 dod:
   - cada uma das tres ou vira sitio, ou continua fora com a razao escrita no `SCOPE`:
     o que nao pode e' a situacao em que a auditoria as encontrou, evadindo em silencio
@@ -7646,6 +7673,26 @@ dod:
     gate tres vezes seguidas. Grafias nao tentadas ainda incluem o skip dentro de um
     `defer`, dentro de um `select`, e a guarda vinda de um metodo com receptor
   - mutacao com efeito conferido, um mutante por capacidade nova
+> **Entregue 2026-09-05.** O gate passou a ler ONDE O SKIP ESTA, nao so onde a sonda
+> esta: condicao de `case` num `switch` sem tag, skip carregado por helper do mesmo
+> pacote, e seletor de dois niveis (`h.t.Skip()`), que antes nem era CONTADO — o que o
+> deixava fora ate do piso "achei pelo menos um skip", a rede contra detector morto.
+> Mais literais de funcao, `defer`, `go`, `select`, type-switch e o arm `default`.
+>
+> A faixa tentou reabrir o proprio conserto: 11 grafias, 8 viraram sitio, 3 ficaram
+> declaradas no `SCOPE`. E consertou um defeito que ela mesma introduziu — seguir um
+> skip para dentro de um helper reportava um guarda uma vez POR CHAMADOR.
+>
+> **A AUDITORIA REABRIU A CLASSE PELA QUARTA VEZ**, por VALORES de funcao: seis
+> grafias, todas silenciosas e nao UNRESOLVED. E o `SCOPE` dizia que a guarda podia ser
+> "a local bound to one" — que e' exatamente `check := cliPresent`, uma das seis. A
+> exclusao estava desenhada em torno de um valor BOOL, que de fato nao tem corpo para
+> ler; o valor de FUNCAO nao estava nem excluido nem coberto. Corrigido em `956296ee0`,
+> e o codigo virou o `B-189`.
+>
+> Contagem re-medida: 23 testes de topo, nao 21 (um `grep -c '^func Test'` da 49,
+> porque os fixtures embutem declaracoes em raw strings) — terceira contagem dessa
+> familia errada na serie.
 
 ## B-189 — A classe volta por um VALOR de funcao, e o gate nem diz UNRESOLVED: seis grafias em silencio   [ ]
 
@@ -7906,6 +7953,27 @@ resolution: |
   `helm get values` e o que muda para CADA uma das tres no dia em que forem promovidas
   (o `GITEA_URL` e' o unico com efeito real: tira a API do default de namespace errado,
   que e' justamente o que o B76 queria). Move-las e' T2 e nao cabia neste item.
+> **Entregue 2026-09-05, e a resposta e' uma terceira que o item nao previa.** A
+> pergunta binaria era: `GITEA_ORG: "loopzero-platform"` no overlay vivo do API e'
+> intencional ou divergencia? Medido: **nao e' intencional, E a linha e' INERTE.** As
+> duas hipoteses do item morreram, e por isso convergir os valores no chute teria sido
+> mexer num valor implantado com base numa premissa falsa.
+>
+> O que ficou: um teste que compara toda declaracao da organizacao entre os charts e os
+> overlays, com pisos que reprovam se o conjunto encolher.
+>
+> **A AUDITORIA CORTOU DUAS AFIRMACOES.** A justificativa escrita no cabecalho do teste
+> errava as duas metades — o operador nao e' implantado de `infra/helm` naquele caminho
+> (o ArgoCD aponta `charts/loopzero-tenant-operator`), entao a inferencia caia dos dois
+> lados mesmo com a premissa verdadeira. E a descoberta so' tolera aspas duplas ou
+> nenhuma: `giteaOrg: 'loopzero-platform'` — YAML valido e comum em values de Helm —
+> PASSA, assim como um mapping em fluxo. Um chart futuro que divergir com a outra
+> grafia legal e' invisivel, e os pisos nao pegam, porque a contagem nao encolhe.
+>
+> Tambem nao coberto e declarado: a camada com a ULTIMA palavra
+> (`values/{env}/loopzero-tenant-operator.yaml.gotmpl`, que o helmfile sobrepoe) esta fora
+> das duas raizes varridas. Nenhum arquivo la declara a org hoje — medido — entao e'
+> lacuna prospectiva, nao falha presente.
 
 ## B-192 — O CI e' pos-merge porque o portao local seria inescapavel, e as tres premissas dessa decisao foram falsas ao mesmo tempo   [ ]
 
