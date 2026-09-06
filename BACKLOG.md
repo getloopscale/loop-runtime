@@ -509,7 +509,6 @@ name and as domain term in the same file, which this item's own text says to esc
 protocol says that trigger closes via an ADR "filed as its own `B-NNN`", and **no such item exists**. The
 trigger names a condition with no owner. Recorded in the ADR next to the protocol.
 
-
 ## B-002 — O cluster `mgmt` é SPOF de tudo, e renomeá-lo para `core` não muda isso   [x]
 
 domain: engine-go
@@ -573,6 +572,7 @@ que ninguém tomou, e projetar HA para 55 releases antes dela é dimensionar sol
 
 > Registrado 2026-08-09 por `/backlog-item` (slug: `core-cluster-spof`).
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-002`
+
 ## B-003 — O checker de ponteiros acusa de fabricação todo caminho iniciado por ponto   [x]
 
 domain: engine-go
@@ -591,6 +591,7 @@ dod:
 
 > Trocado por um lookbehind negativo, que diz o que o `\b` pretendia ("não estou no meio de um caminho") sem exigir que o primeiro caractere seja de palavra. E um ponteiro que sai do projeto (`../irmão/x.ts`) passou a ser …
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-003`
+
 ## B-004 — A fixture "boa" do discover-confidence não passa no layout em que o skill é instalado   [x]
 
 domain: engine-go
@@ -608,6 +609,7 @@ dod:
 
 > Mesma causa-raiz do `B-120` (23 invocações de script nas skills apontando para o layout errado) — três itens, uma família.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-004`
+
 ## B-005 — Unificar cell e cluster em 1:1, aposentando `cell-default`   [x]
 
 domain: engine-go
@@ -711,6 +713,7 @@ conjunto de `UPDATE`s e não exige janela de indisponibilidade. Ambas as mediç�
 
 > Registrado 2026-08-09 a partir da decisão do CTO sobre D2 da opportunity de `B-001` (slug: `cell-cluster-unification`).
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-005`
+
 ## B-006 — O oráculo do conjunto de gates vive num arquivo com data no nome, e é mutado a cada gate   [x]
 
 domain: engine-go
@@ -728,6 +731,7 @@ dod:
 
 > Registrado 2026-08-09 durante a implementação de `B-001` T1.1 (slug: `gateset-oracle-in-dated-baseline`). Fechado 2026-08-16 — DoD conferido bala a bala na re-medição do loop Squad. (1) O oráculo vive em `cmd/loopzero-ops/te…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-006`
+
 ## B-007 — 4,3 MB de snapshot de helmfile que ninguém gera nem consome   [x]
 
 domain: engine-go
@@ -745,6 +749,7 @@ dod:
 
 > Registrado 2026-08-09 durante a execução de `B-001` T4.1 (slug: `orphaned-helmfile-snapshots`). Fechado 2026-08-16 — DoD conferido bala a bala. (1) Decidido: `infra/tests/snapshots/` não existe mais, e a varredura por co…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-007`
+
 ## B-008 — `task test:unit` está vermelho por drift entre repositórios   [x]
 
 domain: engine-go
@@ -768,6 +773,7 @@ Corrigido com `stripComments` aplicado antes do regex, e teste de mesa cobrindo 
 
 > Registrado 2026-08-09 ao rodar o checklist pós-rename (slug: `dashboard-consumed-paths-drift`).
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-008`
+
 ## B-009 — `task lint` está vermelho em 11 achados, nenhum deles novo   [x]
 
 domain: engine-go
@@ -788,6 +794,7 @@ dod:
 
 > Prova: `task lint` exit 0 · `pkg`=0 `operators`=0 `api`=0 · suíte `api` verde.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-009`
+
 ## B-010 — A borda do app-dev alcançava o loopzero-cloud por um port-forward que reiniciava 1,8×/min   [x]
 
 domain: engine-go
@@ -808,6 +815,7 @@ dod:
 
 > Registrado 2026-08-10 durante o diagnóstico do app-dev (slug: `app-dev-edge-portforward`). Fechado 2026-08-16 — DoD 4/4 conferido. (1)+(2) `infra/tests/charts/loopzero_cloud_edge_nodeport_test.go` existe com 2 testes — o Nod…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-010`
+
 ## B-011 — O reconciliador do loopzero-cloud reiniciava o deployment a cada 5 minutos, sempre   [x]
 
 domain: engine-go
@@ -825,6 +833,7 @@ dod:
 
 > Fechado 2026-08-16 — DoD 3/3, todas verificadas no vivo em 2026-08-10 e registradas no bloco: o log diz `BFF: imagem em dia`, o pod não troca de nome entre dois reconciles, e as duas units de port-forward estão paradas e…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-011`
+
 ## B-012 — A imagem do MCP do loopzero-promptly nunca constrói os pacotes que ela executa   [x]
 
 domain: data-plane-ts
@@ -847,6 +856,7 @@ dod:
 
 > B-011 e B-012 registrados 2026-08-10 durante o diagnóstico do app-dev. Fechado 2026-08-16 — verificado nos dois lados. No fonte: `loopzero-promptly/Dockerfile.mcp` tem `RUN pnpm -r build` antes do `pnpm deploy`, com o coment…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-012`
+
 ## B-013 — O nó agente da cell-2 está NotReady desde 2026-07-23 por token não autorizado   [x]
 
 domain: engine-go
@@ -867,6 +877,7 @@ dod:
 
 > Registrado 2026-08-10 durante o diagnóstico do app-dev (slug: `cell2-agent-node-unauthorized`).
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-013`
+
 ## B-014 — `TestTransitClient_RateLimitBurst` reprova por tempo, não por comportamento   [x]
 
 domain: engine-go
@@ -913,6 +924,7 @@ dod:
 
 > Registrado 2026-08-10 ao rodar a suíte completa durante a unificação cell↔cluster (`B-005`).
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-014`
+
 ## B-015 — Dois charts apontam para versões que não existem mais no upstream   [x]
 
 domain: engine-go
@@ -930,6 +942,7 @@ dod:
 
 > Registrado 2026-08-10 durante a reconstrução total do app-dev (`B-001`, `B-005`). Entregue 2026-08-18. As duas quebras tinham causas diferentes, e tratá-las como uma só foi o que as manteve abertas. `k6-operator`: a vers…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-015`
+
 ## B-016 — O token que puxa as imagens de plataforma do GHCR está inválido   [x]
 
 domain: engine-go
@@ -949,6 +962,7 @@ dod:
 
 > Duas armadilhas de medição no caminho, que quase produziram conclusão falsa: primeiro li `404` para cinco imagens e quase registrei "problema de ACL de pacote" — era o meu `Accept` sem `application/vnd.oci.image.manifest…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-016`
+
 ## B-017 — O `Dockerfile.local` do loopzero-cloud tem dois defeitos que o impedem de construir   [x]
 
 domain: control-plane
@@ -973,6 +987,7 @@ Guarda: `internal/ci/dockerfile_local_test.go` compara o `replace` injetado com 
 
 > O campo `status` seguia `raw` com o checkbox já em `[x]` — a mesma deriva que esta sessão mediu em outros seis itens, aqui numa variação que o verificador ainda não cobre: checkbox contra campo, em vez de nota-de-fechame…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-017`
+
 ## B-018 — A borda alcança Kratos e Hydra por encaminhamento de porta que não sobrevive a um rebuild   [x]
 
 domain: engine-go
@@ -996,6 +1011,7 @@ Aplicado sem recriar cluster (`k3d cluster edit --port-add`), então não houve 
 
 > Registrado 2026-08-10 durante a reconstrução total do app-dev.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-018`
+
 ## B-019 — Os quatro CronWorkflows executam uma imagem cujo registro foi deletado   [x]
 
 domain: engine-go
@@ -1014,6 +1030,7 @@ dod:
 
 > `pre-release-governance.md`: *"legado é erro. Delete."* A intenção dos quatro agendamentos está preservada em `B-147`, e o git guarda o chart para quem reconstruir com um runner de verdade. A isenção que o gate carregava…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-019`
+
 ## B-020 — O host `cloud-dev` era um segundo nome para o mesmo painel   [x]
 
 domain: engine-go
@@ -1036,6 +1053,7 @@ dod:
 
 > Registrado e fechado em 2026-08-10, a partir de uma pergunta do sponsor.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-020`
+
 ## B-021 — O webhook do GitHub está desligado: falta o segredo HMAC   [x]
 
 domain: engine-go
@@ -1057,6 +1075,7 @@ dod:
 
 > Por que separar em vez de manter aberto: o item nomeia *"o webhook está desligado"*, e essa condição está morta e enterrada, provada nos três códigos de resposta. A quarta bala é a jornada inteira de auto-deploy, com bla…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-021`
+
 ## B-022 — O caminho do motor depende do painel estar de pé   [ ]
 
 domain: engine-go
@@ -1229,6 +1248,7 @@ dod:
 
 > Isso torna a bala 1 urgente em vez de teórica. Das três saídas — remover, restaurar, manter — manter é a pior: um host público que responde 200 no caminho de saúde e 404 em toda a superfície de identidade parece vivo e n…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-024`
+
 ## B-025 — Três hosts públicos apontam para o vazio   [ ]
 
 domain: engine-go
@@ -1248,6 +1268,7 @@ dod:
 
 > Aplicar na borda e' etapa de operador (`caddy-up-dev-public.sh`), separada e deliberada; este commit muda o arquivo canonico. A direcao e' de reducao de exposicao.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-025`
+
 ## B-026 — As células divergem: a plataforma só era instalada na primeira   [x]
 
 domain: engine-go
@@ -1269,6 +1290,7 @@ dod:
 
 > Registrado e fechado em 2026-08-10, a partir de uma pergunta do sponsor sobre o desenho.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-026`
+
 ## B-027 — O diagnóstico do CLI manda verificar um endereço que não existe   [x]
 
 domain: platform-cli
@@ -1298,6 +1320,7 @@ kill_reason: |
 
 > Registrado 2026-08-10 ao medir se o CLI passa pelo painel (`B-022`).
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-027`
+
 ## B-028 — 17 portas alcançáveis da internet fora de qualquer lista   [x]
 
 domain: engine-go
@@ -1322,6 +1345,7 @@ dod:
 
 > O que fica: a triplicata sem dono declarado continua sendo o `B-111`, e a dívida herdada também — um gate que depende de porta de contêiner exposta na internet é o mesmo cheiro do painel apontando para processo solto. O …
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-028`
+
 ## B-029 — Dois caminhos para o mesmo endpoint do Stripe   [x]
 
 domain: engine-go
@@ -1425,6 +1449,7 @@ envelhece, uma verificada contra o código não.
 
 > Ambos registrados 2026-08-11, ao medir a separação de domínios a pedido do sponsor.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-030`
+
 ## B-031 — A mesma capacidade exige `owner` num lado e nada no outro   [x]
 
 domain: engine-go
@@ -1446,6 +1471,7 @@ dod:
 
 > Registrado 2026-08-11 durante a fase de planejamento do `B-029`.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-031`
+
 ## B-032 — O portal do CLI devolve uma URL construída com o id do cliente   [x]
 
 domain: engine-go
@@ -1470,6 +1496,7 @@ dod:
 
 > O B-029 está fechado por observação, não por argumento.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-032`
+
 ## B-033 — O teto de custo está desligado, e o portão passa direto quando isso acontece   [ ]
 
 domain: control-plane
@@ -1688,7 +1715,6 @@ dod:
 > Fica aqui, com o escopo do **portão**. A metade do agregador está registrada em
 > `loopzero-cloud` como `B-287`, que passou a citar esta divisão. Nenhum id foi reusado.
 
-
 ## B-034 — A cobrança por uso não tem para onde reportar   [x]
 
 domain: control-plane
@@ -1721,7 +1747,6 @@ kill_reason: |
   O bloco fica: id, titulo e evidencia intactos, para que uma referencia antiga a `B-034`
   ainda resolva. Renumerar ou apagar destruiria a unica prova de que ele passou por aqui.
 
-
 ## B-035 — O segredo que verifica pagamentos não existia no ambiente   [x]
 
 
@@ -1749,6 +1774,7 @@ dod:
 
 > Um erro meu de medicao, nomeado. Minha primeira busca usou `stripe.*webhook` e retornou zero — eu quase reportei "nenhum evento do Stripe em 30 dias". A linha tem `webhook` ANTES de `stripe` (`"path":"/v1/webhooks/stripe…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-035`
+
 ## B-036 — Os seeds de cobrança pulam sem credencial e a corrente reporta verde   [x]
 
 
@@ -1772,6 +1798,7 @@ dod:
 
 > Registered 2026-08-11 by `/backlog-item` (slug: `billing-fail-closed`). Fechado 2026-08-18 — medido como já entregue. O desenho existe e está ligado: `Capability` + `RequirementPolicy` + `MissingInput` (`cmd/loopzero-ops/int…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-036`
+
 ## B-037 — O painel monta os dois segredos de cobrança como opcionais   [x]
 
 
@@ -1796,6 +1823,7 @@ dod:
 
 > Registered 2026-08-11 by `/backlog-item` (slug: `billing-fail-closed`). Fechado 2026-08-18 — medido como já entregue, com guarda que o item não pedia. Os dois charts usam `optional: {{ not .Values.billing.required }}`, e…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-037`
+
 ## B-038 — Nenhuma camada de cobrança pode degradar em silêncio   [x]
 
 
@@ -1826,6 +1854,7 @@ dod:
 
 > As camadas 3 e 4 continuam degradando (`open:B-033`). Esta fatia não conserta a cadeia — garante que ela seja enumerável, com dono, e impossível de encolher em silêncio.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-038`
+
 ## B-039 — O painel não tem checkout canônico no droplet   [x]
 
 domain: engine-go
@@ -1898,6 +1927,7 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura (`/loop-codebase-architect`). Evidência reproduzida pela thread principal, não herdada de agente. Fechado 2026-08-16 — DoD 3/3. (1) `route-auth-coverage` reprova enumer…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-040`
+
 ## B-041 — `routes` é o pior módulo de 148, e é onde se procura a resposta a "o que é secret?"   [x]
 
 domain: engine-go
@@ -1918,6 +1948,7 @@ dod:
 
 > (1) Emendada — ver `MEET-ASYNC-AMENDMENT-2026-08-16-routes-family-isomorphism` (pendente de ratificação). Medido: 29 subpastas contra 10 importadas pelo `router.go`. As 19 não são handlers sem família — são construídas e…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-041`
+
 ## B-042 — Ninguém decidiu se o provisionamento de chave Transit é do `api` ou do operator   [x]
 
 domain: engine-go
@@ -1937,6 +1968,7 @@ dod:
 
 > A lista de passos do reconcile virou um método nomeado (`provisioningSteps`) para que a asserção pudesse ler os passos, e não a grafia do literal dentro do `Reconcile`.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-042`
+
 ## B-043 — O domínio de secrets mora dentro do kernel que todo mundo compartilha, com um consumidor só   [x]
 
 domain: engine-go
@@ -1959,6 +1991,7 @@ dod:
 
 > A consequência desconfortável fica escrita: `pkg/vault` continua no kernel e continua sendo o maior pacote de consumidor único dele (3.663 LOC). O item estava certo ao chamar isso de fronteira frouxa — o que mudou é que …
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-043`
+
 ## B-044 — Em qual cluster um chart aterrissa é uma flag de linha de comando, não uma declaração   [x]
 
 domain: engine-go
@@ -1977,6 +2010,7 @@ dod:
 
 > O que protege hoje é mais forte que a bala: o gate impede a divergência no ponto de invocação, antes de qualquer conexão, em vez de depender de o helmfile detectá-la depois. Fecho por prevenção verificada, não por detecç…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-044`
+
 ## B-045 — Quatro gates reprovam hoje em conteúdo real do repositório, e nenhum deles é executado   [x]
 
 domain: engine-go
@@ -1997,6 +2031,7 @@ dod:
 
 > E o `security-context` deixou de sair 0 imprimindo violação: ele roda com `--gate`, e o próprio comentário do Taskfile registra por que a auditoria original concluiu o contrário — ela rodou sem a flag, em modo relatório.…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-045`
+
 ## B-046 — A cerca fail-closed do Tenant CR existe no chart de dev e não no publicado   [x]
 
 domain: engine-go
@@ -2015,6 +2050,7 @@ dod:
 
 > Aberta: o allowlist do `helm-drift` ainda aprova por par, não por arquivo com justificativa — a própria saída do gate diz: *"21 aprovações herdadas do allowlist antigo por PAR, cuja razão por arquivo nunca foi medida"*, …
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-046`
+
 ## B-047 — A task que viola a fronteira SECRETS/CORE está shipada, e o gate que a nomeia valida o violador   [x]
 
 domain: engine-go
@@ -2033,6 +2069,7 @@ dod:
 
 > E a remoção destravou o `B-044`: o `helmfile-context-parity` estava desligado porque esta task produzia 4 divergências, e o teste de wiring dizia *"wiring follows that removal"*. Removida a task, ele foi a 0 divergências…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-047`
+
 ## B-048 — O chart guarda-chuva colapsa os quatro planos num único release Helm   [x]
 
 domain: engine-go
@@ -2051,6 +2088,7 @@ dod:
 
 > Fronteira com o `B-073`: aqui está decidido o que ele é; lá se decide se vale mantê-lo. Medido nesta fatia: nenhum consumidor de produção — todos os medidos são teste ou template.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-048`
+
 ## B-049 — O sink do DAG de domínio importa a camada de persistência e re-exporta os tipos dela   [x]
 
 domain: engine-go
@@ -2069,6 +2107,7 @@ dod:
 
 > O atalho que parece existir e não existe, tentado e revertido nesta fatia. `db.DBTX` é *alias* de `dbtx.DBTX`, então trocar o nome no sink não muda tipo nenhum nem toca as 34 chamadas — parece ganho de graça. O gate já r…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-049`
+
 ## B-050 — O CR `Application` do ArgoCD tem três escritores em dois runtimes   [x]
 
 domain: engine-go
@@ -2087,6 +2126,7 @@ dod:
 
 > Os dois achados colaterais do ADR também foram fechados. `sync_client.go:351` dizia *"PATCH … is the documented ArgoCD REST endpoint"* sobre uma requisição `http.MethodGet`. E `preview_controller.go:638` — que não é come…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-050`
+
 ## B-051 — Uma regra de segurança vive em dois módulos e as duas cópias já divergiram   [x]
 
 domain: engine-go
@@ -2105,6 +2145,7 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura. 2026-08-12 (fatia `slice-11`, `B-070`): o gate que este item criou saiu do estado desligado. A divergência `GOOGLE_` que o mantinha mudo passou a isenção datada (sunse…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-051`
+
 ## B-052 — O `CLAUDE.md` aponta para cinco contratos que não existem   [x]
 
 domain: engine-go
@@ -2124,6 +2165,7 @@ dod:
 
 > (4) As três divergências menores, medidas e corrigidas. O arquivo trazia dois números diferentes de gates (`122` e `112`) e nenhum batia: são 126 ligados sobre 134 subpacotes. Os quatro nomes de cluster estavam errados —…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-052`
+
 ## B-053 — `/api/v1/version` responde `"dev"` em toda imagem construída   [x]
 
 domain: engine-go
@@ -2141,6 +2183,7 @@ dod:
 
 > Renomear arquivo e tipo em código de produção é T2; fica registrado com a medição que torna a decisão barata.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-053`
+
 ## B-054 — O `api` roda dois circuit breakers escritos independentemente sobre o mesmo pool Postgres   [ ]
 
 domain: engine-go
@@ -2159,6 +2202,7 @@ dod:
 
 > O guarda anterior teve de ser INVERTIDO, e a razao e' o proprio conserto. Ele varria por importadores do pacote; como a ligacao e' por interface, o middleware nao importa nada — ele continuaria reportando "sem chamador" …
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-054`
+
 ## B-055 — O invariante de escritor único de status vale em 2 de 8 controllers, e o helper que o repara não tem chamador   [x]
 
 domain: engine-go
@@ -2176,6 +2220,7 @@ dod:
 
 > A revisão independente rodou antes do commit e encontrou um HIGH de corretude que teria passado: o merge-patch simples carrega o array de conditions inteiro (RFC 7386 trata array como escalar), então apagaria a escrita d…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-055`
+
 ## B-056 — Dois charts diferentes têm o mesmo nome, em duas árvores com ciclos de vida distintos   [x]
 
 domain: engine-go
@@ -2218,6 +2263,7 @@ dod:
 
 > Registrado 2026-08-11 pela auditoria de arquitetura.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-056`
+
 ## B-057 — Três pacotes chamados `domain` significam três coisas, e o registro de portas não é um modelo de domínio   [ ]
 
 domain: engine-go
@@ -2726,6 +2772,7 @@ dod:
 
 > Verificado: `operators`, `api` e `cmd/loopzero-ops` compilam; suíte dos operators verde; e os cinco gates estruturais passam — `unhomed-logic` (64 ≤ 82), `pkg-usage-matrix` em dia, `acyclic-graph` acíclico, `status-writer-co…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-061`
+
 ## B-062 — O vocabulário do plano de build está espalhado por quinze pacotes, incluindo o sink de domínio   [x]
 
 domain: engine-go
@@ -2745,6 +2792,7 @@ dod:
 
 > Bala 2 — não construída, e o motivo é medição. O item previu que, depois do aninhamento, um gate precisaria enumerar 3 prefixos. Medido depois de aninhar: 14. O vocabulário não estava só nos quatro pacotes — vive em `con…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-062`
+
 ## B-063 — Um módulo de infraestrutura depende de uma suíte de testes, e `tools/` está fora do workspace    [x]
 
 domain: engine-go
@@ -2761,6 +2809,7 @@ dod:
 
 > Os dois binários ELF que aparecem em `ls tools/` não estão rastreados — `git ls-files tools/` lista só `.sh`, `go.mod`, `main.go`, `main_test.go` e um `Dockerfile`. A assimetria que o B-051 registrou continua fechada. Re…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-063`
+
 ## B-064 — O control plane alcança o plano de secrets por um nome DNS reescrito em tempo de resolução   [x]
 
 domain: engine-go
@@ -2780,6 +2829,7 @@ dod:
 
 > Bloqueio de permissão, não contornado. Existe `infra/tests/charts/cross_cluster_secrets_test.go`, e o diretório `infra/tests/charts/` está negado por permissão nesta sessão — Bash e leitura direta recusam. Não consigo me…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-064`
+
 ## B-065 — Um contexto delimitado vazio está pré-aprovado no DAG congelado   [x]
 
 domain: engine-go
@@ -2796,6 +2846,7 @@ dod:
 
 > A classe, não só a instância: `TestTodoContextoRegistradoTemCodigoRastreado` exige que todo contexto do DAG tenha `.go` rastreado pelo git. Usa `git ls-files` e não `os.Stat` de propósito — um diretório vazio existe na m…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-065`
+
 ## B-066 — Três suítes de invariante são testes Go comuns, invisíveis ao oráculo de gates   [x]
 
 domain: engine-go
@@ -2812,6 +2863,7 @@ dod:
 
 > Movidos para `internal/drill/cost` e `internal/chaos/slo`. Medido depois: 144 diretórios − 4 auxiliares = 140, e o oráculo lista 140. A contagem fecha, e `--list` volta a enumerar tudo que vive ali. Registrado 2026-08-11…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-066`
+
 ## B-067 — 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa   [ ]
 
 domain: engine-go
@@ -2907,6 +2959,7 @@ dod:
 
 > Achado colateral: duas linhas do `CLAUDE.md` descreviam `UserDockerfileStrategy` emitindo `dockerfile-lint` — tipo que não existe desde T2.2. Uma delas instruía justamente a usar o helper que este item removeu. Corrigida…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-068`
+
 ## B-069 — A mesma regra de env reservada descarta em silêncio de um lado e mata o build do outro   [x]
 
 domain: engine-go
@@ -2927,6 +2980,7 @@ dod:
 
 > O resíduo do linter morto virou item próprio: B-157. Registrado 2026-08-11 pelo Challenger do `MEET-ASYNC-AMENDMENT-2026-08-11-001`, ao verificar o desenho do gate do `B-051`. 2026-08-12 (fatia `slice-11`, `B-070`): o ei…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-069`
+
 ## B-070 — `ENV aws_region` já quebra o build hoje, e a API aceitaria a mesma chave   [x]
 
 domain: engine-go
@@ -2945,6 +2999,7 @@ dod:
 
 > Efeito colateral no `B-051`: o gate que ele criou saiu do estado desligado. A divergência `GOOGLE_` virou isenção datada (2026-11-09) em vez de manter os três eixos sem guarda.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-070`
+
 ## B-071 — `task test:unit` está vermelho na `workspace`, e a causa é um par que se desencontrou   [x]
 
 domain: engine-go
@@ -2964,6 +3019,7 @@ dod:
 
 > Registrado 2026-08-11 durante a validação de integração da fatia `slice-1-tripwires`. Bissectado até o commit; não causado por esta fatia, que não toca `api/`. Fechado 2026-08-16 — DoD 4/4. (3) `task test:unit` sai 0 na …
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-071`
+
 ## B-072 — A policy versionada nega ao `api` a criação de chave que o `api` faz   [x]
 
 domain: engine-go
@@ -2982,6 +3038,7 @@ dod:
 
 > As quatro balas: (1) o chart concede `transit/keys/loopzero-tenants-*` com `create`, `read` e `update` (`values.yaml:241-243`); (2) chart e runbook pararam de divergir — o runbook não escreve mais policy e nomeia `loopzero-api`;…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-072`
+
 ## B-073 — O chart guarda-chuva não tem consumidor conhecido, e mantê-lo custa   [x]
 
 domain: engine-go
@@ -3001,6 +3058,7 @@ dod:
 
 > Fica `triaged`. Para fechar, alguém com acesso ao registry precisa responder consumo — pulls, ou uma decisão de produto de que ninguém fora do workspace deve instalá-lo. Registrado 2026-08-12 ao escrever o ADR do `B-048`…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-073`
+
 ## B-074 — Deletar o Environment CR direto deixa a Application órfã, e o reaper não a alcança   [ ]
 
 domain: engine-go
@@ -3019,6 +3077,7 @@ dod:
 
 > Recomendação para a reunião: C, com A como alternativa se a reunião preferir que o spec seja a única fonte de verdade do que é esperado. Registrado 2026-08-12 ao escrever o ADR do `B-050`.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-074`
+
 ## B-075 — O primitivo de crypto-shredding não tem dono, e o ADR quase o deletou   [x]
 
 domain: engine-go
@@ -3036,6 +3095,7 @@ dod:
 
 > O que continua não existindo, e agora está escrito em vez de suposto: o shredder, o ator que acorda em T+90, e o runbook. O CronJob de Day-30 continua filtrando tenants soft-deleted por uma consequência que não acontece …
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-075`
+
 ## B-076 — 21 divergências entre chart publicado e de bootstrap estão aprovadas sem que ninguém tenha medido por quê   [x]
 
 domain: engine-go
@@ -3055,6 +3115,7 @@ status: shipped
 
 > E o achado virou o `B-110`: o gate compara nome de arquivo, e 13 das 21 que ele reporta não são assimetria de instalação. As 4 da classe A ficam aprovadas com a razão dizendo que a aprovação é contorno da forma de medir …
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-076`
+
 ## B-077 — A cerca de forma dos CRs Tenant está desligada exatamente no cluster onde os CRs vivem   [x]
 
 domain: engine-go
@@ -3073,6 +3134,7 @@ dod:
 
 > Fechado pela fatia `slice-16`; o campo `status` não acompanhou até esta medição.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-077`
+
 ## B-078 — O gate de paridade de contexto não enxerga scripts, e não pode comparar quando um lado é parametrizado   [x]
 
 domain: engine-go
@@ -3089,6 +3151,7 @@ dod:
 
 > O contador independente do teste passou a ler `globsPadrao` em vez de repetir a lista. O comentário que ele substitui já avisava: duas listas que precisam concordar acabam discordando, e aí a reconciliação compara duas á…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-078`
+
 ## B-079 — Remover os quatro tipos de persistência da fronteira do sink custa 57 call sites   [ ]
 
 domain: engine-go
@@ -3724,6 +3787,7 @@ dod:
 
 > Um erro meu, e ele vale registrar: meu primeiro piso de população exigiu 200 mensagens, número que tirei do *"277 mensagens"* do próprio item — e 277 conta call sites de `WriteLoopZeroError`, não literais. Duas métricas dife…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-081`
+
 ## B-082 — `check-loopzero-api-vault-projected-token_test.sh` reprova de forma intermitente dentro do `quality:gates`   [x]
 
 domain: engine-go
@@ -3743,6 +3807,7 @@ dod:
 
 > Um ponto de dado não diz nada sobre intermitência, e apresentar "3 de 4 reprovaram" como evidência da instabilidade seria inventar a medição: as falhas eram todas minhas. A lição, para quem retomar: a sonda de flakiness …
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-082`
+
 ## B-083 — `task lint` continua vermelho por 88 achados em `api/`, que o B-009 nunca cobriu   [x]
 
 domain: engine-go
@@ -3760,6 +3825,7 @@ dod:
 
 > As balas 2 e 3 foram as desta fatia. A `lint:strict` saiu: ela comparava um total agregado contra um baseline de 200 (`api=140 + operators=60`) com os dois em zero — 200 fora da realidade. Agora há uma task, um veredito,…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-083`
+
 ## B-084 — A cerca `routes-acyclic` não vigia o pacote pai, e o risco cresce a cada família   [x]
 
 domain: engine-go
@@ -3781,6 +3847,7 @@ dod:
 
 > Registrado 2026-08-12 pela revisão independente da fatia slice-8 (achado M2) e ratificado em `MEET-ASYNC-AMENDMENT-2026-08-12-004 § Amendment 2`, que fixa a condição de preceder a família 3. Fechado 2026-08-16 — DoD 4/4.…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-084`
+
 ## B-085 — Dez arquivos escrevem `.status` fora do contrato, em 28 pontos   [x]
 
 domain: engine-go
@@ -3800,6 +3867,7 @@ dod:
 
 > Decisão em `MEET-ASYNC-AMENDMENT-2026-08-14-application-status-anchor`. O `B-105` continua aberto pela outra bala: o sumário de prontidão inline é pulado em retorno antecipado, e o `ADR-0025 D3` exige que ele seja a últi…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-085`
+
 ## B-086 — Um documento de decisão que registra a ausência de um ADR faz esse ADR resolver   [x]
 
 domain: engine-go
@@ -3819,6 +3887,7 @@ dod:
 
 > A armadilha me pegou um nível acima, e ficou registrada no código. A primeira versão do meu comentário nomeava os dois ids para explicar a medição — e o gate lê comentários Go, então a explicação virou duas citações norm…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-086`
+
 ## B-087 — `task quality:all` aborta no primeiro passo, contra um diretório que não existe desde o M9   [x]
 
 domain: engine-go
@@ -3838,6 +3907,7 @@ dod:
 
 > A terceira bala (*"asserção de que um alvo não referencia diretório inexistente"*) é coberta pelo gate `test-target-coverage` do `B-088`: um diretório que não existe não tem `go.mod`, e um módulo que existe sem alvo repr…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-087`
+
 ## B-088 — Os testes de `cmd/loopzero-ops` e de `tools/` não são rodados por nenhuma task   [x]
 
 domain: engine-go
@@ -3855,6 +3925,7 @@ dod:
 
 > Decisão T2 em `MEET-ASYNC-AMENDMENT-2026-08-13-delivery-gate-hermetic`.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-088`
+
 ## B-089 — A mesma regra de env reservada tem uma TERCEIRA implementação, com um terceiro conjunto   [x]
 
 domain: engine-go
@@ -3872,6 +3943,7 @@ dod:
 
 > Nenhum prefixo entrou ou saiu de nenhuma lista. A lacuna que fica aberta é o B-093.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-089`
+
 ## B-090 — A asserção de caixa do gate é evadível por um refactor comum   [x]
 
 domain: engine-go
@@ -3889,6 +3961,7 @@ dod:
 
 > O que continua fora, dito em vez de implicado inexistente: um fold escondido atrás de uma função própria (`normalize(key)`), que exigiria seguir a chamada.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-090`
+
 ## B-091 — `infra/quality/dry-run-baseline.txt` é a segunda baseline sem leitor   [x]
 
 domain: engine-go
@@ -3905,6 +3978,7 @@ dod:
 
 > A mesma armadilha do B-086 me pegou de novo, no mesmo turno. A primeira versão do teste passou — porque o comentário dele soletrava o nome do arquivo órfão, e a asserção conta leitores procurando o nome no código. Minha …
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-091`
+
 ## B-092 — 16 arquivos de teste em `infra/tests` não rodam, e dois subdiretórios estão vermelhos   [x]
 
 domain: engine-go
@@ -3923,6 +3997,7 @@ dod:
 
 > O que a varredura de tags achou e este item não conserta: a asserção lê um arquivo, e existem 16 charts declarando `image.tag`. Os 7 publicados — os que o ArgoCD entrega — declaram `tag: dev`. Não expandi o teste para re…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-092`
+
 ## B-093 — O validador do `services.json` não bloqueia os prefixos que a plataforma injeta   [x]
 
 domain: engine-go
@@ -3941,6 +4016,7 @@ dod:
 
 > Correção da revisão: eu escrevi que *"o dado que decide não é visível deste repositório"*. Metade dele é, e a revisão a mediu em três greps — o env do `services.json` alcança o contêiner. O que falta é a outra metade, e …
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-093`
+
 ## B-094 — A metade API do `find_sec_004` guarda um campo que ninguém popula   [ ]
 
 domain: engine-go
@@ -3959,6 +4035,7 @@ dod:
 
 > Saiu junto: `AppSpec.Env`, `AppUnit.Env`, o `isReservedEnvKey` local, e — descobertos pelo compilador, nao pelo grep — `assertEnvNotSecret`, `envLines` e `secretEnvFragments`, que escreviam `ENV` na imagem a partir do me…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-094`
+
 ## B-095 — A segunda cerca sobre CRs `loopzero.io` renderiza em lugar nenhum   [ ]
 
 domain: engine-go
@@ -3977,6 +4054,7 @@ dod:
 
 > Falta so' um fato de runtime, escrito no `values-mgmt.yaml`: confirmar que nenhum Tenant/Environment sobreviveu em `default` num cluster ativo. Corrigir o script nao remove o que uma execucao anterior dele ja aplicou.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-095`
+
 ## B-096 — O chart publicado do `loopzero-api` renderiza uma SA que as políticas de admissão não isentam   [x]
 
 domain: engine-go
@@ -3996,6 +4074,7 @@ dod:
 
 > Não apliquei: `pre-release-governance.md` classifica modificação de Helm chart como T2, e a linha muda o nome de uma ServiceAccount renderizada. Fica registrada com o conserto pronto — quem tiver a reunião fecha em um mi…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-096`
+
 ## B-097 — O CLI documenta um `kubectl patch` que a nova cerca nega   [x]
 
 domain: engine-go
@@ -4013,6 +4092,7 @@ dod:
 
 > A dica saiu para `dicaDeConserto()`, uma função testável — antes era uma `fmt.Sprintf` inline dentro de um `slog.Warn`, e testar a mensagem exigiria capturar log. Registrado 2026-08-13 pela revisão da fatia `slice-16`.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-097`
+
 ## B-098 — Duas policies do OpenBao são declaradas e nunca ligadas a role nenhum   [ ]
 
 domain: engine-go
@@ -4031,6 +4111,7 @@ dod:
 
 > Terceira bala fechada: o gate `openbao-init-auth-mounts` passou a recusar policy declarada que nenhum role carregue. Ele reprovava a arvore real, nomeando as duas, antes da remocao. Runbooks que as citavam foram repontad…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-098`
+
 ## B-099 — A policy corrigida não alcança a identidade que cria a chave, e o bootstrap a sobrescreve   [x]
 
 domain: engine-go
@@ -4050,6 +4131,7 @@ dod:
 
 > Preso por `TestOpenBaoInitAuth_NoScriptWritesAPolicyTheChartOwns`, que reprova se qualquer shell sob `infra/` voltar a escrever policy. Mutante verificado.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-099`
+
 ## B-100 — O gate de contrato trabalha por nome de tag nos dois lados, e chama campo homônimo de consumidor   [x]
 
 domain: engine-go
@@ -4070,6 +4152,7 @@ dod:
 
 > A segunda metade do item — `grepConsumersForTag` casar `\.<tag>\b` e contar campo homônimo como consumidor — segue aberta. Na ocorrência real, 8 dos 9 "consumidores" de `repo` eram `p.repo.RepoURL(...)` e 1 era um litera…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-100`
+
 ## B-101 — Quatro testes herméticos de seed queimam 390s de relógio, e é isso que mantém a suíte fora do push   [x]
 
 domain: engine-go
@@ -4088,6 +4171,7 @@ dod:
 
 > Nada a fazer. Fechado por medição. Registrado 2026-08-13, ao medir o `B-088` para fechá-lo. `.claude/rules/testing.md § 6` nomeia isto: *"Time/randomness in unit tests — inject a clock/RNG so the test is deterministic"*.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-101`
+
 ## B-102 — `task --dry` imprime bloco multi-linha sem avaliar o controle de fluxo, e é nisso que uma asserção de segurança se apoia   [x]
 
 domain: engine-go
@@ -4106,6 +4190,7 @@ dod:
 
 > A metade antiga fica, e o comentário dela agora diz por quê: ela cobre a linha exata, que a observação não distingue — o substituto vê `test ./...`, não a forma do comando que o produziu. As duas cobrem coisas diferentes…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-102`
+
 ## B-103 — 43 itens estão `raw` carregando evidência medida, e o loop os trata como não medidos   [x]
 
 domain: engine-go
@@ -4123,6 +4208,7 @@ dod:
 
 > Registrado 2026-08-13 pela fatia que fechou o `closure_note_without_shipped`. Deliberadamente não corrigido em lote: virar 43 status sem abrir cada item é exatamente o atalho que produziu a deriva. Os seis que corrigi ne…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-103`
+
 ## B-104 — O webhook do GitHub se desliga sozinho em silêncio, e `optional: true` é o que permite   [x]
 
 domain: engine-go
@@ -4140,6 +4226,7 @@ dod:
 
 > Ressalva honesta: `task lint` segue vermelho por um achado (`operators/internal/preview/preview_status_writer_test.go:232`, `QF1008`), em arquivo commitado de outra fatia. Não é meu e não o toquei — mexer no arquivo de u…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-104`
+
 ## B-105 — O `application_controller` ancora a base depois de um re-fetch, e pula o sumário em retorno antecipado   [x]
 
 domain: engine-go
@@ -4159,6 +4246,7 @@ status: shipped
 
 > Todos os guards são comportamentais ou estruturais, nunca textuais, e cada asserção foi verificada por mutante — incluindo os três que a revisão usou para matar a versão anterior.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-105`
+
 ## B-106 — 215 dos 582 caminhos do inventário de testes não existem, e o gate que o lê nunca verifica   [x]
 
 domain: engine-go
@@ -4178,6 +4266,7 @@ dod:
 
 > Onze testes, RED antes de GREEN, incluindo as duas fronteiras que impedem a catraca de virar armadilha (a árvore congelada passa contra si mesma; melhorar não é regredir) e o teste contra a população real (`B-109`), que …
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-106`
+
 ## B-107 — O checkbox do título e o campo `status:` são o mesmo fato, e discordavam em 23 itens   [x]
 
 domain: engine-go
@@ -4195,6 +4284,7 @@ dod:
 
 > E o achado colateral vale mais que o item. Ao cruzar as duas representações apareceu que a regra `closure_note_without_shipped` — que eu mesmo escrevi nesta sessão — só conhecia `Fechado`/`Closed` e não conhecia `RESOLVI…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-107`
+
 ## B-108 — Cinco seeds gravam Secret num namespace que podem não encontrar   [x]
 
 domain: engine-go
@@ -4212,6 +4302,7 @@ dod:
 
 > status permanece `raw` no campo acima; o fechamento aguarda a ratificação do `MEET-ASYNC-AMENDMENT-2026-08-16-seeds-ensure-their-namespace`.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-108`
+
 ## B-109 — Guarda nova é medida contra mutante sintético e nunca contra a população que já existe   [x]
 
 domain: engine-go
@@ -4234,6 +4325,7 @@ dod:
 
 > Toda guarda criada neste lote nasceu com o teste de população, e ele pegou coisa em três delas: o `B-123` (a contagem tinha de subir de 42 para 70), o `B-114` (cinco subárvores que eu ia isentar sem serem descobertas) e …
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-109`
+
 ## B-110 — O gate de divergência entre charts compara nome de arquivo, e nome de arquivo não é recurso   [x]
 
 domain: engine-go
@@ -4255,6 +4347,7 @@ dod:
 
 > Provas: 11/11 aprovadas contra o repositório real, mutante `CronJob` injetado reprovando com `SEM APROVAÇÃO`, e `task test:unit` verde com 264 pacotes.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-110`
+
 ## B-111 — O mesmo controle de firewall vive em três repositórios sem dono declarado   [x]
 
 domain: engine-go
@@ -4274,6 +4367,7 @@ dod:
 
 > E nada disso está neste repositório: `git ls-files | grep host-firewall` devolve zero em `loopzero`. O item foi filado contra `loopzero` e seu artefato nunca esteve aqui — a mesma classe do B-145. Registrado 2026-08-15, ao re-me…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-111`
+
 ## B-112 — O gate que detecta deploy do loopzero-rag sonda uma porta que ninguém publica   [x]
 
 domain: data-plane-ts
@@ -4303,6 +4397,7 @@ kill_reason: |
 
 > status permanece `triaged`; o DoD anterior foi reescrito acima porque as duas balas originais descreviam um sistema que não é este.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-112`
+
 ## B-113 — A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável   [ ]
 
 domain: engine-go
@@ -4399,7 +4494,6 @@ sessão passou o dia corrigindo nos outros: declarar cumprido o que foi medido p
 patrocinador por nome, e virar a chave sobre uma cobertura cega travaria a entrega pelas 3 violações
 de pods de teste **enquanto continuava sem ver as 7 que importam**. Virou `B-119`.
 
-
 ## B-114 — `test-target-coverage` tem granularidade de módulo, e foi ela que deixou 39 testes invisíveis   [x]
 
 domain: engine-go
@@ -4417,6 +4511,7 @@ dod:
 
 > A descrição do gate no registro dizia *"Granularidade é o MÓDULO, não o pacote"*, o que passou a ser falso; foi atualizada, e o oráculo congelado re-congelado conscientemente.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-114`
+
 ## B-115 — 34 superfícies do roteador ainda somem sem dizer, e a catraca só impede que virem 35   [x]
 
 domain: engine-go
@@ -4434,6 +4529,7 @@ dod:
 
 > Estado final: 0 mudas em 35 guardas. A catraca deixa de ser rastreador de migração e vira invariante absoluta — superfície nova que registre rota sem reportar reprova de imediato, sem nada com que comparar. Provado contr…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-115`
+
 ## B-116 — A API sobe sem banco por desenho declarado, e isso apaga a maior parte do produto de uma vez   [x]
 
 domain: engine-go
@@ -4451,6 +4547,7 @@ dod:
 
 > Os testes do `B-104` continuam válidos e não foram tocados. `setup_server_nil_deps_test.go` protege as guardas `if != nil` de `buildServerConfig`, que seguem corretas como defesa: elas agora guardam um estado que o arran…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-116`
+
 ## B-117 — Três rotas de exclusão de tenant existem no código e nunca existiram em produção   [x]
 
 domain: engine-go
@@ -4467,6 +4564,7 @@ dod:
 
 > Trabalho completo. O fechamento aguarda a ratificação do `MEET-ASYNC-AMENDMENT-2026-08-16-tenant-deletion-never-wired` (T2: contrato de API restaurado + caminho destrutivo de tenant), então o `status` acima permanece `tr…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-117`
+
 ## B-118 — O loopzero-rag está fora do ar há seis dias: dado do PostgreSQL 15 sob imagem 18   [x]
 
 domain: data-plane-ts
@@ -4485,6 +4583,7 @@ dod:
 
 > Colaterais registrados: `B-130` (o mesmo vazamento em sete repositórios sem trava), `B-131` (o gate varre a árvore inteira e o gatilho exclui parte dela), `B-132`, `B-133`.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-118`
+
 ## B-119 — O gate de digest está em modo aviso há três meses, e a chave tem dono nomeado   [x]
 
 domain: engine-go
@@ -4503,6 +4602,7 @@ dod:
 
 > Medido depois: `prod-image-digests` → `PASS`, 0 bloqueantes, 7 avisos. Antes: 10 avisos, `EXIT=0`, três deles consertáveis e invisíveis.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-119`
+
 ## B-120 — 23 invocações de script nas skills não resolvem no layout em que elas rodam   [x]
 
 domain: engine-go
@@ -4520,6 +4620,7 @@ dod:
 
 > O oráculo de gates confirmou a adição: `TestOracle_MatchesFrozenBaseline` reprovou com *"got 126 lines, baseline 125"* — exatamente um gate a mais — e a baseline foi re-congelada conscientemente.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-120`
+
 ## B-121 — `task lint` para no primeiro módulo e esconde os seguintes   [x]
 
 domain: engine-go
@@ -4537,6 +4638,7 @@ dod:
 
 > Os módulos são descobertos no disco, nunca listados: foi uma lista à mão que deixou cinco de fora. Um módulo novo sem entrada na linha de base reprova, em vez de entrar em silêncio.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-121`
+
 ## B-122 — Comentário afirma um gate de credenciais que não existe   [x]
 
 domain: engine-go
@@ -4555,6 +4657,7 @@ dod:
 
 > Bala 2 verificada: nenhum comentário do repositório afirma o gate ausente. O `config.go:30-33` não só removeu a afirmação como registrou a correção no lugar — *"No such gate exists — grep over cmd/loopzero-ops/internal/quali…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-122`
+
 ## B-123 — O piso do `route-auth-coverage` recusa zero rotas, mas não recusa uma queda   [x]
 
 domain: engine-go
@@ -4572,6 +4675,7 @@ dod:
 
 > Medido depois: `route-auth-coverage: PASS — 70 routes` (antes: 42).
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-123`
+
 ## B-124 — Três suítes do ecossistema estão vermelhas, e ninguém as roda   [x]
 
 domain: engine-go
@@ -4589,6 +4693,7 @@ dod:
 
 > O que a correção do `code-quality` revelou, e que é maior que o item: com a configuração vazia — o estado real deste repositório — `/code-quality` devolvia `verdict: PASS`, `score_cap: 100`, `languages_audited: []`. Um h…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-124`
+
 ## B-125 — Os dois CronJobs de criptografia invocam um subcomando que o binário não tem   [x]
 
 domain: engine-go
@@ -4606,6 +4711,7 @@ dod:
 
 > O risco que sobrevive à deleção virou item: `B-126`. O Day-30 declarava três propósitos; o primeiro morreu com a migração, mas *(b) revogação de chave transit que orfaniza ciphertext* e *(c) corrupção de banco* continuam…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-125`
+
 ## B-126 — Uma chave transit revogada orfaniza ciphertext e nada percebe   [ ]
 
 domain: engine-go
@@ -4667,6 +4773,7 @@ dod:
 
 > Protocolo de mudança de regra LOCKED cumprido: ADR, entrada no CHANGELOG sob `[Unreleased]`, e `check_xrefs.py` + `test_e2e_smoke.py` verdes. Os dois estavam vermelhos ao serem rodados pela primeira vez, e nenhum gate os…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-127`
+
 ## B-128 — O detector de fabricação de símbolo acusa 4258 falsos num workspace multi-módulo   [x]
 
 domain: engine-go
@@ -4685,6 +4792,7 @@ dod:
 
 > `go` continua `DEFER`, e a linha da configuração agora diz a verdade nova: o D2 não bloqueia mais; o que impede é a segunda razão, inalterada — o D1 traz 36 achados reais de código morto, e o veredito é único por linguag…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-128`
+
 ## B-129 — Dois validadores do ecossistema não são rodados por gate nenhum   [x]
 
 domain: engine-go
@@ -4702,6 +4810,7 @@ dod:
 
 > Sete testes, incluindo os dois layouts, o WARN-que-não-reprova, a ausência-que-reprova, e o teste contra a população real (`B-109`) — este último é o que impede o gate de ficar verde sobre scripts sintéticos enquanto os …
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-129`
+
 ## B-130 — O caminho da workstation vazou do kit para nove repositórios, e só um tem trava que pega   [x]
 
 domain: engine-go
@@ -4719,6 +4828,7 @@ dod:
 
 > O que sobrou é migração, não texto — `B-139`. Os três `root *` do `Caddyfile` servem o `app-dev` agora, e as units systemd do `loopzero-workspace` idem. Parametrizar com default mantém o literal; sem default quebra a borda q…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-130`
+
 ## B-131 — A trava de higiene varre a árvore inteira, mas o gatilho dela exclui parte dessa árvore   [x]
 
 domain: data-plane-ts
@@ -4748,6 +4858,7 @@ kill_reason: |
 
 > Registrado 2026-08-17 ao executar o `B-118`.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-131`
+
 ## B-132 — O `publish` do loopzero-rag nunca inicia: ele chama um workflow reutilizável do `loopzero` que não resolve   [x]
 
 domain: data-plane-ts
@@ -4777,6 +4888,7 @@ kill_reason: |
 
 > Registrado 2026-08-17 ao executar o `B-118`.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-132`
+
 ## B-133 — A issue de falha de CI dedup por título, e 221 falhas viraram um fio que nunca fecha   [x]
 
 domain: data-plane-ts
@@ -4806,6 +4918,7 @@ kill_reason: |
 
 > Registrado 2026-08-17 ao executar o `B-118`.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-133`
+
 ## B-134 — O publicador tem o digest da imagem e não o expõe, então ninguém consegue recebê-lo   [ ]
 
 domain: engine-go
@@ -4868,6 +4981,7 @@ dod:
 
 > Registrado 2026-08-17 ao fechar o `B-116`, que deliberadamente deixou este assunto de fora — a bala de prontidão do DoD dele era condicional ao desfecho *"pode subir sem banco"*, e o desfecho foi o outro.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-135`
+
 ## B-136 — A metade `cell` do rename foi executada antes da reunião T3 que a bloqueava, e o cabeçalho ficou mentindo   [ ]
 
 domain: engine-go
@@ -4993,6 +5107,7 @@ dod:
 
 > Limite que fica escrito. A cobertura e' insensivel a caminho. Isso e' aceitavel aqui por um motivo VERIFICADO, nao suposto: os sete `defer` da arvore estao todos num `Reconcile`, o unico ponto de entrada que o controller…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-138`
+
 ## B-139 — O dashboard e os serviços do droplet servem da casa de uma pessoa   [ ]
 
 domain: engine-go
@@ -5041,6 +5156,7 @@ dod:
 
 > Bala 4 entregue em dobro: `runbook-parity` (a mensagem que mandava rotacionar o SA que o runbook proíbe) e `module-selfcontained` (todo módulo compila sem `go.work`, que é o que o CI faz — o gate achou o segundo módulo q…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-140`
+
 ## B-141 — Há um segundo pacote Go chamado `helpers`, e o `B-061` afirmava que era um só   [x]
 
 domain: engine-go
@@ -5059,6 +5175,7 @@ dod:
 
 > Nenhum pacote Go com nome genérico permanece. O limiar não precisa de exceção registrada porque não há exceção. Registrado 2026-08-17 ao fechar o `B-061`. A afirmação "é o único" era falsificável e foi falsificada — exat…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-141`
+
 ## B-142 — Um token do DigitalOcean vivo atravessou cinco meses e vários pushes sem ser barrado   [x]
 
 domain: engine-go
@@ -5107,6 +5224,7 @@ dod:
 
 > Bala 1 NÃO fecha, e não vou fingir que fecha. O `trufflehog` parou de reportá-lo porque o histórico foi reescrito, não porque o token foi revogado — são coisas diferentes. O painel do DigitalOcean não está logado, e o va…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-142`
+
 ## B-143 — O gate de segredos deu vereditos diferentes para a mesma entrada, e deixou passar cinco meses   [x]
 
 domain: engine-go
@@ -5124,6 +5242,7 @@ dod:
 
 > Segunda medição, minutos depois: o gate reprovou de novo, com o mesmo achado, sem nada ter mudado. Então ele não é instável agora — o que está medido é que ele passou antes, hoje, sobre este mesmo histórico. Qual dos doi…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-143`
+
 ## B-144 — O contrato manda o backlog viver no umbrella, e nenhum projeto faz isso   [x]
 
 domain: engine-go
@@ -5152,6 +5271,7 @@ dod:
 
 > Entregue 2026-08-18. A prosa foi corrigida em `rules/cycle-backlog.md` (pré-condições, § Output, G1, tabela de domínios), `rules/cycle-maintenance.md`, `skills/backlog-init/SKILL.md` e `skills/backlog-item/SKILL.md`. E h…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-144`
+
 ## B-145 — Dez itens moram no backlog do projeto errado   [x]
 
 domain: engine-go
@@ -5177,6 +5297,7 @@ dod:
 
 > E foram seis, não sete: o `B-033` teve a migração retirada horas depois. Quem pegou foi a catraca do `billing-layers`, o gate construído nesta mesma sessão (`B-038`), reprovando o push porque duas camadas de cobrança o d…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-145`
+
 ## B-146 — O prazo do cosign é verificado contra um ConfigMap que nunca existiu   [ ]
 
 domain: engine-go
@@ -5365,6 +5486,7 @@ dod:
 
 > `gofmt` virou dimensão própria, com catraca própria: `api` 70 · `infra` 53 · `pkg` 30 · `operators` 1. Os 155 não foram corrigidos — estão congelados e visíveis na saída de todo push, e um arquivo novo fora de formato re…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-148`
+
 ## B-149 — 318 achados de lint e 155 arquivos fora de formato estão congelados, não consertados   [x]
 
 domain: engine-go
@@ -5401,6 +5523,7 @@ dod:
 
 > Os 153 primeiros (G304 + G204 + G101) são inerentes ao que o binário é: uma ferramenta cujo trabalho é ler arquivos arbitrários do repositório e invocar verificadores externos. Suprimi-los um a um trocaria 153 achados po…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-149`
+
 ## B-150 — O webhook apontava para um hostname que o repositório removeu de propósito   [x]
 
 domain: engine-go
@@ -5492,6 +5615,7 @@ dod:
 
 > Bala 1 — a causa, e por que ela não fecha aqui. A cadeia do item termina em `build-image-api: failed to read dockerfile: open Dockerfile: no such file`, e o passo que deveria ter produzido esse arquivo é o `generate-dock…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-151`
+
 ## B-152 — O primeiro build do fixture falha em manifestos, e a mensagem não diz qual domínio   [x]
 
 domain: engine-go
@@ -5550,6 +5674,7 @@ dod:
 
 > Bala 1 — a causa foi identificada e esta' coberta, mas o teste vive noutro item, e isso fica dito em vez de escondido. A cadeia terminava em `open Dockerfile: no such file`: o passo `generate-dockerfile` falhava e o `exi…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-152`
+
 ## B-153 — Seis passos do build não conseguem falhar: o `exit 1` deles é engolido por um `tee`   [x]
 
 domain: engine-go
@@ -5646,6 +5771,7 @@ dod:
 
 > Bala 3 fica aberta e não é minha para fechar aqui: o `loopzero.yaml` a corrigir vive no repositório de fixture (`getloopscale/loopzero-repotest`), fora desta árvore, e a segunda metade — *"um push real chega ao construtor com runt…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-153`
+
 ## B-154 — Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported"   [ ]
 
 domain: engine-go
@@ -5786,6 +5912,7 @@ dod:
 
 > Escrevi um arquivo de teste novo e o apaguei. Ja' existia `lockfile_msg_test.go` cobrindo `$(pwd)` e `repository root`; um segundo arquivo teria duplicado o contrato em duas casas. As asserçoes novas foram para o arquivo…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-155`
+
 ## B-156 — Um teste de chart depende de rede e reprova o portao de entrega sob carga   [x]
 
 domain: engine-go
@@ -5820,6 +5947,7 @@ dod:
 
 > Nenhum teste chama `helm repo add` ou `dependency update` diretamente: os `Adding repo …` que o item observou vêm de dentro do próprio `helmfile template`. Ou seja, a dependência de rede não está escrita em teste nenhum …
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-156`
+
 ## B-157 — Uma ferramenta com imagem, config e testes não é invocada por caminho nenhum   [x]
 
 domain: engine-go
@@ -5839,6 +5967,7 @@ dod:
 
 > As duas balas de decisão seguem abertas: se o linter volta ao caminho de build ou sai da árvore, e a limpeza de `LOOPZERO_DOCKERFILE_LINT_IMAGE` e das invocações de teste que vem com ela.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-157`
+
 ## B-158 — O registro que o loop inteiro le' nao e' validado por nada   [x]
 
 domain: engine-go
@@ -5868,6 +5997,7 @@ nivel acima: nao no que os gates medem, mas em QUEM os manda medir.
 
 > `gateset.frozen` intocado: e' invocacao de taskfile, nao gate do `loopzero-ops`.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-158`
+
 ## B-159 — O checklist manda escrever o CHANGELOG num arquivo que nao existe   [x]
 
 domain: engine-go
@@ -5890,6 +6020,7 @@ de uma medicao. As duas fecham o dod e tem custos muito diferentes.
 
 > Corrigidos os dois pontos (linha 19 e a lista de pre-conclusao), preservando o que de fato vive no umbrella: o ADR da decomposicao e o `../CLAUDE.md`.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-159`
+
 ## B-160 — A guarda de comandos junta pedacos de comandos diferentes e bloqueia o inocente   [x]
 
 domain: engine-go
@@ -5927,6 +6058,7 @@ que estava sendo verificado.
 
 > O escrever este teste foi a evidencia mais direta do defeito. O arquivo nao pode ser criado por heredoc de shell — o comando que o escreveria carrega os literais destrutivos, e a guarda bloqueava a criacao do teste que a…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-160`
+
 ## B-161 — O gate de runbook mede a anotacao, nao o runbook: 6 dos 7 links nao levam a lugar nenhum   [x]
 
 domain: engine-go
@@ -5973,6 +6105,7 @@ a ordem importa — fechar o B-067 antes deste multiplica o defeito por seis.
 
 > As outras balas seguem abertas, e duas delas exigem tocar em chart — gatilho T2.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-161`
+
 ## B-162 — Um gate vencido ha 18 dias reprova e ninguem registrou: o caminho AES continua vivo   [ ]
 
 domain: engine-go
@@ -6055,6 +6188,7 @@ ensina a ignorar gates — e o custo disso e' pago pelo proximo gate, que estara
 
 > O unico residuo, e ele nao merece item: a isencao esta' amarrada a um EVENTO (a migracao T9) e nao a uma data. Pela minha propria formulacao — *"isencao sem prazo e' revogacao com outro nome"* — isso seria fraco; mas nao…
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-163`
+
 ## B-164 — O gate de runbook varre 110 dos 233 alertas da arvore, e o numero que ele reporta parece o total   [x]
 
 domain: engine-go
@@ -6090,6 +6224,7 @@ pare de ser lido como total enquanto a decisao nao vem.
 
 > Tambem trocada a tolerancia a diretorio ausente: um diretorio faltando segue tolerado (as arvores de teste tem so' um), mas zero encontrados agora reprova.
 > Narrativa completa: `.claude/knowledge-base/backlog-archive/closed-2026-08.md` § `B-164`
+
 ## B-165 — O ambiente `standalone-public` ficou sem borda que o sirva   [ ]
 
 domain: engine-go
@@ -6313,6 +6448,7 @@ dod:
   - o teste `test_a_python_defect_is_not_reported_as_PASS` passa em host sem `~/.local/bin` no PATH
 
 > Registrado 2026-08-31 durante execução de /idea-to-release B-167 (side-finding — vulture CLI ausente do PATH bloqueou a suíte de testes; env fix aplicado local mas o requisito hidden persiste no código).
+
 ## B-173 — Three Go packages sit below the coverage floor, and every unrelated slice pays for it   [ ]
 
 domain: engine-go
@@ -7606,136 +7742,6 @@ dod:
   - a distincao entre "declarado e ausente" e "declarado e presente" aparece na saida
     de toda execucao, no molde do `B-181`
 
-## B-192 — O CI e' pos-merge porque o portao local seria inescapavel, e as tres premissas dessa decisao foram falsas ao mesmo tempo   [ ]
-
-domain: infra
-repo: loopzero
-suggested_mode: review
-source: cross-cutting-2026-09-05
-severity: alta — nao ha nada quebrado agora (o `B-187` restaurou o hook e fechou os
-  desvios hoje), e e' exatamente por isso que o item existe: a decisao continua valendo
-  e nada percebeu quando ela parou de valer por tres dias.
-evidence: |
-  `.github/workflows/ci.yml:43-55` declara o gatilho como POS-MERGE e escreve a razao:
-
-      "Validacao POS-MERGE, nao no PR (decisao de 2026-08-12). O portao que impede
-       um merge ruim neste repositorio e' local: o .claude/hooks/delivery-gate.sh
-       roda `task quality:gates` antes de todo `git push` e bloqueia em vermelho,
-       SEM BYPASS."
-
-  A consequencia esta dita honestamente no proprio comentario: "com o PR sem acao, o
-  primeiro sinal de CI chega DEPOIS do merge". Isso e' uma troca legitima — SE o
-  portao local existir, disparar, e nao ter bypass.
-
-  MEDIDO 2026-09-05, e as tres partes falharam juntas:
-
-  1. O ARQUIVO NAO EXISTIA. `.claude/hooks/delivery-gate.sh` foi apagado em
-     `9a6e6e903` (2026-09-02) e nao estava em `git ls-files` nem no disco. Terceira
-     delecao; as duas anteriores foram notadas e restauradas, esta nao (`B-187`).
-  2. O WIRING SUMIU ANTES DO ARQUIVO, e nunca voltou. Em `.claude/settings.json`:
-
-         433682862 b6f075ac3 a6722bbc9 63cc51c48 53c1dc1ea 9a6e6e903 HEAD
-             1         0         1         0         0         0       0
-
-     De 2026-08-29 a 2026-09-02 o hook existia no disco e NUNCA disparava. A
-     restauracao de `53c1dc1ea` — intitulada "restore three files the repo gates
-     still require" — devolveu o arquivo num dia em que o wiring ja estava fora.
-  3. "SEM BYPASS" ERA FALSO EM QUATRO GRAFIAS. Auditoria independente, cada uma um
-     push real que chega ao remoto com o portao decidindo nada:
-
-         git -C <path> push origin main
-         echo --dry-run ; git push origin main
-         git push origin main --force # --dry-run
-         git push origin main; ls --dry-run
-
-  As duas assercoes que existiam para proteger isso — `TestDeliveryGate_*` — ficaram
-  VERDES durante os quatro dias em que o wiring esteve fora: elas leem o ARQUIVO, nao
-  o wiring. Foi o `B-187` que adicionou a quarta, que le o wiring.
-why_now: os tres consertos ja entraram (`B-187` e as correcoes da auditoria). O que
-  NAO existe e' o que teria contado a alguem, em qualquer um dos quatro dias, que o
-  portao no qual o CI se apoia nao estava la. O `PR #344` esta `MERGEABLE`/`CLEAN` com
-  um unico check, de um servico de terceiro que sai como `skipping`.
-status: triaged
-dod:
-  - a decisao pos-merge fica ou muda, e a razao escrita no `ci.yml` passa a citar o
-    que VERIFICA cada premissa em vez de afirma-las: hoje o comentario as afirma
-  - existe UMA coisa que reprova quando o portao local nao esta armado, e ela nao pode
-    ser o proprio portao local — um guarda que verifica a si mesmo e a familia de
-    defeito que este repositorio mediu oito vezes esta semana
-  - a janela ja esta medida e o numero e' 21: `git log --oneline --since=2026-08-29
-    --until=2026-09-02 workspace` da 21 commits. Sao COMMITS, nao pushes — o
-    repositorio nao guarda quando cada push aconteceu, entao 21 e' o limite superior
-    do que passou sem gate, nao a contagem exata. Quem pegar o item nao precisa
-    remedir; precisa decidir se 21 muda a resposta
-  - se a resposta for "o CI passa a rodar no PR", o custo esta medido (o comentario do
-    `ci.yml` diz que `quality:gates` exige helmfile, kubeconform, actionlint, trivy e
-    golangci-lint no PATH) — e o subconjunto que roda sem eles esta nomeado
-  - nao ampliar para o `PR #11` do kit: la o CI morre por faturamento, que e outra
-    causa e outro dono
-## B-193 — Uma ligacao LOCAL restaura o silencio em todo caso UNRESOLVED, e o `rebound` acusa um religamento que nao houve   [ ]
-
-domain: engine-go
-repo: loopzero
-suggested_mode: bug
-source: b189-nemesis-audit
-severity: media — quinta reabertura consecutiva da mesma classe. Sem instancia viva;
-  a evasao e' uma linha (`f := <o que ja e' vermelho>`), e o silencio e' o unico
-  veredito que este gate promete nunca dar.
-evidence: |
-  Medido 2026-09-05 por auditoria independente, com o binario do proprio `B-189`,
-  dentro de `infra/tests/config/`. Oito grafias passam em SILENCIO total — sem sitio,
-  sem veredito, gate PASS — e todas realmente pulam, com `t.Fatal` morto embaixo.
-
-  CAUSA-RAIZ 1, e cobre cinco das oito: `unreadableFuncValue` aceita um `*ast.Ident`
-  so' quando o nome esta em `pkg.rebound` ou `pkg.consts`. Um nome LOCAL nao esta em
-  nenhum dos dois, entao o fallback que existe para transformar silencio em veredito
-  nunca roda para locais:
-
-      presentFn()()   ABSENT (vermelho)   |  f := presentFn(); f()   SILENCIO
-      s.probe()       UNRESOLVED          |  p := s.probe; p()       SILENCIO
-      probes[k]()     UNRESOLVED          |  f := probes[k]; f()     SILENCIO
-
-  E' a forma que um leitor escolhe PRIMEIRO ao fatorar um guarda.
-
-  CAUSA-RAIZ 2, e e' um veredito FALSO, nao um silencio: `indexFuncFields` marca
-  `pkg.rebound[name]` para QUALQUER `=` a um identificador em qualquer lugar do
-  pacote, locais inclusos — enquanto o doc de `pkgScope` diz "the package-level names
-  that get a second value after their declaration". Um alias de pacote que nunca e'
-  reatribuido vira UNRESOLVED porque alguma funcao nao relacionada sombreia o nome, e
-  a razao impressa — "name rebound to another func value" — afirma com confianca um
-  religamento que nao aconteceu. Distinguir exige rastrear escopo, que este resolver
-  nao faz.
-
-  MAIS DUAS, menores e independentes:
-  3. um campo declarado por TIPO NOMEADO (`type predicate func() bool`) nunca entra em
-     `pkg.funcFields`, porque `indexFuncFields` casa so' `*ast.FuncType` — entao e'
-     silencio, e a barra declarada ("algo ligado sob esse nome tem de tocar o
-     filesystem") ESTA satisfeita, o que torna isto propriedade documentada que o
-     codigo nao tem;
-  4. `pathCondition` roteia so' `*ast.Ident` e `*ast.IndexExpr` para
-     `predicateCondition`, entao `(cliPresent)()` — o predicado vivo entre um par de
-     parenteses, estavel sob gofmt — e um literal invocado na hora sao silencio,
-     embora o resolver do `B-189` ja soubesse ler os dois.
-why_now: `B-180` -> `B-183` -> `B-186` -> `B-188` -> `B-189`, e uma auditoria reabriu a
-  classe nas cinco. O `SCOPE` ja foi corrigido para nao prometer o que o binario nao
-  faz, entao nada esta silencioso para quem le o codigo — mas a evasao continua
-  custando uma linha.
-status: triaged
-dod:
-  - as tres grafias de local do `evidence` deixam de ser silencio. O veredito certo
-    para cada uma e' decisao escrita: ABSENT se o valor for seguivel, UNRESOLVED se
-    nao — o que nao pode e' PASS
-  - a barra nao baixa: um local que carrega um predicado que nao toca o filesystem
-    continua fora de escopo, e isso tem teste (`dialFn()` e o controle)
-  - `rebound` para de acusar religamento que nao houve: ou passa a distinguir escopo,
-    ou a razao impressa deixa de afirmar o que nao mediu
-  - o campo por tipo nomeado e o `(cliPresent)()` entram, ou saem declarados no
-    `SCOPE` com a razao
-  - antes de fechar, tentar reabrir. Cinco auditorias conseguiram; a sexta tenta
-    `defer`, receptor por ponteiro vs valor, e o guarda vindo de um `map` com chave
-    calculada
-  - mutacao com efeito conferido, arnes provando o proprio baseline verde
-
 ## B-191 — As tres declaracoes da org do Gitea divergem, e a que diverge nao chega a lugar nenhum   [x]
 
 domain: infra-helm
@@ -7900,3 +7906,134 @@ resolution: |
   `helm get values` e o que muda para CADA uma das tres no dia em que forem promovidas
   (o `GITEA_URL` e' o unico com efeito real: tira a API do default de namespace errado,
   que e' justamente o que o B76 queria). Move-las e' T2 e nao cabia neste item.
+
+## B-192 — O CI e' pos-merge porque o portao local seria inescapavel, e as tres premissas dessa decisao foram falsas ao mesmo tempo   [ ]
+
+domain: infra
+repo: loopzero
+suggested_mode: review
+source: cross-cutting-2026-09-05
+severity: alta — nao ha nada quebrado agora (o `B-187` restaurou o hook e fechou os
+  desvios hoje), e e' exatamente por isso que o item existe: a decisao continua valendo
+  e nada percebeu quando ela parou de valer por tres dias.
+evidence: |
+  `.github/workflows/ci.yml:43-55` declara o gatilho como POS-MERGE e escreve a razao:
+
+      "Validacao POS-MERGE, nao no PR (decisao de 2026-08-12). O portao que impede
+       um merge ruim neste repositorio e' local: o .claude/hooks/delivery-gate.sh
+       roda `task quality:gates` antes de todo `git push` e bloqueia em vermelho,
+       SEM BYPASS."
+
+  A consequencia esta dita honestamente no proprio comentario: "com o PR sem acao, o
+  primeiro sinal de CI chega DEPOIS do merge". Isso e' uma troca legitima — SE o
+  portao local existir, disparar, e nao ter bypass.
+
+  MEDIDO 2026-09-05, e as tres partes falharam juntas:
+
+  1. O ARQUIVO NAO EXISTIA. `.claude/hooks/delivery-gate.sh` foi apagado em
+     `9a6e6e903` (2026-09-02) e nao estava em `git ls-files` nem no disco. Terceira
+     delecao; as duas anteriores foram notadas e restauradas, esta nao (`B-187`).
+  2. O WIRING SUMIU ANTES DO ARQUIVO, e nunca voltou. Em `.claude/settings.json`:
+
+         433682862 b6f075ac3 a6722bbc9 63cc51c48 53c1dc1ea 9a6e6e903 HEAD
+             1         0         1         0         0         0       0
+
+     De 2026-08-29 a 2026-09-02 o hook existia no disco e NUNCA disparava. A
+     restauracao de `53c1dc1ea` — intitulada "restore three files the repo gates
+     still require" — devolveu o arquivo num dia em que o wiring ja estava fora.
+  3. "SEM BYPASS" ERA FALSO EM QUATRO GRAFIAS. Auditoria independente, cada uma um
+     push real que chega ao remoto com o portao decidindo nada:
+
+         git -C <path> push origin main
+         echo --dry-run ; git push origin main
+         git push origin main --force # --dry-run
+         git push origin main; ls --dry-run
+
+  As duas assercoes que existiam para proteger isso — `TestDeliveryGate_*` — ficaram
+  VERDES durante os quatro dias em que o wiring esteve fora: elas leem o ARQUIVO, nao
+  o wiring. Foi o `B-187` que adicionou a quarta, que le o wiring.
+why_now: os tres consertos ja entraram (`B-187` e as correcoes da auditoria). O que
+  NAO existe e' o que teria contado a alguem, em qualquer um dos quatro dias, que o
+  portao no qual o CI se apoia nao estava la. O `PR #344` esta `MERGEABLE`/`CLEAN` com
+  um unico check, de um servico de terceiro que sai como `skipping`.
+status: triaged
+dod:
+  - a decisao pos-merge fica ou muda, e a razao escrita no `ci.yml` passa a citar o
+    que VERIFICA cada premissa em vez de afirma-las: hoje o comentario as afirma
+  - existe UMA coisa que reprova quando o portao local nao esta armado, e ela nao pode
+    ser o proprio portao local — um guarda que verifica a si mesmo e a familia de
+    defeito que este repositorio mediu oito vezes esta semana
+  - a janela ja esta medida e o numero e' 21: `git log --oneline --since=2026-08-29
+    --until=2026-09-02 workspace` da 21 commits. Sao COMMITS, nao pushes — o
+    repositorio nao guarda quando cada push aconteceu, entao 21 e' o limite superior
+    do que passou sem gate, nao a contagem exata. Quem pegar o item nao precisa
+    remedir; precisa decidir se 21 muda a resposta
+  - se a resposta for "o CI passa a rodar no PR", o custo esta medido (o comentario do
+    `ci.yml` diz que `quality:gates` exige helmfile, kubeconform, actionlint, trivy e
+    golangci-lint no PATH) — e o subconjunto que roda sem eles esta nomeado
+  - nao ampliar para o `PR #11` do kit: la o CI morre por faturamento, que e outra
+    causa e outro dono
+
+## B-193 — Uma ligacao LOCAL restaura o silencio em todo caso UNRESOLVED, e o `rebound` acusa um religamento que nao houve   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: b189-nemesis-audit
+severity: media — quinta reabertura consecutiva da mesma classe. Sem instancia viva;
+  a evasao e' uma linha (`f := <o que ja e' vermelho>`), e o silencio e' o unico
+  veredito que este gate promete nunca dar.
+evidence: |
+  Medido 2026-09-05 por auditoria independente, com o binario do proprio `B-189`,
+  dentro de `infra/tests/config/`. Oito grafias passam em SILENCIO total — sem sitio,
+  sem veredito, gate PASS — e todas realmente pulam, com `t.Fatal` morto embaixo.
+
+  CAUSA-RAIZ 1, e cobre cinco das oito: `unreadableFuncValue` aceita um `*ast.Ident`
+  so' quando o nome esta em `pkg.rebound` ou `pkg.consts`. Um nome LOCAL nao esta em
+  nenhum dos dois, entao o fallback que existe para transformar silencio em veredito
+  nunca roda para locais:
+
+      presentFn()()   ABSENT (vermelho)   |  f := presentFn(); f()   SILENCIO
+      s.probe()       UNRESOLVED          |  p := s.probe; p()       SILENCIO
+      probes[k]()     UNRESOLVED          |  f := probes[k]; f()     SILENCIO
+
+  E' a forma que um leitor escolhe PRIMEIRO ao fatorar um guarda.
+
+  CAUSA-RAIZ 2, e e' um veredito FALSO, nao um silencio: `indexFuncFields` marca
+  `pkg.rebound[name]` para QUALQUER `=` a um identificador em qualquer lugar do
+  pacote, locais inclusos — enquanto o doc de `pkgScope` diz "the package-level names
+  that get a second value after their declaration". Um alias de pacote que nunca e'
+  reatribuido vira UNRESOLVED porque alguma funcao nao relacionada sombreia o nome, e
+  a razao impressa — "name rebound to another func value" — afirma com confianca um
+  religamento que nao aconteceu. Distinguir exige rastrear escopo, que este resolver
+  nao faz.
+
+  MAIS DUAS, menores e independentes:
+  3. um campo declarado por TIPO NOMEADO (`type predicate func() bool`) nunca entra em
+     `pkg.funcFields`, porque `indexFuncFields` casa so' `*ast.FuncType` — entao e'
+     silencio, e a barra declarada ("algo ligado sob esse nome tem de tocar o
+     filesystem") ESTA satisfeita, o que torna isto propriedade documentada que o
+     codigo nao tem;
+  4. `pathCondition` roteia so' `*ast.Ident` e `*ast.IndexExpr` para
+     `predicateCondition`, entao `(cliPresent)()` — o predicado vivo entre um par de
+     parenteses, estavel sob gofmt — e um literal invocado na hora sao silencio,
+     embora o resolver do `B-189` ja soubesse ler os dois.
+why_now: `B-180` -> `B-183` -> `B-186` -> `B-188` -> `B-189`, e uma auditoria reabriu a
+  classe nas cinco. O `SCOPE` ja foi corrigido para nao prometer o que o binario nao
+  faz, entao nada esta silencioso para quem le o codigo — mas a evasao continua
+  custando uma linha.
+status: triaged
+dod:
+  - as tres grafias de local do `evidence` deixam de ser silencio. O veredito certo
+    para cada uma e' decisao escrita: ABSENT se o valor for seguivel, UNRESOLVED se
+    nao — o que nao pode e' PASS
+  - a barra nao baixa: um local que carrega um predicado que nao toca o filesystem
+    continua fora de escopo, e isso tem teste (`dialFn()` e o controle)
+  - `rebound` para de acusar religamento que nao houve: ou passa a distinguir escopo,
+    ou a razao impressa deixa de afirmar o que nao mediu
+  - o campo por tipo nomeado e o `(cliPresent)()` entram, ou saem declarados no
+    `SCOPE` com a razao
+  - antes de fechar, tentar reabrir. Cinco auditorias conseguiram; a sexta tenta
+    `defer`, receptor por ponteiro vs valor, e o guarda vindo de um `map` com chave
+    calculada
+  - mutacao com efeito conferido, arnes provando o proprio baseline verde
