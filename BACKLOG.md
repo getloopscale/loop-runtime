@@ -74,7 +74,7 @@ consequência do escopo per-repo declarado acima.
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
-| [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `blocked` · was `triaged` | waiting on `B-174` |
+| [`B-001`](#b-001--os-quatro-clusters-da-plataforma-têm-nomes-que-mentem-sobre-o-que-são----) | Os quatro clusters da plataforma têm nomes que mentem sobre o que são | `triaged` · was `blocked` | desbloqueado 2026-09-06 pelo `B-174`; o que resta tem trigger `AM8` |
 | [`B-022`](#b-022--o-caminho-do-motor-depende-do-painel-estar-de-pé----) | O caminho do motor depende do painel estar de pé | `blocked` · was `triaged` | waiting on a decision — baixa hoje, alta no dia em que o `loopzero-cloud` cair sozinho em produção. O `B-002` registra que o cluster central é SPOF; este item é mais estreito e mais provável: não é o cluster que cai, é **um** processo, e ele carrega uma jornada (deploy) que não é dele. |
 | [`B-067`](#b-067--43-migrations-sem-teste-e-33-alertas-sem-runbook-medidos-por-gates-que-ninguém-executa----) | 43 migrations sem teste e 33 alertas sem runbook, medidos por gates que ninguém executa | `triaged` | média — dívida acumulada, não defeito ativo. **Deliberadamente separado do B-045**: ligar os gates e pagar a dívida são trabalhos diferentes, e ligá-los antes de ter plano transformaria 76 achados legítimos num muro que alguém desliga na sexta-feira. |
 | [`B-113`](#b-113--a-asserção-de-tag-de-imagem-protege-1-chart-de-16-e-os-7-publicados-declaram-uma-tag-mutável----) | A asserção de tag de imagem protege 1 chart de 16, e os 7 publicados declaram uma tag mutável | `blocked` · was `triaged` | waiting on `B-113` — média — não afirmo que `tag: dev` seja violação decidida: pode ser sobrescrita no install pelo ArgoCD, e nenhuma decisão registrada a proíbe. O que está medido é que a guarda cobre 1 de 16, e que os 15 restantes nunca foram julgados. |
@@ -83,7 +83,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-137`](#b-137--a-pirâmide-real-viola-o-alvo-do-adr-d7-em-e2e-e-o-alvo-nunca-foi-medido-contra-a-árvore----) | A pirâmide real viola o alvo do ADR D7 em e2e, e o alvo nunca foi medido contra a árvore | `blocked` · was `triaged` | waiting on `B-137` — média — nada quebra; o que está em aberto é se o alvo ou a árvore está errado, e ninguém decidiu porque ninguém tinha o número. |
 | [`B-139`](#b-139--o-dashboard-e-os-serviços-do-droplet-servem-da-casa-de-uma-pessoa----) | O dashboard e os serviços do droplet servem da casa de uma pessoa | `blocked` · was `triaged` | waiting on `B-139` — média — nada quebra hoje, e é justamente isso que o mantém: o caminho resolve porque a conta existe. Vira **alta** no dia em que outra pessoa operar o host, ou em que a conta for removida. |
 | [`B-154`](#b-154--um-loopzeroyaml-sem-runtime-falha-dizendo-que-o-runtime-e-unsupported----) | Um `loopzero.yaml` sem `runtime` falha dizendo que o runtime e "unsupported" | `blocked` · was `triaged` | waiting on `B-154` |
-| [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `triaged` | blocks `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
+| [`B-174`](#b-174--tres-arquivos-usam-runtime-como-nome-de-cluster-e-como-termo-de-dominio-na-mesma-linha----) | Tres arquivos usam `runtime` como nome de cluster e como termo de dominio na mesma linha | `shipped` | desbloqueia `B-001` — baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito. |
 | [`B-179`](#b-179--coveragereport-nao-tem-executor-e-as-tres-saidas-do-b-147-estao-fechadas----) | `coverageReport` nao tem executor, e as tres saidas do `B-147` estao fechadas | `triaged` | baixa — nada quebra hoje; o trabalho ja nao rodava. O que se perde e' o relatorio semanal de cobertura, e o custo real e' que um trabalho declarado `none — open` num documento e' um trabalho que ninguem revisita. |
 | [`B-182`](#b-182--tres-skips-guardados-por-caminho-ausente-seguem-rastreados-e-a-premissa-escrita-em-dois-deles-nao-vale-mais----) | Tres skips guardados por caminho ausente seguem rastreados, e a premissa escrita em dois deles nao vale mais | `triaged` | baixa — nada quebra e nada esta silencioso: as tres estao no pin do |
 | [`B-194`](#b-194--o-ramo-aes-de-leitura-so-pode-sair-com-uma-contagem-que-cubra-a-frota-e-ninguem-e-dono-dela----) | O ramo AES de leitura so' pode sair com uma contagem que cubra a frota, e ninguem e' dono dela | `triaged` | media — nada quebra hoje (o caminho de escrita ja' recusa AES); o custo e' um gate que segue vermelho por uma divida real cujo desbloqueio depende de acesso a banco que nenhuma sessao tem |
@@ -316,7 +316,7 @@ tier: T2+ (`.claude/rules/pre-release-governance.md`) — toca operações e o c
 evidence: `.claude/knowledge-base/discoveries/opportunities/cluster-topology-naming-opportunity.md` — inventário classificado medido em 2026-08-09 sobre a árvore `26ba1340`, com lista de padrões congelada antes da execução e classificador determinístico (duas execuções byte-idênticas). **2.569 ocorrências-alvo vivas** (não 2.024, e não as 2.990 da primeira contagem — uma emenda datada aos caminhos histórico-imutáveis, derivada de `docs/README.md:16`, reclassificou 421 delas: a contagem do briefing perde identidade em forma nua — contexto kubectl derivado, chave de kubeconfig, env var, alvo de Taskfile, argumento de script). **14.346 ambíguas**, das quais **3.257 vivas em código executável**, 1.614 em `infra/` por 287 arquivos. Artefatos em `.claude/knowledge-base/discoveries/snapshots/cluster-topology-naming-*`. Controle negativo (`build`) validou o instrumento e pegou uma contaminação cruzada no classificador antes de ela virar número neste registro.
 why_now: o gatilho já estava registrado neste repo — `.claude/knowledge-base/plans/helm-topology-index-plan.md:198-200` deixou `mgmt`→`core` fora de escopo *"deliberadamente"*, com a razão **"renomear antes significa renomear duas vezes"**. Por isso os quatro renames vão juntos. E a janela é agora: **os clusters AWS ainda não existem** (`AM5 — [ ]` em `loopzero-workspace/ROADMAP_AWS.md:79`), então o custo hoje é renomear dev loop k3d, helmfiles, ArgoCD apps e secrets. Depois, são quatro clusters vivos a migrar.
 status: triaged
-blocked_by: B-174
+blocked_by: **nenhum desde 2026-09-06.** Era `B-174`, fechado naquela data: as tres excecoes com trigger `sponsor decision` viraram `never — domain term` e o ADR passou a registrar a decisao. O que resta neste item tem trigger `AM8`.
 was_blocked_by: **retired 2026-09-04 by measurement, not by decision.** The wall was `B-173` -- the global `test-coverage-report` gate failing on `ecosystemvalidators`, `billinglayers` and `publishhygiene`, which taxed every slice that walked past it including this one, whose own diff is topology naming. Commit 2ba21c182 retired the cause (the three were failing tests, not uncovered code) and the whole gate suite was re-run on the host on 2026-09-04 to confirm it: EXIT=0, 0 gates FAIL, coverage=85.59% against a 75.00% floor, and `pkg-usage-matrix` PASS -- the gate one step further along whose red state falsified the first unblock claim. `B-173` is now `killed`. This item's own prior wall, the sponsor decision on the `cell` half of the map, was retired separately and is recorded in `decided_by` above; nothing here touches it.
 decided_by: system under sponsor delegation, recorded in commit 7565db99c and governed by `.claude/rules/decision-delegation.txt` — Freeze the 8 remaining occurrences as a written, dated exception list and write the ADR; rename no live resource and drop the cleanroom bullet. Rationale: The 2026-08-17 re-measurement shows the rename already landed (infra/k3d/ has core-cluster.yaml, secrets-cluster.yaml, cell-0/1-cluster.yaml); the 8 survivors are live-resource renames held AS-IS until AM8, and the cleanroom bullet is unexecutable because k3d cluster list is empty and task clean:all on the shared droplet would destroy app-dev.loopzero.example. Prior wall: **decisão de sponsor sobre o mapa da metade `cell`** (D2 da opportunity). A medição refutou `loopzero-workload` → `cell-1` / `loopzero-runtime-2` → `cell-2`: `infra/hel
 dod:
@@ -6600,13 +6600,71 @@ suggested_mode: review
 source: b001-exception-review
 evidence: medido em 2026-09-04 ao congelar as excecoes do `B-001`. Tres sobreviventes do rename de clusters carregam `runtime` nos dois sentidos ao mesmo tempo, e por isso nenhum deles pode ser renomeado mecanicamente: `operators/internal/argocd/real_provisioner.go:465` ("to preserve compatibility with the existing single-runtime-cluster"), `operators/internal/preview/preview_controller.go:697` ("When factory is set, every runtime-cluster") e `operators/internal/tenant/tenant_controller.go:85` ("LISTs ClusterCredentials to resolve cell to runtime-cluster mapping"). Em cada um, `runtime-cluster` descreve tanto o cluster que foi renomeado quanto o conceito de dominio que continua se chamando assim.
 why_now: o `B-001` congelou os tres como excecao datada com trigger `sponsor decision`, e o protocolo de revisao do proprio ADR diz que esse trigger fecha por um ADR "filed as its own B-NNN". Esse item nao existia. Tres excecoes esperavam uma decisao que ninguem tinha sido convidado a tomar — o formato exato de impedimento que este registro existe para tornar visivel, e que a auditoria do `B-001` encontrou por ler o protocolo em vez do resultado.
-status: triaged
+status: shipped
 severity: baixa — nenhum defeito de comportamento. O custo e que tres comentarios usam uma palavra em dois sentidos, e quem ler depois nao sabe qual deles esta sendo dito.
 dod:
   - esta decidido se `runtime` continua sendo o termo de dominio, ou se o dominio ganha outro nome
   - se o dominio muda de nome: os tres arquivos acompanham, e o grep de `runtime-cluster` fora de ADRs e comentarios historicos retorna zero
   - se o dominio fica: as tres excecoes no ADR do `B-001` trocam o trigger `sponsor decision` por `never — dominio`, com a razao escrita
   - o protocolo de revisao do ADR do `B-001` deixa de apontar para um item que nao existe
+
+> **Fechado 2026-09-06.** Premissa re-medida **antes** de escrever codigo e confirmada: o grep de
+> sobreviventes do proprio ADR devolve exatamente 8 linhas em HEAD `cadadb9c9`, uma por linha da
+> tabela, e os tres arquivos Go continuam nos numeros exatos citados (`real_provisioner.go:465`,
+> `preview_controller.go:697`, `tenant_controller.go:85`). Nenhum drift.
+>
+> **Decisao: `runtime` continua sendo o termo de dominio** — ramo 3 do DoD, nao o ramo 2. As tres
+> razoes, cada uma medida:
+>
+> 1. **O nome do cluster nao e alcancavel por um rename**, porque vive fora do repositorio: cluster
+>    DOKS vivo (`infra/pulumi-drill/src/index.ts:172`), a chave de stack output que um teste de
+>    contrato fixa (`infra/pulumi-shared/__tests__/contracts.test.ts:99`), o `.metadata.name` de uma
+>    Application viva do ArgoCD, e o label `loopzero.io/cluster-role: runtime` — estampado por Pulumi num
+>    Namespace vivo (`infra/pulumi-platform/src/index.ts:187,193` via `bootstrap-shared.ts:172`) e
+>    presente em **12** Applications `cell-*.yaml`. A delegacao de 2026-09-04 diz *rename no live
+>    resource*, entao essa metade da pergunta ja estava respondida antes da escalacao ser escrita.
+> 2. **O substituto que as proprias linhas de excecao propunham esta errado no merito.** `cell` e
+>    `runtime cluster` nao sao sinonimos: o ADR irmao de unificacao registra `cell-1` como *"Maps to
+>    runtime-1 … cluster"* e trata a fusao das duas identidades em dev como o defeito que esta
+>    separando. `cell→cell-cluster` e circular — apaga o mapeamento que a frase existe para nomear.
+> 3. **Custo de mover o dominio: 149 identificadores em 22 arquivos** (`RuntimeClientFactory` 63,
+>    `RuntimeClient` 50, `RuntimeFactory` 36, `runtimeClientForPreview` 2, medidos sobre
+>    `operators api pkg cmd`), a maioria superficie exportada. O ADR de convencoes de nome ja aponta
+>    para o outro lado: seu rename adiado e `runtime2ClusterName` → `runtimeCell2ClusterName`.
+>
+> **Correcao ao enunciado do proprio item.** O titulo afirma que os tres arquivos usam a palavra nos
+> dois sentidos *na mesma linha*. Relendo os tres para escrever as notas, so **um** faz isso:
+> `real_provisioner.go`, onde `single-runtime-cluster` (topologia) convive com
+> `"runtime-argocd-cluster"` (nome literal de um Secret). `preview_controller.go:697` e
+> `tenant_controller.go:85` carregam **so** o sentido de dominio; a colisao real dos dois e com o
+> pacote `runtime` do Go, que ambos importam e usam em `*runtime.Scheme` a poucas linhas do
+> comentario. O ADR dizia "same trap" para as duas — as tres celulas `why:` foram corrigidas, nao so
+> os triggers.
+>
+> **O que mudou no codigo:** manter a palavra nao resolve sozinho a ambiguidade que abriu o item,
+> entao cada um dos tres sitios passou a dizer qual sentido carrega. Comentarios apenas.
+>
+> **Efeito colateral pego e corrigido dentro da propria sessao:** a primeira redacao das notas citava
+> o termo entre aspas ao defini-lo, e com isso o grep de sobreviventes subiu de 8 para **11** — tres
+> falsos positivos plantados num detector cujo trabalho e exatamente sinalizar ocorrencias novas
+> ("a new occurrence of an old identifier NOT in this list is drift"). As notas foram reescritas para
+> definir o termo por referencia ("o composto hifenizado acima"), e o grep voltou a 8.
+>
+> Os quatro bullets do DoD:
+>
+> 1. **decidido** — `runtime` fica, com as tres razoes acima, em § "Decision on the domain term
+>    (2026-09-06)" do ADR do `B-001`.
+> 2. **se o dominio muda de nome** — ramo NAO tomado; o grep desse bullet nao se aplica.
+> 3. **as tres excecoes trocam o trigger** — feito: `sponsor decision` → `never — domain term`, com a
+>    razao em cada linha, o conjunto fechado de triggers atualizado, e as tres celulas `why:`
+>    reescritas (duas estavam factualmente erradas).
+> 4. **o protocolo deixa de apontar para um item que nao existe** — feito: o paragrafo *"no such item
+>    exists today"* foi substituido; `sponsor decision` esta marcado como fora de uso e a linha de
+>    Status do ADR registra que so restam triggers `AM8` e `never — …`.
+>
+> Verificacao: `go build ./...` e `go vet` limpos no modulo `operators`; `go test -count=1` verde nos
+> tres pacotes tocados (`argocd`, `preview`, `tenant`); `gofmt -l` vazio; grep de sobreviventes = 8.
+
 
 ## B-175 — O caminho que o External Secrets Operator usa decifra sem contar nada   [ ]
 

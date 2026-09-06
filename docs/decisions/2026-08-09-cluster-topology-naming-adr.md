@@ -1,7 +1,7 @@
 # ADR — Nomenclatura de topologia de clusters
 
 **Data:** 2026-08-09
-**Status:** ACCEPTED with 2026-09-04 dated freeze on 8 named survivors (see § Exception list) — originally ACCEPTED for `mgmt`→`core` and `vault`→`secrets`; the `cell` half landed in code by 2026-08-17 (see § A metade bloqueada — cell); the remaining unrenamed occurrences are frozen AS-IS per the sponsor delegation of 2026-09-04 (`BACKLOG.md § B-001` `decided_by`, `.claude/rules/decision-delegation.txt`)
+**Status:** ACCEPTED with 2026-09-04 dated freeze on 8 named survivors (see § Exception list) — originally ACCEPTED for `mgmt`→`core` and `vault`→`secrets`; the `cell` half landed in code by 2026-08-17 (see § A metade bloqueada — cell); the remaining unrenamed occurrences are frozen AS-IS per the sponsor delegation of 2026-09-04 (`BACKLOG.md § B-001` `decided_by`, `.claude/rules/decision-delegation.txt`); the 3 rows that carried the open trigger `sponsor decision` were resolved on 2026-09-06 (see § Decision on the domain term, filed as `B-174`), leaving only `AM8` and `never — …` triggers outstanding
 **Tier:** T2+ (`.claude/rules/pre-release-governance.md`) — toca operações e o caminho crítico de deploy
 **Sponsor:** CTO
 **Emenda a:** `docs/decisions/2026-08-07-capi-byoc-cluster-lifecycle-adr.md` (PROPOSED, T3), onde o
@@ -107,7 +107,7 @@ existem — feito hoje, eles nascem com o nome certo. Feito depois, são quatro 
 
 The 2026-08-17 re-measurement of B-001 identified 8 remaining occurrences of the old cluster identifiers. Re-measured on 2026-09-04 at HEAD `7649170a` over the executable tree (`cmd/ api/ operators/ pkg/ infra/ charts/ taskfiles/ tools/`): **all 8 are still on disk**, one per row below. Per the sponsor delegation recorded in `BACKLOG.md § B-001` `decided_by` (governed by `.claude/rules/decision-delegation.txt`, commit `7565db99c`), the 8 survivors below are **frozen AS-IS** — rename no live resource, drop the cleanroom bullet, and record the freeze here so a reader who greps for the old identifier lands on the row that explains it.
 
-**How to read this section.** Each row names path, identifier, resource kind (from the closed set `live ArgoCD Application` / `live DOKS cluster` / `sponsor design decision` / `historical preservation`), revisit trigger (from the closed set `AM8` / `sponsor decision` / `never — historical`), and a one-sentence `why:` in the row itself so no citation-only reference is needed. The exception list is **NOT** extended without a delegation-authorised amendment: a new occurrence of an old identifier NOT in this list is drift, not a survivor.
+**How to read this section.** Each row names path, identifier, resource kind (from the closed set `live ArgoCD Application` / `live DOKS cluster` / `sponsor design decision` / `historical preservation`), revisit trigger (from the closed set `AM8` / `sponsor decision` / `never — domain term` / `never — historical`), and a one-sentence `why:` in the row itself so no citation-only reference is needed. The exception list is **NOT** extended without a delegation-authorised amendment: a new occurrence of an old identifier NOT in this list is drift, not a survivor.
 
 | Path | Identifier | Kind | Revisit trigger | Why |
 |---|---|---|---|---|
@@ -115,9 +115,9 @@ The 2026-08-17 re-measurement of B-001 identified 8 remaining occurrences of the
 | `infra/argocd-bootstrap/validate-sync-waves.py` | `("runtime-traefik", "runtime-cluster-issuer")` (pair in tuple list) | live ArgoCD Application | AM8 | why: companion validator that pins the Application name from the sibling row above; must move in lockstep with that row so the pair does not diverge mid-cutover. |
 | `infra/pulumi-drill/src/index.ts` | `${doProject}-runtime-cluster` (`clusterName:`, L172) | live DOKS cluster | AM8 | why: this is the live DigitalOcean Kubernetes cluster's `clusterName`; renaming means destroy and re-create a running production cluster, which is what the delegation's "rename no live resource" clause explicitly forbids. Pulumi is legacy AS-IS until the AM8 AWS re-platform per `CLAUDE.md`. |
 | `infra/pulumi-shared/__tests__/contracts.test.ts` | `runtimeClusterName: "loopzero-runtime"` (L99) | live DOKS cluster | AM8 | why: the structural contract test that pins the stack-output key produced by the row above. It asserts the shape the live DOKS cluster publishes, so it can only change when that cluster's name changes — at AM8, in lockstep with `pulumi-drill/src/index.ts`. Renaming the assertion alone would make the test pass against a name the infrastructure does not emit. |
-| `operators/internal/argocd/real_provisioner.go` | `single-runtime-cluster` (comment L465) | sponsor design decision | sponsor decision | why: the identifier is both a historical cluster name and a Go domain-term describing the single-runtime-cluster legacy path. The item's own text mandates escalating this to the sponsor rather than renaming inside a slice, because a text rename here would either lie about the code's actual shape or force a code-shape change that is not documentation. |
-| `operators/internal/preview/preview_controller.go` | `runtime-cluster` (comment L697) | sponsor design decision | sponsor decision | why: same trap as the row above — the term describes the domain concept `every runtime-cluster` in a comment about the preview controller's cell mapping. A textual rename would decouple the comment from the concept it names. |
-| `operators/internal/tenant/tenant_controller.go` | `cell→runtime-cluster mapping` (comment L85) | sponsor design decision | sponsor decision | why: same trap; the comment describes the `ClusterCredentials` resolution as "cell→runtime-cluster mapping". The design call is whether to migrate the domain vocabulary here to `cell→cell-cluster` or keep the current term. Escalated. |
+| `operators/internal/argocd/real_provisioner.go` | `single-runtime-cluster` (comment L465) | sponsor design decision | `never — domain term` (was `sponsor decision`; resolved 2026-09-06, see § Decision on the domain term) | why: this is the one row of the three that genuinely carries both senses on one line — a topology (`single-runtime-cluster`, an install with exactly one runtime cluster) beside a literal ArgoCD Secret name (`"runtime-argocd-cluster"`). Renaming either would make the comment describe an install shape or a Secret that does not exist. Resolved 2026-09-06: the domain term stays and the comment now states which sense each occurrence carries. |
+| `operators/internal/preview/preview_controller.go` | `runtime-cluster` (comment L697) | sponsor design decision | `never — domain term` (was `sponsor decision`; resolved 2026-09-06, see § Decision on the domain term) | why: **not** the same trap as the row above, as the 2026-09-06 re-measurement found: this line carries the domain sense alone and names no cluster. Its real ambiguity is with Go's `runtime` package, which the file imports (L21) and uses for `*runtime.Scheme` (L78). Resolved 2026-09-06: the domain term stays and the comment now says so. |
+| `operators/internal/tenant/tenant_controller.go` | `cell→runtime-cluster mapping` (comment L85) | sponsor design decision | `never — domain term` (was `sponsor decision`; resolved 2026-09-06, see § Decision on the domain term) | why: also the domain sense alone, not both. The design call this row escalated — migrate to `cell→cell-cluster`, or keep the term — was **decided on 2026-09-06 in favour of keeping it**: a cell maps *to* a runtime cluster, so `cell→cell-cluster` is circular and would erase the mapping the sentence names. The comment now records that rejection. |
 | `taskfiles/k3d.yml` | `loopzero-mgmt` (comment ~L134-137) | historical preservation | never — historical | why: the comment describes the historical bug where `loopzero-mgmt` was inexistent while `core-cluster.yaml` was expected — the audit trail of a fixed defect. DoD-1 of B-001 explicitly preserves "documentos históricos" (historical documents), and rewriting this comment would erase the record of what was true before. |
 
 **Correction of 2026-09-04 — the list is 8 rows, not 7.** An earlier pass on this same day dropped the
@@ -146,11 +146,66 @@ list above is measured with the **old** identifiers only. This is a property of 
 DoD-1 was written before the rename landed and was superseded by the delegation of 2026-09-04.
 
 **Revisit protocol.** For rows with trigger `AM8`: closed by the ADR amendment (or a superseding ADR)
-that ships alongside the AM8 cluster rename. For rows with trigger `sponsor decision`: closed by an ADR
-recording the design decision the escalation was for, filed as its own `B-NNN` — **no such item exists
-today**, so this trigger currently names a condition with no owner; whoever opens it should say so in
-that item. For the row with trigger `never — historical`: no revisit; the row documents a preserved
+that ships alongside the AM8 cluster rename. The trigger `sponsor decision` is **no longer in use**: the three rows that
+carried it were closed on 2026-09-06 by § Decision on the domain term below, filed as `B-174`. It is
+kept in the closed set above so the rows' `was` annotation stays readable. For the row with trigger `never — historical`: no revisit; the row documents a preserved
 artefact.
+
+## Decision on the domain term (2026-09-06)
+
+**Decision: `runtime` stays the domain term.** The three `sponsor design decision` rows above move to
+trigger `never — domain term`. This section is the ADR that the revisit protocol asked for, filed as
+`B-174`.
+
+The escalation asked one question. Those three sites use `runtime` both as a cluster's name and as the
+domain term for the class of cluster that runs tenant workloads; either the cluster name moves or the
+domain term does. Measured at HEAD `cadadb9c9` on 2026-09-06:
+
+**1. The cluster name is not reachable by a rename — it lives in running systems, not only here.**
+
+| Where | What | Cost of renaming |
+|---|---|---|
+| `infra/pulumi-drill/src/index.ts:172` | `clusterName: ${doProject}-runtime-cluster` — a live DOKS cluster | destroy and re-create a running cluster |
+| `infra/pulumi-shared/__tests__/contracts.test.ts:99` | `runtimeClusterName: "loopzero-runtime"` — pins the stack output that cluster publishes | the assertion would stop matching what the infrastructure emits |
+| `infra/argocd-bootstrap/apps/cell-cluster-issuer.yaml:4` | a live ArgoCD Application's `.metadata.name` | `argocd app delete` then re-create, losing sync state |
+| `infra/pulumi-platform/src/index.ts:187,193` → `components/bootstrap-shared.ts:172` | stamps `loopzero.io/cluster-role: runtime` onto a live Namespace | mutating a label on a running object |
+| `infra/argocd-bootstrap/apps/cell-*.yaml` (12 files, L8) | `loopzero.io/cluster-role: runtime` on live Applications | the same, twelve times |
+
+The sponsor delegation of 2026-09-04 says *rename no live resource*. Every row above is a live resource,
+which is why the four already in the exception list carry trigger `AM8`. That half of the question was
+therefore already answered before the escalation was written; only the domain term was ever open.
+
+The `loopzero.io/cluster-role: runtime` rows are **not** drift under the rule stated above, and their absence
+from the exception list is not an omission: that list is measured with the old *cluster identifiers*
+(`loopzero-runtime`, `runtime-cluster`, …), which a bare label value does not match. They are recorded here
+because they are where the escalation's answer actually lives.
+
+**2. The replacement the exception rows floated is wrong on the merits.** The `tenant_controller.go` row
+proposed migrating the vocabulary to `cell→cell-cluster`. A cell and a runtime cluster are not the same
+thing: `2026-08-09-cell-cluster-unification-adr.md` records `cell-1` as *"Maps to runtime-1 … cluster"*
+and treats the dev-environment conflation of those two identities as the defect it is separating.
+`cell→cell-cluster` is circular — it deletes the mapping the sentence exists to name.
+
+**3. The cost of moving the domain term is 149 identifiers across 22 files** — `RuntimeClientFactory`
+(63), `RuntimeClient` (50), `RuntimeFactory` (36), `runtimeClientForPreview` (2), measured over
+`operators api pkg cmd`; most are exported API surface. `2026-05-21-naming-conventions-adr.md:100`
+already points the other way: its deferred rename is `runtime2ClusterName` → `runtimeCell2ClusterName`,
+which keeps `runtime` and qualifies it.
+
+**What this changes in the code.** Keeping the word does not by itself fix the ambiguity the item was
+opened for, so each of the three sites now states which sense it carries, in the comment itself. Writing
+those notes corrected the item's own framing: only `real_provisioner.go` carries both senses on one line
+(`single-runtime-cluster`, a topology, beside `"runtime-argocd-cluster"`, a literal Secret name).
+`preview_controller.go:697` and `tenant_controller.go:85` carry the domain sense **alone** — their real
+collision is with Go's `runtime` package, which both files import and use for `*runtime.Scheme` within a
+few lines of the comment.
+
+The notes are worded so they do not themselves match the survivor grep. Quoting the term while defining
+it would have raised that grep from 8 to 11 and planted three false positives in a detector whose whole
+job is to flag new occurrences.
+
+**Out of scope.** The cluster name and the `loopzero.io/cluster-role: runtime` label value are unchanged and
+stay on trigger `AM8`.
 
 ## Referências
 
