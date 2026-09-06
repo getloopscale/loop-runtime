@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/manifests"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
@@ -22,9 +22,9 @@ import (
 
 // DomainProvisionerStore abstracts the domain persistence needed by the provisioner.
 type DomainProvisionerStore interface {
-	FindAndClaimVerified(ctx context.Context) ([]domain.CustomDomain, error)
-	FindRemoving(ctx context.Context) ([]domain.CustomDomain, error)
-	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]domain.CustomDomain, error)
+	FindAndClaimVerified(ctx context.Context) ([]ports.CustomDomain, error)
+	FindRemoving(ctx context.Context) ([]ports.CustomDomain, error)
+	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]ports.CustomDomain, error)
 	UpdateStatus(ctx context.Context, domain, status string) error
 	TransitionStatus(ctx context.Context, domain, expectedStatus, newStatus string) error
 	UpdateCFZoneStatus(ctx context.Context, domain, cfZoneStatus string) error
@@ -32,8 +32,8 @@ type DomainProvisionerStore interface {
 	Delete(ctx context.Context, domain string) error
 
 	// v2: CF Zone Management
-	FindPendingNS(ctx context.Context) ([]domain.CustomDomain, error)
-	FindNSActive(ctx context.Context) ([]domain.CustomDomain, error)
+	FindPendingNS(ctx context.Context) ([]ports.CustomDomain, error)
+	FindNSActive(ctx context.Context) ([]ports.CustomDomain, error)
 }
 
 // CFZoneStatusChecker checks CF zone activation status.
@@ -273,8 +273,8 @@ func (p *DomainProvisioner) processVerified(ctx context.Context) {
 // provisionDomain renders manifests with the custom domain and pushes to gitops.
 // F-002 fix: Lock (fetch + render) → Unlock → Push → Update status.
 // Pattern matches deploy flow in ContainerDeliveryActivator.
-func (p *DomainProvisioner) provisionDomain(ctx context.Context, d domain.CustomDomain) {
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.domain.provision",
+func (p *DomainProvisioner) provisionDomain(ctx context.Context, d ports.CustomDomain) {
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.ports.provision",
 		trace.WithAttributes(
 			attribute.String("loopzero.tenant", d.TenantID),
 			attribute.String("loopzero.domain", d.Domain),
@@ -426,8 +426,8 @@ func (p *DomainProvisioner) processRemoving(ctx context.Context) {
 
 // removeDomain re-renders manifests WITHOUT the removed domain, pushes to gitops,
 // then deletes the DB row. F-002 fix: uses withEnvironmentLock for render phase.
-func (p *DomainProvisioner) removeDomain(ctx context.Context, d domain.CustomDomain) {
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.domain.remove",
+func (p *DomainProvisioner) removeDomain(ctx context.Context, d ports.CustomDomain) {
+	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.ports.remove",
 		trace.WithAttributes(
 			attribute.String("loopzero.tenant", d.TenantID),
 			attribute.String("loopzero.domain", d.Domain),
@@ -450,7 +450,7 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d domain.CustomDom
 		return
 	}
 
-	// Phase A: Lock → fetch + render manifests WITHOUT removed domain.
+	// Phase A: Lock → fetch + render manifests WITHOUT removed ports.
 	var pushOpts deploycontracts.GitOpsPushOpts
 
 	lockErr := p.locker.WithLock(ctx, d.TenantID, d.ProjectName, d.Environment, func(tx db.DBTX) error {

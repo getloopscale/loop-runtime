@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 
 	"github.com/go-chi/chi/v5"
@@ -56,7 +56,7 @@ type RollbackOutput struct {
 
 // RollbackProjectStore abstracts project lookup for rollback (DIP).
 type RollbackProjectStore interface {
-	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
+	GetByName(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error)
 }
 
 // RollbackReleaseLookup resolves the canonical release for a build.

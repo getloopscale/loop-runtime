@@ -25,15 +25,15 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
 type (
-	AuditStore       = domain.AuditStore
-	AuditFilter      = domain.AuditFilter
-	AuditEntryResult = domain.AuditEntryResult
+	AuditStore       = ports.AuditStore
+	AuditFilter      = ports.AuditFilter
+	AuditEntryResult = ports.AuditEntryResult
 )
 
 // AuditHandler handles GET /api/v1/audit.

@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
@@ -93,7 +93,7 @@ func TestTenantCRManager_EnsureTenant_Creates(t *testing.T) {
 	mgr := newTenantMgr(t)
 	tenantID := "test-cr-create"
 
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "starter"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "starter"}); err != nil {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 
@@ -110,10 +110,10 @@ func TestTenantCRManager_EnsureTenant_Idempotent(t *testing.T) {
 	mgr := newTenantMgr(t)
 	tenantID := "test-cr-idempotent"
 
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "starter"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "starter"}); err != nil {
 		t.Fatalf("first EnsureTenant failed: %v", err)
 	}
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "starter"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "starter"}); err != nil {
 		t.Fatalf("second EnsureTenant (idempotent) failed: %v", err)
 	}
 }
@@ -122,10 +122,10 @@ func TestTenantCRManager_EnsureTenant_UpdatesPlan(t *testing.T) {
 	mgr := newTenantMgr(t)
 	tenantID := "test-cr-update-plan"
 
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "starter"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "starter"}); err != nil {
 		t.Fatalf("EnsureTenant (starter) failed: %v", err)
 	}
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "growth"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "growth"}); err != nil {
 		t.Fatalf("EnsureTenant (growth) failed: %v", err)
 	}
 
@@ -136,7 +136,7 @@ func TestTenantCRManager_EnsureTenant_UpdatesPlan(t *testing.T) {
 }
 
 func TestTenantCRManager_ImplementsInterface(t *testing.T) {
-	var _ domain.TenantCRManager = (*TenantCRManager)(nil)
+	var _ ports.TenantCRManager = (*TenantCRManager)(nil)
 }
 
 func TestTenantCRManager_ImplementsEnvironmentManager(t *testing.T) {
@@ -147,7 +147,7 @@ func TestTenantCRManager_AddEnvironment(t *testing.T) {
 	mgr := newTenantMgr(t)
 	tenantID := "test-add-env"
 
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "starter"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "starter"}); err != nil {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "staging"); err != nil {
@@ -173,7 +173,7 @@ func TestTenantCRManager_AddEnvironment_Idempotent(t *testing.T) {
 	mgr := newTenantMgr(t)
 	tenantID := "test-add-env-idem"
 
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "starter"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "starter"}); err != nil {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "staging"); err != nil {
@@ -199,7 +199,7 @@ func TestTenantCRManager_RemoveEnvironment(t *testing.T) {
 	mgr := newTenantMgr(t)
 	tenantID := "test-rm-env"
 
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "starter"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "starter"}); err != nil {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "production"); err != nil {
@@ -226,7 +226,7 @@ func TestTenantCRManager_RemoveEnvironment_NonExisting_ReturnsNotFound(t *testin
 	mgr := newTenantMgr(t)
 	tenantID := "test-rm-env-idem"
 
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "starter"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "starter"}); err != nil {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 	err := mgr.RemoveEnvironment(context.Background(), tenantID, "", "does-not-exist")
@@ -242,7 +242,7 @@ func TestTenantCRManager_RemoveEnvironment_RejectsLastEnvironment(t *testing.T) 
 	mgr := newTenantMgr(t)
 	tenantID := "test-rm-env-last"
 
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "starter"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "starter"}); err != nil {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 	// Add exactly one env, then attempt to remove it → must be rejected.
@@ -258,7 +258,7 @@ func TestTenantCRManager_ListEnvironments(t *testing.T) {
 	mgr := newTenantMgr(t)
 	tenantID := "test-list-env"
 
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "starter"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "starter"}); err != nil {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "production"); err != nil {
@@ -284,7 +284,7 @@ func TestTenantCRManager_GetEnvironmentDetail(t *testing.T) {
 	mgr := newTenantMgr(t)
 	tenantID := "test-get-env-detail"
 
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "starter"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "starter"}); err != nil {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "production"); err != nil {
@@ -316,7 +316,7 @@ func TestTenantCRManager_GetEnvironmentDetail(t *testing.T) {
 func TestTenantCRManager_AddEnvironment_WritesProjectInSpec(t *testing.T) {
 	mgr := newTenantMgr(t)
 	tenantID := "m2-test-write-project"
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "starter"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "starter"}); err != nil {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 	if err := mgr.AddEnvironment(context.Background(), tenantID, "web", "staging"); err != nil {
@@ -339,7 +339,7 @@ func TestTenantCRManager_AddEnvironment_WritesProjectInSpec(t *testing.T) {
 func TestTenantCRManager_AddEnvironment_SameNameDifferentProjectsBothPersist(t *testing.T) {
 	mgr := newTenantMgr(t)
 	tenantID := "m2-test-same-name-diff-proj"
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "growth"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "growth"}); err != nil {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 	if err := mgr.AddEnvironment(context.Background(), tenantID, "web", "staging"); err != nil {
@@ -364,7 +364,7 @@ func TestTenantCRManager_AddEnvironment_SameNameDifferentProjectsBothPersist(t *
 func TestTenantCRManager_RemoveEnvironment_OnlyRemovesMatchingProject(t *testing.T) {
 	mgr := newTenantMgr(t)
 	tenantID := "m2-test-remove-tuple"
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "growth"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "growth"}); err != nil {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 	if err := mgr.AddEnvironment(context.Background(), tenantID, "web", "staging"); err != nil {
@@ -395,7 +395,7 @@ func TestTenantCRManager_RemoveEnvironment_OnlyRemovesMatchingProject(t *testing
 func TestTenantCRManager_GetEnvironmentDetail_FiltersByProject(t *testing.T) {
 	mgr := newTenantMgr(t)
 	tenantID := "m2-test-get-filter"
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "growth"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "growth"}); err != nil {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 	if err := mgr.AddEnvironment(context.Background(), tenantID, "web", "staging"); err != nil {
@@ -418,7 +418,7 @@ func TestTenantCRManager_GetEnvironmentDetail_FiltersByProject(t *testing.T) {
 func TestTenantCRManager_ListEnvironments_ReturnsProjectPerEntry(t *testing.T) {
 	mgr := newTenantMgr(t)
 	tenantID := "m2-test-list-project"
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "growth"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "growth"}); err != nil {
 		t.Fatalf("EnsureTenant failed: %v", err)
 	}
 	if err := mgr.AddEnvironment(context.Background(), tenantID, "web", "dev"); err != nil {
@@ -426,7 +426,7 @@ func TestTenantCRManager_ListEnvironments_ReturnsProjectPerEntry(t *testing.T) {
 	}
 
 	envs, _ := mgr.ListEnvironments(context.Background(), tenantID)
-	var hit *domain.EnvironmentEntry
+	var hit *ports.EnvironmentEntry
 	for i := range envs {
 		if envs[i].Name == "dev" {
 			hit = &envs[i]
@@ -470,7 +470,7 @@ func TestTenantCRManager_AddEnvironment_RejectsCombinedNamespaceOver63Chars(t *t
 func TestEnsureTenant_concurrentUpdate(t *testing.T) {
 	mgr := newTenantMgrLocked(t)
 	tenantID := "test-concurrent"
-	if err := mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "starter"}); err != nil {
+	if err := mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "starter"}); err != nil {
 		t.Fatalf("seed EnsureTenant failed: %v", err)
 	}
 
@@ -478,7 +478,7 @@ func TestEnsureTenant_concurrentUpdate(t *testing.T) {
 	errs := make(chan error, writers)
 	for i := 0; i < writers; i++ {
 		go func() {
-			errs <- mgr.EnsureTenant(context.Background(), tenantID, domain.TenantCRSpec{Plan: "growth"})
+			errs <- mgr.EnsureTenant(context.Background(), tenantID, ports.TenantCRSpec{Plan: "growth"})
 		}()
 	}
 	for i := 0; i < writers; i++ {

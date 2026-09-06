@@ -25,7 +25,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
@@ -56,9 +56,9 @@ const envDeleteCleanupWarning = "environment removed but cleanup may take a few 
 // canonical types live in domain/. Aliases preserve back-compat with
 // handler code in this file.
 type (
-	EnvironmentEntry  = domain.EnvironmentEntry
-	EnvironmentDetail = domain.EnvironmentDetail
-	EnvProjectInfo    = domain.EnvProjectInfo
+	EnvironmentEntry  = ports.EnvironmentEntry
+	EnvironmentDetail = ports.EnvironmentDetail
+	EnvProjectInfo    = ports.EnvProjectInfo
 )
 
 // EnvironmentManager abstracts environment operations on the Tenant CRD.
@@ -533,7 +533,7 @@ func (h *EnvironmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 		// none was named. Collapsing it into a 500 would tell the operator
 		// nothing and page whoever owns the API. Answer 400 with the candidate
 		// projects so the next command can succeed.
-		var amb *domain.ErrAmbiguousEnvironment
+		var amb *ports.ErrAmbiguousEnvironment
 		if errors.As(err, &amb) {
 			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"ENVIRONMENT_AMBIGUOUS",

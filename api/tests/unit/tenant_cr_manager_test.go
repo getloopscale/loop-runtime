@@ -4,7 +4,7 @@
 package unit
 
 import (
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"testing"
 
@@ -13,7 +13,7 @@ import (
 
 func TestKubeTenantCRManagerImplementsInterface(t *testing.T) {
 	// Compile-time check: TenantCRManager implements routes.TenantCRManager.
-	var _ domain.TenantCRManager = (*tenancy.TenantCRManager)(nil)
+	var _ ports.TenantCRManager = (*tenancy.TenantCRManager)(nil)
 }
 
 func TestKubeTenantCRManagerImplementsEnvironmentManager(t *testing.T) {

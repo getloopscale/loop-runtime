@@ -20,7 +20,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 
 	"github.com/go-chi/chi/v5"
@@ -84,7 +84,7 @@ type StatusRelease struct {
 
 // StatusProjectStore abstracts project lookup for the status handler (DIP).
 type StatusProjectStore interface {
-	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
+	GetByName(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error)
 }
 
 // StatusHandler provides HTTP handlers for project status operations.
@@ -225,7 +225,7 @@ type statusResponse struct {
 
 	// PlanTier is the resolved canonical plan tier for the tenant owning
 	// this project (free / pro / team / enterprise — values mirror the
-	// pkg/domain.PlanTier enum). Populated when StatusHandler.planTierStore
+	// pkg/ports.PlanTier enum). Populated when StatusHandler.planTierStore
 	// is wired; falls back to "starter" when the store is nil OR when
 	// ResolvePlanTier returns ErrUnknown (matches the fallback contract
 	// in ProjectHandler.Create + ScaleHandler.resolveTier). Read by the

@@ -6,11 +6,11 @@ package main
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // envProjectLookupAdapter wires the canonical routes.ProjectStore
-// (domain.ProjectStore — backed by PostgresProjectStore) into the
+// (ports.ProjectStore — backed by PostgresProjectStore) into the
 // EnvironmentHandler's M2 v1.2 cross-tenant gate (EC-1 SEPA-CRITICAL).
 //
 // Why a thin adapter:
@@ -28,7 +28,7 @@ import (
 // (handler shipped with the EnvProjectLookup interface, no production
 // implementation injected). This adapter closes that gap.
 type envProjectLookupAdapter struct {
-	store domain.ProjectStore
+	store ports.ProjectStore
 }
 
 // ProjectExistsForTenant returns true when (tenant_id, projectName) tuple

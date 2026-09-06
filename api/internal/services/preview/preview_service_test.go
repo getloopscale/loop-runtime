@@ -13,7 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -25,20 +25,20 @@ type previewFakeStore struct {
 	createFn          func(ctx context.Context, tx db.DBTX, rec *dbstore.PreviewRecord) error
 	updateStatusFn    func(ctx context.Context, tx db.DBTX, previewID, status string) error
 	updateBuildFn     func(ctx context.Context, tx db.DBTX, previewID, buildID, commitSHA string) error
-	getByPRFn         func(ctx context.Context, tenantID, projectID string, prNumber int) (*domain.Preview, error)
+	getByPRFn         func(ctx context.Context, tenantID, projectID string, prNumber int) (*ports.Preview, error)
 	requestDeletionFn func(ctx context.Context, tenantID, previewID string) error
 }
 
-func (f *previewFakeStore) ListByTenant(_ context.Context, _ string) ([]domain.Preview, error) {
+func (f *previewFakeStore) ListByTenant(_ context.Context, _ string) ([]ports.Preview, error) {
 	return nil, nil
 }
-func (f *previewFakeStore) ListByProject(_ context.Context, _, _ string) ([]domain.Preview, error) {
+func (f *previewFakeStore) ListByProject(_ context.Context, _, _ string) ([]ports.Preview, error) {
 	return nil, nil
 }
-func (f *previewFakeStore) GetByID(_ context.Context, _, _ string) (*domain.Preview, error) {
+func (f *previewFakeStore) GetByID(_ context.Context, _, _ string) (*ports.Preview, error) {
 	return nil, loopzeroerrors.ErrPreviewNotFound
 }
-func (f *previewFakeStore) GetByPR(ctx context.Context, tenantID, projectID string, prNumber int) (*domain.Preview, error) {
+func (f *previewFakeStore) GetByPR(ctx context.Context, tenantID, projectID string, prNumber int) (*ports.Preview, error) {
 	if f.getByPRFn != nil {
 		return f.getByPRFn(ctx, tenantID, projectID, prNumber)
 	}
@@ -104,8 +104,8 @@ func (f *previewFakeCR) DeletePreviewCR(ctx context.Context, tenantID, projectID
 	return nil
 }
 
-func newRequest() domain.CreatePreviewRequest {
-	r := domain.CreatePreviewRequest{
+func newRequest() ports.CreatePreviewRequest {
+	r := ports.CreatePreviewRequest{
 		ProjectID: "api",
 		PRNumber:  42,
 		Branch:    "feature/x",
@@ -211,13 +211,13 @@ func TestPreviewService_CreatePreview_HappyPath(t *testing.T) {
 func TestPreviewService_CreatePreview_ValidationFailures(t *testing.T) {
 	cases := []struct {
 		name string
-		mod  func(*domain.CreatePreviewRequest)
+		mod  func(*ports.CreatePreviewRequest)
 	}{
-		{"empty tenant", func(r *domain.CreatePreviewRequest) { r.SetTenantID("") }},
-		{"empty project", func(r *domain.CreatePreviewRequest) { r.ProjectID = "" }},
-		{"non-positive PR", func(r *domain.CreatePreviewRequest) { r.PRNumber = 0 }},
-		{"empty branch", func(r *domain.CreatePreviewRequest) { r.Branch = "" }},
-		{"empty commit", func(r *domain.CreatePreviewRequest) { r.CommitSHA = "" }},
+		{"empty tenant", func(r *ports.CreatePreviewRequest) { r.SetTenantID("") }},
+		{"empty project", func(r *ports.CreatePreviewRequest) { r.ProjectID = "" }},
+		{"non-positive PR", func(r *ports.CreatePreviewRequest) { r.PRNumber = 0 }},
+		{"empty branch", func(r *ports.CreatePreviewRequest) { r.Branch = "" }},
+		{"empty commit", func(r *ports.CreatePreviewRequest) { r.CommitSHA = "" }},
 	}
 	for _, tc := range cases {
 		// Go 1.22+: per-iteration loop variable; no shadow needed.
@@ -316,8 +316,8 @@ func TestPreviewService_DeletePreviewByPR_HappyPath(t *testing.T) {
 	deletionRequested := false
 	crDeleted := false
 	store := &previewFakeStore{
-		getByPRFn: func(_ context.Context, _, _ string, _ int) (*domain.Preview, error) {
-			return &domain.Preview{ID: "prev-x", TenantID: "tn-test-123", ProjectID: "api", PRNumber: 42}, nil
+		getByPRFn: func(_ context.Context, _, _ string, _ int) (*ports.Preview, error) {
+			return &ports.Preview{ID: "prev-x", TenantID: "tn-test-123", ProjectID: "api", PRNumber: 42}, nil
 		},
 		requestDeletionFn: func(_ context.Context, _, previewID string) error {
 			deletionRequested = true
@@ -402,8 +402,8 @@ func TestPreviewService_OnBuildCompleted_UnknownStatus_Errors(t *testing.T) {
 // =============================================================================
 
 func TestPreviewService_Implements_RoutesInterface(t *testing.T) {
-	// Verifies domain.PreviewService is implemented (compile-time check).
-	var _ domain.PreviewService = (*PreviewService)(nil)
+	// Verifies ports.PreviewService is implemented (compile-time check).
+	var _ ports.PreviewService = (*PreviewService)(nil)
 }
 
 // =============================================================================
@@ -785,8 +785,8 @@ func TestPreviewService_CreatePreview_D3_DifferentProjectsDoNotSubstitute(t *tes
 // failures abort but slot/env_target failures only log.
 func TestPreviewService_DeletePreviewByPR_D6_CleanupChain(t *testing.T) {
 	store := &previewFakeStore{
-		getByPRFn: func(_ context.Context, _, _ string, _ int) (*domain.Preview, error) {
-			return &domain.Preview{ID: "prev-1"}, nil
+		getByPRFn: func(_ context.Context, _, _ string, _ int) (*ports.Preview, error) {
+			return &ports.Preview{ID: "prev-1"}, nil
 		},
 	}
 	slot := &fakePreviewSlotStore{}

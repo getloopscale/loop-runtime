@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 
 	"github.com/go-chi/chi/v5"
@@ -61,7 +61,7 @@ type PromoteOutput struct {
 
 // PromoteProjectStore abstracts project lookup for promote (DIP).
 type PromoteProjectStore interface {
-	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
+	GetByName(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error)
 }
 
 // promoteRequest is the JSON body for POST /api/v1/projects/{name}/promote.

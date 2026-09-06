@@ -39,7 +39,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/correlation"
 	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
@@ -48,10 +48,10 @@ import (
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
 type (
-	SecretMetadata = domain.SecretMetadata
-	SecretStore    = domain.SecretStore
-	SecretK8sSync  = domain.SecretK8sSync
-	AuditLogger    = domain.AuditLogger
+	SecretMetadata = ports.SecretMetadata
+	SecretStore    = ports.SecretStore
+	SecretK8sSync  = ports.SecretK8sSync
+	AuditLogger    = ports.AuditLogger
 )
 
 // SecretEnvLocker is the narrow interface SecretHandler needs to wrap
@@ -109,7 +109,7 @@ type SecretTransit interface {
 // constructor convention) — a project-checker adapter is NOT needed
 // because PostgresProjectStore.GetByName already matches this signature.
 type SecretProjectChecker interface {
-	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
+	GetByName(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error)
 }
 
 // SecretPlanLimiter — narrow interface (ISP) for the plan-limit gate.

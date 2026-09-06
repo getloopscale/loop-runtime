@@ -16,7 +16,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
@@ -63,7 +63,7 @@ func TestRollback_MissingProjectName(t *testing.T) {
 
 func TestRollback_InvalidBody(t *testing.T) {
 	h := NewRollbackHandler(
-		&fakeRollbackProjectStore{project: &domain.ProjectResult{ID: "p1", Name: "my-api"}},
+		&fakeRollbackProjectStore{project: &ports.ProjectResult{ID: "p1", Name: "my-api"}},
 		&fakeRollbackService{},
 		"dev.loopzero.example",
 	)
@@ -82,7 +82,7 @@ func TestRollback_InvalidBody(t *testing.T) {
 
 func TestRollback_InternalError(t *testing.T) {
 	h := NewRollbackHandler(
-		&fakeRollbackProjectStore{project: &domain.ProjectResult{ID: "p1", Name: "my-api"}},
+		&fakeRollbackProjectStore{project: &ports.ProjectResult{ID: "p1", Name: "my-api"}},
 		&fakeRollbackService{err: errors.New("database exploded")},
 		"dev.loopzero.example",
 	)

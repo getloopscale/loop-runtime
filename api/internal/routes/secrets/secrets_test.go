@@ -26,7 +26,7 @@ import (
 	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
 
 	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // --- Fakes ---
@@ -46,13 +46,13 @@ func (l *lockCountingFake) WithLock(_ context.Context, tenant, project, env stri
 	return fn(nil)
 }
 
-// fakeSecretStoreT01 stubs domain.SecretStore for routing tests.
+// fakeSecretStoreT01 stubs ports.SecretStore for routing tests.
 type fakeSecretStoreT01 struct {
 	setCalls    int
 	deleteCalls int
 }
 
-func (f *fakeSecretStoreT01) ListNames(_ context.Context, _, _, _ string) ([]domain.SecretMetadata, error) {
+func (f *fakeSecretStoreT01) ListNames(_ context.Context, _, _, _ string) ([]ports.SecretMetadata, error) {
 	return nil, nil
 }
 
@@ -477,7 +477,7 @@ func TestSecretBulk_SizeCap(t *testing.T) {
 // + EC-02 (sync_status_per_env granularity) absorptions.
 // ============================================================================
 
-// fakeK8sSyncT11 stubs domain.SecretK8sSync for routing tests. Records every
+// fakeK8sSyncT11 stubs ports.SecretK8sSync for routing tests. Records every
 // CreateSecret invocation and supports per-env failure injection via failOnEnv.
 type fakeK8sSyncT11 struct {
 	mu          sync.Mutex
@@ -503,7 +503,7 @@ func (f *fakeK8sSyncT11) DeleteSecret(_ context.Context, tenant, project, env, _
 	return nil
 }
 
-// fakeFailingStore stubs domain.SecretStore with per-key failure injection so
+// fakeFailingStore stubs ports.SecretStore with per-key failure injection so
 // EC-01 (continue-best-effort) can be exercised: entry 3 of 5 fails, entries
 // 1+2+4+5 succeed.
 type fakeFailingStore struct {
@@ -512,7 +512,7 @@ type fakeFailingStore struct {
 	failOnName map[string]error // secret name → error to return on Set
 }
 
-func (f *fakeFailingStore) ListNames(_ context.Context, _, _, _ string) ([]domain.SecretMetadata, error) {
+func (f *fakeFailingStore) ListNames(_ context.Context, _, _, _ string) ([]ports.SecretMetadata, error) {
 	return nil, nil
 }
 
@@ -800,12 +800,12 @@ type fakeProjectCheckerT12 struct {
 	owned map[string]string
 }
 
-func (f *fakeProjectCheckerT12) GetByName(_ context.Context, tenantID, name string) (*domain.ProjectResult, error) {
+func (f *fakeProjectCheckerT12) GetByName(_ context.Context, tenantID, name string) (*ports.ProjectResult, error) {
 	owner, ok := f.owned[name]
 	if !ok || owner != tenantID {
 		return nil, nil
 	}
-	return &domain.ProjectResult{Name: name}, nil
+	return &ports.ProjectResult{Name: name}, nil
 }
 
 // TestSecretBulk_CrossTenantBindingReturns404 — EC-03 absorption. JWT carries
@@ -955,7 +955,7 @@ type recordingStore struct {
 	values   []string // captured value-bytes per Set call, as string
 }
 
-func (r *recordingStore) ListNames(_ context.Context, _, _, _ string) ([]domain.SecretMetadata, error) {
+func (r *recordingStore) ListNames(_ context.Context, _, _, _ string) ([]ports.SecretMetadata, error) {
 	return nil, nil
 }
 

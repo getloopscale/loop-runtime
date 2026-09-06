@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/projects"
 	"net/http"
 	"net/http/httptest"
@@ -25,39 +25,39 @@ type fakeProjectStore struct {
 	listErr   error
 }
 
-func (f *fakeProjectStore) CreateProject(ctx context.Context, p domain.CreateProjectInput) (domain.ProjectResult, error) {
+func (f *fakeProjectStore) CreateProject(ctx context.Context, p ports.CreateProjectInput) (ports.ProjectResult, error) {
 	if f.createErr != nil {
-		return domain.ProjectResult{}, f.createErr
+		return ports.ProjectResult{}, f.createErr
 	}
 	key := p.TenantID + "/" + p.Name
 	if f.projects[key] {
-		return domain.ProjectResult{}, domain.ErrProjectExists
+		return ports.ProjectResult{}, ports.ErrProjectExists
 	}
 	f.projects[key] = true
-	return domain.ProjectResult{
+	return ports.ProjectResult{
 		ID:     "proj-12345678",
 		Name:   p.Name,
 		TeamID: p.TenantID,
 	}, nil
 }
 
-func (f *fakeProjectStore) GetByName(_ context.Context, tenantID, name string) (*domain.ProjectResult, error) {
+func (f *fakeProjectStore) GetByName(_ context.Context, tenantID, name string) (*ports.ProjectResult, error) {
 	key := tenantID + "/" + name
 	if f.projects[key] {
-		return &domain.ProjectResult{ID: "proj-12345678", Name: name, TeamID: tenantID}, nil
+		return &ports.ProjectResult{ID: "proj-12345678", Name: name, TeamID: tenantID}, nil
 	}
 	return nil, nil
 }
 
-func (f *fakeProjectStore) ListByTenant(_ context.Context, tenantID string) ([]domain.ProjectResult, error) {
+func (f *fakeProjectStore) ListByTenant(_ context.Context, tenantID string) ([]ports.ProjectResult, error) {
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
-	var results []domain.ProjectResult
+	var results []ports.ProjectResult
 	for key := range f.projects {
 		parts := splitKey(key)
 		if parts[0] == tenantID {
-			results = append(results, domain.ProjectResult{
+			results = append(results, ports.ProjectResult{
 				ID:     "proj-12345678",
 				Name:   parts[1],
 				TeamID: tenantID,
@@ -65,7 +65,7 @@ func (f *fakeProjectStore) ListByTenant(_ context.Context, tenantID string) ([]d
 		}
 	}
 	if results == nil {
-		results = []domain.ProjectResult{}
+		results = []ports.ProjectResult{}
 	}
 	return results, nil
 }
@@ -84,15 +84,15 @@ func splitKey(key string) [2]string {
 // route renders these in the response — these unit tests focus on the
 // shape/auth/error paths, not the summary semantics, which live in
 // status_mapper_test.go + integration tests).
-func (f *fakeProjectStore) ListByTenantWithSummary(_ context.Context, tenantID string) ([]domain.ProjectSummary, error) {
+func (f *fakeProjectStore) ListByTenantWithSummary(_ context.Context, tenantID string) ([]ports.ProjectSummary, error) {
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
-	var results []domain.ProjectSummary
+	var results []ports.ProjectSummary
 	for key := range f.projects {
 		parts := splitKey(key)
 		if parts[0] == tenantID {
-			results = append(results, domain.ProjectSummary{
+			results = append(results, ports.ProjectSummary{
 				ID:               "proj-12345678",
 				Name:             parts[1],
 				TeamID:           tenantID,
@@ -102,7 +102,7 @@ func (f *fakeProjectStore) ListByTenantWithSummary(_ context.Context, tenantID s
 		}
 	}
 	if results == nil {
-		results = []domain.ProjectSummary{}
+		results = []ports.ProjectSummary{}
 	}
 	return results, nil
 }
@@ -113,11 +113,11 @@ func (f *fakeProjectStore) DeleteProject(_ context.Context, _, _ string) error {
 
 type fakeTenantCRManager struct {
 	calls    int
-	lastSpec domain.TenantCRSpec
+	lastSpec ports.TenantCRSpec
 	err      error
 }
 
-func (f *fakeTenantCRManager) EnsureTenant(ctx context.Context, tenantID string, spec domain.TenantCRSpec) error {
+func (f *fakeTenantCRManager) EnsureTenant(ctx context.Context, tenantID string, spec ports.TenantCRSpec) error {
 	f.calls++
 	f.lastSpec = spec
 	return f.err
@@ -486,40 +486,40 @@ type threadSafeProjectStore struct {
 	projects map[string]bool
 }
 
-func (f *threadSafeProjectStore) CreateProject(ctx context.Context, p domain.CreateProjectInput) (domain.ProjectResult, error) {
+func (f *threadSafeProjectStore) CreateProject(ctx context.Context, p ports.CreateProjectInput) (ports.ProjectResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	key := p.TenantID + "/" + p.Name
 	if f.projects[key] {
-		return domain.ProjectResult{}, domain.ErrProjectExists
+		return ports.ProjectResult{}, ports.ErrProjectExists
 	}
 	f.projects[key] = true
-	return domain.ProjectResult{
+	return ports.ProjectResult{
 		ID:     "proj-12345678",
 		Name:   p.Name,
 		TeamID: p.TenantID,
 	}, nil
 }
 
-func (f *threadSafeProjectStore) GetByName(_ context.Context, tenantID, name string) (*domain.ProjectResult, error) {
+func (f *threadSafeProjectStore) GetByName(_ context.Context, tenantID, name string) (*ports.ProjectResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	key := tenantID + "/" + name
 	if f.projects[key] {
-		return &domain.ProjectResult{ID: "proj-12345678", Name: name, TeamID: tenantID}, nil
+		return &ports.ProjectResult{ID: "proj-12345678", Name: name, TeamID: tenantID}, nil
 	}
 	return nil, nil
 }
 
-func (f *threadSafeProjectStore) ListByTenant(_ context.Context, tenantID string) ([]domain.ProjectResult, error) {
+func (f *threadSafeProjectStore) ListByTenant(_ context.Context, tenantID string) ([]ports.ProjectResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var results []domain.ProjectResult
+	var results []ports.ProjectResult
 	for key := range f.projects {
 		parts := splitKey(key)
 		if parts[0] == tenantID {
-			results = append(results, domain.ProjectResult{
+			results = append(results, ports.ProjectResult{
 				ID:     "proj-12345678",
 				Name:   parts[1],
 				TeamID: tenantID,
@@ -527,20 +527,20 @@ func (f *threadSafeProjectStore) ListByTenant(_ context.Context, tenantID string
 		}
 	}
 	if results == nil {
-		results = []domain.ProjectResult{}
+		results = []ports.ProjectResult{}
 	}
 	return results, nil
 }
 
 // T2.1 + ADR D2: thread-safe summary variant.
-func (f *threadSafeProjectStore) ListByTenantWithSummary(_ context.Context, tenantID string) ([]domain.ProjectSummary, error) {
+func (f *threadSafeProjectStore) ListByTenantWithSummary(_ context.Context, tenantID string) ([]ports.ProjectSummary, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var results []domain.ProjectSummary
+	var results []ports.ProjectSummary
 	for key := range f.projects {
 		parts := splitKey(key)
 		if parts[0] == tenantID {
-			results = append(results, domain.ProjectSummary{
+			results = append(results, ports.ProjectSummary{
 				ID:               "proj-12345678",
 				Name:             parts[1],
 				TeamID:           tenantID,
@@ -550,7 +550,7 @@ func (f *threadSafeProjectStore) ListByTenantWithSummary(_ context.Context, tena
 		}
 	}
 	if results == nil {
-		results = []domain.ProjectSummary{}
+		results = []ports.ProjectSummary{}
 	}
 	return results, nil
 }

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // TestTenantDeletionStoreSqlc_SatisfazAInterfaceDoDominio is the assertion whose
@@ -24,7 +24,7 @@ import (
 // is the floor: it fails the moment the type stops existing, instead of the file
 // quietly becoming a paragraph of prose about nothing.
 func TestTenantDeletionStoreSqlc_SatisfazAInterfaceDoDominio(t *testing.T) {
-	var _ domain.TenantDeletionStore = (*TenantDeletionStoreSqlc)(nil)
+	var _ ports.TenantDeletionStore = (*TenantDeletionStoreSqlc)(nil)
 }
 
 // TestDeletionRowToRecord pins the conversion the adapter exists to perform.

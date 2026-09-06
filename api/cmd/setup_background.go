@@ -28,7 +28,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/cfzone"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
@@ -172,8 +172,8 @@ func setupDomains(
 	logger *slog.Logger,
 ) (*domains.DomainHandler, *domainsvc.DomainProvisioner, *domainsvc.DomainHealthChecker, *cfzone.Client) {
 	cnameTarget := "cname." + cfg.BaseDomain
-	domainValidator := domain.NewValidator(cfg.BaseDomain, nil)
-	dnsVerifier := &domain.DNSVerifier{}
+	domainValidator := ports.NewValidator(cfg.BaseDomain, nil)
+	dnsVerifier := &ports.DNSVerifier{}
 	domainHandler := domains.NewDomainHandler(stores.DomainStore, dnsVerifier, domainValidator, cnameTarget)
 
 	cfZoneClient := cfzone.NewClient(cfg.CFAccountID, cfg.CFAPIToken)

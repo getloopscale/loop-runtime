@@ -16,7 +16,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // StaticRoutingClient writes routing entries for static frontends (CF Workers KV).
@@ -94,7 +94,7 @@ type BuildOrchestratorDeps struct {
 	// the build callback reports SUCCEEDED, the orchestrator emits one
 	// `image.signed` audit entry per app with a cosign signature
 	// (T1.2 mitigation #3 of MEET-2026-05-12). Nil-safe.
-	AuditLogger domain.AuditLogger
+	AuditLogger ports.AuditLogger
 	// DeployTimelineSpawn is the canonical hook for spawning the
 	// per-deploy 5-phase aggregator goroutine when a build transitions
 	// to RUNNING. The wired function constructs the sink + source
@@ -146,7 +146,7 @@ type BuildOrchestrator struct {
 	planCap             PlanCapChecker          // B15: nil = enforcement disabled
 	kedaEnabled         bool                    // gates scale-to-zero (min=0)
 	scalingResolver     scaling.ScalingResolver // B40: nil = yaml-only (backward-compat)
-	auditLogger         domain.AuditLogger      // T1.2 mitigation #3: per-sign cosign audit
+	auditLogger         ports.AuditLogger      // T1.2 mitigation #3: per-sign cosign audit
 	deployTimelineSpawn DeployTimelineSpawner   // plan T5.1 — nil-safe
 	// J-16 slice 3 (MEET-2026-07-04-001): stages deploy.failed on the outbox
 	// when the build workflow reports FAILED. Nil-safe (emit skipped).

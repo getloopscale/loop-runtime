@@ -16,7 +16,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
 
@@ -50,7 +50,7 @@ func (f *fakeEnvEnsurer) EnsureEnvironment(_ context.Context, tenantID, project,
 // `loopzero-<tenant>-<project>-production` automatically.
 func TestProjectCreate_AutoCreatesProductionEnv(t *testing.T) {
 	store := &fakeProjectStore{
-		createResult: domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		createResult: ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	envEnsurer := &fakeEnvEnsurer{}
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
@@ -99,7 +99,7 @@ func TestProjectCreate_AutoCreatesProductionEnv(t *testing.T) {
 // status code contract; the rollback contract is tracked separately.
 func TestProjectCreate_PropagatesEnvEnsurerFailure(t *testing.T) {
 	store := &fakeProjectStore{
-		createResult: domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		createResult: ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	envEnsurer := &fakeEnvEnsurer{returnErr: errors.New("k8s API server unavailable")}
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
@@ -130,7 +130,7 @@ func TestProjectCreate_PropagatesEnvEnsurerFailure(t *testing.T) {
 // mandatory.
 func TestProjectCreate_BackwardCompatNoEnsurer(t *testing.T) {
 	store := &fakeProjectStore{
-		createResult: domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		createResult: ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
 	// envEnsurer intentionally unset.

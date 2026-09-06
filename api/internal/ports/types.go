@@ -4,7 +4,7 @@
 // Package domain provides shared domain types used across layers (routes, db, services).
 // These types live here to avoid DIP violations where infrastructure (db/) would import
 // presentation (routes/).
-package domain
+package ports
 
 import (
 	"context"

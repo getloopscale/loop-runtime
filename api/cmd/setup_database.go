@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
@@ -30,7 +30,7 @@ import (
 type DatabaseDeps struct {
 	DBAdapter    *db.PgxAdapter
 	MemberStore  auth.MembershipStore
-	ProjectStore domain.ProjectStore
+	ProjectStore ports.ProjectStore
 	DBHealth     health.DBHealthChecker
 	PlanLimiter  *enforcement.PlanLimiter
 

@@ -112,7 +112,7 @@ type Outcome struct {
 // 93 `json:` tags (measured 2026-09-05), among them ProjectSummary, the struct behind
 // the 2026-06-08 regression this package doc cites as the reason the gate exists.
 var trackedFiles = []string{
-	"api/internal/domain/types.go",
+	"api/internal/ports/",
 	"api/internal/db/generated/", // any *.go under this dir
 	"api/internal/routes/",       // any *.go under this dir
 }

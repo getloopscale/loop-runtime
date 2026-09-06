@@ -18,7 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -94,7 +94,7 @@ func m4Seed(t *testing.T, std *sql.DB, owner, acct, tn1, tn2, plan string) {
 
 func mustCreate(t *testing.T, store *store.PostgresProjectStore, tenant, name, owner string) error {
 	t.Helper()
-	_, err := store.CreateProject(context.Background(), domain.CreateProjectInput{TenantID: tenant, Name: name, CreatedBy: owner})
+	_, err := store.CreateProject(context.Background(), ports.CreateProjectInput{TenantID: tenant, Name: name, CreatedBy: owner})
 	return err
 }
 

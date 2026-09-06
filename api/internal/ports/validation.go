@@ -3,7 +3,7 @@
 
 // Package domain provides custom domain validation and DNS verification logic.
 // MEET-2026-04-05-033 §6.4
-package domain
+package ports
 
 import (
 	"context"

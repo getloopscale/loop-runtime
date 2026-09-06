@@ -34,14 +34,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // GetBuildAttestation looks up the latest release for a build (any
 // tenant) and returns the supply-chain attestation summary.
 // Caller-trusted variant.
-func (s *PostgresAttestationStore) GetBuildAttestation(ctx context.Context, buildID string) (*domain.AttestationInfo, error) {
+func (s *PostgresAttestationStore) GetBuildAttestation(ctx context.Context, buildID string) (*ports.AttestationInfo, error) {
 	if buildID == "" {
 		return nil, loopzeroerrors.ErrBuildNotFound
 	}
@@ -65,7 +65,7 @@ func (s *PostgresAttestationStore) GetBuildAttestation(ctx context.Context, buil
 // returns attestation if the build belongs to the named tenant.
 // Cross-tenant reads return ErrBuildNotFound to avoid existence
 // leaks per ADR-0014 trust model.
-func (s *PostgresAttestationStore) GetBuildAttestationForTenant(ctx context.Context, tenantID, buildID string) (*domain.AttestationInfo, error) {
+func (s *PostgresAttestationStore) GetBuildAttestationForTenant(ctx context.Context, tenantID, buildID string) (*ports.AttestationInfo, error) {
 	if buildID == "" || tenantID == "" {
 		return nil, loopzeroerrors.ErrBuildNotFound
 	}
@@ -92,8 +92,8 @@ func (s *PostgresAttestationStore) GetBuildAttestationForTenant(ctx context.Cont
 // (digest *string, signature *string, signedAt pgtype.Timestamptz)
 // into the public AttestationInfo struct. Both variants of the
 // query SELECT the same 3 columns so the conversion is shared.
-func attestationRowToInfo(buildID string, digest *string, signature *string, signedAt pgtype.Timestamptz) *domain.AttestationInfo {
-	info := &domain.AttestationInfo{
+func attestationRowToInfo(buildID string, digest *string, signature *string, signedAt pgtype.Timestamptz) *ports.AttestationInfo {
+	info := &ports.AttestationInfo{
 		BuildID: buildID,
 		Signed:  signedAt.Valid,
 	}

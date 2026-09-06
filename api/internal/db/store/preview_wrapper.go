@@ -39,7 +39,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/id"
 )
@@ -213,7 +213,7 @@ func (s *PostgresPreviewStore) RequestDeletion(ctx context.Context, tenantID, pr
 // =========================================================================
 
 // ListByTenant returns all live previews for a tenant.
-func (s *PostgresPreviewStore) ListByTenant(ctx context.Context, tenantID string) ([]domain.Preview, error) {
+func (s *PostgresPreviewStore) ListByTenant(ctx context.Context, tenantID string) ([]ports.Preview, error) {
 	bridge, err := s.bridge()
 	if err != nil {
 		return nil, err
@@ -223,7 +223,7 @@ func (s *PostgresPreviewStore) ListByTenant(ctx context.Context, tenantID string
 	if err != nil {
 		return nil, fmt.Errorf("preview store: list query failed: %w", err)
 	}
-	out := make([]domain.Preview, 0, len(rows))
+	out := make([]ports.Preview, 0, len(rows))
 	for _, row := range rows {
 		rec := previewRecordFromRow(row)
 		out = append(out, *rec.ToDomain())
@@ -233,7 +233,7 @@ func (s *PostgresPreviewStore) ListByTenant(ctx context.Context, tenantID string
 
 // ListByProject returns all live previews for a (tenant, project)
 // pair.
-func (s *PostgresPreviewStore) ListByProject(ctx context.Context, tenantID, projectID string) ([]domain.Preview, error) {
+func (s *PostgresPreviewStore) ListByProject(ctx context.Context, tenantID, projectID string) ([]ports.Preview, error) {
 	bridge, err := s.bridge()
 	if err != nil {
 		return nil, err
@@ -246,7 +246,7 @@ func (s *PostgresPreviewStore) ListByProject(ctx context.Context, tenantID, proj
 	if err != nil {
 		return nil, fmt.Errorf("preview store: list query failed: %w", err)
 	}
-	out := make([]domain.Preview, 0, len(rows))
+	out := make([]ports.Preview, 0, len(rows))
 	for _, row := range rows {
 		rec := previewRecordFromRow(row)
 		out = append(out, *rec.ToDomain())
@@ -256,7 +256,7 @@ func (s *PostgresPreviewStore) ListByProject(ctx context.Context, tenantID, proj
 
 // GetByID returns a live preview by its ID, scoped to a tenant.
 // pgx.ErrNoRows → ErrPreviewNotFound.
-func (s *PostgresPreviewStore) GetByID(ctx context.Context, tenantID, previewID string) (*domain.Preview, error) {
+func (s *PostgresPreviewStore) GetByID(ctx context.Context, tenantID, previewID string) (*ports.Preview, error) {
 	bridge, err := s.bridge()
 	if err != nil {
 		return nil, err
@@ -278,7 +278,7 @@ func (s *PostgresPreviewStore) GetByID(ctx context.Context, tenantID, previewID 
 
 // GetByPR returns the live preview for a (tenant, project,
 // pr_number) tuple. pgx.ErrNoRows → ErrPreviewNotFound.
-func (s *PostgresPreviewStore) GetByPR(ctx context.Context, tenantID, projectID string, prNumber int) (*domain.Preview, error) {
+func (s *PostgresPreviewStore) GetByPR(ctx context.Context, tenantID, projectID string, prNumber int) (*ports.Preview, error) {
 	bridge, err := s.bridge()
 	if err != nil {
 		return nil, err

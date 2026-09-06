@@ -8,7 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"net/http"
 	"net/http/httptest"
@@ -19,15 +19,15 @@ import (
 
 // fakeEnvironmentManager implements routes.EnvironmentManager for testing.
 type fakeEnvironmentManager struct {
-	environments []domain.EnvironmentEntry
-	detail       *domain.EnvironmentDetail
+	environments []ports.EnvironmentEntry
+	detail       *ports.EnvironmentDetail
 	listErr      error
 	addErr       error
 	removeErr    error
 	getErr       error
 }
 
-func (f *fakeEnvironmentManager) ListEnvironments(_ context.Context, _ string) ([]domain.EnvironmentEntry, error) {
+func (f *fakeEnvironmentManager) ListEnvironments(_ context.Context, _ string) ([]ports.EnvironmentEntry, error) {
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
@@ -43,7 +43,7 @@ func (f *fakeEnvironmentManager) RemoveEnvironment(_ context.Context, _, _, _ st
 	return f.removeErr
 }
 
-func (f *fakeEnvironmentManager) GetEnvironmentDetail(_ context.Context, _, _, _ string) (*domain.EnvironmentDetail, error) {
+func (f *fakeEnvironmentManager) GetEnvironmentDetail(_ context.Context, _, _, _ string) (*ports.EnvironmentDetail, error) {
 	if f.getErr != nil {
 		return nil, f.getErr
 	}
@@ -53,7 +53,7 @@ func (f *fakeEnvironmentManager) GetEnvironmentDetail(_ context.Context, _, _, _
 func TestEnvironmentListRoute(t *testing.T) {
 	t.Run("GET /api/v1/environments → 200 with environments list", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{
-			environments: []domain.EnvironmentEntry{
+			environments: []ports.EnvironmentEntry{
 				{Name: "production", Status: "active"},
 				{Name: "staging", Status: "active"},
 			},
@@ -83,7 +83,7 @@ func TestEnvironmentListRoute(t *testing.T) {
 
 	t.Run("GET /api/v1/environments → 200 with empty list", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{
-			environments: []domain.EnvironmentEntry{},
+			environments: []ports.EnvironmentEntry{},
 		}
 		handler := environments.NewEnvironmentHandler(mgr)
 
@@ -362,10 +362,10 @@ func TestEnvironmentCreateRoute(t *testing.T) {
 func TestEnvironmentGetRoute(t *testing.T) {
 	t.Run("GET /api/v1/environments/{name} → 200 with detail", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{
-			detail: &domain.EnvironmentDetail{
+			detail: &ports.EnvironmentDetail{
 				Name:   "production",
 				Status: "active",
-				Projects: []domain.EnvProjectInfo{
+				Projects: []ports.EnvProjectInfo{
 					{Name: "my-api", ActiveRelease: "rel-001", URL: "https://my-api.example.com"},
 				},
 			},

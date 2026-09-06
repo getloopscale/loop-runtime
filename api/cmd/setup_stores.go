@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
@@ -38,7 +38,7 @@ type StoreDeps struct {
 	EventStore       sse.EventStore
 	PgEventStore     *sse.PostgresEventStore
 	SecretStore      secrets.SecretStore
-	BootstrapStore   domain.BootstrapStore
+	BootstrapStore   ports.BootstrapStore
 	DomainStore      *store.PostgresDomainStore
 	CellStore        *store.PostgresCellStore
 	SourceStore      source.SourceStore

@@ -18,7 +18,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
@@ -56,10 +56,10 @@ func tenantBContext() *auth.UserContext {
 // SCOPE by tenant_id. Tenant B looking up tenant A's project returns NIL.
 type rlsScaleProjectStore struct {
 	owningTenant string
-	project      *domain.ProjectResult
+	project      *ports.ProjectResult
 }
 
-func (s *rlsScaleProjectStore) GetByName(_ context.Context, callerTenant, name string) (*domain.ProjectResult, error) {
+func (s *rlsScaleProjectStore) GetByName(_ context.Context, callerTenant, name string) (*ports.ProjectResult, error) {
 	if callerTenant != s.owningTenant {
 		return nil, nil // RLS-scoped: invisible to other tenants
 	}
@@ -75,7 +75,7 @@ func (s *rlsScaleProjectStore) GetByName(_ context.Context, callerTenant, name s
 func TestCrossTenant_Scale_RLS_ReturnsNotFound(t *testing.T) {
 	store := &rlsScaleProjectStore{
 		owningTenant: xtTenantA,
-		project:      &domain.ProjectResult{ID: "p1", Name: "tenant-a-api", TeamID: xtTenantA},
+		project:      &ports.ProjectResult{ID: "p1", Name: "tenant-a-api", TeamID: xtTenantA},
 	}
 	apply := func(_ context.Context, _ ScaleConfigInput) (bool, error) {
 		t.Fatal("apply must NOT be called on cross-tenant rejection")
@@ -104,7 +104,7 @@ func TestCrossTenant_Scale_RLS_ReturnsNotFound(t *testing.T) {
 func TestCrossTenant_Scale_RLS_AllowsOwningTenant(t *testing.T) {
 	store := &rlsScaleProjectStore{
 		owningTenant: xtTenantA,
-		project:      &domain.ProjectResult{ID: "p1", Name: "tenant-a-api", TeamID: xtTenantA},
+		project:      &ports.ProjectResult{ID: "p1", Name: "tenant-a-api", TeamID: xtTenantA},
 	}
 	applyCalled := false
 	apply := func(_ context.Context, cfg ScaleConfigInput) (bool, error) {

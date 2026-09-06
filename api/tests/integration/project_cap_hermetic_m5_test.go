@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // M5 T2.1 — the HERMETIC per-Account project cap on the DEPLOY path
@@ -150,7 +150,7 @@ func TestProjectCapHermeticM5_DeployAndApiCreateShareTheCap(t *testing.T) {
 	go func() { defer wg.Done(); record(mustEnsure(t, store, tn1, "via-deploy", owner)) }()
 	go func() {
 		defer wg.Done()
-		_, err := store.CreateProject(context.Background(), domain.CreateProjectInput{TenantID: tn2, Name: "via-api", CreatedBy: owner})
+		_, err := store.CreateProject(context.Background(), ports.CreateProjectInput{TenantID: tn2, Name: "via-api", CreatedBy: owner})
 		record(err)
 	}()
 	wg.Wait()

@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 	"net/http"
 	"net/http/httptest"
@@ -20,8 +20,8 @@ import (
 // --- Fake TeamStore ---
 
 type fakeTeamStore struct {
-	members      map[string][]domain.TeamMemberInfo // tenantID -> members
-	users        map[string]*domain.TeamUserInfo    // username -> user
+	members      map[string][]ports.TeamMemberInfo // tenantID -> members
+	users        map[string]*ports.TeamUserInfo    // username -> user
 	addErr       error
 	removeErr    error
 	updateErr    error
@@ -31,18 +31,18 @@ type fakeTeamStore struct {
 
 func newFakeTeamStore() *fakeTeamStore {
 	return &fakeTeamStore{
-		members: make(map[string][]domain.TeamMemberInfo),
-		users:   make(map[string]*domain.TeamUserInfo),
+		members: make(map[string][]ports.TeamMemberInfo),
+		users:   make(map[string]*ports.TeamUserInfo),
 	}
 }
 
-func (f *fakeTeamStore) ListMembers(_ context.Context, tenantID string) ([]domain.TeamMemberInfo, error) {
+func (f *fakeTeamStore) ListMembers(_ context.Context, tenantID string) ([]ports.TeamMemberInfo, error) {
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
 	members := f.members[tenantID]
 	if members == nil {
-		return []domain.TeamMemberInfo{}, nil
+		return []ports.TeamMemberInfo{}, nil
 	}
 	return members, nil
 }
@@ -57,7 +57,7 @@ func (f *fakeTeamStore) AddMember(_ context.Context, tenantID, userID, role stri
 			return nil
 		}
 	}
-	f.members[tenantID] = append(f.members[tenantID], domain.TeamMemberInfo{
+	f.members[tenantID] = append(f.members[tenantID], ports.TeamMemberInfo{
 		Username: stripGitHubPrefix(userID),
 		Email:    userID + "@test.com",
 		Role:     role,
@@ -94,7 +94,7 @@ func (f *fakeTeamStore) UpdateMemberRole(_ context.Context, tenantID, userID, ne
 	return teams.ErrMemberNotFound
 }
 
-func (f *fakeTeamStore) GetMember(_ context.Context, tenantID, userID string) (*domain.TeamMemberInfo, error) {
+func (f *fakeTeamStore) GetMember(_ context.Context, tenantID, userID string) (*ports.TeamMemberInfo, error) {
 	if f.getMemberErr != nil {
 		return nil, f.getMemberErr
 	}
@@ -106,7 +106,7 @@ func (f *fakeTeamStore) GetMember(_ context.Context, tenantID, userID string) (*
 	return nil, nil
 }
 
-func (f *fakeTeamStore) GetUserByUsername(_ context.Context, username string) (*domain.TeamUserInfo, error) {
+func (f *fakeTeamStore) GetUserByUsername(_ context.Context, username string) (*ports.TeamUserInfo, error) {
 	u, ok := f.users[username]
 	if !ok {
 		return nil, nil
@@ -141,13 +141,13 @@ func stripGitHubPrefix(id string) string {
 
 func addMember(s *fakeTeamStore, tenantID, userID, role string) {
 	username := stripGitHubPrefix(userID)
-	s.members[tenantID] = append(s.members[tenantID], domain.TeamMemberInfo{
+	s.members[tenantID] = append(s.members[tenantID], ports.TeamMemberInfo{
 		Username: username,
 		Email:    userID + "@test.com",
 		Role:     role,
 		JoinedAt: time.Now().UTC().Format(time.RFC3339),
 	})
-	s.users[username] = &domain.TeamUserInfo{
+	s.users[username] = &ports.TeamUserInfo{
 		ID:          userID,
 		Email:       userID + "@test.com",
 		DisplayName: username,
@@ -157,7 +157,7 @@ func addMember(s *fakeTeamStore, tenantID, userID, role string) {
 func storeWithOwner(tenantID, ownerUserID string) *fakeTeamStore {
 	s := newFakeTeamStore()
 	addMember(s, tenantID, ownerUserID, "owner")
-	s.users["newuser"] = &domain.TeamUserInfo{
+	s.users["newuser"] = &ports.TeamUserInfo{
 		ID:          "github-newuser",
 		Email:       "newuser@test.com",
 		DisplayName: "New User",
@@ -339,7 +339,7 @@ func TestTeamAdd(t *testing.T) {
 	// SECURITY R-01: privilege escalation — "owner" role must be rejected via API
 	t.Run("POST /api/v1/teams/members → 400 rejects owner role (privilege escalation)", func(t *testing.T) {
 		store := storeWithOwner("acme", "github-lucas")
-		store.users["github-hacker"] = &domain.TeamUserInfo{ID: "github-hacker", Email: "h@x.com"}
+		store.users["github-hacker"] = &ports.TeamUserInfo{ID: "github-hacker", Email: "h@x.com"}
 		handler := teams.NewTeamHandler(store)
 
 		body := `{"username":"hacker","role":"owner"}`
@@ -512,7 +512,7 @@ func TestTeamUpdateRole(t *testing.T) {
 
 	t.Run("PATCH /api/v1/teams/members/{username} → 403 when admin tries to change role", func(t *testing.T) {
 		store := storeWithOwnerAndAdmin("acme", "github-lucas", "github-admin")
-		store.members["acme"] = append(store.members["acme"], domain.TeamMemberInfo{
+		store.members["acme"] = append(store.members["acme"], ports.TeamMemberInfo{
 			Username: "bob",
 			Email:    "bob@test.com",
 			Role:     "member",

@@ -4,7 +4,7 @@
 // Attestation domain types — moved from routes/build_attestation.go per
 // T1.3 of deep-review-remediation-plan (closes find_arch_001 partial).
 
-package domain
+package ports
 
 import "context"
 

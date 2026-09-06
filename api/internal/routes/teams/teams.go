@@ -25,14 +25,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
-// ErrMemberNotFound is an alias for domain.ErrMemberNotFound (backward compatibility).
-var ErrMemberNotFound = domain.ErrMemberNotFound
+// ErrMemberNotFound is an alias for ports.ErrMemberNotFound (backward compatibility).
+var ErrMemberNotFound = ports.ErrMemberNotFound
 
 // validRoles defines the allowed team member roles.
 var validRoles = map[string]bool{
@@ -43,9 +43,9 @@ var validRoles = map[string]bool{
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
 type (
-	TeamMemberInfo = domain.TeamMemberInfo
-	TeamUserInfo   = domain.TeamUserInfo
-	TeamStore      = domain.TeamStore
+	TeamMemberInfo = ports.TeamMemberInfo
+	TeamUserInfo   = ports.TeamUserInfo
+	TeamStore      = ports.TeamStore
 )
 
 // TeamHandler provides HTTP handlers for team member operations.

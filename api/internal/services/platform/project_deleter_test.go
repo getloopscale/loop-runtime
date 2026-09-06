@@ -13,7 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // --- Test doubles for ProjectDeleter ---
@@ -242,7 +242,7 @@ func TestProjectDeleter_SingleEnv_FullCascade(t *testing.T) {
 		Sync:              sync,
 	})
 
-	result, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
+	result, err := deleter.Delete(context.Background(), ports.ProjectDeleteInput{
 		TenantID:      "tn-1",
 		ProjectID:     "proj-uuid",
 		ProjectName:   "my-app",
@@ -295,7 +295,7 @@ func TestProjectDeleter_AllEnvs_DeletesProjectRecord(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	result, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
+	result, err := deleter.Delete(context.Background(), ports.ProjectDeleteInput{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-uuid",
 		ProjectName: "my-app",
@@ -324,7 +324,7 @@ func TestProjectDeleter_GitOpsRemoveFails_ReturnsFatalError(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	_, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
+	_, err := deleter.Delete(context.Background(), ports.ProjectDeleteInput{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-uuid",
 		ProjectName: "my-app",
@@ -352,7 +352,7 @@ func TestProjectDeleter_NoEnvTargets_FallbackGitOpsCleanup(t *testing.T) {
 		Sync:           sync,
 	})
 
-	result, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
+	result, err := deleter.Delete(context.Background(), ports.ProjectDeleteInput{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-uuid",
 		ProjectName: "orphan-app",
@@ -385,7 +385,7 @@ func TestProjectDeleter_NilWorkflowCanceller_DoesNotPanic(t *testing.T) {
 		Sync:              nil, // nil-safe
 	})
 
-	_, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
+	_, err := deleter.Delete(context.Background(), ports.ProjectDeleteInput{
 		TenantID:    "tn-1",
 		ProjectID:   "proj-uuid",
 		ProjectName: "my-app",
@@ -409,7 +409,7 @@ func TestProjectDeleter_UsesProjectNameForGitOps(t *testing.T) {
 		GitOps:         gitops,
 	})
 
-	_, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
+	_, err := deleter.Delete(context.Background(), ports.ProjectDeleteInput{
 		TenantID:    "tn-1",
 		ProjectID:   "550e8400-e29b-41d4-a716-446655440000", // UUID
 		ProjectName: "my-real-app",                          // name
@@ -446,7 +446,7 @@ func TestProjectDeleter_CascadesReleaseCancel(t *testing.T) {
 		GitOps:         &fakeGitOpsDeleter{},
 	})
 
-	_, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
+	_, err := deleter.Delete(context.Background(), ports.ProjectDeleteInput{
 		TenantID:    "tn-1",
 		ProjectID:   "my-app",
 		ProjectName: "my-app",
@@ -480,7 +480,7 @@ func TestProjectDeleter_NilReleaseStore_NoPanic(t *testing.T) {
 		GitOps:         &fakeGitOpsDeleter{},
 		// ReleaseStore deliberately nil
 	})
-	if _, err := deleter.Delete(context.Background(), domain.ProjectDeleteInput{
+	if _, err := deleter.Delete(context.Background(), ports.ProjectDeleteInput{
 		TenantID: "tn-1", ProjectID: "p", ProjectName: "p", Environment: "production",
 	}); err != nil {
 		t.Fatalf("unexpected error: %v", err)

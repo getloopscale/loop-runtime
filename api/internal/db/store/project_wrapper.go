@@ -15,7 +15,7 @@ package store
 //
 // Invariants preserved:
 //   - 23505 unique_violation on (tenant_id, name) →
-//     domain.ErrProjectExists (legacy contract; isPGUniqueViolation
+//     ports.ErrProjectExists (legacy contract; isPGUniqueViolation
 //     covers both raw pgconn.PgError + UniqueViolationError paths)
 //   - EnsureProject idempotent (ON CONFLICT DO NOTHING)
 //   - GetByName NoRows → (nil, nil)
@@ -33,7 +33,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -51,14 +51,14 @@ func GenerateProjectID() string {
 }
 
 // CreateProject inserts a new project. 23505 unique_violation →
-// domain.ErrProjectExists.
+// ports.ErrProjectExists.
 //
 // M4 (account-level tenancy, Phase 2): when a ProjectCapChecker is wired, the
 // per-Account project cap is enforced atomically. Unlimited plans (cap < 0) skip
 // the lock+count (EC-6); bounded plans take a per-account advisory lock so the
 // count+insert cannot race (two concurrent creations at the boundary can never
 // both succeed). A nil checker leaves creation unenforced (dev/tests).
-func (s *PostgresProjectStore) CreateProject(ctx context.Context, input domain.CreateProjectInput) (domain.ProjectResult, error) {
+func (s *PostgresProjectStore) CreateProject(ctx context.Context, input ports.CreateProjectInput) (ports.ProjectResult, error) {
 	if s.capChecker == nil {
 		return s.insertProject(ctx, input)
 	}
@@ -71,11 +71,11 @@ func (s *PostgresProjectStore) CreateProject(ctx context.Context, input domain.C
 }
 
 // insertProject is the non-enforced insert (nil checker / unlimited plan), via
-// the sqlc bridge. 23505 → domain.ErrProjectExists.
-func (s *PostgresProjectStore) insertProject(ctx context.Context, input domain.CreateProjectInput) (domain.ProjectResult, error) {
+// the sqlc bridge. 23505 → ports.ErrProjectExists.
+func (s *PostgresProjectStore) insertProject(ctx context.Context, input ports.CreateProjectInput) (ports.ProjectResult, error) {
 	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
-		return domain.ProjectResult{}, fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", s.DB)
+		return ports.ProjectResult{}, fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", s.DB)
 	}
 	q := generated.New()
 
@@ -87,12 +87,12 @@ func (s *PostgresProjectStore) insertProject(ctx context.Context, input domain.C
 		CreatedBy: input.CreatedBy,
 	}); err != nil {
 		if db.IsPGUniqueViolation(err) {
-			return domain.ProjectResult{}, domain.ErrProjectExists
+			return ports.ProjectResult{}, ports.ErrProjectExists
 		}
-		return domain.ProjectResult{}, fmt.Errorf("project store: insert failed: %w", err)
+		return ports.ProjectResult{}, fmt.Errorf("project store: insert failed: %w", err)
 	}
 
-	return domain.ProjectResult{ID: id, Name: input.Name, TeamID: input.TenantID}, nil
+	return ports.ProjectResult{ID: id, Name: input.Name, TeamID: input.TenantID}, nil
 }
 
 // resolveAccountAndLock resolves the tenant's Account (tenants.account_id, NOT
@@ -179,7 +179,7 @@ func enforceProjectCapTx(ctx context.Context, tx db.DBTX, crossTenant db.DBTX, a
 // transaction holds a per-account advisory lock across the count + insert, so two
 // concurrent creations at the cap boundary cannot both succeed (the count is
 // re-read under the lock). cap == 0 (no limit configured) fails closed.
-func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input domain.CreateProjectInput, plan string, cap int) (domain.ProjectResult, error) {
+func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input ports.CreateProjectInput, plan string, cap int) (ports.ProjectResult, error) {
 	adapter, ok := s.DB.(*db.PgxAdapter)
 	if !ok || adapter.Pool == nil {
 		// A cap checker is wired (enforcement intended) but the store has no pgx
@@ -187,22 +187,22 @@ func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input do
 		// on the quota boundary rather than silently bypass the cap: a non-pgx handle
 		// here is a wiring bug, not a legitimate dev path (the nil-checker branch in
 		// CreateProject already handles the unenforced dev case).
-		return domain.ProjectResult{}, fmt.Errorf("project store: cap enforcement requires a pgx pool, got DBTX %T", s.DB)
+		return ports.ProjectResult{}, fmt.Errorf("project store: cap enforcement requires a pgx pool, got DBTX %T", s.DB)
 	}
 
 	pgtx, err := adapter.Pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		return domain.ProjectResult{}, fmt.Errorf("project store: begin tx: %w", err)
+		return ports.ProjectResult{}, fmt.Errorf("project store: begin tx: %w", err)
 	}
 	defer func() { _ = pgtx.Rollback(ctx) }() // no-op after a successful Commit
 	tx := &db.PgxTxAdapter{Tx: pgtx}
 
 	accountID, err := resolveAccountAndLock(ctx, tx, input.TenantID)
 	if err != nil {
-		return domain.ProjectResult{}, err
+		return ports.ProjectResult{}, err
 	}
 	if err := enforceProjectCapTx(ctx, tx, s.crossTenant, accountID, plan, cap); err != nil {
-		return domain.ProjectResult{}, err
+		return ports.ProjectResult{}, err
 	}
 
 	id := GenerateProjectID()
@@ -211,15 +211,15 @@ func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input do
 		id, input.TenantID, input.Name, input.CreatedBy,
 	); err != nil {
 		if db.IsPGUniqueViolation(err) {
-			return domain.ProjectResult{}, domain.ErrProjectExists
+			return ports.ProjectResult{}, ports.ErrProjectExists
 		}
-		return domain.ProjectResult{}, fmt.Errorf("project store: insert failed: %w", err)
+		return ports.ProjectResult{}, fmt.Errorf("project store: insert failed: %w", err)
 	}
 
 	if err := pgtx.Commit(ctx); err != nil {
-		return domain.ProjectResult{}, fmt.Errorf("project store: commit: %w", err)
+		return ports.ProjectResult{}, fmt.Errorf("project store: commit: %w", err)
 	}
-	return domain.ProjectResult{ID: id, Name: input.Name, TeamID: input.TenantID}, nil
+	return ports.ProjectResult{ID: id, Name: input.Name, TeamID: input.TenantID}, nil
 }
 
 // EnsureProject creates a project if it doesn't exist (idempotent).
@@ -346,7 +346,7 @@ func (s *PostgresProjectStore) ensureProjectCapped(ctx context.Context, tx db.DB
 
 // ListByTenant returns all projects for a tenant, ordered by name.
 // Empty slice (not nil) when the tenant has no projects.
-func (s *PostgresProjectStore) ListByTenant(ctx context.Context, tenantID string) ([]domain.ProjectResult, error) {
+func (s *PostgresProjectStore) ListByTenant(ctx context.Context, tenantID string) ([]ports.ProjectResult, error) {
 	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", s.DB)
@@ -357,9 +357,9 @@ func (s *PostgresProjectStore) ListByTenant(ctx context.Context, tenantID string
 	if err != nil {
 		return nil, fmt.Errorf("project store: list by tenant: %w", err)
 	}
-	results := make([]domain.ProjectResult, 0, len(rows))
+	results := make([]ports.ProjectResult, 0, len(rows))
 	for _, r := range rows {
-		out := domain.ProjectResult{
+		out := ports.ProjectResult{
 			ID:        r.ID,
 			Name:      r.Name,
 			TeamID:    r.TenantID,
@@ -381,7 +381,7 @@ func (s *PostgresProjectStore) ListByTenant(ctx context.Context, tenantID string
 // dashboard ProjectStatus enum via
 // pkg/enforcement.MapBuildStatusToProjectStatus (exhaustive 7-state
 // switch per EC-1 absorption).
-func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tenantID string) ([]domain.ProjectSummary, error) {
+func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tenantID string) ([]ports.ProjectSummary, error) {
 	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", s.DB)
@@ -392,9 +392,9 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 	if err != nil {
 		return nil, fmt.Errorf("project store: list by tenant with summary: %w", err)
 	}
-	results := make([]domain.ProjectSummary, 0, len(rows))
+	results := make([]ports.ProjectSummary, 0, len(rows))
 	for _, r := range rows {
-		out := domain.ProjectSummary{
+		out := ports.ProjectSummary{
 			ID:                 r.ID,
 			Name:               r.Name,
 			TeamID:             r.TenantID,
@@ -460,7 +460,7 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 
 // GetByName retrieves a project by tenant and name. Returns (nil,
 // nil) when not found (legacy contract).
-func (s *PostgresProjectStore) GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error) {
+func (s *PostgresProjectStore) GetByName(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error) {
 	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", s.DB)
@@ -477,7 +477,7 @@ func (s *PostgresProjectStore) GetByName(ctx context.Context, tenantID, name str
 		}
 		return nil, fmt.Errorf("project store: get by name: %w", err)
 	}
-	result := &domain.ProjectResult{
+	result := &ports.ProjectResult{
 		ID:        row.ID,
 		Name:      row.Name,
 		TeamID:    row.TenantID,

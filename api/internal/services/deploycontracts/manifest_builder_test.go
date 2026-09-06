@@ -9,17 +9,17 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // --- Test doubles ---
 
 type fakeCustomDomainQuerier struct {
-	domains map[string][]domain.CustomDomain
+	domains map[string][]ports.CustomDomain
 	err     error
 }
 
-func (f *fakeCustomDomainQuerier) ListActiveByApp(_ context.Context, tenant, project, app, env string) ([]domain.CustomDomain, error) {
+func (f *fakeCustomDomainQuerier) ListActiveByApp(_ context.Context, tenant, project, app, env string) ([]ports.CustomDomain, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -67,7 +67,7 @@ func TestBuildManifestApps_NoDomainStore(t *testing.T) {
 
 func TestBuildManifestApps_WithCustomDomains(t *testing.T) {
 	domainStore := &fakeCustomDomainQuerier{
-		domains: map[string][]domain.CustomDomain{
+		domains: map[string][]ports.CustomDomain{
 			"tn-1-my-app-api-production": {
 				{ID: "d1", Domain: "api.example.com", TenantID: "tn-1", ProjectName: "my-app"},
 				{ID: "d2", Domain: "api2.example.com", TenantID: "tn-1", ProjectName: "my-app"},
@@ -98,7 +98,7 @@ func TestBuildManifestApps_WithCustomDomains(t *testing.T) {
 
 func TestBuildManifestApps_ExcludesDomain(t *testing.T) {
 	domainStore := &fakeCustomDomainQuerier{
-		domains: map[string][]domain.CustomDomain{
+		domains: map[string][]ports.CustomDomain{
 			"tn-1-my-app-api-production": {
 				{ID: "d1", Domain: "keep.example.com"},
 				{ID: "d2", Domain: "exclude.example.com"},

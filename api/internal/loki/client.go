@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
@@ -41,8 +41,8 @@ func NewClient(baseURL string, httpClient *http.Client, logger *slog.Logger) *Cl
 }
 
 // QueryBuildLogs queries Loki for logs of a specific build workflow.
-// Implements domain.LogQuerier.
-func (c *Client) QueryBuildLogs(ctx context.Context, buildID string, opts domain.LogQueryOpts) ([]domain.LogEntry, error) {
+// Implements ports.LogQuerier.
+func (c *Client) QueryBuildLogs(ctx context.Context, buildID string, opts ports.LogQueryOpts) ([]ports.LogEntry, error) {
 	// SEC-005 fix: Validate buildID and step to prevent LogQL injection.
 	// Only allow alphanumeric, hyphens, and underscores.
 	if !isValidLogParam(buildID) {
@@ -145,8 +145,8 @@ type lokiStream struct {
 }
 
 // parseLokiStreams converts Loki stream results into LogEntry slices.
-func parseLokiStreams(resp lokiQueryResponse) []domain.LogEntry {
-	var entries []domain.LogEntry
+func parseLokiStreams(resp lokiQueryResponse) []ports.LogEntry {
+	var entries []ports.LogEntry
 
 	for _, stream := range resp.Data.Result {
 		step := stream.Stream["step"]
@@ -164,7 +164,7 @@ func parseLokiStreams(resp lokiQueryResponse) []domain.LogEntry {
 
 			ts := parseNanosecondTimestamp(nsTimestamp)
 
-			entries = append(entries, domain.LogEntry{
+			entries = append(entries, ports.LogEntry{
 				Step:      step,
 				Stream:    streamType,
 				Content:   content,
@@ -242,7 +242,7 @@ func buildRuntimeLogQL(queryKey string) (string, error) {
 
 // QueryBuildLogsSince queries Loki for logs newer than sinceNano (nanosecond timestamp).
 // Used by the log streaming handler for incremental polling.
-// Implements domain.StreamLogQuerier.
+// Implements ports.StreamLogQuerier.
 //
 // The queryKey can be:
 //   - A build ID (e.g., "bld-abc123") for build logs
@@ -251,7 +251,7 @@ func buildRuntimeLogQL(queryKey string) (string, error) {
 //   - A runtime key "runtime:{tenant}:{env}:{project}:{app}" with an
 //     optional 5th segment (Beta Logs Gate Criterion 3) — when {app}
 //     is non-empty the LogQL selector includes `app="<value>"`.
-func (c *Client) QueryBuildLogsSince(ctx context.Context, queryKey string, sinceNano int64, limit int) ([]domain.LogEntry, error) {
+func (c *Client) QueryBuildLogsSince(ctx context.Context, queryKey string, sinceNano int64, limit int) ([]ports.LogEntry, error) {
 	var query string
 
 	// Parse runtime key format: "runtime:{tenant}:{env}:{project}" or

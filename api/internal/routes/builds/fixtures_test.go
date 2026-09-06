@@ -9,34 +9,34 @@ package builds
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 type fakeProjectStore struct {
-	projects       []domain.ProjectResult
-	projectSummary []domain.ProjectSummary // T2.1: per-project summary fixture
-	project        *domain.ProjectResult
-	createResult   domain.ProjectResult
+	projects       []ports.ProjectResult
+	projectSummary []ports.ProjectSummary // T2.1: per-project summary fixture
+	project        *ports.ProjectResult
+	createResult   ports.ProjectResult
 	createErr      error
 	deleteErr      error
 	summaryErr     error
 }
 
-func (f *fakeProjectStore) CreateProject(_ context.Context, input domain.CreateProjectInput) (domain.ProjectResult, error) {
+func (f *fakeProjectStore) CreateProject(_ context.Context, input ports.CreateProjectInput) (ports.ProjectResult, error) {
 	if f.createErr != nil {
-		return domain.ProjectResult{}, f.createErr
+		return ports.ProjectResult{}, f.createErr
 	}
 	return f.createResult, nil
 }
 
-func (f *fakeProjectStore) GetByName(_ context.Context, _, name string) (*domain.ProjectResult, error) {
+func (f *fakeProjectStore) GetByName(_ context.Context, _, name string) (*ports.ProjectResult, error) {
 	if f.project != nil && f.project.Name == name {
 		return f.project, nil
 	}
 	return nil, nil
 }
 
-func (f *fakeProjectStore) ListByTenant(_ context.Context, _ string) ([]domain.ProjectResult, error) {
+func (f *fakeProjectStore) ListByTenant(_ context.Context, _ string) ([]ports.ProjectResult, error) {
 	return f.projects, nil
 }
 
@@ -45,16 +45,16 @@ func (f *fakeProjectStore) ListByTenant(_ context.Context, _ string) ([]domain.P
 // Otherwise, auto-promote f.projects (legacy fixture field) to
 // summaries with zero env_count + idle status — preserves backward
 // compat for the ~12 tests that wrote f.projects directly.
-func (f *fakeProjectStore) ListByTenantWithSummary(_ context.Context, _ string) ([]domain.ProjectSummary, error) {
+func (f *fakeProjectStore) ListByTenantWithSummary(_ context.Context, _ string) ([]ports.ProjectSummary, error) {
 	if f.summaryErr != nil {
 		return nil, f.summaryErr
 	}
 	if f.projectSummary != nil {
 		return f.projectSummary, nil
 	}
-	out := make([]domain.ProjectSummary, 0, len(f.projects))
+	out := make([]ports.ProjectSummary, 0, len(f.projects))
 	for _, p := range f.projects {
-		out = append(out, domain.ProjectSummary{
+		out = append(out, ports.ProjectSummary{
 			ID:               p.ID,
 			Name:             p.Name,
 			TeamID:           p.TeamID,

@@ -10,7 +10,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/github/webhook"
 )
 
@@ -18,7 +18,7 @@ import (
 // PR webhook handler needs. Defined narrowly per ISP so the deployer can
 // be tested without standing up the full service.
 type PreviewLifecycleService interface {
-	CreatePreview(ctx context.Context, req domain.CreatePreviewRequest) (*domain.Preview, error)
+	CreatePreview(ctx context.Context, req ports.CreatePreviewRequest) (*ports.Preview, error)
 	DeletePreviewByPR(ctx context.Context, tenantID, projectID string, prNumber int) error
 }
 
@@ -167,7 +167,7 @@ func (d *PreviewDeployer) handleCreate(
 		return nil
 	}
 
-	req := domain.CreatePreviewRequest{
+	req := ports.CreatePreviewRequest{
 		ProjectID:      repo.ProjectName,
 		PRNumber:       event.Number,
 		Branch:         branch,
@@ -240,7 +240,7 @@ func (d *PreviewDeployer) handleClosed(
 }
 
 // previewID returns the preview ID for logging; safe on nil.
-func previewID(p *domain.Preview) string {
+func previewID(p *ports.Preview) string {
 	if p == nil {
 		return ""
 	}
