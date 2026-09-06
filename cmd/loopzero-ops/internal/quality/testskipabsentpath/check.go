@@ -203,7 +203,23 @@
 //     that fires when the path IS there, in either arm -- remains deliberately
 //     not a site, because no missing path can cause it.
 //
-//   - The GUARD POSITION reaches a body wherever a NAME can carry one. A call to
+//   - THE OPENING SENTENCE OF THIS BULLET USED TO READ "the GUARD POSITION
+//     reaches a body wherever a NAME can carry one". An audit measured that false
+//     on 2026-09-05, the day it was written: EIGHT spellings walk past in total
+//     silence, and one local binding is enough to produce most of them --
+//     `f := presentFn(); f()` where `presentFn()()` is red, `p := s.probe; p()`
+//     where `s.probe()` is UNRESOLVED, `f := probes[k]; f()` where `probes[k]()`
+//     is UNRESOLVED. `unreadableFuncValue` accepts an *ast.Ident only when the
+//     name is in `pkg.rebound` or `pkg.consts`, and a LOCAL name is in neither,
+//     so the fallback that turns a silence into a verdict never runs for the one
+//     shape a reader reaches for first when factoring a guard out. Two more:
+//     a field declared through a NAMED func type (`type predicate func() bool`)
+//     is never indexed, and a parenthesised call `(cliPresent)()` is not routed
+//     to the resolver that could read it. Tracked as B-193, with the audit's
+//     spellings as its oracle.
+//
+//     So the honest opening is narrower: the GUARD POSITION reaches a body when a
+//     PACKAGE-LEVEL name carries one, or when the call is written directly. A call to
 //     a function declared in this package, a method whose name is unambiguous in
 //     it, and -- since B-189 -- a name bound to a func VALUE: a package alias
 //     `var present = cliSrcPresent`, a package `var f = func() bool {...}`, a
@@ -221,7 +237,20 @@
 //     injected into infra/tests/config/: 708 files, 144 skip calls, 11
 //     path-guarded, PASS, exit 0, with a dead t.Fatal under each of the six.
 //     The last three spellings above were measured walking past the FIRST fix
-//     for the other six, in the same silence, on the same day.
+//     for the other six, in the same silence, on the same day. A fourth round of
+//     the same audit then walked past THIS fix eight more times, which is why the
+//     opening sentence of this bullet is now a smaller claim than the work that
+//     earned it.
+//
+//     ONE MORE THING THE CODE DOES THAT THIS COMMENT USED TO DENY: `pkg.rebound`
+//     is set by ANY `=` to an identifier anywhere in the package, locals
+//     included, while `pkgScope`'s own doc calls it "the package-level names that
+//     get a second value after their declaration". So a package alias that is
+//     never reassigned is downgraded to UNRESOLVED because some unrelated
+//     function happens to shadow its name -- and the printed reason, "name
+//     rebound to another func value", is a confident statement about a rebinding
+//     that did not happen. Telling the two apart needs scope tracking this
+//     resolver does not do; B-193 owns it.
 //
 //     WHAT A FUNC VALUE STILL COSTS, and it costs a verdict rather than a
 //     silence. Three shapes are UNRESOLVED and red:
