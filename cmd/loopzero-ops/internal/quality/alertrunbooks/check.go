@@ -253,6 +253,28 @@ func conferirLinks(root, arquivo, conteudo string, out *Outcome) {
 			continue
 		}
 		repo, caminho := b[2], b[3]
+		// A ancora (e um eventual query) NAO fazem parte do caminho em disco. `blobRe`
+		// captura tudo depois do branch num grupo so', entao sem este corte o `Stat`
+		// pergunta por `runbook-security-alerts.md#loopzerounsignedreleasepushed` — nome que
+		// nenhum arquivo tem — e um runbook que existe e' acusado de morto.
+		//
+		// Medido em 2026-09-04 (B-067): os OITO links mortos que este gate reportava na
+		// arvore eram os oito falsos, e quatro deles eram justamente os runbooks de
+		// seguranca entregues pela bala 2 do proprio item. Como `LinksMortos` nao-vazio
+		// forca `Pass = false`, o gate reprovava por defeito nenhum.
+		//
+		// O caminho vazio depois do corte continua morto: `Stat` na raiz responderia
+		// "existe" para um `runbook_url` que nao aponta a arquivo nenhum.
+		if i := strings.IndexAny(caminho, "#?"); i >= 0 {
+			caminho = caminho[:i]
+		}
+		if caminho == "" {
+			out.LinksMortos = append(out.LinksMortos, LinkMorto{
+				Arquivo: arquivo, Alerta: alerta, URL: url,
+				Motivo: "runbook_url sem caminho de arquivo",
+			})
+			continue
+		}
 		if repo != repoCanonico {
 			// Outro repositorio: o caminho nao existe nesta arvore por definicao, e
 			// afirmar que ele nao existe NA DE LA' exigiria rede. Contado, nao acusado.
