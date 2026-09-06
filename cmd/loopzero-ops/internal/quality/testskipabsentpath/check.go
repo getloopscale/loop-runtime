@@ -234,6 +234,15 @@
 //     field read in the condition of a tag-less switch case. All three are
 //     pinned in localbinding_test.go.
 //
+//     THAT ATTEMPT WAS NOT THE LAST WORD, and the sentence above should not be
+//     read as coverage. A further audit walked past the same build five more
+//     times on 2026-09-06: FOUR were a local whose value an `=` changed from
+//     somewhere the walk could not promise had run, and one was a guard that came
+//     out of a `range` over the very table whose indexed spelling was already red.
+//     Both are the round described under "A LOCAL IS FOLLOWED ONLY WHERE
+//     STATEMENT ORDER DECIDES IT" below. A reopening attempt measures what it
+//     tried, never what it did not.
+//
 //     So: a call to a function declared in this package, a method whose name is
 //     unambiguous in it, and -- since B-189 -- a name bound to a func VALUE: a package alias
 //     `var present = cliSrcPresent`, a package `var f = func() bool {...}`, a
@@ -299,6 +308,48 @@
 //     f()` cost the same verdict the spelling without the binding costs, which is
 //     the whole of B-193's first root cause: before it, the binding bought
 //     silence for one line of ordinary refactoring.
+//
+//     A LOCAL IS FOLLOWED ONLY WHERE STATEMENT ORDER DECIDES IT, which is the
+//     second round of B-193 and the one correction here that was not a silence.
+//     This walker is textual: it binds names in the order it meets them, and the
+//     last `=` it passed won. That is right where every statement between the
+//     declaration and the guard certainly runs -- `f := alwaysTrue; f =
+//     cliPresent; if !f() {...}` reads cliPresent, and a test pins it. It is a
+//     GUESS where the assignment sits somewhere that may not have run: an if arm,
+//     a loop or switch body, or a function literal that `defer`, `t.Cleanup`, `go`
+//     or a helper runs later or never.
+//
+//     Measured 2026-09-06 with a binary built from this package, in
+//     infra/tests/config/: THREE such spellings were SILENT at exit 0 -- a
+//     `defer` closure, a `t.Cleanup` closure and a plain if arm, each assigning a
+//     value that touches no filesystem, so the name stopped clearing the bar the
+//     guard had cleared one line above -- and a FOURTH was worse than silent.
+//     `f := cliPresent; if cond { f = otherPresent }; if !f() {...}` reported
+//     ABSENT naming otherPresent's PATH, chosen for no better reason than being
+//     the last assignment the walk went past. That is the confident verdict about
+//     a function that never ran which this comment refuses three paragraphs up for
+//     package-level names, done by the locals map.
+//
+//     So the doubt is recorded rather than resolved: a name an `=` reaches from a
+//     branch or a closure is UNRESOLVED, over the same bar every unreadable guard
+//     clears -- something bound under that name has to touch the filesystem, so
+//     `dialFn := dialCluster; if c { dialFn = alsoDial }` stays out. Branch
+//     awareness is not on offer here and a wrong path stated confidently is worse
+//     than saying so.
+//
+//     THE SAME DOUBT ON A PATH LOCAL was the door the func-value fix left open,
+//     and a reopening attempt against that fix walked straight through it:
+//     `p := cliDir; if c { p = otherDir }; os.Stat(p)` reported ABSENT naming
+//     otherDir, and the `defer` spelling reported it for an assignment that had
+//     provably NOT run when os.Stat read p -- not a guess between two candidates
+//     but the one answer it could not be. resolve() carries the same refusal now.
+//
+//     A GUARD THAT COMES OUT OF A RANGE is the table case wearing other
+//     punctuation. `probes[k]()` with a key this gate cannot read is UNRESOLVED
+//     and red, while `for _, f := range probes { if !f() {...} }` over THE SAME
+//     map was silent. The range value is bound to the entry it is -- an index this
+//     gate cannot read -- so both spellings reach one reader and one bar, rather
+//     than two code paths whose gap is what this item keeps reopening on.
 //
 //     ONE SHAPE OF THAT FOLLOWING IS DECLARED, NOT DONE: a func value the CALLER
 //     handed over, which the helper then calls WITH ARGUMENTS. The value has to
@@ -1239,13 +1290,18 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver, seen map[string]bool, depth int
 	// probe map is shared with the enclosing body on purpose: a probe taken
 	// outside the closure and tested inside it is one guard, and scoping them
 	// apart would lose it.
+	// A literal's body is walked UNDER CONDITION: whoever received it decides
+	// whether it runs, and `defer func(){ f = other }()` and
+	// `t.Cleanup(func(){ f = other })` both run after the guard, not before it.
+	// Reading such an `=` as the name's live value is how both walked past in
+	// silence (B-193).
 	enterLits := func(e ast.Expr) {
 		if e == nil {
 			return
 		}
 		ast.Inspect(e, func(n ast.Node) bool {
 			if lit, ok := n.(*ast.FuncLit); ok && lit.Body != nil {
-				walk(lit.Body.List)
+				r.underCondition(func() { walk(lit.Body.List) })
 			}
 			return true
 		})
@@ -1290,29 +1346,46 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver, seen map[string]bool, depth int
 				if tgt, arm, ok := r.skipArm(s, local); ok {
 					sites = append(sites, r.newSite(tgt, skipPos(arm)))
 				}
-				if s.Body != nil {
-					walk(s.Body.List)
-				}
-				if s.Else != nil {
-					switch e := s.Else.(type) {
-					case *ast.BlockStmt:
-						walk(e.List)
-					case *ast.IfStmt:
-						walk([]ast.Stmt{e})
+				// Both arms are walked under condition: at most one of them runs,
+				// so an `=` in either is a value the name MAY hold, never the one
+				// the statements after the if certainly read.
+				r.underCondition(func() {
+					if s.Body != nil {
+						walk(s.Body.List)
 					}
-				}
+					if s.Else != nil {
+						switch e := s.Else.(type) {
+						case *ast.BlockStmt:
+							walk(e.List)
+						case *ast.IfStmt:
+							walk([]ast.Stmt{e})
+						}
+					}
+				})
 			case *ast.BlockStmt:
+				// A bare block always runs, so it does not raise the doubt.
 				walk(s.List)
 			case *ast.LabeledStmt:
 				walk([]ast.Stmt{s.Stmt})
 			case *ast.ForStmt:
-				if s.Body != nil {
-					walk(s.Body.List)
-				}
+				r.underCondition(func() {
+					if s.Body != nil {
+						walk(s.Body.List)
+					}
+				})
 			case *ast.RangeStmt:
-				if s.Body != nil {
-					walk(s.Body.List)
-				}
+				// The binding is scoped to the body when the range DECLARES it.
+				// Binding it into the frame permanently let it answer for the
+				// outer name after the loop, and a guard reading that name went
+				// from a correct verdict to SILENCE -- the class this gate exists
+				// to close, introduced by a fix for it. Measured 2026-09-06.
+				restore := r.bindRangeValue(s)
+				r.underCondition(func() {
+					if s.Body != nil {
+						walk(s.Body.List)
+					}
+				})
+				restore()
 			case *ast.SwitchStmt:
 				local := probes
 				if init, ok := s.Init.(*ast.AssignStmt); ok {
@@ -1323,20 +1396,26 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver, seen map[string]bool, depth int
 					}
 				}
 				sites = append(sites, r.switchSkips(s, local)...)
-				if s.Body != nil {
-					walk(s.Body.List)
-				}
+				r.underCondition(func() {
+					if s.Body != nil {
+						walk(s.Body.List)
+					}
+				})
 			case *ast.TypeSwitchStmt:
 				// `switch v := x.(type)` never carries a path condition, but its
 				// clauses carry statements, and this walker used to match only
 				// *ast.SwitchStmt -- so a guard in one was not read at all.
-				if s.Body != nil {
-					walk(s.Body.List)
-				}
+				r.underCondition(func() {
+					if s.Body != nil {
+						walk(s.Body.List)
+					}
+				})
 			case *ast.SelectStmt:
-				if s.Body != nil {
-					walk(s.Body.List)
-				}
+				r.underCondition(func() {
+					if s.Body != nil {
+						walk(s.Body.List)
+					}
+				})
 			case *ast.CaseClause:
 				walk(s.Body)
 			case *ast.CommClause:
@@ -1356,6 +1435,64 @@ func guardedSkips(fd *ast.FuncDecl, r *resolver, seen map[string]bool, depth int
 	}
 	walk(fd.Body.List)
 	return sites
+}
+
+// bindRangeValue records the VALUE variable of a `for _, f := range probes` as
+// what it is: an entry of the ranged container, chosen by an index this gate
+// cannot read.
+//
+// It is bound to a synthetic IndexExpr over the ranged expression so the whole
+// question routes to the readers `probes[k]()` already goes to -- funcValue
+// refuses it because the index is not a literal, and unreadableFuncValue turns
+// that refusal into the UNRESOLVED verdict, over the same containerReachesProbe
+// bar. Writing a second reader for the range spelling would be a second code
+// path to keep in step with the first, and the gap between two such paths is
+// what this item keeps reopening on: `probes[k]()` was UNRESOLVED and red while
+// `for _, f := range probes { f() }` over THE SAME map was silent (B-193).
+//
+// A `for _, f = range probes` over a name the frame ALREADY bound is recorded
+// as rebound on top of that: a range runs its body zero times over an empty
+// container, so which of the two values a later guard reads is the same
+// undecidable question, asked by the other door.
+//
+// It returns the UNDO, and which door the range used decides whether there is one.
+// `for _, f := range xs` DECLARES a variable whose scope is the loop: after the
+// loop Go reads whatever `f` held before, so the binding must not survive. Letting
+// it survive is what turned a live guard silent -- `f := cliPresent; for _, f :=
+// range ...; if !f()` reported the right path before the range spelling was taught
+// at all, and nothing after it.
+//
+// `for _, f = range xs` assigns to a name the frame already holds, and THAT does
+// outlive the loop: a range runs its body zero times over an empty container, so
+// which of the two values a later guard reads is the undecidable question the
+// rebound marking turns into UNRESOLVED. No undo for that one.
+func (r *resolver) bindRangeValue(s *ast.RangeStmt) func() {
+	noop := func() {}
+	if s.Value == nil || s.X == nil {
+		return noop
+	}
+	id, ok := s.Value.(*ast.Ident)
+	if !ok || id.Name == "_" {
+		return noop
+	}
+	prev, had := r.locals[id.Name]
+	if had && s.Tok == token.ASSIGN {
+		if r.reboundLocals == nil {
+			r.reboundLocals = map[string]bool{}
+		}
+		r.reboundLocals[id.Name] = true
+	}
+	r.bind(id.Name, &ast.IndexExpr{X: s.X, Index: ast.NewIdent("<range>")}, r.file)
+	if s.Tok != token.DEFINE {
+		return noop
+	}
+	return func() {
+		if had {
+			r.locals[id.Name] = prev
+			return
+		}
+		delete(r.locals, id.Name)
+	}
 }
 
 // withProbe copies a probe map with one more binding, so an if's own init does
@@ -1947,6 +2084,12 @@ func (r *resolver) heldExpr(name string) (boundExpr, *resolver, bool, bool) {
 		return boundExpr{expr: bc.expr, file: bc.scope.file}, bc.scope, true, true
 	}
 	if b, ok := r.locals[name]; ok {
+		// A local an `=` reached from a branch or a closure is not followed, for
+		// the reason a rebound package name is not: its last binding is where the
+		// walk stopped, not where the guard read (B-193).
+		if r.reboundLocals[name] {
+			return boundExpr{}, nil, false, false
+		}
 		return b, r.inFile(b.file), false, true
 	}
 	if b, ok := r.pkg.consts[name]; ok && !r.pkg.rebound[name] {
@@ -1968,6 +2111,16 @@ func (r *resolver) heldExpr(name string) (boundExpr, *resolver, bool, bool) {
 func (r *resolver) unreadableFuncValue(fn ast.Expr, depth int) (guardTarget, bool, bool) {
 	switch x := unparen(fn).(type) {
 	case *ast.Ident:
+		// A LOCAL an `=` reached from a branch or a closure is answered first, and
+		// answered about the values the frame actually wrote. It is checked before
+		// the package indexes because a local SHADOWS them: asking pkg.rebound
+		// about a name only some function reuses is asking about a different name.
+		if r.reboundLocals[x.Name] {
+			if !r.localReachesProbe(x.Name, depth) {
+				return guardTarget{}, false, false
+			}
+			return guardTarget{desc: x.Name + "() (local assigned from a branch or a closure in this function; which value the guard reads is not decidable here)", unreadable: true}, false, true
+		}
 		reason := " (name rebound to another func value)"
 		if !r.pkg.rebound[x.Name] {
 			if _, declared := r.pkg.consts[x.Name]; !declared {
@@ -1980,12 +2133,29 @@ func (r *resolver) unreadableFuncValue(fn ast.Expr, depth int) (guardTarget, boo
 		}
 		return guardTarget{desc: x.Name + "()" + reason, unreadable: true}, false, true
 	case *ast.IndexExpr:
-		b, ok := r.bindingOf(x.X)
-		if !ok {
-			return guardTarget{}, false, false
+		// The container may be written INLINE rather than named:
+		// `for _, f := range []func() bool{cliPresent}` binds f to an IndexExpr
+		// whose X is the literal itself, and bindingOf only resolves names — so a
+		// guard inside that loop was silent. Pre-existing, and the same family the
+		// range spelling was taught for: found by testing the shape rather than
+		// the spelling.
+		var lit *ast.CompositeLit
+		var inFile string
+		if direct, isLit := unwrapCompositeLit(x.X); isLit {
+			lit, inFile = direct, r.file
+		} else {
+			b, ok := r.bindingOf(x.X)
+			if !ok {
+				return guardTarget{}, false, false
+			}
+			var okLit bool
+			lit, okLit = unwrapCompositeLit(b.expr)
+			if !okLit {
+				return guardTarget{}, false, false
+			}
+			inFile = b.file
 		}
-		lit, ok := unwrapCompositeLit(b.expr)
-		if !ok || !r.inFile(b.file).containerReachesProbe(lit, depth) {
+		if !r.inFile(inFile).containerReachesProbe(lit, depth) {
 			return guardTarget{}, false, false
 		}
 		return guardTarget{desc: r.describe(x) + "() (entry of a table of predicates)", unreadable: true}, false, true
@@ -2645,6 +2815,16 @@ func (r *resolver) funcValue(e ast.Expr, depth int) (helperDecl, string, bool) {
 			return bc.scope.funcValue(bc.expr, depth+1)
 		}
 		if b, ok := r.locals[x.Name]; ok {
+			// A LOCAL an `=` reached from a branch or a closure answers with none
+			// of its values. Which assignment the guard read is dataflow -- a
+			// branch that may not run, a closure that runs afterwards -- and this
+			// gate has none. Refused here so the caller reports UNRESOLVED,
+			// exactly as a rebound package-level name is two branches down. A
+			// name every statement before the guard certainly assigned is NOT in
+			// this set, and still resolves in order (B-193).
+			if r.reboundLocals[x.Name] {
+				return helperDecl{}, "", false
+			}
 			if h, key, ok := r.inFile(b.file).funcValue(b.expr, depth+1); ok {
 				return h, key, true
 			}
@@ -2762,7 +2942,8 @@ func (r *resolver) inFile(file string) *resolver {
 		return r
 	}
 	return &resolver{root: r.root, pkgDir: r.pkgDir, file: file, pkg: r.pkg,
-		locals: r.locals, boolPreds: r.boolPreds, condArgs: r.condArgs}
+		locals: r.locals, boolPreds: r.boolPreds, condArgs: r.condArgs,
+		localBinds: r.localBinds, reboundLocals: r.reboundLocals}
 }
 
 // unwrapCompositeLit reads `holder{...}` and `&holder{...}` alike.
@@ -2868,6 +3049,23 @@ type resolver struct {
 	// CALLER handed it, together with the caller's scope. It is how
 	// `skipUnless(t, cliPresent(), "...")` is read as the guard it is (B-188).
 	condArgs map[string]boundCond
+	// localBinds is every expression this frame is seen binding to a local name,
+	// in the order the walk met them. locals holds only the LAST; localBinds is
+	// what the probe BAR is asked over, so a name is judged on the values that
+	// were actually written to it rather than on the one the walk passed last.
+	//
+	// reboundLocals is the set of names an `=` reached from somewhere this frame
+	// cannot promise ran -- an if arm, a loop body, a deferred closure. For those
+	// the gate says UNRESOLVED instead of picking one, which is noteAssign's
+	// whole subject.
+	//
+	// condDepth is how deep the walk currently is inside such a place. It is on
+	// the resolver rather than threaded through the walker because bindAssign is
+	// reached from six statement cases and a seventh would have been the one that
+	// forgot.
+	localBinds    map[string][]boundExpr
+	reboundLocals map[string]bool
+	condDepth     int
 }
 
 // boundCond is a boolean expression carried across a call boundary: the
@@ -2887,12 +3085,101 @@ func (r *resolver) bind(name string, e ast.Expr, file string) {
 	if r.locals == nil {
 		r.locals = map[string]boundExpr{}
 	}
-	r.locals[name] = boundExpr{expr: e, file: file}
+	b := boundExpr{expr: e, file: file}
+	if r.localBinds == nil {
+		r.localBinds = map[string][]boundExpr{}
+	}
+	r.localBinds[name] = append(r.localBinds[name], b)
+	r.locals[name] = b
+}
+
+// noteAssign decides whether an `=` leaves this frame still able to say what a
+// name holds when the guard reads it.
+//
+// STATEMENT ORDER ANSWERS ONLY WHERE EVERY STATEMENT RUNS. `f := alwaysTrue; f
+// = cliPresent; if !f() {...}` is decidable and this gate reads it: the second
+// assignment is a plain statement of the function body, so it has certainly run
+// by the time the guard does, and the value the guard calls is the one it gets.
+// A test pins exactly that, and it refused an earlier, coarser version of this
+// rule that made every twice-bound name UNRESOLVED -- rightly, because that
+// answer was available (B-193).
+//
+// WHAT IS NOT DECIDABLE is an `=` the walk met somewhere that may not have run
+// before the guard: inside an if arm, a loop or switch body, or inside a
+// function literal that `defer`, `t.Cleanup` or any other call runs later or
+// never. Measured 2026-09-06, all four were SILENT and one was worse --
+// `f := cliPresent; if cond { f = otherPresent }; if !f() {...}` reported ABSENT
+// naming otherPresent's path, because the walk is textual and the last `=` it
+// passed won. That is a confident verdict about the wrong file, which this gate
+// refuses everywhere else it can name the refusal; naming it here is the whole
+// of this round.
+//
+// An unconditional `=` CLEARS the doubt rather than accumulating it: whatever a
+// branch did earlier, this one certainly overwrote it.
+func (r *resolver) noteAssign(a *ast.AssignStmt) {
+	if a.Tok != token.ASSIGN {
+		// `:=` declares. It is the name's first value in its own scope, not a
+		// second value for one that already had it.
+		return
+	}
+	for _, lhs := range a.Lhs {
+		id, ok := lhs.(*ast.Ident)
+		if !ok || id.Name == "_" {
+			continue
+		}
+		if r.condDepth == 0 {
+			delete(r.reboundLocals, id.Name)
+			continue
+		}
+		if _, had := r.locals[id.Name]; !had {
+			continue
+		}
+		if r.reboundLocals == nil {
+			r.reboundLocals = map[string]bool{}
+		}
+		r.reboundLocals[id.Name] = true
+	}
+}
+
+// underCondition walks a statement list whose execution this frame cannot
+// promise -- an if arm, a loop or switch body, a func literal someone else
+// decides when to run. An `=` met in there is a value the name MAY hold, and
+// noteAssign records it as the doubt it is.
+func (r *resolver) underCondition(walk func()) {
+	r.condDepth++
+	walk()
+	r.condDepth--
+}
+
+// localCandidates is every expression this frame put under a local name. It is
+// the bar for a name whose value the frame cannot pin down: the same bar every
+// unreadable guard here clears, asked over the values that were actually
+// written rather than over the one the walk happened to pass last.
+func (r *resolver) localCandidates(name string) []boundExpr {
+	return r.localBinds[name]
+}
+
+// localReachesProbe reports whether any value this frame bound to the name
+// resolves to a body that touches the filesystem. It is nameReachesProbe's
+// question asked of a LOCAL, and it is what keeps a rebound `dialFn` out of
+// this gate's business while a rebound `f := cliPresent` comes back UNRESOLVED.
+func (r *resolver) localReachesProbe(name string, depth int) bool {
+	for _, v := range r.localCandidates(name) {
+		h, key, ok := r.inFile(v.file).funcValue(v.expr, depth+1)
+		if !ok || h.decl.Body == nil {
+			continue
+		}
+		if reachesFilesystemProbe(h.decl.Body, r.pkg, map[string]bool{key: true}) {
+			return true
+		}
+	}
+	return false
 }
 
 // bindAssign records `p := "lit"`, `root, err := repoRoot()` and the
 // runtime.Caller idiom.
 func (r *resolver) bindAssign(a *ast.AssignStmt) {
+	r.noteAssign(a)
 	if len(a.Rhs) == 1 {
 		if call, ok := a.Rhs[0].(*ast.CallExpr); ok {
 			if isRuntimeCaller(call) {
@@ -2988,6 +3275,17 @@ func (r *resolver) resolve(e ast.Expr, inFile string, depth int) (string, resolv
 		return s, kindResolved
 	case *ast.Ident:
 		if b, ok := r.locals[x.Name]; ok {
+			// A PATH local carries the same doubt a func-value local does, and
+			// it was measured carrying it: `p := alphaDir; if cond { p = betaDir
+			// }; os.Stat(p)` reported ABSENT naming betaDir, and the `defer`
+			// spelling of the same thing reported betaDir for an assignment that
+			// had provably NOT run yet. The first is a guess, the second is
+			// simply wrong, and both wore the confident ABSENT verdict this gate
+			// reserves for a path it read. UNRESOLVED is the honest answer and it
+			// is still red (B-193).
+			if r.reboundLocals[x.Name] {
+				return "", kindUnresolved
+			}
 			return r.resolve(b.expr, b.file, depth+1)
 		}
 		if b, ok := r.pkg.consts[x.Name]; ok {
@@ -3127,6 +3425,14 @@ func (r *resolver) describe(e ast.Expr) string {
 	id, ok := e.(*ast.Ident)
 	if !ok {
 		return exprString(e)
+	}
+	// A name this frame bound from a branch or a closure has no single value to
+	// show. `locals` holds the last one the walk passed, and printing it as
+	// `p (= betaDir)` beside "could not resolve that expression" names one
+	// candidate with the confidence of a reading -- the same overreach the
+	// rebound REASON was corrected for. Say how many there were instead.
+	if r.reboundLocals[id.Name] {
+		return id.Name + " (assigned from a branch or a closure in this function; which value the guard reads is not decidable here)"
 	}
 	b, ok := r.locals[id.Name]
 	if !ok {
