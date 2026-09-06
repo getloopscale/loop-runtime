@@ -52,4 +52,3 @@ func TestOperatorMetricsRegistration_AllSplitBinariesBlankImportMetrics(t *testi
 		}
 	}
 }
-

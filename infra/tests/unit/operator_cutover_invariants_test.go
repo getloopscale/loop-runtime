@@ -24,6 +24,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func repoRoot() string {
@@ -47,12 +49,12 @@ func TestT01_AtomicCutoverScriptExists(t *testing.T) {
 	text := string(data)
 
 	for _, must := range []string{
-		"ZERO_READY_THRESHOLD_SEC",       // C6 watcher threshold
-		"validate-matrix.sh",              // pre-flight gate
-		"AUTO_ROLLBACK",                   // safety trap
-		"helmfile",                        // sync invocation
-		"--for=condition=Available",       // explicit Ready wait
-		"PRE_FLIGHT_PASSED",               // trap discipline
+		"ZERO_READY_THRESHOLD_SEC",  // C6 watcher threshold
+		"validate-matrix.sh",        // pre-flight gate
+		"AUTO_ROLLBACK",             // safety trap
+		"helmfile",                  // sync invocation
+		"--for=condition=Available", // explicit Ready wait
+		"PRE_FLIGHT_PASSED",         // trap discipline
 	} {
 		if !strings.Contains(text, must) {
 			t.Errorf("cutover script missing: %s", must)
@@ -102,18 +104,53 @@ func TestT05_RbacSubsetWiredInCI(t *testing.T) {
 	t.Skip("rbac-subset gate deleted T1.5 — replacement validator (hack/validate-rbac/) per ADR-0026 not yet shipped")
 }
 
-// T-06 — multi-cell.yml workflow exists for Phase 5 stages.
-func TestT06_MultiCellWorkflowExists(t *testing.T) {
-	// F27 (M23 audit 2026-07-10): GitHub Actions removed 2026-05-23 per
-	// CLAUDE.md § CI/CD. Phase 5 multi-cell gates now run via `task quality:*`.
-	path := filepath.Join(repoRoot(), ".github", "workflows", "multi-cell.yml")
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		t.Skipf("multi-cell.yml absent (GitHub Actions removed 2026-05-23); Phase 5 invariants now in task quality:*")
-	}
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("multi-cell.yml stat error: %v", err)
-	}
-}
+// T-06 was REMOVED, not skipped (B-182, applying the standard of B-169 and B-180).
+//
+// It stat'd `.github/workflows/multi-cell.yml` and skipped when the file was
+// absent. That file was deleted in 5b32b76f0 (2026-05-23), so the skip was the only
+// branch ever taken from that commit on, and the whole assertion was a single
+// os.Stat — meta-coverage over a file listing, the weakest kind there is, and the
+// same shape T-04 above was retired for.
+//
+// The skip message also made a CLAIM: "Phase 5 invariants now in task quality:*".
+// Measured 2026-09-06 by walking the deleted workflow's preflight job step by step
+// (`git show 5b32b76f0^:.github/workflows/multi-cell.yml`), that claim holds for
+// five of its nine checks and is false for four:
+//
+//   COVERED — the four Go steps (cells migration, admin_pin_cell handler,
+//     cell_pinner service, DynamicRouter cell-routing metrics) were plain `go test`
+//     over api/ packages. The ordinary suite runs them, and T-10 and T-11 below pin
+//     the endpoint and the migration.
+//   GONE WITH ITS SUBJECT — the CLI `admin tenants pin` integration step. cli/ left
+//     this repository in 686b9a4c5 (M2) and its suite went with it.
+//   NOT COVERED, and restored below — the PromRule alert-count floor. Nothing here
+//     asserted it: the only other in-repo references to that manifest
+//     (adr-verification-matrices.test.ts, twice) check existence, not content. It is
+//     T-12 below now.
+//   NOT COVERED AND NOT RESTORABLE AS WRITTEN — the wiring grep,
+//     `grep -F "clustercredential-create.sh" infra/helmfile/scripts/wire-clusters.sh`.
+//     Measured: wire-clusters.sh has not CALLED that lib since 2026-05-31, when the
+//     call was deleted on purpose (the "V9-CLEANROOM-FRESH-FAANG-FIX" blocks in that
+//     file) because it created a duplicate ClusterCredential CR and left ArgoCD's
+//     application-controller with cancelled watches. The only two matches left in
+//     the file are the COMMENTS recording that removal — so the workflow step was
+//     already passing on prose describing the opposite of what it asserted, before
+//     the workflow was ever deleted. Restoring it verbatim would pin a known bug.
+//     What is worth guarding is the fix, and that is T-12b below.
+//   STILL NOT COVERED, named rather than pretended — (a) the
+//     clustercredential-create.sh usage gate (no args -> exit 1 + "usage:"; bad
+//     cell-id -> exit 1 + "invalid cell-id"), which is script EXECUTION and does not
+//     belong in a static unit test; and (b) `bash infra/tests/parity/preflight.sh`,
+//     whose script is not in this tree at all. infra/tests/parity/ holds only
+//     standalone-values.yaml, while taskfiles/test.yml (`parity:preflight`,
+//     `validate:matrix`) and infra/tests/e2e/parity_install_test.go still invoke
+//     preflight.sh and validate-matrix.sh. That dangling reference is wider than
+//     this test and is not fixed here; it is written down so the next reader does
+//     not have to re-derive it.
+//
+// The honest summary the old skip message could not give: four of Phase 5's checks
+// stopped being enforced when the workflow went, two are enforced again as of this
+// commit, and two remain open with their shape named.
 
 // T-07 — cache scoping enforcement (C16).
 // Live envtest is cloud-pendente (KUBEBUILDER_ASSETS + ~30s setup per
@@ -141,9 +178,9 @@ func TestT08_OperatorCutoverAlertsLoaded(t *testing.T) {
 	}
 	text := string(data)
 	for _, alert := range []string{
-		"OperatorRestartRate24h",                  // C15
-		"OperatorReconcileLatencyPostCutover24h",  // T2.1 paired
-		"ZeroReadyOperatorWindow",                 // C6 alert pair
+		"OperatorRestartRate24h",                 // C15
+		"OperatorReconcileLatencyPostCutover24h", // T2.1 paired
+		"ZeroReadyOperatorWindow",                // C6 alert pair
 	} {
 		if !strings.Contains(text, alert) {
 			t.Errorf("missing alert: %s", alert)
@@ -242,15 +279,141 @@ func TestT11_CellsMigrationPresent(t *testing.T) {
 }
 
 // T-12 — multi-cell observability shipped.
+//
+// B-182: this used to stat the PromRule and stop there. The deleted multi-cell.yml
+// preflight went one step further — `test "$count" -ge 7` over the alert entries —
+// and that assertion died with the workflow. Counted 2026-09-06: the rule declares
+// exactly 7 alerts, one per metric pair Phase 5 T5.4 shipped. The floor stays at 7
+// because that is the number on-call was promised; alerts may be added, never
+// dropped below it.
+//
+// The count comes from parsing the manifest rather than from the workflow's
+// `grep -cE "^        - alert: "`, which was pinned to one exact indentation and
+// would have started counting zero after any reformat. Parsing also proves the
+// manifest is valid YAML, which the grep never did.
 func TestT12_MultiCellObservabilityShipped(t *testing.T) {
-	for _, p := range []string{
-		"infra/helm/monitoring/manifests/prometheusrule-multi-cell.yaml",
-	} {
-		full := filepath.Join(repoRoot(), p)
-		if _, err := os.Stat(full); err != nil {
-			t.Errorf("%s missing: %v", p, err)
+	const rule = "infra/helm/monitoring/manifests/prometheusrule-multi-cell.yaml"
+	data, err := os.ReadFile(filepath.Join(repoRoot(), rule))
+	if err != nil {
+		t.Fatalf("%s missing: %v", rule, err)
+	}
+	var parsed struct {
+		Spec struct {
+			Groups []struct {
+				Rules []struct {
+					Alert string `yaml:"alert"`
+				} `yaml:"rules"`
+			} `yaml:"groups"`
+		} `yaml:"spec"`
+	}
+	if err := yaml.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("%s is not valid YAML: %v", rule, err)
+	}
+	var alerts []string
+	for _, g := range parsed.Spec.Groups {
+		for _, r := range g.Rules {
+			if r.Alert != "" {
+				alerts = append(alerts, r.Alert)
+			}
 		}
 	}
+	const minAlerts = 7
+	if len(alerts) < minAlerts {
+		t.Errorf("%s declares %d alert(s) %v, expected at least %d \u2014 Phase 5 T5.4 shipped "+
+			"seven and multi-cell.yml's preflight held that floor until the workflow was "+
+			"deleted in 5b32b76f0", rule, len(alerts), alerts, minAlerts)
+	}
+}
+
+// T-12b — wire-clusters.sh does not re-create ClusterCredential CRs through the
+// legacy lib. This guards the FIX, not the bug the deleted workflow guarded.
+//
+// B-182. On 2026-05-31 the `clustercredential-create.sh cell-0 runtime` and
+// `... cell-1 runtime-2` calls were removed from wire-clusters.sh: each created a
+// SECOND ClusterCredential CR (named after the clusterName, not the cellID) pointing
+// at an apiServer URL a CR already claimed. ArgoCD then registered duplicate
+// informers per server URL, and on watch invalidation the orphan informer left the
+// application-controller with cancelled watches and apps stuck at status.sync="".
+// LIVE-validated in the cleanroom-fresh dogfood the same day. The canonical path is
+// `bootstrap-cell-cc.sh --cell N --env <env>`, which runs in the Helmfile hook chain
+// with CR name = cellID.
+//
+// The assertion is written as "no NON-COMMENT line names the lib" for a measured
+// reason. The deleted workflow's plain `grep -F` matched the removal comments and
+// so passed on prose, and the same false pass is live today in
+// infra/pulumi/src/__tests__/cc-bootstrap-lib.test.ts, whose case "invokes
+// clustercredential-create.sh (audit Gap 2 fix)" is green only because those
+// comments exist. A substring check over a shell file cannot tell code from the
+// comment explaining why the code is gone.
+func TestT12b_WireClustersDoesNotRecreateLegacyClusterCredential(t *testing.T) {
+	const (
+		wire      = "infra/helmfile/scripts/wire-clusters.sh"
+		legacyLib = "clustercredential-create.sh"
+		canonical = "infra/helmfile/scripts/bootstrap-cell-cc.sh"
+	)
+
+	data, err := os.ReadFile(filepath.Join(repoRoot(), wire))
+	if err != nil {
+		t.Fatalf("%s missing: %v", wire, err)
+	}
+	for i, line := range strings.Split(string(data), "\n") {
+		if !strings.Contains(line, legacyLib) {
+			continue
+		}
+		// Only a whole-line comment is allowed to name it. Anything else — including a
+		// command with a trailing comment — counts as a call and fails, which is the
+		// safe direction for a check whose whole point is telling code from prose.
+		if !strings.HasPrefix(strings.TrimSpace(line), "#") {
+			t.Errorf("%s:%d calls %s again. It was removed 2026-05-31 because the duplicate "+
+				"ClusterCredential CR it creates leaves ArgoCD's application-controller with "+
+				"cancelled watches; the canonical path is %s.\n\t%s",
+				wire, i+1, legacyLib, canonical, strings.TrimSpace(line))
+		}
+	}
+
+	// The removal is only safe while the canonical path still exists and still has a
+	// caller. "Deleted the legacy call, the canonical one covers it" is exactly the
+	// kind of claim this series keeps finding outlived its subject.
+	if _, err := os.Stat(filepath.Join(repoRoot(), canonical)); err != nil {
+		t.Fatalf("%s is gone, so nothing creates the per-cell ClusterCredential CRs: %v", canonical, err)
+	}
+	root, err := os.ReadFile(filepath.Join(repoRoot(), "Taskfile.yml"))
+	if err != nil {
+		t.Fatalf("read Taskfile.yml: %v", err)
+	}
+	// COMMENTS FIRST. The Taskfile mentions this script in a comment
+	// ("# Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env"), and a
+	// plain Contains over the file was satisfied by it. An audit deleted BOTH live
+	// invocations on 2026-09-06 and this test stayed green — the exact condition the
+	// error message below is written for, and the guard had nothing to say.
+	if !strings.Contains(stripYAMLComments(string(root)), "bootstrap-cell-cc.sh --cell") {
+		t.Errorf("Taskfile.yml no longer invokes %s — the canonical replacement for the "+
+			"call removed from %s has lost its caller", canonical, wire)
+	}
+}
+
+// stripYAMLComments drops whole-line comments and trailing ` #...` from a YAML file,
+// so a mention in prose cannot stand in for a live invocation.
+//
+// Whole-line only, plus a trailing comment that follows whitespace: a `#` inside a
+// quoted string is left alone, because truncating a live command line would make this
+// guard fail for the wrong reason. Erring here costs a false RED, and the direction
+// matters -- a guard that asserts PRESENCE gets stricter by seeing less, which is the
+// safe side for this one.
+func stripYAMLComments(s string) string {
+	var out []string
+	for _, line := range strings.Split(s, "\n") {
+		trimmed := strings.TrimLeft(line, " \t")
+		if strings.HasPrefix(trimmed, "#") {
+			out = append(out, "")
+			continue
+		}
+		if i := strings.Index(line, " #"); i >= 0 {
+			line = line[:i]
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
 }
 
 // T-13 — live cell-1 canary stage 1 GREEN.
