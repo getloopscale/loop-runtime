@@ -80,7 +80,10 @@ resources:
 # manifest (evita erro de CRD missing em kubeconform/helm install).
 # Dev/prod overlays setam true para Prometheus scrape.
 serviceMonitor:
-  enabled: false
+  # Enabled 2026-09-07 alongside charts/loopzero-api (SD-01.13). The dual-chart rule
+  # in CLAUDE.md is why this line exists: enabling it only on the published side
+  # broke `helm-drift`, which is the gate that exists to catch exactly that.
+  enabled: true
   interval: 30s
   scrapeTimeout: 10s
   labels: {}
