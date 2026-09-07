@@ -53,6 +53,6 @@ func TestWriter_Unwrap_ReturnsUnderlying(t *testing.T) {
 // minimalWriter implements http.ResponseWriter but NOT http.Flusher.
 type minimalWriter struct{}
 
-func (w *minimalWriter) Header() http.Header        { return http.Header{} }
+func (w *minimalWriter) Header() http.Header         { return http.Header{} }
 func (w *minimalWriter) Write(b []byte) (int, error) { return len(b), nil }
 func (w *minimalWriter) WriteHeader(_ int)           {}

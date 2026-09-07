@@ -665,10 +665,25 @@ var (
 	//
 	// Use:
 	//   - "success" — ExternalSecret CR created or updated successfully
-	//   - "fail" — runtime client returned error (RBAC, network, etc.)
+	//   - "fail" — SecretK8sManager.CreateSecret returned an error. ANY of its
+	//     error exits, not only the runtime client's (RBAC, network, etc.):
+	//     also the mgmt-cluster Secret write and the namespace derivation.
+	//     B-177 widened this from "runtime client returned error", which had
+	//     been the description AND the implementation.
 	//   - "skip" — manager nil at boot (CELL_0_KUBECONFIG missing) so the
 	//     entire path was bypassed. THIS IS THE INVISIBLE-FAILURE SIGNAL
 	//     that F-2 was originally caused by.
+	//
+	// The invariant behind those three, and the reason B-176 and B-177 both
+	// exist: `POST /secrets` persists the row BEFORE any of this runs, so
+	// every way out of the sync path must move exactly one series. An exit
+	// that counts nothing leaves a row in `secrets` while
+	// sum(loopzero_secret_externalsecret_total) reads zero — and that sum is what
+	// the B-126 canary deferral
+	// (docs/wiki/decisions/2026-09-04-secret-decrypt-canary-deferral.md § 2)
+	// uses as its trigger. Adding an early return here without an increment
+	// re-opens that hole. TestCreateSecret_EveryExitMovesTheCounter
+	// (api/internal/k8s/secretsync) is the guard.
 	//
 	// Alert opportunity: rate(loopzero_secret_externalsecret_total{result="skip"}[5m]) > 0
 	// indicates the API silently no-ops `loopzero secret set` calls.
@@ -698,6 +713,77 @@ var (
 		Name: "loopzero_secret_audit_write_failed_total",
 		Help: "Broker secret-fetch audit write failures (T2.3 closes HIGH #16).",
 	}, []string{"event_type"})
+
+	// SecretDecryptFailedTotal counts failures on the secret READ path.
+	//
+	// SCOPE — both readers, and the list is the whole list:
+	//
+	//   - PostgresSecretStore.decryptFromStore
+	//     (api/internal/db/store/secret_wrapper.go), the single dispatcher
+	//     every decrypt inside the store passes through. Its only non-test
+	//     caller is ListForResync, a deploy-time hook.
+	//   - rawSecretReader.ReadSecret (api/cmd/setup_secret_fetch.go), the
+	//     broker endpoint /internal/v1/secret-fetch/... that External Secrets
+	//     Operator calls for EVERY user secret. It queries the secrets table
+	//     itself and calls Transit directly — it does NOT go through the store
+	//     dispatcher, whatever the InternalSecretReader interface comment used
+	//     to claim.
+	//
+	// The second reader arrived with B-175. Between B-126 and that item this
+	// counter covered resync only while reading as though it covered
+	// everything, so a revoked key on the path that serves users left the
+	// series at zero and an operator would have concluded nothing broke. That
+	// is the failure this SCOPE list exists to prevent: when a third reader
+	// appears, it is named here or the counter starts lying again.
+	//
+	// B-126: until this counter existed, a decrypt failure was reported ONLY
+	// as a per-request error. A revoked or rotated Transit key
+	// (transit/keys/loopzero-tenants-<id>) makes every ciphertext of that tenant
+	// undecryptable at once, and per-request errors do not add up into
+	// anything: the failure looked like one user's broken secret, not like a
+	// key that is gone. Aggregating the same failures turns that into a
+	// visible step change.
+	//
+	// What this counter does NOT do, said plainly: it still needs somebody to
+	// read a secret. A tenant whose secrets are not being read stays silent
+	// however revoked its key is. Detection that does not wait for a reader is
+	// the canary, deferred with a named trigger — see
+	// docs/wiki/decisions/2026-09-04-secret-decrypt-canary-deferral.md.
+	//
+	// Cardinality: ONLY label is `reason` ∈ {empty_ciphertext,
+	// vault_transit_error, aes_legacy_error} — 3 series total. NO tenant
+	// label, for the same reason SecretExternalSecretTotal (EC-3) and
+	// SecretAuditWriteFailedTotal state above: it would be unbounded with N
+	// tenants. The tenant identity survives in the error chain the caller
+	// logs, which is where a free-form, high-cardinality value belongs.
+	//
+	// The three reasons split the two failures whose responses differ
+	// (B-126 DoD bullet 2 — restoring a key and restoring a backup are not
+	// the same operation):
+	//
+	//   - "vault_transit_error"  — Transit refused or was unreachable. Key
+	//     side. A revoked key lands here; so does an unreachable OpenBao,
+	//     because the store talks to Transit through a consumer-defined
+	//     interface and deliberately does not import pkg/vault to tell the
+	//     typed errors apart. Distinguishing the two is the operator's first
+	//     step, from the logged error, not the metric's.
+	//   - "aes_legacy_error"     — a pre-T10.3 AES row would not open. Data
+	//     side, or a lost/rotated local AES key. Nothing writes this format
+	//     any more (B-162), so a non-zero rate here is a legacy row that has
+	//     become unreadable.
+	//   - "empty_ciphertext"     — the EC-06 NULL/empty row guard fired. Data
+	//     side: a row exists whose encrypted_value is empty, which no write
+	//     path in the tree can produce.
+	//
+	// Alert opportunity:
+	//   sum(rate(loopzero_secret_decrypt_failed_total{reason="vault_transit_error"}[5m])) > 0
+	//   means secrets that were readable are not readable now. Page: the
+	//   ciphertext is orphaned until the key comes back. The `sum` is what
+	//   makes the query cover both readers without naming either.
+	SecretDecryptFailedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_secret_decrypt_failed_total",
+		Help: "Secret read-path decrypt failures, by reason (B-126).",
+	}, []string{"reason"})
 
 	// WorkqueueTerminalWriteFailTotal counts cases where the workqueue
 	// consumer's terminal-state write (Complete or Fail) FAILED — the

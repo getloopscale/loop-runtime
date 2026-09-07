@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"

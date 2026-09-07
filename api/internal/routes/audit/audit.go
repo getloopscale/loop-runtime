@@ -19,20 +19,21 @@ package audit
 
 import (
 	"encoding/json"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"net/http"
 	"strconv"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
 type (
-	AuditStore       = domain.AuditStore
-	AuditFilter      = domain.AuditFilter
-	AuditEntryResult = domain.AuditEntryResult
+	AuditStore       = ports.AuditStore
+	AuditFilter      = ports.AuditFilter
+	AuditEntryResult = ports.AuditEntryResult
 )
 
 // AuditHandler handles GET /api/v1/audit.
@@ -49,7 +50,7 @@ func NewAuditHandler(store AuditStore) *AuditHandler {
 // Requires owner or admin role.
 // GET /api/v1/audit?action=project.created&resource_type=project&since=2026-04-01&limit=50&offset=0
 func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		httpio.WriteCodeErrorJSON(w, http.StatusUnauthorized, "UNAUTHORIZED", "Not authenticated.")
 		return

@@ -17,20 +17,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
-// ErrMemberNotFound is an alias for domain.ErrMemberNotFound (backward compatibility).
-var ErrMemberNotFound = domain.ErrMemberNotFound
+// ports.ErrMemberNotFound is an alias for ports.ErrMemberNotFound (backward compatibility).
 
 // validRoles defines the allowed team member roles.
 var validRoles = map[string]bool{
@@ -41,9 +42,9 @@ var validRoles = map[string]bool{
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
 type (
-	TeamMemberInfo = domain.TeamMemberInfo
-	TeamUserInfo   = domain.TeamUserInfo
-	TeamStore      = domain.TeamStore
+	TeamMemberInfo = ports.TeamMemberInfo
+	TeamUserInfo   = ports.TeamUserInfo
+	TeamStore      = ports.TeamStore
 )
 
 // TeamHandler provides HTTP handlers for team member operations.
@@ -63,7 +64,7 @@ func (h *TeamHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -96,7 +97,7 @@ func (h *TeamHandler) Add(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -125,6 +126,11 @@ func (h *TeamHandler) Add(w http.ResponseWriter, r *http.Request) {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("username is required"))
 		return
 	}
+
+	// B-059: declare the resource id for the audit row. member.removed and
+	// member.role_changed already carry the username (it is in their URL);
+	// member.added carried nothing, so the three could not be joined.
+	auditctx.SetResourceID(ctx, req.Username)
 	if req.Role == "" {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("role is required"))
 		return
@@ -174,7 +180,7 @@ func (h *TeamHandler) Remove(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -274,7 +280,7 @@ func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -304,7 +310,7 @@ func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.store.UpdateMemberRole(ctx, uc.TenantID, targetUserID, role); err != nil {
-		if errors.Is(err, ErrMemberNotFound) {
+		if errors.Is(err, ports.ErrMemberNotFound) {
 			httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
 				Code:    "MEMBER_NOT_FOUND",
 				Message: "member '" + username + "' not found in this team",

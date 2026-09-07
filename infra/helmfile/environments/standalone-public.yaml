@@ -6,6 +6,40 @@
 # terminates Let's Encrypt TLS and reverse-proxies into kubectl port-forwards
 # pointing at the in-cluster services.
 #
+# NO EDGE SERVES THIS ENVIRONMENT, AND THAT IS DELIBERATE (B-165, 2026-09-04).
+#
+# The paragraph above describes the topology as built. It stopped being true on
+# 2026-08-19, when B-025 removed the three bare hostnames this environment
+# advertises — app, cloud and auth at loopzero.example — from infra/local/Caddyfile,
+# because they served development processes under names reserved for production.
+# Measured 2026-09-04: the Caddyfile declares four site blocks (app-dev,
+# auth-dev, *.preview-dev, *.prod-dev) and the three bare names survive in it
+# only inside comments.
+#
+# B-165 offered two ways to resolve that — retire this environment with the
+# hostnames, or give it an edge of its own. Neither was taken, and the third
+# option is recorded here rather than inferred:
+#
+#   The environment is KEPT and STAYS SELECTABLE with an explicit
+#   ENV=standalone-public. It is NOT served. What changed is that no task
+#   defaults to it any more — `infra:install:core-dashboard-only` now defaults
+#   to dev-public, which is the canonical public variant and whose hostnames do
+#   have site blocks.
+#
+# So selecting this environment installs the releases and leaves nothing
+# terminating TLS for the names it advertises. That is a usable state for
+# rendering and for the `ory-kratos-public-urls` gate, which still templates it,
+# and it is not a usable state for reaching the cluster over those hostnames.
+#
+# To make it servable again, someone has to add site blocks for the three bare
+# names to infra/local/Caddyfile — which is the decision B-025 deliberately made
+# the other way, and reversing it is a decision, not an edit.
+#
+# `infra/tests/unit/task_env_edge_test.go` holds the part of this that can rot:
+# it fails if any task default names an environment whose public hostnames have
+# no site block. It does not forbid selecting one explicitly, because explicit
+# is the point.
+
 # Differences vs `standalone-multi`:
 #   - publicAuthUrl + publicCloudUrl + cookieDomain set → Kratos renders
 #     serve.public.base_url, CORS, session.cookie.domain, allowed_return_urls.

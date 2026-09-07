@@ -7,8 +7,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
 )
 
 type fakeBuildLookup struct {

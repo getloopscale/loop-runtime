@@ -30,33 +30,111 @@
 # cobertura total e roda metade e' pior que nenhum — foi o que motivou o #255.
 name: CI
 
-# GATILHOS: PR para `develop` OU `main`, mais push em `develop`.
+# TRIGGERS: post-merge push to `develop` and `main`, plus `workflow_call`.
 #
-# Todo commit que entra no trunk e' verificado — e' a definicao de CI. Aqui o
-# trunk e' `develop`, entao e' ELE que precisa de gate; gate so' em `main`
-# protegeria apenas o instante do release, com o estrago ja' feito e diluido num
-# diff grande.
-#
-# Os DOIS gatilhos, e nao um: o de PR mata o defeito antes de entrar no trunk;
-# o de push (pos-merge) pega o que so' existe DEPOIS do merge — dois PRs verdes
-# isoladamente que se quebram juntos. Escopos diferentes, nao redundancia.
+# This header used to describe a `pull_request` trigger and call it one of "the
+# TWO triggers, not one". The `on:` block below has not had a `pull_request` key
+# since 464b9d7e3, "ci: validacao pos-merge em develop e main; PR sem acao" — the
+# commit that made the decision this file records, which changed the trigger and
+# left the paragraph describing the old one. So the header outlived what it
+# described by every run since. Corrected 2026-09-06 rather than deleted, because
+# the sentence it got right is still right — every commit entering the trunk
+# should be verified, and here the trunk is `develop` — and the honest form of
+# that sentence is that what runs on `develop` today runs AFTER the merge. The
+# `on:` block says why, and names what now checks the premise it rests on.
 on:
   workflow_call:
-  # Validacao POS-MERGE, nao no PR (decisao de 2026-08-12).
+  # POST-MERGE validation, not on the PR. Decision of 2026-08-12, re-examined on
+  # 2026-09-06 and KEPT — with its reason replaced by a measurement.
   #
-  # O portao que impede um merge ruim neste repositorio e' local: o
-  # .claude/hooks/delivery-gate.sh roda `task quality:gates` antes de todo
-  # `git push` e bloqueia em vermelho, sem bypass. Duplicar isso no PR pagaria
-  # minutos de runner por turno para reexecutar o que ja rodou na maquina de
-  # quem empurrou — e o CLAUDE.md ja declara que estes workflows NAO sao o
-  # quality gate do repo.
+  # WHAT THE REASON USED TO BE. It was asserted right here: that the gate
+  # stopping a bad merge in this repository is local — `.claude/hooks/
+  # delivery-gate.sh` runs the quality suite before every `git push` and blocks
+  # on red, with no bypass — so duplicating it on the PR would pay runner minutes
+  # to re-run what already ran on the pusher's machine. Three premises, and all
+  # three were false at the same time between 2026-08-29 and 2026-09-02: the
+  # hook file was deleted (9a6e6e903, third deletion), its wiring in
+  # `.claude/settings.json` had been gone four days longer (63cc51c48, and the
+  # restore four hours later put the FILE back and not the wiring), and "no
+  # bypass" was false in four spellings, each one a real push that reached the
+  # remote with the gate deciding nothing. 21 commits landed on `workspace` in
+  # that window — an upper bound, since the repository records when a commit was
+  # authored and not when it was pushed. Nothing, anywhere, said so.
   #
-  # A consequencia, dita: com o PR sem acao, o primeiro sinal de CI chega DEPOIS
-  # do merge. O conserto de uma falha em `main` e um commit de correcao ou um
-  # revert, nao um "nao mergear". Isso e' aceitavel aqui porque o gate real ja
-  # correu antes do push; deixa de ser se alguem empurrar com o hook desativado.
+  # WHAT THE REASON IS NOW. The same trade, with the premises CHECKED instead of
+  # asserted: `.github/workflows/delivery-gate-armed.yml` runs
+  # `.github/scripts/assert-delivery-gate-armed.py` on every push to `workspace`,
+  # `develop` and `main`, and on every pull request into `develop` and `main`. It
+  # verifies the file, the wiring and the four bypass spellings, in seconds, on a
+  # runner that needs neither Go nor a deploy key. It is a SEPARATE workflow
+  # because `on:` filters are per-workflow and the `paths-ignore` below excludes
+  # `.claude/**` — the only place the gate can be disarmed from. Two of the three
+  # commits that falsified the premises touched nothing outside `.claude/**` and
+  # would not have started this workflow at all.
+  #
+  # AND WHAT CHECKS THAT CHECK. An audit of the paragraph above measured the hole
+  # it left, and the hole has the shape of the fix: A WORKFLOW CANNOT REPORT ITS
+  # OWN DELETION. Delete `delivery-gate-armed.yml` and it does not go red — it
+  # stops existing, and an absent check reads on a pull request exactly like a
+  # repository that never had one. Same outcome, harder to see: leave it in place
+  # and give it a `paths:` filter, and it survives every listing while never
+  # firing for the `.claude/**`-only commit that is the shape of all three
+  # historical disarms. So since 2026-09-06 a THIRD file reports on the second:
+  # `.github/scripts/assert-gate-observers-intact.py` asserts that
+  # `delivery-gate-armed.yml` is present, carries no paths filter, still triggers
+  # on `workspace`/`develop`/`main` and on PRs into `develop`/`main`, and still
+  # invokes its script. It runs from two substrates that fail independently —
+  # `workflow-hygiene.yml` on GitHub, and `task quality:hermetic` on the pusher's
+  # machine BEFORE the push, which is the only moment a deletion can be refused
+  # at a cost of zero ungated pushes.
+  #
+  # WHY THIS JOB STAYS POST-MERGE — measured 2026-09-06, not assumed:
+  #   - it costs 2-4 minutes and needs two checkouts, a deploy key for a private
+  #     module and a Go toolchain; `task quality:gates` on top of that needs
+  #     helmfile, kubeconform, actionlint, trivy and golangci-lint and fails high
+  #     without them by design (see ESCOPO above);
+  #   - it is RED, and has been. Runs 32084704925 through 32197072865 — the last
+  #     fifteen — all failed, the failing step being `Test the hermetic modules`,
+  #     and `go test ./... -count=1` in cmd/loopzero-ops is red in a clean worktree
+  #     today on `trufflehogscan.TestArvoreRealEstaAdjudicada` (re-measured
+  #     2026-09-06). Promoting a permanently-red job to a gate on the PR would
+  #     block every promotion for a cause unrelated to the change under review,
+  #     which is how gates get switched off.
+  #
+  # AND THE THING NONE OF THE ABOVE DOES — measured, not assumed, because the
+  # sentence this paragraph replaces assumed it. NOTHING IN THIS REPOSITORY CAN
+  # BLOCK A MERGE. Every check here, this one included, NOTIFIES; a red check
+  # stops nothing until branch protection marks it required, and on 2026-09-06
+  # that setting was not merely unset — it is unavailable:
+  #
+  #     gh api repos/getloopscale/loopzero/branches/develop/protection  -> 403
+  #     gh api repos/getloopscale/loopzero/branches/main/protection     -> 403
+  #     gh api repos/getloopscale/loopzero/rulesets                     -> 403
+  #     "Upgrade to GitHub Pro or make this repository public to enable this
+  #      feature."
+  #
+  # The org `getloopscale` is on the `free` plan and `loopzero` is PRIVATE, and that
+  # combination is what the API is refusing. So "make the armed-check a required
+  # check" is not a checkbox anyone forgot to tick — it is a purchase (org Team
+  # plan) or a visibility change (make the repo public), and until one of those
+  # happens the honest description of every gate in this file is that it tells
+  # someone, and that someone has to act. Written here rather than left implied,
+  # because the previous version of this comment reasoned about required checks
+  # as though this repository had them.
+  #
+  # THE CONSEQUENCE, STILL SAID OUT LOUD: with this job not acting on the PR, its
+  # first signal arrives AFTER the merge, and fixing a red `develop` is a
+  # follow-up commit or a revert rather than a "do not merge". What changed is
+  # that the premise this trade rests on is now verified before the merge instead
+  # of believed. What did NOT change: build, vet and test coverage before a merge
+  # still does not exist here, and what blocks it is the red above, not this
+  # decision. (B-192)
   push:
     branches: [develop, main]
+    # `.claude/**` is ignored here and NOT in delivery-gate-armed.yml, which is
+    # the whole reason that file is separate: a commit touching only
+    # `.claude/settings.json` cannot start this workflow, and that is precisely
+    # the commit that disarms the gate.
     paths-ignore:
       - '.claude/**'
       - '**/*.md'

@@ -6,6 +6,7 @@ package aggregator
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
 )
 

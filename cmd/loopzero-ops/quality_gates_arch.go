@@ -19,6 +19,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/acyclicgraph"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/contractconsumers"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noshellwrap"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/packageadmission"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pkgusagematrix"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/servicesacyclic"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/stackcoverage"
@@ -64,6 +65,23 @@ func runContractConsumers(args []string) int {
 		fmt.Fprintf(os.Stderr, "contract-consumers: AVISO — %d de %d raiz(es) de consumidor nao existem "+
 			"nesta arvore e NAO foram varridas: %v\n", len(outcome.MissingRoots), len(outcome.ScanRoots),
 			outcome.MissingRoots)
+	}
+	// A missing tracked path FAILS, and the difference from the warning above is
+	// deliberate. An absent consumer root shrinks where the gate hunts for the READER of
+	// the field, and where to repoint those is a meeting decision (B-100) — hence a
+	// warning. An absent tracked path takes away the gate's ability to see the field DROP
+	// at all: it starts answering PASS over a contract surface it never read, and nothing
+	// in the verdict text changes. That is not reduced coverage, it is a verdict without
+	// a subject, and the fix depends on no meeting — point the list at the new path.
+	if len(outcome.MissingTracked) > 0 {
+		fmt.Fprintf(os.Stderr, "contract-consumers: FAIL — %d of %d tracked path(s) do not exist "+
+			"in this tree: %v\n", len(outcome.MissingTracked), len(outcome.TrackedFiles),
+			outcome.MissingTracked)
+		fmt.Fprintf(os.Stderr, "  git diff/grep silently ignore a pathspec matching nothing, so this "+
+			"gate would be reporting PASS without reading that surface.\n"+
+			"  Fix: point trackedFiles in cmd/loopzero-ops/internal/quality/contractconsumers/check.go "+
+			"at the new path.\n")
+		return 1
 	}
 	if outcome.CommandError != "" {
 		fmt.Fprintf(os.Stderr, "contract-consumers: git/grep error: %s\n", outcome.CommandError)
@@ -343,6 +361,36 @@ func runServicesAcyclic(args []string) int {
 		return 1
 	}
 	fmt.Printf("services-acyclic: PASS \u2014 %d .go files scanned; services bounded-context import graph is the frozen acyclic DAG (M9 Step 6)\n", outcome.Scanned)
+	return 0
+}
+
+// runPackageAdmission — B-058.
+//
+// The item is about an admission CRITERION that can say no. api/internal/k8s
+// admitted by technology ("it uses client-go"), which admits every domain that
+// happens to speak to the API server. The criterion is now "plumbing names no
+// domain", and this gate is what makes it a rule rather than a paragraph.
+//
+// It fails in three distinguishable ways on purpose, because the fixes differ:
+// a domain name readmitted into the plumbing package (move it to a home), a home
+// that emptied out (the split was undone, and a gate green over a vacuum is the
+// failure adapter-ports records), and nothing scanned at all.
+func runPackageAdmission(args []string) int {
+	fs := flag.NewFlagSet("package-admission", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root directory")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	resolveDotRoot(root)
+	out, err := packageadmission.Check(packageadmission.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "package-admission: FAIL \u2014 %v\n", err)
+		for _, v := range out.Violations {
+			fmt.Fprintf(os.Stderr, "  api/internal/k8s/%s: %s carries the domain word %q \u2014 move it to k8s/tenancy, k8s/workload or k8s/secretsync\n", v.File, v.Where, v.Word)
+		}
+		return 1
+	}
+	fmt.Printf("package-admission: PASS \u2014 %d plumbing file(s) in api/internal/k8s name no domain; homes %v are populated\n", out.Scanned, out.Homes)
 	return 0
 }
 

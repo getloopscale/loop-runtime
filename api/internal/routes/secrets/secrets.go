@@ -27,29 +27,31 @@ import (
 	"errors"
 
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
-	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
 	"log/slog"
 	"net/http"
 	"regexp"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/correlation"
 	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/domain"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
 type (
-	SecretMetadata = domain.SecretMetadata
-	SecretStore    = domain.SecretStore
-	SecretK8sSync  = domain.SecretK8sSync
-	AuditLogger    = domain.AuditLogger
+	SecretMetadata = ports.SecretMetadata
+	SecretStore    = ports.SecretStore
+	SecretK8sSync  = ports.SecretK8sSync
+	AuditLogger    = ports.AuditLogger
 )
 
 // SecretEnvLocker is the narrow interface SecretHandler needs to wrap
@@ -73,10 +75,19 @@ type SecretEnvLocker interface {
 // persisting to PG so the secrets.encrypted_value BYTEA column never
 // stores plaintext. Tenant-scoped (per-tenant transit key per D4 ADR).
 //
-// Production injects *adapters.VaultTransitAdapter (which wraps
-// *pkg/vault.TransitClient). Nil-safe: when transitClient is nil, Bulk
-// falls back to the legacy path where the existing AES key in
-// secret_wrapper.go encrypts at the store layer (legacy/test path).
+// Production injects pkg/vault.Transit directly — the value
+// setupTransitClient returns, which is a *vault.TransitClient. There is no
+// adapter in between: B-058 deleted api/internal/adapters/vault_transit_adapter.go
+// rather than moving it, because its own doc recorded that the signatures matched
+// byte-for-byte and only the method names differed, which makes the bridge a
+// no-op. The adapter went in 2f8910db3 on 2026-08-16; this comment went on
+// naming it for 19 more days, and nothing failed, because nothing checks a
+// comment. The claim is now asserted at compile time in
+// api/cmd/setup_transit.go instead of stated here.
+//
+// Nil-safe: when transitClient is nil, Bulk falls back to the legacy path where
+// the existing AES key in secret_wrapper.go encrypts at the store layer
+// (legacy/test path).
 type SecretTransit interface {
 	Encrypt(ctx context.Context, tenantID string, plaintext []byte) (ciphertext string, err error)
 }
@@ -98,7 +109,7 @@ type SecretTransit interface {
 // constructor convention) — a project-checker adapter is NOT needed
 // because PostgresProjectStore.GetByName already matches this signature.
 type SecretProjectChecker interface {
-	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
+	GetByName(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error)
 }
 
 // SecretPlanLimiter — narrow interface (ISP) for the plan-limit gate.
@@ -336,7 +347,7 @@ func (h *SecretHandler) Bulk(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -492,7 +503,7 @@ type bulkEnvAggregates struct {
 //  4. Emit one SECRET_CREATED audit row per successful entry.
 //
 // Returns a fully-populated secretBulkResult ready to append.
-func (h *SecretHandler) bulkProcessEntry(ctx context.Context, uc *middleware.UserContext, project string, entry secretBulkEntry) secretBulkResult {
+func (h *SecretHandler) bulkProcessEntry(ctx context.Context, uc *auth.UserContext, project string, entry secretBulkEntry) secretBulkResult {
 	result := secretBulkResult{
 		Name:       entry.Name,
 		Status:     "created",
@@ -528,7 +539,7 @@ func (h *SecretHandler) bulkProcessEntry(ctx context.Context, uc *middleware.Use
 // of one entry. Implements EC-01 continue-best-effort: a failure for
 // one env MUST NOT short-circuit the others. Returns the aggregates
 // the caller folds into the entry-level result.
-func (h *SecretHandler) bulkProcessEnvs(ctx context.Context, uc *middleware.UserContext, project string, entry secretBulkEntry) bulkEnvAggregates {
+func (h *SecretHandler) bulkProcessEnvs(ctx context.Context, uc *auth.UserContext, project string, entry secretBulkEntry) bulkEnvAggregates {
 	aggs := bulkEnvAggregates{
 		syncStatusPerEnv: make(map[string]string, len(entry.Envs)),
 	}
@@ -574,6 +585,28 @@ func (h *SecretHandler) bulkProcessEnvs(ctx context.Context, uc *middleware.User
 		// (k8sSync runs OUTSIDE lock; PG row is canonical even on sync
 		// failure — eventual consistency via ESO ExternalSecret CR).
 		if h.k8sSync == nil {
+			// B-176: emit the SAME series the single-set path emits for this
+			// exact condition (the else-branch at the end of Set). Until this
+			// line existed, a bulk write against a deployment with no workload
+			// sync persisted rows in `secrets` and left
+			// sum(loopzero_secret_externalsecret_total) at zero, because only one
+			// of the two paths that handle "no workload sync" was counting.
+			//
+			// That sum is load-bearing, not decoration:
+			// docs/wiki/decisions/2026-09-04-secret-decrypt-canary-deferral.md
+			// § 2 names it as the trigger that fires without anyone running a
+			// query — the signal that the `secrets` table stopped being empty
+			// and the deferred B-126 canary became work. The hole sat exactly
+			// where that event could pass.
+			//
+			// Once per PERSISTED ROW, matching the single-set contract. A
+			// per-entry emission would under-count a multi-env write.
+			//
+			// The API-facing status stays "pending" — the caller's contract is
+			// unchanged. "skip" is the metric's word for the sync path being
+			// bypassed; "pending" is the user's word for a row that is
+			// canonical in PG and not yet materialized.
+			metrics.SecretExternalSecretTotal.WithLabelValues("skip").Inc()
 			aggs.syncStatusPerEnv[env] = "pending"
 			continue
 		}
@@ -636,7 +669,7 @@ func (h *SecretHandler) bulkAggregateStatus(result *secretBulkResult, entry secr
 // Returns secret names only — NEVER values.
 func (h *SecretHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -675,7 +708,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -712,6 +745,10 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 
 	// Use project name from query or default
 	project := r.URL.Query().Get("project")
+
+	// B-059: declare the resource id for the audit row (was read out of
+	// the query string by the middleware).
+	auditctx.SetResourceID(ctx, project)
 
 	// T1.1 of deep-review-2026-05-10-remediation-plan: serialize mutations
 	// per (tenant, project, env) so concurrent `loopzero secret set` + a deploy
@@ -787,6 +824,12 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 	// nil — that path was the silent-failure cause, formerly invisible. Now
 	// `rate(loopzero_secret_externalsecret_total{result="skip"}[5m]) > 0` alerts
 	// that the API is silently no-opping `loopzero secret set`.
+	//
+	// B-176: bulkProcessEnvs handles the same condition and must emit the same
+	// series. It did not, and the gap was found by reading the two paths side
+	// by side rather than by anything failing. Change one of these two sites
+	// and TestExternalSecretSkip_BothWritePathsEmitWhenSyncIsNil fails, which
+	// is the point of asserting them in one test.
 	if h.k8sSync != nil {
 		if syncErr := h.k8sSync.CreateSecret(ctx, uc.TenantID, project, req.Environment, req.App, req.Name, req.Value); syncErr != nil {
 			// Log but don't fail — PG is source of truth, K8s sync is eventual
@@ -814,7 +857,7 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return

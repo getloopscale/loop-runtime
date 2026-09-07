@@ -5,15 +5,16 @@ package builds
 
 import (
 	"context"
-	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
-	"github.com/getloopscale/loopzero/api/internal/routes/pagination"
 	"net/http"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	"github.com/getloopscale/loopzero/api/internal/routes/pagination"
+
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -57,7 +58,7 @@ type BuildListHandler struct {
 	// disables the gate (legacy List path stays unchanged for callers
 	// constructed via NewBuildListHandler — the gate is a T2.2 addition
 	// only relevant for the new /build-envs endpoint).
-	projects domain.ProjectStore
+	projects ports.ProjectStore
 }
 
 // NewBuildListHandler creates a new BuildListHandler (legacy constructor —
@@ -74,7 +75,7 @@ func NewBuildListHandler(builds BuildListStore) *BuildListHandler {
 // BEFORE the query is even attempted. Without the gate, a tenant could
 // probe `/api/v1/projects/<other-tenant-project>/build-envs` and
 // observe metadata (env names) that doesn't belong to them.
-func NewBuildListHandlerWithGate(builds BuildListStore, projects domain.ProjectStore) *BuildListHandler {
+func NewBuildListHandlerWithGate(builds BuildListStore, projects ports.ProjectStore) *BuildListHandler {
 	return &BuildListHandler{builds: builds, projects: projects}
 }
 
@@ -90,7 +91,7 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -187,7 +188,7 @@ func (h *BuildListHandler) BuildEnvs(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return

@@ -1,0 +1,35 @@
+# cli-exit-codes — declared absence of this gate's subject (B-185)
+#
+# CLAUDE.md Rule 4 is a contract about CLI source: a process.exit() code is 0-5
+# only, and 130/143 only inside a process.on('SIG...') handler. The gate that
+# enforces it needs a CLI source tree to read. When there is none, it has two
+# honest options and one dishonest one. The dishonest one — print SKIP, exit 0,
+# and count toward the chain's green — is what it did from 686b9a4c5 until
+# 2026-09-05, and is what B-185 closed.
+#
+# Every line here is a subject this repository has looked for, not found, and
+# decided to carry in the open. The gate re-measures each line's SUBJECT with a
+# stat on EVERY run and prints it together with the path it stat'd — a tracked
+# absence must never be quieter than a fresh one, and must never be a sentence
+# about a filesystem nobody read. It reports PARTIAL rather than PASS, and its
+# Pass boolean is false, so nothing downstream can read "nothing to check" as
+# "checked and fine".
+#
+# The gate FAILS when:
+#   - no CLI source tree is found and NOTHING here declares that;
+#   - a subject listed here is FOUND — either the SUBJECT path on the line
+#     exists (stat'd against this repository's root, every run), or a CLI
+#     source tree turned up in this tree or in the loopzero-cli checkout beside it.
+#     Either way the absence closed, the line is stale prose, and the gate must
+#     go back to scanning instead of declaring.
+#
+#     Until 2026-09-05 only the second half was measured: the subject field was
+#     never stat'd, so a line naming `docs` in a tree that contains docs/ was
+#     printed as an absence at exit 0 (B-190).
+#
+# Format: two TAB-separated fields.
+#   <subject path this gate would scan>	<why it is absent, naming what covers the contract instead>
+#
+# The right way to leave this file is to delete the line, not to add one.
+#
+cli/src	Measured 2026-09-05: cli/ left this repository in 686b9a4c5 (2026-06-16, "remove cli/ — extracted to standalone loopzero-cli (M2)") and no loopzero-cli checkout sits beside it — no directory named loopzero-cli exists beside this repository, and ../loopzero-cli does not resolve. So the gate's skip branch was the only branch that had ever run here, across every quality:gates invocation since that commit. What this repository re-asserts about Rule 4 in the meantime is NOTHING: there is no process.exit() call in this tree for the gate to read, and no other gate enforces the exit-code contract. The contract holds only wherever loopzero-cli's own CI runs it, and that claim is UNVERIFIED from this tree — the same unverified claim the two cli/src skips in api/internal/contract/cli_consumer_test.go carry in infra/quality/test-skip-absent-path.txt. The line leaves when a source tree appears: clone loopzero-cli beside this repository (or set LOOPZERO_CLI_ROOT) and the gate fails on this line until it is deleted, then scans for real.

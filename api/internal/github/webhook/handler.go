@@ -26,10 +26,10 @@ import (
 )
 
 const (
-	maxBodySize       = 10 * 1024 * 1024 // 10MB
-	signatureHeader   = "X-Hub-Signature-256"
-	eventHeader       = "X-GitHub-Event"
-	deliveryHeader    = "X-GitHub-Delivery"
+	maxBodySize     = 10 * 1024 * 1024 // 10MB
+	signatureHeader = "X-Hub-Signature-256"
+	eventHeader     = "X-GitHub-Event"
+	deliveryHeader  = "X-GitHub-Delivery"
 )
 
 // PushHandler is called when a push event is received.
@@ -48,12 +48,12 @@ type DeliveryDeduplicator interface {
 
 // Handler receives GitHub webhook events, validates signatures, and dispatches.
 type Handler struct {
-	secret           []byte
-	logger           *slog.Logger
-	dedup            DeliveryDeduplicator
-	onPush           PushHandler
-	onPullRequest    PullRequestHandler
-	onInstallation   InstallationHandler
+	secret         []byte
+	logger         *slog.Logger
+	dedup          DeliveryDeduplicator
+	onPush         PushHandler
+	onPullRequest  PullRequestHandler
+	onInstallation InstallationHandler
 }
 
 // NewHandler creates a webhook handler with the given HMAC secret.

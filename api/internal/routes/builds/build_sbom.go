@@ -13,7 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -102,7 +102,7 @@ func (h *BuildSBOMHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil || uc.TenantID == "" {
 		http.Error(w, `{"error":"unauthenticated"}`, http.StatusUnauthorized)
 		return

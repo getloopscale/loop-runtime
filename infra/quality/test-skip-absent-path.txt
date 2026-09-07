@@ -1,0 +1,30 @@
+# test-skip-absent-path — declared path-guarded skips (B-180)
+#
+# A test under one of the scanned trees (infra/tests/ and api/, per
+# DefaultScanDirs) that probes a path and skips when it is missing is
+# conditional in FORM and unconditional in FACT once that path leaves the tree:
+# the skip branch becomes the only branch, the package still prints `ok`, and
+# every assertion below the guard is dead. B-169 removed one such test; B-180
+# removed four more and added this gate so the class cannot return silently.
+#
+# Every line here is an absence this repository has looked at and decided to
+# carry for now. The gate prints them on EVERY run, pass or fail — a tracked
+# absence must never be quieter than a fresh one — and it FAILS when:
+#   - a path-guarded skip is absent and NOT listed here;
+#   - a listed path comes BACK (the guard is conditional again, the line is
+#     stale prose);
+#   - a listed skip is not re-found by the scan (the skip went away, or the
+#     gate's detector stopped detecting — either way somebody must look).
+#
+# Format: four TAB-separated fields.
+#   <test file, repo-relative>  <enclosing func>  <guarded path, repo-relative>  <why, naming what covers this instead>
+#
+# The probe may be written inline or one level down inside a same-package
+# predicate the guard calls (`if !cliSrcPresent() { t.Skip() }`) — B-183 taught
+# the gate to read the second form, after an audit walked the class back in with
+# a one-line refactor.
+#
+# The right way to leave this file is to delete the line, not to add one.
+#
+api/internal/contract/cli_consumer_test.go	TestCLIConsumer_KnownGapsAreReal	cli/src	Measured 2026-09-05: cli/ left this repository in 686b9a4c5 (2026-06-16, "remove cli/ — extracted to standalone loopzero-cli (M2)") and no loopzero-cli checkout sits beside it, so cliSrcPresent() has answered false on every run since and this assertion has never executed here. The guard was invisible to this gate until B-183 taught it to read a predicate; the shape is what the item was opened for. What this repository still asserts about the consumer contract is TestCLIConsumer_AllPathsInSpec in the same file: it runs unconditionally and checks the 37 paths of testdata/cli-consumed-paths.txt against engine.yaml (the file has 43 LINES, 6 of them comments; the earlier 43 here was a wc -l rather than a count of the thing claimed, corrected 2026-09-05 after the test itself reported 36 unused + 1). What nothing here re-asserts is that the documented gap /api/v1/domains/{}/dns-records is still referenced by the CLI and still missing from the spec — the skip says that check moved to loopzero-cli's own CI, and that claim is UNVERIFIED from this tree. Settling it (vendor the CLI's path list, or delete the live half naming what covers it) is the same open question B-185 raises for the cli-exit-codes gate, and is deliberately not B-183's diff.
+api/internal/contract/cli_consumer_test.go	TestCLIConsumer_ListMatchesSource	cli/src	Measured 2026-09-05: same absence, same commit (686b9a4c5). This is the drift guard between testdata/cli-consumed-paths.txt and cli/src, so with cli/ gone the checked-in list is frozen data with nothing to compare against. The half that protects the ENGINE still runs — TestCLIConsumer_AllPathsInSpec proves every path in the list exists in engine.yaml. The half that would catch the list going stale against the CLI has no source to read here and, per the skip's own message, moved to loopzero-cli, which is UNVERIFIED from this tree. Tracked with its neighbour above rather than deleted, for the same reason.

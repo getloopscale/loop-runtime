@@ -5,11 +5,13 @@
 //
 // # O defeito que ele previne, medido
 //
-// B-057, 2026-08-18: `api/internal/domain` é importado por **90 arquivos**. A razão de poder
-// sê-lo é justamente não arrastar dependência nenhuma — medido com `go list`, são 9 imports,
-// todos da biblioteca padrão.
+// B-057: `api/internal/domain` é importado por **87 arquivos** (47 de produção, 40 de teste)
+// — re-medido em 2026-09-05; eram 90 quando esta guarda foi escrita em 2026-08-18, e o número
+// se move sozinho conforme a árvore anda. A razão de poder ser importado por tantos é
+// justamente não arrastar dependência nenhuma — medido com `go list`, são 9 imports, todos da
+// biblioteca padrão.
 //
-// Um único import externo ali se propaga para os 90, e nada impedia. A propriedade existia
+// Um único import externo ali se propaga para os 87, e nada impedia. A propriedade existia
 // por disciplina, não por contrato; o `CLAUDE.md` a descreve como razão do pacote existir, e
 // descrever não é verificar.
 //
@@ -47,7 +49,7 @@ var ErrNothingScanned = errors.New("pacote guardado ausente — não achar nada 
 //
 // É um caminho só de propósito: a propriedade foi MEDIDA aqui, e estender a guarda a
 // pacotes cuja propriedade ninguém mediu afirmaria o que não se sabe.
-const guardado = "api/internal/domain"
+const guardado = "api/internal/ports"
 
 // Config drives the check.
 type Config struct {

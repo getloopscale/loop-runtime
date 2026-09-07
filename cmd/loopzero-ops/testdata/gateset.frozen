@@ -27,6 +27,7 @@ contract-consumers	gates	Verifies cross-repo contract consumers stay in sync wit
 corrections-txt-closed	gates	Asserts CORRECTIONS.txt items are all closed.
 correlation-header	gates	Correlation-ID header is forwarded across the request path.
 cosign-cutover	-	Enforces the cosign keyed→keyless cutover deadline ratchet.
+cost-series-producers	gates	B-181: every loopzero_* series the loopzero-cloud cost aggregator queries has a declared producer here, or a tracked absence.
 coverage-diff	-	Diffs test coverage against a baseline to catch regressions.
 coverage-merge	-	Merges per-package coverage profiles into one report.
 crd-semantic-diff	gates	Semantic diff of CRD schemas to catch breaking spec changes.
@@ -81,6 +82,7 @@ option-b-eso-deploy-doc	gates	Locks docs/operations/option-b-mgmt-helmfile-eso-d
 orphan-alerts	gates	Detects Prometheus alerts with no owning dashboard/runbook.
 ory-kratos-lifespan	gates	Locks canonical self-service flow lifespans in infra/helm/ory-kratos/values.yaml.gotmpl: login=10m + registration=10m + recovery=15m (defense pair with edge rate_limit for Red Team #89 email-bomb closure). Section-scoped stricter than bash grep -A N (sibling lifespan can NOT leak). M-Migrate2 2026-07-07 replaces infra/tests/helm/ory-kratos-lifespan_test.sh.
 ory-kratos-public-urls	gates	Hermetic helm-template golden test for Ory Kratos serve.public.base_url + CORS + cookie.domain + allowed_return_urls + dashboardRoute-mapped ui_url across standalone-public + dev envs. Advisory-fallthrough when helmfile absent. M22 empirical follow-up (the ONLY M22 target allowlisted — delivers allowlist -1).
+package-admission	gates	B-058: o pacote de plumbing k8s nao admite vocabulario de dominio, e cada casa do split segue povoada.
 pkg-usage-matrix	gates	Verifies the pkg/ cross-component usage matrix is current.
 platform-cr-namespace	gates	Tenant/Environment CRs em manifesto versionado devem viver em loopzero-system.
 postgresql-pdb-config	gates	Validates the PostgreSQL PodDisruptionBudget configuration.
@@ -91,6 +93,7 @@ publish-hygiene	gates	Nenhum arquivo versionado VIVO carrega caminho de workstat
 pulumi-required-secrets	gates	T1.5 — every Pulumi.<env>.yaml enumerates required secret keys (as `secure:` entry OR comment). Prod=6 keys, staging=4, drill=3 (DO token via env var per D7' sponsor override). Cross-checks prod keys also appear backticked in docs/operations/credentials-required.md. M-Migrate2 2026-07-07 replaces infra/tests/docs/pulumi-required-secrets_test.sh.
 quarantine-protect	diff	Protects the canonical-tests-v1 quarantine from accidental edits.
 readiness-summary	gates	O sumario de prontidao e a ultima mutacao de status antes de persistir, nos seis reconcilers.
+records-tree-split	gates	One records tree is written; the retired one stays frozen (a second live tree accumulates half the truth).
 regression-matrix	gates	Verifies the regression-test matrix covers required scenarios.
 regression-test	-	Asserts a regression test exists for tracked fixed bugs.
 render-schema-gen-sql	gates	T0.2 sqlc schema render pipeline: ephemeral PG16 + golang-migrate replay + pg_dump inside container + post-process (drop ALTER OWNER TO, banners, SET, restrict, orphan --, collapse blanks, trim trailing WS) + sqlc compile pre-flight with throwaway probe. Default check-only mode validates toolchain + migrations dir. Pass --render for destructive pipeline. M-Migrate2 2026-07-07 replaces infra/scripts/ci/render-schema-gen-sql.sh.
@@ -125,6 +128,8 @@ tenant-predicate	gates	Enforces the multi-tenant isolation predicate (security v
 test-coverage-report	gates	Hermetic coverage gate for infra/tests/{unit,charts}/... — runs `go test -cover -json` against configured scope + threshold (default 30%). Advisory-fallthrough when `go` binary missing. M23 T5.1 closes F22 (coverage_pct not measured).
 test-deletion	gates	Guards deletion of test files against coverage loss.
 test-pyramid	gates	Validates the unit/integration/e2e test-pyramid balance.
+test-skip-absent-path	gates	B-180/B-183/B-186/B-188: a test under infra/tests/ or api/ may not skip on an absent path without declaring it — a skip guarded by a path that does not exist is unconditional in practice, and everything below it is dead code. Reads the probe inline, through same-package predicates (functions or unambiguously-named methods) that delegate to one another, in either arm of the guard; and reads the SKIP wherever it sits — inside a function literal, a defer, a select or type-switch clause, in the condition of a tag-less switch case, one same-package call away from the arm, or handed to a helper as an argument. Past its depth bound it reports UNRESOLVED and fails rather than going quiet.
+test-skip-unconditional	gates	B-184: a test under infra/tests/ or api/ may not open with a BARE t.Skip — no guard at all — and carry statements underneath it. A skip aborts the function, so everything below it is unreachable code that reads like a live assertion; two such tests had asserted nothing since T1.4 and six more sat in t.Run subtests. The unguarded half of the class test-skip-absent-path guards. Its pin holds live anchors, so a detector that stops recognising the shape goes red rather than quiet.
 test-target-coverage	gates	Todo PACOTE com teste e rodado por um alvo do Taskfile, ou tem isencao NOMEADA com razao e sunset. Granularidade de pacote, nao de modulo: um `./unit/...` marcava o modulo inteiro coberto enquanto 41 arquivos em tres subarvores nao rodavam (B-114). `go build` nao conta (B-087/B-088).
 test-targets	gates	Verifies Taskfile test targets exist and are wired.
 loopzero-api-openbao-approle-envfrom	gates	T6.1 of plan 2026-06-10-j22-openbao-transit-eso-sync: loopzero-api chart unconditionally wires AppRole secret_id via envFrom.secretRef to K8s Secret loopzero-openbao-approle (optional=true). Anti-hardcode gate — NO inline value: for OPENBAO_VAULT_SECRET_ID. Renders chart via helm template subprocess (Anti-Pattern #8 legitimate); advisory fallthrough when helm absent. M-Migrate2 2026-07-07 replaces infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh.

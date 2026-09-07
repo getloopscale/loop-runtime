@@ -29,12 +29,13 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"sync"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/pkg/naming"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -42,9 +43,9 @@ import (
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
 type (
-	BootstrapRequest    = domain.BootstrapRequest
-	BootstrapStore      = domain.BootstrapStore
-	CellPlacementEngine = domain.CellPlacementEngine
+	BootstrapRequest    = ports.BootstrapRequest
+	BootstrapStore      = ports.BootstrapStore
+	CellPlacementEngine = ports.CellPlacementEngine
 )
 
 // BootstrapResponse is the JSON response for POST /internal/bootstrap.

@@ -21,9 +21,9 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/events"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/api/internal/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -77,9 +77,9 @@ type ReleaseConvergenceLoop struct {
 	// Nil-safe: ActivateReleaseKernel skips the deploy.succeeded emit when nil.
 	deployEventStore store.DeployEventStore
 	baseDomain       string
-	publicDomain string // release-blockers-2026-06-25-set v1.1 #61 — canonical wildcard for deploy.completed URL (mirrors SyncCallbackActivator.publicDomain).
-	logger       *slog.Logger
-	cfg          ReleaseConvergenceLoopConfig
+	publicDomain     string // release-blockers-2026-06-25-set v1.1 #61 — canonical wildcard for deploy.completed URL (mirrors SyncCallbackActivator.publicDomain).
+	logger           *slog.Logger
+	cfg              ReleaseConvergenceLoopConfig
 
 	sem    chan struct{}
 	active sync.Map

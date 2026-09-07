@@ -16,7 +16,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -39,12 +39,12 @@ type BuildStoreReader interface {
 
 // streamTerminalEvents are event types that signal the stream should close.
 // These are events after which no more meaningful events will arrive.
-// - deploy.completed / deploy.sync_failed / deploy.git_push_failed: Phase 2 finished
-// - build.failed / build.cancelled: no deploy will follow
-// - rollout.aborted: argo-rollouts-progressive-delivery-plan T4.1 — canary
-//   analysis failed and Argo Rollouts auto-aborted. Replaces deploy.completed
-//   in the abort path. Note: rollout.step is NON-terminal — stream stays open
-//   while canary progresses through pause/setWeight steps.
+//   - deploy.completed / deploy.sync_failed / deploy.git_push_failed: Phase 2 finished
+//   - build.failed / build.cancelled: no deploy will follow
+//   - rollout.aborted: argo-rollouts-progressive-delivery-plan T4.1 — canary
+//     analysis failed and Argo Rollouts auto-aborted. Replaces deploy.completed
+//     in the abort path. Note: rollout.step is NON-terminal — stream stays open
+//     while canary progresses through pause/setWeight steps.
 var streamTerminalEvents = map[string]bool{
 	"deploy.completed":       true,
 	"deploy.sync_failed":     true,
@@ -138,7 +138,7 @@ type StreamHandler struct {
 	pollInterval         time.Duration
 	safetyTimeout        time.Duration
 	maxConcurrentStreams int64
-	activeStreams         atomic.Int64
+	activeStreams        atomic.Int64
 }
 
 // NewStreamHandler creates a StreamHandler with the given dependencies.
@@ -173,7 +173,7 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// SEC-1: Verify tenant ownership — return 404 (not 403) to avoid leaking build existence.
 	// Per ADR-0030 + T2.3 closure: emit RFC 9457 problem+json (Stage C migration).
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		errorshttp.WriteJSON(w, r, loopzeroerrors.ErrUnauthorized)
 		return
@@ -493,7 +493,7 @@ func (h *ProjectStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		errorshttp.WriteJSON(w, r, loopzeroerrors.ErrUnauthorized)
 		return

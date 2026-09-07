@@ -8,14 +8,15 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"log/slog"
 	"net/http"
 	"net/http/pprof"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/builds"
+	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
 
@@ -28,7 +29,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
@@ -385,7 +386,7 @@ func main() {
 
 	healthServices := setupHealthServices(cfg)
 
-	rateLimiter := middleware.NewRateLimiter(60, 1*time.Minute)
+	rateLimiter := ratelimit.NewRateLimiter(60, 1*time.Minute)
 	defer rateLimiter.Stop()
 
 	// T2.4 of deep-review-remediation-plan + ADR D4 — pre-auth IP rate limit.
@@ -393,10 +394,10 @@ func main() {
 	// in dev so X-Forwarded-For is never honored). Limit defaults to
 	// 120/min/IP — enough headroom for legitimate batch CLIs, stings on
 	// brute-force.
-	ipRateLimiter := middleware.NewIPRateLimiter(middleware.IPRateLimitConfig{
+	ipRateLimiter := ratelimit.NewIPRateLimiter(ratelimit.IPRateLimitConfig{
 		Limit:             120,
 		Window:            1 * time.Minute,
-		TrustedProxyCIDRs: middleware.ParseTrustedProxyCIDRs(os.Getenv("LOOPZERO_TRUSTED_PROXY_CIDRS")),
+		TrustedProxyCIDRs: ratelimit.ParseTrustedProxyCIDRs(os.Getenv("LOOPZERO_TRUSTED_PROXY_CIDRS")),
 	})
 
 	srvCfg := buildServerConfig(cfg, dbAdapter, dbDeps, stores, orchDeps, ghDeps,
@@ -410,7 +411,7 @@ func main() {
 	// (1 reverify per 30 seconds). Composition over duplication: VerifyRateLimiter
 	// wraps RateLimiter internally — see plan m3-verify-rate-limit-middleware
 	// ADR D1.
-	verifyRateLimiter := middleware.NewVerifyRateLimiter(1, 30*time.Second)
+	verifyRateLimiter := ratelimit.NewVerifyRateLimiter(1, 30*time.Second)
 	defer verifyRateLimiter.Stop()
 	srvCfg.VerifyRateLimiter = verifyRateLimiter
 

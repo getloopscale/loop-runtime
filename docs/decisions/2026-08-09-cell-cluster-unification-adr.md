@@ -1,7 +1,7 @@
 # ADR — Unificar cell e cluster em 1:1, aposentando `cell-default`
 
 **Data:** 2026-08-09
-**Status:** **PROPOSED** — material para a reunião T3; **não implementar antes da ratificação**
+**Status:** **ACCEPTED** — retroactively ratified 2026-09-06 by sponsor (see § Retroactive Ratification at end)
 **Tier:** T3 (`.claude/rules/pre-release-governance.md`) — schema, placement e identidade de cluster
 **Item:** `BACKLOG.md` § B-005
 **Medição:** `.claude/knowledge-base/discoveries/opportunities/cell-cluster-unification-opportunity.md`
@@ -161,3 +161,21 @@ Se (2) falhar, a Opção A cai e a B passa a ser a única, com o custo de vocabu
 - Item: `BACKLOG.md` § B-005
 - ADR de nomenclatura que este destrava: `docs/decisions/2026-08-09-cluster-topology-naming-adr.md`
 - Ciclo de vida de cluster: `docs/decisions/2026-08-07-capi-byoc-cluster-lifecycle-adr.md` (PROPOSED)
+
+---
+
+## Retroactive Ratification — 2026-09-06
+
+**Signed by:** sponsor (paulohenriquevn) via `/goal` chat approval on 2026-09-06, in response to B-136 halt (2026-09-04) which measured that:
+
+- The `cell-cluster-unification` code landed in commit `148c04104` on 2026-08-17 — **11 days after** the `governance-gate.py` hook was deleted (`8cb41f660`, 2026-08-06) — while this ADR remained `PROPOSED`.
+- 11 of the 11 agents that `pre-release-governance.md § Meeting Flow` named had been deleted in that same commit, so the meeting instructed by this ADR had no executor.
+- `.claude/rules/decision-delegation.txt § RETAINED governance` explicitly forbids autonomous delegation of governance changes.
+
+**What is ratified:** the decision described in this document (eliminate the 2:1 cell↔cluster relation, retire the `cell-default` sentinel, adopt 1:1 mapping). The code already implementing it (`148c04104`, `a20ec802c`, `92d1674fc`, `4d7a6b97a`) becomes covered by this ratified ADR.
+
+**What is NOT ratified retroactively:** the *process* by which the code landed without ratification. That gap is separately addressed by B-197 (restore `governance-gate.py` + agents, 2026-09-06 same day) which prevents recurrence.
+
+**Consequence:** B-136 bullet 1 (*"existe registro T3 (retroativo, se for o caso) cobrindo a fusão das identidades de cell e o rename dos clusters"*) is now satisfied. Bullets 2 (measured 2026-08-19) and 3 (`pre-release-governance.md` amendment) remain per B-136 halt records.
+
+**Precedent:** future T3 changes without prior ratification MUST NOT rely on this retroactive path. `governance-gate.py` (restored B-197) now BLOCKS Edit/Write on production paths before any T3 code can land. This ratification closes a specific 30-day HONOR-SYSTEM gap and is not policy going forward.

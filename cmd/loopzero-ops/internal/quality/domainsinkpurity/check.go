@@ -8,11 +8,14 @@
 //
 // `api/internal/services/deploycontracts` documents itself as the pure sink of
 // the services acyclic DAG: every context may import it, it imports no sibling.
-// Measured 2026-08-12, it exposes four `api/internal/db` symbols in its PUBLIC
+// Measured 2026-08-12, it exposed four `api/internal/db` symbols in its PUBLIC
 // surface — `db.DBTX` (a transaction handle), `db.Build`, `db.Release` and
-// `db.BuildAppSpec`, plus three `manifests.*` application types. **35 files in 10
-// packages depend on the sink**, so all of them depend transitively on
-// persistence.
+// `db.BuildAppSpec` — plus three `manifests.*` application types. Two of the four
+// are gone as of 2026-09-04 (B-079): `db.Build` and `db.Release` were replaced by
+// sink-owned types, and `delivery.go` no longer imports persistence. **38
+// production files in 11 packages depend on the sink** — re-measured 2026-09-04;
+// the 35-in-10 carried here since 2026-08-12 had drifted — so all of them still
+// depend transitively on the two that remain.
 //
 // `servicesacyclic` cannot see this: it inspects the edges BETWEEN the eight
 // services subpackages (nine of them), not the types that cross the DAG's outer
@@ -20,18 +23,23 @@
 //
 // # Why a ratchet, and not a fence
 //
-// Removing them costs 63 call sites — lines outside _test.go across api/,
-// recounted 2026-08-12 after review caught the first figure mixing three
-// different counting rules. 34 of the 63 are `WithLock`, the
-// environment-lock primitive Unbreakable Rule 6 puts on every mutation.
-// Refactoring it without the cleanroom that
+// Removing them cost 63 call sites — lines outside _test.go across api/,
+// recounted 2026-08-12 and reproduced identically on 2026-08-19 and 2026-09-04
+// after review caught the first figure mixing three different counting rules.
+// 34 of the 63 are `WithLock`, the environment-lock primitive Unbreakable Rule 6
+// puts on every mutation. Refactoring it without the cleanroom that
 // `cleanroom-up-live-test-mandate.md` mandates for LIVE validation would trade a
-// measured leak for an unmeasured risk.
+// measured leak for an unmeasured risk, so it stays frozen.
 //
-// So the gate freezes what was measured and refuses the fifth. It does not claim
-// the leak is closed; it claims the leak stopped growing, which is the property
-// the 35 dependents actually care about. The removal is tracked as its own item
-// with the 63 call sites counted.
+// Note what the 2026-09-04 slice did NOT do to that number: taking `db.Build`
+// and `db.Release` off the surface left all 63 lines in place — they name a
+// contract type now instead of a persistence one. The 63 is the cost of removal,
+// not a balance removal draws down.
+//
+// So the gate freezes what remains measured and refuses a new one. It does not
+// claim the leak is closed; it claims the leak stopped growing and is now two
+// symbols smaller, which is the property the 38 dependents actually care about.
+// The rest of the removal is tracked as its own item with the call sites counted.
 //
 // # It freezes a SET, not a COUNT
 //
@@ -129,11 +137,12 @@ var FrozenDefault = []string{
 	// o mesmo formato de volta.
 	"db.BuildAppSpec", // manifest_builder.go:23 — Apps []db.BuildAppSpec
 
-	// 6 e 5 call sites — os dois mais baratos, e por isso o par que deve sair
-	// PRIMEIRO quando alguem retomar. Ambos vivem no mesmo arquivo
-	// (`delivery.go`), o que faz deles uma fatia unica em vez de duas.
-	"db.Release", // delivery.go:55 — TargetRelease *db.Release
-	"db.Build",   // delivery.go:37 — Activate(ctx, build *db.Build, ...)
+	// REMOVIDOS em 2026-09-04 (B-079): `db.Release` (6 call sites) e `db.Build`
+	// (5) eram o par mais barato e sairam juntos, como esta lista mandava. Hoje
+	// `delivery.go` expoe `RollbackTarget` e `ActivationBuild` — tipos do proprio
+	// sink — e nao importa persistencia nenhuma. O conjunto congelado encolheu de
+	// 7 para 5 no mesmo commit em que a superficie encolheu: um ratchet que fica
+	// maior que a realidade para de ser um ratchet e vira folclore.
 
 	// Application-layer types crossing the same boundary. ADR D2 promised these
 	// were frozen and the first implementation did not watch them at all — three

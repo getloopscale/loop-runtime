@@ -27,20 +27,20 @@ import (
 
 // KubeMintingTokenProvider is a self-healing ArgoCD token provider:
 //
-//   1. Reads the current token from a K8s Secret (default: loopzero-api-tokens.argocd-token).
-//   2. Inspects the token's JWT exp claim and refreshes proactively when
-//      the token has < ProactiveRefreshThreshold time until expiry.
-//   3. On reactive auth-failure signal, re-mints the token immediately.
-//   4. Mints new tokens via ArgoCD's POST /api/v1/account/{account}/token
-//      using credentials from a separate Secret (default:
-//      argocd-refresh-credentials with keys argocd-username + argocd-password
-//      OR argocd-account + argocd-account-token).
-//   5. Persists the new token back to the same K8s Secret AND updates the
-//      in-memory atomic value used by SyncClient on its hot path.
-//   6. Exposes Prometheus metrics:
-//        loopzero_argocd_token_age_seconds        — gauge, sec since last mint
-//        loopzero_argocd_token_refreshes_total    — counter, labels: trigger,
-//                                                outcome ∈ {success,error}
+//  1. Reads the current token from a K8s Secret (default: loopzero-api-tokens.argocd-token).
+//  2. Inspects the token's JWT exp claim and refreshes proactively when
+//     the token has < ProactiveRefreshThreshold time until expiry.
+//  3. On reactive auth-failure signal, re-mints the token immediately.
+//  4. Mints new tokens via ArgoCD's POST /api/v1/account/{account}/token
+//     using credentials from a separate Secret (default:
+//     argocd-refresh-credentials with keys argocd-username + argocd-password
+//     OR argocd-account + argocd-account-token).
+//  5. Persists the new token back to the same K8s Secret AND updates the
+//     in-memory atomic value used by SyncClient on its hot path.
+//  6. Exposes Prometheus metrics:
+//     loopzero_argocd_token_age_seconds        — gauge, sec since last mint
+//     loopzero_argocd_token_refreshes_total    — counter, labels: trigger,
+//     outcome ∈ {success,error}
 //
 // Goroutine model: a single background loop ticks every PollInterval and
 // performs the proactive check; reactive refreshes flow through a 1-buffered
@@ -56,13 +56,13 @@ type KubeMintingTokenProvider struct {
 	cfg KubeMintingConfig
 	log *slog.Logger
 
-	token        atomic.Value // string
-	tokenIssued  atomic.Int64 // unix seconds; 0 means "unknown"
-	refreshMu    sync.Mutex   // serializes mint operations (single-flight)
-	refreshSig   chan struct{}
-	stopCh       chan struct{}
-	httpClient   *http.Client
-	stopOnce     sync.Once
+	token       atomic.Value // string
+	tokenIssued atomic.Int64 // unix seconds; 0 means "unknown"
+	refreshMu   sync.Mutex   // serializes mint operations (single-flight)
+	refreshSig  chan struct{}
+	stopCh      chan struct{}
+	httpClient  *http.Client
+	stopOnce    sync.Once
 
 	// Sprint B T4.1 (plan 2026-06-01-p2-interface-contracts-robustness,
 	// ADR D5): block-on-first-mint signal. Pre-T4.1, Token() returned
@@ -191,13 +191,13 @@ func NewKubeMintingTokenProvider(cfg KubeMintingConfig) (*KubeMintingTokenProvid
 	}
 
 	p := &KubeMintingTokenProvider{
-		cfg:        cfg,
-		log:        cfg.Logger.With("component", "argocd-token-provider"),
+		cfg:              cfg,
+		log:              cfg.Logger.With("component", "argocd-token-provider"),
 		refreshSig:       make(chan struct{}, 1),
 		stopCh:           make(chan struct{}),
 		firstMint:        make(chan struct{}),
 		firstMintTimeout: defaultFirstMintTimeout,
-		httpClient: httpClient,
+		httpClient:       httpClient,
 	}
 
 	// Seed from storage Secret if present. A missing/empty token is non-fatal;
@@ -373,8 +373,9 @@ func (p *KubeMintingTokenProvider) checkAndMaybeRefresh(ctx context.Context, tri
 }
 
 // mintAndPersist mints a new token via the ArgoCD API and stores it in:
-//   1. the K8s Secret cfg.TokenSecretName (data[cfg.TokenSecretKey])
-//   2. the in-memory atomic.Value
+//  1. the K8s Secret cfg.TokenSecretName (data[cfg.TokenSecretKey])
+//  2. the in-memory atomic.Value
+//
 // Single-flight via refreshMu — concurrent callers serialize.
 func (p *KubeMintingTokenProvider) mintAndPersist(ctx context.Context, trigger string) error {
 	p.refreshMu.Lock()
@@ -436,9 +437,9 @@ func (p *KubeMintingTokenProvider) mintAndPersist(ctx context.Context, trigger s
 }
 
 type refreshCreds struct {
-	username     string
-	password     string
-	bearerToken  string // pre-existing apiKey token used to mint a new one
+	username    string
+	password    string
+	bearerToken string // pre-existing apiKey token used to mint a new one
 }
 
 func (p *KubeMintingTokenProvider) readCredentials(ctx context.Context) (refreshCreds, error) {
@@ -462,8 +463,10 @@ func (p *KubeMintingTokenProvider) readCredentials(ctx context.Context) (refresh
 }
 
 // mintToken obtains a session token via either:
-//   (a) admin /api/v1/session login with username+password, OR
-//   (b) reusing a pre-existing apiKey bearer token directly,
+//
+//	(a) admin /api/v1/session login with username+password, OR
+//	(b) reusing a pre-existing apiKey bearer token directly,
+//
 // and then exchanges that for a new loopzero-api account token via
 // /api/v1/account/{AccountName}/token.
 func (p *KubeMintingTokenProvider) mintToken(ctx context.Context, creds refreshCreds) (string, error) {

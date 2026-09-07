@@ -10,14 +10,16 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
 	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loopzero/api/internal/k8s/secretsync"
+	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
+	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 )
 
 // K8sDeps holds Kubernetes client managers used by the API server.
 type K8sDeps struct {
-	TenantCRMgr   *k8s.TenantCRManager
-	PreviewCRMgr  *k8s.PreviewCRManager
+	TenantCRMgr   *tenancy.TenantCRManager
+	PreviewCRMgr  *workload.PreviewCRManager
 	AppCRMgr      build.ApplicationCREnsurer
 	SecretK8sSync secrets.SecretK8sSync
 }
@@ -26,18 +28,18 @@ type K8sDeps struct {
 // and Secret K8s sync (ESO). Returns error if tenant CR manager creation fails.
 func setupK8s(cfg config.Config, logger *slog.Logger) (*K8sDeps, error) {
 	// Tenant CR manager — real Kubernetes client for Tenant CRs.
-	tenantCRMgr, err := k8s.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
+	tenantCRMgr, err := tenancy.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
 	if err != nil {
 		return nil, fmt.Errorf("tenant CR manager: %w", err)
 	}
 
 	// Application CR manager — creates LoopZeroApplication CRs on mgmt cluster.
-	appCRMgr := &appCRAdapter{mgr: k8s.NewApplicationCRManager(tenantCRMgr.Client, "")}
+	appCRMgr := &appCRAdapter{mgr: workload.NewApplicationCRManager(tenantCRMgr.Client, "")}
 
 	// Secret K8s manager — creates K8s Secrets on mgmt + ExternalSecret CRs on workload.
 	// F-01 fix: Use interface variable to avoid Go nil interface trap.
 	var secretK8sSync secrets.SecretK8sSync
-	if mgr, err := k8s.NewSecretK8sManager(
+	if mgr, err := secretsync.NewSecretK8sManager(
 		cfg.MgmtKubeconfig, cfg.MgmtKubeContext,
 		cfg.RuntimeKubeconfig, cfg.RuntimeKubeContext,
 	); err != nil {
@@ -49,7 +51,7 @@ func setupK8s(cfg config.Config, logger *slog.Logger) (*K8sDeps, error) {
 	// Preview CR manager — creates/queries PreviewEnvironment CRs on
 	// mgmt cluster. Shares the same typed client + namespace as
 	// TenantCRManager (both target loopzero-system in the mgmt cluster).
-	previewCRMgr := k8s.NewPreviewCRManager(tenantCRMgr.Client)
+	previewCRMgr := workload.NewPreviewCRManager(tenantCRMgr.Client)
 
 	return &K8sDeps{
 		TenantCRMgr:   tenantCRMgr,

@@ -2,24 +2,22 @@
   "note": "Contagens congeladas por MODULO de golangci-lint e gofmt, lidas por `loopzero-ops quality lint-coverage`. A catraca recusa REGRESSAO: um modulo em 0 que ganhe um achado reprova, mesmo com centenas congeladas ao lado. Melhorar passa e aparece na saida, para que alguem recongele com `--write`. Um modulo sem entrada aqui e reportado — ele entra declarado, nunca em silencio. Ver B-121, B-083 e B-148.",
   "lint": {
     "api": 0,
-    "cmd/loopzero-ops": 221,
+    "cmd/loopzero-ops": 220,
     "infra/scripts": 13,
     "infra/tests": 84,
     "operators": 0,
     "operators/api": 0,
     "pkg": 0,
-    "tools/gen-service-auth-ed25519": 0,
-    "tools/loopzero-dockerfile-lint": 0
+    "tools/gen-service-auth-ed25519": 0
   },
   "gofmt": {
-    "api": 58,
+    "api": 0,
     "cmd/loopzero-ops": 0,
     "infra/scripts": 0,
     "infra/tests": 51,
     "operators": 1,
     "operators/api": 0,
     "pkg": 0,
-    "tools/gen-service-auth-ed25519": 0,
-    "tools/loopzero-dockerfile-lint": 0
+    "tools/gen-service-auth-ed25519": 0
   }
 }

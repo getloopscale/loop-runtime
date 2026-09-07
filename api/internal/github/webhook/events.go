@@ -7,16 +7,16 @@ import "strings"
 
 // PushEvent represents a GitHub push webhook event.
 type PushEvent struct {
-	Ref        string     `json:"ref"`         // "refs/heads/main"
-	Before     string     `json:"before"`      // previous commit SHA
-	After      string     `json:"after"`       // new commit SHA (deploy target)
-	Created    bool       `json:"created"`     // true if branch was just created
-	Deleted    bool       `json:"deleted"`     // true if branch was deleted
-	Forced     bool       `json:"forced"`      // true if force push
-	Repository Repository `json:"repository"`
-	Sender     User       `json:"sender"`
-	HeadCommit *Commit    `json:"head_commit"`
-	Commits    []Commit   `json:"commits"`
+	Ref          string     `json:"ref"`     // "refs/heads/main"
+	Before       string     `json:"before"`  // previous commit SHA
+	After        string     `json:"after"`   // new commit SHA (deploy target)
+	Created      bool       `json:"created"` // true if branch was just created
+	Deleted      bool       `json:"deleted"` // true if branch was deleted
+	Forced       bool       `json:"forced"`  // true if force push
+	Repository   Repository `json:"repository"`
+	Sender       User       `json:"sender"`
+	HeadCommit   *Commit    `json:"head_commit"`
+	Commits      []Commit   `json:"commits"`
 	Installation struct {
 		ID int64 `json:"id"`
 	} `json:"installation"`
@@ -39,11 +39,11 @@ func (e PushEvent) IsTag() bool {
 
 // PullRequestEvent represents a GitHub pull_request webhook event.
 type PullRequestEvent struct {
-	Action      string      `json:"action"` // opened, synchronize, closed, reopened, etc.
-	Number      int         `json:"number"`
-	PullRequest PullRequest `json:"pull_request"`
-	Repository  Repository  `json:"repository"`
-	Sender      User        `json:"sender"`
+	Action       string      `json:"action"` // opened, synchronize, closed, reopened, etc.
+	Number       int         `json:"number"`
+	PullRequest  PullRequest `json:"pull_request"`
+	Repository   Repository  `json:"repository"`
+	Sender       User        `json:"sender"`
 	Installation struct {
 		ID int64 `json:"id"`
 	} `json:"installation"`
@@ -62,8 +62,8 @@ type InstallationEvent struct {
 // Repository represents a GitHub repository in webhook payloads.
 type Repository struct {
 	ID            int64  `json:"id"`
-	Name          string `json:"name"`           // "my-app"
-	FullName      string `json:"full_name"`      // "owner/my-app"
+	Name          string `json:"name"`      // "my-app"
+	FullName      string `json:"full_name"` // "owner/my-app"
 	Owner         User   `json:"owner"`
 	DefaultBranch string `json:"default_branch"` // "main"
 	Private       bool   `json:"private"`
@@ -81,7 +81,7 @@ type User struct {
 
 // Commit represents a git commit in webhook payloads.
 type Commit struct {
-	ID        string `json:"id"`       // full SHA
+	ID        string `json:"id"` // full SHA
 	Message   string `json:"message"`
 	Timestamp string `json:"timestamp"`
 	Author    struct {
@@ -89,23 +89,23 @@ type Commit struct {
 		Email    string `json:"email"`
 		Username string `json:"username"`
 	} `json:"author"`
-	URL   string `json:"url"`
-	Added []string `json:"added"`
+	URL      string   `json:"url"`
+	Added    []string `json:"added"`
 	Modified []string `json:"modified"`
 	Removed  []string `json:"removed"`
 }
 
 // PullRequest represents a GitHub pull request in webhook payloads.
 type PullRequest struct {
-	ID        int64  `json:"id"`
-	Number    int    `json:"number"`
-	State     string `json:"state"`  // "open", "closed"
-	Title     string `json:"title"`
-	Body      string `json:"body"`
-	Merged    bool   `json:"merged"`
-	MergedAt  string `json:"merged_at"`
-	HTMLURL   string `json:"html_url"`
-	Head      struct {
+	ID       int64  `json:"id"`
+	Number   int    `json:"number"`
+	State    string `json:"state"` // "open", "closed"
+	Title    string `json:"title"`
+	Body     string `json:"body"`
+	Merged   bool   `json:"merged"`
+	MergedAt string `json:"merged_at"`
+	HTMLURL  string `json:"html_url"`
+	Head     struct {
 		Ref string `json:"ref"` // branch name
 		SHA string `json:"sha"`
 	} `json:"head"`
@@ -117,7 +117,7 @@ type PullRequest struct {
 
 // Installation represents a GitHub App installation.
 type Installation struct {
-	ID      int64  `json:"id"`
-	Account User   `json:"account"` // user or org that installed
-	AppID   int64  `json:"app_id"`
+	ID      int64 `json:"id"`
+	Account User  `json:"account"` // user or org that installed
+	AppID   int64 `json:"app_id"`
 }

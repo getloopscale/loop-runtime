@@ -17,7 +17,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
@@ -122,7 +122,7 @@ type PreviewServiceDeps struct {
 	EnvTargets store.EnvironmentTargetStore
 }
 
-// PreviewService implements domain.PreviewService and, additionally,
+// PreviewService implements ports.PreviewService and, additionally,
 // provides webhook-driven hooks for the GitHub PR flow (T3.1).
 type PreviewService struct {
 	deps PreviewServiceDeps
@@ -143,7 +143,7 @@ func NewPreviewService(deps PreviewServiceDeps) (*PreviewService, error) {
 	return &PreviewService{deps: deps}, nil
 }
 
-// CreatePreview implements domain.PreviewService.CreatePreview.
+// CreatePreview implements ports.PreviewService.CreatePreview.
 //
 // Steps (per ADR D3 / D4):
 //  1. Validate request fields.
@@ -158,7 +158,7 @@ func NewPreviewService(deps PreviewServiceDeps) (*PreviewService, error) {
 // preview row is the source of truth for the API and the controller will
 // retry on its own. This is the same resilience principle as the deploy
 // flow (ARCH-002 fix in build_orchestrator).
-func (s *PreviewService) CreatePreview(ctx context.Context, req domain.CreatePreviewRequest) (*domain.Preview, error) {
+func (s *PreviewService) CreatePreview(ctx context.Context, req ports.CreatePreviewRequest) (*ports.Preview, error) {
 	if err := s.validate(req); err != nil {
 		return nil, err
 	}
@@ -392,7 +392,7 @@ func (s *PreviewService) OnBuildCompleted(ctx context.Context, previewID, buildI
 // validate enforces the same invariants the HTTP handler enforces.
 // Re-checked here so non-HTTP entry points (webhook, internal callers) are
 // also safe.
-func (s *PreviewService) validate(req domain.CreatePreviewRequest) error {
+func (s *PreviewService) validate(req ports.CreatePreviewRequest) error {
 	if strings.TrimSpace(req.TenantID()) == "" {
 		return loopzeroerrors.ErrMissingField.Wrap("tenant_id is required")
 	}
@@ -488,7 +488,7 @@ func isPreviewNotFound(err error) bool {
 
 // Compile-time assertion: PreviewService satisfies the route handler's
 // PreviewService interface.
-var _ domain.PreviewService = (*PreviewService)(nil)
+var _ ports.PreviewService = (*PreviewService)(nil)
 
 // appsFromLoopZeroYaml — deprecated thin wrapper around the canonical
 // ConvertLoopZeroYamlApps. Kept for in-package call sites that still use

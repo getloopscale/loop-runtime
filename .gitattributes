@@ -1,0 +1,18 @@
+# Append-only records, written concurrently by fleet lanes in separate worktrees.
+#
+# Each lane cuts its own worktree of this project and runs a cycle inside it, so
+# each gets its own copy of these files and appends its own lines. Merging two
+# such copies conflicts on the same lines every time, even though the entries
+# are independent facts about independent items and the correct resolution is
+# always "keep both".
+#
+# Measured 2026-09-04: three lanes sharing one checkout meant every /implement
+# pre-flight failed on the others' records — 21 dirty files from 6 items, and
+# fleet_idle measured 94% idle across 27 hours. Per-lane worktrees remove that,
+# and `merge=union` is what keeps the records mergeable afterwards.
+#
+# `merge=union` can duplicate a line when two lanes write identical text. That
+# is visible in review and far cheaper than a fleet stalled on a conflict at
+# 3am with nobody awake to resolve it.
+.claude/records/cycle-events.jsonl merge=union
+CHANGELOG.md merge=union

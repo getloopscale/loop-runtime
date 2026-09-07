@@ -31,6 +31,7 @@ const canonicalRouter = `package server
 import (
 	"github.com/go-chi/chi/v5"
 	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
 )
 
 func NewRouter() *chi.Mux {
@@ -89,7 +90,10 @@ func TestCheck_MissingAuthGroupFails(t *testing.T) {
 	// Router with NO Auth group.
 	body := `package server
 
-import "github.com/go-chi/chi/v5"
+import (
+	"github.com/go-chi/chi/v5"
+	"github.com/getloopscale/loopzero/api/internal/middleware"
+)
 
 func NewRouter() *chi.Mux {
 	r := chi.NewRouter()
@@ -170,7 +174,8 @@ func synthRouter(t *testing.T, insideAuth, insideProtected, outsideBoth string) 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	body := "package server\n\nfunc Router() {\n" +
+	body := "package server\n\nimport \"github.com/getloopscale/loopzero/api/internal/middleware\"\n\n" +
+		"func Router() {\n" +
 		"\tr.Group(func(r chi.Router) {\n" +
 		"\t\tr.Use(middleware.Auth(cfg.TokenValidator, cfg.MemberStore))\n" +
 		insideAuth +

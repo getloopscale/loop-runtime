@@ -21,8 +21,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
 
@@ -44,8 +44,8 @@ const (
 )
 
 // tenantBContext returns a UserContext for the attacker (tenant B).
-func tenantBContext() *middleware.UserContext {
-	return &middleware.UserContext{
+func tenantBContext() *auth.UserContext {
+	return &auth.UserContext{
 		UserID:   xtUserB,
 		Email:    "xt-user-b@example.com",
 		TenantID: xtTenantB,
@@ -65,13 +65,13 @@ type crossTenantSecretStore struct {
 	gotApp     string
 	gotName    string
 	// stubbed responses
-	listSecrets []domain.SecretMetadata
+	listSecrets []ports.SecretMetadata
 	setCreated  bool
 	delDeleted  bool
 	err         error
 }
 
-func (f *crossTenantSecretStore) ListNames(_ context.Context, tenantID, project, env string) ([]domain.SecretMetadata, error) {
+func (f *crossTenantSecretStore) ListNames(_ context.Context, tenantID, project, env string) ([]ports.SecretMetadata, error) {
 	f.gotTenant, f.gotProject, f.gotEnv = tenantID, project, env
 	return f.listSecrets, f.err
 }

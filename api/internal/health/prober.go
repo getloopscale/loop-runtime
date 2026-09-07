@@ -22,7 +22,7 @@ import (
 // testing Ingress controllers in any environment (local, CI, production).
 type HTTPProber struct {
 	Client     *http.Client
-	IngressURL string        // Optional: e.g., "http://localhost:8090". When set, probe through Ingress.
+	IngressURL string          // Optional: e.g., "http://localhost:8090". When set, probe through Ingress.
 	Backoffs   []time.Duration // Optional: retry backoffs. Default: 10 retries over ~120s for real deploys.
 }
 

@@ -16,7 +16,7 @@ package store
 // (struct in domain_types.go).
 //
 // Invariants preserved:
-//   - Create + CreateWithCFZone surface 23505 → domain.ErrDomainExists
+//   - Create + CreateWithCFZone surface 23505 → ports.ErrDomainExists
 //     via isPGUniqueViolation
 //   - GetByDomainAndTenant NoRows → (nil, nil)
 //   - ListByTenant dynamic filter via sqlc.narg() (replaces legacy
@@ -47,14 +47,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // =========================================================================
 // User-facing CRUD
 // =========================================================================
 
-func (s *PostgresDomainStore) Create(ctx context.Context, d *domain.CustomDomain) error {
+func (s *PostgresDomainStore) Create(ctx context.Context, d *ports.CustomDomain) error {
 	bridge, err := s.bridge()
 	if err != nil {
 		return err
@@ -72,14 +72,14 @@ func (s *PostgresDomainStore) Create(ctx context.Context, d *domain.CustomDomain
 		TlsStatus:         d.TLSStatus,
 	}); err != nil {
 		if db.IsPGUniqueViolation(err) {
-			return domain.ErrDomainExists
+			return ports.ErrDomainExists
 		}
 		return fmt.Errorf("domain store: create: %w", err)
 	}
 	return nil
 }
 
-func (s *PostgresDomainStore) CreateWithCFZone(ctx context.Context, d *domain.CustomDomain) error {
+func (s *PostgresDomainStore) CreateWithCFZone(ctx context.Context, d *ports.CustomDomain) error {
 	bridge, err := s.bridge()
 	if err != nil {
 		return err
@@ -101,14 +101,14 @@ func (s *PostgresDomainStore) CreateWithCFZone(ctx context.Context, d *domain.Cu
 		DnsRecordsImported: d.DNSRecordsImported,
 	}); err != nil {
 		if db.IsPGUniqueViolation(err) {
-			return domain.ErrDomainExists
+			return ports.ErrDomainExists
 		}
 		return fmt.Errorf("domain store: create with cf zone: %w", err)
 	}
 	return nil
 }
 
-func (s *PostgresDomainStore) GetByDomainAndTenant(ctx context.Context, dom, tenantID string) (*domain.CustomDomain, error) {
+func (s *PostgresDomainStore) GetByDomainAndTenant(ctx context.Context, dom, tenantID string) (*ports.CustomDomain, error) {
 	bridge, err := s.bridge()
 	if err != nil {
 		return nil, err
@@ -127,7 +127,7 @@ func (s *PostgresDomainStore) GetByDomainAndTenant(ctx context.Context, dom, ten
 	return customDomainFromGet(row), nil
 }
 
-func (s *PostgresDomainStore) ListByTenant(ctx context.Context, tenantID string, filter domain.DomainListFilter) ([]domain.CustomDomain, int, error) {
+func (s *PostgresDomainStore) ListByTenant(ctx context.Context, tenantID string, filter ports.DomainListFilter) ([]ports.CustomDomain, int, error) {
 	bridge, err := s.bridge()
 	if err != nil {
 		return nil, 0, err
@@ -163,7 +163,7 @@ func (s *PostgresDomainStore) ListByTenant(ctx context.Context, tenantID string,
 	if err != nil {
 		return nil, 0, fmt.Errorf("domain store: list: %w", err)
 	}
-	results := make([]domain.CustomDomain, 0, len(rows))
+	results := make([]ports.CustomDomain, 0, len(rows))
 	for _, r := range rows {
 		results = append(results, *customDomainFromList(r))
 	}
@@ -301,15 +301,15 @@ func (s *PostgresDomainStore) CountByTenant(ctx context.Context, tenantID string
 // Background reaper methods
 // =========================================================================
 
-func (s *PostgresDomainStore) FindAndClaimVerified(ctx context.Context) ([]domain.CustomDomain, error) {
+func (s *PostgresDomainStore) FindAndClaimVerified(ctx context.Context) ([]ports.CustomDomain, error) {
 	return s.ClaimByStatus(ctx, "verified", "provisioning")
 }
 
-func (s *PostgresDomainStore) FindRemoving(ctx context.Context) ([]domain.CustomDomain, error) {
+func (s *PostgresDomainStore) FindRemoving(ctx context.Context) ([]ports.CustomDomain, error) {
 	return s.ClaimByStatus(ctx, "removing", "removing")
 }
 
-func (s *PostgresDomainStore) ClaimByStatus(ctx context.Context, fromStatus, toStatus string) ([]domain.CustomDomain, error) {
+func (s *PostgresDomainStore) ClaimByStatus(ctx context.Context, fromStatus, toStatus string) ([]ports.CustomDomain, error) {
 	bridge, err := s.bridge()
 	if err != nil {
 		return nil, err
@@ -322,14 +322,14 @@ func (s *PostgresDomainStore) ClaimByStatus(ctx context.Context, fromStatus, toS
 	if err != nil {
 		return nil, fmt.Errorf("domain store: claim %s→%s: %w", fromStatus, toStatus, err)
 	}
-	results := make([]domain.CustomDomain, 0, len(rows))
+	results := make([]ports.CustomDomain, 0, len(rows))
 	for _, r := range rows {
 		results = append(results, *customDomainFromClaim(r))
 	}
 	return results, nil
 }
 
-func (s *PostgresDomainStore) FindPendingForAutoVerify(ctx context.Context, cellID string) ([]domain.CustomDomain, error) {
+func (s *PostgresDomainStore) FindPendingForAutoVerify(ctx context.Context, cellID string) ([]ports.CustomDomain, error) {
 	if cellID == "" {
 		cellID = db.CellDefault
 	}
@@ -342,14 +342,14 @@ func (s *PostgresDomainStore) FindPendingForAutoVerify(ctx context.Context, cell
 	if err != nil {
 		return nil, fmt.Errorf("domain store: find pending for auto-verify (cell=%s): %w", cellID, err)
 	}
-	results := make([]domain.CustomDomain, 0, len(rows))
+	results := make([]ports.CustomDomain, 0, len(rows))
 	for _, r := range rows {
 		results = append(results, *customDomainFromFindPending(r))
 	}
 	return results, nil
 }
 
-func (s *PostgresDomainStore) FindActiveForCNAMECheck(ctx context.Context, staleAfter time.Time) ([]domain.CustomDomain, error) {
+func (s *PostgresDomainStore) FindActiveForCNAMECheck(ctx context.Context, staleAfter time.Time) ([]ports.CustomDomain, error) {
 	bridge, err := s.bridge()
 	if err != nil {
 		return nil, err
@@ -359,14 +359,14 @@ func (s *PostgresDomainStore) FindActiveForCNAMECheck(ctx context.Context, stale
 	if err != nil {
 		return nil, fmt.Errorf("domain store: find active for CNAME check: %w", err)
 	}
-	results := make([]domain.CustomDomain, 0, len(rows))
+	results := make([]ports.CustomDomain, 0, len(rows))
 	for _, r := range rows {
 		results = append(results, *customDomainFromFindCNAME(r))
 	}
 	return results, nil
 }
 
-func (s *PostgresDomainStore) FindStalePending(ctx context.Context, maxAge time.Duration) ([]domain.CustomDomain, error) {
+func (s *PostgresDomainStore) FindStalePending(ctx context.Context, maxAge time.Duration) ([]ports.CustomDomain, error) {
 	cutoff := time.Now().UTC().Add(-maxAge)
 	bridge, err := s.bridge()
 	if err != nil {
@@ -377,14 +377,14 @@ func (s *PostgresDomainStore) FindStalePending(ctx context.Context, maxAge time.
 	if err != nil {
 		return nil, fmt.Errorf("domain store: find stale pending: %w", err)
 	}
-	results := make([]domain.CustomDomain, 0, len(rows))
+	results := make([]ports.CustomDomain, 0, len(rows))
 	for _, r := range rows {
 		results = append(results, *customDomainFromStalePending(r))
 	}
 	return results, nil
 }
 
-func (s *PostgresDomainStore) FindStaleProvisioning(ctx context.Context, maxAge time.Duration) ([]domain.CustomDomain, error) {
+func (s *PostgresDomainStore) FindStaleProvisioning(ctx context.Context, maxAge time.Duration) ([]ports.CustomDomain, error) {
 	cutoff := time.Now().UTC().Add(-maxAge)
 	bridge, err := s.bridge()
 	if err != nil {
@@ -395,14 +395,14 @@ func (s *PostgresDomainStore) FindStaleProvisioning(ctx context.Context, maxAge 
 	if err != nil {
 		return nil, fmt.Errorf("domain store: find stale provisioning: %w", err)
 	}
-	results := make([]domain.CustomDomain, 0, len(rows))
+	results := make([]ports.CustomDomain, 0, len(rows))
 	for _, r := range rows {
 		results = append(results, *customDomainFromStaleProvisioning(r))
 	}
 	return results, nil
 }
 
-func (s *PostgresDomainStore) FindActiveWithTLSExpiry(ctx context.Context, withinDays int) ([]domain.CustomDomain, error) {
+func (s *PostgresDomainStore) FindActiveWithTLSExpiry(ctx context.Context, withinDays int) ([]ports.CustomDomain, error) {
 	bridge, err := s.bridge()
 	if err != nil {
 		return nil, err
@@ -412,7 +412,7 @@ func (s *PostgresDomainStore) FindActiveWithTLSExpiry(ctx context.Context, withi
 	if err != nil {
 		return nil, fmt.Errorf("domain store: find active with TLS expiry: %w", err)
 	}
-	results := make([]domain.CustomDomain, 0, len(rows))
+	results := make([]ports.CustomDomain, 0, len(rows))
 	for _, r := range rows {
 		results = append(results, *customDomainFromTLSExpiry(r))
 	}
@@ -439,7 +439,7 @@ func (s *PostgresDomainStore) UpdateCNAMECheck(ctx context.Context, dom string, 
 	return nil
 }
 
-func (s *PostgresDomainStore) ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]domain.CustomDomain, error) {
+func (s *PostgresDomainStore) ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]ports.CustomDomain, error) {
 	bridge, err := s.bridge()
 	if err != nil {
 		return nil, err
@@ -454,14 +454,14 @@ func (s *PostgresDomainStore) ListActiveByApp(ctx context.Context, tenantID, pro
 	if err != nil {
 		return nil, fmt.Errorf("domain store: list active by app: %w", err)
 	}
-	results := make([]domain.CustomDomain, 0, len(rows))
+	results := make([]ports.CustomDomain, 0, len(rows))
 	for _, r := range rows {
 		results = append(results, *customDomainFromActiveByApp(r))
 	}
 	return results, nil
 }
 
-func (s *PostgresDomainStore) findByStatus(ctx context.Context, status string) ([]domain.CustomDomain, error) {
+func (s *PostgresDomainStore) findByStatus(ctx context.Context, status string) ([]ports.CustomDomain, error) {
 	bridge, err := s.bridge()
 	if err != nil {
 		return nil, err
@@ -471,7 +471,7 @@ func (s *PostgresDomainStore) findByStatus(ctx context.Context, status string) (
 	if err != nil {
 		return nil, fmt.Errorf("domain store: find by status %s: %w", status, err)
 	}
-	results := make([]domain.CustomDomain, 0, len(rows))
+	results := make([]ports.CustomDomain, 0, len(rows))
 	for _, r := range rows {
 		results = append(results, *customDomainFromFindByStatus(r))
 	}
@@ -501,11 +501,11 @@ func (s *PostgresDomainStore) UpdateCFZoneStatus(ctx context.Context, dom, cfZon
 	return nil
 }
 
-func (s *PostgresDomainStore) FindPendingNS(ctx context.Context) ([]domain.CustomDomain, error) {
+func (s *PostgresDomainStore) FindPendingNS(ctx context.Context) ([]ports.CustomDomain, error) {
 	return s.findByStatus(ctx, "pending_ns")
 }
 
-func (s *PostgresDomainStore) FindNSActive(ctx context.Context) ([]domain.CustomDomain, error) {
+func (s *PostgresDomainStore) FindNSActive(ctx context.Context) ([]ports.CustomDomain, error) {
 	return s.findByStatus(ctx, "ns_active")
 }
 
@@ -521,7 +521,7 @@ func (s *PostgresDomainStore) bridge() (generated.DBTX, error) {
 	return bridge.GeneratedDB(), nil
 }
 
-// makeCustomDomain assembles a *domain.CustomDomain from the 20
+// makeCustomDomain assembles a *ports.CustomDomain from the 20
 // columns shared by every SELECT * variant on custom_domains. All
 // per-row-type helpers below funnel into this constructor so the
 // conversion logic lives in one place.
@@ -538,8 +538,8 @@ func makeCustomDomain(
 	cfZoneStatus *string,
 	cfNameservers []string,
 	dnsRecordsImported bool,
-) *domain.CustomDomain {
-	d := &domain.CustomDomain{
+) *ports.CustomDomain {
+	d := &ports.CustomDomain{
 		ID:                       id,
 		TenantID:                 tenantID,
 		ProjectName:              projectName,
@@ -583,61 +583,61 @@ func makeCustomDomain(
 // type emitted by sqlc has identical column layout but distinct Go
 // types — these adapters are mechanical 1-call helpers.
 
-func customDomainFromGet(r generated.GetCustomDomainByDomainAndTenantRow) *domain.CustomDomain {
+func customDomainFromGet(r generated.GetCustomDomainByDomainAndTenantRow) *ports.CustomDomain {
 	return makeCustomDomain(r.ID, r.TenantID, r.ProjectName, r.AppName, r.Environment, r.Domain, r.Status, r.VerificationToken,
 		r.VerifiedAt, r.TlsStatus, r.TlsExpiresAt, r.FailureReason, r.LastCnameCheck, r.CnameConsecutiveFailures,
 		r.CreatedAt, r.UpdatedAt, r.CfZoneID, r.CfZoneStatus, r.CfNameservers, r.DnsRecordsImported)
 }
 
-func customDomainFromList(r generated.ListCustomDomainsByTenantRow) *domain.CustomDomain {
+func customDomainFromList(r generated.ListCustomDomainsByTenantRow) *ports.CustomDomain {
 	return makeCustomDomain(r.ID, r.TenantID, r.ProjectName, r.AppName, r.Environment, r.Domain, r.Status, r.VerificationToken,
 		r.VerifiedAt, r.TlsStatus, r.TlsExpiresAt, r.FailureReason, r.LastCnameCheck, r.CnameConsecutiveFailures,
 		r.CreatedAt, r.UpdatedAt, r.CfZoneID, r.CfZoneStatus, r.CfNameservers, r.DnsRecordsImported)
 }
 
-func customDomainFromActiveByApp(r generated.ListActiveCustomDomainsByAppRow) *domain.CustomDomain {
+func customDomainFromActiveByApp(r generated.ListActiveCustomDomainsByAppRow) *ports.CustomDomain {
 	return makeCustomDomain(r.ID, r.TenantID, r.ProjectName, r.AppName, r.Environment, r.Domain, r.Status, r.VerificationToken,
 		r.VerifiedAt, r.TlsStatus, r.TlsExpiresAt, r.FailureReason, r.LastCnameCheck, r.CnameConsecutiveFailures,
 		r.CreatedAt, r.UpdatedAt, r.CfZoneID, r.CfZoneStatus, r.CfNameservers, r.DnsRecordsImported)
 }
 
-func customDomainFromClaim(r generated.ClaimCustomDomainsByStatusRow) *domain.CustomDomain {
+func customDomainFromClaim(r generated.ClaimCustomDomainsByStatusRow) *ports.CustomDomain {
 	return makeCustomDomain(r.ID, r.TenantID, r.ProjectName, r.AppName, r.Environment, r.Domain, r.Status, r.VerificationToken,
 		r.VerifiedAt, r.TlsStatus, r.TlsExpiresAt, r.FailureReason, r.LastCnameCheck, r.CnameConsecutiveFailures,
 		r.CreatedAt, r.UpdatedAt, r.CfZoneID, r.CfZoneStatus, r.CfNameservers, r.DnsRecordsImported)
 }
 
-func customDomainFromFindByStatus(r generated.FindCustomDomainsByStatusRow) *domain.CustomDomain {
+func customDomainFromFindByStatus(r generated.FindCustomDomainsByStatusRow) *ports.CustomDomain {
 	return makeCustomDomain(r.ID, r.TenantID, r.ProjectName, r.AppName, r.Environment, r.Domain, r.Status, r.VerificationToken,
 		r.VerifiedAt, r.TlsStatus, r.TlsExpiresAt, r.FailureReason, r.LastCnameCheck, r.CnameConsecutiveFailures,
 		r.CreatedAt, r.UpdatedAt, r.CfZoneID, r.CfZoneStatus, r.CfNameservers, r.DnsRecordsImported)
 }
 
-func customDomainFromFindPending(r generated.FindPendingCustomDomainsForAutoVerifyRow) *domain.CustomDomain {
+func customDomainFromFindPending(r generated.FindPendingCustomDomainsForAutoVerifyRow) *ports.CustomDomain {
 	return makeCustomDomain(r.ID, r.TenantID, r.ProjectName, r.AppName, r.Environment, r.Domain, r.Status, r.VerificationToken,
 		r.VerifiedAt, r.TlsStatus, r.TlsExpiresAt, r.FailureReason, r.LastCnameCheck, r.CnameConsecutiveFailures,
 		r.CreatedAt, r.UpdatedAt, r.CfZoneID, r.CfZoneStatus, r.CfNameservers, r.DnsRecordsImported)
 }
 
-func customDomainFromFindCNAME(r generated.FindActiveCustomDomainsForCNAMECheckRow) *domain.CustomDomain {
+func customDomainFromFindCNAME(r generated.FindActiveCustomDomainsForCNAMECheckRow) *ports.CustomDomain {
 	return makeCustomDomain(r.ID, r.TenantID, r.ProjectName, r.AppName, r.Environment, r.Domain, r.Status, r.VerificationToken,
 		r.VerifiedAt, r.TlsStatus, r.TlsExpiresAt, r.FailureReason, r.LastCnameCheck, r.CnameConsecutiveFailures,
 		r.CreatedAt, r.UpdatedAt, r.CfZoneID, r.CfZoneStatus, r.CfNameservers, r.DnsRecordsImported)
 }
 
-func customDomainFromStalePending(r generated.FindStalePendingCustomDomainsRow) *domain.CustomDomain {
+func customDomainFromStalePending(r generated.FindStalePendingCustomDomainsRow) *ports.CustomDomain {
 	return makeCustomDomain(r.ID, r.TenantID, r.ProjectName, r.AppName, r.Environment, r.Domain, r.Status, r.VerificationToken,
 		r.VerifiedAt, r.TlsStatus, r.TlsExpiresAt, r.FailureReason, r.LastCnameCheck, r.CnameConsecutiveFailures,
 		r.CreatedAt, r.UpdatedAt, r.CfZoneID, r.CfZoneStatus, r.CfNameservers, r.DnsRecordsImported)
 }
 
-func customDomainFromStaleProvisioning(r generated.FindStaleProvisioningCustomDomainsRow) *domain.CustomDomain {
+func customDomainFromStaleProvisioning(r generated.FindStaleProvisioningCustomDomainsRow) *ports.CustomDomain {
 	return makeCustomDomain(r.ID, r.TenantID, r.ProjectName, r.AppName, r.Environment, r.Domain, r.Status, r.VerificationToken,
 		r.VerifiedAt, r.TlsStatus, r.TlsExpiresAt, r.FailureReason, r.LastCnameCheck, r.CnameConsecutiveFailures,
 		r.CreatedAt, r.UpdatedAt, r.CfZoneID, r.CfZoneStatus, r.CfNameservers, r.DnsRecordsImported)
 }
 
-func customDomainFromTLSExpiry(r generated.FindActiveCustomDomainsWithTLSExpiryRow) *domain.CustomDomain {
+func customDomainFromTLSExpiry(r generated.FindActiveCustomDomainsWithTLSExpiryRow) *ports.CustomDomain {
 	return makeCustomDomain(r.ID, r.TenantID, r.ProjectName, r.AppName, r.Environment, r.Domain, r.Status, r.VerificationToken,
 		r.VerifiedAt, r.TlsStatus, r.TlsExpiresAt, r.FailureReason, r.LastCnameCheck, r.CnameConsecutiveFailures,
 		r.CreatedAt, r.UpdatedAt, r.CfZoneID, r.CfZoneStatus, r.CfNameservers, r.DnsRecordsImported)

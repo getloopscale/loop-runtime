@@ -35,7 +35,7 @@ package store
 //     enforces; audit_log is in TenantOwnedTables)
 //   - achado #26 fix: COALESCE(correlation_id, '') preserved in
 //     ListAuditLogForTenant so NULL correlation_id scans as empty
-//     string into domain.AuditEntryResult.CorrelationID
+//     string into ports.AuditEntryResult.CorrelationID
 //   - fail-loud row-scan: legacy `return err` instead of silent
 //     `continue` preserved verbatim
 //   - nil-pool fallback: PostgresAuditStore with nil DB returns
@@ -54,7 +54,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // ListAuditEntries returns paginated audit entries for a tenant with
@@ -64,7 +64,7 @@ import (
 //
 // Nil-pool fallback (legacy: `if s.DB == nil { return nil, 0, nil }`)
 // preserved.
-func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID string, filter domain.AuditFilter) ([]domain.AuditEntryResult, int, error) {
+func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID string, filter ports.AuditFilter) ([]ports.AuditEntryResult, int, error) {
 	if s.DB == nil {
 		return nil, 0, nil
 	}
@@ -104,9 +104,9 @@ func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID stri
 		return nil, 0, fmt.Errorf("audit: query: %w", err)
 	}
 
-	entries := make([]domain.AuditEntryResult, 0, len(rows))
+	entries := make([]ports.AuditEntryResult, 0, len(rows))
 	for _, r := range rows {
-		e := domain.AuditEntryResult{
+		e := ports.AuditEntryResult{
 			Action:        r.Action,
 			ResourceType:  r.ResourceType,
 			ResourceID:    r.ResourceID,

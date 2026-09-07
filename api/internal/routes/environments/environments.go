@@ -15,17 +15,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
-	"github.com/getloopscale/loopzero/api/internal/routes/pagination"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	"github.com/getloopscale/loopzero/api/internal/routes/pagination"
+
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -54,9 +56,9 @@ const envDeleteCleanupWarning = "environment removed but cleanup may take a few 
 // canonical types live in domain/. Aliases preserve back-compat with
 // handler code in this file.
 type (
-	EnvironmentEntry  = domain.EnvironmentEntry
-	EnvironmentDetail = domain.EnvironmentDetail
-	EnvProjectInfo    = domain.EnvProjectInfo
+	EnvironmentEntry  = ports.EnvironmentEntry
+	EnvironmentDetail = ports.EnvironmentDetail
+	EnvProjectInfo    = ports.EnvProjectInfo
 )
 
 // EnvironmentManager abstracts environment operations on the Tenant CRD.
@@ -215,7 +217,7 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -384,7 +386,7 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -416,6 +418,10 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project is required: pass the project slug (not the project UUID) in the request body"))
 		return
 	}
+
+	// B-059: declare the resource id for the audit row (was body-snooped
+	// from the `project` key).
+	auditctx.SetResourceID(ctx, req.Project)
 
 	// M2 v1.2 T4.1 EC-1 — cross-tenant project gate (SEPA-CRITICAL).
 	// Even when project field is set, it MUST belong to the caller's
@@ -503,7 +509,7 @@ func (h *EnvironmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -527,7 +533,7 @@ func (h *EnvironmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 		// none was named. Collapsing it into a 500 would tell the operator
 		// nothing and page whoever owns the API. Answer 400 with the candidate
 		// projects so the next command can succeed.
-		var amb *domain.ErrAmbiguousEnvironment
+		var amb *ports.ErrAmbiguousEnvironment
 		if errors.As(err, &amb) {
 			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"ENVIRONMENT_AMBIGUOUS",
@@ -559,7 +565,7 @@ func (h *EnvironmentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return

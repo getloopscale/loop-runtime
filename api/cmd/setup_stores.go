@@ -5,8 +5,9 @@ package main
 
 import (
 	"encoding/hex"
-	"github.com/getloopscale/loopzero/api/internal/domain"
 	"log/slog"
+
+	"github.com/getloopscale/loopzero/api/internal/ports"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
@@ -37,7 +38,7 @@ type StoreDeps struct {
 	EventStore       sse.EventStore
 	PgEventStore     *sse.PostgresEventStore
 	SecretStore      secrets.SecretStore
-	BootstrapStore   domain.BootstrapStore
+	BootstrapStore   ports.BootstrapStore
 	DomainStore      *store.PostgresDomainStore
 	CellStore        *store.PostgresCellStore
 	SourceStore      source.SourceStore
@@ -161,5 +162,10 @@ func setupSecretStore(dbAdapter *db.PgxAdapter, encKeyHex string, transit vault.
 			"legacy_aes_key_present", len(encKey) > 0)
 		return store, nil
 	}
+	// T10.3 (B-162): this store has no write path — encryptForStore refuses
+	// without a Transit client. Say so at boot rather than at the first
+	// `loopzero secret set`, which is where the operator would otherwise find out.
+	logger.Warn("secret store wired without openbao transit — secret writes will be refused (T10.3); legacy AES rows remain readable",
+		"legacy_aes_key_present", len(encKey) > 0)
 	return store.NewPostgresSecretStore(dbAdapter, encKey)
 }

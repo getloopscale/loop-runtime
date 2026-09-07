@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
+
+# Set before the header below, not after it: this is a safety directive and the
+# header is documentation. The `shell-hygiene` gate requires it inside the top 60
+# lines, and on 2026-09-05 a correction added to that header pushed it to line 63
+# and failed the chain. A long explanation should never be able to disarm
+# `errexit`, whichever way the gate happens to be written.
+#
+# Two words were missing from this comment for a few minutes, eaten by backticks:
+# it was written through `ssh host "... <<'QUOTED' ..."`, and the outer double
+# quotes are interpreted by the LOCAL shell before the remote heredoc ever
+# protects anything. Long text goes in a file that is copied over, never in a
+# command line.
+set -euo pipefail
 #
 # T3.3 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md
 # Enforces ADR 2026-05-12 hard deadline for cosign keyed → keyless cutover.
@@ -8,6 +21,48 @@
 # Reads:
 #   - ConfigMap loopzero-system/loopzero-cosign-config: mode + cutover_deadline keys
 #   - Current date (UTC)
+#
+# THAT CONFIGMAP DOES NOT EXIST, AND THIS GUARD HAS THEREFORE NEVER EVALUATED.
+#
+# CORRECTION, 2026-09-05: "therefore" was wrong, and the paragraph below is only
+# half the reason. The guard never reached the mode read at all — the v3
+# pre-check further down exited 1 first, on a DIFFERENT ConfigMap
+# (loopzero-cosign-version-config), because it treated any non-empty target_version
+# as an upgrade in progress and demanded a companion set_at. The chart ships
+# target_version=v2.4.3 with set_at omitted and documents that as the resting
+# state, so the guard refused its own shipped default and named the version
+# tracker in the failure.
+#
+# Anyone following the note as first written would have provisioned the ConfigMap
+# named below, watched the guard fail anyway, and been pointed at a third
+# artifact. Fixed the same day (see the V3_BASELINE_VERSION block); the guard now
+# falls through to exit 2 here, which is the loud missing-input failure this note
+# describes.
+# Measured 2026-08-18, re-measured 2026-08-19 and 2026-09-04 against `loopzero-core`:
+# `kubectl -n loopzero-system get cm loopzero-cosign-config` -> NotFound. Nothing in this
+# repository creates it — `grep -rn 'name: loopzero-cosign-config' --include='*.yaml'`
+# returns nothing, and no script applies or patches it. Four places READ the name
+# (this script, infra/scripts/local/baseline-capture.sh:126, and the alert
+# remediation text in both copies of sigstore-alerts.yaml:105); none writes it.
+#
+# It is absent rather than pending, and the reason is that creating it is not an
+# edit. The block condition below — deadline passed AND still keyed — is TRUE as
+# of 2026-08-10:
+#   * ADR-2026-05-12 + 90d = 2026-08-10, the same date this script carries as its
+#     dry-run stub at line ~93;
+#   * the live loopzero-core deployment sets no LOOPZERO_COSIGN_KEYLESS, and config.go:109
+#     documents the `false` default as keyed.
+# So the first `kubectl apply` that creates this ConfigMap makes this guard start
+# blocking immediately. That is correct behaviour for an expired deadline and it
+# is a production-affecting change, which makes it the cutover owner's call:
+# either do the keyed->keyless cutover and provision with mode: keyless, or amend
+# the deadline in ADR-2026-05-12 with a new date and a reason and provision with
+# that. Tracked as issue #348. Do not provision it as a side effect of unrelated
+# work — the point of writing this here is that the absence is a held decision,
+# not an oversight someone should quietly fix.
+#
+# Registered by B-146, whose DoD offers exactly this alternative: provision it
+# declaratively, or write down why it is not provisioned.
 #
 # Exit codes:
 #   0 = OK (within window OR keyless mode active)
@@ -18,7 +73,6 @@
 #   --emergency-override="<reason>" forces exit 0 + audit_log entry
 #   Requires post-hoc Change Governor review within 24h.
 
-set -euo pipefail
 
 CONFIG_NS="${COSIGN_CONFIG_NS:-loopzero-system}"
 CONFIG_NAME="${COSIGN_CONFIG_NAME:-loopzero-cosign-config}"
@@ -118,6 +172,11 @@ fi
 # to reset the clock.
 V3_CM_NS="${COSIGN_V3_CONFIG_NS:-loopzero-system}"
 V3_CM_NAME="${COSIGN_V3_CONFIG_NAME:-loopzero-cosign-version-config}"
+# The version the chart ships as its default, meaning "no upgrade pending".
+# charts/loopzero-admission-policies/templates/cosign-version-config.yaml emits
+# target_version=v2.4.3 with set_at omitted and documents that exact state as
+# the resting one, requiring set_at only when targetVersion != v2.4.3.
+V3_BASELINE_VERSION="${COSIGN_V3_BASELINE_VERSION:-v2.4.3}"
 
 v3_read_field() {
   local key="$1"
@@ -127,7 +186,12 @@ v3_read_field() {
 }
 
 V3_TARGET="$(v3_read_field target_version || true)"
-if [[ -n "$V3_TARGET" ]]; then
+# A pending upgrade is a target that DIFFERS from the shipped baseline. Treating
+# any non-empty target_version as pending made the chart's own default state
+# (target_version=v2.4.3, no set_at) exit 1 here, before the keyed/keyless logic
+# below ever ran — so the guard blocked on the version tracker instead of
+# reporting on the cutover it exists to enforce. Measured 2026-09-05.
+if [[ -n "$V3_TARGET" && "$V3_TARGET" != "$V3_BASELINE_VERSION" ]]; then
   V3_SET_AT="$(v3_read_field set_at || true)"
   if [[ -z "$V3_SET_AT" ]]; then
     log "FAIL: ConfigMap $V3_CM_NS/$V3_CM_NAME has target_version=$V3_TARGET but missing required 'set_at' field; refusing ambiguous deadline (ADR-2026-05-28-cosign-v2.4.3-deadline)"

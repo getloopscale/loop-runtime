@@ -21,21 +21,74 @@ import (
 // criacao do teste que a verifica. Uma guarda que impede escrever o proprio teste e' o
 // mesmo defeito visto de outro angulo.
 
+// localizarHook devolve o interpretador e o caminho do hook instalado, e RECUSA
+// continuar se nao houver nenhum.
+//
+// Media 2026-09-05: este arquivo fixava `validate-command.sh`. O kit aposentou o
+// hook em bash e instala `validate-command.py`, entao toda invocacao devolvia 127
+// — comando nao encontrado — e a tabela abaixo relatava `"rm -rf /" NAO foi
+// bloqueado (exit 127) — a guarda ficou mais permissiva`. A frase e' falsa e
+// alarma na pior direcao possivel. Medido contra o hook realmente instalado:
+// `rm -rf /`, `rm -rf $HOME`, `rm -rf ~` e `echo ola && rm -rf $HOME` saem todos
+// com 2. A guarda bloqueia; quem regrediu foi o teste.
+//
+// **Ausencia e permissao sao achados diferentes.** Um guarda que nao acha o
+// sujeito precisa dizer ISSO, alto, em vez de reportar sobre um comportamento que
+// nunca observou. E' o mesmo conserto que o cross-reference do B75 e o guarda de
+// roteamento de dominio receberam nos ultimos dois dias, pela mesma razao.
+func localizarHook(t *testing.T, raiz string) (string, string) {
+	t.Helper()
+	candidatos := []struct{ interp, nome string }{
+		{"python3", "validate-command.py"},
+		{"bash", "validate-command.sh"},
+	}
+	var procurados []string
+	for _, c := range candidatos {
+		caminho := filepath.Join(raiz, ".claude", "hooks", c.nome)
+		procurados = append(procurados, caminho)
+		if _, err := os.Stat(caminho); err == nil {
+			return c.interp, caminho
+		}
+	}
+	t.Fatalf("nenhum hook de validacao instalado (procurados: %v) — sem ele esta "+
+		"tabela nao mede permissividade nenhuma, so' a propria ausencia, e reportar "+
+		"isso como 'a guarda ficou mais permissiva' seria inventar um achado de "+
+		"seguranca", procurados)
+	return "", ""
+}
+
 // rodarHook alimenta o hook com o JSON que o harness envia. 2 = bloqueado, 0 = permitido.
 func rodarHook(t *testing.T, comando string) int {
 	t.Helper()
 	raiz := repoRootDir(t)
+	// O payload COMPLETO. O hook falha fechado quando nao consegue montar o
+	// contexto — "cannot build the hook context, so nothing was checked — the
+	// payload names no `hook_event_name`" — e ate 2026-09-05 este helper mandava
+	// so' `tool_input`. Toda linha de toda tabela deste arquivo media o caminho de
+	// falha: antes do conserto do caminho do hook, 127 lido como "permitido";
+	// depois dele, 2 seria lido como "bloqueado". Nenhum dos dois numeros vinha da
+	// guarda. As tabelas nunca estiveram erradas sobre a guarda — nunca foram
+	// sobre a guarda.
 	entrada, err := json.Marshal(map[string]any{
-		"tool_input": map[string]any{"command": comando},
+		"hook_event_name": "PreToolUse",
+		"tool_name":       "Bash",
+		"tool_input":      map[string]any{"command": comando},
 	})
 	if err != nil {
 		t.Fatalf("montando json: %v", err)
 	}
-	cmd := exec.Command("bash", filepath.Join(raiz, ".claude", "hooks", "validate-command.sh"))
+	interp, caminho := localizarHook(t, raiz)
+	cmd := exec.Command(interp, caminho)
 	cmd.Stdin = strings.NewReader(string(entrada))
 	cmd.Dir = raiz
 	if err := cmd.Run(); err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
+			// 126/127 sao do shell, nao do hook: nao executavel e nao encontrado.
+			// Deixa-los passar como veredicto e' exatamente o defeito acima.
+			if code := ee.ExitCode(); code == 126 || code == 127 {
+				t.Fatalf("o hook %s nao pode ser executado por %s (exit %d) — isto nao "+
+					"e' um veredicto da guarda", caminho, interp, code)
+			}
 			return ee.ExitCode()
 		}
 		t.Fatalf("rodando o hook: %v", err)

@@ -68,8 +68,20 @@ type Config struct {
 
 // Outcome captures the result.
 type Outcome struct {
-	Pass       bool
-	Violations []string // "<file>:<alertName>"
+	Pass bool
+	// Violations sao SITES em violacao, no formato "<dir>/<arquivo>:<alerta>".
+	//
+	// O diretorio faz parte da chave desde 2026-09-06 (B-067) e a razao e' medida: 9 dos
+	// arquivos de alerta existem DUAS vezes na arvore — uma copia em `infra/helm/...` e a
+	// copia espelhada em `charts/...` que o ArgoCD entrega aos tenants. Com a chave so' no
+	// basename, esses 9 pares produziam linhas IDENTICAS: o relatorio dizia duas vezes
+	// `policy-controller-alerts.yaml:LoopZeroPolicyControllerDown` sem dizer qual abrir, e
+	// consertar uma copia deixava a outra reprovando com a mesma linha — indistinguivel do
+	// trabalho que acabara de ser feito.
+	Violations []string
+	// NomesEmViolacao guarda o nome de cada alerta em violacao, na ordem dos sites, para
+	// que `AlertasDistintos` possa separar "quantos alertas" de "quantos lugares".
+	NomesEmViolacao []string
 	// LinksMortos sao anotacoes de runbook que APONTAM PARA O NADA e que o gate
 	// consegue provar sem rede: caminho deste repositorio que nao existe em disco,
 	// ou URL do GitHub numa org diferente da identidade canonica do repo.
@@ -92,6 +104,19 @@ type Outcome struct {
 	// links estarem bons**. Confundir as duas coisas e' a forma exata que este gate existe
 	// para combater, e ela estava no teste que devia prova-lo.
 	LinksConferidos int
+}
+
+// AlertasDistintos conta ALERTAS, nao sites. Os dois numeros divergem exatamente quando um
+// alerta vive na copia `infra/helm` e na copia `charts` — e a diferenca importa porque sao
+// afirmacoes diferentes: "37 alertas nao dizem ao operador o que fazer" e' divida de
+// runbook; "46 lugares para editar" e' o tamanho do conserto. Reportar o segundo numero com
+// a palavra do primeiro infla a divida em 24% (medido 2026-09-06: 46 sites, 37 alertas).
+func (o *Outcome) AlertasDistintos() int {
+	vistos := make(map[string]struct{}, len(o.NomesEmViolacao))
+	for _, n := range o.NomesEmViolacao {
+		vistos[n] = struct{}{}
+	}
+	return len(vistos)
 }
 
 // LinkMorto e' uma anotacao de runbook provada inutil sem sair da maquina.
@@ -135,7 +160,7 @@ func Check(cfg Config) *Outcome {
 			continue
 		}
 		out.DirsVarridos++
-		varrerDiretorio(root, dir, entries, excepted, out)
+		varrerDiretorio(root, rulesDir, dir, entries, excepted, out)
 	}
 	if out.DirsVarridos == 0 {
 		out.Pass = false
@@ -148,7 +173,7 @@ func Check(cfg Config) *Outcome {
 	return out
 }
 
-func varrerDiretorio(root, dir string, entries []os.DirEntry, excepted map[string]struct{}, out *Outcome) {
+func varrerDiretorio(root, relDir, dir string, entries []os.DirEntry, excepted map[string]struct{}, out *Outcome) {
 	for _, e := range entries {
 		// O filtro historico exigia "prometheusrule" no nome — herdado do script bash que
 		// este gate substituiu. Medido em 2026-08-19 (B-164): os alertas de
@@ -169,7 +194,8 @@ func varrerDiretorio(root, dir string, entries []os.DirEntry, excepted map[strin
 			continue
 		}
 		for _, name := range missingRunbookAlerts(string(data), excepted) {
-			out.Violations = append(out.Violations, e.Name()+":"+name)
+			out.Violations = append(out.Violations, relDir+"/"+e.Name()+":"+name)
+			out.NomesEmViolacao = append(out.NomesEmViolacao, name)
 		}
 		conferirLinks(root, e.Name(), string(data), out)
 	}
@@ -227,6 +253,28 @@ func conferirLinks(root, arquivo, conteudo string, out *Outcome) {
 			continue
 		}
 		repo, caminho := b[2], b[3]
+		// A ancora (e um eventual query) NAO fazem parte do caminho em disco. `blobRe`
+		// captura tudo depois do branch num grupo so', entao sem este corte o `Stat`
+		// pergunta por `runbook-security-alerts.md#loopzerounsignedreleasepushed` — nome que
+		// nenhum arquivo tem — e um runbook que existe e' acusado de morto.
+		//
+		// Medido em 2026-09-04 (B-067): os OITO links mortos que este gate reportava na
+		// arvore eram os oito falsos, e quatro deles eram justamente os runbooks de
+		// seguranca entregues pela bala 2 do proprio item. Como `LinksMortos` nao-vazio
+		// forca `Pass = false`, o gate reprovava por defeito nenhum.
+		//
+		// O caminho vazio depois do corte continua morto: `Stat` na raiz responderia
+		// "existe" para um `runbook_url` que nao aponta a arquivo nenhum.
+		if i := strings.IndexAny(caminho, "#?"); i >= 0 {
+			caminho = caminho[:i]
+		}
+		if caminho == "" {
+			out.LinksMortos = append(out.LinksMortos, LinkMorto{
+				Arquivo: arquivo, Alerta: alerta, URL: url,
+				Motivo: "runbook_url sem caminho de arquivo",
+			})
+			continue
+		}
 		if repo != repoCanonico {
 			// Outro repositorio: o caminho nao existe nesta arvore por definicao, e
 			// afirmar que ele nao existe NA DE LA' exigiria rede. Contado, nao acusado.

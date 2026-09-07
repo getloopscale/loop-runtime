@@ -13,15 +13,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -60,7 +61,7 @@ type PrometheusQueryClient interface {
 // fourth package to make this call in the routes decomposition — the dependency
 // is on ONE method, not on a package (B-080, slice-39).
 type StatusProjectStore interface {
-	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
+	GetByName(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error)
 }
 
 // MetricsProxyHandler handles GET /api/v1/projects/{name}/metrics?range=7d&signal=uptime
@@ -91,7 +92,7 @@ type metricsRangeResponse struct {
 
 // Get handles GET /api/v1/projects/{name}/metrics?range=7d&signal=uptime_24h.
 //
-// Authentication: requires session ctx via middleware.GetUserContext.
+// Authentication: requires session ctx via auth.GetUserContext.
 // Authorization: project ownership verified via projects.GetByName(uc.TenantID, name).
 //
 //	Cross-tenant returns 404 NOT_FOUND (existence-leak-prevention).
@@ -99,7 +100,7 @@ type metricsRangeResponse struct {
 // Prometheus call: 5s timeout per EC-5; timeout → HTTP 504; error → HTTP 502.
 // Empty result → 200 OK with `{ status: "collecting", data: [] }` per EC-8.
 func (h *MetricsProxyHandler) Get(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return

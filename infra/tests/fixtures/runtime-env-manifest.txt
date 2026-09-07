@@ -54,6 +54,7 @@ ENGINE_API_URL|CONFIG|N|loopzero-cloud
 EXPORT_WORKER_DELAY_MS|CONFIG|N|loopzero-cloud
 GITEA_CROSS_CLUSTER_URL|CONFIG|N|loopzero-api
 GITEA_ORG|CONFIG|N|loopzero-api
+GITEA_ORG|CONFIG|N|loopzero-tenant-operator
 GITEA_TOKEN|SECRET|Y|loopzero-api
 GITEA_TOKEN|SECRET|Y|loopzero-{app,platform,preview,tenant}-operator
 GITEA_URL|CONFIG|N|loopzero-api

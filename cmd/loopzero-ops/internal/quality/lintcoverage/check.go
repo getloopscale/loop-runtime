@@ -49,8 +49,11 @@
 package lintcoverage
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -220,12 +223,41 @@ var findingRE = regexp.MustCompile(`(?m)^[a-zA-Z0-9_./-]+\.go:[0-9]+:[0-9]+:`)
 // execRunner invokes the real tools.
 type execRunner struct{}
 
-func (execRunner) Lint(root, mod string) (int, error) {
-	dir := ModuleDir(root, mod)
+// lintCacheDir is the golangci-lint cache this module's run may use: one
+// directory per module directory, derived rather than shared.
+//
+// The shared default cache replays the analysis of trees that no longer exist. On
+// 2026-09-05 `golangci-lint run ./...` in api/ reported 35 findings, all of them
+// under /tmp/b059-lint/api/ and /tmp/clone-B-059/api/ -- neither on disk, neither a
+// registered worktree, both debris from an earlier lane. The same run with a
+// private cache reported 0. The gate faithfully turned that into `api [lint] 0 ->
+// 35` and failed the chain on a module whose own lint is clean.
+//
+// A false FAIL costs what a false PASS costs. It teaches a reader that the chain's
+// red means nothing in particular, and the next real regression is read as more of
+// the same.
+//
+// Keyed by path hash rather than isolated per run, so caching still works: the same
+// tree reuses its own cache, and no tree can answer for another.
+func lintCacheDir(dir string) string {
+	sum := sha256.Sum256([]byte(dir))
+	return filepath.Join(os.TempDir(), "loopzero-golangci-"+hex.EncodeToString(sum[:8]))
+}
+
+// lintCommand builds the invocation, separated from running it so the environment
+// it carries can be asserted without golangci-lint on the box.
+func lintCommand(dir string) *exec.Cmd {
 	// #nosec G204 -- `dir` deriva da varredura de go.mod sob a raiz; nenhum argumento vem de
 	// entrada de usuário.
 	cmd := exec.Command("golangci-lint", "run", "--timeout", "5m", "./...")
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GOLANGCI_LINT_CACHE="+lintCacheDir(dir))
+	return cmd
+}
+
+func (execRunner) Lint(root, mod string) (int, error) {
+	dir := ModuleDir(root, mod)
+	cmd := lintCommand(dir)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		var exitErr *exec.ExitError

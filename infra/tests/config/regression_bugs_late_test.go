@@ -13,6 +13,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -282,10 +283,49 @@ func TestB75MinioBucketsCompleteness(t *testing.T) {
 			}
 		}
 	}
-	// Cross-reference: loopzero-static-assets must be in api/internal/argo/constants.go.
-	apiData, err := os.ReadFile("../../../api/internal/argo/constants.go")
+	// Cross-reference: loopzero-static-assets must be named in the argo constants.
+	//
+	// The path is SEARCHED, not hardcoded. It used to read
+	// `../../../api/internal/argo/constants.go` literally; commit 698fd507d moved
+	// the four build packages under a parent on 2026-08-18, the read started
+	// failing, and `t.Fatalf` sits one line above the assertion — so this
+	// cross-reference went unasserted for 18 days while the test reported red for
+	// a reason that had nothing to do with B-75. A real regression would have been
+	// indistinguishable from the breakage.
+	//
+	// Zero hits and several hits fail differently on purpose: zero means the file
+	// was renamed away and this guard is inert, several means it no longer knows
+	// which file it is asserting about. Both are worth different fixes.
+	var argoConstants []string
+	walkErr := filepath.WalkDir("../../../api", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil // an unreadable subtree is not this test's business
+		}
+		if d.IsDir() || d.Name() != "constants.go" {
+			return nil
+		}
+		if filepath.Base(filepath.Dir(path)) == "argo" {
+			argoConstants = append(argoConstants, path)
+		}
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("walk api/ for the argo constants: %v", walkErr)
+	}
+	switch len(argoConstants) {
+	case 1:
+		// the expected shape
+	case 0:
+		t.Fatalf("no constants.go under a directory named argo anywhere in api/ — " +
+			"the B75 cross-reference has nothing to assert against, which is a guard " +
+			"that stopped guarding rather than an invariant that held")
+	default:
+		t.Fatalf("%d candidates for the argo constants (%v) — this guard asserts "+
+			"against one file and no longer knows which", len(argoConstants), argoConstants)
+	}
+	apiData, err := os.ReadFile(argoConstants[0]) // #nosec G304 -- path comes from the walk above
 	if err != nil {
-		t.Fatalf("read constants.go: %v", err)
+		t.Fatalf("read %s: %v", argoConstants[0], err)
 	}
 	if !strings.Contains(string(apiData), `"loopzero-static-assets"`) {
 		t.Error("B75 regression: api code must reference loopzero-static-assets bucket name")
@@ -316,31 +356,72 @@ func TestB71BuildHelmfileHasCWTs(t *testing.T) {
 	}
 }
 
+// TestB69GiteaOrgConfigurable asserts B-069: the Gitea organisation that owns
+// tenant gitops repositories is configuration (GITEA_ORG), not a literal.
+//
+// B-184 -- WHY THIS ASSERTED NOTHING, AND WHAT REVIVING IT FOUND. It opened with
+// a BARE t.Skip and no guard:
+//
+//	t.Skip("monolith operators/cmd/main.go deleted T1.4 -- Gitea org env covered
+//	       by per-split-binary main.go (post operator-split)")
+//	data, err := os.ReadFile("../../../operators/cmd/main.go")
+//
+// so the six statements below it had not run since T1.4. The reason was wrong in
+// the way that matters: the hardcode was not covered by the split, it MOVED with
+// the provisioner into operators/cmd/tenant-operator/main.go and stayed there.
+// Re-pointing this test at that file found it verbatim --
+// gitea.NewRealProvisioner(giteaURL, giteaToken, "loopzero") -- while the API side
+// had read envOr("GITEA_ORG", "loopzero") the whole time. A deployment that set the
+// org got its repos CREATED in one organisation and PUSHED to another.
+//
+// MEASURED 2026-09-05: operators/cmd/main.go is absent from this tree, as are
+// both chart paths this test used to read (infra/helm/tenant-controller/ and
+// infra/helm/loopzero-controller/), so dropping the skip alone would have failed at
+// the read rather than reviving anything. The assertions are re-pointed at what
+// owns the contract today: tenant-operator is the only split binary that
+// CONSTRUCTS the Gitea provisioner, and charts/loopzero-tenant-operator is what
+// deploys it.
+//
+// "Constructs", not "imports". An audit measured the earlier wording false on
+// 2026-09-05: `go list -deps ./cmd/platform-operator` resolves
+// operators/internal/gitea too, through operators/internal/platform. The
+// conclusion survives — NewRealProvisioner is called only at
+// tenant-operator/main.go:148, and the platform path takes its organisations from
+// pb.Spec.Gitea.Organizations rather than a literal — but the premise did not, and
+// a right conclusion through a false premise exonerates the wrong change next time.
 func TestB69GiteaOrgConfigurable(t *testing.T) {
-	t.Skip("monolith operators/cmd/main.go deleted T1.4 — Gitea org env covered by per-split-binary main.go (post operator-split)")
-	data, err := os.ReadFile("../../../operators/cmd/main.go")
+	const mainPath = "../../../operators/cmd/tenant-operator/main.go"
+	data, err := os.ReadFile(mainPath)
 	if err != nil {
-		t.Fatalf("read operators/cmd/main.go: %v", err)
+		t.Fatalf("read %s: %v", mainPath, err)
 	}
 	s := string(data)
-	// MUST NOT have hardcoded "loopzero" passed as 3rd arg to NewRealProvisioner.
-	if strings.Contains(s, `gitea.NewRealProvisioner(giteaURL, giteaToken, "loopzero")`) {
-		t.Error("B69 regression: orgName hardcoded as \"loopzero\" — must use os.Getenv(\"GITEA_ORG\")")
+	// Assert the CALL SHAPE, not the absence of one literal. The assertion this
+	// test inherited was `!strings.Contains(s, "...NewRealProvisioner(giteaURL,
+	// giteaToken, \"loopzero\")")`, which any other literal walks past -- hardcoding
+	// "acme" would have satisfied it. Requiring the variable in the third position
+	// is the same correction a mutation run forced on the ADR-0018 metric
+	// assertions in regression_adr_test.go: check the declaration, not a mention.
+	if !strings.Contains(s, "gitea.NewRealProvisioner(giteaURL, giteaToken, giteaOrg)") {
+		t.Error("B69 regression: the Gitea provisioner's orgName must be the configured " +
+			"giteaOrg variable, not a string literal")
 	}
 	if !strings.Contains(s, `os.Getenv("GITEA_ORG")`) {
-		t.Error("B69 regression: GITEA_ORG env var read missing — required for configurable org")
+		t.Error("B69 regression: GITEA_ORG env var read missing -- required for configurable org")
 	}
-	// Both controller charts must declare GITEA_ORG.
-	for _, f := range []string{
-		"../../helm/tenant-controller/values.yaml",
-		"../../helm/loopzero-controller/values.yaml",
+	// Reading the env is only half of the contract: a key the chart never sets is
+	// not configurable in any real install, which is what the (now absent)
+	// controller-chart half of this test was for.
+	for _, c := range []struct{ path, want, why string }{
+		{"../../../charts/loopzero-tenant-operator/templates/configmap.yaml", "GITEA_ORG:", "ConfigMap must carry the GITEA_ORG key"},
+		{"../../../charts/loopzero-tenant-operator/values.yaml", "giteaOrg:", "values.yaml must expose config.giteaOrg"},
 	} {
-		data, err := os.ReadFile(f)
+		d, err := os.ReadFile(c.path)
 		if err != nil {
-			t.Fatalf("read %s: %v", f, err)
+			t.Fatalf("read %s: %v", c.path, err)
 		}
-		if !strings.Contains(string(data), "GITEA_ORG:") {
-			t.Errorf("B69 regression: %s must declare GITEA_ORG env var", f)
+		if !strings.Contains(string(d), c.want) {
+			t.Errorf("B69 regression: %s: %s (want %q)", c.path, c.why, c.want)
 		}
 	}
 }

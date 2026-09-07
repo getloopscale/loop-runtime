@@ -8,15 +8,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -35,25 +36,25 @@ func withChiParams(r *http.Request, params map[string]string) *http.Request {
 
 // fakePreviewStore is a controllable PreviewStore for handler tests.
 type fakePreviewStore struct {
-	listByTenantFn  func(ctx context.Context, tenantID string) ([]domain.Preview, error)
-	listByProjectFn func(ctx context.Context, tenantID, projectID string) ([]domain.Preview, error)
-	getByIDFn       func(ctx context.Context, tenantID, previewID string) (*domain.Preview, error)
+	listByTenantFn  func(ctx context.Context, tenantID string) ([]ports.Preview, error)
+	listByProjectFn func(ctx context.Context, tenantID, projectID string) ([]ports.Preview, error)
+	getByIDFn       func(ctx context.Context, tenantID, previewID string) (*ports.Preview, error)
 	requestDeleteFn func(ctx context.Context, tenantID, previewID string) error
 }
 
-func (f *fakePreviewStore) ListByTenant(ctx context.Context, tenantID string) ([]domain.Preview, error) {
+func (f *fakePreviewStore) ListByTenant(ctx context.Context, tenantID string) ([]ports.Preview, error) {
 	if f.listByTenantFn != nil {
 		return f.listByTenantFn(ctx, tenantID)
 	}
 	return nil, nil
 }
-func (f *fakePreviewStore) ListByProject(ctx context.Context, tenantID, projectID string) ([]domain.Preview, error) {
+func (f *fakePreviewStore) ListByProject(ctx context.Context, tenantID, projectID string) ([]ports.Preview, error) {
 	if f.listByProjectFn != nil {
 		return f.listByProjectFn(ctx, tenantID, projectID)
 	}
 	return nil, nil
 }
-func (f *fakePreviewStore) GetByID(ctx context.Context, tenantID, previewID string) (*domain.Preview, error) {
+func (f *fakePreviewStore) GetByID(ctx context.Context, tenantID, previewID string) (*ports.Preview, error) {
 	if f.getByIDFn != nil {
 		return f.getByIDFn(ctx, tenantID, previewID)
 	}
@@ -67,10 +68,10 @@ func (f *fakePreviewStore) RequestDeletion(ctx context.Context, tenantID, previe
 }
 
 type fakePreviewService struct {
-	createFn func(ctx context.Context, req CreatePreviewRequest) (*domain.Preview, error)
+	createFn func(ctx context.Context, req CreatePreviewRequest) (*ports.Preview, error)
 }
 
-func (f *fakePreviewService) CreatePreview(ctx context.Context, req CreatePreviewRequest) (*domain.Preview, error) {
+func (f *fakePreviewService) CreatePreview(ctx context.Context, req CreatePreviewRequest) (*ports.Preview, error) {
 	if f.createFn != nil {
 		return f.createFn(ctx, req)
 	}
@@ -83,11 +84,11 @@ func (f *fakePreviewService) CreatePreview(ctx context.Context, req CreatePrevie
 
 func TestPreviewHandler_List_HappyPath(t *testing.T) {
 	store := &fakePreviewStore{
-		listByProjectFn: func(_ context.Context, tenantID, projectID string) ([]domain.Preview, error) {
+		listByProjectFn: func(_ context.Context, tenantID, projectID string) ([]ports.Preview, error) {
 			if tenantID != "tn-test-123" || projectID != "api" {
 				t.Errorf("scoping wrong: tenant=%q project=%q", tenantID, projectID)
 			}
-			return []domain.Preview{
+			return []ports.Preview{
 				{ID: "prev-a", ProjectID: "api", PRNumber: 1, Branch: "feat/a", Status: "active"},
 				{ID: "prev-b", ProjectID: "api", PRNumber: 2, Branch: "feat/b", Status: "creating"},
 			}, nil
@@ -106,8 +107,8 @@ func TestPreviewHandler_List_HappyPath(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
 	var resp struct {
-		Previews []domain.Preview `json:"previews"`
-		Count    int              `json:"count"`
+		Previews []ports.Preview `json:"previews"`
+		Count    int             `json:"count"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -142,8 +143,8 @@ func TestPreviewHandler_List_MissingProject(t *testing.T) {
 func TestPreviewHandler_List_NoInternalTermsInResponse(t *testing.T) {
 	// Rule 3: tenant_id and ArgoCD/GitOps should not leak.
 	store := &fakePreviewStore{
-		listByProjectFn: func(_ context.Context, _, _ string) ([]domain.Preview, error) {
-			return []domain.Preview{
+		listByProjectFn: func(_ context.Context, _, _ string) ([]ports.Preview, error) {
+			return []ports.Preview{
 				{ID: "prev-a", TenantID: "tn-test-123", ProjectID: "api", PRNumber: 1, Branch: "main", Status: "active"},
 			}, nil
 		},
@@ -169,11 +170,11 @@ func TestPreviewHandler_List_NoInternalTermsInResponse(t *testing.T) {
 
 func TestPreviewHandler_Get_HappyPath(t *testing.T) {
 	store := &fakePreviewStore{
-		getByIDFn: func(_ context.Context, tenantID, previewID string) (*domain.Preview, error) {
+		getByIDFn: func(_ context.Context, tenantID, previewID string) (*ports.Preview, error) {
 			if tenantID != "tn-test-123" || previewID != "prev-x" {
 				t.Errorf("scoping wrong: tenant=%q preview=%q", tenantID, previewID)
 			}
-			return &domain.Preview{ID: "prev-x", ProjectID: "api", PRNumber: 7, Branch: "topic", Status: "active"}, nil
+			return &ports.Preview{ID: "prev-x", ProjectID: "api", PRNumber: 7, Branch: "topic", Status: "active"}, nil
 		},
 	}
 	h := NewPreviewHandler(store, nil, nil)
@@ -190,7 +191,7 @@ func TestPreviewHandler_Get_HappyPath(t *testing.T) {
 
 func TestPreviewHandler_Get_NotFound(t *testing.T) {
 	store := &fakePreviewStore{
-		getByIDFn: func(_ context.Context, _, _ string) (*domain.Preview, error) {
+		getByIDFn: func(_ context.Context, _, _ string) (*ports.Preview, error) {
 			return nil, loopzeroerrors.ErrPreviewNotFound
 		},
 	}
@@ -209,8 +210,8 @@ func TestPreviewHandler_Get_CrossProjectIsolation(t *testing.T) {
 	// Even when the preview exists for the tenant, it should not be
 	// returned if the URL project doesn't match.
 	store := &fakePreviewStore{
-		getByIDFn: func(_ context.Context, _, _ string) (*domain.Preview, error) {
-			return &domain.Preview{ID: "prev-x", ProjectID: "api", PRNumber: 1, Branch: "x", Status: "active"}, nil
+		getByIDFn: func(_ context.Context, _, _ string) (*ports.Preview, error) {
+			return &ports.Preview{ID: "prev-x", ProjectID: "api", PRNumber: 1, Branch: "x", Status: "active"}, nil
 		},
 	}
 	h := NewPreviewHandler(store, nil, nil)
@@ -232,8 +233,8 @@ func TestPreviewHandler_Get_CrossProjectIsolation(t *testing.T) {
 func TestPreviewHandler_Delete_HappyPath(t *testing.T) {
 	deleteCalled := false
 	store := &fakePreviewStore{
-		getByIDFn: func(_ context.Context, _, _ string) (*domain.Preview, error) {
-			return &domain.Preview{ID: "prev-x", ProjectID: "api", PRNumber: 1, Status: "active"}, nil
+		getByIDFn: func(_ context.Context, _, _ string) (*ports.Preview, error) {
+			return &ports.Preview{ID: "prev-x", ProjectID: "api", PRNumber: 1, Status: "active"}, nil
 		},
 		requestDeleteFn: func(_ context.Context, tenantID, previewID string) error {
 			deleteCalled = true
@@ -260,7 +261,7 @@ func TestPreviewHandler_Delete_HappyPath(t *testing.T) {
 
 func TestPreviewHandler_Delete_NotFound(t *testing.T) {
 	store := &fakePreviewStore{
-		getByIDFn: func(_ context.Context, _, _ string) (*domain.Preview, error) {
+		getByIDFn: func(_ context.Context, _, _ string) (*ports.Preview, error) {
 			return nil, loopzeroerrors.ErrPreviewNotFound
 		},
 	}
@@ -281,7 +282,7 @@ func TestPreviewHandler_Delete_NotFound(t *testing.T) {
 
 func TestPreviewHandler_Create_HappyPath(t *testing.T) {
 	svc := &fakePreviewService{
-		createFn: func(_ context.Context, req CreatePreviewRequest) (*domain.Preview, error) {
+		createFn: func(_ context.Context, req CreatePreviewRequest) (*ports.Preview, error) {
 			if req.TenantID() != "tn-test-123" {
 				t.Errorf("tenant injection failed: got %q", req.TenantID())
 			}
@@ -291,7 +292,7 @@ func TestPreviewHandler_Create_HappyPath(t *testing.T) {
 			if req.PRNumber != 42 || req.Branch != "feature/x" || req.CommitSHA != "abc1234" {
 				t.Errorf("body fields wrong: %+v", req)
 			}
-			return &domain.Preview{
+			return &ports.Preview{
 				ID: "prev-new", ProjectID: req.ProjectID, PRNumber: req.PRNumber,
 				Branch: req.Branch, Status: "creating",
 			}, nil
@@ -386,10 +387,10 @@ func TestPreviewHandler_Construction(t *testing.T) {
 // =============================================================================
 
 type fakePreviewProjectChecker struct {
-	getByNameFn func(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
+	getByNameFn func(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error)
 }
 
-func (f *fakePreviewProjectChecker) GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error) {
+func (f *fakePreviewProjectChecker) GetByName(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error) {
 	if f.getByNameFn != nil {
 		return f.getByNameFn(ctx, tenantID, name)
 	}
@@ -400,7 +401,7 @@ func TestPreviewHandler_List_NonExistentProject_Returns404(t *testing.T) {
 	// Red Team #92: project does not exist for this tenant → 404
 	// PROJECT_NOT_FOUND (canonical defense + no existence leak).
 	checker := &fakePreviewProjectChecker{
-		getByNameFn: func(_ context.Context, _, _ string) (*domain.ProjectResult, error) {
+		getByNameFn: func(_ context.Context, _, _ string) (*ports.ProjectResult, error) {
 			return nil, nil // project not found
 		},
 	}
@@ -421,13 +422,13 @@ func TestPreviewHandler_List_NonExistentProject_Returns404(t *testing.T) {
 func TestPreviewHandler_List_ExistingProject_AllowsThrough(t *testing.T) {
 	// Red Team #92: project exists → handler proceeds normally.
 	checker := &fakePreviewProjectChecker{
-		getByNameFn: func(_ context.Context, _, _ string) (*domain.ProjectResult, error) {
-			return &domain.ProjectResult{Name: "api"}, nil
+		getByNameFn: func(_ context.Context, _, _ string) (*ports.ProjectResult, error) {
+			return &ports.ProjectResult{Name: "api"}, nil
 		},
 	}
 	store := &fakePreviewStore{
-		listByProjectFn: func(_ context.Context, _, _ string) ([]domain.Preview, error) {
-			return []domain.Preview{{ID: "prev-1"}}, nil
+		listByProjectFn: func(_ context.Context, _, _ string) ([]ports.Preview, error) {
+			return []ports.Preview{{ID: "prev-1"}}, nil
 		},
 	}
 	h := NewPreviewHandler(store, nil, nil).WithProjectChecker(checker)
@@ -456,7 +457,7 @@ func TestPreviewHandler_List_NilChecker_BackwardsCompat(t *testing.T) {
 
 func TestPreviewHandler_Get_NonExistentProject_Returns404(t *testing.T) {
 	checker := &fakePreviewProjectChecker{
-		getByNameFn: func(_ context.Context, _, _ string) (*domain.ProjectResult, error) {
+		getByNameFn: func(_ context.Context, _, _ string) (*ports.ProjectResult, error) {
 			return nil, nil
 		},
 	}

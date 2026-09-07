@@ -58,7 +58,7 @@ type TenantDBDeleter interface {
 }
 
 // TenantK8sEvictor abstracts the multi-cluster K8s teardown (phase 2).
-// Implemented by k8s.TenantK8sEvictor through adapters.TenantK8sEvictorAdapter.
+// Implemented by tenancy.TenantK8sEvictor through adapters.TenantK8sEvictorAdapter.
 // A nil evictor means EnqueueEviction skips the K8s portion and relies on
 // tools/admin-evict-tenants.sh for cluster cleanup — useful for dev and
 // for smoke-testing the DB half in isolation.
@@ -66,7 +66,7 @@ type TenantK8sEvictor interface {
 	EvictTenantsFromClusters(ctx context.Context, tenantIDs []string) (K8sEvictionCounts, error)
 }
 
-// K8sEvictionCounts mirrors k8s.K8sEvictionCounts on the service-layer side
+// K8sEvictionCounts mirrors tenancy.K8sEvictionCounts on the service-layer side
 // to avoid cyclic imports (same pattern as TenantDeletionCounts).
 type K8sEvictionCounts struct {
 	ArgoWorkflowsDeleted int `json:"argo_workflows_deleted"`

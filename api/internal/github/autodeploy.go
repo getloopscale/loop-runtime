@@ -345,7 +345,7 @@ func (d *AutoDeployer) PrepareSourceBundle(ctx context.Context, repoFullName, co
 // --- loopzero.yaml extraction ---
 
 type LoopZeroYamlMinimal struct {
-	Project string                       `yaml:"project"`
+	Project string                            `yaml:"project"`
 	Apps    map[string]map[string]interface{} `yaml:"apps"`
 }
 

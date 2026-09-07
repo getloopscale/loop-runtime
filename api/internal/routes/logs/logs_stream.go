@@ -7,21 +7,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
-// StreamLogQuerier — alias to domain.StreamLogQuerier (T1.3 of
+// StreamLogQuerier — alias to ports.StreamLogQuerier (T1.3 of
 // deep-review-remediation-plan). The type is canonically defined in
 // domain/logs.go; the alias was promoted to the same routes/logs.go file
 // to keep existing handler call sites working without churn.
@@ -79,7 +80,7 @@ type sseLogEvent struct {
 // StreamBuildLogs handles GET /api/v1/builds/{id}/logs/stream.
 // Streams build logs as SSE events by polling Loki incrementally.
 func (h *LogStreamHandler) StreamBuildLogs(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -141,7 +142,7 @@ func (h *LogStreamHandler) StreamBuildLogs(w http.ResponseWriter, r *http.Reques
 //     promoted by promtail's loopzero-pods scrape job from the pod's
 //     loopzero.io/app label.
 func (h *LogStreamHandler) StreamRuntimeLogs(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -281,7 +282,7 @@ func (h *LogStreamHandler) streamLoop(
 func (h *LogStreamHandler) streamEntries(
 	w http.ResponseWriter,
 	flusher http.Flusher,
-	entries []domain.LogEntry,
+	entries []ports.LogEntry,
 	sinceNano *int64,
 ) bool {
 	for _, entry := range entries {

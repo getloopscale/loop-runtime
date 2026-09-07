@@ -8,14 +8,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/ports"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -23,7 +27,7 @@ import (
 func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
-	uc := middleware.GetUserContext(ctx)
+	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -54,6 +58,10 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// B-059: declare the resource id for the audit row (was body-snooped
+	// from the `project` key).
+	auditctx.SetResourceID(ctx, req.Project)
 
 	// Validate domain format.
 	// Red Team loopzero-cloud#103 closure: was `code: INTERNAL_ERROR` which
@@ -91,7 +99,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 	token := generateVerificationToken()
 
 	domain := &CustomDomain{
-		ID:                GenerateDomainID(),
+		ID:                ports.GenerateDomainID(),
 		TenantID:          uc.TenantID,
 		ProjectName:       req.Project,
 		AppName:           req.App,
@@ -103,7 +111,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.store.Create(ctx, domain); err != nil {
-		if errors.Is(err, ErrDomainExists) {
+		if errors.Is(err, ports.ErrDomainExists) {
 			httpio.WriteJSON(w, http.StatusConflict, map[string]string{
 				"code":    "DOMAIN_ALREADY_EXISTS",
 				"message": "domain already registered",

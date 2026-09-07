@@ -9,7 +9,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // preview_types.go — public structs for the preview environments
@@ -20,7 +20,7 @@ import (
 //
 // PreviewRecord is the DB row representation that keeps time.Time +
 // *string nullable pointers separated from the wire-level
-// domain.Preview (string timestamps, value strings). The conversion
+// ports.Preview (string timestamps, value strings). The conversion
 // happens in ToDomain.
 
 // previewStatus values mirror the state machine in pkg/statemachine/preview.go,
@@ -36,7 +36,7 @@ const (
 )
 
 // PreviewRecord is the database row representation of a preview environment.
-// Distinct from domain.Preview to keep DB types (time.Time) and JSON wire
+// Distinct from ports.Preview to keep DB types (time.Time) and JSON wire
 // types (string) separate.
 type PreviewRecord struct {
 	ID             string
@@ -58,10 +58,10 @@ type PreviewRecord struct {
 	DeletedAt      *time.Time
 }
 
-// ToDomain converts the DB record to a domain.Preview suitable for API
+// ToDomain converts the DB record to a ports.Preview suitable for API
 // responses. Times are serialized as RFC3339; nil pointers become empty.
-func (p *PreviewRecord) ToDomain() *domain.Preview {
-	preview := &domain.Preview{
+func (p *PreviewRecord) ToDomain() *ports.Preview {
+	preview := &ports.Preview{
 		ID:           p.ID,
 		TenantID:     p.TenantID,
 		ProjectID:    p.ProjectID,
@@ -98,10 +98,10 @@ func (p *PreviewRecord) ToDomain() *domain.Preview {
 // subpackage-topology D2 (negligible external port footprint; not a smell).
 type PreviewStore interface {
 	// API queries (reads).
-	ListByTenant(ctx context.Context, tenantID string) ([]domain.Preview, error)
-	ListByProject(ctx context.Context, tenantID, projectID string) ([]domain.Preview, error)
-	GetByID(ctx context.Context, tenantID, previewID string) (*domain.Preview, error)
-	GetByPR(ctx context.Context, tenantID, projectID string, prNumber int) (*domain.Preview, error)
+	ListByTenant(ctx context.Context, tenantID string) ([]ports.Preview, error)
+	ListByProject(ctx context.Context, tenantID, projectID string) ([]ports.Preview, error)
+	GetByID(ctx context.Context, tenantID, previewID string) (*ports.Preview, error)
+	GetByPR(ctx context.Context, tenantID, projectID string, prNumber int) (*ports.Preview, error)
 
 	// PreviewService writes.
 	Create(ctx context.Context, tx db.DBTX, rec *PreviewRecord) error

@@ -26,10 +26,10 @@ func NewScheme() (*runtime.Scheme, error) {
 	return s, nil
 }
 
-// restConfig resolves a *rest.Config: in-cluster first (API running inside the
+// RestConfig resolves a *rest.Config: in-cluster first (API running inside the
 // cluster), then kubeconfig with the given context (local development). Shared
 // by every typed CR manager (DRY — was duplicated per manager pre-M8).
-func restConfig(kubeconfig, kubeContext string) (*rest.Config, error) {
+func RestConfig(kubeconfig, kubeContext string) (*rest.Config, error) {
 	if cfg, err := rest.InClusterConfig(); err == nil {
 		return cfg, nil
 	}

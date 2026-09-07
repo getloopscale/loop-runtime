@@ -6,13 +6,16 @@ package domains
 import (
 	"context"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/getloopscale/loopzero/api/internal/ports"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // createWithCFZone implements the v2 domain creation flow:
@@ -24,7 +27,7 @@ import (
 // Plan 2026-06-15-code-review-49-findings-remediation T5.4 (R2-F3 HIGH):
 // CC 16 → ≤ 12 via 2 helper extracts (removeConflictingApexRecords +
 // dedupAndListZoneRecords). Behavior preserved verbatim.
-func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request, ctx context.Context, uc *middleware.UserContext, req domainCreateRequest) {
+func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request, ctx context.Context, uc *auth.UserContext, req domainCreateRequest) {
 	// Step 1: Create CF zone
 	zone, err := h.cfZone.CreateZone(ctx, req.Domain)
 	if err != nil {
@@ -70,7 +73,7 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 	// Step 6: Save to DB
 	zoneID := zone.ZoneID
 	domain := &CustomDomain{
-		ID:                 GenerateDomainID(),
+		ID:                 ports.GenerateDomainID(),
 		TenantID:           uc.TenantID,
 		ProjectName:        req.Project,
 		AppName:            req.App,
@@ -85,7 +88,7 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 	}
 
 	if err := h.store.CreateWithCFZone(ctx, domain); err != nil {
-		if errors.Is(err, ErrDomainExists) {
+		if errors.Is(err, ports.ErrDomainExists) {
 			// Rollback zone
 			_ = h.cfZone.DeleteZone(ctx, zone.ZoneID)
 			httpio.WriteJSON(w, http.StatusConflict, map[string]string{

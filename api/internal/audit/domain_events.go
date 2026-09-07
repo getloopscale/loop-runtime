@@ -15,15 +15,15 @@
 //
 // Two-phase rollout per EC-3:
 //
-//   Phase A — feature flag AUDIT_ENFORCE_DOMAIN_ENUM=false (default):
-//             ValidateAction() LOGS WARN on unknown actions but returns
-//             nil (accept). Operators observe the WARN counter for at
-//             least one release cycle before flipping the flag.
+//	Phase A — feature flag AUDIT_ENFORCE_DOMAIN_ENUM=false (default):
+//	          ValidateAction() LOGS WARN on unknown actions but returns
+//	          nil (accept). Operators observe the WARN counter for at
+//	          least one release cycle before flipping the flag.
 //
-//   Phase B — AUDIT_ENFORCE_DOMAIN_ENUM=true: ValidateAction() returns
-//             ErrUnknownDomainEvent for any action outside the enum.
-//             Emitters must remap (e.g., `INSERT` on tenant_members →
-//             `tenant.member.added`) before calling WriteAuditLog.
+//	Phase B — AUDIT_ENFORCE_DOMAIN_ENUM=true: ValidateAction() returns
+//	          ErrUnknownDomainEvent for any action outside the enum.
+//	          Emitters must remap (e.g., `INSERT` on tenant_members →
+//	          `tenant.member.added`) before calling WriteAuditLog.
 //
 // The enum extension protocol is intentionally loose: adding a new
 // allowed action is just appending to AllowedDomainEvents. New events

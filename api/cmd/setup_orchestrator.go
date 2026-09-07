@@ -5,7 +5,11 @@ package main
 
 import (
 	"context"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/logs"
@@ -13,9 +17,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
-	"log/slog"
-	"net/http"
-	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
@@ -89,7 +90,7 @@ type OrchestratorDeps struct {
 	ScaleHandler        *scale.ScaleHandler
 	BuildListHandler    *builds.BuildListHandler
 	BuildStatsHandler   *builds.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
-	ProjectDeleter      domain.ProjectDeleter
+	ProjectDeleter      ports.ProjectDeleter
 	ArgoCallbackHandler *argocd.ArgoCallbackHandler
 }
 

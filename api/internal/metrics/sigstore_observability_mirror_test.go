@@ -4,6 +4,7 @@
 package metrics
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -49,20 +50,34 @@ func trimHistogramSuffix(name string) string {
 	return name
 }
 
-// repoRoot walks upward from the test file's directory looking for
-// the repository root (identified by `.git` AND `CHANGELOG.md`).
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
+// findRepoRoot walks upward from start looking for the repository root
+// (identified by `.git` AND `CHANGELOG.md`).
+//
+// B-178: `.git` is checked for EXISTENCE, not for being a directory. It is a
+// directory only in an ordinary clone. In a linked worktree — what
+// `git worktree add` produces, and what every lane now works in — `.git` is a
+// regular file holding a `gitdir:` pointer. Requiring os.Stat(...).IsDir()
+// made the walk climb past the real root to `/` and fail, so these tests
+// failed in every worktree and in no ordinary checkout. A guard that is red
+// only in the environment people actually use is a guard people learn to
+// ignore, which is worse than not having it.
+//
+// The `CHANGELOG.md` half is what keeps the relaxed check honest: a stray
+// `.git` file somewhere above would otherwise be enough to stop the walk.
+//
+// Split out of repoRoot so the discovery can be tested against both shapes
+// without chdir'ing the test process — see repo_root_test.go. The same
+// relaxation is applied in
+// cmd/loopzero-ops/internal/quality/quarantineprotect.RepoRootFromCwd, which is a
+// different Go module and therefore cannot share this function.
+func findRepoRoot(start string) (string, error) {
+	dir := start
 	for i := 0; i < 8; i++ {
-		gitDir := filepath.Join(dir, ".git")
+		gitPath := filepath.Join(dir, ".git")
 		changelogPath := filepath.Join(dir, "CHANGELOG.md")
-		if st, err := os.Stat(gitDir); err == nil && st.IsDir() {
+		if _, err := os.Stat(gitPath); err == nil {
 			if _, err := os.Stat(changelogPath); err == nil {
-				return dir
+				return dir, nil
 			}
 		}
 		parent := filepath.Dir(dir)
@@ -71,8 +86,21 @@ func repoRoot(t *testing.T) string {
 		}
 		dir = parent
 	}
-	t.Fatalf("could not locate repo root from %s", dir)
-	return ""
+	return "", fmt.Errorf("could not locate repo root from %s", dir)
+}
+
+// repoRoot resolves the repository root from the test's working directory.
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root, err := findRepoRoot(wd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root
 }
 
 // extractFromFile returns the unique loopzero_* metric names referenced

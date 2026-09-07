@@ -37,14 +37,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 
 	"github.com/jackc/pgx/v5"
 
 	planpkg "github.com/getloopscale/loopzero-contracts/plan"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -129,9 +130,23 @@ type BillingResponse struct {
 // but `used` + `limit` are forever int. The CLI's billing.ts treats
 // `limit >= 999999` as "unlimited" — keep that sentinel for back-compat
 // when the metric is Enterprise/unbounded.
+//
+// `measured` says whether `used` is a MEASUREMENT or an ABSENCE. It is the
+// added field B-033 needed on the read side: with the cost aggregator off,
+// `cost_counters` holds zero rows, and every metric used to be served as
+// `{"used": 0}` — a protection that has never evaluated anything, rendered as
+// a customer who has consumed nothing. The gate already tells operators apart
+// via `loopzero_cost_cap_decisions_total{reason="unmeasured"}`; this tells the
+// reader of the response.
+//
+// Polarity is deliberate: Go's zero value is `false`, so any decoder that
+// ignores the field reads the PESSIMISTIC claim ("not measured"), never the
+// optimistic one. The failure mode this item exists for is an inert
+// protection that looks healthy.
 type BillingUsageEntry struct {
-	Used  int `json:"used"`
-	Limit int `json:"limit"`
+	Used     int  `json:"used"`
+	Limit    int  `json:"limit"`
+	Measured bool `json:"measured"`
 }
 
 // unlimitedDisplay is the CLI's sentinel for unbounded caps (see billing.ts).
@@ -146,7 +161,7 @@ type PortalResponse struct {
 // Get handles GET /api/v1/billing — returns plan + usage for the
 // authenticated tenant.
 func (h *BillingHandler) Get(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
@@ -185,6 +200,14 @@ func (h *BillingHandler) Get(w http.ResponseWriter, r *http.Request) {
 // CostStore read errors are logged and the metric is skipped — fail-open
 // matches the enforcement middleware posture (degraded aggregator must not
 // break the billing display).
+//
+// `measured` carries the store's `found` flag straight through (B-033). A
+// missing counter row still displays `used: 0`, because zero is what the
+// tenant is charged for; what changes is that the response no longer CLAIMS
+// the zero was measured. With the aggregator disabled — the state measured on
+// app-dev on 2026-08-11 and again on 2026-09-05, `cost_counters` at 0 rows —
+// every metric took this branch and the panel read "0 of 100 used" for a cap
+// that had never evaluated anything.
 func (h *BillingHandler) buildUsage(ctx context.Context, tenantID, plan string) map[string]BillingUsageEntry {
 	usage := make(map[string]BillingUsageEntry)
 	if h.costSource == nil {
@@ -220,7 +243,7 @@ func (h *BillingHandler) buildUsage(ctx context.Context, tenantID, plan string) 
 				used = int(counter.Value)
 			}
 		}
-		usage[string(metric)] = BillingUsageEntry{Used: used, Limit: limit}
+		usage[string(metric)] = BillingUsageEntry{Used: used, Limit: limit, Measured: found}
 	}
 	return usage
 }
@@ -230,7 +253,7 @@ func (h *BillingHandler) buildUsage(ctx context.Context, tenantID, plan string) 
 // customer ID (Starter free tier) MUST get 400 NO_STRIPE_CUSTOMER with a
 // product-language message, NOT 500.
 func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return

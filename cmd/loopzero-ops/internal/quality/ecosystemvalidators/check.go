@@ -51,11 +51,15 @@ type Validator struct {
 }
 
 // DefaultValidators are the two the change protocol names.
+//
+// Paths follow the kit's `scripts/ → mechanisms/<family>/` relocation
+// (the same one recorded in `mechanisms/distribution/install.sh` and the
+// `check_install_drift.py` docstring). `test_e2e_smoke.py` was renamed to
+// `verify_ecosystem.py` in the same pass — the smoke chain is now one section
+// inside a broader ecosystem verification. The Rels here follow the kit's
+// current on-disk layout; anchoring them elsewhere makes the gate hunt for
+// files that were moved deliberately.
 var DefaultValidators = []Validator{
-	// The kit renamed `scripts/` to `mechanisms/<family>/` on 2026-09-01, and
-	// `test_e2e_smoke.py` to `verify_ecosystem.py` before that. Both paths pointed
-	// at files that no longer exist, so this gate reported "the validators are not
-	// on disk" — correctly, and about its own stale map rather than about the kit.
 	{Name: "check_xrefs", Rel: "mechanisms/gates/check_xrefs.py"},
 	{Name: "verify_ecosystem", Rel: "mechanisms/gates/verify_ecosystem.py"},
 }
@@ -109,17 +113,16 @@ const defaultTimeout = 2 * time.Minute
 // Plugin (todo consumidor) tem o ecossistema em `.claude/`; standalone (o repo do
 // próprio kit) o tem na raiz. Fixar um dos dois faria o gate reportar ausência num
 // dos layouts — que é o defeito do `B-120`, noutro lugar.
+//
+// A sonda mudou de `scripts/` para `mechanisms/` porque o kit relocou tudo em
+// `mechanisms/<família>/`. `scripts/` deixou de existir; probar por ela é probar
+// por um diretório que nenhum layout carrega, e o gate cai para `root` em ambos.
 func resolveEco(root, rel string) string {
 	if rel != "" {
 		return filepath.Join(root, rel)
 	}
-	// The marker follows the kit: `scripts/` became `mechanisms/` on 2026-09-01.
-	// Both are probed, because a checkout of an older commit still has the first
-	// and this gate should not report "no ecosystem" about a layout it can read.
-	for _, marker := range []string{"mechanisms", "scripts"} {
-		if fi, err := os.Stat(filepath.Join(root, ".claude", marker)); err == nil && fi.IsDir() {
-			return filepath.Join(root, ".claude")
-		}
+	if fi, err := os.Stat(filepath.Join(root, ".claude", "mechanisms")); err == nil && fi.IsDir() {
+		return filepath.Join(root, ".claude")
 	}
 	return root
 }

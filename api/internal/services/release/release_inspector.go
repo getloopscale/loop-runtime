@@ -22,7 +22,7 @@ import (
 	"fmt"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // ReleaseInspection is the JSON shape returned by
@@ -94,7 +94,7 @@ type releaseStoreInspector struct {
 // service needs. Defined here (consumer side of DIP) so a future
 // re-platform of the audit store does not propagate.
 type ReleaseInspectorAuditQuerier interface {
-	ListAuditEntries(ctx context.Context, tenantID string, filter domain.AuditFilter) ([]domain.AuditEntryResult, int, error)
+	ListAuditEntries(ctx context.Context, tenantID string, filter ports.AuditFilter) ([]ports.AuditEntryResult, int, error)
 }
 
 // ReleaseInspectorBuildQuerier is the minimal build interface the
@@ -159,13 +159,13 @@ func (s *releaseStoreInspector) Inspect(ctx context.Context, releaseID string) (
 	out.SigningPath = derivedSigningPath(rel)
 	out.AttestationPath = derivedAttestationPath(rel)
 
-	// Audit log — domain.AuditFilter does NOT support a ResourceID
+	// Audit log — ports.AuditFilter does NOT support a ResourceID
 	// predicate, so we fetch the tenant's audit window and filter
 	// in-memory to rows whose ResourceID matches this release.
 	// 50-row cap on the upstream fetch keeps the diagnostic payload
 	// bounded.
 	if s.audit != nil {
-		filter := domain.AuditFilter{
+		filter := ports.AuditFilter{
 			ResourceType: "release",
 			Limit:        50,
 		}

@@ -37,7 +37,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // EC-08 MUST FIX P1: secret_name regex validation uses the same
@@ -67,8 +67,20 @@ type TenantCellBindingLookup interface {
 	GetTenantCellID(ctx context.Context, tenantID string) (string, error)
 }
 
-// InternalSecretReader loads ciphertext + delegates decrypt to the dispatcher
-// (encryptForStore/decryptFromStore — T3.4/T3.5 dual-path). Returns plaintext.
+// InternalSecretReader loads a secret's ciphertext and returns plaintext. How
+// it decrypts is the implementer's business; this contract does not say.
+//
+// B-175: until 2026-09-04 this comment claimed the implementer "delegates
+// decrypt to the dispatcher (encryptForStore/decryptFromStore)". The
+// production implementer does not. `rawSecretReader` in
+// api/cmd/setup_secret_fetch.go queries the secrets table itself and calls
+// vault.Transit.Decrypt directly, never touching PostgresSecretStore. An audit
+// of B-126 read that sentence instead of the call graph and concluded the
+// decrypt-failure counter covered every read path, when it covered only the
+// store's resync hook. Both implementers now increment
+// metrics.SecretDecryptFailedTotal under the same reasons — but the delegation
+// this comment described was never true, which is why it is gone rather than
+// updated.
 //
 // T2.1 of plan 2026-06-10-j22-layer2-code-review-fixes (closes HIGH #15
 // rawSecretReader scope-drop): signature carries project + environment
@@ -116,13 +128,13 @@ var (
 
 // NewSecretFetchHandler returns an http.HandlerFunc for T4.1.
 // The caller is expected to wrap this with the cross-cluster TokenReview
-// middleware so r.Context() carries a *middleware.TokenReviewResult.
+// middleware so r.Context() carries a *auth.TokenReviewResult.
 func NewSecretFetchHandler(deps SecretFetchHandlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
 		// Pull validated identity from middleware-injected context.
-		identity, ok := middleware.CrossClusterFromContext(ctx)
+		identity, ok := auth.CrossClusterFromContext(ctx)
 		if !ok || identity == nil || !identity.Authenticated {
 			writeSecretFetchError(w, http.StatusUnauthorized, "auth_failed", "AUTH_TOKEN_INVALID", "")
 			return

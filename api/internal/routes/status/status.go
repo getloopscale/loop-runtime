@@ -15,16 +15,17 @@ package status
 
 import (
 	"context"
-	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"log/slog"
 	"net/http"
 	"sort"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/naming"
@@ -83,7 +84,7 @@ type StatusRelease struct {
 
 // StatusProjectStore abstracts project lookup for the status handler (DIP).
 type StatusProjectStore interface {
-	GetByName(ctx context.Context, tenantID, name string) (*domain.ProjectResult, error)
+	GetByName(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error)
 }
 
 // StatusHandler provides HTTP handlers for project status operations.
@@ -224,7 +225,7 @@ type statusResponse struct {
 
 	// PlanTier is the resolved canonical plan tier for the tenant owning
 	// this project (free / pro / team / enterprise — values mirror the
-	// pkg/domain.PlanTier enum). Populated when StatusHandler.planTierStore
+	// pkg/ports.PlanTier enum). Populated when StatusHandler.planTierStore
 	// is wired; falls back to "starter" when the store is nil OR when
 	// ResolvePlanTier returns ErrUnknown (matches the fallback contract
 	// in ProjectHandler.Create + ScaleHandler.resolveTier). Read by the
@@ -241,7 +242,7 @@ type statusResponse struct {
 // CC 22 → ≤ 12 via 3 helper extracts (findLastBuild + buildActiveRelease +
 // computeScalingInfo). Behavior preserved verbatim.
 func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
-	uc := middleware.GetUserContext(r.Context())
+	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return

@@ -33,14 +33,14 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 )
 
 const idempotencyTTL = 24 * time.Hour
 
 // Get retrieves an idempotency record by key, scoped to a tenant.
 // Returns nil (not error) when the key is not found or has expired.
-func (s *PostgresIdempotencyStore) Get(ctx context.Context, key string, tenantID string) (*middleware.IdempotencyRecord, error) {
+func (s *PostgresIdempotencyStore) Get(ctx context.Context, key string, tenantID string) (*policy.IdempotencyRecord, error) {
 	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("idempotency store: DBTX %T does not implement SqlcBridge (per T0.6 reshape matrix)", s.DB)
@@ -58,7 +58,7 @@ func (s *PostgresIdempotencyStore) Get(ctx context.Context, key string, tenantID
 		return nil, fmt.Errorf("idempotency store: query failed: %w", err)
 	}
 
-	rec := &middleware.IdempotencyRecord{
+	rec := &policy.IdempotencyRecord{
 		Key:            row.Key,
 		TenantID:       row.TenantID,
 		Endpoint:       row.Endpoint,
@@ -70,7 +70,7 @@ func (s *PostgresIdempotencyStore) Get(ctx context.Context, key string, tenantID
 }
 
 // Store persists an idempotency record with a 24-hour TTL.
-func (s *PostgresIdempotencyStore) Store(ctx context.Context, rec *middleware.IdempotencyRecord) error {
+func (s *PostgresIdempotencyStore) Store(ctx context.Context, rec *policy.IdempotencyRecord) error {
 	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return fmt.Errorf("idempotency store: DBTX %T does not implement SqlcBridge (per T0.6 reshape matrix)", s.DB)

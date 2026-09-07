@@ -14,7 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/domain"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -91,8 +91,8 @@ func NewProjectDeleter(deps ProjectDeleterDeps) *ProjectDeleter {
 //  1. ListByProject -> get all envs
 //  2. For each env: single-env flow
 //  3. If all envs removed: delete project from projects table
-func (d *ProjectDeleter) Delete(ctx context.Context, req domain.ProjectDeleteInput) (*domain.ProjectDeleteOutput, error) {
-	result := &domain.ProjectDeleteOutput{
+func (d *ProjectDeleter) Delete(ctx context.Context, req ports.ProjectDeleteInput) (*ports.ProjectDeleteOutput, error) {
+	result := &ports.ProjectDeleteOutput{
 		ProjectName:         req.ProjectName,
 		DeletedEnvironments: []string{},
 	}
@@ -212,7 +212,7 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req domain.ProjectDeleteInp
 
 // deleteEnvironment deletes a single environment for a project.
 // Returns the number of cancelled builds.
-func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req domain.ProjectDeleteInput, env string) (int, error) {
+func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req ports.ProjectDeleteInput, env string) (int, error) {
 	var cancelledBuilds int
 	var workflowIDs []string
 

@@ -17,7 +17,7 @@ type k3dConfig struct {
 	Metadata struct {
 		Name string `yaml:"name"`
 	} `yaml:"metadata"`
-	Agents int `yaml:"agents"`
+	Agents  int `yaml:"agents"`
 	KubeAPI struct {
 		HostPort string `yaml:"hostPort"`
 	} `yaml:"kubeAPI"`
@@ -83,8 +83,8 @@ func TestK3dClusterNamesAreUnique(t *testing.T) {
 	configs := loadK3dConfigs(t)
 
 	expectedNames := map[string]bool{
-		"loopzero-core":     false,
-		"loopzero-build":    false,
+		"loopzero-core":   false,
+		"loopzero-build":  false,
 		"loopzero-cell-0": false,
 	}
 
@@ -111,8 +111,8 @@ func TestK3dKubeAPIPorts(t *testing.T) {
 	configs := loadK3dConfigs(t)
 
 	expectedPorts := map[string]string{
-		"loopzero-core":     "6443",
-		"loopzero-build":    "6445",
+		"loopzero-core":   "6443",
+		"loopzero-build":  "6445",
 		"loopzero-cell-0": "6444",
 	}
 
@@ -136,7 +136,7 @@ func TestK3dKubeAPIPorts(t *testing.T) {
 // actually needs.
 //
 //   - loopzero-core   — 2 agents: hosts CRDs + 4 controllers + ArgoCD + Gitea HA
-//     + Kratos + Hydra + Postgres + Harbor + Traefik + cert-manager.
+//   - Kratos + Hydra + Postgres + Harbor + Traefik + cert-manager.
 //     1 agent OOM's mid-bootstrap (Achado #131, T5.1 run 4).
 //   - loopzero-build  — 1 agent:  only runs Argo Workflows + BuildKit; concurrency
 //     is bounded by the workflow controller, not node count.
@@ -149,8 +149,8 @@ func TestK3dAgentCount(t *testing.T) {
 	configs := loadK3dConfigs(t)
 
 	expected := map[string]int{
-		"loopzero-core":     2,
-		"loopzero-build":    1,
+		"loopzero-core":   2,
+		"loopzero-build":  1,
 		"loopzero-cell-0": 1,
 	}
 

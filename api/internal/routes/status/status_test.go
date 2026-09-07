@@ -6,13 +6,14 @@ package status
 import (
 	"context"
 	"encoding/json"
-	"github.com/getloopscale/loopzero/api/internal/domain"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
 
 // --- Fake StatusBuildStore ---
@@ -40,10 +41,10 @@ func (f *fakeStatusReleaseStore) GetActiveByEnv(_ context.Context, _, _, _ strin
 // --- Fake StatusProjectStore ---
 
 type fakeStatusProjectStore struct {
-	project *domain.ProjectResult
+	project *ports.ProjectResult
 }
 
-func (f *fakeStatusProjectStore) GetByName(_ context.Context, _, name string) (*domain.ProjectResult, error) {
+func (f *fakeStatusProjectStore) GetByName(_ context.Context, _, name string) (*ports.ProjectResult, error) {
 	if f.project != nil && f.project.Name == name {
 		return f.project, nil
 	}
@@ -55,7 +56,7 @@ func (f *fakeStatusProjectStore) GetByName(_ context.Context, _, name string) (*
 func TestStatus_Get_HappyPath(t *testing.T) {
 	now := time.Now()
 	projects := &fakeStatusProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	builds := &fakeStatusBuildStore{
 		builds: []StatusBuild{
@@ -153,7 +154,7 @@ func TestStatus_Get_MissingEnv_DefaultsToProduction(t *testing.T) {
 	// on the project overview to keep URLs canonical). Callers
 	// targeting preview/staging still pass ?env=<name> explicitly.
 	h := NewStatusHandler(
-		&fakeStatusProjectStore{project: &domain.ProjectResult{ID: "p1", Name: "my-api"}},
+		&fakeStatusProjectStore{project: &ports.ProjectResult{ID: "p1", Name: "my-api"}},
 		&fakeStatusBuildStore{},
 		&fakeStatusReleaseStore{},
 		"dev.loopzero.example",
@@ -200,7 +201,7 @@ func TestStatus_Get_Unauthenticated(t *testing.T) {
 func TestStatus_Get_ScalingScaleToZero(t *testing.T) {
 	now := time.Now()
 	projects := &fakeStatusProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	builds := &fakeStatusBuildStore{
 		builds: []StatusBuild{
@@ -255,7 +256,7 @@ func TestStatus_Get_ScalingScaleToZero(t *testing.T) {
 func TestStatus_Get_ScalingHPA(t *testing.T) {
 	now := time.Now()
 	projects := &fakeStatusProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	builds := &fakeStatusBuildStore{
 		builds: []StatusBuild{
@@ -304,7 +305,7 @@ func TestStatus_Get_ScalingHPA(t *testing.T) {
 func TestStatus_Get_NoScaling(t *testing.T) {
 	now := time.Now()
 	projects := &fakeStatusProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	builds := &fakeStatusBuildStore{
 		builds: []StatusBuild{
@@ -332,7 +333,7 @@ func TestStatus_Get_NoScaling(t *testing.T) {
 
 func TestStatus_Get_NoBuildsNoRelease(t *testing.T) {
 	h := NewStatusHandler(
-		&fakeStatusProjectStore{project: &domain.ProjectResult{ID: "p1", Name: "my-api"}},
+		&fakeStatusProjectStore{project: &ports.ProjectResult{ID: "p1", Name: "my-api"}},
 		&fakeStatusBuildStore{builds: []StatusBuild{}},
 		&fakeStatusReleaseStore{release: nil},
 		"dev.loopzero.example",
@@ -383,7 +384,7 @@ func TestStatus_ActiveReleaseGitCommitMatchesBuildCommitSHA_RedTeam85(t *testing
 	const gitopsCommit = "de6b5c5b728265cc229599143a0d979ceed9bc00"
 
 	projects := &fakeStatusProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	builds := &fakeStatusBuildStore{
 		builds: []StatusBuild{
@@ -453,7 +454,7 @@ func TestStatus_ActiveReleaseGitCommitMatchesBuildCommitSHA_RedTeam85(t *testing
 func TestStatus_EmptyProductionWithPreviewRelease_SurfacesHint_RedTeam70(t *testing.T) {
 	now := time.Now()
 	projects := &fakeStatusProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	builds := &fakeStatusBuildStore{
 		builds: []StatusBuild{
@@ -506,7 +507,7 @@ func TestStatus_EmptyProductionWithPreviewRelease_SurfacesHint_RedTeam70(t *test
 // the hint field MUST stay omitted (no noise on the happy path).
 func TestStatus_EmptyProductionWithNoSiblings_OmitsHint_RedTeam70(t *testing.T) {
 	projects := &fakeStatusProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	builds := &fakeStatusBuildStore{builds: []StatusBuild{}} // no builds anywhere
 	releases := &fakeStatusReleaseStore{release: nil}
@@ -543,7 +544,7 @@ func TestStatus_EmptyProductionWithNoSiblings_OmitsHint_RedTeam70(t *testing.T) 
 func TestStatus_EmptyProductionWithFailedSibling_OmitsHint_RedTeam70(t *testing.T) {
 	now := time.Now()
 	projects := &fakeStatusProjectStore{
-		project: &domain.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
+		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
 	builds := &fakeStatusBuildStore{
 		builds: []StatusBuild{

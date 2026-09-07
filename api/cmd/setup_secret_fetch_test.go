@@ -51,7 +51,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 )
@@ -138,7 +138,7 @@ func (c *fakeCellQuerier) GetTenantCellID(_ context.Context, tenantID string) (s
 func TestBrokerBearerMiddleware_RejectsClientSuppliedXCellID(t *testing.T) {
 	const expected = "secret"
 	handler := brokerBearerMiddleware(expected, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ident, ok := middleware.CrossClusterFromContext(r.Context())
+		ident, ok := auth.CrossClusterFromContext(r.Context())
 		require.True(t, ok, "synthetic TokenReviewResult must be injected by middleware")
 		require.Equal(t, placement.DefaultCellID, ident.CellID,
 			"middleware MUST derive cellID server-side from placement.DefaultCellID; the X-Cell-ID header is forgery-prone and must be ignored (T1.1 / ADR D1 / closes #13)")
