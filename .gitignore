@@ -252,6 +252,9 @@ knowledge-base/implementations/.progress-*.json
 architect-output/
 cross-validation-output/
 
+# loop-system-design regenerable output (200KB SQLite, re-derived on each run)
+system-design-output/
+
 # user WIP simulator (commit deliberately, not via git add -A)
 docs/operations/loopzero-capsim*.mjs
 docs/operations/loopzero-capsim-mcp/

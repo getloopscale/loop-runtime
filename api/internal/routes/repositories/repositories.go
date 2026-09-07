@@ -41,14 +41,6 @@ type ProjectRepository struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-// GitHubInstallationInfo is a minimal struct for saving installations (DIP).
-type GitHubInstallationInfo struct {
-	ID           int64
-	AccountLogin string
-	AccountType  string
-	TenantID     *string
-}
-
 // RepositoryStore abstracts project↔repository persistence (DIP).
 type RepositoryStore interface {
 	// Plan J-09 T3.2 (2026-06-05): autoDeploy parameter added; was hardcoded true.

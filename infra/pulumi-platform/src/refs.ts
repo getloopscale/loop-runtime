@@ -36,6 +36,10 @@ export const dbUri = infraRef.requireOutput("dbUri") as pulumi.Output<string>;
 export const dbPassword = infraRef.requireOutput("dbPassword") as pulumi.Output<string>;
 
 // Per-service DB credentials (role-separated users)
+// NOT CONSUMED (measured 2026-09-07): dbGiteaUser and dbGiteaPassword are read
+// from the infra stack and no module in pulumi-platform imports either. The
+// producing side is real — infra/pulumi-infra/src/index.ts:208-209 exports both
+// — so these accessors are a prepared seam, not a live wire.
 export const dbGiteaUser = infraRef.requireOutput("dbGiteaUser") as pulumi.Output<string>;
 export const dbGiteaPassword = infraRef.requireOutput("dbGiteaPassword") as pulumi.Output<string>;
 

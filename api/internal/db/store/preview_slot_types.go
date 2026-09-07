@@ -39,13 +39,6 @@ type PreviewSlot struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
-// IsActive reports whether the slot has an active preview deployment
-// (active_pr_number != NULL). Used by the dashboard merge in the
-// /environments {permanent[], preview{}} response.
-func (s *PreviewSlot) IsActive() bool {
-	return s != nil && s.ActivePRNumber != nil
-}
-
 // PreviewSlotStore defines the interface for preview slot operations.
 // All tx-accepting methods (Upsert, Clear, EnsureEmpty) run inside an
 // existing transaction from withEnvironmentLock — they NEVER start

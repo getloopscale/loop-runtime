@@ -35,9 +35,6 @@ type GitRepoProvisioner = gitea.GitRepoProvisioner
 // ArgoCDProvisioner is the interface for ArgoCD Application provisioning.
 type ArgoCDProvisioner = argocd.Provisioner
 
-// MinIOCredentialProvisioner is the interface for MinIO credential provisioning.
-type MinIOCredentialProvisioner = miniop.CredentialProvisioner
-
 // FakeGitProvisioner is a test double for GitRepoProvisioner.
 // Tracks created repos in memory and can be configured to return errors.
 type FakeGitProvisioner struct {

@@ -28,13 +28,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// dogfoodFinding tracks status of one 2026-04-29 canonical finding.
-type dogfoodFinding struct {
-	ID       string
-	Severity string
-	Check    func(context.Context) (status string, evidence string, err error)
-}
-
 // runKubectl runs kubectl against the given kubeconfig with the given args.
 // Returns (stdout, exitCode, error).
 func runKubectl(ctx context.Context, kubeconfig string, args ...string) (string, int, error) {

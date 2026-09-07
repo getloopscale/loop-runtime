@@ -344,26 +344,6 @@ func (h *EnvtestHandle) Stop() {
 	}
 }
 
-// ResetFakes clears injected errors on all fake provisioners. Useful between
-// test specs to prevent error state leakage. Does NOT clear data.
-func (h *EnvtestHandle) ResetFakes() {
-	if h == nil {
-		return
-	}
-	if h.FakeGit != nil {
-		h.FakeGit.SetErr(nil)
-	}
-	if h.FakeArgoCD != nil {
-		h.FakeArgoCD.Mu.Lock()
-		h.FakeArgoCD.EnsureErr = nil
-		h.FakeArgoCD.DeleteErr = nil
-		h.FakeArgoCD.Mu.Unlock()
-	}
-	if h.FakeMinIO != nil {
-		h.FakeMinIO.ClearErrors()
-	}
-}
-
 // DefaultTimeout is the standard Eventually timeout for split-tree envtest
 // specs. Increased from 15s to 30s in fire 30 of deep-review-remediation
 // after observing intermittent flakes in TestPlatformControllers (the

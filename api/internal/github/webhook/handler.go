@@ -64,12 +64,6 @@ func NewHandler(secret string, logger *slog.Logger) *Handler {
 	}
 }
 
-// WithDedup enables delivery deduplication (MEET-044 P1).
-func (h *Handler) WithDedup(dedup DeliveryDeduplicator) *Handler {
-	h.dedup = dedup
-	return h
-}
-
 // OnPush registers a handler for push events.
 func (h *Handler) OnPush(fn PushHandler) *Handler {
 	h.onPush = fn

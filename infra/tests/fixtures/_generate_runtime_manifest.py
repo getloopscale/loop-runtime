@@ -21,7 +21,6 @@ Usage:
 
 Output: writes runtime-env-manifest.txt (sorted, deterministic).
 """
-import os
 import pathlib
 import re
 import sys

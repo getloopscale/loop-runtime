@@ -119,11 +119,6 @@ func WithDTMaxDuration(d time.Duration) DTOption {
 	return func(h *DeployTimelineHandler) { h.maxDuration = d }
 }
 
-// WithDTLogger sets a structured logger.
-func WithDTLogger(l *slog.Logger) DTOption {
-	return func(h *DeployTimelineHandler) { h.logger = l }
-}
-
 // NewDeployTimelineHandler constructs the handler with sane defaults.
 func NewDeployTimelineHandler(store DeployTimelineEventStore, opts ...DTOption) *DeployTimelineHandler {
 	h := &DeployTimelineHandler{

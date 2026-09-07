@@ -52,6 +52,9 @@ export interface InfraStackConfig {
   readonly cfZoneId?: string;
 }
 
+// NOT CALLED (measured 2026-09-07): the only occurrence of loadInfraStackConfig
+// in the pulumi source trees is this declaration. src/index.ts reads its config
+// by another path, so this loader is a prepared seam rather than the live one.
 export function loadInfraStackConfig(): InfraStackConfig {
   const config = new pulumi.Config();
 

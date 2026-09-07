@@ -13,30 +13,8 @@ import (
 	"strings"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
-
-// verifyNoActiveBuilds checks that no active builds remain for the tenant.
-func verifyNoActiveBuilds(tenantID string) {
-	url := fmt.Sprintf("%s/api/v1/builds?tenant=%s&status=running", apiURL(), tenantID)
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get(url)
-	if err != nil {
-		GinkgoWriter.Printf("cleanup: failed to check active builds: %v\n", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return
-	}
-
-	if builds, ok := result["builds"].([]interface{}); ok && len(builds) > 0 {
-		GinkgoWriter.Printf("cleanup: WARNING -- %d active builds remain for tenant %s\n", len(builds), tenantID)
-	}
-}
 
 // waitBuildTerminal polls the build status API until the build reaches a terminal
 // state (SUCCEEDED, FAILED, CANCELLED, TIMEOUT) or the timeout expires.

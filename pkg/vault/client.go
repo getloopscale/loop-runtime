@@ -127,14 +127,6 @@ func (c *Client) Login(ctx context.Context) error {
 	return nil
 }
 
-// IsAuthenticated returns whether Login succeeded at least once.
-// Thread-safe.
-func (c *Client) IsAuthenticated() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.authenticated
-}
-
 // mapAuthErr maps SDK auth errors to typed errors.
 func (c *Client) mapAuthErr(err error) error {
 	var respErr *openbao.ResponseError

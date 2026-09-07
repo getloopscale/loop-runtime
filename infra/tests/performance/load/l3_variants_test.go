@@ -241,16 +241,5 @@ func TestRealDeploy_L3NoisyNeighbor(t *testing.T) {
 	}
 }
 
-// TestL3CoverageMatrixHasAllBugColumns verifies the regression matrix covers
-// every bug exercised in the L3 variants.
-func strContains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
-}
-
 // envOr returns env value or default if empty.
 // (also defined in real_deploy_test.go — referenced from there)

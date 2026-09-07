@@ -124,11 +124,3 @@ func kubectlForCluster(role ClusterRole, args ...string) *exec.Cmd {
 	all := append(base[1:], args...)
 	return exec.Command(base[0], all...)
 }
-
-// Convenience wrappers — kubectlMgmt lives in journey_velero_dr_test.go,
-// kubectlWorkload lives in journey_rollout_test.go, kubectlBuild here.
-// All delegate to kubectlForCluster() so a single env (DRILL_KUBECONFIG_DIR)
-// flips them simultaneously.
-func kubectlBuild(args ...string) *exec.Cmd {
-	return kubectlForCluster(ClusterBuild, args...)
-}

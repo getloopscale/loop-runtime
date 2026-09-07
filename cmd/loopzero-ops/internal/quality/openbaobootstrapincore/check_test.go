@@ -141,19 +141,6 @@ func repoRoot(t *testing.T) string {
 	return ""
 }
 
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && filepath.Base(s) != sub && index(s, sub) >= 0
-}
-
-func index(s, sub string) int {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return i
-		}
-	}
-	return -1
-}
-
 // --- the six evasions an independent review measured on 2026-08-12 ----------
 //
 // All six returned err==nil against the first version of this gate. Four are

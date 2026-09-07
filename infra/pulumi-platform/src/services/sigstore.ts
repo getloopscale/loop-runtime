@@ -169,6 +169,11 @@ export interface SigstoreArgs {
  *   `clusterImagePolicyKeyless.fulcioURL: https://<fulcioHostname>`
  *   `clusterImagePolicyKeyless.rekorURL: https://<rekorHostname>`
  */
+// NOT INSTANTIATED (measured 2026-09-07): the only occurrence of `Sigstore` in the
+// pulumi source trees is this declaration — no stack constructs it. The keyless
+// cosign chain that IS live comes from infra/scripts/local/bootstrap-sigstore-local.sh
+// and the helmfile releases, not from this component. Treat the block above as the
+// intended IaC shape, not as a description of what a stack applies today.
 export class Sigstore extends pulumi.ComponentResource {
   public readonly release?: k8s.helm.v3.Release;
   public readonly ready: pulumi.Output<boolean>;

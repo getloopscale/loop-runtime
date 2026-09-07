@@ -12,13 +12,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/placement"
 )
 
-// CellQueryResult holds the result of querying a single Cell.
-type CellQueryResult struct {
-	CellID string      `json:"cell_id"`
-	Data   *CellStatus `json:"data,omitempty"`
-	Error  string      `json:"error,omitempty"`
-}
-
 // AggregatedCellResult holds the combined results from all Cells.
 type AggregatedCellResult struct {
 	Cells   []CellStatus `json:"cells"`

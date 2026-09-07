@@ -24,7 +24,6 @@ package e2e
 
 import (
 	"encoding/json"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -109,32 +108,6 @@ func parseJSONLine(t *testing.T, raw string) map[string]any {
 	}
 	t.Fatalf("no JSON found in output: %s", raw[:maxLen])
 	return nil
-}
-
-// waitHTTP200 polls the URL with Host header until HTTP 200 or timeout.
-func waitHTTP200(t *testing.T, url, hostHeader string, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	client := &http.Client{Timeout: 5 * time.Second}
-	for time.Now().Before(deadline) {
-		req, err := http.NewRequest(http.MethodGet, url, nil)
-		if err != nil {
-			t.Fatalf("new request: %v", err)
-		}
-		if hostHeader != "" {
-			req.Host = hostHeader
-		}
-		resp, err := client.Do(req)
-		if err == nil {
-			_ = resp.Body.Close()
-			if resp.StatusCode == 200 {
-				return
-			}
-		}
-		// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
-		time.Sleep(5 * time.Second)
-	}
-	t.Fatalf("timeout waiting for HTTP 200 from %s (Host: %s) after %v", url, hostHeader, timeout)
 }
 
 // TestDogfoodLoopH1 — jornada user-real completa.

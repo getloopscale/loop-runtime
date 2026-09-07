@@ -39,15 +39,6 @@ import (
 // Config & types
 // ---------------------------------------------------------------------------
 
-type LoadTestConfig struct {
-	Tenants       int           // Number of synthetic tenants
-	DeploysPerMin int           // Target deploy rate (0 = all at once)
-	Duration      time.Duration // Test duration (0 = single round)
-	BurstSize     int           // Concurrent deploys in burst mode
-	APIEndpoint   string
-	AuthToken     string
-}
-
 type StageLatency struct {
 	Upload time.Duration
 	Build  time.Duration

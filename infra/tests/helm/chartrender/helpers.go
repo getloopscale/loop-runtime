@@ -372,21 +372,6 @@ func RenderTemplate(t *testing.T, opts *helm.Options, chartPath, releaseName str
 	return entry.output
 }
 
-// MustUnmarshalK8SYaml unmarshales rendered YAML output into the given
-// K8s API struct. Fails the test with clear error on parse failure.
-//
-// WARNING: helm.UnmarshalK8SYaml parses only the FIRST YAML document.
-// Use MustUnmarshalK8SYamlByKind for templates that emit multiple kinds
-// (e.g., loopzero-api/templates/deployment.yaml emits Service + Deployment).
-//
-// Use typed K8s structs from k8s.io/api/<group>/<version> (e.g.,
-// appsV1.Deployment, coreV1.Service) for compile-time field path
-// validation per the Microsoft 2026 type-safety argument.
-func MustUnmarshalK8SYaml(t *testing.T, output string, out interface{}) {
-	t.Helper()
-	helm.UnmarshalK8SYaml(t, output, out)
-}
-
 // kindAndAPI is a minimal struct for sniffing kind from a YAML doc.
 type kindAndAPI struct {
 	APIVersion string `yaml:"apiVersion"`

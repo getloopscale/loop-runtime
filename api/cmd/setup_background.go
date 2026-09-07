@@ -158,11 +158,6 @@ func setupCellRouter(
 	return dynRouter
 }
 
-// DomainDeps holds domain-related components created during background setup.
-type DomainDeps struct {
-	DomainHandler *domains.DomainHandler
-}
-
 // setupDomains creates the domain handler, provisioner, and health checker.
 // The provisioner and health checker are started as background loops only when isLeader is true.
 func setupDomains(

@@ -4,7 +4,16 @@
 /**
  * Cloudflare WAF, Rate Limiting, and Zero Trust Access — edge security layer.
  *
- * These resources protect the platform BEFORE traffic reaches the cluster:
+ * NOT WIRED (measured 2026-09-07). Nothing in this repository calls
+ * createWafRuleset, createRateLimitRules or createZeroTrustAccess: each is
+ * exported and its only occurrence in the pulumi source trees is its own
+ * declaration. What follows therefore describes an INTENDED design, not a
+ * protection the deployment currently has — read it as a reference for the
+ * AWS/Terraform port (`../loopzero-infra-modules`), not as a description of the
+ * running edge.
+ *
+ * The design, once wired, protects the platform BEFORE traffic reaches the
+ * cluster:
  * - WAF: OWASP Top 10 + bot management at CF edge
  * - Rate limiting: protects API from abuse
  * - Zero Trust Access: locks admin UIs (ArgoCD, Grafana, Gitea) behind auth

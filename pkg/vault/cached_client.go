@@ -4,7 +4,6 @@
 package vault
 
 import (
-	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -15,8 +14,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	openbao "github.com/openbao/openbao/api/v2"
 )
 
 // CachedClient is a thin wrapper over Client that adds:
@@ -210,68 +207,6 @@ func hashesEqual(a, b []byte) bool {
 		diff |= a[i] ^ b[i]
 	}
 	return diff == 0
-}
-
-// KvGetCached returns the secret at path, possibly from cache.
-// On cache miss: calls inner KvGet, populates cache, returns.
-// On circuit open: returns ErrCircuitOpen immediately without calling Vault.
-//
-// Cache key = path. Cache entry stores the map[string]interface{} `data` field
-// from the KV-v2 response. Concurrent callers for the same path share the
-// underlying fetch (no thundering herd).
-func (cc *CachedClient) KvGetCached(ctx context.Context, mount, path string) (map[string]interface{}, error) {
-	cacheKey := mount + "::" + path
-
-	// Cache check
-	if cc.cacheTTL > 0 {
-		if v, ok := cc.cache.Load(cacheKey); ok {
-			e := v.(cacheEntry)
-			if time.Now().Before(e.expiresAt) {
-				return e.value, nil
-			}
-			// Expired — remove + fall through
-			cc.cache.Delete(cacheKey)
-		}
-	}
-
-	// Circuit breaker check
-	if cc.cbThreshold > 0 && cc.isCircuitOpen() {
-		return nil, ErrCircuitOpen
-	}
-
-	// Fetch
-	sdk := cc.inner.SDK()
-	kv := sdk.KVv2(mount)
-	secret, err := kv.Get(ctx, path)
-	if err != nil {
-		cc.recordFailure()
-		// Map SDK error to typed error
-		var respErr *openbao.ResponseError
-		if errors.As(err, &respErr) {
-			switch respErr.StatusCode {
-			case 404:
-				return nil, fmt.Errorf("%w: %s", ErrKvNotFound, path)
-			case 403:
-				return nil, fmt.Errorf("%w: %s", ErrPermissionDenied, path)
-			}
-		}
-		return nil, fmt.Errorf("%w: %w", ErrVaultUnreachable, err)
-	}
-	if secret == nil || secret.Data == nil {
-		cc.recordFailure()
-		return nil, fmt.Errorf("%w: nil data for %s", ErrKvNotFound, path)
-	}
-
-	cc.recordSuccess()
-
-	// Populate cache
-	if cc.cacheTTL > 0 {
-		cc.cache.Store(cacheKey, cacheEntry{
-			value:     secret.Data,
-			expiresAt: time.Now().Add(cc.cacheTTL),
-		})
-	}
-	return secret.Data, nil
 }
 
 // Invalidate removes a specific cache entry (e.g., after rotation).

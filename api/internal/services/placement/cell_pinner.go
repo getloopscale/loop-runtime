@@ -191,16 +191,6 @@ func intPow(base, exp int) int {
 	return r
 }
 
-// TenantCRPatcher is the narrow interface CellPinner needs to update the
-// Tenant CR's spec.cellID. T5.3 of deep-review-2026-05-10-remediation-plan
-// (find_arch_cell_pinner_k8s_direct MEDIUM): abstracts the dynamic.Interface
-// dependency so unit tests can inject a fake patcher without standing up
-// envtest. Production wiring (`api/cmd/setup_server.go`) supplies an
-// adapter that wraps the real dynamic client.
-type TenantCRPatcher interface {
-	PatchTenantCellID(ctx context.Context, tenantID, cellID string) error
-}
-
 // patchTenantCR applies a strategic-merge patch to spec.cellID on the
 // named Tenant CR. Idempotent — re-pinning to the same cell is a no-op
 // from the operator's perspective.

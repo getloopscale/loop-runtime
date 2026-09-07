@@ -20,23 +20,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// httpGet performs an HTTP GET and returns the status code, body, and error.
-func httpGet(url string) (statusCode int, body string, err error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(url)
-	if err != nil {
-		return 0, "", fmt.Errorf("HTTP GET %s failed: %w", url, err)
-	}
-	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return resp.StatusCode, "", fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	return resp.StatusCode, string(bodyBytes), nil
-}
-
 // resolveTraefikPort returns the Traefik HTTPS port for a tenant based on cell assignment.
 // cell-1 uses port 8444, everything else uses 8443.
 func resolveTraefikPort(tenant string) string {

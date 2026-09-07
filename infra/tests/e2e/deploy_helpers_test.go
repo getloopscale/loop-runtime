@@ -13,13 +13,9 @@
 package e2e
 
 import (
-	"encoding/json"
-	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	. "github.com/onsi/gomega"
 )
@@ -84,33 +80,4 @@ func runLoopZeroDeploy(dir string, args ...string) (stdout, stderr string, exitC
 	}
 
 	return stdoutBuf.String(), stderrBuf.String(), exitCode
-}
-
-// waitForBuildStatus polls the API until the build reaches the expected
-// status or the timeout expires. Returns nil on success.
-func waitForBuildStatus(buildID string, status string, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	url := fmt.Sprintf("%s/api/v1/builds/%s", apiURL(), buildID)
-
-	for time.Now().Before(deadline) {
-		resp, err := http.Get(url)
-		if err != nil {
-			// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		var result map[string]interface{}
-		json.NewDecoder(resp.Body).Decode(&result)
-		resp.Body.Close()
-
-		if currentStatus, ok := result["status"].(string); ok && currentStatus == status {
-			return nil
-		}
-
-		// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
-		time.Sleep(2 * time.Second)
-	}
-
-	return fmt.Errorf("build %s did not reach status %q within %s", buildID, status, timeout)
 }

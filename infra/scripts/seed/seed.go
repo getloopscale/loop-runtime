@@ -430,16 +430,6 @@ func WaitForReconciliation(kubeContext string, timeout time.Duration) error {
 	}
 }
 
-// ExpectedNamespaces returns just the namespace names (back-compat).
-// Prefer ExpectedNamespacesByContext for cross-cluster correctness.
-func ExpectedNamespaces() []string {
-	out := make([]string, 0, 3)
-	for _, e := range ExpectedNamespacesByContext() {
-		out = append(out, e.name)
-	}
-	return out
-}
-
 // ExpectedNamespacesByContext returns each expected namespace paired with the
 // kubectl context where it should exist.
 func ExpectedNamespacesByContext() []expectedNamespace {
@@ -462,20 +452,6 @@ func findMissingNamespacesByContext(expected []expectedNamespace) []string {
 		cmd := exec.Command(args[0], args[1:]...)
 		if err := cmd.Run(); err != nil {
 			missing = append(missing, e.context+"/"+e.name)
-		}
-	}
-	return missing
-}
-
-// findMissingNamespaces is the legacy single-context probe, retained for
-// back-compat with callers that pass a specific context.
-func findMissingNamespaces(kubeContext string, expected []string) []string {
-	var missing []string
-	for _, ns := range expected {
-		args := append(kubectlArgs(kubeContext), "get", "namespace", ns, "--no-headers", "-o", "name")
-		cmd := exec.Command(args[0], args[1:]...)
-		if err := cmd.Run(); err != nil {
-			missing = append(missing, ns)
 		}
 	}
 	return missing

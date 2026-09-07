@@ -101,6 +101,9 @@ export interface PlatformStackOutputs {
 // loopzero-control-plane outputs (operational, not consumed by other projects)
 // ---------------------------------------------------------------------------
 
+// NOT REFERENCED (measured 2026-09-07): no module names ControlPlaneStackOutputs.
+// It documents the shape a consumer WOULD read from the control-plane stack; the
+// consumers that exist read outputs untyped via requireOutput(name).
 export interface ControlPlaneStackOutputs {
   // Service readiness
   readonly loopzeroApiReady: boolean;

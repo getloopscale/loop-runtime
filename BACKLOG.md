@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-199 items — **Open** 9 · **In flight** 10 · **Closed** 180 · **Blocked** 5
+200 items — **Open** 10 · **In flight** 10 · **Closed** 180 · **Blocked** 5
 
-### Open (9)
+### Open (10)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -83,6 +83,7 @@ consequência do escopo per-repo declarado acima.
 | [`B-194`](#b-194--o-ramo-aes-de-leitura-so-pode-sair-com-uma-contagem-que-cubra-a-frota-e-ninguem-e-dono-dela----) | O ramo AES de leitura so' pode sair com uma contagem que cubra a frota, e ninguem e' dono dela | `triaged` | media — nada quebra hoje (o caminho de escrita ja' recusa AES); o custo e' um gate que segue vermelho por uma divida real cujo desbloqueio depende de acesso a banco que nenhuma sessao tem |
 | [`B-198`](#b-198--remediar-tag-dev-nos-7-charts-publicados-substituindo-por-digest-imutavel----) | Remediar `tag: dev` nos 7 charts publicados substituindo por digest imutavel | `triaged` | — |
 | [`B-199`](#b-199--phase-2-do-b-057-split-de-apiinternalportstypesgo-em-7-arquivos-por-bounded-context----) | Phase 2 do B-057: split de `api/internal/ports/types.go` em 7 arquivos por bounded context | `triaged` | — |
+| [`B-200`](#b-200--cellpinner-patcheia-o-tenant-cr-direto-no-cliente-dinâmico-a-interface-que-abstraía-isso-foi-deletada-por-estar-morta----) | `CellPinner` patcheia o Tenant CR direto no cliente dinâmico; a interface que abstraía isso foi deletada por estar morta | `triaged` | — |
 
 ### In flight (10)
 
@@ -8833,3 +8834,20 @@ dod:
   - CHANGELOG entry mencionando split
 
 > Filed 2026-09-06 as follow-up do B-057 (Phase 2 deferred). Sponsor approved via chat "TUDO APROVADOS" 2026-09-06.
+
+## B-200 — `CellPinner` patcheia o Tenant CR direto no cliente dinâmico; a interface que abstraía isso foi deletada por estar morta   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: deadcode-audit-2026-09-07
+tier: T2 (`.claude/rules/pre-release-governance.md`) — DIP em caminho de escrita de CR multi-cluster
+evidence: `api/internal/services/placement/cell_pinner.go` — o método `patchTenantCR` chama `p.mgmtKube.Resource(tenantGVR).Namespace(p.mgmtNS).Patch(...)` diretamente no `dynamic.Interface`. A interface `TenantCRPatcher`, que existia no mesmo arquivo para abstrair exatamente essa dependência, tinha ZERO referências (medido por `deadcode` RTA + travessia de alcançabilidade + grep) e foi removida em 2026-09-07 sob o escopo aprovado da auditoria de dead code. O comentário dela afirmava, em presente, que "Production wiring (`api/cmd/setup_server.go`) supplies an adapter that wraps the real dynamic client" — medido: `setup_server.go` não menciona patcher nenhum. Ou seja, a remediação `find_arch_cell_pinner_k8s_direct MEDIUM` do plano `deep-review-2026-05-10-remediation` (T5.3) foi registrada como feita, e nunca foi ligada.
+why_now: a interface era o único vestígio de que o defeito existia. Deletá-la fechou um registro falso — e sem este item o defeito arquitetural desaparece junto com ele, que é precisamente o resultado que a auditoria não pode produzir. O custo concreto de não ter a abstração está escrito no comentário original: testes unitários do `CellPinner` precisam de envtest para injetar um patcher falso, em vez de um fake em memória.
+status: triaged
+dod:
+  - decidido e registrado: ou o `CellPinner` recebe a abstração de fato (interface + adapter ligado em `api/cmd/setup_server.go`), ou o ADR/plano que declarou `find_arch_cell_pinner_k8s_direct` remediado é corrigido para dizer que não foi
+  - se a abstração for adotada: existe teste unitário do `CellPinner` que injeta um fake e NÃO precisa de envtest
+  - nenhum comentário no `cell_pinner.go` afirma wiring de produção que `grep` não confirme
+
+> Filed 2026-09-07 pela auditoria de dead code. A deleção que originou este item está no escopo aprovado pelo sponsor em `.claude/governance-gate.local.md`.

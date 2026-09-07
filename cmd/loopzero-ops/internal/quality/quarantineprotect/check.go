@@ -20,9 +20,7 @@ package quarantineprotect
 import (
 	"bufio"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
@@ -171,33 +169,4 @@ func runGitDiff(repoRoot, filter, baseRef, headRef, pathPrefix string) ([]string
 		return nil, fmt.Errorf("scan diff output: %w", err)
 	}
 	return paths, nil
-}
-
-// RepoRootFromCwd is a helper for callers (CLI subcommand) to resolve repo root
-// from the current working directory by walking up to find `.git`.
-// Exported so cmd/loopzero-ops can call without duplicating logic.
-//
-// B-178: `.git` is checked for EXISTENCE, not for being a directory. It is a
-// directory only in an ordinary clone; in a linked worktree (`git worktree
-// add`, which is how every lane works) it is a regular file holding a
-// `gitdir:` pointer, and requiring IsDir() made this walk ascend to `/` and
-// return an error. The same relaxation was applied to findRepoRoot in
-// api/internal/metrics, which is a different Go module and so cannot share
-// this function; that one is the site the item was filed against, and this one
-// was found by sweeping the tree for the same pattern.
-//
-// Honest scope: this function has NO callers today — it is exported for a CLI
-// subcommand that never wired it up. So the fix is preventive, and unlike the
-// metrics one it is not backed by an observed failing gate.
-func RepoRootFromCwd() (string, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	for dir := wd; dir != "/" && dir != ""; dir = filepath.Dir(dir) {
-		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
-			return dir, nil
-		}
-	}
-	return "", fmt.Errorf("no .git found ascending from %s", wd)
 }

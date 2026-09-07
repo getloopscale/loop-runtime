@@ -14,19 +14,6 @@ import (
 	"time"
 )
 
-// PreviewCommentClient is the narrow contract used by preview-environment
-// flows to publish or update a single PR comment with the preview URL.
-//
-// Per ADR D5 (plan §D5), the comment is the same UX Vercel/Netlify ship —
-// developer never has to leave GitHub to find the preview URL.
-//
-// UpsertPreviewComment is idempotent across PR pushes: a marker line keyed
-// on (project, PR) identifies the previously-posted comment so subsequent
-// pushes update it in place rather than spamming the PR with duplicates.
-type PreviewCommentClient interface {
-	UpsertPreviewComment(ctx context.Context, params PreviewCommentParams) error
-}
-
 // PreviewCommentParams describes the comment to upsert.
 type PreviewCommentParams struct {
 	InstallationID int64

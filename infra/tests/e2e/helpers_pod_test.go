@@ -9,59 +9,13 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
-	"os"
-	"os/exec"
 	"strings"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/getloopscale/loopzero/infra/scripts/seed"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
-
-// cleanupTenant deletes the Tenant CR and waits for namespace cleanup.
-func cleanupTenant(tenantID string, timeout time.Duration) {
-	kubeCtx := os.Getenv("LOOPZERO_KUBE_CONTEXT")
-	if kubeCtx == "" {
-		kubeCtx = "k3d-loopzero-core"
-	}
-
-	cmd := exec.Command("kubectl", "--context", kubeCtx,
-		"delete", "tenant", tenantID, "--namespace", "default",
-		"--ignore-not-found", "--timeout=30s")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		GinkgoWriter.Printf("cleanup: failed to delete tenant %s: %s\n", tenantID, string(output))
-	}
-
-	// Wait for namespace deletion.
-	deadline := time.Now().Add(timeout)
-	expectedNamespaces := []string{
-		tenantID + "-production",
-		tenantID + "-staging",
-		"build-" + tenantID,
-	}
-
-	for time.Now().Before(deadline) {
-		allGone := true
-		for _, ns := range expectedNamespaces {
-			checkCmd := exec.Command("kubectl", "--context", kubeCtx,
-				"get", "namespace", ns, "--no-headers", "-o", "name")
-			if checkCmd.Run() == nil {
-				allGone = false
-				break
-			}
-		}
-		if allGone {
-			return
-		}
-		// intentional-sleep: poll-until-state-transition (M23-T3.2 follow-up: candidate for PollUntil replacement)
-		time.Sleep(2 * time.Second)
-	}
-
-	GinkgoWriter.Printf("cleanup: timeout waiting for namespace deletion (tenant: %s)\n", tenantID)
-}
 
 // proveDead verifies that all resources for a project are cleaned up
 // (namespace gone or zero resources with loopzero.io/project label).

@@ -93,20 +93,6 @@ var forbiddenInternalTerms = []string{
 	"Kaniko",
 }
 
-// concurrencyForbiddenTerms extends forbiddenInternalTerms with stricter
-// concurrency-specific forbidden words: "lock" and "advisory" should never
-// leak in user-facing output of concurrent-deploy rejection paths.
-//
-// These two terms are intentionally NOT in forbiddenInternalTerms — many
-// non-concurrency commands legitimately mention "lock" (e.g., login token).
-// Only the concurrent-deploy assertions need this stricter list.
-var concurrencyForbiddenTerms = func() []string {
-	out := make([]string, 0, len(forbiddenInternalTerms)+2)
-	out = append(out, forbiddenInternalTerms...)
-	out = append(out, "lock", "advisory")
-	return out
-}()
-
 // --- Allowed Exit Codes (Rule 4, CLAUDE.md) ---
 
 var allowedExitCodesMap = map[int]string{

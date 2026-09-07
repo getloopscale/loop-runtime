@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 )
 
 // ErrNoModules means the sweep found no Go module.
@@ -74,6 +73,3 @@ func DiscoverModules(root string) ([]string, error) {
 func ModuleDir(root, mod string) string {
 	return filepath.Join(root, filepath.FromSlash(mod))
 }
-
-// IsToolModule reports whether the module lives under tools/.
-func IsToolModule(mod string) bool { return strings.HasPrefix(mod, "tools/") }

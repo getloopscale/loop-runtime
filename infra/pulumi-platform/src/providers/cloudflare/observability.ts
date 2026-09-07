@@ -4,8 +4,12 @@
 /**
  * Cloudflare observability — log export and analytics.
  *
- * Pushes CF edge logs (HTTP requests, firewall events, access logs)
- * to DO Spaces for analysis via Loki or direct query.
+ * NOT WIRED (measured 2026-09-07): `createLogpushJobs` is exported and its
+ * only occurrence in the pulumi source trees is its own declaration. Nothing
+ * pushes anything today; the paragraph below is the intended design.
+ *
+ * Once wired, pushes CF edge logs (HTTP requests, firewall events, access
+ * logs) to DO Spaces for analysis via Loki or direct query.
  */
 
 import * as cloudflare from "@pulumi/cloudflare";

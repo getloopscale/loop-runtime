@@ -140,8 +140,3 @@ func (r *VaultRateLimiter) Middleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, req)
 	})
 }
-
-// AsHandlerFunc returns the middleware as a chi-compatible function.
-func (r *VaultRateLimiter) AsHandlerFunc() func(http.Handler) http.Handler {
-	return r.Middleware
-}
