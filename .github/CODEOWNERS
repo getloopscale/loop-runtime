@@ -4,9 +4,6 @@
 # Default — all PRs require maintainer review
 * @paulosergio-jnr
 
-# CLI (TypeScript)
-/cli/ @paulosergio-jnr
-
 # API (Go)
 /api/ @paulosergio-jnr
 
