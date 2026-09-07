@@ -47,6 +47,7 @@ spec:
             loopzero_component: supply-chain
           annotations:
             summary: "Releases activating without SBOM generation"
+            runbook: "docs/runbooks/platform-alerts.md"
             description: |
               Active releases are happening but loopzero_sbom_generated_total
               has not incremented — syft step is silently broken in the
@@ -121,6 +122,7 @@ spec:
             loopzero_component: workqueue
           annotations:
             summary: "Workqueue terminal-state DB write failed (duplicate side-effects risk)"
+            runbook: "docs/runbooks/platform-alerts.md"
             description: |
               loopzero_workqueue_terminal_write_fail_total{{`{{ $labels.terminal }}`}}
               > 0 — Complete or Fail call returned DB error. If terminal=complete:
@@ -142,6 +144,7 @@ spec:
             loopzero_component: cell-pinner
           annotations:
             summary: "CellPinner DB ↔ CR diverged — operator patch failed"
+            runbook: "docs/runbooks/platform-alerts.md"
             description: |
               loopzero_cell_pinner_cr_patch_fail_total > 0 means tenants.cell_id
               was UPDATED in PostgreSQL but the corresponding Tenant CR
@@ -161,6 +164,7 @@ spec:
             loopzero_component: tenant-operator
           annotations:
             summary: "Tenant deletion stuck — manual intervention may be required"
+            runbook: "docs/runbooks/platform-alerts.md"
             description: |
               loopzero_tenant_deletion_stuck_total is incrementing. The tenant
               lifecycle reached a state where automatic deletion cannot
@@ -176,6 +180,7 @@ spec:
             loopzero_component: cell-router
           annotations:
             summary: "Tenant resources observed on wrong cell — ADR-0018 violation"
+            runbook: "docs/runbooks/platform-alerts.md"
             description: |
               loopzero_misplaced_tenant_total > 0 means at least one tenant's
               workload is running on a cluster whose cellID does NOT match

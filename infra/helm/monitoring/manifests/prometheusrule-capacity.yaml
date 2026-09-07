@@ -32,6 +32,7 @@ spec:
             task: T-07
           annotations:
             summary: "Gitea p95 auth latency > 2s"
+            runbook: "docs/runbooks/platform-alerts.md"
             description: |
               Gitea is returning auth responses slower than 2s at p95.
               This was the leading indicator of bug #44 (c=30 saturation).
@@ -51,6 +52,7 @@ spec:
             task: T-07
           annotations:
             summary: "Argo Workflows hitting 403 (quota or RBAC) > 0.1/s"
+            runbook: "docs/runbooks/platform-alerts.md"
             description: |
               Argo controller receiving sustained 403s. Usually means
               ResourceQuota is exceeded for workflow pods (see bug #41:
@@ -71,6 +73,7 @@ spec:
             task: T-07
           annotations:
             summary: "HPA {{ $labels.namespace }}/{{ $labels.horizontalpodautoscaler }} at max for 5m"
+            runbook: "docs/runbooks/platform-alerts.md"
             description: |
               HPA is at maxReplicas and hasn't scaled down. Consider:
               1. Bump maxReplicas (if actual load >= current)
@@ -90,6 +93,7 @@ spec:
             task: T-07
           annotations:
             summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} pending 2m+"
+            runbook: "docs/runbooks/platform-alerts.md"
             description: |
               PVC is pending for >2min. Historic root causes:
               - DO CSI API 429 rate limit at concurrency > 15 (bug #40)
@@ -111,6 +115,7 @@ spec:
             task: T-07
           annotations:
             summary: "Controller {{ $labels.name }} queue depth {{ $value }} > 50"
+            runbook: "docs/runbooks/platform-alerts.md"
             description: |
               Operator reconciliation is backing up. Likely:
               - Single-replica controller overwhelmed
@@ -134,6 +139,7 @@ spec:
             task: T-07
           annotations:
             summary: "Build failure rate > 10% for 5m"
+            runbook: "docs/runbooks/platform-alerts.md"
             description: |
               >10% of recent builds failing. Check the most-recent
               failed workflow's failing step to identify root cause.

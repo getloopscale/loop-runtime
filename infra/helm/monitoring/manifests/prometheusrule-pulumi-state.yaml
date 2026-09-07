@@ -36,6 +36,7 @@ spec:
             loopzero_component: pulumi-archive
           annotations:
             summary: "No Pulumi archive in 90 days (rotation gap)"
+            runbook: "docs/runbooks/platform-alerts.md"
             description: |
               loopzero_pulumi_archives_total has not incremented in >90
               days. The archive bucket s3://loopzero-archive/pulumi-state/
@@ -68,6 +69,7 @@ spec:
             loopzero_component: pulumi-archive
           annotations:
             summary: "Pulumi stack count exceeds expected baseline (potential paralelas regression)"
+            runbook: "docs/runbooks/platform-alerts.md"
             description: |
               loopzero_pulumi_stacks_total = {{ $value }} for >6h, exceeds
               the expected baseline of 4 (dev/prod/staging/homolog).

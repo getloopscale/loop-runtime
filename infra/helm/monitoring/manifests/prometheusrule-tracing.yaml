@@ -32,6 +32,7 @@ spec:
             severity: warning
           annotations:
             summary: "Tempo PVC usage above 80%"
+            runbook: "docs/runbooks/platform-alerts.md"
             description: "Tempo storage at {{ $value | humanizePercentage }}. Reduce retention or increase PVC."
 
         - alert: LoopZeroOTelCollectorDown
@@ -51,4 +52,5 @@ spec:
             severity: warning
           annotations:
             summary: "OTel Collector failing to export spans"
+            runbook: "docs/runbooks/platform-alerts.md"
             description: "Collector has failed span exports for 5+ minutes. Tempo may be down or unreachable."

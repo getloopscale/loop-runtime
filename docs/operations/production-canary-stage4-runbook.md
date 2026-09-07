@@ -47,7 +47,11 @@ kubectl --context cell-1 argo rollouts get rollout <project>-<app> -n <tenant>-p
 
 **Watch window: 1 hour.** Monitor:
 - AnalysisTemplate metrics (success_rate ≥ 0.95)
-- LoopZero SLO burn rate alert: `loopzero:slo:deploy_burn_rate_5m > 14.4`
+- LoopZero SLO burn rate alert: `LoopZeroDeployLatencyBudgetBurn` (fast-burn page) — emitted by Sloth from
+  `infra/sloth/deploy-latency.yaml`. CORRECTED 2026-09-07: this line named
+  `loopzero:slo:deploy_burn_rate_5m`, a recording rule that exists nowhere in the repository, so an
+  operator following it waited on a signal that could not fire. Confirm the rules are loaded with
+  `kubectl -n monitoring get prometheusrule loopzero-slo-burn-rate` before trusting silence.
 - Loki errors: `{namespace="<tenant>-prod"} | json | level="ERROR" | rate(5m) > 0.01`
 - TraefikService routing weights: stable=99, canary=1
 
@@ -131,7 +135,7 @@ Operator MUST abort canary se qualquer signal triggers:
 | Signal | Threshold | Source |
 |---|---|---|
 | AnalysisTemplate success_rate | < 0.95 over 5min | Prometheus query em template |
-| LoopZero SLO burn rate | > 14.4 (1h budget) | `loopzero:slo:deploy_burn_rate_1h` alert |
+| LoopZero SLO burn rate | > 14.4 (1h budget) | `LoopZeroDeployLatencyBudgetBurn` (slow-burn ticket) — see `docs/runbooks/multi-cell-canary.md` for the full alert map |
 | HTTP 5xx rate | > 1% sustained 5min | Loki `{namespace="<tenant>-prod"} | json | status >= 500` |
 | Latency p95 | > 2× baseline | Prometheus `histogram_quantile(0.95, loopzero_api_request_duration_seconds)` |
 | Customer complaint | ≥ 1 verified | Operator escalation |

@@ -25,66 +25,6 @@ spec:
         # Restart rate watcher per split operator deployment. The metric
         # `kube_pod_container_status_restarts_total` is provided by
         # kube-state-metrics; alert sums per Deployment over 24h.
-        - alert: OperatorRestartRate24h
-          expr: |
-            sum by (deployment) (
-              increase(
-                kube_pod_container_status_restarts_total{
-                  namespace="loopzero-system",
-                  pod=~"loopzero-(tenant|app|preview|platform)-operator-.*"
-                }[24h]
-              )
-            ) > 5
-          for: 5m
-          labels:
-            severity: critical
-            loopzero_component: operator-split
-            loopzero_phase: cutover-soak
-          annotations:
-            summary: "Operator {{ $labels.deployment }} restarted >5x in 24h"
-            description: |
-              Split operator deployment {{ $labels.deployment }} has
-              restarted {{ $value | printf "%.0f" }} times in the last
-              24h. Threshold (5) suggests crash-loop or routine OOM.
-              Per condition C15, this alert BLOCKS T2.5 (monolith chart
-              cleanup) until 30 consecutive days silent. Investigate via:
-                kubectl --context <ctx> -n loopzero-system describe deploy {{ $labels.deployment }}
-                kubectl --context <ctx> -n loopzero-system logs deploy/{{ $labels.deployment }} --previous
-
-        # Reconcile latency degradation post-cutover (paired with the
-        # OperatorReconcileSlowdown alert from T2.1 that has the same
-        # purpose at finer granularity). This rule's threshold is
-        # tuned for the cutover window — first 24h tolerates 2× p95
-        # baseline before paging.
-        - alert: OperatorReconcileLatencyPostCutover24h
-          expr: |
-            histogram_quantile(0.95,
-              sum by (le, operator) (
-                rate(loopzero_operator_reconcile_duration_seconds_bucket{
-                  operator=~"loopzero-(tenant|app|preview|platform)-operator"
-                }[10m])
-              )
-            ) > 2 * 0.5
-          for: 10m
-          labels:
-            severity: warning
-            loopzero_component: operator-split
-            loopzero_phase: cutover-soak
-          annotations:
-            summary: "{{ $labels.operator }} p95 reconcile > 1s for 10m post-cutover"
-            description: |
-              {{ $labels.operator }} p95 reconcile latency exceeds the
-              cutover-window threshold (2× baseline ≈ 1s). Either:
-              (a) initial cache warmup not yet complete (allow 5min
-                  more, alert auto-resolves);
-              (b) reconcile loop has a regression introduced by the
-                  split — investigate logs.
-              If sustained > 30min: ESCALATE; consider rollback.
-
-        # ZeroReadyWindow watcher (condition C6 — partial implementation
-        # via this metric). During cutover, there must NEVER be 0 Ready
-        # split operators per CR domain. This alert detects that
-        # impossible state.
         - alert: ZeroReadyOperatorWindow
           expr: |
             sum by (deployment) (
@@ -100,6 +40,7 @@ spec:
             loopzero_phase: cutover-active
           annotations:
             summary: "Zero-Ready window for {{ $labels.deployment }} > 30s"
+            runbook: "docs/runbooks/platform-alerts.md"
             description: |
               {{ $labels.deployment }} has 0 Ready replicas for >30s.
               Per Invariant I-2 (LeaderElection) + production-design

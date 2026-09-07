@@ -167,6 +167,7 @@ spec:
             audit: M10-G1
           annotations:
             summary: service-auth nonce replay rate elevated
+            runbook: "docs/runbooks/platform-alerts.md"
             description: |
               Clients are reusing (user_id, nonce) tuples within the
               5-min TTL window. Either a client-side bug (nonce RNG

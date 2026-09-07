@@ -110,3 +110,4 @@ spec:
             severity: critical
           annotations:
             summary: "Cloudflare Tunnel disconnected — all user traffic blocked"
+            runbook: "docs/runbooks/platform-alerts.md"
