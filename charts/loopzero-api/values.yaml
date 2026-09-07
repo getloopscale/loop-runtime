@@ -285,7 +285,11 @@ readinessProbe:
 
 metrics:
   serviceMonitor:
-    enabled: false
+    # Enabled 2026-09-07 (system-design audit SD-01.13). While this was false the
+    # only scrape of the control-plane API came from a standalone manifest applied
+    # by `task infra:install:monitoring` — outside any reconciler, so drift was
+    # never corrected and a cluster rebuilt without that task ran unscraped.
+    enabled: true
     port: metrics
     interval: 30s
     scrapeTimeout: 10s
@@ -309,8 +313,17 @@ networkPolicy:
             matchLabels:
               app.kubernetes.io/name: postgresql
 
+# Grace period for in-flight SSE streams on a rolling update (SD-12.2).
+# 300 matches the progressDeadlineSeconds the renderer sets on tenant Rollouts:
+# the stream must outlive the canary it is reporting on.
+terminationGracePeriodSeconds: 300
+
 topologySpreadConstraints:
-  enabled: false
+  # Enabled 2026-09-07 (system-design audit SD-05.4). replicaCount is 2 and the
+  # helper spreads on zone AND hostname with whenUnsatisfiable: ScheduleAnyway,
+  # so on a single-node k3d cluster this is a no-op and on the managed cluster
+  # it is the difference between the pair surviving a node loss and not.
+  enabled: true
 
 affinity: {}
 

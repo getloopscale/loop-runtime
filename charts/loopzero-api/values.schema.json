@@ -779,6 +779,12 @@
           "type": "boolean"
         }
       }
+    },
+    "terminationGracePeriodSeconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3600,
+      "description": "Seconds Kubernetes waits for in-flight work before killing the pod. Sized for SSE streams reporting on a tenant canary (renderer progressDeadlineSeconds is 300), not for the 30s default."
     }
   }
 }

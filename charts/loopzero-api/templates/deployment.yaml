@@ -34,6 +34,10 @@ spec:
       {{- end }}
       serviceAccountName: {{ include "loopzero-common.serviceAccountName" . }}
       automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken | default false }}
+      # SSE streams (deploy.*, rollout.step) are served from this Deployment.
+      # Without this the Kubernetes default of 30s applies and a rolling update
+      # cuts a stream whose canary the renderer allows 300s to finish.
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds | default 300 }}
       securityContext:
         {{- include "loopzero-common.podSecurityContext" . | nindent 8 }}
       {{- include "loopzero-common.priorityClassName" . | nindent 6 }}
