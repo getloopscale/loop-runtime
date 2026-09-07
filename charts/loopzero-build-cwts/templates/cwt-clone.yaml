@@ -39,6 +39,19 @@ spec:
           - |
             set -euo pipefail
 
+            # Jitter before touching the object store (SRE-08.3, audit 2026-09-07).
+            #
+            # retryStrategy below backs off 5s/10s/20s with factor 2 and Argo has
+            # no jitter field, so a burst of clones retries in lockstep. That is
+            # the documented failure mode: clone-repo exhausts its retry budget
+            # at roughly 4+ concurrent builds within 30s on a cold cluster, while
+            # maxConcurrentBuildsPerCell allows 20. Synchronised retries make the
+            # contention they are recovering from worse.
+            #
+            # 0-3s of spread costs nothing on the happy path and breaks the herd.
+            JITTER=$(( RANDOM % 4 ))
+            [ "$JITTER" -gt 0 ] && sleep "$JITTER"
+
             BUNDLE_PATH="{{ "{{inputs.parameters.tenant-id}}" }}/source/{{ "{{inputs.parameters.build-id}}" }}.bundle"
             echo "Downloading source bundle: ${BUNDLE_PATH}"
 

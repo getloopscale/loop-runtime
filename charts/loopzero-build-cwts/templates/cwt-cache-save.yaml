@@ -9,6 +9,18 @@ metadata:
 spec:
   templates:
     - name: save-cache
+      # Cache hops talk to MinIO over the network. A transient error here failed
+      # the whole build with no attempt to recover (SD-10.5, audit 2026-09-07).
+      # Bounded tighter than clone: a cache miss is recoverable by rebuilding,
+      # so this retries briefly and gets out of the way rather than holding a
+      # build slot.
+      retryStrategy:
+        limit: "2"
+        retryPolicy: "OnError"
+        backoff:
+          duration: "3s"
+          factor: "2"
+          maxDuration: "20s"
       inputs:
         parameters:
           - name: tenant-id
