@@ -195,6 +195,10 @@ export function createInfra(config: InfraStackConfig): InfraOutputs {
     name: bucketName({ project: config.project, env: config.environment, region: config.region, suffix: "builds" }),
     region: config.region,
     versioning: false,
+  // One 500 MB bundle per commit on the only store that grows with customer
+  // activity. 30 days matches the in-cluster MinIO ILM rule so the two agree
+  // (SD-15.8, audit 2026-09-07).
+  expireAfterDays: 30,
     tags,
   });
 

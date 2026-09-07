@@ -8,6 +8,17 @@ export interface ObjectStorageSpec {
   readonly name: string;
   readonly region: pulumi.Input<string>;
   readonly versioning?: boolean;
+  /**
+   * Days after which an object expires. Omitted means the bucket keeps objects
+   * forever, which is correct for versioned artifact buckets a rollback may
+   * still need and wrong for anything that grows with customer activity.
+   *
+   * Added 2026-09-07 (system-design audit SD-15.8): the in-cluster MinIO expires
+   * source bundles at 30 days through an ILM rule applied by a Taskfile, and the
+   * production Spaces bucket that actually holds them declared no retention at
+   * all. Retention belongs in the infrastructure that creates the bucket.
+   */
+  readonly expireAfterDays?: number;
   readonly tags: BaseLabels;
 }
 

@@ -15,6 +15,19 @@ export class DigitalOceanStorageProvider implements IProviderStorage {
       versioning: {
         enabled: spec.versioning ?? false,
       },
+      // Retention travels with the bucket, not with a Taskfile (SD-15.8).
+      // Applied to the whole bucket: these buckets hold one kind of object each,
+      // so a prefix would be a distinction without a difference.
+      ...(spec.expireAfterDays !== undefined
+        ? {
+            lifecycleRules: [
+              {
+                enabled: true,
+                expiration: { days: spec.expireAfterDays },
+              },
+            ],
+          }
+        : {}),
     });
 
     return {
