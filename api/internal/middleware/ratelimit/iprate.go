@@ -36,12 +36,22 @@ import (
 //
 // Implementation
 // --------------
-// In-memory fixed-window bucket: `count[key]` resets each `windowSize`.
-// Sufficient for a single-replica API in front of CF; if/when the API runs
-// multi-replica with sticky-session load balancing the per-pod limit is
-// effectively per-pod, which is documented as acceptable for an edge gate
-// (auth + headers carry the real per-tenant guard upstream of the bucket).
-// A Redis-backed sliding window is the production upgrade path post-launch.
+// In-memory SLIDING-window bucket, weighted by the overlap of the previous
+// window (SD-04.3, audit 2026-09-07 — it was a fixed window, and a fixed window
+// admits twice the limit across a boundary).
+//
+// The state is still PER PROCESS, so with replicaCount 2 the effective limit is
+// twice what is configured (SD-04.7). Two things bound that, and neither makes
+// it disappear:
+//   - the Traefik `rate-limit` Middleware is now attached to the public route
+//     (infra/helm/loopzero-api/templates/ingressroute.yaml), and the edge is the one
+//     place where a single instance of the limit exists;
+//   - auth and per-tenant limits upstream carry the real guard.
+//
+// A shared store remains the only thing that makes the per-process multiplication
+// go away for traffic that does not pass the edge. It is deliberately not added
+// here: it would put a network round-trip on every request to fix a factor of
+// two that the edge already covers on the exposed path.
 
 // IPRateLimiter holds the per-IP counter map.
 type IPRateLimiter struct {
@@ -56,6 +66,9 @@ type IPRateLimiter struct {
 type ipCounter struct {
 	count       int
 	windowStart time.Time
+	// prevCount weights the overlapping tail of the previous window — see the
+	// sliding-window note above allow(). SD-04.3, audit 2026-09-07.
+	prevCount int
 }
 
 // IPRateLimitConfig configures the limiter.
@@ -159,14 +172,38 @@ func (l *IPRateLimiter) allow(key string) (bool, time.Duration) {
 
 	now := l.getNow()
 	c, ok := l.counts[key]
-	if !ok || now.Sub(c.windowStart) >= l.window {
+	if !ok {
 		l.counts[key] = &ipCounter{count: 1, windowStart: now}
 		return true, 0
 	}
-	c.count++
-	if c.count > l.limit {
+
+	// Sliding window (SD-04.3). This was a fixed window, and this limiter is the
+	// exposed one — mounted ahead of authentication, so it is the gate an
+	// unauthenticated flood meets first. A fixed window lets that flood spend the
+	// whole allowance either side of a boundary, which is twice the limit in less
+	// than one window, and the boundary is trivially findable by a caller that
+	// watches Retry-After.
+	switch elapsed := now.Sub(c.windowStart); {
+	case elapsed >= 2*l.window:
+		c.prevCount = 0
+		c.count = 0
+		c.windowStart = now
+	case elapsed >= l.window:
+		c.prevCount = c.count
+		c.count = 0
+		c.windowStart = c.windowStart.Add(l.window)
+	}
+
+	overlap := 1 - (now.Sub(c.windowStart).Seconds() / l.window.Seconds())
+	if overlap < 0 {
+		overlap = 0
+	}
+	weighted := float64(c.prevCount)*overlap + float64(c.count)
+
+	if weighted >= float64(l.limit) {
 		return false, l.window - now.Sub(c.windowStart)
 	}
+	c.count++
 	return true, 0
 }
 

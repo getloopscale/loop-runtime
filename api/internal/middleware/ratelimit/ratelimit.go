@@ -40,6 +40,13 @@ type RateLimiter struct {
 type bucket struct {
 	count       int
 	windowStart time.Time
+	// prevCount is the count of the window immediately before windowStart. It is
+	// what turns a fixed window into a sliding one (SD-04.3, audit 2026-09-07):
+	// a fixed window resets to zero at the boundary, so a client could spend its
+	// whole allowance at the end of one window and again at the start of the
+	// next — twice the limit inside a span shorter than one window, and 4x across
+	// two replicas, which is the burst case a limiter exists to stop.
+	prevCount int
 }
 
 // NewRateLimiter creates a rate limiter that allows `rate` requests per `window`
@@ -93,11 +100,37 @@ func (rl *RateLimiter) Allow(key string) bool {
 
 	now := time.Now()
 	b, exists := rl.buckets[key]
-	if !exists || now.Sub(b.windowStart) > rl.window {
+	if !exists {
 		rl.buckets[key] = &bucket{count: 1, windowStart: now}
 		return true
 	}
-	if b.count >= rl.rate {
+
+	// Roll the window forward. One window elapsed keeps the previous count as the
+	// overlapping tail; two or more elapsed means nothing overlaps any more.
+	switch elapsed := now.Sub(b.windowStart); {
+	case elapsed >= 2*rl.window:
+		b.prevCount = 0
+		b.count = 0
+		b.windowStart = now
+	case elapsed >= rl.window:
+		b.prevCount = b.count
+		b.count = 0
+		b.windowStart = b.windowStart.Add(rl.window)
+	}
+
+	// Weight the previous window by how much of it still falls inside the
+	// trailing window. Immediately after a boundary the overlap is ~1, so the
+	// client carries almost its whole previous spend; a full window later the
+	// overlap is 0 and the allowance has recovered. This is the standard sliding
+	// window counter — no shared store, so it fixes the boundary burst without
+	// adding a dependency.
+	overlap := 1 - (now.Sub(b.windowStart).Seconds() / rl.window.Seconds())
+	if overlap < 0 {
+		overlap = 0
+	}
+	weighted := float64(b.prevCount)*overlap + float64(b.count)
+
+	if weighted >= float64(rl.rate) {
 		return false
 	}
 	b.count++

@@ -36,7 +36,13 @@ metadata:
   namespace: traefik
 spec:
   buffering:
-    maxRequestBodyBytes: 10485760  # 10 MiB
+    # 500 MB — MUST NOT drop below SOURCE_MAX_BUNDLE_SIZE (api/internal/config/config.go).
+    # It was 10 MiB while the app accepted 500 MB, and attaching it in that state
+    # would have rejected every deploy over 10 MiB at the edge with a 413 the API
+    # never sees and cannot explain. That is why rate-limit was attached first and
+    # this one waited for the value to be right (SD-14.1, audit 2026-09-07).
+    # The coupling is asserted by infra/tests/charts/edge_body_limit_test.go.
+    maxRequestBodyBytes: 524288000  # 500 MB
     maxResponseBodyBytes: 0  # unlimited response
 ---
 apiVersion: traefik.io/v1alpha1
