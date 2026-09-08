@@ -27,6 +27,7 @@ ralph-loop.local.md
 .claude/ralph-loop.local.md
 *.tgz
 code-review-output-infra-tests/
+project-purge-output/
 # --------------------------------------------
 # Node.js / TypeScript (cli/)
 # --------------------------------------------
