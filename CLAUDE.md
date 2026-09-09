@@ -107,10 +107,16 @@ DEVELOPER PLANE   — ../loopzero-cli (TypeScript) ↔ api/ (Go)
 CONTROL PLANE     — mgmt cluster: 4 operators · Gitea · PG · MinIO · ArgoCD · Traefik · cert-manager
 BUILD PLANE       — build cluster: Argo Workflows + BuildKit + cosign signing
 WORKLOAD PLANE    — runtime cluster(s): user apps via ArgoCD · Traefik + cert-manager + KEDA + Argo Rollouts (canary)
-SECRETS           — SEPARATE `loopzero-secrets` cluster: OpenBao (Transit) + ESO. See below.
+SECRETS           — SEPARATE `loopzero-secrets` cluster: OpenBao (Transit) + ESO. CONDITIONAL — see below.
 ```
 
-`task setup` creates **4** k3d clusters (`infra/k3d/{core,build,cell-0,cell-1}-cluster.yaml` — the names on disk since the B-001 rename; the old `{mgmt,workload,runtime-2}` appear in no filename). **OpenBao runs in a 5th, separate cluster** (`infra/k3d/secrets-cluster.yaml`, `task k3d:secrets:create` + `k3d:secrets:bootstrap`). Installing it into core (`k3d:secrets:bootstrap-in-core`) is **FORBIDDEN in every tier** — it is a topology violation, not a shortcut (`.claude/rules/cleanroom-up-live-test-mandate.md` § Sub-step 2.5).
+`task setup` creates **4** k3d clusters (`infra/k3d/{core,build,cell-0,cell-1}-cluster.yaml` — the names on disk since the B-001 rename; the old `{mgmt,workload,runtime-2}` appear in no filename). **OpenBao runs in a 5th, separate cluster** (`infra/k3d/secrets-cluster.yaml`, `task k3d:secrets:create` + `k3d:secrets:bootstrap`). Installing it into core (`k3d:secrets:bootstrap-in-core`) is **FORBIDDEN in every tier** — it is a topology violation, not a shortcut.
+
+**The 5th cluster is CONDITIONAL, and this used to read as if it were not.** Three things, all measured 2026-09-09:
+
+1. **The composition is gated, default off.** Four releases in `secrets.helmfile.yaml.gotmpl` carry `installed: {{ .Values | get "openbaoEnabled" false }}` (`openbao-cert`, `openbao`, `openbao-init`, `openbao-snapshot-agent`). The flag is set in **1 of 8** environment files — only `vault-local.yaml` — and the only caller is `taskfiles/k3d.yml`, always `-e vault-local`. The helmfile header names the production target as *"DOKS `loopzero-secrets-prod` **in future**"*. OpenBao **is** on the production path via `infra/helm/loopzero-external-secrets` (ESO → loopzero-api broker → OpenBao transit) with its backup bucket in `Pulumi.prod.yaml`; what is gated is the composition that stands the cluster up.
+2. **The secret backend is per-installation, by contract.** `charts/loopzero-api/SECRETS.md` and `charts/loopzero-cloud/SECRETS.md` state that secrets are set *"per installation, in your target's native store (AWS Secrets Manager / GCP Secret Manager)"*, and the AM6.5 anti-lock-in ADR makes ESO **recommended, not required**. So OpenBao is this platform's operational choice, **not a product requirement** — a self-hoster bringing their own secret store runs a **4-cluster** topology.
+3. **The rule this paragraph used to cite does not exist.** `.claude/rules/cleanroom-up-live-test-mandate.md` resolves nowhere in the workspace (`.claude/` is not in this repository), so the citation was removed rather than left dangling. The prohibition above still holds for **our** topology; what has no readable source is the "every tier" wording. Same defect class tracked in **#357**, which also records that the ratified ADR (`docs/wiki/decisions/2026-06-02-openbao-adoption.md` § Q2) decided *"not dedicated DOKS cluster"* and was never amended.
 
 ### Deploy flow (happy path)
 
