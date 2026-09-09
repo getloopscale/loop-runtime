@@ -68,9 +68,9 @@ consequência do escopo per-repo declarado acima.
 
 ## Index
 
-200 items — **Open** 10 · **In flight** 10 · **Closed** 180 · **Blocked** 5
+222 items — **Open** 32 · **In flight** 10 · **Closed** 180 · **Blocked** 5
 
-### Open (10)
+### Open (32)
 
 | Item | Title | Status | Severity |
 |---|---|---|---|
@@ -83,7 +83,29 @@ consequência do escopo per-repo declarado acima.
 | [`B-194`](#b-194--o-ramo-aes-de-leitura-so-pode-sair-com-uma-contagem-que-cubra-a-frota-e-ninguem-e-dono-dela----) | O ramo AES de leitura so' pode sair com uma contagem que cubra a frota, e ninguem e' dono dela | `triaged` | media — nada quebra hoje (o caminho de escrita ja' recusa AES); o custo e' um gate que segue vermelho por uma divida real cujo desbloqueio depende de acesso a banco que nenhuma sessao tem |
 | [`B-198`](#b-198--remediar-tag-dev-nos-7-charts-publicados-substituindo-por-digest-imutavel----) | Remediar `tag: dev` nos 7 charts publicados substituindo por digest imutavel | `triaged` | — |
 | [`B-199`](#b-199--phase-2-do-b-057-split-de-apiinternalportstypesgo-em-7-arquivos-por-bounded-context----) | Phase 2 do B-057: split de `api/internal/ports/types.go` em 7 arquivos por bounded context | `triaged` | — |
-| [`B-200`](#b-200--cellpinner-patcheia-o-tenant-cr-direto-no-cliente-dinâmico-a-interface-que-abstraía-isso-foi-deletada-por-estar-morta----) | `CellPinner` patcheia o Tenant CR direto no cliente dinâmico; a interface que abstraía isso foi deletada por estar morta | `triaged` | — |
+| [`B-200`](#b-200--decidir-implementação-vs-kill-definitivo-das-4-live-journey-suites-deletadas-j-03-j-12-j-16-j-24----) | Decidir implementação vs kill definitivo das 4 LIVE journey suites deletadas (J-03, J-12, J-16, J-24) | `triaged` | — |
+| [`B-201`](#b-201--34-de-60-it-blocks-pulados-nas-jornadas-j-01j-26-57-coverage-gap----) | 34 de 60 It() blocks pulados nas jornadas J-01..J-26 (57% coverage gap) | `triaged` | — |
+| [`B-202`](#b-202--lcr1001--12-suppressões--noqa---shellcheck-disable---eslint-disable-sem-justificativa----) | LCR1001 × 12 suppressões `# noqa` / `# shellcheck disable` / `// eslint-disable` sem justificativa | `triaged` | — |
+| [`B-203`](#b-203--10-shell-scripts-sem-set--euo-pipefail----) | 10 shell scripts sem `set -euo pipefail` | `triaged` | — |
+| [`B-204`](#b-204--5-scripts-órfãos-3-scriptslocalthemory--2-scriptsopenbao----) | 5 scripts órfãos: 3 `scripts/local/*themory*` + 2 `scripts/openbao/*` | `triaged` | — |
+| [`B-205`](#b-205--pyramid-invertido-17-unit-files-vs-77-e2elivetest-files-ice-cream-cone----) | Pyramid invertido: 17 unit files vs 77 e2e+livetest files (ice-cream cone) | `triaged` | — |
+| [`B-206`](#b-206--2-loc-hotspots-drill-helmfile-bootstrapsh-1127-loc--k3d-cross-cluster-healsh-1034-loc----) | 2 LOC hotspots: `drill-helmfile-bootstrap.sh` (1127 LOC) + `k3d-cross-cluster-heal.sh` (1034 LOC) | `triaged` | — |
+| [`B-207`](#b-207--2-stale-todo-sobre-tuf-root-ceremony--doc-existe----) | 2 stale `(TODO)` sobre TUF root ceremony — doc existe | `triaged` | — |
+| [`B-208`](#b-208--3-pulumi-todos-sem-owner-ou-sunset----) | 3 pulumi TODOs sem owner ou sunset | `triaged` | — |
+| [`B-209`](#b-209--testsparity-registrado-como-test_suite-mas-contém-0-_testgo----) | `tests/parity/` registrado como test_suite mas contém 0 `*_test.go` | `triaged` | — |
+| [`B-210`](#b-210--testschaoschaos_testgo-821-loc--15-tests--flakiness-035----) | `tests/chaos/chaos_test.go`: 821 LOC + 15 tests + flakiness 0.35 | `triaged` | — |
+| [`B-211`](#b-211--23-performance-suites-env-gated-loopzero_real_deploy-loopzero_load_test-loopzero_capacity-nunca-rodam-em-ci----) | 23 performance suites env-gated (`LOOPZERO_REAL_DEPLOY`, `LOOPZERO_LOAD_TEST`, `LOOPZERO_CAPACITY`) nunca rodam em CI | `triaged` | — |
+| [`B-212`](#b-212--lcr200120022003-infra-boundary-sem-editorconfig-analyzer-config-ou-ci-security-job----) | LCR2001/2002/2003: `infra/` boundary sem `.editorconfig`, analyzer config, ou CI security job | `triaged` | — |
+| [`B-213`](#b-213--misc-setup-findings-lcr1003-lcr2005-lcr2006-lcr2010-codeowners-baseline-9-suppressions-em-test-files----) | Misc setup findings: LCR1003, LCR2005, LCR2006, LCR2010 (CODEOWNERS, baseline, 9 suppressions em test files) | `triaged` | — |
+| [`B-214`](#b-214--extrair-preflight--sync--verify--cleanup-skeleton-compartilhado-entre-4-orchestrator-scripts----) | Extrair `preflight → sync → verify → cleanup` skeleton compartilhado entre 4 orchestrator scripts | `triaged` | — |
+| [`B-215`](#b-215--105-test-files-reportam-0-assertions-detectáveis--filtrar-helpers-vs-stubs----) | 105 test files reportam 0 assertions detectáveis — filtrar helpers vs stubs | `triaged` | — |
+| [`B-216`](#b-216--69-hardcoded-sleep-n--hardcoded-k3d-contexts-em-9-scripts-productionsecuritydrill----) | 69 hardcoded `sleep <N>` + hardcoded k3d contexts em 9 scripts (production/security/drill) | `triaged` | — |
+| [`B-217`](#b-217--352--true-em-shell-scripts--auditoria-de-cada-um-adjacente-a-mutação----) | 352 `|| true` em shell scripts — auditoria de cada um adjacente a mutação | `triaged` | — |
+| [`B-218`](#b-218--3-scripts-check-sh-de-intent-distinta-compartilham-prefixo----) | 3 scripts `check-*.sh` de intent distinta compartilham prefixo | `triaged` | — |
+| [`B-219`](#b-219--plugin-loop-code-review-v040-schema-drift-analysis_auditpy-emite-categorymaintainability-que-o-db-rejeita----) | plugin `loop-code-review` v0.4.0 schema drift: `analysis_audit.py` emite category=maintainability que o DB rejeita | `triaged` | — |
+| [`B-220`](#b-220--chart-plane-indexmd-documenta-2-tree-parity-mas-chart-pairs-gate-não-foi-rodado-neste-review----) | CHART-PLANE-INDEX.md documenta 2-tree parity mas `chart-pairs` gate não foi rodado neste review | `triaged` | — |
+| [`B-221`](#b-221--fixture-apps-replicam-graceful-shutdown-inline-em-10-files--resolver-requer-refactor-de-build-context-ou-aceitar-duplicação----) | Fixture apps replicam graceful-shutdown inline em 10 files — resolver requer refactor de build context ou aceitar duplicação | `triaged` | — |
+| [`B-222`](#b-222--cve-2026-84445-high-em-googlegolangorggrpc-v1831-do-operatorsgomod--bump-para-v1832-bloqueado-por-governance-gate----) | CVE-2026-84445 (HIGH) em google.golang.org/grpc v1.83.1 do operators/go.mod — bump para v1.83.2 bloqueado por governance-gate | `triaged` | — |
 
 ### In flight (10)
 
@@ -8835,19 +8857,346 @@ dod:
 
 > Filed 2026-09-06 as follow-up do B-057 (Phase 2 deferred). Sponsor approved via chat "TUDO APROVADOS" 2026-09-06.
 
-## B-200 — `CellPinner` patcheia o Tenant CR direto no cliente dinâmico; a interface que abstraía isso foi deletada por estar morta   [ ]
+## B-200 — Decidir implementação vs kill definitivo das 4 LIVE journey suites deletadas (J-03, J-12, J-16, J-24)   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 2 (`code-review-output/final_report.md § Blocking findings`). Antes da deleção do fork 2 desta mesma sessão, quatro arquivos `tests/livetest/dogfood/journey_j{03,12,16,24}_live_test.go` continham 100% `Skip()` blocks — J-03 (3/3 It Skip "T4.2 follow-up — Kratos flow handler + PG courier_messages probe"), J-12 (3/3 It Skip "T4.4 follow-up — Team tier Early Access endpoint listing + alt-role JWT mint"), J-16 (2/2 It Skip "T4.9 follow-up — endpoint contract TBD"), J-24 (2/2 It Skip "T4.10 follow-up — endpoints already covered by J-22 secrets / J-20 scale"). Arquivos deletados nesta sessão para parar de reportar fake green ao DOGFOOD FULL, mas a decisão sobre o TRABALHO subjacente (implementar vs killar cada jornada) permanece pendente e é escopo próprio.
+why_now: fork 2 desta sessão de code-review deletou os 4 arquivos porque o mandate INQUEBRÁVEL `.claude/rules/cleanroom-up-live-test-mandate.md` exige que DOGFOOD FULL realmente exercite a cadeia. Deletar parou o fake green; NÃO respondeu se cada jornada deve ser implementada ou se cada uma é escopo abandonado. Sem esse item, quatro jornadas do produto sumiram do rastro sem decisão registrada.
+status: triaged
+dod:
+  - decisão registrada para J-03 (Verification email code via Resend): implementar Kratos flow + PG probe helper, OU marcar como out-of-scope da milestone atual com kill_reason
+  - decisão registrada para J-12 (Team RBAC): implementar endpoints listing + invites + alt-role JWT mint (Team Early Access), OU adiar formalmente
+  - decisão registrada para J-16 (Settings): freezar contrato de GET/PATCH `/api/v1/tenant/settings` + implementar, OU registrar como não-planejado
+  - decisão registrada para J-24 (Config UI): confirmar cobertura por J-20/J-22 (deletar definitivamente) OU implementar endpoints próprios
+  - se implementação: novas suites LIVE substituem as deletadas, cada uma com ≥1 It não-Skip validado LIVE
+  - se kill: kill_reason por jornada capturado em `.claude/records/discoveries/opportunities/` com evidência de que a cobertura foi assumida por outro suite
+
+## B-201 — 34 de 60 It() blocks pulados nas jornadas J-01..J-26 (57% coverage gap)   [ ]
 
 domain: engine-go
 repo: loopzero
 suggested_mode: review
-source: deadcode-audit-2026-09-07
-tier: T2 (`.claude/rules/pre-release-governance.md`) — DIP em caminho de escrita de CR multi-cluster
-evidence: `api/internal/services/placement/cell_pinner.go` — o método `patchTenantCR` chama `p.mgmtKube.Resource(tenantGVR).Namespace(p.mgmtNS).Patch(...)` diretamente no `dynamic.Interface`. A interface `TenantCRPatcher`, que existia no mesmo arquivo para abstrair exatamente essa dependência, tinha ZERO referências (medido por `deadcode` RTA + travessia de alcançabilidade + grep) e foi removida em 2026-09-07 sob o escopo aprovado da auditoria de dead code. O comentário dela afirmava, em presente, que "Production wiring (`api/cmd/setup_server.go`) supplies an adapter that wraps the real dynamic client" — medido: `setup_server.go` não menciona patcher nenhum. Ou seja, a remediação `find_arch_cell_pinner_k8s_direct MEDIUM` do plano `deep-review-2026-05-10-remediation` (T5.3) foi registrada como feita, e nunca foi ligada.
-why_now: a interface era o único vestígio de que o defeito existia. Deletá-la fechou um registro falso — e sem este item o defeito arquitetural desaparece junto com ele, que é precisamente o resultado que a auditoria não pode produzir. O custo concreto de não ter a abstração está escrito no comentário original: testes unitários do `CellPinner` precisam de envtest para injetar um patcher falso, em vez de um fake em memória.
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 4 (`code-review-output/final_report.md § P1`). Distribuição por arquivo: j01=1/2 j02=2/3 j04=1/2 j05=1/2 j06=1/2 j07=1/3 j09=1/2 j10=1/2 j11=1/2 j13=1/3 j14=2/3 j15=1/2 j17=2/4 j19=1/2 j20=1/2 j21=1/2 j22=1/2 j23=1/2 j25=1/2 j26=1/2 (as 4 100%-skipped J-03/J-12/J-16/J-24 estão no B-200). Cada `Skip()` cita "T3.2 follow-up commit" ou "T4.x follow-up" — o trabalho está ancorado a commits que nunca chegaram. Suite reporta GREEN executando ~43% das intenções.
+why_now: o mesmo mandate INQUEBRÁVEL que motivou o B-200 aplica aqui — DOGFOOD FULL deve exercitar a cadeia real. Sem esse item, cada follow-up permanece como comentário em Skip() e nunca vira trabalho medível.
 status: triaged
 dod:
-  - decidido e registrado: ou o `CellPinner` recebe a abstração de fato (interface + adapter ligado em `api/cmd/setup_server.go`), ou o ADR/plano que declarou `find_arch_cell_pinner_k8s_direct` remediado é corrigido para dizer que não foi
-  - se a abstração for adotada: existe teste unitário do `CellPinner` que injeta um fake e NÃO precisa de envtest
-  - nenhum comentário no `cell_pinner.go` afirma wiring de produção que `grep` não confirme
+  - inventário completo dos 34 Skip() com commit T3.2/T4.x citado por cada um
+  - para cada follow-up, decisão registrada: implementar (com plano), promover a B-NNN próprio, ou remover (com kill_reason)
+  - `grep -c 'Skip(' tests/livetest/dogfood/journey_*_live_test.go` diminui em ≥50% (17+ Skips resolvidos), OU documentação explícita `tests/livetest/dogfood/README.md` explicando por que os remanescentes ficam
+  - regression assertion no gate `no-new-bash`-style: se qualquer novo `Skip("... follow-up ...")` sem sunset+owner aparecer, gate falha
 
-> Filed 2026-09-07 pela auditoria de dead code. A deleção que originou este item está no escopo aprovado pelo sponsor em `.claude/governance-gate.local.md`.
+## B-202 — LCR1001 × 12 suppressões `# noqa` / `# shellcheck disable` / `// eslint-disable` sem justificativa   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: measured 2026-09-09 via `analysis_audit.py` (Phase 1 do loop-code-review). Rule LCR1001 (`§10.2` de CODE-ANALYSIS-RULES.md) exige que toda suppression nomeie a regra específica e diga o que a regra não pode ver. 12 arquivos violam: `helm/openbao-init/templates/configmap.yaml:41` (SC2086), `pulumi/src/components/service-auth-ed25519.ts:157` (@typescript-eslint/no-require-imports), `pulumi/src/components/vault-iac.ts` (@typescript-eslint/no-var-requires), `scripts/ci/coverage-go.sh` (SC2046), `scripts/drill/drill-helmfile-bootstrap.sh` (SC2086), `scripts/lib/bootstrap-cell-cc-common.sh` (SC2064), `scripts/local/bootstrap-themory-key.sh` (SC1090), `scripts/local/start-themory.sh` (SC1090), `scripts/validate/helm-charts.py` (BLE001 + LCR1002 blanket noqa em :49), `scripts/validate/k8s-versions.py` (BLE001), `tests/e2e/live/dev-public-seed-post-cleanroom-tenant-cr_test.sh` (SC2034), `tests/performance/k6/fixtures/bundle-builder.js` (no-undef). Todos em production paths (`infra/scripts`, `infra/helm`, `infra/pulumi`, `infra/helmfile`) bloqueados pelo governance-gate.py — via canonical só.
+why_now: `analysis_audit.py` marca cada uma como severity=medium (LCR1001 default). Se cada suppression fica sem justificativa, a próxima suppression que esconde um bug real vai passar pela mesma trilha silenciosa. LCR1002 em `scripts/validate/helm-charts.py:49` é HIGH — blanket `# noqa:` desliga TODAS as regras naquela linha.
+status: triaged
+dod:
+  - cada uma das 12 supressões nomeia a regra específica (ex: `# noqa: BLE001 -- argparse validates ...` em vez de `# noqa:` seco)
+  - cada uma carrega justificativa curta dizendo o que a regra não pode ver
+  - LCR1002 blanket `# noqa:` em `scripts/validate/helm-charts.py:49` particionado em suppressions específicas
+  - `python3 .claude/hooks/analysis-audit.py infra/` (ou equivalente) reporta 0 LCR1001 + 0 LCR1002
+  - regression: gate que reprova qualquer novo `# noqa:` / `# shellcheck disable=` sem `--` seguido de razão
+
+## B-203 — 10 shell scripts sem `set -euo pipefail`   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 3 (`code-review-output/final_report.md § P3`). Grep `grep -qE 'set\s+-[a-z]*e|set -o errexit'` retornou nada para 10 arquivos: `scripts/lib/drill-jwt-gate.sh`, `scripts/local/check-infra.sh`, `scripts/local/check-sprint.sh`, `scripts/local/vault-bootstrap-dev.sh`, `scripts/openbao/vault-bootstrap-eso.sh`, `scripts/openbao/vault-sync-check.sh`, `scripts/openbao/enable-vault-backup.sh`, `scripts/openbao/rotate-secret.sh`, `scripts/openbao/restore-vault-snapshot.sh`, `scripts/local/lib/fulcio-probes.sh`. Dois são libraries meant to be `source`d (drill-jwt-gate.sh, fulcio-probes.sh) e legitimamente NÃO devem chamar errexit — consumidor decide. Oito são entrypoints top-level.
+why_now: `.claude/rules/error-handling.md § 2` (fail-fast) — um entrypoint shell sem errexit converte toda falha intermediária em silent exit-0. `vault-bootstrap-dev.sh` (Cleanroom canonical), `check-infra.sh` (FAANG post-cleanroom validation) e os 5 `scripts/openbao/*` estão nesse estado hoje — qualquer `bao kv put` que falha silenciosamente é um secret nunca escrito reportado como success. Governance-gate bloqueia scripts/* portanto cycle-plan mandatório.
+status: triaged
+dod:
+  - 8 entrypoints ganham `set -euo pipefail` como primeira linha executável (após shebang + copyright)
+  - 2 libraries (drill-jwt-gate.sh, fulcio-probes.sh) documentam explicitamente que consumer deve `set -e`
+  - regression check: `find infra/scripts -type f -name '*.sh' | xargs grep -L 'set -[eu]'` = 0 fora da allowlist de libs
+
+## B-204 — 5 scripts órfãos: 3 `scripts/local/*themory*` + 2 `scripts/openbao/*`   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 2. Sem callers em `taskfiles/`, `Taskfile.yml`, `scripts/`, `tests/`, ou `helmfile/`: `scripts/local/preflight-themory.sh`, `scripts/local/validate-themory-wireup.sh`, `scripts/local/smoke-dashboard-memory-bff-e2e.sh` (o prefixo `themory` refere-se a componente que parece removido — `loopzero-memory` foi extraído do umbrella em algum momento), `scripts/openbao/init-ceremony.sh`, `scripts/openbao/migrate-pulumi-secrets-to-vault.sh` (ambos parecem migrações one-shot superseded pelo canonical `scripts/local/vault-bootstrap-dev.sh`).
+why_now: `.claude/rules/shell-scripts-allowlist.md § D3` proíbe novos `.sh` fora da allowlist — a contrapartida é que scripts órfãos deveriam ser deletados. Cada `.sh` mantido é overhead de manutenção; scripts referenciando componentes extintos são especialmente frágeis (falham em cenários novos sem ninguém perceber). Este item existe para decidir delete vs allowlist-com-justificativa, não para atacar cegamente.
+status: triaged
+dod:
+  - confirmar com owner da plataforma se "themory" component ainda existe (grep umbrella `../loopzero-memory` OR CHANGELOG por rename/remove)
+  - se dead: deletar os 3 `themory-*.sh` + remover rows da allowlist se presentes
+  - para os 2 `scripts/openbao/*`: verificar se `vault-bootstrap-dev.sh` cobre 100% do que faziam; se sim delete, se não formalizar allowlist entry com justificativa
+  - `grep -rl themory infra/ .claude/ taskfiles/` = 0 quando terminado
+
+## B-205 — Pyramid invertido: 17 unit files vs 77 e2e+livetest files (ice-cream cone)   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 4 (`code-review-output/final_report.md § P1`). `find tests/unit -type f | wc -l = 17`. `find tests/e2e -name '*_test.go' | wc -l = 39`. `find tests/livetest -name '*_test.go' | wc -l = 46`. Ratio 17 : 85 = 0.20 — testing.md § 2 manda "many unit, moderate integration, few E2E". Custo real: toda mudança de fixture roda 5 clusters k3d (Cleanroom TOTAL); toda regressão de lógica pura espera 30-60 min para aparecer. Muitos e2e testam pura lógica de state-machine, renderer, ou validação que caberia como unit test em `pkg/*_test.go` alongside the code.
+why_now: pyramid invertido é o maior driver de flakiness + custo de CI + tempo de bisect quando algo quebra. Não é uma mudança de 1 sprint — é ratchet contínuo por meses. Registrar como item permite Kairos priorizar de modo previsível.
+status: triaged
+dod:
+  - inventário dos e2e que exercitam pura lógica (candidatos para promoção a unit)
+  - plano incremental: 10 unit tests extraídos por mês
+  - metric declarado: ratio unit/(integration+e2e) medido no cycle-code-quality mensalmente
+  - target: ratio ≥ 3x em 6 meses (17 → 250 unit files, ou 85 e2e → 30 e2e)
+
+## B-206 — 2 LOC hotspots: `drill-helmfile-bootstrap.sh` (1127 LOC) + `k3d-cross-cluster-heal.sh` (1034 LOC)   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 3. `wc -l scripts/drill/drill-helmfile-bootstrap.sh = 1127`, `wc -l scripts/local/k3d-cross-cluster-heal.sh = 1034`. LOC é heurístico (SonarQube caps at 1000, arch-go at 50, Clean Code at 20 — nenhum mediu isso), mas ambos são candidatos claros para split por responsabilidade. drill-helmfile-bootstrap orquestra cluster bootstrap + helmfile sync + retries + drill-specific logic. k3d-cross-cluster-heal cobre cenários H12-H19 (múltiplas heals distintas per allowlist rows).
+why_now: cada script > 1000 LOC é ponto de dificuldade de bisect e de onboarding. Medir cyclomatic real (via `shellmetrics` ou equivalente) permite decidir se o split é justificado; sem medir, refactor é folclore.
+status: triaged
+dod:
+  - CC ou complexidade cognitiva medida por função em ambos os scripts
+  - decisão registrada: split por stage/heal-scenario OU manter monolítico com table-of-contents comment justificando
+  - se split: cada novo script ≤ 400 LOC + testado individualmente
+
+## B-207 — 2 stale `(TODO)` sobre TUF root ceremony — doc existe   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 2. `docs/operations/tuf-root-ceremony.md` EXISTE (medido: `ls docs/operations/tuf-root-ceremony.md` sucesso). Dois arquivos ainda anotam "(TODO)" ao lado do path do doc: `pulumi-platform/src/services/sigstore.ts:54` (`Operator runbook: docs/operations/tuf-root-ceremony.md (TODO)`), `helmfile/cell.helmfile.yaml.gotmpl:234` (`See: docs/operations/tuf-root-ceremony.md (TODO) for ceremony procedure.`). Ambos em production paths bloqueados pelo governance-gate.
+why_now: um "(TODO)" que guarda um artefato EXISTENTE é pior que um comentário — diz ao leitor que não procure algo que ele deveria procurar. Onboarding lê a linha e assume que o runbook não está pronto.
+status: triaged
+dod:
+  - `pulumi-platform/src/services/sigstore.ts:54` — remover sufixo `(TODO)`
+  - `helmfile/cell.helmfile.yaml.gotmpl:234` — remover sufixo `(TODO)`
+  - `grep -rn 'tuf-root-ceremony.md (TODO)' infra/` = 0
+
+## B-208 — 3 pulumi TODOs sem owner ou sunset   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 2. (a) `pulumi-infra/src/index.ts:125` — `// TODO: Add back with proper import handling once pipeline is green.` (funcionalidade removida esperando pipeline). (b) `pulumi-platform/src/components/bootstrap-shared.ts:234` — `// TODO: Rename to ${role}-traefik on next destroy+recreate cycle.` (rename bloqueado em operação raríssima). (c) `pulumi-platform/src/services/sigstore.ts:54` — coberto no B-207. Nenhum tem `B-NNN` link nem data de sunset. Todos em production path (governance-gate bloqueia edit direto).
+why_now: `.claude/rules/cycle-backlog.md` — todo trabalho deferido tem owner e closing criterion. Um comentário TODO tem nenhum dos dois; TODOs indated apodrecem em absence permanente.
+status: triaged
+dod:
+  - (a) `pulumi-infra/src/index.ts:125` — decisão: adicionar de volta OU deletar TODO (registrar B próprio se substancial)
+  - (b) `pulumi-platform/src/components/bootstrap-shared.ts:234` — mover para operator runbook de destroy+recreate OU eliminar via helper que emita ambos os nomes durante migração
+  - `grep -rn '// TODO' infra/pulumi*/ | grep -v test | wc -l` diminui em ≥3
+
+## B-209 — `tests/parity/` registrado como test_suite mas contém 0 `*_test.go`   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 4. `code-review-output/baseline/component_inventory.md` lista `tests/parity` como `test_suite` component. `find tests/parity -type f -name '*_test.go' | wc -l = 0`. Per shell-scripts-allowlist.md rows, arquivos como `parity_install_test.sh` / `parity_cell2_canary_test.sh` foram PORTADOS para Go via `exec.Command("bash", scriptPath, "--dry-run")` — mas depois retornaram? Ou foram deletados? Estado ambíguo.
+why_now: `cycle-code-quality.md D1` — surfaces mortas são code smell. Um test_suite component com zero tests é essa pattern no test tree. Vai um passo além: se algum plano dependeu de `tests/parity` ele silenciosamente falha.
+status: triaged
+dod:
+  - `git log --diff-filter=D -- tests/parity/*_test.go | head -5` revela quando/por que foram deletados
+  - decisão: restaurar os Go tests OU deletar `tests/parity/` + remover row da baseline
+  - se restaurar: novos `parity_*_test.go` que rodam per `run_slice_tests.sh`
+  - se deletar: `find tests/parity -type f` = 0 e o comando de rm registrado no commit
+
+## B-210 — `tests/chaos/chaos_test.go`: 821 LOC + 15 tests + flakiness 0.35   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: evolve
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 4 (`code-review-output/final_report.md § P1`). `wc -l tests/chaos/chaos_test.go = 821`. `test_audit` row: test_count=15, flakiness_score=0.35 (12 sleep-based waits). Maior flakiness score da tree. Chaos tests são inerentemente non-deterministic (pod-kill, network partition, latency injection) mas 15 cenários num arquivo dificulta triage on failure.
+why_now: chaos suite é o teste de resilience — se o próprio suite for flaky, sinal se confunde com ruído. testing.md § 3 (each test exercises ONE behavior) estendido: cada arquivo exercita uma story.
+status: triaged
+dod:
+  - split por chaos type (chaos_controller_test.go, chaos_pg_test.go, chaos_api_leader_test.go, ...)
+  - shared setup extraído em helper
+  - `sleep 30` calls audit — cada uma justificada (steady-state observation) OU trocada por polling helper
+  - flakiness_score do maior novo arquivo < 0.20 em nova medição loop-code-review
+
+## B-211 — 23 performance suites env-gated (`LOOPZERO_REAL_DEPLOY`, `LOOPZERO_LOAD_TEST`, `LOOPZERO_CAPACITY`) nunca rodam em CI   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 4. `rg 't\.Skip.*LOOPZERO_(REAL_DEPLOY|LOAD_TEST|LOAD_LEVEL|CAPACITY)' tests/performance | wc -l = 15+`. Cada load/real_deploy test gated em env vars, testado hoje só quando operator lembra de setar. CI nunca roda.
+why_now: `.claude/rules/testing.md § 3`: "Broken test is highest-priority bug" — um teste que nunca roda não quebra, e nunca prova nada. Performance regressions passam livres.
+status: triaged
+dod:
+  - decisão: promover subset L1 (10 tenants smoke, <5min) para CI OU documentar explícitamente em `tests/performance/README.md` que "performance suites are operator-run, never CI" com justificativa
+  - se promover: L1 roda em cada PR
+  - metric de performance baseline capturado + gate no cycle-code-quality que alerta em regressão >10%
+
+## B-212 — LCR2001/2002/2003: `infra/` boundary sem `.editorconfig`, analyzer config, ou CI security job   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: measured 2026-09-09 via `analysis_audit.py`. LCR2001 (`.` :1, HIGH): "no analyzer configuration file in the repository". LCR2002 (`.` :1, HIGH): "no CI configuration found". LCR2003 (`.` :1, HIGH, security-family): "no dedicated security job in CI". Umbrella-level CI + Taskfile + hooks + `loopzero-ops quality --list` fornecem enforcement substancial, mas `analysis_audit.py` rodou com target=`infra/` e não vê fora do boundary. Report final documenta a inconsistência.
+why_now: LCR2003 tem severity=high + family=security (single security finding do audit todo). §11.2 dá security own job. Se `infra/` boundary conta como escopo separado (é como o audit executa) então falta config. Alternativa: adicionar `.editorconfig` mínimo em `infra/` root apontando para umbrella + documentar cross-reference.
+status: triaged
+dod:
+  - decisão registrada: `infra/` herda umbrella CI/analyzer (documentado em `infra/README.md`) OU tem gates próprios (LCR2001+LCR2002+LCR2003 resolvidos com config file)
+  - `analysis_audit.py infra/` para de reportar LCR2001/2002/2003
+  - se herda: `infra/README.md` explica onde os gates rodam e como reproduzir localmente
+
+## B-213 — Misc setup findings: LCR1003, LCR2005, LCR2006, LCR2010 (CODEOWNERS, baseline, 9 suppressions em test files)   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: measured 2026-09-09 via `analysis_audit.py`. LCR1003 em `scripts/local/connect-canonical-fixture.sh` (suppression expired 2026-06-16 — SUNSET violado). LCR2005 em `.` (`No CODEOWNERS declares an owner for the rule set` — MEDIUM). LCR2006 em `.` (`No baseline file recorded` — INFO). LCR2010 (medium): `9 suppressions scattered across test files`. Todos em production paths, governance-gate bloqueia.
+why_now: itens de setup individualmente pequenos que agrupados representam a diferença entre "gates funcionam" e "gates existem em papel". Suppression expired é o mais grave — a razão original do bypass já venceu e ninguém checkou.
+status: triaged
+dod:
+  - LCR1003 expired: renovar sunset com nova justificativa OU remover a suppression
+  - LCR2005: adicionar `CODEOWNERS` no root de `infra/` (ou umbrella) apontando dono por diretório
+  - LCR2006: registrar baseline via `analysis_audit.py --write-baseline` OU documentar por que este projeto não usa baseline
+  - LCR2010: cada uma das 9 test-file suppressions ganha rationale ou é removida
+
+## B-214 — Extrair `preflight → sync → verify → cleanup` skeleton compartilhado entre 4 orchestrator scripts   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 3. Quatro scripts implementam o mesmo skeleton: `scripts/local/seed-post-cleanroom-all.sh`, `scripts/local/trio-dev-public.sh`, `scripts/local/test-all-dev-public.sh`, `scripts/drill/dr-drill.sh`. Cada um define seu próprio `run_step` / `assert_step` / `print_summary`. Rule of 3 (Unbreakable Rule 12 DRY) já cruzado — quatro casos.
+why_now: um framework mínimo compartilhado (`scripts/lib/step-orchestrator.sh: register_step name fn; run_all --bail-on-fail; emit_report --json`) elimina bugs cross-driver e permite adicionar telemetria/logging uma vez. Governance-gate mandatório.
+status: triaged
+dod:
+  - `scripts/lib/step-orchestrator.sh` existe com API mínima documentada
+  - 4 scripts refatorados para consumir o helper
+  - LOC total nos 4 scripts diminui em ≥ 100
+  - regression test: cada script mantém exit-code semantics prévia
+
+## B-215 — 105 test files reportam 0 assertions detectáveis — filtrar helpers vs stubs   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 4. `SELECT COUNT(*) FROM test_audit WHERE test_count=0 = 105`. Heurística `count_tests` conta `It("`, `func Test`, `test_`, `assert_`. A maioria dos 105 é helper (helpers_*_test.go, harness.go, real_deploy_harness.go), mas alguns podem ser stubs esquecidos ou tests sem nenhum assertion.
+why_now: `.claude/rules/testing.md § 6`: commented-out ou permanently @skip'd tests = invisible technical debt. Um `*_test.go` vazio é o extremo. Não é urgente mas fica registrado para audit periodic.
+status: triaged
+dod:
+  - lista dos 105 filtrada em (helpers legítimos, stubs, esquecidos)
+  - stubs deletados OU convertidos em test com pelo menos 1 assertion
+  - helpers renomeados com sufixo `_helpers.go` OU documentados como tal em comment
+  - `SELECT COUNT(*) FROM test_audit WHERE test_count=0 AND file LIKE '%_test.go' AND file NOT LIKE '%helpers%' AND file NOT LIKE '%harness%'` reduz
+
+## B-216 — 69 hardcoded `sleep <N>` + hardcoded k3d contexts em 9 scripts (production/security/drill)   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 3. `rg 'sleep\s+[0-9]+' -t sh | wc -l = 69`. `rg -n 'k3d-loopzero-' scripts/production/ scripts/drill/ scripts/security/ | wc -l = 9`. Sleep-based waits são anti-pattern (testing.md § 6): dormem demais (lento) ou de menos (flaky). Contexts hardcoded `k3d-loopzero-{core,build,cell-0,cell-1,secrets}` em scripts rotulados "live prod tools" (allowlist row) sugere dead paths OU dev-only helpers mal rotulados.
+why_now: cada sleep máscara uma race; cada context hardcoded é uma decisão dev-vs-prod que só aparece em produção. `shell-scripts-allowlist.md § D4` (Operator-time + Necessary): production script que hardcoda context dev tem um dos dois labels mentindo.
+status: triaged
+dod:
+  - 69 sleeps auditados: substituir por `kubectl wait --for=condition=X` ou bounded poll onde possível; onde inerente (chaos steady-state), constante nomeada + comment
+  - 9 contexts hardcoded: se script é produção-facing, parametrizar `$CONTEXT` env sem default; se dev-only, mover para `scripts/local/`
+  - timeouts hardcoded (`--timeout=Ns`) extraídos para `readonly K8S_ROLLOUT_TIMEOUT=180s` no topo dos scripts que os usam
+
+## B-217 — 352 `|| true` em shell scripts — auditoria de cada um adjacente a mutação   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 3. `rg '\|\|\s*true' -t sh | wc -l = 352`. Muitos legítimos (probe de existência, cleanup best-effort), MAS qualquer `|| true` adjacente a mutação (`kubectl apply`, `kv put`, `docker push`) é um erro silenciado real. Top offenders: `scripts/drill/drill-helmfile-bootstrap.sh`, `tests/runner/*.sh`, `tests/secrets/*.sh`.
+why_now: `.claude/rules/error-handling.md`: nunca swallow erros silenciosamente. `|| true` em probe é ok; `|| true` em mutação é bug com comment. Auditar 352 linhas é trabalho grande — merece scope próprio.
+status: triaged
+dod:
+  - script de audit categoriza cada `|| true` como (probe/cleanup/mutation)
+  - todas as `|| true` em mutations trocadas por handling explícito: `if ! X; then error; fi`
+  - `rg '\|\|\s*true.*(kubectl apply|kv put|docker push|helm install|helm upgrade)' -t sh` = 0
+
+## B-218 — 3 scripts `check-*.sh` de intent distinta compartilham prefixo   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 3. `scripts/local/check-infra.sh` é probe de runtime (kubectl + Pod curl). `scripts/local/check-sprint.sh` é orchestrator master de `task check`. `tests/check-loopzero-cloud-*-wiring_test.sh` (3 arquivos) são hermetic gates. Três kinds semanticamente distintos de "check" compartilham prefixo e reader tem que abrir cada um para saber qual é qual.
+why_now: `CLAUDE.md § 5` (nomenclature): "Always choose the most specific and descriptive name. Better a long clear name than a short problematic one." Três prefixos "check" com três significados é o anti-pattern.
+status: triaged
+dod:
+  - decisão de renaming: `probe-infra.sh`, `sprint-orchestrator.sh`, `gate-cloud-*-wiring_test.sh` (ou tags: `rt-check-*`, `orch-check-*`, `gate-check-*`)
+  - renames aplicados via `git mv` (preserva histórico)
+  - allowlist rows atualizadas com novos paths
+  - callers em taskfiles/documentation atualizados
+
+## B-219 — plugin `loop-code-review` v0.4.0 schema drift: `analysis_audit.py` emite category=maintainability que o DB rejeita   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+evidence: measured 2026-09-09 via este próprio loop-code-review Phase 1. `analysis_audit.py` emite findings com `category: "maintainability"` per §4 de CODE-ANALYSIS-RULES.md. DB `findings.category` enum aceita 17 categorias, `maintainability` NÃO é uma. DB rule registry então exige que pipeline category MATCH registered category (LCR2006 deve ser filed sob `maintainability`), o que fica inalcançável via CLI. Workaround adotado nesta sessão: insert direto no SQLite preservando `rule_id` e `canonical_category=maintainability`. Documentado no `code-review-output/final_report.md § Meta-finding`.
+why_now: bug do plugin externo, não deste repo — mas afeta cycle-code-quality e qualquer futuro loop-code-review run. Reportar upstream (loop-code-review plugin repo) + registrar o workaround aqui.
+status: triaged
+dod:
+  - issue aberta no repo `loop-code-review` upstream descrevendo o schema drift
+  - workaround documentado em `.claude/knowledge-base/references/` OU `code-review-output/README.md`
+  - quando upstream corrigir: bumpar versão do plugin instalado + remover workaround
+
+## B-220 — CHART-PLANE-INDEX.md documenta 2-tree parity mas `chart-pairs` gate não foi rodado neste review   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 3. `CHART-PLANE-INDEX.md` (em `infra/` root) documenta que 2 charts (`loopzero-api`, `loopzero-cloud`) existem BOTH em `infra/helm/` e `../charts/`. `chart-pairs` gate (per CLAUDE.md) recusa divergence. Este review verificou o index existe mas NÃO diffou cada par values/templates. Audit gap, não defect.
+why_now: `CLAUDE.md § Helm chart dual system`: parity é enforced by a gate. Este review não rodou. Follow-up para rodar `task quality:gates` (ou `chart-pairs` script direto) e registrar findings resultantes.
+status: triaged
+dod:
+  - `task quality:gates` (ou `loopzero-ops quality chart-pairs`) rodado
+  - se divergência encontrada: B-NNN próprio filed para cada par divergente com evidence
+  - se PASS: registrar no `code-review-output/README.md` que parity foi confirmada
+
+## B-221 — Fixture apps replicam graceful-shutdown inline em 10 files — resolver requer refactor de build context ou aceitar duplicação   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: review
+source: discover-review
+evidence: measured 2026-09-09 via loop-code-review Phase 3 e re-medido pelo Fork 3 desta mesma sessão. Loop-code-review Phase 3 originalmente reportou "13+ fixture apps" duplicando `server.close(() => process.exit(0)); setTimeout(() => process.exit(1), 10000)` inline (`code-review-output/final_report.md § P1`). Fork 3 tentou extração para `tests/fixtures/lib/graceful-shutdown.js` e **BLOQUEOU**. Números corretos: **10 fixture apps** (não 13) têm o padrão de graceful shutdown com `server`; **2 workers pulados** — worker fixtures em `tests/e2e/fixtures/multi-server/worker/src/index.js` e `tests/livetest/dogfood/fixtures/multi-server/worker/src/index.js` NÃO têm `server` (worker loop), então o helper de `server.close()` não se aplica. **3 variações** de log string no shutdown handler: `` `${sig}` ``, `` `${sig} received` ``, `` `sig` `` (literal). Root cause do block: cada fixture é container isolado — Dockerfile faz `WORKDIR /app` + `COPY . .` com build context = fixture dir (via loopzero-packs build). Um `require('../../../lib/graceful-shutdown')` quebra no container build porque o parent tree (`tests/fixtures/lib/`) NÃO está no build context — o container só vê o próprio fixture dir. Duas rotas viáveis pro cycle-plan decidir: (1) **restructurar 14 Dockerfiles + build-context em loopzero-packs** para carregar `../../lib/` (mudança maior no build system); OU (2) **aceitar 10x inline** (nossa duplicação atual) com um linter garantindo que as 10 cópias fiquem byte-idênticas.
+why_now: Fork 3 desta sessão tentou a extração pragmática e descobriu que o problema não é DRY simples — é DRY vs isolamento de container. Sem esse item, a próxima session vai tentar a mesma extração pelo mesmo motivo e bater no mesmo muro. Registrar o measurement + as duas rotas conhecidas fecha o loop.
+status: triaged
+dod:
+  - decisão registrada entre rota 1 (refactor build-context) e rota 2 (accept duplication + linter)
+  - se rota 1: `tests/fixtures/lib/graceful-shutdown.js` existe, 10 fixtures `require` ele, 14 Dockerfiles ajustados para incluir parent lib no build context, loopzero-packs build config alterado, todos os 10 containers buildam e rodam
+  - se rota 2: linter/gate reprova qualquer novo fixture cujo `server.close(...)` handler não seja byte-idêntico à variação canonical escolhida; comentário em cada uma das 10 cópias apontando pro linter e pro B-221 rationale
+  - regression assertion: `rg 'server\.close\(\(\) => process\.exit\(0\)\); setTimeout\(\(\) => process\.exit\(1\), \d+\)' -t js tests/ | wc -l` = 0 (rota 1) OU = 10 idênticas (rota 2)
+  - documentado: as 3 variações de log-string convergiram para uma canonical (`` `${sig}` `` recomendado — mais informativo que `sig` literal, mais curto que `${sig} received`)
+  - os 2 worker fixtures (multi-server/worker/src/index.js × 2) confirmados como NÃO cobertos por este item (worker loop, sem server para fechar)
+
+
+## B-222 — CVE-2026-84445 (HIGH) em google.golang.org/grpc v1.83.1 do operators/go.mod — bump para v1.83.2 bloqueado por governance-gate   [ ]
+
+domain: engine-go
+repo: loopzero
+suggested_mode: bug
+source: discover-review
+sponsor: paulohenriquevn
+tier: T2 (`.claude/rules/pre-release-governance.md` § Automatic T2/T3 Triggers — "Shared library changes (pkg/) / Credential or secret handling / Multi-cluster communication" cobre operators/ que consome grpc para reconcilers cross-cluster). Requires approval em `.claude/governance-gate.local.md`.
+evidence: measured 2026-09-09 durante attempt de push do batch loop-code-review (B-200..B-221). `delivery-gate.sh` rodou `task quality:all` e trivy reportou `operators/go.mod` com `google.golang.org/grpc v1.83.1 // indirect` casando CVE-2026-84445 (HIGH, fixed em 1.82.2/1.83.2/1.85.0-dev). CVE publicado APÓS o último push do repo (o dep foi pinnado em 2b5838a89 dias atrás para fechar outra CVE — CVE-2026-84304). NÃO introduzido pelo trabalho desta sessão — commits 807839756..3f88ec072 tocaram apenas `.gitignore`, `infra/tests/`, `infra/helm/monitoring/README.md`, `BACKLOG.md`, `CHANGELOG.md` (verificado via `git diff --stat 807839756~1..HEAD -- operators/` = vazio). Bloqueia push do batch.
+why_now: bloqueia push do commit batch B-200..B-221 desta sessão. Sem o bump, o `delivery-gate.sh` (INQUEBRÁVEL, sem flag de bypass — `.claude/hooks/delivery-gate.sh`) recusa qualquer `git push` do workspace. Sponsor precisa: (a) rodar `cd operators && go get google.golang.org/grpc@v1.83.2 && go mod tidy` OU (b) adicionar approval em `.claude/governance-gate.local.md` para autorizar o autor a fazer o bump. Alternativa mecânica-honesta: sponsor faz o bump em commit próprio antes de aprovar o push do batch atual.
+status: triaged
+dod:
+  - `operators/go.mod` com `google.golang.org/grpc` em ≥ v1.83.2 (ou v1.85.0+ quando estável)
+  - `cd operators && go mod tidy` limpo (sem drift no go.sum)
+  - `task quality:gates` PASS sobre `operators/` (trivy sem HIGH CVE novo introduzido)
+  - `delivery-gate.sh` PASS em `git push` de teste do workspace
+  - CHANGELOG entry registrando o bump + CVE fechada
