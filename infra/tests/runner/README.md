@@ -21,10 +21,6 @@ task test:chaos:pg-saturation      # Trip circuit breaker
 task test:chaos:argocd-crash       # Kill ArgoCD, verify blast radius
 task test:chaos:gitea-outage       # Drop Gitea traffic, verify fast-fail
 task test:chaos:all                # Run all chaos experiments sequentially
-
-# Composite
-task test:full                 # L1 + all chaos (CI-friendly)
-task test:soak                 # 6h L2 soak (catches leaks)
 ```
 
 ## How a load test runs
