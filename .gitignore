@@ -290,3 +290,9 @@ operators/app-operator
 # these two lines only matter for checkouts of commits older than that rename.
 !.claude/mechanisms/dist/
 !.claude/mechanisms/dist/**
+
+# Personal maintenance log, not a project artifact: BACKLOG.md records per-session
+# findings for the operator, so it is versioned by nobody and shared with nobody.
+# It was tracked until 2026-09-09, when a pull hit a modify/delete conflict between
+# a local deletion and remote edits — the ignore rule is what stops that recurring.
+BACKLOG.md
