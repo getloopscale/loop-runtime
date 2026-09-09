@@ -221,9 +221,13 @@ contratual, não técnico** — revisitar quando aparecer.
 absorve o papel.
 
 **Rationale:** precedente interno direto, não analogia. O OpenBao roda em cluster
-`loopzero-vault` **separado**, e instalá-lo no `mgmt` é **proibido em todos os tiers** —
-*"violação de topologia, não atalho"* (`.claude/rules/cleanroom-up-live-test-mandate.md`,
-`Jeito A INQUEBRÁVEL`). A credencial que cria e destrói infraestrutura em contas de clientes
+**separado** (hoje `loopzero-secrets`), e instalá-lo no `mgmt` é proibido —
+*"violação de topologia, não atalho"* (`docs/decisions/2026-09-09-the-secrets-cluster-is-separate-and-conditional.md`).
+⚠️ **Citação corrigida em 2026-09-09 (#357):** este parágrafo apontava para
+`.claude/rules/cleanroom-up-live-test-mandate.md`, que **não existe no workspace** — `.claude/` não é
+versionado neste repositório. O argumento não mudou; a fonte passou a ser legível. O que a fonte nova
+**não** reconstrói é a formulação *"em todos os tiers"*, cujo único registro era o arquivo ausente.
+A credencial que cria e destrói infraestrutura em contas de clientes
 é da mesma classe que a chave de unseal do vault. O `mgmt` atual roda ~50 releases — o
 produto inteiro (PostgreSQL, Gitea, MinIO, ArgoCD, Harbor, Ory, observabilidade, os 4
 operators, loopzero-api, loopzero-cloud); somar a autoridade sobre a frota de clientes a isso faz um
