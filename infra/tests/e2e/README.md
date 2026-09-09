@@ -20,7 +20,7 @@ task e2e:all
 | Label | Description | Command |
 |-------|------------|---------|
 | `smoke` | Quick subset for development | `task e2e:smoke` |
-| `journey` | Full end-to-end flows (11 journeys) | `task e2e:journey` |
+| `journey` | Full end-to-end flows (26 journeys — see `tests/livetest/dogfood/` for the current set) | `task e2e:journey` |
 | `edge-case` | Concurrency, failures, state machine | `task e2e:edge` |
 
 ## Running Specific Tests
