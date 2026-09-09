@@ -235,6 +235,16 @@ code-review-output-*/baseline/
 code-review-output-*/figures/
 code-review-output-*/findings/
 code-review-output-*/state/
+# Same rule for the bare `code-review-output/` variant (no suffix — plugin default
+# when --output-dir is not passed). Kept as separate lines rather than widening the
+# glob above so the intent (bare vs suffixed) stays greppable.
+code-review-output/code-review.db
+code-review-output/analysis/
+code-review-output/audit/
+code-review-output/baseline/
+code-review-output/figures/
+code-review-output/findings/
+code-review-output/state/
 
 # compiled loopzero-ops binary (build artifact; source is cmd/loopzero-ops/)
 /loopzero-ops
