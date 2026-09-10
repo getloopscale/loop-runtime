@@ -4,7 +4,7 @@
 - **Revision:** 3 — 2026-09-10 (two rounds of external architecture review absorbed)
 - **Tier:** T3 — topology
 - **Repos affected:** `loopzero` · `loopzero-cluster-management`
-- **Precedent to slice 1:** C1 · C2 · C7 · minimum answer on O3
+- **Precedent to slice 1:** ~~C1~~ (closed) · C2 · C7 · minimum answer on O3
 - **Rendered version:** published artifact (same content, designed for reading)
 
 > **On this file.** The rendered version reached the first reviewer as extracted text — table headers
@@ -47,11 +47,61 @@ Measured against Helm 3.19.0 and Helmfile 1.1.6. **Helm supports digests; Helmfi
 toolchain. The installer must resolve and verify first, then hand local artifacts to Helm — which is
 what § 05 is now built around.
 
+### C1 — resolved 2026-09-10
+
+The commercial scope of self-host is closed. It was precedent to slice 1, so this unblocks the
+migration and it materially shrinks what "self-host" means.
+
+| Question | Decision |
+|---|---|
+| Build plane | **Included.** The customer builds on their own infrastructure. |
+| Identity | **Ory embedded, federated by OIDC to the customer's IdP.** Code parity with SaaS; corporate SSO works; two extra components for the customer to run. |
+| Postgres, object storage | **The customer's.** Managed services from their cloud. |
+| Distribution registry (our images) | **Ours, central.** Already shipped as AM6 — entitled, revocable token. |
+| The customer's own images | **Theirs.** Build runs on their infrastructure; artifacts stay there. |
+| Gitea | **In-cluster on the customer.** Not their choice — it is GitOps machinery, like Argo CD. |
+| Observability | **Included, in-cluster.** They need to see their own platform. |
+| Our operational instrumentation | **Excluded.** `chaos-mesh`, `opencost`, `cloudflared`, `smoke-test` are SaaS operations tooling, not product. |
+| Cells | **One now, N as evolution.** `cell.helmfile` is already parameterised by `requiredEnv`, so the second cell is configuration, not refactor. |
+
+**Measured impact.** Ten releases leave the offering — `postgresql`, `minio`, `harbor`,
+`harbor-redis`, `nfs-ganesha`, `nfs-server-provisioner`, `chaos-mesh`, `opencost`, `smoke-test` from
+`core`, and `cloudflared` from `cell`. With an external secret backend the `secrets` composition is
+absent entirely.
+
+| | Literal reading of the promise | Scope as decided |
+|---|---|---|
+| Clusters | 5 | **3** — core, build, one cell |
+| Releases | 101 | **~83** — core 46 · build 10 · cell 27 |
+| `clustermgmtd` in scope | Yes | **No** — one cell makes placement fixed configuration |
+
+The last row matters beyond this RFC: the transactional service that blocks `loopzero-data-cells` leaves
+the self-host critical path, so the two efforts stop competing for the same repository's first
+delivery.
+
+**Two consequences that are now design constraints, not preferences:**
+
+1. **The engine must accept an external identity provider.** Today it does not. Ory stays, but as a
+   broker rather than the source of identity.
+2. **Source bundles never leave the customer's boundary.** Measured: `loopzero-builds` is where
+   `POST /source/upload` puts the customer's source, and where the build clones from. Centralising
+   object storage in our infrastructure would move proprietary source across the boundary on every
+   deploy, which voids the reason the customer bought self-host. This is why C1 chose the customer's
+   storage rather than ours, and it is not revisitable for convenience.
+
+**Why not "we manage everything to reduce friction":** it moves friction from the sale to operations,
+and multi-cloud multiplies it per provider. GitLab — the most operated self-managed product in this
+market — ships bundled PostgreSQL, Redis and MinIO marked *"for evaluation purposes only"* and requires
+external services in production. Gitpod tried to support every managed Kubernetes provider, sunset
+self-hosted after three years, forfeited seven figures of net-new revenue and laid off 28% of the
+company; the reason they published was that open-ended requirements across providers restricted what
+the product could do.
+
 ### Blocking conditions
 
 | # | Condition | Owner | State |
 |---|---|---|---|
-| C1 | Resolve the commercial scope of self-host | Product | Open — precedent to slice 1 |
+| C1 | Resolve the commercial scope of self-host | Product | **Resolved 2026-09-10** — see above |
 | C2 | Formalise the owning repository of the platform release | Sponsor | Open — precedent to slice 1 |
 | C3 | Define a bill of materials with immutable digests | Engineering | Shape defined (§ 05), mechanism open |
 | C4 | Close the classification of all 43 gates | Engineering | Open — neutral prep, may start now |
@@ -297,7 +347,7 @@ any infrastructure. Adopted instead, and it is better than the criterion it repl
 |---|---|
 | `cell` | Belongs. Unambiguous. |
 | `core` | Belongs, if it is a requirement of the supported platform — which it is under any reading of C1. |
-| `build` | Belongs **if it is part of the contracted self-host offering**. The question is commercial; how many planes consume it is the wrong test. |
+| `build` | **Belongs** — C1 included the build plane in the offering, which is the test that decides it. |
 | `secrets` | Belongs as an **optional profile**, not a mandatory cluster. |
 
 This makes `build` downstream of C1 rather than settled.
@@ -475,7 +525,7 @@ likely outcome:
 
 | # | Open decision | Why it matters |
 |---|---|---|
-| O1 | Contractual scope of self-host | Read literally, 101 releases across four or five clusters; read as "run my apps on my Kubernetes", ~13 charts on one. A precedent decision, not a risk — it changes sizing, networking, identity, DNS, storage, backup, observability, Kubernetes requirements and duration. |
+| ~~O1~~ | ~~Contractual scope of self-host~~ | **Closed 2026-09-10.** Three clusters, ~83 releases, external Postgres and object storage, Ory federated to the customer's IdP, one cell. See § 01. |
 | O2 | Final ownership of the composition | The destination, or a dedicated distribution repository. Hinges on C7. |
 | O3 | Bundle format, channel and signing chain | § 05 gives the shape; format, generator, storage and chain are undecided. Minimum answer is precedent to slice 1. |
 | O4 | Cross-repository gate execution | § 08 gives a taxonomy; the mechanism — triggered workflows, published fixtures, a compatibility suite — is undecided. |
