@@ -59,6 +59,15 @@ slice, not before it.
 was no seam to test. It is the class the extraction creates the need for, and **it appears in
 none of the nine slices.**
 
+## What 2026-09-11 did to this view
+
+The broken edge from distribution to installation — the 401 — **lost its destination**. Self-host was
+dropped, so no customer outside this team fetches an artifact, and `REQ-10` was withdrawn with it.
+
+What replaced it as the sharp edge is not in this view: **the cross-account role**. Databricks
+documents ~45 to 70+ AWS actions for the equivalent, and two vendors argue publicly against the
+assumed-role shape our D5 uses. See [`../decisions/byoc-as-the-only-mode-has-no-precedent.md`](../decisions/byoc-as-the-only-mode-has-no-precedent.md).
+
 ## Related
 
 - [`target-solution.md`](target-solution.md) — the same system grouped by piece

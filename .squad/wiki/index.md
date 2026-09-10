@@ -38,15 +38,26 @@ CDN. **Every status in them was measured from disk**, never recalled.
 - [architecture/alignment-review.md](architecture/alignment-review.md) — the review surface,
   and why 100% was never approval
 
+## Decisions
+
+- [decisions/byoc-as-the-only-mode-has-no-precedent.md](decisions/byoc-as-the-only-mode-has-no-precedent.md)
+  — self-host was dropped on 2026-09-11 and BYOC became the whole offer. Research the same day found
+  **no vendor whose only enterprise mode is BYOC with a vendor-hosted control plane**, and two
+  vendors arguing against the cross-account-role mechanism specifically. The decision stands; the
+  evidence is recorded while reversing is still cheap.
+
 ## What these views agree on, and it is not comfortable
 
-Two things carry signed requirements and **no plan at all**:
+1. **The entry path has no owner**, and `loopzero-lens` — the whole execution-record capability — has
+   zero published packages. Signed requirements, no work assigned.
+2. **BYOC is the only mode, and no verified vendor runs that configuration.** Not a defect — an
+   unprecedented shape, recorded above.
 
-1. **A customer cannot fetch the published charts** — 401, and the entitlement the extraction
-   RFC assumes was never built. None of the nine slices covers it
-   ([#358](https://github.com/getloopscale/loopzero/issues/358)).
-2. **The entry path has no owner**, and `loopzero-lens` — the whole execution-record capability —
-   has zero published packages.
+**One thing dropped off this list on 2026-09-11.** *A customer cannot fetch the published charts*
+([#358](https://github.com/getloopscale/loopzero/issues/358)) was the loudest gap here until self-host was
+dropped. Its premise was that a customer must fetch; under BYOC nobody outside does. The issue stays
+open for the narrower defect underneath — the extraction RFC still describes an entitlement token in
+the present tense — but it is no longer between a customer and a running cell.
 
 Both were found by measuring rather than by reading, and both are visible in every view above
 because a drawing that hid them would be the wrong drawing.

@@ -47,6 +47,17 @@ with no work assigned to anyone.
 customer brings their own store. It is the only row where the to-be is **smaller** than the
 as-is, and it is what takes `clustermgmtd` off the critical path for self-host.
 
+## The to-be column changed on 2026-09-11, twice
+
+**First:** self-host was dropped and BYOC became the whole offer. The row *"how the customer obtains
+artifacts"* — the one with no plan, blocked on a 401 — **stopped having a subject**: under BYOC
+nobody outside fetches.
+
+**Then research found the configuration has no precedent.** Every verified vendor offers BYOC beside
+a fully managed mode; none offers it alone. The to-be column is therefore a plan whose *shape* is
+unprecedented, not merely whose *timing* is unproven — a stronger caveat than the one this document
+carried before. See [`../decisions/byoc-as-the-only-mode-has-no-precedent.md`](../decisions/byoc-as-the-only-mode-has-no-precedent.md).
+
 ## Related
 
 - [`target-solution.md`](target-solution.md) · [`engine-and-delivery.md`](engine-and-delivery.md)

@@ -133,18 +133,31 @@ still exists and was never rewritten, and her question is *what did the agent re
 
 **OBJ-3 — Self-host is an install, not a project**
 
-## REQ-10 — The install runs on published artifacts alone
+## REQ-10 — WITHDRAWN 2026-09-11 · the install runs on published artifacts alone
 serves: OBJ-3
-statement: No step of the install requires a file, credential or access that only we have.
-acceptance: On a machine with no access to our source repositories, the install completes
-using only what a customer can fetch with their entitlement.
+statement: **Withdrawn.** No step of the install requires a file, credential or access that only we
+have — written when a CUSTOMER performed the install.
+acceptance: **None. This requirement no longer has a subject.**
+
+**Why it is struck rather than deleted.** The id is cited by `technical-pieces.md` and by two issues;
+deleting it would silently repoint every citation, which is the same defect the backlog's
+never-reuse-an-id rule exists to prevent. It keeps REQ-10 forever.
+
+**Why its premise dissolved.** Self-host was dropped on 2026-09-11 and BYOC is the whole of it. Under
+BYOC the install is performed by CAPA using the authority CAPI holds at cell birth, in an account we
+assume a role into. **No customer ever fetches an artifact**, so "runs on published artifacts alone"
+describes an act nobody performs.
+
+**What it takes with it:** `getloopscale/loopzero#358` — a customer cannot pull the published charts (401,
+no entitlement). That was this requirement's blocker, and it stops being one. The entitlement is
+still worth having the day a customer needs to fetch anything; it is no longer on the critical path.
 
 ## REQ-11 — The customer's code and build artifacts do not leave their infrastructure
 serves: OBJ-3
 statement: During a deploy, the source bundle and the build artifact stay inside the
 customer's infrastructure. Artifacts of **ours** come in; what is **theirs** does not go out.
-acceptance: Declare the permitted perimeter first — the customer's own infrastructure, plus
-the inbound endpoints from which OUR artifacts are fetched. Then network capture during a full
+acceptance: Declare the permitted perimeter first — the customer's AWS account, plus the inbound
+endpoints from which OUR artifacts are fetched into the cell we operate there. Then network capture during a full
 deploy shows **0 bytes of source bundle or build artifact to any destination outside that
 perimeter** — ours included, third parties included. Watching only for egress to our hosts was
 the earlier criterion, and a build shipping the bundle to a third-party registry or mirror
@@ -154,9 +167,9 @@ would have passed it while violating the statement.
 serves: OBJ-3
 statement: The install is reproducible from the written procedure, with no decision taken in
 the moment.
-acceptance: Declare which properties must coincide — component inventory, the resolved
-version of each, and a digest of the effective configuration — then install the same version
-twice and compare all three. Follow with the same functional probe on both installs; both
+acceptance: Declare which properties must coincide — component inventory, the resolved version of
+each, and a digest of the effective configuration — then have CAPA create the same version twice from
+the same ClusterClass and compare all three. Follow with the same functional probe on both installs; both
 pass. Matching names alone can hide different versions, different configuration and different
 behaviour.
 
@@ -169,18 +182,35 @@ behaviour matches what was declared.
 
 ## REQ-14 — The install declares what the customer brings, and refuses early when it is absent
 serves: OBJ-3
-statement: The prerequisites the customer supplies are declared, and the install fails before
-changing anything when one of them is missing.
+statement: The prerequisites the customer supplies are declared, and cell creation fails before
+changing anything when one of them is missing. Under BYOC this is the D10 eight-item bootstrap
+contract — including the ACTIVE validation that assumes the role WITHOUT the `ExternalId` and refuses
+it if that succeeds.
 acceptance: Run the install with a prerequisite missing; it fails naming what is missing, and
 nothing in the environment was altered.
+
+**Researched 2026-09-11: the perimeter is only half of what a security review asks.** The other
+half is what our control plane RETAINS, and *"a scoped cross-account role"* does not survive reading.
+Measured from vendors' own permission documents: **Databricks needs ~45 to 70+ AWS actions**,
+including `PutRolePolicy` and `AuthorizeSecurityGroupIngress` — escalation-relevant on their own;
+**Redpanda** needs IAM role and policy creation, OIDC provider setup and `PassRole`.
+
+**And two vendors argue publicly against our specific mechanism.** Not against BYOC — against the
+assumed cross-account role that D5 uses. WarpStream: *"wouldn't it be better if external access
+wasn't required at all?"* Nuon, on why least privilege does not hold: *"handling the minimal set of
+permissions prohibits most day-to-day debugging"*. Both propose an agent INSIDE the customer account,
+**egress-only, with no inbound path**.
+
+This is the finding with the most leverage, because the mechanism is not yet built. Full record in [`../decisions/byoc-as-the-only-mode-has-no-precedent.md`](../decisions/byoc-as-the-only-mode-has-no-precedent.md).
 
 **The asymmetry in REQ-11 is the requirement, not a detail.** A requirement saying "zero
 traffic" would be false — our chart and our images have to come in. What must not happen is
 **their code going out**. That direction is what the customer bought.
 
-**REQ-14 comes from the C1 scope:** the customer brings Postgres, object storage and an
-identity provider. Without a declaration and an early refusal, "install" becomes "find out
-what is missing with half the system running" — `error-handling.md` fail-fast applied to an
+**REQ-14 came from the C1 scope and survives the change to BYOC**, with its subject moved: the
+customer brings an AWS account satisfying the D10 bootstrap contract rather than a Postgres and an
+IdP. Without a declaration and an early refusal, cell creation becomes "find out what is missing with
+half a cluster standing" — `error-handling.md` fail-fast applied to a provisioner instead of an
 installer.
 
 **REQ-13 corrects a defect an architecture review already caught once:** the RFC said

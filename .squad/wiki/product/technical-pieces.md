@@ -63,15 +63,34 @@ accepts.
 
 ## PIECE-8 — Distribution
 realises: REQ-10, REQ-13, REQ-15
-responsibility: What is published and how it is fetched — packages installable from a public
-registry with no credential of ours, and versioned artifacts that declare which versions one
-may come from and whether the path is reversible.
+responsibility: What is published and how it is fetched — versioned artifacts that declare which
+versions one may come from and whether the path is reversible, fetched into the cells we operate.
 
-## PIECE-9 — Installation
+**Narrowed on 2026-09-11.** It used to require packages installable with no credential of ours,
+because a self-hosting customer had to fetch them. Under BYOC nobody outside fetches, so the
+entitlement leaves this piece's critical path — it is worth having, and it is no longer what stands
+between a customer and a running cell.
+
+## PIECE-9 — Cell provisioning
 realises: REQ-12, REQ-14
-responsibility: Standing the platform up inside somebody else's infrastructure —
-reproducibly, from a written procedure, declaring what the customer supplies and refusing
-before changing anything when one of those is absent.
+responsibility: Bringing a cell into existence inside the customer's AWS account and reaching
+workload-ready — reproducibly from a declared ClusterClass, declaring what the customer supplies and
+refusing before changing anything when one of those is absent.
+
+**This piece owns the cross-account role, and that is where the research bites.** WarpStream and
+Nuon both argue against the assumed-role shape and propose an egress-only agent inside the customer
+account instead. Changing that later means changing a live trust relationship in every customer
+account, which is why it is named here while nothing is built. Full record in [`../decisions/byoc-as-the-only-mode-has-no-precedent.md`](../decisions/byoc-as-the-only-mode-has-no-precedent.md).
+
+**Note also:** ClickHouse, whose BYOC is GA on AWS, **did not use Cluster API** — CloudFormation plus
+Crossplane plus a bespoke upgrader. Our CAPI choice remains defensible and is no longer the obvious
+one.
+
+**Renamed from "Installation" on 2026-09-11**, when self-host was dropped. The responsibility did not
+move; its actor did. An installer is run BY the customer from a written procedure; a provisioner is
+run BY us from a declaration. REQ-12's reproducibility follows the declaration rather than a document
+somebody follows, and REQ-14's early refusal is the D10 bootstrap contract rather than a
+prerequisites check.
 
 ## PIECE-10 — Build path
 realises: REQ-11
@@ -93,7 +112,7 @@ which is what makes the customer's code and build outputs stay inside their infr
 | REQ-7 traced without instrumenting | PIECE-4 |
 | REQ-8 prompts versioned to exact text | PIECE-5 |
 | REQ-9 the four compose without glue | PIECE-1 |
-| REQ-10 published artifacts alone | PIECE-8 |
+| REQ-10 ~~published artifacts alone~~ | withdrawn 2026-09-11 |
 | REQ-11 their code does not leave | PIECE-10 |
 | REQ-12 two installs match | PIECE-9 |
 | REQ-13 upgrade declares direction | PIECE-8 |
@@ -103,7 +122,7 @@ which is what makes the customer's code and build outputs stay inside their infr
 | REQ-17 what needs the platform is stated | PIECE-1 |
 | REQ-18 no dependency edge | PIECE-1 |
 
-**18 of 18 realised, and no piece realises none.** A requirement nobody realises is agreed
+**17 of 17 live requirements realised** (REQ-10 withdrawn 2026-09-11), and no piece realises none. A requirement nobody realises is agreed
 work with nobody to do it; a piece realising nothing is architecture nobody asked for.
 
 ## Why these cuts

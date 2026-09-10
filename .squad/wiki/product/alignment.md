@@ -32,12 +32,12 @@ together mean something the score alone does not.
 
 ## Reviewer sign-off
 
-- [x] The problem stated in the vision is the real one
-- [x] These are the right objectives, and the metrics are the right metrics
-- [x] The requirements follow from the objectives
-- [x] The pieces cover every requirement
+- [ ] The problem stated in the vision is the real one
+- [ ] These are the right objectives, and the metrics are the right metrics
+- [ ] The requirements follow from the objectives
+- [ ] The pieces cover every requirement
 
-<!-- signed-by: paulo -->
+<!-- signed-by: -->
 
 **Only a person signs this one.** `alignment-threshold.md § Amended 2026-09-01` lets
 `alignment_judge.py` sign an *item's* brief, because the judge reads the item's evidence —
@@ -89,6 +89,50 @@ question and no box asks it.** Blocking on it would make the cascade unable to c
 gap exists, which is to say unable to report one. `/backlog-init` acts on this.
 
 
+## Read this before re-signing — the scope change has no precedent
+
+**Self-host was dropped on 2026-09-11 and BYOC became the whole offer. Research the same day found
+no vendor doing that.**
+
+In every vendor verified, BYOC is a **third** option beside a fully managed mode — Confluent,
+MongoDB, Temporal, Porter. **None was found whose only enterprise mode is BYOC with a vendor-hosted
+control plane.** And Databricks, the largest vendor of customer-account compute, is walking back from
+it: serverless GA January 2026, classic managed-VPC workspace creation slated for deprecation.
+
+**Two vendors argue against our specific mechanism**, not against BYOC: WarpStream and Nuon both
+reject the assumed cross-account role and propose an egress-only agent inside the customer account.
+That is the finding with the most leverage, because nothing is built yet.
+
+**None of this refutes the decision.** It says the configuration is unprecedented — a smaller claim,
+and the accurate one. The question it opens is not *bring self-host back*; it is **what the second
+door is**, since every verified vendor has one.
+
+**Signing box 2 now means agreeing to a scope no verified vendor runs.** That may be right. It should
+be deliberate. Full record, with evidence graded read / search / unverified, in [`../decisions/byoc-as-the-only-mode-has-no-precedent.md`](../decisions/byoc-as-the-only-mode-has-no-precedent.md).
+
+## The scope change to weigh before re-signing
+
+**Self-host was dropped on 2026-09-11. BYOC is the whole of it.**
+
+**The vision did not break; it tightened.** *"The same platform runs on your own infrastructure when
+you need it to"* still holds — a BYOC cell lives in the customer's account. And the non-goal *"not
+managed Kubernetes: the customer never operates a cluster"* gets **stronger**, because self-host was
+the one place where they would have.
+
+**Four of five requirements survive; one dissolves.** REQ-11, 12, 13 and 14 all hold — REQ-14 turns
+out to be the D10 eight-item bootstrap contract under another name. **REQ-10 is withdrawn**: under
+BYOC we perform the install with CAPI's authority at cell birth, so "runs on published artifacts
+alone" describes an act nobody performs. The id is struck in place, never deleted — other documents
+cite it.
+
+**It disarms the standing blocker.** `getloopscale/loopzero#358` reported that a customer cannot pull the
+published charts. Its premise was that a customer must fetch; under BYOC nobody outside does.
+
+**And it costs one thing, stated here rather than discovered later.** D5 promises `AssumeRole` +
+`ExternalId` with no long-lived key, and D11 records that this has **no DigitalOcean equivalent**.
+Under self-host the customer's provider was their business. Under BYOC it is ours: **AWS is the only
+provider where the security promise holds as written.**
+
 ## A declared limitation the reviewer should know before signing
 
 **OBJ-1 does not measure comprehension.** Its number comes from a script running the
@@ -114,6 +158,8 @@ sometimes unobtainable.
 | 2026-09-11 | External review: 7 acceptance criteria tightened (REQ-1, 3, 6, 8, 9, 11, 12), 3 objective metrics disambiguated (OBJ-1, 3, 4), D2 reopened, OBJ-1's comprehension gap declared | **signature withdrawn** — re-signature required |
 | 2026-09-11 | Amended text re-read | **re-signed by `paulo`** |
 | 2026-09-11 | `type:` added to frontmatter — OKF v0.2's one hard requirement | **signature stands** — a filing key asserts nothing any box claims |
+| 2026-09-11 | **Self-host dropped; BYOC is the whole of it.** OBJ-3 rewritten, REQ-10 withdrawn, PIECE-9 renamed, vision amended | **signature withdrawn** — box 2 asserts *these are the right objectives* and an objective changed |
+| 2026-09-11 | Market research recorded: **BYOC-only has no precedent found**, and two vendors argue against the cross-account-role mechanism | still withdrawn — the finding is evidence for box 2, not a change to it |
 
 **Why the withdrawal.** The four boxes assert things about a specific text. Box 2 says *these
 are the right metrics* and three metrics changed; box 3 says *the requirements follow from the

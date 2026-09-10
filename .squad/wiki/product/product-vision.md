@@ -81,7 +81,7 @@ delivers.
 |---|---|---|
 | What | full-stack TypeScript framework | Go platform |
 | Licence | open source | proprietary |
-| Distribution | npm | hosted service, or self-hosted |
+| Distribution | npm | hosted service, or a cell in your own cloud account |
 | Knows Kubernetes? | **no, by design** | yes |
 
 They meet at one file — `.loopzero/services.json`. Neither imports the other's code. That seam is what

@@ -51,6 +51,15 @@ instrumenting it* — has no consumable artifact. PIECE-4 is red end to end.
 **`loopzero-cluster-management` holds 16 commits**: README, CLAUDE.md and a wiki. The destination
 of the extraction is empty, and the four compositions (59 releases) are still in the engine.
 
+## Superseded in part on 2026-09-11
+
+PIECE-9 was **Installation** when this was measured; it is now **Cell provisioning**, because
+self-host was dropped and BYOC is the whole offer. The status counts above still hold for what they
+measured; what an installer OWNS does not.
+
+Research the same day found **no vendor whose only enterprise mode is BYOC with a vendor-hosted
+control plane** — see [`../decisions/byoc-as-the-only-mode-has-no-precedent.md`](../decisions/byoc-as-the-only-mode-has-no-precedent.md).
+
 ## Related
 
 - [`engine-and-delivery.md`](engine-and-delivery.md) — R2 and R3 at component level

@@ -78,65 +78,52 @@ why: this is what makes the second feature cost a week. She wrote the memory lay
 so every change goes through her — and that is the half of the cost the vision calls *what
 she gives up finding out*.
 
-## OBJ-3 — Self-host is an install, not a project
+## OBJ-3 — A cell in the customer's account is ours to run and their code never leaves it
 
-metric: **≤ 1 day** for us to install on a cloud account that is not our platform, from published artifacts, with zero access to our infrastructure — the clock starting once the prerequisites REQ-14 declares (Postgres, object storage, identity provider) are present, because those are what the customer brings and timing their provisioning would measure their cloud rather than our install — and **0** bytes of source bundle or build artifact egressing outside the declared perimeter during a deploy, by network capture.
+metric: **≤ 1 day** for CAPA to create a cell in an AWS account that is not our platform and reach
+workload-ready, counted from the moment the customer's bootstrap contract is satisfied — and **0**
+bytes of source bundle or build artifact egressing outside their account during a deploy, by network
+capture.
 horizon: 2026-09-13
-why: the vision already promises it, and the extraction RFC closed the commercial scope
-(3 clusters, 44 releases) with network proof as an acceptance criterion — the promise the
-customer buys has to be demonstrated, not documented.
+why: it is the promise the vision makes about their infrastructure, and it is the one a customer
+buys rather than infers.
 
-**Known at the time of writing:** this objective cannot CLOSE on its horizon — it installs
-artifacts the extraction has not produced yet, and only slice 1 is approved. What the
-horizon requires is that the number be taken: attempt the install with what is published
-today and record where it stops.
+**Rewritten 2026-09-11 — self-host was dropped, BYOC is the whole of it.** The objective used to read
+*"self-host is an install, not a project"*, which described a customer standing the platform up
+themselves. That is no longer the product.
 
-**The prediction, written before the measurement — 2026-09-10.** Measured today:
-release `v0.76.6` (2026-08-18) exists and **12 OCI charts are published**; the composition
-that stands them up is **not** published. So the attempt is not vacuous — there are
-artifacts — but it should stop early, and we predict it stops at **REQ-10** (*the install
-runs on published artifacts alone*): we have the charts and not the published procedure that
-raises them.
+**The vision did not break; it tightened.** *"The same platform runs on your own infrastructure when
+you need it to"* is still true — a BYOC cell lives in their account. And the non-goal *"not managed
+Kubernetes: the customer never operates a cluster"* gets STRONGER, because self-host was the one
+place where they would have.
 
-Writing the prediction first is what makes the attempt worth making. If it stops at REQ-10 we
-confirm what we already believed and the baseline was cheap. **If it stops anywhere else, we
-learned something we did not know** — and that is the only outcome that pays for the
-attempt. A result recorded after the fact can only ever agree with itself.
+**What changed underneath, measured against the TRD:** four of the five requirements survive and one
+dissolves. REQ-11 (their code does not leave), REQ-12 (two installs match), REQ-13 (upgrade declares
+its direction) and REQ-14 (declares what they bring, refuses early) all hold — REQ-14 is the D10
+eight-item bootstrap contract by another name. **REQ-10 (the install runs on published artifacts
+alone) dissolves**: under BYOC we perform the install with the authority CAPI holds at cell birth,
+and no customer ever fetches an artifact.
 
-**The measurement was taken early, on 2026-09-11 — and it refuted the prediction's cause.**
+**And that disarms the blocker.** `getloopscale/loopzero#358` reported that a customer cannot pull the
+published charts — 401, no entitlement. Its premise was that a customer must fetch. Under BYOC-only
+nobody outside does: we pull, into a cell we operate. The 401 stops being a wall.
 
-```
-helm pull oci://ghcr.io/getloopscale/charts/loopzero-api --version 0.2.0   401 unauthorized
-anonymous ghcr token                                                  denied
-"entitlement" in real code                                            1 hit: --allow-insecure-entitlement (BuildKit flag)
-"entitlement" in the extraction RFC                                   1 hit: "reuses ... the entitlement token"
-published install procedure                                           none
-```
+**The cost, stated rather than discovered.** D5 promises `AssumeRole` + `ExternalId` with no
+long-lived key, and D11 records that this promise **has no DigitalOcean equivalent** — there is no
+STS there. Under self-host the customer's provider did not matter. Under BYOC it does: **AWS is the
+only provider where the security promise holds as written.**
 
-**REQ-10 is the requirement that fails, as predicted — for a cause that was not.** The
-prediction said it would stop for want of the published PROCEDURE that raises the charts. It
-stops earlier: **a customer cannot fetch the charts at all.** The entitlement the RFC's O3
-design assumes — *"reuses the registry, the entitlement token and the keyless cosign the
-pipeline already runs on"* — exists in that sentence and nowhere else.
+**Researched the same day, and two findings bear on this objective directly** — full record in [`../decisions/byoc-as-the-only-mode-has-no-precedent.md`](../decisions/byoc-as-the-only-mode-has-no-precedent.md):
 
-The difference matters. A missing procedure is a documentation task. **A missing entitlement is
-a product capability nobody has built**, and the bundle design is written as though it were
-already there.
+1. **BYOC as the ONLY mode has no precedent found.** In Confluent, MongoDB, Temporal and Porter it is
+   a third option beside a fully managed one. The objective is not refuted; its exclusivity is
+   unprecedented, which is a smaller and more accurate statement.
+2. **The largest vendor of customer-account compute is reversing.** Databricks went serverless GA in
+   January 2026 and plans to deprecate classic workspace creation with a managed VPC.
 
-**REQ-12 falls with it.** A customer could be granted access by hand — added to the
-organisation — and that would work; it is not a written procedure, so *two installs of the same
-version produce the same system* has no procedure to be reproducible from.
-
-**What could NOT be measured, and why:** the *≤ 1 day* half needs a cloud account this session
-cannot provision. That is `access` in `rules/decision-delegation.txt`, a retained class where
-authority does not conjure what is missing. The baseline covers REQ-10 and REQ-12; the duration
-is still unmeasured, and saying so is the whole point.
-
-**This is the outcome that paid for writing the prediction down.** Confirming REQ-10 cheaply was
-the expected case. Learning that the cause is a capability nobody built — while the architecture
-RFC describes it in the present tense — is what a result recorded after the fact could never
-have surfaced.
-
+**What survives untouched:** REQ-11's perimeter promise. Whatever the second door turns out to be,
+the customer's code staying in the customer's account is ours to keep and is measured by network
+capture, not asserted.
 
 ## OBJ-4 — LoopZeroKit is adoptable with no account
 
