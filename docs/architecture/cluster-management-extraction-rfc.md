@@ -4,7 +4,7 @@
 - **Revision:** 3 — 2026-09-10 (two rounds of external architecture review absorbed)
 - **Tier:** T3 — topology
 - **Repos affected:** `loopzero` · `loopzero-cluster-management`
-- **Precedent to slice 1:** ~~C1~~ (closed) · C2 · C7 · minimum answer on O3
+- **Precedent to slice 1:** all closed 2026-09-10 — ~~C1~~ · ~~C2~~ · ~~C7~~ · ~~O3~~ (minimum answer)
 - **Rendered version:** published artifact (same content, designed for reading)
 
 > **On this file.** The rendered version reached the first reviewer as extracted text — table headers
@@ -102,12 +102,12 @@ the product could do.
 | # | Condition | Owner | State |
 |---|---|---|---|
 | C1 | Resolve the commercial scope of self-host | Product | **Resolved 2026-09-10** — see above |
-| C2 | Formalise the owning repository of the platform release | Sponsor | Open — precedent to slice 1 |
+| C2 | Formalise the owning repository of the platform release | Sponsor | **Resolved 2026-09-10** — `loopzero-cluster-management`. The condition that would justify a dedicated repository (distinct teams, cadences or operational responsibilities) was measured and is false: one person authors all four repositories. |
 | C3 | Define a bill of materials with immutable digests | Engineering | Shape defined (§ 05), mechanism open |
-| C4 | Close the classification of all 43 gates | Engineering | Open — neutral prep, may start now |
+| C4 | Close the classification of all 43 gates | Engineering | **Draft delivered** — `cluster-management-extraction-gate-classification.md`. 15 travel, 25 stay, **3 cease to exist**. Four open questions remain in it. |
 | C5 | Add publication and signing of infrastructure charts | Engineering | Corrected in § 05 |
 | C6 | Prove clean install, upgrade and rollback | Engineering | Matrix defined (§ 09) |
-| C7 | Name an operational owner and reserved capacity | Sponsor | Open — precedent to slice 1 |
+| C7 | Name an operational owner and reserved capacity | Sponsor | **Resolved 2026-09-10** — one person, sequenced strictly: self-host until the customer is installed, `loopzero-data-cells` after. Viable because C1 removed `clustermgmtd` from the self-host critical path. "Reserved capacity" is recorded as what it is — sequencing, not headcount. |
 
 ---
 
@@ -527,7 +527,7 @@ likely outcome:
 |---|---|---|
 | ~~O1~~ | ~~Contractual scope of self-host~~ | **Closed 2026-09-10.** Three clusters, ~83 releases, external Postgres and object storage, Ory federated to the customer's IdP, one cell. See § 01. |
 | O2 | Final ownership of the composition | The destination, or a dedicated distribution repository. Hinges on C7. |
-| O3 | Bundle format, channel and signing chain | § 05 gives the shape; format, generator, storage and chain are undecided. Minimum answer is precedent to slice 1. |
+| O3 | Bundle format, channel and signing chain | **Minimum answer given 2026-09-10:** ORAS as the vehicle — CNCF subproject, the standard for non-image OCI artifacts, same registry, same entitlement token, same keyless cosign the pipeline already runs on tag `v*`, immutable digest for free. Cost: one new binary in the pipeline (`oras` is not installed today; `cosign` is). Generator and full chain still to detail. |
 | O4 | Cross-repository gate execution | § 08 gives a taxonomy; the mechanism — triggered workflows, published fixtures, a compatibility suite — is undecided. |
 
 | # | Risk | Note |
