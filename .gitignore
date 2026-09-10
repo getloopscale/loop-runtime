@@ -296,3 +296,21 @@ operators/app-operator
 # It was tracked until 2026-09-09, when a pull hit a modify/delete conflict between
 # a local deletion and remote edits — the ignore rule is what stops that recurring.
 BACKLOG.md
+
+# The Squad kit and the data it writes — a dependency and an output, kept apart.
+#
+# `.claude/` is an INSTALLED PLUGIN with a repository of its own, so a copy inside a
+# consumer is a dependency and not this project's source. Versioning it made every
+# adopting repo carry hundreds of permanently dirty files that no `git checkout`
+# could settle, because a reinstall rewrites them.
+#
+# `.squad/` is this PROJECT'S data, which is why it is a separate root: `records/`
+# is a dated trail written per machine, and `wiki/` is the consolidated bundle. The
+# split exists so the versioning question is answerable for each on its own terms —
+# un-versioning the dependency no longer means un-versioning your own knowledge.
+#
+# `.squad/*` and not `.squad/`: git does not descend into an excluded DIRECTORY, so
+# the negation below would never fire and new wiki pages would be dropped in silence.
+.claude/
+.squad/*
+!.squad/wiki/
