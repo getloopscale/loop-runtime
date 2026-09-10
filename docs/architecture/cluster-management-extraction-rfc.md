@@ -1,20 +1,21 @@
 # RFC — Extracting the composition
 
-- **Status:** Reconciled · awaiting slice 1 authorization
-- **Revision:** 4 — 2026-09-10
+- **Status:** **Slice 1 APPROVED** (external architecture review, 2026-09-10) · slices 2–6 pending G1b · slice 7 pending G2
+- **Revision:** 5 — 2026-09-10
 - **Tier:** T3 — topology
 - **Repos affected:** `loopzero` · `loopzero-cluster-management`
-- **Stage gates:** G1 satisfied · G2 partial · G3 open
+- **Stage gates:** G1 ✅ · G1b open · G2 partial · G3 open
 - **Measurements against:** `e031f173a` on branch `workspace`
 
 > **On this file.** The rendered version reached the first reviewer as extracted text — table headers
 > concatenated, the diagram flattened. This Markdown source exists so the document survives copy/paste
 > and any pipeline that strips markup. When the two disagree, this file is the source.
 
-> **On revision 4.** Revisions 1–3 were amended in place, round after round, and the third review found
-> the result internally inconsistent: nine contradictions between what the header claimed and what the
-> body said. Amending again would reproduce the defect, so this revision is a **full rewrite**.
-> Reconciling the numbers as instructed uncovered a measurement error of my own — see below.
+> **On revisions.** Revisions 1–3 were amended in place and the third review found the result
+> internally inconsistent — nine contradictions between header and body. Revision 4 was a full rewrite;
+> reconciling its numbers uncovered a measurement error of my own (§ 00). Revision 5 fixes a **logic
+> defect** the fourth review found: G2 depended on evidence that slices 2–6 produce, so requiring it to
+> start them was circular. G1b now separates them.
 
 ---
 
@@ -68,6 +69,21 @@ repository, not a release. Nine releases leave, not ten.
 | Operating model | **One person, strict sequencing** — risk accepted, see § 11 | C7 |
 | Bundle concept and channel | **Signed OCI artifact via ORAS, resolved locally** | O3a |
 
+**Traceability.** Each decision below was taken by the sponsor in session on the date given, and is
+recorded in this repository — not ratified in a T3 meeting, which for C1/C2/C7 has not occurred:
+
+| Decision | Approver | Date | Record |
+|---|---|---|---|
+| C1 — commercial scope | Sponsor | 2026-09-10 | § 01 here · `CHANGELOG.md` [Unreleased] · commit `1ad69f1f7` |
+| C2 — owning repository | Sponsor | 2026-09-10 | § 11 here · commit `e031f173a` |
+| C7 — operating model | Sponsor | 2026-09-10 | § 11 here · commit `e031f173a` |
+| O3a — bundle concept | Proposed by engineering, accepted by sponsor | 2026-09-10 | § 05 here · commit `e031f173a` |
+
+⚠️ **These are sponsor-direct decisions, not T3 ratifications.** The governance rule for this repository
+requires a meeting for T2/T3 changes, and the two ADRs governing the destination remain `PROPOSED` with
+no meeting record since the date set for 2026-08-17. Slice 1 changes no behaviour, so it does not
+depend on that; **slices 2–3 and 7 do**, and the meeting is their precondition regardless of G1b.
+
 ### Two supported topologies
 
 The OpenBao profile remains commercially supported, so there are two, and the document states both
@@ -101,10 +117,17 @@ option, multiple cells as a day-one requirement, and every component C1 named.
    voiding the reason they bought self-host.
 
 *Why not "manage everything to reduce friction":* it moves friction from the sale to operations, and
-multi-cloud multiplies it per provider. GitLab ships bundled PostgreSQL, Redis and MinIO marked *"for
-evaluation purposes only"* and requires external services in production. Gitpod tried to support every
-managed Kubernetes provider, sunset self-hosted after three years, forfeited seven figures of net-new
-revenue and laid off 28% of the company.
+multi-cloud multiplies it per provider. Two external data points, cited rather than asserted — both
+retrieved 2026-09-10:
+
+| Source | What it says |
+|---|---|
+| [GitLab — Use cloud services for GitLab components](https://docs.gitlab.com/install/cloud-services/) · [Migrate from the bundled charts](https://docs.gitlab.com/charts/installation/migration/bundled_chart_migration/) | The bundled PostgreSQL, Redis and MinIO charts are for **evaluation purposes only**; production requires external services. In the cloud-native architecture, *"external PostgreSQL and Redis/Valkey services are required. These components are not bundled in the chart."* |
+| [Gitpod — Self-hosted, not self-managed](https://www.gitpod.io/blog/self-hosted-not-self-managed) · [devclass, 2022-12-09](https://www.devclass.com/devops/2022/12/09/gitpod-abandons-self-hosted-product-in-favor-of-dedicated-cloud/1629631) · [Emms, 2023-02-05](https://simonemms.com/blog/2023/02/05/self-hosted-is-dead-long-live-self-hosted) | Sunset self-hosted after three years: *"increasingly difficult for us to support … a burden for our clients to manage and operate."* The named cause was aiming at every managed Kubernetes provider. Cost reported: seven figures of net-new revenue forfeited and 28% of staff laid off. |
+
+**Read as evidence, not as proof.** Neither company is LoopZero, and both figures come from their own
+published accounts. What they establish is that the failure mode is real and has been paid for twice,
+not that our outcome is determined.
 
 ---
 
@@ -122,9 +145,23 @@ separated by what they actually gate.
 | C7 | Operating model | **Closed as an accepted risk** — § 11 |
 | O3a | Bundle concept and channel | **Closed** — § 05 |
 
-**G1 is satisfied.** Slice 1 may be authorized.
+**G1 is satisfied. Slice 1 may be authorized — and only slice 1.**
 
-### G2 — The cut may proceed (slice 7)
+### G1b — Slices 2–6 may proceed
+
+Slices 2–6 *produce* the evidence G2 needs. Requiring G2 to start them would be circular, and revision
+4 said so by implication when it stated that nothing beyond slice 1 proceeds on G1 alone. Corrected:
+
+| # | Condition | State |
+|---|---|---|
+| — | Slice 1 merged and the dev loop green against the moved tree | Open |
+| — | #356 exemption ported, so slice 2 does not eliminate the correct copy | Open |
+| O3b-cut | Manifest schema, generator, internal hashes, deterministic bundle build | Open |
+
+**These slices are reversible** — each is a forward commit away from undone, and none has been
+published to anyone. That is why they need an authorization weaker than the cut's.
+
+### G2 — The cut may proceed (slice 7 only)
 
 | # | Condition | State |
 |---|---|---|
@@ -134,12 +171,30 @@ separated by what they actually gate.
 | — | Boundary gate green (slice 6) | Open |
 | — | Rendered-manifest equivalence, pre-cut vs post-cut | Open |
 
+### C1 traced to acceptance criteria
+
+C1 is a commercial decision; G3 needs it as testable criteria. Each row below is a scope decision turned
+into something that can pass or fail — **none is written yet**, and writing them is part of C6.
+
+| C1 decision | Acceptance criterion it becomes |
+|---|---|
+| Ory federated by OIDC | Login succeeds against a customer-operated IdP; the engine accepts an external issuer; token refresh and logout work end to end |
+| Postgres external | Declared supported versions and required extensions; connection by reference only; failover behaviour of the customer's managed service does not corrupt platform state |
+| Object storage external | Declared compatibility contract — which S3 API surface is required; bucket lifecycle and versioning expectations |
+| Gitea in-cluster | Survives node loss; its state is included in backup and restore |
+| Observability included | The platform's own health is visible to the customer without our access |
+| **Source never leaves the boundary** | **Proven, not asserted**: a network-level test showing no source bundle or build artifact egresses to our infrastructure during a deploy |
+| Registry central | Behaviour under registry unavailability — see the acceptance matrix, which now covers pull-dependent paths |
+
+The sixth row is the one that must be demonstrated rather than documented, because it is the promise
+the customer bought.
+
 ### G3 — A version may be offered to a customer
 
 | # | Condition | State |
 |---|---|---|
 | C6 | Acceptance matrix passed per supported profile | **Open** |
-| O3b | Manifest schema, generator, hashes, signing chain, retention, provenance | **Open** |
+| O3c-release | Signing identity, retention, provenance, SBOM, trust policy | **Open** |
 | — | Upgrade path modelled with its reversibility class | **Open** |
 | — | Finite compatibility matrix strategy | **Open** |
 
@@ -250,10 +305,17 @@ platform bundle — OCI artifact, versioned and signed
 └── provenance/            SBOM, signatures, attestations
 ```
 
-### O3b — open
+### O3b-cut and O3c-release — open, and they gate different things
 
-Manifest schema, generator, internal hashes, signing chain, retention policy and provenance chain are
-undecided. They gate **G3**, not slice 1.
+Revision 4 put schema, generator and hashes in O3b at G3, while C3 at G2 required a working manifest
+and pipeline. That overlapped. Split:
+
+| | Contents | Gate |
+|---|---|---|
+| **O3b-cut** | Manifest schema, generator, internal hashes, deterministic bundle build | **G1b/G2** — the cut needs a bundle that builds reproducibly |
+| **O3c-release** | Signing identity, retention policy, provenance chain, SBOM, trust policy | **G3** — a customer needs to verify it, we do not |
+
+C3 is satisfied by O3b-cut; O3c-release is what turns a buildable bundle into a shippable one.
 
 ### Two digests, and they are not interchangeable
 
@@ -312,9 +374,15 @@ supportedProfiles:
   secrets: [openbao, external]     # the two topologies of § 01
 compatibility:
   kubernetes: ">=1.31 <1.34"
-  upgradeFrom: ["2026.8.x"]        # enumerated, not "any"
-  reversible: false                # this release contains a one-way migration
   airGapped: false                 # explicit, not inferred from silence
+upgradePaths:                      # reversibility belongs to the PATH, not the release
+  - from: "2026.8.x"
+    strategy: forward-only         # or: reversible
+    compatibilityWindow: "24h"     # how long N-1 keeps working alongside N
+    backupRequired: true
+  - from: "2026.7.x"
+    strategy: reversible
+    backupRequired: false
 ```
 
 ```yaml
@@ -371,16 +439,17 @@ choice.
 
 | # | Slice | Behaviour change | Gate |
 |---|---|---|---|
-| 1 | Subtree born under its final name. `git mv` of Helmfiles, environments, values; Taskfile, Tiltfile, gates and tests repointed in the same commit. Boundary gate born in warn mode. | None | G1 ✅ |
-| 2 | Kill the three duplicated pairs — **and delete the three gates that police them, in this same slice** | Chart origin | G2 |
-| 3 | Kill the pure wrappers — upstream chart plus local values | Chart origin | G2 |
-| 4a | Classify ownership of the ~10 infrastructure charts (C5) | None | G2 |
-| 4b | Decide publication from that classification; publish and prove equivalence | None | G2 |
-| 4c | Switch the composition to the resolved artifacts | Chart origin | G2 |
-| 4d | Delete the local copies | None | G2 |
-| 5 | Move the 15 travelling gates with their inputs | None | G2 |
-| 6 | Boundary gate flips to deny and goes green | None | G2 |
-| 7 | The cut — extract, graft, repoint, delete | Yes | G2 ✅ complete |
+| 1 | Subtree born under its final name. `git mv` of Helmfiles, environments, values; Taskfile, Tiltfile, gates and tests repointed in the same commit. Boundary gate born in warn mode. | None | **G1 ✅ authorized** |
+| 2 | Kill the three duplicated pairs — **and delete the three gates that police them, in this same slice** | Chart origin | G1b |
+| 3 | Kill the pure wrappers — upstream chart plus local values | Chart origin | G1b |
+| 4a | Classify ownership of the ~10 infrastructure charts (C5) | None | G1b |
+| 4b | Decide publication from that classification; publish and prove equivalence | None | G1b |
+| 4c | Switch the composition to the resolved artifacts | Chart origin | G1b |
+| 4d | Delete the local copies | None | G1b |
+| 5 | Move the 15 travelling gates with their inputs | None | G1b |
+| 6 | Boundary gate flips to deny and goes green | None | G1b |
+| 7a | Extract and graft into the destination; the engine still uses its local copy | No | G2 |
+| 7b | Repoint the engine, then delete the local subtree | Yes | G2 |
 
 Movement and behaviour change never share a commit: when the dev loop breaks, bisection must
 distinguish *the file moved* from *the chart now comes from somewhere else*.
@@ -397,10 +466,11 @@ exemption the bootstrap copy carries (#356). The exemption is ported first.
 | Publication — a version offered to customers | Partly | A digest cannot be unpublished from someone who pulled it. Recovery is a superseding version plus an advisory |
 | Installation — a real cluster upgraded | **Depends on the release** | Declared per version in `compatibility.reversible`. Where false, forward recovery is the only path |
 
-**Upgrade paths are modelled, not assumed.** Each entry in `upgradeFrom` carries its reversibility
-class. A release containing a one-way migration declares `reversible: false`, and then G3 requires
-expand/contract, a declared backward-compatibility window, a validated backup and a tested
-roll-forward — not a rollback test that cannot pass.
+**Reversibility belongs to the path, not to the release.** Revision 4 said so and then contradicted
+itself with a release-level `reversible: false` boolean — corrected above: each entry in
+`upgradePaths` carries its own `strategy`, `compatibilityWindow` and `backupRequired`. A path marked
+`forward-only` is tested by roll-forward, never by a rollback that cannot pass; a path marked
+`reversible` is tested by an actual rollback after CRD, policy and schema changes have landed.
 
 ### Freeze window
 
@@ -470,8 +540,8 @@ environment, **per supported profile**.
 | Forward recovery (release with `reversible: false`) | Expand/contract applied, backward compatibility held for a declared window, backup validated, roll-forward tested. |
 | Backup and restore | Restore into a fresh cluster; declared RTO met and measured. |
 | Registry token rotation | Rotation without downtime; a revoked token fails closed with an actionable message. |
-| Registry unavailable | A running installation keeps serving; the failure surfaces as a diagnosable state. |
-| Secret backend change | OpenBao ↔ external store without reinstalling the platform. |
+| Registry unavailable | Not just "keeps serving" — that misses every path that needs a fresh pull. Must cover: **node replacement**, **scale-out**, **pod reschedule**, and any **new image pull**. Acceptance is a declared degradation mode: what still works, what stops, and how long the installation survives without the registry. |
+| Secret backend change | **Open — is this contracted?** Supporting two topologies does not imply online migration between them. If migrating is not a commercial requirement, this row leaves G3 and becomes "choose at install time, changeable only by reinstall". Decision needed before G3 closes. |
 | Support diagnostics | A single documented command collects the evidence support would ask for. |
 
 **The compatibility matrix must be finite.** Kubernetes versions × distributions × CNI × CSI × ingress
