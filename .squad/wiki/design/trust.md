@@ -29,16 +29,53 @@ flowchart TB
     end
     subgraph platform["LOOPZERO CONTROL PLANE — ours, both doors"]
         api[Control API]
-        pg[(Postgres)]
+        pg[(Postgres — tenants, releases, metering<br/>NOT the execution record)]
         minio[(MinIO)]
     end
-    ops -->|ClusterCredential| api
+    api -->|"holds per-cell kubeconfig, reaches IN"| ops
     api --> pg
     api --> minio
-    app -->|"agent memory, execution record"| api
+    app -->|"agent memory, execution record"| dp[["loopzero-memory · loopzero-lens · loopzero-rag<br/>the developer's, outside both doors"]]
     app_a --> api
     app_b --> api
 ```
+
+## Corrected 2026-09-11 by the design panel — the credential points the other way
+
+This drawing had `ops -->|ClusterCredential| api`: the cell's operators handing a credential
+outward. **The code does the opposite.** `ClusterCredential` CRDs live on the **management
+cluster** (`api/internal/placement/k8s_cell_store.go:24-27` — *"reads CellConfigs from
+ClusterCredential CRDs on the management cluster"*), the router resolves a per-cell kubeconfig
+Secret (`api/internal/placement/router.go:23-26`), and the control plane submits TokenReview
+**to that cluster's API server** (`api/internal/middleware/auth/cross_cluster_token_review.go:12-16`).
+
+So the control plane **holds** the credential and **reaches in**. That is the mechanism the
+market research names as contested — see below — and drawing it outward hid exactly the thing
+that is under question.
+
+**The Postgres node is also relabelled, and one more edge was wrong.** The control plane's
+Postgres holds tenants, releases and metering; the execution record is `loopzero-lens`'s and lives
+outside the cell (`durability.md`). Two drawings were using one name for two databases.
+
+The edge `app --> api` labelled *"agent memory, execution record"* was wrong for the same
+reason: **the Control API has no memory, lens or rag route at all** — `ls api/internal/routes/`
+returns none — and `loopzero-cloud` reaches those services over `MEMORY_/RAG_/LENS_BASE_URL`
+brokers. The workload writes to the developer's data plane, not through us. Found while
+correcting the credential direction, which is what a redraw is for.
+
+## Open — for the sign-off to resolve
+
+- **Does the control plane assume a role inward, or does an egress-only agent reach out?**
+  This is the question this drawing omitted while the other four each carried one, and it is
+  the one [`../decisions/byoc-as-the-only-mode-has-no-precedent.md`](../decisions/byoc-as-the-only-mode-has-no-precedent.md)
+  ranks highest: WarpStream asks *"wouldn't it be better if external access wasn't required at
+  all?"*, and Nuon reports that least privilege *"prohibits most day-to-day debugging"*. Both
+  propose an agent inside the customer account with **no inbound path**. The record calls it
+  *"the finding with the most leverage, because the mechanism is not yet built"* — and changing
+  it later means changing a live trust relationship in every customer account.
+
+- **Is there an egress allowlist for the customer's app?** Registered as `B-226`: the platform's
+  own namespace excludes RFC1918 and `169.254/16`; the tenant's does not.
 
 ## Two doors, and they are not isolated the same way
 

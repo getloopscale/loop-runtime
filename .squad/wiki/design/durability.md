@@ -15,20 +15,23 @@ product. An agent that loses its work to a pod restart is not a long-running age
 | pod crash | rescheduled | survives — Postgres | survives — Postgres | survives |
 | node restart | rescheduled | survives | survives | survives |
 | platform upgrade | **no Draining phase exists** | survives | survives | survives |
-| cell destroyed | gone | gone | gone | gone |
+| cell destroyed | gone | **survives** — `loopzero-memory` | **survives** — `loopzero-lens` | **survives** — `loopzero-rag` |
 
 ```mermaid
 flowchart LR
-    app[Application workload] -->|writes| pg[(Postgres — execution record)]
+    app[Application workload] -->|writes| lens[(loopzero-lens — execution record<br/>the developer's, outside the cell)]
     app -->|writes| minio[(MinIO — artifacts)]
-    pg -->|survives pod, node, upgrade| pg
+    lens -->|survives pod, node, upgrade, cell| lens
     app -->|"memories, entities, history"| mem[("loopzero-memory — Postgres")]
 ```
 
 ## Measured
 
-- **Postgres and MinIO are the two stores** — the only backends named in
-  `charts/*/values.yaml`.
+- **Postgres and MinIO are the two stores that hold agent-relevant state.** The narrower
+  claim, corrected 2026-09-11: this said *"the only backends named in `charts/*/values.yaml`"*
+  and that is false — `charts/loopzero-api/values.yaml:94,170` names a Redis
+  (`loopzeroServiceAuthNonceRedisAddr`). Nonces carry no agent state, so no row of the table above
+  changes; the sentence simply measured less than it asserted.
 - `PIECE-4 Execution record` and `PIECE-2 Agent state` are **separate pieces**, so the
   product already treats them as different things.
 
@@ -36,6 +39,24 @@ flowchart LR
 
 - **The execution record is durable.** It is in Postgres, which survives everything
   above the cell.
+
+## Corrected 2026-09-11 by the design panel — a destroyed cell does not take the data plane
+
+The table said a destroyed cell takes everything. **It takes the workload and nothing else**,
+and the correction is the same fact D4 already established one row up: the state was never in
+the cell.
+
+Measured: `loopzero-lens` appears in **no cell composition**. It is reached by `loopzero-cloud` over
+`LENS_BASE_URL` as a Model-B broker
+(`infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl:124-128`), and `loopzero-memory` and
+`loopzero-rag` are consumed the same way — the developer's own services, outside the cell. A cell
+is where the workload runs, not where its state lives.
+
+**And that exposed a second defect in this drawing, which the panel caught as a contradiction
+with D2:** the `pg[(Postgres — execution record)]` node here and the `pg[(Postgres)]` in
+`trust.md` are **different databases with the same label** — ours holds tenants, releases and
+metering; the execution record is `loopzero-lens`'s. Two drawings using one name for two stores is
+how a reader concludes the wrong thing about both, so the node is renamed below.
 
 ## Resolved 2026-09-11 — agent state is durable
 

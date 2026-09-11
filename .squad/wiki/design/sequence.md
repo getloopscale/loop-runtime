@@ -33,8 +33,8 @@ sequenceDiagram
     Op--xDev: Down — workload never came up
     App-->>Op: Serving
     Op->>Op: check route
-    Op--xDev: Degraded — route does not resolve
-    Op-->>Dev: Reachable
+    Op-->>Dev: Reachable — route resolves
+    Note over Op,Dev: route fails -> phase stays Serving.<br/>Degraded is unreachable while endpoints are ready.
 ```
 
 ## Decided
@@ -44,7 +44,24 @@ sequenceDiagram
 - **`Serving` is not the end.** The sequence continues to the route check, because an
   app that is up and unreachable is not delivered.
 
+**Corrected 2026-09-11 by the design panel.** This drawing had the route failure reporting
+`Degraded`. It does not. `computePhase`
+(`operators/internal/app/application_controller.go:387-404`) tests in strict order —
+`Status.Reachable` first, then `Status.EndpointsReady`, and only then the conditions. So a
+workload whose endpoints are ready and whose route is broken returns **`Serving`**, and the
+`Degraded` branch is unreachable in that state.
+
+**That is a finding about the product, not only about the drawing.** The developer whose app
+is up and unreachable sees a phase that says it is serving. `PIECE-6` requires *"every failure
+names what she must change"*, and this failure names nothing. Whether the fix is a new phase, a
+condition surfaced separately, or `EndpointsReady` ceasing to outrank a failed route is a
+product decision — recorded below as open rather than drawn as settled.
+
 ## Open — for the sign-off to resolve
+
+- **An app that is up and unreachable reports `Serving`.** Measured above. `PIECE-6` promises
+  a failure that names the fix, and this one is silent in the phase. Which of the three fixes
+  is right was not decided.
 
 - **Where does build run?** `PIECE-10` is a piece; whether it executes in the customer's
   cell or on platform infrastructure was not established. It decides whether a heavy
