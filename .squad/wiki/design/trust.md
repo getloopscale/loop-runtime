@@ -9,14 +9,25 @@ status: draft
 
 ```mermaid
 flowchart TB
-    subgraph customer["CUSTOMER AWS ACCOUNT — cell"]
+    subgraph managed["DOOR 1 — OUR CELL, shared (the solo developer)"]
+        subgraph ns_a["namespace loopzero-a-proj-prod · PSA restricted"]
+            app_a[Agent A]
+        end
+        subgraph ns_b["namespace loopzero-b-proj-prod · PSA restricted"]
+            app_b[Agent B]
+        end
+        kernel["shared nodes, shared kernel — no runtimeClass"]
+        app_a -.-> kernel
+        app_b -.-> kernel
+    end
+    subgraph customer["DOOR 2 — CUSTOMER AWS ACCOUNT (privacy)"]
         subgraph untrusted["UNTRUSTED — the customer agentic app"]
             app[Application workload]
         end
         ops["Operators — app, tenant, preview, platform"]
         app -.->|NetworkPolicy| ops
     end
-    subgraph platform["LOOPZERO PLATFORM"]
+    subgraph platform["LOOPZERO CONTROL PLANE — ours, both doors"]
         api[Control API]
         pg[(Postgres)]
         minio[(MinIO)]
@@ -25,7 +36,28 @@ flowchart TB
     api --> pg
     api --> minio
     app -->|"agent memory, execution record"| api
+    app_a --> api
+    app_b --> api
 ```
+
+## Two doors, and they are not isolated the same way
+
+**Decided 2026-09-11** — [`../decisions/two-doors-managed-and-byoc.md`](../decisions/two-doors-managed-and-byoc.md).
+This drawing carried only door 2 until then, which made the platform look like one shape.
+
+| | what separates two CUSTOMERS |
+|---|---|
+| door 1 · managed | a namespace label and PodSecurity `restricted`. **Same kernel, same nodes** |
+| door 2 · BYOC | an AWS account. Nothing is shared |
+
+The control plane is ours on both, so the boundary that moves is the workload's, not the API's.
+
+**Door 1 is where the open question lives.** `runtimeClass` appears in zero files — no gVisor, no
+Kata, no Firecracker — and `nodeSelector` is used only for platform deployments, never to pin a
+tenant. That is ordinary Kubernetes soft multi-tenancy and it is the right default for most
+platforms. This one runs agents: LLM-generated code calling tools for someone nobody met. Whether
+that is the same surface as a web app is a product decision, and choosing otherwise later means
+re-platforming door 1.
 
 ## Measured
 

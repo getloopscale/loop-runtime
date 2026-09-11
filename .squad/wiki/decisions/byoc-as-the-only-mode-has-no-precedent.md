@@ -9,6 +9,15 @@ reviews: the 2026-09-11 decision to drop self-host
 
 # BYOC as the only mode has no precedent found
 
+> **SUPERSEDED IN PART, 2026-09-11** — by
+> [`two-doors-managed-and-byoc.md`](two-doors-managed-and-byoc.md). This record asked *"what is the
+> second door?"* and the answer is the managed PaaS, which was already in the code and not in the
+> documents. **The headline finding — BYOC as the only mode — no longer describes this product.**
+>
+> What is NOT superseded: the mechanism findings. WarpStream and Nuon argue against the assumed
+> cross-account role, and the permission-surface measurements (Databricks ~45-70+ AWS actions,
+> Redpanda's `PassRole`) stand. Those are about HOW the BYOC door works, and it is still unbuilt.
+
 On 2026-09-11 self-host was dropped and **BYOC became the whole offer**. This records what
 research into the market found afterwards, because four of its findings challenge that decision
 and one of them challenges the shape of our design rather than the decision.

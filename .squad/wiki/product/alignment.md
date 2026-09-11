@@ -98,26 +98,29 @@ question and no box asks it.** Blocking on it would make the cascade unable to c
 gap exists, which is to say unable to report one. `/backlog-init` acts on this.
 
 
-## Read this before re-signing — the scope change has no precedent
+## The precedent question, RESOLVED 2026-09-11 — there are two doors
 
-**Self-host was dropped on 2026-09-11 and BYOC became the whole offer. Research the same day found
-no vendor doing that.**
+**This section used to warn that signing box 2 meant agreeing to a scope no verified vendor runs.**
+That warning stood for one day, was true of the description it was written against, and is now
+withdrawn. The description omitted half the product.
 
-In every vendor verified, BYOC is a **third** option beside a fully managed mode — Confluent,
-MongoDB, Temporal, Porter. **None was found whose only enterprise mode is BYOC with a vendor-hosted
-control plane.** And Databricks, the largest vendor of customer-account compute, is walking back from
-it: serverless GA January 2026, classic managed-VPC workspace creation slated for deprecation.
+The research found that in Confluent, MongoDB, Temporal and Porter, BYOC is an option **beside** a
+fully managed mode, never the only one — and closed by asking **what our second door is**. The
+answer, decided 2026-09-11 by the sponsor: *the PaaS for solo developers, BYOC for companies that
+want privacy.*
 
-**Two vendors argue against our specific mechanism**, not against BYOC: WarpStream and Nuon both
-reject the assumed cross-account role and propose an egress-only agent inside the customer account.
-That is the finding with the most leverage, because nothing is built yet.
+**The second door was never missing; it was unwritten.** `MAX_TENANTS_PER_CELL` defaults to **5000**
+and `RoundRobinEngine` places a new tenant into the least-loaded cell — a cell sized for five
+thousand tenants is not a cell in one customer's account, and `OBJ-4` promises adoption with **no
+account** at all. Three numbers that never described one product.
 
-**None of this refutes the decision.** It says the configuration is unprecedented — a smaller claim,
-and the accurate one. The question it opens is not *bring self-host back*; it is **what the second
-door is**, since every verified vendor has one.
+So the shape is now the ordinary one those four vendors run, and **box 2 asserts an unremarkable
+scope rather than an unprecedented one.** Full record in
+[`../decisions/two-doors-managed-and-byoc.md`](../decisions/two-doors-managed-and-byoc.md).
 
-**Signing box 2 now means agreeing to a scope no verified vendor runs.** That may be right. It should
-be deliberate. Full record, with evidence graded read / search / unverified, in [`../decisions/byoc-as-the-only-mode-has-no-precedent.md`](../decisions/byoc-as-the-only-mode-has-no-precedent.md).
+**What the research still says, unchanged:** WarpStream and Nuon argue against the assumed
+cross-account role — the BYOC *mechanism*, not the existence of two doors. That finding keeps its
+leverage, because the mechanism is still unbuilt.
 
 ## The scope change to weigh before re-signing
 
@@ -169,6 +172,7 @@ sometimes unobtainable.
 | 2026-09-11 | `type:` added to frontmatter — OKF v0.2's one hard requirement | **signature stands** — a filing key asserts nothing any box claims |
 | 2026-09-11 | **Self-host dropped; BYOC is the whole of it.** OBJ-3 rewritten, REQ-10 withdrawn, PIECE-9 renamed, vision amended | **signature withdrawn** — box 2 asserts *these are the right objectives* and an objective changed |
 | 2026-09-11 | Market research recorded: **BYOC-only has no precedent found**, and two vendors argue against the cross-account-role mechanism | still withdrawn — the finding is evidence for box 2, not a change to it |
+| 2026-09-11 | **Two doors named** — managed PaaS for the solo developer, BYOC for privacy. No objective changes and no requirement is withdrawn; what changes is knowing which door each describes | **signature STANDS** — the amendment removes a caveat from box 2 (*"a scope no verified vendor runs"*) rather than altering what box 2 asserts. The two earlier withdrawals changed metrics and objectives; this one does not |
 | 2026-09-11 | **Reviewer walkthrough, boxes 1-4.** Box 1 confirmed. Box 2: the OBJ-3 prediction was re-aimed from the withdrawn `REQ-10` to `REQ-14`. Box 3: **`REQ-19` added** — the first half of OBJ-3 (*a cell is created and reaches workload-ready*) had no requirement beneath it. Box 4 verified as it stood | still unsigned — these are the corrections the reviewer asked for BEFORE signing, not a signature |
 
 **Why the withdrawal.** The four boxes assert things about a specific text. Box 2 says *these

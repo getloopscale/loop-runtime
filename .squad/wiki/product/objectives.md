@@ -113,11 +113,19 @@ long-lived key, and D11 records that this promise **has no DigitalOcean equivale
 STS there. Under self-host the customer's provider did not matter. Under BYOC it does: **AWS is the
 only provider where the security promise holds as written.**
 
-**Researched the same day, and two findings bear on this objective directly** — full record in [`../decisions/byoc-as-the-only-mode-has-no-precedent.md`](../decisions/byoc-as-the-only-mode-has-no-precedent.md):
+**This objective describes ONE of two doors** — decided 2026-09-11, full record in
+[`../decisions/two-doors-managed-and-byoc.md`](../decisions/two-doors-managed-and-byoc.md). The
+managed PaaS serves the solo developer (`OBJ-1`, `OBJ-2`, `OBJ-4`); BYOC serves the company that
+wants privacy, and that is this one. `PIECE-9` provisions it; placement into an existing cell serves
+the other.
 
-1. **BYOC as the ONLY mode has no precedent found.** In Confluent, MongoDB, Temporal and Porter it is
-   a third option beside a fully managed one. The objective is not refuted; its exclusivity is
-   unprecedented, which is a smaller and more accurate statement.
+**Researched the same day, and the findings landed differently once the second door was named** —
+full record in [`../decisions/byoc-as-the-only-mode-has-no-precedent.md`](../decisions/byoc-as-the-only-mode-has-no-precedent.md):
+
+1. ~~**BYOC as the ONLY mode has no precedent found.**~~ **Withdrawn 2026-09-11.** It is not the only
+   mode: the managed PaaS is the other, and it was already in the code (`MAX_TENANTS_PER_CELL`
+   defaults to 5000). The finding was true of a description that omitted half the product, and the
+   shape is the ordinary one Confluent, MongoDB, Temporal and Porter run.
 2. **The largest vendor of customer-account compute is reversing.** Databricks went serverless GA in
    January 2026 and plans to deprecate classic workspace creation with a managed VPC.
 
