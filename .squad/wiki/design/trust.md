@@ -67,3 +67,4 @@ That is where Heroku, Railway, Supabase and PlanetScale sit, and it is the line 
 own documentation by shipping a Firecracker-backed product BESIDE its platform rather than inside
 it. The exit condition is written in the decision: reopen the day LoopZero executes agent-generated code
 as a platform capability.
+- [`../decisions/agent-state-never-lives-in-the-pod.md`](../decisions/agent-state-never-lives-in-the-pod.md) — where the tenant egress policy is decided

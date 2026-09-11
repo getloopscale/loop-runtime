@@ -66,6 +66,8 @@ agent's memory.
 
 ## Related
 
+- [`../decisions/agent-state-never-lives-in-the-pod.md`](../decisions/agent-state-never-lives-in-the-pod.md) — the invariant this drawing's open questions resolved into
+
 - [`states.md`](states.md) — D1, the phases whose state this outlives
 - [`system-map.md`](system-map.md) — D5, where the store appears
 - [`sign-off.md`](sign-off.md) — D4 was answered on 2026-09-11: **yes**, and the evidence lives in

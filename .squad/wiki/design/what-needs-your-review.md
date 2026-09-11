@@ -51,12 +51,12 @@ Five drawings. One question of the seven is now **resolved**; six remain.
 | # | Question | Status |
 |---|---|---|
 | D4 | Does agent state survive a pod restart? | **RESOLVED** — yes. `loopzero-memory`, Postgres, 34 migrations, **17 tables** (corrected 2026-09-11; this said 9). It was never in this repo, which is why the charts did not show it |
-| D1 | Is there a suspended state for an idle agent? | open — **backlog** |
-| D1 | What happens to a running app during a platform upgrade? No `Draining` phase | open — **backlog** |
-| D2 | Egress allowlist for the customer's app? | open — **backlog** |
+| D1 | Is there a suspended state for an idle agent? | **RESOLVED 2026-09-11** — `replicas: 0` is the suspended state; KEDA already renders it |
+| D1 | What happens to a running app during a platform upgrade? No `Draining` phase | **RESOLVED** — the pod already drains (`preStop 5s + grace 30s`). The grace budget is what needs measuring |
+| D2 | Egress allowlist for the customer's app? | **RESOLVED** — apply `loopzero-system-egress.yaml`'s shape to the tenant namespace |
 | D2 | Isolation — account, namespace, or kernel sandbox? | **RESOLVED 2026-09-11** — account for BYOC, namespace for projects, shared kernel on the managed door. Researched against 6 platforms; Vercel's own docs draw the line at agent-generated code |
 | D3 | Build runs in the customer's cell or on platform infra? | **RESOLVED** — the customer's, by C1 of the extraction RFC, before this drawing asked |
-| D4 | Is an in-flight turn checkpointed before it completes? | open — new, from resolving the one above. **Backlog, not a pre-condition** |
+| D4 | Is an in-flight turn checkpointed before it completes? | **RESOLVED** — durable state is the developer's, via `loopzero-memory` / `loopzero-lens` / `loopzero-rag` |
 
 **Why D4 looked unresolved from inside `loopzero`:** the renderer emits `Deployment` or
 `Rollout`, never `StatefulSet`, and puts no `PersistentVolumeClaim` on the user's path.

@@ -58,6 +58,8 @@ an app as available before its route resolves.
 
 ## Related
 
+- [`../decisions/agent-state-never-lives-in-the-pod.md`](../decisions/agent-state-never-lives-in-the-pod.md) — the invariant this drawing's open questions resolved into
+
 - [`trust.md`](trust.md) — D2, the boundary these phases cross
 - [`durability.md`](durability.md) — D4, what survives a phase change
 - [`sign-off.md`](sign-off.md) — the open questions this drawing leaves

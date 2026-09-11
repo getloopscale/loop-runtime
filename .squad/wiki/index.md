@@ -34,20 +34,18 @@ DERIVED from them, because a map drawn first looks like design happened and forc
 - [design/sequence.md](design/sequence.md) — D3, call order including failures
 - [design/durability.md](design/durability.md) — D4, what survives what
 - [design/system-map.md](design/system-map.md) — D5, the component map derived from the four
-- [design/sign-off.md](design/sign-off.md) — the sign-off, **unsigned**, 7 boxes — 4 open questions, all backlog-bound
+- [design/sign-off.md](design/sign-off.md) — the sign-off, **unsigned**, 7 boxes — every design question answered
 - [design/what-needs-your-review.md](design/what-needs-your-review.md) — what a person must decide
 
-**Three of the seven design questions are answered.** D3 was never open — C1 of the extraction RFC
-decided the build runs on the customer's infrastructure before this drawing asked. D4 is **yes**:
-agent state survives a pod restart because it was never in the pod, it is in `loopzero-memory`'s Postgres
-— **ours, and treated as ready and working**. D2 is settled by
-[decisions/shared-kernel-on-the-managed-door.md](decisions/shared-kernel-on-the-managed-door.md): the
-account separates BYOC customers, the namespace separates projects, and the managed door shares a
-kernel on purpose.
+**All seven design questions are answered as of 2026-09-11.** D3 by C1 of the extraction RFC, before
+the drawing asked. D4 by locating agent state in `loopzero-memory` — ours, and ready. D2 by
+[decisions/shared-kernel-on-the-managed-door.md](decisions/shared-kernel-on-the-managed-door.md),
+researched against six platforms. And the last four by one invariant —
+[**no agent state lives in the pod**](decisions/agent-state-never-lives-in-the-pod.md) — from which a
+suspended phase, a draining phase, the egress shape and the checkpoint question all fall out.
 
-**Nothing blocks the backlog now.** The four that remain — a suspended state for an idle agent, no
-`Draining` phase on upgrade, an egress allowlist, and whether an in-flight turn is checkpointed — are
-`B-NNN` material: each has evidence, a possible owner and a closing criterion.
+**What remains is work, not decisions**: the tenant egress policy, a measurement of how long a turn
+takes, and the grace period set from it.
 
 ## Architecture views — measured 2026-09-11
 
@@ -70,6 +68,7 @@ them, hand-authored SVG for the paved road — with no CDN. **Every status in th
 - [decisions/byoc-as-the-only-mode-has-no-precedent.md](decisions/byoc-as-the-only-mode-has-no-precedent.md)
 - [decisions/two-doors-managed-and-byoc.md](decisions/two-doors-managed-and-byoc.md) — managed PaaS for the solo developer, BYOC for privacy
 - [decisions/shared-kernel-on-the-managed-door.md](decisions/shared-kernel-on-the-managed-door.md) — shared kernel on the managed door; BYOC is the isolation product
+- [decisions/agent-state-never-lives-in-the-pod.md](decisions/agent-state-never-lives-in-the-pod.md) — the invariant that answers the four remaining design questions
   — self-host was dropped on 2026-09-11 and BYOC became the whole offer. Research the same day found
   **no vendor whose only enterprise mode is BYOC with a vendor-hosted control plane**, and two
   vendors arguing against the cross-account-role mechanism specifically. The decision stands; the

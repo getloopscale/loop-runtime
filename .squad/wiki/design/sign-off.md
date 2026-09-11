@@ -23,13 +23,13 @@ diagram reads as a decision that was made, which is worse than an absent one.
 
 | Drawing | Question | Why it decides the product |
 |---|---|---|
-| D1 | Is there a suspended state for an idle agent? | Decides whether an idle long-running agent costs money |
-| D1 | What happens to a running app during a platform upgrade? No `Draining` phase exists | Decides whether "long-running" survives our own deploys |
-| D2 | Is there an egress allowlist for the customer's app? | An agent that can reach anything is a different product |
+| ~~D1~~ | ~~Is there a suspended state for an idle agent?~~ **ANSWERED 2026-09-11 — `replicas: 0` already is it.** | KEDA `ScaledObject` is already rendered; a `Suspended` phase would be a second source of truth |
+| ~~D1~~ | ~~What happens during a platform upgrade? No `Draining` phase~~ **ANSWERED — the pod already drains.** | `preStop 5s + grace 30s` exists. What is short is the budget, not the lifecycle |
+| ~~D2~~ | ~~Is there an egress allowlist for the customer's app?~~ **ANSWERED — apply the platform's own shape.** | `loopzero-system-egress.yaml` already excludes RFC1918 + `169.254/16`; it does not cover the tenant |
 | ~~D2~~ | ~~Is tenant isolation namespace, node, or cell?~~ **ANSWERED 2026-09-11** — account for BYOC, namespace for projects, and a shared kernel on the managed door, deliberately | Was the one question that could not be retrofitted. Researched against Heroku, Railway, Vercel, Supabase, PlanetScale and Confluent |
 | ~~D3~~ | ~~Build in the customer's cell or on platform infrastructure?~~ **ANSWERED — the customer's.** | Decided by C1 of the extraction RFC before this drawing asked. See below |
 | ~~D4~~ | ~~Does agent state survive a pod restart?~~ **ANSWERED 2026-09-11 — yes.** | State lives in `loopzero-memory`'s Postgres, not in the pod. See below |
-| D4 | Is an in-flight turn checkpointed before it completes? | Decides the blast radius of one pod eviction. Reworded 2026-09-11 — it asked *"is there a checkpoint interval"*, which presumes a mechanism that may not exist |
+| ~~D4~~ | ~~Is an in-flight turn checkpointed before it completes?~~ **ANSWERED — durable state is the developer's, through the data plane.** | `loopzero-memory` / `loopzero-lens` / `loopzero-rag` already implement it. The framework builds nothing |
 
 - [ ] The six phases in D1 are the real lifecycle, and `Cleaned` is the only terminal one
 - [ ] The trust boundary in D2 is the account boundary, and the open egress question is real
@@ -41,8 +41,8 @@ diagram reads as a decision that was made, which is worse than an absent one.
 - [ ] Isolation is settled: the AWS account separates BYOC customers, the namespace
       separates one customer's projects, and two developers on the managed door share a
       kernel — deliberately, with the exit condition written
-- [ ] The other four open questions are registered as `B-NNN` and measured there, not
-      held as pre-conditions on the backlog itself
+- [ ] The four remaining questions are answered by one invariant — **no agent state lives
+      in the pod** ([decision](../decisions/agent-state-never-lives-in-the-pod.md)) — and what is left is work, not decisions
 
 **The last box was split on 2026-09-11, and the count it carried was wrong.** It read *"the
 **seven** open questions above"* after two had been answered, and it held the backlog behind all of
