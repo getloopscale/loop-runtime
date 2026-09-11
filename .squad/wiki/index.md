@@ -34,14 +34,20 @@ DERIVED from them, because a map drawn first looks like design happened and forc
 - [design/sequence.md](design/sequence.md) — D3, call order including failures
 - [design/durability.md](design/durability.md) — D4, what survives what
 - [design/system-map.md](design/system-map.md) — D5, the component map derived from the four
-- [design/sign-off.md](design/sign-off.md) — the sign-off, **unsigned**, with 6 open questions
+- [design/sign-off.md](design/sign-off.md) — the sign-off, **unsigned**, 7 boxes — 4 open questions, all backlog-bound
 - [design/what-needs-your-review.md](design/what-needs-your-review.md) — what a person must decide
 
-**Two were answered on 2026-09-11.** D3 was never open — C1 of the extraction RFC decided the build
-runs on the customer's infrastructure before this drawing asked. D4 is **yes**: agent state survives
-a pod restart because it was never in the pod, it is in `loopzero-memory`'s Postgres — **ours, and
-treated as ready and working**. What D4 produced is a location, not a risk: looking for the state
-in `loopzero` was looking in the wrong repository.
+**Three of the seven design questions are answered.** D3 was never open — C1 of the extraction RFC
+decided the build runs on the customer's infrastructure before this drawing asked. D4 is **yes**:
+agent state survives a pod restart because it was never in the pod, it is in `loopzero-memory`'s Postgres
+— **ours, and treated as ready and working**. D2 is settled by
+[decisions/shared-kernel-on-the-managed-door.md](decisions/shared-kernel-on-the-managed-door.md): the
+account separates BYOC customers, the namespace separates projects, and the managed door shares a
+kernel on purpose.
+
+**Nothing blocks the backlog now.** The four that remain — a suspended state for an idle agent, no
+`Draining` phase on upgrade, an egress allowlist, and whether an in-flight turn is checkpointed — are
+`B-NNN` material: each has evidence, a possible owner and a closing criterion.
 
 ## Architecture views — measured 2026-09-11
 

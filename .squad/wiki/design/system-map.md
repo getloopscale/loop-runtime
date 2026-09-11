@@ -51,7 +51,9 @@ flowchart TB
   into existence once; an app is deployed many times. Drawing them in sequence would
   put a one-time act on the hot path.
 - **The three state pieces are one subgraph and three components.** D4 shows why: they
-  have different durability answers, and two of them are open questions.
+  have different durability answers. Agent state is settled — it lives in `loopzero-memory`'s
+  Postgres and outlives the pod. What is still open is narrower: whether an in-flight turn
+  is checkpointed before it completes.
 - **`PIECE-5` feeds `PIECE-1` and nothing else.** The catalogue is an authoring input.
   If it is also read at runtime, this edge is missing and the map is wrong.
 

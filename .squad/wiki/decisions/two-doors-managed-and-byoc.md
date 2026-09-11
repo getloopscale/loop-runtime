@@ -50,23 +50,16 @@ applies to this product** — it applied to a description of it that omitted hal
 What the research still says, unchanged: two vendors argue against the **assumed cross-account
 role** (WarpStream, Nuon), and that is about the BYOC mechanism, not about having two doors.
 
-## The isolation question this leaves open — and it is the one that cannot be retrofitted
+## The isolation question this opened — CLOSED 2026-09-11
 
-Between BYOC customers, the boundary is an AWS account: the strongest available, and decided.
-Between projects of one customer, it is the namespace: decided 2026-06-07, sponsor-directed,
-recorded verbatim in `pkg/naming/naming.go`.
+Between BYOC customers, the boundary is an AWS account. Between projects of one customer, the
+namespace, decided 2026-06-07 and recorded verbatim in `pkg/naming/naming.go`. **What this decision
+left open was the third case: two developers on the managed door.**
 
-**Between two solo developers on the same cell, it is a namespace and a shared kernel.**
-`runtimeClass` appears in **zero** files; there is no gVisor, no Kata, no Firecracker. `nodeSelector`
-appears 21 times and every one is a platform deployment — no tenant workload is pinned anywhere.
-
-That is standard Kubernetes soft multi-tenancy, and it is the right default for most platforms. This
-one runs **agents**: code an LLM generated, calling tools, on behalf of someone we have never met.
-Whether that surface is the same surface as a web app is a product decision, not an implementation
-detail, and choosing kernel isolation later means re-platforming the managed door.
-
-**That is the open D2 question, restated.** The original — *namespace, node or cell?* — offered three
-exclusive answers to what is a stack, and included a level (node) never used for tenant isolation.
+It was answered the same day —
+[`shared-kernel-on-the-managed-door.md`](shared-kernel-on-the-managed-door.md). They share a kernel,
+deliberately, with an exit condition written. `runtimeClass` appears in zero files and stays that
+way.
 
 ## What this does NOT change
 
