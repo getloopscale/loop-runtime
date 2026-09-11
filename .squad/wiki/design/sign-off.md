@@ -141,6 +141,18 @@ sends the next reader to the right repository has done its job.
 **The blast radius of one pod eviction is therefore the in-flight turn, not the agent's memory** —
 which is what the remaining D4 question is about.
 
+## Rendered
+
+[`walkthrough.html`](walkthrough.html) — the five drawings on one page, with what each decides and
+what it leaves open. Its mermaid blocks are read from the `.md` files, so it cannot drift from them
+silently.
+
+**Five per-drawing `.html` files were deleted on 2026-09-11.** They were rendered before the design
+panel and still showed the refuted drawings — `sequence.html` carried *"Degraded — route does not
+resolve"*, which the panel disproved against `computePhase`. Nothing referenced them. A rendered
+artifact that lags its source is worse than none: it has the authority of being rendered and the
+content of being wrong.
+
 ## Related
 
 - The five drawings: [`states.md`](states.md) · [`trust.md`](trust.md) ·

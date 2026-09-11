@@ -1,0 +1,246 @@
+<title>LoopZero — Os Cinco Desenhos</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#fbfbfa; --raised:#ffffff; --ink:#16191c; --muted:#59636d;
+  --rule:#e4e6e5; --rule-solid:#cfd3d2; --accent:#1f5f6b; --accent-soft:#e6eff0;
+  --open:#9a6407; --open-soft:#fbf3e3; --diagram-bg:#ffffff;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#101315; --raised:#171b1e; --ink:#e8eaea; --muted:#99a3aa;
+    --rule:#252b2f; --rule-solid:#333b40; --accent:#6fb3bd; --accent-soft:#15282c;
+    --open:#d9a441; --open-soft:#2a2114; --diagram-bg:#f4f5f4;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#101315; --raised:#171b1e; --ink:#e8eaea; --muted:#99a3aa;
+  --rule:#252b2f; --rule-solid:#333b40; --accent:#6fb3bd; --accent-soft:#15282c;
+  --open:#d9a441; --open-soft:#2a2114; --diagram-bg:#f4f5f4;
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;
+  font-size:16px;line-height:1.6;margin:0;padding:0 1.25rem 6rem;-webkit-font-smoothing:antialiased}
+.wrap{max-width:74rem;margin:0 auto}
+.prose{max-width:40rem}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.86em;
+  background:var(--accent-soft);color:var(--accent);padding:.1em .34em;border-radius:3px}
+h1,h2,h3,h4{font-family:Newsreader,Georgia,serif;font-weight:500;text-wrap:balance;margin:0}
+/* masthead */
+.mast{padding:4rem 0 2rem;border-bottom:1px solid var(--rule-solid)}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.7rem;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);margin:0 0 1rem}
+.mast h1{font-size:clamp(2.4rem,5.5vw,3.6rem);line-height:1.06;letter-spacing:-.015em}
+.mast .sub{max-width:38rem;margin:1.25rem 0 0;color:var(--muted);font-size:1.05rem}
+.status{display:flex;flex-wrap:wrap;gap:.5rem 2rem;margin:2rem 0 0;padding:1rem 1.25rem;
+  background:var(--raised);border:1px solid var(--rule);border-radius:6px}
+.status div{display:flex;flex-direction:column;gap:.15rem}
+.status dt{font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted)}
+.status dd{margin:0;font-weight:600;font-size:.95rem;font-variant-numeric:tabular-nums}
+.status .ok{color:var(--accent)}
+/* index */
+nav.toc{margin:2.5rem 0 0;display:flex;flex-wrap:wrap;gap:.5rem}
+nav.toc a{font-family:"IBM Plex Mono",monospace;font-size:.78rem;text-decoration:none;
+  color:var(--muted);border:1px solid var(--rule-solid);padding:.35rem .7rem;border-radius:99px}
+nav.toc a:hover,nav.toc a:focus-visible{color:var(--accent);border-color:var(--accent)}
+/* sections */
+section{padding:4rem 0;border-bottom:1px solid var(--rule)}
+.sec-head{display:flex;align-items:baseline;gap:1rem;margin-bottom:.75rem}
+.dnum{font-family:"IBM Plex Mono",monospace;font-size:.8rem;font-weight:500;color:var(--accent);
+  border:1px solid var(--accent);border-radius:3px;padding:.15rem .45rem;flex:none}
+.sec-head h2{font-size:clamp(1.5rem,3vw,2rem);letter-spacing:-.01em}
+.lead{max-width:40rem;color:var(--muted);margin:0 0 2rem}
+figure.diagram{margin:0 0 2rem;background:var(--diagram-bg);border:1px solid var(--rule-solid);
+  border-radius:8px;padding:1.5rem;overflow-x:auto}
+figure.diagram .mermaid{min-width:min-content}
+/* notes */
+.cols{display:grid;gap:1.5rem;grid-template-columns:1fr}
+@media(min-width:60rem){.cols{grid-template-columns:1fr 1fr;gap:2.5rem}}
+.notes h4{font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.12em;
+  text-transform:uppercase;margin:0 0 .9rem;padding-bottom:.45rem;border-bottom:1px solid var(--rule)}
+.notes.decided h4{color:var(--accent)}
+.notes.open h4{color:var(--open)}
+.notes ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1rem}
+.notes li{padding-left:.9rem;border-left:2px solid var(--rule-solid)}
+.notes.open li{border-left-color:var(--open)}
+.notes li b{display:block;font-weight:600;font-size:.95rem;margin-bottom:.2rem}
+.notes li span{display:block;color:var(--muted);font-size:.9rem;line-height:1.55}
+/* footer */
+.foot{padding:3.5rem 0 0}
+.foot h3{font-size:1.35rem;margin-bottom:.75rem}
+.foot p{max-width:40rem;color:var(--muted)}
+.foot .rounds{font-family:"IBM Plex Mono",monospace;font-size:.8rem;margin:1.5rem 0;
+  background:var(--raised);border:1px solid var(--rule);border-radius:6px;padding:1rem 1.25rem;
+  overflow-x:auto;white-space:pre;color:var(--muted);line-height:1.8}
+.foot .rounds b{color:var(--ink);font-weight:500}
+</style>
+
+<div class="wrap">
+<div class="mast prose">
+  <p class="eyebrow">LoopZero · cycle-design · 11 de setembro de 2026</p>
+  <h1>Os cinco desenhos</h1>
+  <p class="sub">Quatro decisões que nenhum produto retrofita — ciclo de vida, fronteira de confiança,
+  ordem das chamadas com as falhas, e durabilidade — mais o mapa de componentes derivado delas.
+  Um mapa desenhado primeiro parece design e não força escolha nenhuma.</p>
+  <dl class="status">
+    <div><dt>Painel</dt><dd class="ok">APPROVED · 2 de 3</dd></div>
+    <div><dt>Famílias</dt><dd>anthropic + openai</dd></div>
+    <div><dt>Rondas</dt><dd>4</dd></div>
+    <div><dt>Peças cobertas</dt><dd>10 / 10</dd></div>
+    <div><dt>Assinatura</dt><dd style="color:var(--open)">7 caixas em branco</dd></div>
+  </dl>
+  <nav class="toc">
+    <a href="#states">D1 · ciclo de vida</a><a href="#trust">D2 · confiança</a>
+    <a href="#sequence">D3 · sequência</a><a href="#durability">D4 · durabilidade</a>
+    <a href="#system-map">D5 · componentes</a><a href="#panel">o painel</a>
+  </nav>
+</div>
+
+<section id="states">
+  <header class="sec-head"><span class="dnum">D1</span><h2>O ciclo de vida de uma Application</h2></header>
+  <p class="lead">O objeto central é <code>Application</code>. Tudo que a plataforma faz com o app de um cliente é uma transição aqui.</p>
+  <figure class="diagram"><pre class="mermaid">stateDiagram-v2
+    [*] --&gt; Progressing : Application created
+    Progressing --&gt; Serving : workload ready
+    Progressing --&gt; Down : workload never came up
+    Serving --&gt; Reachable : route resolves from outside
+    Reachable --&gt; Degraded : partial failure
+    Degraded --&gt; Reachable : recovered
+    Degraded --&gt; Down : total failure
+    Down --&gt; Progressing : reconcile retries
+    Progressing --&gt; Cleaned : reaper — DECLARED, NOT WIRED (B-228)
+    note right of Cleaned
+        No production path reaches this.
+        ShouldReap has only test callers.
+    end note
+    Cleaned --&gt; [*]</pre></figure>
+  <div class="cols"><div class="notes decided"><h4>Decidido</h4><ul><li><b>As seis fases vêm do CRD</b><span><code>application_types.go</code> define exatamente <code>Progressing</code>, <code>Serving</code>, <code>Reachable</code>, <code>Degraded</code>, <code>Down</code> e <code>Cleaned</code>.</span></li><li><b><code>Cleaned</code> só é alcançável de <code>Progressing</code></b><span><code>ShouldReap</code> recusa qualquer outra fase pelo nome.</span></li></ul></div><div class="notes open"><h4>Em aberto</h4><ul><li><b><code>Cleaned</code> é declarada e não está ligada</b><span><code>ShouldReap</code> e <code>MarkAsCleaned</code> têm apenas chamadores de teste, e <code>application_controller.go</code> nunca os invoca — enquanto o cabeçalho do reaper afirma o contrário. Registrado como <code>B-228</code>.</span></li><li><b>Uma app <code>Reachable</code> cujo manifesto sai da fonte não tem transição</b><span>O reaper só aceita <code>Progressing</code>.</span></li></ul></div></div>
+</section>
+<section id="trust">
+  <header class="sec-head"><span class="dnum">D2</span><h2>Onde o código do cliente para</h2></header>
+  <p class="lead">Duas portas, e elas não isolam da mesma forma. A porta gerenciada separa clientes por namespace e <b>kernel compartilhado</b>; a BYOC separa por conta AWS.</p>
+  <figure class="diagram"><pre class="mermaid">flowchart TB
+    subgraph managed[&quot;DOOR 1 — OUR CELL, shared (the solo developer)&quot;]
+        subgraph ns_a[&quot;namespace loopzero-a-proj-prod · PSA restricted&quot;]
+            app_a[Agent A]
+        end
+        subgraph ns_b[&quot;namespace loopzero-b-proj-prod · PSA restricted&quot;]
+            app_b[Agent B]
+        end
+        kernel[&quot;shared nodes, shared kernel — no runtimeClass&quot;]
+        app_a -.-&gt; kernel
+        app_b -.-&gt; kernel
+    end
+    subgraph customer[&quot;DOOR 2 — CUSTOMER AWS ACCOUNT (privacy)&quot;]
+        subgraph untrusted[&quot;UNTRUSTED — the customer agentic app&quot;]
+            app[Application workload]
+        end
+        ops[&quot;Operators — app, tenant, preview, platform&quot;]
+        app -.-&gt;|NetworkPolicy| ops
+    end
+    subgraph platform[&quot;LOOPZERO CONTROL PLANE — ours, both doors&quot;]
+        api[Control API]
+        pg[(Postgres — tenants, releases, metering&lt;br/&gt;NOT the execution record)]
+        minio[(MinIO)]
+    end
+    api --&gt;|&quot;holds per-cell kubeconfig, reaches IN&quot;| ops
+    api --&gt; pg
+    api --&gt; minio
+    app --&gt;|&quot;agent memory, execution record&quot;| dp[[&quot;loopzero-memory · loopzero-lens · loopzero-rag&lt;br/&gt;the developer&#x27;s services. Not in any cell&lt;br/&gt;composition; production placement undeclared&quot;]]
+    app_a --&gt; api
+    app_b --&gt; api</pre></figure>
+  <div class="cols"><div class="notes decided"><h4>Decidido</h4><ul><li><b>A credencial aponta para dentro</b><span>O control plane guarda o kubeconfig por cell e alcança a cell — <code>k8s_cell_store.go</code>, <code>router.go</code>, <code>cross_cluster_token_review.go</code>.</span></li><li><b>O workload não escreve estado pela Control API</b><span>Ela não tem rota de memory, lens ou rag. O app escreve direto no data plane.</span></li></ul></div><div class="notes open"><h4>Em aberto</h4><ul><li><b>O control plane assume um papel para dentro, ou um agente egress-only alcança para fora?</b><span>WarpStream e Nuon argumentam contra o cross-account role assumido. O registro de decisão classifica esta como a questão de maior alavancagem, e o mecanismo ainda não foi construído.</span></li><li><b>Existe allowlist de egress para o app do cliente?</b><span>O namespace da plataforma exclui RFC1918 e <code>169.254/16</code>; o do tenant não. Registrado como <code>B-226</code>.</span></li></ul></div></div>
+</section>
+<section id="sequence">
+  <header class="sec-head"><span class="dnum">D3</span><h2>De nada a rodando, incluindo o que falha</h2></header>
+  <p class="lead">As falhas são o ponto aqui, não a decoração. <code>PIECE-6</code> exige um caminho só, sem bifurcação, e que cada falha nomeie o que mudar.</p>
+  <figure class="diagram"><pre class="mermaid">sequenceDiagram
+    participant Dev as Developer
+    participant Entry as PIECE-6 Entry path
+    participant Build as PIECE-10 Build path
+    participant Pub as PIECE-7 Publishing
+    participant Dist as PIECE-8 Distribution
+    participant Op as app-operator
+    participant App as Application
+
+    Dev-&gt;&gt;Entry: loopzero up
+    Entry-&gt;&gt;Build: build request
+    Build--xEntry: build failed — names the file
+    Build--&gt;&gt;Pub: artifact
+    Pub--xEntry: publish rejected — names the missing field
+    Pub--&gt;&gt;Dist: published version
+    Dist-&gt;&gt;Op: Application desired state
+    Op-&gt;&gt;App: reconcile
+    App--&gt;&gt;Op: Progressing
+    Op--xDev: Down — workload never came up
+    App--&gt;&gt;Op: Serving
+    Op-&gt;&gt;Op: check route
+    Op--&gt;&gt;Dev: Reachable — route resolves
+    Note over Op,Dev: route fails -&gt; phase stays Serving.&lt;br/&gt;Degraded is unreachable while endpoints are ready.</pre></figure>
+  <div class="cols"><div class="notes decided"><h4>Decidido</h4><ul><li><b>A build roda na infraestrutura do cliente</b><span>Decidido pelo C1 do RFC de extração, antes deste desenho perguntar.</span></li></ul></div><div class="notes open"><h4>Em aberto</h4><ul><li><b>Uma app no ar e inalcançável reporta <code>Serving</code></b><span><code>computePhase</code> testa <code>Reachable</code>, depois <code>EndpointsReady</code>, e só então as condições — então o ramo <code>Degraded</code> é inalcançável enquanto os endpoints estiverem prontos. <code>PIECE-6</code> promete uma falha que nomeia o conserto, e esta é silenciosa na fase.</span></li></ul></div></div>
+</section>
+<section id="durability">
+  <header class="sec-head"><span class="dnum">D4</span><h2>O que sobrevive a quê</h2></header>
+  <p class="lead">Para uma plataforma de agentes de longa duração, este é o desenho que define o produto. Um agente que perde seu trabalho num restart de pod não é um agente de longa duração.</p>
+  <figure class="diagram"><pre class="mermaid">flowchart LR
+    app[Application workload] --&gt;|writes| lens[(loopzero-lens — execution record&lt;br/&gt;the developer&#x27;s service. WHERE it runs in&lt;br/&gt;production is not declared)]
+    app --&gt;|writes| minio[(MinIO — artifacts)]
+    lens --&gt;|survives pod, node, upgrade| lens
+    app --&gt;|&quot;memories, entities, history&quot;| mem[(&quot;loopzero-memory — Postgres&quot;)]</pre></figure>
+  <div class="cols"><div class="notes decided"><h4>Decidido</h4><ul><li><b>O estado do agente sobrevive porque nunca esteve no pod</b><span>Vive no Postgres do <code>loopzero-memory</code> — 34 migrations.</span></li><li><b>O registro de execução é durável contra pod, nó e upgrade</b><span><code>loopzero-lens</code> declara <code>dialect: "postgresql"</code> e carrega 34 migrations próprias, com nomes inteiramente distintos dos do <code>loopzero-memory</code>.</span></li></ul></div><div class="notes open"><h4>Em aberto</h4><ul><li><b>Onde o data plane roda em produção?</b><span><code>prod.yaml</code> não declara nenhum dos três, e as URLs vêm de um overlay que só <code>dev-public</code> define. Enquanto isso não for declarado, nenhuma coluna de data plane da linha <i>cell destruída</i> pode ser preenchida.</span></li><li><b>Um turno em andamento é checkpointado antes de completar?</b><span>Decide o raio de explosão de um despejo de pod.</span></li></ul></div></div>
+</section>
+<section id="system-map">
+  <header class="sec-head"><span class="dnum">D5</span><h2>Componentes, derivados de D1–D4</h2></header>
+  <p class="lead">Derivado, não desenhado primeiro. Um mapa feito antes das quatro decisões parece design e não força escolha nenhuma.</p>
+  <figure class="diagram"><pre class="mermaid">flowchart TB
+    subgraph author[Authoring]
+        p1[PIECE-1 Authoring surface]
+        p5[PIECE-5 Prompt and skill catalogue]
+    end
+    subgraph path[From nothing to running]
+        p6[PIECE-6 Entry path]
+        p10[PIECE-10 Build path]
+        p7[PIECE-7 Publishing]
+        p8[PIECE-8 Distribution]
+    end
+    subgraph cell[Cell - customer AWS account]
+        p9[PIECE-9 Cell provisioning]
+        app[Application workload]
+    end
+    subgraph state[State]
+        p2[PIECE-2 Agent state]
+        p3[PIECE-3 Knowledge retrieval]
+        p4[PIECE-4 Execution record]
+    end
+
+    p1 --&gt; p6
+    p5 --&gt; p1
+    p6 --&gt; p10
+    p10 --&gt; p7
+    p7 --&gt; p8
+    p8 --&gt; app
+    p9 --&gt; cell
+    app --&gt; p2
+    app --&gt; p3
+    app --&gt; p4</pre></figure>
+  <div class="cols"><div class="notes decided"><h4>Decidido</h4><ul><li><b>Dez peças, dez cobertas</b><span>Nenhum componente do mapa sem peça, nenhuma peça sem lugar no mapa.</span></li></ul></div></div>
+</section>
+
+<section id="panel" class="foot prose" style="border-bottom:none">
+  <h3>O que quatro rondas de painel encontraram</h3>
+  <div class="rounds"><b>ronda 1</b>   0/3   três objeções independentes, todas contra o código
+<b>ronda 2</b>   2/3   duas aprovações da MESMA família — não passou
+<b>ronda 3</b>    —    a correção chegou à prosa e não ao desenho
+<b>ronda 4</b>   2/3   anthropic + openai — APPROVED</div>
+  <p>A ronda 2 é o argumento inteiro para a regra de duas famílias. Os dois revisores Anthropic
+  aprovaram; o assento externo retornou — e o que ele encontrou depois foi uma fase do CRD que
+  <b>nenhum caminho de produção atinge</b>. Duas aprovações correlacionadas teriam passado isso adiante.</p>
+  <p>Seis defeitos nos desenhos foram confirmados contra o código: a fase que uma rota quebrada
+  produz, duas transições de deleção que não existem, o rótulo do grace period, a direção da
+  credencial, uma aresta afirmando que o app escreve memória pela Control API — que não tem essa
+  rota — e dois bancos diferentes com o mesmo nome.</p>
+  <p><b>O painel julga o conteúdo; a assinatura é de uma pessoa.</b> As sete caixas de
+  <code>sign-off.md</code> continuam em branco, e nenhuma delas espera mais uma decisão.</p>
+</section>
+</div>
