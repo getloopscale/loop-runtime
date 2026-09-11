@@ -77,15 +77,21 @@ and the gap between memory and workflow state is exactly where that expectation 
 
 ### A known defect this leaves standing
 
-`CheckpointStorage` declares `'memory' | 'filesystem' | 'drizzle' | 'redis'`. **`drizzle` and `redis`
-have no implementation** — measured 2026-09-11, they appear only in `types.ts` and the generated
-`.d.ts`. And `CheckpointCapability` warns that only `'filesystem'` resumes across requests, which on
-this platform is unreachable: the renderer emits `Deployment` or `Rollout` with no
-`PersistentVolumeClaim`.
+Filed as [`loopzerokit/loopzerokit#724`](https://github.com/loopzerokit/loopzerokit/issues/724), and the
+measurement went further than the first reading.
 
-**So the framework offers four checkpoint backends, two do not exist, and the one it recommends
-cannot work on LoopZero's own platform.** The `ttl` default of one hour says what it was built for: crash
-recovery, not dormancy measured in days.
+`CheckpointOptions` declares four fields. **Exactly one is ever read**, at
+`agent-endpoint.ts:389` — `compiled.checkpoint?.storage === 'filesystem'` — and it decides whether a
+`checkpoint_saved` event is emitted to the client. `strategy`, `maxCheckpoints` and `ttl` are read
+nowhere.
+
+So `'drizzle'` and `'redis'` are not unimplemented backends: they are values **indistinguishable
+from `'memory'`** in every code path. And `'filesystem'` selects nothing either — the comment above
+that line states that the SDK persists every session to a `.jsonl` transcript regardless. The
+warning tells an author to change a value to obtain persistence they already have.
+
+The `ttl` default of one hour is the other tell: sized for crash recovery rather than dormancy
+measured in days, and never read, so it is a default about nothing.
 
 This is a framework defect, not a platform one, and it belongs in `loopzerokit`'s backlog. Naming it here
 because the decision above makes it survivable rather than urgent — nothing depends on that
