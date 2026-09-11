@@ -19,9 +19,9 @@ product. An agent that loses its work to a pod restart is not a long-running age
 
 ```mermaid
 flowchart LR
-    app[Application workload] -->|writes| lens[(loopzero-lens — execution record<br/>the developer's, outside the cell)]
+    app[Application workload] -->|writes| lens[(loopzero-lens — execution record<br/>the developer's service. WHERE it runs in<br/>production is not declared)]
     app -->|writes| minio[(MinIO — artifacts)]
-    lens -->|survives pod, node, upgrade, cell| lens
+    lens -->|survives pod, node, upgrade| lens
     app -->|"memories, entities, history"| mem[("loopzero-memory — Postgres")]
 ```
 
@@ -37,8 +37,10 @@ flowchart LR
 
 ## Decided
 
-- **The execution record is durable.** It is in Postgres, which survives everything
-  above the cell.
+- **The execution record is durable against pod, node and upgrade** — it is in Postgres and
+  it is not in the workload. Against a destroyed **cell** the drawing says nothing, because
+  `prod.yaml` declares where none of the three data-plane services run. Corrected 2026-09-11,
+  round 3: the table said `not established` while this edge still said `survives … cell`.
 
 ## Corrected twice on 2026-09-11 — and the honest answer for a destroyed cell is *not established*
 

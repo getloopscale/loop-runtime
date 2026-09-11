@@ -35,7 +35,7 @@ flowchart TB
     api -->|"holds per-cell kubeconfig, reaches IN"| ops
     api --> pg
     api --> minio
-    app -->|"agent memory, execution record"| dp[["loopzero-memory · loopzero-lens · loopzero-rag<br/>the developer's, outside both doors"]]
+    app -->|"agent memory, execution record"| dp[["loopzero-memory · loopzero-lens · loopzero-rag<br/>the developer's services. Not in any cell<br/>composition; production placement undeclared"]]
     app_a --> api
     app_b --> api
 ```
@@ -55,7 +55,9 @@ that is under question.
 
 **The Postgres node is also relabelled, and one more edge was wrong.** The control plane's
 Postgres holds tenants, releases and metering; the execution record is `loopzero-lens`'s and lives
-outside the cell (`durability.md`). Two drawings were using one name for two databases.
+the developer's (`durability.md`). Two drawings were using one name for two databases.
+**Where those services run in production is undeclared** — `prod.yaml` names none of them — so
+this drawing says only what is measured: they are in no cell composition.
 
 The edge `app --> api` labelled *"agent memory, execution record"* was wrong for the same
 reason: **the Control API has no memory, lens or rag route at all** — `ls api/internal/routes/`
