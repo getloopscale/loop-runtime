@@ -1,10 +1,10 @@
 # Dogfood 2026-04-29 Repro Suite
 
-Scripts e testes que reproduzem os 13 achados do dogfood
+Scripts and tests that reproduce the 13 dogfood findings
 ``docs/plans/dogfood-2026-04-29-remediation-plan.md`` *(removido do versionamento)*
 contra k3d standalone-multi.
 
-## Uso
+## Usage
 
 ```bash
 task dogfood:repro                                  # Run completo + summary
@@ -38,7 +38,7 @@ bash infra/tests/livetest/dogfood/repro-findings.sh --json   # JSON only (CI)
 |------|---------|
 | 0 | Every finding still REPRODUCES (matrix consistent, no fix merged) |
 | 1 | At least one finding FIXED — update the regression matrix and the CHANGELOG |
-| 2 | Erro de pre-condição (k3d ausente, kubectl falha) |
+| 2 | Pre-condition error (k3d absent, kubectl fails) |
 
 ## Status `INDETERMINATE`
 

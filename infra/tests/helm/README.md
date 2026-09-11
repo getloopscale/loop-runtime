@@ -195,8 +195,8 @@ drift in either source or test code re-runs validation.
 - **Don't render the same chart 13 times** when 13 parallel tests share
   setup — use `t.Parallel()` + helpers `sync.Once` cache for deps.
 - **Don't bypass build gate** by removing tests instead of fixing
-  helpers symbol. Per binding "SE ENCONTRAR UM BUG CORRIJA SEM
-  WORKAROUND" — fix the root, not the surface.
+  helpers symbol. Per the standing instruction "if you find a bug, fix it without a
+  workaround" — fix the root, not the surface.
 - **Don't add `// readOnlyRootFilesystem` exemption** without
   documenting WHY in the test (e.g., nginx needs writable /tmp).
 - **Don't commit a test that passes only "by coincidence"** — e.g.,

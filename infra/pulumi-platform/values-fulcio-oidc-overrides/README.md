@@ -1,40 +1,40 @@
 # Fulcio OIDC Trust Overrides — M07 Keyless 3.85
 
-Helm values fragments + reference manifests para configurar Fulcio trust chain
-em k3d local + production DOKS. Resultado final: cosign keyless signing GREEN
-end-to-end (sign + attest + Rekor URL populated em DB).
+Helm values fragments and reference manifests for configuring the Fulcio trust chain on local k3d
+and production DOKS. End result: cosign keyless signing GREEN end-to-end (sign + attest + Rekor URL
+populated in the database).
 
-## Histórico
+## History
 
-Esses files foram criados iterativamente durante 9 Ralph iterations (2026-05-28)
-investigando HTTP 400 "error processing identity token" do Fulcio em LIVE builds.
+These files were created iteratively across 9 loop iterations (2026-05-28) while investigating
+Fulcio's HTTP 400 "error processing identity token" on LIVE builds.
 
-Iter 1-9 testaram (todos sem resolver):
+Iterations 1-9 tried the following, none of which resolved it:
 - `cenario-c-issuer-mismatch.yaml` — added 2nd OIDCIssuer entry (iss already matched)
 - `cenario-a-k3s-config.yaml` — K3s `anonymous-auth=true` + `jwks_uri=DNS`
 - `cenario-a-anonymous-discovery.yaml` — ClusterRoleBinding `system:unauthenticated`
-- `cenario-d-tls-ca-investigation.md` — investigation doc (Fulcio extraEnv blocker)
+- `cenario-d-tls-ca-investigation.md` — investigation note (Fulcio extraEnv blocker)
 
-Research-1 (2026-05-28) via WebSearch + WebFetch achou fix oficial:
+Research on 2026-05-28 found the official fix:
 - **`cenario-a-cacert-trust.yaml`** — Fulcio config schema `OIDCIssuer.CACert`
-  PEM field documented em pkg.go.dev/github.com/sigstore/fulcio/pkg/config.
+  PEM field, documented at pkg.go.dev/github.com/sigstore/fulcio/pkg/config.
 
-## Apply flow (após cleanroom)
+## Apply flow (after a cleanroom)
 
-**Pré-requisitos** (Phase -1 do plan):
+**Prerequisites** (Phase -1 of the plan):
 
 1. **K3s anonymous-auth=true**: `docker cp cenario-a-k3s-config.yaml k3d-loopzero-build-server-0:/etc/rancher/k3s/config.yaml && docker restart k3d-loopzero-build-server-0`
 2. **CRB system:unauthenticated**: `kubectl apply -f cenario-a-anonymous-discovery.yaml`
 3. **Sigstore stack**: `helm install scaffold sigstore/scaffold --version 0.6.108 --wait`
 
-**Fix CACert** (Phase 0-2 do plan):
+**CACert fix** (Phases 0-2 of the plan):
 
 ```bash
 # Extract K3s server CA
 docker exec k3d-loopzero-build-server-0 \
   cat /var/lib/rancher/k3s/server/tls/server-ca.crt > /tmp/k3s-server-ca.pem
 
-# Render template with PEM inline (python — indented 10 spaces para YAML block scalar)
+# Render the template with the PEM inline (indented 10 spaces for the YAML block scalar)
 python3 <<'PY'
 import re
 with open('/tmp/k3s-server-ca.pem') as f:

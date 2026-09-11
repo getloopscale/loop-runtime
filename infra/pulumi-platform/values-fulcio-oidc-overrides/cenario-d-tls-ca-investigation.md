@@ -1,4 +1,4 @@
-# Cenário D — TLS CA mount investigation (M07 plan 2026-05-28 T2.1)
+# Scenario D — TLS CA mount investigation (M07 plan 2026-05-28 T2.1)
 
 ## Why this is NOT a simple values override
 
@@ -53,11 +53,11 @@ handshake even with CA available at SA mount path.
 **Phase 1 diagnose verdict will tell us if D is actually the blocker.**
 The fulcio_log_excerpt from probe 3 will say something like:
 - `x509: certificate signed by unknown authority` → confirmed D
-- Other patterns → different cenário
+- Other patterns → a different scenario
 
 **Only if verdict=D, operator chooses Path 1-4.** Path 2 (postRenderer)
 recommended for KISS local k3d — keeps chart pinned, isolated patch.
 
-DO NOT pre-apply Cenário D fix without verdict — it's complex and
-chart-specific. Cenário C (issuer mismatch, 45% probability) has clean
+DO NOT pre-apply the Scenario D fix without verdict — it's complex and
+chart-specific. Scenario C (issuer mismatch, 45% probability) has clean
 values override (see `cenario-c-issuer-mismatch.yaml`).

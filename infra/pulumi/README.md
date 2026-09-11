@@ -2,7 +2,7 @@
 
 Infrastructure-as-Code for the LoopZero platform. Provisions a complete production topology on DigitalOcean (portable to AWS) using Pulumi.
 
-## Topologia
+## Topology
 
 ```
                     ┌──────────────────────────────┐
@@ -30,18 +30,18 @@ Infrastructure-as-Code for the LoopZero platform. Provisions a complete producti
                 └────────────┘          └─────────────────┘
 ```
 
-### Separação de responsabilidades
+### Separation of responsibilities
 
 | Component | Where it runs | Why |
 |------------|-----------|---------|
-| ArgoCD, API, Traefik | Management cluster | Platform tooling isolado do produto |
-| User applications | Runtime cluster | Blast radius separado — mgmt down ≠ apps down |
-| Gitea | VM dedicada | Stateful + critical path — fora do K8s |
-| Runners | VMs separadas | Builds consomem recursos de forma imprevisível |
-| PostgreSQL | Managed (DO) | Backups automáticos, failover, patching |
-| Artifacts | Spaces (S3) | Object storage escalável e barato |
+| ArgoCD, API, Traefik | Management cluster | Platform tooling isolated from the product |
+| User applications | Runtime cluster | Separate blast radius — mgmt down ≠ apps down |
+| Gitea | Dedicated VM | Stateful + critical path — outside K8s |
+| Runners | Separate VMs | Builds consume resources unpredictably |
+| PostgreSQL | Managed (DO) | Automatic backups, failover, patching |
+| Artifacts | Spaces (S3) | Cheap, scalable object storage |
 
-## Pipeline de 3 fases
+## Three-phase pipeline
 
 ```
 Phase 1: createInfra()        Phase 2: bootstrapCluster()     Phase 3: exposePlatform()
@@ -57,18 +57,18 @@ Phase 1: createInfra()        Phase 2: bootstrapCluster()     Phase 3: exposePla
      InfraOutputs      ──>      BootstrapOutputs       ──>     ExposeOutputs
 ```
 
-## Estrutura
+## Structure
 
 ```
 src/
-├── index.ts                    Orquestrador: 3 fases + execution state + wiring
+├── index.ts                    Orchestrator: 3 phases + execution state + wiring
 ├── config/
-│   └── stack.ts                Config por ambiente (fail-fast)
+│   └── stack.ts                Per-environment config (fail-fast)
 ├── core/
 │   ├── types.ts                CloudProvider, Environment, NodeClass
-│   ├── naming.ts               Nomes determinísticos
-│   ├── tags.ts                 Tags padrão
-│   ├── errors.ts               InfraError tipado
+│   ├── naming.ts               Deterministic names
+│   ├── tags.ts                 Standard tags
+│   ├── errors.ts               Typed InfraError
 │   └── execution.ts            State tracking per phase and component
 ├── contracts/
 │   ├── provider.ts             Factory + 6 interfaces ISP
@@ -79,7 +79,7 @@ src/
 │   ├── compute.ts              ComputeInstanceSpec / Output (VMs)
 │   └── database.ts             DatabaseClusterSpec / Output
 ├── components/
-│   ├── infra.ts                Phase 1: topologia completa
+│   ├── infra.ts                Phase 1: full topology
 │   ├── bootstrap.ts            Phase 2: dual-cluster (mgmt + runtime)
 │   └── expose.ts               Phase 3: DNS (mgmt + runtime wildcard)
 ├── __tests__/
@@ -89,7 +89,7 @@ src/
 │   ├── nodes.test.ts           resolveNodeSize, resolveDbSize
 │   └── dns-detection.test.ts   A vs CNAME vs AAAA auto-detection
 └── providers/
-    ├── digitalocean/            Implementação completa (8 arquivos)
+    ├── digitalocean/            Complete implementation (8 files)
     │   ├── index.ts             Factory
     │   ├── nodes.ts             NodeClass → droplet/DB sizes
     │   ├── network.ts           VPC
@@ -99,10 +99,10 @@ src/
     │   ├── compute.ts           Droplets (VMs)
     │   └── database.ts          Managed PostgreSQL
     └── aws/
-        └── index.ts             Stub com guia de implementação
+        └── index.ts             Stub with an implementation guide
 ```
 
-## Ambientes
+## Environments
 
 | Stack | Domain | Mgmt Nodes | Runtime Nodes | Runners | DB |
 |-------|--------|------------|---------------|---------|-----|
@@ -112,15 +112,15 @@ src/
 
 ## State Backend
 
-O state do Pulumi é armazenado no **DigitalOcean Spaces** (S3-compatible). Sem dependência do Pulumi Cloud.
+Pulumi state is stored in **DigitalOcean Spaces** (S3-compatible). No dependency on Pulumi Cloud.
 
 ```
 ┌──────────────────────────────────┐
 │  DigitalOcean Spaces             │
 │  s3://loopzero-infra-pulumi-state          │
-│  ├── .pulumi/stacks/dev.json     │  ← state do ambiente dev
-│  ├── .pulumi/stacks/staging.json │  ← state do ambiente staging
-│  └── .pulumi/stacks/prod.json    │  ← state do ambiente prod
+│  ├── .pulumi/stacks/dev.json     │  ← dev environment state
+│  ├── .pulumi/stacks/staging.json │  ← staging environment state
+│  └── .pulumi/stacks/prod.json    │  ← prod environment state
 └──────────────────────────────────┘
 ```
 
@@ -129,35 +129,35 @@ O state do Pulumi é armazenado no **DigitalOcean Spaces** (S3-compatible). Sem 
 The state bucket is "day-zero infrastructure" — it must exist before Pulumi runs.
 
 ```bash
-# 1. Criar Spaces access keys no painel DO:
+# 1. Create Spaces access keys in the DO panel:
 #    https://cloud.digitalocean.com/account/api/spaces
 
-# 2. Criar o bucket de state
-doctl serverless functions init  # (ou via painel DO)
+# 2. Create the state bucket
+doctl serverless functions init  # (or via the DO panel)
 doctl compute cdn create --origin loopzero-infra-pulumi-state.nyc3.digitaloceanspaces.com 2>/dev/null || true
 
-# Ou via s3cmd:
+# Or with s3cmd:
 export AWS_ACCESS_KEY_ID="<spaces-key>"
 export AWS_SECRET_ACCESS_KEY="<spaces-secret>"
 aws s3 mb s3://loopzero-infra-pulumi-state --endpoint-url https://nyc3.digitaloceanspaces.com
 
-# 3. Configurar variáveis locais
+# 3. Configure local variables
 export AWS_ACCESS_KEY_ID="<spaces-key>"
 export AWS_SECRET_ACCESS_KEY="<spaces-secret>"
 export PULUMI_CONFIG_PASSPHRASE="<strong-passphrase>"
 
-# 4. Login no backend S3
+# 4. Log in to the S3 backend
 pulumi login 's3://loopzero-infra-pulumi-state?endpoint=nyc3.digitaloceanspaces.com&region=us-east-1'
 ```
 
-## Uso
+## Usage
 
 ```bash
 npm install
 npm run typecheck
 npm test
 
-# Login no state backend (S3/Spaces)
+# Log in to the state backend (S3/Spaces)
 export AWS_ACCESS_KEY_ID="<spaces-key>"
 export AWS_SECRET_ACCESS_KEY="<spaces-secret>"
 export PULUMI_CONFIG_PASSPHRASE="<passphrase>"
@@ -178,35 +178,35 @@ pulumi stack output runtimeKubeconfig --show-secrets > runtime.kubeconfig
 
 ### Phase 1 — Infra
 
-| Output | Tipo | Descrição |
+| Output | Type | Description |
 |--------|------|-----------|
 | `networkId` | `string` | VPC ID |
-| `mgmtClusterName` | `string` | Nome do cluster de management |
-| `mgmtClusterEndpoint` | `string` | API endpoint do mgmt cluster |
-| `mgmtKubeconfig` | `string` (secret) | Kubeconfig do mgmt cluster |
-| `runtimeClusterName` | `string` | Nome do cluster runtime |
-| `runtimeClusterEndpoint` | `string` | API endpoint do runtime cluster |
-| `runtimeKubeconfig` | `string` (secret) | Kubeconfig do runtime cluster |
-| `giteaIp` | `string` | IP público do Gitea |
-| `giteaPrivateIp` | `string` | IP privado do Gitea (VPC) |
-| `runnerIps` | `string[]` | IPs dos runner VMs |
-| `dbHost` | `string` | Host privado do PostgreSQL |
-| `dbPort` | `number` | Porta do PostgreSQL |
-| `dbUri` | `string` (secret) | Connection string completa |
-| `dbPassword` | `string` (secret) | Senha do PostgreSQL |
-| `bucketName` | `string` | Nome do bucket |
-| `bucketEndpoint` | `string` | Endpoint do bucket |
+| `mgmtClusterName` | `string` | Management cluster name |
+| `mgmtClusterEndpoint` | `string` | Management cluster API endpoint |
+| `mgmtKubeconfig` | `string` (secret) | Management cluster kubeconfig |
+| `runtimeClusterName` | `string` | Runtime cluster name |
+| `runtimeClusterEndpoint` | `string` | Runtime cluster API endpoint |
+| `runtimeKubeconfig` | `string` (secret) | Runtime cluster kubeconfig |
+| `giteaIp` | `string` | Gitea public IP |
+| `giteaPrivateIp` | `string` | Gitea private IP (VPC) |
+| `runnerIps` | `string[]` | Runner VM IPs |
+| `dbHost` | `string` | PostgreSQL private host |
+| `dbPort` | `number` | PostgreSQL port |
+| `dbUri` | `string` (secret) | Full connection string |
+| `dbPassword` | `string` (secret) | PostgreSQL password |
+| `bucketName` | `string` | Bucket name |
+| `bucketEndpoint` | `string` | Bucket endpoint |
 
 ### Phase 2 — Bootstrap
 
-| Output | Tipo | Descrição |
+| Output | Type | Description |
 |--------|------|-----------|
-| `mgmtIngressReady` | `boolean` | Traefik deployed no mgmt |
-| `mgmtIngressEndpoint` | `string` | LB IP/hostname do mgmt |
+| `mgmtIngressReady` | `boolean` | Traefik deployed on mgmt |
+| `mgmtIngressEndpoint` | `string` | Mgmt LB IP/hostname |
 | `certManagerReady` | `boolean` | cert-manager deployed |
 | `argoCdReady` | `boolean` | ArgoCD deployed |
-| `runtimeIngressReady` | `boolean` | Traefik deployed no runtime |
-| `runtimeIngressEndpoint` | `string` | LB IP/hostname do runtime |
+| `runtimeIngressReady` | `boolean` | Traefik deployed on runtime |
+| `runtimeIngressEndpoint` | `string` | Runtime LB IP/hostname |
 
 ### Wiring (how the components connect)
 
@@ -286,9 +286,9 @@ pulumi stack output execution --json
 }
 ```
 
-## Helm Charts Pinados
+## Pinned Helm charts
 
-| Chart | Versão | Cluster | Repo |
+| Chart | Version | Cluster | Repo |
 |-------|--------|---------|------|
 | cert-manager | v1.14.5 | mgmt | https://charts.jetstack.io |
 | ArgoCD | 7.3.11 | mgmt | https://argoproj.github.io/argo-helm |
@@ -298,22 +298,22 @@ pulumi stack output execution --json
 
 ```
 CloudProviderFactory
-├── IProviderNetwork          VPC / rede
+├── IProviderNetwork          VPC / network
 ├── IProviderKubernetes       cluster K8s
 ├── IProviderStorage          object storage (S3-compatible)
-├── IProviderDns              registros DNS
+├── IProviderDns              DNS records
 ├── IProviderCompute          VMs (Droplet / EC2)
 └── IProviderDatabase         managed database (PostgreSQL)
 ```
 
 | Provider | Status |
 |----------|--------|
-| DigitalOcean | Implementado (6 capabilities) |
-| AWS | Stub com guia de implementação |
+| DigitalOcean | Implemented (6 capabilities) |
+| AWS | Stub with an implementation guide |
 
-## Adicionando um novo provider
+## Adding a new provider
 
-1. Criar `src/providers/{nome}/` com:
+1. Create `src/providers/{name}/` with:
    - `nodes.ts` — `NodeClass → instance type` + `NodeClass → DB size`
    - `network.ts` — `IProviderNetwork`
    - `kubernetes.ts` — `IProviderKubernetes`
@@ -323,11 +323,11 @@ CloudProviderFactory
    - `database.ts` — `IProviderDatabase`
    - `index.ts` — factory
 
-2. Registrar em `src/components/infra.ts` → `resolveProvider()`
+2. Register it in `src/components/infra.ts` → `resolveProvider()`
 
-3. Adicionar tipo em `src/core/types.ts` → `CloudProvider`
+3. Add the type in `src/core/types.ts` → `CloudProvider`
 
-## Decisões de design
+## Design decisions
 
 **Why 2 clusters?** The management cluster can go down without affecting apps in production. ArgoCD down means deploys stop while apps keep running — a contained blast radius.
 
@@ -341,28 +341,34 @@ CloudProviderFactory
 
 **AWS portability:** Gitea VM → EC2, Spaces → S3, DOKS → EKS, DB → RDS. The model does not change — only the provider implementations do.
 
-## Dependências
+## Dependencies
 
-| Pacote | Versão | Propósito |
+| Package | Version | Purpose |
 |--------|--------|-----------|
 | `@pulumi/pulumi` | ^3.153.1 | Core SDK |
-| `@pulumi/digitalocean` | ^4.40.0 | Provider DigitalOcean |
-| `@pulumi/kubernetes` | ^4.18.0 | Provider Kubernetes (Phase 2) |
+| `@pulumi/digitalocean` | ^4.40.0 | DigitalOcean provider |
+| `@pulumi/kubernetes` | ^4.18.0 | Kubernetes provider (Phase 2) |
 | `vitest` | ^3.2.4 | Test runner (dev) |
 
 ## CI/CD Pipeline
 
+> **This section describes workflows that do not exist.** Measured 2026-09-11: `.github/workflows/`
+> holds `build-publish.yml`, `ci.yml`, `delivery-gate-armed.yml`, `release-artifacts.yml` and
+> `workflow-hygiene.yml`. `infra-preview.yml` and `infra-deploy.yml` are in no commit, and GitHub
+> Actions was retired as the pipeline on 2026-05-23. What follows is the intended shape, not what
+> runs — and `infra/pulumi*` is AS-IS legacy until the AM8 cutover to Terraform.
+
 ### Workflows
 
-| Workflow | Trigger | Ação |
+| Workflow | Trigger | Action |
 |----------|---------|------|
-| `ci.yml` (test-pulumi) | Push em qualquer branch | Typecheck + testes unitários |
-| `infra-preview.yml` | PR para develop/main | `pulumi preview` → comentário no PR |
-| `infra-deploy.yml` | Push em develop | `pulumi up` → stack dev (automático) |
-| `infra-deploy.yml` | Push em main | `pulumi up` → stack prod (requer aprovação) |
-| `infra-deploy.yml` | Manual (workflow_dispatch) | Qualquer comando em qualquer stack |
+| `ci.yml` (test-pulumi) | Push on any branch | Typecheck + unit tests |
+| `infra-preview.yml` | PR to develop/main | `pulumi preview` → PR comment |
+| `infra-deploy.yml` | Push to develop | `pulumi up` → dev stack (automatic) |
+| `infra-deploy.yml` | Push to main | `pulumi up` → prod stack (requires approval) |
+| `infra-deploy.yml` | Manual (workflow_dispatch) | Any command on any stack |
 
-### Fluxo
+### Flow
 
 ```
 PR → develop                    Push → develop              Push → main
@@ -374,40 +380,40 @@ PR → develop                    Push → develop              Push → main
 └─────────────────┘            └─────────────────┘         └─────────────────┘
 ```
 
-### Secrets necessários
+### Required secrets
 
-Configure nos GitHub Environments (`infra-dev`, `infra-prod`):
+Configure these in the GitHub Environments (`infra-dev`, `infra-prod`):
 
-| Secret | Descrição |
+| Secret | Description |
 |--------|-----------|
-| `DIGITALOCEAN_TOKEN` | Token da API DigitalOcean (full access para deploy) |
+| `DIGITALOCEAN_TOKEN` | DigitalOcean API token (full access, for deploy) |
 | `SPACES_ACCESS_KEY_ID` | Spaces access key (state backend S3) |
 | `SPACES_SECRET_ACCESS_KEY` | Spaces secret key (state backend S3) |
-| `PULUMI_CONFIG_PASSPHRASE` | Passphrase para encriptação de secrets no state |
+| `PULUMI_CONFIG_PASSPHRASE` | Passphrase encrypting secrets in the state |
 
 ### GitHub Environments
 
 | Environment | Protection |
 |-------------|-----------|
-| `infra-dev` | Nenhuma — deploy automático |
-| `infra-staging` | Opcional — deploy manual via workflow_dispatch |
+| `infra-dev` | None — automatic deploy |
+| `infra-staging` | Optional — manual deploy via workflow_dispatch |
 | `infra-prod` | Required reviewers + deployment branch = main |
 
-### Operações manuais
+### Manual operations
 
 ```bash
 # Via GitHub Actions UI → workflow_dispatch:
 #   Stack: dev | staging | prod
 #   Command: up | preview | refresh | destroy
-#   Message: razão da operação
+#   Message: reason for the operation
 
 # Exemplos:
-# - refresh: sincroniza state com recursos reais (drift detection)
-# - destroy: teardown completo do ambiente (requer aprovação para prod)
-# - preview: dry-run antes de deploy manual
+# - refresh: reconcile state with real resources (drift detection)
+# - destroy: full environment teardown (requires approval for prod)
+# - preview: dry-run before a manual deploy
 ```
 
 ### Concurrency
 
-- **Preview (PRs):** cancel-in-progress: true — safe, é read-only
-- **Deploy:** cancel-in-progress: false — NUNCA cancelar um `pulumi up` em andamento
+- **Preview (PRs):** cancel-in-progress: true — safe, it is read-only
+- **Deploy:** cancel-in-progress: false — NEVER cancel a `pulumi up` in flight

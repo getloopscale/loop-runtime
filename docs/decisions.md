@@ -68,6 +68,36 @@ meeting date is not the meeting.
 | 2026-09-06 | **Restore the governance gate and agents** deleted in `8cb41f660` — selectively, not wholesale. |
 | 2026-05-21 | **External tooling evaluations.** Recommendations recorded and adopted per tool. |
 
+## Numbered ADRs cited by the code
+
+Production comments cite decisions by number (`ADR-NNNN`). Those numbers were assigned in
+documents spread across the old tree; the 2026-09-11 consolidation removed the documents and left
+the citations pointing at nothing. **This table restores the pointer, not the document** — each row
+says where that ADR's text is in git, and none of it is reconstructed from memory.
+
+| ADR | Cited from | Text at `git show 4f728eb7a:<path>` |
+|---|---|---|
+| ADR-0006 | `api/internal/routes/projects/projects.go:259` | **not in the tree even before the consolidation** |
+| ADR-0018 | `api/cmd/controller/setup_metering.go:102` | `docs/knowledge-base/plans/metering-compute-loop-plan.md` |
+| ADR-0020 | `cmd/loopzero-ops/internal/quality/prodimagetags/check.go:5` | `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md` |
+| ADR-0022 | `operators/cmd/registration_test.go:125` | **not in the tree even before the consolidation** |
+| ADR-0023 | `operators/cmd/cache_scoping_test.go:23` | `docs/plans/completed/2026-05-26-T2.2-cosign-keyless-change-governor-diagnostic.md` |
+| ADR-0024 | `cmd/loopzero-ops/internal/quality/docsrefs/check.go:15` | `docs/wiki/decisions/2026-08-12-status-writer-contract.md` |
+| ADR-0025 | `pkg/conditions/summary.go:34` | `docs/wiki/audits/2026-05-11/03-operators.md` |
+| ADR-0028 | `pkg/conditions/aggregate.go:7` | `docs/technical/pkg/architecture.md` |
+| ADR-0030 | `api/internal/routes/httpio/writer.go:45` | `docs/wiki/audits/2026-05-11/04-pkg.md` |
+| ADR-0031 | `pkg/circuitbreaker/circuitbreaker.go:74` | `docs/wiki/audits/2026-05-11/03-operators.md` |
+| ADR-0032 | `pkg/conditions/aggregate.go:10` | `docs/technical/pkg/architecture.md` |
+| ADR-0033 | `pkg/enforcement/limiter.go:8` | `docs/architecture/api/withenvironmentlock-coverage.md` |
+| ADR-0034 | `pkg/logging/context.go:20` | `docs/wiki/plans/completed/2026-05-12-active-execution-plan.md` |
+| ADR-0041 | `cmd/loopzero-ops/internal/quality/helmdrift/check.go:6` | `docs/wiki/reviews/2026-05-21-deep-review-naming-credentials-toolchain.md` |
+| ADR-0048 | `cmd/loopzero-ops/internal/quality/agplisolation/check.go:11` | `docs/plans/completed/2026-05-22-shell-script-strategic-status.md` |
+| ADR-2026 | `api/cmd/setup_server.go:530` | `docs/architecture/build-pipeline/tenant-build-pipeline-as-is.md` |
+
+Two of these did not resolve before the consolidation either — they are recorded as such rather
+than quietly dropped. The numbering is historical and not continuous; new decisions are recorded in
+this file by date, not by number.
+
 ## Decisions recorded outside this file
 
 Some decisions that bind this repo live elsewhere, deliberately:
