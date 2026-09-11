@@ -60,7 +60,7 @@ GitHub Actions was retired as the pipeline in 2026-05-23. The scanners below run
 - **govulncheck** — Go stdlib + module CVEs across `api`, `operators`, `pkg`. `task vuln-scan`; `task vuln-scan:strict` fails on MEDIUM+.
 - **kubeconform --strict** — Kubernetes manifest schema validation. `task validate:manifests`.
 - **cosign + syft** — image signing and CycloneDX SBOM on publish (`.github/workflows/build-publish.yml`).
-- **108 pure-logic gates** in `cmd/loopzero-ops` — `task quality:gates`; after `task quality:build`, `/tmp/loopzero-ops quality --list` is the authoritative inventory, including which gates are wired and which are registered-but-unrun. A stray `./loopzero-ops` at the repo root is a gitignored local artifact and can be badly stale.
+- **126 wired gates** (145 registered) in `cmd/loopzero-ops` — `task quality:gates`; after `task quality:build`, `/tmp/loopzero-ops quality --list` is the authoritative inventory, including which gates are wired and which are registered-but-unrun. A stray `./loopzero-ops` at the repo root is a gitignored local artifact and can be badly stale.
 
 The CLI moved to the `loopzero-cli` repository at M2; its `npm audit` runs there.
 

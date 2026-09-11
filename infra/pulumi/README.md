@@ -1,6 +1,6 @@
 # loopzero-infra
 
-Infrastructure-as-Code para a plataforma LoopZero. Provisiona uma topologia de produção completa na DigitalOcean (com portabilidade para AWS) usando Pulumi.
+Infrastructure-as-Code for the LoopZero platform. Provisions a complete production topology on DigitalOcean (portable to AWS) using Pulumi.
 
 ## Topologia
 
@@ -32,7 +32,7 @@ Infrastructure-as-Code para a plataforma LoopZero. Provisiona uma topologia de p
 
 ### Separação de responsabilidades
 
-| Componente | Onde roda | Por quê |
+| Component | Where it runs | Why |
 |------------|-----------|---------|
 | ArgoCD, API, Traefik | Management cluster | Platform tooling isolado do produto |
 | User applications | Runtime cluster | Blast radius separado — mgmt down ≠ apps down |
@@ -69,7 +69,7 @@ src/
 │   ├── naming.ts               Nomes determinísticos
 │   ├── tags.ts                 Tags padrão
 │   ├── errors.ts               InfraError tipado
-│   └── execution.ts            Tracking de estado por fase e componente
+│   └── execution.ts            State tracking per phase and component
 ├── contracts/
 │   ├── provider.ts             Factory + 6 interfaces ISP
 │   ├── network.ts              NetworkSpec / Output
@@ -124,9 +124,9 @@ O state do Pulumi é armazenado no **DigitalOcean Spaces** (S3-compatible). Sem 
 └──────────────────────────────────┘
 ```
 
-### Bootstrap (uma vez, antes do primeiro deploy)
+### Bootstrap (once, before the first deploy)
 
-O bucket de state é "infra de dia zero" — precisa existir antes do Pulumi rodar.
+The state bucket is "day-zero infrastructure" — it must exist before Pulumi runs.
 
 ```bash
 # 1. Criar Spaces access keys no painel DO:
@@ -208,7 +208,7 @@ pulumi stack output runtimeKubeconfig --show-secrets > runtime.kubeconfig
 | `runtimeIngressReady` | `boolean` | Traefik deployed no runtime |
 | `runtimeIngressEndpoint` | `string` | LB IP/hostname do runtime |
 
-### Wiring (conexão entre componentes)
+### Wiring (how the components connect)
 
 ```bash
 pulumi stack output wiring --json
@@ -329,17 +329,17 @@ CloudProviderFactory
 
 ## Decisões de design
 
-**Por que 2 clusters?** Management cluster pode cair sem afetar apps em produção. ArgoCD down = deploys param, mas apps continuam rodando. Blast radius controlado.
+**Why 2 clusters?** The management cluster can go down without affecting apps in production. ArgoCD down means deploys stop while apps keep running — a contained blast radius.
 
-**Por que Gitea em VM?** Stateful + critical path. Pod restart em K8s pode corromper dados. VM dedicada é mais simples de operar, fazer backup e restaurar.
+**Why Gitea on a VM?** Stateful and on the critical path. A pod restart in K8s can corrupt data. A dedicated VM is simpler to operate, back up and restore.
 
-**Por que runners em VMs?** Builds consomem CPU/memória de forma imprevisível. Dentro do cluster, um build pesado causa eviction de pods do control plane.
+**Why runners on VMs?** Builds consume CPU and memory unpredictably. Inside the cluster, one heavy build evicts control-plane pods.
 
-**Por que managed PostgreSQL?** Backups automáticos, failover, patching sem overhead operacional. Estado da plataforma não deveria depender de um StatefulSet.
+**Why managed PostgreSQL?** Automatic backups, failover and patching with no operational overhead. The platform's state should not depend on a StatefulSet.
 
-**Por que ArgoCD só no mgmt?** ArgoCD é Kubernetes-native e gerencia o runtime cluster via kubeconfig. Não faz sentido colocá-lo fora do K8s.
+**Why ArgoCD only on the management cluster?** ArgoCD is Kubernetes-native and manages the runtime cluster through a kubeconfig. Putting it outside K8s makes no sense.
 
-**Portabilidade AWS:** Gitea VM → EC2, Spaces → S3, DOKS → EKS, DB → RDS. O modelo não muda — só as implementações dos providers.
+**AWS portability:** Gitea VM → EC2, Spaces → S3, DOKS → EKS, DB → RDS. The model does not change — only the provider implementations do.
 
 ## Dependências
 

@@ -10,7 +10,7 @@ Esses files foram criados iterativamente durante 9 Ralph iterations (2026-05-28)
 investigando HTTP 400 "error processing identity token" do Fulcio em LIVE builds.
 
 Iter 1-9 testaram (todos sem resolver):
-- `cenario-c-issuer-mismatch.yaml` — added 2nd OIDCIssuer entry (iss já matched)
+- `cenario-c-issuer-mismatch.yaml` — added 2nd OIDCIssuer entry (iss already matched)
 - `cenario-a-k3s-config.yaml` — K3s `anonymous-auth=true` + `jwks_uri=DNS`
 - `cenario-a-anonymous-discovery.yaml` — ClusterRoleBinding `system:unauthenticated`
 - `cenario-d-tls-ca-investigation.md` — investigation doc (Fulcio extraEnv blocker)
@@ -101,4 +101,4 @@ With CACert config: Fulcio go-oidc client uses provided PEM as trust root for K3
 
 - `git show 4f728eb7a:docs/plans/2026-05-28-M07-fulcio-cacert-keyless-LIVE-plan.md` v1.1 — current execution plan
 - `git show 4f728eb7a:docs/plans/2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan.md` v1.7 — predecessor (deferred, will be amended v1.8 cancelled by current plan)
-- `git show 4f728eb7a:docs/plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md` v1.2 — derived plan (M2 deferral será revertido v1.3)
+- `git show 4f728eb7a:docs/plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md` v1.2 — derived plan (the M2 deferral is reverted in v1.3)

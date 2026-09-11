@@ -1,27 +1,27 @@
-# Exceção de securityContext — `argo-events`
+# securityContext exception — `argo-events`
 
-**Data:** 2026-08-12 · **Status:** ACCEPTED · **Item:** `B-045` (bala 3)
-**Revisar até:** 2026-11-09
+**Date:** 2026-08-12 · **Status:** ACCEPTED · **Item:** `B-045` (bullet 3)
+**Review by:** 2026-11-09
 
-## Por que este chart não declara os quatro campos
+## Why this chart does not declare the four fields
 
-Ele **não tem pod spec própria**. `Chart.yaml` declara uma dependência do chart upstream
-`argo-events` 2.4.4 (pinado, com Renovate subindo patches), e este diretório é um *wrapper*: ele
-fornece valores, não templates de contêiner.
+It **has no pod spec of its own**. `Chart.yaml` declares a dependency on the upstream `argo-events`
+chart 2.4.4 (pinned, with Renovate raising patches), and this directory is a *wrapper*: it supplies
+values, not container templates.
 
-Endurecer aqui não é adicionar `securityContext` a um template nosso — é sobrescrever a árvore de
-valores do upstream, cujo esquema muda entre versões menores. Feito às cegas, um `values` que o
-upstream renomeia deixa de aplicar **em silêncio**, e o chart volta a rodar sem endurecimento com o
-gate verde. Esse modo de falha é pior que a lacuna: ele a esconde.
+Hardening here is not adding `securityContext` to a template we own — it is overriding the
+upstream's value tree, whose schema shifts between minor versions. Done blindly, a `values` key the
+upstream renames stops applying **silently**, and the chart runs unhardened again with the gate
+green. That failure mode is worse than the gap: it hides it.
 
-## O que esta exceção NÃO diz
+## What this exception does NOT say
 
-Não diz que o argo-events deve rodar privilegiado. Diz que o endurecimento dele é um trabalho de
-**overlay de valores contra um esquema upstream versionado**, que precisa ser verificado contra o
-render real — e que fazê-lo sem essa verificação produz garantia falsa.
+It does not say argo-events should run privileged. It says hardening it is a job of **overlaying
+values against a versioned upstream schema**, which has to be verified against the real render — and
+that doing it without that verification produces a false guarantee.
 
-## Condição de saída
+## Exit condition
 
-Ao subir a versão do chart upstream: ler o `values.yaml` dele, mapear os campos de `securityContext`
-que ele expõe, aplicá-los aqui, e confirmar no `helm template` que saem no manifesto renderizado.
-Confirmado isso, este arquivo é **deletado** — não atualizado.
+When the upstream chart version is raised: read its `values.yaml`, map the `securityContext` fields
+it exposes, apply them here, and confirm with `helm template` that they appear in the rendered
+manifest. Once confirmed, this file is **deleted**, not updated.

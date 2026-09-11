@@ -8,7 +8,7 @@ contra k3d standalone-multi.
 
 ```bash
 task dogfood:repro                                  # Run completo + summary
-bash infra/tests/livetest/dogfood/repro-findings.sh --json   # Apenas JSON (CI)
+bash infra/tests/livetest/dogfood/repro-findings.sh --json   # JSON only (CI)
 ```
 
 ## Output Schema
@@ -36,15 +36,15 @@ bash infra/tests/livetest/dogfood/repro-findings.sh --json   # Apenas JSON (CI)
 
 | Code | Meaning |
 |------|---------|
-| 0 | Todos os achados ainda REPRODUZEM (matriz consistente, nenhum fix mergeado) |
-| 1 | Pelo menos 1 achado FIXED — atualize a regression matrix e o CHANGELOG |
+| 0 | Every finding still REPRODUCES (matrix consistent, no fix merged) |
+| 1 | At least one finding FIXED — update the regression matrix and the CHANGELOG |
 | 2 | Erro de pre-condição (k3d ausente, kubectl falha) |
 
 ## Status `INDETERMINATE`
 
 Alguns checks dependem de outros (cascata). Por exemplo, F-07 (`/api/v1/version` retorna 404)
-não pode ser validado se F-01 (API inalcançável) ainda reproduz, porque a connect-refused
-mascara a 404. Quando F-01 for fixed, F-07 fica determinístico.
+cannot be validated while F-01 (API unreachable) still reproduces, because the connection refusal
+masks the 404. Once F-01 is fixed, F-07 becomes deterministic.
 
 ## Mapeamento Achado → Check Function
 

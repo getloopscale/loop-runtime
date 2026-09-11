@@ -52,7 +52,12 @@ No infrastructure to manage. No build config required. Just push.
 
 ## Project Status
 
-> **Production.** Running on DigitalOcean (3 DOKS clusters, managed PostgreSQL, Cloudflare Tunnel). Multi-cell architecture live (3 cells). Progressive delivery (canary deploys) shipped. The commercial managed runtime for loopzero customers; self-host via commercial license.
+> **Running in production for loopzero customers — not released to external users.** That is the
+> phase [`GOVERNANCE.md`](GOVERNANCE.md) declares, and it is what the word means here: backward
+> compatibility is not required, and legacy code is deleted rather than carried.
+>
+> On DigitalOcean (3 DOKS clusters, managed PostgreSQL, Cloudflare Tunnel), multi-cell live across
+> **2 cells** (`cell-0`, `cell-1`), progressive delivery shipped. Self-host via commercial licence.
 
 ### What Works (E2E Validated on DigitalOcean)
 
@@ -83,7 +88,7 @@ No infrastructure to manage. No build config required. Just push.
 | Idempotency | Retry-safe via `Idempotency-Key` header |
 | Image signing (cosign) | Every container image signed post-build |
 | Scale-to-zero (KEDA) | Manifest generation + Helm charts + Helmfile L2 bootstrap (cluster KEDA pending). KEDA HPA targets `Kind=Rollout` post-canary plan (T3.1) with `transfer-hpa-ownership` annotation so Argo Rollouts owns replica scaling during canary, KEDA after promotion. |
-| Cell architecture (3 cells LIVE) | PlacementEngine, DynamicRouter (`loopzero_cell_discovery_count=3`), cell-scoped queries, leader fencing, build admission gate, PG work queue, capacity tests. **Cell-2 ACTIVATED 2026-05-03**: tenant pin via `loopzero admin tenants pin --cell cell-1` → CR MergePatch + ArgoCD destination flip → workload Pod Running on loopzero-cell-1. 12/12 ADR gates LIVE GREEN persistente. Rollback SLO P50=648ms / P95=705ms (<<300s budget). EnvironmentReconciler cell-aware via `CellAwareRuntimeClientFactory` covers monolithic + split-binary builds. Heal H14+H15 codify cell-1 ClusterCredential refresh+bootstrap + ArgoCD bearer token sync. Production stages 4-5 (1 customer 7-day → 10/50/100%) pending Sprint 9 readiness review. |
+| Cell architecture (2 cells LIVE) | PlacementEngine, DynamicRouter,  cell-scoped queries, leader fencing, build admission gate, PG work queue, capacity tests. **Second cell activated 2026-05-03** (named `cell-2` then, `cell-1` since the B-001 rename): tenant pin via `loopzero admin tenants pin --cell cell-1` → CR MergePatch + ArgoCD destination flip → workload Pod Running on loopzero-cell-1. 12/12 ADR gates LIVE GREEN persistente. Rollback SLO P50=648ms / P95=705ms (<<300s budget). EnvironmentReconciler cell-aware via `CellAwareRuntimeClientFactory` covers monolithic + split-binary builds. Heal H14+H15 codify cell-1 ClusterCredential refresh+bootstrap + ArgoCD bearer token sync. Production stages 4-5 (1 customer 7-day → 10/50/100%) pending Sprint 9 readiness review. |
 | SecurityContext (non-root pods) | `runAsNonRoot`, `drop: ALL`, `readOnlyRootFilesystem` |
 | PodSecurity Admission | `restricted` profile on all tenant namespaces |
 | NetworkPolicy | Mandatory deny-all + explicit allow rules |
@@ -529,53 +534,52 @@ loopzero deploy (or git push)
 
 ### Edge Proxy vs Cluster Ingress (Caddy ↔ Traefik)
 
-**LoopZero coexiste DOIS proxies — nunca um trocou pelo outro. Servem camadas
-diferentes do request flow** (separation of concerns canonical, pattern
-FAANG: AWS ALB + NGINX Ingress, Cloudflare + Envoy/Istio).
+**LoopZero runs BOTH proxies — neither replaced the other. They serve different layers of the request
+flow** (the canonical separation of concerns: AWS ALB + NGINX Ingress, Cloudflare + Envoy/Istio).
 
 | Layer | Caddy (edge) | Traefik (cluster ingress) |
 |-------|--------------|---------------------------|
-| Onde roda | Host machine (VPS local OU dev workstation) | Dentro do workload cluster (K8s Deployment) |
-| Camada do request | L7 público — primeira parada após DNS | L7 interno — primeira parada após Caddy |
-| TLS público (Let's Encrypt) | ✅ Automático + grace renewal | ❌ Possível mas setup complexo |
-| Bind portas 80/443 do host | ✅ Naturalmente | ❌ K8s exige NodePort/LoadBalancer + port-forward |
-| Single binary, file config | ✅ Reload via `caddy reload` | ❌ Roda como Deployment + IngressRoute CRDs |
-| K8s native CRD | ❌ Não conhece K8s | ✅ IngressRoute operator nativo |
+| Where it runs | Host machine (local VPS or dev workstation) | Inside the workload cluster (K8s Deployment) |
+| Request layer | Public L7 — first stop after DNS | Internal L7 — first stop after Caddy |
+| Public TLS (Let's Encrypt) | ✅ Automatic + grace renewal | ❌ Possible, but complex to set up |
+| Binds host ports 80/443 | ✅ Naturally | ❌ K8s needs NodePort/LoadBalancer + port-forward |
+| Single binary, file config | ✅ Reload via `caddy reload` | ❌ Runs as a Deployment + IngressRoute CRDs |
+| Native K8s CRD | ❌ Knows nothing about K8s | ✅ Native IngressRoute operator |
 | Argo Rollouts canary | ❌ | ✅ TrafficRouter `traefik.io/v1alpha1` (weighted services) |
-| Multi-tenant routing por Host header | Possível mas verboso | ✅ Natural via IngressRoute CRD |
-| Cert interno cluster (`.loopzero.local`) | ❌ | ✅ via cert-manager + ClusterIssuer |
-| HTTP-01 ACME challenge | ✅ Auto | ❌ Não é foco |
+| Multi-tenant routing by Host header | Possible, but verbose | ✅ Natural via the IngressRoute CRD |
+| Internal cluster cert (`.loopzero.local`) | ❌ | ✅ via cert-manager + ClusterIssuer |
+| HTTP-01 ACME challenge | ✅ Auto | ❌ Not its focus |
 
-#### Request flow live (J-23 preview example)
+#### Live request flow (J-23 preview example)
 
 ```
 Browser
   ↓ DNS (Cloudflare: pr1-teste.preview-dev.loopzero.example → host IP)
   ↓
-Host machine porta 443
+Host machine, port 443
   ↓
 Caddy
-  ├─ TLS termination (Let's Encrypt automático)
+  ├─ TLS termination (Let's Encrypt, automatic)
   ├─ Block match: pr1-teste.preview-dev.loopzero.example
   └─ reverse_proxy https://172.18.0.10:443
        header_up Host tn-...-teste-api-preview-pr-1.loopzero.local
   ↓
 Workload cluster Traefik LoadBalancer (172.18.0.10:443)
   ↓
-Traefik IngressRoute (no namespace preview)
+Traefik IngressRoute (in the preview namespace)
   └─ match: Host(`tn-...-teste-api-preview-pr-1.loopzero.local`)
   ↓
 K8s Service teste-api-stable / teste-api-canary
   ↓
 Rollout Pod
   ↓
-App responde
+App responds
 ```
 
 #### Local k3d ↔ Prod DOKS
 
-Em produção (DOKS), Caddy é substituído por **Cloudflare Tunnel** (zero
-public IPs, all runtime via CF edge). Traefik permanece dentro do cluster.
+In production (DOKS), Caddy is replaced by **Cloudflare Tunnel** (zero public IPs, all runtime
+traffic through the CF edge). Traefik stays inside the cluster.
 
 ```
 Local dev/test:                       Prod (DOKS):
@@ -583,8 +587,8 @@ Internet → Caddy (host) → Traefik    Internet → CF Tunnel → Traefik
                           (k8s)                              (k8s)
 ```
 
-Caddy local é decisão pragmática: VPS com 1 binário ao invés de provisionar
-CF Tunnel + cluster reachability. Mesmo trade-off do `task setup` k3d vs DOKS.
+Caddy locally is a pragmatic call: one binary on a VPS instead of provisioning a CF Tunnel plus
+cluster reachability. The same trade-off as `task setup` on k3d rather than DOKS.
 
 ### Helm Charts Inventory (`infra/helm/`, 43 dirs)
 
