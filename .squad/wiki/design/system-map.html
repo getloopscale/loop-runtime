@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Components · Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--paper:#f5f5f5;--paper2:#ececec;--ink:#2d3142;--muted:#4f5d75;--soft:#7a8399;--rule:#bfc0c0;--accent:#eb6c36;
+--sans:'Geist',system-ui,sans-serif;--serif:'Instrument Serif',serif;--mono:'Geist Mono',ui-monospace,monospace}
+body{font-family:var(--sans);background:var(--paper);color:var(--ink);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:3rem 2rem}
+.frame{max-width:1240px;width:100%}
+.eyebrow{font-family:var(--mono);font-size:.66rem;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem}
+h1{font-family:var(--serif);font-size:clamp(1.5rem,2.4vw + .75rem,2rem);font-weight:400;letter-spacing:-.02em;line-height:1.15;margin-bottom:.4rem}
+.standfirst{font-size:.9rem;color:var(--muted);max-width:66ch;line-height:1.5;margin-bottom:2rem}
+svg{width:100%;height:auto;display:block}
+.note{margin-top:1.75rem;padding-top:1rem;border-top:1px solid var(--rule);font-size:.78rem;color:var(--soft);line-height:1.6;max-width:76ch}
+.note strong{color:var(--muted);font-weight:500}
+</style></head>
+<body><div class="frame">
+<p class="eyebrow">LoopZero · D5 · Architecture · derived</p>
+<h1>Ten pieces, four zones</h1>
+<p class="standfirst">Drawn last, from D1&ndash;D4. A component map produced first looks like design happened and forces no choice; this one is a summary of decisions already made, and the gate checks it against the declared pieces.</p>
+
+<svg viewBox="0 0 1180 640" role="img" aria-label="Four zones: authoring, the route from nothing to running, the customer cell, and state. Ten pieces placed across them.">
+<defs><marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 1 L9 5 L0 9z" fill="#4f5d75"/></marker>
+<marker id="mc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 1 L9 5 L0 9z" fill="#eb6c36"/></marker></defs>
+
+<!-- zone: authoring -->
+<rect x="30" y="70" width="200" height="230" rx="10" fill="#ececec" stroke="#bfc0c0" stroke-width="1.2"/>
+<text x="48" y="96" font-family="Geist Mono" font-size="8" letter-spacing="0.18em" fill="#7a8399">AUTHORING</text>
+<rect x="52" y="120" width="156" height="50" rx="8" fill="#f5f5f5" stroke="#2d3142" stroke-width="1.5"/>
+<text x="130" y="141" text-anchor="middle" font-family="Geist" font-size="11" font-weight="600" fill="#2d3142">Authoring surface</text>
+<text x="130" y="155" text-anchor="middle" font-family="Geist Mono" font-size="7.5" fill="#7a8399">PIECE-1</text>
+<rect x="52" y="204" width="156" height="50" rx="8" fill="#f5f5f5" stroke="#2d3142" stroke-width="1.5"/>
+<text x="130" y="225" text-anchor="middle" font-family="Geist" font-size="11" font-weight="600" fill="#2d3142">Prompt &amp; skills</text>
+<text x="130" y="239" text-anchor="middle" font-family="Geist Mono" font-size="7.5" fill="#7a8399">PIECE-5</text>
+
+<!-- zone: the route -->
+<rect x="272" y="70" width="470" height="230" rx="10" fill="#ececec" stroke="#4f5d75" stroke-width="1.4"/>
+<text x="290" y="96" font-family="Geist Mono" font-size="8" letter-spacing="0.18em" fill="#4f5d75">FROM NOTHING TO RUNNING — ONE ROUTE, NO FORK</text>
+<g font-family="Geist" font-size="11" font-weight="600" text-anchor="middle">
+<rect x="292" y="150" width="96" height="46" rx="8" fill="#f5f5f5" stroke="#2d3142" stroke-width="1.5"/><text x="340" y="170" fill="#2d3142">Entry</text><text x="340" y="184" font-family="Geist Mono" font-size="7.5" font-weight="400" fill="#7a8399">PIECE-6</text>
+<rect x="404" y="150" width="96" height="46" rx="8" fill="#f5f5f5" stroke="#2d3142" stroke-width="1.5"/><text x="452" y="170" fill="#2d3142">Build</text><text x="452" y="184" font-family="Geist Mono" font-size="7.5" font-weight="400" fill="#7a8399">PIECE-10</text>
+<rect x="516" y="150" width="96" height="46" rx="8" fill="#f5f5f5" stroke="#2d3142" stroke-width="1.5"/><text x="564" y="170" fill="#2d3142">Publish</text><text x="564" y="184" font-family="Geist Mono" font-size="7.5" font-weight="400" fill="#7a8399">PIECE-7</text>
+<rect x="628" y="150" width="96" height="46" rx="8" fill="#f5f5f5" stroke="#2d3142" stroke-width="1.5"/><text x="676" y="170" fill="#2d3142">Distribute</text><text x="676" y="184" font-family="Geist Mono" font-size="7.5" font-weight="400" fill="#7a8399">PIECE-8</text>
+</g>
+<line x1="388" y1="173" x2="398" y2="173" stroke="#4f5d75" stroke-width="1.3" marker-end="url(#m)"/>
+<line x1="500" y1="173" x2="510" y2="173" stroke="#4f5d75" stroke-width="1.3" marker-end="url(#m)"/>
+<line x1="612" y1="173" x2="622" y2="173" stroke="#4f5d75" stroke-width="1.3" marker-end="url(#m)"/>
+
+<!-- zone: cell -->
+<rect x="784" y="70" width="366" height="230" rx="10" fill="#ececec" stroke="#eb6c36" stroke-width="1.5" stroke-dasharray="7 4"/>
+<text x="802" y="96" font-family="Geist Mono" font-size="8" letter-spacing="0.18em" fill="#eb6c36">CELL — CUSTOMER AWS ACCOUNT</text>
+<rect x="806" y="120" width="150" height="50" rx="8" fill="#f5f5f5" stroke="#2d3142" stroke-width="1.5"/>
+<text x="881" y="141" text-anchor="middle" font-family="Geist" font-size="11" font-weight="600" fill="#2d3142">Cell provisioning</text>
+<text x="881" y="155" text-anchor="middle" font-family="Geist Mono" font-size="7.5" fill="#7a8399">PIECE-9</text>
+<rect x="980" y="120" width="150" height="50" rx="8" fill="#f5f5f5" stroke="#eb6c36" stroke-width="2"/>
+<text x="1055" y="141" text-anchor="middle" font-family="Geist" font-size="11" font-weight="600" fill="#eb6c36">Application</text>
+<text x="1055" y="155" text-anchor="middle" font-family="Geist Mono" font-size="7.5" fill="#eb6c36">the customer's agent</text>
+<line x1="956" y1="145" x2="974" y2="145" stroke="#4f5d75" stroke-width="1.3" marker-end="url(#m)"/>
+<text x="881" y="200" text-anchor="middle" font-family="Geist Mono" font-size="7.5" fill="#7a8399">brought into existence once —</text>
+<text x="881" y="213" text-anchor="middle" font-family="Geist Mono" font-size="7.5" fill="#7a8399">beside the path, not on it</text>
+
+<!-- zone: state -->
+<rect x="272" y="356" width="878" height="200" rx="10" fill="#ececec" stroke="#bfc0c0" stroke-width="1.2"/>
+<text x="290" y="382" font-family="Geist Mono" font-size="8" letter-spacing="0.18em" fill="#7a8399">STATE — THREE PIECES, THREE DIFFERENT DURABILITY ANSWERS (D4)</text>
+<rect x="330" y="412" width="200" height="56" rx="8" fill="#f5f5f5" stroke="#eb6c36" stroke-width="2" stroke-dasharray="6 4"/>
+<text x="430" y="436" text-anchor="middle" font-family="Geist" font-size="11" font-weight="600" fill="#eb6c36">Agent state</text>
+<text x="430" y="451" text-anchor="middle" font-family="Geist Mono" font-size="7.5" fill="#eb6c36">PIECE-2 · persistence unresolved</text>
+<rect x="580" y="412" width="200" height="56" rx="8" fill="#f5f5f5" stroke="#2d3142" stroke-width="1.5"/>
+<text x="680" y="436" text-anchor="middle" font-family="Geist" font-size="11" font-weight="600" fill="#2d3142">Knowledge retrieval</text>
+<text x="680" y="451" text-anchor="middle" font-family="Geist Mono" font-size="7.5" fill="#7a8399">PIECE-3</text>
+<rect x="830" y="412" width="200" height="56" rx="8" fill="#f5f5f5" stroke="#2d3142" stroke-width="1.5"/>
+<text x="930" y="436" text-anchor="middle" font-family="Geist" font-size="11" font-weight="600" fill="#2d3142">Execution record</text>
+<text x="930" y="451" text-anchor="middle" font-family="Geist Mono" font-size="7.5" fill="#7a8399">PIECE-4 · durable</text>
+
+<!-- cross-zone edges -->
+<path d="M130 254 L130 280 L290 280" fill="none" stroke="#4f5d75" stroke-width="1.3" marker-end="url(#m)"/>
+<path d="M130 170 L130 200" fill="none" stroke="#4f5d75" stroke-width="1.3" marker-end="url(#m)" transform="translate(0,34) scale(1,-1) translate(0,-374)"/>
+<path d="M724 196 C 760 196 770 145 800 145" fill="none" stroke="#4f5d75" stroke-width="1.3" marker-end="url(#m)"/>
+<path d="M1030 170 C 1030 300 620 320 460 406" fill="none" stroke="#eb6c36" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#mc)"/>
+<path d="M1050 170 C 1050 300 760 330 700 406" fill="none" stroke="#4f5d75" stroke-width="1.3" marker-end="url(#m)"/>
+<path d="M1070 170 C 1090 300 960 330 940 406" fill="none" stroke="#4f5d75" stroke-width="1.3" marker-end="url(#m)"/>
+
+<text x="1150" y="600" text-anchor="end" font-family="Geist Mono" font-size="8" letter-spacing="0.06em" fill="#7a8399">10 pieces declared · 10 placed · verified by check_design_completeness.py</text>
+</svg>
+
+<p class="note"><strong>What the map says that the list did not.</strong> Cell provisioning sits <em>beside</em> the path, not on it — a cell is brought into existence once while an app deploys many times, and drawing them in sequence would put a one-time act on the hot path. The three state pieces are one zone and three components, because D4 gives them three different durability answers and two of those are still open. And PIECE-5 feeds PIECE-1 and nothing else: if the catalogue is also read at runtime, this map is missing an edge and is wrong.</p>
+</div></body></html>

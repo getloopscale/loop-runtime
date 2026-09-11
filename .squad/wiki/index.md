@@ -24,6 +24,25 @@ declared here.
 - [product/alignment.md](product/alignment.md) — the sign-off, its amendment history, and the
   limitation declared before signing
 
+## Design — the system drawn before a backlog is filed against it
+
+`cycle-design`, phase 0. Four drawings force the decisions no product retrofits; the fifth is
+DERIVED from them, because a map drawn first looks like design happened and forces no choice.
+
+- [design/states.md](design/states.md) — D1, the lifecycle an application moves through
+- [design/trust.md](design/trust.md) — D2, where the trust boundaries sit
+- [design/sequence.md](design/sequence.md) — D3, call order including failures
+- [design/durability.md](design/durability.md) — D4, what survives what
+- [design/system-map.md](design/system-map.md) — D5, the component map derived from the four
+- [design/sign-off.md](design/sign-off.md) — the sign-off, **unsigned**, with 6 open questions
+- [design/what-needs-your-review.md](design/what-needs-your-review.md) — what a person must decide
+
+**Two were answered on 2026-09-11.** D3 was never open — C1 of the extraction RFC decided the build
+runs on the customer's infrastructure before this drawing asked. D4 is **yes**: agent state survives
+a pod restart because it was never in the pod, it is in `loopzero-memory`'s Postgres. Answering D4
+exposed the finding: **that evidence lives in a repository `loopzero` does not build, and no gate here
+watches the edge.**
+
 ## Architecture views — measured 2026-09-11
 
 Each view ships a Markdown concept and an interactive render — React Flow bundled inline for four of

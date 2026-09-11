@@ -121,6 +121,17 @@ not test the claim the title makes.
 them fails OBJ-2 without failing REQ-5 through REQ-8. A distinct failure needs a distinct
 requirement.
 
+**REQ-5's evidence lives in a repository this one does not build — found 2026-09-11 by the
+design drawings.** The state survives a restart because it was never in the pod: it is in
+`loopzero-memory`'s Postgres, 34 migrations and 17 tables at head. Measured in `loopzero`, the renderer
+emits `Deployment` or `Rollout`, never `StatefulSet`, and places no `PersistentVolumeClaim` on the
+user's path.
+
+**So the promise holds only while the `loopzero` ↔ `loopzero-memory` edge holds, and no gate here watches
+it.** A migration in `loopzero-memory` that drops a table takes this requirement with it, silently,
+while every test in this repository stays green. The acceptance criterion above — kill the process,
+read back what was written — would catch it, and only if somebody runs it.
+
 **Why REQ-5 serves two objectives:** if memory only survives in a store we host, she needs an
 account and OBJ-4 falls. Writing the second citation is what makes that tension visible now
 rather than in phase 4.
