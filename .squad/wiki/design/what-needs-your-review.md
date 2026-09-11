@@ -54,7 +54,7 @@ Five drawings. One question of the seven is now **resolved**; six remain.
 | D1 | Is there a suspended state for an idle agent? | open — **backlog** |
 | D1 | What happens to a running app during a platform upgrade? No `Draining` phase | open — **backlog** |
 | D2 | Egress allowlist for the customer's app? | open — **backlog** |
-| D2 | Isolation: account separates BYOC customers, namespace separates projects — **what separates two solo developers on a shared cell?** | open — **BLOCKS the backlog**. Restated 2026-09-11; two thirds of it were already decided in code |
+| D2 | Isolation — account, namespace, or kernel sandbox? | **RESOLVED 2026-09-11** — account for BYOC, namespace for projects, shared kernel on the managed door. Researched against 6 platforms; Vercel's own docs draw the line at agent-generated code |
 | D3 | Build runs in the customer's cell or on platform infra? | **RESOLVED** — the customer's, by C1 of the extraction RFC, before this drawing asked |
 | D4 | Is an in-flight turn checkpointed before it completes? | open — new, from resolving the one above. **Backlog, not a pre-condition** |
 

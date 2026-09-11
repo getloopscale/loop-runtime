@@ -26,7 +26,7 @@ diagram reads as a decision that was made, which is worse than an absent one.
 | D1 | Is there a suspended state for an idle agent? | Decides whether an idle long-running agent costs money |
 | D1 | What happens to a running app during a platform upgrade? No `Draining` phase exists | Decides whether "long-running" survives our own deploys |
 | D2 | Is there an egress allowlist for the customer's app? | An agent that can reach anything is a different product |
-| D2 | ~~Is tenant isolation namespace, node, or cell?~~ **RESTATED 2026-09-11** — *on the managed door, is a shared kernel acceptable for agent workloads?* | Cannot be retrofitted. The original offered three exclusive answers to what is a stack, and included a level (node) never used for tenant isolation |
+| ~~D2~~ | ~~Is tenant isolation namespace, node, or cell?~~ **ANSWERED 2026-09-11** — account for BYOC, namespace for projects, and a shared kernel on the managed door, deliberately | Was the one question that could not be retrofitted. Researched against Heroku, Railway, Vercel, Supabase, PlanetScale and Confluent |
 | ~~D3~~ | ~~Build in the customer's cell or on platform infrastructure?~~ **ANSWERED — the customer's.** | Decided by C1 of the extraction RFC before this drawing asked. See below |
 | ~~D4~~ | ~~Does agent state survive a pod restart?~~ **ANSWERED 2026-09-11 — yes.** | State lives in `loopzero-memory`'s Postgres, not in the pod. See below |
 | D4 | Is an in-flight turn checkpointed before it completes? | Decides the blast radius of one pod eviction. Reworded 2026-09-11 — it asked *"is there a checkpoint interval"*, which presumes a mechanism that may not exist |
@@ -38,9 +38,9 @@ diagram reads as a decision that was made, which is worse than an absent one.
       Postgres and outlives the pod, and the blast radius of an eviction is the
       in-flight turn
 - [ ] Every PIECE-N has a place in D5, and no component in D5 lacks a piece
-- [ ] Isolation is decided BEFORE the backlog opens: the AWS account separates BYOC
-      customers, the namespace separates one customer's projects, and what separates two
-      solo developers on a shared cell is the question that remains
+- [ ] Isolation is settled: the AWS account separates BYOC customers, the namespace
+      separates one customer's projects, and two developers on the managed door share a
+      kernel — deliberately, with the exit condition written
 - [ ] The other four open questions are registered as `B-NNN` and measured there, not
       held as pre-conditions on the backlog itself
 
@@ -56,16 +56,25 @@ the hypothesis and let the measurement decide.
 
 So the reviewer now signs WHICH question blocks and why, rather than that five things come first.
 
-**The two doors were named on 2026-09-11** —
-[`../decisions/two-doors-managed-and-byoc.md`](../decisions/two-doors-managed-and-byoc.md) — and that
-answers most of D2 from code that already existed. The AWS account separates BYOC customers; the
-namespace `loopzero-{tenant}-{project}-{env}` separates one customer's projects, sponsor-directed on
-2026-06-07 and recorded verbatim in `pkg/naming/naming.go`.
+**D2 is answered as of 2026-09-11** —
+[`../decisions/shared-kernel-on-the-managed-door.md`](../decisions/shared-kernel-on-the-managed-door.md).
+Two thirds came from code that already existed: the AWS account separates BYOC customers
+([`two-doors-managed-and-byoc.md`](../decisions/two-doors-managed-and-byoc.md)), and the namespace
+`loopzero-{tenant}-{project}-{env}` separates one customer's projects, sponsor-directed 2026-06-07 and
+verbatim in `pkg/naming/naming.go`.
 
-What survives is narrower and harder: **two solo developers on a shared cell are separated by a
-namespace label and nothing else.** `runtimeClass` appears in zero files. For a web app that is the
-correct default; for LLM-generated code calling tools, it is a product decision, and reversing it
-later means re-platforming the managed door.
+The last third was decided against the market rather than against taste. Heroku's standard dynos
+*"share an underlying compute instance"*; Railway documents *"container isolation is shared-kernel"*;
+Supabase and PlanetScale put BYOC at enterprise with no middle rung. **Vercel draws the real line**:
+it runs normal deploys in containers and shipped a SEPARATE product, Firecracker-backed, for
+*"untrusted or agent-generated code"*.
+
+LoopZero's managed door is on the container side of that line, measured: the pod runs the image she
+built, the PTY backend was deliberately moved out of the default path, and the hooks that can spawn
+a shell are deny-by-default with a command fingerprint.
+
+**The exit condition is written** — reopen the day LoopZero offers execution of agent-generated code as
+a platform capability, and build it beside the PaaS rather than inside it.
 
 Sign with `/sign`:
 
