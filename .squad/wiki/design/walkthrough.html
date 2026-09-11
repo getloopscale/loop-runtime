@@ -88,7 +88,7 @@ figure.diagram .mermaid{min-width:min-content}
     <div><dt>Famílias</dt><dd>anthropic + openai</dd></div>
     <div><dt>Rondas</dt><dd>4</dd></div>
     <div><dt>Peças cobertas</dt><dd>10 / 10</dd></div>
-    <div><dt>Assinatura</dt><dd style="color:var(--open)">7 caixas em branco</dd></div>
+    <div><dt>Veredito</dt><dd class="ok">assinado · human/paulo</dd></div>
   </dl>
   <nav class="toc">
     <a href="#states">D1 · ciclo de vida</a><a href="#trust">D2 · confiança</a>
@@ -141,13 +141,13 @@ figure.diagram .mermaid{min-width:min-content}
     end
     subgraph platform[&quot;LOOPZERO CONTROL PLANE — ours, both doors&quot;]
         api[Control API]
-        pg[(Postgres — tenants, releases, metering&lt;br/&gt;NOT the execution record)]
+        pg[(&quot;Postgres — tenants, releases, metering&lt;br/&gt;NOT the execution record&quot;)]
         minio[(MinIO)]
     end
     api --&gt;|&quot;holds per-cell kubeconfig, reaches IN&quot;| ops
     api --&gt; pg
     api --&gt; minio
-    app --&gt;|&quot;agent memory, execution record&quot;| dp[[&quot;loopzero-memory · loopzero-lens · loopzero-rag&lt;br/&gt;the developer&#x27;s services. Not in any cell&lt;br/&gt;composition; production placement undeclared&quot;]]
+    app --&gt;|&quot;agent memory, execution record&quot;| dp[[&quot;loopzero-memory · loopzero-lens · loopzero-rag&lt;br/&gt;in no cell composition&lt;br/&gt;production placement undeclared&quot;]]
     app_a --&gt; api
     app_b --&gt; api</pre></figure>
   <div class="cols"><div class="notes decided"><h4>Decidido</h4><ul><li><b>A credencial aponta para dentro</b><span>O control plane guarda o kubeconfig por cell e alcança a cell — <code>k8s_cell_store.go</code>, <code>router.go</code>, <code>cross_cluster_token_review.go</code>.</span></li><li><b>O workload não escreve estado pela Control API</b><span>Ela não tem rota de memory, lens ou rag. O app escreve direto no data plane.</span></li></ul></div><div class="notes open"><h4>Em aberto</h4><ul><li><b>O control plane assume um papel para dentro, ou um agente egress-only alcança para fora?</b><span>WarpStream e Nuon argumentam contra o cross-account role assumido. O registro de decisão classifica esta como a questão de maior alavancagem, e o mecanismo ainda não foi construído.</span></li><li><b>Existe allowlist de egress para o app do cliente?</b><span>O namespace da plataforma exclui RFC1918 e <code>169.254/16</code>; o do tenant não. Registrado como <code>B-226</code>.</span></li></ul></div></div>
@@ -184,7 +184,7 @@ figure.diagram .mermaid{min-width:min-content}
   <header class="sec-head"><span class="dnum">D4</span><h2>O que sobrevive a quê</h2></header>
   <p class="lead">Para uma plataforma de agentes de longa duração, este é o desenho que define o produto. Um agente que perde seu trabalho num restart de pod não é um agente de longa duração.</p>
   <figure class="diagram"><pre class="mermaid">flowchart LR
-    app[Application workload] --&gt;|writes| lens[(loopzero-lens — execution record&lt;br/&gt;the developer&#x27;s service. WHERE it runs in&lt;br/&gt;production is not declared)]
+    app[Application workload] --&gt;|writes| lens[(&quot;loopzero-lens — execution record&lt;br/&gt;WHERE it runs in production&lt;br/&gt;is not declared&quot;)]
     app --&gt;|writes| minio[(MinIO — artifacts)]
     lens --&gt;|survives pod, node, upgrade| lens
     app --&gt;|&quot;memories, entities, history&quot;| mem[(&quot;loopzero-memory — Postgres&quot;)]</pre></figure>
@@ -240,7 +240,6 @@ figure.diagram .mermaid{min-width:min-content}
   produz, duas transições de deleção que não existem, o rótulo do grace period, a direção da
   credencial, uma aresta afirmando que o app escreve memória pela Control API — que não tem essa
   rota — e dois bancos diferentes com o mesmo nome.</p>
-  <p><b>O painel julga o conteúdo; a assinatura é de uma pessoa.</b> As sete caixas de
-  <code>sign-off.md</code> continuam em branco, e nenhuma delas espera mais uma decisão.</p>
+  <p><b>O painel julga o conteúdo; a assinatura é de uma pessoa.</b> As sete caixas foram assinadas em 11 de setembro de 2026 — com o registro, dentro do documento, de que o signatário também é autor e de que essa assinatura vale menos que a de um revisor que não escreveu o texto. O gate computa <code>DESIGN_AGREED</code>.</p>
 </section>
 </div>

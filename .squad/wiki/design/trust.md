@@ -29,13 +29,13 @@ flowchart TB
     end
     subgraph platform["LOOPZERO CONTROL PLANE — ours, both doors"]
         api[Control API]
-        pg[(Postgres — tenants, releases, metering<br/>NOT the execution record)]
+        pg[("Postgres — tenants, releases, metering<br/>NOT the execution record")]
         minio[(MinIO)]
     end
     api -->|"holds per-cell kubeconfig, reaches IN"| ops
     api --> pg
     api --> minio
-    app -->|"agent memory, execution record"| dp[["loopzero-memory · loopzero-lens · loopzero-rag<br/>the developer's services. Not in any cell<br/>composition; production placement undeclared"]]
+    app -->|"agent memory, execution record"| dp[["loopzero-memory · loopzero-lens · loopzero-rag<br/>in no cell composition<br/>production placement undeclared"]]
     app_a --> api
     app_b --> api
 ```

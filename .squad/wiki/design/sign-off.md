@@ -31,17 +31,17 @@ diagram reads as a decision that was made, which is worse than an absent one.
 | ~~D4~~ | ~~Does agent state survive a pod restart?~~ **ANSWERED 2026-09-11 — yes.** | State lives in `loopzero-memory`'s Postgres, not in the pod. See below |
 | ~~D4~~ | ~~Is an in-flight turn checkpointed before it completes?~~ **ANSWERED — durable state is the developer's, through the data plane.** | `loopzero-memory` / `loopzero-lens` / `loopzero-rag` already implement it. The framework builds nothing |
 
-- [ ] The six phases in D1 are the real lifecycle, and `Cleaned` is the only terminal one
-- [ ] The trust boundary in D2 is the account boundary, and the open egress question is real
-- [ ] The failure paths in D3 are the ones a developer actually hits
-- [ ] The durability table in D4 is honest — agent state lives in `loopzero-memory`'s
+- [x] The six phases in D1 are the real lifecycle, and `Cleaned` is the only terminal one  <!-- signed-by: human/paulo -->
+- [x] The trust boundary in D2 is the account boundary, and the open egress question is real
+- [x] The failure paths in D3 are the ones a developer actually hits
+- [x] The durability table in D4 is honest — agent state lives in `loopzero-memory`'s
       Postgres and outlives the pod, and the blast radius of an eviction is the
       in-flight turn
-- [ ] Every PIECE-N has a place in D5, and no component in D5 lacks a piece
-- [ ] Isolation is settled: the AWS account separates BYOC customers, the namespace
+- [x] Every PIECE-N has a place in D5, and no component in D5 lacks a piece
+- [x] Isolation is settled: the AWS account separates BYOC customers, the namespace
       separates one customer's projects, and two developers on the managed door share a
       kernel — deliberately, with the exit condition written
-- [ ] The four remaining questions are answered by one invariant — **no agent state lives
+- [x] The four remaining questions are answered by one invariant — **no agent state lives
       in the pod** ([decision](../decisions/agent-state-never-lives-in-the-pod.md)) — and what is left is work, not decisions
 
 **The last box was split on 2026-09-11, and the count it carried was wrong.** It read *"the
@@ -159,3 +159,11 @@ content of being wrong.
   [`sequence.md`](sequence.md) · [`durability.md`](durability.md) · [`system-map.md`](system-map.md)
 - [`what-needs-your-review.md`](what-needs-your-review.md) — the same questions, as a worklist
 - [`../product/trd.md`](../product/trd.md) — where `REQ-5` makes the promise D4 rests on
+
+**Signed 2026-09-11 by `human/paulo` — a person, not a judge.**
+
+What a signature asserts is that someone read this and is willing to say it holds. It does not assert that a machine checked it: the deterministic score sits above, and the two are separate claims on purpose.
+
+**The signer is also an author of this document.** The reviewer and the author are normally separate, and here they are not. Reason given: solo project; no second reviewer exists
+
+This signature is weaker than one from a reviewer who did not write the document, and the record says so rather than blurring it.

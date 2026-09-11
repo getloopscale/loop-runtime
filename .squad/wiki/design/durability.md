@@ -19,7 +19,7 @@ product. An agent that loses its work to a pod restart is not a long-running age
 
 ```mermaid
 flowchart LR
-    app[Application workload] -->|writes| lens[(loopzero-lens — execution record<br/>the developer's service. WHERE it runs in<br/>production is not declared)]
+    app[Application workload] -->|writes| lens[("loopzero-lens — execution record<br/>WHERE it runs in production<br/>is not declared")]
     app -->|writes| minio[(MinIO — artifacts)]
     lens -->|survives pod, node, upgrade| lens
     app -->|"memories, entities, history"| mem[("loopzero-memory — Postgres")]
