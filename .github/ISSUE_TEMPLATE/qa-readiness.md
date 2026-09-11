@@ -14,14 +14,14 @@ Operator runs `gh issue create` from this template AFTER sponsor JUNTOS Step 7 P
 
 ## Milestone metadata
 
-- **Milestone:** M7 of `.claude/knowledge-base/plans/qa-readiness-roadmap-2026-06-23.md`
+- **Milestone:** M7 of the QA-readiness roadmap (the `.claude/knowledge-base/` tree that held it no longer exists; `.claude/` is gitignored)
 - **Date:** YYYY-MM-DD
 - **Operator:** <name>
 - **Sponsor present:** <name(s)>
-- **Plan:** `.claude/knowledge-base/plans/m7-cleanroom-validation-readiness-plan.md`
-- **ADR:** `.claude/knowledge-base/decisions/2026-06-23-validation-milestone-sponsor-hard-stop.md`
-- **Runbook followed:** `docs/operations/m7-cleanroom-validation-runbook.md`
-- **Baseline captured:** `docs/operations/baselines/YYYY-MM-DD-qa-readiness-complete.md`
+- **Plan:** the M7 cleanroom-validation readiness plan (same removed tree)
+- **ADR:** validation-milestone sponsor hard stop, 2026-06-23 (same removed tree)
+- **Runbook followed:** `git show 4f728eb7a:docs/operations/m7-cleanroom-validation-runbook.md`
+- **Baseline captured:** _(path — `docs/operations/baselines/` was removed in the 2026-09-11 consolidation)_
 
 ## Chain step results
 
@@ -34,7 +34,7 @@ Operator runs `gh issue create` from this template AFTER sponsor JUNTOS Step 7 P
 | 4 | dogfood-all.sh --live-only --json | ~Xmin | <X/13 PASS> | per-wrapper log: /tmp/dogfood-all-*.log |
 | 5 | live-proof-dev-public.sh | ~30s | <X/9 PASS> | layer 1-3 probes |
 | 6 | run-chaos.sh × 2 | ~Xmin | <X/2 PASS> | gitea-outage + pod-kill-api-leader |
-| 6.5 | Baseline capture | ~5min | <DONE> | filed at `docs/operations/baselines/YYYY-MM-DD-qa-readiness-complete.md` |
+| 6.5 | Baseline capture | ~5min | <DONE> | filed where baselines are now kept (`docs/operations/baselines/` was removed 2026-09-11) |
 | 7 | Sponsor JUNTOS browser walkthrough | ~30min | <PASS/FAIL> | sponsor verbatim quote below |
 
 ## Sponsor verbatim quote (HARD STOP marker #4)
@@ -73,5 +73,5 @@ M7 itself remains ✅ COMPLETED for this dated run; followups are tracked separa
 
 - Closes M7 of `qa-readiness-roadmap-2026-06-23.md`
 - Closes the canonical pattern established by ADR `2026-06-23-validation-milestone-sponsor-hard-stop.md` § Worked example
-- Run-file: `.claude/knowledge-base/roadmap-runs/M7-YYYY-MM-DD.md`
-- Mandate INQUEBRÁVEL: `.claude/rules/cleanroom-up-live-test-mandate.md` (sponsor verbatim 2026-06-10 + 2026-06-16)
+- Run-file: the M7 roadmap run (the `.claude/knowledge-base/` tree that held it no longer exists)
+- Unbreakable mandate (sponsor verbatim 2026-06-10 + 2026-06-16): Cleanroom TOTAL → UP → seeds → DOGFOOD FULL → LIVE TEST → QA Red Team; warm-infra results are not LIVE-valid. The rule file `.claude/rules/cleanroom-up-live-test-mandate.md` no longer exists.

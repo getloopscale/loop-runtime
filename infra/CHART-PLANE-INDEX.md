@@ -2,7 +2,7 @@
 
 Qual plano cada chart de `charts/` pertence, e **como isso foi provado**. Executa a terceira
 bala do `B-048` e a consequência do ADR
-[`2026-08-12-umbrella-chart-plane-separation`](../docs/wiki/decisions/2026-08-12-umbrella-chart-plane-separation.md).
+[`2026-08-12-umbrella-chart-plane-separation`](git show 4f728eb7a:docs/wiki/decisions/2026-08-12-umbrella-chart-plane-separation.md).
 
 ## Por que este arquivo existe
 
@@ -47,7 +47,7 @@ instaladas como um único release. O `B-048` decidiu que isso era composição s
 **deliberada**, não descuido.
 
 **Ele foi removido porque não instalava.** Medido em 2026-08-19: `helm template` sai com
-`rc=1` e **zero linhas** — sem profile, com `profiles/dev.yaml` e com `profiles/prod.yaml`.
+`rc=1` e **zero linhas** — sem profile, com `helmfile/environments/dev.yaml` e com `helmfile/environments/prod.yaml`.
 Os `values.schema.json` dos subcharts recusam `global` e `enabled`, que são exatamente as
 chaves que uma composição guarda-chuva injeta.
 

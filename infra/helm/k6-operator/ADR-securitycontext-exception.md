@@ -33,8 +33,8 @@ controller-manager pod for several reasons:
    NOT expose `podSecurityContext` / `containerSecurityContext` keys
    directly — they're hardcoded in templates with upstream defaults.
 
-2. **Pod-spec ergonomic mismatch**: the audit script
-   (`scripts/audit-security-context.sh`) scans `values.yaml` for the
+2. **Pod-spec ergonomic mismatch**: the audit script (whose path,
+   `scripts/audit-security-context.sh`, exists in no commit) scans `values.yaml` for the
    4 keywords. Since the upstream chart doesn't surface them via values,
    the audit cannot SEE the enforced defaults — false negative on a
    chart that IS hardened at image level.
@@ -98,7 +98,7 @@ on the following grounds:
 
 ## References
 
-- `scripts/audit-security-context.sh` — audit logic
+- The security-context audit logic. (`scripts/audit-security-context.sh`, cited here until 2026-09-11, exists in no commit.)
 - `infra/helm/promtail/ADR-securitycontext-exception.md` — precedent for
   hardening-incompatible operator
 - `infra/helm/nfs-server-provisioner/ADR-securitycontext-exception.md`

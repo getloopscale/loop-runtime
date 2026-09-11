@@ -26,7 +26,7 @@ task test:chaos:all                # Run all chaos experiments sequentially
 ## How a load test runs
 
 1. `task test:load:l2` invokes `kubectl apply` with an envsubst'd
-   `k6/job-template.yaml` + the L2 script.
+   `../performance/k6/job-template.yaml` + the L2 script.
 2. Init container builds a fresh git bundle fixture at `/fixtures/bundle.bin`.
 3. Init container seeds 50 tenants into PG via the shared `seed.sh`.
 4. Main container runs `k6 run scripts/l2-50-tenants.js` with

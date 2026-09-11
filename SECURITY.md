@@ -76,7 +76,7 @@ The CLI moved to the `loopzero-cli` repository at M2; its `npm audit` runs there
 - **External Secrets Operator** projects them into workload namespaces; the plaintext value exists only in the tenant's Kubernetes Secret.
 - OpenBao runs in its **own `loopzero-secrets` cluster**, separate from mgmt — a deliberate blast-radius boundary. Installing it into mgmt is forbidden.
 - Secrets are never exposed in CLI output, logs, or audit entries.
-- Unseal is Shamir 5-share / 3-threshold. For persistent and production vaults the ceremony is witnessed and the shares are distributed across independent custody; the ephemeral dev tier is automated (see `docs/operations/openbao-init-runbook.md`).
+- Unseal is Shamir 5-share / 3-threshold. For persistent and production vaults the ceremony is witnessed and the shares are distributed across independent custody; the ephemeral dev tier is automated (see `docs/runbooks.md § OpenBao init ceremony`).
 
 ### Dependencies
 - All Go dependencies pinned via `go.sum`; the workspace is a multi-module `go.work`.

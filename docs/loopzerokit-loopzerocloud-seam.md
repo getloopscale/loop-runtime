@@ -1,7 +1,7 @@
 # The LoopZeroKit ↔ LoopZeroCloud seam
 
 **Mandatory pre-read.** Consult this before editing anything that touches
-`api/internal/routes/source.go`, `api/internal/buildplane/source/services.schema.json`,
+`api/internal/routes/source/source.go`, `api/internal/buildplane/source/services.schema.json`,
 `api/internal/buildplane/source/validator_*.go`, `api/internal/manifests/renderer.go`, or
 the `services_json` / multipart upload contract.
 

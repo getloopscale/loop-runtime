@@ -137,7 +137,7 @@ Reference: `operators/internal/environment/environment_controller.go` + its
 
 **Capacity default:** `MAX_TENANTS_PER_CELL` is `envInt("MAX_TENANTS_PER_CELL", 5000)`
 (`api/internal/config`) plus `charts/loopzero-api/values.yaml`. The `maxPerCell = 500` in
-`placement/engine.go` is the constructor **fallback**, not the delivered value. Citing the
+`api/internal/placement/engine.go` is the constructor **fallback**, not the delivered value. Citing the
 guard instead of the config once inflated a capacity simulation tenfold and invented a
 `cell_count` bottleneck that does not exist.
 
@@ -172,9 +172,9 @@ The decomposition seams are HTTP/OpenAPI contracts, each with a consumer-driven 
 
 | Seam | Consumer | Provider | Contract |
 |---|---|---|---|
-| cli↔engine | loopzero-cli | loopzero | `loopzero-cli/tests/contract/engine.yaml` (vendored OpenAPI snapshot) + engine-side `api/internal/contract/cli_consumer_test.go` |
+| cli↔engine | loopzero-cli | loopzero | `../loopzero-cli/tests/contract/engine.yaml` (vendored OpenAPI snapshot) + engine-side `api/internal/contract/cli_consumer_test.go` |
 | cloud↔engine | loopzero-cloud | loopzero | opaque `/engine/*` proxy + Ed25519 service-auth |
-| cloud↔loopzero-data | loopzero-cloud | loopzero-data | `loopzero-cloud/openapi/themory.yaml` |
+| cloud↔loopzero-data | loopzero-cloud | loopzero-data | `../loopzero-cloud/openapi/themory.yaml` |
 | engine self-conformance | — | loopzero | `api/openapi/engine.yaml` |
 
 ```bash

@@ -99,6 +99,6 @@ With CACert config: Fulcio go-oidc client uses provided PEM as trust root for K3
 
 ## Plans
 
-- `docs/plans/2026-05-28-M07-fulcio-cacert-keyless-LIVE-plan.md` v1.1 — current execution plan
-- `docs/plans/2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan.md` v1.7 — predecessor (deferred, will be amended v1.8 cancelled by current plan)
-- `docs/plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md` v1.2 — derived plan (M2 deferral será revertido v1.3)
+- `git show 4f728eb7a:docs/plans/2026-05-28-M07-fulcio-cacert-keyless-LIVE-plan.md` v1.1 — current execution plan
+- `git show 4f728eb7a:docs/plans/2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan.md` v1.7 — predecessor (deferred, will be amended v1.8 cancelled by current plan)
+- `git show 4f728eb7a:docs/plans/2026-05-27-M07-tenant-build-pipeline-to-3-85-cap-plan.md` v1.2 — derived plan (M2 deferral será revertido v1.3)

@@ -1,7 +1,7 @@
 # Quality Gates — Engineer Reference
 
-Plan: `docs/plans/completed/2026-05-21-comprehensive-quality-gates-plan.md` v1.1
-Operator handoff: `.claude/knowledge-base/concepts/operations/operator-handoff-2026-05-21-quality-gates.md`
+Plan: `git show 4f728eb7a:docs/plans/completed/2026-05-21-comprehensive-quality-gates-plan.md` v1.1
+Operator handoff: recorded in the knowledge-base tree that no longer exists (`.claude/knowledge-base/` was removed; `.claude/` is gitignored).
 
 ## Quick start
 
@@ -56,7 +56,7 @@ bash infra/scripts/ci/check-mock-budget.sh  # find files >5 mocks
 
 1. Write script under `infra/scripts/ci/`
 2. Write hermetic test under `infra/tests/scripts/`
-3. Add job to `.github/workflows/quality-gates.yml`
+3. Wire the gate into `task quality:gates` (`taskfiles/quality.yml`). This step named `.github/workflows/quality-gates.yml` until 2026-09-11; that workflow exists in no commit, and Actions was retired as the pipeline in 2026-05-23.
 4. Add Required Status Check name to `.github/branch-protection-config.yml`
 5. Operator activates via `branch-protection-update.sh`
 

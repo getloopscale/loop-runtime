@@ -74,8 +74,8 @@ Some decisions that bind this repo live elsewhere, deliberately:
 
 | Decision | Where |
 |---|---|
-| Monorepo decomposition (what moved to which sibling repo) | `../decisions/2026-06-16-monorepo-decomposition.md` at the umbrella root |
-| AWS infra-state decomposition (DO/Pulumi to AWS/Terraform) | `../decisions/2026-06-17-infra-state-decomposition-aws.md` |
+| Monorepo decomposition (what moved to which sibling repo) | `../loopzero-workspace/docs/decisions/2026-06-16-monorepo-decomposition.md` |
+| AWS infra-state decomposition (DO/Pulumi to AWS/Terraform) | `../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md` |
 | LoopZeroKit does not know Kubernetes (ADR-0015) | recorded on the LoopZeroKit side; its consequence for this repo is in [`loopzerokit-loopzerocloud-seam.md`](loopzerokit-loopzerocloud-seam.md) |
 | Orphan CRD deletion (AppSecret, ReconciliationReport) | 2026-05-13; the CRDs are gone and [`architecture.md`](architecture.md) records the outcome |
 

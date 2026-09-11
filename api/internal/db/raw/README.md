@@ -9,7 +9,7 @@ cannot parse**, primarily window-function-based ranked subqueries
 WHERE IN subqueries), recursive CTEs, and a small set of dynamic-WHERE
 shapes where `sqlc.narg()` would explode into too many branches.
 
-Per ADR-1 §6 D5 of `docs/decisions/2026-05-29-sqlc-adoption.md`, the
+Per ADR-1 §6 D5 of `docs/decisions.md § Data layer (2026-05-29)`, the
 raw subpackage is the **canonical escape hatch**, not a fallback for
 "sqlc is too verbose" or "I prefer raw SQL". The bar to add a query
 here is: sqlc fails to generate code for it, AND the query is not

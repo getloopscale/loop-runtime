@@ -61,6 +61,6 @@ Revisit this exception when ANY of:
 ## References
 
 - INF-G08: Secure Defaults gate.
-- ADR D7 of `docs/plans/infra-sota-hardening-plan.md`.
+- ADR D7 of the infra SOTA hardening plan. (The path `docs/plans/infra-sota-hardening-plan.md` cited here until 2026-09-11 exists in no commit.)
 - Promtail upstream: https://grafana.com/docs/loki/latest/clients/promtail/
 - Kubernetes hostPath docs: https://kubernetes.io/docs/concepts/storage/volumes/#hostpath

@@ -6,7 +6,7 @@ asserts structural invariants. **Catches drift between `helm lint`
 passing and chart deploying broken structures (selector orphans,
 security context gaps, registry typos, etc.).**
 
-Plan: `docs/plans/completed/2026-05-20-helm-render-time-testing-terratest-plan.md`
+Plan: `git show 4f728eb7a:docs/plans/completed/2026-05-20-helm-render-time-testing-terratest-plan.md`
 
 ## Quick start
 
@@ -180,7 +180,7 @@ For per-env tests (only when helmfile env values differ meaningfully):
 
 ## CI / CD integration
 
-`.github/workflows/helm-charts.yml` adds a `render-tests` job that:
+A `render-tests` job would run the following. This named `.github/workflows/helm-charts.yml` until 2026-09-11; that workflow exists in no commit, and Actions was retired as the pipeline in 2026-05-23:
 1. Runs `task helm:test:vet` (~5s build gate)
 2. Runs `task helm:test` (~5min full suite)
 3. Gates `package-push`: broken charts cannot reach DOCR

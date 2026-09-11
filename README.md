@@ -656,7 +656,8 @@ Build it first with `task quality:build`, then `/tmp/loopzero-ops quality --list
 | **Renovate** | `.github/renovate.json` | Dependency mgmt with `pinDigests: true` (INF-G18 SHA pinning), weekly grouped PRs |
 
 Adding a new `.sh` file is refused by the `no-new-bash` gate — new logic belongs in Go
-(`cmd/loopzero-ops`), declarative Helmfile, or Ginkgo. Contract: `.claude/rules/shell-scripts-allowlist.md`.
+(`cmd/loopzero-ops`), declarative Helmfile, or Ginkgo. The written allowlist contract
+(`.claude/rules/shell-scripts-allowlist.md`) **no longer exists**; the gate still runs.
 
 ### Production Infrastructure (DigitalOcean)
 
