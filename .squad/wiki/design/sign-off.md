@@ -34,7 +34,9 @@ diagram reads as a decision that was made, which is worse than an absent one.
 - [ ] The six phases in D1 are the real lifecycle, and `Cleaned` is the only terminal one
 - [ ] The trust boundary in D2 is the account boundary, and the open egress question is real
 - [ ] The failure paths in D3 are the ones a developer actually hits
-- [ ] The durability table in D4 is honest — including that agent state is unresolved
+- [ ] The durability table in D4 is honest — agent state lives in `loopzero-memory`'s
+      Postgres and outlives the pod, and the blast radius of an eviction is the
+      in-flight turn
 - [ ] Every PIECE-N has a place in D5, and no component in D5 lacks a piece
 - [ ] The seven open questions above are the right ones to answer before the backlog opens
 
@@ -57,6 +59,19 @@ infrastructure"*, and `REQ-11` makes it a network-capture criterion.
 A question left open in a drawing while a signed RFC answers it invites somebody to decide it
 again, differently. That is the only reason it is struck here rather than left to the reviewer.
 
+### The fourth box was rewritten twice on 2026-09-11
+
+It first read *"including that agent state is **unresolved**"*. Answering D4 made that false — the
+table says `survives — Postgres` on all three rows.
+
+**The replacement then over-corrected**, asking the reviewer to accept the `loopzero` ↔ `loopzero-memory`
+edge as a standing risk. It is not one: `loopzero-memory` is part of this ecosystem and is treated as
+ready and working, so a boundary between two of our own repositories is the ordinary topology here.
+Dramatising it would have hung a permanent caveat on a promise that holds.
+
+What the box asserts now is what the table shows: where the state lives, and what one eviction
+costs.
+
 ### D4 — agent state survives a pod restart
 
 **Yes, and the drawing's own instinct was right: nothing in `loopzero` shows it.**
@@ -77,20 +92,18 @@ tables are **17**, counted from `CREATE TABLE` across `packages/core/src/.../mig
 and here there are none. (An earlier pass of my own counted 102 migrations: the other 68 are
 copies under `dist/`, which is a build artefact.)
 
-### What answering D4 exposes, and it is the finding
+### What answering D4 located
 
-**The durability property this design asserts has its evidence in a repository `loopzero` does not
-build.** The `loopzero` ↔ `loopzero-memory` edge is cross-repo, and **no gate in `loopzero` would see it
-break** — a migration in `loopzero-memory` that drops a table takes `REQ-5` with it, silently, and
-every test here stays green.
+**The state was never in the pod, and looking for it in `loopzero` was looking in the wrong
+repository.** The renderer emits `Deployment` or `Rollout`, never `StatefulSet`, and puts no
+`PersistentVolumeClaim` on the user's path. Read alone that says the state does not survive.
 
-`REQ-5` promises *memory that survives a restart*, with an acceptance criterion of killing the
-process and reading back what was written. **That promise is only true while the edge holds, and
-nothing here watches the edge.** The renderer places no store on the user's path; the developer
-imports `@loopzero/memory` herself.
+It survives because it lives in `loopzero-memory`'s Postgres — part of this ecosystem, treated as ready
+and working. So D4's answer is a plain yes, and what the drawing adds is WHERE. A drawing that
+sends the next reader to the right repository has done its job.
 
-That is a gap in the product, not in this drawing — and it is the kind a drawing exists to
-surface before a backlog is filed against it.
+**The blast radius of one pod eviction is therefore the in-flight turn, not the agent's memory** —
+which is what the remaining D4 question is about.
 
 ## Related
 

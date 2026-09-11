@@ -58,9 +58,6 @@ agent's memory.
 
 ## Still open
 
-- **The `loopzero` ↔ `loopzero-memory` edge is cross-repo.** This drawing now asserts a
-  durability property whose evidence lives in a repository this one does not build.
-  A change there reaches every agent here and no gate in `loopzero` would see it.
 - **What is lost mid-turn?** Memory is durable at rest; whether an in-flight turn is
   checkpointed before it completes was not established, and that is the remaining
   question for a long-running agent.
@@ -72,5 +69,5 @@ agent's memory.
 - [`states.md`](states.md) — D1, the phases whose state this outlives
 - [`system-map.md`](system-map.md) — D5, where the store appears
 - [`sign-off.md`](sign-off.md) — D4 was answered on 2026-09-11: **yes**, and the evidence lives in
-  `loopzero-memory`, a repository `loopzero` does not build
+  `loopzero-memory`, which is ours and is treated as ready
 - [`../product/trd.md`](../product/trd.md) — `REQ-5`, the promise that rests on that edge
