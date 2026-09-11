@@ -15,7 +15,7 @@ product. An agent that loses its work to a pod restart is not a long-running age
 | pod crash | rescheduled | survives — Postgres | survives — Postgres | survives |
 | node restart | rescheduled | survives | survives | survives |
 | platform upgrade | **no Draining phase exists** | survives | survives | survives |
-| cell destroyed | gone | **survives** — `loopzero-memory` | **survives** — `loopzero-lens` | **survives** — `loopzero-rag` |
+| cell destroyed | gone | **not established** | **not established** | **not established** |
 
 ```mermaid
 flowchart LR
@@ -40,23 +40,33 @@ flowchart LR
 - **The execution record is durable.** It is in Postgres, which survives everything
   above the cell.
 
-## Corrected 2026-09-11 by the design panel — a destroyed cell does not take the data plane
+## Corrected twice on 2026-09-11 — and the honest answer for a destroyed cell is *not established*
 
-The table said a destroyed cell takes everything. **It takes the workload and nothing else**,
-and the correction is the same fact D4 already established one row up: the state was never in
-the cell.
+**Round 1.** The table said a destroyed cell takes everything, including the execution record.
+Measured: `loopzero-lens` appears in **no cell composition**, and `loopzero-memory` and `loopzero-rag` are
+consumed the same way — so it is not in the cell, and "gone" was wrong.
 
-Measured: `loopzero-lens` appears in **no cell composition**. It is reached by `loopzero-cloud` over
-`LENS_BASE_URL` as a Model-B broker
-(`infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl:124-128`), and `loopzero-memory` and
-`loopzero-rag` are consumed the same way — the developer's own services, outside the cell. A cell
-is where the workload runs, not where its state lives.
+**Round 2 — the replacement was wrong too, and the external seat caught it.** It said
+**survives**, citing `infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl:124-128`. That
+file is under `values/dev-public/`: a **development** host endpoint (`host.k3d.internal:18084`),
+which establishes neither where the database sits in production nor that anything survives.
+Correcting a wrong claim with a differently-wrong claim is worse than the first, because it
+now carries a citation.
 
-**And that exposed a second defect in this drawing, which the panel caught as a contradiction
-with D2:** the `pg[(Postgres — execution record)]` node here and the `pg[(Postgres)]` in
-`trust.md` are **different databases with the same label** — ours holds tenants, releases and
-metering; the execution record is `loopzero-lens`'s. Two drawings using one name for two stores is
-how a reader concludes the wrong thing about both, so the node is renamed below.
+**What is actually measured:**
+
+- `loopzero-lens`, `loopzero-memory` and `loopzero-rag` are in **no cell chart and no cell composition**.
+  True in every environment.
+- `loopzero-cloud` reaches them over `LENS_/MEMORY_/RAG_BASE_URL`, which the deployment comment
+  says *"flows from the overlay env map"* — so their location is **configuration**, not
+  topology.
+- **`infra/helmfile/environments/prod.yaml` declares none of the three.** The only overlay
+  that sets those URLs is `dev-public`.
+
+So where the data plane runs in production is **undeclared**, and a claim either way would be
+invented. `not established` is the honest cell, and it is a finding about the product rather
+than about this drawing: the durability of the execution record in production rests on a
+placement nobody has written down.
 
 ## Resolved 2026-09-11 — agent state is durable
 
@@ -78,6 +88,10 @@ was never in the pod. The blast radius of a pod eviction is the in-flight turn, 
 agent's memory.
 
 ## Still open
+
+- **Where does the data plane run in production?** `prod.yaml` declares none of
+  `loopzero-lens`, `loopzero-memory` or `loopzero-rag`, and their URLs come from an overlay only
+  `dev-public` sets. Until that is declared, no row of the `cell destroyed` line can be filled.
 
 - **What is lost mid-turn?** Memory is durable at rest; whether an in-flight turn is
   checkpointed before it completes was not established, and that is the remaining

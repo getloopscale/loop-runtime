@@ -20,7 +20,11 @@ stateDiagram-v2
     Degraded --> Reachable : recovered
     Degraded --> Down : total failure
     Down --> Progressing : reconcile retries
-    Progressing --> Cleaned : reaped — manifest gone past grace period
+    Progressing --> Cleaned : reaper — DECLARED, NOT WIRED (B-228)
+    note right of Cleaned
+        No production path reaches this.
+        ShouldReap has only test callers.
+    end note
     Cleaned --> [*]
 ```
 
@@ -58,25 +62,32 @@ an app as available before its route resolves.
 - **`Down` is recoverable, not terminal.** The controller retries; an app that failed
   to come up is not an app that is finished.
 
-## Corrected 2026-09-11 by the design panel
+## Corrected 2026-09-11 by the design panel — twice
 
-**`Cleaned` is reachable from `Progressing` and from nowhere else.** This drawing had
+**Round 1 — `Cleaned` is reachable from `Progressing` and from nowhere else.** This drawing had
 `Reachable --> Cleaned` and `Down --> Cleaned`, both labelled *deleted*. `ShouldReap`
-(`operators/internal/app/application_reaper.go:80-84`) refuses every other phase by name:
+(`operators/internal/app/application_reaper.go:80-84`) refuses every other phase by name.
 
-```go
-if app.Status.Phase != loopzerov1.ApplicationPhaseProgressing {
-    return false, fmt.Sprintf("phase %q is not Progressing", app.Status.Phase)
-}
+**Round 2 — and that edge is not wired at all.** The external seat checked whether the
+corrected transition actually happens, and it does not:
+
+```bash
+grep -rn "ShouldReap\|MarkAsCleaned" --include="*.go" . | grep -v _test.go
+# the definition, the signature, and comments. Zero call sites.
 ```
 
-and `application_types.go` says the same in prose — `Cleaned` is set *"when the CR has been
-Progressing for > grace period AND the GitOps source no longer contains its manifest"*. It is
-the orphan reaper, not a deletion path.
+`application_controller.go` mentions `Reap`, `Cleaned` and `orphan` **zero times**, while the
+reaper's own header (`:19-21`) asserts the opposite in words: *"The reaper is invoked from the
+existing application controller's reconcile path… Each reconcile evaluates `ShouldReap()`."*
 
-**What that leaves genuinely open** is below: a `Reachable` app whose manifest disappears from
-the source has no drawn transition at all. The reaper will not take it, because it is not
-`Progressing`.
+So `ApplicationPhaseCleaned` is declared in the CRD and **no production path reaches it**. The
+edge stays on the diagram, marked, because a reader who finds the phase in the CRD will look
+for it here — and removing it would hide the gap rather than name it. Registered as **`B-228`**.
+
+**The grace-period label was also wrong** and is now gone. It read *"manifest gone past grace
+period"*; `application_reaper.go:86` is `age := now.Sub(app.CreationTimestamp.Time)` — the age
+of the **CR**, not time since the manifest disappeared. The manifest check is a separate
+condition that runs after it.
 
 ## Open — for the sign-off to resolve
 
