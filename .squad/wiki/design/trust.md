@@ -76,7 +76,7 @@ correcting the credential direction, which is what a redraw is for.
   *"the finding with the most leverage, because the mechanism is not yet built"* — and changing
   it later means changing a live trust relationship in every customer account.
 
-- **Is there an egress allowlist for the customer's app?** Registered as `B-226`: the platform's
+- **Is there an egress allowlist for the customer's app?** **No longer a question — it is work.** Registered as `B-226`, `triaged`, domain `operators`: the platform's
   own namespace excludes RFC1918 and `169.254/16`; the tenant's does not.
 
 ## Two doors, and they are not isolated the same way

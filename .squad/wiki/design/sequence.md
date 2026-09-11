@@ -59,15 +59,23 @@ product decision — recorded below as open rather than drawn as settled.
 
 ## Open — for the sign-off to resolve
 
-- **An app that is up and unreachable reports `Serving`.** Measured above. `PIECE-6` promises
+- **An app that is up and unreachable reports `Serving`.** Measured above. **Registered as `B-229`.** `PIECE-6` promises
   a failure that names the fix, and this one is silent in the phase. Which of the three fixes
   is right was not decided.
 
-- **Where does build run?** `PIECE-10` is a piece; whether it executes in the customer's
-  cell or on platform infrastructure was not established. It decides whether a heavy
-  build can starve a running agent.
-- **Is `loopzero up` the only entry?** The drawing assumes one. A second path — a CI push,
-  an API call — would break the no-fork requirement and is worth naming if it exists.
+- ~~**Where does build run?**~~ **ANSWERED — the customer's infrastructure.** It was never
+  open: C1 of the extraction RFC states it in one line — *"Build plane — Included. The customer
+  builds on their own infrastructure"* — and `REQ-11` makes it a network-capture criterion. Left
+  struck because a question a drawing keeps open while a signed RFC answers it invites somebody to
+  decide it again, differently.
+- ~~**Is `loopzero up` the only entry?**~~ **ANSWERED 2026-09-11 — there is a second TRIGGER and it
+  is not a second PATH.** A GitHub push webhook enters at `api/cmd/setup_github.go:181`
+  (`wh.OnPush`), and `buildSubmitterAdapter.SubmitBuildFromWebhook`
+  (`api/cmd/autodeploy_adapters.go:56`) calls `orchestrator.SubmitBuild` — **the same
+  `BuildOrchestrator` the CLI drives**. Two triggers, one pipeline, so `REQ-1`'s *one route, no
+  fork* holds. What a second trigger DOES change is who sees the failure: a push that fails
+  builds has no terminal to print to, and `REQ-4` (*a failure names the fix*) has no audited
+  surface there. That is narrower than the original question and is the part worth watching.
 
 ## Related
 

@@ -100,15 +100,20 @@ agent's memory.
 
 ## Still open
 
-- **Where does the data plane run in production?** `prod.yaml` declares none of
+- **Where does the data plane run in production?** **Registered as `B-230`.** `prod.yaml` declares none of
   `loopzero-lens`, `loopzero-memory` or `loopzero-rag`, and their URLs come from an overlay only
   `dev-public` sets. Until that is declared, **no data-plane column** of the `cell destroyed` row can be filled — the App-workload column is `gone` and stays so, because D2 and D5 both place the workload inside the cell and that placement IS declared.
 
-- **What is lost mid-turn?** Memory is durable at rest; whether an in-flight turn is
-  checkpointed before it completes was not established, and that is the remaining
-  question for a long-running agent.
-- **No `Draining` phase still stands** (D1). Agent state surviving an upgrade does not
-  mean the workload does.
+- ~~**What is lost mid-turn?**~~ **ANSWERED by the product decision of 2026-09-11 — what is lost
+  is whatever she did not persist.** The framework builds no checkpoint backend and the data plane
+  is hers ([`../decisions/agent-state-never-lives-in-the-pod.md`](../decisions/agent-state-never-lives-in-the-pod.md)),
+  so the mid-turn boundary is a property of her code, not of this platform. What remains ours is
+  narrower and is `B-227`: the eviction window is `preStop 5s + grace 30s`, and nobody has measured
+  a turn against it.
+- ~~**No `Draining` phase still stands** (D1).~~ **ANSWERED with D1 — the pod drains without
+  one.** Agent state surviving an upgrade does not mean the workload does, and that is what
+  `preStop 5s + grace 30s` is for. The open part moved to `B-227`: nobody has measured how long a
+  turn takes, so the 30 is unjustified rather than wrong.
 
 ## Related
 

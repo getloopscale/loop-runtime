@@ -92,13 +92,22 @@ condition that runs after it.
 ## Open — for the sign-off to resolve
 
 - **A `Reachable` app whose manifest leaves the source has no transition.** The reaper only
-  takes `Progressing`. Whether that app should be reaped, alerted on, or left standing was
-  never decided — found 2026-09-11 by correcting the two deletion edges above.
+  takes `Progressing`. Whether that app should be reaped, alerted on, or left standing was never
+  decided — found 2026-09-11 by correcting the two deletion edges above. **Subsumed by `B-228`**:
+  the reaper has no production caller at all, so no app of any phase is reaped today. Decide the
+  wiring first; this question only becomes answerable after it.
 
-- **Is there a suspended state?** Nothing in the CRD carries one. For long-running
-  agents this is the question that decides whether an idle agent costs money.
-- **What happens to a running app during a platform upgrade?** No `Draining` phase
-  exists. Either upgrades do not touch running workloads, or the gap is real.
+### Answered 2026-09-11, and left here struck rather than deleted
+
+- ~~**Is there a suspended state?**~~ **`replicas: 0` already is one.** `buildScaledObject`
+  (`api/internal/manifests/renderer_deployment.go:227`) renders a KEDA `ScaledObject`, and
+  `keda-http-addon` is in the cell composition. Adding a `Suspended` phase would give the CRD a
+  state KEDA already represents, and two sources of truth about *"is it running?"* diverge at the
+  first incident. See [`../decisions/agent-state-never-lives-in-the-pod.md`](../decisions/agent-state-never-lives-in-the-pod.md).
+- ~~**What happens during a platform upgrade?**~~ **The pod already drains.** `preStop 5s + grace
+  30s`, with the reason in the code — *"endpoint removal wins the race"*. What is short is the
+  budget, not the lifecycle: 30 seconds against a turn that chains LLM and tool calls. Registered
+  as `B-227`, which measures the turn first.
 
 ## Related
 
