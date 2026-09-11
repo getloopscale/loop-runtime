@@ -200,6 +200,26 @@ it if that succeeds.
 acceptance: Run the install with a prerequisite missing; it fails naming what is missing, and
 nothing in the environment was altered.
 
+## REQ-19 — A cell is created in an account that is not ours, and reaches workload-ready
+serves: OBJ-3
+statement: CAPA creates a cell in an AWS account this team does not own, and the cell reaches
+workload-ready with no step performed by hand after the bootstrap contract of REQ-14 is satisfied.
+acceptance: Declare what workload-ready means first — the cluster exists, its GitOps controller is
+running, and an application synced into it reports Healthy. Then create a cell in an account that is
+not ours and observe all three. A cell that stands up and cannot receive a workload is not ready; a
+cell that receives one only after a manual step did not meet the requirement.
+
+**REQ-19 was added on 2026-09-11, and its absence for a day is the reason to state it plainly.**
+OBJ-3 carries two halves — a cell is created and reaches workload-ready, and none of the customer's
+bytes leave. The second had REQ-11. **The first had nothing.** REQ-12, REQ-13 and REQ-14 describe how
+the provisioning BEHAVES — reproducible, reversible, pre-validated — and not one of them asserts that
+it happens. The closest was REQ-10, which at least claimed the install ran, and it was withdrawn with
+self-host.
+
+This is not the objective restated. The objective carries the NUMBER (≤ 1 day); the requirement
+carries the FACT, with an acceptance somebody can fail. Without it the first half of OBJ-3 had
+nothing beneath it to fail — and a half that cannot fail anywhere is the half nobody tests.
+
 **Researched 2026-09-11: the perimeter is only half of what a security review asks.** The other
 half is what our control plane RETAINS, and *"a scoped cross-account role"* does not survive reading.
 Measured from vendors' own permission documents: **Databricks needs ~45 to 70+ AWS actions**,
@@ -298,7 +318,7 @@ requirement demands is that she be **told**, not that everything work offline.
 |---|---|
 | OBJ-1 | REQ-1, REQ-2, REQ-3, REQ-4 |
 | OBJ-2 | REQ-5, REQ-6, REQ-7, REQ-8, REQ-9 |
-| OBJ-3 | REQ-10, REQ-11, REQ-12, REQ-13, REQ-14 |
+| OBJ-3 | ~~REQ-10~~ *(withdrawn)*, REQ-11, REQ-12, REQ-13, REQ-14, REQ-19 |
 | OBJ-4 | REQ-5, REQ-15, REQ-16, REQ-17, REQ-18 |
 
 Every objective carries requirements. An objective with none would mean it is unreachable or

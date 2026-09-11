@@ -14,8 +14,8 @@ The four documents of `cycle-brainstorm` are written:
 |---|---|---|
 | 1 | [`product-vision.md`](product-vision.md) | 1 named user · 1 problem · 4 non-goals |
 | 2 | [`objectives.md`](objectives.md) | 4 objectives · 4/4 with a metric · 4/4 with a horizon |
-| 3 | [`trd.md`](trd.md) | 18 requirements · 18/18 citing an objective · 0 dangling |
-| 4 | [`technical-pieces.md`](technical-pieces.md) | 10 pieces · 18/18 requirements realised |
+| 3 | [`trd.md`](trd.md) | 19 requirements · 19/19 citing an objective · 0 dangling |
+| 4 | [`technical-pieces.md`](technical-pieces.md) | 10 pieces · 18/18 live requirements realised |
 
 ## What the score cannot decide
 
@@ -75,10 +75,19 @@ no lifecycle scripts in any published package, which is the other common hiding 
 **D1 — OBJ-3 cannot close on its horizon. → Resolved: the horizon stays, and the prediction
 is written first.**
 Measured: release `v0.76.6` and **12 OCI charts** are published; the composition that stands
-them up is not. The attempt is therefore not vacuous, and we predict it stops at **REQ-10**.
+them up is not. The attempt is therefore not vacuous, and we predict it stops at **REQ-14** —
+the eight-item bootstrap contract, which is the first step of the install that demands something
+from an account nobody on this team controls.
 Writing that prediction before the measurement is what makes the attempt worth making — if it
 stops elsewhere we learned something we did not know, and a result recorded after the fact
 can only agree with itself.
+
+**The prediction was re-aimed on 2026-09-11, and the reason matters more than the new target.**
+It named `REQ-10` until the scope change that withdrew `REQ-10` left it pointing at a requirement
+whose own acceptance now reads *"None. This requirement no longer has a subject"* — a withdrawal
+recorded later in this very document. A prediction no run can confirm or refute is not a prediction, so
+the defence that kept the horizon had dissolved while the horizon stayed. Re-aiming restores the
+falsifiability. **It does not make the date more likely**, and nothing here claims it does.
 
 **D3 — PIECE-6 has no owner. → Resolved: it is a finding, and a finding does not block this
 signature.**
@@ -160,6 +169,7 @@ sometimes unobtainable.
 | 2026-09-11 | `type:` added to frontmatter — OKF v0.2's one hard requirement | **signature stands** — a filing key asserts nothing any box claims |
 | 2026-09-11 | **Self-host dropped; BYOC is the whole of it.** OBJ-3 rewritten, REQ-10 withdrawn, PIECE-9 renamed, vision amended | **signature withdrawn** — box 2 asserts *these are the right objectives* and an objective changed |
 | 2026-09-11 | Market research recorded: **BYOC-only has no precedent found**, and two vendors argue against the cross-account-role mechanism | still withdrawn — the finding is evidence for box 2, not a change to it |
+| 2026-09-11 | **Reviewer walkthrough, boxes 1-4.** Box 1 confirmed. Box 2: the OBJ-3 prediction was re-aimed from the withdrawn `REQ-10` to `REQ-14`. Box 3: **`REQ-19` added** — the first half of OBJ-3 (*a cell is created and reaches workload-ready*) had no requirement beneath it. Box 4 verified as it stood | still unsigned — these are the corrections the reviewer asked for BEFORE signing, not a signature |
 
 **Why the withdrawal.** The four boxes assert things about a specific text. Box 2 says *these
 are the right metrics* and three metrics changed; box 3 says *the requirements follow from the

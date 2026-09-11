@@ -72,7 +72,7 @@ entitlement leaves this piece's critical path — it is worth having, and it is 
 between a customer and a running cell.
 
 ## PIECE-9 — Cell provisioning
-realises: REQ-12, REQ-14
+realises: REQ-12, REQ-14, REQ-19
 responsibility: Bringing a cell into existence inside the customer's AWS account and reaching
 workload-ready — reproducibly from a declared ClusterClass, declaring what the customer supplies and
 refusing before changing anything when one of those is absent.
@@ -117,12 +117,13 @@ which is what makes the customer's code and build outputs stay inside their infr
 | REQ-12 two installs match | PIECE-9 |
 | REQ-13 upgrade declares direction | PIECE-8 |
 | REQ-14 declares what they bring | PIECE-9 |
+| REQ-19 a cell is created and becomes ready | PIECE-9 |
 | REQ-15 no credential to install | PIECE-8 |
 | REQ-16 no contact, telemetry included | PIECE-1 |
 | REQ-17 what needs the platform is stated | PIECE-1 |
 | REQ-18 no dependency edge | PIECE-1 |
 
-**17 of 17 live requirements realised** (REQ-10 withdrawn 2026-09-11), and no piece realises none. A requirement nobody realises is agreed
+**18 of 18 live requirements realised** (REQ-10 withdrawn 2026-09-11; REQ-19 added the same day), and no piece realises none. A requirement nobody realises is agreed
 work with nobody to do it; a piece realising nothing is architecture nobody asked for.
 
 ## Why these cuts
