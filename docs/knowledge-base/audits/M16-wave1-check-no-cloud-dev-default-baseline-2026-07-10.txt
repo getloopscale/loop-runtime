@@ -1,8 +1,0 @@
-=== check-no-cloud-dev-default_test.sh baseline (2026-07-10 pre-migration) ===
-Command: bash infra/tests/check-no-cloud-dev-default_test.sh
-Repo HEAD: 9ae2972e9df5a96f71d5c66f629ae4d1de387bd3
-
---- stdout+stderr ---
-[PASS] no cloud-dev defaults in test/seed scripts (webhook handler exception allowed)
-summary: 1 pass / 0 fail
---- exit code: 0 ---
