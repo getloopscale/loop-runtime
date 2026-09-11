@@ -51,12 +51,12 @@ Five drawings. One question of the seven is now **resolved**; six remain.
 | # | Question | Status |
 |---|---|---|
 | D4 | Does agent state survive a pod restart? | **RESOLVED** — yes. `loopzero-memory`, Postgres, 34 migrations, **17 tables** (corrected 2026-09-11; this said 9). It was never in this repo, which is why the charts did not show it |
-| D1 | Is there a suspended state for an idle agent? | open |
-| D1 | What happens to a running app during a platform upgrade? No `Draining` phase | open |
-| D2 | Egress allowlist for the customer's app? | open |
-| D2 | Tenant isolation — namespace, node, or cell? | open |
+| D1 | Is there a suspended state for an idle agent? | open — **backlog** |
+| D1 | What happens to a running app during a platform upgrade? No `Draining` phase | open — **backlog** |
+| D2 | Egress allowlist for the customer's app? | open — **backlog** |
+| D2 | Tenant isolation — namespace, node, or cell? | open — **BLOCKS the backlog — cannot be retrofitted** |
 | D3 | Build runs in the customer's cell or on platform infra? | **RESOLVED** — the customer's, by C1 of the extraction RFC, before this drawing asked |
-| D4 | Is an in-flight turn checkpointed before it completes? | open — new, from resolving the one above |
+| D4 | Is an in-flight turn checkpointed before it completes? | open — new, from resolving the one above. **Backlog, not a pre-condition** |
 
 **Why D4 looked unresolved from inside `loopzero`:** the renderer emits `Deployment` or
 `Rollout`, never `StatefulSet`, and puts no `PersistentVolumeClaim` on the user's path.

@@ -29,7 +29,7 @@ diagram reads as a decision that was made, which is worse than an absent one.
 | D2 | Is tenant isolation namespace, node, or cell? | Cannot be retrofitted |
 | ~~D3~~ | ~~Build in the customer's cell or on platform infrastructure?~~ **ANSWERED — the customer's.** | Decided by C1 of the extraction RFC before this drawing asked. See below |
 | ~~D4~~ | ~~Does agent state survive a pod restart?~~ **ANSWERED 2026-09-11 — yes.** | State lives in `loopzero-memory`'s Postgres, not in the pod. See below |
-| D4 | Is there a checkpoint interval? | Decides the blast radius of one pod eviction |
+| D4 | Is an in-flight turn checkpointed before it completes? | Decides the blast radius of one pod eviction. Reworded 2026-09-11 — it asked *"is there a checkpoint interval"*, which presumes a mechanism that may not exist |
 
 - [ ] The six phases in D1 are the real lifecycle, and `Cleaned` is the only terminal one
 - [ ] The trust boundary in D2 is the account boundary, and the open egress question is real
@@ -38,7 +38,22 @@ diagram reads as a decision that was made, which is worse than an absent one.
       Postgres and outlives the pod, and the blast radius of an eviction is the
       in-flight turn
 - [ ] Every PIECE-N has a place in D5, and no component in D5 lacks a piece
-- [ ] The seven open questions above are the right ones to answer before the backlog opens
+- [ ] Tenant isolation — namespace, node or cell — is decided BEFORE the backlog opens.
+      It is the only open question here that cannot be retrofitted
+- [ ] The other four open questions are registered as `B-NNN` and measured there, not
+      held as pre-conditions on the backlog itself
+
+**The last box was split on 2026-09-11, and the count it carried was wrong.** It read *"the
+**seven** open questions above"* after two had been answered, and it held the backlog behind all of
+them.
+
+Only one of the five has to come first. Choosing namespace, node or cell decides the shape of
+`PIECE-9` and of D2, and changing it later is not a change — it is a different platform. The other
+four each have evidence, a possible owner and a closing criterion, which is the description of a
+backlog item: holding them as pre-conditions inverts `cycle-backlog`, whose whole purpose is to take
+the hypothesis and let the measurement decide.
+
+So the reviewer now signs WHICH question blocks and why, rather than that five things come first.
 
 Sign with `/sign`:
 
