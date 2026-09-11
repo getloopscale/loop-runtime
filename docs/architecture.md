@@ -31,17 +31,21 @@ SECRETS           separate loopzero-secrets cluster: OpenBao (Transit) + ESO. CO
 ```
 
 `task setup` creates **4** k3d clusters (`infra/k3d/{core,build,cell-0,cell-1}-cluster.yaml`).
-OpenBao runs in a 5th, separate cluster. Installing it into core is a topology violation,
-not a shortcut.
+OpenBao runs in a 5th, separate cluster. Installing it into core is a topology violation, not a
+shortcut: the `k3d:secrets:bootstrap-in-core` task that did it was **removed on 2026-08-12**
+(B-047), and the `openbao-bootstrap-in-core-task` gate now fails on its existence — or on the
+equivalent effect under another name.
 
-**The 5th cluster is conditional.** Four releases in `secrets.helmfile.yaml.gotmpl` are gated
-on `openbaoEnabled`, set in 1 of 8 environment files. The secret backend is per-installation
+**The 5th cluster is conditional.** Three releases in `secrets.helmfile.yaml.gotmpl`
+(`openbao-cert`, `openbao`, `openbao-init`) are gated on `openbaoEnabled`, set in **1 of 8**
+environment files (`vault-local.yaml`). A fourth, `openbao-snapshot-agent`, is gated on a
+**different** flag — `snapshotAgentEnabled` — also defaulting to false. The secret backend is per-installation
 by contract (`charts/loopzero-api/SECRETS.md`) — a self-hoster bringing their own store runs a
 4-cluster topology. Decision: `docs/decisions.md` § secrets cluster.
 
 ## Multi-module Go workspace
 
-`go.work` (Go 1.26.1) unions **8 modules**, one of which is a sibling repository:
+`go.work` (Go 1.26.1) unions **9 modules**, one of which is a sibling repository:
 
 ```
 ../loopzero-contracts   <- SIBLING REPO. Absent -> the workspace does not build.

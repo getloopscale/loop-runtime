@@ -14,7 +14,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- `docs/` consolidated from 1,523 markdown files across 19 subtrees into **six living
+- `docs/` consolidated from 1,374 versioned markdown files across 17 subtrees into **six living
   documents** — `architecture.md`, `loopzerokit-loopzerocloud-seam.md`, `api-contracts.md`,
   `operations.md`, `runbooks.md`, `decisions.md` — plus `README.md` as the single index.
   Everything removed stays in git at `4f728eb7a`.
@@ -37,7 +37,12 @@ to [Semantic Versioning](https://semver.org/).
 - `docs/api-keys.md`, which documented `memory:*` scopes belonging to `../loopzero-memory`
   rather than to this engine.
 
-### Fixed
+### Known regressions
 
-- 72 of the 154 `docs/*.md` paths cited from code and configuration no longer resolved.
-  The consolidated tree has no dangling internal references.
+- **The consolidation broke the 82 inbound `docs/*.md` references that still resolved.** Of the
+  154 distinct `docs/*.md` paths cited from code, configuration and ADR bodies, 72 were already
+  dangling before the cut; all 154 dangle now. No content was lost — every target is at
+  `git show 4f728eb7a:<path>` — but a reader following a source comment no longer lands on a
+  file. Repointing them means editing hundreds of comments across the tree, which is a separate
+  change.
+- Links *between* the six consolidated documents all resolve; the regression is inbound only.

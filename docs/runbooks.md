@@ -59,7 +59,7 @@ Recovers OpenBao when the normal AWS KMS auto-unseal path is unavailable. Trigge
 destroyed, AWS account suspended or in billing hold, AWS unreachable for hours, or a lost
 Raft cluster needing a snapshot restore without KMS.
 
-**Phase 1 — decision gate (5 min).** Confirm the `OpenBaoSealStatus` alert is firing;
+**Phase 1 — decision gate (5 min).** Confirm the `VaultSealedOrDown` alert is firing;
 confirm the KMS key state in the AWS console; confirm no other path exists, including simply
 waiting; record the decision in `audit_log` with `event_type='vault.breakglass.initiated'`.
 
@@ -83,7 +83,7 @@ assembled, or when the decision gate has not been recorded.
 | Transit cutover | the longest procedure in the set (600+ lines). Read the long form before starting. |
 | Multi-cluster Kubernetes auth | one auth backend per cell cluster |
 | AWS resources | the KMS key, its `protect: true` guard, and the backup bucket |
-| Local secrets cluster | `task k3d:secrets:create` + `k3d:secrets:bootstrap`. Installing OpenBao into core (`k3d:secrets:bootstrap-in-core`) is a **topology violation**, not a shortcut. |
+| Local secrets cluster | `task k3d:secrets:create` + `k3d:secrets:bootstrap`. Installing OpenBao into core is a **topology violation**: the `k3d:secrets:bootstrap-in-core` task was removed on 2026-08-12 (B-047) and the `openbao-bootstrap-in-core-task` gate fails on its existence, or on the same effect under another name. |
 | Secret migration | moving existing secrets under Transit |
 
 ## Service-auth secret rotation (manual, ~3 min, zero downtime)

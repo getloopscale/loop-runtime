@@ -69,7 +69,7 @@ Any future change that breaks one of these is a regression.
 
 - **`tenantID` and `projectID` MUST match DNS-1123** before flowing into `fmt.Sprintf` repo
   names. Single canonical regex `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`; sentinel
-  `source.ErrInvalidTenantOrProject` (`api/internal/source/gitea_store.go`).
+  `source.ErrInvalidTenantOrProject` (`api/internal/buildplane/source/gitea_store.go`).
 - **`env` keys MUST match POSIX shape AND reject reserved keys.** Schema:
   `patternProperties ^[A-Z_][A-Z0-9_]*$` + `maxLength 4096` + `maxProperties 64`. Blocklist:
   `PATH`, `HOME`, `USER`, `SHELL`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, plus prefixes `DYLD_*`,
@@ -78,8 +78,12 @@ Any future change that breaks one of these is a regression.
 ### Wire
 
 - **Multipart field order is part of the contract** — `services_json` first, `bundle`
-  second. Enforced by `peekFirstMultipartFieldName`, which clones `r.GetBody` capped at
-  16 KB so an oversized or malformed payload is rejected before the body is buffered.
+  second. Enforced by `peekFirstMultipartFieldName`, which clones `r.GetBody` and caps the
+  peek at 16 KB so a client cannot drag the process into reading the whole body twice.
+  **The check is best-effort by construction:** when `r.GetBody` is nil the body is not
+  repeatable, the function returns `("", nil)`, and the handler treats the order as
+  conformant. Order is a contract the client must honour, not one the server can always
+  prove.
 - **`services_json` is capped at 256 KB; `bundle` at 500 MB.** Constants
   `maxServicesJSONSize`, `maxBundleSize`.
 

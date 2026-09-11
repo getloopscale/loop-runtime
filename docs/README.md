@@ -36,12 +36,14 @@ time.
 
 ## What this tree used to be
 
-Until 2026-09-11 `docs/` held **1,523 markdown files across 19 subtrees** — roughly 303,000
-lines. Two thirds were dated audit trail: completed plans, roadmap runs, meeting records,
-per-iteration implementation logs, review reports.
+Until 2026-09-11 `docs/` held **1,374 versioned markdown files across 17 subtrees** —
+284,273 lines. Two thirds were dated audit trail: completed plans, roadmap runs, meeting
+records, per-iteration implementation logs, review reports. A further ~149 markdown files sat
+in the worktree unversioned, inside a 26 MB Node checkout with its own `node_modules` left
+under `docs/operations/`.
 
-It was consolidated into the six documents above, and the rest was deleted. Three
-measurements taken before the cut, which are the reason for it:
+It was consolidated into the six documents above, and the rest was deleted. Three measurements
+taken before the cut, which are the reason for it:
 
 - **72 of the 154 `docs/*.md` paths cited from code and configuration no longer resolved.**
   Nearly half the tree's inbound references were already broken.
@@ -49,16 +51,22 @@ measurements taken before the cut, which are the reason for it:
   generated Portuguese `index.md` claiming 1,199 concepts. The second violated the
   English-only rule for versioned artifacts.
 - **Two parallel audit trails** with identical subdirectory names — `wiki/` (934 files) and
-  `knowledge-base/` (126) — overlapping in period, with **zero byte-identical files**
-  between them.
+  `knowledge-base/` (126) — overlapping in period, with **zero byte-identical files** between
+  them.
 
-**Nothing was lost, but it did stop being navigable.** Every deleted file is in git.
-Recover one by path:
+**Nothing was lost, but it did stop being navigable.** Every deleted file is in git. Recover
+one by path:
 
 ```bash
 git show 4f728eb7a:docs/operations/openbao-init-runbook.md
 git log --diff-filter=D --name-only -- 'docs/**'   # what was removed
 ```
 
-The audit trail is history and remains readable as history. What it stopped doing is
-competing with current truth for the reader's attention.
+**What the cut cost, stated plainly:** the 82 inbound references that *did* resolve now do
+not. Code comments, ADR bodies and configuration across the repo point at paths that exist
+only in git history. No content was lost, but a reader following one of those pointers must
+resolve it with `git show` rather than opening a file. Repointing them means editing hundreds
+of source comments — a separate change, not made here.
+
+The audit trail is history and remains readable as history. What it stopped doing is competing
+with current truth for the reader's attention.
