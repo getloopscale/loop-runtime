@@ -32,10 +32,10 @@ together mean something the score alone does not.
 
 ## Reviewer sign-off
 
-- [ ] The problem stated in the vision is the real one
-- [ ] These are the right objectives, and the metrics are the right metrics
-- [ ] The requirements follow from the objectives
-- [ ] The pieces cover every requirement
+- [x] The problem stated in the vision is the real one  <!-- signed-by: human/paulo -->
+- [x] These are the right objectives, and the metrics are the right metrics
+- [x] The requirements follow from the objectives
+- [x] The pieces cover every requirement
 
 <!-- signed-by: -->
 
@@ -179,3 +179,11 @@ it approve wording nobody read.
 The agent withdrew the marks rather than asking, because withdrawal is the fail-safe
 direction: it can never fabricate an approval, only remove one. Re-signing is the reviewer's,
 as it was the first time.
+
+**Signed 2026-09-11 by `human/paulo` — a person, not a judge.**
+
+What a signature asserts is that someone read this and is willing to say it holds. It does not assert that a machine checked it: the deterministic score sits above, and the two are separate claims on purpose.
+
+**The signer is also an author of this document.** The reviewer and the author are normally separate, and here they are not. Reason given: solo project; no second reviewer exists
+
+This signature is weaker than one from a reviewer who did not write the document, and the record says so rather than blurring it.
