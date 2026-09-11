@@ -258,15 +258,15 @@ the CLI itself.
 
 | Module | Test files | `Test*` funcs | Notes |
 |--------|-----------:|--------------:|-------|
-| `api/` | 421 | 3,009 | Routes, services, placement, gitops, manifests, metering |
-| `cmd/loopzero-ops/` | 153 | 1,313 | The 108 quality gates + seed/drill/pulumi/chaos subcommands |
-| `pkg/` | 70 | 778 | Shared libs — state machines, errors, naming, enforcement |
-| `operators/` | 67 | 310 | Ginkgo + envtest reconcile suites |
-| `infra/tests/` | 184 | 518 | E2E (Ginkgo), chaos, load (k6), hermetic infra checks |
+| `api/` | 505 | 3,167 | Routes, services, placement, gitops, manifests, metering |
+| `cmd/loopzero-ops/` | 260 | 2,277 | The 126 wired quality gates + seed/drill/pulumi/chaos subcommands |
+| `pkg/` | 68 | 706 | Shared libs — state machines, errors, naming, enforcement |
+| `operators/` | 74 | 350 | Ginkgo + envtest reconcile suites |
+| `infra/tests/` | 206 | 563 | E2E (Ginkgo), chaos, load (k6), hermetic infra checks |
 
 Ginkgo `It(`/`Entry(` blocks across `operators/` + `infra/tests/`: **484**.
 
-E2E and cleanroom journeys are **operator-run, not CI-run** — see `.claude/rules/cleanroom-up-live-test-mandate.md` for the mandatory chain (Cleanroom TOTAL → UP → seeds → dogfood → LIVE test).
+E2E and cleanroom journeys are **operator-run, not CI-run**. The chain is Cleanroom TOTAL → UP → seeds → dogfood → LIVE test; warm-infra results are not LIVE-valid. The rule file that carried this (`.claude/rules/cleanroom-up-live-test-mandate.md`) **no longer exists**, and `.claude/` is gitignored, so a fresh clone never had it.
 
 ---
 
@@ -455,12 +455,12 @@ Secrets             OpenBao (Transit) + ESO — runs in its own `loopzero-secret
 
 ### Multi-Cell Routing
 
-Tenant workloads run on independent K8s clusters called **cells** (`cell-0`, `cell-0`, `cell-1`, ...). Routing is **placement once, route many** — not load-balanced.
+Tenant workloads run on independent K8s clusters called **cells** (`cell-0`, `cell-1`, ...). Routing is **placement once, route many** — not load-balanced.
 
 ```
 loopzero bootstrap (NEW tenant)
   -> RoundRobinEngine.AssignAndExecute (PG advisory lock + SERIALIZABLE)
-     -> picks least-loaded cell with capacity (default cap=500 tenants)
+     -> picks least-loaded cell with capacity (default cap=5000 tenants)
      -> writes tenants.cell_id (canonical SoT) + Tenant CR spec.cellID
      -> sticky: tenant stays on this cell forever unless operator pins
 
@@ -524,8 +524,8 @@ loopzero deploy (or git push)
 | IaC — L1 cloud primitives | **Being re-platformed DigitalOcean/Pulumi → AWS/Terraform** per the 2026-06-17 CTO mandate. Target: `../loopzero-infra-modules` (versioned blueprints) + `../loopzero-infra-live` (per-env Terragrunt units). The 5 Pulumi projects under `infra/` are **AS-IS legacy, live until the AM8 cutover** — do not add new Pulumi for target infra. |
 | IaC — L2 platform workloads | Helmfile v1.0+ (`infra/helmfile/`) — the source of truth for platform releases, **not** Pulumi |
 | IaC — L3 tenant Day-2 | ArgoCD (manual sync, from Gitea) |
-| CI/CD | 3 workflows in `.github/workflows/` (`build-publish`, `release-artifacts`, `workflow-hygiene`). Actions was retired as the pipeline 2026-05-23; gates run via `task quality:*` |
-| Helm charts | 44 bootstrap (`infra/helm/`) + 13 published (`charts/`) |
+| CI/CD | 5 workflows in `.github/workflows/` (`build-publish`, `ci`, `delivery-gate-armed`, `release-artifacts`, `workflow-hygiene`). Actions was retired as the pipeline 2026-05-23; gates run via `task quality:*` |
+| Helm charts | 43 bootstrap (`infra/helm/`) + 12 published (`charts/`) |
 
 ### Edge Proxy vs Cluster Ingress (Caddy ↔ Traefik)
 
@@ -586,7 +586,7 @@ Internet → Caddy (host) → Traefik    Internet → CF Tunnel → Traefik
 Caddy local é decisão pragmática: VPS com 1 binário ao invés de provisionar
 CF Tunnel + cluster reachability. Mesmo trade-off do `task setup` k3d vs DOKS.
 
-### Helm Charts Inventory (`infra/helm/`, 44 dirs)
+### Helm Charts Inventory (`infra/helm/`, 43 dirs)
 
 Bootstrap charts installed via Helmfile L2. `ls infra/helm/` is the authoritative list — this table
 groups it. **Classifying a tool as adopted or missing from memory is forbidden**; grep first
@@ -608,16 +608,19 @@ groups it. **Classifying a tool as adopted or missing from memory is forbidden**
 | Load + smoke testing | `k6-operator`, `smoke-test` |
 | LoopZero platform | `loopzero-api`, `loopzero-cloud`, `static-assets` |
 
-### Published OCI Charts (`charts/`, 13 dirs)
+### Published OCI Charts (`charts/`, 12 dirs)
 
 For ArgoCD L3 + downstream consumers. Use `loopzero-common` library for consistent labels and security contexts.
 
-`loopzero-admission-policies` · `loopzero-api` · `loopzero-app-operator` · `loopzero-build-cwts` · `loopzero-cloud` · `loopzero-common` · `loopzero-crds` · `loopzero-dashboard` · `loopzero-monitoring` · `loopzero-platform` · `loopzero-platform-operator` · `loopzero-preview-operator` · `loopzero-tenant-operator`
+`loopzero-admission-policies` · `loopzero-api` · `loopzero-app-operator` · `loopzero-build-cwts` · `loopzero-cloud` · `loopzero-common` · `loopzero-crds` · `loopzero-dashboard` · `loopzero-monitoring` · `loopzero-platform-operator` · `loopzero-preview-operator` · `loopzero-tenant-operator`
+
+This list named a thirteenth, `loopzero-platform`, until 2026-09-11; `charts/loopzero-platform` does not exist.
 
 ### Supply Chain Security
 
-> **Where these run.** GitHub Actions was retired as the pipeline in 2026-05-23. Three workflows
-> remain (`.github/workflows/build-publish.yml`, `release-artifacts.yml`, `workflow-hygiene.yml`); everything else is
+> **Where these run.** GitHub Actions was retired as the pipeline in 2026-05-23. **Five** workflows
+> remain (`build-publish.yml`, `ci.yml`, `delivery-gate-armed.yml`, `release-artifacts.yml`,
+> `workflow-hygiene.yml` — measured 2026-09-11; this said three); everything else is
 > run by `task` locally or by whichever CI a deployment wires up. The tool configs below are live —
 > their former workflow homes (`build-images.yml`, `ci.yml`, `helm-charts.yml`) are **gone**, so
 > treat the run column as "how to invoke", not "enforced on every PR".
@@ -638,12 +641,12 @@ For ArgoCD L3 + downstream consumers. Use `loopzero-common` library for consiste
 
 ### Quality & Validation Gates
 
-The gate layer is **108 pure-logic Go checks** in `cmd/loopzero-ops` — the substitute for the retired CI.
+The gate layer is **126 wired Go checks** in `cmd/loopzero-ops` (145 registered, 126 wired — measured 2026-09-11) — the substitute for the retired CI.
 Build it first with `task quality:build`, then `/tmp/loopzero-ops quality --list` is the authoritative inventory (name / wired-into-which-task / summary). A stray `./loopzero-ops` at the repo root is a gitignored local artifact and can be badly stale.
 
 | Tool | How it runs | What it does |
 |------|-------------|-----------|
-| **`loopzero-ops` quality gates (73)** | `task quality:gates` (full scan) · `task quality:diff` (PR-scoped) · `task quality:all` | Pure-logic gates: `unhomed-logic`, `no-new-bash`, `advisory-lock-scope`, `cli-exit-codes`, `prod-image-tags`, `no-migrate-force`, … |
+| **`loopzero-ops` quality gates (126 wired / 145 registered)** | `task quality:gates` (full scan) · `task quality:diff` (PR-scoped) · `task quality:all` | Pure-logic gates: `unhomed-logic`, `no-new-bash`, `advisory-lock-scope`, `cli-exit-codes`, `prod-image-tags`, `no-migrate-force`, … |
 | **kubeconform** | `task validate:manifests` | K8s manifest schema validation (`--strict`) |
 | **golangci-lint v2.11+** | `task lint` (os 9 módulos do workspace, com catraca por módulo) | Go static analysis |
 | **helmfile template + kubeconform** | `task validate:helmfile-templates` · `task validate:matrix` | Renders every release and schema-checks the output |
@@ -659,7 +662,7 @@ Adding a new `.sh` file is refused by the `no-new-bash` gate — new logic belon
 
 | Resource | Configuration |
 |----------|---------------|
-| 3 DOKS clusters | v1.32, 2 nodes each, SFO3 (mgmt, build, runtime) |
+| 3 DOKS clusters | v1.32, 2 nodes each, SFO3. Named `core`, `build`, `cell-N` since the B-001 rename — the old `mgmt` / `workload` / `runtime` appear in no filename |
 | PostgreSQL | v16, managed |
 | Container Registry | DigitalOcean (Professional) |
 | Edge proxy | Cloudflare Tunnel (zero public IPs, WAF/DDoS) |
@@ -684,7 +687,7 @@ Adding a new `.sh` file is refused by the `no-new-bash` gate — new logic belon
 
 Go 1.26+, Node.js 20+, Docker, [k3d](https://k3d.io), [Tilt](https://tilt.dev), [Task](https://taskfile.dev), [Helm](https://helm.sh) v3.14+ with the [helm-diff](https://github.com/databus23/helm-diff) plugin, [Helmfile](https://helmfile.readthedocs.io) v1.0+, kubectl, [kubeconform](https://github.com/yannh/kubeconform), [golangci-lint](https://golangci-lint.run) v2.11+
 
-**This repo is a multi-module Go workspace.** `go.work` unions 8 modules and one of them is the
+**This repo is a multi-module Go workspace.** `go.work` unions 9 modules and one of them is the
 sibling repo `../loopzero-contracts` — clone it alongside this one or the workspace will not build.
 There is no `go.mod` at the repo root, so `go build ./...` / `go test ./...` from the root do **not**
 cover the repo; run them per module or use `task`.
@@ -700,13 +703,13 @@ task doctor      # HEALTH CHECK: 38+ invariants across clusters/pods/tokens
 **Distinction (canonical per plan 2026-05-22 Phase 3):**
 - `task setup` is for **cold start** / fresh cleanroom / recovery. One-shot.
 - `tilt up` is the **day-to-day dev loop**. Hot reload, no manual rebuilds.
-- See `docs/operations/dev-loop.md` for full workflow guide.
+- See [`docs/operations.md`](docs/operations.md) for the full workflow guide.
 
 ### Tests
 
 ```bash
 task test                        # unit + lint + manifest validation
-task quality:gates               # the 108 pure-logic gates (full-repo scan)
+task quality:gates               # the 126 wired gates (full-repo scan)
 task test:e2e                    # Ginkgo E2E (needs running clusters + tilt up)
 
 cd api           && go test ./...   # API
@@ -761,9 +764,9 @@ Every PR starts with a failing test. See the [development commands](CLAUDE.md#de
 
 ## Links
 
-- [Documentation index](docs/README.md) — architecture, runbooks, and what in `docs/` is living reference vs audit trail
+- [Documentation index](docs/README.md) — six living documents: architecture, the LoopZeroKit seam, API contracts, operations, runbooks, decisions
 - [Changelog](CHANGELOG.md)
-- [Governance](GOVERNANCE.md) · [Security policy](SECURITY.md) · [Roadmap](ROADMAP.md)
+- [Governance](GOVERNANCE.md) · [Security policy](SECURITY.md)
 
 ## Community
 

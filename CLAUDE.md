@@ -16,7 +16,7 @@ LoopZero is a **CLI-first managed cloud (Kubernetes-backed)** for monorepo deplo
 
 **Consequence:** if you are looking for a CLI command, a dashboard screen, Stripe billing, or a shared contract type, it is **not in this repo**. Do not re-implement it here. The decomposition ADR is `../decisions/2026-06-16-monorepo-decomposition.md` (umbrella root — **not** this repo's own `.claude/knowledge-base/decisions/`); the workspace contract is `../CLAUDE.md` (this used to also name an umbrella-scope rule file; it does not exist in the umbrella either — verified 2026-08-16, B-052).
 
-**Cycle artifacts (plans, reviews, audits, ADRs) and the CHANGELOG live in THIS repo** — `.claude/records/` and `CHANGELOG.md`. `.claude/knowledge-base/` is the same trail up to 2026-08-28, frozen (see below).
+**Cycle artifacts (plans, reviews, audits, ADRs) and the CHANGELOG live in THIS repo** — `.squad/` and `CHANGELOG.md`. See § Records: the `.claude/records/` and `.claude/knowledge-base/` this line used to name **do not exist**, and `.claude/` is gitignored.
 
 This paragraph said the opposite until 2026-08-19, and both halves of it were false (B-159). Measured: `../CHANGELOG.md` **does not exist**, `../.claude/knowledge-base/` **does not exist**, and **all 21 sibling repos keep their own `CHANGELOG.md`** — this one has 4,567 lines and took 227 commits since 2026-08-01 alone. The instruction named a path nothing resolved to, while the repo's overwhelming practice did the opposite.
 
@@ -24,7 +24,7 @@ It also contradicted two neighbours: the paragraph immediately below points at *
 
 What genuinely lives at the umbrella root is narrower: the decomposition ADR named above, and `../CLAUDE.md`, the workspace contract.
 
-**The codebase is authoritative.** Where this file and the code disagree, the code wins. `CHANGELOG.md` (1 MB, exhaustive), `.claude/records/` (live) and `.claude/knowledge-base/` (frozen archive) hold the dated history — this file deliberately does not restate it.
+**The codebase is authoritative.** Where this file and the code disagree, the code wins. `CHANGELOG.md` holds the dated history — this file deliberately does not restate it. It was rewritten on 2026-09-11 after being deleted in `4f728eb7a`; everything before that is at `git show 4f728eb7a~1:CHANGELOG.md`.
 
 ## Multi-module Go workspace (read before any build command)
 
@@ -74,7 +74,7 @@ cd infra/tests && go test ./e2e/... -v -timeout 120m \
 
 ### Quality gates — the CI substitute
 
-GitHub Actions was removed as the pipeline in 2026-05-23. **5 workflows remain** (`build-publish.yml`, `release-artifacts.yml`, `workflow-hygiene.yml`, `ci.yml`, `delivery-gate-armed.yml`) — measured 2026-09-11; this said **4** and named four, having already been corrected up from **3**, which is the third time this count has drifted — this line said **3** and named the first three until 2026-08-19, and the fourth had been added deliberately in the meantime. Three of them are not the quality gate; **`ci.yml` is**, and its own header says why: the gates moved to a pre-push hook that runs *on the pusher machine and only there*, so a repository with no GitHub gate has none for anyone else. The gate inventory is **140 wired quality gates** in `cmd/loopzero-ops` (measured 2026-08-19 via `--list`, the oracle), run locally or by whatever CI is wired:
+GitHub Actions was removed as the pipeline in 2026-05-23. **5 workflows remain** (`build-publish.yml`, `release-artifacts.yml`, `workflow-hygiene.yml`, `ci.yml`, `delivery-gate-armed.yml`) — measured 2026-09-11; this said **4** and named four, having already been corrected up from **3**, which is the third time this count has drifted — this line said **3** and named the first three until 2026-08-19, and the fourth had been added deliberately in the meantime. Three of them are not the quality gate; **`ci.yml` is**, and its own header says why: the gates moved to a pre-push hook that runs *on the pusher machine and only there*, so a repository with no GitHub gate has none for anyone else. The gate inventory is **126 wired quality gates** in `cmd/loopzero-ops` — 145 registered, 126 wired (measured 2026-09-11 via `--list`, the oracle). This line said **140** until then, and § Components said **126** four screens later: one file, two numbers, neither re-measured, run locally or by whatever CI is wired:
 
 ```bash
 task quality:gates            # full-repo scan
@@ -94,7 +94,7 @@ task db:generate              # regenerate api/internal/db/generated/ via sqlc
 
 A stray `./loopzero-ops` at the repo root is a **gitignored local build artifact**, not the gate binary — it can be arbitrarily stale (one measured on 2026-07-30 reported 73 gates against a source tree carrying 108; the tree carries 122 as of 2026-08-12) and is absent in a fresh clone. Always build first; never read `./loopzero-ops` as the oracle.
 
-**Adding a new `.sh` file is FORBIDDEN by default** (`no-new-bash` gate, D3). New logic belongs in `cmd/loopzero-ops/internal/quality/` (Go — this is where the gates live; the old `pkg/quality/` was relocated out of the shared base at M9), `infra/helmfile/` (declarative), or `infra/tests/e2e/` (Ginkgo). The allowlist + justification contract is `.claude/rules/shell-scripts-allowlist.md`.
+**Adding a new `.sh` file is FORBIDDEN by default** (`no-new-bash` gate, D3). New logic belongs in `cmd/loopzero-ops/internal/quality/` (Go — this is where the gates live; the old `pkg/quality/` was relocated out of the shared base at M9), `infra/helmfile/` (declarative), or `infra/tests/e2e/` (Ginkgo). The allowlist + justification contract was `.claude/rules/shell-scripts-allowlist.md`, which **does not exist** (measured 2026-09-11). The gate still runs; the written justification contract does not.
 
 **Prerequisites:** Go 1.26+, Node.js 20+, Docker, k3d, Tilt, Task, Helm v3.14+, **helm-diff plugin**, **Helmfile v1.0+**, kubectl, kubeconform, golangci-lint v2.11+, cosign (optional).
 
@@ -116,7 +116,7 @@ SECRETS           — SEPARATE `loopzero-secrets` cluster: OpenBao (Transit) + E
 
 1. **The composition is gated, default off.** **THREE** releases in `secrets.helmfile.yaml.gotmpl` carry `installed: {{ .Values | get "openbaoEnabled" false }}` — `openbao-cert`, `openbao`, `openbao-init`. This line said FOUR and named `openbao-snapshot-agent` as the fourth until 2026-09-11; measured, that release is gated on a **different** flag, `snapshotAgentEnabled` (also default false), so the count and the mechanism were both wrong. The flag is set in **1 of 8** environment files — only `vault-local.yaml` — and the only caller is `taskfiles/k3d.yml`, always `-e vault-local`. The helmfile header names the production target as *"DOKS `loopzero-secrets-prod` **in future**"*. OpenBao **is** on the production path via `infra/helm/loopzero-external-secrets` (ESO → loopzero-api broker → OpenBao transit) with its backup bucket in `Pulumi.prod.yaml`; what is gated is the composition that stands the cluster up.
 2. **The secret backend is per-installation, by contract.** `charts/loopzero-api/SECRETS.md` and `charts/loopzero-cloud/SECRETS.md` state that secrets are set *"per installation, in your target's native store (AWS Secrets Manager / GCP Secret Manager)"*, and the AM6.5 anti-lock-in ADR makes ESO **recommended, not required**. So OpenBao is this platform's operational choice, **not a product requirement** — a self-hoster bringing their own secret store runs a **4-cluster** topology.
-3. **The decision now has a home; the rule this paragraph used to cite does not exist.** The separation and its conditionality are recorded in `docs/decisions.md` § Open (2026-09-09, full body at `git show 4f728eb7a:docs/decisions/2026-09-09-the-secrets-cluster-is-separate-and-conditional.md`), which supersedes § Q2 of the ratified adoption ADR (that ADR decided *"not dedicated DOKS cluster"* and was never amended — #357). `.claude/rules/cleanroom-up-live-test-mandate.md` resolves nowhere in the workspace (`.claude/` is not in this repository), so the citation was replaced rather than left dangling. The prohibition above holds for **our** topology; what has no readable source is the "every tier" wording.
+3. **The decision now has a home; the rule this paragraph used to cite does not exist.** The separation and its conditionality are recorded in `docs/decisions.md` § Open (2026-09-09, full body at `git show 4f728eb7a:docs/decisions/2026-09-09-the-secrets-cluster-is-separate-and-conditional.md`), which supersedes § Q2 of the ratified adoption ADR (that ADR decided *"not dedicated DOKS cluster"* and was never amended — #357). `.claude/rules/cleanroom-up-live-test-mandate.md` resolves nowhere, so the citation was replaced rather than left dangling. Precisely: `.claude/` **does** exist on disk — it is the installed kit — but it is **gitignored** (`.gitignore:311`, 0 files tracked), so a fresh clone has none of it, and that particular rule file is absent even here. The prohibition above holds for **our** topology; what has no readable source is the "every tier" wording.
 
 ### Deploy flow (happy path)
 
@@ -136,12 +136,12 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 
 | Path | What |
 |---|---|
-| `api/internal/` | ~40 subpackages. Notable: `routes` (43 files), `services`, `lock`, `placement`, `cellmgr`, `gitops`, `argo`, `manifests`, `metering`, `sse`, `source` |
+| `api/internal/` | **39** subpackages. Notable: `routes` (**112** files — this said 43), `services`, `lock`, `placement`, `cellmgr`, `gitops`, `argo`, `manifests`, `metering`, `sse`, `source` |
 | `operators/` | 4 split binaries (`operators/cmd/{tenant,app,preview,platform}-operator`) — kubebuilder + controller-runtime |
 | `operators/api/` | CRD Go types (own module) |
 | `pkg/` | Shared libs: `statemachine`, `errors`, `naming`, `conditions`, `enforcement`, `circuitbreaker`, `healthcheck`, `id`, `logging`, `domain`, `events`, `vault`, `shellrun`, `pulumi`, `correlation` |
-| `cmd/loopzero-ops/` | Ops + quality binary: **126** wired quality gates (134 subpackages — the difference is helpers and not-yet-wired checks; `loopzero-ops quality --list` is the oracle) + `seed` / `drill` / `pulumi` / `chaos` subcommands |
-| `infra/helm/` (44 dirs) | Bootstrap charts — installed by **Helmfile L2** |
+| `cmd/loopzero-ops/` | Ops + quality binary: **126** wired quality gates of 145 registered (**167** directories — the difference is helpers and not-yet-wired checks; `loopzero-ops quality --list` is the oracle) + `seed` / `drill` / `pulumi` / `chaos` subcommands |
+| `infra/helm/` (**43** dirs) | Bootstrap charts — installed by **Helmfile L2** |
 | `charts/` (12) | Published OCI charts — consumed by **ArgoCD L3**; use the `loopzero-common` library |
 | `infra/tests/` | Ginkgo e2e, chaos, load (k6), unit (own module) |
 | `tools/` | `gen-service-auth-ed25519` (era um par; `loopzero-dockerfile-lint` saiu em 2026-08-19, B-157 — validava Dockerfile do usuario, caminho removido na T2.2) |
@@ -150,7 +150,7 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 
 Tenant · Environment · LoopZeroApplication · ExposedRoute · PlatformBootstrap · GitRepositoryBinding · ClusterCredential · PreviewEnvironment.
 
-The 2 historical orphan CRDs (AppSecret, ReconciliationReport) were deleted 2026-05-13 per ADR `.claude/knowledge-base/decisions/2026-05-13-orphan-crd-deletion.md` (this repo's own ADR tree).
+The 2 historical orphan CRDs (AppSecret, ReconciliationReport) were deleted 2026-05-13. The ADR was at `.claude/knowledge-base/decisions/2026-05-13-orphan-crd-deletion.md`, a tree that **no longer exists** — the deletion itself is in git history.
 
 ### State machines (11, `pkg/statemachine/`)
 
@@ -212,12 +212,19 @@ Layering today: **L1** cloud primitives (Pulumi/DO legacy → Terraform/AWS targ
 | Before you… | Read |
 |---|---|
 | touch any LoopZeroKit ↔ LoopZeroCloud seam — `api/internal/routes/source.go`, `api/internal/buildplane/source/services.schema.json`, `api/internal/buildplane/source/validator_*.go`, `api/internal/manifests/renderer.go`, or anything touching `services_json` / the multipart upload contract | `docs/loopzerokit-loopzerocloud-seam.md`. This doc used to be mirrored on the LoopZeroKit side; **that mirror no longer exists anywhere in the workspace**, so the copy here is the only one. If you re-establish a mirror, restore the "edit one, copy the diff in the same commit" rule with it. |
-| declare a journey complete, cut a release, or run `/cleanroom` `/dogfood full` `/chaos-test` | `.claude/rules/steady-state-baseline.md` — a 4-layer baseline snapshot is **mandatory** at every milestone boundary (code · runtime · config · LIVE functional probes). Omitting any layer invalidates it. |
-| run any LIVE validation | `.claude/rules/cleanroom-up-live-test-mandate.md` — INQUEBRÁVEL: Cleanroom TOTAL → UP → seeds → DOGFOOD FULL → LIVE TEST → QA Red Team. Warm-infra results are not LIVE-valid. |
-| implement a T2/T3 change (schema, state machine, API contract, CLI output, reconcile logic, Helm, Pulumi, `pkg/`, credentials, multi-cluster) | `.claude/rules/pre-release-governance.md` — classify the tier first; T2+ requires a meeting **before** code. |
+| declare a journey complete, cut a release, or run `/cleanroom` `/dogfood full` `/chaos-test` | **The rule file is gone.** `.claude/rules/steady-state-baseline.md` does not exist (measured 2026-09-11). The practice it carried: a 4-layer baseline snapshot at every milestone boundary — code · runtime · config · LIVE functional probes — where omitting any layer invalidates it. Nothing enforces this now. |
+| run any LIVE validation | **The rule file is gone.** `.claude/rules/cleanroom-up-live-test-mandate.md` does not exist, and § Four Planes already said so in one place while this row kept citing it. The practice: Cleanroom TOTAL → UP → seeds → DOGFOOD FULL → LIVE TEST → QA Red Team; warm-infra results are not LIVE-valid. Nothing enforces this now. |
+| implement a T2/T3 change (schema, state machine, API contract, CLI output, reconcile logic, Helm, Pulumi, `pkg/`, credentials, multi-cluster) | **The rule file is gone.** `.claude/rules/pre-release-governance.md` does not exist. The practice: classify the tier first; T2+ requires a meeting **before** code. Nothing enforces this now. |
 | write public copy (`PITCH.md`, loopzero.example, launch material) | `.claude/rules/public-copy.md`. Cross-Project Rule 9: never expose `Kubernetes`, `cluster`, `ArgoCD`, `Cosign`, `KEDA`, `Gitea`, `MinIO`, `Pulumi`, `Traefik`, `Ory` in user-facing copy — internals belong in a DEEP DIVE / Self-host section only. `PITCH.md` states this contract in its own header. |
 
-Other contracts live in `.claude/rules/` — `testing.md`, `error-handling.md`, `git-safety.md`, `shell-scripts-allowlist.md`, `architecture.md`, `parsimony-ladder.md`, `public-copy.md`, `pre-release-governance.md`.
+Other contracts live in `.claude/rules/` (36 files, measured 2026-09-11). These resolve:
+`testing.md`, `error-handling.md`, `git-safety.md`, `architecture.md`, `parsimony-ladder.md`,
+`public-copy.md`, `records-location.md`, `english-only.md`, plus the `cycle-*.md` set and the
+`*-golden-rule.md` set.
+
+**`shell-scripts-allowlist.md` and `pre-release-governance.md` do NOT exist** — this line named
+both until 2026-09-11. Note that `.claude/` is **gitignored**: these contracts are an installed
+kit, not this repository's source, so a fresh clone has none of them.
 
 Five files this list used to name (`workflow.md`, `tdd-workflow.md`, `loopzero-design.md`, `cli-output.md`, `design-principles.md`) were **deleted together** in `1c941b91f` ("Remove docs inconsistent") and are **not coming back** — restoring them would restore documentation someone judged inconsistent. Their subjects did not disappear with them; each is repointed (B-052):
 
@@ -229,8 +236,8 @@ Five files this list used to name (`workflow.md`, `tdd-workflow.md`, `loopzero-d
 | `cli-output.md` (internal terms, exit codes, `--json`) | Rules 3, 4 and 5 of this file; `public-copy.md` for the copy side |
 | `design-principles.md` (Don't Reinvent, KISS, YAGNI, DRY, SOLID) | `~/.claude/CLAUDE.md` Part II, operationalised by `parsimony-ladder.md` |
 
-`docs/README.md` is the index for `docs/`. **The tree was consolidated on 2026-09-11** from 1,523
-files across 19 subtrees into **six documents, all living reference** — `architecture.md`,
+`docs/README.md` is the index for `docs/`. **The tree was consolidated on 2026-09-11** from 1,374
+versioned files across 17 subtrees into **six documents, all living reference** — `architecture.md`,
 `loopzerokit-loopzerocloud-seam.md`, `api-contracts.md`, `operations.md`, `runbooks.md`, `decisions.md`.
 Fix one when it drifts; do not add a seventh beside it.
 
@@ -243,15 +250,33 @@ cited from code no longer resolved, two competing indexes described the same tre
 parallel audit trails (`wiki/` and `knowledge-base/`) overlapped in period with zero
 byte-identical files.
 
-## Records (`.claude/records/` live, `.claude/knowledge-base/` frozen)
+## Records — where cycle artifacts go
 
-Both store **WHY** — decisions, trade-offs, rationale that cannot be derived from code. Evidence is classified `[MEASURED]` / `[REPORTED]` / `[ESTIMATED]`. Max 3 pages updated per task; never auto-generate as a coding side effect — **this sentence is the rule**; the `auto-docs.md` it used to cite does not exist (B-052).
+Records store **WHY** — decisions, trade-offs, rationale that cannot be derived from code.
+Evidence is classified `[MEASURED]` / `[REPORTED]` / `[ESTIMATED]`. Max 3 pages updated per
+task; never auto-generate as a coding side effect.
 
-**Write to `.claude/records/`.** `.claude/rules/records-location.md` states it without a per-project option — *"`<project>/.claude/records/` is canonical. Always."* — and the kit's boundary hook lists `records/` among the paths a consumer owns, which `knowledge-base/` is not.
+**Write to `.squad/`.** `.claude/rules/records-location.md` is unambiguous — *"`<project>/.squad/`
+is the one write root. Always, in every layout."* — with `.squad/records/` for the dated trail and
+`.squad/wiki/` for durable knowledge.
 
-**`.claude/knowledge-base/` is a read-only archive** of the same trail up to 2026-08-28. It is frozen rather than deleted because it holds 149 records with **zero** overlap with `.claude/records/` — no file in either tree has a byte-identical twin in the other, measured 2026-09-04 — so each is the only copy of its evidence, and 59 citations elsewhere in this repo still resolve into it. Its `.md` set is pinned by `.claude/rules/records-archive-frozen.txt` and enforced by `loopzero-ops quality records-tree-split`, which fails both ways: a record ADDED there means the split reopened, a record REMOVED means evidence was destroyed. `decisions/` (48 ADRs) is the subtree most often cited from it.
+**This section described two directories that do not exist**, and said so in the present tense
+until 2026-09-11. Measured that day:
 
-This section used to send readers to `index.md`, `concepts/` and `references/` inside the archive. None of the three exists — verified 2026-09-04, B-166, same defect class as the `auto-docs.md` citation above.
+| Path | State |
+|---|---|
+| `.claude/records/` | **does not exist** |
+| `.claude/knowledge-base/` | **does not exist** |
+| `.claude/` | exists, **gitignored** (`.gitignore:311`), 0 files tracked — it is the installed kit, a dependency, not this repo's source |
+| `.squad/records/` | exists, empty |
+
+The consequence is the one that matters: **nothing written under `.claude/` reaches anyone who
+clones this repository.** The old text told a reader to write records into a path that both does
+not exist and would not travel, and backed it with a count of 149 archived records and 59
+citations into a tree that is gone.
+
+Cycle artifacts from before the move are in git history, and the dated engineering history lives
+in `CHANGELOG.md`.
 
 ## Pre-completion checklist
 
@@ -299,7 +324,7 @@ This section used to send readers to `index.md`, `concepts/` and `references/` i
 | Mistake | Fix |
 |---------|-----|
 | `pg_advisory_lock` (session-scoped) | Use `pg_advisory_xact_lock` |
-| Default lido do fallback do construtor em vez da config | `placement/engine.go:91` tem `if maxPerCell <= 0 { maxPerCell = 500 }` — é o **fallback**, não o valor entregue. O real é `config.go:497` (`envInt("MAX_TENANTS_PER_CELL", 5000)`) + `charts/loopzero-api/values.yaml:121`. O simulador de capacidade leu o 500 e inflou a contagem de cells em 10x, produzindo um gargalo `cell_count` inexistente e uma "Fase 1" que seria um downgrade. Ao citar um default, cite a **config**, não a guarda defensiva. |
+| Default lido do fallback do construtor em vez da config | `placement/engine.go:91` tem `if maxPerCell <= 0 { maxPerCell = 500 }` — é o **fallback**, não o valor entregue. O real é `config.go:511` (`envInt("MAX_TENANTS_PER_CELL", 5000)`) + `charts/loopzero-api/values.yaml:121`. O simulador de capacidade leu o 500 e inflou a contagem de cells em 10x, produzindo um gargalo `cell_count` inexistente e uma "Fase 1" que seria um downgrade. Ao citar um default, cite a **config**, não a guarda defensiva. |
 | Expressão CEL sobre `object.` numa regra `DELETE` | Em `DELETE` o `object` **não vem populado** como em CREATE/UPDATE. A expressão levanta erro de avaliação e, sob `failurePolicy: Fail`, isso vira **bloqueio geral**. Use `oldObject` quando precisar inspecionar o recurso, ou `request.*` para decidir por identidade. Terceira armadilha CEL da família (as outras duas: `!has(request.subResource)` e as isenções de GC do B33). Gate `vap-delete-guardrail` trava. |
 | Lista de isenções vazia num `matchCondition` de negação | A forma `!(request.userInfo.username in [...])` com lista **vazia** é `!(x in [])` — **sempre true**. A política passa a rodar para toda identidade e nega **tudo**, inclusive dos operators. Um piso mínimo de identidades é asserção de gate, não convenção. |
 | Testar admission policy com o kubeconfig padrão do e2e | O kubeconfig de k3d é admin, membro de `system:masters` — **grupo exempto** nos VAPs. O teste passa *porque o delete foi permitido*, não porque foi bloqueado. Use `--as=system:serviceaccount:<ns>:<sa>` com uma SA sem isenção, **e conceda RBAC a ela**: sem RBAC o `Forbidden` vem do RBAC e não prova nada sobre a política (a mensagem diz `cannot delete resource ... at the cluster scope`; a da política nomeia a policy). |
