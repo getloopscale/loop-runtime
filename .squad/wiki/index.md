@@ -26,8 +26,8 @@ declared here.
 
 ## Architecture views — measured 2026-09-11
 
-Each view ships a Markdown concept and an interactive React Flow render, bundled inline with no
-CDN. **Every status in them was measured from disk**, never recalled.
+Each view ships a Markdown concept and an interactive render — React Flow bundled inline for four of
+them, hand-authored SVG for the paved road — with no CDN. **Every status in them was measured from disk**, never recalled.
 
 - [architecture/target-solution.md](architecture/target-solution.md) — 61 components grouped by
   piece: 23 ready, 17 changed, 21 absent
@@ -37,6 +37,8 @@ CDN. **Every status in them was measured from disk**, never recalled.
   row, with what stands behind each promise
 - [architecture/alignment-review.md](architecture/alignment-review.md) — the review surface,
   and why 100% was never approval
+- [architecture/paved-road.md](architecture/paved-road.md) — 8 nodes: which routes cross which
+  trust boundary, drawn to the `diagram-design` contract
 
 ## Decisions
 

@@ -57,7 +57,7 @@ h1{font-size:clamp(2.1rem,5vw,3.1rem);line-height:1.06;font-weight:500;letter-sp
   margin-top:30px;padding:16px 20px;border:1px solid var(--ok);
   background:var(--ok-soft);border-radius:3px;
 }
-.verdict b{font-family:"IBM Plex Mono",monospace;font-size:.94rem;letter-spacing:.06em;color:var(--ok);font-weight:500}
+.verdict b{font-family:"IBM Plex Mono",monospace;font-size:.94rem;letter-spacing:.06em;color:var(--accent);font-weight:500}
 .verdict span{font-family:"IBM Plex Sans",sans-serif;font-size:.9rem;color:var(--ink-2)}
 .verdict .score{font-family:"IBM Plex Mono",monospace;font-size:.86rem;color:var(--ink-3)}
 
@@ -178,12 +178,12 @@ footer p{margin:0 0 8px;max-width:70ch}
 <div class="wrap">
 
 <header class="top">
-  <p class="eyebrow">cycle-brainstorm · emendado após revisão externa · 2026-09-11</p>
+  <p class="eyebrow">cycle-brainstorm · self-host removido · 2026-09-11</p>
   <h1>LoopZero Product Alignment</h1>
-  <p class="dek">Uma revisão externa apertou sete critérios de aceite, desambiguou três métricas e derrubou uma conclusão minha. O texto emendado foi re-assinado — e a segunda assinatura cobre saber o que ainda não está demonstrado.</p>
+  <p class="dek">Self-host foi eliminado e o BYOC virou a oferta inteira. A assinatura saiu de novo — e desta vez a pesquisa de mercado diz que <strong>nenhum fornecedor verificado opera essa configuração</strong>.</p>
   <div class="verdict">
-    <b>PRODUCT_ALIGNED</b>
-    <span>re-assinado por <b style="font-family:inherit">paulo</b> · 2026-09-11, sobre o texto emendado</span>
+    <b>AWAITING_REVIEW</b>
+    <span>assinatura retirada — <b style="font-family:inherit">self-host saiu</b> e o OBJ-3 foi reescrito</span>
     <span>3 discordâncias resolvidas em 2026-09-10</span>
     <span class="score tnum">100.0% · 34/34 · piso 90%</span>
   </div>
@@ -229,48 +229,47 @@ footer p{margin:0 0 8px;max-width:70ch}
       </div>
     </div>
   </div>
-  <p class="signnote"><b>Assinado duas vezes, e a segunda cobre mais que a primeira.</b> A de 2026-09-10 foi <b>retirada</b> quando o texto mudou — a caixa 2 afirma <em>estas são as métricas certas</em> e três mudaram; a caixa 3 afirma <em>os requisitos decorrem dos objetivos</em> e sete aceites mudaram. O agente retirou sem perguntar porque retirar é a direção segura: nunca fabrica aprovação, só remove uma. A de <b>2026-09-11</b> cobre o texto emendado — e cobre saber que os 30 minutos do OBJ-1 são da máquina e não de uma pessoa, e que o REQ-16 ainda não foi demonstrado pelo instrumento que ele nomeia.</p>
+  <p class="signnote"><b>A assinatura foi retirada pela segunda vez.</b> A caixa 2 afirma <em>estes são os objetivos certos</em>, e o OBJ-3 foi reescrito quando o self-host saiu. <b>Marcar a caixa 2 agora significa concordar com um escopo que nenhum fornecedor verificado opera.</b> Pode estar certo. Deve ser deliberado — e o registro completo, com evidência graduada em lida / resumo de busca / não verificada, está em <code>.squad/wiki/decisions/byoc-as-the-only-mode-has-no-precedent.md</code>.</p>
 </section>
 
 <section class="col">
-  <h2>As três discordâncias, resolvidas</h2>
-  <p class="sub">2026-09-10 · duas por medição, uma por decisão</p>
-  <p class="lede">As três foram resolvidas <strong>antes</strong> deste documento ser oferecido para assinatura. Duas se resolveram lendo o disco em vez de decidindo — que é a metade mais barata.</p>
+  <h2>A mudança de escopo, e o que ela não tem</h2>
+  <p class="sub">2026-09-11 · self-host eliminado, BYOC é a oferta inteira</p>
 
   <div class="dis">
-    <span class="n">D2 · reaberta em 2026-09-11</span>
-    <h4>REQ-16 &nbsp;→&nbsp; a conclusão era mais forte que o instrumento</h4>
+    <span class="n">o que sobrevive</span>
+    <h4>A visão não quebrou — apertou</h4>
     <div class="measure">
-      <span>aceite exigido: <b>captura de rede</b></span>
-      <span>o que rodou: <b>grep</b> por <code>fetch</code>/<code>axios</code></span>
-      <span><code>create-loopzerokit</code> chama <b>git clone</b> — invisível ao grep</span>
+      <span><b>4</b> de 5 requisitos seguem</span>
+      <span><b>REQ-10</b> retirado, riscado no lugar</span>
+      <span><b>PIECE-9</b> vira cell provisioning</span>
     </div>
-    <p>Afirmar um requisito satisfeito com instrumento mais fraco do que o que ele nomeia é a falha que esta cascata existe para prevenir — e foi feito no mesmo parágrafo que se elogiava por ter pego um falso positivo de regex.</p>
-    <p>Sondando o que o grep não vê, achou-se um caminho real: <code>clone-example.ts:1</code> importa <code>execFileSync</code> e chama <code>git clone</code>. É opt-in e vai ao GitHub, não a nós — então o REQ-16 <em>pode</em> valer, mas isso é outra afirmação.</p>
-    <p class="ask"><b>Estado: inspeção estática favorável, aceite pendente.</b> A inspeção confirmou também ausência de lifecycle scripts em todos os pacotes publicados — o outro esconderijo comum.</p>
+    <p><em>"A mesma plataforma roda na sua infraestrutura"</em> continua verdade — a cell BYOC vive na conta dele. E o não-objetivo <em>"o cliente nunca opera um cluster"</em> fica <strong>mais forte</strong>: o self-host era o único lugar onde ele operaria.</p>
+    <p class="ask">O REQ-10 dissolveu porque sob BYOC nós instalamos com a autoridade do CAPI. Riscado e não apagado — outros documentos citam o id.</p>
   </div>
 
   <div class="dis">
-    <span class="n">D1 · resolvida com previsão escrita antes</span>
-    <h4>OBJ-3 não fecha no horizonte &nbsp;→&nbsp; o horizonte fica, e a previsão vem primeiro</h4>
+    <span class="n">o que a pesquisa contesta</span>
+    <h4>BYOC como único modo não tem precedente encontrado</h4>
     <div class="measure">
-      <span>release <b>v0.76.6</b> publicada</span>
-      <span><b>12</b> charts OCI publicados</span>
-      <span>composição que os levanta — <b>não publicada</b></span>
+      <span>Confluent · MongoDB · Temporal · Porter</span>
+      <span><b>todos</b> têm uma segunda porta</span>
+      <span><b>0</b> fornecedores só-BYOC encontrados</span>
     </div>
-    <p>A tentativa não é vazia: há artefato. Mas para cedo, e a previsão é que <strong>pare no REQ-10</strong> — temos os charts e não temos o procedimento publicado que os levanta.</p>
-    <p class="ask">Escrever a previsão antes é o que faz a tentativa valer. Se parar no REQ-10, confirmamos o que já sabíamos e o baseline foi barato. <b>Se parar em outro lugar, aprendemos algo que não sabíamos</b> — e um resultado registrado depois do fato só consegue concordar consigo mesmo.</p>
+    <p>Em todo fornecedor verificado o BYOC é a <strong>terceira</strong> opção, ao lado de um modo gerenciado. E a Databricks, maior fornecedora de compute na conta do cliente, está recuando: serverless GA em janeiro de 2026, depreciação planejada do workspace clássico.</p>
+    <p class="ask">A decisão não foi refutada. A <em>exclusividade</em> dela é inédita — afirmação menor, e a exata.</p>
   </div>
 
   <div class="dis">
-    <span class="n">D3 · resolvida por decisão</span>
-    <h4>PIECE-6 não tem dono &nbsp;→&nbsp; é achado, e achado não bloqueia esta assinatura</h4>
+    <span class="n">o que tem mais alavancagem</span>
+    <h4>Dois fornecedores argumentam contra a nossa forma</h4>
     <div class="measure">
-      <span><code>create-loopzerokit/README.md</code> — <b>0</b> seções de início</span>
-      <span><code>loopzero-cli/README.md</code> — <b>1</b></span>
+      <span>WarpStream · Nuon</span>
+      <span><b>45 a 70+</b> ações AWS no equivalente Databricks</span>
+      <span>propõem <b>egress-only</b></span>
     </div>
-    <p>O pacote que <strong>é</strong> o ponto de entrada não documenta o percurso. Mas a caixa 4 pergunta se <em>as peças cobrem todos os requisitos</em>, e a PIECE-6 cobre REQ-1 e REQ-4 — cobertura está satisfeita. <strong>Dono é outra pergunta, e nenhuma das quatro caixas a faz.</strong></p>
-    <p class="ask">Bloquear nisso tornaria a cascata incapaz de fechar enquanto existisse qualquer lacuna — ou seja, incapaz de <em>reportar</em> uma. E atribuir o dono aqui cruzaria a linha da própria fase: o mapeamento peça→repositório é do <code>/backlog-init</code>, que age sobre este achado.</p>
+    <p>Não contra o BYOC — contra o <strong>papel assumido cross-account</strong>, que é o que o D5 usa. Ambos propõem agente dentro da conta do cliente, sem caminho de entrada.</p>
+    <p class="ask">É o achado com mais alavancagem porque <b>o mecanismo ainda não foi construído</b>. Mudá-lo depois é mudar uma relação de confiança viva em cada conta de cliente.</p>
   </div>
 </section>
 
