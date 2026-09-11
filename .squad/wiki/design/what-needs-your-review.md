@@ -58,9 +58,11 @@ Five drawings. One question of the seven is now **resolved**; six remain.
 | D3 | Build runs in the customer's cell or on platform infra? | **RESOLVED** — the customer's, by C1 of the extraction RFC, before this drawing asked |
 | D4 | Is an in-flight turn checkpointed before it completes? | open — new, from resolving the one above |
 
-**New finding from the D4 answer:** the `loopzero` ↔ `loopzero-memory` edge is cross-repo.
-This drawing now asserts a durability property whose evidence lives in a repository
-`loopzero` does not build, and no gate here would see it break.
+**Why D4 looked unresolved from inside `loopzero`:** the renderer emits `Deployment` or
+`Rollout`, never `StatefulSet`, and puts no `PersistentVolumeClaim` on the user's path.
+Read alone that says the state does not survive. It survives because it lives in
+`loopzero-memory` — part of this ecosystem, **treated as ready and working** (decided
+2026-09-11). The drawing's contribution is WHERE, not a risk.
 
 ---
 

@@ -39,9 +39,9 @@ DERIVED from them, because a map drawn first looks like design happened and forc
 
 **Two were answered on 2026-09-11.** D3 was never open — C1 of the extraction RFC decided the build
 runs on the customer's infrastructure before this drawing asked. D4 is **yes**: agent state survives
-a pod restart because it was never in the pod, it is in `loopzero-memory`'s Postgres. Answering D4
-exposed the finding: **that evidence lives in a repository `loopzero` does not build, and no gate here
-watches the edge.**
+a pod restart because it was never in the pod, it is in `loopzero-memory`'s Postgres — **ours, and
+treated as ready and working**. What D4 produced is a location, not a risk: looking for the state
+in `loopzero` was looking in the wrong repository.
 
 ## Architecture views — measured 2026-09-11
 
