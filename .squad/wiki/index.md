@@ -69,6 +69,7 @@ them, hand-authored SVG for the paved road — with no CDN. **Every status in th
 - [decisions/two-doors-managed-and-byoc.md](decisions/two-doors-managed-and-byoc.md) — managed PaaS for the solo developer, BYOC for privacy
 - [decisions/shared-kernel-on-the-managed-door.md](decisions/shared-kernel-on-the-managed-door.md) — shared kernel on the managed door; BYOC is the isolation product
 - [decisions/agent-state-never-lives-in-the-pod.md](decisions/agent-state-never-lives-in-the-pod.md) — the invariant that answers the four remaining design questions
+- [decisions/the-control-plane-reaches-in-only-at-cell-birth.md](decisions/the-control-plane-reaches-in-only-at-cell-birth.md) — push at birth, egress-only for Day-2
   — self-host was dropped on 2026-09-11 and BYOC became the whole offer. Research the same day found
   **no vendor whose only enterprise mode is BYOC with a vendor-hosted control plane**, and two
   vendors arguing against the cross-account-role mechanism specifically. The decision stands; the

@@ -67,14 +67,17 @@ correcting the credential direction, which is what a redraw is for.
 
 ## Open — for the sign-off to resolve
 
-- **Does the control plane assume a role inward, or does an egress-only agent reach out?**
-  This is the question this drawing omitted while the other four each carried one, and it is
-  the one [`../decisions/byoc-as-the-only-mode-has-no-precedent.md`](../decisions/byoc-as-the-only-mode-has-no-precedent.md)
-  ranks highest: WarpStream asks *"wouldn't it be better if external access wasn't required at
-  all?"*, and Nuon reports that least privilege *"prohibits most day-to-day debugging"*. Both
-  propose an agent inside the customer account with **no inbound path**. The record calls it
-  *"the finding with the most leverage, because the mechanism is not yet built"* — and changing
-  it later means changing a live trust relationship in every customer account.
+- ~~**Does the control plane assume a role inward, or does an egress-only agent reach out?**~~
+  **ANSWERED 2026-09-11 — both, at different moments.** CAPI reaches in **at cell birth only**,
+  with minimum scope and revoked after; Day-2 is egress-only, with no stored per-cell kubeconfig.
+  Researched against Azure Arc, GKE Connect, AWS SSM, WarpStream and Confluent, which converged
+  unanimously on outbound agents. Full record, including what it costs:
+  [`../decisions/the-control-plane-reaches-in-only-at-cell-birth.md`](../decisions/the-control-plane-reaches-in-only-at-cell-birth.md).
+
+  **The spike inverted the question.** `cross_cluster_token_review.go` looked like proof we must
+  reach in; it validates a token from **ESO running in the cell**, which already calls us outbound.
+  We reached back only to verify the caller — and `loopzero-contracts/serviceauth` already does that
+  with Ed25519 signatures, replay windows and a nonce store, built against the same threat.
 
 - **Is there an egress allowlist for the customer's app?** **No longer a question — it is work.** Registered as `B-226`, `triaged`, domain `operators`: the platform's
   own namespace excludes RFC1918 and `169.254/16`; the tenant's does not.
