@@ -47,6 +47,11 @@ them, hand-authored SVG for the paved road — with no CDN. **Every status in th
   **no vendor whose only enterprise mode is BYOC with a vendor-hosted control plane**, and two
   vendors arguing against the cross-account-role mechanism specifically. The decision stands; the
   evidence is recorded while reversing is still cheap.
+- [decisions/eks-via-awsmanagedcontrolplane.md](decisions/eks-via-awsmanagedcontrolplane.md) — a
+  cell's control plane is EKS via CAPA's `AWSManagedControlPlane`, decided on the one row nobody
+  had checked: EKS standard support reaches 1.36 and our libraries are 1.36, so the constraint
+  that would have flipped it does not bite. `AWSManagedMachinePool` stays out — still
+  experimental — which means AMIs remain ours to build.
 
 ## What these views agree on, and it is not comfortable
 
