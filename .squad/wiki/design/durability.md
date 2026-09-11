@@ -38,7 +38,16 @@ flowchart LR
 ## Decided
 
 - **The execution record is durable against pod, node and upgrade** — it is in Postgres and
-  it is not in the workload. Against a destroyed **cell** the drawing says nothing, because
+  it is not in the workload. **Store named AND found** (cited 2026-09-11, round 4, after the
+  panel objected that only the Agent-state column had been verified): `loopzero-lens`'s
+  `drizzle.config.ts:10` declares `dialect: "postgresql"`, and its
+  `packages/core/src/infrastructure/db/migrations/` holds **34** `.sql` files,
+  `0000_yielding_mercury` through `0033_rls_fail_closed`.
+
+  **The count is the same as `loopzero-memory`'s and the schemas are not.** Both reached 34 by
+  coincidence; the migration names share nothing (`loopzero-memory` runs `0000_crazy_mimic` to
+  `0033_worker_sequence_grants`). Stated because two identical numbers in one document invite
+  the conclusion that one was copied from the other. Against a destroyed **cell** the drawing says nothing, because
   `prod.yaml` declares where none of the three data-plane services run. Corrected 2026-09-11,
   round 3: the table said `not established` while this edge still said `survives … cell`.
 
@@ -93,7 +102,7 @@ agent's memory.
 
 - **Where does the data plane run in production?** `prod.yaml` declares none of
   `loopzero-lens`, `loopzero-memory` or `loopzero-rag`, and their URLs come from an overlay only
-  `dev-public` sets. Until that is declared, no row of the `cell destroyed` line can be filled.
+  `dev-public` sets. Until that is declared, **no data-plane column** of the `cell destroyed` row can be filled — the App-workload column is `gone` and stays so, because D2 and D5 both place the workload inside the cell and that placement IS declared.
 
 - **What is lost mid-turn?** Memory is durable at rest; whether an in-flight turn is
   checkpointed before it completes was not established, and that is the remaining
