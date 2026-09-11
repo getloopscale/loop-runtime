@@ -93,6 +93,67 @@ PlanetScale have no middle rung: shared, then BYOC at enterprise. The customer w
 isolation **buys BYOC**, and that rung already exists. Building a third was complexity with no
 concrete case behind it, which is the parsimony ladder's first rung answering no.
 
+## What the isolation would cost — priced 2026-09-11
+
+The decision above was taken on the market's shape, not on a number. The number was researched
+later and does not change it, which is worth recording: a decision that survives being priced is
+stronger than one taken before anybody asked.
+
+**The vendor price of a sandbox is the EC2 price, in the vCPU.**
+
+| | per vCPU-hour |
+|---|---|
+| E2B · Daytona | `$0.0504` |
+| AWS `m7i.large` — `$0.1008/hr` ÷ 2 vCPU | `$0.0504` |
+
+The same figure. Zero margin on compute; the margin is memory, charged on top at
+`$0.0162/GiB-hour`. So the equivalent of an `m7i.large` costs `$0.1008` on EC2 and `$0.2304` from
+a sandbox vendor — **≈2.3×**, all of it in memory — plus E2B's `$150/month` floor, whose crossover
+is ~1,050 vCPU-hours. Modal charges ~`$0.071/vCPU-hour` (3× its own standard rate) and **zeroes
+compute while idle**, which inverts the comparison for intermittent load.
+
+**Priced for 100 solo agents active 5% of the time** (1 vCPU / 2 GiB each; arithmetic ours, prices
+above):
+
+```
+managed sandbox vendor      ~$302/month + floor
+our own EC2, bin-packed     ~$220/month
+our own EC2 + gVisor        ~$227/month   (~3% runtime overhead)
+```
+
+**So compute cost argues for nothing, in either direction.** Isolating costs ~3%; buying instead
+of operating costs under 40%. Anyone choosing on price alone is choosing on noise.
+
+### What the price DOES settle: who pays
+
+| | who pays | what it buys |
+|---|---|---|
+| sandbox as **platform isolation** | us, on **100% of pods**, permanently | protection against a risk Heroku, Railway, Supabase and PlanetScale all accept |
+| sandbox as **a product beside it** | the customer, **per use** | a revenue line at ~2.3× infrastructure cost |
+
+Vercel, Cloudflare, Modal and Ramp all shipped sandboxes in early 2026 and **none converted its
+deployment platform**. The exit condition below is therefore also the commercially correct move,
+not only the architecturally correct one.
+
+### And a correction to this record's own reasoning
+
+The § *What was rejected* section calls gVisor *"a permanent operational dependency"*. That
+overstates it: the literature describes gVisor as close to a drop-in — configure `runsc` as a
+RuntimeClass handler and existing images run unmodified. **Kata** is the one needing a VMM and
+nested virtualisation.
+
+What does apply to us, verbatim: *"a self-hosted, Cluster API-managed fleet doesn't get to hide the
+isolation decision — every pod scheduled onto owned hardware needs an explicit trust tier, because
+there's no platform vendor absorbing the isolation choice (and its cost) on your behalf."* That is
+this platform exactly, and it is the honest version of the cost.
+
+### Market context, for the same date
+
+Agents: `$10.8B` in 2026, 44-46% CAGR; coding agents ~`$9.8-11B` annualised. **79% of enterprises
+report adopting agents and 11% run them in production**, with Gartner putting 40%+ of projects at
+risk of cancellation by 2027. The trend the OpenChoreo diagram shows is real; what sustains revenue
+is a tenth of it.
+
 ## The exit condition — written, because otherwise it becomes default by inertia
 
 > **Reopen this decision when LoopZero offers execution of agent-generated code as a platform
