@@ -5,7 +5,7 @@ package store
 
 // repository_wrapper.go — sqlc-backed implementation of
 // PostgresRepositoryStore. T2.1 Batch A (3rd of 10) of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// 2026-05-29-sqlc-migration-plan v1.3.
 //
 // The 1 prod call site (api/cmd/setup_github.go:56) uses the
 // struct-literal `&db.PostgresRepositoryStore{DB: dbAdapter}` —

@@ -143,6 +143,76 @@ Go 1.26+, Node.js 20+, Docker, k3d, Tilt, Task, Helm v3.14+, **helm-diff plugin*
 | `LOOPZERO_SESSION_TOKEN_SECRET` | generated locally | injected | injected |
 | `COSIGN_KEY` + `COSIGN_PASSWORD` | local pair from `generate-build-secrets.sh` | injected | injected |
 
+### Pulumi config secrets
+
+Set with `pulumi config set --secret <key>` per stack. Required across dev / staging / prod / drill:
+`digitaloceanToken`, `spacesAccessKeyId`, `spacesSecretAccessKey`, `giteaAdminPassword`,
+`minioRootPassword`, `loopzeroApiDbPassword`, `sessionTokenSecret`, `serviceAuthSecret`.
+
+Required when the matching feature is on: `cfApiToken`, `cfAccountId`, `cfZoneId`, `tunnelSecret`
+(Cloudflare); `stripeApiKey`, `stripeWebhookSecret`, `stripePriceProId` (billing); `resendApiKey`
+(mail); `githubOAuthClientId`, `googleOAuthClientId` (social login).
+
+### K8s Secrets created at bootstrap
+
+Reconciled by `task bootstrap:standalone` locally, by Pulumi + Helmfile on drill/prod.
+
+| Secret | Namespace | Source | Consumers | Rotation |
+|---|---|---|---|---|
+| `loopzero-db-credentials` | loopzero-system | `generate-secrets.sh:146` | loopzero-api, loopzero-cloud, Hydra/Kratos DSN | manual — see playbook |
+| `gitea-admin` | loopzero-system | `generate-secrets.sh:157-158` | Gitea pod, tenant + app operators | Gitea admin UI, then re-run `provision-api-tokens.sh` |
+| `loopzero-api-tokens` | loopzero-system | `provision-api-tokens.sh:100` | loopzero-api `/health/deep` | re-run the script |
+| `argocd-creds-gitea` | argocd | `provision-api-tokens.sh:119` | ArgoCD repo-creds (Gitea HTTPS) | with `gitea-admin` |
+| `cluster-cell-0` | argocd | `provision-api-tokens.sh:155` | ArgoCD destination resolution | n/a — kubeconfig embedded |
+| `minio-credentials` | argo | `generate-build-secrets.sh:108` | Argo Workflows + BuildKit cache | with the MinIO root |
+| `cosign-signing-key` | argo | `generate-build-secrets.sh:87` | the cosign-signer step | **quarterly** |
+| `buildkit-registry-config` | argo | `generate-build-secrets.sh:100` | BuildKit `--registry-config` | with the registry creds |
+| `cloudflared-tunnel-token` | loopzero-system | `generate-runtime-secrets.sh:65,74` | cloudflared Deployment | CF Zero Trust |
+| `loopzero-eso-source` | external-secrets | `generate-runtime-secrets.sh:90` | ESO ClusterSecretStore | with the ESO SA token |
+| `static-assets-s3` | loopzero-system | `generate-runtime-secrets.sh:126` | nginx-s3-gateway | with the Spaces creds |
+| `harbor-admin` | loopzero-system | `generate-secrets.sh:294` | Harbor login | Harbor admin |
+| `harbor-redis-credentials` | loopzero-system | `generate-secrets.sh:300` | Harbor ↔ Redis | with the Harbor admin |
+| `loopzero-registry-pull` | loopzero-system (workload) | `bootstrap-cluster.sh:76` | every `loopzero-*` imagePullSecret | `doctl registry kubernetes-manifest` |
+
+**ESO-managed:** the ClusterCredential kubeconfig Secret in `loopzero-system` (core) is synced into the
+workload cluster as `cell-0.kubeconfig` for loopzero-api.
+
+### Chart-hardcoded credentials
+
+Dev fallbacks compiled into chart values. Each is a known default that can reach production through
+`helmfile -e standalone sync`, which is why they are enumerated rather than left implicit.
+
+| File:Line | Literal |
+|---|---|
+| `infra/helm/postgresql/values.yaml:19` | `loopzero-dev-password` |
+| `infra/helm/minio/values.yaml:7` | `loopzero-dev-password` |
+| `infra/helm/loki/values.yaml:25` | `loopzero-dev-password` |
+| `infra/helm/monitoring/values.yaml:57` | `loopzero-dev-password` (Grafana admin) |
+| `infra/helm/gitea/values.yaml:7` | `loopzero-gitea-dev-2026` |
+| `infra/helm/gitea/values.yaml:19` | `loopzero-dev-password` (PASSWD env) |
+| `infra/helm/ory-hydra/values.yaml.gotmpl:18` | `loopzero-dev-password` (DSN inline) |
+| `infra/helm/ory-kratos/values.yaml.gotmpl:14` | `loopzero-dev-password` (DSN inline) |
+| `infra/helmfile/scripts/generate-secrets.sh:140` | `loopzero-dev-password` fallback |
+| `infra/helmfile/scripts/generate-runtime-secrets.sh:119` | `loopzero-dev-password` fallback |
+| `infra/scripts/production/provision-api-tokens.sh:23` | `loopzero-gitea-dev-2026` fallback |
+
+### Rotation playbook
+
+**`loopzero-db-credentials`** — write the new value into the Secret, `ALTER USER loopzero WITH PASSWORD`
+against Postgres, then restart the consumers (they cache the DSN at boot: `loopzero-api`, plus `hydra`
+and `kratos` in `loopzero-auth`), and confirm with `task doctor`.
+
+**`gitea-admin`** — use the idempotent re-run path, which refreshes both the Secret and the Gitea
+API token: `generate-secrets.sh standalone mgmt` then `provision-api-tokens.sh`. Restart
+`argocd-repo-server` afterwards to invalidate its cache.
+
+**`cosign-signing-key`** — quarterly, with a dual-sign window. Procedure in
+[`runbooks.md`](runbooks.md) § Cosign signing key rotation.
+
+**Pulumi config secrets** — `pulumi config set --secret <key>` on the target stack, then re-apply.
+
+**Everything else** — re-run the generator script that owns the Secret; each row above names it.
+
 `LOOPZERO_ADMIN_API=true` is a separate defense-in-depth flag: without it, admin endpoints
 return 404 even with a valid `X-Service-Auth`. Production sets it via the infra layer;
 a standalone Tilt stack must set it explicitly.

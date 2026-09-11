@@ -2,7 +2,7 @@
 -- environment_targets table (the operational pointer that tracks
 -- desired/active release per (tenant, project, environment) tuple).
 --
--- T2.1 (Batch A #6) of plan docs/plans/2026-05-29-sqlc-migration-plan.md
+-- T2.1 (Batch A #6) of plan 2026-05-29-sqlc-migration-plan
 -- v1.3. Multi-tenant: every query carries `tenant_id` predicate
 -- (environment_targets is in TenantOwnedTables).
 --

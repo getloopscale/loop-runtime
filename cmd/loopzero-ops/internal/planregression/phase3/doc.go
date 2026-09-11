@@ -4,7 +4,7 @@
 // Package phase3 validates Phase 3 (deprecate task setup; canonicalize
 // Tilt) of plan 2026-05-22-shell-script-strategic-plan.md v1.3:
 //
-//   - T3.1: docs/operations/dev-loop.md exists + CLAUDE.md/README canonicalized
+//   - T3.1: docs/operations.md exists + CLAUDE.md/README canonicalized
 //   - T3.2: Taskfile.yml setup target has deprecation notice pointing to tilt
 //
 // Phase 3 is doc-only — no production Go code. Tests verify the docs are

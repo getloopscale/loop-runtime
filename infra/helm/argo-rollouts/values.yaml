@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Argo Rollouts hardened values per
-# docs/plans/argo-rollouts-progressive-delivery-plan.md T0.1.
+# argo-rollouts-progressive-delivery-plan T0.1.
 #
 # Hardening:
 #   - Dashboard DISABLED (attack surface — same policy as Chaos Mesh)

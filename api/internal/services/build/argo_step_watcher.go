@@ -305,7 +305,7 @@ func (w *ArgoStepWatcher) ReportWatchError(statusCode int, message string) {
 		w.logger.Error("argo step watcher: build cluster auth failed — rotate loopzero-workflow-submitter token",
 			"status_code", statusCode,
 			"message", message,
-			"runbook", "docs/operations/build-cluster-token-rotation.md",
+			"runbook", "docs/runbooks.md",
 		)
 		cloudmetrics.ArgoWatcherTokenExpiredTotal.Inc()
 	default:

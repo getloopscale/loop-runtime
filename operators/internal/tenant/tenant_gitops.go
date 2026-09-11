@@ -350,7 +350,7 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 	// writes the input (Tenant.Spec.Environments), triggers operations (/sync,
 	// /operation) and deletes only on the administrative-eviction path — it never
 	// writes spec, and must not start. ADR
-	// docs/wiki/decisions/2026-08-12-argocd-application-ownership.md (B-050).
+	// docs/decisions.md (B-050).
 	//
 	// This paragraph used to say instead that preview_controller.go:609 carried a
 	// comment claiming "Application CR deletion is owned by the API (best-effort)"

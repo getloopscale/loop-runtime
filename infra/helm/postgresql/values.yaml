@@ -22,7 +22,7 @@ auth:
   # kratos/hydra/loopzero-api read. An inline value here would diverge from that
   # secret. Earlier this was "" expecting a never-wired $LOOPZERO_DB_PASSWORD
   # override → Bitnami auto-generated a random password → kratos SASL auth
-  # failed (finding-2026-05-22-pg-password-divergence). See docs/operations/credentials-required.md.
+  # failed (finding-2026-05-22-pg-password-divergence). See docs/operations.md.
   password: ""
   database: loopzero
 

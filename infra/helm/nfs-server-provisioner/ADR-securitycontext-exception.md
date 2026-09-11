@@ -56,5 +56,5 @@ Revisit this exception when ANY of:
 ## References
 
 - INF-G08: Secure Defaults gate (this exception is documented per gate's "documented and explicit" criterion).
-- ADR D7 of the infra SOTA hardening plan: audit-first / fix-or-document approach. (The path `docs/plans/infra-sota-hardening-plan.md` cited here until 2026-09-11 exists in no commit.)
+- ADR D7 of the infra SOTA hardening plan: audit-first / fix-or-document approach. (The path `infra-sota-hardening-plan` cited here until 2026-09-11 exists in no commit.)
 - Kubernetes NFS provisioner upstream: https://github.com/kubernetes-sigs/nfs-ganesha-server-and-external-provisioner

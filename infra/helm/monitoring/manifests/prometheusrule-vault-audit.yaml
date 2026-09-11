@@ -1,5 +1,5 @@
 # B-161/B-067 — os quatro alertas voltaram a carregar `runbook_url`, agora para um caminho
-# que EXISTE: `docs/operations/runbook-vault-audit-alerts.md`.
+# que EXISTE: `docs/runbooks.md`.
 #
 # Ate' 2026-08-19 eles apontavam para `docs.loopzero.example/runbooks/vault-*`, que responde 404. Os
 # links mortos sairam naquele dia (B-161) e os quatro ficaram mudos — o gate `vault-prom-alerts`,
@@ -51,7 +51,7 @@ spec:
             team: platform-security
             domain: vault
           annotations:
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/operations/runbook-vault-audit-alerts.md#vaultauthfailureratehigh"
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#vaultauthfailureratehigh"
             summary: "Vault auth failure rate > 10/min on {{ $labels.path }}"
             description: |
               The Vault auth method at path `{{ $labels.path }}` is rejecting
@@ -75,7 +75,7 @@ spec:
             team: platform-security
             domain: vault
           annotations:
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/operations/runbook-vault-audit-alerts.md#vaultpolicydenialratehigh"
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#vaultpolicydenialratehigh"
             summary: "Vault policy denial rate > 5/min for {{ $labels.request_path }}"
             description: |
               Policy denials at `{{ $labels.request_path }}` exceed 5/min over
@@ -98,7 +98,7 @@ spec:
             team: platform-security
             domain: vault
           annotations:
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/operations/runbook-vault-audit-alerts.md#vaultsealedordown"
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#vaultsealedordown"
             summary: "OpenBao Vault is sealed OR scrape down"
             description: |
               vault_core_unsealed=0 (sealed) OR the metrics scrape itself is
@@ -128,7 +128,7 @@ spec:
             domain: vault
             invariant: "audit-log-must-flow"
           annotations:
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/operations/runbook-vault-audit-alerts.md#vaultauditlogstalled"
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#vaultauditlogstalled"
             summary: "OpenBao audit log silent > 10min despite active traffic"
             description: |
               Vault is processing requests (vault_audit_log_request_count > 0)

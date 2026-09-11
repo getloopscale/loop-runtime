@@ -31,7 +31,7 @@ spec:
             severity: critical
           annotations:
             summary: "Velero backup '{{ $labels.schedule }}' is stale (>12h)"
-            runbook: "docs/runbooks/velero-backup-alerts.md"
+            runbook: "docs/runbooks.md"
             description: "Last successful run of schedule {{ $labels.schedule }} is older than 12 hours. RPO exceeded — risk of data loss in case of cluster failure."
 
         - alert: LoopZeroVeleroBackupFailing
@@ -41,7 +41,7 @@ spec:
             severity: critical
           annotations:
             summary: "Velero backup '{{ $labels.schedule }}' is failing"
-            runbook: "docs/runbooks/velero-backup-alerts.md"
+            runbook: "docs/runbooks.md"
             description: "Schedule {{ $labels.schedule }} produced one or more failed backups in the last 6 hours."
 
         - alert: LoopZeroVeleroServerDown
@@ -51,7 +51,7 @@ spec:
             severity: critical
           annotations:
             summary: "Velero server is down"
-            runbook: "docs/runbooks/velero-backup-alerts.md"
+            runbook: "docs/runbooks.md"
             description: "Velero deployment has been unreachable for >2 minutes. No backups will run while the server is down."
 
         - alert: LoopZeroVeleroBackupPartial
@@ -61,5 +61,5 @@ spec:
             severity: warning
           annotations:
             summary: "Velero backup '{{ $labels.schedule }}' completed with partial failures"
-            runbook: "docs/runbooks/velero-backup-alerts.md"
+            runbook: "docs/runbooks.md"
             description: "Schedule {{ $labels.schedule }} finished but some items were skipped. Inspect `velero backup describe` to identify missed resources."

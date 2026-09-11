@@ -4,7 +4,7 @@
 // Package vapdeleteguardrail implements the `vap-delete-guardrail` quality gate.
 //
 // Plan: .claude/knowledge-base/plans/d4-vap-delete-guardrail-plan.md (T1.3)
-// ADR:  docs/decisions/2026-08-07-capi-byoc-cluster-lifecycle-adr.md (D4)
+// ADR:  docs/decisions.md (D4)
 //
 // # WHAT IT GUARDS
 //

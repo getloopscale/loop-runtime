@@ -6,7 +6,7 @@ package store
 // audit_types.go — public types for the audit_log domain that survive
 // the T1.5 deletion of the legacy hand-rolled `audit.go` +
 // `audit_store.go`. Per plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3 § T1.5 (sensitive
+// 2026-05-29-sqlc-migration-plan v1.3 § T1.5 (sensitive
 // store — M-3 audit-callsite-diff + M-4 pair-review), this file carries:
 //
 //   - AuditEntry struct (row-shape consumed by WriteAuditLog + the 6

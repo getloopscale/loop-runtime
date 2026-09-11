@@ -7,7 +7,7 @@ package store
 // PostgresBootstrapStore (struct in this same file, no separate
 // _types.go — bootstrap is small).
 //
-// T2.2 (Batch B #3) of plan docs/plans/2026-05-29-sqlc-migration-plan.md
+// T2.2 (Batch B #3) of plan 2026-05-29-sqlc-migration-plan
 // v1.3.
 //
 // The 1 prod call site (api/cmd/setup_stores.go:90) uses struct-

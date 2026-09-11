@@ -526,7 +526,7 @@ type InsertReleaseParams struct {
 
 // queries/releases.sql — sqlc query definitions for the releases table.
 //
-// T1.1 of plan docs/plans/2026-05-29-sqlc-migration-plan.md v1.2 (Phase 1
+// T1.1 of plan 2026-05-29-sqlc-migration-plan v1.2 (Phase 1
 // pilot — M07 Rekor URL persistence 3-layer bug site, commit b3375ed0).
 //
 // Per ADR-1 D2 (pgx/v5) + D3 (emit_methods_with_db_argument) + D6

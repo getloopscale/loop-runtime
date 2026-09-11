@@ -133,7 +133,7 @@ func scanFile(absPath, relPath string) ([]Hit, error) {
 				Line:       lineNum,
 				Key:        currentKey,
 				Reason:     "Pulumi inline encrypted secret — bypasses Vault audit log + rotation; post-T9 migration all secrets must come from Vault via vault.generic.getSecret",
-				Suggestion: "replace with Vault data source: `value: ${vault_generic.X.data[\"key\"]}` and configure the @pulumi/vault provider per docs/operations/prod-pulumi-bootstrap.md",
+				Suggestion: "replace with Vault data source: `value: ${vault_generic.X.data[\"key\"]}` and configure the @pulumi/vault provider per docs/runbooks.md",
 			})
 		}
 	}

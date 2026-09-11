@@ -120,7 +120,7 @@ if (!config.giteaAdminPassword) {
   throw new Error(
     "giteaAdminPassword Pulumi config secret is required — set via: " +
       "`pulumi config set --secret giteaAdminPassword <value>`. " +
-      "See docs/operations/credentials-required.md.",
+      "See docs/operations.md.",
   );
 }
 const giteaPassword = config.giteaAdminPassword;

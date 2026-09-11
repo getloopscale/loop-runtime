@@ -6,8 +6,8 @@
 // (`cmd1 | cmd2 && cmd3`) with a Runner interface that emits
 // structured logs, metrics, and traces per invocation.
 //
-// Plan: docs/plans/completed/2026-05-21-bash-to-go-migration-plan.md
-// ADR: docs/decisions/2026-05-21-bash-to-go-migration-adr.md (D7+D9)
+// Plan: 2026-05-21-bash-to-go-migration-plan
+// ADR: docs/decisions.md (D7+D9)
 //
 // Phase 1 T1.1 of the bash → Go migration.
 package shellrun

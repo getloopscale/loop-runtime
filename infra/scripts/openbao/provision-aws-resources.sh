@@ -339,7 +339,7 @@ write_output() {
 # DO NOT COMMIT. Permissions: chmod 600 (enforced).
 #
 # Consumed by infra/helmfile/core.helmfile.yaml.gotmpl (openbao release).
-# See docs/operations/openbao-aws-resources-runbook.md for rotation.
+# See docs/runbooks.md for rotation.
 
 OPENBAO_AWS_REGION=${AWS_REGION}
 OPENBAO_AWS_KMS_KEY_ID=${OUT_KMS_KEY_ID}

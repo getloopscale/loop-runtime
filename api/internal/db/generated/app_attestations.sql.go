@@ -161,7 +161,7 @@ type UpsertAppAttestationParams struct {
 // queries/app_attestations.sql — sqlc query definitions for the
 // release_app_attestations table.
 //
-// T1.3 of plan docs/plans/2026-05-29-sqlc-migration-plan.md v1.3 (Phase
+// T1.3 of plan 2026-05-29-sqlc-migration-plan v1.3 (Phase
 // 1 pilot — M07 SLSA L3 attestation flow + F-S2-01 FK violation race
 // closure). This store is the canonical per-app sidecar of
 // ADR-0014 (multi-app attestation fix) and ships the tx-batched

@@ -31,7 +31,7 @@ vaps:
   # failurePolicy: Fail is safe here by measurement, not optimism — the only two
   # writers of Tenant CRs (EnsureTenant, patchTenantCR) run in the api process,
   # whose SA the CEL exempts, and no operator writes them. See ADR
-  # docs/wiki/decisions/2026-08-13-tenant-cr-fence-placement.md (B-077).
+  # docs/decisions.md (B-077).
   tenantCrShape: true
 
   # Runtime-only policies: OFF on mgmt. Every one of these guards a workload concern

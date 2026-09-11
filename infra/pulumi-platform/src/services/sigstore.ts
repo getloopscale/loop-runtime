@@ -51,7 +51,7 @@ const HELM_VERSION = "0.7.16";
  * mgmt cluster filesystem at rest — they live in a sealed Secret
  * created by the operator via the ceremony output script.
  *
- * Operator runbook: docs/operations/tuf-root-ceremony.md (TODO)
+ * Operator runbook: docs/runbooks.md (TODO)
  */
 export interface TUFKeyset {
   /**
@@ -212,7 +212,7 @@ export class Sigstore extends pulumi.ComponentResource {
         "via offline ceremony (multi-party, hardware-backed, air-gapped) " +
         "and provided as a Kubernetes Secret reference. In-cluster TUF " +
         "generation is REJECTED — mgmt compromise would equal supply " +
-        "chain compromise. See docs/operations/tuf-root-ceremony.md."
+        "chain compromise. See docs/runbooks.md."
       );
     }
     if (!args.rekorWitness) {

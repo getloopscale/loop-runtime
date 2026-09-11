@@ -5,7 +5,7 @@ package store
 
 // build_wrapper.go — thin Go wrapper around sqlc-generated Queries for
 // the `builds` table, with state-machine integration preserved at the
-// store layer per D4 of plan docs/plans/2026-05-29-sqlc-migration-plan.md
+// store layer per D4 of plan 2026-05-29-sqlc-migration-plan
 // v1.3.
 //
 // T1.2 of plan v1.3 (Phase 1 pilot — concurrent-build invariant Rule 6 +

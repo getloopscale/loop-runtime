@@ -11,7 +11,7 @@
 # skip the alert than emit garbage data.
 #
 # Operator post-Sigstore-activation flow:
-#   1. Execute offline TUF ceremony (docs/operations/tuf-root-ceremony.md)
+#   1. Execute offline TUF ceremony (docs/runbooks.md)
 #   2. Extract ceremony date: pulumi stack output tufCeremonyDate
 #   3. helmfile -e prod sync --set tufRootCeremonyDate=<ISO-8601-date>
 #   4. Verify CronJob next-fire time + first-run output

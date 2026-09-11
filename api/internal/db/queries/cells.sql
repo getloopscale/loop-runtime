@@ -1,6 +1,6 @@
 -- queries/cells.sql — sqlc query definitions for the cell-aware
 -- placement primitives. T2.2 (Batch B #2) of plan
--- docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+-- 2026-05-29-sqlc-migration-plan v1.3.
 --
 -- Tables touched:
 --   - tenants (tenant-owned self-table; uses `id = $N` not `tenant_id`)

@@ -98,7 +98,7 @@ cmd/loopzero-ops/internal/quality/canonicalfixturerepo/check_failclosed_test.go	
 cmd/loopzero-ops/internal/quality/chartdefaulttags/check_test.go	t.Skipf("%s", out.Reason)
 cmd/loopzero-ops/internal/quality/clusterrolenosecretsstar/check_failclosed_test.go	t.Skip("permission-based walk-error test needs non-root (root bypasses chmod 000)")
 cmd/loopzero-ops/internal/quality/clusterrolenosecretsstar/check_test.go	t.Skip("CLAUDE.md not found — cannot resolve repo root")
-cmd/loopzero-ops/internal/quality/credentialssot/check_test.go	t.Skip("could not locate docs/operations/credentials-required.md within 8 parent dirs")
+cmd/loopzero-ops/internal/quality/credentialssot/check_test.go	t.Skip("could not locate docs/operations.md within 8 parent dirs")
 cmd/loopzero-ops/internal/quality/dashboardpromtool/check_test.go	t.Skip("promtool IS installed — skip-on-missing test N/A")
 cmd/loopzero-ops/internal/quality/day30day60cronjobs/check_test.go	t.Skip("helm not on PATH — skipping LIVE chart render")
 cmd/loopzero-ops/internal/quality/day30day60cronjobs/check_test.go	t.Skip("could not locate ROADMAP.md (skipping)")

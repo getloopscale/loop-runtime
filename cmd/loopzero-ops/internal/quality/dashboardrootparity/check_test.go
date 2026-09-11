@@ -26,7 +26,7 @@ func tree(t *testing.T, caddy, runbook string) string {
 		}
 	}
 	mk("infra/local/Caddyfile", caddy)
-	mk("docs/operations/local-public-dashboard.md", runbook)
+	mk("docs/runbooks.md", runbook)
 	return root
 }
 

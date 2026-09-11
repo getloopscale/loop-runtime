@@ -100,7 +100,7 @@ if ! kubectl --context "$OPENBAO_CONTEXT" -n "$NS" get pod "$POD" >/dev/null 2>&
   log "Jeito A canonical (sponsor mandate INQUEBRÁVEL 2026-06-19, issue #111):"
   log "  1. Provision separate vault cluster: task k3d:secrets:create"
   log "  2. Install OpenBao chart:            task k3d:secrets:bootstrap"
-  log "  3. Sponsor JUNTOS Shamir init + unseal × 3 (see docs/operations/openbao-init-runbook.md)"
+  log "  3. Sponsor JUNTOS Shamir init + unseal × 3 (see docs/runbooks.md)"
   log "Override OPENBAO_CONTEXT env if your vault cluster has a different name."
   exit 1
 fi
@@ -278,7 +278,7 @@ fi
 # via the TokenReview API. The canonical operator runbook documented
 # this as "operator-time" — codifying it here closes seed chain FAIL=11
 # for the cross-cluster ESO read path (per
-# docs/operations/openbao-multi-cluster-auth-runbook.md).
+# docs/runbooks.md).
 #
 # Mount-precedence guard: bao MUST report `k8s-core/` enabled before
 # `bao write auth/k8s-core/config` — else Vault returns 404

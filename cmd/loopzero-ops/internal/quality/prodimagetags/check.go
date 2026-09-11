@@ -4,7 +4,7 @@
 // Package prodimagetags implements the T1.16 gate: reject mutable :prod / :latest
 // image tags in production manifests (ADR-0020 D1, INV-1).
 //
-// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of 2026-05-22-shell-script-strategic-plan v1.3:
 // replaces infra/scripts/check-prod-image-tags.sh. Pure-Go (filepath walk +
 // regexp) — replaces bash find/grep/sed. No external CLI.
 //

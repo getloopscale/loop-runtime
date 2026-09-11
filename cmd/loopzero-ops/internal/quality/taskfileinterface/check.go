@@ -5,7 +5,7 @@
 // from MEET-2026-05-03-062 (DX engineer condition #5): public Taskfile
 // commands MUST resolve identically across refactors.
 //
-// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of 2026-05-22-shell-script-strategic-plan v1.3:
 // replaces scripts/check-taskfile-interface.sh. The bash version shelled out
 // to `task --list-all` and parsed its output (requiring the `task` binary).
 // This pure-Go version parses the Taskfile YAML files DIRECTLY — no `task`

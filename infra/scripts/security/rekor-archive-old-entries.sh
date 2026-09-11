@@ -30,7 +30,7 @@ DRY_RUN="${DRY_RUN:-0}"
 # admin API integration is intentionally deferred to a separate operator
 # workstream. Until it lands, this script short-circuits with WARN
 # when invoked with --manual-procedure-only, pointing at
-# docs/operations/rekor-retention.md. Without the flag, the script
+# docs/runbooks.md. Without the flag, the script
 # proceeds to its existing pre-flight + stub flow — the flag is opt-in
 # so a future scheduled invocation cannot silently become a no-op.
 MANUAL_PROCEDURE_ONLY=0
@@ -43,7 +43,7 @@ Usage: $0 [--manual-procedure-only]
 
   --manual-procedure-only   short-circuit with WARN pointing at the
                             manual procedure runbook
-                            (docs/operations/rekor-retention.md).
+                            (docs/runbooks.md).
                             The Trillian admin API integration is
                             intentionally deferred to a separate
                             operator workstream. T4.6 of plan
@@ -63,7 +63,7 @@ done
 if [[ "$MANUAL_PROCEDURE_ONLY" == "1" ]]; then
   echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] WARN: rekor-archive-old-entries in MANUAL_PROCEDURE_ONLY mode."
   echo "  Trillian admin API integration is deferred to a separate operator workstream."
-  echo "  Follow docs/operations/rekor-retention.md to archive old Rekor entries manually."
+  echo "  Follow docs/runbooks.md to archive old Rekor entries manually."
   echo "  (T4.6 of plan 2026-05-28-meet-001-engineering-closure, CR-11)"
   exit 0
 fi
@@ -122,8 +122,8 @@ fi
 # AND the operator did NOT pass --manual-procedure-only. Exit 1 so a
 # scheduled invocation surfaces loud instead of silently no-op'ing.
 # Operator path: re-invoke with --manual-procedure-only and follow
-# docs/operations/rekor-retention.md.
+# docs/runbooks.md.
 echo "ERROR: Trillian admin API not implemented (CR-11)." >&2
 echo "  Re-invoke with --manual-procedure-only and follow" >&2
-echo "  docs/operations/rekor-retention.md to archive entries manually." >&2
+echo "  docs/runbooks.md to archive entries manually." >&2
 exit 1

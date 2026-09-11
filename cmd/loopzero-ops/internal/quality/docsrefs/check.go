@@ -485,7 +485,7 @@ func isDecisionDoc(repoRoot, path string) bool {
 //   - `.claude/knowledge-base/decisions/2026-01-01-thing.md` abre com
 //     "This is ADR-0024." — titulo, logo declara. E' o caso que
 //     `TestCheck_DecisionRecordIsADRDocumentation` protege desde antes deste item.
-//   - `docs/wiki/decisions/2026-08-12-status-writer-contract.md` abre com um
+//   - `docs/decisions.md` abre com um
 //     titulo sobre contrato de status e so' menciona `ADR-0024` a partir da
 //     linha 17, no corpo, cinco vezes, todas para dizer que ele NAO EXISTE.
 //     Nao declara, e por isso deixa de fabricar a presenca (B-086).

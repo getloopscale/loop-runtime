@@ -5,7 +5,7 @@
 // integrity gate. Every code marker `LOCAL ONLY (LP-NNN)` must have a matching
 // matrix entry; every OPEN matrix entry must have a live code marker.
 //
-// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of 2026-05-22-shell-script-strategic-plan v1.3:
 // replaces scripts/check-divergence-matrix.sh. Pure-logic Go (filepath.WalkDir
 // + regexp) — no shell-out. Per D5: a genuine pure-logic migration.
 package divergencematrix

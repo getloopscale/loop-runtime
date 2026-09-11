@@ -205,14 +205,14 @@ tasks:
     desc: |
       Full setup from scratch — clusters + infra + networking + CRDs + DB + tokens + standalone bootstrap.
 
-      Per T3.2 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
+      Per T3.2 of 2026-05-22-shell-script-strategic-plan v1.3:
       `task setup` builds the PLATFORM (one-shot install). The DEV LOOP is `tilt up`.
-      See docs/operations/dev-loop.md for the canonical developer workflow.
+      See docs/operations.md for the canonical developer workflow.
     cmds:
       # T3.2 deprecation notice — operators should run `tilt up` after `task setup`
       # to enter the dev loop. `task setup` only PROVISIONS; it does not iterate.
       - echo "[NOTICE] task setup creates platform infrastructure. Dev loop is via 'tilt up'."
-      - echo "[NOTICE] See docs/operations/dev-loop.md for canonical workflow."
+      - echo "[NOTICE] See docs/operations.md for canonical workflow."
       - task: registry:create
       - task: clusters:create
       - task: images:build

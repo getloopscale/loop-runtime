@@ -18,7 +18,7 @@
 //	            privileged: false → true (or added as true)
 //
 // Replaces infra/scripts/helm-diff-structural.sh (~196 LOC) per Phase 7
-// of plan docs/plans/completed/2026-05-21-bash-to-go-migration-plan.md.
+// of plan 2026-05-21-bash-to-go-migration-plan.
 //
 // Origin: audit gap M06 #21 / active-execution-plan §6.E.6b.
 package helmdiffstructural

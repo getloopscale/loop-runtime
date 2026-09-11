@@ -6,7 +6,7 @@ package store
 // app_attestation_types.go — public types for the per-app attestation
 // domain that survive the T1.3b deletion of the legacy hand-rolled
 // `app_attestation_store.go`. Per plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3 § T1.3b, this file
+// 2026-05-29-sqlc-migration-plan v1.3 § T1.3b, this file
 // carries:
 //
 //   - SBOMFormat* constants (CHECK constraint mirror per migration

@@ -4,7 +4,7 @@
 // Package prodimagedigests implements the T2.3 gate: detect platform
 // manifests that use :tag references instead of immutable image@sha256:<digest>.
 //
-// T2.3 of docs/plans/completed/2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md.
+// T2.3 of 2026-05-26-maturity-3-62-to-4-0-roadmap-plan.
 //
 // Why: a tag like :v1.2.3 is mutable in DOCR. Attacker with push access
 // can re-tag the same name to point at a malicious image; next pod

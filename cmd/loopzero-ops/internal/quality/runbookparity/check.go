@@ -6,7 +6,7 @@
 //
 // # O defeito, medido
 //
-// Em 2026-08-18, seguindo o runbook `docs/operations/build-cluster-token-rotation.md` para
+// Em 2026-08-18, seguindo o runbook `docs/runbooks.md` para
 // consertar um erro que disparava a cada 2 segundos no droplet, encontrei a contradição:
 //
 //	api/.../argo_step_watcher.go  logava  "build cluster auth failed — rotate loopzero-build-sa token"
@@ -56,7 +56,7 @@ var ErrRunbookMissing = errors.New("runbook ausente — sem prescrição não h�
 var ErrNothingScanned = errors.New("nenhuma mensagem de rotação varrida — não achar nada não é o mesmo que não achar nada errado")
 
 // runbookRel is the prescribing document.
-const runbookRel = "docs/operations/build-cluster-token-rotation.md"
+const runbookRel = "docs/runbooks.md"
 
 var (
 	// rotateMsgRE captura o SA que a mensagem manda rotacionar.

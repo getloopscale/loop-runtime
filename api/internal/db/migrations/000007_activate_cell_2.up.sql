@@ -1,8 +1,8 @@
 -- Migration 000007: activate cell-2 in dev (flip status from 'maintenance' to 'active').
 --
 -- cell-2-activation-plan T2.2 / ADR D6 (production deferred to Sprint 9).
--- ADR: docs/meetings/adr/MEET-INFRA-NORMALIZE-T3-multi-cell.md
--- Plan: docs/plans/cell-2-activation-plan.md
+-- ADR: docs/decisions.md
+-- Plan: cell-2-activation-plan
 --
 -- WARNING: This migration MUST NOT be applied to production until Sprint 9
 -- prod canary readiness review APPROVES Stage 4 (per ADR D6 in cell-2-

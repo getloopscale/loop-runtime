@@ -12,7 +12,7 @@
  *   - No shared passphrase between team members
  *   - Compatible with all existing Pulumi providers (AWS, CF, DO)
  *
- * Operator-time bootstrap: see docs/operations/prod-pulumi-bootstrap.md.
+ * Operator-time bootstrap: see docs/runbooks.md.
  *
  * Migration pattern (T9.4):
  *   BEFORE (Pulumi.dev.yaml):

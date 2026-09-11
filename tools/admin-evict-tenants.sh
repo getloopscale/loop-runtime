@@ -9,7 +9,7 @@
 #   tools/admin-evict-tenants.sh --pattern 'tn-lt-l3-%'       # só tenants L3
 #   tools/admin-evict-tenants.sh --pattern '%'  --yes         # TUDO (inclui prod — requer --yes)
 #
-# Plano: docs/plans/50k-immediate-focus.md (T-02)
+# Plano: 50k-immediate-focus (T-02)
 set -eu
 
 PATTERN="${PATTERN:-tn-lt-%}"

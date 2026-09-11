@@ -16,7 +16,7 @@
 //     2026-09-04: 7 non-test files, 1520 non-test lines, three responsibilities
 //     sharing one directory because they share a client library. This gate closes it.
 //   - api/internal/services/platform still admits by nothing this gate can express;
-//     see docs/architecture/package-admission.md for the measurement.
+//     see docs/architecture.md for the measurement.
 //
 // # The criterion this gate enforces
 //

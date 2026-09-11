@@ -12,7 +12,7 @@ spec:
     # Scaled for L3 c=30 + heavy DAG (validate+restore+deps+build+sign+mirror).
     # Each workflow uses ~4 CPU limits × 30 parallel = 120 CPU at peak.
     # Bumped for v14: 48→128 CPU limits to absorb burst without 403s.
-    # Plan: docs/plans/50k-immediate-focus.md
+    # Plan: 50k-immediate-focus
     requests.cpu: "48"
     requests.memory: 96Gi
     limits.cpu: "128"

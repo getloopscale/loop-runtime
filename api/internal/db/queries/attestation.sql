@@ -2,7 +2,7 @@
 -- supply-chain attestation summary endpoint (domain.AttestationStore
 -- contract via PostgresAttestationStore).
 --
--- T2.1 (Batch A #8c) of plan docs/plans/2026-05-29-sqlc-migration-plan.md
+-- T2.1 (Batch A #8c) of plan 2026-05-29-sqlc-migration-plan
 -- v1.3. The store reads the LATEST release for a build and surfaces
 -- its supply-chain columns (image_digest, image_signature,
 -- image_signed_at) as AttestationInfo. CHG-2026-04-25-ATTESTATION-WIRE

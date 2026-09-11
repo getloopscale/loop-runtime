@@ -76,7 +76,7 @@ increasing load.
 
 ## Thresholds (SLOs)
 
-Every script enforces thresholds hardcoded in `scripts/lib/thresholds.js`. They were described as derived from `docs/capacity/cell-budget.md` until 2026-09-11; that file exists in no commit.
+Every script enforces thresholds hardcoded in `scripts/lib/thresholds.js`. They were described as derived from `cell-budget` until 2026-09-11; that file exists in no commit.
 A failed threshold fails the k6 exit code → fails the Job → fails CI.
 
 ```js

@@ -4,7 +4,7 @@
 // Package load provides load testing infrastructure for the LoopZero platform.
 //
 // This file implements the REAL deploy harness described in
-// docs/plans/scale-50k-plan.md Phase 0.0. It replaces the fake-bundle
+// scale-50k-plan Phase 0.0. It replaces the fake-bundle
 // DeploySimulator with a harness that exercises the FULL pipeline:
 //
 //   tenant provisioned via API (not SQL) →
@@ -709,7 +709,7 @@ func (h *RealDeployHarness) verifyAppLive(ctx context.Context, appURL string) (b
 	// Give ArgoCD + pod scheduling + (if needed) cluster-autoscaler node provisioning
 	// up to 240s to make the app live. DO node provisioning alone takes ~90-120s when
 	// the autoscaler triggers; 120s was insufficient at L2+ scale — see bug #25 in
-	// docs/plans/scale-50k-l3-readiness.md. Pre-warmed clusters will still finish well
+	// scale-50k-l3-readiness. Pre-warmed clusters will still finish well
 	// under this budget.
 	deadline := time.Now().Add(240 * time.Second)
 	for time.Now().Before(deadline) {

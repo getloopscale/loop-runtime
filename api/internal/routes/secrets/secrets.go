@@ -593,7 +593,7 @@ func (h *SecretHandler) bulkProcessEnvs(ctx context.Context, uc *auth.UserContex
 			// of the two paths that handle "no workload sync" was counting.
 			//
 			// That sum is load-bearing, not decoration:
-			// docs/wiki/decisions/2026-09-04-secret-decrypt-canary-deferral.md
+			// docs/decisions.md
 			// § 2 names it as the trigger that fires without anyone running a
 			// query — the signal that the `secrets` table stopped being empty
 			// and the deferred B-126 canary became work. The hole sat exactly

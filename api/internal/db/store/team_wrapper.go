@@ -5,7 +5,7 @@ package store
 
 // team_wrapper.go — sqlc-backed implementation of
 // PostgresTeamStore. T2.1 Batch A #5 of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// 2026-05-29-sqlc-migration-plan v1.3.
 //
 // The 1 prod call site (api/cmd/setup_server.go:215) compiles
 // UNCHANGED — struct-literal `&db.PostgresTeamStore{DB: dbAdapter}`

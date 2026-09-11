@@ -6,7 +6,7 @@ package store
 // audit_wrapper.go — sqlc-backed implementation of WriteAuditLog +
 // PostgresAuditStore.ListAuditEntries.
 //
-// T1.5 of plan docs/plans/2026-05-29-sqlc-migration-plan.md v1.3
+// T1.5 of plan 2026-05-29-sqlc-migration-plan v1.3
 // (Phase 1 pilot — SENSITIVE store; M-3 audit-callsite-diff +
 // M-4 pair-review per MEET-2026-05-29-001).
 //

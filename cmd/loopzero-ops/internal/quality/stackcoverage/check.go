@@ -5,7 +5,7 @@
 // between LanguageStrategy types registered in api/internal/buildplane/argo/languages.go
 // and E2E fixture coverage under infra/tests/e2e/fixtures/.
 //
-// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of 2026-05-22-shell-script-strategic-plan v1.3:
 // replaces infra/scripts/check-stack-coverage.sh (which was never wired into
 // CI — an "implemented but not wired" gap). Pure-Go (regexp + YAML grep) —
 // no external CLI.

@@ -5,7 +5,7 @@ package store
 
 // idempotency_wrapper.go — sqlc-backed implementation of
 // PostgresIdempotencyStore. T2.1 Batch A of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// 2026-05-29-sqlc-migration-plan v1.3.
 //
 // The 3 prod call sites (api/cmd/setup_server.go:169,
 // api/cmd/setup_background.go:289, api/cmd/controller/setup_services.go:213)

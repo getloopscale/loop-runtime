@@ -5,7 +5,7 @@ package store
 
 // membership_wrapper.go — sqlc-backed implementation of
 // PostgresMembershipStore.GetMemberships. T2.1 Batch A #8a of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// 2026-05-29-sqlc-migration-plan v1.3.
 //
 // The 1 prod call site (api/cmd/setup_database.go:67) compiles
 // UNCHANGED — struct-literal `&db.PostgresMembershipStore{DB:

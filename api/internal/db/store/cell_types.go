@@ -11,7 +11,7 @@ import (
 
 // cell_types.go — public struct + sentinel errors for the cell-
 // aware placement primitives. T2.2 (Batch B #2) of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// 2026-05-29-sqlc-migration-plan v1.3.
 //
 // The 4 prod call sites (api/cmd/main.go:175,
 // api/cmd/setup_stores.go:92, api/cmd/setup_server.go:231,

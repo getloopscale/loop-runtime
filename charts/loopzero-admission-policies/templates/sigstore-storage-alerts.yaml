@@ -35,8 +35,8 @@ spec:
             loopzero_alert_class: storage
           annotations:
             summary: "Sigstore PV usage > 80%"
-            description: {{ printf "PV {{ $labels.persistentvolumeclaim }} in sigstore-system at {{ $value | humanizePercentage }} usage. Schedule rekor-archive-old-entries.sh run OR plan PV resize. See docs/operations/sigstore-storage-model.md § PV resize procedure." | quote }}
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/operations/sigstore-storage-model.md"
+            description: {{ printf "PV {{ $labels.persistentvolumeclaim }} in sigstore-system at {{ $value | humanizePercentage }} usage. Schedule rekor-archive-old-entries.sh run OR plan PV resize. See docs/runbooks.md § PV resize procedure." | quote }}
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md"
 
         - alert: LoopZeroSigstorePVUsageCritical
           expr: |
@@ -52,6 +52,6 @@ spec:
             loopzero_alert_class: storage
           annotations:
             summary: "Sigstore PV usage > 95% — URGENT"
-            description: {{ printf "PV {{ $labels.persistentvolumeclaim }} in sigstore-system at {{ $value | humanizePercentage }} usage. Rekor will stop accepting new entries when PV full → builds stall. Immediate action: PV resize (docs/operations/sigstore-storage-model.md) OR force-archive." | quote }}
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/operations/sigstore-storage-model.md"
+            description: {{ printf "PV {{ $labels.persistentvolumeclaim }} in sigstore-system at {{ $value | humanizePercentage }} usage. Rekor will stop accepting new entries when PV full → builds stall. Immediate action: PV resize (docs/runbooks.md) OR force-archive." | quote }}
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md"
 {{- end }}

@@ -38,7 +38,7 @@ spec:
           annotations:
             summary: "Harbor mirror failure rate > 10% sustained 30m"
             description: {{ printf "Harbor mirror has been failing >10%% over 30m. DOCR is primary registry (production still functional) but Harbor mirror is missing latest images. Operator action: check Harbor health + auth credentials." | quote }}
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/operations/sigstore-storage-model.md"
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md"
 
         # Immediate alert on any harbor mirror failure (info-level, for
         # dashboard awareness — DOES NOT page operator).

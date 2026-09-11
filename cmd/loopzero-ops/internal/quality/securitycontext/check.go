@@ -5,7 +5,7 @@
 // charts (infra/helm/*) for securityContext compliance — runAsNonRoot,
 // readOnlyRootFilesystem, drop:[ALL], allowPrivilegeEscalation:false.
 //
-// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of 2026-05-22-shell-script-strategic-plan v1.3:
 // replaces scripts/audit-security-context.sh. Pure-Go (filepath walk + regexp) —
 // replaces bash grep/find. No external CLI. (The "helm" in the chart dir path
 // is a directory name, not a helm invocation.)

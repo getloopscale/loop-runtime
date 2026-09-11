@@ -27,7 +27,7 @@ GITEA_PASS="${GITEA_PASS:-$(kubectl --context "${MGMT_CTX:-k3d-loopzero-core}" -
 if [[ -z "$GITEA_PASS" ]]; then
   echo "ERROR: GITEA_PASS unset AND gitea-admin Secret missing in loopzero-system" >&2
   echo "       Run generate-secrets.sh first OR set GITEA_PASS env var" >&2
-  echo "       See docs/operations/credentials-required.md" >&2
+  echo "       See docs/operations.md" >&2
   exit 1
 fi
 

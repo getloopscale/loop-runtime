@@ -427,7 +427,7 @@ tasks:
       M5 — run ALL decomposition seam contract tests across the umbrella repos in
       one command (cli↔engine, cloud↔engine serviceauth, cloud↔loopzero-data themory).
       Degrades gracefully (SKIP) when a sibling repo is absent. See
-      docs/cross-repo-contract-matrix.md. The CI platform invokes this target.
+      cross-repo-contract-matrix. The CI platform invokes this target.
     cmds:
       - |
         echo "=== seam engine OpenAPI + cli consumer (loopzero/api) ==="

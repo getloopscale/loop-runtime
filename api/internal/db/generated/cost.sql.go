@@ -38,7 +38,7 @@ type GetActiveCostCounterRow struct {
 
 // queries/cost.sql — sqlc query definitions for the cost_counters
 // table. T2.2 (Batch B #5) of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// 2026-05-29-sqlc-migration-plan v1.3.
 //
 // T1.9 production wiring (Wave 1 of MEET-2026-05-12):
 // enforcement.CostStore reads + cost_counters cap policy.

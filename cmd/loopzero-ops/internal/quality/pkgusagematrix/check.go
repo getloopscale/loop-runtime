@@ -3,14 +3,14 @@
 
 // Package pkgusagematrix generates and verifies the "Real Usage
 // Matrix" of pkg/ shared libraries embedded between markers in
-// docs/technical/pkg/architecture.md. CI uses --check; humans run
+// docs/architecture.md. CI uses --check; humans run
 // --write locally before commit.
 //
 // Per pkg-sota-faang-grade-plan v1.0 T1.7 + gate PKG-G14
 // (Documentation Reflects Real Usage).
 //
 // Replaces infra/scripts/pkg-usage-matrix.sh (~148 LOC) per Phase 7
-// of plan docs/plans/completed/2026-05-21-bash-to-go-migration-plan.md.
+// of plan 2026-05-21-bash-to-go-migration-plan.
 package pkgusagematrix
 
 import (
@@ -28,7 +28,7 @@ import (
 )
 
 // DefaultDocPath — bash default, relative to repo root.
-const DefaultDocPath = "docs/technical/pkg/architecture.md"
+const DefaultDocPath = "docs/architecture.md"
 
 // Markers bracket the generated content.
 const (

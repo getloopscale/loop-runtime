@@ -1,6 +1,6 @@
 // CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 — invariants matrix coverage map
 //
-// Plan ref: docs/decisions/operator-split-invariants.md (8 invariants
+// Plan ref: docs/decisions.md (8 invariants
 // I-1..I-8 extracted from MEET-INFRA-NORMALIZE-T3-operator-split.md
 // condition C18). This vitest file is the central index documenting
 // where each invariant is verified, plus the direct check for I-5
@@ -119,7 +119,7 @@ describe("operator-split invariants matrix (I-1 through I-8)", () => {
     ).toBe(true);
   });
 
-  // The standalone `docs/decisions/operator-split-invariants.md` doc
+  // The standalone `docs/decisions.md` doc
   // was deleted in fc1793dd (2026-05-11 doc cleanup); the I-1..I-8
   // invariants are now verified directly by the 8 individual tests
   // above (RBAC, replicaCount, ImagePullSecret, leader-election,

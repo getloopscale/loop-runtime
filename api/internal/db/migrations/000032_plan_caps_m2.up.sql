@@ -2,7 +2,7 @@
 --
 -- Plan: .claude/knowledge-base/plans/2026-06-07-runtime-envs-per-project-m2-plan.md
 -- ADR D4 — Sponsor verbatim 2026-06-07: "Continue evoluindo o plano ate
--- que ele passe" (T0.2 batch-approval, docs/operations/plan-limits-m2-decision.md).
+-- que ele passe" (T0.2 batch-approval, docs/operations.md).
 --
 -- NOTE on numbering — SEPA CRITICAL #1 (2026-06-07):
 -- Plan body originally cited migration number 000029. Post-merge with

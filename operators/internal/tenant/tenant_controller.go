@@ -96,7 +96,7 @@ var tenantSM = statemachine.NewTenantTypedMachine()
 // make the sentence circular and erase the mapping it names. Nor is
 // "runtime" here apimachinery's runtime package (k8s.io/apimachinery/pkg/runtime, NOT Go's stdlib runtime — the stdlib one has no Scheme type, which is what `*runtime.Scheme` in this tree proves), imported as
 // k8s.io/apimachinery/pkg/runtime and used for the Scheme field below.
-// See docs/decisions/2026-08-09-cluster-topology-naming-adr.md
+// See docs/decisions.md
 // § Decision on the domain term (2026-09-06).
 type TenantReconciler struct {
 	client.Client

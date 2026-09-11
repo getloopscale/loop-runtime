@@ -27,14 +27,14 @@ to [Semantic Versioning](https://semver.org/).
 - The dated audit trail under `docs/` — completed plans, baselines, meeting records,
   roadmap runs, per-iteration implementation logs and review reports. Two thirds of the
   tree. Still readable as history via `git show 4f728eb7a:docs/<path>`.
-- The two competing indexes (`docs/README.md` curated in English and `docs/index.md`
+- The two competing indexes (`docs/README.md` curated in English and `index`
   generated in Portuguese, the latter also breaking the English-only rule for versioned
   artifacts), replaced by one index.
 - The duplicate audit trails `docs/wiki/` (934 files) and `docs/knowledge-base/` (126),
   which overlapped in period with zero byte-identical files between them.
 - `docs/operations/loopzero-capsim-mcp/` — a 26 MB Node checkout with its own `node_modules`
   living inside the documentation tree, and its now-dangling `.gitignore` entry.
-- `docs/api-keys.md`, which documented `memory:*` scopes belonging to `../loopzero-memory`
+- `docs/api-contracts.md`, which documented `memory:*` scopes belonging to `../loopzero-memory`
   rather than to this engine.
 
 ### Known regressions

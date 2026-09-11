@@ -13,7 +13,7 @@ package store
 //     (soft-delete lifecycle per MEET-052: RequestDeletion +
 //     CancelDeletion + GetPendingDeletion + WriteTombstone)
 //
-// T1.4 of plan docs/plans/2026-05-29-sqlc-migration-plan.md v1.3
+// T1.4 of plan 2026-05-29-sqlc-migration-plan v1.3
 // (Phase 1 pilot — multi-tenant SoT + admin bulk + soft-delete
 // lifecycle).
 //

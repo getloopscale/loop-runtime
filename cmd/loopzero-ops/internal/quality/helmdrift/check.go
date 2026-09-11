@@ -5,7 +5,7 @@
 // bootstrap charts (infra/helm/) by comparing template-file sets. A drift is
 // acceptable only if it has an approving ADR (per ADR-0041, gate CH-G16).
 //
-// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of 2026-05-22-shell-script-strategic-plan v1.3:
 // replaces infra/scripts/audit-helm-drift.sh. Pure-Go (os.ReadDir + set diff
 // + static registry) — no external CLI (bash used find/comm/awk). Genuine
 // pure-logic win per D5.

@@ -10,7 +10,7 @@
 //
 // EC-14 documented: an operator without PULUMI_CONFIG_PASSPHRASE gets
 // "failed to decrypt" instead of fail-fast — mitigated by documenting
-// the passphrase as pre-requisite in docs/operations/credentials-required.md.
+// the passphrase as pre-requisite in docs/operations.md.
 //
 // Migrated from infra/tests/docs/pulumi-required-secrets_test.sh
 // (M-Migrate2 continuation 2026-07-07). Hermetic — pure text walk.
@@ -29,7 +29,7 @@ const (
 	prodStackPath    = "infra/pulumi/Pulumi.prod.yaml"
 	stagingStackPath = "infra/pulumi/Pulumi.staging.yaml"
 	drillStackPath   = "infra/pulumi-drill/Pulumi.drill.yaml"
-	sotDocPath       = "docs/operations/credentials-required.md"
+	sotDocPath       = "docs/operations.md"
 )
 
 // requiredProd is the set of secret keys that Pulumi.prod.yaml MUST list

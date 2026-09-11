@@ -301,7 +301,7 @@ func buildServerConfig(
 			billingHandler.WithCostSource(store.NewSQLCostStore(dbAdapter))
 		}
 		// O ENGINE NAO EMITE SESSAO DE PORTAL. Por ADR 2026-08-11
-		// (docs/decisions/2026-08-11-stripe-portal-ownership-adr.md), o loopzero-cloud e o unico
+		// (docs/decisions.md), o loopzero-cloud e o unico
 		// emissor: ele e quem CRIA o cliente Stripe quando falta (EnsureStripeCustomer), e o
 		// engine so exigia que ja existisse. Manter a capacidade aqui significava a chave do
 		// Stripe poder existir no processo que atende o CLI e o caminho critico de deploy —

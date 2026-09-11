@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Argo Rollouts wrapper for LoopZero platform progressive delivery.
 # Pinned to 2.38.1 (Argo Rollouts 1.7.x) per
-# docs/plans/argo-rollouts-progressive-delivery-plan.md T0.1.
+# argo-rollouts-progressive-delivery-plan T0.1.
 #
 # Deployed to ALL workload clusters via infra/helmfile/cell.helmfile.yaml.gotmpl
 # (Wave 0, alongside KEDA — both are workload controllers).

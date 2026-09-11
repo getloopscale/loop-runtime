@@ -5,7 +5,7 @@
 // pairs that downstream quality gates use to scope their checks to
 // only the lines added or modified in a PR. Replaces
 // infra/scripts/quality/git-diff-to-lines.sh (~24 LOC) per Phase 5
-// T5.2 of plan docs/plans/completed/2026-05-21-bash-to-go-migration-plan.md.
+// T5.2 of plan 2026-05-21-bash-to-go-migration-plan.
 //
 // Origin: plan 2026-05-21-comprehensive-quality-gates v1.1 T2.1.
 //

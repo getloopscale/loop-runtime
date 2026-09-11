@@ -5,7 +5,7 @@
 // must carry a runbook_url (or legacy runbook:) annotation so Alertmanager can
 // link operators to recovery docs.
 //
-// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of 2026-05-22-shell-script-strategic-plan v1.3:
 // replaces infra/scripts/check_alert_runbooks.sh (which embedded a python3
 // heredoc). Pure-Go (file read + regexp) — no external CLI. (The "helm" in the
 // rules-dir path is a directory name, not a helm invocation.)

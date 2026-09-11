@@ -141,7 +141,7 @@ func runDrillCredsIsolation(_ []string) int {
 }
 
 // runCredentialsSot enforces T1.1 SoT drift audit — every Secret created by
-// canonical generator scripts is enumerated in docs/operations/credentials-required.md.
+// canonical generator scripts is enumerated in docs/operations.md.
 // Migrated from infra/tests/docs/credentials-sot_test.sh
 // (M-Migrate2 continuation 2026-07-07 — final KEEP-CI-WIRED wave).
 func runCredentialsSot(args []string) int {
@@ -165,7 +165,7 @@ func runCredentialsSot(args []string) int {
 		}
 		return 1
 	}
-	fmt.Printf("credentials-sot: PASS — %d bootstrap-created Secrets enumerated in docs/operations/credentials-required.md\n", len(outcome.Discovered))
+	fmt.Printf("credentials-sot: PASS — %d bootstrap-created Secrets enumerated in docs/operations.md\n", len(outcome.Discovered))
 	return 0
 }
 
@@ -223,7 +223,7 @@ func runOpenbaoInitAuthMounts(args []string) int {
 	return 0
 }
 
-// runOptionBEsoDeployDoc enforces docs/operations/option-b-mgmt-helmfile-eso-deploy.md
+// runOptionBEsoDeployDoc enforces docs/runbooks.md
 // contract (4 sub-paths named, B1 recommended, B4 rejected, canonical commands
 // documented, rollback + decision matrix + cross-references present, ESO
 // version drift against runtime helmfile detected).
@@ -389,7 +389,7 @@ func runOpenBaoBootstrapInCoreTask(args []string) int {
 		fmt.Fprintln(os.Stderr, "forbidden in EVERY tier — a topology violation, not a shortcut. The canonical")
 		fmt.Fprintln(os.Stderr, "path is `task k3d:secrets:create` + `task k3d:secrets:bootstrap`.")
 		fmt.Fprintln(os.Stderr, "See .claude/rules/cleanroom-up-live-test-mandate.md and")
-		fmt.Fprintln(os.Stderr, "docs/wiki/decisions/2026-08-12-openbao-in-core-rule-vs-task.md (B-047).")
+		fmt.Fprintln(os.Stderr, "docs/decisions.md (B-047).")
 		return 1
 	}
 	fmt.Printf("openbao-bootstrap-in-core-task: PASS — no core-cluster OpenBao shortcut (%d lines scanned)\n", outcome.LinesScanned)

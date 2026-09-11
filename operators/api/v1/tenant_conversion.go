@@ -16,7 +16,7 @@ package v1
 // testable harness, so the FIRST backward-incompatible Tenant CRD change finds
 // the conversion path ready instead of orphaning existing CRs. The step-by-step
 // procedure for activating the webhook lives in
-// docs/operations/crd-conversion-procedure.md.
+// docs/runbooks.md.
 
 // Hub marks Tenant (v1) as the conversion hub (storage) version, implementing
 // sigs.k8s.io/controller-runtime/pkg/conversion.Hub. Marker only — no runtime

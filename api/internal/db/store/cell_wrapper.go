@@ -4,7 +4,7 @@
 package store
 
 // cell_wrapper.go — sqlc-backed implementation of PostgresCellStore.
-// T2.2 (Batch B #2) of plan docs/plans/2026-05-29-sqlc-migration-plan.md
+// T2.2 (Batch B #2) of plan 2026-05-29-sqlc-migration-plan
 // v1.3.
 //
 // 4 methods dispatch through SqlcBridge:

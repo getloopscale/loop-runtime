@@ -5,7 +5,7 @@ package store
 
 // preview_wrapper.go — sqlc-backed implementation of
 // PostgresPreviewStore. T2.2 Batch B #1 of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// 2026-05-29-sqlc-migration-plan v1.3.
 //
 // All 11 PreviewStore methods (Create UPSERT, UpdateStatus,
 // UpdateBuild, UpdateURL, RequestDeletion soft-delete + 4 read paths

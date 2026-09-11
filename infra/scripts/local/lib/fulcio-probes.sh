@@ -2,7 +2,7 @@
 # Fulcio K8s OIDC trust probes — library sourced by fulcio-oidc-diagnose.sh.
 # Each probe_* function writes JSON to $PROBE_OUT_DIR/<name>.json + returns 0/1.
 #
-# Per plan v1.1 docs/plans/2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan.md
+# Per plan v1.1 2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan
 # § T0.1 Deep Dives. Mock-friendly: all kubectl calls go via $KUBECTL var
 # (defaults to "kubectl") so hermetic tests can PATH-override.
 

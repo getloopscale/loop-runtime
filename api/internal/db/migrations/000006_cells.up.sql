@@ -31,7 +31,7 @@
 --     `^cell-[a-z0-9-]+$`. This table's CHECK constraint matches.
 --   • api/internal/placement/dynamic_router.go — Resolve(cellID) is the
 --     consumer that benefits when this table tracks capacity (future).
---   • docs/decisions/MEET-INFRA-NORMALIZE-T3-multi-cell.md — references
+--   • docs/decisions.md — references
 --     this migration as part of cell-2 activation gates.
 
 CREATE TABLE IF NOT EXISTS cells (

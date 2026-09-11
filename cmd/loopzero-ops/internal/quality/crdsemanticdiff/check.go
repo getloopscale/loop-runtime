@@ -10,7 +10,7 @@
 //
 // Replaces infra/scripts/crd-semantic-diff.sh (~114 LOC, yq + helm
 // shell-out) per Phase 7 of plan
-// docs/plans/completed/2026-05-21-bash-to-go-migration-plan.md.
+// 2026-05-21-bash-to-go-migration-plan.
 //
 // Origin: charts-sota-implementation-plan T1.4 / gate CH-G06.
 package crdsemanticdiff

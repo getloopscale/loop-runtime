@@ -59,7 +59,7 @@ const (
 
 	// DefaultDocPath is the generated index. It is OUTPUT: no code reads it, and editing it by
 	// hand always loses on the next run.
-	DefaultDocPath = "docs/architecture/helm-topology.md"
+	DefaultDocPath = "docs/architecture.md"
 
 	bodyStart = "<!-- BEGIN GENERATED TABLE -->"
 	bodyEnd   = "<!-- END GENERATED TABLE -->"

@@ -21,7 +21,7 @@
 # Idempotent: re-runs are no-ops once schema_migrations is present and current.
 #
 # References:
-#   - Plan: docs/plans/dogfood-2026-05-08-fixes-plan.md (v1.1, T1.2/T1.3)
+#   - Plan: dogfood-2026-05-08-fixes-plan (v1.1, T1.2/T1.3)
 #   - ADR D1: golang-migrate canonical adoption
 #   - Edge cases: EC-2 (HIGHEST dynamic detection)
 

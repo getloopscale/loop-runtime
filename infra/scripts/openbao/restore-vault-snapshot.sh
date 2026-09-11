@@ -99,7 +99,7 @@ EXAMPLES
 POST-RESTORE
   Vault will be RE-SEALED after restore (Raft state replaced; current root
   token + unseal shards may not match new state). Operator MUST re-run
-  Shamir unseal ceremony per docs/operations/secrets-cluster-local-runbook.md P3.
+  Shamir unseal ceremony per docs/runbooks.md P3.
 EOF
 }
 
@@ -248,7 +248,7 @@ echo "🛑 POST-RESTORE STEPS (operator-time, MANDATORY):" >&2
 echo "  1. Vault is now likely RE-SEALED — verify status:" >&2
 echo "     kubectl --context $SECRETS_CONTEXT -n $VAULT_NAMESPACE exec $VAULT_POD -- bao status" >&2
 echo "  2. If sealed: re-run Shamir unseal ceremony per" >&2
-echo "     docs/operations/secrets-cluster-local-runbook.md P3" >&2
+echo "     docs/runbooks.md P3" >&2
 echo "  3. After unseal, verify KV data integrity:" >&2
 echo "     bash infra/scripts/openbao/vault-sync-check.sh --threshold 10" >&2
 exit 0

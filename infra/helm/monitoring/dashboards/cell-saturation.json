@@ -7,7 +7,7 @@
   "graphTooltip": 1,
   "title": "Cell Saturation (Roadmap 04)",
   "uid": "cell-saturation",
-  "description": "Per-cell capacity headroom. Yellow = warn, Red = admission control should start rejecting. Thresholds defined in docs/capacity/cell-budget.md.",
+  "description": "Per-cell capacity headroom. Yellow = warn, Red = admission control should start rejecting. Thresholds defined in cell-budget.",
   "tags": [
     "loopzero",
     "cell",

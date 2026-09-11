@@ -11,7 +11,7 @@
 // # Why moving it needed a decision
 //
 // `CLAUDE.md` locks this file: any change to the LoopZeroKit ↔ LoopZeroCloud seam must be
-// preceded by reading `docs/architecture/loopzerokit-loopzerocloud-integration.md`, which
+// preceded by reading `docs/loopzerokit-loopzerocloud-seam.md`, which
 // is the ONLY surviving copy of the contract — the LoopZeroKit-side mirror is gone.
 //
 // Read, the answer was that the contract is BEHAVIOURAL: `services_json` must be
@@ -438,7 +438,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 // because ParseMultipartForm will still process the original stream.
 //
 // Plan v1.2 T6.1 (EC-5) — used to enforce the services_json-first wire
-// contract documented in docs/api/source-upload-wire-protocol.md.
+// contract documented in docs/api-contracts.md.
 func peekFirstMultipartFieldName(r *http.Request) (string, error) {
 	if r.GetBody == nil {
 		// Request body isn't repeatable — accept the order silently and

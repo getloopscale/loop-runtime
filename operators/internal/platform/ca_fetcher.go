@@ -11,7 +11,7 @@
 // ArgoCD cluster Secret's tlsClientConfig.caData with a fresh value,
 // instead of relying on the kubeconfig snapshot captured at bootstrap.
 //
-// Plan: docs/plans/completed/2026-05-25-live-ca-fetch-clustercredential-plan.md (v1.1)
+// Plan: 2026-05-25-live-ca-fetch-clustercredential-plan (v1.1)
 // ADRs: D1 (live fetch) + D2 (graceful fallback) + D3 (DIP) + EC-13 (insecure bootstrap)
 //
 // Why insecure-bootstrap (EC-13):

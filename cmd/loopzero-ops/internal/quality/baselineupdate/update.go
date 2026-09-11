@@ -3,7 +3,7 @@
 
 // Package baselineupdate orchestrates the post-merge / cron baseline
 // refresh per Phase 5 T5.16 of plan
-// docs/plans/completed/2026-05-21-bash-to-go-migration-plan.md. Replaces
+// 2026-05-21-bash-to-go-migration-plan. Replaces
 // infra/scripts/quality/baseline-update.sh (285 LOC) — the biggest
 // individual Phase 5 script.
 //

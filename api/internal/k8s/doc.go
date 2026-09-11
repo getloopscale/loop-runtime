@@ -28,5 +28,5 @@
 //
 // The gate `loopzero-ops quality package-admission` enforces both halves — no domain
 // vocabulary up here, and every home still populated, so refusing into nowhere does
-// not read as compliance. See docs/architecture/package-admission.md.
+// not read as compliance. See docs/architecture.md.
 package k8s

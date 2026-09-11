@@ -189,6 +189,16 @@ incumbent cell. Stages run dev 1h, dev 24h, prod single tenant 7d, then prod 10%
 When a halt criterion is met, **halt** — the criteria exist precisely so the decision is not
 made under pressure.
 
+## Local public dashboard (manual, dev only)
+
+The edge serves `~/loopzero-cloud/loopzero-cloud/dashboard/dist` — that path is the `root *` of the
+`app-dev` blocks in `infra/local/Caddyfile`, and the `dashboard-root-parity` gate fails this runbook
+if the two diverge. The canonical checkout is `~/loopzero-cloud/loopzero-cloud`.
+
+**The obvious path misleads:** the dashboard source moved to the sibling repo `../loopzero-cloud` at M4,
+so a `dashboard/` under this repository is stale if it exists at all. Build in the sibling, serve the
+`dist` it produces.
+
 ## PV rebind, CRD conversion, ArgoCD Application identity migration
 
 Three narrow one-off procedures. Read the long form from git before running any of them.

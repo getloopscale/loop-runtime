@@ -119,7 +119,7 @@ type ListTenantMembersRow struct {
 // queries/teams.sql — sqlc query definitions for the tenant_members
 // + users tables (team membership domain).
 //
-// T2.1 (Batch A #5) of plan docs/plans/2026-05-29-sqlc-migration-plan.md
+// T2.1 (Batch A #5) of plan 2026-05-29-sqlc-migration-plan
 // v1.3. tenant_members IS multi-tenant (in TenantOwnedTables); users
 // queries use id/username principal lookup paths (tenantpredicate:
 // exempt — JWT middleware authenticates upstream).

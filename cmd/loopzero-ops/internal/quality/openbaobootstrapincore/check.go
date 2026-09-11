@@ -15,7 +15,7 @@
 // green is read as approval. B-047 measured exactly that — the rule prohibited,
 // the taskfile offered, and this gate certified the offer.
 //
-// ADR docs/wiki/decisions/2026-08-12-openbao-in-core-rule-vs-task.md decided the
+// ADR docs/decisions.md decided the
 // rule wins, and named three consequences: remove the task, INVERT this gate,
 // fix the two runbooks. This file is the second one.
 //
@@ -99,7 +99,7 @@ type Outcome struct {
 var ErrForbiddenShortcut = errors.New(
 	"installing OpenBao into the core cluster is forbidden in EVERY tier " +
 		"(.claude/rules/cleanroom-up-live-test-mandate.md; " +
-		"ADR docs/wiki/decisions/2026-08-12-openbao-in-core-rule-vs-task.md)")
+		"ADR docs/decisions.md)")
 
 // ErrNothingScanned means the taskfile could not be read or was empty, so
 // nothing was verified.

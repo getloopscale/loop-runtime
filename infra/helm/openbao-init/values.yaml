@@ -102,7 +102,7 @@ secretsEngines:
 #
 # Operator-time: per-mount auth/<path>/config (kubernetesHost + CACert +
 # tokenReviewerJwt) MUST be written manually after init — see
-# docs/operations/openbao-multi-cluster-auth-runbook.md (cluster credentials
+# docs/runbooks.md (cluster credentials
 # cannot be templated at helm-time).
 authMethods:
   - path: kubernetes
@@ -512,7 +512,7 @@ transitKeys:
 # Each connection: { name, plugin, connectionUrl, allowedRoles, username, password }.
 # Operator-time: connectionUrl + username + password come from K8s Secret
 # referenced by the init Job (not templated at helm-time — see runbook
-# docs/operations/vault-database-engine-runbook.md).
+# docs/runbooks.md).
 #
 # Each role: { name, dbName, creationStatements, defaultTtl, maxTtl, revocationStatements }.
 # loopzero-api role: TTL 1h / max 24h per plan T6.3.

@@ -100,7 +100,7 @@ fi
 
 # Uma cell por cluster. O conjunto era `default, 1, 2` — tres nomes para duas maquinas,
 # porque `default` e `1` mapeavam ambos para o mesmo cluster. A unificacao 1:1 de
-# 2026-08-09 (ADR docs/decisions/2026-08-09-cell-cluster-unification-adr.md) eliminou a
+# 2026-08-09 (ADR docs/decisions.md) eliminou a
 # duplicata; `default` nao existe mais como cell.
 case "$CELL" in
   0|1) ;;

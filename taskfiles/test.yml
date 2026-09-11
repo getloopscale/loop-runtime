@@ -11,7 +11,7 @@ tasks:
     # T0.3 of plan 2026-05-23-incremental-bash-to-go-migration. Replaces the
     # develop-bkp anti-pattern of `(cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .)`
     # duplicated across ~15 call sites. Gates invoke `bin/loopzero-ops <gate>`, OR
-    # `go run ./cmd/loopzero-ops <gate>` for one-shot CI use (see docs/operations/loopzero-ops.md).
+    # `go run ./cmd/loopzero-ops <gate>` for one-shot CI use (see docs/operations.md).
     cmds:
       - mkdir -p bin
       - cd cmd/loopzero-ops && go build -o ../../bin/loopzero-ops .
@@ -33,7 +33,7 @@ tasks:
       - bash infra/tests/parity/validate-matrix.sh --quick
 
   pkg:usage-matrix:check:
-    desc: Verify docs/technical/pkg/architecture.md Real Usage Matrix is up-to-date (gate PKG-G14)
+    desc: Verify docs/architecture.md Real Usage Matrix is up-to-date (gate PKG-G14)
     # T1.5 of plan 2026-05-23: migrated pkg-usage-matrix.sh to pure-Go gate (D6).
     cmds:
       - cd cmd/loopzero-ops && go run . quality pkg-usage-matrix --root "{{.ROOT_DIR}}" --check

@@ -5,7 +5,7 @@
 // committed `api/internal/db/generated/` is in-sync with a fresh `sqlc
 // generate` run against the same `sqlc.yaml` + `queries/*.sql` + `schema.gen.sql`.
 //
-// T0.3 of plan docs/plans/2026-05-29-sqlc-migration-plan.md v1.2.
+// T0.3 of plan 2026-05-29-sqlc-migration-plan v1.2.
 //
 // Why this gate exists:
 //   - Pre-T0.3, `schema_mirror_test.go` (T2.2 of MEET-2026-05-28-001 closure)

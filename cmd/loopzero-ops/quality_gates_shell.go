@@ -118,7 +118,7 @@ func runDanglingScriptRefs(args []string) int {
 		}
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Per plan D2: rewire ALL 4 caller surfaces (Taskfile/CI/SKILL/scripts) in the")
-		fmt.Fprintln(os.Stderr, "same PR that deletes the script. See docs/plans/completed/2026-05-23-incremental-bash-to-go-migration-plan.md")
+		fmt.Fprintln(os.Stderr, "same PR that deletes the script. See 2026-05-23-incremental-bash-to-go-migration-plan")
 		return 1
 	}
 	fmt.Println("dangling-script-refs: PASS — no deleted script left with live references")
@@ -180,7 +180,7 @@ func runNoNewBash(args []string) int {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintf(os.Stderr, "To fix: add the script to %s with justificativa per D4 criteria,\n", *allowlist)
 		fmt.Fprintln(os.Stderr, "OR migrate the function to: helmfile (D2), cmd/loopzero-ops/internal/quality/X Go gate (D5),")
-		fmt.Fprintln(os.Stderr, "Ginkgo (T4), go:generate (T5.2). See docs/plans/completed/2026-05-22-shell-script-strategic-plan.md")
+		fmt.Fprintln(os.Stderr, "Ginkgo (T4), go:generate (T5.2). See 2026-05-22-shell-script-strategic-plan")
 		return 1
 	}
 	fmt.Println("no-new-bash: PASS — no new bash scripts outside allowlist")
@@ -268,7 +268,7 @@ func runScriptCount(args []string) int {
 		return 0
 	}
 	if !v.OK {
-		fmt.Fprintf(os.Stderr, "script-count: FAIL — %d canonical .sh > baseline %d (a PR may never increase the count; see docs/plans/completed/2026-05-24-script-minimization-program-plan.md)\n", v.Count, v.Baseline)
+		fmt.Fprintf(os.Stderr, "script-count: FAIL — %d canonical .sh > baseline %d (a PR may never increase the count; see 2026-05-24-script-minimization-program-plan)\n", v.Count, v.Baseline)
 		return 1
 	}
 	if v.Improved {

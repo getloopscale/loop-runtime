@@ -24,7 +24,7 @@ opencost:
     customPricing:
       enabled: true
       # CSV-style overrides per node SKU; populated by operator per region
-      # (see docs/operations/cost-attribution.md for canonical DO pricing
+      # (see docs/operations.md for canonical DO pricing
       # values). Defaults below are placeholders; operator MUST update before
       # production attribution becomes meaningful.
       configmapName: opencost-pricing-do

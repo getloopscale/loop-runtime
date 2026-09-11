@@ -124,7 +124,7 @@ spec:
             severity: warning
           annotations:
             summary: "Service auth secret approaching 90-day rotation deadline"
-            runbook: "docs/runbooks/platform-alerts.md"
+            runbook: "docs/runbooks.md"
             description: "Service auth secret has been in use for {{ $value | humanizeDuration }}. Rotate within 10 days."
 
         - alert: LoopZeroArgoCDHealthStuck
@@ -257,7 +257,7 @@ spec:
             slo: "true"
           annotations:
             summary: "Build duration p95 exceeds 5min SLO"
-            runbook: "docs/runbooks/platform-alerts.md"
+            runbook: "docs/runbooks.md"
             description: "Build duration (p95) has been above 300s for 10 minutes. SLO target: <300s."
 
         - alert: LoopZeroDeployFailureRate
@@ -268,7 +268,7 @@ spec:
             slo: "true"
           annotations:
             summary: "Deploy failure rate exceeds 10% (24h rolling)"
-            runbook: "docs/runbooks/platform-alerts.md"
+            runbook: "docs/runbooks.md"
             description: "Deploy success rate dropped below 90% over the last 24 hours. SLO target: >90%."
 
         - alert: LoopZeroLockContention
@@ -279,7 +279,7 @@ spec:
             slo: "true"
           annotations:
             summary: "Lock hold duration p95 exceeds 2s SLO"
-            runbook: "docs/runbooks/platform-alerts.md"
+            runbook: "docs/runbooks.md"
             description: "Environment lock hold time (p95) above 2s for 5 minutes. SLO target: <2s."
 
         - alert: LoopZeroSyncSlow
@@ -290,7 +290,7 @@ spec:
             slo: "true"
           annotations:
             summary: "End-to-end deploy duration p95 exceeds 10min"
-            runbook: "docs/runbooks/platform-alerts.md"
+            runbook: "docs/runbooks.md"
             description: "Full deploy cycle (build + sync) p95 above 600s for 10 minutes. SLO target: <600s."
 
         - alert: LoopZeroBuildQueueSlow
@@ -301,7 +301,7 @@ spec:
             slo: "true"
           annotations:
             summary: "Build queue depth exceeds 5"
-            runbook: "docs/runbooks/platform-alerts.md"
+            runbook: "docs/runbooks.md"
             description: "More than 5 builds waiting in QUEUED state for over 5 minutes."
 
         # MEET-040: Traefik error rate monitoring.

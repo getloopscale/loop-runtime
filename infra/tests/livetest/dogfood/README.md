@@ -1,7 +1,7 @@
 # Dogfood 2026-04-29 Repro Suite
 
 Scripts and tests that reproduce the 13 dogfood findings
-``docs/plans/dogfood-2026-04-29-remediation-plan.md`` *(removido do versionamento)*
+``dogfood-2026-04-29-remediation-plan`` *(removido do versionamento)*
 contra k3d standalone-multi.
 
 ## Usage

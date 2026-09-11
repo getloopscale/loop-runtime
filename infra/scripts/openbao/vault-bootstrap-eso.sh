@@ -31,7 +31,7 @@
 #   3 — ClusterSecretStore did NOT reach Ready=True within timeout
 #
 # Plan: 2026-06-02-loopzero-api-vault-integration v1.8 P1 codification (iter 13).
-# Runbook reference: docs/operations/vault-secret-migration-runbook.md P1.
+# Runbook reference: docs/runbooks.md P1.
 # SPDX-License-Identifier: Apache-2.0
 
 set -uo pipefail

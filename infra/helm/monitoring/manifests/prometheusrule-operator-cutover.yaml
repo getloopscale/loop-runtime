@@ -1,5 +1,5 @@
 # CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C15.
-# Source: docs/decisions/MEET-INFRA-NORMALIZE-T3-operator-split.md
+# Source: docs/decisions.md
 #
 # 24h post-cutover restart watcher. Alerts if any of the 4 split
 # operator deployments restarts > 5 times in a 24h window after the
@@ -40,7 +40,7 @@ spec:
             loopzero_phase: cutover-active
           annotations:
             summary: "Zero-Ready window for {{ $labels.deployment }} > 30s"
-            runbook: "docs/runbooks/platform-alerts.md"
+            runbook: "docs/runbooks.md"
             description: |
               {{ $labels.deployment }} has 0 Ready replicas for >30s.
               Per Invariant I-2 (LeaderElection) + production-design

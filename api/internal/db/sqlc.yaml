@@ -3,9 +3,9 @@
 # + plan v1.2 D1 (sqlc CLI pinned at v1.31.1).
 #
 # Authoritative references:
-#   - docs/decisions/2026-05-29-sqlc-adoption.md (ADR-1)
-#   - docs/decisions/2026-05-29-schema-gen-sql-render.md (ADR-2)
-#   - docs/plans/2026-05-29-sqlc-migration-plan.md v1.2 § "ADRs" + T0.1
+#   - docs/decisions.md (ADR-1)
+#   - docs/decisions.md (ADR-2)
+#   - 2026-05-29-sqlc-migration-plan v1.2 § "ADRs" + T0.1
 #
 # CHANGE CONTROL: this file is the canonical source of sqlc codegen behavior.
 # Any modification requires re-running `task db:generate` + verifying CI green

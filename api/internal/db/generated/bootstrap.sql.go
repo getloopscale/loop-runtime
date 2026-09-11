@@ -101,7 +101,7 @@ type InsertBootstrapUserParams struct {
 
 // queries/bootstrap.sql — sqlc query definitions for the platform
 // bootstrap flow. T2.2 (Batch B #3) of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// 2026-05-29-sqlc-migration-plan v1.3.
 //
 // All 4 queries are idempotent INSERTs (ON CONFLICT DO NOTHING) so
 // repeated bootstrap calls are safe. The wrapper tracks "did anyone

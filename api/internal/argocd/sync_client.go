@@ -351,7 +351,7 @@ func (c *SyncClient) ForceReconcile(ctx context.Context, appName string) error {
 	// Ownership, declared: everything this client does is an OPERATION on an
 	// Application (`/sync`, `/operation`, this refresh) — never a write to `.spec`,
 	// which the operator owns. ADR
-	// docs/wiki/decisions/2026-08-12-argocd-application-ownership.md (B-050).
+	// docs/decisions.md (B-050).
 	//
 	// GET /api/v1/applications/{name}?refresh=normal — the request below is
 	// http.MethodGet, and this comment said PATCH until 2026-08-16 (B-050

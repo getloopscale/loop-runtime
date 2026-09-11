@@ -1,5 +1,5 @@
 # CHG-2026-04-30-INFRA-NORMALIZE / Phase 3 condition C20.
-# Source: docs/decisions/MEET-INFRA-NORMALIZE-T3-pulumi-consolidation.md
+# Source: docs/decisions.md
 #
 # Pulumi state observability — pairs with loopzero_pulumi_archives_total +
 # loopzero_pulumi_stacks_total metrics in api/internal/metrics/metrics.go.
@@ -36,7 +36,7 @@ spec:
             loopzero_component: pulumi-archive
           annotations:
             summary: "No Pulumi archive in 90 days (rotation gap)"
-            runbook: "docs/runbooks/platform-alerts.md"
+            runbook: "docs/runbooks.md"
             description: |
               loopzero_pulumi_archives_total has not incremented in >90
               days. The archive bucket s3://loopzero-archive/pulumi-state/
@@ -69,7 +69,7 @@ spec:
             loopzero_component: pulumi-archive
           annotations:
             summary: "Pulumi stack count exceeds expected baseline (potential paralelas regression)"
-            runbook: "docs/runbooks/platform-alerts.md"
+            runbook: "docs/runbooks.md"
             description: |
               loopzero_pulumi_stacks_total = {{ $value }} for >6h, exceeds
               the expected baseline of 4 (dev/prod/staging/homolog).

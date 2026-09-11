@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package services — tenant_evictor.go implements T-02 bulk tenant
-// teardown service (docs/plans/50k-immediate-focus.md).
+// teardown service (50k-immediate-focus).
 //
 // This replaces the ad-hoc bash tool (tools/admin-evict-tenants.sh)
 // with a proper auditable service. Currently scaffolded for future

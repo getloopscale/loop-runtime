@@ -254,7 +254,7 @@ log "Check 3/4: D7' advisory mode (credentials isolation)..."
 # Migrated to the Go gate `loopzero-ops quality drill-creds-isolation`
 # (pkg/quality/drillcredisolation) — same tri-state exit contract:
 # 0 OK / 1 catastrophic / 2 missing. The bash check-drill-credentials-isolation.sh
-# was deleted (MIGRATE-GO-PUREFN). See docs/operations/infra-scripts-catalog.md.
+# was deleted (MIGRATE-GO-PUREFN). See docs/operations.md.
 if [[ "${MISSING_TOKENS[*]:-}" == *"DIGITALOCEAN_TOKEN"* ]]; then
   log "  ⊘ Skipped (DIGITALOCEAN_TOKEN missing — covered by check 1)"
   record "advisory_mode" "SKIP" "no-do-token-check-1-covered"

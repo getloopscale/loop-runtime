@@ -5,7 +5,7 @@
 // build if production code contains the literal pattern "migrate force"
 // (running golang-migrate's force on a prod DB corrupts schema_migrations).
 //
-// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of 2026-05-22-shell-script-strategic-plan v1.3:
 // replaces infra/scripts/check-no-migrate-force.sh + its hermetic test
 // (D6 AUTO-DIE). Pure-Go (filepath walk + regexp) — no external CLI.
 //

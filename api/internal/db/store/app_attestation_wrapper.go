@@ -6,7 +6,7 @@ package store
 // app_attestation_wrapper.go — thin Go wrapper around sqlc-generated
 // Queries for the `release_app_attestations` table.
 //
-// T1.3 of plan docs/plans/2026-05-29-sqlc-migration-plan.md v1.3 (Phase
+// T1.3 of plan 2026-05-29-sqlc-migration-plan v1.3 (Phase
 // 1 pilot — M07 SLSA L3 attestation flow + F-S2-01 FK violation race
 // closure).
 //

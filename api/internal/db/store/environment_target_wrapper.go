@@ -5,7 +5,7 @@ package store
 
 // environment_target_wrapper.go — sqlc-backed implementation of
 // PostgresEnvironmentTargetStore. T2.1 Batch A #6 of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// 2026-05-29-sqlc-migration-plan v1.3.
 //
 // The 2 prod call sites (api/cmd/setup_stores.go:57,
 // api/cmd/controller/setup_services.go:50) compile UNCHANGED — the

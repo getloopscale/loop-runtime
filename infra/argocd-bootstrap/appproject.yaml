@@ -8,7 +8,7 @@ metadata:
 spec:
   description: |
     LoopZero platform App of Apps — Day-2 drift management.
-    Source: docs/plans/infra-layered-bootstrap-plan.md (T6.1).
+    Source: infra-layered-bootstrap-plan (T6.1).
 
   sourceRepos:
     - "*"

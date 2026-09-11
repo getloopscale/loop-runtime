@@ -145,7 +145,7 @@ vault:
 # templates/deployment.yaml reads only `.Values.tracing.enabled` from this block
 # while ranging over `.Values.env` for env vars. Nothing renders them; the API
 # falls back to its own Go defaults for all three. This is bug #52 of
-# docs/wiki/concepts/operations/finding-2026-05-18-drill-bootstrap-orchestration-gaps.md
+# finding-2026-05-18-drill-bootstrap-orchestration-gaps
 # ("YAML indent bug — vars under `tracing:` instead of `env:`"), which was patched
 # LIVE via `kubectl set env` and never fixed in the chart; the drill script still
 # carries the same workaround (infra/scripts/drill/drill-helmfile-bootstrap.sh).

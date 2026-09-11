@@ -3,7 +3,7 @@
 //
 // SLO thresholds for k6 load tests.
 //
-// These numbers come from docs/capacity/cell-budget.md and the SLO
+// These numbers come from cell-budget and the SLO
 // targets in each roadmap item. Changing a threshold here must be
 // justified against the budget doc — k6 will fail the test (non-zero
 // exit code) when any threshold is breached, which feeds directly
@@ -36,7 +36,7 @@ export const base = {
   // under-loaded the platform, making any SLO claim from it false.
   // Fail when more than a handful drop. N=100 is a starting absolute
   // (warm-up tolerance); calibrate against the first LIVE operator run
-  // per docs/capacity/cell-budget.md. `dropped_iterations` is a Counter
+  // per cell-budget. `dropped_iterations` is a Counter
   // → use count< (a rate< form would be a silent no-op).
   'dropped_iterations': ['count<100'],
 

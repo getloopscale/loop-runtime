@@ -22,7 +22,7 @@
 #   - pulumi CLI + PULUMI_CONFIG_PASSPHRASE
 #   - jq
 #
-# See: docs/operations/prod-pulumi-bootstrap.md
+# See: docs/runbooks.md
 
 set -euo pipefail
 

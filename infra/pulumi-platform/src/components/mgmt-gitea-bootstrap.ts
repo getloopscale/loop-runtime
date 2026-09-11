@@ -115,7 +115,7 @@ export function bootstrapGitea(
                         throw new Error(
                           "giteaAdminPassword Pulumi config secret is required for Gitea bootstrap — " +
                             "set via: `pulumi config set --secret giteaAdminPassword <value>`. " +
-                            "See docs/operations/credentials-required.md.",
+                            "See docs/operations.md.",
                         );
                       }
                       return pulumi.interpolate`${config.giteaAdminPassword}`;

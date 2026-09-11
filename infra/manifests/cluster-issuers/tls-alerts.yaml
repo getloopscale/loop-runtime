@@ -47,7 +47,7 @@ spec:
               {{ $value | humanize }} days.
               For Origin CA certs, this hits the 5-year rotation cap.
               For LE certs, this means auto-renewal failed. Investigate.
-              Runbook: docs/plans/tls-strategy.md#rotation-policy
+              Runbook: tls-strategy#rotation-policy
 
         # Alert 2: ClusterIssuer Not Ready for >15min
         - alert: LoopZeroClusterIssuerNotReady

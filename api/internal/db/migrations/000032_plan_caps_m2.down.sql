@@ -3,7 +3,7 @@
 -- supports local fresh-cleanroom tear-down + replay only.
 --
 -- Restores the pre-M2 plan_limits caps that were observed in the
--- T0.1 baseline (docs/operations/baselines/2026-06-07-pre-runtime-envs-m2-refactor.md):
+-- T0.1 baseline (docs/runbooks.md):
 --   - starter: environments=1, projects=1
 --   - pro:     environments=3, projects=3
 --   - team:    environments=10, projects=10  (when present)

@@ -99,22 +99,22 @@
     {
       "id": "126b9cbe3bfbd4fd",
       "detector": "Eraser",
-      "first_seen_in": "docs/architecture/eraser-diagrams-index.md"
+      "first_seen_in": "docs/architecture.md"
     },
     {
       "id": "6a867b62662cf001",
       "detector": "Postgres",
-      "first_seen_in": "docs/plans/dogfood-2026-05-08-fixes-plan.md"
+      "first_seen_in": "dogfood-2026-05-08-fixes-plan"
     },
     {
       "id": "81a963f476bdf6f3",
       "detector": "Docker",
-      "first_seen_in": "docs/plans/harbor-gaps-resolution.md"
+      "first_seen_in": "harbor-gaps-resolution"
     },
     {
       "id": "f7e813169b5bcf82",
       "detector": "Postgres",
-      "first_seen_in": "docs/plans/self-hosted-systematization.md"
+      "first_seen_in": "self-hosted-systematization"
     },
     {
       "id": "df235625d3592369",

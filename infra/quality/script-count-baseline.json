@@ -197,19 +197,19 @@
       "date": "2026-06-24",
       "from": 411,
       "to": 355,
-      "reason": "Ratchet DOWN after migrating the gate from filepath.WalkDir (on-disk tree, ignored .gitignore) to `git ls-files` (tracked index only) per issue #151 / CHG-2026-06-24-002 (sponsor-direct T2). 355 is the deterministic count of tracked canonical .sh \u2014 identical for this commit on any machine and in CI (the old WalkDir reported 427 here with discover reference clones present vs 354 on a clean checkout, depending purely on working-tree junk). NOT a deletion of 56 scripts: the previous 411 ceiling included gitignored/untracked .sh that were never part of the program. The script-minimization program (docs/plans/completed/2026-05-24-script-minimization-program-plan.md) continues to ratchet DOWN from 355. Hand-edit to preserve this _changelog (script-count --update-baseline would wipe it)."
+      "reason": "Ratchet DOWN after migrating the gate from filepath.WalkDir (on-disk tree, ignored .gitignore) to `git ls-files` (tracked index only) per issue #151 / CHG-2026-06-24-002 (sponsor-direct T2). 355 is the deterministic count of tracked canonical .sh \u2014 identical for this commit on any machine and in CI (the old WalkDir reported 427 here with discover reference clones present vs 354 on a clean checkout, depending purely on working-tree junk). NOT a deletion of 56 scripts: the previous 411 ceiling included gitignored/untracked .sh that were never part of the program. The script-minimization program (2026-05-24-script-minimization-program-plan) continues to ratchet DOWN from 355. Hand-edit to preserve this _changelog (script-count --update-baseline would wipe it)."
     },
     {
       "date": "2026-06-18",
       "from": 409,
       "to": 411,
-      "reason": "Governed re-anchor (+2) reflecting already-merged reviewed work that landed on develop after the 2026-06-17 142->409 reconciliation WITHOUT ratcheting (e.g. deploy-timeline-canonical-5-phases dogfood wrapper + sibling). NOT new un-reviewed scripts: the install-config-contract Slice 1+2 work is net-zero on .sh (its 4 hermetic *_test.sh were homed as Go in infra/tests/charts/ per the un-homed-logic gate). Owner-authorized 2026-06-18. Hand-edit per the sanctioned auditable up-ratchet override; the script-minimization program (docs/plans/completed/2026-05-24-script-minimization-program-plan.md) remains the path to ratchet DOWN from 411."
+      "reason": "Governed re-anchor (+2) reflecting already-merged reviewed work that landed on develop after the 2026-06-17 142->409 reconciliation WITHOUT ratcheting (e.g. deploy-timeline-canonical-5-phases dogfood wrapper + sibling). NOT new un-reviewed scripts: the install-config-contract Slice 1+2 work is net-zero on .sh (its 4 hermetic *_test.sh were homed as Go in infra/tests/charts/ per the un-homed-logic gate). Owner-authorized 2026-06-18. Hand-edit per the sanctioned auditable up-ratchet override; the script-minimization program (2026-05-24-script-minimization-program-plan) remains the path to ratchet DOWN from 411."
     },
     {
       "date": "2026-06-17",
       "from": 142,
       "to": 409,
-      "reason": "Bulk stale-baseline reconciliation per plan gate-baseline-reconciliation (T2.1) \u2014 the ceiling went unmaintained from 2026-05-29 while ~267 canonical .sh of legitimate M1-M8 decomposition + vault/openbao work landed on branch refactor-cli-cloud WITHOUT triggering the gate (no CI platform; the M8 pre-push hook is the first enforcement, 2026-06-16). This is a one-time re-anchor to current observed reality (NOT a blessing of 409 as minimal) so the gate resumes ratcheting DOWN from today; the script-minimization program (docs/plans/completed/2026-05-24-script-minimization-program-plan.md) remains the path to lower it. Hand-edit required because `script-count --update-baseline` refuses to ratchet UP by design (the sanctioned, auditable override). T2 governance \u2014 see ADR knowledge-base/adrs/ + CHANGELOG."
+      "reason": "Bulk stale-baseline reconciliation per plan gate-baseline-reconciliation (T2.1) \u2014 the ceiling went unmaintained from 2026-05-29 while ~267 canonical .sh of legitimate M1-M8 decomposition + vault/openbao work landed on branch refactor-cli-cloud WITHOUT triggering the gate (no CI platform; the M8 pre-push hook is the first enforcement, 2026-06-16). This is a one-time re-anchor to current observed reality (NOT a blessing of 409 as minimal) so the gate resumes ratcheting DOWN from today; the script-minimization program (2026-05-24-script-minimization-program-plan) remains the path to lower it. Hand-edit required because `script-count --update-baseline` refuses to ratchet UP by design (the sanctioned, auditable override). T2 governance \u2014 see ADR knowledge-base/adrs/ + CHANGELOG."
     },
     {
       "date": "2026-05-29",
@@ -221,7 +221,7 @@
       "date": "2026-05-28",
       "from": 140,
       "to": 141,
-      "reason": "T4.6 of plan 2026-05-28-meet-001-engineering-closure v1.1 \u2014 adds infra/tests/check-rekor-archive_test.sh (KEEP-CI-WIRED 14/14 PASS hermetic test for rekor-archive-old-entries.sh: pins --manual-procedure-only flag behavior + --help banner + no-flag exits 1 LOUD with CR-11 marker (no silent stub-no-op) + DRY_RUN=1 short-circuit. CR-11: Trillian admin API integration deferred to operator workstream; flag short-circuits with WARN pointing at docs/operations/rekor-retention.md)."
+      "reason": "T4.6 of plan 2026-05-28-meet-001-engineering-closure v1.1 \u2014 adds infra/tests/check-rekor-archive_test.sh (KEEP-CI-WIRED 14/14 PASS hermetic test for rekor-archive-old-entries.sh: pins --manual-procedure-only flag behavior + --help banner + no-flag exits 1 LOUD with CR-11 marker (no silent stub-no-op) + DRY_RUN=1 short-circuit. CR-11: Trillian admin API integration deferred to operator workstream; flag short-circuits with WARN pointing at docs/runbooks.md)."
     },
     {
       "date": "2026-05-28",

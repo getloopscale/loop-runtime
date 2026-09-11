@@ -5,7 +5,7 @@
 // test file requires either a `test-deletion-approved` PR label OR a
 // "Test deletion justification: <reason>" line in the PR body.
 //
-// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of 2026-05-22-shell-script-strategic-plan v1.3:
 // replaces infra/scripts/quality/check-test-deletion.sh. Shells `git` only
 // (an ALLOWED CLI per D5 — no mature Go-native diff). The win is testability
 // (DiffOverride seam) + consolidation into the loopzero-ops gate suite + no bash

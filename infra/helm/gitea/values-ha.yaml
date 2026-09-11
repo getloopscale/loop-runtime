@@ -29,7 +29,7 @@
 # Reference: https://docs.gitea.com/installation/install-with-docker
 # HA Guide: Gitea Enterprise docs (config format identical for Community)
 #
-# Roadmap: docs/roadmap/index.md § Gitea Bottleneck (escalation trigger at L4)
+# Roadmap: index § Gitea Bottleneck (escalation trigger at L4)
 
 gitea:
   config:

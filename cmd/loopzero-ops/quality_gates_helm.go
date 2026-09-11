@@ -244,7 +244,7 @@ func runVAPDeleteGuardrail(args []string) int {
 func runHelmTopologyIndex(args []string) int {
 	fs := flag.NewFlagSet("helm-topology-index", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
-	doc := fs.String("doc", "", "generated index path (default docs/architecture/helm-topology.md)")
+	doc := fs.String("doc", "", "generated index path (default docs/architecture.md)")
 	write := fs.Bool("write", false, "regenerate the index instead of verifying it")
 	if err := fs.Parse(args); err != nil {
 		return 1

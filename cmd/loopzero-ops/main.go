@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Command loopzero-ops is the operator toolbox for LoopZero platform CI gates.
-// Phase 0 T0.1 of plan docs/plans/completed/2026-05-22-shell-script-strategic-plan.md
+// Phase 0 T0.1 of plan 2026-05-22-shell-script-strategic-plan
 // lands this minimal skeleton with a single subcommand: `quality scripts-audit`.
 //
 // Future subcommands (Phase 5/6/7 of plan): quality no-new-bash,

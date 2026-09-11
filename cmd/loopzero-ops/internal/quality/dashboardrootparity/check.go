@@ -57,7 +57,7 @@ var ErrMissingFile = errors.New("arquivo ausente")
 
 const (
 	caddyfileRel = "infra/local/Caddyfile"
-	runbookRel   = "docs/operations/local-public-dashboard.md"
+	runbookRel   = "docs/runbooks.md"
 )
 
 var (

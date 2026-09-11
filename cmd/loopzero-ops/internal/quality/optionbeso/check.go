@@ -1,5 +1,5 @@
 // Package optionbeso is a hermetic contract test for
-// docs/operations/option-b-mgmt-helmfile-eso-deploy.md.
+// docs/runbooks.md.
 //
 // Locks that the Option B analysis doc:
 //   - Documents 4 sub-paths (B1, B2, B3, B4) with each rated.

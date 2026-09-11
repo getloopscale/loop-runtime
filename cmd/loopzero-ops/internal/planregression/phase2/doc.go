@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package phase2 provides hermetic validation that Phase 2 of plan
-// docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3 was implemented
+// 2026-05-22-shell-script-strategic-plan v1.3 was implemented
 // correctly:
 //
 //   - taskfiles/infra.yml install:* tasks delegate to helmfile sync (T2.3.a)

@@ -5,7 +5,7 @@
 // Gates Checklist items ticked, or has explicit `N/A justifications`
 // for any unticked items. Replaces infra/scripts/quality/template-compliance.sh
 // (~81 LOC) per Phase 5 T5.8 of plan
-// docs/plans/completed/2026-05-21-bash-to-go-migration-plan.md.
+// 2026-05-21-bash-to-go-migration-plan.
 //
 // Origin: plan 2026-05-21-comprehensive-quality-gates v1.1 T5.1 + EC-5.
 //

@@ -1,7 +1,7 @@
 -- queries/tenants.sql — sqlc query definitions for the tenant lifecycle
 -- domain.
 --
--- T1.4 of plan docs/plans/2026-05-29-sqlc-migration-plan.md v1.3 (Phase
+-- T1.4 of plan 2026-05-29-sqlc-migration-plan v1.3 (Phase
 -- 1 pilot — multi-tenant SoT + soft-delete lifecycle + admin bulk
 -- eviction). Covers BOTH legacy stores: PostgresTenantStore (admin
 -- bulk operations) AND PostgresTenantDeletionStore (soft-delete

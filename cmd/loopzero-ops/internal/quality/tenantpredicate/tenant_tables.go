@@ -25,8 +25,8 @@ import "strings"
 // table from the tenant_id predicate check (handled via TenantSelfTable).
 //
 // References:
-//   - docs/plans/2026-05-29-sqlc-migration-plan.md v1.2 § T0.5
-//   - docs/decisions/2026-05-29-sqlc-adoption.md ADR-1 § Conflict 3
+//   - 2026-05-29-sqlc-migration-plan v1.2 § T0.5
+//   - docs/decisions.md ADR-1 § Conflict 3
 //     resolution + § 6 platform-security-engineer condition 1
 //   - api/internal/db/schema.gen.sql (CI-rendered source of truth for
 //     what tables actually exist)

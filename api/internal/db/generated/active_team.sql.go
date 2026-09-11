@@ -34,7 +34,7 @@ SELECT active_tenant_id FROM users WHERE id = $1
 // user-driven active-team selection (migration 000018, users.
 // active_tenant_id column). Plan T2.5 D8.
 //
-// T2.1 of plan docs/plans/2026-05-29-sqlc-migration-plan.md v1.3
+// T2.1 of plan 2026-05-29-sqlc-migration-plan v1.3
 // (Phase 2 Batch A — 2nd of 10 stores).
 //
 // All queries here are USER-scoped (WHERE id = $1 on the users

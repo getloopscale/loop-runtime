@@ -78,21 +78,21 @@ says where that ADR's text is in git, and none of it is reconstructed from memor
 | ADR | Cited from | Text at `git show 4f728eb7a:<path>` |
 |---|---|---|
 | ADR-0006 | `api/internal/routes/projects/projects.go:259` | **not in the tree even before the consolidation** |
-| ADR-0018 | `api/cmd/controller/setup_metering.go:102` | `docs/knowledge-base/plans/metering-compute-loop-plan.md` |
-| ADR-0020 | `cmd/loopzero-ops/internal/quality/prodimagetags/check.go:5` | `docs/plans/completed/2026-05-22-shell-script-strategic-plan.md` |
+| ADR-0018 | `api/cmd/controller/setup_metering.go:102` | `metering-compute-loop-plan` |
+| ADR-0020 | `cmd/loopzero-ops/internal/quality/prodimagetags/check.go:5` | `2026-05-22-shell-script-strategic-plan` |
 | ADR-0022 | `operators/cmd/registration_test.go:125` | **not in the tree even before the consolidation** |
-| ADR-0023 | `operators/cmd/cache_scoping_test.go:23` | `docs/plans/completed/2026-05-26-T2.2-cosign-keyless-change-governor-diagnostic.md` |
-| ADR-0024 | `cmd/loopzero-ops/internal/quality/docsrefs/check.go:15` | `docs/wiki/decisions/2026-08-12-status-writer-contract.md` |
-| ADR-0025 | `pkg/conditions/summary.go:34` | `docs/wiki/audits/2026-05-11/03-operators.md` |
-| ADR-0028 | `pkg/conditions/aggregate.go:7` | `docs/technical/pkg/architecture.md` |
-| ADR-0030 | `api/internal/routes/httpio/writer.go:45` | `docs/wiki/audits/2026-05-11/04-pkg.md` |
-| ADR-0031 | `pkg/circuitbreaker/circuitbreaker.go:74` | `docs/wiki/audits/2026-05-11/03-operators.md` |
-| ADR-0032 | `pkg/conditions/aggregate.go:10` | `docs/technical/pkg/architecture.md` |
-| ADR-0033 | `pkg/enforcement/limiter.go:8` | `docs/architecture/api/withenvironmentlock-coverage.md` |
-| ADR-0034 | `pkg/logging/context.go:20` | `docs/wiki/plans/completed/2026-05-12-active-execution-plan.md` |
-| ADR-0041 | `cmd/loopzero-ops/internal/quality/helmdrift/check.go:6` | `docs/wiki/reviews/2026-05-21-deep-review-naming-credentials-toolchain.md` |
-| ADR-0048 | `cmd/loopzero-ops/internal/quality/agplisolation/check.go:11` | `docs/plans/completed/2026-05-22-shell-script-strategic-status.md` |
-| ADR-2026 | `api/cmd/setup_server.go:530` | `docs/architecture/build-pipeline/tenant-build-pipeline-as-is.md` |
+| ADR-0023 | `operators/cmd/cache_scoping_test.go:23` | `2026-05-26-T2.2-cosign-keyless-change-governor-diagnostic` |
+| ADR-0024 | `cmd/loopzero-ops/internal/quality/docsrefs/check.go:15` | `docs/decisions.md` |
+| ADR-0025 | `pkg/conditions/summary.go:34` | `03-operators` |
+| ADR-0028 | `pkg/conditions/aggregate.go:7` | `docs/architecture.md` |
+| ADR-0030 | `api/internal/routes/httpio/writer.go:45` | `04-pkg` |
+| ADR-0031 | `pkg/circuitbreaker/circuitbreaker.go:74` | `03-operators` |
+| ADR-0032 | `pkg/conditions/aggregate.go:10` | `docs/architecture.md` |
+| ADR-0033 | `pkg/enforcement/limiter.go:8` | `docs/architecture.md` |
+| ADR-0034 | `pkg/logging/context.go:20` | `2026-05-12-active-execution-plan` |
+| ADR-0041 | `cmd/loopzero-ops/internal/quality/helmdrift/check.go:6` | `2026-05-21-deep-review-naming-credentials-toolchain` |
+| ADR-0048 | `cmd/loopzero-ops/internal/quality/agplisolation/check.go:11` | `2026-05-22-shell-script-strategic-status` |
+| ADR-2026 | `api/cmd/setup_server.go:530` | `docs/architecture.md` |
 
 Two of these did not resolve before the consolidation either — they are recorded as such rather
 than quietly dropped. The numbering is historical and not continuous; new decisions are recorded in
@@ -104,8 +104,8 @@ Some decisions that bind this repo live elsewhere, deliberately:
 
 | Decision | Where |
 |---|---|
-| Monorepo decomposition (what moved to which sibling repo) | `../loopzero-workspace/docs/decisions/2026-06-16-monorepo-decomposition.md` |
-| AWS infra-state decomposition (DO/Pulumi to AWS/Terraform) | `../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md` |
+| Monorepo decomposition (what moved to which sibling repo) | `../loopzero-workspace/docs/decisions.md` |
+| AWS infra-state decomposition (DO/Pulumi to AWS/Terraform) | `../loopzero-workspace/docs/decisions.md` |
 | LoopZeroKit does not know Kubernetes (ADR-0015) | recorded on the LoopZeroKit side; its consequence for this repo is in [`loopzerokit-loopzerocloud-seam.md`](loopzerokit-loopzerocloud-seam.md) |
 | Orphan CRD deletion (AppSecret, ReconciliationReport) | 2026-05-13; the CRDs are gone and [`architecture.md`](architecture.md) records the outcome |
 

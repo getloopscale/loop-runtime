@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # fulcio-oidc-diagnose.sh — Diagnose Fulcio K8s OIDC trust chain (M07 keyless).
 #
-# Per plan v1.1 docs/plans/2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan.md
+# Per plan v1.1 2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan
 # § T0.1. Identifies which cenário (A/B/C/D/GREEN/UNKNOWN) is blocking
 # Fulcio /api/v2/signingCert validation in ≤30s.
 #

@@ -5,7 +5,7 @@ package store
 
 // release_wrapper.go — thin Go wrapper around sqlc-generated Queries for
 // the `releases` table, with state-machine integration preserved at the
-// store layer per D4 of plan docs/plans/2026-05-29-sqlc-migration-plan.md
+// store layer per D4 of plan 2026-05-29-sqlc-migration-plan
 // v1.3.
 //
 // T1.1c2b of plan v1.3 (Phase 1 pilot — M07 Rekor URL persistence 3-layer

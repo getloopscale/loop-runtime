@@ -19,7 +19,7 @@ LABEL org.opencontainers.image.description="Cosign image signer for LoopZero bui
 # does client-side token validation rejection after Fulcio GetConfiguration,
 # without ever hitting CreateSigningCertificate. v2.6.3 uses simpler API:
 # SIGSTORE_ID_TOKEN env + SIGSTORE_FULCIO_URL → POST /api/v2/signingCert.
-# See: docs/plans/2026-05-28-M07-fulcio-cacert-keyless-LIVE-plan.md v1.2
+# See: 2026-05-28-M07-fulcio-cacert-keyless-LIVE-plan v1.2
 ARG COSIGN_VERSION=v2.4.3
 ARG COSIGN_SHA256=caaad125acef1cb81d58dcdc454a1e429d09a750d1e9e2b3ed1aed8964454708
 

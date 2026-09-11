@@ -24,7 +24,7 @@ type GetTenantMembershipsByUserRow struct {
 // queries/membership.sql — sqlc query for user → tenant_members
 // lookup (middleware.MembershipStore contract).
 //
-// T2.1 (Batch A #8a) of plan docs/plans/2026-05-29-sqlc-migration-plan.md
+// T2.1 (Batch A #8a) of plan 2026-05-29-sqlc-migration-plan
 // v1.3. The query operates by user_id (the principal) — cross-tenant
 // by design. JWT middleware authenticates upstream; the result set
 // enumerates the tenants the user is a member of (this is the

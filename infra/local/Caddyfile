@@ -111,7 +111,7 @@ app-dev.loopzero.example {
   # loopzero-cloud/dashboard/dist (per /home/paulo/loopzero-cloud/{loopzero,loopzero-cloud,
   # loopzero-cli,loopzero-contracts} workspace layout). Override DASHBOARD_DIST
   # before task invocation if you have a non-standard layout.
-  # See docs/operations/operator-local-caddy-workflow.md.
+  # See docs/runbooks.md.
   # Red Team loopzero-cloud#86 closure path normalization is enforced at the
   # loopzero-cloud BFF layer (cloud/internal/middleware/path_normalize.go)
   # because Caddy's `path_regexp` matcher operates on the CLEANED path

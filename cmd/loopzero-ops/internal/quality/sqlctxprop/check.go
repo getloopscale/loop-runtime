@@ -6,7 +6,7 @@
 // tx-bound `Queries.WithTx(tx).<method>(...)` form rather than the
 // pool-bound form `Queries{}.<method>(...)`.
 //
-// T0.4 of plan docs/plans/2026-05-29-sqlc-migration-plan.md v1.2.
+// T0.4 of plan 2026-05-29-sqlc-migration-plan v1.2.
 //
 // Why this gate exists (per MEET-2026-05-29-001 distributed-systems-engineer
 // R-DS-1):

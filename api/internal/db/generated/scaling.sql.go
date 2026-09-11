@@ -88,7 +88,7 @@ type GetScalingConfigByAppParams struct {
 // app_scaling_config table (per-app HPA / scale-to-zero
 // configuration).
 //
-// T2.1 (Batch A #7) of plan docs/plans/2026-05-29-sqlc-migration-plan.md
+// T2.1 (Batch A #7) of plan 2026-05-29-sqlc-migration-plan
 // v1.3. Multi-tenant: every query carries `tenant_id` predicate
 // (app_scaling_config is in TenantOwnedTables). Plan T2.1 of
 // pre-launch-gaps-plan.md replaced the stub-202 path; the wrapper

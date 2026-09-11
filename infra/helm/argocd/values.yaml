@@ -31,7 +31,7 @@ controller:
   # T-05: 3 replicas with sharding distributes Applications by hash across
   # pods. At L3+ a single controller saturates reconciling 100+ Apps,
   # causing sync latency >15min. Sharding cuts p95 sync below 60s.
-  # Plan: docs/plans/50k-immediate-focus.md
+  # Plan: 50k-immediate-focus
   replicas: 3
   # fix-all-platform-issues-plan T3.1 BUG-FIX (mgmt-argocd duplicate env var):
   # The upstream argo-cd chart 7.3.11 auto-injects ARGOCD_CONTROLLER_REPLICAS

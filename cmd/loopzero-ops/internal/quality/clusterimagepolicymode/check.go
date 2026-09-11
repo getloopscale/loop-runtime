@@ -5,7 +5,7 @@
 // admission-policies ClusterImagePolicy.mode may only be 'enforce' when an ADR
 // or MEET record signs off the deny-flip; otherwise it must stay 'warn'.
 //
-// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of 2026-05-22-shell-script-strategic-plan v1.3:
 // replaces infra/scripts/check_clusterimagepolicy_mode.sh. Pure-Go (file read +
 // regexp) — replaces bash awk/grep. No external CLI. (The "helm"/"cosign" in the
 // default paths/comments are a values-file path + a comment, not invocations.)

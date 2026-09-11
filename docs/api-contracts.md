@@ -64,7 +64,7 @@ live in the sibling repo `../loopzero-contracts` (`serviceauth`). Rotation:
 
 ## API keys
 
-`docs/api-keys.md` described API keys scoped `memory:read` / `memory:write` /
+`docs/api-contracts.md` described API keys scoped `memory:read` / `memory:write` /
 `memory:delete` / `memory:admin`. Those scopes belong to **`../loopzero-memory`**, not to this
 engine, so the document was removed here rather than consolidated. If the engine grows its
 own key surface, document it in this file.

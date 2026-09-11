@@ -16,7 +16,7 @@ config:
   #   - L2 (50 tenants, hello-server) needs ~5 vCPU for 50 pods simultaneous.
   #   - Previous maxNodes=3 → 9 pods Pending with NotTriggerScaleUp.
   #   - Bumped to 6 so autoscaler can reach ~9.6 vCPU for L2 headroom.
-  # For L3+ (100+ tenants) this must be re-sized. See docs/plans/scale-50k-plan.md.
+  # For L3+ (100+ tenants) this must be re-sized. See scale-50k-plan.
   loopzero-infra:runtimeK8sVersion: "1.32.13-do.2"
   loopzero-infra:runtimeNodeClass: small
   loopzero-infra:runtimeMinNodes: "2"

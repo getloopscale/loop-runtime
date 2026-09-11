@@ -39,7 +39,7 @@ import (
 func runRegressionMatrix(args []string) int {
 	fs := flag.NewFlagSet("regression-matrix", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
-	matrix := fs.String("matrix", "docs/runbooks/bootstrap-regression-matrix.md", "matrix markdown path (repo-relative)")
+	matrix := fs.String("matrix", "docs/runbooks.md", "matrix markdown path (repo-relative)")
 	strict := fs.Bool("strict", false, "fail on ANY miss, not just critical (Pode Recorrer=NÃO) ones")
 	if err := fs.Parse(args); err != nil {
 		return 1

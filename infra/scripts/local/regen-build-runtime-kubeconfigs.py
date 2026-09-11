@@ -83,7 +83,7 @@ def discover_cluster_ip(container: str) -> str:
 # rotation loop, so a token whose TTL is shorter than the re-seed interval dies
 # between runs and silently breaks every deploy at workflow submit (401). 720h
 # (30d) gives ~29-day margin; the build cluster accepts it (verified LIVE
-# 2026-07-19). Mirrors docs/operations/build-cluster-token-rotation.md (93e238d7).
+# 2026-07-19). Mirrors docs/runbooks.md (93e238d7).
 TOKEN_TTL = "720h"
 
 

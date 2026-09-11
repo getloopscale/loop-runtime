@@ -2,13 +2,13 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package regressionmatrix is the matrix-integrity gate: it audits the
-// bootstrap regression matrix (docs/runbooks/bootstrap-regression-matrix.md) to
+// bootstrap regression matrix (docs/runbooks.md) to
 // guarantee every entry's "Verification" artifact still resolves in the repo.
 // If a test was renamed, deleted, or never existed, the matrix becomes a lie —
 // a silent regression of the protection it claims.
 //
 // It replaces two bash scripts (Track B TB5 of plan
-// docs/plans/completed/2026-05-24-script-minimization-program-plan.md):
+// 2026-05-24-script-minimization-program-plan):
 //   - infra/tests/parity/audit-regression-matrix.sh — the audit itself, and
 //   - infra/tests/parity/audit-golden-test.sh — the golden test that proves
 //     the audit detects a fabricated broken entry.

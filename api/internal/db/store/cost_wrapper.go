@@ -5,7 +5,7 @@ package store
 
 // cost_wrapper.go — sqlc-backed implementation of SQLCostStore.
 // T2.2 (Batch B #5) of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// 2026-05-29-sqlc-migration-plan v1.3.
 //
 // T1.9 production wiring (Wave 1 of MEET-2026-05-12). Previous
 // cost_store.go used *sql.DB (database/sql legacy) for cost_counters

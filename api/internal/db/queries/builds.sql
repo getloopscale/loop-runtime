@@ -1,6 +1,6 @@
 -- queries/builds.sql — sqlc query definitions for the builds table.
 --
--- T1.2 of plan docs/plans/2026-05-29-sqlc-migration-plan.md v1.3 (Phase 1
+-- T1.2 of plan 2026-05-29-sqlc-migration-plan v1.3 (Phase 1
 -- pilot — concurrent-build invariant Rule 6 + IDOR closure
 -- find_sec_idor_buildstore + multi-cell cell_id propagation).
 --

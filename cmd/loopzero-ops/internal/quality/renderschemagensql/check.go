@@ -3,7 +3,7 @@
 // dumps the schema, post-processes it deterministically, and validates
 // the result with sqlc compile.
 //
-// T0.2 of plan docs/plans/2026-05-29-sqlc-migration-plan.md v1.2.
+// T0.2 of plan 2026-05-29-sqlc-migration-plan v1.2.
 // Migrated from infra/scripts/ci/render-schema-gen-sql.sh (M-Migrate2
 // continuation 2026-07-07). The subprocess boundaries (docker, migrate,
 // pg_dump inside container, sqlc) are legitimate — these are canonical

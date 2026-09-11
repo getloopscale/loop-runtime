@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # validate-op-b-soak.sh — Phase 5 T5.0 pre-flight gate for Op B heal cleanup.
 #
-# Plan: docs/plans/completed/2026-05-25-live-ca-fetch-clustercredential-plan.md v1.1
+# Plan: 2026-05-25-live-ca-fetch-clustercredential-plan v1.1
 # EC-19 amendment: 7-day soak gate must be VALIDATED before T5.1 deletes
 # H19/H19a from the heal script. Without this script, "operator waits 7
 # days" is unverifiable promise.

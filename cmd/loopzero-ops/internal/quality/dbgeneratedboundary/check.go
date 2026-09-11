@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package dbgeneratedboundary enforces MA-7 Gate A of the M9 db-split
-// (docs/meetings/records/MEET-2026-07-03-001.md Decision D3; ADR
+// (docs/decisions.md Decision D3; ADR
 // .claude/knowledge-base/decisions/2026-07-03-m9-db-store-subpackage-topology.md).
 //
 // Invariant (Gate A): NO file under api/internal/{services,routes,server}

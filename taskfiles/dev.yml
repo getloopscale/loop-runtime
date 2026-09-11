@@ -250,7 +250,7 @@ tasks:
         echo ""
         echo "=== Multi-Cell Topology (CTO Golden Rule #1) ==="
         # Uma cell por cluster desde a unificacao 1:1 de 2026-08-09 (ADR
-        # docs/decisions/2026-08-09-cell-cluster-unification-adr.md). Esta lista tinha
+        # docs/decisions.md). Esta lista tinha
         # TRES entradas para duas maquinas e, depois da fusao, passou a checar `cell-0`
         # duas vezes — contando o mesmo ClusterCredential duas vezes e comparando o
         # resultado contra um total de 3 que nao existe mais.

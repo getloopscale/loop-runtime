@@ -6,7 +6,7 @@ package store
 // tenant_types.go — public types for the tenant lifecycle domain that
 // survive the T1.4 deletion of the legacy hand-rolled `tenant_store.go`
 // + `tenant_deletion_store.go`. Per plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3 § T1.4, this file
+// 2026-05-29-sqlc-migration-plan v1.3 § T1.4, this file
 // carries:
 //
 //   - TenantDeletionCounts struct (per-table tally returned by the

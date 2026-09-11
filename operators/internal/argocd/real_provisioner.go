@@ -475,7 +475,7 @@ func (p *RealProvisioner) DeleteAppProject(ctx context.Context, tenantID string)
 // install actually has. Neither sense is apimachinery's runtime package (k8s.io/apimachinery/pkg/runtime, NOT Go's stdlib runtime — the stdlib one has no Scheme type, which is what `*runtime.Scheme` in this tree proves), imported
 // in this file as k8s.io/apimachinery/pkg/runtime/schema. The domain
 // term stays "runtime"; the cluster name is frozen until AM8.
-// See docs/decisions/2026-08-09-cluster-topology-naming-adr.md
+// See docs/decisions.md
 // § Decision on the domain term (2026-09-06).
 //
 // SEC-007 invariant preserved: destination is explicit, never wildcard.

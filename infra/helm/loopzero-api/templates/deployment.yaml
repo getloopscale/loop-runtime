@@ -341,7 +341,7 @@ spec:
             # literals. Bootstrap the Secret via:
             #   kubectl create secret generic loopzero-openbao-approle \
             #     --from-literal=OPENBAO_VAULT_SECRET_ID="<from vault write>"
-            # See docs/operations/openbao-transit-cutover-runbook.md step 2.1.
+            # See docs/runbooks.md step 2.1.
             # optional=true so dev/test envs without OpenBao still boot —
             # config.Validate() fail-louds at startup IF transit was enabled
             # but the secret_id env is missing, which is the canonical signal

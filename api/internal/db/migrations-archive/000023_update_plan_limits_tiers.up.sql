@@ -1,5 +1,5 @@
 -- Migration 000023: Update plan_limits to match pricing tiers
--- docs/strategy/competitive-analysis-and-pricing.md
+-- competitive-analysis-and-pricing
 --
 -- Starter (Free): 1 project, 1 env, 50 builds, 3 seats
 -- Pro ($29/mo): 3 projects, 3 envs, 500 builds, 10 seats

@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package routes — admin_evict.go implements T-02 bulk tenant eviction
-// endpoint from docs/plans/50k-immediate-focus.md.
+// endpoint from 50k-immediate-focus.
 //
 // Gated behind LOOPZERO_ADMIN_API=true. Requires X-Service-Auth header
 // (not user auth) since eviction is an operator primitive, not a tenant

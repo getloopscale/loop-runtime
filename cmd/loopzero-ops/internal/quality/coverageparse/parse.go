@@ -8,7 +8,7 @@
 //
 // Replaces the awk one-liners in infra/scripts/quality/baseline-update.sh
 // per Phase 5 of plan
-// docs/plans/completed/2026-05-21-bash-to-go-migration-plan.md.
+// 2026-05-21-bash-to-go-migration-plan.
 //
 // Go profile format (one statement-range per data line after header):
 //

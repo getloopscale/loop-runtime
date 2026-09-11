@@ -680,7 +680,7 @@ var (
 	// that counts nothing leaves a row in `secrets` while
 	// sum(loopzero_secret_externalsecret_total) reads zero — and that sum is what
 	// the B-126 canary deferral
-	// (docs/wiki/decisions/2026-09-04-secret-decrypt-canary-deferral.md § 2)
+	// (docs/decisions.md § 2)
 	// uses as its trigger. Adding an early return here without an increment
 	// re-opens that hole. TestCreateSecret_EveryExitMovesTheCounter
 	// (api/internal/k8s/secretsync) is the guard.
@@ -748,7 +748,7 @@ var (
 	// read a secret. A tenant whose secrets are not being read stays silent
 	// however revoked its key is. Detection that does not wait for a reader is
 	// the canary, deferred with a named trigger — see
-	// docs/wiki/decisions/2026-09-04-secret-decrypt-canary-deferral.md.
+	// docs/decisions.md.
 	//
 	// Cardinality: ONLY label is `reason` ∈ {empty_ciphertext,
 	// vault_transit_error, aes_legacy_error} — 3 series total. NO tenant

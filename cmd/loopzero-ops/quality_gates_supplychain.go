@@ -179,7 +179,7 @@ func runProdImageDigests(args []string) int {
 		fmt.Fprintln(os.Stderr, "     o template já está certo; falta o VALOR. Declare `image.digest`")
 		fmt.Fprintln(os.Stderr, "     (o publicador de imagens é quem o produz — um digest fixado à mão")
 		fmt.Fprintln(os.Stderr, "     vira mentira na próxima publicação).")
-		fmt.Fprintln(os.Stderr, "See docs/architecture/infra/diff/cosign-digest-enforcement.md for context.")
+		fmt.Fprintln(os.Stderr, "See docs/architecture.md for context.")
 		if !outcome.Pass {
 			return 1
 		}

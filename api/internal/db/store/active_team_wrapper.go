@@ -5,7 +5,7 @@ package store
 
 // active_team_wrapper.go — sqlc-backed implementation of
 // PostgresActiveTeamStore. T2.1 Batch A (2nd of 10 stores) of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// 2026-05-29-sqlc-migration-plan v1.3.
 //
 // The 1 prod call site (api/cmd/setup_server.go:220) uses the
 // constructor `db.NewPostgresActiveTeamStore(dbAdapter)` — preserved

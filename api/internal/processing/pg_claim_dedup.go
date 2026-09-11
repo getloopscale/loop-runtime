@@ -19,7 +19,7 @@ import (
 // When disabled (the default), it falls back to a no-op that always
 // succeeds — the sync.Map in the loop struct continues to function.
 //
-// Phase 0.2 of docs/plans/scale-50k-plan.md.
+// Phase 0.2 of scale-50k-plan.
 type PGClaimDedup struct {
 	store   *ClaimStore
 	enabled bool

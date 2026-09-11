@@ -4,7 +4,7 @@
 // Package drilloutputs implements the EC-02 gate (plan 2026-05-16 T1.1.bis):
 // grep-audit the repo for LEGACY consumers of the pulumi-drill outputs schema.
 //
-// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of 2026-05-22-shell-script-strategic-plan v1.3:
 // replaces infra/scripts/check-drill-outputs-consumers.sh + its hermetic test
 // (D6 AUTO-DIE). Pure-Go (filepath walk + regexp string-match) — no external
 // CLI. The `pulumi`/`kubectl` strings in the patterns are search targets, NOT

@@ -8,7 +8,7 @@
 //
 // LIVE assertion (T9.4): the canonical mapping in
 // `infra/scripts/openbao/migrate-pulumi-secrets-to-vault.sh` matches the
-// runbook docs/operations/prod-pulumi-bootstrap.md mapping table.
+// runbook docs/runbooks.md mapping table.
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";

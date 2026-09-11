@@ -4,7 +4,7 @@
 // Package runtimeslo implements the runtime-SLO gate (ADR D5): per-test ≤60s,
 // per-suite ≤600s. Parses `go test -v` output.
 //
-// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of 2026-05-22-shell-script-strategic-plan v1.3:
 // replaces infra/scripts/quality/check-runtime-slo.sh. Pure-Go (regexp +
 // strconv float compare) — replaces bash sed/awk. No external CLI.
 package runtimeslo

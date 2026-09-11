@@ -14,7 +14,7 @@ import (
 // short-circuit at PushBundle entry with ReasonBundleTooLarge so the user
 // gets a specific actionable message instead of a generic upload failure.
 // Default 64 MiB matches the canonical Gitea repo size guidance for source
-// bundles (per docs/architecture/loopzerokit-loopzerocloud-integration.md § sizing).
+// bundles (per docs/loopzerokit-loopzerocloud-seam.md § sizing).
 const MaxBundleBytes = 64 << 20
 
 // PushBundleErrorReason discriminates failure modes returned by PushBundle.

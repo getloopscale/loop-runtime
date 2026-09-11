@@ -31,7 +31,7 @@
 #
 # Plan: 2026-06-02-loopzero-api-vault-integration v1.8 T8.1 EC-22 mitigation.
 # Companion to: seed-loopzero-secrets.sh (initial provisioning T8.1 EC-21).
-# Runbook reference: docs/operations/vault-secret-migration-runbook.md P2.
+# Runbook reference: docs/runbooks.md P2.
 # SPDX-License-Identifier: Apache-2.0
 
 set -uo pipefail
@@ -132,7 +132,7 @@ ROLLBACK
     (b) Manual completion: identify failed step in output, finish manually
     (c) Disable ESO temporarily: vaultEnabled=false → pods restart with
         legacy env var values
-  See docs/operations/vault-secret-migration-runbook.md P2 for details.
+  See docs/runbooks.md P2 for details.
 EOF
 }
 
@@ -309,7 +309,7 @@ if [ "$RESTART_FAILED" -gt 0 ]; then
   echo "         Vault value is updated (KV-v2 versioned)." >&2
   echo "         Old pods may still be running with stale value." >&2
   echo "         Manual recovery: kubectl rollout status / rollout restart per failed binary" >&2
-  echo "         See docs/operations/vault-secret-migration-runbook.md P2 'Rollback'" >&2
+  echo "         See docs/runbooks.md P2 'Rollback'" >&2
   exit 2
 fi
 

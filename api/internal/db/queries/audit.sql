@@ -1,6 +1,6 @@
 -- queries/audit.sql — sqlc query definitions for the audit_log table.
 --
--- T1.5 of plan docs/plans/2026-05-29-sqlc-migration-plan.md v1.3 (Phase
+-- T1.5 of plan 2026-05-29-sqlc-migration-plan v1.3 (Phase
 -- 1 pilot — sensitive store; M-3 audit-callsite-diff + M-4 pair-review
 -- gate per MEET-2026-05-29-001).
 --

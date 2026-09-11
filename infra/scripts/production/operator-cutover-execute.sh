@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C1.
-# Source: docs/decisions/MEET-INFRA-NORMALIZE-T3-operator-split.md
+# Source: docs/decisions.md
 #
 # Atomic operator topology cutover orchestrator. Wraps `helmfile sync`
 # with the safety controls the production-design veto demanded (C6:

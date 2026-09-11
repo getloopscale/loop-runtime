@@ -5,7 +5,7 @@ package store
 
 // domain_wrapper.go — sqlc-backed implementation of
 // PostgresDomainStore. T2.1 Batch A #9 of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3. FINAL Batch A
+// 2026-05-29-sqlc-migration-plan v1.3. FINAL Batch A
 // store — consolidates the 3-file legacy split (domain_store.go +
 // domain_store_background.go + domain_store_cfzone.go) into one
 // wrapper that dispatches all 20+ methods through SqlcBridge.

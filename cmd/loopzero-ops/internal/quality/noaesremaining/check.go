@@ -34,7 +34,7 @@
 // again, because the walk stopped at `api/`. Same evasion, same ADR, one
 // `mv` further out.
 //
-// `docs/wiki/decisions/2026-09-04-t103-aes-write-path-removal.md` names that
+// `docs/decisions.md` names that
 // second move and rejects it on judgment ("relocating the code would pass
 // the implementation while defeating the stated intent"). Walking the tree
 // is that rejection made mechanical.

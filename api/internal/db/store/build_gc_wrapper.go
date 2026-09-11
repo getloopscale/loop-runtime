@@ -5,7 +5,7 @@ package store
 
 // build_gc_wrapper.go — hybrid wrapper for PostgresBuildGCStore.
 // T2.2 (Batch B #6) of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// 2026-05-29-sqlc-migration-plan v1.3.
 //
 // DeleteOldWebhookDeliveries dispatches through SqlcBridge to the
 // sqlc-generated query.
@@ -13,7 +13,7 @@ package store
 // DeleteOldBuilds is kept as raw SQL via DBTX.Exec because sqlc
 // 1.31.1 cannot parse the ranked-subquery shape (`column rn does
 // not exist` errors across multiple CTE / subquery refactors).
-// Per ADR-1 D5 of docs/decisions/2026-05-29-sqlc-adoption.md, this
+// Per ADR-1 D5 of docs/decisions.md, this
 // query is a candidate for the raw/ subpackage escape hatch which
 // is the explicit purpose of T4.1 — wrapping the handwritten SQL
 // behind a typed boundary so the sqlc gate's invariants

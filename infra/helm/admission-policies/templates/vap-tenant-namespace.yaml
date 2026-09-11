@@ -33,7 +33,7 @@ spec:
     # `request.subResource == ""` raises `no such key: subResource`. The
     # CEL-correct form is `!has(request.subResource)` for "main resource"
     # detection (verified live against k3d 1.32.13 — see
-    # docs/decisions/MEET-ADR-0018-decision.md C6 amendment iter 6).
+    # docs/decisions.md C6 amendment iter 6).
     # We negate: match (run validation) only when there is NO subResource.
     # Status/scale subresource updates by the controller pass through.
     - name: skip-status-subresource

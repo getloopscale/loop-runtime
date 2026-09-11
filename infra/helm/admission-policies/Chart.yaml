@@ -10,7 +10,7 @@ description: |
     - ClusterImagePolicy loopzero-images-warn (mode: warn, static.action: pass)
     - PrometheusRule loopzero-policy-controller-alerts (SLO/latency/availability)
 
-  Reference: T0.1 of docs/plans/infra-layered-bootstrap-plan.md.
+  Reference: T0.1 of infra-layered-bootstrap-plan.
 type: application
 version: 0.1.0
 appVersion: "1.0.0"

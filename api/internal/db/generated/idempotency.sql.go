@@ -54,7 +54,7 @@ type GetIdempotencyRecordRow struct {
 // queries/idempotency.sql — sqlc query definitions for the
 // idempotency_keys table.
 //
-// T2.1 (Batch A) of plan docs/plans/2026-05-29-sqlc-migration-plan.md
+// T2.1 (Batch A) of plan 2026-05-29-sqlc-migration-plan
 // v1.3 — Phase 2 store conversion. Multi-tenant: every query carries
 // `tenant_id` predicate (idempotency_keys is in TenantOwnedTables).
 // TTL is 24 hours per spec §4.3; the wrapper computes expires_at at

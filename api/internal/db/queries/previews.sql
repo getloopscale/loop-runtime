@@ -1,7 +1,7 @@
 -- queries/previews.sql — sqlc query definitions for the
 -- preview_environments table.
 --
--- T2.2 (Batch B #1) of plan docs/plans/2026-05-29-sqlc-migration-plan.md
+-- T2.2 (Batch B #1) of plan 2026-05-29-sqlc-migration-plan
 -- v1.3. Multi-tenant — every list/lookup query carries tenant_id
 -- predicate. Single-row mutations keyed by globally-unique preview_id
 -- (PRIMARY KEY) are marked tenantpredicate:exempt — the route handler

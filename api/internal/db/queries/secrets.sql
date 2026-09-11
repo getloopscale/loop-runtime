@@ -1,6 +1,6 @@
 -- queries/secrets.sql — sqlc query definitions for the secrets
 -- table. T2.2 (Batch B #4) of plan
--- docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+-- 2026-05-29-sqlc-migration-plan v1.3.
 --
 -- SEC-001: encrypted_value column stores AES-256-GCM ciphertext
 -- (nonce || ciphertext) or plaintext (local dev only with nil key).

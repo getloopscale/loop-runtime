@@ -215,7 +215,7 @@ tasks:
       no auto-unseal) matching the actual chart values.
 
       Post-bootstrap manual operator steps (NOT in this task, follow
-      docs/operations/openbao-init-runbook.md):
+      docs/runbooks.md):
         bao operator init -key-shares=5 -key-threshold=3 -format=json
         bao operator unseal <shard1> <shard2> <shard3>
         kubectl create secret generic openbao-init-token --from-literal=BAO_TOKEN=<root>
@@ -232,7 +232,7 @@ tasks:
       - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-secrets --selector name=openbao-cert sync
       - kubectl --context k3d-loopzero-secrets -n secrets-system wait --for=condition=Ready certificate/openbao --timeout=120s
       - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-secrets --selector name=openbao sync
-      - echo "[OK] OpenBao bootstrapped (HA Raft PRODLIKE.2, sealed). Next:- bao operator init + unseal (see docs/operations/openbao-init-runbook.md). Validate:- task k3d:secrets:status"
+      - echo "[OK] OpenBao bootstrapped (HA Raft PRODLIKE.2, sealed). Next:- bao operator init + unseal (see docs/runbooks.md). Validate:- task k3d:secrets:status"
 
   k3d:secrets:status:
     desc: |

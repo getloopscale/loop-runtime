@@ -5,7 +5,7 @@ package store
 
 // secret_wrapper.go — sqlc-backed implementation of
 // PostgresSecretStore. T2.2 (Batch B #4) of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// 2026-05-29-sqlc-migration-plan v1.3.
 //
 // PostgresSecretStore struct + NewPostgresSecretStore constructor
 // live in this file (inline — no separate _types.go needed; the
@@ -272,7 +272,7 @@ func (s *PostgresSecretStore) encryptForStore(ctx context.Context, tenantID stri
 // The counter aggregates; it does not probe. A tenant whose secrets nobody
 // reads stays silent no matter what happened to its key, which is why the
 // canary in the item's DoD is a separate design and not this one — see
-// docs/wiki/decisions/2026-09-04-secret-decrypt-canary-deferral.md for the
+// docs/decisions.md for the
 // deferral and its trigger.
 func (s *PostgresSecretStore) decryptFromStore(ctx context.Context, tenantID string, ciphertext []byte) ([]byte, error) {
 	if len(ciphertext) == 0 {

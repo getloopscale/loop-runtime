@@ -3,7 +3,7 @@
 
 // Package capacity provides isolated micro-benchmarks per subsystem.
 //
-// Context (T-03 from docs/plans/50k-immediate-focus.md):
+// Context (T-03 from 50k-immediate-focus):
 //
 // Between L3 v1 and L3 v8 we ran 8 full 100-tenant end-to-end tests to
 // discover 8 distinct bugs in isolated subsystems (Gitea auth, cosign TUF,
@@ -18,7 +18,7 @@
 //   - One Go test file per subsystem (gitea_test.go, minio_test.go, ...)
 //   - Each test is a `BenchmarkFoo` with configurable concurrency + duration
 //   - Results written to /tmp/capacity-bench/{subsystem}-{timestamp}.json
-//   - Baselines documented in docs/plans/capacity-baselines.md
+//   - Baselines documented in capacity-baselines
 //
 // Usage:
 //   LOOPZERO_API_URL=https://api.dev.loopzero.example \

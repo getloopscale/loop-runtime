@@ -5,7 +5,7 @@ package store
 
 // scaling_wrapper.go — sqlc-backed implementation of
 // PostgresScalingStore. T2.1 Batch A #7 of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// 2026-05-29-sqlc-migration-plan v1.3.
 //
 // The 1 prod call site (api/cmd/setup_orchestrator.go:74) compiles
 // UNCHANGED — the constructor `db.NewPostgresScalingStore(dbAdapter)`

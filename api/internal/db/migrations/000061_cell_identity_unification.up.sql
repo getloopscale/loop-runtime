@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: Apache-2.0
 -- Copyright 2025-2026 The LoopZero Authors
 
--- Unifica cell e cluster em 1:1. ADR docs/decisions/2026-08-09-cell-cluster-unification-adr.md,
+-- Unifica cell e cluster em 1:1. ADR docs/decisions.md,
 -- BACKLOG.md B-005.
 --
 -- O catalogo tinha TRES cells para DUAS maquinas. Tres fontes independentes mediram que

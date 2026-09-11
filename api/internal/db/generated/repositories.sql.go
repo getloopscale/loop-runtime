@@ -205,7 +205,7 @@ type UpsertGitHubInstallationParams struct {
 // queries/repositories.sql — sqlc query definitions for the
 // project_repositories + github_installations tables.
 //
-// T2.1 (Batch A #3) of plan docs/plans/2026-05-29-sqlc-migration-plan.md
+// T2.1 (Batch A #3) of plan 2026-05-29-sqlc-migration-plan
 // v1.3. Backs `loopzero connect` (project ↔ GitHub repo linkage) and the
 // GitHub App webhook → installation lifecycle.
 //

@@ -5,7 +5,7 @@
 // staged with an `expr: vector(0) > 1` placeholder (an alert whose underlying
 // metric is not emitted — it can never fire, creating false confidence).
 //
-// Plan T5.3 of docs/plans/completed/2026-05-22-shell-script-strategic-plan.md v1.3:
+// Plan T5.3 of 2026-05-22-shell-script-strategic-plan v1.3:
 // replaces infra/scripts/check_orphan_alerts.sh. Pure-Go (file read + regexp) —
 // replaces bash grep/sed. No external CLI. (The "helm" in the default rules dir
 // path is a directory name, not a helm invocation.)

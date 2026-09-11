@@ -5,7 +5,7 @@ package store
 
 // project_wrapper.go — sqlc-backed implementation of
 // PostgresProjectStore. T2.1 Batch A #4 of plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// 2026-05-29-sqlc-migration-plan v1.3.
 //
 // The 5 prod call sites (api/cmd/setup_orchestrator.go × 3,
 // api/cmd/setup_database.go × 1, api/cmd/controller/setup_services.go

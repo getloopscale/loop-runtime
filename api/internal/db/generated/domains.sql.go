@@ -724,7 +724,7 @@ type InsertCustomDomainParams struct {
 // custom_domains table (custom-domain lifecycle: create, verify,
 // TLS provision, CF zone management, background reaper claims).
 //
-// T2.1 (Batch A #9) of plan docs/plans/2026-05-29-sqlc-migration-plan.md
+// T2.1 (Batch A #9) of plan 2026-05-29-sqlc-migration-plan
 // v1.3. Final Batch A store. Migrates the 3-file legacy split
 // (domain_store.go + domain_store_background.go +
 // domain_store_cfzone.go) into a unified sqlc query file +

@@ -5,7 +5,7 @@
 // when someone runs `helm template | grep` manually; this test exercises them
 // on every PR.
 //
-// Plan ref: docs/plans/infra-normalize-multicell-plan.md T2.1 TDD block:
+// Plan ref: infra-normalize-multicell-plan T2.1 TDD block:
 //   test_each_split_operator_chart_has_resource_limits()
 //   test_each_split_operator_chart_has_runAsNonRoot()
 //   test_each_split_operator_has_unique_leader_election_id()

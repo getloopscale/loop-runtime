@@ -6,7 +6,7 @@ package db
 // build_types.go — public types for the builds domain that survive the
 // T1.2b deletion of the legacy hand-rolled `build_store.go`,
 // `build_store_list.go`, and `build_store_reconcile.go`. Per plan
-// docs/plans/2026-05-29-sqlc-migration-plan.md v1.3 § T1.2b, this file
+// 2026-05-29-sqlc-migration-plan v1.3 § T1.2b, this file
 // carries:
 //
 //   - Build struct (public type consumed by services + tests)

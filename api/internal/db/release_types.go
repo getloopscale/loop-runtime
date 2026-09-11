@@ -5,7 +5,7 @@ package db
 
 // release_types.go — public types for the releases domain that survive
 // the T1.1c2c deletion of the legacy hand-rolled `release_store.go`. Per
-// plan docs/plans/2026-05-29-sqlc-migration-plan.md v1.3 § T1.1c2c, this
+// plan 2026-05-29-sqlc-migration-plan v1.3 § T1.1c2c, this
 // file is **NOT** deleted along with PostgresReleaseStore — it carries:
 //
 //   - Release struct (public type consumed by services + tests)

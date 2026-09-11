@@ -24,7 +24,7 @@ import (
 // the cleanup job must enforce the 2-person rule + 90-day window before calling this.
 //
 // EnsureTenantKey was removed in 2026-08-16 per ADR
-// `docs/wiki/decisions/2026-08-12-tenant-transit-key-ownership.md` (B-042):
+// `docs/decisions.md` (B-042):
 // provisioning is api-side. The api creates the key lazily on the first encrypt 404
 // (`pkg/vault/transit_client.go:391`), and this side never had a production
 // implementation — the only EnsureTenantKey in the tree were two test mocks, and

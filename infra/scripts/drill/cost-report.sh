@@ -107,7 +107,7 @@ fi
 # (`loopzero-ops drill cost`), parity-proven byte-identical vs this script's prior
 # heredoc. This bash now keeps ONLY the --auto Pulumi-state gathering above
 # (orchestration, ADR D1). Validation (invalid/missing/end<=start) is enforced
-# by the Go subcommand. See docs/operations/drill-migration-map.md.
+# by the Go subcommand. See docs/operations.md.
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 OPS_ARGS=(drill cost --start "$START_TS" --end "$END_TS")
 [[ -n "$OUTPUT" ]] && OPS_ARGS+=(--output "$OUTPUT")

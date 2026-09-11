@@ -66,7 +66,7 @@ var reservedEnvKeys = map[string]struct{}{
 //
 // They shared this name until 2026-08-13, and the collision cost a backlog item
 // filed on the false premise that they were three diverging copies of one rule
-// (B-089, ADR docs/wiki/decisions/2026-08-13-reserved-env-two-rules.md). Naming
+// (B-089, ADR docs/decisions.md). Naming
 // the threat is what keeps the next reader from repeating it.
 var runtimeHijackEnvPrefixes = []string{
 	"DYLD_",

@@ -5,7 +5,7 @@
 // in the LoopZero API db layer. See README.md for scope (≤5% of all
 // queries), forbidden tables, and contribution rules.
 //
-// T4.1 of plan docs/plans/2026-05-29-sqlc-migration-plan.md v1.3.
+// T4.1 of plan 2026-05-29-sqlc-migration-plan v1.3.
 //
 // The package emits one symbol per query, named after the legacy
 // store method (e.g., DeleteOldBuilds). All raw queries dispatch

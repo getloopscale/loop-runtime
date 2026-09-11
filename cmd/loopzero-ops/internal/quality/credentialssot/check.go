@@ -1,6 +1,6 @@
 // Package credentialssot enforces T1.1 of plan 2026-05-21-deep-review-remediation:
 // every K8s Secret created by canonical bootstrap scripts MUST be enumerated
-// in docs/operations/credentials-required.md.
+// in docs/operations.md.
 //
 // Discovery strategy: grep `kubectl create secret {generic,docker-registry} <name>`
 // literals across 4 canonical generator scripts, then assert each name
@@ -29,7 +29,7 @@ import (
 	"strings"
 )
 
-const sotDoc = "docs/operations/credentials-required.md"
+const sotDoc = "docs/operations.md"
 
 // canonicalGenerators are the bootstrap scripts whose kubectl-create-secret
 // literals get harvested. The bash guard hard-codes this exact list; new
@@ -83,7 +83,7 @@ type Outcome struct {
 var ErrViolations = errors.New("credentials SoT drift: secrets created in code are not documented OR mandatory env vars / sections missing")
 
 // ErrSotMissing means the SoT doc itself is absent.
-var ErrSotMissing = errors.New("docs/operations/credentials-required.md missing")
+var ErrSotMissing = errors.New("docs/operations.md missing")
 
 // Check runs the audit.
 func Check(cfg Config) (Outcome, error) {

@@ -7,7 +7,7 @@
 // make progress on this work right now?"
 //
 // The gate checks two budgets sourced from the cell capacity document
-// (docs/capacity/cell-budget.md):
+// (cell-budget):
 //
 //  1. **Per-cell concurrent build ceiling.** Reflects the real BuildKit
 //     solve capacity of the build cluster plus the reconcile loop's
@@ -121,7 +121,7 @@ type ActiveBuildsQuerier interface {
 type Config struct {
 	// MaxConcurrentPerCell is the hard ceiling for non-terminal builds
 	// within a single cell. Matches the `loopzero_build_queue_depth` red
-	// line in docs/capacity/cell-budget.md (20 by default).
+	// line in cell-budget (20 by default).
 	MaxConcurrentPerCell int
 	// MaxConcurrentPerTenant is the per-tenant fairness cap within a
 	// cell. Matches the MaxBuildsPerTenant knob already in the

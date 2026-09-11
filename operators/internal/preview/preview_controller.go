@@ -704,7 +704,7 @@ func SetupPreviewController(mgr ctrl.Manager, runtimeClient client.Client, baseD
 // not apimachinery's runtime package (k8s.io/apimachinery/pkg/runtime, NOT Go's stdlib runtime — the stdlib one has no Scheme type, which is what `*runtime.Scheme` in this tree proves) (imported above as
 // k8s.io/apimachinery/pkg/runtime, used for the Scheme field), not
 // sigs.k8s.io/controller-runtime, and not any cluster's literal name.
-// See docs/decisions/2026-08-09-cluster-topology-naming-adr.md
+// See docs/decisions.md
 // § Decision on the domain term (2026-09-06).
 //
 // Audit gap (registration_test.go COMP-001 family, audit §6.F.1b

@@ -122,9 +122,9 @@ describe("ADR-0021 (infra-normalize) verification matrix D1-D10", () => {
   });
 
   // D9 + D10 assertions removed per MEET-2026-05-12 D5 + T1.1 scope:
-  // - D9 referenced docs/customer-comms/cell-1-canary-template.md (deleted in fc1793dd,
+  // - D9 referenced cell-1-canary-template (deleted in fc1793dd,
   //   superseded by .claude/knowledge-base/concepts/operations/incident-templates/* per T1.10)
-  // - D10 referenced docs/plans/infra-normalize-multicell-plan.md (deleted in fc1793dd,
+  // - D10 referenced infra-normalize-multicell-plan (deleted in fc1793dd,
   //   superseded by .claude/knowledge-base/plans/2026-05-12-launch-readiness-waves-plan.md)
   // Both files removed intentionally during 2026-05-11 governance consolidation;
   // verification matrix rows kept as assertions over the matrix structure itself.
