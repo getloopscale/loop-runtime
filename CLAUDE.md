@@ -136,7 +136,7 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 
 | Path | What |
 |---|---|
-| `api/internal/` | **39** subpackages. Notable: `routes` (**112** files — this said 43), `services`, `lock`, `placement`, `cellmgr`, `gitops`, `argo`, `manifests`, `metering`, `sse`, `source` |
+| `api/internal/` | **38** subpackages. Notable: `routes` (**112** files — this said 43), `services`, `lock`, `placement`, `gitops`, `argo`, `manifests`, `metering`, `sse`, `source` |
 | `operators/` | 4 split binaries (`operators/cmd/{tenant,app,preview,platform}-operator`) — kubebuilder + controller-runtime |
 | `operators/api/` | CRD Go types (own module) |
 | `pkg/` | Shared libs: `statemachine`, `errors`, `naming`, `conditions`, `enforcement`, `circuitbreaker`, `healthcheck`, `id`, `logging`, `domain`, `events`, `vault`, `shellrun`, `pulumi`, `correlation` |

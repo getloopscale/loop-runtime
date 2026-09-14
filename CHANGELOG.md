@@ -136,6 +136,13 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- `api/internal/cellmgr`, an unused per-cell Kubernetes client manager. It had no callers,
+  and could not have worked if wired: it resolved clients from kubeconfig path settings that
+  only the test-only router populates, while production uses the credential-based one. The
+  mechanism that actually resolves per-cell clients is unchanged and unaffected. Also corrects
+  the eleven comments and two inventory entries that pointed at it, nine of which described it
+  as the live resolver (B-023).
+
 - The dated audit trail under `docs/` — completed plans, baselines, meeting records,
   roadmap runs, per-iteration implementation logs and review reports. Two thirds of the
   tree. Still readable as history via `git show 4f728eb7a:docs/<path>`.

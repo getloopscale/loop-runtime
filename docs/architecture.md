@@ -58,7 +58,7 @@ the repo — run per module, or use the Taskfile.
 
 | Path | What |
 |---|---|
-| `api/internal/` | 39 subpackages: `routes`, `services`, `lock`, `placement`, `cellmgr`, `gitops`, `argo`, `manifests`, `metering`, `sse`, `source` |
+| `api/internal/` | 38 subpackages: `routes`, `services`, `lock`, `placement`, `gitops`, `argo`, `manifests`, `metering`, `sse`, `source` |
 | `operators/` | 4 split binaries (`cmd/{tenant,app,preview,platform}-operator`), kubebuilder + controller-runtime |
 | `operators/api/` | CRD Go types (own module) |
 | `pkg/` | Shared libs: `statemachine`, `errors`, `naming`, `conditions`, `enforcement`, `circuitbreaker`, `healthcheck`, `id`, `logging`, `domain`, `events`, `vault`, `shellrun`, `pulumi`, `correlation`. The only module with no in-repo dependencies; a change here reaches four modules. |
