@@ -92,6 +92,13 @@ to [Semantic Versioning](https://semver.org/).
   forks instead of failing there. A fork receives no secrets, so those jobs could never
   have succeeded; they now report as skipped and the aggregated gate accepts that by name.
 
+- The four operator charts now pin their ServiceAccount name instead of deriving it from
+  the Helm release name, so the identity the platform's delete-guard and OpenBao
+  allowlists name is a property of the chart rather than of how it was installed.
+  Installing under a release name other than the chart name previously produced an
+  identity outside both lists, which surfaced as a permission failure during
+  reconciliation rather than as a failed install. Rendered output is unchanged on every
+  path this repository deploys (#B-047)
 - `docs/` consolidated from 1,374 versioned markdown files across 17 subtrees into **six living
   documents** — `architecture.md`, `loopzerokit-loopzerocloud-seam.md`, `api-contracts.md`,
   `operations.md`, `runbooks.md`, `decisions.md` — plus `README.md` as the single index.

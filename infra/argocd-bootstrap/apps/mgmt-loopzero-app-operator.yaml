@@ -17,6 +17,10 @@ spec:
     path: charts/loopzero-app-operator
     targetRevision: HEAD
     helm:
+      # ArgoCD defaults releaseName to the Application's own metadata.name --
+      # mgmt-loopzero-app-operator -- and chart-rendered names derive from the release,
+      # so deleting the line below renames what this Application installs.
+      # SAFETY, load-bearing (B-047, B-096): keep this pinned to the chart name.
       releaseName: loopzero-app-operator
       valueFiles:
         - values.yaml
