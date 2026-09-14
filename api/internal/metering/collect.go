@@ -18,9 +18,9 @@ import (
 	"k8s.io/component-helpers/resource"
 )
 
-// PodLister lists the pods in a namespace on a cell — implemented over
-// cellmgr.ClientFor(cell).CoreV1().Pods(ns).List, fakeable in tests. Kept narrow
-// (DIP) so the worker's collect logic is unit-testable without a live cluster.
+// PodLister lists the pods in a namespace on a cell — implemented over the cell
+// client's .CoreV1().Pods(ns).List, fakeable in tests. Kept narrow (DIP) so the
+// worker's collect logic is unit-testable without a live cluster.
 type PodLister interface {
 	ListPods(ctx context.Context, namespace string) ([]corev1.Pod, error)
 }

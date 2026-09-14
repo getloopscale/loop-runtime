@@ -7,8 +7,9 @@ package metering
 // metering-compute-loop T3.2, slice S5 enabler). The metering worker is the first
 // api-side consumer that must list pods on tenant cells; there was no production
 // mechanism to resolve a cell's kubernetes.Interface from its ClusterCredential.
-// cellmgr.ClientManager is path-based (StaticRouter), incompatible with the
-// DynamicRouter's SecretRef model — so this provider mirrors the operators-side
+// The former per-cell ClientManager under api/internal/ was path-based
+// (StaticRouter), incompatible with the DynamicRouter's SecretRef model, and was
+// removed by B-023 — so this provider mirrors the operators-side
 // CellAwareRuntimeClientFactory (list ClusterCredential by spec.cellID → read its
 // kubeconfig Secret → build a client) but returns a client-go kubernetes.Interface
 // (the shape PodLister needs) instead of a controller-runtime client.Client.

@@ -8,7 +8,8 @@ package metering
 // controller's leader constructs the dedicated worker pool + the core-cluster CR
 // client + the cell client provider, then calls NewWorkerLoop to wire them into a
 // runnable Loop. Kept as a pure assembly (no I/O) so it is unit-testable; the raw
-// pgxpool + cellmgr construction lives at the main.go boundary (T6.1 LIVE).
+// pgxpool + cell client provider construction lives at the main.go boundary
+// (T6.1 LIVE).
 
 import (
 	"time"
