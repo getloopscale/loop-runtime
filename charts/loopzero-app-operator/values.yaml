@@ -52,7 +52,21 @@ resources:
 
 serviceAccount:
   create: true
-  name: ""
+  # FIXED on purpose, against the Helm convention of deriving the name from the release
+  # (B-096, B-047). Two literal allowlists name this identity as a string, and neither
+  # moves when the release name does:
+  #   - the delete-guard ValidatingAdmissionPolicy, at
+  #     infra/helm/admission-policies/templates/vap-protect-platform-deletes.yaml:84-88
+  #   - OpenBao's boundServiceAccountNames, on mount k8s-core, in
+  #     infra/helm/openbao-init/values.yaml
+  # With name: "" this chart rendered <release>-loopzero-app-operator, so an install under any release
+  # name other than the chart name put the operator outside both lists — and that failure
+  # appears as Forbidden during reconciliation, never as a failed install, which is why
+  # B-096 survived review.
+  # Widening the allowlist to a pattern was considered and rejected; the reason is
+  # recorded once, at charts/loopzero-api/values.yaml:202 — it turns a release name into a
+  # credential.
+  name: "loopzero-app-operator"
   automountServiceAccountToken: true
 
 rbac:
