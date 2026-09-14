@@ -12,7 +12,7 @@ package auth
 //  1. Extract `Authorization: Bearer <token>` header.
 //  2. Extract `X-Cell-ID` header (which cell the request claims to come from).
 //  3. Look up the per-cell K8s client (kubeconfig from ClusterCredential per
-//     cellmgr/client_manager.go pattern).
+//     the metering/secret_cell_client.go caching pattern).
 //  4. Submit TokenReview to that cluster's API.
 //  5. On success: extract user info + cache for short TTL (default 60s).
 //  6. Inject reviewed identity into request context for handlers.
