@@ -19,7 +19,6 @@
 // Real implementations are required:
 //   - WorkflowSubmitter → api/internal/buildplane/argo/workflow_submitter.go
 //   - GitOpsPusher      → api/internal/gitops/gitea_pusher.go
-//   - HealthProber      → api/internal/health/prober.go
 //   - SyncClient        → api/internal/argocd/sync_client.go
 //   - SourceStore       → api/internal/buildplane/source/gitea_store.go
 package adapters

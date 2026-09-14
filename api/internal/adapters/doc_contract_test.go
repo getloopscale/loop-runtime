@@ -4,6 +4,10 @@
 package adapters
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,36 +15,25 @@ import (
 	"testing"
 )
 
-// The doc comment in adapters.go carries a hand-maintained list of ports whose real
-// implementations are required. Nothing checked that list and it drifted: commit
-// ad6de675f (2026-03-19) deleted the HealthProber port together with its caller and
-// its composition-root wiring, and the row naming it survived two later edits to the
-// same block. These tests make the list a checked contract instead of a convention.
+// These tests make the "Real implementations are required" block of adapters.go a
+// checked contract rather than a convention. It drifted for six months after commit
+// ad6de675f deleted one of the ports it listed, together with that port's caller and
+// its wiring. Rationale: .squad/wiki/decisions/B-022-health-prober-disposition.md
 
 const (
-	// moduleRoot is the api module root, relative to this package directory.
-	moduleRoot = "../.."
-	// markerLine opens the block of required implementations in adapters.go.
-	markerLine = "Real implementations are required:"
+	moduleRoot = "../.."                              // the api module root, from this package dir
+	markerLine = "Real implementations are required:" // opens the block inside adapters.go
 )
 
-// docRow is one "- Port -> path" row of that block.
-type docRow struct {
-	Port string
-	Path string
-}
+type docRow struct{ Port, Path string }
 
 var docRowRE = regexp.MustCompile(`^//\s*-\s*(\S+)\s*(?:\x{2192}|->)\s*(\S+)\s*$`)
 
-// docContractRows parses the required-implementations block of adapters.go. It fails
-// the test rather than returning an empty slice: emptying the block is the one way a
-// guard over a list silently stops guarding.
 func docContractRows(t *testing.T) []docRow {
 	t.Helper()
 	src, err := os.ReadFile("adapters.go")
 	if err != nil {
-		abs, _ := filepath.Abs("adapters.go")
-		t.Fatalf("read %s: %v", abs, err)
+		t.Fatalf("read adapters.go: %v", err)
 	}
 	var rows []docRow
 	started := false
@@ -57,20 +50,71 @@ func docContractRows(t *testing.T) []docRow {
 			rows = append(rows, docRow{Port: m[1], Path: m[2]})
 		}
 	}
+	// Emptying the block is the one way a guard over a list silently stops guarding.
 	if len(rows) == 0 {
-		t.Fatal("parsed 0 rows from the required-implementations block of adapters.go - " +
-			"the guard would pass vacuously; check the marker line and the row format")
+		t.Fatal("parsed 0 rows from the required-implementations block - it would pass vacuously")
 	}
 	return rows
 }
 
-// TestDocCommentPathsResolveOnDisk asserts that every path the block cites exists.
 func TestDocCommentPathsResolveOnDisk(t *testing.T) {
 	for _, row := range docContractRows(t) {
 		rel := strings.TrimPrefix(row.Path, "api/")
 		if _, err := os.Stat(filepath.Join(moduleRoot, rel)); err != nil {
 			t.Errorf("doc comment cites %s for port %s, which is not on disk; "+
 				"repoint the row at the real file or delete the row", row.Path, row.Port)
+		}
+	}
+}
+
+func declaredTypes(t *testing.T) map[string]bool {
+	t.Helper()
+	names := map[string]bool{}
+	fset := token.NewFileSet()
+	err := filepath.WalkDir(moduleRoot, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if n := d.Name(); n == ".git" || n == "vendor" || n == "testdata" {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		// Non-test files only: the block requires *real* implementations, not fakes.
+		if n := d.Name(); !strings.HasSuffix(n, ".go") || strings.HasSuffix(n, "_test.go") {
+			return nil
+		}
+		f, perr := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
+		if perr != nil {
+			return nil // `go build` is the right messenger for a module that does not parse
+		}
+		for _, decl := range f.Decls {
+			if gd, ok := decl.(*ast.GenDecl); ok && gd.Tok == token.TYPE {
+				for _, spec := range gd.Specs {
+					if ts, ok := spec.(*ast.TypeSpec); ok {
+						names[ts.Name.Name] = true
+					}
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk %s: %v", moduleRoot, err)
+	}
+	if len(names) == 0 {
+		t.Fatalf("walked %s and found no type declarations - it would pass vacuously", moduleRoot)
+	}
+	return names
+}
+
+func TestDocCommentNamesOnlyDeclaredPorts(t *testing.T) {
+	declared := declaredTypes(t)
+	for _, row := range docContractRows(t) {
+		if !declared[row.Port] {
+			t.Errorf("doc comment names port %s, which is declared nowhere in the module; "+
+				"declare the port or delete the row", row.Port)
 		}
 	}
 }
