@@ -6,7 +6,7 @@ package metering
 // pod_lister_test.go — the concrete PodListerFactory adapter (plan
 // metering-compute-loop T3.2, slice S3b). Unit-tests the client→[]corev1.Pod
 // mapping with client-go's fake clientset (a real boundary fake, no live
-// cluster); the cellmgr.ClientFor cell resolution is exercised at T6.1 LIVE.
+// cluster). Cell-client resolution itself is not exercised here.
 
 import (
 	"context"
@@ -25,8 +25,9 @@ func podInNS(name, ns string) *corev1.Pod {
 	return &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}}
 }
 
-// fakeCellClientProvider stands in for cellmgr — returns a canned client (or an
-// error) so the factory is testable without a live ClientManager.
+// fakeCellClientProvider stands in for the production CellClientProvider —
+// returns a canned client (or an error) so the factory is testable without a
+// live provider.
 type fakeCellClientProvider struct {
 	client kubernetes.Interface
 	err    error

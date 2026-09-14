@@ -50,8 +50,8 @@ type NamespaceLister interface {
 }
 
 // PodListerFactory yields a PodLister bound to a specific cell's read-scoped
-// client (over cellmgr.ClientFor). Per-cell so a tenant's pods are listed on the
-// cell PG says it lives on (INV I2), never a mutable CR mirror.
+// client (over SecretCellClientProvider.ClientFor). Per-cell so a tenant's pods
+// are listed on the cell PG says it lives on (INV I2), never a mutable CR mirror.
 type PodListerFactory interface {
 	PodListerForCell(ctx context.Context, cellID string) (PodLister, error)
 }

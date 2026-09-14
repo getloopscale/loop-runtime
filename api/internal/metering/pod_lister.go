@@ -4,10 +4,11 @@
 package metering
 
 // pod_lister.go — the concrete PodListerFactory (plan metering-compute-loop T3.2,
-// slice S3b). Wraps a cell's read-scoped Kubernetes client (resolved via cellmgr)
-// and lists the pods in a namespace, mapping them to []corev1.Pod for the pure
-// sumComputeRequests math. The cell client is resolved behind the narrow
-// CellClientProvider interface (DIP) so the factory is unit-testable with a fake.
+// slice S3b). Wraps a cell's read-scoped Kubernetes client (resolved in
+// production by SecretCellClientProvider) and lists the pods in a namespace,
+// mapping them to []corev1.Pod for the pure sumComputeRequests math. The cell
+// client is resolved behind the narrow CellClientProvider interface (DIP) so
+// the factory is unit-testable with a fake.
 
 import (
 	"context"
@@ -18,9 +19,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// CellClientProvider resolves a cell's read-scoped Kubernetes client. Satisfied by
-// cellmgr.ClientManager.ClientFor; the interface is the DIP seam that lets the
-// factory be tested without a live ClientManager.
+// CellClientProvider resolves a cell's read-scoped Kubernetes client. Satisfied
+// in production by SecretCellClientProvider, which resolves the cell's
+// ClusterCredential by spec.cellID; the interface is the DIP seam that lets the
+// factory be tested without a live provider.
 type CellClientProvider interface {
 	ClientFor(ctx context.Context, cellID string) (kubernetes.Interface, error)
 }
@@ -52,7 +54,8 @@ type CellPodListerFactory struct {
 	clients CellClientProvider
 }
 
-// NewCellPodListerFactory wraps the cell-client provider (cellmgr in production).
+// NewCellPodListerFactory wraps the cell-client provider — in production,
+// SecretCellClientProvider.
 func NewCellPodListerFactory(clients CellClientProvider) *CellPodListerFactory {
 	return &CellPodListerFactory{clients: clients}
 }
