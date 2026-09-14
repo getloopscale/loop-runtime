@@ -148,6 +148,12 @@ to [Semantic Versioning](https://semver.org/).
   living inside the documentation tree, and its now-dangling `.gitignore` entry.
 - `docs/api-contracts.md`, which documented `memory:*` scopes belonging to `../loopzero-memory`
   rather than to this engine.
+- `api/internal/health` — the outbound HTTP prober, unreachable since its caller, its port
+  and its composition-root wiring were removed in March 2026 (`ad6de675f`). Nothing in the
+  running API reached it. The `api/internal/adapters` doc comment that still required it is
+  corrected, and a test now fails if that list ever again names a port declared nowhere or
+  cites a file that is not on disk. Rationale:
+  `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
 
