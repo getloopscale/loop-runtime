@@ -4,12 +4,13 @@
 //
 // Plan 2026-05-20-helm-render-time-testing-terratest v1.1 — T3.1 (chart 1/10).
 //
-// CRITICAL: Per ADR D1 lookup order, `chartrender.ChartPath("loopzero-cloud")`
-// resolves to `infra/helm/loopzero-cloud/` (bootstrap variant, used by Helmfile
-// L2 at install time). The `charts/loopzero-cloud/` published variant (used by
-// ArgoCD L3 Day-2) is structurally different (full Service template +
-// loopzero-common library labels + container-level securityContext) and is
-// NOT covered by this test file.
+// CRITICAL: this file tests the BOOTSTRAP chart, and now says so in the call.
+// `chartrender.BootstrapChartPath("loopzero-cloud")` resolves to `infra/helm/loopzero-cloud/`
+// only (bootstrap variant, used by Helmfile L2 at install time). `ChartPath`
+// refuses the bare name outright, because `charts/loopzero-cloud` is a DIFFERENT
+// chart. That published variant (used by ArgoCD L3 Day-2) is structurally
+// different (full Service template + loopzero-common library labels +
+// container-level securityContext) and is NOT covered by this test file.
 //
 // FOLLOW-UP (Phase 3 amendment): published variant test pkg needed —
 // see task #126 follow-up. CLAUDE.md "3 overlapping charts" rule means

@@ -28,7 +28,7 @@
 //	)
 //
 //	func TestLoopZeroAPI_Defaults(t *testing.T) {
-//	    chartPath, _ := chartrender.ChartPath("loopzero-api")
+//	    chartPath, _ := chartrender.BootstrapChartPath("loopzero-api")
 //	    opts, _ := chartrender.NewOptions(chartPath, "")
 //	    output := chartrender.RenderTemplate(t, opts, chartPath, "loopzero-api-test",
 //	        []string{"templates/deployment.yaml"})
@@ -127,9 +127,14 @@ func repoRoot() (string, error) {
 var ErrAmbiguousChart = errors.New("chart name resolves to two charts")
 
 // BootstrapChartPath resolves to infra/helm/<name>/ ONLY.
-// Use when the test deliberately targets the bootstrap (Helmfile L2)
-// variant of an overlapping chart (loopzero-api, loopzero-cloud,
-// admission-policies). For non-overlapping charts, ChartPath suffices.
+//
+// Use it for the two names declared in BOTH chart trees - loopzero-api and
+// loopzero-cloud (infra/quality/chart-pairs.txt) - which ChartPath refuses.
+// For a name present in exactly one tree, ChartPath suffices.
+//
+// admission-policies / loopzero-admission-policies is an overlapping PAIR for
+// the parity gate but NOT a name collision: the two names differ, so
+// ChartPath resolves each of them unambiguously (see B-066).
 func BootstrapChartPath(chartName string) (string, error) {
 	if chartName == "" {
 		return "", fmt.Errorf("chart name cannot be empty")
@@ -166,15 +171,20 @@ func PublishedChartPath(chartName string) (string, error) {
 
 // ChartPath resolves a chart name to its absolute filesystem path.
 //
-// Lookup order (matches CLAUDE.md Helm Chart Dual System):
-//  1. infra/helm/<name>/ (bootstrap charts, Helmfile L2)
-//  2. charts/<name>/ (published OCI charts, ArgoCD L3)
+// The name must identify exactly one chart. Present in exactly one of
+// infra/helm/ (bootstrap, Helmfile L2) or charts/ (published OCI, ArgoCD
+// L3), that path is returned. Present in BOTH, the call fails with
+// ErrAmbiguousChart naming both paths: no lookup order decides it, because
+// a name that means two charts has no single right answer. Present in
+// neither, it fails with "not found in infra/helm/ or charts/".
 //
-// Returns error if chart not found in either location.
+// Exactly two names are declared in both trees - loopzero-api and loopzero-cloud
+// (infra/quality/chart-pairs.txt). Reach those through BootstrapChartPath
+// or PublishedChartPath, which carry the tree in the call instead of
+// relying on a precedence rule.
 //
-// For overlapping charts (loopzero-api, loopzero-cloud, admission-policies),
-// prefer the explicit BootstrapChartPath / PublishedChartPath helpers
-// so the test pins to a single variant deterministically.
+// admission-policies / loopzero-admission-policies is an overlapping PAIR for
+// the parity gate but NOT a name collision, and resolves here normally.
 func ChartPath(chartName string) (string, error) {
 	if chartName == "" {
 		return "", fmt.Errorf("chart name cannot be empty")
