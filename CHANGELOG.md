@@ -46,6 +46,21 @@ to [Semantic Versioning](https://semver.org/).
 - `docs/api-contracts.md`, which documented `memory:*` scopes belonging to `../loopzero-memory`
   rather than to this engine.
 
+### Fixed
+
+- A deploy stuck in release activation no longer creates a duplicate release each time the
+  platform fails to read the release it already has. The read failure was being mistaken for
+  "this build has no release yet", which is the one condition that legitimately creates one;
+  a database blip during activation could therefore leave up to ten releases behind for a
+  single deploy, with nothing recorded to explain them. The failure is now reported and the
+  attempt retried on the next pass, and a deploy whose read keeps failing still ends as a
+  clear failure on the same schedule as before (#B-069)
+- A failed Cloudflare activation check on a custom domain is now reported instead of being
+  discarded silently. Domain activation was unaffected either way — the check only speeds up
+  detection, and the next pass re-reads the zone regardless — but a rate-limited or failing
+  Cloudflare account produced no trace at any log level, leaving slow activations with no
+  explanation (#B-069)
+
 ### Known regressions
 
 - **The consolidation broke the 82 inbound `docs/*.md` references that still resolved.** Of the
