@@ -526,11 +526,15 @@ loopzero deploy (or git push)
 | Edge | Cloudflare Tunnel + Worker + KV + Zone Management |
 | Static assets | DigitalOcean Spaces + CDN |
 | Monitoring | Prometheus + Grafana + Loki + Tempo + OpenTelemetry |
-| IaC — L1 cloud primitives | **Being re-platformed DigitalOcean/Pulumi → AWS/Terraform** per the 2026-06-17 CTO mandate. Target: `../loopzero-infra-modules` (versioned blueprints) + `../loopzero-infra-live` (per-env Terragrunt units). The 5 Pulumi projects under `infra/` are **AS-IS legacy, live until the AM8 cutover** — do not add new Pulumi for target infra. |
+| IaC — L1 cloud primitives | **Being re-platformed DigitalOcean/Pulumi → AWS/Terraform** per the 2026-06-17 CTO mandate (`../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md`). Target: `../loopzero-infra-modules` (versioned blueprints) + `../loopzero-infra-live` (per-env Terragrunt units). The 5 Pulumi projects under `infra/` are **AS-IS legacy** — do not add new Pulumi for target infra. |
 | IaC — L2 platform workloads | Helmfile v1.0+ (`infra/helmfile/`) — the source of truth for platform releases, **not** Pulumi |
 | IaC — L3 tenant Day-2 | ArgoCD (manual sync, from Gitea) |
 | CI/CD | 5 workflows in `.github/workflows/` (`build-publish`, `ci`, `delivery-gate-armed`, `release-artifacts`, `workflow-hygiene`). Actions was retired as the pipeline 2026-05-23; gates run via `task quality:*` |
 | Helm charts | 43 bootstrap (`infra/helm/`) + 12 published (`charts/`) |
+
+**The L1 schedule.** The Pulumi projects stay live until the AM9 cutover and are retired at
+AM10, per the ADR cited in the row above. The prohibition on adding to them is separate and
+unconditional: it carries no date and has been in force since the mandate.
 
 ### Edge Proxy vs Cluster Ingress (Caddy ↔ Traefik)
 

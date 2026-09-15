@@ -206,9 +206,11 @@ DigitalOcean/Pulumi -> AWS/Terraform, into two sibling repos: `../loopzero-infra
 (versioned blueprints) + `../loopzero-infra-live` (per-env Terragrunt units). Tooling is
 **Terraform**, not OpenTofu, not Pulumi.
 
-`infra/pulumi*` is **AS-IS legacy, live until the AM8 cutover**. Do not cite Pulumi as the
-forward path, and do not add new Pulumi for target infra. The in-cluster platform layer is
-unchanged: Helmfile L2 + ArgoCD L3 + charts + k3d dev all stay.
+`infra/pulumi*` is **AS-IS legacy — live until the AM9 cutover, and retired at AM10**, per
+`../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md`. Do not cite
+Pulumi as the forward path, and do not add new Pulumi for target infra. This rule is
+unconditional and carries no date. The in-cluster platform layer is unchanged:
+Helmfile L2 + ArgoCD L3 + charts + k3d dev all stay.
 
 Layering today: **L1** cloud primitives (Pulumi/DO legacy -> Terraform/AWS target) ·
 **L2** Helmfile (SoT for the platform releases) · **L3** ArgoCD (tenant Day-2 GitOps,
