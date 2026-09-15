@@ -339,7 +339,7 @@ CloudProviderFactory
 
 **Why ArgoCD only on the management cluster?** ArgoCD is Kubernetes-native and manages the runtime cluster through a kubeconfig. Putting it outside K8s makes no sense.
 
-**AWS portability:** Gitea VM → EC2, Spaces → S3, DOKS → EKS, DB → RDS. The model does not change — only the provider implementations do.
+**AWS portability:** Gitea VM → EC2, Spaces → S3, DOKS → EKS, DB → RDS. The AWS build happens in `../loopzero-infra-modules` and `../loopzero-infra-live` (Terraform), per `../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md`.
 
 ## Dependencies
 
@@ -356,7 +356,11 @@ CloudProviderFactory
 > holds `build-publish.yml`, `ci.yml`, `delivery-gate-armed.yml`, `release-artifacts.yml` and
 > `workflow-hygiene.yml`. `infra-preview.yml` and `infra-deploy.yml` are in no commit, and GitHub
 > Actions was retired as the pipeline on 2026-05-23. What follows is the intended shape, not what
-> runs — and `infra/pulumi*` is AS-IS legacy until the AM8 cutover to Terraform.
+> runs — and `infra/pulumi*` is AS-IS legacy: live until the AM9 cutover, and retired at AM10,
+> per `../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md`.
+>
+> Do not cite Pulumi as the forward path for infra construction, and do not add new Pulumi for target infra.
+> This rule is unconditional and carries no date.
 
 ### Workflows
 
