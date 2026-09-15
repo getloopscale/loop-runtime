@@ -100,7 +100,7 @@ func TestIsLibraryChart_detects_loopzero_common(t *testing.T) {
 func TestIsLibraryChart_rejects_application_chart(t *testing.T) {
 	t.Parallel()
 
-	chartPath, err := ChartPath("loopzero-api")
+	chartPath, err := BootstrapChartPath("loopzero-api")
 	if err != nil {
 		t.Fatalf("resolve loopzero-api: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestNewOptions_no_env_values(t *testing.T) {
 func TestNewOptions_rejects_gotmpl_values(t *testing.T) {
 	t.Parallel()
 
-	chartPath, err := ChartPath("loopzero-api")
+	chartPath, err := BootstrapChartPath("loopzero-api")
 	if err != nil {
 		t.Fatalf("resolve loopzero-api: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestNewOptions_rejects_gotmpl_values(t *testing.T) {
 func TestNewOptions_rejects_missing_env_file(t *testing.T) {
 	t.Parallel()
 
-	chartPath, err := ChartPath("loopzero-api")
+	chartPath, err := BootstrapChartPath("loopzero-api")
 	if err != nil {
 		t.Fatalf("resolve loopzero-api: %v", err)
 	}
