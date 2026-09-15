@@ -39,6 +39,7 @@
 package chartrender
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -120,6 +121,11 @@ func repoRoot() (string, error) {
 	return root, nil
 }
 
+// ErrAmbiguousChart is returned by ChartPath when a bare chart name is declared in
+// BOTH chart trees, so the name identifies two different charts and no single path
+// is the right answer. Callers match it with errors.Is rather than on message text.
+var ErrAmbiguousChart = errors.New("chart name resolves to two charts")
+
 // BootstrapChartPath resolves to infra/helm/<name>/ ONLY.
 // Use when the test deliberately targets the bootstrap (Helmfile L2)
 // variant of an overlapping chart (loopzero-api, loopzero-cloud,
@@ -177,16 +183,39 @@ func ChartPath(chartName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	candidates := []string{
-		filepath.Join(root, "infra", "helm", chartName),
-		filepath.Join(root, "charts", chartName),
+	bootstrap := filepath.Join(root, "infra", "helm", chartName)
+	published := filepath.Join(root, "charts", chartName)
+
+	// BOTH candidates are examined before anything is returned. The loop this
+	// replaced returned inside its first iteration, so the second candidate was
+	// never stat'd and the function could not observe — let alone report — that a
+	// name identified two charts. Reporting an ambiguity requires having looked.
+	bootstrapExists := hasChartYaml(bootstrap)
+	publishedExists := hasChartYaml(published)
+
+	switch {
+	case bootstrapExists && publishedExists:
+		return "", fmt.Errorf(
+			"%w: %q names two charts - %s and %s; "+
+				"call BootstrapChartPath for the first or PublishedChartPath for the second",
+			ErrAmbiguousChart, chartName, bootstrap, published)
+	case bootstrapExists:
+		return bootstrap, nil
+	case publishedExists:
+		return published, nil
+	default:
+		return "", fmt.Errorf("chart %q not found in infra/helm/ or charts/", chartName)
 	}
-	for _, candidate := range candidates {
-		if _, err := os.Stat(filepath.Join(candidate, "Chart.yaml")); err == nil {
-			return candidate, nil
-		}
-	}
-	return "", fmt.Errorf("chart %q not found in infra/helm/ or charts/", chartName)
+}
+
+// hasChartYaml reports whether dir holds a Chart.yaml, which is what makes a
+// directory a chart. Keying on the file and never on the directory matters: the
+// values-only overlays under infra/helm/ are directories with no Chart.yaml, and
+// they must keep taking the not-found branch. A stat failure for any other reason
+// (permissions, I/O) is treated as absence, exactly as it was before B-002.
+func hasChartYaml(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "Chart.yaml"))
+	return err == nil
 }
 
 // chartYaml is the minimal subset of Chart.yaml we care about for D12

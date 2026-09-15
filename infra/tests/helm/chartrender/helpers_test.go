@@ -9,6 +9,7 @@
 package chartrender
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,8 +21,9 @@ import (
 func TestChartPath_resolves_known_charts(t *testing.T) {
 	t.Parallel()
 
-	// Note: ChartPath prefers infra/helm/ first per CLAUDE.md Dual System.
-	// loopzero-api exists in BOTH infra/helm/ and charts/ — infra/helm wins.
+	// Every name below exists in exactly ONE tree, which is the only case
+	// ChartPath resolves. loopzero-api and loopzero-cloud are declared in BOTH and are
+	// therefore refused, not preferred — see TestChartPath_refuses_a_colliding_name.
 	// postgresql + cert-manager are upstream-wrappers (no Chart.yaml) —
 	// they would be auto-exempt per coverage gate, not testable here.
 	cases := []struct {
@@ -29,7 +31,6 @@ func TestChartPath_resolves_known_charts(t *testing.T) {
 		chartName string
 		wantDir   string // expected to contain this segment
 	}{
-		{"loopzero-api: infra/helm/ takes precedence over charts/", "loopzero-api", "infra/helm/loopzero-api"},
 		{"chaos-mesh lives in infra/helm/ with Chart.yaml", "chaos-mesh", "infra/helm/chaos-mesh"},
 		{"loopzero-app-operator lives in charts/", "loopzero-app-operator", "charts/loopzero-app-operator"},
 		{"loopzero-common (library) lives in charts/", "loopzero-common", "charts/loopzero-common"},
@@ -78,6 +79,42 @@ func TestChartPath_rejects_empty_name(t *testing.T) {
 
 // TestIsLibraryChart_detects_loopzero_common confirms library chart detection
 // per ADR D12 (EC-3 fix).
+// TestChartPath_refuses_a_colliding_name asserts the contract this package used to
+// invert: a name declared in BOTH chart trees resolves to no chart at all.
+//
+// Before B-002, ChartPath returned infra/helm/<name> for these two names because
+// that candidate sat at index 0 of the candidate slice — the identity of the chart
+// was decided by slice order, and charts/loopzero-api and charts/loopzero-cloud were
+// unreachable through this function. The error must do more than fail: it names
+// both paths and both explicit resolvers, so the caller is told what to call instead.
+func TestChartPath_refuses_a_colliding_name(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"loopzero-api", "loopzero-cloud"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := ChartPath(name)
+			if !errors.Is(err, ErrAmbiguousChart) {
+				t.Fatalf("ChartPath(%q) err = %v; want ErrAmbiguousChart", name, err)
+			}
+			if got != "" {
+				t.Errorf("ChartPath(%q) = %q; want empty path on refusal", name, got)
+			}
+			for _, want := range []string{
+				"infra/helm/" + name,
+				"charts/" + name,
+				"BootstrapChartPath",
+				"PublishedChartPath",
+			} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("ChartPath(%q) error %q does not name %q", name, err, want)
+				}
+			}
+		})
+	}
+}
+
 func TestIsLibraryChart_detects_loopzero_common(t *testing.T) {
 	t.Parallel()
 
