@@ -21,6 +21,15 @@ to [Semantic Versioning](https://semver.org/).
 - `CLAUDE.md` repointed at the consolidated paths: the locked LoopZeroKit ↔ LoopZeroCloud rule now
   cites `docs/loopzerokit-loopzerocloud-seam.md`, and the paragraph describing `docs/` as a mix of
   living reference and audit trail now describes the six-document tree.
+- Code-quality auditing is enabled for the `api` module — 97 of the workspace's 321 packages.
+  It audited nothing at all before this: no language was enabled, so every plan scored in this
+  repository was capped `INVALID` regardless of its own quality, and `/implement` was unreachable.
+  Pre-existing dead-code findings are recorded as a baseline (14 rows) so they stay countable
+  without failing changes that did not cause them, and Go mutation testing — which the toolchain
+  defers unconditionally for every Go project, so the finding says nothing about this codebase —
+  is exempted **until 2026-12-12**. On that date the exemption lapses, the finding returns at full
+  severity and every plan drops back below the band `/implement` requires; renew the row in
+  `.claude/rules/code-quality-allowlist.txt` or adopt a Go mutation runner (#B-034, #B-088)
 
 ### Removed
 
