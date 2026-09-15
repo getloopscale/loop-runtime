@@ -182,6 +182,8 @@ A merge patch carries no `resourceVersion`, so it never 409s against a concurren
 
 `infra/helm/` (bootstrap, Helmfile L2) and `charts/` (published OCI, ArgoCD L3) coexist by design (ADR D1). **2 charts exist in BOTH trees under the same `name`** — `loopzero-api` and `loopzero-cloud`: when patching one, apply the same fix to the other. Refer to each by its **path**, never by the bare name — `infra/helm/loopzero-api` is the bootstrap one, `charts/loopzero-api` is the published OCI one.
 
+For Go code under `infra/tests`, this is now mechanised rather than remembered: `chartrender.ChartPath` **refuses** a name declared in both trees and names both paths, so a colliding chart is reached through `BootstrapChartPath` or `PublishedChartPath`, which carry the tree in the call. Documents, helmfiles, manifests and the `Tiltfile` are not reached by that mechanism and remain governed by the instruction above (B-002).
+
 This used to read **3**, naming `loopzero-admission-policies` as the third. Measured 2026-08-18 (B-056): `infra/helm/loopzero-admission-policies` **does not exist** — the chart lives only in `charts/`, so there is no other side to patch. A parity contract that names a pair with one side dilutes the two that are real. The pair list now lives in `infra/quality/chart-pairs.txt`, and the `chart-pairs` gate refuses a pair that is undeclared **or** a declaration that outlived its pair — because this sentence drifted once already. `monitoring` / `loopzero-monitoring` are complementary (infra vs config), not overlapping.
 
 ### Infrastructure — AWS re-platform in progress

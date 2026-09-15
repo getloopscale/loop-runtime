@@ -127,6 +127,12 @@ to [Semantic Versioning](https://semver.org/).
   `operators/internal/argocd/real_provisioner.go`, where it freezes a cluster name rather than
   declaring a schedule; it is a separate defect in another domain and is filed as its own item
   (#B-018)
+- A chart name that exists in **both** chart trees — `loopzero-api` and `loopzero-cloud` — no longer
+  resolves silently to the bootstrap chart in render-time tests. `chartrender.ChartPath` now
+  fails, naming both paths and the two resolvers that disambiguate. Previously the bootstrap
+  chart won because it happened to sit first in the candidate list, so the published charts were
+  unreachable through that function and a test could render the wrong chart while looking
+  correct. Names present in exactly one tree are unaffected (#B-002)
 
 ### Removed
 
