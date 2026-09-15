@@ -6,6 +6,7 @@ package helmdrift
 import (
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -93,5 +94,62 @@ func TestRenderErrorNamesTheChartAndTheSetList(t *testing.T) {
 	if !strings.Contains(err.Error(), "rbac.create=true") {
 		t.Errorf("the error does not name the --set list, so the invocation cannot be "+
 			"reproduced from it: %v", err)
+	}
+}
+
+// B-001 T5.1. The matrix is the gate's own configuration and the reported count
+// rests on it, so it is asserted rather than merely written down.
+func TestTheValuesMatrixIsTheTwoMeasuredPoints(t *testing.T) {
+	got := matrixFor("loopzero-api:loopzero-api")
+	if len(got) != 2 {
+		t.Fatalf("expected the two measured points, got %v", got)
+	}
+	var flags []string
+	for _, entry := range got {
+		joined := strings.Join(entry, " ")
+		if !strings.Contains(joined, "rbac.create=true") {
+			t.Errorf("entry %q does not enable rbac.create, so the published chart renders no "+
+				"ClusterRole at all under it", entry)
+		}
+		flags = append(flags, joined)
+	}
+
+	// Both values of the flag are named EXPLICITLY, which is the whole point of
+	// pinning: the reported count cannot move because somebody flipped the
+	// default in values.yaml, only because a chart's rules changed (NFR-006).
+	sort.Strings(flags)
+	if !strings.Contains(flags[0], "rbac.legacyClusterWideSecrets=false") ||
+		!strings.Contains(flags[1], "rbac.legacyClusterWideSecrets=true") {
+		t.Errorf("the matrix does not pin both states of rbac.legacyClusterWideSecrets: %v", flags)
+	}
+}
+
+// Negative case: the degenerate configuration must not be reintroduced silently.
+//
+// At rbac.create=false the published chart renders no ClusterRole — helm reports
+// "could not find template templates/clusterrole.yaml in chart" — so every
+// comparison degenerates to "all 175 bootstrap cells diverge". A number printed
+// forever is how a gate teaches everyone to ignore it.
+func TestTheMatrixExcludesRbacCreateFalse(t *testing.T) {
+	for pair, entries := range rbacValuesMatrix {
+		for _, entry := range entries {
+			for _, set := range entry {
+				if strings.Contains(strings.ReplaceAll(set, " ", ""), "rbac.create=false") {
+					t.Errorf("%s pins %q; at that value the published chart renders no "+
+						"ClusterRole and the comparison reports total divergence forever", pair, set)
+				}
+			}
+		}
+	}
+}
+
+// A pair the matrix does not name is rendered once, at whatever the chart itself
+// defaults to. Measured 2026-09-15: charts/loopzero-admission-policies ships a
+// values.schema.json and REJECTS `--set rbac.create=true` outright, so a
+// gate-wide matrix would have made two of the three pairs unrenderable.
+func TestAPairWithNoMatrixRendersOnceAtChartDefaults(t *testing.T) {
+	got := matrixFor("loopzero-admission-policies:admission-policies")
+	if len(got) != 1 || got[0] != nil {
+		t.Errorf("expected a single render at chart defaults, got %v", got)
 	}
 }
