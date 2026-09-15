@@ -19,7 +19,7 @@ import (
 //
 // Este teste existe para que a sonda nao suma em silencio: um alvo removido nao quebra nada
 // visivelmente, so' apaga o dado, e a falta do dado e' invisivel ate' alguem precisar dele.
-func TestB022_SondaCobreOLoopZeroCloud(t *testing.T) {
+func TestProbeCoversLoopZeroCloud(t *testing.T) {
 	const path = "../../helm/monitoring/manifests/probe-targets.yaml"
 	b, err := os.ReadFile(path)
 	if err != nil {

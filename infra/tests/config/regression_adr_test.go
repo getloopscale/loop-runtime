@@ -135,7 +135,7 @@ func TestADR0018T32_VAPTemplateExists(t *testing.T) {
 // A lista precisa ser NAO-VAZIA: a forma `!(x in [])` e' sempre verdadeira, entao uma lista vazia
 // faz a politica valer para toda identidade e negar tudo — armadilha de CEL registrada no
 // `CLAUDE.md`. Por isso este teste exige os nomes, e nao so' a presenca do matchCondition.
-func TestB095_VAPTenantNamespaceIsentaOsProprioControllers(t *testing.T) {
+func TestVAPTenantNamespaceExemptsItsOwnControllers(t *testing.T) {
 	const path = "../../helm/admission-policies/templates/vap-tenant-namespace.yaml"
 	data, err := os.ReadFile(path)
 	if err != nil {

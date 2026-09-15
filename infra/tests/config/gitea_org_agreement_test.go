@@ -93,7 +93,7 @@ type b191Site struct {
 	value string
 }
 
-func TestB191GiteaOrgDeclarationsAgree(t *testing.T) {
+func TestGiteaOrgDeclarationsAgree(t *testing.T) {
 	const repoRoot = "../../.."
 
 	// ---- the two Go fallbacks, read from source rather than restated here ----

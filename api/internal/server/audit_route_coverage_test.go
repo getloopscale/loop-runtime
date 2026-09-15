@@ -50,7 +50,7 @@ import (
 // Ela e' de CAIXA-PRETA de proposito: dispara a requisicao e le' o que o escritor de auditoria
 // gravou. Chamar `deriveAction` direto testaria a funcao; isto testa o caminho — inclusive o
 // middleware estar de fato montado sobre a rota.
-func TestB059_TodaRotaMutanteGravaAcaoDeclarada(t *testing.T) {
+func TestEveryMutatingRouteRecordsItsDeclaredAction(t *testing.T) {
 	var gravadas []linhaDeAuditoria
 	escritor := mwaudit.AuditWriter(func(tenantID, action, actor, resourceType, resourceID,
 		correlationID string, metadata map[string]any) {
@@ -208,7 +208,7 @@ func (membroFixo) GetMemberships(_ context.Context, _ string) ([]auth.TenantMemb
 // O mutante: sem ele, um PASS acima seria indistinguivel de um detector que nunca dispara.
 // Um caminho que nenhuma regra mapeia TEM de ser acusado — e a acusacao carrega o ultimo
 // segmento do caminho concreto, que e' o dano: a acao varia com o id.
-func TestB059_ODetectorAcusaCaminhoNaoMapeado(t *testing.T) {
+func TestDetectorReportsAnUnmappedRoute(t *testing.T) {
 	var gravadas []linhaDeAuditoria
 	escritor := mwaudit.AuditWriter(func(_, action, _, _, _, _ string, _ map[string]any) {
 		gravadas = append(gravadas, linhaDeAuditoria{acao: action})

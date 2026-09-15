@@ -35,7 +35,7 @@ import (
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
-// TestB059AuditBaselineDump — B-059 Phase 1 T1.1 (NFR-002 regression floor).
+// TestAuditBaselineDumpIsReproducible — B-059 Phase 1 T1.1 (NFR-002 regression floor).
 //
 // # PURPOSE
 //
@@ -49,7 +49,7 @@ import (
 // # SCOPE OF THIS DUMP
 //
 // Bodyless synthetic requests, no query params — same shape as
-// `TestB059_TodaRotaMutanteGravaAcaoDeclarada`. That means:
+// `TestEveryMutatingRouteRecordsItsDeclaredAction`. That means:
 //
 //   - URL-sourced routes (`extractResourceID(r.URL.Path)` returns non-empty)
 //     are captured with `source=url | value=<id>`.
@@ -76,7 +76,7 @@ import (
 // — enough to prove the dumper ran and the fixture reached the audited group.
 // The baseline file itself is the artifact Phase 2 diffs against; Phase 2
 // carries its own tests that assert the diff shape.
-func TestB059AuditBaselineDump(t *testing.T) {
+func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 	type row struct{ method, path, source, value string }
 	var rows []row
 
@@ -121,7 +121,7 @@ func TestB059AuditBaselineDump(t *testing.T) {
 	rotas := rotasMutantes(t, r)
 	if len(rotas) < 17 {
 		t.Fatalf("baseline dumper walked %d mutating route(s); fixture must reach the audited group "+
-			"(the same ≥17 floor that TestB059_TodaRotaMutanteGravaAcaoDeclarada enforces).", len(rotas))
+			"(the same ≥17 floor that TestEveryMutatingRouteRecordsItsDeclaredAction enforces).", len(rotas))
 	}
 
 	auditar := mwaudit.AuditLog(slog.New(slog.NewTextHandler(io.Discard, nil)), writer)(http.HandlerFunc(
@@ -163,7 +163,7 @@ func TestB059AuditBaselineDump(t *testing.T) {
 	sb.WriteString("# B-059 Phase 1 T1.1 baseline — resource_id coverage per mutating route\n")
 	sb.WriteString("#\n")
 	sb.WriteString("# Captured with bodyless synthetic requests + no query params via\n")
-	sb.WriteString("# TestB059AuditBaselineDump. Rows where source=none rely on body/query\n")
+	sb.WriteString("# TestAuditBaselineDumpIsReproducible. Rows where source=none rely on body/query\n")
 	sb.WriteString("# snooping today and must be migrated to declare their id via\n")
 	sb.WriteString("# audit.SetResourceID in Phase 1 T1.2. Rows where source=url are stable.\n")
 	sb.WriteString("#\n")
