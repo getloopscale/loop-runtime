@@ -1115,3 +1115,106 @@ func TestReconcile_PerTenantBackpressure(t *testing.T) {
 	// The test passes if it does not panic or deadlock — the backpressure
 	// mechanism is structural.
 }
+
+// ---------------------------------------------------------------------------
+// A failed release lookup must not be mistaken for "no release exists".
+//
+// ReleaseStoreSqlc.GetLatestByBuildID separates the two states deliberately:
+// (nil, nil) when no release exists for the build, (nil, err) when the lookup
+// failed. Discarding the error collapsed both to nil, skipped the guard, and
+// reached Activate() — which writes a release row as its first statement.
+//
+// Every test below MUST populate the workflow status through
+// succeededStatusWithDigests: without a digest, BuildManifestApps fails loud
+// and RetryReleaseActivation is never reached, so an assertion of zero
+// retries would be satisfied by the manifest gate instead of by the fix and
+// would pass against the defect it exists to catch. See the note at the
+// succeededStatusWithDigests declaration above.
+//
+// Backlog item B-069.
+// ---------------------------------------------------------------------------
+
+func TestRetryReleaseActivation_LookupFails_DoesNotActivate(t *testing.T) {
+	// Arrange
+	fakes := newReconcileLoopFakes()
+	b := defaultBuild("bld-lookup-fail", string(statemachine.BuildReleasing))
+	fakes.buildStore.builds[b.ID] = b
+	fakes.buildStore.apps[b.ID] = []db.BuildAppSpec{{Name: "api", Type: "server", Port: 3000}}
+	fakes.workflow.statusResult = succeededStatusWithDigests("api")
+	fakes.orch.findReleaseResult = nil
+	fakes.orch.findReleaseErr = errors.New("sqlc: get latest by build_id: conn closed")
+
+	loop := fakes.buildLoop(BuildReconcileLoopConfig{})
+
+	// Act
+	loop.retryReleaseActivation(context.Background(), b)
+
+	// Assert: the release state is unknown, so the branch that creates one
+	// must not be taken.
+	if fakes.orch.retryCalls != 0 {
+		t.Errorf("lookup failed, so the release state is unknown: expected 0 "+
+			"RetryReleaseActivation calls, got %d", fakes.orch.retryCalls)
+	}
+	// And a single transient read must not end the user's deploy.
+	if got := fakes.buildStore.builds[b.ID].Status; got != string(statemachine.BuildReleasing) {
+		t.Errorf("a transient lookup failure must skip the tick, not end the deploy: "+
+			"expected status RELEASING, got %q", got)
+	}
+}
+
+func TestRetryReleaseActivation_LookupFailsEveryTick_NeverRetries(t *testing.T) {
+	// Arrange
+	fakes := newReconcileLoopFakes()
+	b := defaultBuild("bld-lookup-fail-10", string(statemachine.BuildReleasing))
+	fakes.buildStore.builds[b.ID] = b
+	fakes.buildStore.apps[b.ID] = []db.BuildAppSpec{{Name: "api", Type: "server", Port: 3000}}
+	fakes.workflow.statusResult = succeededStatusWithDigests("api")
+	fakes.orch.findReleaseResult = nil
+	fakes.orch.findReleaseErr = errors.New("sqlc: get latest by build_id: pool exhausted")
+
+	loop := fakes.buildLoop(BuildReconcileLoopConfig{})
+
+	// Act: ten ticks, deliberately at or below the cap (the comparison is
+	// attempts > maxActivationAttempts), so this measures the branch and not
+	// the cap.
+	for i := 0; i < maxActivationAttempts; i++ {
+		loop.retryReleaseActivation(context.Background(), b)
+	}
+
+	// Assert
+	if fakes.orch.retryCalls != 0 {
+		t.Errorf("expected 0 RetryReleaseActivation calls across %d failing ticks, got %d",
+			maxActivationAttempts, fakes.orch.retryCalls)
+	}
+}
+
+func TestRetryReleaseActivation_LookupFailsEveryTick_FailsBuildAtCap(t *testing.T) {
+	// Arrange
+	fakes := newReconcileLoopFakes()
+	b := defaultBuild("bld-lookup-fail-cap", string(statemachine.BuildReleasing))
+	fakes.buildStore.builds[b.ID] = b
+	fakes.buildStore.apps[b.ID] = []db.BuildAppSpec{{Name: "api", Type: "server", Port: 3000}}
+	fakes.workflow.statusResult = succeededStatusWithDigests("api")
+	fakes.orch.findReleaseResult = nil
+	fakes.orch.findReleaseErr = errors.New("sqlc: get latest by build_id: conn closed")
+
+	loop := fakes.buildLoop(BuildReconcileLoopConfig{})
+
+	// Act: eleven ticks — the eleventh crosses maxActivationAttempts. The
+	// error branch must sit AFTER the attempt counter, or a failing tick
+	// costs nothing, the cap is never crossed, and the build stalls without
+	// bound instead of failing.
+	for i := 0; i < maxActivationAttempts+1; i++ {
+		loop.retryReleaseActivation(context.Background(), b)
+	}
+
+	// Assert BOTH halves. The cap half alone is satisfied by the defect,
+	// which also reaches FAILED — after creating a release row on every tick.
+	if fakes.orch.retryCalls != 0 {
+		t.Errorf("expected 0 RetryReleaseActivation calls, got %d", fakes.orch.retryCalls)
+	}
+	if got := fakes.buildStore.builds[b.ID].Status; got != string(statemachine.BuildFailed) {
+		t.Errorf("a lookup failing on every tick must still terminate the build through "+
+			"the existing cap: expected FAILED, got %q", got)
+	}
+}

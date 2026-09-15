@@ -4,9 +4,12 @@
 package domain
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -127,8 +130,9 @@ func (f *fakeGitOpsProvisioner) Remove(_ context.Context, _ deploycontracts.GitO
 }
 
 type fakeCFZoneChecker struct {
-	statuses  map[string]string
-	deleteErr error
+	statuses   map[string]string
+	deleteErr  error
+	triggerErr error
 }
 
 func (f *fakeCFZoneChecker) GetZoneStatus(_ context.Context, zoneID string) (string, error) {
@@ -138,7 +142,9 @@ func (f *fakeCFZoneChecker) GetZoneStatus(_ context.Context, zoneID string) (str
 	}
 	return s, nil
 }
-func (f *fakeCFZoneChecker) TriggerActivationCheck(_ context.Context, _ string) error { return nil }
+func (f *fakeCFZoneChecker) TriggerActivationCheck(_ context.Context, _ string) error {
+	return f.triggerErr
+}
 func (f *fakeCFZoneChecker) DeleteZone(_ context.Context, _ string) error {
 	return f.deleteErr
 }
@@ -480,5 +486,61 @@ func TestDomainProvisioner_RemoveCFManaged_DeletesZone(t *testing.T) {
 	// only in the gitops path which requires a release)
 	if len(store.deletedDomains) != 1 || store.deletedDomains[0] != "cf-remove.com" {
 		t.Errorf("expected cf-remove.com deleted, got %v", store.deletedDomains)
+	}
+}
+
+// TestDomainProvisioner_TriggerActivationCheckFails_IsRecorded pins the one
+// silent failure site in this file. TriggerActivationCheck is fire-and-forget
+// by design — no control flow depends on it and the next tick re-reads zone
+// status regardless — but a discarded error reaches nobody, while the sibling
+// Cloudflare call eighteen lines up reports its failure at Warn.
+//
+// The zone id assertion is what binds the record to the logger derived inside
+// the loop (carrying domain and zone_id): asserting only the error string
+// would pass on a record emitted through the bare provisioner logger, which
+// loses both.
+//
+// Backlog item B-069.
+func TestDomainProvisioner_TriggerActivationCheckFails_IsRecorded(t *testing.T) {
+	// Arrange
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	zoneID := "zone-456"
+	store := newFakeDomainProvisionerStore()
+	store.pendingNSDomains = []ports.CustomDomain{
+		{
+			ID: "dom-9", Domain: "slow.com", TenantID: "tn-1",
+			ProjectName: "app", AppName: "api", Environment: "production",
+			CFZoneID: &zoneID, Status: "pending_ns",
+			CreatedAt: time.Now(), // well inside the 48h window
+		},
+	}
+	// "pending" (not "active") routes to the else-branch holding the discard.
+	cfZone := &fakeCFZoneChecker{
+		statuses:   map[string]string{zoneID: "pending"},
+		triggerErr: errors.New("cloudflare: 429 too many requests"),
+	}
+
+	provisioner := NewDomainProvisioner(
+		store, &fakeDomainReleaseReader{}, &fakeDomainBuildReader{},
+		&fakeGitOpsProvisioner{}, &fakeLockerProvisioner{},
+		logger,
+		DomainProvisionerConfig{Interval: time.Second, ClusterIssuer: "test-issuer"},
+	)
+	provisioner.WithCFZone(cfZone)
+
+	// Act
+	provisioner.ProcessOnce(context.Background())
+
+	// Assert: the failure reaches an operator...
+	out := buf.String()
+	if !strings.Contains(out, "429 too many requests") {
+		t.Errorf("the discarded Cloudflare error must reach the log; got output: %q", out)
+	}
+	// ...on the logger that carries domain and zone_id.
+	if !strings.Contains(out, zoneID) {
+		t.Errorf("the record must be emitted on the logger carrying domain and zone_id; "+
+			"got output: %q", out)
 	}
 }
