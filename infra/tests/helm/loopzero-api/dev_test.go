@@ -18,7 +18,7 @@ const devEnvStub = "infra/tests/helm/values/dev/loopzero-api.yaml"
 func renderDevDeployment(t *testing.T) appsV1.Deployment {
 	t.Helper()
 
-	chartPath, err := chartrender.ChartPath(chartName)
+	chartPath, err := chartrender.BootstrapChartPath(chartName)
 	require.NoError(t, err)
 
 	opts, err := chartrender.NewOptions(chartPath, devEnvStub)

@@ -41,7 +41,7 @@ const (
 func renderDefaultDeployment(t *testing.T) appsV1.Deployment {
 	t.Helper()
 
-	chartPath, err := chartrender.ChartPath(chartName)
+	chartPath, err := chartrender.BootstrapChartPath(chartName)
 	require.NoError(t, err, "resolve chart path")
 
 	opts, err := chartrender.NewOptions(chartPath, "")

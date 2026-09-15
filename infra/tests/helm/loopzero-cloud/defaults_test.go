@@ -43,7 +43,7 @@ const (
 func renderDefaultDeployment(t *testing.T) appsV1.Deployment {
 	t.Helper()
 
-	chartPath, err := chartrender.ChartPath(chartName)
+	chartPath, err := chartrender.BootstrapChartPath(chartName)
 	require.NoError(t, err)
 
 	opts, err := chartrender.NewOptions(chartPath, "")
@@ -61,7 +61,7 @@ func renderDefaultDeployment(t *testing.T) appsV1.Deployment {
 func renderDefaultService(t *testing.T) coreV1.Service {
 	t.Helper()
 
-	chartPath, err := chartrender.ChartPath(chartName)
+	chartPath, err := chartrender.BootstrapChartPath(chartName)
 	require.NoError(t, err)
 
 	opts, err := chartrender.NewOptions(chartPath, "")

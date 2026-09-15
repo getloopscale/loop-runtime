@@ -16,7 +16,7 @@ const drillEnvStub = "infra/tests/helm/values/drill/loopzero-api.yaml"
 func renderDrillDeployment(t *testing.T) appsV1.Deployment {
 	t.Helper()
 
-	chartPath, err := chartrender.ChartPath(chartName)
+	chartPath, err := chartrender.BootstrapChartPath(chartName)
 	require.NoError(t, err)
 
 	opts, err := chartrender.NewOptions(chartPath, drillEnvStub)
@@ -89,7 +89,7 @@ func TestLoopZeroAPI_Drill_Domain(t *testing.T) {
 
 	// Domain typically appears in IngressRoute template, not Deployment.
 	// Validate from IngressRoute render.
-	chartPath, err := chartrender.ChartPath(chartName)
+	chartPath, err := chartrender.BootstrapChartPath(chartName)
 	require.NoError(t, err)
 
 	opts, err := chartrender.NewOptions(chartPath, drillEnvStub)
