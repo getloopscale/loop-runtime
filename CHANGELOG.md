@@ -115,6 +115,18 @@ to [Semantic Versioning](https://semver.org/).
   is exempted **until 2026-12-12**. On that date the exemption lapses, the finding returns at full
   severity and every plan drops back below the band `/implement` requires; renew the row in
   `.claude/rules/code-quality-allowlist.txt` or adopt a Go mutation runner (#B-034, #B-088)
+- The four documents that declare when the Pulumi layer stops being authoritative now name the
+  cutover milestone the ratified CTO mandate names, and cite the decision that defines it
+  (`../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md`) — `README.md`,
+  `CLAUDE.md`, `docs/architecture.md` and `infra/pulumi/README.md`. In each of them the rule
+  against adding to the Pulumi layer now stands on its own line, carrying no date, because it is
+  unconditional and has been since the mandate; a rule sharing a line with a schedule reads as a
+  rule that expires. `infra/pulumi/README.md` also stops presenting a Pulumi provider swap as the
+  AWS path, and `CLAUDE.md` stops offering `CHANGELOG.md` as a place the milestone names survive
+  — this file carries none of them. One further reference to the old milestone remains, in
+  `operators/internal/argocd/real_provisioner.go`, where it freezes a cluster name rather than
+  declaring a schedule; it is a separate defect in another domain and is filed as its own item
+  (#B-018)
 
 ### Removed
 
