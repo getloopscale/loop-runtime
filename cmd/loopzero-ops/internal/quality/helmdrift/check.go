@@ -87,6 +87,11 @@ type Drift struct {
 type Outcome struct {
 	Pass   bool
 	Drifts []Drift
+	// RBACDrifts carries the per-cell RBAC comparison of each declared pair.
+	// Separate from Drifts because the two comparisons answer different
+	// questions — "the same TYPES of resource?" and "the same GRANTS?" — and a
+	// reader must be able to tell which one a finding came from.
+	RBACDrifts []RBACDrift
 	// RenderErrors carries a failed `helm template`, verbatim.
 	//
 	// A render that failed and a chart that produces nothing are different facts:
