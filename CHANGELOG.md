@@ -99,6 +99,25 @@ to [Semantic Versioning](https://semver.org/).
   identity outside both lists, which surfaced as a permission failure during
   reconciliation rather than as a failed install. Rendered output is unchanged on every
   path this repository deploys (#B-047)
+- The `helm-drift` gate now compares what each side of a declared chart pair **grants**, not
+  only which resource types it installs: every `(apiGroup, resource, verb)` RBAC cell of both
+  rendered ClusterRoles, with each differing cell named in the report. Measured on the
+  `loopzero-api` pair, the two sides diverge on **174 cells of a 200-cell union** — a divergence
+  no gate could see before, because both sides install exactly one `ClusterRole` and the
+  comparison stopped at the resource type (B-001).
+- Each of those 174 cells is declared individually in the gate's own registry, so the gate is
+  green because the divergence is recorded rather than because nobody looked; withdrawing one
+  declaration turns it red naming exactly that cell. Two of the declarations are recorded as
+  **undecided**, not approved — the bootstrap chart's cluster-wide `secrets` `delete` and
+  `pods/exec` `create` — and are printed by name on every run. The decision on them belongs to
+  B-048; the reasoning is in `.squad/wiki/decisions/B-001-bootstrap-grant-disposition.md` (B-001).
+
+### Changed
+
+- `helm-drift`'s one-line summary in `loopzero-ops quality --list` now says what the gate actually
+  compares. It read "drift between rendered Helm charts and the deployed state", which named a
+  comparison the gate has never made — it compares `charts/` against `infra/helm/`, and since
+  B-001 also compares their RBAC grants (B-001).
 - `docs/` consolidated from 1,374 versioned markdown files across 17 subtrees into **six living
   documents** — `architecture.md`, `loopzerokit-loopzerocloud-seam.md`, `api-contracts.md`,
   `operations.md`, `runbooks.md`, `decisions.md` — plus `README.md` as the single index.

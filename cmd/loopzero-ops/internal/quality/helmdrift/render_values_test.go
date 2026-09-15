@@ -28,7 +28,7 @@ import (
 // with no subprocess, so the check stays hermetic: the gate must not need the
 // toolchain it audits in order to test how it invokes it.
 func TestHelmTemplateArgsCarryTheSetValues(t *testing.T) {
-	got := helmTemplateArgs("charts/loopzero-api", rbacValuesMatrix[1])
+	got := helmTemplateArgs("charts/loopzero-api", matrixFor("loopzero-api:loopzero-api")[1])
 	joined := strings.Join(got, " ")
 
 	for _, want := range []string{
@@ -65,11 +65,11 @@ func TestMatrixPointsProduceDifferentPublishedOutput(t *testing.T) {
 	}
 	chart := filepath.Join("..", "..", "..", "..", "..", "charts", "loopzero-api")
 
-	on, err := helmRenderer{}.Render(chart, rbacValuesMatrix[0])
+	on, err := helmRenderer{}.Render(chart, matrixFor("loopzero-api:loopzero-api")[0])
 	if err != nil {
 		t.Fatalf("render at matrix point 0: %v", err)
 	}
-	off, err := helmRenderer{}.Render(chart, rbacValuesMatrix[1])
+	off, err := helmRenderer{}.Render(chart, matrixFor("loopzero-api:loopzero-api")[1])
 	if err != nil {
 		t.Fatalf("render at matrix point 1: %v", err)
 	}

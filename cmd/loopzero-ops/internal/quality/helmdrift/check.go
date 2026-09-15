@@ -9,6 +9,37 @@
 // replaces infra/scripts/audit-helm-drift.sh. Pure-Go (os.ReadDir + set diff
 // + static registry) — no external CLI (bash used find/comm/awk). Genuine
 // pure-logic win per D5.
+//
+// # Two comparisons, one gate (B-001)
+//
+// The gate asks two questions of each pair and reports them apart:
+//
+//	KINDS  — do the two sides install the same TYPES of resource?
+//	RBAC   — do the two sides GRANT the same (apiGroup, resource, verb) cells?
+//
+// The second was added because the first cannot see a grant divergence at all:
+// both sides of the loopzero-api pair install exactly one ClusterRole, so the pair
+// was green while it diverged on 174 cells of a 200-cell union.
+//
+// # "Declared pair" means two different things in this repository
+//
+// This gate discovers pairs from DISK: every charts/loopzero-* that also exists under
+// infra/helm/, plus the conceptualPairs map below for the ones whose names differ.
+// The `chart-pairs` gate reads a written registry, infra/quality/chart-pairs.txt,
+// which by its own scope lists only the SAME-NAME pairs — two today, where this
+// gate audits three.
+//
+// The two sources are deliberately NOT unified here. Making this gate read that
+// file would drop the conceptual pair it currently audits, which is a change to
+// the KIND comparison's coverage and has nothing to do with the RBAC comparison
+// B-001 added; and making that gate scan disk would end the "declaration that
+// outlived its pair" check it exists for. Unification is its own piece of work
+// with its own evidence, and TestThePairSourcesDivergeAndTheDivergenceIsRecorded
+// fails the day somebody does it — so this note cannot quietly become false.
+//
+// It is recorded HERE rather than in a backlog entry because BACKLOG.md is
+// gitignored in this repository (.gitignore:295): a note filed there reaches
+// nobody who clones.
 package helmdrift
 
 import (
@@ -108,34 +139,57 @@ func Check(cfg Config) (*Outcome, error) {
 		r = helmRenderer{}
 	}
 
+	pairs, err := discoverPairs(cfg.RepoRoot)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range pairs {
+		auditPair(r, cfg.RepoRoot, p.published, p.bootstrap, outcome)
+	}
+
+	return outcome, nil
+}
+
+// pair is one published↔bootstrap chart pair this gate audits.
+type pair struct{ published, bootstrap string }
+
+// discoverPairs returns the pairs, in a deterministic order.
+//
+// Split out of Check so WHICH pairs this gate audits can be asserted without
+// rendering anything — the question is answered from directory names, and a test
+// that had to run `helm` to ask it would be measuring the toolchain instead.
+func discoverPairs(repoRoot string) ([]pair, error) {
+	var pairs []pair
+
 	// Same-name overlaps: charts/loopzero-*/ that also exist in infra/helm/.
-	chartsDir := filepath.Join(cfg.RepoRoot, "charts")
-	entries, err := os.ReadDir(chartsDir)
+	entries, err := os.ReadDir(filepath.Join(repoRoot, "charts"))
 	if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read charts/: %w", err)
 	}
+	var sameName []string
 	for _, e := range entries {
 		if !e.IsDir() || !strings.HasPrefix(e.Name(), "loopzero-") {
 			continue
 		}
-		name := e.Name()
-		if dirExists(filepath.Join(cfg.RepoRoot, "infra/helm", name)) {
-			auditPair(r, cfg.RepoRoot, name, name, outcome)
+		if dirExists(filepath.Join(repoRoot, "infra/helm", e.Name())) {
+			sameName = append(sameName, e.Name())
 		}
 	}
+	sort.Strings(sameName)
+	for _, name := range sameName {
+		pairs = append(pairs, pair{published: name, bootstrap: name})
+	}
 
-	// Conceptual pairs (different names).
-	// Deterministic order for stable output.
+	// Conceptual pairs (different names). Deterministic order for stable output.
 	var pubNames []string
 	for p := range conceptualPairs {
 		pubNames = append(pubNames, p)
 	}
 	sort.Strings(pubNames)
 	for _, pub := range pubNames {
-		auditPair(r, cfg.RepoRoot, pub, conceptualPairs[pub], outcome)
+		pairs = append(pairs, pair{published: pub, bootstrap: conceptualPairs[pub]})
 	}
-
-	return outcome, nil
+	return pairs, nil
 }
 
 // auditPair compares template sets for one published↔bootstrap pair and, if
@@ -166,6 +220,12 @@ func auditPair(r Renderer, repoRoot, publishedName, bootstrapName string, outcom
 		return
 	}
 	onlyPub, onlyBoot := diffKinds(pubKinds, bootKinds)
+
+	// B-001: what the two sides GRANT is a second question, asked of every pair
+	// whether or not their resource KINDS agree. A pair can install the same
+	// kinds and grant differently -- which is exactly the loopzero-api pair -- so
+	// this must not sit behind the early return below.
+	auditPairRBAC(r, pairKey, publishedChart, bootstrapChart, outcome)
 
 	if len(onlyPub) == 0 && len(onlyBoot) == 0 {
 		return // os dois lados instalam os mesmos tipos de recurso

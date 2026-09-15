@@ -113,7 +113,31 @@ func renderedKinds(r Renderer, chartDir string) (map[string]bool, error) {
 	// nil values: the kind comparison renders at chart DEFAULTS, unchanged. Its
 	// eleven approvals were measured under them, and moving its baseline while
 	// adding a second comparison would make both findings unreadable.
-	raw, err := r.Render(chartDir, nil)
+	docs, err := renderDocs(r, chartDir, nil)
+	if err != nil {
+		return nil, err
+	}
+	kinds := map[string]bool{}
+	for _, doc := range docs {
+		kind, _ := doc["kind"].(string)
+		if kind == "" {
+			continue
+		}
+		kinds[kind] = true
+	}
+	return kinds, nil
+}
+
+// renderDocs renders a chart and returns the installable documents it produces:
+// every YAML document that carries a kind and is not a Helm test hook.
+//
+// Split out of renderedKinds so a second comparison can read the SAME decoded
+// documents rather than decoding the stream twice. Until B-001 the decode kept
+// `doc["kind"]` and dropped the rest on the next iteration — the `rules` of every
+// ClusterRole went out of scope four lines after being parsed, which is why the
+// gate could not see a grant divergence.
+func renderDocs(r Renderer, chartDir string, sets []string) ([]map[string]any, error) {
+	raw, err := r.Render(chartDir, sets)
 	if err != nil {
 		// A render that FAILED and a chart that produces NOTHING are different
 		// facts. Collapsing the first into the second would make the gate report
@@ -121,7 +145,7 @@ func renderedKinds(r Renderer, chartDir string) (map[string]bool, error) {
 		return nil, err
 	}
 
-	kinds := map[string]bool{}
+	var docs []map[string]any
 	dec := yaml.NewDecoder(strings.NewReader(raw))
 	for {
 		var doc map[string]any
@@ -137,16 +161,15 @@ func renderedKinds(r Renderer, chartDir string) (map[string]bool, error) {
 		if doc == nil {
 			continue
 		}
-		kind, _ := doc["kind"].(string)
-		if kind == "" {
+		if _, ok := doc["kind"].(string); !ok {
 			continue
 		}
 		if isTestHook(doc) {
 			continue
 		}
-		kinds[kind] = true
+		docs = append(docs, doc)
 	}
-	return kinds, nil
+	return docs, nil
 }
 
 // isTestHook reports whether a rendered document is a Helm test hook.

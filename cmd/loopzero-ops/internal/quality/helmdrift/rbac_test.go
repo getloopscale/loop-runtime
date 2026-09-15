@@ -219,7 +219,7 @@ func TestRealLoopZeroAPIPairRBACDivergenceIsReported(t *testing.T) {
 	// under the other.
 	boot := oracleCells(t, filepath.Join(root, "infra/helm/loopzero-api"), nil)
 	divergent := map[string]bool{}
-	for _, sets := range rbacValuesMatrix {
+	for _, sets := range matrixFor("loopzero-api:loopzero-api") {
 		pub := oracleCells(t, filepath.Join(root, "charts/loopzero-api"), sets)
 		for c := range boot {
 			if !pub[c] {

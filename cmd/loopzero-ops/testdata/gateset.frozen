@@ -53,7 +53,7 @@ error-vocabulary	gates	Mensagem de erro autorada nao pode carregar termo interno
 git-diff-to-lines	-	Utility: converts a git diff into a changed-line set for other gates.
 gomod-auth-org	gates	The org build files authenticate to matches the org go.mod requires (a drift makes git fetch unauthenticated and GitHub answer 'not found').
 helm-diff-structural	-	Structural pre-sync Helm diff to catch drift before apply.
-helm-drift	gates	Detects drift between rendered Helm charts and the deployed state.
+helm-drift	gates	Compares the two sides of each declared chart pair: the resource KINDS each installs, and the (apiGroup, resource, verb) RBAC cells each grants (B-001).
 helm-overlap-parity	gates	Keeps the dual Helm chart systems (infra/helm vs charts) in parity.
 helm-topology-index	gates	Index of which chart runs on which cluster, derived from the helmfiles (never a hand-written second copy).
 helmfile-context-parity	gates	A task que invoca um helmfile aponta para o cluster que o helmfile declara (B-044).

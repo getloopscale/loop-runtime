@@ -138,9 +138,7 @@ func runHelmDrift(args []string) int {
 			TemplatesOnlyInPublished []string `json:"templates_only_in_published"`
 			TemplatesOnlyInBootstrap []string `json:"templates_only_in_bootstrap"`
 		}
-		out := struct {
-			Drifts []driftJSON `json:"drifts"`
-		}{Drifts: []driftJSON{}}
+		out := struct{ Drifts []driftJSON }{Drifts: []driftJSON{}}
 		for _, d := range o.Drifts {
 			sev := "high"
 			var adr *string
@@ -161,7 +159,10 @@ func runHelmDrift(args []string) int {
 				TemplatesOnlyInPublished: pub, TemplatesOnlyInBootstrap: boot,
 			})
 		}
-		b, _ := json.Marshal(out)
+		b, _ := json.Marshal(struct {
+			Drifts []driftJSON `json:"drifts"`
+			RBAC   []rbacJSON  `json:"rbac"`
+		}{Drifts: out.Drifts, RBAC: rbacDriftJSON(o.RBACDrifts)})
 		fmt.Println(string(b))
 		if !o.Pass {
 			return 1
@@ -172,9 +173,9 @@ func runHelmDrift(args []string) int {
 	for _, e := range o.RenderErrors {
 		fmt.Fprintf(os.Stderr, "✗ helm template falhou: %s\n", e)
 	}
-	if len(o.Drifts) == 0 && len(o.RenderErrors) == 0 {
+	kindsClean := len(o.Drifts) == 0 && len(o.RenderErrors) == 0
+	if kindsClean {
 		fmt.Println("✓ charts/ ↔ infra/helm/: os dois lados instalam os mesmos tipos de recurso.")
-		return 0
 	}
 	for _, d := range o.Drifts {
 		marker := "⚠"
@@ -198,14 +199,62 @@ func runHelmDrift(args []string) int {
 			fmt.Printf("  SEM APROVAÇÃO: %s\n", f)
 		}
 	}
+	// B-001: the second comparison. What the two sides GRANT is reported apart
+	// from what they INSTALL, because a reader has to be able to tell which
+	// question a finding answers. Every undeclared and undecided cell is named:
+	// a count alone says something diverged and not whether it is progress or a
+	// regression.
+	for _, d := range o.RBACDrifts {
+		marker := "ℹ"
+		if len(d.Undeclared) > 0 {
+			marker = "⚠"
+		}
+		if *format == "github-annotations" && len(d.Undeclared) > 0 {
+			fmt.Printf("::warning::RBAC divergence for %s: %d undeclared cell(s)\n",
+				d.Pair, len(d.Undeclared))
+		}
+		fmt.Printf("%s %s — RBAC\n", marker, d.Pair)
+		for _, line := range d.ReportLines() {
+			fmt.Printf("  %s\n", line)
+		}
+	}
+
 	// Printed on every run, green or red. A debt that lives only in a source
 	// comment is a debt nobody is reminded of.
 	if !o.Pass {
 		fmt.Fprintln(os.Stderr, "❌ Drifts without approving ADR detected.")
 		return 1
 	}
+	if kindsClean {
+		return 0
+	}
 	fmt.Println("✓ All drifts have approving ADRs (intentional).")
 	return 0
+}
+
+// rbacJSON mirrors RBACDrift for the machine-readable format. The cells are
+// rendered as strings so a consumer reads the same spelling the human report and
+// the registry use.
+type rbacJSON struct {
+	Pair       string   `json:"pair"`
+	Declared   int      `json:"declared"`
+	Undeclared []string `json:"undeclared"`
+	Undecided  []string `json:"undecided"`
+}
+
+func rbacDriftJSON(drifts []helmdrift.RBACDrift) []rbacJSON {
+	out := []rbacJSON{}
+	for _, d := range drifts {
+		row := rbacJSON{Pair: d.Pair, Declared: d.Declared, Undeclared: []string{}, Undecided: []string{}}
+		for _, c := range d.Undeclared {
+			row.Undeclared = append(row.Undeclared, c.String())
+		}
+		for _, c := range d.Undecided {
+			row.Undecided = append(row.Undecided, c.String())
+		}
+		out = append(out, row)
+	}
+	return out
 }
 
 // runVAPDeleteGuardrail implements the `vap-delete-guardrail` gate (plan

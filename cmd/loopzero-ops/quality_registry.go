@@ -110,7 +110,7 @@ var gateRegistry = []gateSpec{
 	{"ldflag-symbols", "Refuses a `-X` ldflag injection whose import path or symbol does not resolve on disk — the linker accepts it silently and the binary keeps its default (B-053).", runLdflagSymbols},
 	{"silent-surface", "Ratchet: refuses a NEW router surface guarded by `if cfg.X != nil` that does not report whether it was registered (B-104). Baseline may fall, never rise.", runSilentSurface},
 	{"status-writer-contract", "Refuses a bare Status().Update anywhere in operators production code, including the local-alias and SubResource spellings (ADR 2026-08-12-status-writer-contract, B-085).", runStatusWriterContract},
-	{"helm-drift", "Detects drift between rendered Helm charts and the deployed state.", runHelmDrift},
+	{"helm-drift", "Compares the two sides of each declared chart pair: the resource KINDS each installs, and the (apiGroup, resource, verb) RBAC cells each grants (B-001).", runHelmDrift},
 	{"helm-overlap-parity", "Keeps the dual Helm chart systems (infra/helm vs charts) in parity.", runHelmOverlapParity},
 	{"migration-test-coverage", "Every DB migration has corresponding test coverage.", runMigrationTestCoverage},
 	{"mock-budget", "Caps the number of mocks per test (SRP smell budget).", runMockBudget},
