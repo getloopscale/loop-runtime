@@ -186,9 +186,17 @@ This used to read **3**, naming `loopzero-admission-policies` as the third. Meas
 
 ### Infrastructure — AWS re-platform in progress
 
-> **CTO mandate 2026-06-17** (ADR `../loopzero-workspace/docs/decisions.md`, ACCEPTED). The **L1 cloud-primitives layer** is being re-platformed **DigitalOcean/Pulumi → AWS/Terraform**, into two sibling repos: `../loopzero-infra-modules` (versioned blueprints) + `../loopzero-infra-live` (per-env Terragrunt units, per-component state isolation). Tooling is **Terraform**, not OpenTofu, not Pulumi.
+> **CTO mandate 2026-06-17** (ADR `../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md`, ACCEPTED). The **L1 cloud-primitives layer** is being re-platformed **DigitalOcean/Pulumi → AWS/Terraform**, into two sibling repos: `../loopzero-infra-modules` (versioned blueprints) + `../loopzero-infra-live` (per-env Terragrunt units, per-component state isolation). Tooling is **Terraform**, not OpenTofu, not Pulumi.
 >
-> `infra/pulumi*` is **AS-IS legacy — live until the AM8 cutover**. Do not cite Pulumi as the forward path for infra construction, and do not add new Pulumi for target infra. The **in-cluster platform layer is unchanged**: Helmfile L2 + ArgoCD L3 + charts + k3d dev all stay. The AM0-AM9 strangler-fig roadmap was `../ROADMAP_AWS.md`, which **does not exist** (measured 2026-09-11); the milestone names survive in the ADR above and in `CHANGELOG.md`.
+> `infra/pulumi*` is **AS-IS legacy — live until the AM9 cutover, and retired at AM10**, per the ADR above.
+>
+> Do not cite Pulumi as the forward path for infra construction, and do not add new Pulumi for target infra. This rule is unconditional and carries no date.
+>
+> The **in-cluster platform layer is unchanged**: Helmfile L2 + ArgoCD L3 + charts + k3d dev all stay.
+>
+> The strangler-fig roadmap was `../ROADMAP_AWS.md`, which **does not exist** (measured 2026-09-11).
+>
+> This repository **cites the AM milestones and never defines them**: the ADR above is the definition, and where the two disagree the ADR wins.
 
 Layering today: **L1** cloud primitives (Pulumi/DO legacy → Terraform/AWS target) · **L2** Helmfile (SoT for ~32 platform releases) · **L3** ArgoCD (tenant Day-2 GitOps, manual sync, from Gitea).
 
