@@ -65,8 +65,22 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 	// Guard: check if a release already exists for this build.
 	// Activate() creates a new release on each call. If we call it again after a
 	// previous attempt created a release that failed (SYNC_FAILED, GIT_MIRROR_FAILED),
-	// we'd create duplicates in an infinite loop. Instead, check existing state and decide.
-	existingRelease, _ := r.orch.FindReleaseForBuild(ctx, build.ID)
+	// we'd create duplicates up to the attempt cap. Instead, check existing state and decide.
+	existingRelease, err := r.orch.FindReleaseForBuild(ctx, build.ID)
+	if err != nil {
+		// The store separates "no release exists for this build" ((nil, nil))
+		// from "the lookup failed" ((nil, err)). Discarding the error collapsed
+		// both into nil, skipped the guard below, and reached Activate() —
+		// creating the duplicate release the comment above exists to prevent.
+		//
+		// A failed read is recoverable, so skip the tick rather than fail the
+		// user's deploy on one transient error. The attempt counter was already
+		// incremented above, so a lookup that fails on every tick still
+		// terminates the build through maxActivationAttempts.
+		r.logger.Error("reconcile loop: failed to look up existing release for RELEASING build",
+			"build_id", build.ID, "attempt", attempts, "error", err)
+		return
+	}
 	if existingRelease != nil {
 		switch existingRelease.Status {
 		case "ACTIVE":
