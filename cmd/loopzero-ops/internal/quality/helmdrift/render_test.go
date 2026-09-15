@@ -18,7 +18,9 @@ import (
 // that the failure is environmental.
 type fakeRenderer map[string]string
 
-func (f fakeRenderer) Render(chartDir string) (string, error) {
+// `sets` ignored: the canned manifests are keyed by chart dir alone, because the
+// tests below pin decoding and set arithmetic, neither of which varies with values.
+func (f fakeRenderer) Render(chartDir string, _ []string) (string, error) {
 	out, ok := f[chartDir]
 	if !ok {
 		return "", errors.New("fakeRenderer: sem manifesto para " + chartDir)

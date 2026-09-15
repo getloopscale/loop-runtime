@@ -12,32 +12,59 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Renderer turns a chart directory into the manifest stream it installs.
+// Renderer turns a chart directory into the manifest stream it installs, under
+// the values `sets` (each a `--set` expression; nil renders at chart defaults).
 //
 // It is an interface so the gate can be tested without `helm` on the machine —
 // a gate that required the toolchain it audits in order to run its own tests
 // would teach the reader that a red suite is environmental.
+//
+// # Why values are on THIS method rather than on a second interface
+//
+// The RBAC comparison (B-001) renders the published chart once per entry of
+// rbacValuesMatrix, and the original signature had no room for that. A separate
+// `ValuesRenderer` would have left the existing doubles untouched, at the cost of
+// a type assertion at the call site and a fallback that renders at defaults — so
+// a caller could report "both flag states agree" about a renderer that ignored
+// them. Widening the one method means every implementation is handed the values
+// and none can silently drop them; the two doubles in the suite take a parameter
+// they ignore, which is visible in their source rather than hidden in a branch.
 type Renderer interface {
-	Render(chartDir string) (string, error)
+	Render(chartDir string, sets []string) (string, error)
 }
 
-// helmRenderer is the production implementation: `helm template` under DEFAULT
-// values.
+// helmRenderer is the production implementation: `helm template`, at chart
+// defaults when `sets` is empty and under the given `--set` expressions
+// otherwise.
 //
 // The release name is fixed so two runs of the same chart produce byte-identical
 // output; it is never compared across charts, because the two chart families use
 // deliberately different naming conventions (see renderedKinds).
 type helmRenderer struct{}
 
-func (helmRenderer) Render(chartDir string) (string, error) {
-	out, err := exec.Command("helm", "template", "drift-probe", chartDir).Output()
+// helmTemplateArgs builds the invocation. Split out from Render so how the gate
+// calls helm can be asserted without helm being installed — the values are the
+// one part of the invocation that the comparison's correctness depends on.
+func helmTemplateArgs(chartDir string, sets []string) []string {
+	args := []string{"template", "drift-probe", chartDir}
+	for _, s := range sets {
+		args = append(args, "--set", s)
+	}
+	return args
+}
+
+func (helmRenderer) Render(chartDir string, sets []string) (string, error) {
+	args := helmTemplateArgs(chartDir, sets)
+	out, err := exec.Command("helm", args...).Output()
 	if err != nil {
 		var stderr string
 		var ee *exec.ExitError
 		if errorsAs(err, &ee) {
 			stderr = strings.TrimSpace(string(ee.Stderr))
 		}
-		return "", fmt.Errorf("helm template %s: %w%s", chartDir, err, prefixed(stderr))
+		// The --set list is named so the failing invocation can be reproduced
+		// from the message alone.
+		return "", fmt.Errorf("helm %s: %w%s", strings.Join(args, " "), err, prefixed(stderr))
 	}
 	return string(out), nil
 }
@@ -83,7 +110,10 @@ func prefixed(s string) string {
 // actually running — and measured against the real charts, it is exactly the
 // difference that showed up (`Pod` on the published side of both pairs).
 func renderedKinds(r Renderer, chartDir string) (map[string]bool, error) {
-	raw, err := r.Render(chartDir)
+	// nil values: the kind comparison renders at chart DEFAULTS, unchanged. Its
+	// eleven approvals were measured under them, and moving its baseline while
+	// adding a second comparison would make both findings unreadable.
+	raw, err := r.Render(chartDir, nil)
 	if err != nil {
 		// A render that FAILED and a chart that produces NOTHING are different
 		// facts. Collapsing the first into the second would make the gate report

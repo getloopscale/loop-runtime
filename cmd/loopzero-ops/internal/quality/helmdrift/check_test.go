@@ -205,7 +205,12 @@ func TestEveryApprovalIsMeasuredAssimetry(t *testing.T) {
 // deriva sem aprovacao, par conceitual) sobre uma base de comparacao nova.
 type fixtureRenderer struct{}
 
-func (fixtureRenderer) Render(chartDir string) (string, error) {
+// The `sets` are ignored: the fixture files on disk ARE the rendered output, so
+// there is no template for a value to reach. Ignoring them in plain sight beats a
+// second interface the fixture would not implement — a hermetic test of the
+// COMPARISON has no values to vary, and the matrix is exercised by the real-tree
+// test that renders real charts.
+func (fixtureRenderer) Render(chartDir string, _ []string) (string, error) {
 	entries, err := os.ReadDir(filepath.Join(chartDir, "templates"))
 	if err != nil {
 		return "", err
