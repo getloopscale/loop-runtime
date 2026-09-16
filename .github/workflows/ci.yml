@@ -180,8 +180,8 @@ jobs:
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
-    # RUNNER: frota Blacksmith, habilitada em 2026-07-30 com a transferencia
-    # deste repositorio para a org `getloopscale`.
+    # RUNNER: the Blacksmith fleet, enabled 2026-07-30 with the transfer of this
+    # repository to the `getloopscale` org.
     #
     # The label is LITERAL on purpose. The umbrella runbook measured that
     # `vars.CI_RUNNER` does NOT resolve in this repo (`LABELS=[self-hosted,linux,x64]`,
@@ -263,8 +263,8 @@ jobs:
             IdentitiesOnly yes
             IdentityAgent none
           SSHCFG
-          # go/git buscam o modulo por HTTPS; reescrever para SSH e' o que faz a
-          # deploy key ser usada.
+          # go/git fetch the module over HTTPS; rewriting to SSH is what makes the deploy
+          # key get used.
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
           git ls-remote git@github.com:getloopscale/loopzero-contracts.git >/dev/null
@@ -469,7 +469,7 @@ jobs:
       # The role split is the point. Applying the schema as `loopzero` makes that
       # role the table owner, exactly as in production, so the tests measure the
       # real posture instead of a convenient one.
-      - name: Provisionar o banco com a separacao de papeis de producao
+      - name: Provision the database with production's separation of roles
         env:
           PGHOST: localhost
           PGPORT: "5432"
@@ -512,7 +512,7 @@ jobs:
       # Asserted before the tests run: if the migration silently did less than
       # it claims, fail here with a number rather than let a downstream test
       # produce a confusing error.
-      - name: Verificar a postura no catalogo
+      - name: Check the posture in the catalogue
         run: |
           set -euo pipefail
           read -r rls forced open <<< "$(PGPASSWORD=postgres psql -U postgres -h localhost -d loopzero_test -tAF' ' -c "
@@ -547,7 +547,7 @@ jobs:
           go test ./tests/integration/ -count=1 -v
 
   # ---------------------------------------------------------------------------
-  # O GATE QUE UM CONTRIBUIDOR EXTERNO REALMENTE ENCONTRA.
+  # THE GATE AN OUTSIDE CONTRIBUTOR ACTUALLY MEETS.
   #
   # `build-and-test` and `tenant-isolation` above use a deploy key to fetch the PRIVATE
   # sibling `loopzero-contracts`. A PR from a FORK receives NO secret at all — that is how
@@ -648,7 +648,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Exigir os jobs verdes
+      - name: Require the jobs to be green
         env:
           PUBLIC: ${{ needs.public-checks.result }}
           PRIVATE_BUILD: ${{ needs.build-and-test.result }}
@@ -667,7 +667,7 @@ jobs:
               continue
             fi
             if [ "$result" = skipped ] && [ "$IS_FORK" = true ]; then
-              echo "::notice::$name pulado: PR de fork nao recebe o segredo do modulo privado"
+              echo "::notice::$name skipped: a fork PR receives no secret for the private module"
               continue
             fi
             echo "::error::$name is $result"

@@ -119,6 +119,13 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Seven citations in versioned files that pointed at documents which no longer exist. Four
+  were in production operator comments and three in the test that exists to prove such
+  citations resolve — it checked the working tree, and the 2026-09-11 consolidation had
+  taken two of its three subjects. It reads git history now, which is where a consolidated
+  document actually goes. The guard that caught the operator comments ships instead of
+  staying untracked.
+
 - `cluster-rename-guard` reports on the rename again, in a second instead of six minutes.
   Its baseline was deleted with 1,380 other files and is restored to `infra/quality/`,
   where it is versioned; its pinned commit is translated rather than re-captured, because

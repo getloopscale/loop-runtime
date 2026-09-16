@@ -42,8 +42,8 @@ import (
 // to the legacy two-segment formula. T1.1 ships CRD-level enforcement
 // (TenantEnvironmentEntry.Project required + RFC 1123 Pattern) so every
 // caller in production code (tenant_gitops.go:143, :186 + tenant_controller.go:337)
-// is guaranteed to pass a non-empty project. Per `rules/loopzero-design.md`
-// § Error Philosophy the silent fallback was the smoking gun that caused
+// is guaranteed to pass a non-empty project. A silent fallback is forbidden — it was
+// the smoking gun that caused
 // all 4 M2 LIVE workarounds — fail-fast with LoopZeroError is canonical
 // (feedback_m2_canonical_drift_operator_renderer memory).
 func canonicalDestNamespace(tenantSlug, projectSlug, envName string) (string, error) {
@@ -163,8 +163,8 @@ func (r *TenantReconciler) expectedApplicationNames(
 // namespace list for a tenant. T2.2 of plan 2026-06-09-m2-operator-canonical-fix
 // v1.4: extracted from reconcileArgoCDApp so the (project, env) iteration is
 // unit-testable without spinning up envtest, and so the previous silent
-// error-drop (`if nsErr == nil { append }`) is replaced with fail-loud
-// propagation per `rules/loopzero-design.md` § Error Philosophy.
+// error-drop (`if nsErr == nil { append }`) is replaced with fail-loud propagation.
+// The rule is stated rather than cited: a pointer can rot, a stated rule cannot.
 //
 // Inputs:
 //   - tenant.Spec.Environments contributes one destination per (Project, Name) tuple.

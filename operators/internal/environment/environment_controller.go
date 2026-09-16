@@ -174,7 +174,10 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// former refetch-then-restore `Status().Update` dance, which lost updates on
 	// conflict and silently dropped the condition (the t31 flake). If a SECOND
 	// status writer is ever introduced this invariant must be revisited — see
-	// `.claude/rules/loopzero-design.md` § single-status-writer.
+	// `CLAUDE.md` § Single-status-writer invariant, which is the contract itself and not a
+	// summary of one. The design rule this used to cite was deleted in `9a4a29755`; its
+	// name is left out deliberately, because writing a dead path into the note explaining
+	// that the path is dead is how the citation survives its own correction.
 	base := env.DeepCopy()
 
 	// Transition from empty to Pending via state machine (Rule 8).
@@ -198,8 +201,8 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// condition TypeEnvNamespaceReady=False Reason=NameTooLong with the
 	// length in the message and return ctrl.Result{} (no requeue). User
 	// sees an actionable error in the dashboard instead of an infinite
-	// reconcile-loop with a cryptic error per `rules/loopzero-design.md` §
-	// Error Philosophy.
+	// reconcile-loop with a cryptic error. The rule is one sentence, so it is stated
+	// rather than cited: fail loudly with an actionable message, never drop the error.
 	nsName := env.Spec.Namespace.Name
 	if env.Spec.Project != "" {
 		// T1.3.e of plan 2026-06-11-code-review-remediation v1.2 —

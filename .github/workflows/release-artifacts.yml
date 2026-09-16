@@ -180,7 +180,7 @@ jobs:
           OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
-          # minusculas: nomes de conta preservam maiusculas, referencias OCI nao.
+          # lowercase: account names preserve case, OCI references do not.
           NS="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           mkdir -p /tmp/charts
           # loopzero-common is a library chart that image-backed charts depend on; resolve
