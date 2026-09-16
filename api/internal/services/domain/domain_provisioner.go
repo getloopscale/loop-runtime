@@ -207,8 +207,13 @@ func (p *DomainProvisioner) processPendingNS(ctx context.Context) {
 			}
 			metrics.CustomDomainsTotal.WithLabelValues(d.TenantID, "ns_active").Inc()
 		} else {
-			// Trigger activation check to speed up detection
-			_ = p.cfZone.TriggerActivationCheck(ctx, *d.CFZoneID)
+			// Trigger activation check to speed up detection. Fire-and-forget by
+			// design — no control flow depends on it and the next tick re-reads
+			// the zone status regardless — but a failure is still reported,
+			// matching the sibling CF status call above.
+			if err := p.cfZone.TriggerActivationCheck(ctx, *d.CFZoneID); err != nil {
+				log.Warn("domain provisioner: CF zone activation check trigger failed", "error", err)
+			}
 		}
 	}
 }
