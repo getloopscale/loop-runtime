@@ -45,7 +45,7 @@ const (
 	testfilePath   = "taskfiles/test.yml"
 	qualityPath    = "taskfiles/quality.yml"
 	readmePath     = "infra/tests/performance/k6/README.md"
-	allowlistPath  = ".claude/rules/shell-scripts-allowlist.md"
+	allowlistPath  = "infra/quality/shell-scripts-allowlist.md"
 )
 
 // Check runs all 15+ assertions.

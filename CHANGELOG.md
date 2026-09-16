@@ -12,6 +12,44 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The shell-script allowlist is versioned again, at `infra/quality/shell-scripts-allowlist.md`.
+  It lived under `.claude/`, which is an installed dependency and is not tracked, so six
+  quality gates read a file that existed on one machine and in no clone — four of them
+  failed for every contributor and every CI run. The 768-line record was recovered from the
+  commit before the one that untracked the tooling tree; the content is unchanged.
+- A missing allowlist now means *no exemptions declared* rather than a fatal read error, in
+  the two gates whose question is "may this be exempt?". A gate whose default exempts
+  nothing cannot be weakened by losing its file; a file that is present and unreadable is a
+  different claim and stays fatal.
+- Thirteen test helpers located the repository root by looking for `ROADMAP.md`, a file this
+  repository deleted. They use `go.work` — which defines the nine-module workspace and
+  exists by construction.
+- Seven documentation citations pointed at `pkg/quality/`, relocated at M9. Four were in
+  sqlc-generated files and were fixed in the `.sql` sources so regeneration preserves them.
+- A guard against stale `pkg/quality/` citations reported itself, because a guard for a token
+  must spell the token. Its sibling exempted itself by hardcoded filename and that exemption
+  did not grow when the second guard was written; both now key on the class.
+
+### Changed
+
+- Twenty-six tests over `.claude/hooks/delivery-gate.sh` are retired. `hooks.json` declares
+  nine hooks and none of them is it — the mechanism was removed from the kit, and its
+  replacement (`.git/hooks/pre-push`) has an interface nothing like it. What they asserted,
+  and what their retirement costs, is recorded in `cmd/loopzero-ops/delivery_gate_history.go`.
+- Two RED suites for registered-but-unimplemented items (B-001, B-048) skip by default and
+  name the item and the measurement in the skip message. `LOOPZERO_RUN_B001_RED=1` and
+  `LOOPZERO_RUN_B048_RED=1` arm them; both still fail when armed, so the skip hides nothing.
+
+### Added
+
+- `MAINTAINERS.md` and `RELEASES.md`, both declared by `.github/CODEOWNERS` and both absent.
+- `docs/operations.md` gains a Troubleshooting section, written from failures this repository
+  has actually produced: a root-level `go build` that covers almost nothing, the absent
+  sibling module, an e2e suite that reports success having skipped all 132 specs, Ginkgo's
+  own timeout, and the seed's legacy database URL.
+
 ### Changed
 
 - The delivery-gate premise check asks which regime the repository is in before it

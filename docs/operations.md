@@ -217,6 +217,84 @@ API token: `generate-secrets.sh standalone mgmt` then `provision-api-tokens.sh`.
 return 404 even with a valid `X-Service-Auth`. Production sets it via the infra layer;
 a standalone Tilt stack must set it explicitly.
 
+## Troubleshooting
+
+Every entry here is a failure someone actually hit, and each one looks like a different
+problem than it is. That is why they are written down: the symptom points at the wrong
+cause in all of them.
+
+### `go build ./...` from the repository root says nothing is wrong
+
+There is **no `go.mod` at the root**. `go.work` unions nine modules, so a root-level
+build walks almost no code and exits 0 over a broken tree. Build per module, or use the
+Taskfile:
+
+```bash
+cd api && go build ./...          # and pkg, operators, operators/api, cmd/loopzero-ops, …
+task test:unit                    # the whole set
+```
+
+### The build fails to resolve `../loopzero-contracts`
+
+`go.work` unions a **sibling repository**. Absent, the workspace does not build. Either
+check it out beside this one, or build the six modules that do not need it with the
+workspace off:
+
+```bash
+GOWORK=off go build ./...         # works in cmd/loopzero-ops, operators, operators/api, tools/…
+```
+
+`api` and `pkg` are the two that genuinely require it.
+
+### The e2e suite reports SUCCESS having run zero specs
+
+`BeforeSuite` probes `<apiURL>/api/v1/health` with a 5s timeout and **skips the whole
+suite** when it fails — 132 specs skipped reads as green, with no FAIL anywhere. The
+default `apiURL()` is `http://localhost:3001`, the Tilt port-forward. Against a k3d
+deployment, loopzero-api is on host port 13001:
+
+```bash
+LOOPZERO_API_URL=http://localhost:13001 go test ./e2e/... -v
+```
+
+If a suite finishes suspiciously fast, count the specs that ran before believing it.
+
+### The suite times out at 60 minutes although `-timeout 120m` was passed
+
+Ginkgo v2 keeps **its own** suite timeout, default 60 minutes, independent of
+`go test -timeout`. Pass both:
+
+```bash
+go test ./e2e/... -v -timeout 120m -args -ginkgo.timeout=2h
+```
+
+The `-args` separator is required for the flag to reach the test binary.
+
+### Seeding fails with `password authentication failed for user "loopzero"`
+
+The default in `infra/scripts/seed/seed.go` is legacy from an in-process Postgres that
+no longer exists. Port-forward first, then point at it with the deterministic standalone
+password:
+
+```bash
+kubectl --context k3d-loopzero-core -n loopzero-system port-forward svc/postgresql 15432:5432 &
+export LOOPZERO_E2E_DATABASE_URL='postgres://loopzero:loopzero-dev-password@127.0.0.1:15432/loopzero?sslmode=disable'
+```
+
+### A quality gate exits 5 on a file under `.claude/`
+
+`.claude/` is the installed tooling kit and is **not versioned**, so anything a gate
+reads from it is absent in every clone and on every runner. Gates treat a missing
+allowlist as *no exemptions declared* — the strictest reading — rather than as a fatal
+error. If one still exits 5 on such a path, that is the bug, not your checkout.
+
+### A workflow's pre-push gate refuses and names no failing check
+
+`.git/hooks/pre-push` runs `task quality:gates` before anything leaves the machine. Its
+escapes are deliberate and documented in its own header: `git push --no-verify`, or
+`LOOPZERO_SKIP_PREPUSH=1 git push`. Use them to see the push itself fail rather than the
+gate — then fix what the gate found.
+
 ## Blocked commands
 
 `kubectl delete` (without dry-run), `k3d cluster delete`, `DROP TABLE/COLUMN`,

@@ -42,7 +42,7 @@ func initRepo(t *testing.T) string {
 // An ABSENT allowlist declares no exemptions; it is not an infrastructure failure.
 //
 // The distinction decides whether this gate can run at all. Its allowlist lived at
-// `.claude/rules/shell-scripts-allowlist.md`, and `3d4075ca3` (2026-09-08) removed
+// `infra/quality/shell-scripts-allowlist.md`, and `3d4075ca3` (2026-09-08) removed
 // the whole installed tooling tree from tracking — so the file exists in no clone,
 // on no runner, and for no contributor. Measured 2026-09-16: the gate exits 5 with
 // "read allowlist ...: no such file or directory", which blocked this repository's

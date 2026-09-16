@@ -51,7 +51,7 @@ func (f *fakeArgoListDelete) DeleteApplication(_ context.Context, appName string
 //
 // J-23 LIVE catch 2026-06-07 #69 (sponsor verbatim "Atacar #69 fix
 // tenant_gitops + CRD"): the renderer canonical refactor (commit
-// cd6235fc) emits manifests with the three-segment namespace
+// a567cdbb5) emits manifests with the three-segment namespace
 // `loopzero-<tenant>-<project>-<env>`. Before this helper, tenant_gitops.go
 // emitted destinations via the legacy two-segment formula
 // `loopzero-<tenant>-<env>`, causing ArgoCD destination mismatch and

@@ -149,7 +149,7 @@ func runInstallGitHooks(args []string) int {
 func runNoNewBash(args []string) int {
 	fs := flag.NewFlagSet("no-new-bash", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
-	allowlist := fs.String("allowlist", ".claude/rules/shell-scripts-allowlist.md", "allowlist markdown file")
+	allowlist := fs.String("allowlist", "infra/quality/shell-scripts-allowlist.md", "allowlist markdown file")
 	baseRef := fs.String("base-ref", "origin/main", "base git ref")
 	headRef := fs.String("head-ref", "HEAD", "head git ref")
 	if err := fs.Parse(args); err != nil {

@@ -89,6 +89,19 @@ func TestStalePkgQualityPath_RepoWide(t *testing.T) {
 
 	var hits []string
 	for rel, body := range sources {
+		// A GUARD FOR A TOKEN HAS TO NAME THE TOKEN. This file and its sibling
+		// `quality_stale_pkg_quality_path_test.go` both carry `pkg/quality/` in
+		// their detection logic and in the message they print, so both would
+		// report themselves.
+		//
+		// The sibling already exempts itself — by its own filename, hardcoded.
+		// That exemption did not grow when this second guard was written, and
+		// this file failed from the day it landed. Keying on the CLASS instead
+		// of one name is the difference between an exemption that covers the
+		// guards and one that covers the guard somebody remembered.
+		if isStalePkgQualityGuard(rel) {
+			continue
+		}
 		for i, line := range strings.Split(body, "\n") {
 			if strings.Contains(line, "pkg/quality/") {
 				hits = append(hits, rel+":"+itoa(i+1))
@@ -121,4 +134,15 @@ func TestStalePkgQualityPath_RepoWide_PositiveControl(t *testing.T) {
 	if _, ok := sources["api/internal/correlation/reader.go"]; !ok {
 		t.Fatalf("positive control FAILED: api/internal/correlation/reader.go was not collected")
 	}
+}
+
+// isStalePkgQualityGuard reports whether a path is one of the guards for the
+// relocated `pkg/quality/` token. Every such guard must spell the token to find
+// it, so every one of them is exempt from itself and from its siblings.
+func isStalePkgQualityGuard(rel string) bool {
+	base := rel
+	if i := strings.LastIndex(rel, "/"); i >= 0 {
+		base = rel[i+1:]
+	}
+	return strings.HasPrefix(base, "quality_stale_pkg_quality_") && strings.HasSuffix(base, "_test.go")
 }

@@ -31,7 +31,7 @@ import (
 // continues reconciling existing installations without manual repair.
 //
 // J-23 LIVE catch 2026-06-07 #69: the renderer canonical refactor
-// (commit cd6235fc) updated the manifest namespace to the canonical
+// (commit a567cdbb5) updated the manifest namespace to the canonical
 // three-segment formula, but tenant_gitops.go was emitting destinations
 // via the legacy two-segment formula because there was no place in the
 // CR spec for the project name. Result: ArgoCD destination mismatch ->

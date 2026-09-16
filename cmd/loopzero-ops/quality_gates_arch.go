@@ -179,7 +179,7 @@ func runPkgUsageMatrix(args []string) int {
 // operational logic from the allowlist + ratchets a monotonic baseline.
 func runUnhomedLogic(args []string) int {
 	fs := flag.NewFlagSet("unhomed-logic", flag.ContinueOnError)
-	allowlist := fs.String("allowlist", ".claude/rules/shell-scripts-allowlist.md", "allowlist markdown")
+	allowlist := fs.String("allowlist", "infra/quality/shell-scripts-allowlist.md", "allowlist markdown")
 	baselinePath := fs.String("baseline", "infra/quality/unhomed-baseline.json", "baseline JSON")
 	root := fs.String("root", ".", "repo root (for content-verifying KEEP claims)")
 	report := fs.Bool("report", false, "print per-domain un-homed counts (no gate)")

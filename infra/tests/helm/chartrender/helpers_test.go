@@ -189,7 +189,11 @@ func TestNewOptions_rejects_missing_env_file(t *testing.T) {
 // TestBootstrapChartPath_resolves_overlapping_charts confirms explicit
 // bootstrap-only resolution for the 3 overlapping charts (loopzero-api,
 // loopzero-cloud, admission-policies). Closes the variant-ambiguity gap
-// surfaced during T3.1 (commit 05cecb64).
+// surfaced during T3.1 — `feat(infra): T3.1 (1/10) loopzero-cloud bootstrap render
+// tests (10/10 GREEN)`, 2026-05-20. The SHA that stood here (05cecb64) does not
+// resolve after the 2026-09-16 history rewrite and has no equivalent in the new
+// lineage, so the subject and date carry the citation instead: they survive a
+// rewrite, and a SHA does not.
 func TestBootstrapChartPath_resolves_overlapping_charts(t *testing.T) {
 	t.Parallel()
 

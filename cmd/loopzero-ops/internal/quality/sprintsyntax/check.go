@@ -38,7 +38,7 @@ import (
 const (
 	scriptRel    = "infra/scripts/local/check-sprint.sh"
 	helperRel    = "infra/scripts/local/check_sprint.py"
-	allowlistRel = ".claude/rules/shell-scripts-allowlist.md"
+	allowlistRel = "infra/quality/shell-scripts-allowlist.md"
 	allowlistTag = "check-sprint.sh"
 )
 

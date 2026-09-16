@@ -154,21 +154,34 @@ func TestT2_2_HydraYAMLEscapeFixed(t *testing.T) {
 	}
 }
 
-// TestT2_1_MappingDocExists — the audit doc produced by T2.1 must be committed.
-func TestT2_1_MappingDocExists(t *testing.T) {
-	data, err := os.ReadFile(mappingDoc)
-	if err != nil {
-		t.Fatalf("mapping doc missing: %v", err)
-	}
-	content := string(data)
-	if !strings.Contains(content, "Helmfile Mapping") {
-		t.Errorf("mapping doc should have 'Helmfile Mapping' header")
-	}
-	if !strings.Contains(content, "EC-01") {
-		t.Errorf("mapping doc should reference EC-01 compliance check")
-	}
-	if !strings.Contains(content, "EC-02") {
-		t.Errorf("mapping doc should reference EC-02 compliance check")
+// The T2.1 mapping doc was CONSOLIDATED, and this test records where it went.
+//
+// It asserted that `docs/scripts-audit/2026-05-22-helmfile-mapping.md` exists and
+// carries a "Helmfile Mapping" header plus the EC-01..EC-0N compliance sections.
+// Measured 2026-09-16: the file is absent from the worktree, and none of its three
+// marker strings appears anywhere under `docs/` — the content did not move into the
+// six living documents, it left with the dated audit trail.
+//
+// That was a decision, not an accident. `19b8c6eaa` ("docs: consolidate 1,523 files
+// into six living documents") cut the trail from the worktree on the argument
+// CLAUDE.md records: 72 of 154 cited `docs/*.md` paths no longer resolved, two
+// indexes described one tree, and two parallel audit trails overlapped with zero
+// byte-identical files. The trail was not deleted — `git show 4f728eb7a:docs/scripts-audit/2026-05-22-helmfile-mapping.md`
+// still returns it — it stopped competing with current truth for a reader's attention.
+//
+// So the assertion outlived its subject by four days and then failed for eight more.
+// Retiring it rather than repointing it, because there is nothing to repoint AT: the
+// consolidation's whole point is that a dated audit of one afternoon is history, and
+// a test that requires history to sit in the worktree forbids ever consolidating it.
+//
+// WHAT IS LOST, named rather than left to be found: nothing now asserts that the
+// helmfile mapping was audited. The audit happened, its record is in git, and the
+// claim "it is committed and readable today" is the one that stopped being true.
+func TestT2_1_MappingDocWasConsolidated(t *testing.T) {
+	if _, err := os.Stat(mappingDoc); err == nil {
+		t.Fatalf("%s is back in the worktree — either the consolidation was reverted, "+
+			"in which case restore the assertions this comment replaced, or something "+
+			"re-created a dated audit doc that `19b8c6eaa` deliberately cut", mappingDoc)
 	}
 }
 

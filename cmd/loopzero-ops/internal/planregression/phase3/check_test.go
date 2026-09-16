@@ -12,7 +12,13 @@ import (
 
 var (
 	taskfileRoot = filepath.Join(repoRoot, "Taskfile.yml")
-	devLoopDoc   = filepath.Join(repoRoot, "docs/operations/dev-loop.md")
+	// Era `docs/operations/dev-loop.md` ate' `19b8c6eaa` ("docs: consolidate 1,523
+	// files into six living documents"). O conteudo NAO se perdeu — `docs/operations.md:11`
+	// carrega o DEV LOOP e `CLAUDE.md:47` ja aponta para la'. Medido 2026-09-16: o
+	// caminho antigo sobrevivia apenas neste arquivo; README, CLAUDE.md, Taskfile.yml e
+	// taskfiles/test.yml ja tinham migrado, e so' o teste ficou para tras — por isso
+	// ele e' repontado e nao aposentado.
+	devLoopDoc   = filepath.Join(repoRoot, "docs/operations.md")
 	readmePath   = filepath.Join(repoRoot, "README.md")
 	claudeMdPath = filepath.Join(repoRoot, "CLAUDE.md")
 )
@@ -21,18 +27,22 @@ var (
 func TestT3_1_DevLoopDocExists(t *testing.T) {
 	data, err := os.ReadFile(devLoopDoc)
 	if err != nil {
-		t.Fatalf("dev-loop.md missing: %v", err)
+		t.Fatalf("docs/operations.md missing: %v", err)
 	}
 	content := string(data)
 	for _, must := range []string{
-		"LoopZero Dev Loop",
+		// "LoopZero Dev Loop" era o TITULO do documento dedicado. Consolidado sob
+		// `# Operations`, a secao chama-se `## Dev loop` — repetir "LoopZero" num
+		// documento deste repositorio seria ruido, e o que o teste protege e' que
+		// a secao exista, nao que carregue o nome do arquivo que a continha.
+		"## Dev loop",
 		"`task setup`",
 		"`tilt up`",
 		"`task doctor`",
 		"Troubleshooting",
 	} {
 		if !strings.Contains(content, must) {
-			t.Errorf("dev-loop.md should contain %q", must)
+			t.Errorf("docs/operations.md should contain %q", must)
 		}
 	}
 }
@@ -60,8 +70,8 @@ func TestT3_2_SetupHasDeprecationNotice(t *testing.T) {
 	if !strings.Contains(block, "tilt up") {
 		t.Errorf("setup target notice should reference 'tilt up' as the dev loop")
 	}
-	if !strings.Contains(block, "dev-loop.md") {
-		t.Errorf("setup target notice should reference docs/operations/dev-loop.md")
+	if !strings.Contains(block, "docs/operations.md") {
+		t.Errorf("setup target notice should reference docs/operations.md")
 	}
 }
 
@@ -85,8 +95,8 @@ func TestT3_1_ReadmeCanonicalizesTilt(t *testing.T) {
 	if !strings.Contains(block, "DEV LOOP") && !strings.Contains(block, "dev loop") {
 		t.Errorf("README Setup section should explain dev loop = tilt up")
 	}
-	if !strings.Contains(block, "dev-loop.md") {
-		t.Errorf("README Setup section should link to docs/operations/dev-loop.md")
+	if !strings.Contains(block, "docs/operations.md") {
+		t.Errorf("README Setup section should link to docs/operations.md")
 	}
 }
 
@@ -98,8 +108,8 @@ func TestT3_1_ClaudeMdCanonicalizes(t *testing.T) {
 		t.Fatalf("read CLAUDE.md: %v", err)
 	}
 	content := string(data)
-	if !strings.Contains(content, "dev-loop.md") {
-		t.Errorf("CLAUDE.md should reference docs/operations/dev-loop.md")
+	if !strings.Contains(content, "docs/operations.md") {
+		t.Errorf("CLAUDE.md should reference docs/operations.md")
 	}
 	if !strings.Contains(content, "ONE-SHOT") && !strings.Contains(content, "DEV LOOP") {
 		t.Errorf("CLAUDE.md should distinguish task setup (one-shot) vs tilt up (dev loop)")

@@ -195,7 +195,7 @@ func TestDangling_DeletedAndAllRefsRemoved_Passes(t *testing.T) {
 func TestDangling_AllowlistRefIgnored_Passes(t *testing.T) {
 	root := initTestRepo(t, map[string]string{
 		"infra/scripts/dr/cost-report.sh":          "#!/usr/bin/env bash\n",
-		".claude/rules/shell-scripts-allowlist.md": "| infra/scripts/dr/cost-report.sh | 159 | grandfathered |\n",
+		"infra/quality/shell-scripts-allowlist.md": "| infra/scripts/dr/cost-report.sh | 159 | grandfathered |\n",
 	})
 	commitOn(t, root, "feat", map[string]string{
 		"infra/scripts/dr/cost-report.sh": "<DELETE>",

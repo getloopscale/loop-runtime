@@ -233,7 +233,7 @@ jobs:
       # (id 158891596), com a chave privada em GOMOD_SSH_KEY.
       #
       # ATUALIZADO 2026-08-07: o import path NAO continua mais em `getloopscale`.
-      # O commit f813b367 (2026-08-06) reescreveu api/go.mod e pkg/go.mod para
+      # O commit 696fe5c62 (2026-08-06) reescreveu api/go.mod e pkg/go.mod para
       # `github.com/getloopscale/loopzero-contracts v0.4.0`, revertendo a premissa acima —
       # mas este workflow ficou em `getloopscale` e passou a nao encontrar a versao,
       # falhando com "pkg/go.mod nao declara loopzero-contracts". O ultimo run verde foi

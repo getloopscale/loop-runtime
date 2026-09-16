@@ -33,7 +33,7 @@ var _ = regexp.MustCompile // retained for future assertions
 
 const (
 	valuesPath    = "infra/helm/ory-kratos/values.yaml.gotmpl"
-	allowlistPath = ".claude/rules/shell-scripts-allowlist.md"
+	allowlistPath = "infra/quality/shell-scripts-allowlist.md"
 	planSlug      = "kratos-self-service-rate-limit-systemic"
 	maxLoC        = 500
 )

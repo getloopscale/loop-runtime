@@ -9,7 +9,7 @@
 #   - K8s ConfigMap loopzero-api-runtime-config@loopzero-system on mgmt cluster:
 #       MINIO_CROSS_CLUSTER_ENDPOINT, GITEA_CROSS_CLUSTER_URL,
 #       API_CROSS_CLUSTER_URL, WORKLOAD_INGRESS_URL
-#       (post-T1.1.b commit 927588b1: api-deployment.yaml uses envFrom now)
+#       (post-T1.1.b commit 3fbde9a13: api-deployment.yaml uses envFrom now)
 #   - infra/tilt/operator-deployment.yaml   (WORKLOAD_CLUSTER_URL — still inline)
 #   - Build cluster secrets                 (loopzero-minio-credentials MINIO_ENDPOINT)
 #   - infra/helm/monitoring/values.yaml     (scrape targets)
@@ -66,7 +66,7 @@ echo "  Build LB: $BUILD_LB (Argo metrics:30090)"
 # ---------------------------------------------------------------------------
 # Patch API runtime ConfigMap (loopzero-api-runtime-config)
 #
-# Pre-T1.1.b (commit 927588b1): these 4 envs were inline in
+# Pre-T1.1.b (commit 3fbde9a13): these 4 envs were inline in
 # infra/tilt/api-deployment.yaml; this script sed-patched the file.
 #
 # Post-T1.1.b: the 4 envs migrated to envFrom: configMapRef:

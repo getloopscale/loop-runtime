@@ -19,7 +19,7 @@
 //
 // NOTE ON HONESTY: entries tagged unwiredDebt are GRANDFATHERED, not endorsed.
 // They record pre-existing debt so the bleeding stops while the backlog is
-// worked down — the same pattern .claude/rules/shell-scripts-allowlist.md uses
+// worked down — the same pattern infra/quality/shell-scripts-allowlist.md uses
 // for shell scripts. Reclassifying one to a real category, or wiring it, is
 // the way an entry leaves this list. Adding a NEW unwiredDebt entry is a smell
 // that should not survive review.

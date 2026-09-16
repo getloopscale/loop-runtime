@@ -33,7 +33,7 @@ import (
 
 const (
 	scriptRel    = "infra/tests/e2e/live/dev-public-billing-portal_test.sh"
-	allowlistRel = ".claude/rules/shell-scripts-allowlist.md"
+	allowlistRel = "infra/quality/shell-scripts-allowlist.md"
 	allowlistTag = "infra/tests/e2e/live/dev-public-billing-portal_test.sh"
 )
 

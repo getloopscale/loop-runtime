@@ -4,7 +4,7 @@
 // Package nonewbash implements the D3 governance gate from
 // 2026-05-22-shell-script-strategic-plan: "Creation of new
 // bash scripts is FORBIDDEN by default; exceptions require entry in
-// .claude/rules/shell-scripts-allowlist.md".
+// infra/quality/shell-scripts-allowlist.md".
 //
 // The gate scans `git diff --diff-filter=AR base...head -- '*.sh'`
 // (added + renamed-to) and fails if any new script is not in the

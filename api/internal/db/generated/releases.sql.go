@@ -534,7 +534,7 @@ type InsertReleaseParams struct {
 //
 // Every multi-tenant SELECT / UPDATE / DELETE carries `tenant_id` predicate
 // per platform-security-engineer condition 1 + M-1 + M-2 (enforced by
-// pkg/quality/tenantpredicate gate).
+// cmd/loopzero-ops/internal/quality/tenantpredicate gate).
 //
 // Initial query set (5/13 total — remaining 8 queries added incrementally as
 // callers migrate per T1.1 sub-step):

@@ -54,8 +54,10 @@ func collectGoSources(t *testing.T) map[string]string {
 		if info.IsDir() || !strings.HasSuffix(path, ".go") {
 			return nil
 		}
-		// Skip this guard itself — it must name the stale token to detect it.
-		if strings.HasSuffix(path, "quality_stale_pkg_quality_path_test.go") {
+		// Skip the guards themselves — each must name the stale token to detect
+		// it. This named ONE file until 2026-09-16, and a second guard written
+		// later was not covered: it reported itself from the day it landed.
+		if isStalePkgQualityGuard(path) {
 			return nil
 		}
 		b, readErr := os.ReadFile(path)

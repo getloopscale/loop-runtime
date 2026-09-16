@@ -24,7 +24,7 @@
 // The gate does NOT try to restore the missing documents — part of their content
 // migrated elsewhere, and recreating them by guesswork would produce invented
 // documentation, which is strictly worse than absence. Known gaps go in a DATED
-// allowlist instead, the same shape .claude/rules/shell-scripts-allowlist.md and
+// allowlist instead, the same shape infra/quality/shell-scripts-allowlist.md and
 // code-quality-allowlist.txt already use.
 package docsrefs
 

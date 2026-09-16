@@ -218,13 +218,22 @@ func TestCheck_RealRepo_PASS(t *testing.T) {
 
 func findRepoRoot(t *testing.T) string {
 	t.Helper()
-	// Walk up from the test cwd until we find ROADMAP.md
+	// O MARCO E' `go.work`, e nao `ROADMAP.md`.
+	//
+	// `ROADMAP.md` era o marco ate' ser apagado — `git log --all -- ROADMAP.md` ainda
+	// o mostra, e o disco nao. Medido 2026-09-16: este teste falhava com "ROADMAP.md
+	// not found within 10 parents", um erro que descreve a busca e nao a causa, e que
+	// manda o leitor procurar um arquivo que o projeto decidiu nao ter.
+	//
+	// `go.work` e' o marco certo para ESTE repositorio: ele define o workspace de nove
+	// modulos, existe por construcao, e um diretorio que o contem e' a raiz por
+	// definicao — nao por convencao que alguem pode revogar apagando um documento.
 	dir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
 	}
 	for i := 0; i < 10; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "ROADMAP.md")); err == nil {
+		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
 			return dir
 		}
 		parent := filepath.Dir(dir)
@@ -233,7 +242,7 @@ func findRepoRoot(t *testing.T) string {
 		}
 		dir = parent
 	}
-	t.Fatal("ROADMAP.md not found within 10 parents")
+	t.Fatal("go.work not found within 10 parents — is this a checkout of loopzero?")
 	return ""
 }
 
