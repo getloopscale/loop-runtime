@@ -38,7 +38,7 @@ const runbookOK = "O SA correto é `loopzero-workflow-submitter` (bound to a Rol
 // autentica e depois é proibido, trocando um 401 legível por um 403 que parece falha nova.
 func TestMensagemQueContradizORunbookReprova(t *testing.T) {
 	root := arvore(t, map[string]string{
-		runbookRel:  runbookOK,
+		runbookRel: runbookOK,
 		"api/internal/services/build/argo_step_watcher.go": "logger.Error(\"argo step watcher: build cluster auth failed — rotate loopzero-build-sa token\",\n",
 	})
 	out, err := Check(Config{RepoRoot: root})
@@ -55,7 +55,7 @@ func TestMensagemQueContradizORunbookReprova(t *testing.T) {
 
 func TestMensagemQueConcordaComORunbookPassa(t *testing.T) {
 	root := arvore(t, map[string]string{
-		runbookRel:  runbookOK,
+		runbookRel: runbookOK,
 		"api/internal/services/build/argo_step_watcher.go": "logger.Error(\"argo step watcher: build cluster auth failed — rotate loopzero-workflow-submitter token\",\n",
 	})
 	if _, err := Check(Config{RepoRoot: root}); err != nil {
@@ -109,7 +109,7 @@ func TestProibicaoQuebradaEmDUASLinhasComCitacao(t *testing.T) {
 		"> `loopzero-build-sa` here — that SA is the workflow *executor*.\n" +
 		"```bash\nkubectl -n argo create token loopzero-workflow-submitter --duration=720h\n```\n"
 	root := arvore(t, map[string]string{
-		runbookRel:  real,
+		runbookRel: real,
 		"api/internal/services/build/argo_step_watcher.go": "logger.Error(\"build cluster auth failed — rotate loopzero-build-sa token\",\n",
 	})
 	out, err := Check(Config{RepoRoot: root})

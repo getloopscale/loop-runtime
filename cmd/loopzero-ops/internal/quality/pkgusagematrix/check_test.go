@@ -288,7 +288,7 @@ func TestRun_MissingDocReturnsOPS_USAGE(t *testing.T) {
 
 func TestRun_DocWithoutMarkersReturnsOPS_USAGE(t *testing.T) {
 	root := setup(t, map[string]string{
-		"pkg/errors/errors.go":               "package errors\n",
+		"pkg/errors/errors.go": "package errors\n",
 		"docs/architecture.md": "# Doc with no markers\n",
 	})
 	_, err := Run(Config{Root: root}, ModeCheck)

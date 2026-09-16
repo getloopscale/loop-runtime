@@ -47,16 +47,16 @@
 // Four files and twenty-six tests reached the removed hook, and the first fix attempt
 // found only the first of them. Swept by compiling the package instead:
 //
-//   delivery_gate_bypass_test.go    8 tests  — parsed a command for push bypasses
-//   delivery_gate_identity_test.go  2 tests  — executed the hook against a stub tree
-//   gate_armed_check_test.go       10 tests  — copied the hook byte for byte into a
-//                                              synthetic armed tree (`armedTree`)
-//   quality_delivery_gate_covers_tests_test.go
-//                                  6 tests  — asserted the hook runs one real task
-//                                              target covering this module, carries
-//                                              exactly one task invocation, blocks
-//                                              outside this repository, and is wired
-//                                              into the PreToolUse Bash hook
+//	delivery_gate_bypass_test.go    8 tests  — parsed a command for push bypasses
+//	delivery_gate_identity_test.go  2 tests  — executed the hook against a stub tree
+//	gate_armed_check_test.go       10 tests  — copied the hook byte for byte into a
+//	                                           synthetic armed tree (`armedTree`)
+//	quality_delivery_gate_covers_tests_test.go
+//	                               6 tests  — asserted the hook runs one real task
+//	                                           target covering this module, carries
+//	                                           exactly one task invocation, blocks
+//	                                           outside this repository, and is wired
+//	                                           into the PreToolUse Bash hook
 //
 // The third is the one worth arguing about, because its subject — the Python check
 // `.github/scripts/assert-delivery-gate-armed.py` — is alive and runs in CI. Its
