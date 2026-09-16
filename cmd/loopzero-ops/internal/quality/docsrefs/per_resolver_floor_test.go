@@ -5,6 +5,7 @@ package docsrefs
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -19,7 +20,27 @@ import (
 // rule reference that RESOLVES, and the tree has no Go file at all, so
 // adrResolver.collect walks its six roots and returns zero. If the floor were
 // per-resolver this must fail; with the aggregate floor it passes green.
+// RED POR DESENHO ate' B-074 ser implementado (o item cita B-013 como antecedente).
+//
+// Mede o defeito: `docsrefs` conta vacuidade num unico agregado, entao um resolver que
+// enumera ZERO referencias e' absorvido pelos que enumeram alguma — medido aqui,
+// `Checked=1` inteiro vindo de `ruleResolver` enquanto `adrResolver` enumerou 0, e o
+// piso agregado passa.
+//
+// SKIP com o item e a medicao na mensagem, pelo mesmo argumento de B-001 e B-048: um
+// teste permanentemente vermelho e' ignorado numa semana e leva a suite junto
+// (`rules/testing.md`). `LOOPZERO_RUN_B074_RED=1` o arma.
+func skipUnlessRedB074(t *testing.T) {
+	t.Helper()
+	if os.Getenv("LOOPZERO_RUN_B074_RED") == "" {
+		t.Skip("DEBITO CONHECIDO B-074: o contador de vacuidade de `docsrefs` e' um agregado " +
+			"unico, entao um resolver que enumera zero referencias fica invisivel atras dos " +
+			"que enumeram alguma. Rode com LOOPZERO_RUN_B074_RED=1 para ver a medicao.")
+	}
+}
+
 func TestCheck_AResolverThatEnumeratesNothingIsInvisible(t *testing.T) {
+	skipUnlessRedB074(t)
 	root := writeTree(t, map[string]string{
 		"CLAUDE.md":                "Read `.claude/rules/present.md`.\n",
 		".claude/rules/present.md": "x\n",

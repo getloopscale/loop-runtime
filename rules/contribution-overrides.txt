@@ -1,0 +1,47 @@
+# THIS PROJECT's contribution conventions, overriding the kit's defaults.
+#
+# `rules/contribution-conventions.md` is the kit's contract and a reinstall overwrites
+# it. This file is yours: it ships empty, a reinstall preserves it, and
+# `check_contribution_conventions.py` reads it before applying any default.
+#
+# Format:  key = value        (one per line; `#` comments; unknown keys are refused)
+#
+# Keys:
+#   commit_types    = comma-separated. REPLACES the kit's set
+#   commit_scopes   = comma-separated. When set, a scope outside it is refused
+#   subject_max     = integer. Default 72
+#   body_required   = comma-separated types. Default: feat,fix
+#   branch_trunk    = the trunk's name, when it is not detected from origin/HEAD
+#
+# TWO THINGS CANNOT BE OVERRIDDEN and an attempt is refused rather than ignored:
+#
+#   the co-authorship refusal — the author of a commit is one person, and a trailer
+#   crediting a tool misattributes the accountability authorship carries
+#
+#   the secrets rule for issues — no token, cookie, password or customer data in an
+#   issue body, ever
+#
+# Example:
+#   commit_types = fix,feat,docs,test,chore,perf,build,ci,revert,refactor,deps
+#   subject_max  = 80
+
+# ---------------------------------------------------------------------------
+# `merge` e' um tipo DESTE repositorio, e nao uma concessao.
+#
+# O fluxo `workspace -> develop -> main` (rules/git-safety.md) produz merges por
+# desenho: 24 dos commits que so' existem em `main` sao merges de PR de release,
+# zero deles carregando conteudo proprio. Um commit de merge nomeado `merge(B-069):`
+# diz o que e' e a que item pertence; forca-lo a `chore(merge):` diria menos.
+#
+# `subject_max` a 85 e' o p90 medido sobre 300 assuntos deste repositorio, nao o 50
+# ou 72 que todo guia repete — um limite que reprova 44% do que o repositorio sempre
+# fez ensina as pessoas a ignorar o verificador.
+commit_types = fix,feat,test,docs,refactor,chore,perf,build,ci,revert,merge
+subject_max  = 85
+
+# E UMA LICAO QUE CUSTOU UM COMMIT: o escopo e' a AREA, nao o item.
+#
+# `merge(B-069):` foi recusado por `header_shape` e a razao nao e' o tipo — e' que
+# `B-069` e' maiusculo e o escopo pede lowercase kebab-case. `merge(api):` casa.
+# A §5.1 de `~/.claude/CLAUDE.md` ja' dizia onde o numero vai: na MENSAGEM do commit,
+# no corpo do PR, no CHANGELOG. O slot do escopo nao e' um desses.

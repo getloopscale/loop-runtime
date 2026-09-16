@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Instability against size - where a change is expensive</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper: #f5f5f5; --color-ink: #2d3142; --color-muted: #4f5d75; --color-accent: #eb6c36;
+      --font-sans: 'Geist', system-ui, sans-serif; --font-serif: 'Instrument Serif', serif; --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1280px; width: 100%; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500;
+      letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400;
+      letter-spacing: -0.02em; line-height: 1.15; color: var(--color-ink); margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    .caption { margin-top: 1.25rem; padding-top: 0.75rem; border-top: 1px solid rgba(45,49,66,0.12);
+      font-family: var(--font-mono); font-size: 0.62rem; line-height: 1.9; color: var(--color-muted); }
+    .caption span { display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Quadrant - DG-09</p>
+    <h1>Instability against size - where a change is expensive</h1>
+    <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="quadrant-title quadrant-desc">
+      <title id="quadrant-title">Instability against size - where a change is expensive</title>
+      <desc id="quadrant-desc">Twelve packages positioned by Martin instability on one axis and lines of code on the other. The painful quadrant is large and unstable: a big package that depends on everything and that nothing can depend on safely.</desc>
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+        <marker id="arrow-soft" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#7a8399"/></marker>
+        <marker id="arrow-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#4f5d75" stroke-width="1.2"/></marker>
+        <marker id="tri-hollow" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto"><polygon points="0 0, 12 5, 0 10" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/></marker>
+        <marker id="dia-filled" markerWidth="14" markerHeight="8" refX="13" refY="4" orient="auto"><polygon points="0 4, 7 0, 14 4, 7 8" fill="#2d3142"/></marker>
+        <marker id="dia-hollow" markerWidth="14" markerHeight="8" refX="13" refY="4" orient="auto"><polygon points="0 4, 7 0, 14 4, 7 8" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+      <line x1="160" y1="320.0" x2="1120" y2="320.0" stroke="#2d3142" stroke-width="1" marker-end="url(#arrow)"/><line x1="640.0" y1="584" x2="640.0" y2="56" stroke="#2d3142" stroke-width="1" marker-end="url(#arrow)"/><text x="1132" y="323" fill="#2d3142" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="start" letter-spacing="0.18em">UNSTABLE</text><text x="148" y="323" fill="#2d3142" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end" letter-spacing="0.18em">STABLE</text><text x="640" y="44" fill="#2d3142" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.18em">LARGE</text><text x="640" y="604" fill="#2d3142" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.18em">SMALL</text>
+      
+      <circle cx="737.8" cy="96.0" r="6" fill="#f5f5f5"/><circle cx="737.8" cy="96.0" r="6" fill="rgba(235,108,54,0.15)" stroke="#eb6c36" stroke-width="1.2"/><rect x="684" y="77" width="48" height="12" rx="2" fill="#f5f5f5"/><text x="728" y="86" fill="#eb6c36" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">db/store</text><circle cx="1028.3" cy="192.4" r="4" fill="#f5f5f5"/><circle cx="1028.3" cy="192.4" r="4" fill="rgba(79,93,117,0.20)" stroke="#4f5d75" stroke-width="1"/><rect x="986" y="173" width="36" height="12" rx="2" fill="#f5f5f5"/><text x="1018" y="182" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">tenant</text><circle cx="200.0" cy="276.2" r="4" fill="#f5f5f5"/><circle cx="200.0" cy="276.2" r="4" fill="rgba(79,93,117,0.20)" stroke="#4f5d75" stroke-width="1"/><rect x="206" y="257" width="64" height="12" rx="2" fill="#f5f5f5"/><text x="210" y="266" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="start">db/generated</text><circle cx="200.0" cy="289.8" r="4" fill="#f5f5f5"/><circle cx="200.0" cy="289.8" r="4" fill="rgba(79,93,117,0.20)" stroke="#4f5d75" stroke-width="1"/><rect x="206" y="271" width="64" height="12" rx="2" fill="#f5f5f5"/><text x="210" y="280" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="start">statemachine</text><circle cx="1080.0" cy="318.2" r="4" fill="#f5f5f5"/><circle cx="1080.0" cy="318.2" r="4" fill="rgba(79,93,117,0.20)" stroke="#4f5d75" stroke-width="1"/><rect x="994" y="299" width="80" height="12" rx="2" fill="#f5f5f5"/><text x="1070" y="308" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">loopzero-api server</text><circle cx="440.0" cy="337.2" r="4" fill="#f5f5f5"/><circle cx="440.0" cy="337.2" r="4" fill="rgba(79,93,117,0.20)" stroke="#4f5d75" stroke-width="1"/><rect x="446" y="318" width="16" height="12" rx="2" fill="#f5f5f5"/><text x="450" y="327" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="start">db</text><circle cx="640.0" cy="344.0" r="4" fill="#f5f5f5"/><circle cx="640.0" cy="344.0" r="4" fill="rgba(79,93,117,0.20)" stroke="#4f5d75" stroke-width="1"/><rect x="582" y="325" width="52" height="12" rx="2" fill="#f5f5f5"/><text x="630" y="334" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">manifests</text><circle cx="992.0" cy="373.8" r="4" fill="#f5f5f5"/><circle cx="992.0" cy="373.8" r="4" fill="rgba(79,93,117,0.20)" stroke="#4f5d75" stroke-width="1"/><rect x="938" y="355" width="48" height="12" rx="2" fill="#f5f5f5"/><text x="982" y="364" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">platform</text><circle cx="200.0" cy="391.5" r="4" fill="#f5f5f5"/><circle cx="200.0" cy="391.5" r="4" fill="rgba(79,93,117,0.20)" stroke="#4f5d75" stroke-width="1"/><rect x="206" y="372" width="104" height="12" rx="2" fill="#f5f5f5"/><text x="210" y="381" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="start">loopzero.io/v1 CRD types</text><circle cx="420.0" cy="415.5" r="4" fill="#f5f5f5"/><circle cx="420.0" cy="415.5" r="4" fill="rgba(79,93,117,0.20)" stroke="#4f5d75" stroke-width="1"/><rect x="426" y="397" width="60" height="12" rx="2" fill="#f5f5f5"/><text x="430" y="406" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="start">enforcement</text><circle cx="1000.0" cy="417.7" r="4" fill="#f5f5f5"/><circle cx="1000.0" cy="417.7" r="4" fill="rgba(79,93,117,0.20)" stroke="#4f5d75" stroke-width="1"/><rect x="970" y="399" width="24" height="12" rx="2" fill="#f5f5f5"/><text x="990" y="408" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">app</text><circle cx="828.6" cy="420.8" r="4" fill="#f5f5f5"/><circle cx="828.6" cy="420.8" r="4" fill="rgba(79,93,117,0.20)" stroke="#4f5d75" stroke-width="1"/><rect x="787" y="402" width="36" height="12" rx="2" fill="#f5f5f5"/><text x="819" y="411" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">github</text>
+      <line x1="40" y1="656" x2="1240" y2="656" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/><text x="40" y="672" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.14em">LEGEND</text><circle cx="124" cy="669" r="4" fill="#eb6c36"/><text x="140" y="673" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">largest package</text><circle cx="252" cy="669" r="4" fill="#4f5d75"/><text x="268" y="673" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">package</text><line x1="332" y1="669" x2="348" y2="669" stroke="#2d3142" stroke-width="1.2"/><text x="356" y="673" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">median-free axes: 0 to 1 instability, 0 to max LOC</text>
+    </svg>
+    <p class="caption"><span>Source: metrics `instability` (axis x) and `loc` (axis y), 80 packages measured, 12 largest drawn - the type&#x27;s item cap is 12.</span><span>Instability = efferent / (afferent + efferent); 1.0 means nothing depends on it and it depends on others.</span><span>The cross sits at the midpoint of each range, so a point drawn on an axis is at that midpoint - it has not been nudged into a quadrant.</span></p>
+  </div>
+</body>
+</html>
