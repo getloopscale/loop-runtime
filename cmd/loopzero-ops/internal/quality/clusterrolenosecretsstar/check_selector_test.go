@@ -37,7 +37,10 @@ func repoRoot(t *testing.T) string {
 		}
 		cwd = filepath.Dir(cwd)
 	}
-	t.Skip("CLAUDE.md not found — cannot resolve repo root")
+	// Fail rather than skip: CLAUDE.md is tracked at the repo root, so its absence
+	// means the harness is running somewhere it cannot measure — not that there is
+	// nothing to measure. A skip here would report that as a pass.
+	t.Fatal("CLAUDE.md not found in any parent — cannot resolve repo root")
 	return ""
 }
 
@@ -72,30 +75,35 @@ func liveClusterRoleFiles(t *testing.T, root string) []string {
 	return found
 }
 
-// RED 1 — a ClusterRole carrying an unguarded cluster-wide secrets grant is
-// invisible to the gate purely because its file is not called
-// clusterrole.yaml. Hermetic: proves the selector defect in isolation.
-// ESTES TESTES SAO RED POR DESENHO ate' B-048 ser implementado.
+// These tests are RED BY DESIGN: they measure the defect, not its fix.
 //
-// Medem o defeito, nao o conserto. Ficam SKIP pelo mesmo argumento que os de B-001
-// em `internal/quality/chartpairs`: um teste permanentemente vermelho e' ignorado
-// dentro de uma semana e leva a suite junto (`rules/testing.md`). Um skip que NOMEIA
-// o item e a medicao e' o oposto do skip invisivel que a mesma regra proibe.
+// They SKIP rather than fail because a permanently red test is ignored within a week
+// and takes the whole suite with it (`rules/testing.md`: "once red tests are ignored,
+// all tests lose their value"). A skip that names the defect and prints the
+// measurement is the opposite of the invisible skip that same rule forbids — the debt
+// shows up in every run, and the issue below is where it is tracked.
 //
-// `LOOPZERO_RUN_B048_RED=1 go test ./internal/quality/clusterrolenosecretsstar/` roda-os.
-// Quando B-048 ficar verde, apague este bloco — se passarem sem a variavel, chegou.
-func skipUnlessRedB048(t *testing.T) {
+// Tracked at: https://github.com/getloopscale/loopzero/issues/362
+// The defect: the gate selects by file BASENAME rather than by the `kind:` of the declarations,
+// so it audits five of the nine ClusterRoles and reports on all nine.
+//
+// `LOOPZERO_RUN_SELECTOR_AUDIT=1 go test ./internal/quality/clusterrolenosecretsstar/` runs them for real.
+// When the issue closes, delete this block — if they pass without the variable, the
+// fix has landed.
+
+func skipUnlessSelectorAuditArmed(t *testing.T) {
 	t.Helper()
-	if os.Getenv("LOOPZERO_RUN_B048_RED") == "" {
-		t.Skip("DEBITO CONHECIDO B-048: o gate seleciona por BASENAME do arquivo e nao " +
-			"pelo `kind:` das declaracoes — nove ClusterRole existem sob charts/ e " +
-			"infra/helm/, e o gate abre as cinco que calham de morar num clusterrole.yaml. " +
-			"Rode com LOOPZERO_RUN_B048_RED=1 para ver a medicao.")
+	if os.Getenv("LOOPZERO_RUN_SELECTOR_AUDIT") == "" {
+		// https://github.com/getloopscale/loopzero/issues/362
+		t.Skip("known debt: the gate selects by file basename rather than by the kind: of " +
+			"the declarations — nine ClusterRoles exist under charts/ and infra/helm/, and " +
+			"the gate opens the five that happen to live in a clusterrole.yaml. " +
+			"Run with LOOPZERO_RUN_SELECTOR_AUDIT=1 to see the measurement.")
 	}
 }
 
 func TestCheck_ClusterRoleInNonCanonicalFilename_FAIL(t *testing.T) {
-	skipUnlessRedB048(t)
+	skipUnlessSelectorAuditArmed(t)
 	tmp := t.TempDir()
 	dir := filepath.Join(tmp, "infra", "helm", "some-chart", "templates")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -139,11 +147,13 @@ rules:
 // that declares a ClusterRole, the verdict must not depend on what the file is
 // called. Any divergence is coverage the gate silently does not have.
 func TestCheck_LIVE_SelectionIsRenameInvariant(t *testing.T) {
-	skipUnlessRedB048(t)
+	skipUnlessSelectorAuditArmed(t)
 	root := repoRoot(t)
 	files := liveClusterRoleFiles(t, root)
 	if len(files) == 0 {
-		t.Skip("no ClusterRole declarations found — nothing to compare")
+		// Zero found means the finder is broken, which is the very defect this test
+		// measures. Skipping on zero is the vacuity trap the gate exists to catch.
+		t.Fatalf("no ClusterRole declarations found under %v — the finder is broken", scanDirs)
 	}
 	t.Logf("B-048: %d files under %v declare a ClusterRole", len(files), scanDirs)
 
@@ -193,11 +203,12 @@ func runOne(t *testing.T, basename string, body []byte) bool {
 // cluster-wide secrets+configmaps with delete, unconditionally, and the gate
 // reports PASS over the whole repository.
 func TestCheck_LIVE_FlagsLoopZeroApiBootstrapSecretsGrant(t *testing.T) {
-	skipUnlessRedB048(t)
+	skipUnlessSelectorAuditArmed(t)
 	root := repoRoot(t)
 	const target = "infra/helm/loopzero-api/templates/serviceaccount.yaml"
 	if _, err := os.Stat(filepath.Join(root, target)); err != nil {
-		t.Skipf("%s absent: %v", target, err)
+		// The target is tracked, so absence is a broken checkout, not a missing input.
+		t.Fatalf("%s is tracked but absent: %v", target, err)
 	}
 
 	out, err := Check(Config{RepoRoot: root})

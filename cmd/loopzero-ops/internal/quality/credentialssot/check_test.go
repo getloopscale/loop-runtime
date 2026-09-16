@@ -167,5 +167,9 @@ func TestCheck_RealRepoPasses(t *testing.T) {
 		}
 		abs = filepath.Dir(abs)
 	}
-	t.Skip("could not locate docs/operations/credentials-required.md within 8 parent dirs")
+	// The message used to name docs/operations/credentials-required.md, a path the
+	// 2026-09-11 docs consolidation folded away; sotDoc has been docs/operations.md
+	// since. Derive it from the constant so it cannot drift again, and fail rather
+	// than skip: the document is tracked, so not finding it is a broken checkout.
+	t.Fatalf("could not locate %s within 8 parent directories", sotDoc)
 }

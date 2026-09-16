@@ -14,6 +14,16 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Five test skips that reported an inability to measure as a pass. Four guards over
+  tracked files now fail instead of skipping — an absent CLAUDE.md, an absent tracked
+  manifest, and a ClusterRole finder returning zero all mean the harness is broken, not
+  that there is nothing to check. The SHA-pin verification behind every pinned action
+  now fails under CI on a shallow clone, where a silent skip reported an unverified
+  supply chain as a clean one.
+- Four known-debt skips named backlog ids that do not travel with a clone. They now cite
+  GitHub issues (#361, #362, #363, #364), and their identifiers describe what they arm
+  rather than which ticket filed them.
+
 - The pre-push quality gates ask the convention check about what the push introduces,
   not about the last forty commits. Grading commits already on the remote made every
   push fail on violations no amend could reach, and the only remedy the arithmetic

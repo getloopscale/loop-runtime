@@ -18,65 +18,34 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/chartpairs"
 )
 
-// B-001 RED tests.
+// These tests are RED BY DESIGN: they measure the defect, not its fix.
 //
-// The parity contract in CLAUDE.md is "when patching one, apply the same fix to the
-// other". `chart-pairs` is the only gate named for that contract, and it compares the
-// SET OF NAMES against the declared registry -- never what either side grants.
+// They SKIP rather than fail because a permanently red test is ignored within a week
+// and takes the whole suite with it (`rules/testing.md`: "once red tests are ignored,
+// all tests lose their value"). A skip that names the defect and prints the
+// measurement is the opposite of the invisible skip that same rule forbids — the debt
+// shows up in every run, and the issue below is where it is tracked.
 //
-// Two tests, deliberately at different levels:
+// Tracked at: https://github.com/getloopscale/loopzero/issues/361
+// The defect: the declared `loopzero-api` pair diverges in 162 of 200 cells (apiGroup, resource,
+// verb) and the `chart-pairs` gate does not look at it.
 //
-//	TestDivergentGrantsInDeclaredPairAreRefused -- hermetic. Proves the gate cannot
-//	    detect a grant divergence AT ALL. Owns its own fixture, so it can never go
-//	    green because someone changed a chart.
-//
-//	TestRealLoopZeroAPIPairDivergenceIsReported -- reads the REAL loopzero-api pair. Proves
-//	    the gate is silent about THIS divergence, which is what B-001 is about.
-//
-// The second is what B-001's DoD (a) asks for; the first is what keeps the coverage
-// alive after the pair is reconciled. Neither replaces the other.
+// `LOOPZERO_RUN_GRANT_COMPARISON=1 go test ./internal/quality/chartpairs/` runs them for real.
+// When the issue closes, delete this block — if they pass without the variable, the
+// fix has landed.
 
-// ---------------------------------------------------------------------------
-// Hermetic: the gate cannot see a grant divergence at all.
-// ---------------------------------------------------------------------------
-
-// The fixture reproduces the real pair's `secrets` divergence exactly: both sides
-// grant get/list/watch/create/update/patch, and ONLY the bootstrap side adds
-// `delete`. One verb, which is the smallest signal the gate has to catch --
-// measured on the real charts at
-// infra/helm/loopzero-api/templates/serviceaccount.yaml:37 (7 verbs incl. delete) and
-// charts/loopzero-api/templates/clusterrole.yaml:42 (the same 6, without delete).
-//
-// FAILS on the current state: Check reads only Chart.yaml, so it reports PASS.
-// ESTES DOIS TESTES SAO RED POR DESENHO, e o item que eles fixam e' B-001.
-//
-// Eles medem o defeito, nao o conserto: o gate `chart-pairs` verifica que os dois
-// lados de um par DECLARADO existem, e nao que concedem a mesma coisa. Medido
-// 2026-09-16 sobre o par real `loopzero-api`: **162 de 200 celulas (apiGroup, resource,
-// verb) divergem**, 38 concordam — `infra/helm` concede o que `charts/` retem, e o
-// gate passa.
-//
-// Ficam SKIP ate' B-001 ser implementado, com o numero na mensagem, porque um teste
-// permanentemente vermelho e' ignorado dentro de uma semana e leva a suite inteira
-// junto (`rules/testing.md`: "uma vez que testes vermelhos sao ignorados, todos os
-// testes perdem valor"). Um skip que NOMEIA o item e imprime a medicao e' o oposto
-// do skip invisivel que aquela mesma regra proibe: o debito aparece em todo run.
-//
-// `LOOPZERO_RUN_B001_RED=1 go test ./internal/quality/chartpairs/` roda-os de verdade.
-// Quando B-001 ficar verde, apague este bloco e os dois `skipUnlessRed` — se eles
-// passarem sem a variavel, o conserto chegou.
-
-func skipUnlessRed(t *testing.T) {
+func skipUnlessGrantComparisonArmed(t *testing.T) {
 	t.Helper()
-	if os.Getenv("LOOPZERO_RUN_B001_RED") == "" {
-		t.Skip("DEBITO CONHECIDO B-001: o par declarado `loopzero-api` diverge em 162 de 200 " +
-			"celulas (apiGroup, resource, verb) e o gate `chart-pairs` nao olha para isso. " +
-			"Rode com LOOPZERO_RUN_B001_RED=1 para ver a medicao.")
+	if os.Getenv("LOOPZERO_RUN_GRANT_COMPARISON") == "" {
+		// https://github.com/getloopscale/loopzero/issues/361
+		t.Skip("known debt: the declared loopzero-api pair diverges in 162 of 200 cells " +
+			"(apiGroup, resource, verb) and the chart-pairs gate does not compare them. " +
+			"Run with LOOPZERO_RUN_GRANT_COMPARISON=1 to see the measurement.")
 	}
 }
 
 func TestDivergentGrantsInDeclaredPairAreRefused(t *testing.T) {
-	skipUnlessRed(t)
+	skipUnlessGrantComparisonArmed(t)
 	root := t.TempDir()
 
 	write := func(rel, body string) {
@@ -211,7 +180,7 @@ func renderCells(t *testing.T, chartDir, showOnly string) map[string]bool {
 // FAILS on the current state: the oracle finds 162 divergent cells of a 200-cell union
 // and `Check` returns nil.
 func TestRealLoopZeroAPIPairDivergenceIsReported(t *testing.T) {
-	skipUnlessRed(t)
+	skipUnlessGrantComparisonArmed(t)
 	root := filepath.Join("..", "..", "..", "..", "..")
 
 	boot := renderCells(t, filepath.Join(root, "infra/helm/loopzero-api"), "templates/serviceaccount.yaml")

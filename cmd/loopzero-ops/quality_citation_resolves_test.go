@@ -100,12 +100,30 @@ var notCommitWords = map[string]bool{"ed25519": true, "deadbeef": true, "abc1234
 
 func TestCommitSHAsCitedInWorkflowsAreReachable(t *testing.T) {
 	root := repoRootForCitations(t)
+	// This check needs local history to resolve a pin, so it cannot measure without it.
+	// Under CI that is a configuration error and must be loud: `public-checks` sets
+	// fetch-depth: 0 precisely so this runs, and a silent skip there would report an
+	// unverified supply chain as a clean one. Locally it stays a skip — failing a
+	// developer's shallow clone would claim a defect where there is only a missing input.
+	// Verifying without history is tracked at:
+	// https://github.com/getloopscale/loopzero/issues/365
+	underCI := os.Getenv("GITHUB_ACTIONS") == "true" || os.Getenv("CI") == "true"
+	cannotMeasure := func(format string, args ...any) {
+		t.Helper()
+		if underCI {
+			t.Fatalf(format+" — CI must check out with fetch-depth: 0", args...)
+		}
+		// https://github.com/getloopscale/loopzero/issues/365
+		t.Skipf(format, args...)
+	}
 	if err := exec.Command("git", "-C", root, "rev-parse", "--git-dir").Run(); err != nil {
-		t.Skipf("not a git worktree at %s: %v", root, err)
+		cannotMeasure("not a git worktree at %s: %v", root, err)
+		return
 	}
 	if out, err := exec.Command("git", "-C", root, "rev-parse", "--is-shallow-repository").Output(); err == nil {
 		if strings.TrimSpace(string(out)) == "true" {
-			t.Skip("shallow clone: an unreachable SHA here proves nothing about the citation")
+			cannotMeasure("shallow clone: an unreachable SHA here proves nothing about the citation")
+			return
 		}
 	}
 

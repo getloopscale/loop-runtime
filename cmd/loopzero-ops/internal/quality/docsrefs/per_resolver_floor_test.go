@@ -10,37 +10,34 @@ import (
 	"testing"
 )
 
-// RED (B-013, orthogonal-seat return): the ErrNoReferencesEnumerated floor is
-// computed over the AGGREGATE Checked counter (check.go:427 increments one
-// field inside the loop over every resolver; check.go:450 tests that single
-// total). So a resolver whose collect() returns nothing is invisible as long as
-// ANY other resolver enumerated something.
+// These tests are RED BY DESIGN: they measure the defect, not its fix.
 //
-// Constructed with the two resolvers that exist today: CLAUDE.md carries one
-// rule reference that RESOLVES, and the tree has no Go file at all, so
-// adrResolver.collect walks its six roots and returns zero. If the floor were
-// per-resolver this must fail; with the aggregate floor it passes green.
-// RED POR DESENHO ate' B-074 ser implementado (o item cita B-013 como antecedente).
+// They SKIP rather than fail because a permanently red test is ignored within a week
+// and takes the whole suite with it (`rules/testing.md`: "once red tests are ignored,
+// all tests lose their value"). A skip that names the defect and prints the
+// measurement is the opposite of the invisible skip that same rule forbids — the debt
+// shows up in every run, and the issue below is where it is tracked.
 //
-// Mede o defeito: `docsrefs` conta vacuidade num unico agregado, entao um resolver que
-// enumera ZERO referencias e' absorvido pelos que enumeram alguma — medido aqui,
-// `Checked=1` inteiro vindo de `ruleResolver` enquanto `adrResolver` enumerou 0, e o
-// piso agregado passa.
+// Tracked at: https://github.com/getloopscale/loopzero/issues/363
+// The defect: the vacuity floor is one aggregate across every resolver, so a resolver
+// enumerating zero references hides behind those that enumerate some.
 //
-// SKIP com o item e a medicao na mensagem, pelo mesmo argumento de B-001 e B-048: um
-// teste permanentemente vermelho e' ignorado numa semana e leva a suite junto
-// (`rules/testing.md`). `LOOPZERO_RUN_B074_RED=1` o arma.
-func skipUnlessRedB074(t *testing.T) {
+// `LOOPZERO_RUN_PER_RESOLVER_FLOOR=1 go test ./internal/quality/docsrefs/` runs them for real.
+// When the issue closes, delete this block — if they pass without the variable, the
+// fix has landed.
+
+func skipUnlessPerResolverFloorArmed(t *testing.T) {
 	t.Helper()
-	if os.Getenv("LOOPZERO_RUN_B074_RED") == "" {
-		t.Skip("DEBITO CONHECIDO B-074: o contador de vacuidade de `docsrefs` e' um agregado " +
-			"unico, entao um resolver que enumera zero referencias fica invisivel atras dos " +
-			"que enumeram alguma. Rode com LOOPZERO_RUN_B074_RED=1 para ver a medicao.")
+	if os.Getenv("LOOPZERO_RUN_PER_RESOLVER_FLOOR") == "" {
+		// https://github.com/getloopscale/loopzero/issues/363
+		t.Skip("known debt: the docsrefs vacuity counter is a single aggregate, so a resolver " +
+			"that enumerates zero references is invisible behind those that enumerate some. " +
+			"Run with LOOPZERO_RUN_PER_RESOLVER_FLOOR=1 to see the measurement.")
 	}
 }
 
 func TestCheck_AResolverThatEnumeratesNothingIsInvisible(t *testing.T) {
-	skipUnlessRedB074(t)
+	skipUnlessPerResolverFloorArmed(t)
 	root := writeTree(t, map[string]string{
 		"CLAUDE.md":                "Read `.claude/rules/present.md`.\n",
 		".claude/rules/present.md": "x\n",
