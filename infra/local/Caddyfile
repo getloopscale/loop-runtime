@@ -108,7 +108,7 @@ app-dev.loopzero.example {
   # canonical shape. Operator workflow: cd loopzero-cloud/dashboard && npm run
   # build before task cloud:caddy:up. The Taskfile target cloud:caddy:up
   # exports DASHBOARD_DIST automatically to the workspace sibling repo
-  # loopzero-cloud/dashboard/dist (per /home/paulo/loopzero-cloud/{loopzero,loopzero-cloud,
+  # loopzero-cloud/dashboard/dist (per the sibling layout <REPO_PARENT>/{loopzero,loopzero-cloud,
   # loopzero-cli,loopzero-contracts} workspace layout). Override DASHBOARD_DIST
   # before task invocation if you have a non-standard layout.
   # See docs/runbooks.md.
@@ -321,7 +321,7 @@ app-dev.loopzero.example {
   # cache header for chunks (vite hashed filenames are content-addressed,
   # so cache forever is safe).
   handle /assets/* {
-    root * /home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist
+    root * {$LOOPZERO_DASHBOARD_DIST:../loopzero-cloud/dashboard/dist}
     encode gzip
     header Cache-Control "public, max-age=31536000, immutable"
     file_server
@@ -337,7 +337,7 @@ app-dev.loopzero.example {
     path /sw.js /workbox-*.js
   }
   handle @pwa_service_worker {
-    root * /home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist
+    root * {$LOOPZERO_DASHBOARD_DIST:../loopzero-cloud/dashboard/dist}
     encode gzip
     # Service worker MUST NOT be cached — the browser checks for a new
     # SW on every visit; cache it and the user is stuck on the old
@@ -364,7 +364,7 @@ app-dev.loopzero.example {
   # being present + DASHBOARD_DIST env var set) + Red Team #100
   # absorption (silent MIME outage on stale-chunk requests).
   handle {
-    root * /home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist
+    root * {$LOOPZERO_DASHBOARD_DIST:../loopzero-cloud/dashboard/dist}
     encode gzip
     header Cache-Control "no-cache"
     try_files {path} /index.html

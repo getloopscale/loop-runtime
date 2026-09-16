@@ -13,10 +13,10 @@ sources:
     resource: "query:SELECT SUM(loc) FROM files_inventoried WHERE is_excluded=0 AND loc IS NOT NULL AND language='go'"
     note: "total 601347 LOC over 12 languages; is_excluded=0 drops vendored/node_modules"
   - id: cm-dir
-    resource: "query:SELECT SUM(loc) FROM files_inventoried WHERE is_excluded=0 AND loc IS NOT NULL AND (path='/home/paulo/Projetos/loopzero/loopzero-platform/loopzero/api/internal' OR path LIKE '/home/paulo/Projetos/loopzero/loopzero-platfo"
+    resource: "query:SELECT SUM(loc) FROM files_inventoried WHERE is_excluded=0 AND loc IS NOT NULL AND (path='<REPO_ROOT>/api/internal' OR path LIKE '<LOCAL_PATH>"
     note: "package = first two path segments; parent = top-level module. 40 largest of 129 total."
   - id: cm-loc
-    resource: "query:SELECT SUM(loc) FROM files_inventoried WHERE is_excluded=0 AND loc IS NOT NULL AND path LIKE '/home/paulo/Projetos/loopzero/loopzero-platform/loopzero/api/internal/db/store/%' AND path NOT LIKE '/home/paulo/Proje"
+    resource: "query:SELECT SUM(loc) FROM files_inventoried WHERE is_excluded=0 AND loc IS NOT NULL AND path LIKE '<REPO_ROOT>/api/internal/db/store/%' AND path NOT LIKE '<LOCAL_PATH>"
     note: "direct LOC: files whose dirname equals the component's declared path, so a parent package is not credited with its children's lines."
   - id: cm-inst
     resource: "query:SELECT ROUND(CAST((SELECT COUNT(*) FROM relations WHERE kind IN ('imports','depends_on') AND from_key='api.db.store') AS REAL)/((SELECT COUNT(*) FROM relations WHERE kind IN ('imports','depends_on') A"
@@ -236,7 +236,7 @@ of a repository with one primary author rather than a team on a shared schedule,
 # Evidence
 
 [^cm-lang]: `SELECT SUM(loc) FROM files_inventoried WHERE is_excluded=0 AND loc IS NOT NULL AND language='go'`
-[^cm-dir]: `SELECT SUM(loc) FROM files_inventoried WHERE is_excluded=0 AND loc IS NOT NULL AND (path='/home/paulo/Projetos/loopzero/loopzero-platform/loopzero/api/internal' O`
-[^cm-loc]: `SELECT SUM(loc) FROM files_inventoried WHERE is_excluded=0 AND loc IS NOT NULL AND path LIKE '/home/paulo/Projetos/loopzero/loopzero-platform/loopzero/api/interna`
+[^cm-dir]: `SELECT SUM(loc) FROM files_inventoried WHERE is_excluded=0 AND loc IS NOT NULL AND (path='<REPO_ROOT>/api/internal' O`
+[^cm-loc]: `SELECT SUM(loc) FROM files_inventoried WHERE is_excluded=0 AND loc IS NOT NULL AND path LIKE '<REPO_ROOT>/api/interna`
 [^cm-inst]: `SELECT ROUND(CAST((SELECT COUNT(*) FROM relations WHERE kind IN ('imports','depends_on') AND from_key='api.db.store') AS REAL)/((SELECT COUNT(*) FROM `
 [^cm-period]: `python3 -c "import subprocess,collections;print(collections.Counter(subprocess.run(['git','log','--format=%ad','--date=format:%H'],capture_output=True`

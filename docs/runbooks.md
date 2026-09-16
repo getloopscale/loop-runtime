@@ -191,9 +191,14 @@ made under pressure.
 
 ## Local public dashboard (manual, dev only)
 
-The edge serves `~/loopzero-cloud/loopzero-cloud/dashboard/dist` — that path is the `root *` of the
-`app-dev` blocks in `infra/local/Caddyfile`, and the `dashboard-root-parity` gate fails this runbook
-if the two diverge. The canonical checkout is `~/loopzero-cloud/loopzero-cloud`.
+The edge serves `{$LOOPZERO_DASHBOARD_DIST:../loopzero-cloud/dashboard/dist}` — that expression is the
+`root *` of the `app-dev` blocks in `infra/local/Caddyfile`, and the `dashboard-root-parity` gate
+fails this runbook if the two diverge.
+
+It was an absolute path under one person's home until 2026-09-16, which made the file work on
+exactly one machine and published that machine's directory layout to anyone who cloned. The
+default is now relative to this repository, and `LOOPZERO_DASHBOARD_DIST` overrides it for a checkout
+laid out differently.
 
 **The obvious path misleads:** the dashboard source moved to the sibling repo `../loopzero-cloud` at M4,
 so a `dashboard/` under this repository is stale if it exists at all. Build in the sibling, serve the

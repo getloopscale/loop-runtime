@@ -102,7 +102,12 @@ func Check(cfg Config) (Outcome, error) {
 	// F: documentation traceability.
 	assertRE("F1 doc cites issue #111 / Jeito A / dev-public-cross-cluster-secrets",
 		`(issue #111|Jeito A|dev-public-cross-cluster-secrets)`)
-	assertContains("F2 doc cites OpenBao init runbook", "openbao-init-runbook.md")
+	// O needle era `openbao-init-runbook.md`, e `24d05df4e` consolidou aquele arquivo
+	// em `docs/runbooks.md` — a cerimonia vive la' em `## OpenBao init ceremony`, e
+	// `docs/README.md:61` ate' registra o `git show` que recupera o original. Um needle
+	// que exige um nome de arquivo apagado pede ao overlay que cite o que ninguem pode
+	// abrir; este exige o caminho que resolve.
+	assertContains("F2 doc cites OpenBao init runbook", "docs/runbooks.md")
 	assertContains("F3 doc cites EC-1", "EC-1")
 	assertContains("F4 doc cites EC-2", "EC-2")
 

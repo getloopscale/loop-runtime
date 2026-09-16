@@ -217,7 +217,7 @@ func miniRepo(t *testing.T) string {
 		"api/internal/svc.go": `package svc
 import "github.com/getloopscale/loopzero/pkg/errors"
 `,
-		"docs/technical/pkg/architecture.md": `# Pkg Architecture
+		"docs/architecture.md": `# Pkg Architecture
 
 before
 ` + StartMark + `
@@ -266,7 +266,7 @@ func TestRun_WriteSucceedsAndReportsPath(t *testing.T) {
 	assert.Equal(t, ModeWrite, out.Mode)
 
 	// Re-read the file and confirm marker bracket remains.
-	got, err := os.ReadFile(filepath.Join(root, "docs/technical/pkg/architecture.md"))
+	got, err := os.ReadFile(filepath.Join(root, "docs/architecture.md"))
 	require.NoError(t, err)
 	assert.Contains(t, string(got), StartMark)
 	assert.Contains(t, string(got), EndMark)
@@ -289,7 +289,7 @@ func TestRun_MissingDocReturnsOPS_USAGE(t *testing.T) {
 func TestRun_DocWithoutMarkersReturnsOPS_USAGE(t *testing.T) {
 	root := setup(t, map[string]string{
 		"pkg/errors/errors.go":               "package errors\n",
-		"docs/technical/pkg/architecture.md": "# Doc with no markers\n",
+		"docs/architecture.md": "# Doc with no markers\n",
 	})
 	_, err := Run(Config{Root: root}, ModeCheck)
 	require.Error(t, err)
@@ -312,7 +312,7 @@ func TestRun_UnknownModeError(t *testing.T) {
 // =============================================================================
 
 func TestConstants(t *testing.T) {
-	assert.Equal(t, "docs/technical/pkg/architecture.md", DefaultDocPath)
+	assert.Equal(t, "docs/architecture.md", DefaultDocPath)
 	assert.Equal(t, "<!-- USAGE-MATRIX-START -->", StartMark)
 	assert.Equal(t, "<!-- USAGE-MATRIX-END -->", EndMark)
 }

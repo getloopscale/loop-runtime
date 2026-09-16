@@ -137,7 +137,7 @@ func TestGuardaSegueBloqueandoAsFormasDestrutivas(t *testing.T) {
 		"rm --recursive --force /",
 		"rm -r -f /",
 		"echo ola && rm -rf $HOME",
-		"cd /tmp; rm -rf /home/paulo",
+		"cd /tmp; rm -rf /home/someone", // uma HOME qualquer: o guarda decide pela FORMA do comando, nao por quem mora ali
 		"rm -rf /*",
 	} {
 		if got := rodarHook(t, comando); got != 2 {

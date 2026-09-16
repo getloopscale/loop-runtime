@@ -26,7 +26,7 @@ func writeFixture(t *testing.T, body string) string {
 
 // canonical mirrors the post-T1.2 (Jeito A / issue #111) shape.
 const canonical = `# dev-public overlay — post-T1.2 workload identity (issue #111 / Jeito A / dev-public-cross-cluster-secrets)
-# See openbao-init-runbook.md for the Shamir ceremony.
+# See docs/runbooks.md for the Shamir ceremony (## OpenBao init ceremony).
 # EC-1: cross-cluster token review required.
 # EC-2: CoreDNS host-alias preserves cert SAN.
 # Cross-cluster topology: loopzero-secrets (separate cluster).

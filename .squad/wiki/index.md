@@ -27,7 +27,7 @@ the disagreement is recorded — see [`/operations/contradictions.md`](/operatio
 
 ## How this bundle was built
 
-- **Mapped on:** 2026-09-11 against `/home/paulo/Projetos/loopzero/loopzero-platform/loopzero` at commit `6c22c4ecf`
+- **Mapped on:** 2026-09-11 against `<REPO_ROOT>` at commit `6c22c4ecf`
 - **Coverage:** 2,591 of 3,621 in-scope files read in full (71.6%). The categorical gate reports
   **100% of every critical role** — 13/13 entrypoints, 67/67 manifests, 219/219 schema, 517/517
   IaC — and that figure is **narrower than it sounds**: 11 further critical-role files are
