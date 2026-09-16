@@ -21,8 +21,11 @@ import (
 func runClusterRenameGuard(args []string) int {
 	fs := flag.NewFlagSet("cluster-rename-guard", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
+	// Versioned, so it reaches whoever clones. It lived under `.claude/` until
+	// 2026-09-16 — gitignored, and deleted with 1,380 other files by `3d4075ca3` — which
+	// made this gate fail on a missing file rather than report anything about the rename.
 	baseline := fs.String("baseline",
-		".claude/knowledge-base/discoveries/snapshots/cluster-topology-naming-generic-baseline.json",
+		"infra/quality/snapshots/cluster-topology-naming-generic-baseline.json",
 		"baseline of GENERIC occurrences captured before the rename")
 	skipAncestry := fs.Bool("skip-ancestry-check", false,
 		"skip the guard that refuses a baseline captured after the rename began (EC-1)")

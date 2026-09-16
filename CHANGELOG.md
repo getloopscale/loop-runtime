@@ -14,6 +14,14 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `cluster-rename-guard` reports on the rename again, in a second instead of six minutes.
+  Its baseline was deleted with 1,380 other files and is restored to `infra/quality/`,
+  where it is versioned; its pinned commit is translated rather than re-captured, because
+  re-capturing would compare the new state with itself; the gate now tells a `git grep`
+  that answers "not found" from a `git grep` that could not run, which is what made it
+  read 554 MB of `.git` per absent occurrence; and it honours the `amendments` field the
+  baseline has carried since August, which no code had ever read.
+
 - The allowlist sunset contract is enforced again. `check-allowlist-sunsets` was a
   contract test for a Python script that exists in no clone and no installed kit, so it
   reported a missing program instead of a lapsed deadline — and two code-review exemptions
