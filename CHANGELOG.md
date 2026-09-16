@@ -14,6 +14,11 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The CLI exit-code contract is checked against the CLI again. Both subjects were declared
+  absent — one because the tree moved to a sibling repository at M2, the other because
+  that sibling was not checked out — and the sibling has since been cloned, so the gate
+  now scans its 81 source files instead of recording why it could not.
+
 - Three places where the secret-redaction pass replaced something that was not a secret.
   `tools/gen-service-auth-ed25519` stopped compiling because the replacement landed on a
   struct field access inside the test that proves keypair generation is random, and two

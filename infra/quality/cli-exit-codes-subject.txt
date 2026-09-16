@@ -32,5 +32,3 @@
 #
 # The right way to leave this file is to delete the line, not to add one.
 #
-cli/src	extracted to sibling repo `../loopzero-cli` at milestone M2 (see CLAUDE.md § What This Project Is). This tree contains no cli/ directory. The exit-code contract is enforced in the sibling repository's own CI.
-../loopzero-cli/src	the sibling repo `loopzero-cli` is not checked out beside this tree on this machine. Contract enforcement is the sibling's responsibility.
