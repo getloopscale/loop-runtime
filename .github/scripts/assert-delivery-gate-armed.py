@@ -285,6 +285,73 @@ def premise_3_no_bypass(root: Path, report: Report) -> None:
     )
 
 
+CI_WORKFLOW = ".github/workflows/ci.yml"
+
+
+def premise_0_ci_gates_the_pull_request(root: Path, report: Report) -> bool:
+    """Is the trunk guarded by CI itself, rather than by a hook on one machine?
+
+    THE REGIME THIS FILE WAS WRITTEN FOR IS NOT THE ONLY ONE ANY MORE.
+
+    The three premises below defend a specific trade: `ci.yml` may trigger
+    post-merge BECAUSE a local hook blocks a bad push first. That trade was
+    legitimate while this repository was private with one author, and it dies
+    the moment anyone else can open a pull request -- a contributor has no
+    `.claude/hooks/delivery-gate.sh`, cannot be made to have one, and a fork's
+    workflow receives no secrets either. Measured 2026-09-16: `.claude/` stopped
+    being tracked in 3d4075ca3 (2026-09-08), the last green run of this check was
+    2026-09-09T14:39, and every run since has failed on a premise that can no
+    longer become true.
+
+    So the check asks first which regime is in force, and asserts what is
+    actually true in it. When `ci.yml` gates the pull request, the guard is CI,
+    it is verifiable by GitHub as a required check, and it covers every
+    contributor rather than every contributor who installed a hook.
+    """
+    ci = root / CI_WORKFLOW
+    if not ci.is_file():
+        report.unchecked(f"PREMISE 0 — CI gates the pull request: {ci} is not there.")
+        return False
+
+    # Lido a mao, e nao por uma lib de YAML, pelo mesmo motivo que o resto deste
+    # arquivo: a checagem roda num runner cru, sem instalar nada, e uma dependencia
+    # a mais e' uma forma a mais de a checagem nao rodar. Comentarios sao
+    # descartados porque este repositorio escreve blocos inteiros de prosa dentro
+    # do `on:` -- um `# pull_request:` explicando por que ele NAO esta la' seria
+    # lido como se estivesse.
+    lines = [l.split("#", 1)[0].rstrip() for l in ci.read_text(encoding="utf-8").splitlines()]
+    try:
+        on_at = next(i for i, l in enumerate(lines) if l.rstrip() == "on:")
+    except StopIteration:
+        report.bad(f"PREMISE 0 — CI gates the pull request: {CI_WORKFLOW} declares no `on:` block.")
+        return False
+
+    triggers = set()
+    for line in lines[on_at + 1:]:
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip())
+        if indent == 0:
+            break                      # saiu do bloco `on:`
+        if indent == 2 and line.rstrip().endswith(":"):
+            triggers.add(line.strip().rstrip(":"))
+
+    if "pull_request" not in triggers:
+        report.bad(
+            "PREMISE 0 — CI gates the pull request: "
+            f"{CI_WORKFLOW} does NOT trigger on `pull_request` (found: "
+            f"{', '.join(sorted(triggers)) or 'nothing'}). Falling back to the local-hook premises."
+        )
+        return False
+
+    report.ok(
+        "PREMISE 0 — CI gates the pull request: "
+        f"{CI_WORKFLOW} triggers on `pull_request`, so a change is checked BEFORE it "
+        "reaches the trunk, by CI rather than by a hook on the pusher's machine."
+    )
+    return True
+
+
 def main(argv: list[str] | None = None) -> int:
     default_root = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -294,6 +361,18 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"delivery gate armed? checking {root}")
     report = Report()
+
+    # Which regime? Asking this first is the whole change: the three premises
+    # below are the RIGHT check for a repository whose only guard is local, and
+    # the WRONG one for a repository whose CI gates the pull request.
+    if premise_0_ci_gates_the_pull_request(root, report):
+        print()
+        print(
+            "CI gates the pull request, so the local-hook premises are not what protects\n"
+            "the trunk here and are not checked. They remain in this file for a repository\n"
+            "that still makes the post-merge trade."
+        )
+        return 0
 
     have_file = premise_1_file_exists(root, report)
     premise_2_is_wired(root, report)

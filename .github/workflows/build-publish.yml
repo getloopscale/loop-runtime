@@ -40,10 +40,17 @@ on:
       verify:          { required: false, type: boolean, default: false }   # identity-pinned cosign verify (needs sign=true)
       trivy:           { required: false, type: boolean, default: false }   # CRITICAL/HIGH Trivy gate before push (uses .trivyignore if present)
       dockerhub_image: { required: false, type: string,  default: "" }      # e.g. "loopzero/themory" — also push to Docker Hub when DOCKERHUB_TOKEN is set
-      # Default = frota Blacksmith da org `getloopscale` (2026-07-30). Consumidores
-      # fora da org devem passar a propria label; um default GitHub-hosted aqui
-      # gastaria minutos da conta de quem chama, em silencio.
-      runner:          { required: false, type: string,  default: '["blacksmith-8vcpu-ubuntu-2404"]' }
+      # Default = `ubuntu-latest`, runner hospedado pelo GitHub (2026-09-16).
+      #
+      # Era a frota Blacksmith da org `getloopscale` (2026-07-30), e o argumento
+      # escrito aqui contra um default GitHub-hosted era que ele "gastaria minutos
+      # da conta de quem chama, em silencio". Valia enquanto o repositorio era
+      # privado; em repo PUBLICO o runner do GitHub e' gratuito, entao o custo que
+      # o argumento protegia deixou de existir — e o default antigo cobrava de um
+      # consumidor de fora uma frota que ele nao tem.
+      #
+      # O input continua existindo: quem tiver frota propria passa a label.
+      runner:          { required: false, type: string,  default: '["ubuntu-latest"]' }
     secrets:
       # Deploy key read-only de loopzero-contracts — via PREFERIDA desde 2026-07-31.
       # Alcanca exatamente um repositorio, so' leitura, revogavel sozinha. O PAT
@@ -62,7 +69,10 @@ permissions:
   id-token: write   # consumed only when sign=true (keyless cosign); harmless otherwise
 jobs:
   build-publish:
-    runs-on: ${{ fromJSON(inputs.runner) }} # default = frota Blacksmith da org; ver o input `runner`
+    # O default do GitHub e' 6 HORAS: um job travado queima isso em minutos
+    # faturados e segura uma vaga de concorrencia o tempo todo.
+    timeout-minutes: 30
+    runs-on: ${{ fromJSON(inputs.runner) }}   # default = ubuntu-latest; ver o input `runner`
     env:
       # `secrets` is NOT allowed in step `if:` — lift the token to a job-level env so the
       # Docker Hub guards below can use `env.*` (valid in if/with). Stays masked in logs.
@@ -174,7 +184,7 @@ jobs:
 
       - name: Trivy vulnerability scan (CRITICAL + HIGH gate)
         if: ${{ inputs.trivy }}
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ inputs.image }}:scan-target
           format: table

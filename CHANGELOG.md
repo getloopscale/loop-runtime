@@ -12,6 +12,49 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- The delivery-gate premise check asks which regime the repository is in before it
+  asserts anything. Its three premises defend a specific trade — CI may run post-merge
+  because a local hook blocks a bad push first — and that trade cannot hold for a public
+  repository, where a contributor has no such hook and a fork's workflow receives no
+  secrets. With `ci.yml` now triggering on `pull_request`, the guard is CI itself, which
+  is verifiable by GitHub as a required check and covers every contributor. The local-hook
+  premises remain in the file for a repository that still makes the post-merge trade.
+
+### Added
+
+- Continuous integration now runs on pull requests, not only after a merge. A contribution
+  is checked before it reaches `develop` — previously the suite ran only on push to
+  `develop`/`main`, so the first automated check on any change happened after it landed.
+- A `public-checks` job that needs no repository secrets, so a pull request opened from a
+  fork is gated like any other: it builds, vets and tests the six modules that do not
+  depend on the private `loopzero-contracts` sibling, and runs the diff-scoped quality gates.
+- An aggregated `CI gate` check. Branch protection can require one check instead of five,
+  and it fails when an upstream job fails OR is skipped — a skipped required check
+  otherwise reports as passing.
+
+### Changed
+
+- Every job runs on GitHub-hosted runners (`ubuntu-latest`). The third-party runner fleet
+  is no longer the default anywhere, including in the reusable publish workflow, whose
+  `runner` input still accepts a custom label for anyone who has a fleet of their own.
+- Jobs that need the private `loopzero-contracts` module are skipped on pull requests from
+  forks instead of failing there. A fork receives no secrets, so those jobs could never
+  have succeeded; they now report as skipped and the aggregated gate accepts that by name.
+
+### Security
+
+- Workflow permissions are declared per job rather than repository-wide. `packages: write`
+  and `id-token: write` were granted to every job in the release workflow, including one
+  that only reads the repository.
+- The release workflow names the four secrets it passes to the workflow it calls, instead
+  of `secrets: inherit`. A secret added later is no longer forwarded by omission.
+- `persist-credentials: false` on all nine checkouts: the credential no longer stays in
+  `.git/config` on the runner where later third-party steps can read it.
+- A branch name is no longer interpolated into a shell command in the quality-gate step.
+  On a fork pull request the branch name is chosen by the contributor.
+
 ### Added
 
 - `BACKLOG.md` — the repository's maintenance registry, created at the root of the governed

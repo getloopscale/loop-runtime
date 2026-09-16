@@ -101,10 +101,12 @@ jobs:
     # prove works here; naming a smaller, cheaper-looking fleet size that has
     # never been exercised in this repository would risk a job that queues
     # forever, which is the one outcome a check like this cannot afford.
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
+        with:
+          persist-credentials: false   # zizmor artipacked: nenhum passo seguinte empurra
 
       # If the script is missing, python3 exits non-zero and this step fails.
       # Fail-closed by construction: deleting the checker cannot produce a pass.

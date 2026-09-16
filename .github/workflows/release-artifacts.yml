@@ -9,16 +9,22 @@ on:
     branches: [develop]
     tags: ["v*"]
   workflow_dispatch: {}
+# O PISO, e so' o piso. `packages: write` e `id-token: write` viviam aqui e valiam
+# para os tres jobs, inclusive `plan`, que so' faz checkout e paths-filter. zizmor
+# marcava os dois como excessive-permissions (High) e estava certo: um token com
+# escopo de escrita em pacotes exposto a um job que nunca publica nada e' superficie
+# que nao compra nada. Cada job declara o que usa, abaixo.
 permissions:
   contents: read
-  packages: write
-  id-token: write
 concurrency:
   group: artifacts-${{ github.ref }}
   cancel-in-progress: ${{ github.ref == 'refs/heads/develop' }}   # cancel superseded DEV runs only; never release
 jobs:
   plan:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # O default do GitHub e' 6 HORAS: um job travado queima isso em minutos
+    # faturados e segura uma vaga de concorrencia o tempo todo.
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
     outputs:
       images: ${{ steps.set.outputs.images }}
       charts: ${{ steps.set.outputs.charts }}
@@ -27,7 +33,9 @@ jobs:
       version: ${{ steps.provenance.outputs.version }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin: supply-chain; matches build-publish.yml; issue #233)
-        with: { fetch-depth: 0 }   # full history for accurate paths-filter diff on push
+        with:
+          fetch-depth: 0                 # full history for accurate paths-filter diff on push
+          persist-credentials: false     # zizmor artipacked: nenhum passo seguinte empurra
       # Data do COMMIT, nao a hora do build. Duas razoes, e a segunda e' a que
       # decide: um timestamp de build muda a cada run e o valor entra na chave de
       # cache da camada (a ARG e' usada no RUN), entao TODO build recompilaria do
@@ -100,6 +108,12 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.images) }}
+    # O workflow chamado assina com cosign (`id-token`) e publica no GHCR
+    # (`packages`). Sao dele, e de mais ninguem neste arquivo.
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     uses: ./.github/workflows/build-publish.yml
     with:
       image: ${{ matrix.image }}
@@ -122,16 +136,29 @@ jobs:
         LOOPZERO_VERSION=${{ needs.plan.outputs.version }}
         LOOPZERO_COMMIT=${{ github.sha }}
         LOOPZERO_BUILD_DATE=${{ needs.plan.outputs.built_at }}
-    secrets: inherit
+    # NOMEADOS, nao `inherit`. `inherit` entrega TODO segredo do repositorio ao
+    # workflow chamado, incluindo os que ele nao declara e os que forem criados
+    # depois. Estes quatro sao os que `build-publish.yml` declara em
+    # `workflow_call.secrets`; um quinto criado amanha nao vaza por omissao.
+    secrets:
+      GOMOD_SSH_KEY: ${{ secrets.GOMOD_SSH_KEY }}
+      GOMOD_TOKEN: ${{ secrets.GOMOD_TOKEN }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
   charts:
+    # O default do GitHub e' 6 HORAS: um job travado queima isso em minutos
+    # faturados e segura uma vaga de concorrencia o tempo todo.
+    timeout-minutes: 20
     needs: plan
     if: ${{ needs.plan.outputs.charts == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
+        with:
+          persist-credentials: false   # zizmor artipacked: nenhum passo seguinte empurra
       - name: Login GHCR (helm)
         # Mesma classe do #250: nada de `${{ }}` dentro de `run:`. Aqui o segredo tambem deixa de
         # transitar pela LINHA DE COMANDO — `printenv` nao aparece em `ps`, ao contrario de um `echo`

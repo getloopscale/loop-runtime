@@ -140,6 +140,30 @@ on:
       - '**/*.md'
       - 'docs/**'
 
+  # O GATILHO QUE FALTAVA, e a razao pela qual ele faltava importa mais que a linha.
+  #
+  # `464b9d7e3` (2026-08-12) removeu o `pull_request` e moveu os gates para um hook
+  # de pre-push. Enquanto o repositorio era privado com um autor, a diferenca era
+  # teorica: quem empurra tem o hook. Aberto, deixa de ser — o PR de um estranho
+  # chegaria a `develop` sem que a suite tivesse rodado uma vez, porque o `push:`
+  # acima so' dispara DEPOIS do merge.
+  #
+  # Medido 2026-09-16: dos 8 modulos do go.work, apenas `api` e `pkg` exigem o
+  # sibling PRIVADO `loopzero-contracts`. Os outros seis — incluindo `cmd/loopzero-ops`,
+  # que carrega os 126 gates — compilam com `GOWORK=off` e nao precisam de segredo
+  # nenhum. E' isso que torna um gate real para fork possivel: ver `public-checks`.
+  pull_request:
+    branches: [develop, main]
+    paths-ignore:
+      - '.claude/**'
+      - '**/*.md'
+      - 'docs/**'
+
+  # Sem isto, um repositorio com merge queue espera para sempre por um check que
+  # nunca reporta na branch temporaria da fila, e nao ha falha em lugar nenhum
+  # para ler. Custa uma linha e so' e' notado quando falta.
+  merge_group:
+
 permissions:
   contents: read
 
@@ -149,6 +173,14 @@ concurrency:
 
 jobs:
   build-and-test:
+    # Pula num PR de FORK, e a razao e' mecanica, nao politica: os passos abaixo
+    # usam um deploy key para buscar o sibling PRIVADO `loopzero-contracts`, e o
+    # GitHub nao entrega segredo a workflow disparado por PR de fork. Sem esta
+    # condicao o job RODA e falha no passo do deploy key — um vermelho que nao diz
+    # nada sobre a contribuicao. `ci-gate` aceita o skip por nome, so' para fork.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     # RUNNER: frota Blacksmith, habilitada em 2026-07-30 com a transferencia
     # deste repositorio para a org `getloopscale`.
     #
@@ -163,7 +195,7 @@ jobs:
     #   2. o GitHub App `blacksmith-sh` esta instalado NA ORG que dona o repo
     # A segunda so' fica visivel depois de resolver a primeira, e foi o que
     # custou tres tentativas na migracao do loopzero-memory.
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 20
 
     env:
@@ -193,6 +225,7 @@ jobs:
       # que se quer de um gate.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin: supply-chain; issue #233)
         with:
+          persist-credentials: false   # zizmor artipacked: nenhum passo seguinte empurra
           path: loopzero
 
       # `loopzero-contracts` e' PRIVADO e foi transferido para `getloopscale` junto com
@@ -276,6 +309,7 @@ jobs:
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
         with:
+          persist-credentials: false   # zizmor artipacked: nenhum passo seguinte empurra
           repository: getloopscale/loopzero-contracts
           ref: ${{ steps.contracts.outputs.ref }}
           path: loopzero-contracts
@@ -357,7 +391,15 @@ jobs:
   # with it the possibility of forgetting to add a name to it.
   # ---------------------------------------------------------------------------
   tenant-isolation:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # Pula num PR de FORK, e a razao e' mecanica, nao politica: os passos abaixo
+    # usam um deploy key para buscar o sibling PRIVADO `loopzero-contracts`, e o
+    # GitHub nao entrega segredo a workflow disparado por PR de fork. Sem esta
+    # condicao o job RODA e falha no passo do deploy key — um vermelho que nao diz
+    # nada sobre a contribuicao. `ci-gate` aceita o skip por nome, so' para fork.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
     timeout-minutes: 15
 
     env:
@@ -380,6 +422,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
         with:
+          persist-credentials: false   # zizmor artipacked: nenhum passo seguinte empurra
           path: loopzero
 
       - name: Deploy key para o modulo privado
@@ -417,6 +460,7 @@ jobs:
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
         with:
+          persist-credentials: false   # zizmor artipacked: nenhum passo seguinte empurra
           repository: getloopscale/loopzero-contracts
           ref: ${{ steps.contracts.outputs.ref }}
           path: loopzero-contracts
@@ -506,3 +550,133 @@ jobs:
           set -euo pipefail
           cd loopzero/api
           go test ./tests/integration/ -count=1 -v
+
+  # ---------------------------------------------------------------------------
+  # O GATE QUE UM CONTRIBUIDOR EXTERNO REALMENTE ENCONTRA.
+  #
+  # `build-and-test` e `tenant-isolation` acima usam um deploy key para buscar o
+  # sibling PRIVADO `loopzero-contracts`. Um PR vindo de FORK nao recebe segredo
+  # nenhum — e' como o GitHub funciona, nao configuracao — entao aqueles dois jobs
+  # nao podem rodar para quem nao e' da organizacao.
+  #
+  # Este job nao usa segredo, por construcao. Medido 2026-09-16: dos 8 modulos do
+  # go.work, so' `api` e `pkg` exigem o privado. `cmd/loopzero-ops` (os 126 gates de
+  # qualidade), `operators`, `operators/api`, `infra/scripts`, `infra/tests` e
+  # `tools/...` compilam com `GOWORK=off` — verificado rodando `go build ./...`
+  # com o workspace desligado, que e' o que simula a ausencia do repo privado.
+  # ---------------------------------------------------------------------------
+  public-checks:
+    name: Public checks (sem segredos — roda em fork)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin: supply-chain; issue #233)
+        with:
+          # `quality:diff` compara contra uma base; sem historico nao ha diff.
+          fetch-depth: 0
+          persist-credentials: false   # nenhum passo abaixo empurra
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0 (SHA-pin; issue #233)
+        with:
+          go-version-file: cmd/loopzero-ops/go.mod
+          cache-dependency-path: |
+            cmd/loopzero-ops/go.sum
+            operators/go.sum
+
+      # GOWORK=off e' o ponto inteiro deste job: com o workspace ativo o Go tenta
+      # resolver `../loopzero-contracts` e falha sem o deploy key. Desligado, cada
+      # modulo independente se resolve pelo proprio go.mod.
+      - name: Build e vet dos modulos independentes
+        env:
+          GOWORK: off
+        run: |
+          set -euo pipefail
+          for m in cmd/loopzero-ops operators operators/api tools/gen-service-auth-ed25519; do
+            echo "::group::$m"
+            (cd "$m" && go build ./... && go vet ./...)
+            echo "::endgroup::"
+          done
+
+      - name: Testes dos modulos independentes
+        env:
+          GOWORK: off
+        run: |
+          set -euo pipefail
+          for m in cmd/loopzero-ops operators/api; do
+            echo "::group::test $m"
+            (cd "$m" && go test ./... -count=1)
+            echo "::endgroup::"
+          done
+
+      # Os 126 gates. Ate' hoje viviam num hook de pre-push que roda "na maquina de
+      # quem empurra, e so' la'" — o que significa que, para qualquer pessoa de fora,
+      # eles nao existiam. Aqui rodam no escopo do diff, que e' o que o PR propoe.
+      - name: Quality gates (escopo do diff)
+        # Os DOIS valores passam por `env:`. O `git fetch` abaixo interpolava
+        # `github.base_ref` direto no shell, e nome de branch e' escolhido por quem
+        # abre o PR — num fork, por um estranho. zizmor marcou template-injection
+        # (High). As tres linhas de gate ja' usavam "$BASE_REF" corretamente: o mesmo
+        # passo acertava tres vezes e errava uma, que e' o caso exato do manual.
+        env:
+          GOWORK: off
+          BASE_BRANCH: ${{ github.base_ref || 'develop' }}
+          BASE_REF: origin/${{ github.base_ref || 'develop' }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$BASE_BRANCH"
+          (cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .)
+          # `no-new-bash` NAO esta aqui, e a ausencia e' medida, nao esquecimento.
+          # Medido 2026-09-16: sai com exit 5 — "read allowlist
+          # .claude/rules/shell-scripts-allowlist.md: no such file or directory".
+          # Esse arquivo vive sob `.claude/`, que o `.gitignore:311` exclui, entao ele
+          # nao existe em clone nenhum. O gate roda na maquina de quem tem o kit
+          # instalado e em lugar nenhum mais; po-lo aqui seria um vermelho garantido
+          # no primeiro PR, dizendo nada sobre a contribuicao. Rastreado no backlog.
+          /tmp/loopzero-ops quality dangling-script-refs --base-ref "$BASE_REF" --head-ref HEAD
+          /tmp/loopzero-ops quality dangling-data-refs --base-ref "$BASE_REF" --head-ref HEAD
+
+  # ---------------------------------------------------------------------------
+  # UM check exigido, nao cinco. Duas sutilezas decidem este bloco:
+  #
+  # 1. Um check exigido que e' PULADO reporta como aprovado na protecao de branch.
+  #    Por isso `if: always()` e a asercao explicita de cada resultado abaixo.
+  # 2. `build-and-test` e `tenant-isolation` sao legitimamente pulados num PR de
+  #    fork (nao ha segredo para o modulo privado). Isso e' aceito POR NOME aqui,
+  #    nao por omissao — a diferenca entre "decidimos que pode pular" e "esquecemos
+  #    de olhar" e' exatamente esta linha.
+  # ---------------------------------------------------------------------------
+  ci-gate:
+    name: CI gate
+    needs: [public-checks, build-and-test, tenant-isolation]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Exigir os jobs verdes
+        env:
+          PUBLIC: ${{ needs.public-checks.result }}
+          PRIVATE_BUILD: ${{ needs.build-and-test.result }}
+          PRIVATE_TENANT: ${{ needs.tenant-isolation.result }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          set -euo pipefail
+          fail=0
+
+          # `public-checks` nunca pode pular: nao depende de segredo nenhum.
+          [ "$PUBLIC" = success ] || { echo "::error::public-checks is $PUBLIC"; fail=1; }
+
+          for name in PRIVATE_BUILD PRIVATE_TENANT; do
+            result="${!name}"
+            if [ "$result" = success ]; then
+              continue
+            fi
+            if [ "$result" = skipped ] && [ "$IS_FORK" = true ]; then
+              echo "::notice::$name pulado: PR de fork nao recebe o segredo do modulo privado"
+              continue
+            fi
+            echo "::error::$name is $result"
+            fail=1
+          done
+
+          exit "$fail"

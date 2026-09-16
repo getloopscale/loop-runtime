@@ -48,15 +48,20 @@ permissions:
   contents: read
 jobs:
   hygiene:
+    # O default do GitHub e' 6 HORAS: um job travado queima isso em minutos
+    # faturados e segura uma vaga de concorrencia o tempo todo.
+    timeout-minutes: 10
     # Aspas obrigatorias: um `name:` terminado em `run:` o YAML le como mapping aninhado e o workflow
     # morre em `startup_failure` — sem job algum, portanto sem sinal vermelho util.
     name: "workflows — observador do portao intacto + actionlint + SHA-pin + sem interpolacao em run:"
     # Frota Blacksmith, habilitada com a transferencia para a org `getloopscale`
     # (2026-07-30). Label LITERAL: `vars.CI_RUNNER` nao resolve no repo e o
     # fallback devolve a frota antiga em silencio (runbook do umbrella).
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false   # zizmor artipacked: nenhum passo seguinte empurra
 
       # PRIMEIRO passo, e a ordem e' deliberada. Os passos param no primeiro que
       # falha, entao um actionlint vermelho por qualquer outro motivo esconderia
