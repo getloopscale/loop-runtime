@@ -151,6 +151,54 @@ which fails both ways — an undeclared pair, or a declaration that outlived its
 
 `monitoring` / `loopzero-monitoring` are complementary (infra vs config), not overlapping.
 
+<!-- BEGIN GENERATED TABLE -->
+| Chart | Cluster(s) | Nature | Version | Conditional |
+|---|---|---|---|---|
+| `admission-policies` | cell, core | ours | — | `always` |
+| `argo-ci-namespace` | build | ours | — | `always` |
+| `argo-events` | build | ours | — | `always` |
+| `argo-events-bus` | build | ours | — | `always` |
+| `argo-rollouts` | cell | ours | — | `always` |
+| `argo-workflows` | build | upstream | 1.0.5 | `always` |
+| `argocd` | core | upstream | 7.3.11 | `always` |
+| `blackbox-exporter` | core | upstream | 9.2.0 | `always` |
+| `cert-manager` | cell, core | upstream | — | `always` |
+| `chaos-mesh` | core | ours | — | `{{ .Values \| get "installChaosMesh" false }}` |
+| `cloudflared` | cell | ours | — | `always` |
+| `cluster-issuer` | cell, secrets | ours | — | `always` |
+| `external-secrets` | cell, core | upstream | 0.14.3 | `always` |
+| `gitea` | core | upstream | 10.6.0 | `always` |
+| `harbor` | core | upstream | 1.16.2 | `{{ ne .Environment.Name "drill" }}` |
+| `k6-operator` | — | undeclared | — | `always` |
+| `keda` | cell | upstream | 2.16.1 | `always` |
+| `keda-http-addon` | cell | upstream | 0.8.0 | `{{ ne .Environment.Name "drill" }}` |
+| `loki` | build | upstream | 6.24.0 | `always` |
+| `minio` | core | upstream | 5.4.0 | `always` |
+| `monitoring` | cell, core | upstream | 3.12.1 | `{{ .Values \| get "installMetricsServer" false }}` |
+| `network-policies` | cell | ours | — | `always` |
+| `nfs-server-provisioner` | core | upstream | 1.8.0 | `always` |
+| `openbao-cert` | secrets | ours | — | `{{ .Values \| get "openbaoEnabled" false }}` |
+| `openbao-init` | secrets | ours | — | `{{ .Values \| get "openbaoEnabled" false }}` |
+| `openbao-snapshot-agent` | secrets | ours | — | `{{ .Values \| get "snapshotAgentEnabled" false }}` |
+| `opencost` | core | ours | — | `always` |
+| `ory-hydra` | core | upstream | 0.61.0 | `always` |
+| `ory-kratos` | core | upstream | 0.61.0 | `always` |
+| `otel` | core | upstream | 0.96.0 | `always` |
+| `policy-controller` | cell | upstream | 0.8.1 | `always` |
+| `postgresql` | core | upstream | 18.6.2 | `{{ .Values.inClusterPostgres \| default false }}` |
+| `promtail` | build, cell | upstream | 6.16.6 | `always` |
+| `redis` | core | upstream | 19.6.4 | `{{ ne .Environment.Name "drill" }}` |
+| `sigstore-extras` | — | undeclared | — | `always` |
+| `smoke-test` | core | ours | — | `{{ and (ne .Environment.Name "drill") (ne .Environment.Name "dev-public") (ne (.Values \| get "clusterRole" "dev") "standalone") }}` |
+| `static-assets` | cell | ours | — | `{{ ne .Environment.Name "drill" }}` |
+| `tempo` | core | upstream | 1.14.0 | `always` |
+| `loopzero-api` | core | ours | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |
+| `loopzero-cloud` | core | ours | — | `{{ and (ne .Environment.Name "drill") (ne (.Values \| get "clusterRole" "dev") "standalone") }}` |
+| `loopzero-external-secrets` | — | undeclared | — | `always` |
+| `traefik` | cell, core | upstream | 28.3.0 | `always` |
+| `velero` | core | ours | — | `always` |
+<!-- END GENERATED TABLE -->
+
 ## Infrastructure — AWS re-platform in progress
 
 CTO mandate 2026-06-17. The **L1 cloud-primitives layer** is being re-platformed

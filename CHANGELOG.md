@@ -14,6 +14,18 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `helm-topology-index --write` no longer replaces `docs/architecture.md`. It built the
+  whole document — header, table, footer — and wrote it over whatever was there, which
+  suited the dedicated file it used to own and destroyed the living document the
+  2026-09-11 consolidation made its default. It splices between its markers now, and
+  refuses an existing document that has none rather than overwriting it.
+
+- The Helm topology index is back in `docs/architecture.md`, alongside the package usage
+  matrix — the same consolidation deleted both sets of markers, and both gates had been
+  failing against a section that no longer existed. Its generated block is in English now
+  too. It indexes 43 charts and lists three under `infra/helm/` that no helmfile
+  mentions: `k6-operator`, `sigstore-extras` and `loopzero-external-secrets`.
+
 - The CLI exit-code contract is checked against the CLI again. Both subjects were declared
   absent — one because the tree moved to a sibling repository at M2, the other because
   that sibling was not checked out — and the sibling has since been cloned, so the gate

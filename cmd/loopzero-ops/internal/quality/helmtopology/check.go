@@ -77,12 +77,12 @@ const (
 type Nature string
 
 const (
-	NatureOwn      Nature = "próprio"
+	NatureOwn      Nature = "ours"
 	NatureUpstream Nature = "upstream"
 	// NatureUndeclared marks a directory under infra/helm/ that no helmfile mentions. It is
 	// listed rather than omitted (EC-6): silence would hide dead charts, and "nobody installs
 	// this" is useful information — either debt or a mistake.
-	NatureUndeclared Nature = "não declarado"
+	NatureUndeclared Nature = "undeclared"
 )
 
 // Entry is one row of the index.
@@ -292,7 +292,7 @@ func firstOr(existing, candidate string) string {
 
 func renderTable(entries []Entry) string {
 	var sb strings.Builder
-	sb.WriteString("| Chart | Cluster(s) | Natureza | Versão | Condicional |\n")
+	sb.WriteString("| Chart | Cluster(s) | Nature | Version | Conditional |\n")
 	sb.WriteString("|---|---|---|---|---|\n")
 	for _, e := range entries {
 		clusters := strings.Join(e.Clusters, ", ")
@@ -305,7 +305,7 @@ func renderTable(entries []Entry) string {
 		}
 		cond := e.Conditional
 		if cond == "" {
-			cond = "sempre"
+			cond = "always"
 		}
 		// A helmfile predicate can contain `|` — Go template pipelines are common, e.g.
 		// `{{ .Values.inClusterPostgres | default false }}`. Unescaped, markdown reads it as a
@@ -330,11 +330,54 @@ func extractBody(doc string) (string, bool) {
 }
 
 func writeDoc(full, body string) error {
-	if err := os.MkdirAll(filepath.Dir(full), 0o750); err != nil {
-		return fmt.Errorf("helm-topology: mkdir: %w", err)
+	// Splice between the markers; never replace the file.
+	//
+	// This used to build header + table + footer and write the whole document, which is
+	// right for an output nobody else touches and destructive for `docs/architecture.md`
+	// — a hand-maintained document that the 2026-09-11 consolidation made the default
+	// path, and that `pkg-usage-matrix` also writes into through its own marker pair.
+	// Measured 2026-09-16: one --write took it from 217 lines to 78 and deleted the
+	// sibling's section. The gate printed "run --write and commit it" on every failing
+	// run, so the remedy it named was the thing that destroyed the file.
+	raw, err := os.ReadFile(full) // #nosec G304 -- path is the configured doc under the repo root
+	if os.IsNotExist(err) {
+		// Nothing to preserve: the gate creates the document it is pointed at when that
+		// document does not exist, markers included, and owns it from then on. Only an
+		// EXISTING document is somebody else's, and that is the one this must not replace.
+		if mkErr := os.MkdirAll(filepath.Dir(full), 0o750); mkErr != nil {
+			return fmt.Errorf("helm-topology: mkdir: %w", mkErr)
+		}
+		fresh := docHeader() + bodyStart + "\n" + body + bodyEnd + "\n" + docFooter()
+		if wErr := os.WriteFile(full, []byte(fresh), 0o600); wErr != nil {
+			return fmt.Errorf("helm-topology: write %s: %w", full, wErr)
+		}
+		return nil
 	}
-	doc := docHeader() + bodyStart + "\n" + body + bodyEnd + "\n" + docFooter()
-	if err := os.WriteFile(full, []byte(doc), 0o600); err != nil {
+	if err != nil {
+		return fmt.Errorf("helm-topology: read %s: %w", full, err)
+	}
+	doc := string(raw)
+
+	startIdx := strings.Index(doc, bodyStart)
+	endIdx := strings.Index(doc, bodyEnd)
+	switch {
+	case startIdx < 0:
+		return fmt.Errorf("helm-topology: %s has no %s marker — add the marker pair where the table belongs; this gate does not own the document", full, bodyStart)
+	case endIdx < 0:
+		return fmt.Errorf("helm-topology: %s has no %s marker", full, bodyEnd)
+	case endIdx < startIdx:
+		return fmt.Errorf("helm-topology: %s has the markers inverted (%s precedes %s)", full, bodyEnd, bodyStart)
+	}
+
+	var sb strings.Builder
+	sb.WriteString(doc[:startIdx])
+	sb.WriteString(bodyStart)
+	sb.WriteString("\n")
+	sb.WriteString(body)
+	sb.WriteString(bodyEnd)
+	sb.WriteString(doc[endIdx+len(bodyEnd):])
+
+	if err := os.WriteFile(full, []byte(sb.String()), 0o600); err != nil {
 		return fmt.Errorf("helm-topology: write %s: %w", full, err)
 	}
 	return nil
@@ -349,23 +392,25 @@ title: "Topologia Helm — o que roda em qual cluster"
 # Topologia Helm
 
 > **Documento gerado. Não edite à mão** — a próxima execução do gate sobrescreve.
-> Fonte: ` + "`infra/helmfile/*.helmfile.yaml.gotmpl`" + `. Regenerar:
+> Source: ` + "`infra/helmfile/*.helmfile.yaml.gotmpl`" + `. Regenerate with:
 > ` + "`loopzero-ops quality helm-topology-index --write`" + `
 
-Responde "em qual cluster este chart roda?" sem abrir os helmfiles. Cada linha vem da
-declaração da release, não de convenção de pasta.
+Answers "which cluster does this chart run on?" without opening the helmfiles. Every row
+comes from the release declaration, not from a folder convention.
 
-**Como ler as colunas**
+**How to read the columns**
 
-- **Natureza** — vem da *forma de declaração*: ` + "`chart: ../helm/X`" + ` é chart nosso;
-  chart remoto com ` + "`values:`" + ` local é configuração de upstream. ` + "`não declarado`" + `
-  é diretório que nenhum helmfile menciona — dívida ou engano, nunca omitido daqui.
-- **Condicional** — o predicado ` + "`installed:`" + ` **literal**, não avaliado. ` + "`sempre`" + `
-  significa incondicional. Um predicado aqui quer dizer que a release existe em alguns
-  ambientes e não em outros: ` + "`postgresql`" + ` roda no mgmt em standalone e não em prod.
+- **Nature** — taken from the *form of the declaration*: ` + "`chart: ../helm/X`" + ` is a
+  chart of ours; a remote chart with local ` + "`values:`" + ` is configuration of an
+  upstream one. ` + "`undeclared`" + ` is a directory no helmfile mentions — debt or a
+  mistake, and never omitted from here.
+- **Conditional** — the ` + "`installed:`" + ` predicate **literally**, not evaluated.
+  ` + "`always`" + ` means unconditional. A predicate here means the release exists in some
+  environments and not others: ` + "`postgresql`" + ` runs on core in standalone and not in
+  production.
 
-**Escopo:** só ` + "`infra/helm/`" + ` (bootstrap via Helmfile L2). Os charts publicados em
-` + "`charts/`" + `, consumidos por ArgoCD (L3), não estão aqui.
+**Scope:** ` + "`infra/helm/`" + ` only (bootstrap via Helmfile L2). The charts published in
+` + "`charts/`" + `, consumed by ArgoCD (L3), are not here.
 
 `
 }
