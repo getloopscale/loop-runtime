@@ -579,7 +579,16 @@ tasks:
         curl -sf http://localhost:{{.PROMETHEUS_PORT}}/api/v1/alerts | jq -r '.data.alerts[] | "\(.labels.alertname)\t\(.state)\t\(.labels.severity)"' 2>/dev/null | column -t || echo "No alerts or Prometheus not reachable"
         echo ""
         echo "=== Grafana Dashboards ==="
-        curl -sf -u REDACTED_SECRET_056 http://localhost:{{.GRAFANA_PORT}}/api/search?type=dash-db | jq -r '.[].title' 2>/dev/null || echo "Grafana not reachable at localhost:{{.GRAFANA_PORT}}"
+        # The chart leaves adminPassword empty, so Grafana generates one and keeps it in
+        # the Secret. Read it at call time: a literal here goes stale the moment the
+        # release is reinstalled, which is how the previous one came to be wrong.
+        GRAFANA_PASS=$(kubectl --context {{.CORE_CONTEXT}} -n monitoring get secret \
+          monitoring-grafana -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d)
+        if [ -z "$GRAFANA_PASS" ]; then
+          echo "  (not checked: could not read the Grafana admin secret in ns/monitoring)"
+        else
+          curl -sf -u "admin:$GRAFANA_PASS" http://localhost:{{.GRAFANA_PORT}}/api/search?type=dash-db | jq -r '.[] | "  \(.title)"' 2>/dev/null || echo "  (none)"
+        fi
 
   # =========================================================================
   # MEET-055: Post-Stress-Test Operational Tasks

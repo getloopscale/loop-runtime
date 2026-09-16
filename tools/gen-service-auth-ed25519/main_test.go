@@ -94,7 +94,7 @@ func TestGenerate_MarkerIsDeterministicSHA256Prefix(t *testing.T) {
 func TestGenerate_RunsAreNotDeterministic(t *testing.T) {
 	a, _ := generate()
 	b, _ := generate()
-	if a.PrivateKeyB64 == REDACTED_SECRET_060 {
+	if a.PrivateKeyB64 == b.PrivateKeyB64 {
 		t.Fatal("two consecutive generate() calls produced the same private key — randomness broken")
 	}
 	if a.PublicKeyB64 == b.PublicKeyB64 {

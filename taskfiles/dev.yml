@@ -361,7 +361,8 @@ tasks:
         else
           echo "Prometheus not reachable at localhost:{{.PROMETHEUS_PORT}}"
         fi
-        if curl -sf -u REDACTED_SECRET_056 http://localhost:{{.GRAFANA_PORT}}/api/health >/dev/null 2>&1; then
+        # Grafana /api/health is unauthenticated by design — no credential needed.
+          if curl -sf http://localhost:{{.GRAFANA_PORT}}/api/health >/dev/null 2>&1; then
           echo "Grafana: reachable"
         else
           echo "Grafana: not reachable at localhost:{{.GRAFANA_PORT}}"

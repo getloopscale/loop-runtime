@@ -14,6 +14,12 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Three places where the secret-redaction pass replaced something that was not a secret.
+  `tools/gen-service-auth-ed25519` stopped compiling because the replacement landed on a
+  struct field access inside the test that proves keypair generation is random, and two
+  `task` targets lost a Grafana credential without gaining a way to obtain one. The
+  remaining nine occurrences are in comments and are tracked in #367.
+
 - The package usage matrix is back in `docs/architecture.md`. The 2026-09-11
   consolidation deleted the document that carried its markers, so the gate had been
   failing against a section that no longer existed anywhere. The generated block is also
