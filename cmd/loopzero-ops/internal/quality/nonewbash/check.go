@@ -19,7 +19,9 @@ package nonewbash
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,7 +51,23 @@ func Check(cfg Config) (*Outcome, error) {
 	// 1. Read allowlist
 	allowlistFull := filepath.Join(cfg.RepoRoot, cfg.AllowlistPath)
 	allowlistBytes, err := os.ReadFile(allowlistFull)
-	if err != nil {
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		// AN ABSENT ALLOWLIST DECLARES NO EXEMPTIONS. It is not an infrastructure
+		// failure, and the difference decides whether this gate can run at all.
+		//
+		// The allowlist lived under `.claude/`, which `3d4075ca3` (2026-09-08)
+		// removed from tracking — so it exists in no clone, on no runner, and for
+		// no contributor. Measured 2026-09-16: this read exited 5 and blocked the
+		// repository's own pre-push hook.
+		//
+		// Absence reads as "nothing is exempt", the STRICTEST answer available and
+		// the one this gate is for: refusing new shell scripts. A gate whose
+		// default exempts nothing cannot be weakened by losing its file.
+		allowlistBytes = nil
+	case err != nil:
+		// Present and unreadable is a different claim, and stays fatal: calling it
+		// "no exemptions" would silently discard exemptions somebody wrote.
 		return nil, fmt.Errorf("read allowlist %s: %w", cfg.AllowlistPath, err)
 	}
 	allowed, err := parseAllowlist(string(allowlistBytes))

@@ -12,6 +12,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routesacyclic"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/silentsurface"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/statuswritercontract"
+	iofs "io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -189,7 +190,19 @@ func runUnhomedLogic(args []string) int {
 		return 1
 	}
 	data, err := os.ReadFile(*allowlist) // #nosec G304 -- repo-internal allowlist path
-	if err != nil {
+	switch {
+	case errors.Is(err, iofs.ErrNotExist):
+		// AN ABSENT ALLOWLIST DECLARES NO EXEMPTIONS — the same contract
+		// `internal/quality/nonewbash` states, and for the same measured reason:
+		// this allowlist lives under `.claude/`, which `3d4075ca3` (2026-09-08)
+		// removed from tracking, so it exists in no clone and on no runner.
+		// Measured 2026-09-16, this read returned 5 and blocked a push.
+		//
+		// Nothing exempt is the strictest reading, so losing the file cannot
+		// weaken the gate. A file that is PRESENT and unreadable stays fatal.
+		fmt.Fprintf(os.Stderr, "unhomed-logic: no allowlist at %s — nothing is exempt\n", *allowlist)
+		data = nil
+	case err != nil:
 		fmt.Fprintf(os.Stderr, "unhomed-logic: read allowlist: %v\n", err)
 		return 5
 	}
