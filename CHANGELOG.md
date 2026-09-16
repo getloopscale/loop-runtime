@@ -12,6 +12,14 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- The five GitHub workflows are written in English. They carried 104 lines of Portuguese —
+  comments, step names and error messages — in a repository about to be public, where the
+  people who read a workflow to understand a failing check are exactly the people who do
+  not speak it. Nothing about what they do changed; `actionlint` is clean and `zizmor`
+  reports 0 high and 0 medium on the translated files.
+
 ### Fixed
 
 - `cluster-rename-guard` reports on the rename again, in a second instead of six minutes.
