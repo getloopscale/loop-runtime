@@ -14,6 +14,20 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The local development edge no longer hardcodes one machine's home directory. The dashboard
+  root in `infra/local/Caddyfile` reads `{$LOOPZERO_DASHBOARD_DIST:../loopzero-cloud/dashboard/dist}`,
+  so the file works from any checkout instead of exactly one, and the runbook naming that path
+  was corrected in the same change.
+- Four tests named documentation paths that the six-document consolidation retired. Three were
+  repointed at where the content actually lives; the fourth is retired, because its subject left
+  with the dated audit trail and there is nothing to repoint at.
+- Thirteen test helpers located the repository root by looking for a file this repository
+  deleted, and reported the search rather than the cause.
+- The Tiltfile named the pre-rename organisation and a four-minor-versions-old release of the
+  contracts module that `api/go.mod` and `pkg/go.mod` already require.
+
+### Fixed
+
 - The shell-script allowlist is versioned again, at `infra/quality/shell-scripts-allowlist.md`.
   It lived under `.claude/`, which is an installed dependency and is not tracked, so six
   quality gates read a file that existed on one machine and in no clone — four of them
