@@ -177,13 +177,30 @@ func TestT08_OperatorCutoverAlertsLoaded(t *testing.T) {
 		t.Fatalf("prometheusrule missing: %v", err)
 	}
 	text := string(data)
-	for _, alert := range []string{
-		"OperatorRestartRate24h",                 // C15
-		"OperatorReconcileLatencyPostCutover24h", // T2.1 paired
-		"ZeroReadyOperatorWindow",                // C6 alert pair
+
+	// `ZeroReadyOperatorWindow` is the one alert this file still carries, and the commit
+	// that retired the other two says why it was kept: zero ready operators is a condition
+	// that does not expire with a cutover.
+	if !strings.Contains(text, "ZeroReadyOperatorWindow") {
+		t.Error("missing alert: ZeroReadyOperatorWindow")
+	}
+
+	// The other two were RETIRED deliberately by `49b52c0a5` (2026-09-07), which recorded
+	// the evidence: both declare themselves "24h post-cutover" watchers of CHG-2026-04-30,
+	// and the operator split is complete — so they watch for a window that has closed.
+	//
+	// This test asserted their PRESENCE until 2026-09-16 and had been red since that
+	// commit, which is the shape worth naming: the chart moved with a recorded decision
+	// and the test kept asserting the state before it. Asserting their ABSENCE is the
+	// stronger form — it pins the decision, so a retired alert cannot drift back in
+	// without somebody re-opening the reasoning that retired it.
+	for _, retired := range []string{
+		"OperatorRestartRate24h",
+		"OperatorReconcileLatencyPostCutover24h",
 	} {
-		if !strings.Contains(text, alert) {
-			t.Errorf("missing alert: %s", alert)
+		if strings.Contains(text, retired) {
+			t.Errorf("%s was retired by 49b52c0a5 as a closed-window watcher and is back; "+
+				"re-open that reasoning before restoring it", retired)
 		}
 	}
 }

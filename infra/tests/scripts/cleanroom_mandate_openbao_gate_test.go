@@ -31,11 +31,10 @@ import (
 // traceable. It does NOT execute any tooling — purely doc body
 // inspection.
 func TestCleanroomMandateOpenBaoSponsorJUNTOSGateDocumented(t *testing.T) {
-	mandatePath := repoFile(t, ".claude", "rules", "cleanroom-up-live-test-mandate.md")
-	runbookPath := repoFile(t, "docs", "operations", "openbao-init-runbook.md")
-
-	mandate := readFileText(t, mandatePath)
-	runbook := readFileText(t, runbookPath)
+	// Both documents left the worktree — the mandate with `3d4075ca3`, the runbook with the
+	// docs consolidation. What this test asserts is what they SAY, which history holds.
+	mandate := readDocument(t, "3d4075ca3~1", ".claude", "rules", "cleanroom-up-live-test-mandate.md")
+	runbook := readDocument(t, "19b8c6eaa~1", "docs", "operations", "openbao-init-runbook.md")
 
 	// T1. Mandate body MUST reference Sub-step 2.5 as the canonical
 	// header for the new gate. Future refactor that drops or renames

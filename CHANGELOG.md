@@ -119,6 +119,12 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Three more tests that had stopped matching the repository. Two read documents the
+  consolidation moved, and now read history through a shared helper that tries disk first
+  and fails loudly when neither answers. The third asserted two operator alerts that were
+  retired on purpose in September; it asserts their absence now, so a closed-window watcher
+  cannot drift back without someone re-opening the reasoning that retired it.
+
 - A second chart test read a rule file deleted from the worktree. Like the guard beside it,
   it reads git history when the document is not on disk — the assertion is about what the
   rule SAID, and history holds that exactly.

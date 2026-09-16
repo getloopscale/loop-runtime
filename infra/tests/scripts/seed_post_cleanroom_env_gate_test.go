@@ -23,8 +23,8 @@ import (
 // (where Kratos + Hydra use localhost URLs via Tilt port-forward). Running
 // the master seed in default standalone-multi env produced:
 //
-//   [patch-kratos-dev-public] ERROR: LOOPZERO_GITHUB_CLIENT_ID not set in env,
-//     <repo>/.env, or ~/.loopzero/dev-credentials.json
+//	[patch-kratos-dev-public] ERROR: LOOPZERO_GITHUB_CLIENT_ID not set in env,
+//	  <repo>/.env, or ~/.loopzero/dev-credentials.json
 //
 // + cascading FAILs in Steps 3 (admin), 9 (tenant-fixture), 11 (connect-
 // fixture) because they depend on the dev-public-shaped Kratos config.
