@@ -46,6 +46,14 @@ on:
   workflow_dispatch: {}
 permissions:
   contents: read
+
+# Todo push numa PR aberta paga uma rodada inteira de trabalho que ninguem vai ler.
+# Este workflow so' verifica arquivos, entao cancelar o superado nao interrompe nada
+# a meio caminho — ao contrario de um deploy, onde `cancel-in-progress` e' o erro.
+concurrency:
+  group: hygiene-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   hygiene:
     # O default do GitHub e' 6 HORAS: um job travado queima isso em minutos

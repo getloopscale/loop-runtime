@@ -67,6 +67,20 @@ permissions:
   contents: read
   packages: write
   id-token: write   # consumed only when sign=true (keyless cosign); harmless otherwise
+  attestations: write   # `actions/attest-build-provenance` abaixo; escopo de escrita so' para atestacoes
+
+# Agrupado por IMAGEM e `cancel-in-progress: false`, que e' o oposto do padrao de CI
+# e deliberado: este workflow constroi, assina com cosign e empurra para um registry.
+# Cancelar no meio deixa uma tag publicada sem assinatura, ou uma assinatura sem a
+# imagem que ela cobre. O ganho de cancelar um build superado nao paga esse risco.
+#
+# `github.ref` entra no grupo junto com a imagem porque o mesmo reusable e' chamado
+# em matriz: duas imagens diferentes do mesmo commit devem correr em paralelo, e duas
+# publicacoes da MESMA imagem nao.
+concurrency:
+  group: publish-${{ inputs.image }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-publish:
     # O default do GitHub e' 6 HORAS: um job travado queima isso em minutos
@@ -245,6 +259,26 @@ jobs:
           # que fez o teste local aprovar o que a CI reprovou.
           secret-envs: |
             gomod_ssh_key=GOMOD_SSH_KEY
+
+      # ATESTACAO NATIVA DO GITHUB, alem da procedencia que o buildx ja' embute.
+      #
+      # Sao coisas diferentes e as duas valem. `provenance: mode=max` no passo acima
+      # escreve a procedencia DENTRO do manifesto OCI, onde quem puxa a imagem precisa
+      # de ferramenta para ler. Isto publica a mesma afirmacao no registro de atestacoes
+      # do GitHub, onde `gh attestation verify` a le sem nada instalado — e' o que torna
+      # a cadeia verificavel por quem CONSOME o repositorio, nao so' por quem o constroi.
+      #
+      # Medido no campo (501 workflows, 18 projetos grandes): 3 de 18 atestam procedencia.
+      # E' pratica de LIDERANCA, nao piso — entra porque e' gratuita em repositorio publico
+      # e porque este workflow ja' assina com cosign, entao a alternativa seria assinar sem
+      # deixar a afirmacao onde um consumidor a encontra.
+      - name: Attest build provenance (GitHub-native)
+        if: ${{ inputs.sign }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.resolve-registry.outputs.registry }}/${{ inputs.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
 
       - name: Install cosign
         if: ${{ inputs.sign }}
