@@ -14,6 +14,13 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The `clusterimagepolicy-mode` gate can be satisfied again. It demanded a recorded
+  sign-off before admission control may reject unsigned images, and searched three
+  directories that do not exist — so no action could pass it, while the remedy it printed
+  named the first of the three. It reads `docs/decisions.md` first now, and the deny-flip
+  decision is recorded there with its scope: enforce in clusters we own, warn in the
+  chart a self-hoster installs.
+
 - `helm-topology-index --write` no longer replaces `docs/architecture.md`. It built the
   whole document — header, table, footer — and wrote it over whatever was there, which
   suited the dedicated file it used to own and destroyed the living document the

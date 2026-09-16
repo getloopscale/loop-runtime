@@ -21,9 +21,13 @@ import (
 // Default locations relative to repo root.
 const (
 	DefaultValuesFile = "infra/helm/admission-policies/values.yaml"
-	DefaultADRDir     = ".claude/knowledge-base/decisions"
-	DefaultMeetingDir = ".claude/knowledge-base/meetings"
-	DefaultLegacyADR  = "docs/meetings/adr"
+	// DefaultDecisionsDoc is where a decision in THIS repository is written: one of the
+	// six living documents the 2026-09-11 consolidation left, and versioned, so it reaches
+	// whoever clones. Checked first, ahead of the three directories below.
+	DefaultDecisionsDoc = "docs/decisions.md"
+	DefaultADRDir       = ".claude/knowledge-base/decisions"
+	DefaultMeetingDir   = ".claude/knowledge-base/meetings"
+	DefaultLegacyADR    = "docs/meetings/adr"
 )
 
 var (
@@ -38,11 +42,12 @@ var (
 
 // Config drives the gate.
 type Config struct {
-	Root       string
-	ValuesFile string // default DefaultValuesFile
-	ADRDir     string // default DefaultADRDir
-	MeetingDir string // default DefaultMeetingDir
-	LegacyADR  string // default DefaultLegacyADR
+	Root         string
+	DecisionsDoc string // default DefaultDecisionsDoc
+	ValuesFile   string // default DefaultValuesFile
+	ADRDir       string // default DefaultADRDir
+	MeetingDir   string // default DefaultMeetingDir
+	LegacyADR    string // default DefaultLegacyADR
 }
 
 // Outcome captures the result.
@@ -59,6 +64,7 @@ func Check(cfg Config) *Outcome {
 		root = "."
 	}
 	valuesFile := orDefault(cfg.ValuesFile, DefaultValuesFile)
+	decisionsDoc := orDefault(cfg.DecisionsDoc, DefaultDecisionsDoc)
 	adrDir := orDefault(cfg.ADRDir, DefaultADRDir)
 	meetingDir := orDefault(cfg.MeetingDir, DefaultMeetingDir)
 	legacyADR := orDefault(cfg.LegacyADR, DefaultLegacyADR)
@@ -75,6 +81,13 @@ func Check(cfg Config) *Outcome {
 	case mode == "warn":
 		return &Outcome{Pass: true, Mode: mode, Reason: "mode is 'warn' (Sprint 6 default; Sprint 9 cutover pending)"}
 	case mode == "enforce":
+		// The versioned document first. The three directories below are kept as fallbacks
+		// for an installation that still has them; measured 2026-09-16, none of the three
+		// exists here, which made this gate unsatisfiable — every path it could accept was
+		// absent, so no operator action could have satisfied it.
+		if fileMatches(filepath.Join(root, decisionsDoc), adrKeywordRe) {
+			return &Outcome{Pass: true, Mode: mode, Reason: "mode 'enforce' with sign-off in " + decisionsDoc}
+		}
 		if anyMDMatches(filepath.Join(root, adrDir), adrKeywordRe) {
 			return &Outcome{Pass: true, Mode: mode, Reason: "mode 'enforce' with ADR sign-off (knowledge-base/decisions)"}
 		}
@@ -85,10 +98,21 @@ func Check(cfg Config) *Outcome {
 			return &Outcome{Pass: true, Mode: mode, Reason: "mode 'enforce' with legacy ADR sign-off (docs/meetings/adr)"}
 		}
 		return &Outcome{Pass: false, Mode: mode,
-			Reason: "mode 'enforce' but no ADR/MEET record references the deny-flip cutover"}
+			Reason: "mode 'enforce' but no record references the deny-flip cutover — write it in " + decisionsDoc}
 	default:
 		return &Outcome{Pass: false, Mode: mode, Reason: "mode must be 'warn' or 'enforce'"}
 	}
+}
+
+// fileMatches reports whether a single file exists and matches re. Distinct from
+// anyMDMatches, which walks a directory: a decision here lives in one document, not in a
+// directory of one-decision files.
+func fileMatches(path string, re *regexp.Regexp) bool {
+	data, err := os.ReadFile(path) // #nosec G304 -- path is the configured doc under the repo root
+	if err != nil {
+		return false
+	}
+	return re.Match(data)
 }
 
 // extractMode returns the mode value inside the clusterImagePolicy: block, or "".

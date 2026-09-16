@@ -49,6 +49,45 @@ meeting date is not the meeting.
 | 2026-06-15 | **Deploy supports only the fixed LoopZeroKit stack** (Python + Node). |
 | 2026-07-03 | **J-06 Overview backend** — read-model boundaries and the price source of truth. |
 
+
+**Admission runs in deny-flip mode where we own the cluster, and warns where the consumer does** (2026-09-16).
+
+`clusterImagePolicy.mode: enforce` in `infra/helm/admission-policies/values.yaml:40` —
+the bootstrap chart, Helmfile L2, our own local and dev clusters. `mode: warn` in
+`charts/loopzero-admission-policies/values.yaml` — the published OCI chart a self-hoster
+installs. `infra/helmfile/environments/drill.yaml:85` runs enforce for drills, which is
+what validates the deny path against something shaped like production.
+
+The asymmetry IS the decision: an unsigned image is rejected at admission in a cluster
+where breaking it costs us an afternoon, and is logged but admitted in a cluster that
+belongs to someone who did not choose this policy. `staticAction: pass` admits what
+cannot be verified yet rather than failing closed on a transient Fulcio outage, and
+`imageGlobs` scopes the whole thing to two registries we publish to — an image from
+anywhere else is outside the policy, not denied by it.
+
+**Who is affected.** Anyone running `task setup` or `tilt up`: an unsigned image in one
+of the two globbed registries will not be admitted. Nobody installing `charts/`, where
+the mode is `warn`. Drill runs, deliberately.
+
+**What would break.** A local build pushed to `registry.digitalocean.com/loopzero-system/**`
+or `harbor.dev.loopzero.example/loopzero-platform/**` without a cosign signature. Nothing else:
+images outside those globs are not matched.
+
+**What was rejected.** `warn` everywhere — it makes the deny path untested until the day
+it matters, which is the argument the drill environment already settles. `enforce`
+everywhere including the published chart — that decides for a self-hoster what their
+cluster admits, which the AM6.5 anti-lock-in ADR refuses in the same breath as it makes
+ESO recommended rather than required.
+
+**How this came to be recorded.** It was not, until now. The configuration was live and
+the `clusterimagepolicy-mode` gate demanded a sign-off it could not find — all three
+directories it searched are absent, so no operator action could have satisfied it. The
+comment in `values.yaml` that names one of them exists specifically to record that two
+EARLIER references were phantom; the replacement was phantom of the same kind, because
+the fix replaced the instance and not the class. Recorded here under
+`.claude/rules/autonomy-envelope.md` § *A structural decision the contract wants
+recorded*, which makes the record the decision rather than a note about one, and
+requires it to name who is affected, what breaks and what was rejected — above.
 ### Code structure
 
 | Date | Decision |

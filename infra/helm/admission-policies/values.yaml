@@ -28,12 +28,18 @@ clusterImagePolicy:
   # (prod.yaml) retains `policyMode: warn` until Sprint 9 readiness
   # review delivers cosign keyless + 7-day dual-signing window.
   #
-  # Mode flip is gated by the `clusterimagepolicy-mode` quality gate, which
-  # requires an ADR signing the deny-flip. That ADR is
-  # .claude/knowledge-base/decisions/2026-08-12-clusterimagepolicy-deny-flip.md
-  # (B-045). The two references that stood here before — `ADR-0050` and
-  # `infra/scripts/check_clusterimagepolicy_mode.sh` — did not exist; measured
-  # 2026-08-12, same class as the phantom ADR-0024 of B-052.
+  # Mode flip is gated by the `clusterimagepolicy-mode` quality gate, which requires a
+  # recorded sign-off for the deny-flip. It is in `docs/decisions.md` § Deploy model —
+  # versioned, so it reaches whoever clones this repository.
+  #
+  # This comment is on its THIRD citation, and the first two taught the lesson the third
+  # ignored. `ADR-0050` and `infra/scripts/check_clusterimagepolicy_mode.sh` were found
+  # phantom on 2026-08-12 and replaced by a path under `.claude/knowledge-base/`, which
+  # was phantom in turn — that tree does not exist, and `.claude/` is gitignored, so even
+  # a file written there would have reached nobody. Three fixes, one class: a citation
+  # into something that does not travel. Measured 2026-09-16, when the gate was found
+  # unsatisfiable — all three directories it searched were absent, so no operator action
+  # could have passed it.
   #
   # warn    — log audit, admit
   # enforce — reject unsigned images (current default — local + dev)
