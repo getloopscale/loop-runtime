@@ -12,6 +12,16 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The records-tree gate named the root that `rules/records-location.md` retired on
+  2026-09-09, so it began failing the moment the last file left the old path — reporting
+  that it could not find the tree it governs, which is exactly what it should do when
+  pointed at the right one.
+- Two more citations survived the six-document consolidation only as names: the OpenBao
+  transit cutover procedure, which the `loopzero-api` chart had stopped citing entirely, and
+  the runbook needle that checked for it.
+
 ### Added
 
 - Build provenance is attested to GitHub's native attestation registry, so `gh attestation

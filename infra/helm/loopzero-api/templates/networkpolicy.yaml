@@ -3,6 +3,11 @@ T3.3 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 — egress
 NetworkPolicy scoped to loopzero-api pods that allows TCP/8200 ONLY to the
 openbao pod(s) in the secrets-system namespace.
 
+Cutover procedure: docs/runbooks.md, `Transit cutover` — the longest in the set,
+600+ lines, and worth reading in full before starting. It was
+`openbao-transit-cutover-runbook.md` until the six-document consolidation; the
+citation left with the file and this comment is where it belongs.
+
 NetworkPolicy operates at L3/L4; path-level enforcement (only
 /v1/transit/{encrypt,decrypt,keys}/loopzero-tenants/*) is delegated to the
 AppRole policy (per D4 ADR per-tenant key isolation). The L4 restriction

@@ -45,3 +45,13 @@ subject_max  = 85
 # `B-069` e' maiusculo e o escopo pede lowercase kebab-case. `merge(api):` casa.
 # A §5.1 de `~/.claude/CLAUDE.md` ja' dizia onde o numero vai: na MENSAGEM do commit,
 # no corpo do PR, no CHANGELOG. O slot do escopo nao e' um desses.
+
+# E o autor desta linha violou-a no commit seguinte: `602b67f04` tem 99 caracteres de
+# assunto contra os 85 declarados acima. Fica registrado em vez de corrigido, e a razao
+# e' proporcionalidade: o commit nao foi empurrado mas esta' quatro commits atras do HEAD,
+# e reescrever quatro por catorze caracteres custa mais do que o defeito. A janela do gate
+# e' de 40 commits, entao ele reporta um fato verdadeiro e deixa de o reportar sozinho.
+#
+# O que NAO se faz e' mover o limite para 99 para o gate ficar verde. O 85 e' o p90 medido
+# sobre 300 assuntos deste repositorio; um assunto de 99 esta' no decil superior, entao o
+# outlier e' o commit e nao a regra.

@@ -100,7 +100,10 @@ func Check(cfg Config) (Outcome, error) {
 
 	// B — comment block cites plan + runbook
 	assertContains("B1 chart comment cites plan 2026-06-10-j22-openbao-transit-eso-sync", "2026-06-10-j22-openbao-transit-eso-sync")
-	assertContains("B2 chart comment points at the cutover runbook", "openbao-transit-cutover-runbook.md")
+	// O needle era `openbao-transit-cutover-runbook.md`, consolidado em `docs/runbooks.md`
+	// (secao `Transit cutover`). Exigir um nome de arquivo apagado pede ao chart que aponte
+	// para o que ninguem pode abrir; este exige o caminho que um leitor segue hoje.
+	assertContains("B2 chart comment points at the cutover runbook", "docs/runbooks.md")
 
 	// C — anti-hardcode gate: no inline `value:` following OPENBAO_VAULT_SECRET_ID
 	if inlineValueRE.MatchString(rendered) {

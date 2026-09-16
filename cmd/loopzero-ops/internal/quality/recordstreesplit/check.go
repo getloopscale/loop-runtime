@@ -47,7 +47,18 @@ import (
 )
 
 // DefaultLiveDir is the canonical records tree, per rules/records-location.md.
-const DefaultLiveDir = ".claude/records"
+//
+// Era `.claude/records` ate' 2026-09-09, quando aquela regra moveu a raiz de escrita
+// para `<project>/.squad/` — e a razao dela e' a mesma que esta constante serve: um
+// projeto nao deve partilhar diretorio com uma dependencia instalada, porque `.claude/`
+// e' gitignored e substituido inteiro pelo proximo install, entao um registro escrito
+// la' nao alcanca quem clona e morre na proxima atualizacao.
+//
+// A constante ficou apontando para a raiz aposentada. Medido 2026-09-16, depois de o
+// ultimo arquivo sair de `.claude/records/`: o diretorio deixou de existir e este gate
+// passou a falhar por nao encontrar a arvore que ele governa — que e' exatamente o que
+// o comentario do teste diz que deve acontecer, so' que apontado para o lugar errado.
+const DefaultLiveDir = ".squad/records"
 
 // DefaultArchiveDir is the tree retired on 2026-09-03 and frozen by this gate.
 const DefaultArchiveDir = ".claude/knowledge-base"
