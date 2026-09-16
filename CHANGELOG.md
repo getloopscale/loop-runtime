@@ -14,6 +14,14 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The pre-push quality gates ask the convention check about what the push introduces,
+  not about the last forty commits. Grading commits already on the remote made every
+  push fail on violations no amend could reach, and the only remedy the arithmetic
+  allowed — more commits — was the thing being refused. The standalone audit keeps the
+  forty-commit window, where grading history is the question being asked.
+
+### Fixed
+
 - The records-tree gate named the root that `rules/records-location.md` retired on
   2026-09-09, so it began failing the moment the last file left the old path — reporting
   that it could not find the tree it governs, which is exactly what it should do when

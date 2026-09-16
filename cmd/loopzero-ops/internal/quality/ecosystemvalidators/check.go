@@ -48,6 +48,21 @@ var ErrValidatorsMissing = errors.New("os validadores do ecossistema não estão
 type Validator struct {
 	Name string
 	Rel  string
+	// Args sao os argumentos passados ao script, e existem porque um deles tem
+	// DUAS perguntas legitimas e o chamador decide qual esta a fazer.
+	//
+	// `verify_ecosystem.py` por omissao julga os ultimos 40 commits, que e' a
+	// pergunta certa para uma auditoria avulsa: o repositorio segue as suas
+	// convencoes? Este pacote corre na cadeia
+	// `.git/hooks/pre-push` -> `task quality:gates` -> aqui, e a pergunta ai e'
+	// outra: este push pode entrar? Ai so' contam as violacoes que quem empurra
+	// ainda consegue consertar.
+	//
+	// Medido 2026-09-16: com `-40`, tres dos quatro achados ja' estavam em
+	// `origin/workspace` e os dois mais proximos sairiam da janela em 11 e 13
+	// commits — que nao podiam acontecer, porque o gate recusava os commits que
+	// moveriam a janela. Cada peca estava certa e juntas eram um impasse.
+	Args []string
 }
 
 // DefaultValidators are the two the change protocol names.
@@ -61,7 +76,7 @@ type Validator struct {
 // files that were moved deliberately.
 var DefaultValidators = []Validator{
 	{Name: "check_xrefs", Rel: "mechanisms/gates/check_xrefs.py"},
-	{Name: "verify_ecosystem", Rel: "mechanisms/gates/verify_ecosystem.py"},
+	{Name: "verify_ecosystem", Rel: "mechanisms/gates/verify_ecosystem.py", Args: []string{"--introduced"}},
 }
 
 // Result is one validator's outcome.
@@ -151,7 +166,7 @@ func Check(cfg Config) (Outcome, error) {
 		if _, err := os.Stat(script); err != nil {
 			return out, fmt.Errorf("%w: %s", ErrValidatorsMissing, script)
 		}
-		out.Results = append(out.Results, run(cfg.RepoRoot, script, v.Name, cfg.Timeout))
+		out.Results = append(out.Results, run(cfg.RepoRoot, script, v.Name, v.Args, cfg.Timeout))
 	}
 	if len(out.Failed()) > 0 {
 		return out, ErrValidatorFailed
@@ -159,12 +174,12 @@ func Check(cfg Config) (Outcome, error) {
 	return out, nil
 }
 
-func run(root, script, name string, timeout time.Duration) Result {
+func run(root, script, name string, args []string, timeout time.Duration) Result {
 	// G204: o caminho não vem de entrada do usuário. Ele é `DefaultValidators`
 	// (constantes do pacote) juntado à raiz resolvida, e `Check` já provou que o
 	// arquivo existe antes de chegar aqui. O `Validators` configurável existe para
 	// os testes montarem uma árvore própria.
-	cmd := exec.Command("python3", script) //nolint:gosec // caminho de constante do pacote, não de entrada
+	cmd := exec.Command("python3", append([]string{script}, args...)...) //nolint:gosec // caminho e args de constantes do pacote, não de entrada
 	cmd.Dir = root
 
 	done := make(chan struct{})
