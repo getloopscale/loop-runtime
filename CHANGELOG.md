@@ -14,6 +14,12 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The package usage matrix is back in `docs/architecture.md`. The 2026-09-11
+  consolidation deleted the document that carried its markers, so the gate had been
+  failing against a section that no longer existed anywhere. The generated block is also
+  in English now — it had been writing Portuguese prose into a versioned document on
+  every run (#366 tracks two columns of it that count directories removed at M2/M4).
+
 - Five test skips that reported an inability to measure as a pass. Four guards over
   tracked files now fail instead of skipping — an absent CLAUDE.md, an absent tracked
   manifest, and a ClusterRole finder returning zero all mean the harness is broken, not
