@@ -39,16 +39,16 @@ on:
       verify:          { required: false, type: boolean, default: false }   # identity-pinned cosign verify (needs sign=true)
       trivy:           { required: false, type: boolean, default: false }   # CRITICAL/HIGH Trivy gate before push (uses .trivyignore if present)
       dockerhub_image: { required: false, type: string,  default: "" }      # e.g. "loopzero/themory" — also push to Docker Hub when DOCKERHUB_TOKEN is set
-      # Default = `ubuntu-latest`, runner hospedado pelo GitHub (2026-09-16).
+      # Default = `ubuntu-latest`, a GitHub-hosted runner (2026-09-16).
       #
-      # Era a frota Blacksmith da org `getloopscale` (2026-07-30), e o argumento
-      # escrito aqui contra um default GitHub-hosted era que ele "gastaria minutos
-      # da conta de quem chama, em silencio". Valia enquanto o repositorio era
-      # privado; em repo PUBLICO o runner do GitHub e' gratuito, entao o custo que
-      # o argumento protegia deixou de existir — e o default antigo cobrava de um
-      # consumidor de fora uma frota que ele nao tem.
+      # It used to be the `getloopscale` org's Blacksmith fleet (2026-07-30), and the argument
+      # written here against a GitHub-hosted default was that it would "spend the calling
+      # account's minutes, in silence". That held while the repository was private; on a
+      # PUBLIC repo GitHub's runner is free, so the cost the argument protected against
+      # stopped existing — and the old default charged an outside consumer for a fleet they
+      # do not have.
       #
-      # O input continua existindo: quem tiver frota propria passa a label.
+      # The input still exists: anyone with a fleet of their own passes the label.
       runner:          { required: false, type: string,  default: '["ubuntu-latest"]' }
     secrets:
       # Read-only deploy key for loopzero-contracts — the PREFERRED route since 2026-07-31. It
@@ -167,9 +167,9 @@ jobs:
           file: ${{ inputs.dockerfile }}
           load: true
           tags: ${{ inputs.image }}:scan-target
-          # As MESMAS build-args do push abaixo. Divergir aqui faria o Trivy
-          # escanear uma imagem diferente da publicada — o gate passaria sobre um
-          # artefato que nao e' o que vai para o registry.
+          # The SAME build-args as the push below. Diverging here would make Trivy scan a
+          # different image from the published one — the gate would pass over an artifact
+          # that is not what goes to the registry.
           build-args: ${{ inputs.build_args }}
           cache-from: type=gha,scope=${{ inputs.image }}
           # ignore-error: the GitHub Actions cache service (type=gha) intermittently 500s /
@@ -304,10 +304,10 @@ jobs:
         if: ${{ inputs.sign && inputs.verify }}
         env:
           IMAGE_REF: ${{ steps.resolve-registry.outputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
-          # A identidade keyless deriva de repo + caminho do workflow. Fixar o dono
-          # em texto quebra a verificacao numa transferencia — e, pior, um dono
-          # ERRADO aqui aceitaria assinatura produzida por OUTRO workflow. Este e' o
-          # guard de confused-deputy, entao ele acompanha o repo que de fato roda.
+          # The keyless identity derives from repo plus workflow path. Fixing the owner in
+          # text breaks verification on a transfer — and, worse, a WRONG owner here would
+          # accept a signature produced by ANOTHER workflow. This is the confused-deputy
+          # guard, so it follows the repo that actually runs.
           IDENTITY_REPO: ${{ github.repository }}
         run: |
           cosign verify "${IMAGE_REF}" \

@@ -9,11 +9,11 @@ on:
     branches: [develop]
     tags: ["v*"]
   workflow_dispatch: {}
-# O PISO, e so' o piso. `packages: write` e `id-token: write` viviam aqui e valiam
-# para os tres jobs, inclusive `plan`, que so' faz checkout e paths-filter. zizmor
-# marcava os dois como excessive-permissions (High) e estava certo: um token com
-# escopo de escrita em pacotes exposto a um job que nunca publica nada e' superficie
-# que nao compra nada. Cada job declara o que usa, abaixo.
+# THE FLOOR, and only the floor. `packages: write` and `id-token: write` lived here and
+# applied to all three jobs, including `plan`, which only checks out and runs paths-filter.
+# zizmor flagged both as excessive-permissions (High) and was right: a token with package
+# write scope exposed to a job that never publishes anything is surface that buys nothing.
+# Each job declares what it uses, below.
 permissions:
   contents: read
 concurrency:

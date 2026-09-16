@@ -172,11 +172,11 @@ concurrency:
 
 jobs:
   build-and-test:
-    # Pula num PR de FORK, e a razao e' mecanica, nao politica: os passos abaixo
-    # usam um deploy key para buscar o sibling PRIVADO `loopzero-contracts`, e o
-    # GitHub nao entrega segredo a workflow disparado por PR de fork. Sem esta
-    # condicao o job RODA e falha no passo do deploy key — um vermelho que nao diz
-    # nada sobre a contribuicao. `ci-gate` aceita o skip por nome, so' para fork.
+    # Skipped on a FORK PR, and the reason is mechanical rather than political: the steps
+    # below use a deploy key to fetch the PRIVATE sibling `loopzero-contracts`, and GitHub does
+    # not hand a secret to a workflow triggered by a fork's PR. Without this condition the
+    # job RUNS and fails at the deploy-key step — a red that says nothing about the
+    # contribution. `ci-gate` accepts the skip by name, for a fork only.
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
@@ -256,7 +256,7 @@ jobs:
           # IdentitiesOnly + IdentityAgent=none: without these the runner's agent can
           # offer another key first and GitHub answers `Repository not found` — the same
           # message a genuinely absent repository gives. It cost one round of
-          # diagnostico local ate' o `-v` mostrar a chave errada sendo oferecida.
+          # local diagnosis before `-v` showed the wrong key being offered.
           cat >> ~/.ssh/config <<'SSHCFG'
           Host github.com
             IdentityFile ~/.ssh/gomod_key
@@ -268,22 +268,22 @@ jobs:
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
           git ls-remote git@github.com:getloopscale/loopzero-contracts.git >/dev/null
-          echo "deploy key OK — loopzero-contracts acessivel."
+          echo "deploy key OK — loopzero-contracts reachable."
 
-      # QUAL versao de loopzero-contracts fazer checkout — derivada do `go.mod`, nunca
-      # fixada aqui.
+      # WHICH version of loopzero-contracts to check out — derived from `go.mod`, never fixed
+      # here.
       #
-      # O DEFEITO QUE ISTO CORRIGE (medido no run 30627506396): o checkout sem
-      # `ref:` traz o branch DEFAULT do repositorio, que e' `main` — 12 commits
-      # atras de `develop` e sem `plan.MetricCPUCoreSeconds`. O build morria em
-      # `undefined: plan.MetricCPUCoreSeconds`, e a mensagem sugeria codigo
-      # quebrado quando o quebrado era a VERSAO que o gate escolhia sozinho.
+      # THE DEFECT THIS CORRECTS (measured in run 30627506396): a checkout with no `ref:`
+      # brings the repository's DEFAULT branch, which is `main` — 12 commits behind
+      # `develop` and without `plan.MetricCPUCoreSeconds`. The build died on
+      # `undefined: plan.MetricCPUCoreSeconds`, and the message suggested broken code when
+      # what was broken was the VERSION the gate had chosen on its own.
       #
-      # A tag `v0.3.0` que os go.mod exigem TEM os simbolos — a dependencia
-      # declarada estava correta o tempo todo. Fixar a versao no workflow
-      # resolveria hoje e mentiria no proximo bump; derivar do go.mod faz o gate
-      # exercitar exatamente a versao que o repositorio declara.
-      - name: Resolver a versao de loopzero-contracts exigida pelo go.mod
+      # The `v0.3.0` tag the go.mod files require DOES have the symbols — the declared
+      # dependency was correct the whole time. Pinning the version in the workflow would fix
+      # today and lie at the next bump; deriving it from go.mod makes the gate exercise
+      # exactly the version the repository declares.
+      - name: Resolve the loopzero-contracts version go.mod requires
         id: contracts
         run: |
           set -euo pipefail
@@ -318,11 +318,10 @@ jobs:
             loopzero/api/go.sum
             loopzero/operators/go.sum
 
-      # Este repositorio e' MULTI-MODULO e nao tem `go.mod` na raiz: um
-      # `go build ./...` na raiz nao cobre NADA. Cada modulo e' compilado
-      # explicitamente. A lista e' a do `go.work` menos `../loopzero-contracts`, que
-      # tem CI proprio no repositorio dele — este gate valida o consumo, nao a
-      # producao.
+      # This repository is MULTI-MODULE and has no `go.mod` at the root: a `go build ./...`
+      # there covers NOTHING. Each module is built explicitly. The list is `go.work`'s minus
+      # `../loopzero-contracts`, which has CI of its own in its repository — this gate validates
+      # the consumption, not the production.
       - name: Build every module
         run: |
           set -euo pipefail
@@ -389,9 +388,9 @@ jobs:
   tenant-isolation:
     # Pula num PR de FORK, e a razao e' mecanica, nao politica: os passos abaixo
     # usam um deploy key para buscar o sibling PRIVADO `loopzero-contracts`, e o
-    # GitHub nao entrega segredo a workflow disparado por PR de fork. Sem esta
-    # condicao o job RODA e falha no passo do deploy key — um vermelho que nao diz
-    # nada sobre a contribuicao. `ci-gate` aceita o skip por nome, so' para fork.
+    # GitHub does not hand a secret to a workflow triggered by a fork's PR. Without this
+    # condition the job RUNS and fails at the deploy-key step — a red that says nothing
+    # about the contribution. `ci-gate` accepts the skip by name, for a fork only.
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
@@ -443,7 +442,7 @@ jobs:
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
 
-      - name: Resolver a versao de loopzero-contracts exigida pelo go.mod
+      - name: Resolve the loopzero-contracts version go.mod requires
         id: contracts
         run: |
           set -euo pipefail
@@ -535,7 +534,7 @@ jobs:
             exit 1
           fi
 
-      - name: Integração contra banco real (falha se o banco sumir, nunca pula)
+      - name: Integration against a real database (fails if the database vanishes, never skips)
         env:
           DATABASE_URL: postgres://loopzero:loopzero@localhost:5432/loopzero_test?sslmode=disable
           LOOPZERO_API_DATABASE_URL: postgres://loopzero_api:loopzero-api@localhost:5432/loopzero_test?sslmode=disable
@@ -580,10 +579,10 @@ jobs:
             cmd/loopzero-ops/go.sum
             operators/go.sum
 
-      # GOWORK=off e' o ponto inteiro deste job: com o workspace ativo o Go tenta
-      # resolver `../loopzero-contracts` e falha sem o deploy key. Desligado, cada
-      # modulo independente se resolve pelo proprio go.mod.
-      - name: Build e vet dos modulos independentes
+      # `GOWORK=off` is the entire point of this job: with the workspace active Go tries to
+      # resolve `../loopzero-contracts` and fails without the deploy key. Switched off, each
+      # independent module resolves through its own go.mod.
+      - name: Build and vet the independent modules
         env:
           GOWORK: off
         run: |
@@ -594,7 +593,7 @@ jobs:
             echo "::endgroup::"
           done
 
-      - name: Testes dos modulos independentes
+      - name: Test the independent modules
         env:
           GOWORK: off
         run: |
@@ -605,15 +604,15 @@ jobs:
             echo "::endgroup::"
           done
 
-      # Os 126 gates. Ate' hoje viviam num hook de pre-push que roda "na maquina de
-      # quem empurra, e so' la'" — o que significa que, para qualquer pessoa de fora,
-      # eles nao existiam. Aqui rodam no escopo do diff, que e' o que o PR propoe.
-      - name: Quality gates (escopo do diff)
-        # Os DOIS valores passam por `env:`. O `git fetch` abaixo interpolava
-        # `github.base_ref` direto no shell, e nome de branch e' escolhido por quem
-        # abre o PR — num fork, por um estranho. zizmor marcou template-injection
-        # (High). As tres linhas de gate ja' usavam "$BASE_REF" corretamente: o mesmo
-        # passo acertava tres vezes e errava uma, que e' o caso exato do manual.
+      # The quality gates. Until today they lived in a pre-push hook that runs "on the
+      # pusher's machine, and only there" — which means that, for anyone outside, they did
+      # not exist. Here they run scoped to the diff, which is what the PR proposes.
+      - name: Quality gates (diff-scoped)
+        # BOTH values go through `env:`. The `git fetch` below interpolated `github.base_ref`
+        # straight into the shell, and a branch name is chosen by whoever opens the PR — in a
+        # fork, by a stranger. zizmor flagged template-injection (High). The three gate lines
+        # already used "$BASE_REF" correctly: the same step got it right three times and
+        # wrong once, which is exactly the case the manual describes.
         env:
           GOWORK: off
           BASE_BRANCH: ${{ github.base_ref || 'develop' }}
