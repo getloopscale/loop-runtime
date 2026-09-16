@@ -119,6 +119,10 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A second chart test read a rule file deleted from the worktree. Like the guard beside it,
+  it reads git history when the document is not on disk — the assertion is about what the
+  rule SAID, and history holds that exactly.
+
 - Seven citations in versioned files that pointed at documents which no longer exist. Four
   were in production operator comments and three in the test that exists to prove such
   citations resolve — it checked the working tree, and the 2026-09-11 consolidation had

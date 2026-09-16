@@ -12,17 +12,17 @@
 // 4 assertions, all source-grep on canonical files (no kubectl, no
 // docker, no helmfile):
 //
-//   (a) seed-post-cleanroom-all.sh invokes vault-bootstrap-dev.sh
-//   (b) seed-post-cleanroom-all.sh, when LOOPZERO_HELMFILE_ENV=dev-public,
-//       auto-provisions loopzero-secrets via `task k3d:secrets:create` +
-//       `task k3d:secrets:bootstrap` BEFORE vault-bootstrap-dev.sh runs
-//       (so the dev-public chain is solo/CI provisionable per the ADR)
-//   (c) seed-post-cleanroom-all.sh NEVER invokes the forbidden
-//       `task k3d:secrets:bootstrap-in-core` shortcut (Jeito A is
-//       INQUEBRÁVEL regardless of witness scope)
-//   (d) cleanroom-up-live-test-mandate.md cites the ADR
-//       2026-06-20-dev-public-vault-automated-init in § Sub-step 2.5
-//       so the witness re-scoping is auditable from the rule
+//	(a) seed-post-cleanroom-all.sh invokes vault-bootstrap-dev.sh
+//	(b) seed-post-cleanroom-all.sh, when LOOPZERO_HELMFILE_ENV=dev-public,
+//	    auto-provisions loopzero-secrets via `task k3d:secrets:create` +
+//	    `task k3d:secrets:bootstrap` BEFORE vault-bootstrap-dev.sh runs
+//	    (so the dev-public chain is solo/CI provisionable per the ADR)
+//	(c) seed-post-cleanroom-all.sh NEVER invokes the forbidden
+//	    `task k3d:secrets:bootstrap-in-core` shortcut (Jeito A is
+//	    INQUEBRÁVEL regardless of witness scope)
+//	(d) cleanroom-up-live-test-mandate.md cites the ADR
+//	    2026-06-20-dev-public-vault-automated-init in § Sub-step 2.5
+//	    so the witness re-scoping is auditable from the rule
 //
 // Cross-references:
 //   - ADR: .claude/knowledge-base/decisions/2026-06-20-dev-public-vault-automated-init.md
@@ -34,6 +34,7 @@ package charts
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -91,10 +92,21 @@ func TestDevPublicVaultBootstrapDefault(t *testing.T) {
 	// (d) cleanroom-up-live-test-mandate.md cites ADR
 	//     2026-06-20-dev-public-vault-automated-init in § Sub-step 2.5
 	//     so the re-scoping is auditable from the rule itself.
-	mandatePath := filepath.Join(root, ".claude/rules/cleanroom-up-live-test-mandate.md")
-	mandateBytes, err := os.ReadFile(mandatePath)
+	// The rule file was deleted by `3d4075ca3` and `CLAUDE.md` records it as gone and not
+	// replaced, so the worktree copy this used to read does not exist in any clone. The
+	// assertion is still answerable: a deleted document stays in history forever, and what
+	// is being checked — that the re-scoping is auditable from the rule itself — is a
+	// property of what the rule SAID, which history holds exactly.
+	const mandateRel = ".claude/rules/cleanroom-up-live-test-mandate.md"
+	mandateBytes, err := os.ReadFile(filepath.Join(root, mandateRel))
 	if err != nil {
-		t.Fatalf("read %s: %v", mandatePath, err)
+		// #nosec G204 -- both operands are constants in this file
+		cmd := exec.Command("git", "show", "3d4075ca3~1:"+mandateRel)
+		cmd.Dir = root
+		mandateBytes, err = cmd.Output()
+		if err != nil {
+			t.Fatalf("read %s: absent from the worktree and unreadable from git: %v", mandateRel, err)
+		}
 	}
 	mandate := string(mandateBytes)
 	if !strings.Contains(mandate, "2026-06-20-dev-public-vault-automated-init") {
