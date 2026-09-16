@@ -14,6 +14,13 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The allowlist sunset contract is enforced again. `check-allowlist-sunsets` was a
+  contract test for a Python script that exists in no clone and no installed kit, so it
+  reported a missing program instead of a lapsed deadline — and two code-review exemptions
+  passed their 2026-09-09 sunset unnoticed. The check runs in Go now, reads the allowlist
+  directly, and warns on the last day instead of blocking it. The two expired entries are
+  removed, and the work they deferred is tracked at #368.
+
 - The `clusterimagepolicy-mode` gate can be satisfied again. It demanded a recorded
   sign-off before admission control may reject unsigned images, and searched three
   directories that do not exist — so no action could pass it, while the remedy it printed

@@ -81,7 +81,14 @@ func runCheckAllowlistSunsets(args []string) int {
 		}
 		return 1
 	}
-	fmt.Println("check-allowlist-sunsets: PASS — 7 fixture cases + live check GREEN (future/today/past/malformed/bad-date/missing/live)")
+	// Report what was actually read. This line claimed "7 fixture cases" until 2026-09-16,
+	// when the fixtures went with the missing Python script they graded — a success
+	// message describing work that no longer happens is the same defect as a gate whose
+	// remedy names an absent path.
+	for _, w := range outcome.Warnings {
+		fmt.Printf("check-allowlist-sunsets: WARN — %s\n", w)
+	}
+	fmt.Printf("check-allowlist-sunsets: PASS — %d exemption(s) checked, none expired\n", outcome.Checked)
 	return 0
 }
 

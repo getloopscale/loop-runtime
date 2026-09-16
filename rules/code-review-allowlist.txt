@@ -15,5 +15,7 @@
 #   finding_id | category | sunset_date | rationale
 
 # --- 2026-06-11 plan deferrals (knowingly-incomplete on first run) ---
-T1.3.c-f-deferred | refactor | 2026-09-09 | EnvRef Value Object migration across remaining 34 call sites of pkg/naming.Namespace deferred. T1.3.a (type) + T1.3.b (EnvRef.Namespace() canonical pattern method + tests) shipped; per-package call-site rewrite is mechanical, planned in follow-up per-PR slices.
-T5.1-low-maturity | maturity | 2026-09-09 | 25 LOW maturity findings batched into follow-up grooming sweep; none security-impacting per per-finding triage
+# Two entries were removed on 2026-09-16, having expired on 2026-09-09: the
+# exemption ends on its date, which is what a sunset is. The work they deferred —
+# 34 EnvRef call sites, 25 LOW maturity findings — is tracked at
+# https://github.com/getloopscale/loopzero/issues/368 rather than by a date that slides.
