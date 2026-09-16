@@ -12,6 +12,26 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `BACKLOG.md` — the repository's maintenance registry, created at the root of the governed
+  scope (`single-repo`). Opened with 33 items, each carrying a measured evidence pointer from
+  the 2026-09-11 system-cartography run (finding id in `cartography-output/cartography.db`
+  plus the `file:line` it cites); since grown by DISCOVER sweeps, which register their own
+  findings directly. Items are grouped by the quality pillar their
+  Definition of Done moves — nomenclature, clarity, organisation, cohesion, domain
+  separation — and six of them are blocked on the gate that must fail before they can be
+  verified.
+- `.squad/domain-routing.txt` — the project's domain routing table, derived from disk:
+  7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
+
+### Fixed
+
+- Domain routing was FATAL for every repository in this project. `rules/domain-routing.txt`
+  carried no domain rows at all — only comments plus a stray `grep` command that had landed
+  in the file — so `route_domain.py` exited `UNROUTED` for all 7 repos and no backlog item
+  could have been assigned to anyone. The table is now derived and verified.
+
 ### Changed
 
 - `docs/` consolidated from 1,374 versioned markdown files across 17 subtrees into **six living
