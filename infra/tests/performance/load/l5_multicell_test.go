@@ -7,7 +7,6 @@ import (
 	"context"
 	"os"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -75,24 +74,13 @@ func TestL5_1_MultiCellRouting(t *testing.T) {
 	}
 
 	// Deploy all
-	results := make([]FullDeployResult, n)
-	var wg sync.WaitGroup
+	results, _ := harness.RunScenario(ctx, ids, fanOutOptions{concurrency: 5}, nil)
 	var success int64
-	sem := make(chan struct{}, 5)
-
-	for i, id := range ids {
-		wg.Add(1)
-		go func(idx int, tenant TenantIdentity) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			results[idx] = harness.RealDeploy(ctx, tenant)
-			if results[idx].Success && results[idx].AppLive {
-				atomic.AddInt64(&success, 1)
-			}
-		}(i, id)
+	for _, r := range results {
+		if r.Success && r.AppLive {
+			success++
+		}
 	}
-	wg.Wait()
 
 	t.Logf("Result: %d/%d succeeded + live", success, n)
 	if success < int64(n) {
@@ -181,32 +169,13 @@ func TestL5_3_1000Tenants_TwoCells(t *testing.T) {
 
 	// Deploy
 	t.Log("--- Deploying ---")
-	var (
-		successCnt int64
-		liveCnt    int64
-	)
-
-	sem := make(chan struct{}, concurrency)
-	var wg sync.WaitGroup
-	for i, id := range identities {
-		wg.Add(1)
-		go func(idx int, tenant TenantIdentity) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			r := harness.RealDeploy(ctx, tenant)
-			if r.Success {
-				atomic.AddInt64(&successCnt, 1)
-			}
-			if r.AppLive {
-				atomic.AddInt64(&liveCnt, 1)
-			}
+	_, tally := harness.RunScenario(ctx, identities, fanOutOptions{concurrency: concurrency},
+		func(idx int, r FullDeployResult) {
 			if idx%100 == 0 || !r.Success {
 				t.Logf("  tn-%d: success=%v live=%v time=%s", idx, r.Success, r.AppLive, r.TotalTime.Round(time.Second))
 			}
-		}(i, id)
-	}
-	wg.Wait()
+		})
+	successCnt, liveCnt := tally.Succeeded, tally.Live
 
 	// Report
 	t.Log("")
@@ -272,32 +241,13 @@ func TestL5_4_5000Tenants_TenCells(t *testing.T) {
 
 	// Deploy with high concurrency
 	t.Log("--- Deploying ---")
-	var (
-		successCnt int64
-		liveCnt    int64
-	)
-
-	sem := make(chan struct{}, concurrency)
-	var wg sync.WaitGroup
-	for i, id := range identities {
-		wg.Add(1)
-		go func(idx int, tenant TenantIdentity) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			r := harness.RealDeploy(ctx, tenant)
-			if r.Success {
-				atomic.AddInt64(&successCnt, 1)
-			}
-			if r.AppLive {
-				atomic.AddInt64(&liveCnt, 1)
-			}
+	_, tally := harness.RunScenario(ctx, identities, fanOutOptions{concurrency: concurrency},
+		func(idx int, r FullDeployResult) {
 			if idx%500 == 0 || !r.Success {
 				t.Logf("  tn-%d: success=%v live=%v", idx, r.Success, r.AppLive)
 			}
-		}(i, id)
-	}
-	wg.Wait()
+		})
+	successCnt, liveCnt := tally.Succeeded, tally.Live
 
 	t.Log("")
 	t.Log("═══════════════════════════════════════════════════════")

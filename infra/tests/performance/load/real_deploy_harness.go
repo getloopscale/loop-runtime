@@ -7,12 +7,12 @@
 // scale-50k-plan Phase 0.0. It replaces the fake-bundle
 // DeploySimulator with a harness that exercises the FULL pipeline:
 //
-//   tenant provisioned via API (not SQL) →
-//   real git bundle from fixtures →
-//   Argo Workflow builds a real image →
-//   ArgoCD syncs manifests →
-//   pod runs on runtime cluster →
-//   HTTP 200 verified on app URL
+//	tenant provisioned via API (not SQL) →
+//	real git bundle from fixtures →
+//	Argo Workflow builds a real image →
+//	ArgoCD syncs manifests →
+//	pod runs on runtime cluster →
+//	HTTP 200 verified on app URL
 //
 // Every deploy is verified end-to-end: BUILD SUCCEEDED + RELEASE ACTIVE
 // + app URL returns HTTP 200. If any step fails, it counts as a failure.
@@ -46,7 +46,7 @@ type RealDeployHarness struct {
 	serviceAuth     string
 	bootstrapSecret string
 	client          *http.Client
-	bundleBytes     []byte // pre-built git bundle from fixture
+	bundleBytes     []byte       // pre-built git bundle from fixture
 	apps            []fixtureApp // parsed from fixture's loopzero.yaml
 }
 
@@ -600,107 +600,39 @@ apps:
 	return uploadResp.CommitSHA, time.Since(start), nil
 }
 
+// harnessPollInterval is how often a real deploy asks for its build.
+const harnessPollInterval = 10 * time.Second
+
+// buildsFor is the shared build contract client acting as tenant t.
+func (h *RealDeployHarness) buildsFor(t TenantIdentity) buildAPI {
+	return buildAPI{
+		apiURL:       h.apiURL,
+		client:       h.client,
+		auth:         func(req *http.Request) { h.setAuth(req, t) },
+		pollInterval: harnessPollInterval,
+		retryBackoff: defaultSubmitBackoff,
+	}
+}
+
 func (h *RealDeployHarness) submitBuild(ctx context.Context, t TenantIdentity, commitSHA string) (string, time.Duration, error) {
 	start := time.Now()
 	// CHG-002b 2026-04-27: build apps array from parsed loopzero.yaml so the
 	// payload mirrors what `loopzero deploy` would send. Previously hardcoded
 	// to [{api,node,3000}] and silently dropped 3 of 4 apps for
 	// dogfood-monorepo, breaking L3-realistic.
-	appsJSON, err := json.Marshal(buildAppsPayload(h.apps))
-	if err != nil {
-		return "", time.Since(start), fmt.Errorf("marshal apps payload: %w", err)
-	}
-	reqBody := fmt.Sprintf(`{
-		"project_id": %q,
+	payload := map[string]any{
+		"project_id":  t.ProjectName,
 		"environment": "production",
-		"commit_sha": %q,
-		"apps": %s
-	}`, t.ProjectName, commitSHA, string(appsJSON))
-
-	// T-06: retry on 429 (CELL_AT_CAPACITY admission backpressure) and 503
-	// (circuit breaker). Exponential backoff 1s, 2s, 4s, 8s, 16s — mirrors
-	// the CLI retry policy (cli/src/api/client.ts). Without this, the test
-	// treats load-shedding as failure rather than the designed behavior.
-	backoffs := []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second}
-	var lastErr error
-	for attempt := 0; attempt <= len(backoffs); attempt++ {
-		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return "", time.Since(start), ctx.Err()
-			case <-time.After(backoffs[attempt-1]):
-			}
-		}
-
-		req, err := http.NewRequestWithContext(ctx, "POST", h.apiURL+"/api/v1/builds", strings.NewReader(reqBody))
-		if err != nil {
-			return "", time.Since(start), err
-		}
-		h.setAuth(req, t)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Idempotency-Key", fmt.Sprintf("lt-%s-%d", t.TenantID, time.Now().UnixNano()))
-
-		resp, err := h.client.Do(req)
-		if err != nil {
-			return "", time.Since(start), fmt.Errorf("submit build: %w", err)
-		}
-		respBody, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-
-		if resp.StatusCode == 202 || resp.StatusCode == 201 {
-			var buildResp struct {
-				BuildID string `json:"build_id"`
-			}
-			json.Unmarshal(respBody, &buildResp)
-			return buildResp.BuildID, time.Since(start), nil
-		}
-
-		lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
-
-		// Retry only on 429 (capacity) and 503 (circuit breaker).
-		if resp.StatusCode != 429 && resp.StatusCode != 503 {
-			return "", time.Since(start), lastErr
-		}
-		// Continue to next retry iteration
+		"commit_sha":  commitSHA,
+		"apps":        buildAppsPayload(h.apps),
 	}
-
-	return "", time.Since(start), fmt.Errorf("submit exhausted retries: %w", lastErr)
+	key := fmt.Sprintf("lt-%s-%d", t.TenantID, time.Now().UnixNano())
+	id, err := h.buildsFor(t).submitBuild(ctx, payload, key)
+	return id, time.Since(start), err
 }
 
 func (h *RealDeployHarness) waitForBuild(ctx context.Context, t TenantIdentity, buildID string) (string, time.Duration, error) {
-	start := time.Now()
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return "TIMEOUT", time.Since(start), ctx.Err()
-		case <-ticker.C:
-			req, err := http.NewRequestWithContext(ctx, "GET", h.apiURL+"/api/v1/builds/"+buildID, nil)
-			if err != nil {
-				continue
-			}
-			h.setAuth(req, t)
-
-			resp, err := h.client.Do(req)
-			if err != nil {
-				continue
-			}
-			var build struct {
-				Status string `json:"status"`
-			}
-			json.NewDecoder(resp.Body).Decode(&build)
-			resp.Body.Close()
-
-			switch build.Status {
-			case "SUCCEEDED":
-				return "SUCCEEDED", time.Since(start), nil
-			case "FAILED", "CANCELLED":
-				return build.Status, time.Since(start), fmt.Errorf("build %s: %s", buildID, build.Status)
-			}
-		}
-	}
+	return h.buildsFor(t).waitForBuild(ctx, buildID)
 }
 
 func (h *RealDeployHarness) verifyAppLive(ctx context.Context, appURL string) (bool, time.Duration, error) {
