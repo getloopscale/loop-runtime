@@ -4,6 +4,7 @@
 package helmdrift
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"sort"
@@ -59,7 +60,7 @@ func (helmRenderer) Render(chartDir string, sets []string) (string, error) {
 	if err != nil {
 		var stderr string
 		var ee *exec.ExitError
-		if errorsAs(err, &ee) {
+		if errors.As(err, &ee) {
 			stderr = strings.TrimSpace(string(ee.Stderr))
 		}
 		// The --set list is named so the failing invocation can be reproduced
@@ -67,16 +68,6 @@ func (helmRenderer) Render(chartDir string, sets []string) (string, error) {
 		return "", fmt.Errorf("helm %s: %w%s", strings.Join(args, " "), err, prefixed(stderr))
 	}
 	return string(out), nil
-}
-
-// errorsAs is a tiny indirection so the import list stays honest about what this
-// file needs; behaviour is errors.As.
-func errorsAs(err error, target **exec.ExitError) bool {
-	ee, ok := err.(*exec.ExitError) //nolint:errorlint // direct type is what we want here
-	if ok {
-		*target = ee
-	}
-	return ok
 }
 
 func prefixed(s string) string {

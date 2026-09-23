@@ -29,9 +29,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
+	"github.com/blang/semver/v4"
 	"gopkg.in/yaml.v3"
 )
 
@@ -195,86 +195,16 @@ func relativeOrAbs(root, path string) string {
 	return path
 }
 
-// compareSemver returns -1, 0, or 1 if a < b, a == b, a > b.
-// Handles MAJOR.MINOR.PATCH and MAJOR.MINOR.PATCH-prerelease per semver.org.
-// Pre-release is considered lower than the corresponding release
-// (1.0.0-rc1 < 1.0.0). Build metadata (after +) is ignored.
+// compareSemver returns -1, 0, or 1 if a < b, a == b, a > b, per semver.org
+// (build metadata ignored; pre-release identifiers compared by §11).
 func compareSemver(a, b string) (int, error) {
-	// Strip build metadata
-	a = stripBuildMeta(a)
-	b = stripBuildMeta(b)
-
-	aCore, aPre := splitPrerelease(a)
-	bCore, bPre := splitPrerelease(b)
-
-	aParts, err := parseCore(aCore)
+	av, err := semver.Parse(a)
 	if err != nil {
 		return 0, fmt.Errorf("a=%q: %w", a, err)
 	}
-	bParts, err := parseCore(bCore)
+	bv, err := semver.Parse(b)
 	if err != nil {
 		return 0, fmt.Errorf("b=%q: %w", b, err)
 	}
-
-	for i := 0; i < 3; i++ {
-		if aParts[i] < bParts[i] {
-			return -1, nil
-		}
-		if aParts[i] > bParts[i] {
-			return 1, nil
-		}
-	}
-
-	// Core equal — pre-release compare
-	if aPre == "" && bPre == "" {
-		return 0, nil
-	}
-	if aPre == "" {
-		// release > pre-release
-		return 1, nil
-	}
-	if bPre == "" {
-		return -1, nil
-	}
-	// Both have prerelease — lexicographic
-	if aPre < bPre {
-		return -1, nil
-	}
-	if aPre > bPre {
-		return 1, nil
-	}
-	return 0, nil
-}
-
-func stripBuildMeta(v string) string {
-	if idx := strings.Index(v, "+"); idx >= 0 {
-		return v[:idx]
-	}
-	return v
-}
-
-func splitPrerelease(v string) (core, pre string) {
-	if idx := strings.Index(v, "-"); idx >= 0 {
-		return v[:idx], v[idx+1:]
-	}
-	return v, ""
-}
-
-func parseCore(s string) ([3]int, error) {
-	parts := strings.Split(s, ".")
-	if len(parts) != 3 {
-		return [3]int{}, fmt.Errorf("expected 3 dot-separated components, got %d", len(parts))
-	}
-	var out [3]int
-	for i, p := range parts {
-		n, err := strconv.Atoi(p)
-		if err != nil {
-			return [3]int{}, fmt.Errorf("component %d (%q): %w", i, p, err)
-		}
-		if n < 0 {
-			return [3]int{}, fmt.Errorf("component %d negative", i)
-		}
-		out[i] = n
-	}
-	return out, nil
+	return av.Compare(bv), nil
 }

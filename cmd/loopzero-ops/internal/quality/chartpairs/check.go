@@ -37,6 +37,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -127,7 +128,7 @@ func Check(cfg Config) (Outcome, error) {
 			out.Pairs = append(out.Pairs, n)
 		}
 	}
-	sortStrings(out.Pairs)
+	sort.Strings(out.Pairs)
 
 	declarado, err := lerRegistro(filepath.Join(root, registroRel))
 	if err != nil {
@@ -146,8 +147,8 @@ func Check(cfg Config) (Outcome, error) {
 			out.Stale = append(out.Stale, d)
 		}
 	}
-	sortStrings(out.Undeclared)
-	sortStrings(out.Stale)
+	sort.Strings(out.Undeclared)
+	sort.Strings(out.Stale)
 
 	if len(out.Undeclared) > 0 {
 		return out, fmt.Errorf("%w: %s — declare em %s",
@@ -181,12 +182,4 @@ func lerRegistro(p string) (map[string]bool, error) {
 		}
 	}
 	return out, nil
-}
-
-func sortStrings(s []string) {
-	for i := 1; i < len(s); i++ {
-		for j := i; j > 0 && s[j] < s[j-1]; j-- {
-			s[j], s[j-1] = s[j-1], s[j]
-		}
-	}
 }
