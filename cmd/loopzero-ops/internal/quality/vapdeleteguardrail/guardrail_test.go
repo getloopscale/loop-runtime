@@ -114,6 +114,43 @@ func TestGuardrail_FailsWhenGCExemptionMissing(t *testing.T) {
 	}
 }
 
+// kubeSystemPrefixRender is the shape the admission-policies helper
+// (loopzero-admission.systemActorExemptions) renders: every kube-system service account
+// is exempt by prefix, which covers the namespace-controller without naming it.
+const kubeSystemPrefixRender = `
+  matchConditions:
+    - name: exclude-system-actors
+      expression: >-
+        !(request.userInfo.username.startsWith('system:serviceaccount:kube-system:'))
+        && request.userInfo.username != 'system:kube-controller-manager'
+        && !(request.userInfo.username in [
+          'system:serviceaccount:loopzero-system:loopzero-api',
+          'system:serviceaccount:loopzero-system:loopzero-tenant-operator'
+        ])
+        && !('system:masters' in request.userInfo.groups)
+`
+
+func TestGuardrail_AcceptsKubeSystemPrefixAsNamespaceControllerExemption(t *testing.T) {
+	rep := Report{}
+	rep.checkExemptions(kubeSystemPrefixRender)
+	if !rep.OK() {
+		t.Fatalf("a kube-system prefix exemption covers the namespace-controller (B33), got %+v", rep.Findings)
+	}
+}
+
+func TestGuardrail_FailsWhenKubeSystemPrefixIsNotAnExemption(t *testing.T) {
+	// The prefix appearing somewhere else (a message, an unrelated rule) is not an
+	// exemption: only the negated startsWith form keeps the GC out of the policy.
+	notExempt := strings.Replace(kubeSystemPrefixRender,
+		"!(request.userInfo.username.startsWith('system:serviceaccount:kube-system:'))",
+		"request.userInfo.username.startsWith('system:serviceaccount:kube-system:')", 1)
+	rep := Report{}
+	rep.checkExemptions(notExempt)
+	if rep.OK() {
+		t.Fatal("expected failure: a positive startsWith does not exempt the namespace-controller (B33)")
+	}
+}
+
 // --- EC-7: on DELETE the CEL must read oldObject, not object -----------------------
 
 func TestGuardrail_FailsWhenExpressionUsesObjectOnDelete(t *testing.T) {

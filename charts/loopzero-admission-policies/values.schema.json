@@ -199,6 +199,25 @@
     },
     "tufRootCeremonyDate": {
       "type": "string"
+    },
+    "systemActorExemptions": {
+      "type": "object",
+      "description": "Identities no admission policy may block (templates/_helpers.tpl loopzero-admission.systemActorExemptions). ServiceAccount names in loopzero-system. At least two, or the negated `in` list denies the platform's own controllers (EC-2).",
+      "required": [
+        "platformServiceAccounts"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "platformServiceAccounts": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+          }
+        }
+      }
     }
   }
 }

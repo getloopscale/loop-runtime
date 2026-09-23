@@ -55,16 +55,7 @@ spec:
     # Denies the sanctioned pin and the DB/CR split-brain (retries treat Deny as
     # transient). Mirrors the kube-controller-manager exemption: the control-plane
     # writer is trusted; the policy targets human `kubectl edit', not the pin path.
-    - name: exclude-system-actors
-      expression: >
-        !(request.userInfo.username.startsWith('system:serviceaccount:kube-system:')) &&
-        request.userInfo.username != 'system:kube-controller-manager' &&
-        !(request.userInfo.username in [
-          'system:serviceaccount:loopzero-system:loopzero-api',
-          'system:serviceaccount:loopzero-system:loopzero-tenant-operator',
-          'system:serviceaccount:loopzero-system:tenant-operator'
-        ]) &&
-        !('system:masters' in request.userInfo.groups)
+    {{- include "loopzero-admission.systemActorExemptions" . | nindent 4 }}
   validations:
     # EC-1: has()-guard before iterating so a missing field denies cleanly.
     - expression: >

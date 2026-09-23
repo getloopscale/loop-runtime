@@ -248,9 +248,12 @@ trusting the success metric.
 Protects platform resources on the core cluster from deletion.
 
 **The failure mode to watch for:** a `DELETE` policy that stops exempting the cluster
-garbage collector **deadlocks namespaces in `Terminating`**. The exempt identities are
-`system:serviceaccount:kube-system:namespace-controller`, `system:kube-controller-manager`
-and the `system:masters` group.
+garbage collector **deadlocks namespaces in `Terminating`**. The exempt identities are every
+`system:serviceaccount:kube-system:*` account (the namespace controller and the garbage
+collector among them), `system:kube-controller-manager`, the `system:masters` group, and the
+platform ServiceAccounts listed in `systemActorExemptions.platformServiceAccounts` of the
+admission-policies values. All of it is rendered by one helper,
+`loopzero-admission.systemActorExemptions`, used by every policy that matches UPDATE or DELETE.
 
 Two more traps, both of which make a test pass for the wrong reason:
 
@@ -270,6 +273,21 @@ nothing about the policy. The RBAC message reads `cannot delete resource ... at 
 scope`; the policy's message names the policy.
 
 Rollback is a values toggle — no rebuild.
+
+## Image-digest admission warnings
+
+`LoopZeroImageDigestWarnRatePresent` fires when the `loopzero-require-image-digest` policy, still in
+warn mode, saw a pod admitted with an image `:tag` instead of `@sha256:<digest>`.
+
+1. Find the workload: `kubectl get events -A --field-selector reason=FailedAdmission` or the
+   API-server audit log for `loopzero-require-image-digest`.
+2. A platform chart, sidecar or operator-rendered manifest using a tag is a defect in that
+   source — pin it by digest there.
+3. Only when the rate has stayed at zero for the 7-day soak may
+   `vaps.requireImageDigestEnforce` be set to `true`; with violations still present the flip
+   denies those pods.
+
+Rollback is the same values toggle.
 
 ## Security and vault audit alerts
 

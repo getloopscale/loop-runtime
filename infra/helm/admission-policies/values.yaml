@@ -78,6 +78,22 @@ clusterImagePolicyKeyless:
   identityRegexp: "^system:serviceaccount:argo:loopzero-build-sa$"
 
 # Toggle individual VAPs (enabled by default).
+# Identities no admission policy may block (templates/_helpers.tpl,
+# `loopzero-admission.systemActorExemptions`). The platform's own controllers delete
+# and de-finalize the objects these policies guard; denying them deadlocks
+# teardown (B33, B-095). Names are ServiceAccounts in loopzero-system. Two operator
+# names because the install path differs: `loopzero-tenant-operator` in prod/ArgoCD,
+# `tenant-operator` under Tilt. At least two entries are required — rendering
+# fails below that (EC-2).
+systemActorExemptions:
+  platformServiceAccounts:
+    - loopzero-api
+    - loopzero-tenant-operator
+    - tenant-operator
+    - loopzero-app-operator
+    - loopzero-platform-operator
+    - loopzero-preview-operator
+
 vaps:
   # D4 / plan d4-vap-delete-guardrail — protect boundary resources (Application,
   # AppProject, Tenant, Environment, ClusterCredential) AND their CRDs from unauthorized

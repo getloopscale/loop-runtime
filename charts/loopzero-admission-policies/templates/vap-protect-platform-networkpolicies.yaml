@@ -1,7 +1,19 @@
 {{- if .Values.vaps.protectPlatformNetworkpolicies }}
+# ValidatingAdmissionPolicy: Protect platform-created NetworkPolicies from tenant deletion.
+# Enterprise RBAC grants networkpolicies delete — this prevents deletion of platform policies.
+# F2-C2: Mitigates RISK-3 from MEET-2026-03-30-021 security review.
+#
 # CHG-2026-05-05-DOGFOOD-B33: matchConditions exclude the K8s namespace
-# garbage collector and kube-controller-manager. Without this, namespace
-# deletion deadlocks in Terminating state forever (GC rejected by VAP).
+# garbage collector (system:serviceaccount:kube-system:namespace-controller)
+# and the cluster-internal kube-controller-manager. Without this, when a
+# managed namespace enters Terminating state, K8s tries to delete every
+# resource (including platform NetworkPolicies). The VAP rejects the
+# delete and the namespace deadlocks in Terminating forever — see B33
+# evidence: 5 stuck namespaces with cond `ContentDeletionFailed: networkpolicies
+# "Unknown" is forbidden: ValidatingAdmissionPolicy ...`. Tenants still
+# cannot delete platform NetworkPolicies via their own credentials — only
+# the cluster's own machinery and the platform's controllers are exempted
+# (loopzero-admission.systemActorExemptions in _helpers.tpl).
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
@@ -18,11 +30,7 @@ spec:
       matchLabels:
         loopzero.io/managed-by: environment-controller
   matchConditions:
-    - name: skip-cluster-internal-gc
-      expression: >-
-        request.userInfo.username != 'system:serviceaccount:kube-system:namespace-controller'
-        && request.userInfo.username != 'system:kube-controller-manager'
-        && !('system:masters' in request.userInfo.groups)
+    {{- include "loopzero-admission.systemActorExemptions" . | nindent 4 }}
   validations:
     - expression: >-
         !has(object.metadata.labels) ||

@@ -1,4 +1,8 @@
 {{- if .Values.vaps.disallowLatestTag }}
+# ValidatingAdmissionPolicy: Disallow :latest image tag for tenant workloads.
+# Forces explicit versioning for reproducibility and rollback safety.
+# Covers: containers, initContainers, ephemeralContainers (F2-C1).
+# MEET-2026-03-30-021 Phase 2.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:

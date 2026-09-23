@@ -6,6 +6,9 @@
 #
 # MEET-2026-04-11-048: Harbor registry migration (dual-registry transition).
 # During migration, BOTH DOCR and Harbor prefixes are allowed.
+# TODO(MEET-048): After migration completes, remove the DOCR prefix
+# (registry.digitalocean.com/loopzero-system/) and keep only Harbor
+# (harbor.dev.loopzero.example/loopzero-platform/).
 {{- /*
   CHG-2026-04-29-DOGFOOD iter 9 — build the allowed-registry CEL
   predicate from `docrPrefix` + `harborPrefix` + `additionalPrefixes`.

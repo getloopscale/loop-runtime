@@ -4,8 +4,6 @@
 package charts
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -27,9 +25,7 @@ import (
 // both with the fixed name and with a values.yaml that happened to derive the
 // right name from that release — and the second is no guarantee at all.
 func TestPublishedChartServiceAccountMatchesTheVAPExemption(t *testing.T) {
-	root := repoRoot(t)
-
-	exempt := serviceAccountsExemptedByVAPs(t, root)
+	exempt := serviceAccountsExemptedByVAPs(t)
 	if len(exempt) == 0 {
 		t.Fatal("no exempt ServiceAccount found in the VAPs — a sweep that reaches nothing " +
 			"reports green over nothing, and this whole test depends on it")
@@ -50,42 +46,34 @@ func TestPublishedChartServiceAccountMatchesTheVAPExemption(t *testing.T) {
 	}
 }
 
-// serviceAccountsExemptedByVAPs reads the exemptions declared in the policy
-// templates. It reads the SOURCE instead of rendering: the list is literal in
-// the files, and rendering would need the overlay's values — more parts for the
-// same answer.
-func serviceAccountsExemptedByVAPs(t *testing.T, root string) map[string]bool {
+// serviceAccountsExemptedByVAPs returns the loopzero-system ServiceAccounts the
+// admission policies exempt, read from the RENDERED chart. The list used to be
+// a literal in each template; it now lives in values.yaml and is expanded by the
+// loopzero-admission.systemActorExemptions helper, so only a render sees it. Every
+// policy that carries the exemption is switched on, so none is missed because
+// its toggle defaults off.
+func serviceAccountsExemptedByVAPs(t *testing.T) map[string]bool {
 	t.Helper()
-	dir := filepath.Join(root, "infra", "helm", "admission-policies", "templates")
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("reading %s: %v", dir, err)
-	}
+	out := renderChart(t, bootstrapChart(t, "admission-policies"), "exemptions", map[string]string{
+		"vaps.protectPlatformDeletes":         "true",
+		"vaps.protectPlatformNetworkpolicies": "true",
+		"vaps.tenantCrShape":                  "true",
+		"vaps.tenantNamespace":                "true",
+	})
 	exempt := map[string]bool{}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasPrefix(e.Name(), "vap-") {
+	for _, line := range strings.Split(out, "\n") {
+		const prefix = "system:serviceaccount:loopzero-system:"
+		i := strings.Index(line, prefix)
+		if i < 0 {
 			continue
 		}
-		path := filepath.Clean(filepath.Join(dir, e.Name()))
-		b, err := os.ReadFile(path)
-		if err != nil {
-			// An unreadable policy is one whose exemptions this sweep never saw.
-			t.Fatalf("reading %s: %v", path, err)
+		rest := line[i+len(prefix):]
+		end := strings.IndexAny(rest, "'\",: \t")
+		if end < 0 {
+			end = len(rest)
 		}
-		for _, line := range strings.Split(string(b), "\n") {
-			const prefix = "system:serviceaccount:loopzero-system:"
-			i := strings.Index(line, prefix)
-			if i < 0 {
-				continue
-			}
-			rest := line[i+len(prefix):]
-			end := strings.IndexAny(rest, "'\",: \t")
-			if end < 0 {
-				end = len(rest)
-			}
-			if name := rest[:end]; name != "" {
-				exempt[name] = true
-			}
+		if name := rest[:end]; name != "" {
+			exempt[name] = true
 		}
 	}
 	return exempt

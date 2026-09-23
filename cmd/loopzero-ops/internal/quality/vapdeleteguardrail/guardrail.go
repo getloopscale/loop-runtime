@@ -236,10 +236,26 @@ func (r *Report) checkRenderedPolicy(rendered string) {
 	}
 }
 
+// kubeSystemPrefixExemption is the negated prefix match the admission-policies helper
+// (loopzero-admission.systemActorExemptions) renders. It exempts every kube-system service
+// account — the namespace-controller included — so it satisfies the namespace-controller
+// requirement without naming it. Only the NEGATED form counts: a positive startsWith
+// would select the GC into the policy instead of keeping it out.
+const kubeSystemPrefixExemption = "!(request.userInfo.username.startsWith('system:serviceaccount:kube-system:'))"
+
+// exempted reports whether the rendered policy keeps identity ex out of its scope.
+func exempted(rendered, ex string) bool {
+	if strings.Contains(rendered, ex) {
+		return true
+	}
+	return strings.HasPrefix(ex, "system:serviceaccount:kube-system:") &&
+		strings.Contains(rendered, kubeSystemPrefixExemption)
+}
+
 // checkExemptions enforces EC-2 (floor of 2) and the B33 GC exemptions.
 func (r *Report) checkExemptions(rendered string) {
 	for _, ex := range clusterGCExemptions {
-		if !strings.Contains(rendered, ex) {
+		if !exempted(rendered, ex) {
 			r.fail("gc-exemption",
 				"matchConditions missing %q — a VAP with failurePolicy=Fail on DELETE that does "+
 					"not exempt the cluster GC deadlocks namespaces in Terminating (B33)", ex)

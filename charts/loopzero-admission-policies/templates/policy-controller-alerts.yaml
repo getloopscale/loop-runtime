@@ -97,4 +97,29 @@ spec:
           annotations:
             summary: "policy-controller is unreachable"
             description: "Sigstore policy-controller has been unreachable for 5 minutes. In Audit mode (D4) admissions still succeed but lose verification visibility; in Deny mode admissions FAIL CLOSED for tenant namespaces."
+
+        # ─────────────────────────────────────────────────────────────────
+        # T2.3 of maturity-3-62-to-4-0-roadmap: image digest enforcement
+        # ─────────────────────────────────────────────────────────────────
+        # The loopzero-require-image-digest VAP runs in warn-mode by default.
+        # The Kubernetes apiserver exposes the policy check failure counter
+        # for both Warn + Deny outcomes. This alert surfaces the warn-rate
+        # so operators can validate zero-violation 7-day soak before
+        # flipping requireImageDigestEnforce=true (Deny mode).
+        #
+        # Expected steady-state: 0 (every platform pod uses image@digest).
+        # Non-zero = a chart, sidecar, or operator-applied manifest still
+        # uses :tag — investigate before the sponsor flip.
+        - alert: LoopZeroImageDigestWarnRatePresent
+          expr: |
+            increase(apiserver_admission_policy_check_failures_total{policy="loopzero-require-image-digest"}[15m]) > 0
+          for: 0m
+          labels:
+            severity: info
+            loopzero_component: admission-vap
+            loopzero_gate: T2.3
+          annotations:
+            summary: "image-digest VAP saw warn-mode violations"
+            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#image-digest-admission-warnings"
+            description: {{ printf "{{ $value }} pod admission(s) used :tag instead of @sha256:<digest> in the last 15m. Investigate before sponsor flips requireImageDigestEnforce=true (would Deny these admissions)." | quote }}
 {{- end }}
