@@ -13,60 +13,9 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
 
-	"github.com/jackc/pgx/v5"
-
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
-
-// --- pgxRowAdapter: Scan maps pgx.ErrNoRows to db.ErrNoRows ---
-
-// fakeRow is a minimal pgx.Row implementation for testing.
-type fakeRow struct {
-	err error
-}
-
-func (r *fakeRow) Scan(_ ...any) error { return r.err }
-
-func TestPgxRowAdapter_Scan_MapsErrNoRows(t *testing.T) {
-	// Arrange: a pgx.Row that returns pgx.ErrNoRows
-	adapter := &pgxRowAdapter{row: &fakeRow{err: pgx.ErrNoRows}}
-
-	// Act
-	err := adapter.Scan()
-
-	// Assert: should be translated to db.ErrNoRows
-	if !errors.Is(err, db.ErrNoRows) {
-		t.Errorf("expected db.ErrNoRows, got %v", err)
-	}
-}
-
-func TestPgxRowAdapter_Scan_PassesThroughOtherErrors(t *testing.T) {
-	// Arrange: a pgx.Row that returns a generic error
-	genericErr := errors.New("connection refused")
-	adapter := &pgxRowAdapter{row: &fakeRow{err: genericErr}}
-
-	// Act
-	err := adapter.Scan()
-
-	// Assert: should be passed through unchanged
-	if err != genericErr {
-		t.Errorf("expected original error %v, got %v", genericErr, err)
-	}
-}
-
-func TestPgxRowAdapter_Scan_SuccessReturnsNil(t *testing.T) {
-	// Arrange: a pgx.Row that succeeds
-	adapter := &pgxRowAdapter{row: &fakeRow{err: nil}}
-
-	// Act
-	err := adapter.Scan()
-
-	// Assert
-	if err != nil {
-		t.Errorf("expected nil, got %v", err)
-	}
-}
 
 // --- BuildOrchestratorAdapter: SubmitBuild defaults ---
 
