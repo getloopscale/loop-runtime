@@ -56,12 +56,11 @@ func TestBreaker_OpenRejectsCalls(t *testing.T) {
 }
 
 func TestBreaker_TransitionsToHalfOpenAfterRetryInterval(t *testing.T) {
-	cb := New(Config{Name: "test", OpenThreshold: 1, CloseThreshold: 1, RetryInterval: 10 * time.Millisecond}, nil)
-	cb.RecordResult(errTest) // opens
+	cb, clock := openBreaker(t, 1, nil)
 
-	time.Sleep(15 * time.Millisecond)
+	clock.advance(time.Minute)
 
-	// Should transition to half-open and allow probe
+	// Should transition to half-open and allow the probe
 	if err := cb.PreCheck(); err != nil {
 		t.Fatalf("after retry interval, should allow probe, got: %v", err)
 	}
@@ -71,10 +70,11 @@ func TestBreaker_TransitionsToHalfOpenAfterRetryInterval(t *testing.T) {
 }
 
 func TestBreaker_HalfOpenSuccess_ClosesCircuit(t *testing.T) {
-	cb := New(Config{Name: "test", OpenThreshold: 1, CloseThreshold: 1, RetryInterval: 10 * time.Millisecond}, nil)
-	cb.RecordResult(errTest)          // opens
-	time.Sleep(15 * time.Millisecond) // wait for retry interval
-	_ = cb.PreCheck()                 // half-open
+	cb, clock := openBreaker(t, 1, nil)
+	clock.advance(time.Minute)
+	if err := cb.PreCheck(); err != nil { // half-open probe
+		t.Fatalf("probe must be admitted: %v", err)
+	}
 
 	cb.RecordResult(nil) // success → closes
 	if cb.State() != Closed {
@@ -83,10 +83,11 @@ func TestBreaker_HalfOpenSuccess_ClosesCircuit(t *testing.T) {
 }
 
 func TestBreaker_HalfOpenFailure_ReOpens(t *testing.T) {
-	cb := New(Config{Name: "test", OpenThreshold: 1, CloseThreshold: 1, RetryInterval: 10 * time.Millisecond}, nil)
-	cb.RecordResult(errTest)          // opens
-	time.Sleep(15 * time.Millisecond) // wait for retry interval
-	_ = cb.PreCheck()                 // half-open
+	cb, clock := openBreaker(t, 1, nil)
+	clock.advance(time.Minute)
+	if err := cb.PreCheck(); err != nil { // half-open probe
+		t.Fatalf("probe must be admitted: %v", err)
+	}
 
 	cb.RecordResult(errTest) // failure → re-opens
 	if cb.State() != Open {
