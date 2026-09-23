@@ -6,6 +6,7 @@ package release
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"testing"
@@ -326,6 +327,7 @@ func TestRollback_WithDeliveryActivator(t *testing.T) {
 type fakeDeliveryActivator struct {
 	rollbackCalled bool
 	rollbackErr    error
+	onRollback     func() // runs during delivery, to simulate a concurrent change
 }
 
 func (f *fakeDeliveryActivator) Activate(_ context.Context, _ deploycontracts.ActivationBuild, _ deploycontracts.BuildCallbackRequest) error {
@@ -333,6 +335,9 @@ func (f *fakeDeliveryActivator) Activate(_ context.Context, _ deploycontracts.Ac
 }
 func (f *fakeDeliveryActivator) Rollback(_ context.Context, _ deploycontracts.RollbackDeliveryRequest) error {
 	f.rollbackCalled = true
+	if f.onRollback != nil {
+		f.onRollback()
+	}
 	return f.rollbackErr
 }
 
@@ -619,5 +624,30 @@ func TestRollback_SyncWaitFails_DBStaysInRollingBack(t *testing.T) {
 	// Sync wait failure → release stays in ROLLBACK_FAILED, NOT ROLLED_BACK.
 	if rs.lastStatus["rel-active"] == string(statemachine.ReleaseRollbackCompleted) {
 		t.Errorf("DB SAFETY VIOLATION: release marked ROLLED_BACK after sync wait failed (expected ROLLBACK_FAILED)")
+	}
+}
+
+func TestRollback_CurrentReleaseVanishesBeforeFinalize_ReturnsReleaseNotFound(t *testing.T) {
+	rs := newFakeRollbackReleaseStore()
+	activeRelease := &db.Release{ID: "rel-2", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", Status: string(statemachine.ReleaseActive)}
+	targetRelease := &db.Release{ID: "rel-1", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", Status: string(statemachine.ReleaseSuperseded), GitCommit: "abc123"}
+	rs.releases["rel-2"] = activeRelease
+	rs.releases["rel-1"] = targetRelease
+	rs.activeByEnv["tn-1-proj-1-production"] = activeRelease
+	rs.previousByEnv["tn-1-proj-1-production"] = targetRelease
+	delivery := &fakeDeliveryActivator{onRollback: func() { delete(rs.releases, "rel-2") }}
+	orch := NewRollbackOrchestrator(RollbackOrchestratorDeps{
+		Releases: rs, EnvTargets: newFakeRollbackEnvTargetStore(),
+		Locker: &fakeRollbackLocker{}, Delivery: delivery, Logger: slog.Default(),
+	})
+
+	_, err := orch.Rollback(context.Background(), RollbackRequest{
+		TenantID: "tn-1", ProjectID: "proj-1", Environment: "production",
+	})
+
+	if !errors.Is(err, loopzeroerrors.ErrReleaseNotFound) {
+		t.Fatalf("want ErrReleaseNotFound when the rolling-back release is gone, got %v", err)
 	}
 }

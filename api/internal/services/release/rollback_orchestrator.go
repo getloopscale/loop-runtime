@@ -246,9 +246,14 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 		if fetchErr != nil {
 			return fmt.Errorf("rollback: re-fetch current release: %w", fetchErr)
 		}
-		if fresh == nil || fresh.Status != string(statemachine.RPhRollingBack) {
-			return fmt.Errorf("rollback: release %s is no longer in ROLLING_BACK state (current: %s), aborting",
-				currentRelease.ID, fresh.Status)
+		if fresh == nil {
+			return fmt.Errorf("rollback: release %s disappeared before finalize: %w",
+				currentRelease.ID, loopzeroerrors.ErrReleaseNotFound)
+		}
+		if fresh.Status != string(statemachine.RPhRollingBack) {
+			return loopzeroerrors.NewInvalidTransition(fresh.Status, fmt.Sprintf(
+				"%s: release %s is no longer in ROLLING_BACK state, aborting",
+				statemachine.RPEventRollbackCompleted, currentRelease.ID))
 		}
 
 		// Transition current: ROLLING_BACK → ROLLED_BACK
