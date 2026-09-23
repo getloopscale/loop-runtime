@@ -10,16 +10,13 @@ import (
 	"strings"
 )
 
-// B-098: toda policy declarada precisa ser carregada por ao menos um role.
+// Every declared policy must be carried by at least one role (B-098).
 //
-// Uma policy sem role nao concede nada — e essa e' justamente a razao de ninguem notar. O custo
-// aparece quando alguem vai editar "a policy do loopzero-api" e encontra quatro nomes parecidos: foi
-// assim que o B-072 aplicou um patch em `loopzero-api-transit-encrypt` em vez de `loopzero-api`, porque o
-// padrao casou primeiro.
-//
-// E o erro simetrico e' pior. As duas orfas medidas em 2026-08-19 eram versoes ANTERIORES e MAIS
-// LARGAS da policy corrente (`transit/encrypt/+` contra `transit/encrypt/loopzero-tenants-*`). Liga-las
-// por engano nao concederia de menos: concederia demais.
+// A policy no role carries grants nothing, which is exactly why nobody notices it.
+// The cost shows up when someone edits "the loopzero-api policy" and finds several
+// similar names: B-072 patched `loopzero-api-transit-encrypt` instead of `loopzero-api`
+// that way. The orphans measured on 2026-08-19 were earlier, WIDER versions of the
+// current policy, so wiring one by mistake would grant too much, not too little.
 
 var (
 	reWritePolicy = regexp.MustCompile(`write_policy\s+"([^"]+)"`)
@@ -27,60 +24,58 @@ var (
 	reQuoted      = regexp.MustCompile(`"([^"]*)"`)
 )
 
-// posicaoPoliticasEmWriteAuthRole e' o indice do argumento `policies` na assinatura do helper
-// renderizado: mount, role, bound_sas, bound_ns, policies, ttl[, bound_audiences].
-const posicaoPoliticasEmWriteAuthRole = 4
+// policiesArgIndex is the index of the `policies` argument in the rendered
+// helper's signature: mount, role, bound_sas, bound_ns, policies, ttl[, audiences].
+const policiesArgIndex = 4
 
-// checarPoliciesOrfas devolve as falhas: policies escritas que nenhum role carrega.
-//
-// Ele tambem reprova quando NENHUMA policy e' encontrada — uma varredura que nao alcanca nada
-// reporta verde sobre nada, e essa forma ja custou caro nesta arvore (`PASS — 0 routes`, B-040).
-func checarPoliciesOrfas(renderizado string) []string {
-	declaradas := map[string]bool{}
-	for _, m := range reWritePolicy.FindAllStringSubmatch(renderizado, -1) {
-		declaradas[m[1]] = true
+// orphanPolicyFailures returns one failure per problem: policies written that no
+// role carries. It also fails when NO policy is found — a scan that reaches
+// nothing reports green over nothing.
+func orphanPolicyFailures(rendered string) []string {
+	declared := map[string]bool{}
+	for _, m := range reWritePolicy.FindAllStringSubmatch(rendered, -1) {
+		declared[m[1]] = true
 	}
-	if len(declaradas) == 0 {
-		return []string{"nenhuma policy encontrada no chart renderizado — a varredura nao alcancou nada"}
+	if len(declared) == 0 {
+		return []string{"no policy found in the rendered chart — the scan reached nothing"}
 	}
 
-	ligadas := map[string]bool{}
-	var malformados []string
-	for _, m := range reWriteRole.FindAllStringSubmatch(renderizado, -1) {
+	carried := map[string]bool{}
+	var malformed []string
+	for _, m := range reWriteRole.FindAllStringSubmatch(rendered, -1) {
 		args := reQuoted.FindAllStringSubmatch(m[1], -1)
-		if len(args) <= posicaoPoliticasEmWriteAuthRole {
-			// Assinatura mudou. Reportar em vez de seguir lendo o argumento errado: um
-			// parser que se desalinha em silencio marca policies vivas como orfas.
-			malformados = append(malformados, fmt.Sprintf(
-				"write_auth_role com %d argumento(s), esperado ao menos %d — a assinatura do helper mudou",
-				len(args), posicaoPoliticasEmWriteAuthRole+1))
+		if len(args) <= policiesArgIndex {
+			// The helper signature changed. Report it instead of reading the wrong
+			// argument: a parser that misaligns silently marks live policies orphan.
+			malformed = append(malformed, fmt.Sprintf(
+				"write_auth_role with %d argument(s), expected at least %d — the helper signature changed",
+				len(args), policiesArgIndex+1))
 			continue
 		}
-		for _, p := range strings.Split(args[posicaoPoliticasEmWriteAuthRole][1], ",") {
+		for _, p := range strings.Split(args[policiesArgIndex][1], ",") {
 			if p = strings.TrimSpace(p); p != "" {
-				ligadas[p] = true
+				carried[p] = true
 			}
 		}
 	}
-	if len(ligadas) == 0 {
-		malformados = append(malformados,
-			"nenhum role carrega policy alguma — o parser nao alcancou os bindings")
+	if len(carried) == 0 {
+		malformed = append(malformed, "no role carries any policy — the parser did not reach the bindings")
 	}
 
-	var orfas []string
-	for p := range declaradas {
-		if !ligadas[p] {
-			orfas = append(orfas, p)
+	var orphans []string
+	for p := range declared {
+		if !carried[p] {
+			orphans = append(orphans, p)
 		}
 	}
-	sort.Strings(orfas)
+	sort.Strings(orphans)
 
-	falhas := malformados
-	if len(orfas) > 0 {
-		falhas = append(falhas, fmt.Sprintf(
-			"policy declarada que NENHUM role carrega: %s — inerte hoje, mas um nome a mais na lista de "+
-				"candidatos de quem for editar, e o B-072 ja aplicou um patch no candidato errado",
-			strings.Join(orfas, ", ")))
+	failures := malformed
+	if len(orphans) > 0 {
+		failures = append(failures, fmt.Sprintf(
+			"policy declared that NO role carries: %s — inert today, but one more name among the "+
+				"candidates whoever edits next must choose from, and B-072 already patched the wrong one",
+			strings.Join(orphans, ", ")))
 	}
-	return falhas
+	return failures
 }
