@@ -4,9 +4,15 @@
 package servicesacyclic
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/subpackagefence"
 )
 
 func writeGo(t *testing.T, root, rel, body string) {
@@ -20,274 +26,160 @@ func writeGo(t *testing.T, root, rel, body string) {
 	}
 }
 
-// buildImportsRelease is a legal edge (build → release).
-const buildImportsRelease = `package build
+func importing(pkg string, contexts ...string) string {
+	body := "package " + pkg + "\n\n"
+	for _, c := range contexts {
+		body += "import _ \"" + servicesPkgPath + "/" + c + "\"\n"
+	}
+	return body
+}
 
-import (
-	"github.com/getloopscale/loopzero/api/internal/services/release"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-)
-
-var _ = release.X
-var _ = deploycontracts.Y
-`
-
-// releaseImportsBuild is the forbidden reverse edge (would re-create the cycle).
-const releaseImportsBuild = `package release
-
-import "github.com/getloopscale/loopzero/api/internal/services/build"
-
-var _ = build.Z
-`
-
-// deploycontractsLeaf is the shared sink importing no services context.
-const deploycontractsLeaf = `package deploycontracts
-
-import "context"
-
-var _ = context.Background
-`
-
-// deploycontractsImportsBuild breaks the sink invariant.
-const deploycontractsImportsBuild = `package deploycontracts
-
-import "github.com/getloopscale/loopzero/api/internal/services/build"
-
-var _ = build.Z
-`
-
-// placementLeaf is a pure leaf.
-const placementLeaf = `package placement
-
-func Do() {}
-`
-
-// placementImportsBilling is a forbidden cross-leaf edge.
-const placementImportsBilling = `package placement
-
-import "github.com/getloopscale/loopzero/api/internal/services/billing"
-
-var _ = billing.Q
-`
+// legalTree is the frozen DAG in miniature: build reaches release and scaling,
+// everything else is self-contained.
+func legalTree(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	writeGo(t, root, "api/internal/services/build/b.go", importing("build", "release", "scaling"))
+	writeGo(t, root, "api/internal/services/release/r.go", importing("release"))
+	writeGo(t, root, "api/internal/services/scaling/s.go", importing("scaling"))
+	writeGo(t, root, "api/internal/services/placement/p.go", importing("placement"))
+	return root
+}
 
 func TestCheck_LegalGraphPasses(t *testing.T) {
-	root := t.TempDir()
-	writeGo(t, root, "api/internal/services/build/b.go", buildImportsRelease)
-	writeGo(t, root, "api/internal/services/release/r.go", "package release\n\nvar X = 1\n")
-	writeGo(t, root, "api/internal/deploycontracts/s.go", deploycontractsLeaf)
-	writeGo(t, root, "api/internal/services/placement/p.go", placementLeaf)
-	out, err := Check(Config{RepoRoot: root})
+	out, err := Check(Config{RepoRoot: legalTree(t)})
+
 	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-	if !out.Pass {
-		t.Errorf("legal DAG must PASS, got violations=%+v unknown=%v", out.Violations, out.Unknown)
+		t.Fatalf("the frozen DAG must pass: %v edges=%+v", err, out.Edges)
 	}
 }
 
 func TestCheck_ReverseEdgeFails(t *testing.T) {
-	root := t.TempDir()
-	writeGo(t, root, "api/internal/services/release/r.go", releaseImportsBuild)
+	root := legalTree(t)
+	writeGo(t, root, "api/internal/services/release/back.go", importing("release", "build"))
+
 	out, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
+
+	if !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
+		t.Fatalf("release → build is the reverse edge the split removed; err = %v", err)
 	}
-	if out.Pass {
-		t.Fatal("release → build is a forbidden reverse edge; must FAIL")
-	}
-	if out.Violations[0].From != "release" || out.Violations[0].To != "build" {
-		t.Errorf("want release→build violation, got %+v", out.Violations[0])
+	if out.Edges[0].From != "release" || out.Edges[0].To != "build" {
+		t.Errorf("want release → build, got %+v", out.Edges[0])
 	}
 }
 
-func TestCheck_SharedLeafInvariant(t *testing.T) {
-	root := t.TempDir()
-	writeGo(t, root, "api/internal/services/placement/p.go", placementLeaf)
-	writeGo(t, root, "api/internal/deploycontracts/s.go", deploycontractsImportsBuild)
-	out, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-	if out.Pass {
-		t.Fatal("deploycontracts must import no services context; deploycontracts → build must FAIL")
-	}
-	if len(out.Violations) != 1 || out.Violations[0].From != "deploycontracts" || out.Violations[0].To != "build" {
-		t.Errorf("want exactly one deploycontracts→build violation, got %+v", out.Violations)
+func TestCheck_CrossEdgeBetweenSelfContainedContextsFails(t *testing.T) {
+	root := legalTree(t)
+	writeGo(t, root, "api/internal/services/placement/x.go", importing("placement", "scaling"))
+
+	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
+		t.Fatalf("placement → scaling is not in the allow-list; err = %v", err)
 	}
 }
 
-func TestCheck_CrossLeafEdgeFails(t *testing.T) {
-	root := t.TempDir()
-	writeGo(t, root, "api/internal/services/placement/p.go", placementImportsBilling)
+func TestCheck_UnregisteredContextFails(t *testing.T) {
+	root := legalTree(t)
+	writeGo(t, root, "api/internal/services/newthing/n.go", importing("newthing"))
+
 	out, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
+
+	if !errors.Is(err, subpackagefence.ErrUnregisteredSubpackage) {
+		t.Fatalf("an unregistered context must fail; err = %v", err)
 	}
-	if out.Pass {
-		t.Fatal("placement → billing is a forbidden cross-leaf edge; must FAIL")
+	if len(out.Unregistered) != 1 || out.Unregistered[0] != "newthing" {
+		t.Errorf("Unregistered = %v, want [newthing]", out.Unregistered)
 	}
 }
 
-func TestCheck_UnknownContextFailsClosed(t *testing.T) {
-	root := t.TempDir()
-	// a subpackage not in the allow-list must fail-closed (forces registration).
-	writeGo(t, root, "api/internal/services/newthing/n.go", "package newthing\n\nfunc F() {}\n")
-	writeGo(t, root, "api/internal/deploycontracts/s.go", deploycontractsLeaf)
-	out, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-	if out.Pass {
-		t.Fatal("an unregistered subpackage must fail-closed")
-	}
-	if len(out.Unknown) != 1 || out.Unknown[0] != "newthing" {
-		t.Errorf("want Unknown=[newthing], got %v", out.Unknown)
+func TestCheck_ForbiddenEdgeInATestFileFails(t *testing.T) {
+	root := legalTree(t)
+	writeGo(t, root, "api/internal/services/release/r_test.go", importing("release", "build"))
+
+	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
+		t.Fatalf("a test import is still a build edge; err = %v", err)
 	}
 }
 
-func TestCheck_TestImportEdgeAlsoCounts(t *testing.T) {
-	root := t.TempDir()
-	// a forbidden edge in a _test.go file is still a violation.
-	writeGo(t, root, "api/internal/services/release/r_test.go", "package release\n\nimport \"github.com/getloopscale/loopzero/api/internal/services/build\"\n\nvar _ = build.Z\n")
+func TestCheck_NestedPackageDoesNotEscapeItsContext(t *testing.T) {
+	root := legalTree(t)
+	writeGo(t, root, "api/internal/services/release/internal/helper/h.go", importing("helper", "build"))
+
 	out, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-	if out.Pass {
-		t.Fatal("a forbidden edge in a test file must FAIL (build-time cycle risk)")
+
+	if !errors.Is(err, subpackagefence.ErrForbiddenEdge) || out.Edges[0].From != "release" {
+		t.Fatalf("nesting must not bypass the fence; err = %v edges = %+v", err, out.Edges)
 	}
 }
 
-func TestCheck_SelfAliasImportIgnored(t *testing.T) {
-	root := t.TempDir()
-	// tests/unit-style alias of a package to itself is not a sibling edge.
-	writeGo(t, root, "api/internal/services/release/r.go", "package release\n\nimport releasesvc \"github.com/getloopscale/loopzero/api/internal/services/release\"\n\nvar _ = releasesvc.X\nvar X = 1\n")
-	out, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
+// An empty directory is not a context: it survives on the disk of whoever built
+// before and does not exist in a fresh clone, so counting it would give one commit
+// two verdicts. Measured when billing's code left for loopzero-cloud.
+func TestCheck_EmptyDirectoryIsNotAnUnknownContext(t *testing.T) {
+	root := legalTree(t)
+	if err := os.MkdirAll(filepath.Join(root, "api/internal/services/billing"), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if !out.Pass {
-		t.Errorf("self-import must be ignored, got %+v", out.Violations)
+
+	if _, err := Check(Config{RepoRoot: root}); err != nil {
+		t.Fatalf("an empty directory must not fail the gate: %v", err)
 	}
 }
 
-func TestCheck_NestedSubpackageEdgeCaught(t *testing.T) {
+func TestCheck_MissingServicesRootFails(t *testing.T) {
 	root := t.TempDir()
-	// a nested subpackage under release/ that imports build must NOT escape the
-	// gate by nesting — the parent context's allow-list applies to the subtree.
-	writeGo(t, root, "api/internal/services/release/internal/helper/h.go",
-		"package helper\n\nimport \"github.com/getloopscale/loopzero/api/internal/services/build\"\n\nvar _ = build.Z\n")
-	out, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-	if out.Pass {
-		t.Fatal("a forbidden edge in a nested subpackage must FAIL (no nesting bypass)")
-	}
-	if out.Violations[0].From != "release" || out.Violations[0].To != "build" {
-		t.Errorf("want release→build violation from nested pkg, got %+v", out.Violations[0])
+	writeGo(t, root, "api/internal/other/x.go", "package other\n")
+
+	if _, err := Check(Config{RepoRoot: root}); err == nil {
+		t.Fatal("a services root renamed away must fail, not pass over nothing")
 	}
 }
 
-func TestCheck_NoServicesDirTriviallyPasses(t *testing.T) {
-	root := t.TempDir()
-	out, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-	if !out.Pass {
-		t.Error("absent services/ AND absent api/internal/ (partial checkout) must trivially pass")
-	}
-}
-
-// §7 Step 1 (report finding — false-green nit): the services root being *renamed
-// away* while its parent api/internal/ still exists is a real regression the gate
-// exists to catch — it MUST fail-closed, not silently pass like a partial
-// checkout. Pre-fix, os.Stat(root) error → Pass:true unconditionally (false green).
-func TestCheck_ServicesRootRenamedAwayFailsClosed(t *testing.T) {
-	root := t.TempDir()
-	// api/internal/ exists (a sibling dir proves it), but services/ is gone.
-	writeGo(t, root, "api/internal/other/x.go", "package other\n\nfunc F() {}\n")
-	out, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-	if out.Pass {
-		t.Fatal("services/ renamed away with api/internal/ present must FAIL (false-green regression)")
-	}
-}
-
-// §7 Step 1: an *empty* services root (dir exists, zero context subpackages) means
-// the whole decomposition vanished — also a regression, also fail-closed.
-func TestCheck_EmptyServicesRootFailsClosed(t *testing.T) {
+func TestCheck_EmptyServicesRootFails(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, servicesRoot), 0o750); err != nil {
-		t.Fatalf("mkdir: %v", err)
+		t.Fatal(err)
 	}
-	out, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-	if out.Pass {
-		t.Fatal("empty services/ (all contexts gone) must FAIL, not silently pass")
+
+	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, subpackagefence.ErrNothingParsed) {
+		t.Fatalf("an empty services root means the decomposition vanished; err = %v", err)
 	}
 }
 
-// §7 Step 1 (permission-error case): if the services path is not a directory
-// (e.g. clobbered by a file), the gate MUST surface an error — never silently
-// pass and never crash.
-func TestCheck_ServicesPathNotADirErrors(t *testing.T) {
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "api/internal"), 0o750); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	// Clobber the services path with a regular file.
-	if err := os.WriteFile(filepath.Join(root, servicesRoot), []byte("not a dir"), 0o600); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	out, err := Check(Config{RepoRoot: root})
-	if err == nil {
-		t.Fatalf("services path being a file must return an error, got Pass=%v", out.Pass)
+func TestRegistryIsAcyclic(t *testing.T) {
+	if err := subpackagefence.ValidateRegistry(fence()); err != nil {
+		t.Fatalf("the committed registry must validate: %v", err)
 	}
 }
 
-// Um diretorio VAZIO nao e' contexto delimitado, e contar como um faz o veredito
-// depender do disco de quem roda: uma pasta vazia sobrevive na maquina de quem ja'
-// rodou o build e nao existe num clone novo. Medido em 2026-08-18 (B-065): ao
-// remover `billing` do DAG congelado — o codigo saiu para o `loopzero-cloud` no M4 — o
-// diretorio vazio que ficou passou a reprovar o gate LOCALMENTE enquanto o CI, com
-// clone limpo, passava. Mesmo commit, vereditos opostos.
-func TestCheck_DiretorioVazioNaoEContextoDesconhecido(t *testing.T) {
-	root := t.TempDir()
-	writeGo(t, root, "api/internal/services/placement/p.go", placementLeaf)
-	writeGo(t, root, "api/internal/deploycontracts/s.go", deploycontractsLeaf)
-	if err := os.MkdirAll(filepath.Join(root, "api/internal/services/billing"), 0o755); err != nil {
-		t.Fatalf("criando diretorio vazio: %v", err)
-	}
-	out, err := Check(Config{RepoRoot: root})
+func TestCheck_RealTreePasses(t *testing.T) {
+	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
+
 	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-	if len(out.Unknown) != 0 {
-		t.Errorf("diretorio vazio virou contexto desconhecido: %v", out.Unknown)
-	}
-	if !out.Pass {
-		t.Errorf("arvore legal com uma pasta vazia deve PASSAR; violations=%+v", out.Violations)
+		t.Fatalf("the real tree must pass: %v unregistered=%v edges=%+v", err, out.Unregistered, out.Edges)
 	}
 }
 
-// A contrapartida, para que a guarda acima nao vire uma isencao geral: um
-// subpacote com .go e sem registro CONTINUA reprovando — e' o proposito
-// deny-by-default do gate.
-func TestCheck_SubpacoteComCodigoESemRegistroAindaReprova(t *testing.T) {
-	root := t.TempDir()
-	writeGo(t, root, "api/internal/deploycontracts/s.go", deploycontractsLeaf)
-	writeGo(t, root, "api/internal/services/billing/b.go", "package billing\n\nvar X = 1\n")
-	out, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-	if len(out.Unknown) == 0 {
-		t.Error("subpacote com codigo e sem registro precisa ser reportado como desconhecido")
+// A registered context with no tracked Go code pre-approves the decision this gate
+// exists to force: whoever creates the directory later starts importing without
+// being asked. The check uses `git ls-files`, not the disk, because an empty
+// directory exists on one machine and not in a fresh clone.
+func TestEveryRegisteredContextHasTrackedCode(t *testing.T) {
+	root := qtestutil.Root(t)
+	for context := range allowed {
+		dir := filepath.Join(servicesRoot, context)
+		out, err := exec.Command("git", "-C", root, "ls-files", "--", dir).Output()
+		if err != nil {
+			t.Fatalf("git ls-files %s: %v", dir, err)
+		}
+		tracked := 0
+		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			if strings.HasSuffix(line, ".go") {
+				tracked++
+			}
+		}
+		if tracked == 0 {
+			t.Errorf("the registry names context %q and %s tracks no .go file — a phantom context "+
+				"pre-approves the decision this gate exists to force", context, dir)
+		}
 	}
 }

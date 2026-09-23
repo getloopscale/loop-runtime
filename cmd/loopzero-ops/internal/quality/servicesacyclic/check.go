@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package servicesacyclic is the architecture fitness function for the M9 Step 6
-// bounded-context split of api/internal/services (ADR
-// .claude/knowledge-base/decisions/2026-07-03-m9-db-store-subpackage-topology.md;
-// MEET-2026-07-03-001). After services was decomposed into eight bounded-context
-// subpackages, the inter-context import graph MUST stay the acyclic DAG the split
-// produced — a deny-by-default import-linter with an explicit allow-list.
+// Package servicesacyclic fences the bounded contexts of api/internal/services.
 //
-// The frozen topology between the services contexts:
+// It is a registry over subpackagefence, the engine it shares with
+// routesacyclic. The inter-context import graph must stay the acyclic DAG the M9
+// split produced, deny-by-default:
 //
 //	build     → release, scaling
 //	release   → (no sibling)
@@ -16,89 +13,32 @@
 //	preview   → (no sibling)
 //	domain    → (no sibling)
 //	platform  → (no sibling)
-//	placement → (pure leaf)
+//	placement → (no sibling)
 //
-// The shared sink every context depends on, deploycontracts, lives OUTSIDE the
-// services tree at api/internal/deploycontracts (moved there so the services
-// subtree and the build plane no longer import each other). It stays a pure
-// sink: it may import NO services context, and this gate checks that too —
-// otherwise a sink edge back into services would close a cycle through it.
+// The shared types every context needs live in api/internal/deploycontracts,
+// OUTSIDE this package, which is why no context needs a sibling to reach them.
 //
-// Any edge not in the allow-list FAILs: a new reverse edge (e.g. release → build)
-// would re-introduce a cycle; a sink edge (deploycontracts → build) would erode
-// the sink invariant; a new subpackage not registered here forces a conscious
-// decision instead of silently widening the graph.
+// Any edge not in the allow-list fails: a reverse edge (release → build) would
+// re-create a cycle, a new cross edge erodes the split, and a new context that is
+// not registered forces a conscious decision instead of silently widening the
+// graph. The registry itself is checked for cycles before the tree is read.
 //
-// AST-based: only genuine import specs are considered, so a string literal or
-// comment mentioning another context's import path is not a false edge.
+// `billing` is deliberately absent: its code moved to loopzero-cloud, and a context
+// registered for code that does not exist would pre-approve the decision this
+// gate exists to force for whoever recreates the directory.
 package servicesacyclic
 
 import (
-	"fmt"
-	"go/parser"
-	"go/token"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"sort"
-	"strings"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/subpackagefence"
 )
 
-// Config controls the gate.
-type Config struct {
-	RepoRoot string
-}
+const (
+	servicesRoot    = "api/internal/services"
+	servicesPkgPath = "github.com/getloopscale/loopzero/api/internal/services"
+)
 
-// Violation is a forbidden inter-context import edge.
-type Violation struct {
-	From string // importing subpackage (e.g. "release")
-	To   string // imported subpackage (e.g. "build")
-	File string
-	Line int
-}
-
-// Outcome is what the gate returns.
-type Outcome struct {
-	Pass       bool
-	Violations []Violation
-	Scanned    int
-	// Unknown lists subpackage dirs present on disk but absent from the
-	// allow-list — an unregistered context is itself a FAIL (fail-closed).
-	Unknown []string
-}
-
-// servicesRoot is the decomposed package, relative to RepoRoot.
-const servicesRoot = "api/internal/services"
-
-// servicesImportPrefix is the canonical import path of the decomposed package.
-const servicesImportPrefix = "github.com/getloopscale/loopzero/api/internal/services/"
-
-// missingRootMarker is the Unknown[] sentinel emitted when the services root is
-// renamed away or empty — a fail-closed signal distinct from a per-context name.
-// It cannot collide with a real subpackage (dir names never contain '<').
-const missingRootMarker = "<services-root-missing-or-empty>"
-
-// sinkRoot is the shared contracts package every services context depends on,
-// relative to RepoRoot. It is not a services context, so it is not in allowed;
-// it is scanned with an empty allow-list because it may import no context.
-const sinkRoot = "api/internal/deploycontracts"
-
-// sinkName is how a sink violation is reported in Violation.From.
-const sinkName = "deploycontracts"
-
-// `billing` NAO esta aqui, e a ausencia e' deliberada (B-065). O dominio foi
-// extraido para `../loopzero-cloud` no M4; `api/internal/services/billing` ficou como
-// diretorio VAZIO e nao rastreado, e o registro sobreviveu ao codigo. Um contexto
-// registrado para codigo inexistente GASTA ADIANTADO a decisao que este gate
-// existe para forcar: quem criasse o diretorio depois comecaria a importar sem
-// que nada perguntasse. A rota `GET /api/v1/billing` continua servida deste
-// repositorio (`api/internal/server/router.go:610`) delegando ao handler; a
-// LOGICA de billing mora no `loopzero-cloud`. Se um dia existir codigo de billing
-// aqui, registrar de novo — conscientemente.
-//
-// allowed is the deny-by-default adjacency allow-list. allowed[A] is the set of
-// subpackages A is permitted to import. A subpackage absent from this map is
-// unknown → fail-closed. An empty set means "pure leaf" (imports no sibling).
+// allowed is the deny-by-default registry: allowed[A] is the set of contexts A
+// may import.
 var allowed = map[string]map[string]bool{
 	"build":     {"release": true, "scaling": true},
 	"release":   {},
@@ -109,199 +49,28 @@ var allowed = map[string]map[string]bool{
 	"placement": {},
 }
 
-// Check is the gate entry point.
-func Check(cfg Config) (Outcome, error) {
-	if cfg.RepoRoot == "" {
-		cfg.RepoRoot = "."
-	}
-	if err := checkRegistryAcyclic(allowed); err != nil {
-		return Outcome{}, err
-	}
-	root := filepath.Join(cfg.RepoRoot, servicesRoot)
-	info, err := os.Stat(root)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			// Permission or other stat error — surface it, never silently pass.
-			return Outcome{}, fmt.Errorf("stat %s: %w", root, err)
-		}
-		// services/ is absent. Distinguish a genuine partial checkout (the parent
-		// api/internal/ is also absent → nothing to enforce → skip) from a
-		// renamed-away services root (parent present, services/ gone → a real
-		// regression this gate exists to catch → fail-closed). Pre-M9 §7-step-1
-		// this branch returned Pass:true unconditionally — a false green that let
-		// a destroyed decomposition ship past CI.
-		parent := filepath.Join(cfg.RepoRoot, filepath.Dir(servicesRoot))
-		if _, perr := os.Stat(parent); perr != nil {
-			if os.IsNotExist(perr) {
-				return Outcome{Pass: true}, nil // partial checkout — trivially skip.
-			}
-			return Outcome{}, fmt.Errorf("stat %s: %w", parent, perr)
-		}
-		return Outcome{Pass: false, Unknown: []string{missingRootMarker}}, nil
-	}
-	if !info.IsDir() {
-		return Outcome{}, fmt.Errorf("%s is not a directory", root)
-	}
-
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return Outcome{}, err
-	}
-
-	var violations []Violation
-	var unknown []string
-	scanned := 0
-	knownContexts := 0
-
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		ctx := e.Name()
-		// Um diretorio SEM nenhum .go nao e' contexto delimitado — e' pasta vazia.
-		// Sem esta guarda o veredito dependia do DISCO de quem roda: um diretorio
-		// vazio sobrevive na maquina de quem ja' rodou o build e nao existe num
-		// clone novo, entao o mesmo commit reprovava aqui e passava no CI (B-065,
-		// onde `services/billing` ficou vazio depois do M4). Um subpacote de
-		// verdade — com .go — continua reprovando se nao estiver registrado, que
-		// e' o proposito deny-by-default deste gate.
-		if temGo, err := contemGo(filepath.Join(root, ctx)); err != nil {
-			return Outcome{}, err
-		} else if !temGo {
-			continue
-		}
-		allowedTargets, known := allowed[ctx]
-		if !known {
-			unknown = append(unknown, ctx)
-			continue
-		}
-		knownContexts++
-		dir := filepath.Join(root, ctx)
-		v, n, err := scanContext(dir, ctx, allowedTargets)
-		if err != nil {
-			return Outcome{}, err
-		}
-		violations = append(violations, v...)
-		scanned += n
-	}
-
-	// An existing-but-empty services root (zero known contexts, nothing unknown to
-	// explain it) means the whole decomposition vanished — fail-closed with a
-	// self-documenting sentinel rather than passing on an empty graph.
-	if knownContexts == 0 && len(unknown) == 0 {
-		unknown = append(unknown, missingRootMarker)
-	}
-
-	sinkViolations, sinkScanned, err := scanSink(cfg.RepoRoot)
-	if err != nil {
-		return Outcome{}, err
-	}
-	violations = append(violations, sinkViolations...)
-	scanned += sinkScanned
-
-	sort.Strings(unknown)
-	pass := len(violations) == 0 && len(unknown) == 0
-	return Outcome{Pass: pass, Violations: violations, Scanned: scanned, Unknown: unknown}, nil
+// Config controls the gate.
+type Config struct {
+	RepoRoot string
 }
 
-// scanContext parses every .go file in one subpackage dir and flags any import of
-// another services subpackage not in allowedTargets. Test files are included:
-// the acyclic invariant must hold for test imports too (a test that imports a
-// forbidden sibling still creates a build-time cycle risk).
-func scanContext(dir, ctx string, allowedTargets map[string]bool) ([]Violation, int, error) {
-	var violations []Violation
-	scanned := 0
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if info.IsDir() {
-			// Descend into nested subpackages too: a future
-			// services/<ctx>/internal/... that imports a forbidden sibling must
-			// still be caught — the parent context's allow-list applies to its
-			// whole subtree, else the gate is trivially bypassable by nesting.
-			return nil
-		}
-		if !strings.HasSuffix(info.Name(), ".go") {
-			return nil
-		}
-		scanned++
-		fset := token.NewFileSet()
-		file, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
-		if err != nil {
-			return fmt.Errorf("parse %s: %w", path, err)
-		}
-		for _, imp := range file.Imports {
-			p := strings.Trim(imp.Path.Value, `"`)
-			if !strings.HasPrefix(p, servicesImportPrefix) {
-				continue
-			}
-			target := strings.TrimPrefix(p, servicesImportPrefix)
-			// Only the first path segment is the sibling context.
-			if i := strings.IndexByte(target, '/'); i >= 0 {
-				target = target[:i]
-			}
-			if target == ctx {
-				continue // self-import (aliased) — not a sibling edge.
-			}
-			if !allowedTargets[target] {
-				pos := fset.Position(imp.Pos())
-				violations = append(violations, Violation{From: ctx, To: target, File: path, Line: pos.Line})
-			}
-		}
-		return nil
-	})
-	return violations, scanned, err
+func fence() subpackagefence.Fence {
+	return subpackagefence.Fence{Dir: servicesRoot, PkgPath: servicesPkgPath, Allowed: allowed}
 }
 
-// scanSink checks that the shared sink imports no services context. An absent
-// sink is not this gate's concern: domainsinkpurity fails closed when the sink
-// package is missing, and a missing sink cannot import anything.
-func scanSink(repoRoot string) ([]Violation, int, error) {
-	dir := filepath.Join(repoRoot, sinkRoot)
-	info, err := os.Stat(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, 0, nil
-		}
-		return nil, 0, fmt.Errorf("stat %s: %w", dir, err)
-	}
-	if !info.IsDir() {
-		return nil, 0, fmt.Errorf("%s is not a directory", dir)
-	}
-	return scanContext(dir, sinkName, nil)
+// Check scans api/internal/services against the registry.
+func Check(cfg Config) (subpackagefence.Outcome, error) {
+	return subpackagefence.Check(cfg.RepoRoot, fence())
 }
 
 // ActionableFix returns the operator-facing message for FAIL output.
 func ActionableFix() string {
 	return "An inter-context import edge violates the frozen acyclic DAG of " +
-		"api/internal/services (M9 Step 6). Either (a) the dependency belongs in " +
-		"the api/internal/deploycontracts sink — move the shared symbol there; or (b) the edge is a " +
+		"api/internal/services (M9 Step 6). Either (a) the shared symbol belongs " +
+		"in api/internal/deploycontracts — move it there; or (b) the edge is a " +
 		"genuine new dependency that must be reviewed and added to the allow-list " +
-		"in servicesacyclic/check.go with an ADR justifying why it does not create " +
-		"a cycle. Reverse edges (e.g. release importing build) are forbidden — " +
-		"they re-introduce the cycle the split removed."
-}
-
-// contemGo diz se o diretorio tem ao menos um arquivo .go em QUALQUER
-// profundidade. Descer e' obrigatorio: um contexto pode guardar seus arquivos
-// num subdiretorio, e `TestCheck_NestedSubpackageEdgeCaught` cobre exatamente
-// essa forma — uma primeira versao desta funcao olhou so' o topo e passou a
-// PULAR esses contextos, que e' o oposto do que ela existe para fazer.
-func contemGo(dir string) (bool, error) {
-	var achou bool
-	err := filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() && strings.HasSuffix(d.Name(), ".go") {
-			achou = true
-			return fs.SkipAll
-		}
-		return nil
-	})
-	if err != nil {
-		return false, err
-	}
-	return achou, nil
+		"in servicesacyclic/check.go, which refuses any addition that creates a " +
+		"cycle. Reverse edges (e.g. release importing build) are forbidden — they " +
+		"re-introduce the cycle the split removed. An unregistered context needs " +
+		"the same decision before it may exist."
 }

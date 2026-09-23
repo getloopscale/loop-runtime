@@ -24,6 +24,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pkgusagematrix"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/servicesacyclic"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/stackcoverage"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/subpackagefence"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/unhomedlogic"
 )
 
@@ -361,23 +362,54 @@ func runServicesAcyclic(args []string) int {
 	}
 	resolveDotRoot(root)
 	outcome, err := servicesacyclic.Check(servicesacyclic.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "services-acyclic: %v\n", err)
+	return reportSubpackageFence("services-acyclic", outcome, err, servicesacyclic.ActionableFix())
+}
+
+// reportSubpackageFence prints a subpackagefence verdict and maps it to an exit
+// code: 0 on PASS, 1 when the fence refused (a rule, including an invalid
+// registry), 5 when the scan itself could not complete (I/O or parse).
+func reportSubpackageFence(gate string, o subpackagefence.Outcome, err error, fix string) int {
+	fmt.Printf("%s: %d subpackage(s), %d file(s) parsed, %d unregistered, %d forbidden edge(s)\n",
+		gate, len(o.Subpackages), o.FilesParsed, len(o.Unregistered), len(o.Edges))
+	for _, u := range o.Unregistered {
+		fmt.Printf("  UNREGISTERED %s — a subpackage nobody decided on\n", u)
+	}
+	for _, e := range o.Edges {
+		// The two kinds need different fixes — one moves shared code into a leaf,
+		// the other moves the CALL into a _test.go — so they are labelled apart.
+		if e.TestOnly {
+			fmt.Printf("  TEST-ONLY LEAF IN PRODUCTION %s → %s (%s:%d)\n", e.From, e.To, e.File, e.Line)
+			continue
+		}
+		fmt.Printf("  FORBIDDEN EDGE %s → %s (%s:%d)\n", e.From, e.To, e.File, e.Line)
+	}
+	if err == nil {
+		fmt.Printf("%s: PASS — every subpackage is registered and imports only what its allow-list names\n", gate)
+		return 0
+	}
+	fmt.Fprintf(os.Stderr, "%s: FAIL — %v\n", gate, err)
+	if !isSubpackageFenceRule(err) {
 		return 5
 	}
-	if !outcome.Pass {
-		fmt.Fprintf(os.Stderr, "services-acyclic: FAIL \u2014 %d forbidden edge(s), %d unknown context(s) (scanned %d .go files):\n", len(outcome.Violations), len(outcome.Unknown), outcome.Scanned)
-		for _, v := range outcome.Violations {
-			fmt.Fprintf(os.Stderr, "  %s:%d edge %s \u2192 %s not in allow-list\n", v.File, v.Line, v.From, v.To)
+	fmt.Fprintf(os.Stderr, "\nFix: %s\n", fix)
+	return 1
+}
+
+func isSubpackageFenceRule(err error) bool {
+	for _, rule := range []error{
+		subpackagefence.ErrEmptyAllowList,
+		subpackagefence.ErrIncoherentRegistry,
+		subpackagefence.ErrRegistryCycle,
+		subpackagefence.ErrUnregisteredSubpackage,
+		subpackagefence.ErrForbiddenEdge,
+		subpackagefence.ErrTestOnlyLeafFromProduction,
+		subpackagefence.ErrNothingParsed,
+	} {
+		if errors.Is(err, rule) {
+			return true
 		}
-		for _, u := range outcome.Unknown {
-			fmt.Fprintf(os.Stderr, "  unregistered subpackage: services/%s\n", u)
-		}
-		fmt.Fprintf(os.Stderr, "\nFix: %s\n", servicesacyclic.ActionableFix())
-		return 1
 	}
-	fmt.Printf("services-acyclic: PASS \u2014 %d .go files scanned; services bounded-context import graph is the frozen acyclic DAG (M9 Step 6)\n", outcome.Scanned)
-	return 0
+	return false
 }
 
 // runPackageAdmission — B-058.
@@ -530,10 +562,7 @@ func runSilentSurface(args []string) int {
 	return 0
 }
 
-// runRoutesAcyclic — B-041 / slice-5 T1.3.
-//
-// The fence that precedes the split. B-041 states the order explicitly: a fence
-// written after the move is written to fit what was already done.
+// runRoutesAcyclic fences the handler families of api/internal/routes (B-041).
 func runRoutesAcyclic(args []string) int {
 	fs := flag.NewFlagSet("routes-acyclic", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
@@ -542,28 +571,5 @@ func runRoutesAcyclic(args []string) int {
 	}
 	resolveDotRoot(root)
 	o, err := routesacyclic.Check(routesacyclic.Config{RepoRoot: *root})
-	fmt.Println(o.Summary())
-	for _, u := range o.Unregistered {
-		fmt.Printf("  NÃO REGISTRADO %s — uma família de handlers que ninguém decidiu\n", u)
-	}
-	for _, e := range o.Edges {
-		// The two kinds need different fixes — one moves shared code into a
-		// leaf, the other moves the CALL into a _test.go — so a single label
-		// for both would point the reader at the wrong remedy.
-		if e.TestOnly {
-			fmt.Printf("  LEAF SÓ-DE-TESTE em produção %s → %s (%s:%d)\n", e.From, e.To, e.File, e.Line)
-			continue
-		}
-		fmt.Printf("  ARESTA IRMÃ %s → %s (%s:%d)\n", e.From, e.To, e.File, e.Line)
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "routes-acyclic: %v\n", err)
-		fmt.Fprintln(os.Stderr, routesacyclic.ActionableFix())
-		if errors.Is(err, routesacyclic.ErrEmptyAllowList) {
-			return 5
-		}
-		return 1
-	}
-	fmt.Println("PASS — todo subpacote de routes está registrado e nenhum importa um irmão")
-	return 0
+	return reportSubpackageFence("routes-acyclic", o, err, routesacyclic.ActionableFix())
 }

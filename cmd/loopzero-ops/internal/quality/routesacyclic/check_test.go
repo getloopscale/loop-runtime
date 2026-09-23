@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/subpackagefence"
 )
 
 // tree writes subpackages under api/internal/routes/. Each entry maps a
@@ -49,7 +50,7 @@ var twoFamilies = map[string]map[string]bool{
 func TestCheck_UnregisteredSubpackageFails(t *testing.T) {
 	root := tree(t, map[string][]string{"httpio": nil, "inventado": nil})
 	out, err := Check(Config{RepoRoot: root, Allowed: twoFamilies})
-	if !errors.Is(err, ErrUnregisteredSubpackage) {
+	if !errors.Is(err, subpackagefence.ErrUnregisteredSubpackage) {
 		t.Fatalf("an unregistered subpackage must FAIL; got %v", err)
 	}
 	if len(out.Unregistered) != 1 || out.Unregistered[0] != "inventado" {
@@ -61,11 +62,11 @@ func TestCheck_UnregisteredSubpackageFails(t *testing.T) {
 func TestCheck_SiblingEdgeFails(t *testing.T) {
 	root := tree(t, map[string][]string{
 		"httpio":  nil,
-		"secrets": {routesImportPrefix + "builds"},
+		"secrets": {routesPkgPath + "/" + "builds"},
 		"builds":  nil,
 	})
 	out, err := Check(Config{RepoRoot: root, Allowed: twoFamilies})
-	if !errors.Is(err, ErrSiblingEdge) {
+	if !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
 		t.Fatalf("one family importing another must FAIL; got %v", err)
 	}
 	if len(out.Edges) != 1 || out.Edges[0].From != "secrets" || out.Edges[0].To != "builds" {
@@ -85,7 +86,7 @@ func TestCheck_ImportingTheLeafIsAllowed(t *testing.T) {
 	}
 	root := tree(t, map[string][]string{
 		"httpio":  nil,
-		"secrets": {routesImportPrefix + "httpio"},
+		"secrets": {routesPkgPath + "/" + "httpio"},
 	})
 	if _, err := Check(Config{RepoRoot: root, Allowed: reg}); err != nil {
 		t.Errorf("a permitted edge to the shared leaf is the whole point of having one; got %v", err)
@@ -97,7 +98,7 @@ func TestCheck_NestedPathResolvesToItsFamily(t *testing.T) {
 	reg := map[string]map[string]bool{"httpio": {}, "secrets": {"httpio": true}}
 	root := tree(t, map[string][]string{
 		"httpio":  nil,
-		"secrets": {routesImportPrefix + "httpio/internal/detail"},
+		"secrets": {routesPkgPath + "/" + "httpio/internal/detail"},
 	})
 	if _, err := Check(Config{RepoRoot: root, Allowed: reg}); err != nil {
 		t.Errorf("a nested path under a permitted family is that family; got %v", err)
@@ -108,7 +109,7 @@ func TestCheck_NestedPathResolvesToItsFamily(t *testing.T) {
 // and reporting green there is the vacuous-pass shape B-040 measured.
 func TestCheck_EmptyAllowListIsAnError(t *testing.T) {
 	root := tree(t, map[string][]string{"httpio": nil})
-	if _, err := Check(Config{RepoRoot: root, Allowed: map[string]map[string]bool{}}); !errors.Is(err, ErrEmptyAllowList) {
+	if _, err := Check(Config{RepoRoot: root, Allowed: map[string]map[string]bool{}}); !errors.Is(err, subpackagefence.ErrEmptyAllowList) {
 		t.Errorf("an empty registry must FAIL, never pass green; got %v", err)
 	}
 }
@@ -126,11 +127,11 @@ func TestCheck_MissingRoutesRootIsAnError(t *testing.T) {
 func TestCheck_TestFilesAreScanned(t *testing.T) {
 	root := tree(t, map[string][]string{"httpio": nil, "secrets": nil, "builds": nil})
 	p := filepath.Join(root, routesDir, "secrets", "x_test.go")
-	body := "package secrets\n\nimport _ \"" + routesImportPrefix + "builds\"\n"
+	body := "package secrets\n\nimport _ \"" + routesPkgPath + "/" + "builds\"\n"
 	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Check(Config{RepoRoot: root, Allowed: twoFamilies}); !errors.Is(err, ErrSiblingEdge) {
+	if _, err := Check(Config{RepoRoot: root, Allowed: twoFamilies}); !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
 		t.Errorf("a test reaching across a family boundary is still an edge; got %v", err)
 	}
 }
@@ -156,9 +157,9 @@ func TestCheck_RealTree(t *testing.T) {
 func TestCheck_EdgeIsCaughtRegardlessOfImportForm(t *testing.T) {
 	reg := map[string]map[string]bool{"httpio": {}, "secrets": {}, "builds": {}}
 	forms := map[string]string{
-		"alias": "import b \"" + routesImportPrefix + "builds\"\n\nvar _ = b.X",
-		"dot":   "import . \"" + routesImportPrefix + "builds\"",
-		"blank": "import _ \"" + routesImportPrefix + "builds\"",
+		"alias": "import b \"" + routesPkgPath + "/" + "builds\"\n\nvar _ = b.X",
+		"dot":   "import . \"" + routesPkgPath + "/" + "builds\"",
+		"blank": "import _ \"" + routesPkgPath + "/" + "builds\"",
 	}
 	for name, imp := range forms {
 		t.Run(name, func(t *testing.T) {
@@ -179,7 +180,7 @@ func TestCheck_EdgeIsCaughtRegardlessOfImportForm(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(d, "x.go"), []byte("package secrets\n\n"+imp+"\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := Check(Config{RepoRoot: root, Allowed: reg}); !errors.Is(err, ErrSiblingEdge) {
+			if _, err := Check(Config{RepoRoot: root, Allowed: reg}); !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
 				t.Errorf("an %s import carries the same path and must be caught; got %v", name, err)
 			}
 		})
@@ -201,12 +202,12 @@ func TestCheck_EdgeNestedBelowAFamilyIsStillCaught(t *testing.T) {
 	if err := os.MkdirAll(deep, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	body := "package store\n\nimport _ \"" + routesImportPrefix + "builds\"\n"
+	body := "package store\n\nimport _ \"" + routesPkgPath + "/" + "builds\"\n"
 	if err := os.WriteFile(filepath.Join(deep, "y.go"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	out, err := Check(Config{RepoRoot: root, Allowed: twoFamilies})
-	if !errors.Is(err, ErrSiblingEdge) {
+	if !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
 		t.Fatalf("a family's allow-list applies to its WHOLE subtree; got %v edges=%+v files=%d", err, out.Edges, out.FilesParsed)
 	}
 }
@@ -217,10 +218,10 @@ func TestCheck_EdgeNestedBelowAFamilyIsStillCaught(t *testing.T) {
 func TestCheck_ImportingTheParentPackageIsAnEdge(t *testing.T) {
 	root := tree(t, map[string][]string{"httpio": nil, "secrets": {routesPkgPath}, "builds": nil})
 	out, err := Check(Config{RepoRoot: root, Allowed: twoFamilies})
-	if !errors.Is(err, ErrSiblingEdge) {
+	if !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
 		t.Fatalf("a family importing routes/ itself must FAIL; got %v", err)
 	}
-	if len(out.Edges) != 1 || out.Edges[0].To != "<routes-parent>" {
+	if len(out.Edges) != 1 || out.Edges[0].To != subpackagefence.ParentNode {
 		t.Errorf("the edge must name the parent so the reader knows what to move; got %+v", out.Edges)
 	}
 }
@@ -251,16 +252,16 @@ func TestCheck_ToolchainIgnoredDirsAreNotSubpackages(t *testing.T) {
 // families are still to move and would have trusted it.
 func TestCheck_ParentImportingAFamilyIsAnEdge(t *testing.T) {
 	root := tree(t, map[string][]string{"httpio": nil, "tenants": nil})
-	body := "package routes\n\nimport _ \"" + routesImportPrefix + "tenants\"\n"
+	body := "package routes\n\nimport _ \"" + routesPkgPath + "/" + "tenants\"\n"
 	if err := os.WriteFile(filepath.Join(root, routesDir, "x.go"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	reg := map[string]map[string]bool{"httpio": {}, "tenants": {}}
 	out, err := Check(Config{RepoRoot: root, Allowed: reg})
-	if !errors.Is(err, ErrSiblingEdge) {
+	if !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
 		t.Fatalf("the parent reaching into a family is the same coupling as a sibling edge, on the vertical; got %v edges=%+v", err, out.Edges)
 	}
-	if len(out.Edges) != 1 || out.Edges[0].From != "<routes-parent>" || out.Edges[0].To != "tenants" {
+	if len(out.Edges) != 1 || out.Edges[0].From != subpackagefence.ParentNode || out.Edges[0].To != "tenants" {
 		t.Errorf("the edge must name the parent and the family; got %+v", out.Edges)
 	}
 	if out.Edges[0].Line == 0 {
@@ -275,7 +276,7 @@ func TestCheck_ParentImportingAFamilyIsAnEdge(t *testing.T) {
 // at birth.
 func TestCheck_ParentImportingALeafIsAllowed(t *testing.T) {
 	root := tree(t, map[string][]string{"httpio": nil, "tenants": nil})
-	body := "package routes\n\nimport _ \"" + routesImportPrefix + "httpio\"\n"
+	body := "package routes\n\nimport _ \"" + routesPkgPath + "/" + "httpio\"\n"
 	if err := os.WriteFile(filepath.Join(root, routesDir, "x.go"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -288,12 +289,12 @@ func TestCheck_ParentImportingALeafIsAllowed(t *testing.T) {
 // A nested path under a family still belongs to that family, from the parent too.
 func TestCheck_ParentImportingANestedFamilyPathIsAnEdge(t *testing.T) {
 	root := tree(t, map[string][]string{"httpio": nil, "tenants": nil})
-	body := "package routes\n\nimport _ \"" + routesImportPrefix + "tenants/internal/detail\"\n"
+	body := "package routes\n\nimport _ \"" + routesPkgPath + "/" + "tenants/internal/detail\"\n"
 	if err := os.WriteFile(filepath.Join(root, routesDir, "x.go"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	reg := map[string]map[string]bool{"httpio": {}, "tenants": {}}
-	if _, err := Check(Config{RepoRoot: root, Allowed: reg}); !errors.Is(err, ErrSiblingEdge) {
+	if _, err := Check(Config{RepoRoot: root, Allowed: reg}); !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
 		t.Errorf("a nested path resolves to its family from the parent side too; got %v", err)
 	}
 }
@@ -307,7 +308,7 @@ func TestCheck_ParentImportingANestedFamilyPathIsAnEdge(t *testing.T) {
 // worth remembering: writing a risk is not mitigating it.
 func TestCheck_AFamilyWithNoSiblingsIsNotALeaf(t *testing.T) {
 	root := tree(t, map[string][]string{"httpio": nil, "version": nil})
-	body := "package routes\n\nimport _ \"" + routesImportPrefix + "version\"\n"
+	body := "package routes\n\nimport _ \"" + routesPkgPath + "/" + "version\"\n"
 	if err := os.WriteFile(filepath.Join(root, routesDir, "x.go"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +318,7 @@ func TestCheck_AFamilyWithNoSiblingsIsNotALeaf(t *testing.T) {
 		Allowed:  map[string]map[string]bool{"httpio": {}, "version": {}},
 		Leaves:   map[string]bool{"httpio": true},
 	}
-	if _, err := Check(cfg); !errors.Is(err, ErrSiblingEdge) {
+	if _, err := Check(cfg); !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
 		t.Fatalf("a family that imports no sibling is still a family; deriving leafness from the empty set let the parent reach it; got %v", err)
 	}
 }
@@ -326,7 +327,7 @@ func TestCheck_AFamilyWithNoSiblingsIsNotALeaf(t *testing.T) {
 // parent edges to httpio become findings.
 func TestCheck_RemovingALeafDeclarationMakesTheParentEdgesFail(t *testing.T) {
 	root := tree(t, map[string][]string{"httpio": nil})
-	body := "package routes\n\nimport _ \"" + routesImportPrefix + "httpio\"\n"
+	body := "package routes\n\nimport _ \"" + routesPkgPath + "/" + "httpio\"\n"
 	if err := os.WriteFile(filepath.Join(root, routesDir, "x.go"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +336,7 @@ func TestCheck_RemovingALeafDeclarationMakesTheParentEdgesFail(t *testing.T) {
 		Allowed:  map[string]map[string]bool{"httpio": {}},
 		Leaves:   map[string]bool{}, // httpio no longer declared a leaf
 	}
-	if _, err := Check(cfg); !errors.Is(err, ErrSiblingEdge) {
+	if _, err := Check(cfg); !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
 		t.Errorf("the leaf declaration must carry weight — without it the parent edge is an edge; got %v", err)
 	}
 }
@@ -352,7 +353,7 @@ func TestCheck_NothingParsedIsAnError(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, routesDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Check(Config{RepoRoot: root, Allowed: map[string]map[string]bool{"httpio": {}}}); !errors.Is(err, ErrNothingParsed) {
+	if _, err := Check(Config{RepoRoot: root, Allowed: map[string]map[string]bool{"httpio": {}}}); !errors.Is(err, subpackagefence.ErrNothingParsed) {
 		t.Errorf("an empty routes/ must FAIL — a fence that read nothing has verified nothing; got %v", err)
 	}
 }
@@ -368,7 +369,7 @@ func TestCheck_AFamilyDeclaredAsALeafIsIncoherent(t *testing.T) {
 		Allowed:  map[string]map[string]bool{"httpio": {}, "tenants": {"httpio": true}},
 		Leaves:   map[string]bool{"httpio": true, "tenants": true}, // contradição
 	}
-	if _, err := Check(cfg); !errors.Is(err, ErrIncoherentRegistry) {
+	if _, err := Check(cfg); !errors.Is(err, subpackagefence.ErrIncoherentRegistry) {
 		t.Fatalf("a name declared both a family and a leaf must FAIL before anything is scanned; got %v", err)
 	}
 }
@@ -452,7 +453,7 @@ func TestCheck_ToolchainIgnoredDirsUnderAFamilyAreNotEdges(t *testing.T) {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		body := "package fixture\n\nimport _ \"" + routesImportPrefix + "version\"\n"
+		body := "package fixture\n\nimport _ \"" + routesPkgPath + "/" + "version\"\n"
 		if err := os.WriteFile(filepath.Join(dir, "f.go"), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -527,15 +528,15 @@ func TestCheck_ProductionFileImportingATestOnlyLeafIsAnEdge(t *testing.T) {
 	}
 	root := t.TempDir()
 	writeFile(t, root, "routestest", "helpers.go")
-	writeFile(t, root, "secrets", "secrets.go", routesImportPrefix+"routestest")
+	writeFile(t, root, "secrets", "secrets.go", routesPkgPath+"/"+"routestest")
 
 	out, err := Check(Config{RepoRoot: root, Allowed: reg})
 	if err == nil {
 		t.Fatalf("production code reaching the test-only leaf must fail even when the family declares it; got PASS: %+v", out)
 	}
 
-	if !errors.Is(err, ErrTestOnlyLeafFromProduction) {
-		t.Errorf("the message must name the ACTUAL rule: ErrSiblingEdge says \"families are peers\",\n"+
+	if !errors.Is(err, subpackagefence.ErrTestOnlyLeafFromProduction) {
+		t.Errorf("the message must name the ACTUAL rule: subpackagefence.ErrForbiddenEdge says \"families are peers\",\n"+
 			"which would send the reader hunting a coupling that is not there — the target IS a\n"+
 			"declared leaf and the family DID declare the edge; got %v", err)
 	}
@@ -557,7 +558,7 @@ func TestCheck_TestFileImportingATestOnlyLeafIsAllowed(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "routestest", "helpers.go")
 	writeFile(t, root, "secrets", "secrets.go")
-	writeFile(t, root, "secrets", "secrets_test.go", routesImportPrefix+"routestest")
+	writeFile(t, root, "secrets", "secrets_test.go", routesPkgPath+"/"+"routestest")
 
 	if _, err := Check(Config{RepoRoot: root, Allowed: reg}); err != nil {
 		t.Errorf("a _test.go reaching the test-only leaf is precisely why the leaf exists; got %v", err)
@@ -578,15 +579,15 @@ func TestCheck_ParentProductionFileImportingATestOnlyLeafIsAnEdge(t *testing.T) 
 	writeFile(t, root, "routestest", "helpers.go")
 	dir := filepath.Join(root, routesDir)
 	if err := os.WriteFile(filepath.Join(dir, "projects.go"),
-		[]byte("package routes\n\nimport (\n\t_ \""+routesImportPrefix+"routestest\"\n)\n"), 0o644); err != nil {
+		[]byte("package routes\n\nimport (\n\t_ \""+routesPkgPath+"/"+"routestest\"\n)\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	out, err := Check(Config{RepoRoot: root, Allowed: map[string]map[string]bool{"routestest": {}}})
-	if !errors.Is(err, ErrTestOnlyLeafFromProduction) {
+	if !errors.Is(err, subpackagefence.ErrTestOnlyLeafFromProduction) {
 		t.Fatalf("the parent's production files are as barred as a family's; got %v (%+v)", err, out.Edges)
 	}
-	if len(out.Edges) != 1 || out.Edges[0].From != "<routes-parent>" || !out.Edges[0].TestOnly {
+	if len(out.Edges) != 1 || out.Edges[0].From != subpackagefence.ParentNode || !out.Edges[0].TestOnly {
 		t.Errorf("the edge must be attributed to the parent and carry its kind; got %+v", out.Edges)
 	}
 }
@@ -599,10 +600,16 @@ func TestCheck_ParentTestFileImportingATestOnlyLeafIsAllowed(t *testing.T) {
 	writeFile(t, root, "routestest", "helpers.go")
 	dir := filepath.Join(root, routesDir)
 	if err := os.WriteFile(filepath.Join(dir, "projects_test.go"),
-		[]byte("package routes_test\n\nimport (\n\t_ \""+routesImportPrefix+"routestest\"\n)\n"), 0o644); err != nil {
+		[]byte("package routes_test\n\nimport (\n\t_ \""+routesPkgPath+"/"+"routestest\"\n)\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Check(Config{RepoRoot: root, Allowed: map[string]map[string]bool{"routestest": {}}}); err != nil {
 		t.Errorf("the parent's _test.go is exactly the edge the real tree carries; got %v", err)
+	}
+}
+
+func TestRegistryValidates(t *testing.T) {
+	if err := subpackagefence.ValidateRegistry(Config{}.Fence()); err != nil {
+		t.Fatalf("the committed registry must be coherent and acyclic: %v", err)
 	}
 }
