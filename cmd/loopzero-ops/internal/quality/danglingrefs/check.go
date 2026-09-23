@@ -6,7 +6,9 @@
 //
 // It fails when a .sh script DELETED (or renamed-away) in the diff is still
 // referenced — in a live, non-comment context — by any caller surface:
-// Taskfile.yml, taskfiles/, .github/workflows/, infra/, .claude/skills/.
+// Taskfile.yml, taskfiles/, .github/workflows/, infra/. The installed kit
+// under .claude/ is gitignored and is not a surface: a gate reading it would
+// answer differently on every clone.
 //
 // This is the automated backstop against the failure that abandoned the
 // develop-bkp big-bang: scripts were deleted faster than their callers were
@@ -50,9 +52,8 @@ var excludedPathFragments = []string{
 }
 
 // liveCallContext matches lines that INVOKE/REFERENCE a script in an
-// executable or operator-instruction context. Markdown ref lines in SKILLs
-// (backticked paths, list items) also count — a SKILL must never point at a
-// deleted file.
+// executable or operator-instruction context (a backticked path or a list
+// item counts too).
 var liveCallContext = regexp.MustCompile(`(?i)(\bbash\b|\bsource\b|^\s*\.\s|run:|\bexec\b|script=|/tmp/loopzero-ops|` + "`" + `|^\s*-\s|\.sh)`)
 
 // spec is this gate's configuration of the shared dangling-reference engine.
@@ -64,7 +65,6 @@ var spec = deletedrefs.Spec{
 		"taskfiles",
 		".github/workflows",
 		"infra",
-		".claude/skills",
 	},
 	IsCaller: isCaller,
 	// Comment lines that document a migration rather than invoke the script.
@@ -99,11 +99,6 @@ func isCaller(rel string) bool {
 	if strings.HasSuffix(lower, ".csv") || strings.HasSuffix(lower, ".txt") {
 		return false
 	}
-	// Markdown prose (knowledge-base, plans, audits) is not a live caller.
-	// EXCEPTION: SKILL.md files are operator instructions — a SKILL pointing
-	// at a deleted script IS a live break, so those are scanned.
-	if strings.HasSuffix(lower, ".md") && !strings.Contains(lower, "skills/") {
-		return false
-	}
-	return true
+	// Markdown prose is not a live caller.
+	return !strings.HasSuffix(lower, ".md")
 }

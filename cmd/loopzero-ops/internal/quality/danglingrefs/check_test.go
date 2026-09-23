@@ -19,31 +19,31 @@ func run(t *testing.T, root string) *Outcome {
 	return out
 }
 
-// TestDangling_LiveSkillRef_Fails — a deleted dr/x.sh still invoked by a SKILL
+// TestDangling_LiveTaskRef_Fails — a deleted dr/x.sh still invoked by a task
 // (full-path form) is a dangling reference → Pass=false.
-func TestDangling_LiveSkillRef_Fails(t *testing.T) {
+func TestDangling_LiveTaskRef_Fails(t *testing.T) {
 	root := qtestutil.InitRepo(t, map[string]string{
-		"infra/scripts/dr/preflight.sh":           "#!/usr/bin/env bash\necho hi\n",
-		".claude/skills/cleanroom-drill/SKILL.md": "Run: `bash infra/scripts/dr/preflight.sh`\n",
+		"infra/scripts/dr/preflight.sh": "#!/usr/bin/env bash\necho hi\n",
+		"taskfiles/drill.yml":           "      - bash infra/scripts/dr/preflight.sh\n",
 	})
 	qtestutil.CommitOn(t, root, "feat", map[string]string{
 		"infra/scripts/dr/preflight.sh": "<DELETE>",
 	})
 	out := run(t, root)
 	if out.Pass {
-		t.Fatalf("expected FAIL: deleted dr/preflight.sh still referenced by SKILL, got Pass")
+		t.Fatalf("expected FAIL: deleted dr/preflight.sh still referenced by a task, got Pass")
 	}
 	if len(out.Violations) == 0 || !strings.Contains(strings.Join(out.Violations, "\n"), "preflight.sh") {
 		t.Fatalf("violation must name preflight.sh, got: %v", out.Violations)
 	}
 }
 
-// TestDangling_AbbreviatedSkillRef_Fails — EC-1: the abbreviated `dr/x.sh` form
-// (no infra/scripts/ prefix) the SKILLs actually use must also be caught.
-func TestDangling_AbbreviatedSkillRef_Fails(t *testing.T) {
+// TestDangling_AbbreviatedRef_Fails — EC-1: the abbreviated `dr/x.sh` form
+// (no infra/scripts/ prefix) must also be caught.
+func TestDangling_AbbreviatedRef_Fails(t *testing.T) {
 	root := qtestutil.InitRepo(t, map[string]string{
 		"infra/scripts/dr/teardown-validator.sh": "#!/usr/bin/env bash\n",
-		".claude/skills/drill-test/SKILL.md":     "- Pular `dr/teardown-validator.sh` (audit cleanup)\n",
+		"taskfiles/drill.yml":                    "      - bash dr/teardown-validator.sh\n",
 	})
 	qtestutil.CommitOn(t, root, "feat", map[string]string{
 		"infra/scripts/dr/teardown-validator.sh": "<DELETE>",
@@ -134,5 +134,19 @@ func TestDangling_AllowlistRefIgnored_Passes(t *testing.T) {
 	out := run(t, root)
 	if !out.Pass {
 		t.Fatalf("allowlist reference must be excluded, got: %v", out.Violations)
+	}
+}
+
+// The installed kit under .claude/ is gitignored: a SKILL there is not part of
+// the repository, so it cannot make the verdict — otherwise the gate answers
+// differently on every clone.
+func TestDangling_GitignoredKitSkillIsNotACallerSurface(t *testing.T) {
+	root := qtestutil.InitRepo(t, map[string]string{
+		"infra/scripts/dr/preflight.sh":           "#!/usr/bin/env bash\necho hi\n",
+		".claude/skills/cleanroom-drill/SKILL.md": "Run: `bash infra/scripts/dr/preflight.sh`\n",
+	})
+	qtestutil.CommitOn(t, root, "feat", map[string]string{"infra/scripts/dr/preflight.sh": "<DELETE>"})
+	if out := run(t, root); !out.Pass {
+		t.Fatalf("a reference inside the gitignored .claude kit must not fail the gate: %v", out.Violations)
 	}
 }
