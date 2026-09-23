@@ -76,6 +76,7 @@ var gateRegistry = []gateSpec{
 	{"skill-suites", "Roda as suites pytest de .claude/skills/*/tests/, que nenhuma task rodava. Advisory quando pytest ausente; FALHA quando a descoberta nao acha suite nenhuma, porque nao achar nada nao e o mesmo que nao achar nada errado (B-124).", runSkillSuites},
 	{"skill-script-paths", "Toda invocacao de script num SKILL.md resolve nos DOIS layouts do ecossistema (.claude/ no plugin, raiz no standalone). Caminho nu quebra em um dos dois, e em qual depende de como o ecossistema foi instalado (B-120).", runSkillScriptPaths},
 	{"docs-contract-refs", "Toda referencia .claude/rules/*.md no CLAUDE.md e todo ADR-NNNN citado em comentario Go resolve (ou tem excecao com prazo).", runDocsContractRefs},
+	{"values-duplicate-keys", "A Helm values file must not declare one mapping key twice (Helm silently keeps only the last).", runValuesDuplicateKeys},
 	{"chart-default-tags", "loopzero-owned charts must not default their image tag to a mutable ref (#232).", runChartDefaultTags},
 	{"caddyfile-dev-server-deny", "Defense-in-depth: app-dev block MUST 404 dev-server-only paths (/src/*, /.env, /@vite/*, /node_modules/*, /vite.config.*). Regression protection for loopzero-cloud#141.", runCaddyfileDevServerDeny},
 	{"dev-public-billing-portal-syntax", "Hermetic contract for infra/tests/e2e/live/dev-public-billing-portal_test.sh — 8 assertions (bash -n / strict-mode / log+assert / billing endpoint / exit-code contract / allowlisted). M20 T2.1 Wave A gate 1/18.", runDevPublicBillingPortalSyntax},

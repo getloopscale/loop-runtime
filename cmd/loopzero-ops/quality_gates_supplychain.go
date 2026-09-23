@@ -24,6 +24,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/prodimagetags"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/trivyscan"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/trufflehogscan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/valuesduplicatekeys"
 )
 
 // M9 Step 7: quality gate entry points for the "supplychain" theme, decomposed out of the
@@ -376,6 +377,37 @@ func runChartDefaultTags(args []string) int {
 		fmt.Fprintf(os.Stderr, "  %s:%d — chart %s defaults to mutable tag %q\n", f.File, f.Line, f.Chart, f.Tag)
 	}
 	fmt.Fprintln(os.Stderr, "Fix: prefer `tag: \"\"` — an empty default fails loudly if nothing overrides it, where `latest` fails silently (#232).")
+	return 1
+}
+
+// runValuesDuplicateKeys refuses a Helm values file that declares one mapping key
+// twice: Helm keeps the last declaration silently, so the first block never
+// renders while the file reads as configured.
+func runValuesDuplicateKeys(args []string) int {
+	fs := flag.NewFlagSet("values-duplicate-keys", flag.ContinueOnError)
+	root := fs.String("root", ".", "repo root")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	out, err := valuesduplicatekeys.Check(valuesduplicatekeys.Config{RepoRoot: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "values-duplicate-keys: %v\n", err)
+		return 2
+	}
+	if out.Skipped {
+		fmt.Printf("values-duplicate-keys: SKIP — %s\n", out.Reason)
+		return 0
+	}
+	if out.Pass {
+		fmt.Printf("values-duplicate-keys: PASS — %s\n", out.Reason)
+		return 0
+	}
+	fmt.Fprintln(os.Stderr, "values-duplicate-keys: FAIL")
+	for _, f := range out.Findings {
+		fmt.Fprintf(os.Stderr, "  %s:%d — key %q already declared at line %d; Helm keeps this one and drops the first\n",
+			f.File, f.Line, f.Path, f.FirstLine)
+	}
+	fmt.Fprintln(os.Stderr, "Fix: merge the two blocks into one key.")
 	return 1
 }
 

@@ -1,7 +1,20 @@
 # Grafana Tempo — trace backend for distributed tracing
-# Chart: grafana/tempo (standalone mode)
+# Chart: grafana/tempo 1.14.0 (standalone mode), installed directly by
+# core.helmfile.yaml.gotmpl — every key below is read by THAT chart, so the shape
+# must be the upstream one.
 # Sufficient for <100 deploys/day (same rationale as Loki SingleBinary)
 # MEET-2026-03-30-020: APPROVED_WITH_CONDITIONS
+#
+# Upstream shape, verified against the chart's templates:
+#   tempo.*            — the Tempo process: config, resources, CONTAINER securityContext
+#   securityContext    — the POD securityContext (statefulset.yaml renders it at pod level)
+#   persistence.*      — the PVC mounted at /var/tempo
+# The chart exposes no probe values and hardcodes the HTTP port to 3100 in both the
+# container and the Service, so tempo.server.http_listen_port must stay 3100.
+#
+# This file used to declare `tempo:` twice. Helm keeps only the LAST mapping of a
+# duplicated key, silently, so the receivers/retention/storage block was dropped and
+# Tempo ran with the chart defaults (24h retention, jaeger + opencensus receivers).
 
 tempo:
   receivers:
@@ -20,16 +33,32 @@ tempo:
       wal:
         path: /var/tempo/wal
 
-server:
-  http_listen_port: 3200
+  resources:
+    limits:
+      cpu: "300m"
+      memory: "512Mi"
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+
+  # Hardened container securityContext (INF-G08 + plan ADR D7).
+  # Tempo writes traces to /var/tempo (PVC mount); root FS can be read-only.
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
 
 persistence:
   enabled: true
   size: 5Gi
 
-# Hardened securityContext (INF-G08 + plan ADR D7).
-# Tempo writes traces to /var/tempo (PVC mount); root FS can be read-only.
-podSecurityContext:
+# Pod securityContext (the chart renders the top-level key at pod level).
+securityContext:
   runAsNonRoot: true
   runAsUser: 10001
   runAsGroup: 10001
@@ -37,51 +66,6 @@ podSecurityContext:
   seccompProfile:
     type: RuntimeDefault
 
-securityContext:
-  runAsNonRoot: true
-  runAsUser: 10001
-  runAsGroup: 10001
-  readOnlyRootFilesystem: true
-  allowPrivilegeEscalation: false
-  capabilities:
-    drop:
-      - ALL
-
-tempo:
-  podSecurityContext:
-    runAsNonRoot: true
-    runAsUser: 10001
-    seccompProfile:
-      type: RuntimeDefault
-  containerSecurityContext:
-    readOnlyRootFilesystem: true
-    allowPrivilegeEscalation: false
-    runAsNonRoot: true
-    capabilities:
-      drop:
-        - ALL
-
-resources:
-  limits:
-    cpu: "300m"
-    memory: "512Mi"
-  requests:
-    cpu: "100m"
-    memory: "256Mi"
-
 # C8: PriorityClass lower than core platform services (PG, ArgoCD, API, operators)
 # Telemetry is first-to-shed under resource pressure.
 # priorityClassName: loopzero-observability  # Uncomment when PriorityClass is created
-
-livenessProbe:
-  httpGet:
-    path: /ready
-    port: 3200
-  initialDelaySeconds: 15
-  periodSeconds: 15
-readinessProbe:
-  httpGet:
-    path: /ready
-    port: 3200
-  initialDelaySeconds: 10
-  periodSeconds: 10

@@ -266,6 +266,7 @@ tasks:
       # Wired 2026-07-30 assim que os achados foram corrigidos (CHG-2026-07-30-002).
       - /tmp/loopzero-ops quality worker-csp          # #35 — CSP do CF Worker sem script inline
       - /tmp/loopzero-ops quality chart-default-tags  # #232 — chart loopzero-owned sem tag mutável no default
+      - /tmp/loopzero-ops quality values-duplicate-keys  # a values file declaring one key twice loses the first block silently
       # sqlc T3 governance gates (T0.3-T0.5 of plan 2026-05-29-sqlc-
       # migration v1.2). Phase 0 baseline: each gate trivially passes
       # (empty queries/, no sqlc imports). Real exercise begins T1.1+.
