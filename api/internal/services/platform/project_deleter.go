@@ -28,9 +28,9 @@ type WorkflowCanceller interface {
 type ProjectDeleterDeps struct {
 	BuildStore        db.BuildStore
 	EnvTargetStore    store.EnvironmentTargetStore
-	ReleaseStore      db.ReleaseStore // nil-safe: when nil, skips release cascade-cancel (legacy callers)
+	ReleaseStore      ProjectDeleteReleaseStore // nil-safe: when nil, skips release cascade-cancel (legacy callers)
 	ProjectStore      ProjectDeleteProjectStore
-	ScalingStore      store.ScalingStore // nil-safe: when nil, skips app_scaling_config cascade
+	ScalingStore      ProjectDeleteScalingStore // nil-safe: when nil, skips app_scaling_config cascade
 	Locker            deploycontracts.EnvironmentLocker
 	GitOps            deploycontracts.GitOpsPusher
 	WorkflowCanceller WorkflowCanceller   // nil-safe: skips workflow cancel if not set
@@ -44,13 +44,25 @@ type ProjectDeleteProjectStore interface {
 	DeleteProject(ctx context.Context, tenantID, projectID string) error
 }
 
+// ProjectDeleteReleaseStore is the release-store operation project deletion
+// needs: cancelling every non-terminal release of an environment (ISP).
+type ProjectDeleteReleaseStore interface {
+	CancelAllByEnv(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (int, error)
+}
+
+// ProjectDeleteScalingStore is the scaling-store operation project deletion
+// needs: removing the project's app_scaling_config rows (ISP).
+type ProjectDeleteScalingStore interface {
+	DeleteByProject(ctx context.Context, tx db.DBTX, tenantID, projectID string) error
+}
+
 // ProjectDeleter orchestrates project deletion across all layers.
 type ProjectDeleter struct {
 	buildStore        db.BuildStore
 	envTargetStore    store.EnvironmentTargetStore
-	releaseStore      db.ReleaseStore
+	releaseStore      ProjectDeleteReleaseStore
 	projectStore      ProjectDeleteProjectStore
-	scalingStore      store.ScalingStore
+	scalingStore      ProjectDeleteScalingStore
 	locker            deploycontracts.EnvironmentLocker
 	gitops            deploycontracts.GitOpsPusher
 	workflowCanceller WorkflowCanceller

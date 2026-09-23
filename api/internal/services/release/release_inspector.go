@@ -104,10 +104,16 @@ func (e ErrReleaseInspectionNotFound) Error() string {
 // releaseStoreInspector queries the release store + audit store +
 // optional build store for the workflow ID.
 type releaseStoreInspector struct {
-	releases   db.ReleaseStore
+	releases   ReleaseInspectorReleaseQuerier
 	audit      ReleaseInspectorAuditQuerier
 	buildStore ReleaseInspectorBuildQuerier
 	logger     *slog.Logger
+}
+
+// ReleaseInspectorReleaseQuerier is the one release-store read the inspector
+// makes (ISP — consumer-side port, like the audit and build queriers below).
+type ReleaseInspectorReleaseQuerier interface {
+	GetByID(ctx context.Context, id string) (*db.Release, error)
 }
 
 // ReleaseInspectorAuditQuerier is the minimal audit interface this
@@ -128,7 +134,7 @@ type ReleaseInspectorBuildQuerier interface {
 
 // NewReleaseInspector wires the inspector.
 func NewReleaseInspector(
-	releases db.ReleaseStore,
+	releases ReleaseInspectorReleaseQuerier,
 	audit ReleaseInspectorAuditQuerier,
 	buildStore ReleaseInspectorBuildQuerier,
 ) ReleaseInspector {

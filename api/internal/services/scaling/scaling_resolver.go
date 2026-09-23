@@ -32,16 +32,22 @@ type ScalingResolver interface {
 	) ([]deploycontracts.AppSpec, error)
 }
 
-// dbScalingResolver implements ScalingResolver via store.ScalingStore.
+// ScalingConfigReader is the one scaling-store read the resolver makes (ISP —
+// store.ScalingStore also carries the writes the scaling routes use).
+type ScalingConfigReader interface {
+	GetByApp(ctx context.Context, tenantID, projectID, environment, appName string) (*store.ScalingConfig, error)
+}
+
+// dbScalingResolver implements ScalingResolver via a ScalingConfigReader.
 // Nil-safe: a nil store falls back to returning the yaml unchanged
 // (defensive — preserves current behavior if wiring missing).
 type dbScalingResolver struct {
-	store store.ScalingStore
+	store ScalingConfigReader
 }
 
 // NewDBScalingResolver constructs a resolver backed by the given store.
 // Passing nil produces a resolver that always returns yaml unchanged.
-func NewDBScalingResolver(store store.ScalingStore) ScalingResolver {
+func NewDBScalingResolver(store ScalingConfigReader) ScalingResolver {
 	return &dbScalingResolver{store: store}
 }
 

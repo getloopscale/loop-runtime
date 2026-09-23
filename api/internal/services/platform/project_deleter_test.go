@@ -169,8 +169,8 @@ func (f *fakeSyncDeleter) TriggerSync(_ context.Context, appName string) error {
 func (f *fakeSyncDeleter) TerminateOperation(_ context.Context, _ string) error { return nil }
 
 // fakeReleaseStoreDeleter records every CancelAllByEnv call so tests can assert
-// the cascade fires inside the project-delete lock. Implements db.ReleaseStore;
-// only CancelAllByEnv is exercised, the rest return zero values.
+// the cascade fires inside the project-delete lock. It implements only the
+// ProjectDeleteReleaseStore port.
 type fakeReleaseStoreDeleter struct {
 	cancelCalls    []cancelAllCall
 	cancelledCount int
@@ -183,45 +183,6 @@ type cancelAllCall struct {
 	env       string
 }
 
-func (f *fakeReleaseStoreDeleter) Create(_ context.Context, _ db.DBTX, _ *db.Release) error {
-	return nil
-}
-func (f *fakeReleaseStoreDeleter) GetByID(_ context.Context, _ string) (*db.Release, error) {
-	return nil, nil
-}
-func (f *fakeReleaseStoreDeleter) UpdateStatus(_ context.Context, _ db.DBTX, _, _ string) (*db.Release, error) {
-	return nil, nil
-}
-func (f *fakeReleaseStoreDeleter) SetGitCommit(_ context.Context, _ db.DBTX, _, _ string) error {
-	return nil
-}
-func (f *fakeReleaseStoreDeleter) GetActiveByEnv(_ context.Context, _, _, _ string) (*db.Release, error) {
-	return nil, nil
-}
-func (f *fakeReleaseStoreDeleter) GetActiveByEnvTx(_ context.Context, _ db.DBTX, _, _, _ string) (*db.Release, error) {
-	return nil, nil
-}
-func (f *fakeReleaseStoreDeleter) GetPreviousRelease(_ context.Context, _, _, _ string) (*db.Release, error) {
-	return nil, nil
-}
-func (f *fakeReleaseStoreDeleter) GetByIDForTenant(_ context.Context, _, _ string) (*db.Release, error) {
-	return nil, nil
-}
-func (f *fakeReleaseStoreDeleter) ListByEnv(_ context.Context, _, _, _ string, _ int) ([]db.Release, error) {
-	return nil, nil
-}
-func (f *fakeReleaseStoreDeleter) GetLatestByBuildID(_ context.Context, _ string) (*db.Release, error) {
-	return nil, nil
-}
-func (f *fakeReleaseStoreDeleter) FindPendingReleases(_ context.Context, _ string) ([]db.Release, error) {
-	return nil, nil
-}
-func (f *fakeReleaseStoreDeleter) FindActiveReleases(_ context.Context, _ string) ([]db.Release, error) {
-	return nil, nil
-}
-func (f *fakeReleaseStoreDeleter) GetByIDTx(_ context.Context, _ db.DBTX, _ string) (*db.Release, error) {
-	return nil, nil
-}
 func (f *fakeReleaseStoreDeleter) CancelAllByEnv(_ context.Context, _ db.DBTX, tenantID, projectID, env string) (int, error) {
 	f.cancelCalls = append(f.cancelCalls, cancelAllCall{tenantID, projectID, env})
 	return f.cancelledCount, f.cancelErr

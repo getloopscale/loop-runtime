@@ -67,8 +67,17 @@ type ReleaseStaleChecker interface {
 //
 // Unlike BuildReaper, the ReleaseReaper does not need to check external workflow status —
 // it only checks database state.
+// ReleaseReaperStore is the part of the release store the reaper uses:
+// re-reading a stale release, transitioning it, and recording why (ISP —
+// the full db.ReleaseStore has fifteen methods).
+type ReleaseReaperStore interface {
+	GetByID(ctx context.Context, id string) (*db.Release, error)
+	UpdateStatus(ctx context.Context, tx db.DBTX, id string, event string) (*db.Release, error)
+	AppendSideEffect(ctx context.Context, tx db.DBTX, id string, patch map[string]any) error
+}
+
 type ReleaseReaper struct {
-	releaseStore db.ReleaseStore
+	releaseStore ReleaseReaperStore
 	checker      ReleaseStaleChecker
 	locker       deploycontracts.EnvironmentLocker
 	eventStore   interface {
@@ -80,7 +89,7 @@ type ReleaseReaper struct {
 
 // NewReleaseReaper creates a new ReleaseReaper.
 func NewReleaseReaper(
-	releaseStore db.ReleaseStore,
+	releaseStore ReleaseReaperStore,
 	checker ReleaseStaleChecker,
 	locker deploycontracts.EnvironmentLocker,
 	eventStore interface {
