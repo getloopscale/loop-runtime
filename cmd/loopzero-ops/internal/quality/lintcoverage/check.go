@@ -259,15 +259,45 @@ func (execRunner) Lint(root, mod string) (int, error) {
 	dir := ModuleDir(root, mod)
 	cmd := lintCommand(dir)
 	out, err := cmd.CombinedOutput()
+	code := 0
 	if err != nil {
 		var exitErr *exec.ExitError
 		if !errors.As(err, &exitErr) {
-			// Binário ausente ou impossível de executar: NÃO é "zero achados".
-			return 0, fmt.Errorf("golangci-lint em %s: %w", mod, err)
+			// A missing or unrunnable binary is NOT "zero findings".
+			return 0, fmt.Errorf("golangci-lint in %s: %w", mod, err)
 		}
-		// Saída != 0 com achados é o caminho normal — a contagem vem do texto.
+		code = exitErr.ExitCode()
 	}
-	return len(findingRE.FindAllString(string(out), -1)), nil
+	n, lerr := lintFindings(code, out)
+	if lerr != nil {
+		return 0, fmt.Errorf("golangci-lint in %s: %w", mod, lerr)
+	}
+	return n, nil
+}
+
+// lintIssuesExitCode is golangci-lint's exit code for "issues were found".
+// Every other non-zero code is a run that did not complete.
+const lintIssuesExitCode = 1
+
+// lintFindings turns a golangci-lint exit code and output into a count. A
+// crashed run (config error, type-check failure, timeout) prints no finding
+// lines; counting it as zero would report an unmeasured module as clean.
+func lintFindings(exitCode int, out []byte) (int, error) {
+	n := len(findingRE.FindAll(out, -1))
+	switch {
+	case exitCode == 0:
+		return n, nil
+	case exitCode == lintIssuesExitCode && n > 0:
+		return n, nil
+	default:
+		return 0, fmt.Errorf("exit %d with %d parseable finding(s) — the run did not complete: %s",
+			exitCode, n, lastLine(out))
+	}
+}
+
+func lastLine(out []byte) string {
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	return lines[len(lines)-1]
 }
 
 func (execRunner) Gofmt(root, mod string) (int, error) {
