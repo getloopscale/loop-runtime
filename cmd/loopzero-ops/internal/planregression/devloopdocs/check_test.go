@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package phase3
+package devloopdocs
 
 import (
 	"os"
@@ -12,29 +12,23 @@ import (
 
 var (
 	taskfileRoot = filepath.Join(repoRoot, "Taskfile.yml")
-	// Era `docs/operations/dev-loop.md` ate' `19b8c6eaa` ("docs: consolidate 1,523
-	// files into six living documents"). O conteudo NAO se perdeu — `docs/operations.md:11`
-	// carrega o DEV LOOP e `CLAUDE.md:47` ja aponta para la'. Medido 2026-09-16: o
-	// caminho antigo sobrevivia apenas neste arquivo; README, CLAUDE.md, Taskfile.yml e
-	// taskfiles/test.yml ja tinham migrado, e so' o teste ficou para tras — por isso
-	// ele e' repontado e nao aposentado.
+	// The dev loop moved from docs/operations/dev-loop.md into the "Dev loop"
+	// section of docs/operations.md when docs/ was consolidated (19b8c6eaa).
 	devLoopDoc   = filepath.Join(repoRoot, "docs/operations.md")
 	readmePath   = filepath.Join(repoRoot, "README.md")
 	claudeMdPath = filepath.Join(repoRoot, "CLAUDE.md")
 )
 
-// TestT3_1_DevLoopDocExists — operator runbook present
-func TestT3_1_DevLoopDocExists(t *testing.T) {
+// The operator runbook describes the dev loop and how to troubleshoot it.
+func TestOperationsDocDescribesTheDevLoop(t *testing.T) {
 	data, err := os.ReadFile(devLoopDoc)
 	if err != nil {
 		t.Fatalf("docs/operations.md missing: %v", err)
 	}
 	content := string(data)
 	for _, must := range []string{
-		// "LoopZero Dev Loop" era o TITULO do documento dedicado. Consolidado sob
-		// `# Operations`, a secao chama-se `## Dev loop` — repetir "LoopZero" num
-		// documento deste repositorio seria ruido, e o que o teste protege e' que
-		// a secao exista, nao que carregue o nome do arquivo que a continha.
+		// The section heading, not the old document title: what matters is
+		// that the section exists.
 		"## Dev loop",
 		"`task setup`",
 		"`tilt up`",
@@ -47,8 +41,9 @@ func TestT3_1_DevLoopDocExists(t *testing.T) {
 	}
 }
 
-// TestT3_2_SetupHasDeprecationNotice — Taskfile setup target prints notice
-func TestT3_2_SetupHasDeprecationNotice(t *testing.T) {
+// `task setup` is one-shot; it prints a notice pointing at `tilt up` for the
+// day-to-day loop.
+func TestSetupTaskPointsToTiltForTheDevLoop(t *testing.T) {
 	data, err := os.ReadFile(taskfileRoot)
 	if err != nil {
 		t.Fatalf("read Taskfile: %v", err)
@@ -75,9 +70,8 @@ func TestT3_2_SetupHasDeprecationNotice(t *testing.T) {
 	}
 }
 
-// TestT3_1_ReadmeCanonicalizesTilt — README Setup section explicitly distinguishes
-// task setup vs tilt up roles.
-func TestT3_1_ReadmeCanonicalizesTilt(t *testing.T) {
+// The README Setup section distinguishes `task setup` from `tilt up`.
+func TestReadmeSetupExplainsTheDevLoop(t *testing.T) {
 	data, err := os.ReadFile(readmePath)
 	if err != nil {
 		t.Fatalf("read README: %v", err)
@@ -100,9 +94,9 @@ func TestT3_1_ReadmeCanonicalizesTilt(t *testing.T) {
 	}
 }
 
-// TestT3_1_ClaudeMdCanonicalizes — CLAUDE.md development-commands section
-// references the distinction explicitly.
-func TestT3_1_ClaudeMdCanonicalizes(t *testing.T) {
+// CLAUDE.md's development commands distinguish the one-shot setup from the
+// dev loop.
+func TestClaudeMdDistinguishesOneShotSetupFromDevLoop(t *testing.T) {
 	data, err := os.ReadFile(claudeMdPath)
 	if err != nil {
 		t.Fatalf("read CLAUDE.md: %v", err)
