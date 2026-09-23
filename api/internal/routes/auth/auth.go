@@ -123,8 +123,7 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("switch team: membership lookup failed",
 			"user_id", uc.UserID, "error", err)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-			"INTERNAL", "Unable to verify team membership."))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError.Wrap("Unable to verify team membership."))
 		return
 	}
 	isMember := false
@@ -144,8 +143,7 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 	if err := h.activeStore.SetActiveTenant(r.Context(), uc.UserID, req.Name); err != nil {
 		slog.Error("switch team: SetActiveTenant failed",
 			"user_id", uc.UserID, "tenant_id", req.Name, "error", err)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-			"INTERNAL", "Unable to persist team selection."))
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError.Wrap("Unable to persist team selection."))
 		return
 	}
 

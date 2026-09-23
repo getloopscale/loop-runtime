@@ -37,6 +37,9 @@ var apiStatusByCode = map[string]int{
 	"ENVIRONMENT_AMBIGUOUS":     http.StatusBadRequest,     // routes/environments — name in several projects
 	"SCALE_TO_ZERO_UNAVAILABLE": http.StatusBadRequest,     // services/build — min 0 without KEDA
 	"ENV_PROVISION_TIMEOUT":     http.StatusGatewayTimeout, // services/platform — env not ready in time
+	// A first-deploy environment could not be provisioned: a server-side
+	// failure, registered so it is an explicit 500 rather than a default one.
+	"ENV_PROVISION_FAILED": http.StatusInternalServerError, // services/platform
 }
 
 func init() {
