@@ -13,7 +13,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -278,55 +277,23 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 			reason = reaperReason(s.Event, r.cfg)
 		}
 
-		err = r.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
-			// Re-fetch inside lock
-			build, err = r.buildStore.GetByID(ctx, s.ID)
-			if err != nil {
-				return err
-			}
-			if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
-				return nil
-			}
-
-			_, err = r.buildStore.UpdateStatus(ctx, tx, s.ID, string(s.Event))
-			if err != nil {
-				return err
-			}
-
-			// Set descriptive error message (F-04: reaped builds must explain why)
-			if err := r.buildStore.SetErrorMessage(ctx, tx, s.ID, reason); err != nil {
-				return err
-			}
-
-			// J-16 slice 3 (MEET-2026-07-04-001): stage deploy.failed on the same
-			// tx — but ONLY for failure reaps. A cancel-timeout reaps to CANCELLED,
-			// which is NOT a deploy.failed (the customer cancelled).
-			if s.Event != statemachine.BPEventCancelTimeout {
-				if err := stageDeployFailed(ctx, tx, r.deployEventStore, build); err != nil {
-					return err
-				}
-			}
-			return nil
+		timeoutEvent := s.Event
+		transitioned, err := r.finalizer().fail(ctx, build, buildFailure{
+			reason: reason,
+			route: func(statemachine.BuildPhase) ([]statemachine.BuildPhaseEvent, error) {
+				return []statemachine.BuildPhaseEvent{timeoutEvent}, nil
+			},
+			// A cancel-timeout reaps to CANCELLED, which is not a failed deploy
+			// (the customer cancelled), so deploy.failed is not staged.
+			stageDeployFailed: timeoutEvent != statemachine.BPEventCancelTimeout,
 		})
-
 		if err != nil {
 			r.logger.Error("build reaper: failed to transition build",
 				"build_id", s.ID, "from", s.State, "event", s.Event, "error", err)
 			continue
 		}
-
-		// MOD-5: Emit SSE build.failed so the CLI gets notified immediately
-		// instead of waiting for the deploy timeout (10 minutes).
-		if r.eventStore != nil {
-			eventData := events.SafeJSONMarshal(map[string]string{
-				"build_id": s.ID,
-				"status":   "failed",
-				"error":    reason,
-			})
-			if _, err := r.eventStore.Append(ctx, s.ID, "build.failed", eventData); err != nil {
-				r.logger.Error("build reaper: failed to emit SSE event",
-					"build_id", s.ID, "error", err)
-			}
+		if !transitioned {
+			continue // finalized by another worker since the stale query
 		}
 
 		r.logger.Warn("build reaper: reaped stale build",
@@ -399,4 +366,10 @@ func (c *PostgresStaleBuildChecker) FindStaleBuilds(ctx context.Context, cellID 
 	}
 
 	return result, rows.Err()
+}
+
+// finalizer takes the reaper's builds to a terminal phase.
+func (r *BuildReaper) finalizer() buildFinalizer {
+	return buildFinalizer{builds: r.buildStore, locker: r.locker, sse: r.eventStore,
+		deployEvents: r.deployEventStore, logger: r.logger}
 }

@@ -48,6 +48,19 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 			"build callback reported success but provided no apps")
 	}
 
+	// A failed build is finalized by the shared failure path: it routes QUEUED
+	// (the EC-N race, Argo finishing before SubmitBuild moved it to RUNNING)
+	// through RUNNING, persists the error, stages deploy.failed and, after the
+	// commit, emits build.failed. No activation follows.
+	if result.Status == "failed" {
+		if _, err := o.finalizer().fail(ctx, build, buildFailure{
+			reason: result.Error, route: routeToFailed, stageDeployFailed: true,
+		}); err != nil {
+			return fmt.Errorf("on build completed: %w", err)
+		}
+		return nil
+	}
+
 	// Phase 1 (Lock 1): Transition build to terminal state.
 	// This transaction MUST commit independently so the build never gets stuck in RUNNING.
 	err = o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
@@ -69,46 +82,6 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 			}
 		}
 
-		// Transition to terminal state
-		if result.Status == "failed" {
-			if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BPEventFailed)); err != nil {
-				return fmt.Errorf("on build completed: transition to FAILED: %w", err)
-			}
-
-			// J-16 slice 3 (MEET-2026-07-04-001): stage deploy.failed on the
-			// outbox on the SAME tx as the FAILED transition — atomic with the
-			// deploy, no silently-lost failure event.
-			if err := stageDeployFailed(ctx, tx, o.deployEventStore, build); err != nil {
-				return fmt.Errorf("on build completed: stage deploy.failed: %w", err)
-			}
-
-			// Persist error message (F-04: builds must have error_message when FAILED)
-			if result.Error != "" {
-				if err := o.buildStore.SetErrorMessage(ctx, tx, buildID, result.Error); err != nil {
-					slog.Error("failed to set error message on build",
-						"build_id", buildID,
-						"error", err,
-					)
-					// Non-fatal: the build already transitioned to FAILED, which is the critical part
-				}
-			}
-
-			// Emit SSE build.failed with error details
-			failedPayload := map[string]string{
-				"build_id": buildID,
-				"status":   "failed",
-			}
-			if result.Error != "" {
-				failedPayload["error"] = result.Error
-			}
-			eventData := events.SafeJSONMarshal(failedPayload)
-			if _, err := o.eventStore.Append(ctx, buildID, "build.failed", eventData); err != nil {
-				return fmt.Errorf("on build completed: emit build.failed: %w", err)
-			}
-
-			return nil
-		}
-
 		// Transition to SUCCEEDED
 		if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BPEventSucceeded)); err != nil {
 			return fmt.Errorf("on build completed: transition to SUCCEEDED: %w", err)
@@ -127,11 +100,6 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	})
 	if err != nil {
 		return err
-	}
-
-	// If build failed, no activation needed -- Phase 1 already emitted build.failed
-	if result.Status == "failed" {
-		return nil
 	}
 
 	// Re-fetch build after Phase 1 commit to get updated state
@@ -180,20 +148,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	}
 
 	// Phase 2 succeeded -- transition RELEASING -> SUCCEEDED (deploy complete).
-	if err := o.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
-		// Re-fetch inside lock -- another pod's reconcile loop may have already transitioned
-		current, err := o.buildStore.GetByID(ctx, buildID)
-		if err != nil {
-			return fmt.Errorf("on build completed: re-fetch for SUCCEEDED transition: %w", err)
-		}
-		if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(current.Status)) {
-			return nil // Already finalized (race with reconcile loop) -- safe
-		}
-		if _, err := o.buildStore.UpdateStatus(ctx, tx, buildID, string(statemachine.BPEventReleaseCompleted)); err != nil {
-			return fmt.Errorf("on build completed: transition to SUCCEEDED: %w", err)
-		}
-		return nil
-	}); err != nil {
+	if err := o.finalizer().succeed(ctx, build); err != nil {
 		slog.Error("on build completed: failed to transition RELEASING -> SUCCEEDED",
 			"build_id", buildID, "error", err)
 		return fmt.Errorf("on build completed: RELEASING -> SUCCEEDED: %w", err)

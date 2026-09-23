@@ -16,7 +16,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/manifests"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/pkg/naming"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // onWorkflowSucceeded handles a completed build workflow by creating a release
@@ -158,19 +157,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 // Called when the reconcile loop detects that the release is already ACTIVE.
 func (r *BuildReconcileLoop) completeBuild(ctx context.Context, build *db.Build) {
 	r.activationAttempts.Delete(build.ID) // BRC-003: cleanup on success
-	err := r.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
-		current, err := r.buildStore.GetByID(ctx, build.ID)
-		if err != nil {
-			return err
-		}
-		if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(current.Status)) {
-			return nil // Already finalized
-		}
-		if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BPEventReleaseCompleted)); err != nil {
-			return fmt.Errorf("complete build: transition to SUCCEEDED: %w", err)
-		}
-		return nil
-	})
+	err := r.finalizer().succeed(ctx, build)
 	if err != nil {
 		r.logger.Error("reconcile loop: failed to complete RELEASING build",
 			"build_id", build.ID, "error", err)

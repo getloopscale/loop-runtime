@@ -6,6 +6,7 @@ package build
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"time"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -234,4 +235,10 @@ func (o *BuildOrchestrator) activate(ctx context.Context, build *db.Build, resul
 		return errDeliveryNotWired
 	}
 	return o.delivery.Activate(ctx, activationBuildFrom(build), result)
+}
+
+// finalizer takes the orchestrator's builds to a terminal phase.
+func (o *BuildOrchestrator) finalizer() buildFinalizer {
+	return buildFinalizer{builds: o.buildStore, locker: o.locker, sse: o.eventStore,
+		deployEvents: o.deployEventStore, logger: slog.Default()}
 }

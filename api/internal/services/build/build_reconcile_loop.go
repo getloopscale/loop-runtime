@@ -288,3 +288,9 @@ func (r *BuildReconcileLoop) IsProcessing(buildID string) bool {
 	_, ok := r.active.Load(buildID)
 	return ok
 }
+
+// finalizer takes the loop's builds to a terminal phase.
+func (r *BuildReconcileLoop) finalizer() buildFinalizer {
+	return buildFinalizer{builds: r.buildStore, locker: r.locker, sse: r.eventStore,
+		deployEvents: r.deployEventStore, logger: r.logger}
+}

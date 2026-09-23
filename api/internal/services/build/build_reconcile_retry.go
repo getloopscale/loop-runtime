@@ -12,10 +12,8 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/events"
 	"github.com/getloopscale/loopzero/api/internal/manifests"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // maxActivationAttempts is the maximum number of times the reconcile loop will
@@ -207,76 +205,10 @@ func (r *BuildReconcileLoop) failBuild(ctx context.Context, build *db.Build, rea
 	metrics.BuildDuration.WithLabelValues(build.TenantID, build.Environment, "failed").Observe(time.Since(build.CreatedAt).Seconds())
 	metrics.BuildQueueDepth.Dec()
 
-	err := r.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
-		// Re-fetch inside lock — state may have changed
-		current, err := r.buildStore.GetByID(ctx, build.ID)
-		if err != nil {
-			return err
-		}
-		if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(current.Status)) {
-			return nil // Already finalized
-		}
-
-		// Route to the correct failure event based on current state
-		switch statemachine.BuildPhase(current.Status) {
-		case statemachine.BPhQueued:
-			// QUEUED → RUNNING first (state machine requires it), then RUNNING → FAILED
-			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BPEventStarted)); err != nil {
-				return fmt.Errorf("transition to RUNNING: %w", err)
-			}
-			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BPEventFailed)); err != nil {
-				return fmt.Errorf("transition to FAILED: %w", err)
-			}
-		case statemachine.BPhRunning:
-			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BPEventFailed)); err != nil {
-				return fmt.Errorf("transition to FAILED: %w", err)
-			}
-		case statemachine.BPhReleasing:
-			// MEET-008: RELEASING → FAILED via release-specific event
-			if _, err := r.buildStore.UpdateStatus(ctx, tx, build.ID, string(statemachine.BPEventReleaseFailed)); err != nil {
-				return fmt.Errorf("transition RELEASING to FAILED: %w", err)
-			}
-		default:
-			return fmt.Errorf("unexpected build state %q for failBuild", current.Status)
-		}
-
-		// Set error message
-		if err := r.buildStore.SetErrorMessage(ctx, tx, build.ID, reason); err != nil {
-			return fmt.Errorf("set error message: %w", err)
-		}
-
-		// J-16 slice 3 (MEET-2026-07-04-001): stage deploy.failed on the outbox
-		// on the SAME tx as the FAILED transition above — atomic, at-least-once.
-		if err := stageDeployFailed(ctx, tx, r.deployEventStore, build); err != nil {
-			return fmt.Errorf("stage deploy.failed: %w", err)
-		}
-
-		return nil
-	})
-
-	if err != nil {
+	if _, err := r.finalizer().fail(ctx, build, buildFailure{
+		reason: reason, route: routeToFailed, stageDeployFailed: true,
+	}); err != nil {
 		r.logger.Error("reconcile loop: failed to transition build",
 			"build_id", build.ID, "error", err)
-		return
 	}
-
-	// Emit SSE build.failed event so the CLI gets notified
-	eventData := events.SafeJSONMarshal(map[string]string{
-		"build_id": build.ID,
-		"status":   "failed",
-		"error":    reason,
-	})
-	if _, err := r.eventStore.Append(ctx, build.ID, "build.failed", eventData); err != nil {
-		r.logger.Error("reconcile loop: failed to emit SSE event",
-			"build_id", build.ID, "error", err)
-	}
-
-	r.logger.Warn("reconcile loop: build failed",
-		"build_id", build.ID, "reason", reason)
-
-	// M9 Step 6: release owns the build-failed callback + its async delivery
-	// (find_code_004 / CODE-004 WithoutCancel+30s timeout contract lives in
-	// release.NotifyBuildFailed). Build asks release to notify; it no longer
-	// peeks at the private callback var.
-	release.NotifyBuildFailed(ctx, build.TenantID, build.ProjectID, build.CommitSHA, build.ID)
 }
