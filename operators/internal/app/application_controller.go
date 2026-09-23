@@ -161,6 +161,11 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// EndpointsReady=true unblocks phase=Serving.
 	r.reconcileWorkloadStatus(ctx, &app)
 	r.reconcileRouteStatus(ctx, &app)
+	phase, err := advancePhase(&app)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	app.Status.Phase = phase
 	r.reconcileHealthCondition(&app)
 
 	if err := r.patchStatus(ctx, &app, base); err != nil {
@@ -315,8 +320,6 @@ func (r *ApplicationReconciler) reconcileRouteStatus(ctx context.Context, app *l
 	setReadyOrWaitingCondition(&app.Status.Conditions, conditions.TypeRouteReachable,
 		app.Status.Reachable, app.Generation,
 		"route is reachable", "waiting for route to become reachable")
-
-	app.Status.Phase = r.computePhase(app)
 }
 
 // setReadyOrWaitingCondition is the canonical if-bool-then-True-else-False
@@ -380,35 +383,6 @@ func (r *ApplicationReconciler) reconcileDelete(ctx context.Context, app *loopze
 
 	logger.Info("application deletion complete", "application", app.Name)
 	return ctrl.Result{}, nil
-}
-
-// computePhase determines the ApplicationPhase based on current state.
-// Uses all defined phases: Progressing → Serving → Reachable, Degraded, Down.
-func (r *ApplicationReconciler) computePhase(app *loopzerov1.LoopZeroApplication) loopzerov1.ApplicationPhase {
-	if app.Status.Reachable {
-		return loopzerov1.ApplicationPhaseReachable
-	}
-	if app.Status.EndpointsReady {
-		return loopzerov1.ApplicationPhaseServing
-	}
-	// Check conditions for degraded/down states.
-	// "Waiting" is normal progression (not yet reachable), "Failed" is degraded.
-	// AP-2 fix: use typed constants from internal/conditions instead of
-	// hardcoded string literals. See ADR-0023 hoist condition + roadmap §AP-2.
-	for _, c := range app.Status.Conditions {
-		if c.Type == conditions.TypeRouteReachable && c.Status == metav1.ConditionFalse {
-			switch c.Reason {
-			case conditions.ReasonFailed:
-				return loopzerov1.ApplicationPhaseDown
-			case conditions.ReasonDegraded:
-				return loopzerov1.ApplicationPhaseDegraded
-			default:
-				// "Waiting" or any other reason — still progressing
-				return loopzerov1.ApplicationPhaseProgressing
-			}
-		}
-	}
-	return loopzerov1.ApplicationPhaseProgressing
 }
 
 // reconcileWorkloadStatus sets app.Status.EndpointsReady=true if the workload
