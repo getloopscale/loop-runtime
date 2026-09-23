@@ -13,6 +13,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/go-logr/logr"
 	// pgx stdlib driver — registered on import; used only when the data-plane
 	// poller is enabled (default OFF). Zero runtime cost for legacy operators.
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -28,6 +29,7 @@ import (
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/app"
 	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
+	"github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/operatorboot"
 	"github.com/getloopscale/loopzero/operators/internal/tracing"
 	"github.com/getloopscale/loopzero/pkg/healthcheck"
@@ -107,48 +109,28 @@ func main() {
 	}
 
 	// dogfood-2026-05-08-fixes T4.2 (F-6, ADR D6 + EC-5 multi-cell awareness).
-	// Wire the cell-aware runtime client factory so ApplicationController can
-	// fast-path EndpointsReady=true on workload Pod Ready, regardless of
-	// ExposedRoute Reachable.
+	// The Application and Exposure controllers read workload Pods and TLS
+	// Secrets in the runtime cluster of each tenant's cell.
 	//
-	// T1.4 of deep-review-remediation-plan (closes find_arch_007 MEDIUM partial,
-	// per ADR D3 of the plan): CELL_0_KUBECONFIG should be MANDATORY in
-	// production, but EC-4 of the edge-case review warned that flipping the
-	// guard mid-rollout (when the Helm chart hasn't yet mounted the Secret)
-	// CrashLoopBackOffs every operator pod. Compromise:
-	//
-	//   - Set LOOPZERO_REQUIRE_CELL_0_KUBECONFIG=true to opt into fail-fast mode
-	//     (post-T1.4a Helm chart deploy). Operator exits with non-zero if
-	//     CELL_0_KUBECONFIG is missing OR factory creation fails.
-	//   - Leave LOOPZERO_REQUIRE_CELL_0_KUBECONFIG unset (default) for graceful
-	//     fallback (legacy path; warning emitted; no fast-path Healthy).
-	//
-	// Production cells flip the env var to true ONCE T1.4a Helm mount is
-	// observed via task doctor. Pre-flip, the warning + loopzero_app_operator_
-	// cell_factory_disabled_total counter (T1.5/find_arch_007 wired) provides
-	// observability of the degraded mode.
-	var appFactory cellrouting.RuntimeClientFactory
+	// T1.4 of deep-review-remediation-plan (find_arch_007): CELL_0_KUBECONFIG
+	// should be mandatory in production, but flipping the guard before the
+	// Helm chart mounts the Secret would CrashLoopBackOff every pod (EC-4).
+	// LOOPZERO_REQUIRE_CELL_0_KUBECONFIG=true opts into fail-fast; without it a
+	// missing or unusable kubeconfig starts the operator with a factory that
+	// reports ErrRuntimeClusterUnavailable on every lookup, which the
+	// controllers surface as "not ready" rather than guessing a cluster. The
+	// setup log below is the signal of that degraded mode.
 	requireKubeconfig := os.Getenv("LOOPZERO_REQUIRE_CELL_0_KUBECONFIG") == "true"
-	cell0Kubeconfig := os.Getenv("CELL_0_KUBECONFIG")
-	if cell0Kubeconfig != "" {
-		runtimeClient, err := cellrouting.CreateClusterClient(setupLog, cell0Kubeconfig, scheme, "runtime")
-		if err != nil {
-			if requireKubeconfig {
-				setupLog.Error(err, "failed to create runtime cluster client AND LOOPZERO_REQUIRE_CELL_0_KUBECONFIG=true — refusing to start")
-				os.Exit(1)
-			}
-			setupLog.Error(err, "failed to create runtime cluster client — fast-path Healthy disabled (degraded)")
-		} else {
-			appFactory = cellrouting.NewCellAwareRuntimeClientFactory(
-				mgr.GetClient(), runtimeClient, "loopzero-system")
-			setupLog.Info("ApplicationController: cell-aware fast-path Healthy enabled")
-		}
-	} else {
+	appFactory, factoryErr := runtimeFactory(mgr, os.Getenv("CELL_0_KUBECONFIG"), setupLog)
+	if factoryErr != nil {
 		if requireKubeconfig {
-			setupLog.Error(nil, "CELL_0_KUBECONFIG required (LOOPZERO_REQUIRE_CELL_0_KUBECONFIG=true) but not set — refusing to start")
+			setupLog.Error(factoryErr, "runtime cluster access required (LOOPZERO_REQUIRE_CELL_0_KUBECONFIG=true) — refusing to start")
 			os.Exit(1)
 		}
-		setupLog.Info("CELL_0_KUBECONFIG not set — Application fast-path Healthy disabled (legacy mode)")
+		setupLog.Error(factoryErr, "runtime cluster access unavailable — Application fast-path Healthy and TLS certificate checks disabled (degraded)")
+		appFactory = cellrouting.NewUnavailableRuntimeClientFactory(factoryErr.Error())
+	} else {
+		setupLog.Info("ApplicationController: cell-aware fast-path Healthy enabled")
 	}
 
 	if err := app.SetupApplicationControllerWithFactory(mgr, baseDomain, appFactory); err != nil {
@@ -226,4 +208,17 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// runtimeFactory builds the cell-aware factory from the CELL_0_KUBECONFIG
+// path, or reports why runtime cluster access is unavailable.
+func runtimeFactory(mgr ctrl.Manager, cell0Kubeconfig string, log logr.Logger) (cellrouting.RuntimeClientFactory, error) {
+	if cell0Kubeconfig == "" {
+		return nil, fmt.Errorf("CELL_0_KUBECONFIG is not set")
+	}
+	runtimeClient, err := cellrouting.CreateClusterClient(log, cell0Kubeconfig, scheme, "runtime")
+	if err != nil {
+		return nil, fmt.Errorf("create runtime cluster client: %w", err)
+	}
+	return cellrouting.NewCellAwareRuntimeClientFactory(mgr.GetClient(), runtimeClient, constants.NamespacePlatformSystem), nil
 }

@@ -419,7 +419,8 @@ func (r *ApplicationReconciler) computePhase(app *loopzerov1.LoopZeroApplication
 // EC-9 graceful degrade on cell-0-cluster unreachable).
 //
 // Behavior:
-//   - RuntimeFactory == nil: single-cell legacy mode → no-op (current path).
+//   - Factory without runtime access (app-operator started without
+//     CELL_0_KUBECONFIG): For returns ErrRuntimeClusterUnavailable → log + return.
 //   - Tenant CR not found: log + return (route-status path will set
 //     EndpointsReady eventually).
 //   - Workload client error (timeout, RBAC, cluster down): log + return.
@@ -427,9 +428,6 @@ func (r *ApplicationReconciler) computePhase(app *loopzerov1.LoopZeroApplication
 //   - Pod list returns 0 matches: leave EndpointsReady at current value.
 //   - Pod list returns ≥1 with PodReady=True: set EndpointsReady=true.
 func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app *loopzerov1.LoopZeroApplication) {
-	if r.RuntimeFactory == nil {
-		return
-	}
 	logger := log.FromContext(ctx)
 
 	// Resolve tenant cellID via Tenant CR (mgmt cluster).
@@ -499,11 +497,15 @@ func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app
 	}
 }
 
-// SetupApplicationControllerWithFactory is the cell-aware entrypoint
-// (dogfood-2026-05-08-fixes T4.2). Passing a CellAwareRuntimeClientFactory
-// enables the workload-Pod-Ready fast-path so app.Status.Phase converges
-// to Serving as soon as the Pod is Ready, regardless of ExposedRoute state.
+// SetupApplicationControllerWithFactory registers the ApplicationController
+// (dogfood-2026-05-08-fixes T4.2). factory is required: with runtime access it
+// enables the workload-Pod-Ready fast-path so app.Status.Phase converges to
+// Serving as soon as the Pod is Ready; a deployment without runtime access
+// passes cellrouting.NewUnavailableRuntimeClientFactory.
 func SetupApplicationControllerWithFactory(mgr ctrl.Manager, baseDomain string, factory cellrouting.RuntimeClientFactory) error {
+	if factory == nil {
+		return fmt.Errorf("application controller: a runtime client factory is required")
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.LoopZeroApplication{}, reconcileloop.ForOption()).
 		Owns(&loopzerov1.ExposedRoute{}).

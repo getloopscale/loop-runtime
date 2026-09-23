@@ -339,12 +339,6 @@ func (r *ExposureReconciler) checkCertificateReady(ctx context.Context, route *l
 	}
 	logger := log.FromContext(ctx)
 
-	if r.RuntimeFactory == nil {
-		logger.Info("cert check: no runtime factory — cannot look where the secret lives",
-			"route", route.Name)
-		return false
-	}
-
 	var app loopzerov1.LoopZeroApplication
 	appKey := types.NamespacedName{Name: route.Spec.ApplicationRef, Namespace: route.Namespace}
 	if err := r.Get(ctx, appKey, &app); err != nil {
@@ -432,16 +426,16 @@ type ExposureControllerConfig struct {
 	AllowProbeURLOverride bool
 
 	// RuntimeFactory resolves the client for the cell where the workload — and its
-	// TLS secret — actually lives. Without it the cert check cannot look in the right
-	// place and reports not-ready, which is the honest answer (#277).
+	// TLS secret — actually lives. Required. A deployment without runtime access
+	// passes cellrouting.NewUnavailableRuntimeClientFactory, and the cert check
+	// then reports not-ready, which is the honest answer (#277).
 	RuntimeFactory cellrouting.RuntimeClientFactory
 }
 
 // SetupExposureController registers the ExposureController with the manager.
-func SetupExposureController(mgr ctrl.Manager, cfgs ...ExposureControllerConfig) error {
-	var cfg ExposureControllerConfig
-	if len(cfgs) > 0 {
-		cfg = cfgs[0]
+func SetupExposureController(mgr ctrl.Manager, cfg ExposureControllerConfig) error {
+	if cfg.RuntimeFactory == nil {
+		return fmt.Errorf("exposure controller: a runtime client factory is required")
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.ExposedRoute{}, reconcileloop.ForOption()).

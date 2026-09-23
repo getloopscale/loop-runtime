@@ -8,6 +8,7 @@ package cellrouting
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -202,4 +203,22 @@ func contains(haystack, needle string) bool {
 		}
 	}
 	return false
+}
+
+// A deployment that has no runtime cluster access (app-operator without
+// CELL_0_KUBECONFIG) is a configuration, not a nil: every lookup returns a
+// typed error the caller can recognise, instead of each controller carrying
+// its own nil branch with its own degraded-mode semantics.
+func TestUnavailableFactory_ReturnsTheTypedErrorForEveryCell(t *testing.T) {
+	f := NewUnavailableRuntimeClientFactory("CELL_0_KUBECONFIG not set")
+
+	for _, cellID := range []string{"", "cell-0", "cell-1"} {
+		c, err := f.For(context.Background(), cellID)
+		if !errors.Is(err, ErrRuntimeClusterUnavailable) {
+			t.Fatalf("For(%q) error = %v, want ErrRuntimeClusterUnavailable", cellID, err)
+		}
+		if c != nil {
+			t.Fatalf("For(%q) returned a client alongside the error", cellID)
+		}
+	}
 }

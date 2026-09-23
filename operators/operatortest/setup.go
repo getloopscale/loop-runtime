@@ -349,35 +349,25 @@ func SetupClusterCredentialController(mgr ctrl.Manager) error {
 // envtest_suite.go calls SetupEnvironmentControllerWithFactory directly.
 
 // SetupApplicationController registers the ApplicationController with the given manager.
-// baseDomain is the base domain for hostname assignment (e.g., "dev.loopzero.example").
+// baseDomain is the base domain for hostname assignment (e.g., "dev.loopzero.example");
+// runtimeFactory resolves the runtime cluster of each tenant's cell.
 //
-// ADR-0023 D1: delegates to internal/app. Calls the canonical WithFactory
-// entry point with factory=nil (single-cell envtest mode), eliminating the
-// backward-compat wrapper that registration_test.go flagged as
-// "implemented but not wired" in app-operator main.go.
-func SetupApplicationController(mgr ctrl.Manager, baseDomain string) error {
-	return app.SetupApplicationControllerWithFactory(mgr, baseDomain, nil)
+// ADR-0023 D1: delegates to internal/app.
+func SetupApplicationController(mgr ctrl.Manager, baseDomain string, runtimeFactory cellrouting.RuntimeClientFactory) error {
+	return app.SetupApplicationControllerWithFactory(mgr, baseDomain, runtimeFactory)
 }
 
 // SetupExposureController registers the ExposureController with the given manager.
 // Enables AllowProbeURLOverride for test environments (SEC-005).
 //
 // ADR-0023 D1: delegates to internal/app.
-func SetupExposureController(mgr ctrl.Manager) error {
+func SetupExposureController(mgr ctrl.Manager, runtimeFactory cellrouting.RuntimeClientFactory) error {
 	return app.SetupExposureController(mgr, app.ExposureControllerConfig{
 		AllowProbeURLOverride: true,
-		// #277: em envtest há um cluster só, então a "cell do workload" é ele mesmo.
-		// Sem factory a checagem de certificado responde not-ready por não ter onde olhar,
-		// e todo teste de TLS falharia por um motivo que não é o que ele testa.
-		RuntimeFactory: sameClusterFactory{c: mgr.GetClient()},
+		// #277: the TLS Secret lives in the workload's cell, so the cert check
+		// resolves it through the same factory as every other runtime read.
+		RuntimeFactory: runtimeFactory,
 	})
-}
-
-// sameClusterFactory resolve qualquer cellID para o cluster local. Só para envtest.
-type sameClusterFactory struct{ c client.Client }
-
-func (f sameClusterFactory) For(context.Context, string) (client.Client, error) {
-	return f.c, nil
 }
 
 // SetupGitRepositoryBindingController registers the GitRepositoryBindingController with the given manager.

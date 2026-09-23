@@ -126,7 +126,8 @@ type EnvtestConfig struct {
 	// both routed through the tracking CellAwareFactory. Tenant suite uses this.
 	EnableTenant bool
 
-	// EnableApp wires SetupApplicationController + SetupExposureController.
+	// EnableApp wires SetupApplicationController + SetupExposureController,
+	// both routed through CellAwareFactory.
 	EnableApp bool
 
 	// EnablePreview wires SetupPreviewController, routed through CellAwareFactory.
@@ -270,11 +271,11 @@ func StartEnvtest(t TestT, cfg EnvtestConfig) *EnvtestHandle {
 		}
 	}
 	if cfg.EnableApp {
-		if err := SetupApplicationController(mgr, baseDomain); err != nil {
+		if err := SetupApplicationController(mgr, baseDomain, h.CellAwareFactory); err != nil {
 			h.Stop()
 			t.Fatalf("SetupApplicationController: %v", err)
 		}
-		if err := SetupExposureController(mgr); err != nil {
+		if err := SetupExposureController(mgr, h.CellAwareFactory); err != nil {
 			h.Stop()
 			t.Fatalf("SetupExposureController: %v", err)
 		}

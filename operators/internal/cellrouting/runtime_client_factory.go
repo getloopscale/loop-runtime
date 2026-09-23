@@ -7,11 +7,12 @@ package cellrouting
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -131,7 +132,7 @@ func (f *CellAwareRuntimeClientFactory) kubeconfigSecret(ctx context.Context, ce
 	}
 	var secret corev1.Secret
 	if err := f.MgmtClient.Get(ctx, client.ObjectKey{Name: match.Spec.SecretRef.Name, Namespace: secretNS}, &secret); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return nil, fmt.Errorf("runtime-client-factory: kubeconfig Secret %s/%s not found for cell %q",
 				secretNS, match.Spec.SecretRef.Name, cellID)
 		}
@@ -179,4 +180,27 @@ func (s *staticRuntimeClientFactory) For(_ context.Context, _ string) (client.Cl
 		return nil, fmt.Errorf("static-runtime-client-factory: no client configured")
 	}
 	return s.c, nil
+}
+
+// ErrRuntimeClusterUnavailable is returned by a factory for a deployment that
+// was configured without runtime cluster access.
+var ErrRuntimeClusterUnavailable = errors.New("runtime cluster access is not configured")
+
+// unavailableRuntimeClientFactory is the factory of a deployment with no
+// runtime cluster access. Every lookup fails with ErrRuntimeClusterUnavailable,
+// so a controller handles "cannot reach the cell" through its ordinary error
+// path instead of a nil-factory branch of its own.
+type unavailableRuntimeClientFactory struct {
+	reason string
+}
+
+// NewUnavailableRuntimeClientFactory returns a factory whose every lookup
+// fails with ErrRuntimeClusterUnavailable, carrying reason.
+func NewUnavailableRuntimeClientFactory(reason string) RuntimeClientFactory {
+	return unavailableRuntimeClientFactory{reason: reason}
+}
+
+// For implements RuntimeClientFactory.
+func (u unavailableRuntimeClientFactory) For(_ context.Context, cellID string) (client.Client, error) {
+	return nil, fmt.Errorf("cellID=%q: %w: %s", cellID, ErrRuntimeClusterUnavailable, u.reason)
 }
