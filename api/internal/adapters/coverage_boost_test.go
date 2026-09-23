@@ -73,21 +73,6 @@ func TestRollbackServiceAdapter_StructExists(t *testing.T) {
 // BuildOrchestratorAdapter - OnBuildCompleted (covers app translation)
 // =============================================================================
 
-// fakeBuildOrchestratorForComplete tests the OnBuildCompleted path by verifying
-// the adapter can be created with the correct types.
-func TestBuildOrchestratorAdapter_OnBuildCompleted_NilOrchPanics(t *testing.T) {
-	// When Orch is nil, calling OnBuildCompleted will panic.
-	// This verifies the adapter struct instantiation.
-	adapter := &BuildOrchestratorAdapter{
-		Orch:       nil,
-		BuildStore: &fakeBuildStore{},
-	}
-	// Verify fields are set.
-	if adapter.Orch != nil {
-		t.Error("expected nil Orch")
-	}
-}
-
 // =============================================================================
 // BuildOrchestratorAdapter - CancelBuild (covers delegation path)
 // =============================================================================

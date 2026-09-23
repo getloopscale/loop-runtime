@@ -242,13 +242,6 @@ func TestAdapters_EmptyStore_ReturnsErrNoRows(t *testing.T) {
 			},
 		},
 		{
-			name: "BuildOrchestratorAdapter_IsBuildTerminal",
-			call: func(store *fakeBuildStore) error {
-				_, err := (&BuildOrchestratorAdapter{BuildStore: store}).IsBuildTerminal(context.Background(), "bld-nope")
-				return err
-			},
-		},
-		{
 			name: "BuildOrchestratorAdapter_GetBuildTenantID",
 			call: func(store *fakeBuildStore) error {
 				_, err := (&BuildOrchestratorAdapter{BuildStore: store}).GetBuildTenantID(context.Background(), "bld-nope")
@@ -511,67 +504,7 @@ var _ status.StatusReleaseStore = (*StatusReleaseStoreAdapter)(nil)
 
 // --- IsBuildTerminal ---
 
-func TestBuildOrchestratorAdapter_IsBuildTerminal_Succeeded(t *testing.T) {
-	store := &fakeBuildStore{
-		build: &db.Build{ID: "bld-term-001", Status: "SUCCEEDED"},
-	}
-	adapter := &BuildOrchestratorAdapter{BuildStore: store}
-
-	terminal, err := adapter.IsBuildTerminal(context.Background(), "bld-term-001")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !terminal {
-		t.Error("SUCCEEDED build should be terminal")
-	}
-}
-
-func TestBuildOrchestratorAdapter_IsBuildTerminal_Running(t *testing.T) {
-	store := &fakeBuildStore{
-		build: &db.Build{ID: "bld-run-001", Status: "RUNNING"},
-	}
-	adapter := &BuildOrchestratorAdapter{BuildStore: store}
-
-	terminal, err := adapter.IsBuildTerminal(context.Background(), "bld-run-001")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if terminal {
-		t.Error("RUNNING build should NOT be terminal")
-	}
-}
-
-func TestBuildOrchestratorAdapter_IsBuildTerminal_Failed(t *testing.T) {
-	store := &fakeBuildStore{
-		build: &db.Build{ID: "bld-fail-001", Status: "FAILED"},
-	}
-	adapter := &BuildOrchestratorAdapter{BuildStore: store}
-
-	terminal, err := adapter.IsBuildTerminal(context.Background(), "bld-fail-001")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !terminal {
-		t.Error("FAILED build should be terminal")
-	}
-}
-
-func TestBuildOrchestratorAdapter_IsBuildTerminal_Cancelled(t *testing.T) {
-	store := &fakeBuildStore{
-		build: &db.Build{ID: "bld-can-001", Status: "CANCELLED"},
-	}
-	adapter := &BuildOrchestratorAdapter{BuildStore: store}
-
-	terminal, err := adapter.IsBuildTerminal(context.Background(), "bld-can-001")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !terminal {
-		t.Error("CANCELLED build should be terminal")
-	}
-}
-
-// IsBuildTerminal/GetBuildTenantID/BuildStoreReaderAdapter/LogBuildStoreAdapter
+// GetBuildTenantID/BuildStoreReaderAdapter/LogBuildStoreAdapter
 // NotFound cases consolidated into TestAdapters_EmptyStore_ReturnsErrNoRows
 // above (Phase 3 v26 refactor).
 

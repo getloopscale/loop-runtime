@@ -107,36 +107,8 @@ func (a *buildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID s
 	}, nil
 }
 
-func (a *buildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID string, result builds.BuildCallbackInput) error {
-	var apps []deploycontracts.AppRelease
-	for _, app := range result.Apps {
-		apps = append(apps, deploycontracts.AppRelease{
-			Name:        app.Name,
-			ImageDigest: app.ImageDigest,
-			URL:         app.URL,
-			DurationMs:  app.DurationMs,
-		})
-	}
-	return a.orch.OnBuildCompleted(ctx, buildID, deploycontracts.BuildCallbackRequest{
-		Status: result.Status,
-		Apps:   apps,
-	})
-}
-
 func (a *buildOrchestratorAdapter) CancelBuild(ctx context.Context, buildID string) error {
 	return a.orch.CancelBuild(ctx, buildID)
-}
-
-func (a *buildOrchestratorAdapter) IsBuildTerminal(ctx context.Context, buildID string) (bool, error) {
-	build, err := a.buildStore.GetByID(ctx, buildID)
-	if err != nil {
-		return false, err
-	}
-	switch statemachine.BuildPhase(build.Status) {
-	case statemachine.BPhSucceeded, statemachine.BPhFailed, statemachine.BPhCancelled:
-		return true, nil
-	}
-	return false, nil
 }
 
 func (a *buildOrchestratorAdapter) GetBuildTenantID(ctx context.Context, buildID string) (string, error) {

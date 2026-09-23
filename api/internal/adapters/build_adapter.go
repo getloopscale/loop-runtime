@@ -115,35 +115,8 @@ func (a *BuildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID s
 	return resp, nil
 }
 
-func (a *BuildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID string, result builds.BuildCallbackInput) error {
-	var apps []deploycontracts.AppRelease
-	for _, app := range result.Apps {
-		apps = append(apps, deploycontracts.AppRelease{
-			Name:        app.Name,
-			ImageDigest: app.ImageDigest,
-			URL:         app.URL,
-			Type:        app.Type,
-			DurationMs:  app.DurationMs,
-		})
-	}
-	return a.Orch.OnBuildCompleted(ctx, buildID, deploycontracts.BuildCallbackRequest{
-		Status:    result.Status,
-		Error:     result.Error,
-		Apps:      apps,
-		Manifests: result.Manifests,
-	})
-}
-
 func (a *BuildOrchestratorAdapter) CancelBuild(ctx context.Context, buildID string) error {
 	return a.Orch.CancelBuild(ctx, buildID)
-}
-
-func (a *BuildOrchestratorAdapter) IsBuildTerminal(ctx context.Context, buildID string) (bool, error) {
-	build, err := a.BuildStore.GetByID(ctx, buildID)
-	if err != nil {
-		return false, err
-	}
-	return statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)), nil
 }
 
 // GetBuildTenantID returns the tenant that owns a build (SEC-4: authorization check).

@@ -13,7 +13,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // --- RollbackServiceAdapter tests ---
@@ -60,36 +59,6 @@ func TestRollbackServiceAdapter_Rollback_Success(t *testing.T) {
 }
 
 // --- BuildOrchestratorAdapter additional tests ---
-
-func TestBuildOrchestratorAdapter_IsBuildTerminal_Releasing(t *testing.T) {
-	store := &fakeBuildStore{
-		build: &db.Build{ID: "bld-releasing", Status: string(statemachine.BuildReleasing)},
-	}
-	adapter := &BuildOrchestratorAdapter{BuildStore: store}
-
-	terminal, err := adapter.IsBuildTerminal(context.Background(), "bld-releasing")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if terminal {
-		t.Error("RELEASING build should NOT be terminal")
-	}
-}
-
-func TestBuildOrchestratorAdapter_IsBuildTerminal_Queued(t *testing.T) {
-	store := &fakeBuildStore{
-		build: &db.Build{ID: "bld-queued", Status: string(statemachine.BuildQueued)},
-	}
-	adapter := &BuildOrchestratorAdapter{BuildStore: store}
-
-	terminal, err := adapter.IsBuildTerminal(context.Background(), "bld-queued")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if terminal {
-		t.Error("QUEUED build should NOT be terminal")
-	}
-}
 
 // --- BuildStoreReaderAdapter error ---
 

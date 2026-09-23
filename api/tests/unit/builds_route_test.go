@@ -33,15 +33,6 @@ type fakeBuildOrchestrator struct {
 	getBuild    *builds.BuildStatusResponse
 	getBuildErr error
 
-	// OnBuildCompleted
-	onCompletedErr   error
-	onCompletedCalls int
-	lastCallbackReq  *builds.BuildCallbackInput
-	lastCallbackID   string
-
-	// For duplicate detection
-	buildTerminal bool
-
 	// CancelBuild
 	cancelErr         error
 	lastCancelBuildID string
@@ -65,26 +56,9 @@ func (f *fakeBuildOrchestrator) GetBuildStatus(ctx context.Context, buildID stri
 	return f.getBuild, nil
 }
 
-func (f *fakeBuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string, result builds.BuildCallbackInput) error {
-	f.onCompletedCalls++
-	f.lastCallbackID = buildID
-	f.lastCallbackReq = &result
-	if f.onCompletedErr != nil {
-		return f.onCompletedErr
-	}
-	return nil
-}
-
 func (f *fakeBuildOrchestrator) CancelBuild(ctx context.Context, buildID string) error {
 	f.lastCancelBuildID = buildID
 	return f.cancelErr
-}
-
-func (f *fakeBuildOrchestrator) IsBuildTerminal(ctx context.Context, buildID string) (bool, error) {
-	if f.getBuildErr != nil {
-		return false, f.getBuildErr
-	}
-	return f.buildTerminal, nil
 }
 
 func (f *fakeBuildOrchestrator) GetBuildTenantID(ctx context.Context, buildID string) (string, error) {

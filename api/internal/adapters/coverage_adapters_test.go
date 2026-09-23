@@ -114,39 +114,6 @@ func TestBuildOrchestratorAdapter_SubmitBuild_DefaultAppType(t *testing.T) {
 	_ = orch
 }
 
-func TestBuildOrchestratorAdapter_OnBuildCompleted_TranslatesApps(t *testing.T) {
-	// Verify the app translation from routes.BuildCallbackInput to deploycontracts.BuildCallbackRequest.
-	input := builds.BuildCallbackInput{
-		Status: "SUCCEEDED",
-		Apps: []builds.BuildCallbackApp{
-			{Name: "api", ImageDigest: "sha256:abc", URL: "https://api.example.com", Type: "server", DurationMs: 45000},
-			{Name: "web", ImageDigest: "sha256:def", URL: "https://web.example.com", Type: "static", DurationMs: 12000},
-		},
-		Manifests: "apiVersion: apps/v1\nkind: Deployment",
-	}
-
-	// Verify translation logic
-	var apps []deploycontracts.AppRelease
-	for _, app := range input.Apps {
-		apps = append(apps, deploycontracts.AppRelease{
-			Name:        app.Name,
-			ImageDigest: app.ImageDigest,
-			URL:         app.URL,
-			Type:        app.Type,
-			DurationMs:  app.DurationMs,
-		})
-	}
-	if len(apps) != 2 {
-		t.Fatalf("expected 2 apps, got %d", len(apps))
-	}
-	if apps[0].DurationMs != 45000 {
-		t.Errorf("expected 45000ms, got %d", apps[0].DurationMs)
-	}
-	if apps[1].Type != "static" {
-		t.Errorf("expected 'static', got %q", apps[1].Type)
-	}
-}
-
 func TestBuildOrchestratorAdapter_GetBuildStatus_WithDuration(t *testing.T) {
 	now := time.Now().UTC()
 	dur := 300
@@ -302,19 +269,4 @@ func (f *fakeBuildStoreWithGetError) GetByIDForTenant(ctx context.Context, tenan
 		return nil, nil
 	}
 	return b, nil
-}
-
-func TestBuildOrchestratorAdapter_IsBuildTerminal_Cancelling(t *testing.T) {
-	store := &fakeBuildStore{
-		build: &db.Build{ID: "bld-cancelling", Status: "CANCELLING"},
-	}
-	adapter := &BuildOrchestratorAdapter{BuildStore: store}
-
-	terminal, err := adapter.IsBuildTerminal(context.Background(), "bld-cancelling")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if terminal {
-		t.Error("CANCELLING build should NOT be terminal")
-	}
 }

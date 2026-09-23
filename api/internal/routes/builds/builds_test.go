@@ -48,14 +48,6 @@ func (f *fakeBuildOrch) GetBuildStatus(_ context.Context, _ string) (*BuildStatu
 	return f.statusResult, f.statusErr
 }
 
-func (f *fakeBuildOrch) OnBuildCompleted(_ context.Context, _ string, _ BuildCallbackInput) error {
-	return nil
-}
-
-func (f *fakeBuildOrch) IsBuildTerminal(_ context.Context, _ string) (bool, error) {
-	return false, nil
-}
-
 func (f *fakeBuildOrch) CancelBuild(_ context.Context, _ string) error {
 	return f.cancelErr
 }

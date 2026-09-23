@@ -82,31 +82,15 @@ type SubmitBuildResult struct {
 	StreamURL string `json:"stream_url"`
 }
 
-// BuildCallbackApp describes a built app in the callback payload.
-type BuildCallbackApp struct {
-	Name        string `json:"name"`
-	ImageDigest string `json:"image_digest"`
-	URL         string `json:"url"`
-	Type        string `json:"type,omitempty"` // "server", "worker", "frontend"
-	DurationMs  int    `json:"duration_ms"`
-}
-
-// BuildCallbackInput is the callback payload from the build system.
-type BuildCallbackInput struct {
-	Status    string             `json:"status"`
-	Error     string             `json:"error,omitempty"`
-	Apps      []BuildCallbackApp `json:"apps"`
-	Manifests string             `json:"manifests,omitempty"` // raw K8s YAML from build pipeline
-}
-
-// BuildOrchestratorService defines the interface the route handler needs
-// from the build orchestrator. Follows DIP — handler depends on abstraction,
-// using route-local types to avoid import cycles with services/db packages.
+// BuildOrchestratorService is what the build ROUTES need from the build
+// orchestrator — and only that (ISP). Build completion is not an HTTP
+// concern: the reconcile loop drives it through the services/build contract
+// (deploycontracts.BuildCallbackRequest), so this port carries no completion
+// or terminal-state methods. Route-local types avoid import cycles with the
+// services/db packages.
 type BuildOrchestratorService interface {
 	SubmitBuild(ctx context.Context, req SubmitBuildInput) (*SubmitBuildResult, error)
 	GetBuildStatus(ctx context.Context, buildID string) (*BuildStatusResponse, error)
-	OnBuildCompleted(ctx context.Context, buildID string, result BuildCallbackInput) error
-	IsBuildTerminal(ctx context.Context, buildID string) (bool, error)
 	CancelBuild(ctx context.Context, buildID string) error
 	// GetBuildTenantID returns the tenant that owns a build — used for authorization.
 	GetBuildTenantID(ctx context.Context, buildID string) (string, error)
