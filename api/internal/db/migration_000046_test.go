@@ -75,16 +75,20 @@ func TestMigration000046_Schema(t *testing.T) {
 		t.Error("metering_config.enabled = true, want false (EC-5: observe-only ships disabled)")
 	}
 
-	// (d) RLS disabled on both metering tables.
-	for _, tbl := range []string{"metering_cursor", "metering_config"} {
+	// (d) Row-level security. 000046 created both tables without RLS; 000062
+	// (rls_fail_closed) then put every tenant_id-scoped table under a
+	// fail-closed policy, metering_cursor included. The live schema is the
+	// result of the whole chain, so metering_cursor carries RLS and the
+	// singleton metering_config (no tenant_id) still does not.
+	for tbl, want := range map[string]bool{"metering_cursor": true, "metering_config": false} {
 		var rls bool
 		if err := conn.QueryRow(ctx,
 			`SELECT relrowsecurity FROM pg_class WHERE relname=$1`, tbl,
 		).Scan(&rls); err != nil {
 			t.Fatalf("read RLS for %s: %v", tbl, err)
 		}
-		if rls {
-			t.Errorf("%s has RLS enabled, want disabled by design (control-plane table)", tbl)
+		if rls != want {
+			t.Errorf("%s relrowsecurity = %v, want %v", tbl, rls, want)
 		}
 	}
 }
