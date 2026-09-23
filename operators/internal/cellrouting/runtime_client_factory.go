@@ -1,8 +1,8 @@
-// Package cellrouting resolve como um controller ALCANÇA o cluster de uma cell.
+// Package cellrouting resolves how a controller REACHES the cluster of a cell.
 //
-// Separado de `reconcilehelpers` no B-061: rotear para uma cell e reconciliar um
-// recurso mudam por razões diferentes, e estavam no mesmo pacote porque o nome dele
-// não conseguia dizer não a nenhuma das duas.
+// Split out of `reconcilehelpers` in B-061: routing to a cell and reconciling a
+// resource change for different reasons, and they shared a package only because
+// its name could not refuse either of them.
 package cellrouting
 
 import (
@@ -18,18 +18,28 @@ import (
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
+// kubeconfigKey is the Secret data key holding a cell's kubeconfig.
+const kubeconfigKey = "kubeconfig"
+
 // RuntimeClientFactory abstracts cell-aware runtime client lookup.
 // Implementations resolve a tenant's cellID to the right cluster client.
 type RuntimeClientFactory interface {
 	// For returns a controller-runtime client connected to the runtime
-	// cluster identified by cellID. Só cellID "" devolve o cliente
-	// legado; toda cell nomeada resolve o ClusterCredential dela.
+	// cluster identified by cellID. Only cellID "" returns the legacy
+	// client; every named cell resolves its own ClusterCredential.
 	For(ctx context.Context, cellID string) (client.Client, error)
 }
 
 // CellAwareRuntimeClientFactory implements RuntimeClientFactory by reading
 // ClusterCredential CRs from the mgmt cluster and building runtime clients
 // from their kubeconfig Secrets.
+//
+// A built client is cached per cell and keyed by the identity and
+// resourceVersion of the kubeconfig Secret it was built from, so a rotated
+// credential produces a new client on the next lookup instead of failing every
+// reconcile until the operator restarts. The ClusterCredential and Secret reads
+// go through MgmtClient (the manager's cached client in production) and happen
+// outside the lock; only the map access is serialised.
 type CellAwareRuntimeClientFactory struct {
 	// MgmtClient reads ClusterCredential CRs + their kubeconfig Secrets.
 	MgmtClient client.Client
@@ -37,12 +47,16 @@ type CellAwareRuntimeClientFactory struct {
 	DefaultClient client.Client
 	// MgmtNamespace is where ClusterCredential CRs live (default: loopzero-system).
 	MgmtNamespace string
-	// SchemeProvider is the controller-runtime scheme used to build clients.
-	// Must include corev1 + loopzerov1 (for ClusterCredential GET).
-	SchemeProvider func() *client.Options
 
 	mu      sync.RWMutex
-	clients map[string]client.Client
+	clients map[string]cachedCellClient
+}
+
+// cachedCellClient is a built cell client plus the version of the kubeconfig
+// Secret it was built from.
+type cachedCellClient struct {
+	client        client.Client
+	secretVersion string
 }
 
 // NewCellAwareRuntimeClientFactory builds a factory wired to the mgmt
@@ -56,7 +70,7 @@ func NewCellAwareRuntimeClientFactory(mgmtClient, defaultClient client.Client, m
 		MgmtClient:    mgmtClient,
 		DefaultClient: defaultClient,
 		MgmtNamespace: mgmtNamespace,
-		clients:       make(map[string]client.Client),
+		clients:       make(map[string]cachedCellClient),
 	}
 }
 
@@ -69,25 +83,33 @@ func (f *CellAwareRuntimeClientFactory) For(ctx context.Context, cellID string) 
 		return f.DefaultClient, nil
 	}
 
-	// Fast path: cached client.
+	secret, err := f.kubeconfigSecret(ctx, cellID)
+	if err != nil {
+		return nil, err
+	}
+	version := string(secret.UID) + "/" + secret.ResourceVersion
+
 	f.mu.RLock()
-	if c, ok := f.clients[cellID]; ok {
-		f.mu.RUnlock()
-		return c, nil
-	}
+	cached, ok := f.clients[cellID]
 	f.mu.RUnlock()
-
-	// Slow path: write lock with double-check.
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if c, ok := f.clients[cellID]; ok {
-		return c, nil
+	if ok && cached.secretVersion == version {
+		return cached.client, nil
 	}
 
-	// Find ClusterCredential CR with spec.cellID == requested cellID.
-	// We list CRs (small set; CR per cell) and filter by spec — equivalent
-	// to the API's K8sCellStore.LoadCells pattern (MEET-053 B9: lookup by
-	// spec.cellID, NOT metadata.name).
+	c, err := f.buildClient(cellID, secret)
+	if err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	f.clients[cellID] = cachedCellClient{client: c, secretVersion: version}
+	f.mu.Unlock()
+	return c, nil
+}
+
+// kubeconfigSecret resolves the kubeconfig Secret of the ClusterCredential
+// whose spec.cellID matches. Lookup is by spec.cellID, NOT metadata.name
+// (MEET-053 B9) — the same rule as the API's K8sCellStore.
+func (f *CellAwareRuntimeClientFactory) kubeconfigSecret(ctx context.Context, cellID string) (*corev1.Secret, error) {
 	var ccList loopzerov1.ClusterCredentialList
 	if err := f.MgmtClient.List(ctx, &ccList, client.InNamespace(f.MgmtNamespace)); err != nil {
 		return nil, fmt.Errorf("runtime-client-factory: list ClusterCredentials: %w", err)
@@ -103,40 +125,36 @@ func (f *CellAwareRuntimeClientFactory) For(ctx context.Context, cellID string) 
 		return nil, fmt.Errorf("runtime-client-factory: no ClusterCredential found with spec.cellID=%q in namespace %s", cellID, f.MgmtNamespace)
 	}
 
-	// Read kubeconfig Secret referenced by the CC.
-	var secret corev1.Secret
-	secretRefNS := match.Spec.SecretRef.Namespace
-	if secretRefNS == "" {
-		secretRefNS = f.MgmtNamespace
+	secretNS := match.Spec.SecretRef.Namespace
+	if secretNS == "" {
+		secretNS = f.MgmtNamespace
 	}
-	if err := f.MgmtClient.Get(ctx, client.ObjectKey{
-		Name:      match.Spec.SecretRef.Name,
-		Namespace: secretRefNS,
-	}, &secret); err != nil {
+	var secret corev1.Secret
+	if err := f.MgmtClient.Get(ctx, client.ObjectKey{Name: match.Spec.SecretRef.Name, Namespace: secretNS}, &secret); err != nil {
 		if errors.IsNotFound(err) {
 			return nil, fmt.Errorf("runtime-client-factory: kubeconfig Secret %s/%s not found for cell %q",
-				secretRefNS, match.Spec.SecretRef.Name, cellID)
+				secretNS, match.Spec.SecretRef.Name, cellID)
 		}
 		return nil, fmt.Errorf("runtime-client-factory: get kubeconfig Secret for cell %q: %w", cellID, err)
 	}
-	kubeconfigBytes, ok := secret.Data["kubeconfig"]
-	if !ok || len(kubeconfigBytes) == 0 {
-		return nil, fmt.Errorf("runtime-client-factory: Secret %s/%s has no data.kubeconfig",
-			secretRefNS, match.Spec.SecretRef.Name)
-	}
+	return &secret, nil
+}
 
-	// Build rest.Config from kubeconfig bytes + controller-runtime Client.
-	restConfig, err := clientcmd.RESTConfigFromKubeConfig(kubeconfigBytes)
+// buildClient turns the kubeconfig carried by secret into a runtime client.
+func (f *CellAwareRuntimeClientFactory) buildClient(cellID string, secret *corev1.Secret) (client.Client, error) {
+	raw, ok := secret.Data[kubeconfigKey]
+	if !ok || len(raw) == 0 {
+		return nil, fmt.Errorf("runtime-client-factory: Secret %s/%s has no %q key",
+			secret.Namespace, secret.Name, kubeconfigKey)
+	}
+	restConfig, err := clientcmd.RESTConfigFromKubeConfig(raw)
 	if err != nil {
 		return nil, fmt.Errorf("runtime-client-factory: parse kubeconfig for cell %q: %w", cellID, err)
 	}
-	scheme := f.MgmtClient.Scheme()
-	c, err := client.New(restConfig, client.Options{Scheme: scheme})
+	c, err := client.New(restConfig, client.Options{Scheme: f.MgmtClient.Scheme()})
 	if err != nil {
 		return nil, fmt.Errorf("runtime-client-factory: build client for cell %q: %w", cellID, err)
 	}
-
-	f.clients[cellID] = c
 	return c, nil
 }
 
