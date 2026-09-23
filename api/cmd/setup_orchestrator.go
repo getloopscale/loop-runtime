@@ -216,7 +216,7 @@ func setupOrchestrator(
 		// adapters (loki_markers + argocd_app + loopzeroapp_informer +
 		// status_url_probe) are documented as the v1.1 production
 		// follow-up per the plan's Open Questions section. Nil-safe.
-		DeployTimelineSpawn: makeDeployTimelineSpawn(stores.PgEventStore, stores.ReleaseStore),
+		DeployTimelineSpawn: makeDeployTimelineSpawn(stores.PgEventStore),
 		// J-16 slice 3 (MEET-2026-07-04-001): deploy.failed outbox emit on the
 		// build-completed FAILED path.
 		DeployEventStore: store.NewDeployEventStoreSqlc(),

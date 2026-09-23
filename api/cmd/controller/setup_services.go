@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -42,9 +43,10 @@ type controllerDeps struct {
 }
 
 // setupServices creates all stores, clients, and the build orchestrator
-// needed by the controller background loops. It exits the process on
-// fatal errors (e.g. unable to create the workflow submitter).
-func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Logger) controllerDeps {
+// needed by the controller background loops. A client that cannot be built
+// (workflow submitter, tenant CR manager) is returned as an error for main to
+// report and exit on.
+func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Logger) (controllerDeps, error) {
 	// ---- Stores ----
 	// T1.2b (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper.
 	// Satisfies db.BuildStore interface 1:1 — service field types
@@ -80,8 +82,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT, // T1.2 CR-1 fix
 	})
 	if err != nil {
-		logger.Error("failed to create workflow submitter", "error", err)
-		panic("fatal: workflow submitter creation failed") // unreachable after os.Exit
+		return controllerDeps{}, fmt.Errorf("workflow submitter: %w", err)
 	}
 	workflowSubmitter := platform.NewCircuitBreakerWorkflowSubmitter(
 		rawWorkflowSubmitter,
@@ -126,8 +127,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	// ---- k8s managers (mgmt cluster) ----
 	tenantCRMgr, err := tenancy.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
 	if err != nil {
-		logger.Error("failed to create tenant CR manager", "error", err)
-		panic("fatal: tenant CR manager creation failed") // unreachable after os.Exit
+		return controllerDeps{}, fmt.Errorf("tenant CR manager: %w", err)
 	}
 	appCRMgr := &appCRAdapter{mgr: workload.NewApplicationCRManager(tenantCRMgr.Client, "")}
 
@@ -270,7 +270,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		releaseConvergenceLoop: releaseConvergenceLoop,
 		idempotencyCleaner:     idempotencyCleaner,
 		eventPruner:            eventPruner,
-	}
+	}, nil
 }
 
 // startBackgroundLoops launches all 6 background loops as goroutines tracked

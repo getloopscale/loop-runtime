@@ -55,10 +55,6 @@ func resolveEntryApp(appsRaw json.RawMessage) string {
 	return naming.ResolveEntryAppFromApps(appsRaw)
 }
 
-// _ = db.BuildAppSpec{} — retained import placeholder; other adapters may
-// grow AppSpec usage. Preserving the import avoids a rippling churn.
-var _ = db.BuildAppSpec{}
-
 // A porta que este adaptador satisfaz, afirmada em tempo de compilacao.
 //
 // B-058: o pacote se chama `adapters` e o criterio de admissao dele era "e um adapter" —

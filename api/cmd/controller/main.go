@@ -122,7 +122,11 @@ func main() {
 	defer secretAgeCollector.Stop()
 
 	// ---- Services + orchestrator ----
-	deps := setupServices(cfg, dbAdapter, logger)
+	deps, err := setupServices(cfg, dbAdapter, logger)
+	if err != nil {
+		logger.Error("controller setup failed", "error", err)
+		os.Exit(1)
+	}
 
 	// ---- Leader election via generation counter (roadmap 02) ----
 	acquirer := leader.NewAcquirer(dbAdapter, leader.DefaultConfig())
