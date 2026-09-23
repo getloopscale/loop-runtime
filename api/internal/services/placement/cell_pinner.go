@@ -22,17 +22,16 @@ package placement
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -58,31 +57,21 @@ type CellPinnerStore interface {
 	PinTenantToCell(ctx context.Context, tenantID, cellID string) (previousCell string, err error)
 }
 
-// Sentinel errors. The HTTP handler maps these to status codes via
-// substring match (see admin_pin_cell.go); this package exposes the
-// concrete values for unit tests against the service.
-//
-// T5.7 of deep-review-2026-05-10-remediation-plan
-// (find_arch_routes_import_services MEDIUM) considered moving these to
-// pkg/errors. Deferred per Princípio 3 (Honestidade Extrema): the
-// canonical pkg/errors counterparts (`ErrTenantNotFound`, `ErrCellAtCapacity`)
-// are `*LoopZeroError` types — not plain `error` — so a direct alias produces
-// type conflicts at the existing call sites that wrap these with
-// `fmt.Errorf("... %w", services.ErrTenantNotFound)`. The proper move
-// requires either (a) converting all call sites to LoopZeroError or
-// (b) renaming the pkg/errors versions. Both are larger refactors than
-// T5.7's scope and risk regression of the existing admin_pin_cell error
-// mapping. Tracked as future work; current cross-package dependency
-// (routes → services) is legitimate top-down per T1.3 closure.
+// Sentinel errors for a pin the store refused. They ARE the store's values, not
+// copies: the admin handler (routes/admin/admin_pin_cell.go) maps them to HTTP
+// statuses with errors.Is, and the production store (store.PostgresCellStore)
+// returns store.ErrCellPinner*. While this package declared its own values with
+// the same text, errors.Is could not cross them and every refusal of a real pin
+// was reported as an internal error.
 //
 // ErrCellAtTenantCapacity (note the longer name) disambiguates the
 // tenant-population limit from the build-admission limit also called
-// "cell at capacity" in services/admission.go.
+// "cell at capacity" in services/build/admission.go.
 var (
-	ErrTenantNotFound       = errors.New("tenant not found")
-	ErrCellNotFound         = errors.New("cell not found")
-	ErrCellNotPinnable      = errors.New("cell not pinnable")
-	ErrCellAtTenantCapacity = errors.New("cell at capacity")
+	ErrTenantNotFound       = store.ErrCellPinnerTenantNotFound
+	ErrCellNotFound         = store.ErrCellPinnerCellNotFound
+	ErrCellNotPinnable      = store.ErrCellPinnerNotPinnable
+	ErrCellAtTenantCapacity = store.ErrCellPinnerAtCapacity
 )
 
 // ErrCellPinNotApplied means the Tenant CR could not be patched and the database
@@ -247,50 +236,6 @@ func (p *CellPinner) patchTenantCR(ctx context.Context, tenantID, cellID string)
 	}
 	return nil
 }
-
-// pinTenantToCellSQL is the canonical query the store implementation
-// runs in a SERIALIZABLE transaction. Exposed as a package-level
-// constant so tests can reference it without coupling to pgx.
-//
-//revive:disable-next-line:unused-receiver
-const pinTenantToCellSQL = `
-WITH
--- 1) Tenant must exist.
-target_tenant AS (
-    SELECT id, cell_id AS prev_cell_id FROM tenants WHERE id = $1
-),
--- 2) Cell must exist + be active. capacity_tenants_max is NULL = unlimited.
-target_cell AS (
-    SELECT cell_id, status, capacity_tenants_max FROM cells WHERE cell_id = $2
-),
--- 3) Current tenant count on the target cell (excluding the moving tenant
---    so a re-pin to the same cell doesn't fail capacity off-by-one).
-cell_population AS (
-    SELECT COUNT(*) AS current_count FROM tenants
-     WHERE cell_id = $2 AND id <> $1
-)
-UPDATE tenants
-   SET cell_id = $2
- WHERE id = $1
-   AND EXISTS (SELECT 1 FROM target_tenant)
-   AND EXISTS (SELECT 1 FROM target_cell tc WHERE tc.status = 'active')
-   AND (
-       (SELECT capacity_tenants_max FROM target_cell) IS NULL
-       OR (SELECT capacity_tenants_max FROM target_cell) >
-          (SELECT current_count FROM cell_population)
-   )
-RETURNING (SELECT prev_cell_id FROM target_tenant);
-`
-
-// _ = pinTenantToCellSQL exists to prevent unused-import errors in tests
-// that don't reference it. Concrete db implementation will use this
-// SQL in db/cell_pinner_store.go (NEW file ships with the migration
-// 000003_cells reconciler).
-var _ = pinTenantToCellSQL
-
-// _ Tx is a type-system check that the store-side will need pgx.Tx-like
-// semantics. Documented here so any future driver swap doesn't drift.
-type _ pgx.Tx
 
 // repairHint is the operator guidance attached to ErrCellPinDiverged, when the
 // database already records the new cell and the Tenant CR is the stale side.

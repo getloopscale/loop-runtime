@@ -12,6 +12,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 )
 
 type mockPinnerStore struct {
@@ -85,38 +87,27 @@ func TestCellPinner_Pin_NilStore_Errors(t *testing.T) {
 	}
 }
 
-func TestCellPinner_SQL_ReferencesAllConditions(t *testing.T) {
-	// The SQL is the contract. If a future refactor drops a condition,
-	// this test catches it before merge.
-	for _, must := range []string{
-		"SELECT id, cell_id AS prev_cell_id FROM tenants WHERE id = $1",
-		"SELECT cell_id, status, capacity_tenants_max FROM cells WHERE cell_id = $2",
-		"COUNT(*) AS current_count FROM tenants",
-		"WHERE id = $1",
-		"tc.status = 'active'",
-		"capacity_tenants_max",
-		"RETURNING (SELECT prev_cell_id FROM target_tenant)",
-	} {
-		if !stringsContains(pinTenantToCellSQL, must) {
-			t.Errorf("pin SQL missing required clause: %q", must)
-		}
+// The production store (store.PostgresCellStore) returns its own sentinels, and
+// the admin handler matches the placement ones with errors.Is. They must be the
+// same values, or every validation failure of a real pin surfaces as a 500.
+func TestCellPinner_Pin_StoreSentinelsMatchThePlacementSentinels(t *testing.T) {
+	cases := []struct {
+		storeErr, want error
+	}{
+		{store.ErrCellPinnerTenantNotFound, ErrTenantNotFound},
+		{store.ErrCellPinnerCellNotFound, ErrCellNotFound},
+		{store.ErrCellPinnerNotPinnable, ErrCellNotPinnable},
+		{store.ErrCellPinnerAtCapacity, ErrCellAtTenantCapacity},
 	}
-}
+	for _, tc := range cases {
+		t.Run(tc.want.Error(), func(t *testing.T) {
+			p := NewCellPinner(&mockPinnerStore{err: tc.storeErr})
 
-// stringsContains is a local helper to avoid colliding with `contains`
-// already defined elsewhere in the services test suite. Trivial substring
-// matcher (no regex, no allocs beyond Go's string comparison).
-func stringsContains(haystack, needle string) bool {
-	if len(needle) == 0 {
-		return true
+			_, err := p.Pin(context.Background(), "tn-x", "cell-1")
+
+			if !errors.Is(err, tc.want) {
+				t.Errorf("errors.Is(%v, %v) = false", err, tc.want)
+			}
+		})
 	}
-	if len(haystack) < len(needle) {
-		return false
-	}
-	for i := 0; i+len(needle) <= len(haystack); i++ {
-		if haystack[i:i+len(needle)] == needle {
-			return true
-		}
-	}
-	return false
 }
