@@ -114,8 +114,9 @@ kubeContexts:
 # Production stack (charts/loopzero-api) is unchanged.
 # T5.11 of plan 2026-06-02-openbao-adoption v1.3 — Vault K8s auth config.
 # When enabled, the Deployment mounts a projected SA token with bounded
-# audience + expiration, and pkg/vault.Client uses K8s auth login instead
-# of static token env var. Disabled by default (vault stack opt-in per env).
+# audience + expiration for a Kubernetes-auth Vault login instead of a static
+# token env var. No engine code performs that login today: the api's Transit
+# client (pkg/vault.TransitClient) authenticates with AppRole. Disabled by default (vault stack opt-in per env).
 vault:
   enabled: false
   # TOPOLOGIA (B-064): este nome DNS parece intra-cluster e nem sempre e'.

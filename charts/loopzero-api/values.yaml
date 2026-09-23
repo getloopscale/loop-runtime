@@ -208,8 +208,9 @@ serviceAccount:
 
 # T5.11 of plan 2026-06-02-openbao-adoption v1.3 — Vault K8s auth config.
 # When enabled, the Deployment mounts a projected SA token with bounded
-# audience + expiration, and pkg/vault.Client uses K8s auth login instead
-# of static token env var. Disabled by default (vault stack opt-in per env).
+# audience + expiration for a Kubernetes-auth Vault login instead of a static
+# token env var. No engine code performs that login today: the api's Transit
+# client (pkg/vault.TransitClient) authenticates with AppRole. Disabled by default (vault stack opt-in per env).
 vault:
   enabled: false
   # Vault endpoint reachable from loopzero-api (mgmt cluster).
@@ -224,8 +225,8 @@ vault:
   # Projected token expiration. Kubelet auto-rotates before expiry.
   tokenExpirationSeconds: 3600
   # SPKI pin populated by ESO from openbao SPKI extractor CronJob
-  # (T2.5). When empty, pkg/vault.CachedClient skips SPKI pin
-  # verification (still validates CA bundle).
+  # (T2.5). No engine code reads this Secret today; the Transit client takes
+  # its pin from OPENBAO_SPKI_PIN_SHA256 (see setup_transit.go).
   spkiPinSecretName: "vault-spki-pin"
   spkiPinSecretKey: "spki_hash"
 

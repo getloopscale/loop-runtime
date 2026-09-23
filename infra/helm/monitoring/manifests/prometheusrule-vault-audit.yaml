@@ -103,8 +103,9 @@ spec:
             description: |
               vault_core_unsealed=0 (sealed) OR the metrics scrape itself is
               absent (Vault pod down / network partition). Either way, all
-              new Vault operations fail. loopzero-api fallback: serve cached
-              secrets from pkg/vault.CachedClient (no rotation possible).
+              new Vault operations fail. loopzero-api keeps no cached copy of
+              secret values: every secret encrypt/decrypt through Transit
+              fails until Vault is back.
               Triage: `kubectl -n secrets-system get pods openbao-0` + check
               for recent restart events. Unseal procedure: see runbook.
 

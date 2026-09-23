@@ -21,7 +21,7 @@ const liveVaultPrefix = "vault:v1:"
 
 // insecureTLS returns a TLS config that skips cert verification — used for
 // LIVE tests against k3d self-signed Vault. PRODUCTION code MUST never use
-// this (pkg/vault.CachedClient uses SPKI pin instead).
+// this (TransitClient pins the server SPKI instead).
 func insecureTLS() *tls.Config {
 	return &tls.Config{InsecureSkipVerify: true} // #nosec G402 — test-only
 }

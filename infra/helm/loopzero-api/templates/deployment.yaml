@@ -60,7 +60,7 @@ spec:
             sizeLimit: 1Gi
         {{- if .Values.vault.enabled }}
         # T5.11 of plan 2026-06-02-openbao-adoption v1.3 — projected SA
-        # token with bounded audience + expiration. Read by pkg/vault.Client
+        # token with bounded audience + expiration, for a Kubernetes-auth Vault login
         # at /var/run/secrets/vault.loopzero.io/token; sent to auth/k8s-core/login.
         # Vault TokenReview validates audience claim cryptographically,
         # preventing token re-use against K8s API or other audiences.
@@ -96,7 +96,7 @@ spec:
               mountPath: /tmp
             {{- if .Values.vault.enabled }}
             # T5.11 of plan 2026-06-02-openbao-adoption v1.3 — Vault projected
-            # token mount. pkg/vault.Client reads /var/run/secrets/vault.loopzero.io/token.
+            # token mount at /var/run/secrets/vault.loopzero.io/token (no engine code reads it today).
             - name: vault-sa-token
               mountPath: /var/run/secrets/vault.loopzero.io
               readOnly: true
@@ -272,9 +272,10 @@ spec:
                   optional: true
             {{- if .Values.vault.enabled }}
             # T5.11-T5.12 of plan 2026-06-02-openbao-adoption v1.3 — Vault
-            # K8s auth login config. pkg/vault.Client reads these env vars
-            # at startup; performs auth/<mount>/login with SA JWT from
-            # /var/run/secrets/vault.loopzero.io/token.
+            # K8s auth login config. A Kubernetes-auth client would read these
+            # env vars at startup and perform auth/<mount>/login with the SA JWT
+            # from /var/run/secrets/vault.loopzero.io/token; none exists in the
+            # engine today.
             - name: LOOPZERO_VAULT_ADDR
               value: {{ .Values.vault.addr | quote }}
             - name: LOOPZERO_VAULT_K8S_AUTH_PATH
