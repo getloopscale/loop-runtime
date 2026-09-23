@@ -82,8 +82,8 @@ from pathlib import Path
 
 ARMED_WORKFLOW = ".github/workflows/delivery-gate-armed.yml"
 HYGIENE_WORKFLOW = ".github/workflows/workflow-hygiene.yml"
-ARMED_SCRIPT = ".github/scripts/assert-delivery-gate-armed.py"
-OBSERVERS_SCRIPT = ".github/scripts/assert-gate-observers-intact.py"
+ARMED_SCRIPT = ".github/scripts/assert_delivery_gate_armed.py"
+OBSERVERS_SCRIPT = ".github/scripts/assert_gate_observers_intact.py"
 
 # `workspace` is the point of the list, not padding in it. The window B-192
 # measured was four days and 21 commits on `workspace`; without it here the
@@ -415,7 +415,7 @@ def main(argv: list[str] | None = None) -> int:
     # The armed-check's own script. Its absence already fails the workflow step
     # on GitHub; it is asserted here so the LOCAL run refuses the deletion before
     # the push instead of after it.
-    label = "OBSERVER 1 — assert-delivery-gate-armed.py"
+    label = "OBSERVER 1 — assert_delivery_gate_armed.py"
     present(root, ARMED_SCRIPT, report, label)
     if armed is not None:
         require_verdict_reaches_the_check(armed, report, label)

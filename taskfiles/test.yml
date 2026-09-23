@@ -641,7 +641,7 @@ tasks:
       (replacing pre-refactor bootstrap-shared.ts).
     cmds:
       - |
-        python3 infra/scripts/validate/helm-charts.py
+        python3 infra/scripts/validate/helm_charts.py
 
   validate:helmfile-scripts:
     desc: |
@@ -820,7 +820,7 @@ tasks:
       prometheusrule-pulumi-state.yaml during iter 17 (medium→warning,
       high→critical normalization).
     cmds:
-      - python3 infra/helm/monitoring/validate-rules.py
+      - python3 infra/helm/monitoring/validate_rules.py
 
   validate:k8s-versions:
     desc: |
@@ -829,7 +829,7 @@ tasks:
       before bootstrap fails with 422 invalid version slug. Sprint 8 v3.2 / Pilar 2.
     cmds:
       - |
-        python3 infra/scripts/validate/k8s-versions.py
+        python3 infra/scripts/validate/k8s_versions.py
 
   chaos:install:
     desc: |

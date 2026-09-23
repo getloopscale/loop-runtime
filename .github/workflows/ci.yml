@@ -62,7 +62,7 @@ on:
   #
   # WHAT THE REASON IS NOW. The same trade, with the premises CHECKED instead of
   # asserted: `.github/workflows/delivery-gate-armed.yml` runs
-  # `.github/scripts/assert-delivery-gate-armed.py` on every push to `workspace`,
+  # `.github/scripts/assert_delivery_gate_armed.py` on every push to `workspace`,
   # `develop` and `main`, and on every pull request into `develop` and `main`. It
   # verifies the file, the wiring and the four bypass spellings, in seconds, on a
   # runner that needs neither Go nor a deploy key. It is a SEPARATE workflow
@@ -79,7 +79,7 @@ on:
   # and give it a `paths:` filter, and it survives every listing while never
   # firing for the `.claude/**`-only commit that is the shape of all three
   # historical disarms. So since 2026-09-06 a THIRD file reports on the second:
-  # `.github/scripts/assert-gate-observers-intact.py` asserts that
+  # `.github/scripts/assert_gate_observers_intact.py` asserts that
   # `delivery-gate-armed.yml` is present, carries no paths filter, still triggers
   # on `workspace`/`develop`/`main` and on PRs into `develop`/`main`, and still
   # invokes its script. It runs from two substrates that fail independently —

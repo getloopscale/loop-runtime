@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""validate-helm-charts.py — validate every Helmfile-referenced chart
+"""validate-helm_charts.py — validate every Helmfile-referenced chart
 resolves to its declared version in the upstream repo index.
 
 Plan 2026-05-21-deep-review-remediation T5.4: extracted from Taskfile

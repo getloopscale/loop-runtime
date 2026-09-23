@@ -59,7 +59,7 @@
 //	                                           into the PreToolUse Bash hook
 //
 // The third is the one worth arguing about, because its subject — the Python check
-// `.github/scripts/assert-delivery-gate-armed.py` — is alive and runs in CI. Its
+// `.github/scripts/assert_delivery_gate_armed.py` — is alive and runs in CI. Its
 // `armedTree` helper copies the REAL hook on purpose, and the reason is written in
 // its own comment: "a stub would let this suite pass while the real file had a
 // bypass in it, which is the failure being defended against wearing a test's

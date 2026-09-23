@@ -32,7 +32,7 @@ func observerScript(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("root: %v", err)
 	}
-	p := filepath.Join(root, ".github", "scripts", "assert-gate-observers-intact.py")
+	p := filepath.Join(root, ".github", "scripts", "assert_gate_observers_intact.py")
 	if _, err := os.Stat(p); err != nil {
 		t.Fatalf("the observer check must exist: %v", err)
 	}

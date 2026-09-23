@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// .github/scripts/assert-gate-observers-intact.py is what refuses, ON THIS
+// .github/scripts/assert_gate_observers_intact.py is what refuses, ON THIS
 // MACHINE AND BEFORE THE PUSH, a commit that deletes or defangs the workflow
 // that reports a disarmed delivery gate. These tests are what make its verdicts
 // worth reading.
@@ -41,7 +41,7 @@ func observersCheckPath(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("repo root: %v", err)
 	}
-	p := filepath.Join(root, ".github", "scripts", "assert-gate-observers-intact.py")
+	p := filepath.Join(root, ".github", "scripts", "assert_gate_observers_intact.py")
 	if _, err := os.Stat(p); err != nil {
 		t.Fatalf("this is the only thing that refuses a deleted gate-observer before the push; it must exist: %v", err)
 	}
@@ -78,7 +78,7 @@ func observerTree(t *testing.T) string {
 	for _, rel := range []string{
 		".github/workflows/delivery-gate-armed.yml",
 		".github/workflows/workflow-hygiene.yml",
-		".github/scripts/assert-delivery-gate-armed.py",
+		".github/scripts/assert_delivery_gate_armed.py",
 	} {
 		body, err := os.ReadFile(filepath.Join(src, rel))
 		if err != nil {
@@ -229,14 +229,14 @@ func TestObserversCheck_ReadsTheBlockSpellingOfTheBranchList(t *testing.T) {
 func TestObserversCheck_FailsWhenTheArmedWorkflowNoLongerRunsItsScript(t *testing.T) {
 	root := observerTree(t)
 	rewriteObserver(t, root, ".github/workflows/delivery-gate-armed.yml",
-		"      - run: python3 .github/scripts/assert-delivery-gate-armed.py",
+		"      - run: python3 .github/scripts/assert_delivery_gate_armed.py",
 		"      - run: echo ok")
 
 	code, out := runObserversCheck(t, root)
 	if code == 0 {
 		t.Fatalf("the armed-check workflow runs nothing and this called it intact:\n%s", out)
 	}
-	if !strings.Contains(out, "assert-delivery-gate-armed.py") {
+	if !strings.Contains(out, "assert_delivery_gate_armed.py") {
 		t.Errorf("the refusal must name the check that is no longer invoked; got:\n%s", out)
 	}
 }
@@ -248,8 +248,8 @@ func TestObserversCheck_FailsWhenTheArmedWorkflowNoLongerRunsItsScript(t *testin
 func TestObserversCheck_ReadsAnInvocationInsideARunBlock(t *testing.T) {
 	root := observerTree(t)
 	rewriteObserver(t, root, ".github/workflows/workflow-hygiene.yml",
-		"        run: python3 .github/scripts/assert-gate-observers-intact.py",
-		"        run: |\n          python3 .github/scripts/assert-gate-observers-intact.py")
+		"        run: python3 .github/scripts/assert_gate_observers_intact.py",
+		"        run: |\n          python3 .github/scripts/assert_gate_observers_intact.py")
 
 	code, out := runObserversCheck(t, root)
 	if code != 0 {
@@ -259,7 +259,7 @@ func TestObserversCheck_ReadsAnInvocationInsideARunBlock(t *testing.T) {
 
 func TestObserversCheck_FailsWhenTheArmedScriptIsDeleted(t *testing.T) {
 	root := observerTree(t)
-	if err := os.Remove(filepath.Join(root, ".github/scripts/assert-delivery-gate-armed.py")); err != nil {
+	if err := os.Remove(filepath.Join(root, ".github/scripts/assert_delivery_gate_armed.py")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -267,7 +267,7 @@ func TestObserversCheck_FailsWhenTheArmedScriptIsDeleted(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("the armed-check's script is gone and this called the mechanism intact:\n%s", out)
 	}
-	if !strings.Contains(out, "assert-delivery-gate-armed.py") {
+	if !strings.Contains(out, "assert_delivery_gate_armed.py") {
 		t.Errorf("the refusal must name the missing script; got:\n%s", out)
 	}
 }
@@ -322,7 +322,7 @@ func TestObserversCheck_FailsClosedOnAWorkflowWhoseTriggersItCannotRead(t *testi
 	root := observerTree(t)
 	if err := os.WriteFile(filepath.Join(root, ".github/workflows/delivery-gate-armed.yml"),
 		[]byte("name: delivery-gate-armed\njobs:\n  armed:\n    steps:\n"+
-			"      - run: python3 .github/scripts/assert-delivery-gate-armed.py\n"), 0o644); err != nil {
+			"      - run: python3 .github/scripts/assert_delivery_gate_armed.py\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

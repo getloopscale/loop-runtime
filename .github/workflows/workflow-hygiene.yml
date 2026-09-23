@@ -9,7 +9,7 @@
 # the local delivery gate is not armed, AND A WORKFLOW CANNOT REPORT ITS OWN DELETION. Deleted, it
 # does not go red: it disappears, and an absent check reads, in a PR, exactly like a repository that
 # never had one. Whoever reports that deletion has to be a file the deleting commit does not remove
-# with it — this one. See `.github/scripts/assert-gate-observers-intact.py`.
+# with it — this one. See `.github/scripts/assert_gate_observers_intact.py`.
 name: workflow-hygiene
 on:
   # THE THREE TRIGGERS, and each covers a moment the others cannot reach.
@@ -74,7 +74,7 @@ jobs:
       # If the script disappears, `python3` exits non-zero and the step fails. It closes by
       # construction: deleting the checker does not produce a green.
       - name: the delivery gate's observer is intact
-        run: python3 .github/scripts/assert-gate-observers-intact.py
+        run: python3 .github/scripts/assert_gate_observers_intact.py
 
       # actionlint goes HERE, and not in a workflow of its own as in loopzero-memory.
       #

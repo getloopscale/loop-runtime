@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""validate-k8s-versions.py — validate K8s versions in Pulumi.<stack>.yaml
+"""validate-k8s_versions.py — validate K8s versions in Pulumi.<stack>.yaml
 are still supported by DigitalOcean.
 
 Plan 2026-05-21-deep-review-remediation T5.4: extracted from Taskfile

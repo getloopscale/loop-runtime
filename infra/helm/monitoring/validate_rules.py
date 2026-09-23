@@ -17,7 +17,7 @@
 #   - severity ∈ {critical, warning, info}
 #
 # Usage:
-#   python3 infra/helm/monitoring/validate-rules.py
+#   python3 infra/helm/monitoring/validate_rules.py
 # Exit 0 = all rules valid; non-zero = at least one error.
 
 import glob

@@ -6,7 +6,7 @@
 # the sentence above had a hole exactly its own size: a workflow cannot report
 # its own deletion. Delete this file and no run is queued, no check appears, and
 # an absent check reads on a pull request like a repository that never had one.
-# `.github/scripts/assert-gate-observers-intact.py` is what reports that now —
+# `.github/scripts/assert_gate_observers_intact.py` is what reports that now —
 # it asserts this file exists, keeps the triggers below, carries no paths filter
 # and still runs its script. It is invoked from `workflow-hygiene.yml` (on
 # GitHub, at the push and on the promotion PR) and from `task quality:hermetic`
@@ -110,4 +110,4 @@ jobs:
 
       # If the script is missing, python3 exits non-zero and this step fails.
       # Fail-closed by construction: deleting the checker cannot produce a pass.
-      - run: python3 .github/scripts/assert-delivery-gate-armed.py
+      - run: python3 .github/scripts/assert_delivery_gate_armed.py

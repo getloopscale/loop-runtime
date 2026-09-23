@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-regen-build-runtime-kubeconfigs.py — canonical post-Cleanroom regen of the
+regen_build_runtime_kubeconfigs.py — canonical post-Cleanroom regen of the
 build/runtime/runtime2 SA tokens embedded in loopzero-cluster-kubeconfigs.
 
 Trigger: QA Dogfooding Run-4 #133. Symptom — `loopzero deploy` failed with
@@ -32,9 +32,9 @@ canonical post-Cleanroom action when QA dogfooding reports build/deploy
 failure with INTERNAL_ERROR + loopzero-api auth-fail logs.
 
 Usage:
-  python3 regen-build-runtime-kubeconfigs.py           # all 3 (build+runtime+runtime2)
-  python3 regen-build-runtime-kubeconfigs.py --only build   # one cluster
-  python3 regen-build-runtime-kubeconfigs.py --verify  # restart + smoke probe
+  python3 regen_build_runtime_kubeconfigs.py           # all 3 (build+runtime+runtime2)
+  python3 regen_build_runtime_kubeconfigs.py --only build   # one cluster
+  python3 regen_build_runtime_kubeconfigs.py --verify  # restart + smoke probe
 """
 from __future__ import annotations
 

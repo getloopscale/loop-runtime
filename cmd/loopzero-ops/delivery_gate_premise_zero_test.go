@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// PREMISE 0 of .github/scripts/assert-delivery-gate-armed.py decides which
+// PREMISE 0 of .github/scripts/assert_delivery_gate_armed.py decides which
 // regime protects the trunk. It used to accept `ci.yml triggers on
 // pull_request` as proof that "CI gates the pull request" and return 0 without
 // looking at WHAT ci.yml runs — so a workflow that triggered on the PR and ran
@@ -22,7 +22,7 @@ import (
 
 func deliveryGateScript(t *testing.T) string {
 	t.Helper()
-	p, err := filepath.Abs("../../.github/scripts/assert-delivery-gate-armed.py")
+	p, err := filepath.Abs("../../.github/scripts/assert_delivery_gate_armed.py")
 	if err != nil {
 		t.Fatal(err)
 	}
