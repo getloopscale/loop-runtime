@@ -105,6 +105,41 @@ func (q *Queries) GetCellIDByTenantID(ctx context.Context, db DBTX, id string) (
 	return cell_id, err
 }
 
+const listDeclaredCellCapacities = `-- name: ListDeclaredCellCapacities :many
+SELECT cell_id, capacity_tenants_max::integer AS capacity_tenants_max
+FROM cells
+WHERE capacity_tenants_max IS NOT NULL
+`
+
+type ListDeclaredCellCapacitiesRow struct {
+	CellID             string `json:"cell_id"`
+	CapacityTenantsMax int32  `json:"capacity_tenants_max"`
+}
+
+// Every cell that declares a tenant capacity. Feeds the PlacementEngine, so
+// automatic placement reads the same column PinTenantToCell enforces; for
+// automatic placement a cell with NULL falls back to the platform-wide
+// MAX_TENANTS_PER_CELL. `cells` is not tenant-owned.
+func (q *Queries) ListDeclaredCellCapacities(ctx context.Context, db DBTX) ([]ListDeclaredCellCapacitiesRow, error) {
+	rows, err := db.Query(ctx, listDeclaredCellCapacities)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDeclaredCellCapacitiesRow
+	for rows.Next() {
+		var i ListDeclaredCellCapacitiesRow
+		if err := rows.Scan(&i.CellID, &i.CapacityTenantsMax); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lookupCellForPin = `-- name: LookupCellForPin :one
 SELECT status, capacity_tenants_max FROM cells WHERE cell_id = $1
 `

@@ -24,6 +24,10 @@ func (f *fakeGetCellQuerier) GetTenantCellID(_ context.Context, _ string) (strin
 	return f.cellID, f.err
 }
 
+func (f *fakeGetCellQuerier) CapacityByCell(_ context.Context) (map[string]int, error) {
+	return map[string]int{}, nil
+}
+
 func (f *fakeGetCellQuerier) CountByCell(_ context.Context) (map[string]int, error) {
 	if f.countMap != nil {
 		return f.countMap, nil

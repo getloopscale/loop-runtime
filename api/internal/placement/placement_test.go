@@ -90,8 +90,13 @@ func TestPassthroughRouter_ListCells(t *testing.T) {
 // --- RoundRobinEngine tests ---
 
 type fakeQuerier struct {
-	counts  map[string]int
-	cellIDs map[string]string
+	counts     map[string]int
+	cellIDs    map[string]string
+	capacities map[string]int
+}
+
+func (f *fakeQuerier) CapacityByCell(_ context.Context) (map[string]int, error) {
+	return f.capacities, nil
 }
 
 func (f *fakeQuerier) CountByCell(_ context.Context) (map[string]int, error) {
@@ -322,6 +327,10 @@ func TestStaticRouter_RejectsEmptyList(t *testing.T) {
 // see the same snapshot and all assign to the same cell. When an
 // AssignCell completes, the test code records the pick into this querier
 // so the NEXT caller (serialized or otherwise) observes the updated count.
+
+func (r *raceQuerier) CapacityByCell(_ context.Context) (map[string]int, error) {
+	return map[string]int{}, nil
+}
 
 type raceQuerier struct {
 	mu       sync.Mutex

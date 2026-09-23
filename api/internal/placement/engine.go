@@ -31,6 +31,10 @@ type TenantCellQuerier interface {
 	CountByCell(ctx context.Context) (map[string]int, error)
 	// GetTenantCellID returns the cell_id for a specific tenant.
 	GetTenantCellID(ctx context.Context, tenantID string) (string, error)
+	// CapacityByCell returns the tenant capacity each cell declares
+	// (cells.capacity_tenants_max). A cell absent from the map declares none
+	// and is bounded by the platform-wide capacity.
+	CapacityByCell(ctx context.Context) (map[string]int, error)
 }
 
 // ExtractRegion derives a region label from a cell_id.
@@ -88,7 +92,8 @@ type RoundRobinEngine struct {
 
 // NewRoundRobinEngine creates a placement engine that distributes tenants
 // across Cells using a bin-packing (least-loaded) strategy.
-// maxPerCell is the capacity limit per Cell (default 500 if <= 0).
+// maxPerCell is the platform-wide capacity (MAX_TENANTS_PER_CELL), applied to
+// every cell that declares no capacity of its own (default 500 if <= 0).
 func NewRoundRobinEngine(router Router, querier TenantCellQuerier, maxPerCell int) *RoundRobinEngine {
 	if maxPerCell <= 0 {
 		maxPerCell = 500
@@ -156,24 +161,38 @@ func (e *RoundRobinEngine) assignLocked(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("placement: count tenants by cell: %w", err)
 	}
+	declared, err := e.querier.CapacityByCell(ctx)
+	if err != nil {
+		return "", fmt.Errorf("placement: read cell capacities: %w", err)
+	}
 
-	// Find the Cell with the fewest tenants that is not at capacity.
+	// The least-loaded cell that still has room under its own capacity.
 	bestCell := ""
-	bestCount := e.maxPerCell + 1 // start above max so any Cell wins
-
+	bestCount := 0
 	for _, cell := range cells {
 		count := counts[cell.CellID] // 0 if no tenants yet
-		if count < e.maxPerCell && count < bestCount {
-			bestCell = cell.CellID
-			bestCount = count
+		if count >= e.capacityOf(cell.CellID, declared) {
+			continue
+		}
+		if bestCell == "" || count < bestCount {
+			bestCell, bestCount = cell.CellID, count
 		}
 	}
 
 	if bestCell == "" {
-		return "", fmt.Errorf("placement: all cells at capacity (%d tenants each)", e.maxPerCell)
+		return "", fmt.Errorf("placement: all %d cells at capacity (platform default %d tenants per cell)", len(cells), e.maxPerCell)
 	}
 
 	return bestCell, nil
+}
+
+// capacityOf is the one definition of a cell's tenant capacity: the capacity
+// the cell declares, else the platform-wide default.
+func (e *RoundRobinEngine) capacityOf(cellID string, declared map[string]int) int {
+	if c, ok := declared[cellID]; ok {
+		return c
+	}
+	return e.maxPerCell
 }
 
 // AssignAndExecute picks a cell AND runs the given callback inside the same
