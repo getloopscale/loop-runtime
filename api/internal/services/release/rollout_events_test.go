@@ -6,7 +6,6 @@ package release
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"testing"
 )
@@ -30,45 +29,6 @@ func (f *fakeEventStore) Append(ctx context.Context, buildID string, eventType s
 	}
 	f.events = append(f.events, recordedEvent{BuildID: buildID, EventType: eventType, Data: data})
 	return int64(len(f.events)), nil
-}
-
-func TestEmitRolloutStep_HappyPath(t *testing.T) {
-	es := &fakeEventStore{}
-	logger := slog.Default()
-	err := EmitRolloutStep(context.Background(), logger, es, "build-abc", RolloutStepEvent{
-		Weight: 20, Step: 1, TotalSteps: 5, Status: "progressing",
-	})
-	if err != nil {
-		t.Fatalf("EmitRolloutStep returned error: %v", err)
-	}
-	if len(es.events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(es.events))
-	}
-	ev := es.events[0]
-	if ev.EventType != "rollout.step" {
-		t.Errorf("event type = %q, want rollout.step", ev.EventType)
-	}
-	if ev.BuildID != "build-abc" {
-		t.Errorf("build_id = %q, want build-abc", ev.BuildID)
-	}
-	var payload RolloutStepEvent
-	if err := json.Unmarshal(ev.Data, &payload); err != nil {
-		t.Fatalf("unmarshal payload: %v", err)
-	}
-	if payload.Weight != 20 || payload.Step != 1 || payload.TotalSteps != 5 || payload.Status != "progressing" {
-		t.Errorf("payload mismatch: %+v", payload)
-	}
-}
-
-func TestEmitRolloutStep_StoreError(t *testing.T) {
-	es := &fakeEventStore{err: errors.New("db down")}
-	logger := slog.Default()
-	err := EmitRolloutStep(context.Background(), logger, es, "build-abc", RolloutStepEvent{
-		Weight: 20, Step: 1, TotalSteps: 5, Status: "progressing",
-	})
-	if err == nil {
-		t.Errorf("expected error from EmitRolloutStep when store fails")
-	}
 }
 
 func TestEmitRolloutAborted_HappyPath(t *testing.T) {

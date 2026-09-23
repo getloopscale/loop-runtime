@@ -103,3 +103,19 @@ func TestCellStatus_NoInternalTerms(t *testing.T) {
 	// Verify no "argocd" in JSON field names
 	// The json tags use "deploy_health" not "argocd_health" — checked by code review
 }
+
+// No provider measures cluster or deploy health per cell, so the service must
+// say so ("Unknown") rather than report a fabricated "Ready"/"Healthy".
+func TestCellService_ReportsUnmeasuredHealthAsUnknown(t *testing.T) {
+	router, _ := placement.NewStaticRouter([]placement.CellConfig{{CellID: "cell-0"}})
+	svc := NewCellService(router, &fakeCellQuerier{counts: map[string]int{}}, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+
+	cells, err := svc.ListCells(context.Background())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cells[0].ClusterHealth != "Unknown" || cells[0].DeployHealth != "Unknown" || cells[0].AppCount != 0 {
+		t.Errorf("got %+v, want unmeasured health reported as Unknown and no app count", cells[0])
+	}
+}

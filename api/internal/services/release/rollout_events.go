@@ -12,24 +12,9 @@ import (
 
 // rollout_events.go — argo-rollouts-progressive-delivery-plan T4.1.
 //
-// Helpers for emitting SSE events during canary rollout progression.
-//
-// Event taxonomy:
-//   - rollout.step  (NON-TERMINAL): emitted when canary advances to a new
-//     step. Stream stays open. CLI shows progress.
-//   - rollout.aborted (TERMINAL): emitted when Argo Rollouts auto-aborts a
-//     canary (analysis failed or bad pod health). Replaces deploy.completed
-//     in the abort path. Stream closes; CLI shows error and exits with
-//     code 3 (deploy failure).
-//
-// Schema (rollout.step.data):
-//   {
-//     "weight": 20,           // current canary traffic weight (0-100)
-//     "step": 3,              // 1-indexed current step
-//     "total_steps": 5,       // total step count from canary spec
-//     "status": "analyzing",  // "progressing" | "paused" | "analyzing"
-//     "analysis_status": "running"  // optional: "running"|"successful"|"failed"
-//   }
+// rollout.aborted (TERMINAL) is emitted when a canary release fails: it
+// replaces deploy.completed in the abort path, the stream closes, and the CLI
+// exits with code 3 (deploy failure).
 //
 // Schema (rollout.aborted.data):
 //   {
@@ -38,15 +23,11 @@ import (
 //     "weight": 20,
 //     "message": "success-rate dropped below 0.90 threshold"
 //   }
-
-// RolloutStepEvent is the JSON payload of an SSE rollout.step event.
-type RolloutStepEvent struct {
-	Weight         int    `json:"weight"`
-	Step           int    `json:"step"`
-	TotalSteps     int    `json:"total_steps"`
-	Status         string `json:"status"`
-	AnalysisStatus string `json:"analysis_status,omitempty"`
-}
+//
+// The plan also specified a non-terminal rollout.step progress event, and the
+// CLI renders one if it arrives, but nothing in the API observes canary step
+// progression, so nothing emits it. Its helper had no caller and was removed;
+// emitting rollout.step needs a producer that watches Rollout steps first.
 
 // RolloutAbortedEvent is the JSON payload of an SSE rollout.aborted event.
 type RolloutAbortedEvent struct {
@@ -54,34 +35,6 @@ type RolloutAbortedEvent struct {
 	Step    int    `json:"step"`
 	Weight  int    `json:"weight"`
 	Message string `json:"message"`
-}
-
-// EmitRolloutStep emits a non-terminal rollout.step event. Idempotent:
-// repeated calls with the same weight/step/status produce duplicate events
-// — callers (release convergence loop) should deduplicate by polling
-// only on transitions.
-func EmitRolloutStep(
-	ctx context.Context,
-	logger *slog.Logger,
-	eventStore ReleaseActivationEventStore,
-	buildID string,
-	ev RolloutStepEvent,
-) error {
-	data, err := json.Marshal(ev)
-	if err != nil {
-		return fmt.Errorf("marshal rollout.step: %w", err)
-	}
-	if _, err := eventStore.Append(ctx, buildID, "rollout.step", data); err != nil {
-		if logger != nil {
-			logger.Error("failed to emit rollout.step",
-				"build_id", buildID,
-				"weight", ev.Weight,
-				"step", ev.Step,
-				"error", err)
-		}
-		return fmt.Errorf("append rollout.step: %w", err)
-	}
-	return nil
 }
 
 // EmitRolloutAborted emits a TERMINAL rollout.aborted event. Causes the SSE
