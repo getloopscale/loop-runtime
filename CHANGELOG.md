@@ -14,6 +14,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- task dogfood:v2:journey JOURNEY=<label> runs one live dogfood journey (e.g. JOURNEY=j04).
+
 - **api:** backlog B-119 — the build cache is keyed by name, so two tenants on the same
   stack share nothing
 - **api:** backlog B-120 — a build with no lockfile warns and proceeds, so the platform
@@ -56,6 +58,8 @@ to [Semantic Versioning](https://semver.org/).
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
 ### Changed
+
+- The per-cell bootstrap tasks k3d:bootstrap-cell-0 and k3d:bootstrap-cell-1 are replaced by one task, k3d:bootstrap-cell CELL_CTX=<context>; cells and their bootstrap releases are declared once (CELL_CONTEXTS, CELL_BOOTSTRAP_RELEASES).
 
 - **api:** the `surfaces` registry moved from `api/internal/server/surfaces` to `api/internal/surfaces`, and `deploycontracts` from `api/internal/services/deploycontracts` to `api/internal/deploycontracts`. Twelve `api/internal` subtrees depended on each other in one cycle through `metrics → server` and `buildplane → services`; both packages are leaves or contracts, so moving them out dissolves the cycle. A new architecture test, `api/internal/archtest`, fails the build if any two `api/internal` subtrees import each other again — the check the Go compiler cannot make.
 
@@ -157,6 +161,12 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- The unused ArgoCD app-of-apps manifests under infra/argocd-bootstrap and task validate:argocd-sync-waves; the platform is installed and managed by Helmfile.
+
+- Tasks that could only fail because their script was deleted: audit:action-pinning, dev-public:live-proof, validate:matrix:quick, parity:preflight, parity:k3d-virgin, parity:droplet, parity:doks, test:pre-release-rigor:scenario-3 and scenario-4, ops:build, and the 16 test:dogfood:* wrappers.
+
+- landscape.yml, a vendored copy of the CNCF landscape data that no part of the repository read, is no longer shipped.
+
 - `api/internal/cellmgr`, an unused per-cell Kubernetes client manager. It had no callers,
   and could not have worked if wired: it resolved clients from kubeconfig path settings that
   only the test-only router populates, while production uses the credential-based one. The
@@ -184,6 +194,20 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- The DR drill declares each cell once (cell-0, cell-1); it declared cell-0 twice after the cell renumbering.
+
+- .github/branch-protection-config.yml requires the CI gate check that ci.yml actually reports instead of 13 checks from deleted workflows.
+
+- task pprof:operators takes OPERATOR=tenant|app|preview|platform and api:hotfix no longer restarts a deployment that no longer exists.
+
+- task audit:security-context, task dev-public:patch-kratos and task validate:matrix run their current implementations instead of deleted scripts.
+
+- task validate:helmfile-templates renders the current core, build and cell helmfiles instead of helmfiles that no longer exist, and shows render errors.
+
+- task infra:install:monitoring-crds and task test:smoke now cover every cell cluster; cell-1 was skipped.
+
+- task drill no longer aborts at Phase 5 (cell bootstrap) and leaves the paid drill stack running; it bootstraps cells 0 and 1.
 
 - Three more tests that had stopped matching the repository. Two read documents the
   consolidation moved, and now read history through a shared helper that tries disk first
@@ -326,6 +350,8 @@ to [Semantic Versioning](https://semver.org/).
   explanation (#B-069)
 
 ### Security
+
+- Credentials the legacy Pulumi stack reads from LOOPZERO_* environment variables are now stored encrypted in stack state, like values set with pulumi config set --secret.
 
 - Workflow permissions are declared per job rather than repository-wide. `packages: write`
   and `id-token: write` were granted to every job in the release workflow, including one
