@@ -110,23 +110,6 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	// correlation-id from CR annotation into reconcile context (no-op se ausente).
 	ctx = correlation.WithID(ctx, route.GetAnnotations()["loopzero.io/correlation-id"])
 
-	// kstatus universal per ADR-0025 D3 condition #1.
-	//
-	// The shared helper, not the hand-rolled copy this file used to carry. That
-	// copy predated slice-10 and reproduced the two defects that slice fixed:
-	// it persisted with Status().Update, so a conditions write — an ARRAY, which
-	// RFC 7386 treats as a scalar — could erase a concurrent write of the whole
-	// array with no error anywhere; and it DISCARDED the error (`_ =`), making a
-	// dropped status write silent in the one place that has nowhere to return to.
-	//
-	// DeferReadinessSummary carries MergeFromWithOptimisticLock and logs the
-	// failure. Duplicated knowledge is why this file still had the pre-fix shape
-	// months after the fix (B-085).
-	defer reconcileloop.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
-		func() *loopzerov1.ExposedRoute { return &loopzerov1.ExposedRoute{} },
-		func(x *loopzerov1.ExposedRoute) *[]metav1.Condition { return &x.Status.Conditions },
-		exposureDetailTypes)()
-
 	if !route.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, r.reconcileDelete(ctx, &route)
 	}

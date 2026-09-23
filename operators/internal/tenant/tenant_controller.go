@@ -141,24 +141,6 @@ func (r *TenantReconciler) runtimeClient(ctx context.Context, tenant *loopzerov1
 	return c, nil
 }
 
-// tenantDetailTypes are the per-step conditions that SetReadinessSummary
-// classifies for kstatus. Per ADR-0025 D3.
-var tenantDetailTypes = []string{
-	conditions.TypeGitRepoReady,
-	conditions.TypeQuotaEnforced,
-	conditions.TypeBuildNamespaceReady,
-	conditions.TypePriorityClassReady,
-	conditions.TypeArgoCDAppReady,
-	// HarborProjectReady is only required when HarborClient is configured;
-	// included here so kstatus.Compute waits for it in Harbor mode. In DOCR
-	// mode the controller never sets it, so SetReadinessSummary classifies
-	// as Reconciling (missing detail). Acceptable: DOCR-mode tenants stay
-	// Reconciling forever from a kstatus standpoint UNTIL the per-tenant
-	// requiredProvisioningConditions() omits Harbor — TODO follow-up: add
-	// runtime-conditional detailTypes selector.
-	conditions.TypeHarborProjectReady,
-}
-
 // Reconcile handles the reconciliation loop for Tenant resources.
 func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	ctx, span := reconcileloop.StartReconcileSpan(ctx, "tenant", req.Name, req.Namespace)
@@ -189,24 +171,6 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// logs + audit_log writes trace back to the originating request. No-op
 	// for background reconciles (watch event without annotation).
 	ctx = correlation.WithID(ctx, tenant.GetAnnotations()["loopzero.io/correlation-id"])
-
-	// kstatus universal: SetReadinessSummary MUST be the LAST status
-	// mutation per ADR-0025 D3 condition #1. Defer ensures it runs even
-	// on early return / panic from internal helpers.
-	// Adjust detailTypes for DOCR mode (HarborClient nil → skip Harbor).
-	dt := tenantDetailTypes
-	if r.HarborClient == nil {
-		dt = dt[:len(dt)-1] // drop trailing TypeHarborProjectReady
-	}
-	// Delegated to the shared helper (B-085). This was an inlined copy of it that
-	// persisted with `_ = r.Status().Update(...)` — the forbidden pattern, with the
-	// error discarded. Four sibling controllers already delegate, and slice-10
-	// fixed the helper to use a locked merge patch and to log the failure; keeping
-	// a local copy meant it silently diverged from the fixed one.
-	defer reconcileloop.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
-		func() *loopzerov1.Tenant { return &loopzerov1.Tenant{} },
-		func(t *loopzerov1.Tenant) *[]metav1.Condition { return &t.Status.Conditions },
-		dt)()
 
 	// Handle deletion with verify-then-remove finalizer pattern
 	if !tenant.DeletionTimestamp.IsZero() {
@@ -271,7 +235,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// It carries no resourceVersion only BECAUSE `base` is captured after the
 	// finalizer write; see the snapshot comment above. That is asserted by
 	// TestTenantStatusPatch_CarriesNoResourceVersion, on the emitted bytes.
-	if err := r.Status().Patch(ctx, &tenant, client.MergeFrom(base)); err != nil {
+	if err := r.patchStatus(ctx, &tenant, base); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -327,7 +291,7 @@ func (r *TenantReconciler) runSteps(ctx context.Context, tenant, base *loopzerov
 			// names only what changed, so there is nothing stale to dodge — see
 			// the snapshot comment in Reconcile for why the placement of `base`
 			// is what makes that true (B-085).
-			if statusErr := r.Status().Patch(ctx, tenant, client.MergeFrom(base)); statusErr != nil {
+			if statusErr := r.patchStatus(ctx, tenant, base); statusErr != nil {
 				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
 			}
 			return err
@@ -337,9 +301,12 @@ func (r *TenantReconciler) runSteps(ctx context.Context, tenant, base *loopzerov
 }
 
 // requiredProvisioningConditions returns the conditions that must be True
-// for a tenant to transition from PROVISIONING to ACTIVE.
-// When HarborClient is configured, HarborProjectReady is required.
-// When HarborClient is nil (DOCR mode), Harbor conditions are skipped.
+// for a tenant to transition from PROVISIONING to ACTIVE, and the detail
+// conditions the kstatus readiness summary classifies (ADR-0025 D3): one rule
+// for both, so a tenant is never Ready on a condition it is not required to
+// meet, nor Active while the summary waits on one it never gets.
+// HarborProjectReady belongs to it only when HarborClient is configured
+// (DOCR mode never writes it).
 func (r *TenantReconciler) requiredProvisioningConditions() []string {
 	required := []string{
 		conditions.TypeGitRepoReady,
@@ -551,4 +518,13 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 			Credentials:        cfg.Credentials,
 			RegistryCIDRs:      cfg.RegistryCIDRs,
 		})
+}
+
+// patchStatus is the single status writer of this controller. It folds the
+// kstatus readiness summary in as the last mutation (ADR-0025 D3) and persists
+// with a merge patch off base, so every write carries a Ready condition that
+// agrees with the conditions written beside it.
+func (r *TenantReconciler) patchStatus(ctx context.Context, tenant, base *loopzerov1.Tenant) error {
+	conditions.SetReadinessSummaryViaPkg(&tenant.Status.Conditions, tenant.Generation, r.requiredProvisioningConditions())
+	return r.Status().Patch(ctx, tenant, client.MergeFrom(base))
 }

@@ -90,15 +90,6 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// correlation-id from CR annotation into reconcile context (no-op se ausente).
 	ctx = correlation.WithID(ctx, cr.GetAnnotations()["loopzero.io/correlation-id"])
 
-	// kstatus universal: SetReadinessSummary MUST be the LAST status
-	// mutation per ADR-0025. Defer ensures it runs even on early return
-	// or panic from internal helpers (resolveKubeconfig, checkConnectivity)
-	// that have their own Status().Update sites.
-	defer reconcileloop.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
-		func() *loopzerov1.ClusterCredential { return &loopzerov1.ClusterCredential{} },
-		func(x *loopzerov1.ClusterCredential) *[]metav1.Condition { return &x.Status.Conditions },
-		clusterCredentialDetailTypes)()
-
 	if !cr.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, &cr)
 	}
@@ -160,7 +151,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// MEET-053 D-03: Record observed generation for change detection.
 	cr.Status.ObservedGeneration = cr.Generation
 
-	if statusErr := r.Status().Patch(ctx, &cr, client.MergeFrom(base)); statusErr != nil {
+	if statusErr := r.patchStatus(ctx, &cr, base); statusErr != nil {
 		return ctrl.Result{}, statusErr
 	}
 
@@ -195,7 +186,7 @@ func (r *ClusterCredentialReconciler) resolveKubeconfig(ctx context.Context, cr,
 				metav1.ConditionTrue, "SecretMissing",
 				fmt.Sprintf("Secret %s/%s not found", secretKey.Namespace, secretKey.Name),
 				cr.Generation)
-			if statusErr := r.Status().Patch(ctx, cr, client.MergeFrom(base)); statusErr != nil {
+			if statusErr := r.patchStatus(ctx, cr, base); statusErr != nil {
 				return nil, ctrl.Result{}, statusErr
 			}
 			return nil, ctrl.Result{RequeueAfter: constants.RequeueSecretNotFound}, nil
@@ -215,7 +206,7 @@ func (r *ClusterCredentialReconciler) resolveKubeconfig(ctx context.Context, cr,
 			metav1.ConditionFalse, "KubeconfigKeyMissing",
 			"Secret does not contain 'kubeconfig' key",
 			cr.Generation)
-		if statusErr := r.Status().Patch(ctx, cr, client.MergeFrom(base)); statusErr != nil {
+		if statusErr := r.patchStatus(ctx, cr, base); statusErr != nil {
 			return nil, ctrl.Result{}, statusErr
 		}
 		return nil, ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
@@ -260,7 +251,7 @@ func (r *ClusterCredentialReconciler) checkConnectivity(ctx context.Context, cr,
 			metav1.ConditionFalse, reason, msg, cr.Generation)
 		now := metav1.Now()
 		cr.Status.LastCheckedAt = &now
-		if statusErr := r.Status().Patch(ctx, cr, client.MergeFrom(base)); statusErr != nil {
+		if statusErr := r.patchStatus(ctx, cr, base); statusErr != nil {
 			return false, ctrl.Result{}, statusErr
 		}
 		return false, ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
@@ -289,7 +280,7 @@ func (r *ClusterCredentialReconciler) markDisconnected(ctx context.Context, cr, 
 	cr.Status.Connected = false
 	conditions.SetCondition(&cr.Status.Conditions, conditions.TypeConnected,
 		metav1.ConditionFalse, reason, msg, cr.Generation)
-	if statusErr := r.Status().Patch(ctx, cr, client.MergeFrom(base)); statusErr != nil {
+	if statusErr := r.patchStatus(ctx, cr, base); statusErr != nil {
 		return false, ctrl.Result{}, statusErr
 	}
 	return false, ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
@@ -551,4 +542,13 @@ func (r *ClusterCredentialReconciler) findCredentialsForSecret(ctx context.Conte
 		}
 	}
 	return requests
+}
+
+// patchStatus is the single status writer of this controller. It folds the
+// kstatus readiness summary in as the last mutation (ADR-0025 D3) and persists
+// with a merge patch off base, so every write carries a Ready condition that
+// agrees with the conditions written beside it.
+func (r *ClusterCredentialReconciler) patchStatus(ctx context.Context, cr, base *loopzerov1.ClusterCredential) error {
+	conditions.SetReadinessSummaryViaPkg(&cr.Status.Conditions, cr.Generation, clusterCredentialDetailTypes)
+	return r.Status().Patch(ctx, cr, client.MergeFrom(base))
 }

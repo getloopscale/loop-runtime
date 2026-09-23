@@ -59,7 +59,7 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 		}
 		tenant.Status.Phase = loopzerov1.TenantPhase(next)
 	}
-	if err := r.Status().Patch(ctx, tenant, client.MergeFrom(base)); err != nil {
+	if err := r.patchStatus(ctx, tenant, base); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -110,7 +110,7 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 	if len(deleteErrs) > 0 {
 		// Persist condition before returning so observers can see the
 		// failure even while the reconciler retries with backoff.
-		if statusErr := r.Status().Patch(ctx, tenant, client.MergeFrom(base)); statusErr != nil {
+		if statusErr := r.patchStatus(ctx, tenant, base); statusErr != nil {
 			logger.Error(statusErr, "failed to persist EnvironmentCleanup condition")
 		}
 		return ctrl.Result{}, fmt.Errorf("phase 1: delete %d/%d child environments failed (first: %s): %w",

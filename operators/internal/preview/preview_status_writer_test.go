@@ -188,35 +188,22 @@ func TestPreviewController_ReconcileEmitsAStatusPatchWithoutResourceVersion(t *t
 		Spec: loopzerov1.PreviewEnvironmentSpec{TenantID: "tn-x", ProjectID: "api", PRNumber: 42},
 	})
 
-	// Two contracts, opposite on purpose, and both guarded here.
-	//
-	// The deferred readiness summary is by Go's defer semantics the LAST status
-	// write of a Reconcile, and it uses MergeFromWithOptimisticLock — it CARRIES
-	// resourceVersion deliberately (slice-10): it re-fetches, and conditions are
-	// an array, which RFC 7386 treats as a scalar, so without the lock it would
-	// clobber a concurrent write of the whole array.
-	//
-	// Everything before it comes from the controller body, which uses plain
-	// MergeFrom and must carry NO version — that is the snapshot-placement
-	// property this file exists to guard.
-	//
-	// The first version of this assertion required no version on ALL patches and
-	// therefore reported the summary's deliberate lock as a defect. Conflating
-	// them would let either regress into the other.
-	if len(bodies) < 2 {
-		t.Fatalf("expected at least one body patch and the deferred readiness summary; got %d — "+
-			"the observation is incomplete, which is not the same as clean", len(bodies))
+	// The controller is the single status writer: every write folds the
+	// readiness summary in and none carries a resourceVersion, because the
+	// snapshot is taken after the finalizer write (B-085).
+	if len(bodies) == 0 {
+		t.Fatal("no status patch observed — the observation is incomplete, which is not the same as clean")
 	}
-	for i, body := range bodies[:len(bodies)-1] {
+	for i, body := range bodies {
 		if strings.Contains(body, "resourceVersion") {
-			t.Errorf("body status patch #%d carries resourceVersion, which makes it an optimistic lock "+
+			t.Errorf("status patch #%d carries resourceVersion, which makes it an optimistic lock "+
 				"frozen at snapshot time — a WIDER conflict window than the refetch this contract "+
 				"removes. Capture `base` AFTER the finalizer Update (B-085).\npatch: %s", i+1, body)
 		}
-	}
-	if last := bodies[len(bodies)-1]; !strings.Contains(last, "resourceVersion") {
-		t.Errorf("the deferred readiness summary lost its optimistic lock — without it a conditions "+
-			"patch overwrites the whole array and erases a concurrent write (slice-10).\npatch: %s", last)
+		if !strings.Contains(body, `"type":"Ready"`) {
+			t.Errorf("status patch #%d does not carry the Ready summary; every write must fold it "+
+				"in (ADR-0025 D3).\npatch: %s", i+1, body)
+		}
 	}
 }
 

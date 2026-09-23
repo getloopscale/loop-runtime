@@ -150,19 +150,21 @@ func TestTenantController_DoesNotDiscardStatusWriteErrors(t *testing.T) {
 	src := controllerSource(t)
 	if strings.Contains(src, "_ = r.Status().Update") || strings.Contains(src, "_ = r.Status().Patch") {
 		t.Error("a status write result is discarded with `_ =`. CLAUDE.md is explicit that a " +
-			"status-write failure is never swallowed; the readiness summary belongs to " +
-			"reconcile.DeferReadinessSummary, which logs it (B-085).")
+			"status-write failure is never swallowed (B-085).")
 	}
 }
 
-// And the summary must come from the shared helper rather than a seventh
-// hand-rolled copy — the shape B-089 measured the cost of.
-func TestTenantController_DelegatesReadinessSummaryToTheHelper(t *testing.T) {
+// And every status write carries the readiness summary: the controller is the
+// single status writer, so the summary is folded into its one patch instead of
+// being persisted by a second, re-fetching writer (ADR-0025 D3).
+func TestTenantController_FoldsTheReadinessSummaryIntoItsStatusPatch(t *testing.T) {
 	src := controllerSource(t)
-	if !strings.Contains(src, "DeferReadinessSummary") {
-		t.Error("the readiness summary is still inlined here. Four of the six controllers delegate " +
-			"to reconcile.DeferReadinessSummary, which slice-10 fixed to use a locked merge " +
-			"patch and to log the error; a local copy diverges from it silently (B-085).")
+	if !strings.Contains(src, "SetReadinessSummaryViaPkg(") {
+		t.Error("the Tenant status patch does not fold the readiness summary; a write that omits " +
+			"it leaves Ready at whatever a previous pass computed.")
+	}
+	if strings.Contains(src, "DeferReadinessSummary") {
+		t.Error("a deferred second status writer is back; the controller must stay the single writer.")
 	}
 }
 

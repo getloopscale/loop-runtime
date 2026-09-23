@@ -131,14 +131,6 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// correlation-id from CR annotation into reconcile context (no-op se ausente).
 	ctx = correlation.WithID(ctx, env.GetAnnotations()["loopzero.io/correlation-id"])
 
-	// kstatus universal per ADR-0025 D3 condition #1.
-	// Per pkg-sota-faang-grade-plan v1.2 T2.2 closure: delegates to
-	// pkg/conditions via adapter (same algorithm, shared core).
-	defer reconcileloop.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
-		func() *loopzerov1.Environment { return &loopzerov1.Environment{} },
-		func(x *loopzerov1.Environment) *[]metav1.Condition { return &x.Status.Conditions },
-		environmentDetailTypes)()
-
 	// Handle deletion with verify-then-remove finalizer pattern
 	if !env.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, &env)
@@ -154,7 +146,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Tenant controller writes only Environment spec/metadata. Capturing a
 	// DeepCopy here — after EnsureFinalizer's metadata write, before any status
 	// mutation — lets every status write below use
-	// `r.Status().Patch(ctx, &env, client.MergeFrom(base))`. A merge patch
+	// `r.patchStatus(ctx, &env, base)`. A merge patch
 	// carries no resourceVersion (no optimistic-concurrency 409) and sends only
 	// the changed status fields, so a concurrent spec/metadata write by the
 	// Tenant controller can never clobber this status write. This replaces the
@@ -207,7 +199,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			// MA-4: report the observed generation even on the error branch.
 			env.Status.ObservedGeneration = env.Generation
 			// MA-1/MA-2: merge-patch (no 409); requeue on write failure.
-			if statusErr := r.Status().Patch(ctx, &env, client.MergeFrom(base)); statusErr != nil {
+			if statusErr := r.patchStatus(ctx, &env, base); statusErr != nil {
 				logger.Error(statusErr, "failed to persist InvalidEnvRef condition")
 				return ctrl.Result{}, statusErr
 			}
@@ -225,7 +217,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			env.Status.ObservedGeneration = env.Generation
 			// MA-1/MA-2: merge-patch (no 409); requeue on write failure so the
 			// condition converges instead of being silently dropped (t31 flake).
-			if statusErr := r.Status().Patch(ctx, &env, client.MergeFrom(base)); statusErr != nil {
+			if statusErr := r.patchStatus(ctx, &env, base); statusErr != nil {
 				logger.Error(statusErr, "failed to update NameTooLong status")
 				return ctrl.Result{}, statusErr
 			}
@@ -256,7 +248,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err != nil {
 		conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvNamespaceReady,
 			metav1.ConditionFalse, "RuntimeClusterUnresolved", err.Error(), env.Generation)
-		if statusErr := r.Status().Patch(ctx, &env, client.MergeFrom(base)); statusErr != nil {
+		if statusErr := r.patchStatus(ctx, &env, base); statusErr != nil {
 			logger.Error(statusErr, "failed to persist RuntimeClusterUnresolved condition")
 		}
 		return ctrl.Result{}, err
@@ -279,7 +271,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), env.Generation)
 			// MA-1: merge-patch (no 409). The step error already drives the
 			// requeue below; a status-write failure is logged, not swallowed.
-			if statusErr := r.Status().Patch(ctx, &env, client.MergeFrom(base)); statusErr != nil {
+			if statusErr := r.patchStatus(ctx, &env, base); statusErr != nil {
 				logger.Error(statusErr, "failed to update environment status")
 			}
 			return ctrl.Result{}, err
@@ -304,7 +296,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// MA-1: merge-patch the accumulated status (phase + conditions + namespace +
 	// observedGeneration) off the base snapshot. No refetch, no resourceVersion,
 	// no 409 against a concurrent Tenant-controller spec/metadata write.
-	if err := r.Status().Patch(ctx, &env, client.MergeFrom(base)); err != nil {
+	if err := r.patchStatus(ctx, &env, base); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -340,7 +332,7 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 			return ctrl.Result{}, err
 		}
 		env.Status.Phase = loopzerov1.EnvironmentPhase(next)
-		if err := r.Status().Patch(ctx, env, client.MergeFrom(base)); err != nil {
+		if err := r.patchStatus(ctx, env, base); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -502,4 +494,13 @@ func SetupEnvironmentControllerWithFactory(mgr ctrl.Manager, factory cellrouting
 			Scheme:           mgr.GetScheme(),
 			IngressNamespace: ingressNS,
 		})
+}
+
+// patchStatus is the single status writer of this controller. It folds the
+// kstatus readiness summary in as the last mutation (ADR-0025 D3) and persists
+// with a merge patch off base, so every write carries a Ready condition that
+// agrees with the conditions written beside it.
+func (r *EnvironmentReconciler) patchStatus(ctx context.Context, env, base *loopzerov1.Environment) error {
+	conditions.SetReadinessSummaryViaPkg(&env.Status.Conditions, env.Generation, environmentDetailTypes)
+	return r.Status().Patch(ctx, env, client.MergeFrom(base))
 }

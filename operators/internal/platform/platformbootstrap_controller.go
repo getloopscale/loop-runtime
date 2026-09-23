@@ -101,12 +101,6 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// correlation-id from CR annotation into reconcile context (no-op se ausente).
 	ctx = correlation.WithID(ctx, pb.GetAnnotations()["loopzero.io/correlation-id"])
 
-	// kstatus universal per ADR-0025 D3 condition #1.
-	defer reconcileloop.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
-		func() *loopzerov1.PlatformBootstrap { return &loopzerov1.PlatformBootstrap{} },
-		func(x *loopzerov1.PlatformBootstrap) *[]metav1.Condition { return &x.Status.Conditions },
-		platformBootstrapDetailTypes)()
-
 	// Handle deletion -- clean up platform-tokens secret if present.
 	if !pb.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&pb, constants.FinalizerPlatformBootstrap) {
@@ -166,7 +160,7 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		)
 		now := metav1.Now()
 		pb.Status.LastTransitionTime = &now
-		if err := r.Status().Patch(ctx, &pb, client.MergeFrom(base)); err != nil {
+		if err := r.patchStatus(ctx, &pb, base); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{Requeue: true}, nil
@@ -180,7 +174,7 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		pb.Status.RetryCount = 0
 		now := metav1.Now()
 		pb.Status.LastTransitionTime = &now
-		if err := r.Status().Patch(ctx, &pb, client.MergeFrom(base)); err != nil {
+		if err := r.patchStatus(ctx, &pb, base); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{Requeue: true}, nil
@@ -218,7 +212,7 @@ func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb
 	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(next)
 	now := metav1.Now()
 	pb.Status.LastTransitionTime = &now
-	if err := r.Status().Patch(ctx, pb, client.MergeFrom(base)); err != nil {
+	if err := r.patchStatus(ctx, pb, base); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
@@ -235,7 +229,7 @@ func (r *PlatformBootstrapReconciler) transitionToNextPhase(ctx context.Context,
 	pb.Status.RetryCount = 0
 	now := metav1.Now()
 	pb.Status.LastTransitionTime = &now
-	if err := r.Status().Patch(ctx, pb, client.MergeFrom(base)); err != nil {
+	if err := r.patchStatus(ctx, pb, base); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{Requeue: true}, nil
@@ -252,7 +246,7 @@ func (r *PlatformBootstrapReconciler) requeueWithRetry(ctx context.Context, pb, 
 		return r.transitionToFailed(ctx, pb, base, fmt.Sprintf("max retries (%d) exhausted: %s", maxRetries, message))
 	}
 
-	if err := r.Status().Patch(ctx, pb, client.MergeFrom(base)); err != nil {
+	if err := r.patchStatus(ctx, pb, base); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{RequeueAfter: platformBootstrapRequeueDelay}, nil
@@ -338,4 +332,13 @@ func SetupPlatformBootstrapController(mgr ctrl.Manager, httpClient *http.Client)
 // setConditionAndUpdateStatus is a helper that sets a condition and updates status.
 func (r *PlatformBootstrapReconciler) setCondition(pb *loopzerov1.PlatformBootstrap, condType string, status metav1.ConditionStatus, reason, message string) {
 	conditions.SetCondition(&pb.Status.Conditions, condType, status, reason, message, pb.Generation)
+}
+
+// patchStatus is the single status writer of this controller. It folds the
+// kstatus readiness summary in as the last mutation (ADR-0025 D3) and persists
+// with a merge patch off base, so every write carries a Ready condition that
+// agrees with the conditions written beside it.
+func (r *PlatformBootstrapReconciler) patchStatus(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap) error {
+	conditions.SetReadinessSummaryViaPkg(&pb.Status.Conditions, pb.Generation, platformBootstrapDetailTypes)
+	return r.Status().Patch(ctx, pb, client.MergeFrom(base))
 }

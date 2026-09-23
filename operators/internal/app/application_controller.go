@@ -195,11 +195,10 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 // remembered: a new early-return path cannot reintroduce the defect, because
 // there is no way to persist status without summarizing it first.
 //
-// Deliberately NOT reconcileloop.DeferReadinessSummary, which the other
-// controllers use: that helper re-fetches and takes an optimistic lock because
-// it is a SECOND writer by design. This controller had a second writer removed
-// (T5.1, see the note in Reconcile) for flapping conditions and 409s; trading an
-// ordering defect for a concurrency one is not a fix.
+// Every operator controller now persists status this way. The deferred
+// re-fetching summary the others used to carry was a SECOND writer by design;
+// this controller removed its own (T5.1, see the note in Reconcile) for
+// flapping conditions and 409s, and the rest followed.
 //
 // Decision: MEET-ASYNC-AMENDMENT-2026-08-14-application-status-persist-encapsulation
 func (r *ApplicationReconciler) patchStatus(ctx context.Context, app, base *loopzerov1.LoopZeroApplication) error {

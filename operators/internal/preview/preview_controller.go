@@ -156,12 +156,6 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	// correlation-id from CR annotation into reconcile context (no-op se ausente).
 	ctx = correlation.WithID(ctx, preview.GetAnnotations()["loopzero.io/correlation-id"])
 
-	// kstatus universal per ADR-0025 D3 condition #1.
-	defer reconcileloop.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
-		func() *loopzerov1.PreviewEnvironment { return &loopzerov1.PreviewEnvironment{} },
-		func(x *loopzerov1.PreviewEnvironment) *[]metav1.Condition { return &x.Status.Conditions },
-		previewDetailTypes)()
-
 	// Handle deletion
 	if !preview.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, &preview)
@@ -247,7 +241,7 @@ func (r *PreviewReconciler) failPreviewCondition(ctx context.Context, preview, b
 	logger := log.FromContext(ctx)
 	conditions.SetCondition(&preview.Status.Conditions, condType,
 		metav1.ConditionFalse, reason, msg, preview.Generation)
-	if statusErr := r.Status().Patch(ctx, preview, client.MergeFrom(base)); statusErr != nil {
+	if statusErr := r.patchStatus(ctx, preview, base); statusErr != nil {
 		if statusLogContext == "" {
 			logger.Error(statusErr, "failed to update preview status")
 		} else {
@@ -348,7 +342,7 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview, base
 	if gated {
 		// Persist conditions/phase changes the gate may have set, then
 		// honor its requeue/error.
-		if statusErr := r.Status().Patch(ctx, preview, client.MergeFrom(base)); statusErr != nil {
+		if statusErr := r.patchStatus(ctx, preview, base); statusErr != nil {
 			logger.Error(statusErr, "failed to update preview status while gating on workload conditions")
 			return ctrl.Result{}, statusErr
 		}
@@ -359,7 +353,7 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview, base
 		previewSM.Transition(statemachine.PPhCreating, statemachine.PPEventCreationCompleted),
 	)
 
-	if err := r.Status().Patch(ctx, preview, client.MergeFrom(base)); err != nil {
+	if err := r.patchStatus(ctx, preview, base); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -475,7 +469,7 @@ func (r *PreviewReconciler) reconcileActive(ctx context.Context, preview, base *
 		preview.Status.Phase = loopzerov1.PreviewPhase(
 			previewSM.Transition(statemachine.PPhActive, statemachine.PPEventExpirationTriggered),
 		)
-		if err := r.Status().Patch(ctx, preview, client.MergeFrom(base)); err != nil {
+		if err := r.patchStatus(ctx, preview, base); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{Requeue: true}, nil
@@ -599,7 +593,7 @@ func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopze
 					} else {
 						preview.Status.Phase = loopzerov1.PreviewPhase(nextState)
 					}
-					if statusErr := r.Status().Patch(ctx, preview, client.MergeFrom(base)); statusErr != nil {
+					if statusErr := r.patchStatus(ctx, preview, base); statusErr != nil {
 						logger.Error(statusErr, "preview cleanup: failed to update CleanupFailed status")
 					}
 					// Persist the bumped annotation BEFORE returning so the
@@ -648,7 +642,7 @@ func (r *PreviewReconciler) completePreviewDeletion(ctx context.Context, preview
 
 	// Status update is best-effort here — even if it fails, dropping the
 	// finalizer must succeed or the CR is stuck forever.
-	if statusErr := r.Status().Patch(ctx, preview, client.MergeFrom(base)); statusErr != nil {
+	if statusErr := r.patchStatus(ctx, preview, base); statusErr != nil {
 		logger.Error(statusErr, "preview cleanup: status update failed (continuing)")
 	}
 
@@ -705,4 +699,13 @@ func SetupPreviewController(mgr ctrl.Manager, factory cellrouting.RuntimeClientF
 			BaseDomain:       baseDomain,
 			IngressNamespace: ingressNS,
 		})
+}
+
+// patchStatus is the single status writer of this controller. It folds the
+// kstatus readiness summary in as the last mutation (ADR-0025 D3) and persists
+// with a merge patch off base, so every write carries a Ready condition that
+// agrees with the conditions written beside it.
+func (r *PreviewReconciler) patchStatus(ctx context.Context, preview, base *loopzerov1.PreviewEnvironment) error {
+	conditions.SetReadinessSummaryViaPkg(&preview.Status.Conditions, preview.Generation, previewDetailTypes)
+	return r.Status().Patch(ctx, preview, client.MergeFrom(base))
 }
