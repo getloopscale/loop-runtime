@@ -138,7 +138,7 @@ func Check(cfg Config) (Outcome, error) {
 			sibling = ""
 		}
 	}
-	resolver := NewGuardResolver(root, sibling, filepath.Join(root, "BACKLOG.md"))
+	resolver := NewGuardResolver(root, sibling, reg.Debts)
 
 	// EC-4: o piso é o que impede o registro de se auto-silenciar.
 	if out.Layers < reg.Floor {

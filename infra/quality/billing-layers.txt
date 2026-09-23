@@ -20,8 +20,15 @@
 # GUARDAS
 #   gate:<nome>   um gate do loopzero-ops cobre — só resolve se o gate for RODADO no quality.yml
 #   test:<path>   um teste afirma o invariante (verificado por EXISTÊNCIA, não conteúdo)
-#   open:B-NNN    dívida declarada com dono — resolve SÓ enquanto o item estiver aberto
-#                 (raw, triaged ou planned); shipped e killed REPROVAM
+#   open:B-NNN    declared debt with an owner — resolves ONLY while the [debts] section
+#                 below records the item as open (raw, triaged, approved or planned);
+#                 shipped and killed FAIL
+#
+# [debts]         <B-NNN> | <status> | <what closing it puts in place>
+#   The debt ledger lives HERE, versioned, and not in BACKLOG.md: BACKLOG.md is
+#   gitignored, so a gate reading it failed on every clone and passed only on the
+#   one machine that had it. Closing a debt means editing its status in this file,
+#   in the same diff that swaps the layer's guard for `gate:` or `test:`.
 #
 # A CATRACA: fechar um item `open:` sem trocar a guarda REPROVA. É isso que impede a
 # dívida de virar tapete — sem ela, bastaria marcar o B-033 como entregue para a camada
@@ -55,3 +62,6 @@ cmd/loopzero-ops/quality_gates_authz.go | fiação de subcomando do loopzero-ops
 infra/helmfile/environments/dev-public.yaml | declara o ambiente; o valor que liga a cobrança mora em values/dev-public/
 taskfiles/infra.yml | task de operador que IMPRIME o comando de criar o Secret à mão; instrução, não caminho de execução
 taskfiles/quality.yml | comentário citando `LOOPZERO_PROMETHEUS_URL` e `CostEnforcer` para justificar o wire do gate `check-loopzero-cloud-cost-aggregator-wiring` sob `quality:gates`; é documentação da razão do gate, não caminho de cobrança
+
+[debts]
+B-033 | approved | the cost-aggregator layer gets a guard that proves the running cluster aggregates cost (not only that the chart renders), replacing open:B-033

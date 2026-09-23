@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 )
 
@@ -23,31 +22,15 @@ var ErrGuardUnresolved = errors.New("guarda declarada não resolve")
 // acontecer é o verde silencioso sobre o que não foi olhado.
 var ErrSiblingAbsent = errors.New("repositório irmão ausente")
 
-// openStatuses são os estados em que um item ainda é dívida com dono.
-//
-// `planned` conta como ABERTO, e a escolha foi revista durante a revisão desta fatia. O
-// primeiro desenho o excluía com o argumento de que a camada segue descoberta enquanto o
-// plano não vira código — verdade, e irrelevante para o que a catraca existe para pegar:
-// FECHAMENTO sem cobertura. Um item planejado não está fechado.
-//
-// O custo de excluí-lo era concreto: o gate travaria TODO push do repositório justamente
-// na janela em que alguém implementa o conserto, o que é desproporcional ao risco e é o
-// jeito conhecido de uma trava ser desligada — a mesma razão que decidiu o B-127 e o B-143.
-// `approved` was added to the contract on 2026-09-04 and belongs here for the same
-// reason `planned` does, only more so: an approved item is a commitment somebody
-// with the authority made, so it is MORE owned than a hypothesis, not less. It was
-// missing until 2026-09-05, when moving B-033 to `approved` took the
-// cost-aggregator layer's guard out from under it and failed the chain at step 8.
-//
-// This map is the sixth reader of `status:` in this ecosystem and the first one in
-// Go. The kit pins the other five against each other, and all five are Python and
-// all five live in the kit — so the invariant was pinned one repository short.
-// `guard_open_statuses_test.go` closes that from this side.
+// openStatuses are the states in which a debt still has an owner. `planned`
+// and `approved` count as open: the ratchet exists to catch CLOSING without
+// coverage, and a planned or approved item is not closed.
 var openStatuses = map[string]bool{
 	"raw": true, "triaged": true, "approved": true, "planned": true,
 }
 
-var statusRE = regexp.MustCompile(`(?m)^status:\s*(\S+)`)
+// terminalStatuses close a debt: an `open:` guard pointing at one fails.
+var terminalStatuses = map[string]bool{"shipped": true, "killed": true}
 
 // GuardResolver answers whether a declared guard actually guards.
 //
@@ -56,12 +39,13 @@ var statusRE = regexp.MustCompile(`(?m)^status:\s*(\S+)`)
 type GuardResolver struct {
 	repoRoot    string
 	siblingRoot string
-	backlogPath string
+	debts       map[string]Debt
 }
 
 // NewGuardResolver builds the resolver used by Check and by the tests alike.
-func NewGuardResolver(repoRoot, siblingRoot, backlogPath string) *GuardResolver {
-	return &GuardResolver{repoRoot: repoRoot, siblingRoot: siblingRoot, backlogPath: backlogPath}
+// debts is the registry's versioned [debts] ledger.
+func NewGuardResolver(repoRoot, siblingRoot string, debts map[string]Debt) *GuardResolver {
+	return &GuardResolver{repoRoot: repoRoot, siblingRoot: siblingRoot, debts: debts}
 }
 
 // Root returns the filesystem root for a declared repo name.
@@ -122,44 +106,22 @@ func (g *GuardResolver) resolveFile(rel, repo, oQue string) error {
 	return nil
 }
 
-// resolveDebt é a CATRACA.
+// resolveDebt is the RATCHET.
 //
-// Uma dívida só guarda enquanto tiver dono ativo. No instante em que o item vira
-// `shipped` ou `killed`, a camada ficou descoberta — e é aí que o gate reprova, obrigando
-// a trocar a guarda por `gate:` ou `test:`. Sem esta cláusula, `open:` seria um tapete:
-// fechar o item silenciaria a camada com o registro ainda afirmando que alguém cuida dela.
+// A debt guards only while it has an owner. The moment the registry records
+// the item as shipped or killed, the layer is uncovered and the gate fails,
+// forcing the guard to become `gate:` or `test:`. Without this clause `open:`
+// would be a rug: closing the item would silence the layer while the registry
+// still claimed somebody owned it.
 func (g *GuardResolver) resolveDebt(item string) error {
-	corpo, err := os.ReadFile(filepath.Clean(g.backlogPath))
-	if err != nil {
-		// EC-5: presumir "aberto" seria decidir a favor da dívida com base em nada.
-		return fmt.Errorf("%w: não consegui ler %s para conferir %s — não achar não é o mesmo que estar em ordem",
-			ErrGuardUnresolved, g.backlogPath, item)
-	}
-	bloco, ok := itemBlock(string(corpo), item)
+	d, ok := g.debts[item]
 	if !ok {
-		return fmt.Errorf("%w: o item %s não existe no backlog — uma dívida sem item não tem dono", ErrGuardUnresolved, item)
+		return fmt.Errorf("%w: the debt %s is not declared in the [debts] section of %s — a debt without an item owns nothing",
+			ErrGuardUnresolved, item, RegistryRelPath)
 	}
-	m := statusRE.FindStringSubmatch(bloco)
-	if m == nil {
-		return fmt.Errorf("%w: o item %s não declara status", ErrGuardUnresolved, item)
-	}
-	if !openStatuses[m[1]] {
-		return fmt.Errorf("%w: o item %s está %q — o item saiu dos estados abertos e a camada ficou descoberta; troque a guarda por `gate:` ou `test:` no registro",
-			ErrGuardUnresolved, item, m[1])
+	if !openStatuses[d.Status] {
+		return fmt.Errorf("%w: the debt %s is %q — it left the open states and the layer is uncovered; swap the guard for `gate:` or `test:` in the registry",
+			ErrGuardUnresolved, item, d.Status)
 	}
 	return nil
-}
-
-// itemBlock extracts one `## B-NNN` block.
-func itemBlock(corpo, item string) (string, bool) {
-	marca := "## " + item + " "
-	i := strings.Index(corpo, marca)
-	if i < 0 {
-		return "", false
-	}
-	resto := corpo[i:]
-	if j := strings.Index(resto[1:], "\n## B-"); j >= 0 {
-		return resto[:j+1], true
-	}
-	return resto, true
 }

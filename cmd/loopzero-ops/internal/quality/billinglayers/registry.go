@@ -51,6 +51,15 @@ type Reference struct {
 	Reason string
 }
 
+// Debt is one declared open item an `open:` guard points at. It lives in the
+// versioned registry so the ratchet reads the same answer on every clone; the
+// personal BACKLOG.md it used to read is gitignored and absent in CI.
+type Debt struct {
+	ID     string
+	Status string
+	Closes string // what delivering the item puts in place of the debt
+}
+
 // Registry is the declared state of the billing chain.
 type Registry struct {
 	// Anchor lives HERE, as data, and not as literals in Go — see the package doc.
@@ -58,6 +67,7 @@ type Registry struct {
 	Floor      int
 	Layers     []Layer
 	References []Reference
+	Debts      map[string]Debt
 }
 
 // ParseRegistry reads the declared registry.
@@ -108,6 +118,18 @@ func ParseRegistry(r io.Reader) (Registry, error) {
 				return reg, err
 			}
 			reg.References = append(reg.References, ref)
+		case "debts":
+			d, err := parseDebt(linha, n)
+			if err != nil {
+				return reg, err
+			}
+			if reg.Debts == nil {
+				reg.Debts = map[string]Debt{}
+			}
+			if _, dup := reg.Debts[d.ID]; dup {
+				return reg, fmt.Errorf("%w: debt %s declared twice (line %d)", ErrRegistryMalformed, d.ID, n)
+			}
+			reg.Debts[d.ID] = d
 		default:
 			return reg, fmt.Errorf("%w: linha %d fora de qualquer seção: %q", ErrRegistryMalformed, n, linha)
 		}
@@ -192,4 +214,27 @@ func parseReference(linha string, n int) (Reference, error) {
 			ErrRegistryMalformed, n)
 	}
 	return ref, nil
+}
+
+// parseDebt reads `<B-NNN> | <status> | <what closes it>`. The status must be
+// one the ratchet can classify; anything else is refused rather than guessed.
+func parseDebt(line string, n int) (Debt, error) {
+	fields := strings.Split(line, "|")
+	if len(fields) != 3 {
+		return Debt{}, fmt.Errorf("%w: debt on line %d has %d fields, want 3 (id | status | what closes it)",
+			ErrRegistryMalformed, n, len(fields))
+	}
+	d := Debt{
+		ID:     strings.TrimSpace(fields[0]),
+		Status: strings.TrimSpace(fields[1]),
+		Closes: strings.TrimSpace(fields[2]),
+	}
+	if d.ID == "" || d.Closes == "" {
+		return Debt{}, fmt.Errorf("%w: debt on line %d has an empty id or no closing criterion", ErrRegistryMalformed, n)
+	}
+	if !openStatuses[d.Status] && !terminalStatuses[d.Status] {
+		return Debt{}, fmt.Errorf("%w: debt %s on line %d has status %q; known statuses are raw, triaged, approved, planned, shipped, killed",
+			ErrRegistryMalformed, d.ID, n, d.Status)
+	}
+	return d, nil
 }

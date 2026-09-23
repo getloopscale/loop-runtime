@@ -58,7 +58,6 @@ func base(t *testing.T, extra map[string]string) string {
 		"camada.go":             "const s = \"" + insumo() + "\"\n",
 		"guarda_test.go":        "package a\n",
 		"taskfiles/quality.yml": "cmds:\n",
-		"BACKLOG.md":            "## B-033 — x   [ ]\n\nstatus: triaged\n",
 	}
 	for k, v := range extra {
 		arquivos[k] = v
@@ -194,5 +193,22 @@ func TestArvoreRealPassa(t *testing.T) {
 	}
 	if out.Scanned == 0 || out.Layers == 0 {
 		t.Fatalf("varredura que não alcançou nada não pode reportar verde: %+v", out)
+	}
+}
+
+// The debt ledger is versioned: the gate resolves `open:` guards from the
+// registry's [debts] section and never from BACKLOG.md, which is gitignored
+// and absent on every clone.
+func TestOpenDebtResolvesFromTheVersionedRegistryWithoutABacklog(t *testing.T) {
+	root := base(t, map[string]string{
+		"infra/quality/billing-layers.txt": "[ancora]\n" + insumo() + "\n\n[piso]\n1\n\n" +
+			"[camadas]\nseed | loopzero | camada.go | open:B-033 | skips without a credential\n\n" +
+			"[debts]\nB-033 | approved | the cost ceiling ships with a gate\n",
+	})
+	if _, err := os.Stat(filepath.Join(root, "BACKLOG.md")); err == nil {
+		t.Fatal("fixture must not carry a BACKLOG.md")
+	}
+	if _, err := run(t, root, ""); err != nil {
+		t.Fatalf("an open debt declared in the registry resolves: %v", err)
 	}
 }

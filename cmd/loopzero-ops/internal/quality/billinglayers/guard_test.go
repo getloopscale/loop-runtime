@@ -28,7 +28,7 @@ func repoCom(t *testing.T, arquivos map[string]string) string {
 func resolvedorCom(t *testing.T, arquivos map[string]string) *GuardResolver {
 	t.Helper()
 	root := repoCom(t, arquivos)
-	return NewGuardResolver(root, root, filepath.Join(root, "BACKLOG.md"))
+	return NewGuardResolver(root, root, nil)
 }
 
 // Um gate que ninguém roda não guarda nada — a razão de resolver por `quality.yml`
@@ -66,47 +66,36 @@ func TestTesteApagadoReprova(t *testing.T) {
 	}
 }
 
-func backlogCom(status string) string {
-	return "## B-033 — teto de custo   [ ]\n\ndomain: control-plane\nstatus: " + status + "\n"
+func resolverWithDebt(t *testing.T, status string) *GuardResolver {
+	t.Helper()
+	root := repoCom(t, map[string]string{"x.md": "x"})
+	return NewGuardResolver(root, root, map[string]Debt{"B-033": {ID: "B-033", Status: status, Closes: "cost ceiling"}})
 }
 
-// `planned` conta como aberto: a catraca existe para pegar FECHAMENTO sem cobertura, e um
-// item planejado não está fechado. Excluí-lo faria o gate travar TODO push do repositório
-// justamente na janela em que alguém implementa o conserto — custo desproporcional ao
-// risco, e o jeito conhecido de uma trava ser desligada.
-func TestDividaResolveEnquantoOItemEstaAberto(t *testing.T) {
-	for _, st := range []string{"raw", "triaged", "planned"} {
-		r := resolvedorCom(t, map[string]string{"BACKLOG.md": backlogCom(st)})
-		if err := r.Resolve(Guard{Kind: GuardOpen, Target: "B-033"}, "loopzero"); err != nil {
-			t.Fatalf("dívida com item %s resolve: %v", st, err)
+// `planned` and `approved` count as open: the ratchet exists to catch CLOSING
+// without coverage, and a planned or approved item is not closed.
+func TestDebtResolvesWhileTheItemIsOpen(t *testing.T) {
+	for _, st := range []string{"raw", "triaged", "approved", "planned"} {
+		if err := resolverWithDebt(t, st).Resolve(Guard{Kind: GuardOpen, Target: "B-033"}, "loopzero"); err != nil {
+			t.Fatalf("debt with item %s resolves: %v", st, err)
 		}
 	}
 }
 
-// A CATRACA (ADR-2). Sem ela, fechar o B-033 deixaria a camada descoberta e silenciosa,
-// com o registro ainda afirmando que alguém cuida dela.
-func TestDividaComItemFechadoReprova(t *testing.T) {
+// THE RATCHET: closing the debt without swapping the guard leaves the layer
+// uncovered while the registry still claims somebody owns it.
+func TestDebtWithAClosedItemFails(t *testing.T) {
 	for _, st := range []string{"shipped", "killed"} {
-		r := resolvedorCom(t, map[string]string{"BACKLOG.md": backlogCom(st)})
-		err := r.Resolve(Guard{Kind: GuardOpen, Target: "B-033"}, "loopzero")
+		err := resolverWithDebt(t, st).Resolve(Guard{Kind: GuardOpen, Target: "B-033"}, "loopzero")
 		if !errors.Is(err, ErrGuardUnresolved) {
-			t.Fatalf("item %s não é dívida aberta — a guarda tem que virar gate: ou test:; err=%v", st, err)
+			t.Fatalf("item %s is not open debt — the guard must become gate: or test:; err=%v", st, err)
 		}
 	}
 }
 
-func TestDividaComItemInexistenteReprova(t *testing.T) {
-	r := resolvedorCom(t, map[string]string{"BACKLOG.md": backlogCom("triaged")})
-	if err := r.Resolve(Guard{Kind: GuardOpen, Target: "B-999"}, "loopzero"); !errors.Is(err, ErrGuardUnresolved) {
-		t.Fatalf("item inexistente não é dono de nada; err=%v", err)
-	}
-}
-
-// EC-5: sem BACKLOG.md a catraca é inavaliável, e presumir a favor da dívida é o
-// comportamento que esta família de itens inteira existe para eliminar.
-func TestBacklogAusenteReprova(t *testing.T) {
-	r := resolvedorCom(t, map[string]string{"outro.md": "x"})
-	if err := r.Resolve(Guard{Kind: GuardOpen, Target: "B-033"}, "loopzero"); !errors.Is(err, ErrGuardUnresolved) {
-		t.Fatalf("sem backlog a dívida não pode ser presumida aberta; err=%v", err)
+func TestDebtNotDeclaredInTheRegistryFails(t *testing.T) {
+	err := resolverWithDebt(t, "triaged").Resolve(Guard{Kind: GuardOpen, Target: "B-999"}, "loopzero")
+	if !errors.Is(err, ErrGuardUnresolved) {
+		t.Fatalf("an undeclared debt owns nothing; err=%v", err)
 	}
 }

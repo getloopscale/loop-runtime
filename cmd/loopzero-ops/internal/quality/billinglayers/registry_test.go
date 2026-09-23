@@ -109,3 +109,28 @@ func TestAncoraVaziaReprova(t *testing.T) {
 		t.Fatalf("sem âncora não há como detectar camada nova; err=%v", err)
 	}
 }
+
+func TestDebtSectionIsParsed(t *testing.T) {
+	r, err := ParseRegistry(strings.NewReader(minimo + "\n[debts]\nB-033 | approved | cost ceiling\n"))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if d, ok := r.Debts["B-033"]; !ok || d.Status != "approved" || d.Closes != "cost ceiling" {
+		t.Fatalf("debts: %+v", r.Debts)
+	}
+}
+
+// An unknown status is refused rather than read as open or closed: a status
+// the gate cannot classify must not decide whether a layer is covered.
+func TestDebtWithUnknownStatusIsMalformed(t *testing.T) {
+	for _, bad := range []string{
+		"[debts]\nB-033 | pending | x\n",
+		"[debts]\nB-033 | approved\n",
+		"[debts]\nB-033 | approved | x\nB-033 | raw | y\n",
+		"[debts]\nB-033 | approved | \n",
+	} {
+		if _, err := ParseRegistry(strings.NewReader(minimo + "\n" + bad)); !errors.Is(err, ErrRegistryMalformed) {
+			t.Errorf("%q: want ErrRegistryMalformed, got %v", bad, err)
+		}
+	}
+}
