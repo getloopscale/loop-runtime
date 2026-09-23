@@ -156,12 +156,16 @@ func (f *fakeWorkflowCanceller) Cancel(_ context.Context, _, id string) error {
 
 type fakeSyncDeleter struct {
 	syncCalled bool
+	syncedApps []string
 }
 
-func (f *fakeSyncDeleter) TriggerSync(_ context.Context, _ string) error {
+func (f *fakeSyncDeleter) TriggerSync(_ context.Context, appName string) error {
 	f.syncCalled = true
+	f.syncedApps = append(f.syncedApps, appName)
 	return nil
 }
+
+func (f *fakeSyncDeleter) TerminateOperation(_ context.Context, _ string) error { return nil }
 
 // fakeReleaseStoreDeleter records every CancelAllByEnv call so tests can assert
 // the cascade fires inside the project-delete lock. Implements db.ReleaseStore;
@@ -490,4 +494,55 @@ func TestProjectDeleter_NilReleaseStore_NoPanic(t *testing.T) {
 // AppendSideEffect — fix-all-platform-issues-plan T4.1 stub.
 func (f *fakeReleaseStoreDeleter) AppendSideEffect(_ context.Context, _ db.DBTX, _ string, _ map[string]any) error {
 	return nil
+}
+
+func TestProjectDeleter_SingleEnv_SyncsTheApplicationOfThisProject(t *testing.T) {
+	sync := &fakeSyncDeleter{}
+	deleter := NewProjectDeleter(ProjectDeleterDeps{
+		BuildStore:     &fakeBuildStoreDeleter{},
+		EnvTargetStore: &fakeEnvTargetStoreDeleter{},
+		ProjectStore:   &fakeProjectStoreDeleter{},
+		Locker:         &fakeLockerDeleter{},
+		GitOps:         &fakeGitOpsDeleter{},
+		Sync:           sync,
+	})
+
+	_, err := deleter.Delete(context.Background(), ports.ProjectDeleteInput{
+		TenantID:    "tn-1",
+		ProjectID:   "proj-uuid",
+		ProjectName: "my-app",
+		Environment: "staging",
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(sync.syncedApps) != 1 || sync.syncedApps[0] != "tn-1-my-app-staging" {
+		t.Errorf("prune sync must target the tenant-project-env application; got %v", sync.syncedApps)
+	}
+}
+
+func TestProjectDeleter_NoEnvTargets_FallbackSyncsTheProductionApplicationOfThisProject(t *testing.T) {
+	sync := &fakeSyncDeleter{}
+	deleter := NewProjectDeleter(ProjectDeleterDeps{
+		BuildStore:     &fakeBuildStoreDeleter{},
+		EnvTargetStore: &fakeEnvTargetStoreDeleter{},
+		ProjectStore:   &fakeProjectStoreDeleter{},
+		Locker:         &fakeLockerDeleter{},
+		GitOps:         &fakeGitOpsDeleter{},
+		Sync:           sync,
+	})
+
+	_, err := deleter.Delete(context.Background(), ports.ProjectDeleteInput{
+		TenantID:    "tn-1",
+		ProjectID:   "proj-uuid",
+		ProjectName: "orphan-app",
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(sync.syncedApps) != 1 || sync.syncedApps[0] != "tn-1-orphan-app-production" {
+		t.Errorf("fallback prune sync must target the tenant-project-production application; got %v", sync.syncedApps)
+	}
 }

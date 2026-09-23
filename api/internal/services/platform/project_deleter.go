@@ -16,6 +16,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // WorkflowCanceller cancels Argo Workflows by ID.
@@ -160,7 +161,10 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req ports.ProjectDeleteInpu
 			// TriggerSync will hit ErrSyncOperationInProgress; terminate stuck
 			// op + retry once so the prune actually executes.
 			if d.sync != nil {
-				argoAppName := req.TenantID + "-production"
+				argoAppName, nameErr := naming.ArgoAppName(req.TenantID, gitopsID, "production")
+				if nameErr != nil {
+					return nil, fmt.Errorf("project delete: fallback sync: %w", nameErr)
+				}
 				syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
 				defer syncCancel()
 				syncErr := d.sync.TriggerSync(syncCtx, argoAppName)
@@ -302,7 +306,10 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req ports.Projec
 		// Fix: 3-attempt exponential backoff (1s/3s/9s ≈ 13s total) to ride out
 		// transient auth/network blips; if still failing, return error → caller emits
 		// 5xx + user sees "delete partially failed, retry".
-		argoAppName := req.TenantID + "-" + env
+		argoAppName, nameErr := naming.ArgoAppName(req.TenantID, gitopsProjectID, env)
+		if nameErr != nil {
+			return cancelledBuilds, fmt.Errorf("project delete: prune sync: %w", nameErr)
+		}
 		syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
 		defer syncCancel()
 
