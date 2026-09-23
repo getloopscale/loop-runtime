@@ -30,9 +30,8 @@ spec:
       {{- include "loopzero-common.priorityClassName" . | nindent 6 }}
       serviceAccountName: {{ include "loopzero-common.serviceAccountName" . }}
       automountServiceAccountToken: {{ include "loopzero-common.automountServiceAccountToken" . }}
-      {{- with .Values.global.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
+      {{- with (include "loopzero-common.imagePullSecrets" .) }}
+      {{- . | nindent 6 }}
       {{- end }}
       securityContext:
         {{- include "loopzero-common.podSecurityContext" . | nindent 8 }}

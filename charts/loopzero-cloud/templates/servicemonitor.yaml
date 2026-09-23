@@ -1,16 +1,1 @@
-{{- if and .Values.metrics .Values.metrics.serviceMonitor .Values.metrics.serviceMonitor.enabled }}
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: {{ include "loopzero-common.fullname" . }}
-  labels:
-    {{- include "loopzero-common.labels" . | nindent 4 }}
-spec:
-  selector:
-    matchLabels:
-      {{- include "loopzero-common.selectorLabels" . | nindent 6 }}
-  endpoints:
-    - port: {{ .Values.metrics.serviceMonitor.port | default "http" }}
-      interval: {{ .Values.metrics.serviceMonitor.interval | default "30s" }}
-      scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout | default "10s" }}
-{{- end }}
+{{- include "loopzero-common.servicemonitor" . }}

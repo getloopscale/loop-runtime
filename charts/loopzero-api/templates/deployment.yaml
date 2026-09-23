@@ -28,12 +28,11 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      {{- with .Values.global.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
+      {{- with (include "loopzero-common.imagePullSecrets" .) }}
+      {{- . | nindent 6 }}
       {{- end }}
       serviceAccountName: {{ include "loopzero-common.serviceAccountName" . }}
-      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken | default false }}
+      automountServiceAccountToken: {{ include "loopzero-common.automountServiceAccountToken" . }}
       # SSE streams (deploy.*, rollout.step) are served from this Deployment.
       # Without this the Kubernetes default of 30s applies and a rolling update
       # cuts a stream whose canary the renderer allows 300s to finish.

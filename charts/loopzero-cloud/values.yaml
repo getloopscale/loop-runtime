@@ -104,7 +104,9 @@ readinessProbe:
 metrics:
   serviceMonitor:
     enabled: false
-    port: metrics
+    # The Service exposes one named port, `http`, and /metrics is served on it —
+    # a ServiceMonitor naming `metrics` would select no endpoint.
+    port: http
     interval: 30s
     scrapeTimeout: 10s
 

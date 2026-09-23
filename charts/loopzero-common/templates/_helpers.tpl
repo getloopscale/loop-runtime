@@ -335,46 +335,6 @@ NETWORK POLICY
 
 {{/*
 ----------------------------------------------------------------------
-TPLVALUES.RENDER (charts-sota T2.1 / ADR-0037)
-----------------------------------------------------------------------
-*/}}
-
-{{/*
-Render values that may contain Go template syntax. Bitnami common pattern.
-Usage:
-  {{ include "loopzero-common.tplvalues.render" (dict "value" .Values.podAnnotations "context" $) | nindent 8 }}
-*/}}
-{{- define "loopzero-common.tplvalues.render" -}}
-{{- $value := typeIs "string" .value | ternary .value (.value | toYaml) }}
-{{- if contains "{{" (toJson .value) }}
-  {{- if .scope }}
-    {{- tpl (cat "{{- with $.RelativeScope -}}" $value "{{- end }}") (merge (dict "RelativeScope" .scope) .context) }}
-  {{- else }}
-    {{- tpl $value .context }}
-  {{- end }}
-{{- else }}
-{{- $value }}
-{{- end }}
-{{- end -}}
-
-{{/*
-----------------------------------------------------------------------
-KUBE VERSION GUARD (charts-sota T2.2 / ADR-0037)
-----------------------------------------------------------------------
-*/}}
-
-{{/*
-Return target Kubernetes version. Allows .Values.kubeVersion override for
-test fixtures + matrix CI; otherwise uses cluster's actual version.
-Usage:
-  {{ if semverCompare ">=1.30" (include "loopzero-common.kubeVersion" .) }}...{{ end }}
-*/}}
-{{- define "loopzero-common.kubeVersion" -}}
-{{- default .Capabilities.KubeVersion.Version .Values.kubeVersion -}}
-{{- end -}}
-
-{{/*
-----------------------------------------------------------------------
 CHECKSUM ANNOTATIONS (charts-sota T2.3 — eliminates 5x duplication)
 ----------------------------------------------------------------------
 */}}
@@ -471,7 +431,7 @@ And in deployment.spec.template.spec.volumes:
 {{- define "loopzero-common.tmpVolume" -}}
 - name: tmp
   emptyDir:
-    sizeLimit: {{ .Values.tmpVolume.sizeLimit | default "64Mi" }}
+    sizeLimit: {{ (.Values.tmpVolume | default dict).sizeLimit | default "64Mi" }}
 {{- end -}}
 
 {{/*
@@ -531,5 +491,136 @@ spec:
   ingress:
     {{- toYaml .Values.networkPolicy.ingress | nindent 4 }}
   {{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+----------------------------------------------------------------------
+OPERATOR DEPLOYMENT (template method — one skeleton, four operators)
+----------------------------------------------------------------------
+*/}}
+
+{{/*
+The Deployment every loopzero-*-operator chart renders. The four charts used to carry
+near-identical copies of this file that differed in three places only; those
+three places are the hooks:
+
+  checksum      the name of the checksum-annotations helper to include
+                ("loopzero-common.checksumAnnotations" when the chart ships a Secret
+                template, "loopzero-common.checksumAnnotationsConfigOnly" when not)
+  envFrom       extra envFrom entries after the chart ConfigMap (YAML list, may be "")
+  env           env entries (YAML list, may be "")
+  volumeMounts  extra volumeMounts after /tmp (YAML list, may be "")
+  volumes       extra volumes after tmp (YAML list, may be "")
+
+Usage (templates/deployment.yaml of an operator chart):
+  {{- include "loopzero-common.operatorDeployment" (dict
+        "root" .
+        "checksum" "loopzero-common.checksumAnnotations"
+        "envFrom" (include "loopzero-tenant-operator.envFrom" .)
+        "env" (include "loopzero-tenant-operator.env" .)
+        "volumeMounts" (include "loopzero-tenant-operator.volumeMounts" .)
+        "volumes" (include "loopzero-tenant-operator.volumes" .)) }}
+*/}}
+{{- define "loopzero-common.operatorDeployment" -}}
+{{- $hooks := . -}}
+{{- with .root -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "loopzero-common.fullname" . }}
+  labels:
+    {{- include "loopzero-common.operatorLabels" . | nindent 4 }}
+  {{- if .Values.reloader.enabled }}
+  annotations:
+    reloader.stakater.com/auto: "true"
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit | default 3 }}
+  selector:
+    matchLabels:
+      {{- include "loopzero-common.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- include $hooks.checksum . | nindent 8 }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "loopzero-common.selectorLabels" . | nindent 8 }}
+        loopzero.io/component: control-plane
+        app.kubernetes.io/component: loopzero-operator
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with (include "loopzero-common.imagePullSecrets" .) }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      serviceAccountName: {{ include "loopzero-common.serviceAccountName" . }}
+      automountServiceAccountToken: {{ include "loopzero-common.automountServiceAccountToken" . }}
+      securityContext:
+        {{- include "loopzero-common.podSecurityContext" . | nindent 8 }}
+      {{- include "loopzero-common.priorityClassName" . | nindent 6 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "loopzero-common.affinity" . | nindent 6 }}
+      {{- include "loopzero-common.topologySpreadConstraints" . | nindent 6 }}
+      containers:
+        - name: controller
+          image: {{ include "loopzero-common.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "--leader-elect={{ .Values.args.leaderElect }}"
+            - "--health-probe-bind-address={{ .Values.args.healthProbeBindAddress }}"
+            - "--metrics-bind-address={{ .Values.args.metricsBindAddress }}"
+          securityContext:
+            {{- include "loopzero-common.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+            - name: metrics
+              containerPort: 8443
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "loopzero-common.fullname" . }}
+            {{- with trim $hooks.envFrom }}
+            {{- . | nindent 12 }}
+            {{- end }}
+          {{- with trim $hooks.env }}
+          env:
+            {{- . | nindent 12 }}
+          {{- end }}
+          {{- include "loopzero-common.startupProbe" . | nindent 10 }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            {{- include "loopzero-common.tmpVolumeMount" . | nindent 12 }}
+            {{- with trim $hooks.volumeMounts }}
+            {{- . | nindent 12 }}
+            {{- end }}
+      volumes:
+        {{- include "loopzero-common.tmpVolume" . | nindent 8 }}
+        {{- with trim $hooks.volumes }}
+        {{- . | nindent 8 }}
+        {{- end }}
 {{- end }}
 {{- end }}
