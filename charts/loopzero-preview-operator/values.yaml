@@ -58,8 +58,8 @@ serviceAccount:
   # FIXED on purpose, against the Helm convention of deriving the name from the release
   # (B-096, B-047). Two literal allowlists name this identity as a string, and neither
   # moves when the release name does:
-  #   - the delete-guard ValidatingAdmissionPolicy, at
-  #     infra/helm/admission-policies/templates/vap-protect-platform-deletes.yaml:84-88
+  #   - the admission policies' system-actor exemption, at
+  #     infra/helm/admission-policies/values.yaml (systemActorExemptions.platformServiceAccounts)
   #   - OpenBao's boundServiceAccountNames, on mount k8s-core, in
   #     infra/helm/openbao-init/values.yaml
   # With name: "" this chart rendered <release>-loopzero-preview-operator, so an install under any release
