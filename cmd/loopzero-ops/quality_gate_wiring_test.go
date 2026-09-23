@@ -305,13 +305,6 @@ var gateWiringExemptions = map[string]wiringReason{
 	// searches for an ADR; hermetic. Exit 1 — clusterImagePolicy.mode is
 	// `enforce` (a live deny-flip that rejects unsigned images at admission)
 	// with no ADR/MEET record referencing the cutover. Deciding that posture is
-	// Measured 2026-08-11: hermetic (--root only), and BROKEN rather than
-	// operator-run. It looks for the matrix at
-	// .claude/knowledge-base/concepts/operations/local-prod-divergence-matrix.md
-	// and the document lives at docs/wiki/concepts/operations/ — the path moved
-	// and the gate did not follow. Exit 5, "divergence matrix not found", for a
-	// document that exists. Repair the path, then wire.
-	"divergence-matrix": brokenGate,
 	// 9 inline encrypted secrets across infra/pulumi/Pulumi.{dev,prod}.yaml.
 	// Closing this is the T9 Vault-provider migration, on the legacy DO/Pulumi
 	// layer that the AWS re-platform is retiring (ADR 2026-06-17) — moving live

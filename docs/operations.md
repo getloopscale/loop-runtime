@@ -295,6 +295,20 @@ escapes are deliberate and documented in its own header: `git push --no-verify`,
 `LOOPZERO_SKIP_PREPUSH=1 git push`. Use them to see the push itself fail rather than the
 gate — then fix what the gate found.
 
+## Local-prod divergence matrix (LP-NNN)
+
+Rule 10 is *local equals production*. Where the local k3d stack cannot match production,
+the code says so with a `LOCAL ONLY (LP-NNN)` comment and the divergence is recorded here.
+`loopzero-ops quality divergence-matrix` holds the two together: a marker whose id has no row
+fails, and an `OPEN` row whose marker is gone fails. To retire a divergence, delete the
+marker and set its row to `RESOLVED` in the same commit.
+
+| LP-NNN | Status | Code site(s) | What diverges | Why local needs it | Production behaviour |
+|---|---|---|---|---|---|
+| LP-001 | OPEN | `api/internal/buildplane/argo/syft.go`, `infra/helm/cert-manager/templates/self-signed-issuer.yaml` | TLS — the local registry is HTTP-only, and cert-manager `letsencrypt-prod` cannot issue for `*.loopzero.local` (no public DNS for the ACME challenge) | k3d uses private IPs and no public hostname; a self-signed CA issuer fills the in-cluster TLS gap | CF-managed TLS at the edge; the registry is HTTPS and pulls are cosign-verified |
+| LP-002 | OPEN | `infra/k3d/cell-1-cluster.yaml` | Port mapping — each k3d cluster publishes its ingress on a distinct local port | every k3d cluster shares the host loopback and cannot bind the same port | each cell has its own DNS name and serves HTTPS on 443 with no port translation |
+| LP-003 | OPEN | `api/internal/buildplane/argo/cosign.go` | Cosign keyless signing — k3d service-account tokens are not accepted by the public Fulcio OIDC validator, so local builds sign with a keyed dev key | a local cluster has no public CI OIDC token | keyless signing with the CI workflow's OIDC identity, verified against Fulcio and Rekor |
+
 ## Blocked commands
 
 `kubectl delete` (without dry-run), `k3d cluster delete`, `DROP TABLE/COLUMN`,

@@ -41,7 +41,7 @@ dev-public-billing-portal-syntax	gates	Hermetic contract for infra/tests/e2e/liv
 dev-public-env	gates	Locks dev-public.yaml canonical shape: publicAuthUrl/publicCloudUrl/uiBaseUrl/dashboardOrigin point to *-dev.loopzero.example, cookieDomain=loopzero.example, CORS + allowedReturnUrls cover both dev hosts with trailing-slash variants, no localhost or legacy non-dev URLs leak, D5 OAuth reuse (no _DEV env var override), Stripe webhook per-env split documented. M-Migrate2 2026-07-07 replaces infra/tests/helm/dev-public-env_test.sh.
 dev-public-oidc-redirect-syntax	gates	Hermetic contract for infra/tests/e2e/live/dev-public-oidc-redirect_test.sh — 9 assertions (bash -n / strict-mode / log+assert+test_provider / OIDC provider ref / Kratos browser flow path / exit-code / allowlisted). M22 T2.1 Wave A gate 2/17.
 dev-public-loopzero-external-secrets-overlay	gates	Locks post-T1.2 workload-identity contract for infra/helmfile/values/dev-public/loopzero-external-secrets.yaml.gotmpl (enabled=false safe default, K8s-auth shape, no legacy AppRole roleId/secretRef, canonical mgmt DNS, EC-1/EC-2 traceability). M-Migrate2 2026-07-07 replaces infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh.
-divergence-matrix	-	Checks the local-vs-prod divergence matrix is current.
+divergence-matrix	gates	Checks the local-vs-prod divergence matrix is current.
 dockerfile-no-docker-hub	gates	Forbids unqualified docker.io/Docker Hub base images.
 docs-contract-refs	gates	Toda referencia .claude/rules/*.md no CLAUDE.md e todo ADR-NNNN citado em comentario Go resolve (ou tem excecao com prazo).
 domain-sink-purity	gates	Ratchet: the services DAG sink must not grow its persistence surface (B-049).
