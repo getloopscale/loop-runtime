@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,11 +116,26 @@ func runHelmDiffStructural(args []string) int {
 	return 0
 }
 
+// driftRenderer writes one helm-drift outcome in one output format.
+type driftRenderer func(stdout, stderr io.Writer, o *helmdrift.Outcome) error
+
+// driftRenderers is the --format table; adding a format is adding a row.
+var driftRenderers = map[string]driftRenderer{
+	"human":              renderDriftHuman(false),
+	"github-annotations": renderDriftHuman(true),
+	"json":               renderDriftJSON,
+}
+
 func runHelmDrift(args []string) int {
 	fs := flag.NewFlagSet("helm-drift", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
-	format := fs.String("format", "human", "output format: human | github-annotations")
+	format := fs.String("format", "human", "output format: human | github-annotations | json")
 	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	render, ok := driftRenderers[*format]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "helm-drift: unknown --format %q (use human | github-annotations | json)\n", *format)
 		return 1
 	}
 	o, err := helmdrift.Check(helmdrift.Config{RepoRoot: *root})
@@ -127,115 +143,124 @@ func runHelmDrift(args []string) int {
 		fmt.Fprintf(os.Stderr, "helm-drift: %v\n", err)
 		return 5
 	}
+	if err := render(os.Stdout, os.Stderr, o); err != nil {
+		fmt.Fprintf(os.Stderr, "helm-drift: %v\n", err)
+		return 5
+	}
+	return helmDriftExitCode(o)
+}
 
-	if *format == "json" {
-		// Match the legacy bash JSON schema (consumed by charts-drift-cron.yml).
-		type driftJSON struct {
-			Pair        string `json:"pair"`
-			Intentional bool   `json:"intentional"`
-			// ADR keeps its field name (the --json contract); it carries the
-			// docs/decisions.md row the recorded drift cites.
-			ADR                      *string  `json:"adr"`
-			Severity                 string   `json:"severity"`
-			TemplatesOnlyInPublished []string `json:"templates_only_in_published"`
-			TemplatesOnlyInBootstrap []string `json:"templates_only_in_bootstrap"`
-		}
-		out := struct{ Drifts []driftJSON }{Drifts: []driftJSON{}}
-		for _, d := range o.Drifts {
-			sev := "high"
-			var adr *string
-			if d.Intentional {
-				sev = "info"
-				a := d.Decision
-				adr = &a
-			}
-			pub, boot := d.OnlyInPublished, d.OnlyInBootstrap
-			if pub == nil {
-				pub = []string{}
-			}
-			if boot == nil {
-				boot = []string{}
-			}
-			out.Drifts = append(out.Drifts, driftJSON{
-				Pair: d.Pair, Intentional: d.Intentional, ADR: adr, Severity: sev,
-				TemplatesOnlyInPublished: pub, TemplatesOnlyInBootstrap: boot,
-			})
-		}
-		b, err := json.Marshal(struct {
-			Drifts []driftJSON `json:"drifts"`
-			RBAC   []rbacJSON  `json:"rbac"`
-		}{Drifts: out.Drifts, RBAC: rbacDriftJSON(o.RBACDrifts)})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "helm-drift: encode json: %v\n", err)
-			return 5
-		}
-		fmt.Println(string(b))
-		if !o.Pass {
-			return 1
-		}
-		return 0
-	}
-
-	for _, e := range o.RenderErrors {
-		fmt.Fprintf(os.Stderr, "✗ helm template failed: %s\n", e)
-	}
-	kindsClean := len(o.Drifts) == 0 && len(o.RenderErrors) == 0
-	if kindsClean {
-		fmt.Println("✓ charts/ ↔ infra/helm/: both sides install the same kinds of resource.")
-	}
-	for _, d := range o.Drifts {
-		marker := "⚠"
-		status := "needs a registry entry (" + helmdrift.RegistryRelPath + ") or a fix"
-		if d.Intentional {
-			marker = "ℹ"
-			status = "intentional (recorded under decision: " + d.Decision + ")"
-		}
-		if *format == "github-annotations" && !d.Intentional {
-			fmt.Printf("::warning::Drift detected for %s: templates differ\n", d.Pair)
-		}
-		fmt.Printf("%s %s\n", marker, d.Pair)
-		if len(d.OnlyInPublished) > 0 {
-			fmt.Printf("  Only in published: %s\n", strings.Join(d.OnlyInPublished, " "))
-		}
-		if len(d.OnlyInBootstrap) > 0 {
-			fmt.Printf("  Only in bootstrap: %s\n", strings.Join(d.OnlyInBootstrap, " "))
-		}
-		fmt.Printf("  STATUS: %s\n", status)
-		for _, f := range d.Unapproved {
-			fmt.Printf("  UNRECORDED: %s\n", f)
-		}
-	}
-	// B-001: the second comparison. What the two sides GRANT is reported apart
-	// from what they INSTALL, because a reader has to be able to tell which
-	// question a finding answers. Every undeclared and undecided cell is named:
-	// a count alone says something diverged and not whether it is progress or a
-	// regression.
-	for _, d := range o.RBACDrifts {
-		marker := "ℹ"
-		if len(d.Undeclared) > 0 {
-			marker = "⚠"
-		}
-		if *format == "github-annotations" && len(d.Undeclared) > 0 {
-			fmt.Printf("::warning::RBAC divergence for %s: %d undeclared cell(s)\n",
-				d.Pair, len(d.Undeclared))
-		}
-		fmt.Printf("%s %s — RBAC\n", marker, d.Pair)
-		for _, line := range d.ReportLines() {
-			fmt.Printf("  %s\n", line)
-		}
-	}
-
-	// Printed on every run, green or red. A debt that lives only in a source
-	// comment is a debt nobody is reminded of.
+func helmDriftExitCode(o *helmdrift.Outcome) int {
 	if !o.Pass {
-		fmt.Fprintln(os.Stderr, "❌ Drifts with no registry entry detected ("+helmdrift.RegistryRelPath+").")
 		return 1
 	}
-	if kindsClean {
-		return 0
-	}
-	fmt.Println("✓ All drifts are recorded in " + helmdrift.RegistryRelPath + " (intentional).")
 	return 0
+}
+
+// driftJSON is one template-set drift in the machine-readable format — the
+// schema of the original bash gate, kept field for field.
+type driftJSON struct {
+	Pair        string `json:"pair"`
+	Intentional bool   `json:"intentional"`
+	// ADR keeps its field name (the --json contract); it carries the
+	// docs/decisions.md row the recorded drift cites.
+	ADR                      *string  `json:"adr"`
+	Severity                 string   `json:"severity"`
+	TemplatesOnlyInPublished []string `json:"templates_only_in_published"`
+	TemplatesOnlyInBootstrap []string `json:"templates_only_in_bootstrap"`
+}
+
+// renderDriftJSON writes the outcome as one JSON document. render_errors is
+// additive: before it, a failed `helm template` reached the JSON consumer only
+// as a failing exit code.
+func renderDriftJSON(stdout, _ io.Writer, o *helmdrift.Outcome) error {
+	drifts := make([]driftJSON, 0, len(o.Drifts))
+	for _, d := range o.Drifts {
+		row := driftJSON{
+			Pair: d.Pair, Intentional: d.Intentional, Severity: "high",
+			TemplatesOnlyInPublished: nonNil(d.OnlyInPublished),
+			TemplatesOnlyInBootstrap: nonNil(d.OnlyInBootstrap),
+		}
+		if d.Intentional {
+			decision := d.Decision
+			row.Severity, row.ADR = "info", &decision
+		}
+		drifts = append(drifts, row)
+	}
+	b, err := json.Marshal(struct {
+		Drifts       []driftJSON `json:"drifts"`
+		RBAC         []rbacJSON  `json:"rbac"`
+		RenderErrors []string    `json:"render_errors"`
+	}{Drifts: drifts, RBAC: rbacDriftJSON(o.RBACDrifts), RenderErrors: nonNil(o.RenderErrors)})
+	if err != nil {
+		return fmt.Errorf("encode JSON report: %w", err)
+	}
+	_, err = fmt.Fprintln(stdout, string(b))
+	return err
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+// renderDriftHuman writes the report for a person; with annotations it also
+// emits a GitHub `::warning::` for every finding that needs action.
+func renderDriftHuman(annotations bool) driftRenderer {
+	return func(stdout, stderr io.Writer, o *helmdrift.Outcome) error {
+		for _, e := range o.RenderErrors {
+			fmt.Fprintf(stderr, "✗ helm template failed: %s\n", e)
+		}
+		kindsClean := len(o.Drifts) == 0 && len(o.RenderErrors) == 0
+		if kindsClean {
+			fmt.Fprintln(stdout, "✓ charts/ ↔ infra/helm/: both sides install the same kinds of resource.")
+		}
+		for _, d := range o.Drifts {
+			marker, status := "⚠", "needs a registry entry ("+helmdrift.RegistryRelPath+") or a fix"
+			if d.Intentional {
+				marker, status = "ℹ", "intentional (recorded under decision: "+d.Decision+")"
+			}
+			if annotations && !d.Intentional {
+				fmt.Fprintf(stdout, "::warning::Drift detected for %s: templates differ\n", d.Pair)
+			}
+			fmt.Fprintf(stdout, "%s %s\n", marker, d.Pair)
+			if len(d.OnlyInPublished) > 0 {
+				fmt.Fprintf(stdout, "  Only in published: %s\n", strings.Join(d.OnlyInPublished, " "))
+			}
+			if len(d.OnlyInBootstrap) > 0 {
+				fmt.Fprintf(stdout, "  Only in bootstrap: %s\n", strings.Join(d.OnlyInBootstrap, " "))
+			}
+			fmt.Fprintf(stdout, "  STATUS: %s\n", status)
+			for _, f := range d.Unapproved {
+				fmt.Fprintf(stdout, "  UNRECORDED: %s\n", f)
+			}
+		}
+		// What the two sides GRANT is reported apart from what they INSTALL,
+		// so a reader can tell which question a finding answers; every
+		// undeclared and undecided cell is named, never only counted.
+		for _, d := range o.RBACDrifts {
+			marker := "ℹ"
+			if len(d.Undeclared) > 0 {
+				marker = "⚠"
+				if annotations {
+					fmt.Fprintf(stdout, "::warning::RBAC divergence for %s: %d undeclared cell(s)\n", d.Pair, len(d.Undeclared))
+				}
+			}
+			fmt.Fprintf(stdout, "%s %s — RBAC\n", marker, d.Pair)
+			for _, line := range d.ReportLines() {
+				fmt.Fprintf(stdout, "  %s\n", line)
+			}
+		}
+		switch {
+		case !o.Pass:
+			fmt.Fprintln(stderr, "❌ Drifts with no registry entry detected ("+helmdrift.RegistryRelPath+").")
+		case !kindsClean:
+			fmt.Fprintln(stdout, "✓ All drifts are recorded in "+helmdrift.RegistryRelPath+" (intentional).")
+		}
+		return nil
+	}
 }
 
 // rbacJSON mirrors RBACDrift for the machine-readable format. The cells are
