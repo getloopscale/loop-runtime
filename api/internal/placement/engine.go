@@ -22,6 +22,7 @@ package placement
 import (
 	"context"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 )
 
 // TenantCellQuerier abstracts tenant-to-cell lookups against the DB.
@@ -72,8 +73,9 @@ type Serializer func(ctx context.Context, fn func(ctx context.Context) error) er
 // Serializer implementations. Chosen from the user-reserved lock space so
 // it never collides with built-in Postgres locks or with LoopZero's environment
 // lock family (which uses hashes of (tenant, project, env)).
-// "plcmtlck" in hex.
-const PlacementLockID int64 = 0x706C636D746C636B
+// "plcmtlck" in hex. The value is declared once, in dbtx, because the admin
+// cell pin must take the same lock (see dbtx.PlacementLockID).
+const PlacementLockID = dbtx.PlacementLockID
 
 // RoundRobinEngine assigns new tenants to the Cell with fewest tenants.
 // Existing tenants keep their cell_id (sticky assignment).

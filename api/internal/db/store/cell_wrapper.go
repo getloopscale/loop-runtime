@@ -12,8 +12,8 @@ package store
 //   - CountByCell: alias of CellTenantCounts satisfying
 //     placement.TenantCellQuerier
 //   - GetTenantCellID: tenant → cell lookup (DynamicRouter feed)
-//   - PinTenantToCell: atomic 4-step admin override
-//     (CHG-2026-04-30-DELETE-SINGLE-CELL)
+//   - PinTenantToCell: 4-step admin override in one transaction under
+//     the placement advisory lock (CHG-2026-04-30-DELETE-SINGLE-CELL)
 //
 // Invariants preserved:
 //   - CellTenantCounts/CountByCell returns non-nil empty map when zero
@@ -37,6 +37,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
 )
 
@@ -82,37 +83,54 @@ func (s *PostgresCellStore) GetTenantCellID(ctx context.Context, tenantID string
 	return cellID, nil
 }
 
-// PinTenantToCell implements placement.CellPinnerStore. Atomic
-// 4-step sequence:
+// PinTenantToCell implements placement.CellPinnerStore. The whole sequence
+// runs in ONE transaction that first takes the placement advisory lock
+// (dbtx.PlacementLockID, the key the placement engine assigns cells under):
 //  1. validate tenant exists → ErrCellPinnerTenantNotFound
 //  2. validate cell exists + status='active' → ErrCellPinnerCellNotFound/
 //     ErrCellPinnerNotPinnable
 //  3. capacity check (NULL = unlimited; current excludes moving tenant)
 //     → ErrCellPinnerAtCapacity
-//  4. UPDATE tenants.cell_id, RETURNING previous cell_id
+//  4. UPDATE tenants.cell_id, returning the previous cell_id
 //
-// CHG-2026-04-30-DELETE-SINGLE-CELL: wires admin tenant-pin endpoint
-// previously dormant in router.go.
-//
-// Implementation notes: DBTX is the abstraction loopzero-api uses across
-// pool/tx, so this method runs without an explicit SERIALIZABLE wrapper.
-// Correctness relies on:
-//  1. Pre-flight existence checks for tenant + cell (deterministic errors)
-//  2. status='active' check before capacity (cheap rejects fast)
-//  3. capacity check excludes the moving tenant (re-pin-to-same-cell is OK)
-//  4. UPDATE is atomic at the row level
-//
-// Concurrent admin pin races for the same tenant are rare (operator-driven),
-// and the application-level placement lock used during tenant creation is
-// the primary serialization mechanism.
+// Steps 3 and 4 are a check-then-act: run as independent pooled statements,
+// two concurrent pins (or a pin and a new-tenant placement) could both read
+// "room for one" and both move in. Holding the placement lock across all four
+// makes the capacity read and the write one serialized decision.
 func (s *PostgresCellStore) PinTenantToCell(ctx context.Context, tenantID, cellID string) (string, error) {
-	bridge, err := s.bridge()
+	adapter, ok := s.DB.(*db.PgxAdapter)
+	if !ok || adapter.Pool == nil {
+		return "", fmt.Errorf("cell store: pinning needs a pgx pool to hold the placement lock, got DBTX %T", s.DB)
+	}
+	tx, err := adapter.Pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return "", fmt.Errorf("cell store: begin pin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op after a successful Commit
+
+	if _, err := tx.Exec(ctx, "SET LOCAL lock_timeout = '30s'"); err != nil {
+		return "", fmt.Errorf("cell store: set lock_timeout: %w", err)
+	}
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", dbtx.PlacementLockID); err != nil {
+		return "", fmt.Errorf("cell store: acquire placement lock: %w", err)
+	}
+
+	previous, err := pinTenantToCellTx(ctx, tx, tenantID, cellID)
 	if err != nil {
 		return "", err
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("cell store: commit pin: %w", err)
+	}
+	return previous, nil
+}
+
+// pinTenantToCellTx runs the four pin steps on a transaction that already
+// holds the placement lock.
+func pinTenantToCellTx(ctx context.Context, tx generated.DBTX, tenantID, cellID string) (string, error) {
 	q := generated.New()
 
-	existingCell, err := q.LookupTenantForCellPin(ctx, bridge, tenantID)
+	existingCell, err := q.LookupTenantForCellPin(ctx, tx, tenantID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrCellPinnerTenantNotFound
@@ -120,7 +138,7 @@ func (s *PostgresCellStore) PinTenantToCell(ctx context.Context, tenantID, cellI
 		return "", fmt.Errorf("cell store: lookup tenant: %w", err)
 	}
 
-	cell, err := q.LookupCellForPin(ctx, bridge, cellID)
+	cell, err := q.LookupCellForPin(ctx, tx, cellID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", ErrCellPinnerCellNotFound
@@ -131,7 +149,7 @@ func (s *PostgresCellStore) PinTenantToCell(ctx context.Context, tenantID, cellI
 		return "", ErrCellPinnerNotPinnable
 	}
 	if cell.CapacityTenantsMax != nil {
-		current, err := q.CountTenantsInCellExcluding(ctx, bridge, generated.CountTenantsInCellExcludingParams{
+		current, err := q.CountTenantsInCellExcluding(ctx, tx, generated.CountTenantsInCellExcludingParams{
 			CellID: cellID,
 			ID:     tenantID,
 		})
@@ -143,7 +161,7 @@ func (s *PostgresCellStore) PinTenantToCell(ctx context.Context, tenantID, cellI
 		}
 	}
 
-	if err := q.UpdateTenantCellID(ctx, bridge, generated.UpdateTenantCellIDParams{
+	if err := q.UpdateTenantCellID(ctx, tx, generated.UpdateTenantCellIDParams{
 		CellID: cellID,
 		ID:     tenantID,
 	}); err != nil {
