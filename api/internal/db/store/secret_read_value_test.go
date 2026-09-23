@@ -5,8 +5,6 @@ package store
 
 import (
 	"errors"
-	"github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -49,18 +47,11 @@ func TestReadValue_AbsentSecretIsNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
-	before := 0.0
-	for _, r := range []string{"empty_ciphertext", "vault_transit_error", "aes_legacy_error"} {
-		before += testutil.ToFloat64(metrics.SecretDecryptFailedTotal.WithLabelValues(r))
-	}
+	before := decryptFailuresTotal(t)
 	if _, err := s.ReadValue(ctx, "tn-secret-absent", "web", "production", "NOPE"); !errors.Is(err, ErrSecretNotFound) {
 		t.Fatalf("want ErrSecretNotFound, got %v", err)
 	}
-	after := 0.0
-	for _, r := range []string{"empty_ciphertext", "vault_transit_error", "aes_legacy_error"} {
-		after += testutil.ToFloat64(metrics.SecretDecryptFailedTotal.WithLabelValues(r))
-	}
-	if after != before {
+	if after := decryptFailuresTotal(t); after != before {
 		t.Errorf("an absent secret moved the decrypt-failure counter by %v; it is not a decrypt failure", after-before)
 	}
 }
