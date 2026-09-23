@@ -29,6 +29,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellscript"
 )
 
 // Script captures one shell script with audit metadata.
@@ -397,7 +399,7 @@ func isolatedStemPresent(text, stem string) bool {
 // dispositionRule is one step of the classification: the first rule whose match
 // holds decides the disposition, so more specific rules come first.
 type dispositionRule struct {
-	disposition string
+	disposition shellscript.Disposition
 	match       func(s Script, now time.Time) bool
 }
 
@@ -406,39 +408,39 @@ type dispositionRule struct {
 var dispositionRules = []dispositionRule{
 	// Harness hooks and scripts are registered with the Claude Code harness,
 	// not invoked by literal basename: keep them whatever their caller count.
-	{"KEEP-OPERATOR", func(s Script, _ time.Time) bool {
+	{shellscript.KeepOperator, func(s Script, _ time.Time) bool {
 		return strings.Contains(s.Path, ".claude/hooks/") || strings.Contains(s.Path, ".claude/scripts/")
 	}},
 	// X_test.sh dies with its parent.
-	{"AUTO-DIE", func(s Script, _ time.Time) bool { return strings.HasSuffix(stem(s), "_test") }},
+	{shellscript.AutoDie, func(s Script, _ time.Time) bool { return strings.HasSuffix(stem(s), "_test") }},
 	// No caller and untouched for 90 days: a dead-code candidate.
-	{"DELETE-DEAD", func(s Script, now time.Time) bool {
+	{shellscript.DeleteDead, func(s Script, now time.Time) bool {
 		return len(s.Callers) == 0 && now.Sub(s.LastMod) > 90*24*time.Hour
 	}},
 	// A real `helm upgrade/install` command belongs to helmfile.
-	{"DELEGATE-HELMFILE", func(s Script, _ time.Time) bool { return hasRealHelmInvocation(s.Body) }},
+	{shellscript.DelegateHelmfile, func(s Script, _ time.Time) bool { return hasRealHelmInvocation(s.Body) }},
 	// kubectl apply chains for tenant day-2 belong to ArgoCD.
-	{"DELEGATE-ARGOCD", func(s Script, _ time.Time) bool {
+	{shellscript.DelegateArgoCD, func(s Script, _ time.Time) bool {
 		return strings.Contains(s.Body, "kubectl apply -f infra/argocd") || strings.Contains(s.Body, "argocd app sync")
 	}},
 	// Test orchestrators go to Ginkgo — before the check-/validate- rule, so a
 	// validate-*.sh under parity/ is not proposed as a pure function.
-	{"MIGRATE-GINKGO", func(s Script, _ time.Time) bool {
+	{shellscript.MigrateGinkgo, func(s Script, _ time.Time) bool {
 		return strings.Contains(s.Path, "infra/tests/parity/") ||
 			strings.Contains(s.Path, "infra/tests/dogfood/") ||
 			strings.Contains(s.Path, "infra/tests/livetest/dogfood/")
 	}},
 	// A check-/validate-/audit- gate that shells out to an effectful CLI is not
 	// pure logic; porting it would be a forbidden shell-wrap.
-	{"KEEP-OPERATOR", func(s Script, _ time.Time) bool { return isGateScript(s) && invokesExternalCLI(s.Body) }},
-	{"MIGRATE-GO-PUREFN", func(s Script, _ time.Time) bool { return isGateScript(s) }},
+	{shellscript.KeepOperator, func(s Script, _ time.Time) bool { return isGateScript(s) && invokesExternalCLI(s.Body) }},
+	{shellscript.MigrateGoPureFn, func(s Script, _ time.Time) bool { return isGateScript(s) }},
 	// pulumi-*.sh moves to the Automation API.
-	{"MIGRATE-GO-SDK", func(s Script, _ time.Time) bool { return strings.HasPrefix(stem(s), "pulumi-") }},
+	{shellscript.MigrateGoSDK, func(s Script, _ time.Time) bool { return strings.HasPrefix(stem(s), "pulumi-") }},
 	// A generator that shells out is a bootstrap injector, not a file generator.
-	{"DELEGATE-HELMFILE", func(s Script, _ time.Time) bool { return isGeneratorScript(s) && invokesExternalCLI(s.Body) }},
-	{"MIGRATE-GENERATOR", func(s Script, _ time.Time) bool { return isGeneratorScript(s) }},
+	{shellscript.DelegateHelmfile, func(s Script, _ time.Time) bool { return isGeneratorScript(s) && invokesExternalCLI(s.Body) }},
+	{shellscript.MigrateGenerator, func(s Script, _ time.Time) bool { return isGeneratorScript(s) }},
 	// Small drill / break-glass operator scripts stay.
-	{"KEEP-OPERATOR", func(s Script, _ time.Time) bool {
+	{shellscript.KeepOperator, func(s Script, _ time.Time) bool {
 		return s.LOC < 100 && (strings.Contains(s.Path, "break-glass") || strings.Contains(s.Path, "drill-"))
 	}},
 }
@@ -451,10 +453,10 @@ var dispositionRules = []dispositionRule{
 func ProposeDisposition(s Script, now time.Time) string {
 	for _, r := range dispositionRules {
 		if r.match(s, now) {
-			return r.disposition
+			return string(r.disposition)
 		}
 	}
-	return "REVIEW-NEEDED"
+	return string(shellscript.ReviewNeeded)
 }
 
 func stem(s Script) string { return strings.TrimSuffix(filepath.Base(s.Path), ".sh") }
@@ -469,11 +471,7 @@ func isGeneratorScript(s Script) bool {
 	return strings.HasPrefix(st, "gen-") || strings.HasPrefix(st, "generate-")
 }
 
-// externalCLITokens — tools whose invocation makes a script LIVE/effectful,
-// disqualifying a pure-logic Go migration (parent D5 shell-wrap prohibition).
-var externalCLITokens = regexp.MustCompile(`\b(kubectl|helm|helmfile|cosign|argocd|doctl|pulumi|terraform)\b`)
-
-func invokesExternalCLI(body string) bool { return externalCLITokens.MatchString(body) }
+func invokesExternalCLI(body string) bool { return shellscript.EffectfulCLI.MatchString(body) }
 
 // helmInvocationLine matches a REAL helm upgrade/install command at the start
 // of a line (ignoring leading whitespace). It deliberately does NOT match

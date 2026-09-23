@@ -25,10 +25,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/gitref"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellscript"
 )
 
 // Config tells Check where to operate.
@@ -131,19 +131,6 @@ func gitDiffAdded(repoRoot, base, head string) ([]string, error) {
 	return paths, nil
 }
 
-// allowlistRowRe matches a Markdown table row whose first column ends in .sh.
-// Allows whitespace tolerance. Rejects placeholder tokens containing `<` or `>`
-// (used in template/example rows that should not be parsed as real entries).
-// Example matches:
-//
-//	| infra/scripts/foo.sh | 145 | reason |
-//	|infra/scripts/foo.sh|145|reason|
-//
-// Example rejected (placeholder syntax):
-//
-//	| <script-path-relative-to-repo-root>.sh | <LOC> | <reason> |
-var allowlistRowRe = regexp.MustCompile(`^\|\s*([^\s|<>]+\.sh)\s*\|`)
-
 // parseAllowlist extracts the set of allowed .sh paths from the markdown
 // content. Robust to:
 //   - empty file
@@ -156,15 +143,11 @@ func parseAllowlist(content string) (map[string]bool, error) {
 	scanner := bufio.NewScanner(strings.NewReader(content))
 	for scanner.Scan() {
 		line := scanner.Text()
-		match := allowlistRowRe.FindStringSubmatch(line)
-		if match == nil {
+		row, ok := shellscript.ParseAllowlistRow(line)
+		if !ok {
 			continue
 		}
-		path := strings.TrimSpace(match[1])
-		if path == "" {
-			continue
-		}
-		allowed[path] = true
+		allowed[row.Path] = true
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err

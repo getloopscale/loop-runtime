@@ -30,9 +30,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellscript"
 )
 
 const (
@@ -41,10 +41,6 @@ const (
 	allowlistRel = "infra/quality/shell-scripts-allowlist.md"
 	allowlistTag = "check-sprint.sh"
 )
-
-// heredocRE matches `python3 -<<PY` or `<<'PY'` variants — the anti-costume pattern
-// the T3.2 gate forbids in check-sprint.sh (per bash NO_HEREDOC assertion).
-var heredocRE = regexp.MustCompile(`python3?\s+(-\s+)?<<|<<\s*['"]*?(PY|PYEOF|PYTHON)`)
 
 // Config controls the check.
 type Config struct {
@@ -107,7 +103,7 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	// 5. no python3 heredoc remains — grep against script content
-	if scriptBytes != nil && heredocRE.Match(scriptBytes) {
+	if scriptBytes != nil && shellscript.PythonHeredoc.Match(scriptBytes) {
 		failures = append(failures, "no python3 heredoc remains: found forbidden heredoc pattern (T3.2 de-costume gate)")
 	}
 

@@ -243,7 +243,7 @@ func runUnhomedLogic(args []string) int {
 		}
 		for _, e := range entries {
 			fmt.Printf("| %s | %s | %d | %s | %s | %s |\n",
-				e.Domain, e.Path, e.LOC, yn(e.HasPython), yn(e.ShellsLive), e.Disposition)
+				e.Domain, e.Path, e.LOC, yn(e.HasPython), yn(e.ShellsLive), fmt.Sprintf("%s (%s)", e.Disposition, e.Rationale))
 		}
 		return 0
 	}
