@@ -33,7 +33,12 @@ var ExpectedCommands = []string{
 	"db:migrate",
 	"db:reset",
 	"validate:matrix",
-	"parity:preflight",
+
+	// `parity:preflight` was removed here on 2026-09-23 for the reason the
+	// cli:* entries below were: it ran infra/tests/parity/preflight.sh, deleted
+	// on 2026-07-07 when the parity scripts gave way to Ginkgo specs
+	// (Label("parity")), so the task could only fail with "No such file". The
+	// contract was asserting a capability the repository no longer has.
 
 	// `cli:link` and `cli:build` were removed here on 2026-07-30 (issue #254).
 	// They ran `cd cli && npm …`, but `cli/` left this repository at M2 of the

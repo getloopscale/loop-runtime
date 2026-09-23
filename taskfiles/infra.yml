@@ -629,7 +629,6 @@ tasks:
         docker push registry.digitalocean.com/loopzero-system/loopzero-api:{{.TAG}}
         echo "Rolling out..."
         kubectl --context={{.CONTEXT}} -n loopzero-system rollout restart deploy/loopzero-api
-        kubectl --context={{.CONTEXT}} -n loopzero-system rollout restart deploy/loopzero-controller
         echo ""
         echo "✅ Hotfix applied. Rollout status:"
         kubectl --context={{.CONTEXT}} -n loopzero-system rollout status deploy/loopzero-api --timeout=120s
@@ -703,9 +702,16 @@ tasks:
       - kubectl --context {{.CORE_CONTEXT}} -n loopzero-system port-forward deploy/loopzero-api 6060:6060
 
   pprof:operators:
-    desc: Port-forward to Operator pprof endpoint (http://localhost:6061/debug/pprof/)
+    desc: "Port-forward to one operator's pprof endpoint (http://localhost:6061/debug/pprof/). OPERATOR=tenant|app|preview|platform"
+    # The operators are four binaries since the split; each serves pprof on
+    # :6061 (operators/internal/operatorboot/pprof.go). The single
+    # deploy/loopzero-controller this used to target no longer exists.
+    requires:
+      vars:
+        - name: OPERATOR
+          enum: [tenant, app, preview, platform]
     cmds:
-      - kubectl --context {{.CORE_CONTEXT}} -n loopzero-system port-forward deploy/loopzero-controller 6061:6061
+      - kubectl --context {{.CORE_CONTEXT}} -n loopzero-system port-forward deploy/{{.OPERATOR}}-operator 6061:6061
 
   blackbox:status:
     desc: Check blackbox exporter health and probe results
@@ -1325,23 +1331,12 @@ tasks:
         LOOPZERO_GOOGLE_CLIENT_ID, LOOPZERO_GOOGLE_CLIENT_SECRET
         LOOPZERO_RESEND_API_KEY
 
-      Flags: pass --dry-run / --skip-restart / --verify via TASK_ARGS.
+      Flags: pass --verify / --dry-run / --json after `--`, e.g.
+      `task dev-public:patch-kratos -- --verify`.
     cmds:
-      - bash infra/scripts/local/patch-kratos-dev-public.sh --verify
-
-  dev-public:live-proof:
-    desc: |
-      Executes /live-proof for dev-public env. Validates 3 checks
-      (oidc, stripe, resend) × 3 layers (.env source, K8s rendered,
-      LIVE behavior). T7.1 of plan 2026-06-04.
-
-      Use ANY time as a quick health check — particularly after
-      `helmfile sync`, `kubectl rollout restart`, or first thing in a
-      session to assert the env is configured correctly.
-
-      Output: per-check PASS/FAIL with reason; non-zero exit on any FAIL.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh
+      # The Go seed that replaced infra/scripts/local/patch-kratos-dev-public.sh
+      # (migrated 2026-07-08); the task kept calling the deleted script.
+      - cd cmd/loopzero-ops && go run . seed patch-kratos {{.CLI_ARGS}}
 
   dev-public:trio:
     desc: |

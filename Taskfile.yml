@@ -163,24 +163,10 @@ tasks:
 
   audit:security-context:
     desc: "INF-G08 audit — pod/container securityContext hardening"
-    # Local task home for scripts/audit-security-context.sh --gate. (Was also
-    # an infra-gates.yml CI step until GitHub Actions was removed 2026-05-23;
-    # this task is now the canonical runner — wire it into the real CI if any.)
+    # Runs the Go gate that replaced scripts/audit-security-context.sh (the
+    # script was deleted; the task kept calling it and could only fail).
     cmds:
-      - bash scripts/audit-security-context.sh --gate
-
-  audit:action-pinning:
-    desc: "INF-G18 audit — GitHub Action SHA pinning (matches infra-gates.yml CI gate)"
-    # 2026-05-20 CI/local parity. Operator can now run locally before push.
-    # Same exit semantics as CI INF-G18 action-pinning job.
-    cmds:
-      - |
-        if [ -f scripts/check-action-pinning.sh ]; then
-          bash scripts/check-action-pinning.sh
-        else
-          echo "[audit:action-pinning] WARN: scripts/check-action-pinning.sh not present"
-          exit 0
-        fi
+      - cd cmd/loopzero-ops && go run . quality security-context --root "{{.ROOT_DIR}}" --gate
 
   audit:divergence-matrix:
     desc: "Plan T5.2 audit — local↔prod divergence matrix integrity (matches infra-gates.yml CI gate)"
@@ -457,7 +443,7 @@ tasks:
       - task: lint
       - task: validate:manifests
 
-  # parity:* + validate:matrix* migrated to taskfiles/test.yml (plan T1.3 iter 1).
+  # validate:matrix lives in taskfiles/test.yml (plan T1.3 iter 1).
 
 
   # ---------------------------------------------------------------------------

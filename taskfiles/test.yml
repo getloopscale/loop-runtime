@@ -1,36 +1,19 @@
 version: "3"
 
-# taskfiles/test.yml — test orchestration: parity, validate-matrix.
-# Per Plan T1.3 + MEET-2026-05-03-062 (MEET-A): incremental migration; this is
-# Phase 3 (per-domain) iteration 1 — `parity:*` + `validate:matrix*`.
-# Future iterations expand to test:*, test:report:*, test:e2e:*, dead-code, lint.
+# taskfiles/test.yml — test orchestration: unit, e2e, load, dogfood, validation.
+# Every script a task here runs must exist: cmd/loopzero-ops
+# quality_taskfile_script_refs_test.go fails on a task that points at a
+# deleted script (29 such tasks were removed or repointed on 2026-09-23).
 
 tasks:
-  ops:build:
-    desc: Build the loopzero-ops gate binary to bin/loopzero-ops (D6 — canonical stable path)
-    # T0.3 of plan 2026-05-23-incremental-bash-to-go-migration. Replaces the
-    # develop-bkp anti-pattern of `(cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .)`
-    # duplicated across ~15 call sites. Gates invoke `bin/loopzero-ops <gate>`, OR
-    # `go run ./cmd/loopzero-ops <gate>` for one-shot CI use (see docs/operations.md).
-    cmds:
-      - mkdir -p bin
-      - cd cmd/loopzero-ops && go build -o ../../bin/loopzero-ops .
-      - ./bin/loopzero-ops quality --help >/dev/null && echo "ops:build OK — bin/loopzero-ops ready"
-
-  parity:preflight:
-    desc: Run parity validation suite preflight (offline, <2s) — shellcheck + audit + dry-runs
-    cmds:
-      - bash infra/tests/parity/preflight.sh
-
   validate:matrix:
-    desc: Master validation matrix — every offline gate (Phase 8 T8.1)
+    desc: Master validation matrix — every offline gate (alias of `task test`)
+    # infra/tests/parity/validate-matrix.sh was deleted on 2026-07-07 (its
+    # parity checks have Ginkgo substitutes, Label("parity")); the offline
+    # suite it aggregated is `task test`. Kept as a name because the Taskfile
+    # public contract and README cite it.
     cmds:
-      - bash infra/tests/parity/validate-matrix.sh
-
-  validate:matrix:quick:
-    desc: validate:matrix without operators envtest (faster signal)
-    cmds:
-      - bash infra/tests/parity/validate-matrix.sh --quick
+      - task: test
 
   pkg:usage-matrix:check:
     desc: Verify docs/architecture.md Real Usage Matrix is up-to-date (gate PKG-G14)
@@ -76,20 +59,6 @@ tasks:
       # Now the Go unit test TestGolden_* (faithful port of audit-golden-test.sh).
       - go test ./cmd/loopzero-ops/internal/quality/regressionmatrix/...
 
-  parity:k3d-virgin:
-    desc: T5.1 — k3d virgin install (degrau 1, $0, ~10min)
-    cmds:
-      - bash infra/tests/parity/k3d-virgin-install.sh
-
-  parity:droplet:
-    desc: 'T6.1 — Droplet install (degrau 2, ~$0.50, ~30min). DRY_RUN=1 for offline preflight.'
-    cmds:
-      - bash infra/tests/parity/droplet-install.sh {{.CLI_ARGS}}
-
-  parity:doks:
-    desc: 'T7.1 — DOKS install (degrau 3, ~$5, ~60min). DRY_RUN=1 for offline preflight.'
-    cmds:
-      - bash infra/tests/parity/doks-install.sh {{.CLI_ARGS}}
   test:all:
     desc: Run everything — unit + integration + E2E (requires running clusters)
     cmds:
@@ -807,213 +776,6 @@ tasks:
     cmds:
       - LOOPZERO_E2E=1 go test ./infra/tests/e2e/ -run TestDeployHappyPath -v --ginkgo.label-filter="dogfood-repro"
 
-  test:dogfood:recovery:
-    desc: |
-      T5.4 of plan 2026-06-05-dashboard-journey-j04-recovery — aggregate
-      dogfood wrapper for Journey J-04 Recovery. Invokes:
-        1. T5.2 hermetic syntax check (allowlist + structure regression gate)
-        2. vitest hermetic suite (recovery.test.tsx + login.test.tsx — covers
-           Cenários B + F via DOM-state mocks, ~10s)
-        3. T5.1 LIVE bash (5 cenários A/C/C2/D/E against dev-public DNS,
-           skipped via --hermetic-only)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-recovery.sh {{.CLI_ARGS}}
-
-  test:dogfood:device:
-    desc: |
-      T5.1 of plan 2026-06-05-dashboard-journey-j05-device-success — aggregate
-      dogfood wrapper for Journey J-05 Device Success. Invokes:
-        1. T4.2 hermetic syntax check (LIVE bash structure regression gate)
-        2. T2.1 hermetic helm-values check (Hydra post_device_done_url contract)
-        3. vitest hermetic suite (device-success.test.tsx — 9 tests)
-        4. Playwright headless (e2e/device-success.spec.ts — 2 cenários,
-           SKIP=FAIL by default per EC-5; override with --allow-skip)
-        5. T4.2 LIVE bash (3 cenários A/B/C against dev-public DNS,
-           skipped via --hermetic-only)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json --allow-skip.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-device.sh {{.CLI_ARGS}}
-
-  test:dogfood:project-connect:
-    desc: |
-      T6.2 of plan 2026-06-05-dashboard-journey-j09-project-connect — aggregate
-      dogfood wrapper for Journey J-09 Project Connect. Invokes:
-        1. T4.1 hermetic syntax check (LIVE bash structure regression gate)
-        2. vitest project-connect.test.tsx (T1.2 + T2.2 + T3.1 — 10 tests)
-        3. Go engine tests (TestListRepositories + TestRepositories_Connect)
-        4. Go cloud tests (TestInitiateInstall + TestCallback — 14 tests)
-        5. Go webhook tests (TestWebhook + counter + correlation_id)
-        6. Playwright headless (e2e/project-connect.spec.ts — 4 cenários,
-           SKIP=FAIL by default per EC-5; override with --allow-skip)
-        7. T4.1 LIVE bash (4 cenários A/B/C/D against dev-public GitHub
-           webhook endpoint; SKIP if LOOPZERO_GITHUB_WEBHOOK_SECRET unset;
-           full bypass via --hermetic-only)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json --allow-skip.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-project-connect.sh {{.CLI_ARGS}}
-
-  test:dogfood:deployments:
-    desc: |
-      T7.3 of plan 2026-06-06-dashboard-journey-j17-deployments-realtime —
-      aggregate dogfood wrapper for Journey J-17 Deployments. Invokes:
-        1. T7.2 hermetic syntax check (LIVE bash structure regression gate)
-        2. vitest J-17 hooks + pages (use-deployments-list-stream,
-           use-deployments, deployments.tsx — 7+4+4 tests)
-        3. Go API tests for the J-17 backend surface
-           (api/internal/buildplane/argo + loki + routes — covers Layer 1+2+3 wrap,
-           LogQL filter, build_list + logs handlers)
-        4. T7.2 LIVE bash (4 cenários A/B/C/D against dev-public — REST
-           list + SSE wiring + Loki marker pipeline + preflight)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-deployments.sh {{.CLI_ARGS}}
-
-  test:dogfood:secrets:
-    desc: |
-      T6.2 of plan 2026-06-06-dashboard-journey-j22-secrets-crud v1.2.1 —
-      aggregate dogfood wrapper for Journey J-22 Secrets CRUD. Invokes:
-        1. T5.4 hermetic syntax check (23 assertions on the LIVE bash shape)
-        2. vitest J-22 (35 specs / 9 files: dotenv parser + use-secrets
-           env filter + 4 mutations + SecretsTable D1 masking +
-           AddSecretSheet canonical + RotateSecretDialog EC-13
-           expected_version + DeleteSecretDialog EC-19 case-sensitive +
-           BulkUploadSheet preview invariant + page URL state)
-        3. Go SecretHandler.Bulk tests (5 specs covering T1.1 results-
-           length invariant + T1.2 audit-per-key + T1.3 plan-limit 402 +
-           EC-18 size cap 413 + T5.2 EC-14 duplicate-key 400)
-        4. T5.3 LIVE bash (4 scenarios A create / B rotate-upsert /
-           C bulk / D ESO sync) against dev-public
-      Flags forwarded to wrapper: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-secrets.sh {{.CLI_ARGS}}
-
-  test:dogfood:login:
-    desc: |
-      T5.2 of plan 2026-06-16-m0-j01-login-polish v1.1 SHIPPABLE 100.0 —
-      aggregate dogfood wrapper for J-01 Login polish (M0 Plan A v0.19.0).
-      Suite 0 pre-flight gates (per ADR D5):
-        - patch-kratos --check-only (read-only Cleanroom-survival gate, EC-9)
-        - Hydra OAuth clients probe ≥ 3 clients
-      Suites:
-        1. T4.4 hermetic syntax (19 assertions)
-        2. vitest J-01 (error-mapper + return-to + safe-redirect + 3 components, 46+ specs)
-        3. T4.2 LIVE bash dev-public scenarios A-E (OPERATOR HARD STOP)
-        4. Playwright OAuth denial (SKIP when no chromium)
-      Flags: --hermetic-only --live-only --skip-playwright --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-login.sh {{.CLI_ARGS}}
-
-  test:dogfood:register:
-    desc: |
-      M0 J-02 Register — aggregate dogfood wrapper.
-      Suites: hermetic syntax + loopzero-cloud go test ./internal/routes -run TestMe_
-      (provisioning snapshot T1.2 + lazy starter provision T1.3) + dashboard
-      vitest (register + completing-screen + provisioning hook) + LIVE bash
-      (dev-public, OPERATOR HARD STOP). Flags: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-register.sh {{.CLI_ARGS}}
-
-  test:dogfood:verification:
-    desc: |
-      M0 J-03 Verification — aggregate dogfood wrapper.
-      Suites: hermetic syntax + dashboard vitest (verification + ResendCooldownButton)
-      + LIVE bash (dev-public, OPERATOR HARD STOP). Flags: --hermetic-only
-      --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-verification.sh {{.CLI_ARGS}}
-
-  test:dogfood:overview:
-    desc: |
-      M1 J-06 Overview — aggregate dogfood wrapper.
-      Suites: hermetic syntax + dashboard vitest (useOverviewKPIs + OverviewKPIStrip
-      + overview page) + engine build_stats handler tests + LIVE bash (dev-public,
-      OPERATOR HARD STOP). Flags: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-overview.sh {{.CLI_ARGS}}
-
-  test:dogfood:domains:
-    desc: |
-      T5.2 of plan 2026-06-06-dashboard-journey-j11-domains v1.1 SHIPPABLE
-      93.2 — aggregate dogfood wrapper for the J-11 Domains polish slice.
-      Invokes:
-        1. T4.3 hermetic syntax test for the LIVE bash test (19 assertions)
-        2. vitest J-11 hooks + components — 20 specs GREEN
-        3. T4.2 LIVE bash dev-public-domains scenarios A+B+C
-           (OPERATOR HARD STOP per ADR D5 + cleanroom-up-live-test-mandate.md)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-domains.sh {{.CLI_ARGS}}
-
-  test:dogfood:readiness:
-    desc: |
-      T5.2 of plan 2026-06-06-dashboard-journey-j21-readiness v1.1 SHIPPABLE
-      94.0 — aggregate dogfood wrapper for the J-21 Readiness Score slice.
-      Invokes:
-        1. T4.4 hermetic syntax test for the LIVE bash test (15 assertions)
-        2. vitest J-21 hooks + components — 14 specs GREEN
-        3. T4.3 LIVE bash dev-public-readiness scenarios A+B
-           (OPERATOR HARD STOP per ADR D5 + cleanroom-up-live-test-mandate.md)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-readiness.sh {{.CLI_ARGS}}
-
-  test:dogfood:all:
-    desc: |
-      Phase 3+6 of plan 2026-06-15-100pct-dashboard-coverage-roadmap —
-      umbrella runner that invokes EVERY per-journey dogfood wrapper.
-      Maps to sponsor goal "Dogfood --full → all 12 dogfood wrappers".
-
-      Modes (exactly one required, passed via CLI_ARGS):
-        --hermetic-only  CI-safe (no cluster needed, ~5min)
-        --live-only      Operator + sponsor JUNTOS gate
-                         (requires Cleanroom TOTAL precedence)
-
-      Currently aggregates 12 wrappers covering 12 delivered journeys
-      (J-04/J-05/J-09/J-10/J-11/J-17+J-19/J-20/J-21/J-22 x2/J-23/J-25).
-      Roadmap Phase 3 adds 11 more wrappers for backlog journeys
-      (J-01/J-02/J-03/J-06/J-12/J-13/J-14/J-15/J-16/J-18/J-24).
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-all.sh {{.CLI_ARGS}}
-
-  test:dogfood:scale:
-    desc: |
-      T1.4 of plan 2026-06-15-code-review-49-findings-remediation (R1-F1
-      BLOCKER closure) — aggregate dogfood wrapper for the J-20 Scale
-      slice. Lines up with the J-21 + J-11 + J-19 + J-22 + J-25 canonical
-      3-script triplet pattern that J-20 v1.1 was missing.
-      Invokes:
-        1. T1.2 hermetic syntax test for the LIVE bash test (24 assertions)
-        2. Go pkg/enforcement scale tests (EC-2 + EC-3 + EC-4 absorption)
-        3. vitest J-20 scale components + hooks
-        4. T1.1 LIVE bash dev-public-scale-flow scenarios A+B+C
-           (OPERATOR HARD STOP per ADR D5 + cleanroom-up-live-test-mandate.md)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-scale.sh {{.CLI_ARGS}}
-
-  test:dogfood:secrets-openbao:
-    desc: |
-      T5.2 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 —
-      aggregate dogfood wrapper for the J-22 OpenBao Transit + ESO Sync
-      chain. Invokes:
-        1. T4.2 hermetic syntax check (38 assertions on the T4.1 LIVE
-           script shape)
-        2. go test -race ./pkg/vault/... (31 specs: TransitClient base
-           + EC-04 singleflight + EC-06 auto-create + Zeroize + Redaction
-           + RateLimit + EC-08 LRU eviction)
-        3. go test -race ./api/internal/routes (14 TestSecretBulk specs
-           covering T1.1 k8sSync wire + T1.2 cross-tenant 404 + T2.3
-           transit Encrypt + EC-01 continue-best-effort + EC-02 per-env
-           sync_status + EC-03 byte-identical 404)
-        4. T4.1 LIVE 6-scenario zero-leak proof against dev-public
-           (A PG vault:v1: prefix / B workload K8s Secret / C pod printenv
-           / D kubectl logs no leak / E kubectl describe no value leak /
-           F sentinel only in tenant ns) — operator HARD STOP
-      Flags forwarded to wrapper: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-secrets-openbao.sh {{.CLI_ARGS}}
-
   test:dogfood:secrets-openbao:rehearsal:
     desc: |
       Iter 26 productive-idle of plan 2026-06-10-j22-openbao-transit-eso-sync
@@ -1047,49 +809,6 @@ tasks:
       script for non-k3d-loopzero-core cluster targeting.
     cmds:
       - bash infra/tests/e2e/live/dev-public-secrets-zero-leak_test.sh --rehearsal {{.CLI_ARGS}}
-
-  test:dogfood:environments:
-    desc: |
-      T5.1 of plan 2026-06-06-dashboard-journey-j10-environments v1.1 —
-      aggregate dogfood wrapper for Journey J-10 Environments. Invokes:
-        1. T4.4 hermetic syntax check (LIVE bash structure regression gate)
-        2. vitest J-10 dialogs + hooks + KPI + 402 modal (5 spec files,
-           26 specs: use-environments mutations, delete-environment-dialog,
-           promote-dialog canonical {from,to}, environment-kpi-row,
-           plan-limit-upgrade-modal)
-        3. Go API tests for the J-10 backend surface — promote handler
-           edge cases (11 tests: happy + 401 + 404 project + 400 from/to
-           missing + 404 no-active + 400 same-env + 409 lock + body code
-           assertions + RegressionV10BodyShape locking canonical
-           {from,to} vs v1.0 buggy {from_environment,to_environment})
-        4. T4.3 LIVE bash (4 cenários A create / B delete / C promote
-           canonical body shape / D preflight against dev-public)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-environments.sh {{.CLI_ARGS}}
-
-  test:dogfood:preview:
-    desc: |
-      J-23 #64 of the 4-task batch (sponsor verbatim 2026-06-07
-      "Adicionar teste de PR preview ao dogfood wrapper") — aggregate
-      dogfood wrapper for the preview-canonical chain. Invokes:
-        1. Hermetic syntax check on the LIVE bash test
-        2. Go canonical-destination helper unit tests (#69 fix in
-           tenant_gitops.go + tenant_controller.go)
-        3. Ginkgo preview controller envtest specs (#67 SA on
-           canonical preview namespace) — skipped with --skip-envtest
-        4. LIVE bash scenarios A-E against the cluster:
-           A pre-flight tenant + project in PG
-           B RBAC #65 — tenant-operator SA can list previewenvironments
-           C SA #67 — loopzero-app on canonical preview ns + automount=false
-           D destination #69 — ArgoCD App namespace matches canonical
-              loopzero-<tenant>-<project>-<env> formula
-           E TLS #68 — HTTPS via wildcard *.preview-dev.loopzero.example
-              returns 200 with Let's Encrypt cert (DNS-01 issued)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json
-      --skip-envtest.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-preview.sh {{.CLI_ARGS}}
 
   validate:slos:
     desc: |
@@ -1402,39 +1121,18 @@ tasks:
         fi
         bash infra/tests/e2e/live/dev-public-webhook-chain_test.sh
 
-  test:pre-release-rigor:scenario-4:
-    desc: |
-      Cenário 4 (dashboard API sanity via curl) — runs T3.1 live-proof
-      --check=api-sanity (4 endpoint shape assertions, catches iter-20
-      BuildListItem.Apps + T5.3 ProjectHealthCard regression classes).
-      Internal budget 5 min. Plan T3.1.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh --check=api-sanity
-
-  test:pre-release-rigor:scenario-3:
-    desc: |
-      Cenário 3 (chaos + webhook concurrent) — runs T4.1 C11 + T4.2 C12
-      sequentially. Internal budget 60 min per ADR D8 (25 min C11 + 30 min
-      C12 + 5 min cleanup margin). Plan T4.1 + T4.2.
-    cmds:
-      - bash infra/scripts/local/chaos-scenarios/c11-webhook-concurrent-podkill.sh
-      - bash infra/scripts/local/chaos-scenarios/c12-simul-prs-during-partition.sh
-
   test:pre-release-rigor:
     desc: |
-      Umbrella — runs all 4 Cenários of plan 2026-06-08-pre-release-test-rigor
-      in dependency order per ADR D1: scenario-2 (baseline) → scenario-1
-      (chain) → scenario-4 (api-sanity) → scenario-3 (chaos).
+      Umbrella — runs the pre-release rigor scenarios of plan
+      2026-06-08-pre-release-test-rigor in dependency order per ADR D1:
+      scenario-2 (baseline, ~45 min cleanroom) → scenario-1 (chain, ~20 min
+      webhook end-to-end).
 
-      (EC-4 / ADR D8) wall-clock budget 120 min total — revised upward
-      per ADR D8 + EC-4 absorption from the prior plan estimate. Per-Cenário
-      internal budgets:
-        scenario-2 baseline   ~45 min cleanroom
-        scenario-1 chain      ~20 min webhook end-to-end
-        scenario-4 api-sanity ~5 min
-        scenario-3 chaos      ~60 min (C11 25 + C12 30 + margin)
-      = 130 min real worst case; 120 min documented budget assumes
-      scenario-3 + scenario-4 partial overlap is operator-driven.
+      Scenario 3 (chaos C11/C12) and scenario 4 (api-sanity live-proof) were
+      retired: their scripts were deleted, so the tasks could only fail with
+      "No such file". Chaos coverage lives in chaos:v2:hermetic and the
+      live-proof checks were absorbed into the contra-prova chain
+      (infra/tests/livetest/contraprova, Camada 8) run by chain:v2:full.
 
       Default Task semantics provide fail-fast — if any scenario exits
       non-zero, the umbrella aborts (per ADR D6). No `ignore_error: true`
@@ -1444,8 +1142,6 @@ tasks:
     cmds:
       - task: test:pre-release-rigor:scenario-2
       - task: test:pre-release-rigor:scenario-1
-      - task: test:pre-release-rigor:scenario-4
-      - task: test:pre-release-rigor:scenario-3
 
   # T3.1+T3.5 of plan canonical-tests-rewrite-v2 v1.0 per ADR-2026-06-17-T3 D1.
   # Canonical chain runner v2 — replaces archive/canonical-tests-v1/scripts/local/cleanroom-canonical-chain-runner.sh.
@@ -1471,6 +1167,17 @@ tasks:
       CurlJSON + KubectlGetJSON + Pause helpers. No LIVE infra needed.
     cmds:
       - go test ./infra/tests/livetest/dogfood/... -count=1 -timeout 1m
+
+  dogfood:v2:journey:
+    desc: |
+      Run ONE v2 dogfood journey (LIVE Ginkgo spec) by its label, e.g.
+      `task dogfood:v2:journey JOURNEY=j04`. Replaces the per-journey
+      test:dogfood:* wrappers, which ran deleted archive/canonical-tests-v1
+      scripts. Requires dev-public UP + JWT seed (see dogfood:v2).
+    requires:
+      vars: [JOURNEY]
+    cmds:
+      - go test -tags=live ./infra/tests/livetest/dogfood/... -count=1 -timeout 1h -v -args -ginkgo.label-filter={{.JOURNEY}}
 
   dogfood:v2:
     desc: |
