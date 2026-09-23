@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
@@ -186,6 +187,9 @@ type EnvironmentEnsurer interface {
 
 // NewBuildHandler creates a new BuildHandler.
 func NewBuildHandler(orch BuildOrchestratorService, logger *slog.Logger) *BuildHandler {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &BuildHandler{
 		orch:   orch,
 		logger: logger,
@@ -195,7 +199,14 @@ func NewBuildHandler(orch BuildOrchestratorService, logger *slog.Logger) *BuildH
 // WithAdmission attaches a build admission gate and cell resolver.
 // MEET-053 A-06: cellResolver replaces the hardcoded cellID string.
 // The resolver is called per-request to get the tenant's actual cell.
+//
+// Both are required: admission is judged per cell, and without a resolver
+// the gate would have no cell to judge — a nil checker or resolver leaves
+// admission off.
 func (h *BuildHandler) WithAdmission(a AdmissionChecker, resolver CellResolver) *BuildHandler {
+	if a == nil || resolver == nil {
+		return h
+	}
 	h.admission = a
 	h.cellResolver = resolver
 	return h
@@ -244,6 +255,10 @@ type createBuildRequest struct {
 
 // Create handles POST /api/v1/builds.
 // Auth required. Idempotency-Key middleware applied externally.
+//
+// The handler decodes and validates the whole request before any side
+// effect, prepares the environment, consults the admission gate, then
+// submits: each step is a method below.
 func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// C-02: Enforce request deadline so handlers don't hang indefinitely.
 	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
@@ -255,187 +270,23 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req createBuildRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
-		return
-	}
-
-	// Plan J-17 T6.4 — redeploy_of short-circuit. Look up the source
-	// build, verify tenant + terminal status, copy its params. After
-	// this the rest of the handler treats the request as a normal
-	// build submission (validation, env ensure, secret resync, etc.).
-	if req.RedeployOf != "" {
-		src, srcErr := h.orch.GetRedeploySource(ctx, uc.TenantID, req.RedeployOf)
-		if srcErr != nil {
-			mapBuildError(w, r, srcErr)
-			return
-		}
-		req.ProjectID = src.ProjectID
-		req.Environment = src.Environment
-		req.CommitSHA = src.CommitSHA
-		req.Apps = src.Apps
-		// NoCache opt-in stays from the request; everything else
-		// comes from the source.
-	}
-
-	// Validate required fields
-	if req.ProjectID == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-			"MISSING_FIELD",
-			"Project name is required. Check your loopzero.yaml."))
-		return
-	}
-	if req.Environment == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-			"MISSING_FIELD",
-			"Environment is required"))
-		return
-	}
-
-	// B-059: declare the resource id for the audit row. The middleware used
-	// to buffer this body and scan it for `project_id` to find the same
-	// value; the handler already decoded it, so it says so.
+	req, err := h.decodeBuildRequest(ctx, r, uc.TenantID)
+	// B-059: declare the resource id for the audit row as soon as it is
+	// known — a rejected mutation must still be attributable.
 	auditctx.SetResourceID(ctx, req.ProjectID)
-	// T1.3 follow-up (CR-2 regression caught during cleanroom Final Phase
-	// 2026-05-29): an empty `apps` array used to be silently accepted —
-	// SubmitBuild would create a Build row, build an empty WorkflowSpec, and
-	// the legacy spec.Apps fallback in workflow_builder would emit a Workflow
-	// CR with zero steps that Argo "succeeded" trivially. T1.3 (commit
-	// 2b9f8040) removed the fallback and added an invariant guard, exposing
-	// the gap — empty bodies now reach the guard as 500 INTERNAL_ERROR.
-	// Fail fast at the system boundary with a typed 400 instead.
-	if len(req.Apps) == 0 {
-		// Red Team loopzero-cloud#126 — when this is a redeploy_of request and
-		// the source build itself has no apps (legacy seed data or synthetic
-		// fixture), the user has no local `.loopzero/services.json` to edit;
-		// pointing them there is misleading. Surface a redeploy-specific
-		// message that names the source build and explains the actionable
-		// fix: pick a source build that has apps.
-		detail := "At least one app is required. Check your `.loopzero/services.json` for a `services:` array."
-		if req.RedeployOf != "" {
-			detail = fmt.Sprintf(
-				"Source build %s has no apps to redeploy. Pick a build that completed with at least one app.",
-				req.RedeployOf,
-			)
-		}
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-			"MISSING_FIELD",
-
-			detail))
+	if err != nil {
+		mapBuildError(w, r, err)
 		return
 	}
 
-	// Environment validation (DA-10): the one environment-name rule.
-	if err := validation.ValidateEnvironmentName(req.Environment); err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError("INVALID_ENVIRONMENT", err.Error()))
+	if terr := h.prepareEnvironment(ctx, uc.TenantID, req); terr != nil {
+		httpio.WriteLoopZeroError(w, terr)
 		return
 	}
-
-	// Plan T2.2 D5 — auto-create environment on first deploy --env <novo>.
-	// Closes F-S1-02 where LoopZeroApplication CR was created but Environment CR
-	// + workload namespace + ArgoCD App+AppProject were not, causing eternal
-	// SYNC_FAILED. When envEnsurer is wired, calling EnsureEnvironment is a
-	// no-op for existing envs and creates+waits for new ones.
-	if h.envEnsurer != nil {
-		// M2 v1.2 T3.2: propagate req.ProjectID so the operator
-		// computes the canonical `loopzero-<tenant>-<project>-<env>`
-		// namespace and writes the project field to spec.environments.
-		// req.ProjectID is already validated non-empty upstream.
-		if ensureErr := h.envEnsurer.EnsureEnvironment(ctx, uc.TenantID, req.ProjectID, req.Environment); ensureErr != nil {
-			// Wrap non-LoopZeroError errors so the handler emits a clean response.
-			var te *loopzeroerrors.LoopZeroError
-			if errors.As(ensureErr, &te) {
-				httpio.WriteLoopZeroError(w, te)
-			} else {
-				httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-					"ENV_PROVISION_FAILED",
-					fmt.Sprintf("Failed to provision environment %q: %s", req.Environment, ensureErr.Error())))
-			}
-			return
-		}
-	}
-
-	// V9 L20: Resync PG secrets to workload K8s ExternalSecrets. Closes
-	// the race where `loopzero secret set` ran BEFORE the namespace existed
-	// (first deploy --env <novo> creates the namespace, but the secret
-	// POST K8s sync at line ~234 of secrets.go silently failed with
-	// "namespaces ... not found"). Pod start would later fail with
-	// CreateContainerConfigError because the K8s Secret was never
-	// created on workload.
-	//
-	// Best-effort: log resync errors but don't fail the deploy — the
-	// pod-start failure will surface as a deploy timeout if any required
-	// secret is missing. Per-secret sync errors are also non-fatal in
-	// the resyncer (e.g., partial-success when only one secret has a
-	// transient issue).
-	if h.secretResync != nil {
-		if resyncErr := h.secretResync.ResyncEnv(ctx, uc.TenantID, req.ProjectID, req.Environment); resyncErr != nil {
-			slog.Warn("secret resync failed — pods may fail to start with CreateContainerConfigError",
-				"error", resyncErr,
-				"tenant_id", uc.TenantID,
-				"project", req.ProjectID,
-				"environment", req.Environment,
-			)
-		}
-	}
-
-	// SEC-3 fix: Validate app paths before they reach shell scripts in the build pipeline.
-	// Prevents path traversal and command injection via crafted app.path values.
-	// CODE-001 fix: Also validate app names — they flow into shell scripts in
-	// loopzeroPacksDockerfileStep() and buildctl arguments.
-	for _, app := range req.Apps {
-		if err := validation.ValidateAppName(app.Name); err != nil {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-				"INVALID_APP_NAME",
-				fmt.Sprintf("Invalid name for app: %s", err.Error())))
-			return
-		}
-		if err := validation.ValidateAppPath(app.Path); err != nil {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-				"INVALID_APP_PATH",
-				fmt.Sprintf("Invalid path for app %q: %s", app.Name, err.Error())))
-			return
-		}
-	}
-
-	// Roadmap 07 — admission gate. Only consulted when configured
-	// (WithAdmission + LOOPZERO_ADMISSION_CONTROL=true). A nil checker
-	// means the feature is off, which is the pre-roadmap default.
-	if h.admission != nil {
-		// MEET-053 A-06: Resolve cell_id per-request from tenant's placement.
-		cellID := "cell-0" // fallback if resolver not set
-		if h.cellResolver != nil {
-			if resolved, resolveErr := h.cellResolver.GetTenantCellID(ctx, uc.TenantID); resolveErr == nil {
-				cellID = resolved
-			} else if h.logger != nil {
-				h.logger.Warn("cell resolver failed — using default",
-					"error", resolveErr,
-					"tenant_id", uc.TenantID,
-				)
-			}
-		}
-		admitted, retryAfter, code, message, adErr := h.admission.Check(ctx, cellID, uc.TenantID)
-		if adErr != nil {
-			// Fail-open: the gate is advisory, a query error must not
-			// penalize users by blocking builds. Log and continue.
-			if h.logger != nil {
-				h.logger.Warn("admission gate query failed — failing open",
-					"error", adErr,
-					"tenant_id", uc.TenantID,
-					"cell_id", cellID,
-				)
-			}
-		} else if !admitted {
-			// Roadmap 07 DoD: 429 with Retry-After header.
-			secs := int(retryAfter.Round(time.Second).Seconds())
-			if secs < 1 {
-				secs = 1
-			}
-			w.Header().Set("Retry-After", fmt.Sprintf("%d", secs))
-			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(code, message))
-			return
-		}
+	if refusal := h.admit(ctx, uc.TenantID); refusal != nil {
+		w.Header().Set("Retry-After", strconv.Itoa(refusal.retryAfterSeconds))
+		httpio.WriteLoopZeroError(w, refusal.err)
+		return
 	}
 
 	resp, err := h.orch.SubmitBuild(ctx, SubmitBuildInput{
@@ -452,8 +303,131 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		mapBuildError(w, r, err)
 		return
 	}
-
 	httpio.WriteJSON(w, http.StatusAccepted, resp)
+}
+
+// decodeBuildRequest decodes the body, resolves a redeploy into its source
+// build's parameters, and validates everything — at the system boundary,
+// before any environment is provisioned. A returned error is either a typed
+// *LoopZeroError or an orchestrator error; mapBuildError renders both.
+func (h *BuildHandler) decodeBuildRequest(ctx context.Context, r *http.Request, tenantID string) (createBuildRequest, error) {
+	var req createBuildRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return req, loopzeroerrors.ErrInvalidRequest
+	}
+	// Plan J-17 T6.4 — redeploy_of copies project, environment, commit and
+	// apps from the source build (tenant ownership and terminal status are
+	// verified by the orchestrator). NoCache stays from the request.
+	if req.RedeployOf != "" {
+		src, err := h.orch.GetRedeploySource(ctx, tenantID, req.RedeployOf)
+		if err != nil {
+			return req, err
+		}
+		req.ProjectID, req.Environment, req.CommitSHA, req.Apps = src.ProjectID, src.Environment, src.CommitSHA, src.Apps
+	}
+	if err := validateBuildRequest(req); err != nil {
+		return req, err
+	}
+	return req, nil
+}
+
+// validateBuildRequest checks the request shape. App names and paths flow
+// into shell steps of the build pipeline, so they are validated here
+// (SEC-3 / CODE-001) against injection and traversal.
+func validateBuildRequest(req createBuildRequest) *loopzeroerrors.LoopZeroError {
+	if req.ProjectID == "" {
+		return loopzeroerrors.NewLoopZeroError("MISSING_FIELD", "Project name is required. Check your loopzero.yaml.")
+	}
+	if req.Environment == "" {
+		return loopzeroerrors.NewLoopZeroError("MISSING_FIELD", "Environment is required")
+	}
+	// T1.3 follow-up (CR-2): an empty apps array would reach the workflow
+	// builder's invariant guard as a 500; it is a caller error.
+	if len(req.Apps) == 0 {
+		detail := "At least one app is required. Check your `.loopzero/services.json` for a `services:` array."
+		if req.RedeployOf != "" {
+			// Red Team loopzero-cloud#126 — a redeploy has no local services.json
+			// to edit; name the source build instead.
+			detail = fmt.Sprintf("Source build %s has no apps to redeploy. Pick a build that completed with at least one app.", req.RedeployOf)
+		}
+		return loopzeroerrors.NewLoopZeroError("MISSING_FIELD", detail)
+	}
+	// DA-10: the one environment-name rule.
+	if err := validation.ValidateEnvironmentName(req.Environment); err != nil {
+		return loopzeroerrors.NewLoopZeroError("INVALID_ENVIRONMENT", err.Error())
+	}
+	for _, app := range req.Apps {
+		if err := validation.ValidateAppName(app.Name); err != nil {
+			return loopzeroerrors.NewLoopZeroError("INVALID_APP_NAME", fmt.Sprintf("Invalid name for app: %s", err.Error()))
+		}
+		if err := validation.ValidateAppPath(app.Path); err != nil {
+			return loopzeroerrors.NewLoopZeroError("INVALID_APP_PATH", fmt.Sprintf("Invalid path for app %q: %s", app.Name, err.Error()))
+		}
+	}
+	return nil
+}
+
+// prepareEnvironment makes the target environment deployable. Plan T2.2 D5:
+// a first deploy to a new environment creates it (Environment CR, namespace,
+// application) — a no-op for an existing one. V9 L20: secrets set before the
+// namespace existed are then resynced; a resync failure is logged, not fatal,
+// because a missing secret surfaces as a deploy failure the user can act on.
+func (h *BuildHandler) prepareEnvironment(ctx context.Context, tenantID string, req createBuildRequest) *loopzeroerrors.LoopZeroError {
+	if h.envEnsurer != nil {
+		if err := h.envEnsurer.EnsureEnvironment(ctx, tenantID, req.ProjectID, req.Environment); err != nil {
+			var te *loopzeroerrors.LoopZeroError
+			if errors.As(err, &te) {
+				return te
+			}
+			return loopzeroerrors.NewLoopZeroError("ENV_PROVISION_FAILED",
+				fmt.Sprintf("Failed to provision environment %q: %s", req.Environment, err.Error()))
+
+		}
+	}
+	if h.secretResync != nil {
+		if err := h.secretResync.ResyncEnv(ctx, tenantID, req.ProjectID, req.Environment); err != nil {
+			h.logger.Warn("secret resync failed — pods may fail to start with CreateContainerConfigError",
+				"error", err, "tenant_id", tenantID, "project", req.ProjectID, "environment", req.Environment)
+		}
+	}
+	return nil
+}
+
+// admissionRefusal is a build the admission gate turned away.
+type admissionRefusal struct {
+	err               *loopzeroerrors.LoopZeroError
+	retryAfterSeconds int
+}
+
+// admit consults the admission gate (Roadmap 07) for the tenant's cell. The
+// gate is advisory: when the cell cannot be resolved or the gate cannot be
+// queried, the build proceeds rather than being judged against the wrong
+// cell or blocked by an outage. A refusal answers 429 with a Retry-After of
+// at least one second.
+func (h *BuildHandler) admit(ctx context.Context, tenantID string) *admissionRefusal {
+	if h.admission == nil {
+		return nil
+	}
+	cellID, err := h.cellResolver.GetTenantCellID(ctx, tenantID)
+	if err != nil {
+		h.logger.Warn("admission skipped — the tenant's cell could not be resolved",
+			"error", err, "tenant_id", tenantID)
+		return nil
+	}
+	admitted, retryAfter, code, message, err := h.admission.Check(ctx, cellID, tenantID)
+	if err != nil {
+		h.logger.Warn("admission gate query failed — failing open",
+			"error", err, "tenant_id", tenantID, "cell_id", cellID)
+		return nil
+	}
+	if admitted {
+		return nil
+	}
+	secs := int(retryAfter.Round(time.Second).Seconds())
+	if secs < 1 {
+		secs = 1
+	}
+	return &admissionRefusal{err: loopzeroerrors.NewLoopZeroError(code, message), retryAfterSeconds: secs}
 }
 
 // Get handles GET /api/v1/builds/:id.
@@ -561,7 +535,7 @@ func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
 	// Sprint 6 ADR D3: dispatch wrap-site discriminated *SubmitBuildError
 	// BEFORE the generic catchall. The reason label is the wire form
 	// (Stringer output); the verbatim cause is composed into the user-
-	// facing message via SubmitBuildError.UserError.
+	// facing message via pkg/errors.NewBuildSubmitFailedFromReason.
 	if se, ok := build.AsSubmitBuildError(err); ok {
 		slog.Error("build trigger failed (typed)",
 			"reason", se.Reason.String(),
