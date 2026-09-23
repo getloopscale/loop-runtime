@@ -5,18 +5,21 @@ package tenancy
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"strings"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // TenantK8sEvictor performs the K8s cluster teardown portion of bulk tenant
@@ -26,104 +29,120 @@ import (
 //	step 2: delete mgmt CRs (tenants, environments, loopzeroapplications,
 //	        exposedroutes, applications.argoproj.io)
 //	step 3: force-null finalizers on stuck mgmt CRs (3-pass retry)
-//	step 4: force-finalize runtime namespaces (loopzero-{tenantID}*)
+//	step 4: force-finalize the tenant's runtime namespaces
 //
 // Step 5 (DB cleanup) remains in db.PostgresTenantStore.DeleteTenantsFKOrdered.
 //
-// The evictor is constructed with three kubeconfigs (mgmt, build, runtime)
-// so it works both in-cluster (where mgmt pod mounts all three as Secret
-// projections) and in local dev (where kubectl contexts differ).
+// A resource is in scope ONLY when the identity it carries names one of the
+// evicted tenants exactly (see ownerOf). Tenant IDs are free-form and may be
+// hyphen-extensions of each other ("tn-a", "tn-a-b"), so a resource name is
+// never used as evidence of ownership: every operation here is forced and
+// irreversible, and a prefix match would purge another customer.
 type TenantK8sEvictor struct {
-	mgmtDynamic    dynamic.Interface
-	buildDynamic   dynamic.Interface
-	runtimeTyped   kubernetes.Interface
-	runtimeDynamic dynamic.Interface
-	mgmtNamespace  string
-	buildNamespace string
+	mgmtDynamic        dynamic.Interface
+	buildDynamic       dynamic.Interface
+	runtimeTyped       kubernetes.Interface
+	mgmtNamespace      string
+	buildNamespace     string
+	finalizerPassDelay time.Duration
 }
 
 // Resource types this evictor knows how to purge. Listed in deletion order:
 // ArgoCD Applications first (they reference the other CRs), then the loopzero.io
-// CRs. applications.argoproj.io uses a different group, kept last.
+// CRs.
+var (
+	argoApplicationsGVR = schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "applications"}
+	exposedRoutesGVR    = schema.GroupVersionResource{Group: "loopzero.io", Version: "v1", Resource: "exposedroutes"}
+	loopzeroApplicationsGVR = schema.GroupVersionResource{Group: "loopzero.io", Version: "v1", Resource: "loopzeroapplications"}
+	environmentsGVR     = schema.GroupVersionResource{Group: "loopzero.io", Version: "v1", Resource: "environments"}
+	tenantsGVR          = schema.GroupVersionResource{Group: "loopzero.io", Version: "v1", Resource: "tenants"}
+	argoWorkflowGVR     = schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "workflows"}
+)
+
 var mgmtCRTypes = []schema.GroupVersionResource{
-	{Group: "argoproj.io", Version: "v1alpha1", Resource: "applications"},
-	{Group: "loopzero.io", Version: "v1", Resource: "exposedroutes"},
-	{Group: "loopzero.io", Version: "v1", Resource: "loopzeroapplications"},
-	{Group: "loopzero.io", Version: "v1", Resource: "environments"},
-	{Group: "loopzero.io", Version: "v1", Resource: "tenants"},
+	argoApplicationsGVR, exposedRoutesGVR, loopzeroApplicationsGVR, environmentsGVR, tenantsGVR,
 }
 
-var argoWorkflowGVR = schema.GroupVersionResource{
-	Group:    "argoproj.io",
-	Version:  "v1alpha1",
-	Resource: "workflows",
+const (
+	defaultBuildNamespace     = "argo"
+	defaultFinalizerPassDelay = 3 * time.Second
+	finalizerPasses           = 3
+)
+
+// ClusterAccess names one cluster: the kubeconfig file and the context in it.
+// An empty Kubeconfig means "use in-cluster config".
+type ClusterAccess struct {
+	Kubeconfig string
+	Context    string
+}
+
+// EvictorConfig is the evictor's cluster wiring. Namespaces default to the
+// control-plane namespace (mgmt) and "argo" (build) when empty.
+type EvictorConfig struct {
+	Mgmt, Build, Runtime ClusterAccess
+	MgmtNamespace        string
+	BuildNamespace       string
+}
+
+// evictorClients is the resolved form of EvictorConfig; tests build it from
+// fakes.
+type evictorClients struct {
+	mgmt, build    dynamic.Interface
+	runtime        kubernetes.Interface
+	mgmtNamespace  string
+	buildNamespace string
 }
 
 // NewTenantK8sEvictor builds an evictor with distinct clients per cluster.
-// An empty kubeconfig means "use in-cluster config" — the mgmt pod mounts
-// its own service account; build + runtime require projected kubeconfigs.
-func NewTenantK8sEvictor(
-	mgmtKubeconfig, mgmtContext string,
-	buildKubeconfig, buildContext string,
-	cell0Kubeconfig, runtimeContext string,
-	mgmtNamespace, buildNamespace string,
-) (*TenantK8sEvictor, error) {
-	mgmtDyn, err := newDynamicClient(mgmtKubeconfig, mgmtContext)
+func NewTenantK8sEvictor(cfg EvictorConfig) (*TenantK8sEvictor, error) {
+	mgmtCfg, err := k8s.ExplicitRestConfig(cfg.Mgmt.Kubeconfig, cfg.Mgmt.Context)
 	if err != nil {
 		return nil, fmt.Errorf("mgmt client: %w", err)
 	}
-	buildDyn, err := newDynamicClient(buildKubeconfig, buildContext)
+	mgmtDyn, err := dynamic.NewForConfig(mgmtCfg)
+	if err != nil {
+		return nil, fmt.Errorf("mgmt client: %w", err)
+	}
+	buildCfg, err := k8s.ExplicitRestConfig(cfg.Build.Kubeconfig, cfg.Build.Context)
 	if err != nil {
 		return nil, fmt.Errorf("build client: %w", err)
 	}
-	runtimeTyped, runtimeDyn, err := newDualClient(cell0Kubeconfig, runtimeContext)
+	buildDyn, err := dynamic.NewForConfig(buildCfg)
+	if err != nil {
+		return nil, fmt.Errorf("build client: %w", err)
+	}
+	runtimeCfg, err := k8s.ExplicitRestConfig(cfg.Runtime.Kubeconfig, cfg.Runtime.Context)
 	if err != nil {
 		return nil, fmt.Errorf("runtime client: %w", err)
 	}
-	if mgmtNamespace == "" {
-		mgmtNamespace = "loopzero-system"
+	runtimeTyped, err := kubernetes.NewForConfig(runtimeCfg)
+	if err != nil {
+		return nil, fmt.Errorf("runtime client: %w", err)
 	}
-	if buildNamespace == "" {
-		buildNamespace = "argo"
+	e := newTenantK8sEvictorFromClients(evictorClients{
+		mgmt: mgmtDyn, build: buildDyn, runtime: runtimeTyped,
+		mgmtNamespace: cfg.MgmtNamespace, buildNamespace: cfg.BuildNamespace,
+	})
+	e.finalizerPassDelay = defaultFinalizerPassDelay
+	return e, nil
+}
+
+func newTenantK8sEvictorFromClients(c evictorClients) *TenantK8sEvictor {
+	mgmtNS := c.mgmtNamespace
+	if mgmtNS == "" {
+		mgmtNS = k8s.ControlPlaneNamespace
+	}
+	buildNS := c.buildNamespace
+	if buildNS == "" {
+		buildNS = defaultBuildNamespace
 	}
 	return &TenantK8sEvictor{
-		mgmtDynamic:    mgmtDyn,
-		buildDynamic:   buildDyn,
-		runtimeTyped:   runtimeTyped,
-		runtimeDynamic: runtimeDyn,
-		mgmtNamespace:  mgmtNamespace,
-		buildNamespace: buildNamespace,
-	}, nil
-}
-
-func newDynamicClient(kubeconfig, kubeContext string) (dynamic.Interface, error) {
-	cfg, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig},
-		&clientcmd.ConfigOverrides{CurrentContext: kubeContext},
-	).ClientConfig()
-	if err != nil {
-		return nil, err
+		mgmtDynamic:    c.mgmt,
+		buildDynamic:   c.build,
+		runtimeTyped:   c.runtime,
+		mgmtNamespace:  mgmtNS,
+		buildNamespace: buildNS,
 	}
-	return dynamic.NewForConfig(cfg)
-}
-
-func newDualClient(kubeconfig, kubeContext string) (kubernetes.Interface, dynamic.Interface, error) {
-	cfg, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig},
-		&clientcmd.ConfigOverrides{CurrentContext: kubeContext},
-	).ClientConfig()
-	if err != nil {
-		return nil, nil, err
-	}
-	typed, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	dyn, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	return typed, dyn, nil
 }
 
 // K8sEvictionCounts records what was purged per cluster. All fields are
@@ -136,106 +155,175 @@ type K8sEvictionCounts struct {
 	NamespacesFinalized  int `json:"namespaces_finalized"`
 }
 
-// EvictTenantsFromClusters purges K8s resources for the given tenant IDs.
-// Mirrors steps 1-4 of tools/admin-evict-tenants.sh. The tenantIDs list is
-// used as an exact-match prefix filter — all resources whose name has any
-// tenantID as prefix are considered in scope.
+// EvictTenantsFromClusters purges K8s resources owned by the given tenant IDs.
 //
-// The method is idempotent and safe to re-run. Errors in individual resources
-// are logged but do not abort the overall eviction (the bash script uses
-// `|| true` liberally for the same reason — stuck resources shouldn't block
-// cleanup of the rest).
+// A failure on one resource does not stop the purge of the others — stuck
+// resources must not block cleanup of the rest, and every operation is
+// idempotent — but every such failure is collected and returned, naming the
+// resource. A nil error therefore means every in-scope resource was handled;
+// the caller must not proceed to DB cleanup otherwise.
 //
 // Order:
 //  1. Delete Argo workflows in build cluster (grace-period=0)
 //  2. Delete mgmt CRs (triggers operator reconcileDelete)
-//  3. Force-null finalizers (3 passes, 3s between) for stuck CRs
-//  4. Force-finalize runtime namespaces stuck Terminating
+//  3. Force-null finalizers (3 passes) for stuck CRs
+//  4. Force-finalize the tenants' runtime namespaces stuck Terminating
 func (e *TenantK8sEvictor) EvictTenantsFromClusters(ctx context.Context, tenantIDs []string) (K8sEvictionCounts, error) {
 	var counts K8sEvictionCounts
 	if len(tenantIDs) == 0 {
 		return counts, nil
 	}
+	scope := newTenantSet(tenantIDs)
+	var failures []error
 
-	// Step 1: Argo workflows (build cluster).
-	wfCount, err := e.deleteMatchingResources(ctx, e.buildDynamic, argoWorkflowGVR, e.buildNamespace, tenantIDs)
+	wfCount, errs, err := e.deleteOwnedResources(ctx, e.buildDynamic, argoWorkflowGVR, e.buildNamespace, scope)
 	if err != nil {
 		return counts, fmt.Errorf("step 1 argo wf: %w", err)
 	}
 	counts.ArgoWorkflowsDeleted = wfCount
+	failures = append(failures, errs...)
 
-	// Step 2: mgmt CRs.
 	for _, gvr := range mgmtCRTypes {
-		n, err := e.deleteMatchingResources(ctx, e.mgmtDynamic, gvr, e.mgmtNamespace, tenantIDs)
+		n, errs, err := e.deleteOwnedResources(ctx, e.mgmtDynamic, gvr, e.mgmtNamespace, scope)
 		if err != nil {
 			return counts, fmt.Errorf("step 2 %s: %w", gvr.Resource, err)
 		}
 		counts.MgmtCRsDeleted += n
+		failures = append(failures, errs...)
 	}
 
-	// Step 3: force-null finalizers (3 passes).
-	for i := 0; i < 3; i++ {
-		for _, gvr := range mgmtCRTypes {
-			n, err := e.forceNullFinalizers(ctx, e.mgmtDynamic, gvr, e.mgmtNamespace, tenantIDs)
-			if err != nil {
-				return counts, fmt.Errorf("step 3 pass %d %s: %w", i+1, gvr.Resource, err)
-			}
-			counts.FinalizersCleared += n
-		}
-		if i < 2 {
-			select {
-			case <-time.After(3 * time.Second):
-			case <-ctx.Done():
-				return counts, ctx.Err()
-			}
-		}
+	cleared, errs, err := e.clearFinalizersInPasses(ctx, scope)
+	counts.FinalizersCleared = cleared
+	if err != nil {
+		return counts, err
 	}
+	failures = append(failures, errs...)
 
-	// Step 4: force-finalize runtime namespaces.
-	nsCount, err := e.forceFinalizeRuntimeNamespaces(ctx, tenantIDs)
+	nsCount, errs, err := e.forceFinalizeRuntimeNamespaces(ctx, scope)
 	if err != nil {
 		return counts, fmt.Errorf("step 4 namespaces: %w", err)
 	}
 	counts.NamespacesFinalized = nsCount
+	failures = append(failures, errs...)
 
+	if len(failures) > 0 {
+		return counts, fmt.Errorf("tenant eviction incomplete (%d resource operations failed): %w",
+			len(failures), errors.Join(failures...))
+	}
 	return counts, nil
 }
 
-// hasTenantPrefix returns true if name starts with any tenantID prefix.
-// Matches the bash script's `grep "$RES_PREFIX"` behavior (prefix match on
-// resource name, where resource names typically embed the tenant ID).
-func hasTenantPrefix(name string, tenantIDs []string) bool {
-	for _, id := range tenantIDs {
-		if strings.HasPrefix(name, id) {
-			return true
+// clearFinalizersInPasses runs forceNullFinalizers over every mgmt CR type
+// finalizerPasses times. Only the last pass's per-resource failures are
+// reported: an earlier failure the next pass cleared is not a failure.
+func (e *TenantK8sEvictor) clearFinalizersInPasses(ctx context.Context, scope tenantSet) (int, []error, error) {
+	cleared := 0
+	var lastPass []error
+	for pass := 1; pass <= finalizerPasses; pass++ {
+		lastPass = nil
+		for _, gvr := range mgmtCRTypes {
+			n, errs, err := e.forceNullFinalizers(ctx, e.mgmtDynamic, gvr, e.mgmtNamespace, scope)
+			if err != nil {
+				return cleared, nil, fmt.Errorf("step 3 pass %d %s: %w", pass, gvr.Resource, err)
+			}
+			cleared += n
+			lastPass = append(lastPass, errs...)
+		}
+		if pass < finalizerPasses {
+			if err := e.waitBetweenPasses(ctx); err != nil {
+				return cleared, nil, err
+			}
 		}
 	}
-	return false
+	return cleared, lastPass, nil
 }
 
-// runtimeNamespaceMatches returns true if a namespace name matches the
-// runtime convention `loopzero-{tenantID}...`. Runtime per-env namespaces are
-// named after the tenant ID + environment, so a tenant prefix check works.
-func runtimeNamespaceMatches(ns string, tenantIDs []string) bool {
-	const prefix = "loopzero-"
-	if !strings.HasPrefix(ns, prefix) {
+func (e *TenantK8sEvictor) waitBetweenPasses(ctx context.Context) error {
+	if e.finalizerPassDelay <= 0 {
+		return ctx.Err()
+	}
+	timer := time.NewTimer(e.finalizerPassDelay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// tenantSet is the exact set of tenant IDs being evicted.
+type tenantSet map[string]struct{}
+
+func newTenantSet(ids []string) tenantSet {
+	s := make(tenantSet, len(ids))
+	for _, id := range ids {
+		if id != "" {
+			s[id] = struct{}{}
+		}
+	}
+	return s
+}
+
+func (s tenantSet) owns(tenantID string) bool {
+	if tenantID == "" {
 		return false
 	}
-	return hasTenantPrefix(strings.TrimPrefix(ns, prefix), tenantIDs)
+	_, ok := s[tenantID]
+	return ok
 }
 
-// deleteMatchingResources lists resources in ns, filters by tenant prefix,
-// and deletes each with grace=0. Returns count of delete calls issued (not
-// rows actually gone — K8s may keep finalizer-blocked objects around).
-func (e *TenantK8sEvictor) deleteMatchingResources(
-	ctx context.Context, client dynamic.Interface, gvr schema.GroupVersionResource, ns string, tenantIDs []string,
-) (int, error) {
+// ownerOf returns the tenant ID a resource belongs to, read from the identity
+// the platform writes on it: the Tenant CR is named after its tenant, an
+// Environment carries spec.tenantRef.name, and every other kind carries the
+// loopzero.io/tenant label. It returns "" when the resource carries no identity —
+// such a resource is never evicted.
+func ownerOf(gvr schema.GroupVersionResource, obj *unstructured.Unstructured) string {
+	switch gvr {
+	case tenantsGVR:
+		return obj.GetName()
+	case environmentsGVR:
+		ref, _, _ := unstructured.NestedString(obj.Object, "spec", "tenantRef", "name")
+		return ref
+	default:
+		return obj.GetLabels()[naming.LabelTenant]
+	}
+}
+
+func resourceRef(gvr schema.GroupVersionResource, ns, name string) string {
+	return fmt.Sprintf("%s %s/%s", gvr.Resource, ns, name)
+}
+
+// ownedResources lists gvr in ns and keeps the items owned by a tenant in
+// scope. A missing resource type (CRD not installed) is an empty list.
+func ownedResources(
+	ctx context.Context, client dynamic.Interface, gvr schema.GroupVersionResource, ns string, scope tenantSet,
+) ([]unstructured.Unstructured, error) {
 	list, err := client.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return 0, nil
+			return nil, nil
 		}
-		return 0, fmt.Errorf("list %s: %w", gvr.Resource, err)
+		return nil, fmt.Errorf("list %s: %w", gvr.Resource, err)
+	}
+	var owned []unstructured.Unstructured
+	for _, item := range list.Items {
+		if scope.owns(ownerOf(gvr, &item)) {
+			owned = append(owned, item)
+		}
+	}
+	return owned, nil
+}
+
+// deleteOwnedResources deletes each in-scope resource with grace=0. It returns
+// the number of delete calls that succeeded and one error per resource that
+// could not be deleted; the third return is a failure to list at all.
+func (e *TenantK8sEvictor) deleteOwnedResources(
+	ctx context.Context, client dynamic.Interface, gvr schema.GroupVersionResource, ns string, scope tenantSet,
+) (int, []error, error) {
+	owned, err := ownedResources(ctx, client, gvr, ns, scope)
+	if err != nil {
+		return 0, nil, err
 	}
 	// Ownership, declared: this is the ONE path where the api removes an ArgoCD
 	// Application, and it is not spec authorship — it deletes the whole resource on
@@ -248,94 +336,79 @@ func (e *TenantK8sEvictor) deleteMatchingResources(
 	zero := int64(0)
 	policy := metav1.DeletePropagationBackground
 	deleted := 0
-	for _, item := range list.Items {
-		name := item.GetName()
-		if !hasTenantPrefix(name, tenantIDs) {
-			continue
-		}
-		err := client.Resource(gvr).Namespace(ns).Delete(ctx, name, metav1.DeleteOptions{
+	var failures []error
+	for _, item := range owned {
+		err := client.Resource(gvr).Namespace(ns).Delete(ctx, item.GetName(), metav1.DeleteOptions{
 			GracePeriodSeconds: &zero,
 			PropagationPolicy:  &policy,
 		})
 		if err != nil && !k8serrors.IsNotFound(err) {
-			// Don't abort — mirror bash's `|| true`. Finalizer-blocked
-			// objects come back in the next pass via forceNullFinalizers.
+			failures = append(failures, fmt.Errorf("delete %s: %w", resourceRef(gvr, ns, item.GetName()), err))
 			continue
 		}
 		deleted++
 	}
-	return deleted, nil
+	return deleted, failures, nil
 }
 
-// forceNullFinalizers patches finalizers to [] on stuck resources. Uses a
-// JSON-merge-patch rather than strategic-merge because unstructured CRDs
-// don't have strategic-merge schema registered.
+// forceNullFinalizers patches finalizers to null on in-scope resources that
+// still carry any. Uses a JSON-merge-patch rather than strategic-merge because
+// unstructured CRDs don't have strategic-merge schema registered.
 func (e *TenantK8sEvictor) forceNullFinalizers(
-	ctx context.Context, client dynamic.Interface, gvr schema.GroupVersionResource, ns string, tenantIDs []string,
-) (int, error) {
-	list, err := client.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{})
+	ctx context.Context, client dynamic.Interface, gvr schema.GroupVersionResource, ns string, scope tenantSet,
+) (int, []error, error) {
+	owned, err := ownedResources(ctx, client, gvr, ns, scope)
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("list for finalizer clear %s: %w", gvr.Resource, err)
+		return 0, nil, fmt.Errorf("finalizer clear: %w", err)
 	}
 	cleared := 0
+	var failures []error
 	patch := []byte(`{"metadata":{"finalizers":null}}`)
-	for _, item := range list.Items {
-		name := item.GetName()
-		if !hasTenantPrefix(name, tenantIDs) {
+	for _, item := range owned {
+		if len(item.GetFinalizers()) == 0 {
 			continue
 		}
-		finalizers := item.GetFinalizers()
-		if len(finalizers) == 0 {
+		_, err := client.Resource(gvr).Namespace(ns).Patch(ctx, item.GetName(), types.MergePatchType, patch, metav1.PatchOptions{})
+		if err != nil {
+			if !k8serrors.IsNotFound(err) {
+				failures = append(failures, fmt.Errorf("clear finalizers on %s: %w", resourceRef(gvr, ns, item.GetName()), err))
+			}
 			continue
 		}
-		_, err := client.Resource(gvr).Namespace(ns).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
-		if err == nil {
-			cleared++
-		}
+		cleared++
 	}
-	return cleared, nil
+	return cleared, failures, nil
 }
 
 // forceFinalizeRuntimeNamespaces is the runtime cluster equivalent of
-// `kubectl replace --raw /api/v1/namespaces/{name}/finalize` from the bash
-// script. Stuck-Terminating namespaces don't release until their .spec.finalizers
-// is emptied via the finalize subresource — this cannot be done through the
-// normal Patch/Update API.
-func (e *TenantK8sEvictor) forceFinalizeRuntimeNamespaces(ctx context.Context, tenantIDs []string) (int, error) {
+// `kubectl replace --raw /api/v1/namespaces/{name}/finalize`. Stuck-Terminating
+// namespaces don't release until their .spec.finalizers is emptied via the
+// finalize subresource — this cannot be done through the normal Patch/Update
+// API. Namespaces are selected by the loopzero.io/tenant label the environment
+// controller writes on them.
+func (e *TenantK8sEvictor) forceFinalizeRuntimeNamespaces(ctx context.Context, scope tenantSet) (int, []error, error) {
 	list, err := e.runtimeTyped.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return 0, fmt.Errorf("list namespaces: %w", err)
+		return 0, nil, fmt.Errorf("list namespaces: %w", err)
 	}
 	finalized := 0
-	for _, ns := range list.Items {
-		if !runtimeNamespaceMatches(ns.Name, tenantIDs) {
+	var failures []error
+	for i := range list.Items {
+		ns := &list.Items[i]
+		if !scope.owns(ns.Labels[naming.LabelTenant]) {
 			continue
 		}
-		if ns.Status.Phase != "Terminating" && len(ns.Spec.Finalizers) == 0 {
-			// Namespace is either healthy or already done — skip.
+		if ns.Status.Phase != corev1.NamespaceTerminating && len(ns.Spec.Finalizers) == 0 {
 			continue
 		}
-		// Fetch current state + clear spec.finalizers via the /finalize
-		// subresource. Use a raw PUT so we hit the correct endpoint.
-		current, err := e.runtimeTyped.CoreV1().Namespaces().Get(ctx, ns.Name, metav1.GetOptions{})
-		if err != nil {
+		ns.Spec.Finalizers = nil
+		if _, err := e.runtimeTyped.CoreV1().Namespaces().Finalize(ctx, ns, metav1.UpdateOptions{}); err != nil {
+			if !k8serrors.IsNotFound(err) {
+				failures = append(failures, fmt.Errorf("finalize namespace %s: %w", ns.Name, err))
+			}
 			continue
 		}
-		current.Spec.Finalizers = nil
-		body, err := json.Marshal(current)
-		if err != nil {
-			continue
-		}
-		_, err = e.runtimeTyped.CoreV1().RESTClient().Put().
-			AbsPath("/api/v1/namespaces", ns.Name, "finalize").
-			Body(body).
-			DoRaw(ctx)
-		if err == nil {
-			finalized++
-		}
+		finalized++
 	}
-	return finalized, nil
+	return finalized, failures, nil
 }

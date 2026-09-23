@@ -37,12 +37,12 @@ func buildAdminEvictor(cfg config.Config, dbAdapter *db.PgxAdapter) admin.Tenant
 	store := store.NewTenantStoreSqlc(dbAdapter)
 	dbDeleter := &adapters.TenantDBDeleterAdapter{Store: store}
 
-	k8sEv, err := tenancy.NewTenantK8sEvictor(
-		cfg.MgmtKubeconfig, cfg.MgmtKubeContext,
-		cfg.BuildKubeconfig, cfg.BuildKubeContext,
-		cfg.RuntimeKubeconfig, cfg.RuntimeKubeContext,
-		"", "", // default namespaces (loopzero-system, argo)
-	)
+	k8sEv, err := tenancy.NewTenantK8sEvictor(tenancy.EvictorConfig{
+		Mgmt:    tenancy.ClusterAccess{Kubeconfig: cfg.MgmtKubeconfig, Context: cfg.MgmtKubeContext},
+		Build:   tenancy.ClusterAccess{Kubeconfig: cfg.BuildKubeconfig, Context: cfg.BuildKubeContext},
+		Runtime: tenancy.ClusterAccess{Kubeconfig: cfg.RuntimeKubeconfig, Context: cfg.RuntimeKubeContext},
+		// Namespaces default to the control-plane namespace and "argo".
+	})
 	if err != nil {
 		slog.Warn("admin evict: K8s teardown disabled — falling back to DB-only",
 			"error", err.Error(),

@@ -33,6 +33,16 @@ func RestConfig(kubeconfig, kubeContext string) (*rest.Config, error) {
 	if cfg, err := rest.InClusterConfig(); err == nil {
 		return cfg, nil
 	}
+	return ExplicitRestConfig(kubeconfig, kubeContext)
+}
+
+// ExplicitRestConfig resolves a *rest.Config from the given kubeconfig file and
+// context, WITHOUT preferring the in-cluster config. Use it for a cluster the
+// API does not run in (build, runtime cells): RestConfig would silently return
+// the cluster the pod runs in. An empty kubeconfig with no other configuration
+// falls back to in-cluster, which is clientcmd's own behaviour for an empty
+// config.
+func ExplicitRestConfig(kubeconfig, kubeContext string) (*rest.Config, error) {
 	loadingRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig}
 	overrides := &clientcmd.ConfigOverrides{}
 	if kubeContext != "" {
