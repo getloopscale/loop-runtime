@@ -1,9 +1,6 @@
 # loopzero-admission-policies values.yaml
 # Aligned with infra/helm/admission-policies (CH-G09 + CH-G11 fix per T1.2 + ADR-0040).
 
-# Domain used to derive Harbor registry hostname.
-domain: dev.loopzero.example
-
 # Approved registry prefixes used by ClusterImagePolicy and the
 # restrict-registries VAP.
 registries:
@@ -120,10 +117,3 @@ alerts:
 
 # T1.2.b of plan 2026-05-27-tenant-build-pipeline-gaps-closure
 tufRootCeremonyDate: ""
-
-# Default namespace selector for VAPBindings (applies to all except system namespaces).
-namespaceSelector:
-  matchExpressions:
-    - key: kubernetes.io/metadata.name
-      operator: NotIn
-      values: ["kube-system", "kube-public"]

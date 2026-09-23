@@ -8,41 +8,11 @@ images:
 # Must match SOURCE_BUCKET env var in loopzero-api and the bucket created by Pulumi.
 sourceBucket: "loopzero-builds"
 
-controller:
-  securityContext:
-    runAsNonRoot: true
-  # Parallelism limits to prevent scheduler pressure under high concurrency.
-  # workflowWorkers: max concurrent workflow reconciliations.
-  # podWorkers: max concurrent pod reconciliations.
-  # These prevent 100 simultaneous builds from overwhelming the build cluster.
-  workflowWorkers: 32
-  podWorkers: 32
-  livenessProbe:
-    httpGet:
-      path: /healthz
-      port: 6060
-    initialDelaySeconds: 30
-    periodSeconds: 30
-  readinessProbe:
-    httpGet:
-      path: /healthz
-      port: 6060
-    initialDelaySeconds: 10
-    periodSeconds: 15
-  # REVIEW-MOD-1: Increased from 500m/256Mi to 2/1Gi. With 32 workflowWorkers
-  # and 50+ concurrent builds (each generating ~8 pods), the controller needs
-  # headroom for workflow reconciliation, pod scheduling, and CRD watch events.
-  resources:
-    limits:
-      cpu: "2"
-      memory: "1Gi"
-    requests:
-      cpu: "500m"
-      memory: "512Mi"
-  metricsConfig:
-    enabled: true
-    port: 9090
-    path: /metrics
+# The Argo Workflows controller, server and workflow defaults (parallelism, probes,
+# podGC, volumeClaimGC) are configured where that chart is installed:
+# infra/helm/argo-workflows/values.yaml. This chart only ships the
+# ClusterWorkflowTemplates and the workflow ServiceAccount; keys for the controller
+# here were never read by any template.
 
 # Workflow execution ServiceAccount and RBAC.
 # The WorkflowTemplate (loopzero-build-nodejs-v1) specifies serviceAccountName: loopzero-build-sa.
@@ -71,43 +41,3 @@ minio:
   # CWTs consume by reference (envFrom secretRef). Must provide the keys in SECRETS.md.
   # Default preserves legacy behavior. See SECRETS.md + examples/eso-minio.yaml.
   existingSecret: "loopzero-minio-credentials"
-
-# Pod retention for log collection — Promtail needs time to ship logs to Loki
-# before pods are garbage collected. 4h is sufficient for all build durations.
-workflowDefaults:
-  spec:
-    podGC:
-      strategy: OnWorkflowCompletion
-      deleteDelayDuration: 4h
-    # P1-6: Auto-delete PVCs from completed/failed workflows.
-    # Without this, workspace PVCs accumulate from failed builds (audit: 4x 20Gi orphaned).
-    volumeClaimGC:
-      strategy: OnWorkflowCompletion
-
-server:
-  securityContext:
-    runAsNonRoot: true
-  livenessProbe:
-    httpGet:
-      path: /
-      port: 2746
-    initialDelaySeconds: 10
-    periodSeconds: 20
-  readinessProbe:
-    httpGet:
-      path: /
-      port: 2746
-    initialDelaySeconds: 10
-    periodSeconds: 20
-  resources:
-    limits:
-      cpu: "200m"
-      memory: "128Mi"
-    requests:
-      cpu: "50m"
-      memory: "64Mi"
-  # REVIEW-SEC: Changed from NodePort to ClusterIP. The Argo Server UI gives
-  # full admin access to all workflows. Use `kubectl port-forward` when needed.
-  # Previously exposed on NodePort 30081 which was accessible to any host process.
-  service:
-    type: ClusterIP

@@ -91,16 +91,6 @@
         }
       }
     },
-    "annotations": {
-      "type": "object"
-    },
-    "labels": {
-      "type": "object"
-    },
-    "keep": {
-      "type": "boolean",
-      "description": "Whether to retain CRDs on chart uninstall (helm.sh/resource-policy: keep)"
-    },
     "controllerGenVersion": {
       "type": "string"
     },

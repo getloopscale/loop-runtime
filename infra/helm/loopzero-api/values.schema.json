@@ -21,27 +21,32 @@
     },
     "kubeContexts": {
       "type": "object",
-      "description": "Per-cluster kubectl context names. loopzero-api consumes these to resolve target cluster for kubectl-driven operations (mgmt CR reconcile, build cluster Argo Workflow submission, runtime cluster manifest apply).",
+      "description": "Per-cluster kubectl context names, one per cluster loopzero-api drives: core (its own CR reconcile), build (Argo Workflow submission), cell0 (runtime manifest apply). \"in-cluster\" uses the pod's own ServiceAccount.",
       "properties": {
-        "mgmt":    { "type": "string", "minLength": 1 },
-        "build":   { "type": "string", "minLength": 1 },
-        "runtime": { "type": "string", "minLength": 1 }
-      }
+        "core": {
+          "type": "string",
+          "minLength": 1
+        },
+        "build": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cell0": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
     },
     "env": {
       "type": "object",
       "description": "Plain-text env vars passed to loopzero-api Deployment (NOT secrets — those go via envFrom Secrets).",
       "additionalProperties": true
     },
-    "replicas": {
-      "type": "object",
-      "properties": {
-        "api": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "loopzero-api replica count. Default 1 (standalone). Drill/prod typically 2 for HA + leader election (Bug #18 fix 2026-05-17)."
-        }
-      }
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "loopzero-api replica count. The Helmfile release sets it from the environment's `replicas.api`; 2+ gives HA with leader election (Bug #18 fix 2026-05-17)."
     }
   },
   "additionalProperties": true
