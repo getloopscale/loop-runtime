@@ -143,14 +143,13 @@ type Outcome struct {
 	Violations []string
 }
 
-// Pass reports whether the contract was CHECKED and holds.
+// Pass reports a check that HAPPENED and found nothing wrong.
 //
 // It is deliberately a method and not a field. The defect this package was
 // rewritten for was one struct literal -- `Outcome{Pass: true, Skipped: true}`
 // -- which let "there was nothing to check" be read downstream as "checked and
-// fine". Derived from Checked, that literal cannot be written: no caller can
-// claim a pass for a scan that did not happen.
-// Pass reports a check that HAPPENED and found nothing wrong.
+// fine". Derived from what was read, that literal cannot be written: no caller
+// can claim a pass for a scan that did not happen.
 //
 // `Checked` alone is not that. It becomes true when a directory is located, before
 // a file is opened, so a subject that exists and yields nothing scored a pass over
@@ -372,7 +371,7 @@ func isExcludedFile(root, path string) bool {
 	}
 	rel = "/" + filepath.ToSlash(rel)
 	return strings.Contains(rel, ".test.") || strings.Contains(rel, ".spec.") ||
-		strings.Contains(path, "/__tests__/") || strings.Contains(rel, "/node_modules/")
+		strings.Contains(rel, "/__tests__/") || strings.Contains(rel, "/node_modules/")
 }
 
 // scanFile reads one file and reports out-of-contract exits, naming the path

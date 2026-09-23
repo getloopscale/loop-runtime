@@ -59,3 +59,19 @@ func TestTheFileLevelExemptionStillHolds(t *testing.T) {
 		t.Fatalf("exactly the one real source file should be read; got %d", o.ScannedFiles)
 	}
 }
+
+// The __tests__ exemption had the same defect as the other three rules: it
+// matched the ABSOLUTE path, so a checkout sitting under any __tests__
+// directory was skipped whole.
+func TestAParentDirectoryNamedTestsDoesNotSilenceTheTree(t *testing.T) {
+	root := t.TempDir()
+	cli := filepath.Join(root, "__tests__", "loopzero-cli")
+	write(t, cli, "src/main.ts", "process.exit(9)\n")
+
+	o := check(t, Config{RepoRoot: root, CLIRoot: cli})
+
+	if o.ScannedFiles != 1 || len(o.Violations) != 1 {
+		t.Fatalf("a parent directory named __tests__ excluded the file; ScannedFiles=%d violations=%v",
+			o.ScannedFiles, o.Violations)
+	}
+}

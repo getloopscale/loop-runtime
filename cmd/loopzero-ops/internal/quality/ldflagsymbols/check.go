@@ -159,6 +159,20 @@ func resolve(mods []module, root, importPath string) (string, string) {
 		"confira a org e o nome do módulo em go.mod")
 }
 
+// isStringSpec reports whether the i-th name of vs is a string variable:
+// declared `string`, or untyped and initialized with a string literal.
+func isStringSpec(vs *ast.ValueSpec, i int) bool {
+	if vs.Type != nil {
+		id, ok := vs.Type.(*ast.Ident)
+		return ok && id.Name == "string"
+	}
+	if i >= len(vs.Values) {
+		return false
+	}
+	lit, ok := vs.Values[i].(*ast.BasicLit)
+	return ok && lit.Kind == token.STRING
+}
+
 // packageHasStringVar reports whether dir declares symbol as a top-level var,
 // and separately whether dir holds a Go package at all.
 //
@@ -196,8 +210,8 @@ func packageHasStringVar(dir, symbol string) (hasSymbol, isPackage bool, err err
 				if !ok {
 					continue
 				}
-				for _, name := range vs.Names {
-					if name.Name == symbol {
+				for i, name := range vs.Names {
+					if name.Name == symbol && isStringSpec(vs, i) {
 						return true, true, nil
 					}
 				}
