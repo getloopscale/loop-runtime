@@ -101,72 +101,32 @@ func (cb *CircuitBreakerSyncClient) WaitForSync(ctx context.Context, appName str
 	return err
 }
 
-// GetAppStatus delegates to the inner SyncClient.
-// Read-only operation — no circuit breaker needed (does not mutate state).
-// Required so that the ReleaseConvergenceLoop type assertion succeeds
-// when the SyncClient is wrapped by the circuit breaker (AUDIT-2026-03-28).
+// GetAppStatus delegates to the inner SyncClient. Read-only, so it bypasses the
+// breaker: a status poll does not mutate ArgoCD and must keep working while the
+// circuit is open.
 func (cb *CircuitBreakerSyncClient) GetAppStatus(ctx context.Context, appName string, deployedApps []string) (bool, bool, error) {
-	type statusChecker interface {
-		GetAppStatus(ctx context.Context, appName string, deployedApps []string) (bool, bool, error)
-	}
-	if checker, ok := cb.inner.(statusChecker); ok {
-		return checker.GetAppStatus(ctx, appName, deployedApps)
-	}
-	return false, false, nil
+	return cb.inner.GetAppStatus(ctx, appName, deployedApps)
 }
 
-// TerminateOperation delegates to the inner SyncClient.
-// Required so that the ReleaseConvergenceLoop type assertion succeeds
-// when the SyncClient is wrapped by the circuit breaker (MEET-2026-03-29-019).
+// TerminateOperation delegates to the inner SyncClient. It bypasses the breaker
+// because it is a recovery path: freeing a stuck operation is exactly what must
+// still run while syncs are failing (MEET-2026-03-29-019).
 func (cb *CircuitBreakerSyncClient) TerminateOperation(ctx context.Context, appName string) error {
-	type terminator interface {
-		TerminateOperation(ctx context.Context, appName string) error
-	}
-	if t, ok := cb.inner.(terminator); ok {
-		return t.TerminateOperation(ctx, appName)
-	}
-	return nil
+	return cb.inner.TerminateOperation(ctx, appName)
 }
 
-// ForceReconcile delegates to the inner SyncClient.
-// V9 L22 fix 2026-05-31: ReleaseConvergenceLoop performs a type assertion
-// `r.sync_.(forceReconciler)` to call ForceReconcile when retriggerSync has
-// exhausted (counter >= maxSyncRetriggers) AND the release has been stuck
-// for >2min. Without this wrapper method the assertion FAILS silently — the
-// inner *argocd.SyncClient has the method but `cb.inner` is typed as the
-// SyncClient interface (only TriggerSync + WaitForSync). The L22 escalation
-// path was a no-op for all wrapped sync clients, which is the actual
-// production wiring (workflows.SyncClient is *CircuitBreakerSyncClient per
-// setup_workflows.go). Discovered LIVE in cleanroom-fresh dogfood 2026-05-31:
-// J04 Scale release rel-30b7cc1ae4556e55 hit max retriggers + sync_timeout
-// without L22 ever firing.
-//
-// Like the other delegating methods, this re-asserts the interface on the
-// inner client so it works whether the inner is a real *argocd.SyncClient
-// or another wrapper. No circuit-breaker pre-check: ForceReconcile is a
-// recovery path; we want it to run even when the breaker is half-open.
+// ForceReconcile delegates to the inner SyncClient. It bypasses the breaker for
+// the same reason as TerminateOperation: it is the convergence loop's L22
+// recovery for a controller whose workqueue stalled, and it must run even when
+// the breaker is half-open.
 func (cb *CircuitBreakerSyncClient) ForceReconcile(ctx context.Context, appName string) error {
-	type forceReconciler interface {
-		ForceReconcile(ctx context.Context, appName string) error
-	}
-	if fr, ok := cb.inner.(forceReconciler); ok {
-		return fr.ForceReconcile(ctx, appName)
-	}
-	return nil
+	return cb.inner.ForceReconcile(ctx, appName)
 }
 
-// GetSyncRevision delegates to the inner SyncClient.
-// Read-only operation — no circuit breaker needed.
-// Required so that the commit SHA verification type assertion succeeds
-// when the SyncClient is wrapped by the circuit breaker (AUDIT-2026-03-28).
+// GetSyncRevision delegates to the inner SyncClient. Read-only, so it bypasses
+// the breaker.
 func (cb *CircuitBreakerSyncClient) GetSyncRevision(ctx context.Context, appName string) (string, error) {
-	type revisionChecker interface {
-		GetSyncRevision(ctx context.Context, appName string) (string, error)
-	}
-	if checker, ok := cb.inner.(revisionChecker); ok {
-		return checker.GetSyncRevision(ctx, appName)
-	}
-	return "", nil
+	return cb.inner.GetSyncRevision(ctx, appName)
 }
 
 // preCheck evaluates the circuit state. Returns ErrPlatformDegraded if the
