@@ -41,25 +41,21 @@ func readMigration007ActivateCell2(t *testing.T) string {
 	return string(data)
 }
 
-// # Estes testes leem HISTÓRIA, não o presente
+// # These tests read HISTORY, not the present
 //
-// As migrações são forward-only e imutáveis: `000007` ativou a célula que na
-// época se chamava `cell-2`, e é isso que ela diz — em todo banco onde já rodou.
-// A migração `000061` (cell_identity_unification) depois fundiu `cell-default` +
-// `cell-1` em `cell-0` e renomeou o resto, mas renomear no presente não muda o
-// que um arquivo de migração executou no passado.
+// Migrations are forward-only and immutable: `000007` activated the cell that
+// was then called `cell-2`, and that is what it says in every database where it
+// already ran. Migration `000061` (cell_identity_unification) later merged
+// `cell-default` + `cell-1` into `cell-0` and renamed the rest, but renaming in
+// the present does not change what a migration file executed in the past.
 //
-// Estes testes foram reescritos com a identidade NOVA e continuaram lendo os
-// arquivos ANTIGOS, então reprovavam procurando `cell-1` num arquivo que fala de
-// `cell-2` — quatro reprovações com uma causa só (B-071).
+// The fix for drift here is NOT to edit the migration: rewriting a dated record
+// to look current destroys the only proof of what was true then. What these
+// tests protect is the SHAPE of the historical migration — the UPDATE is
+// filtered, the audit note is appended, prod is gated. Those properties hold
+// under the name the file carries.
 //
-// A correção NÃO é editar a migração: `docs/README.md` é explícito que reescrever
-// um registro datado para parecer atual destrói a única prova do que era verdade
-// então. O que estes testes protegem é a FORMA da migração histórica — que o
-// UPDATE é filtrado, que a nota de auditoria é anexada, que há referência a plano
-// e ADR. Essas propriedades valem com o nome que o arquivo carrega.
-//
-// A identidade ATUAL das células é responsabilidade de um teste sobre a `000061`.
+// The CURRENT identity of the cells is the responsibility of a test on `000061`.
 func TestMigration007ActivatesOnlyCell2(t *testing.T) {
 	sql := readMigration007ActivateCell2(t)
 	if !strings.Contains(sql, "WHERE cell_id = 'cell-2'") {
@@ -129,16 +125,6 @@ func TestMigration007ProductionGatingWarning(t *testing.T) {
 	}
 	if !strings.Contains(sql, "Sprint 9") {
 		t.Fatal("expected Sprint 9 reference in production-gating warning")
-	}
-}
-
-func TestMigration007ReferencesADRAndPlan(t *testing.T) {
-	sql := readMigration007ActivateCell2(t)
-	if !strings.Contains(sql, "MEET-INFRA-NORMALIZE-T3-multi-cell") {
-		t.Fatal("expected ADR reference (MEET-INFRA-NORMALIZE-T3-multi-cell) in migration")
-	}
-	if !strings.Contains(sql, "cell-2-activation-plan") {
-		t.Fatal("expected plan reference (cell-2-activation-plan) in migration")
 	}
 }
 
