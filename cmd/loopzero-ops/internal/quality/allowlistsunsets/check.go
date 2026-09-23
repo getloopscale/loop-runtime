@@ -34,6 +34,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/calendarday"
 )
 
 const (
@@ -66,21 +68,6 @@ type Outcome struct {
 // ErrViolations means at least one entry has expired or cannot be read.
 var ErrViolations = errors.New("allowlist sunset contract violated")
 
-// referenceDate returns the day to compare against, as a LOCAL date.
-//
-// Local rather than UTC because the dates in the allowlist are written by hand, by
-// somebody reading their own calendar. Comparing a hand-written local date against a UTC
-// clock makes an entry expire early for the last hours of every day in any negative
-// offset — measured 2026-08-06 21:15 -03, when two readers of the same file disagreed
-// about what "today" was.
-func referenceDate(injected time.Time) time.Time {
-	if !injected.IsZero() {
-		return time.Date(injected.Year(), injected.Month(), injected.Day(), 0, 0, 0, 0, time.Local)
-	}
-	n := time.Now()
-	return time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.Local)
-}
-
 // Check reads the allowlist and grades every entry's sunset.
 func Check(cfg Config) (Outcome, error) {
 	var out Outcome
@@ -102,7 +89,7 @@ func Check(cfg Config) (Outcome, error) {
 	}
 	defer func() { _ = f.Close() }()
 
-	today := referenceDate(cfg.Today)
+	today := calendarday.Today(cfg.Today)
 	sc := bufio.NewScanner(f)
 	for line := 1; sc.Scan(); line++ {
 		raw := strings.TrimSpace(sc.Text())
@@ -120,7 +107,7 @@ func Check(cfg Config) (Outcome, error) {
 		}
 
 		field := strings.TrimSpace(cols[sunsetColumn])
-		sunset, perr := time.ParseInLocation("2006-01-02", field, time.Local)
+		sunset, perr := calendarday.Parse(field)
 		if perr != nil {
 			// Not a date in the future — a date nobody can read. Treating it as future
 			// would turn a typo into a permanent exemption, which is what the sunset is

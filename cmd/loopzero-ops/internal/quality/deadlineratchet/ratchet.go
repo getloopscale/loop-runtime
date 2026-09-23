@@ -20,6 +20,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/calendarday"
 )
 
 // DateLayout is the ISO-8601 date layout for marker files.
@@ -40,7 +42,7 @@ type Spec struct {
 // Config drives a single evaluation.
 type Config struct {
 	Root string    // repo root (contains the marker/exception dir)
-	AsOf time.Time // reference "today"; zero value means time.Now().UTC()
+	AsOf time.Time // reference "today"; zero value means the local calendar day
 }
 
 // Outcome captures the result.
@@ -82,11 +84,8 @@ func Check(spec Spec, cfg Config) (*Outcome, error) {
 		return nil, fmt.Errorf("cannot parse date %q in %s", dateStr, marker)
 	}
 
-	asOf := cfg.AsOf
-	if asOf.IsZero() {
-		asOf = time.Now().UTC()
-	}
-	days := int(asOf.Sub(start).Hours() / 24)
+	// Calendar days in the local clock: the marker is a hand-written date.
+	days := calendarday.DaysBetween(start, calendarday.Today(cfg.AsOf))
 
 	out := &Outcome{Date: dateStr, Days: days}
 	switch {

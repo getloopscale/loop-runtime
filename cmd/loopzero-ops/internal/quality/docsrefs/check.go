@@ -39,6 +39,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/calendarday"
 )
 
 // ErrUnresolvedReferences means at least one reference points at something that
@@ -368,7 +370,7 @@ func loadAllowlist(path string) (map[string]allowEntry, error) {
 		if kind != KindRule && kind != KindADR {
 			return nil, fmt.Errorf("%w: line %d has unknown kind %q (want %q or %q)", ErrMalformedAllowlist, i+1, kind, KindRule, KindADR)
 		}
-		sunset, perr := time.Parse("2006-01-02", strings.TrimSpace(parts[2]))
+		sunset, perr := calendarday.Parse(strings.TrimSpace(parts[2]))
 		if perr != nil {
 			return nil, fmt.Errorf("%w: line %d sunset %q is not YYYY-MM-DD", ErrMalformedAllowlist, i+1, strings.TrimSpace(parts[2]))
 		}
@@ -378,13 +380,6 @@ func loadAllowlist(path string) (map[string]allowEntry, error) {
 		out[string(kind)+"|"+strings.TrimSpace(parts[1])] = allowEntry{kind: kind, raw: strings.TrimSpace(parts[1]), sunset: sunset}
 	}
 	return out, nil
-}
-
-// nowDate reduces an instant to the calendar day it falls on, in the same
-// reference frame the allowlist dates are written in (local wall clock).
-func nowDate(t time.Time) time.Time {
-	d, _ := time.Parse("2006-01-02", t.Format("2006-01-02"))
-	return d
 }
 
 // --- the gate -------------------------------------------------------------
@@ -432,7 +427,7 @@ func Check(cfg Config) (Outcome, error) {
 			// Compare CALENDAR DAYS, not instants. Truncating a timestamp to
 			// 24h works in UTC and silently shifts the boundary by a day for
 			// anyone west of Greenwich — the sunset would expire early in BRT.
-			if e, ok := allow[string(ref.Kind)+"|"+ref.Raw]; ok && !nowDate(now).After(e.sunset) {
+			if e, ok := allow[string(ref.Kind)+"|"+ref.Raw]; ok && !calendarday.Of(now).After(e.sunset) {
 				out.Allowlisted++
 				continue
 			}
