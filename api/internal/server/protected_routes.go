@@ -29,10 +29,12 @@ type middleware = func(http.Handler) http.Handler
 // re-assembling slices by hand — hand assembly is how the rate limiter once
 // ran twice on the same request.
 type routeChains struct {
-	// rateLimited guards every mutation.
+	// rateLimited guards every mutation (mutation_guards_test.go enforces it).
 	rateLimited []middleware
 	// idempotent is rateLimited plus Idempotency-Key handling. The key is
-	// REQUIRED on these routes (400 MISSING_IDEMPOTENCY_KEY without it).
+	// REQUIRED on these routes (400 MISSING_IDEMPOTENCY_KEY without it); which
+	// mutations use it, and why the others do not, is recorded route by route
+	// in mutation_guards_test.go.
 	idempotent []middleware
 
 	buildQuota       middleware // plan: builds_per_month
@@ -419,11 +421,11 @@ func registerDomainRoutes(r chi.Router, cfg Config, ch routeChains) {
 
 // registerRepositoryRoutes: GitHub App connection (auto-deploy) and the
 // dashboard's repository picker (J-09 T2.1).
-func registerRepositoryRoutes(r chi.Router, cfg Config, _ routeChains) {
+func registerRepositoryRoutes(r chi.Router, cfg Config, ch routeChains) {
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Repositories, cfg.RepositoryHandler != nil,
 		"no GitHub dependencies — comes from `ghDeps` (setup_server.go), which needs GitHub App credentials and, before them, the database") {
-		r.Post("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Connect)
-		r.Delete("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Disconnect)
+		r.With(ch.limited()...).Post("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Connect)
+		r.With(ch.limited()...).Delete("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Disconnect)
 		r.Get("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.GetConnection)
 	}
 	if surfaces.Recorded(cfg.Surfaces, surfaces.IntegrationsGitHub, cfg.IntegrationsGitHubHandler != nil,

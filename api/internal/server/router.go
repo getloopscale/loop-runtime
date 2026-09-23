@@ -3,10 +3,15 @@
 
 // Package server assembles the HTTP router (chi) + middleware
 // pipeline + dependency wiring for the API binary. Routes are
-// declared per resource group (tenant, project, build, release,
-// etc.) and dispatched to services in `api/internal/services/`.
-// All mutating routes pass through `withEnvironmentLock` per
-// CLAUDE.md Rule 6.
+// declared per resource family (protected_routes.go) and dispatched
+// to the handlers under `api/internal/routes/`.
+//
+// What the router guarantees for every mutating route is rate limiting,
+// and an Idempotency-Key where the route requires one; both are asserted
+// route by route in mutation_guards_test.go. The environment lock
+// (CLAUDE.md Rule 6) is taken by the handler or service that mutates a
+// (tenant, project, environment), not by the router — the router cannot
+// know which mutations touch one.
 package server
 
 import (
