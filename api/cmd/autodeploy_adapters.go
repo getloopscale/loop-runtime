@@ -128,22 +128,7 @@ func (a *previewAppsLookupAdapter) LatestSucceededApps(ctx context.Context, tena
 	}
 	out := make([]deploycontracts.AppSpec, 0, len(dbApps))
 	for _, da := range dbApps {
-		app := deploycontracts.AppSpec{
-			Name:      da.Name,
-			Type:      da.Type,
-			Rendering: da.Rendering,
-			Port:      da.Port,
-			Secrets:   da.Secrets,
-			Replicas:  da.Replicas,
-		}
-		if da.Autoscaling != nil {
-			app.Autoscaling = &deploycontracts.AppAutoscalingSpec{
-				MinReplicas: da.Autoscaling.MinReplicas,
-				MaxReplicas: da.Autoscaling.MaxReplicas,
-				TargetCPU:   da.Autoscaling.TargetCPU,
-			}
-		}
-		out = append(out, app)
+		out = append(out, deploycontracts.AppSpecFromStored(da))
 	}
 	return out, nil
 }
