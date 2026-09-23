@@ -68,3 +68,17 @@ func TestSetupDatabase_PresentURLIsNotRejectedAsMissing(t *testing.T) {
 		t.Fatalf("uma URL presente nunca é 'ausente'; got %v", err)
 	}
 }
+
+// Plan enforcement (project cap, replica cap, plan limits) runs on its own
+// stdlib connection. If that connection cannot be opened, the API must not boot
+// with every quota silently off: an unreachable database is a boot failure here
+// exactly as it is for the request pool.
+func TestOpenPlanEnforcementDB_UnreachableDatabaseIsAnError(t *testing.T) {
+	stdDB, err := openPlanEnforcementDB("postgres://nobody:nothing@127.0.0.1:1/none?sslmode=disable&connect_timeout=1")
+	if err == nil {
+		t.Fatal("an unreachable plan-enforcement database must be reported, not disable the limits")
+	}
+	if stdDB != nil {
+		t.Fatalf("no connection may be returned alongside the error: %v", stdDB)
+	}
+}

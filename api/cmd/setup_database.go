@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -121,24 +122,38 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 		PoolCollector: poolCollector,
 	}
 
-	// Plan enforcement limiter (uses stdlib sql.DB for simple queries)
-	stdDB, err := sql.Open("pgx", dbURL)
+	// Plan enforcement limiter (stdlib sql.DB for simple queries). Quotas are
+	// not optional: if their connection cannot be opened, the boot fails like
+	// it does for the request pool, instead of serving with every limit off.
+	stdDB, err := openPlanEnforcementDB(dbURL)
 	if err != nil {
-		logger.Warn("failed to open stdlib DB for plan enforcement — limits disabled", "error", err)
-	} else {
-		stdDB.SetMaxOpenConns(2)
-		if pingErr := stdDB.Ping(); pingErr != nil {
-			logger.Warn("plan enforcement DB ping failed — limits disabled", "error", pingErr)
-			_ = stdDB.Close()
-		} else {
-			deps.StdDB = stdDB
-			deps.PlanLimiter = enforcement.NewPlanLimiter(enforcement.NewSQLLimitsStore(stdDB), logger)
-			// The per-Account project cap is wired onto this store in main, once the
-			// cross-tenant (loopzero_worker) connection it counts through exists — see
-			// projectCapEnforcement.
-			logger.Info("plan enforcement enabled")
-		}
+		poolCollector.Stop()
+		poolCfg.Close()
+		return nil, err
 	}
+	deps.StdDB = stdDB
+	deps.PlanLimiter = enforcement.NewPlanLimiter(enforcement.NewSQLLimitsStore(stdDB), logger)
+	// The per-Account project cap is wired onto this store in main, once the
+	// cross-tenant (loopzero_worker) connection it counts through exists — see
+	// projectCapEnforcement.
+	logger.Info("plan enforcement enabled")
 
 	return deps, nil
+}
+
+// openPlanEnforcementDB opens and pings the stdlib connection plan enforcement
+// runs on. A failure is returned with nothing left open.
+func openPlanEnforcementDB(dbURL string) (*sql.DB, error) {
+	stdDB, err := sql.Open("pgx", dbURL)
+	if err != nil {
+		return nil, fmt.Errorf("plan enforcement: open database: %w", err)
+	}
+	stdDB.SetMaxOpenConns(2)
+	if err := stdDB.Ping(); err != nil {
+		if cerr := stdDB.Close(); cerr != nil {
+			return nil, fmt.Errorf("plan enforcement: ping database: %w (close: %v)", err, cerr)
+		}
+		return nil, fmt.Errorf("plan enforcement: ping database: %w", err)
+	}
+	return stdDB, nil
 }

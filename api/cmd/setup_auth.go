@@ -77,6 +77,14 @@ func setupAuth(logger *slog.Logger) *AuthDeps {
 	tokenValidator := auth.NewJWTOnlyValidator(rsaValidator, nil)
 	logger.Info("JWT auth enabled (RSA-only)", "jwks_url", jwksURL)
 
+	// A configured but unreachable replay-protection store fails the boot
+	// rather than silently dropping cross-replica replay protection.
+	nonceStore, err := setupServiceAuthNonceStore(logger)
+	if err != nil {
+		logger.Error("service-auth nonce store unavailable", "error", err)
+		os.Exit(1)
+	}
+
 	// Service-to-service auth for internal proxy calls (cloud->engine), the
 	// operator (admin) service secret, and the platform-admin API key — each
 	// with a _PREVIOUS sibling for zero-downtime rotation (S1.2, MEET-052).
@@ -93,7 +101,7 @@ func setupAuth(logger *slog.Logger) *AuthDeps {
 		AdminAPIKeyPrevious:        os.Getenv("LOOPZERO_ADMIN_API_KEY_PREVIOUS"),
 		Ed25519PublicKeys:          loadServiceAuthEd25519Trust(logger),
 		RequireSignature:           serviceAuthRequireSignature(),
-		NonceStore:                 setupServiceAuthNonceStore(logger),
+		NonceStore:                 nonceStore,
 	}
 
 	return &AuthDeps{

@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/getloopscale/loopzero/api/internal/ports"
 )
@@ -37,10 +38,11 @@ type envProjectLookupAdapter struct {
 // failures (handler maps to 500).
 func (a *envProjectLookupAdapter) ProjectExistsForTenant(ctx context.Context, tenantID, projectName string) (bool, error) {
 	if a == nil || a.store == nil {
-		// Defensive: nil adapter falls open (legacy/test path); the
-		// caller already gates on nil before wiring, but keep this
-		// defensive guard so a future wiring slip doesn't 500.
-		return true, nil
+		// This lookup IS the cross-tenant gate. Unwired, it cannot say whether
+		// the project belongs to the tenant, so it fails closed: a wiring slip
+		// must surface as an error, never as access to every project.
+		return false, fmt.Errorf("environment project lookup: no project store wired, cannot verify %q for tenant %s",
+			projectName, tenantID)
 	}
 	project, err := a.store.GetByName(ctx, tenantID, projectName)
 	if err != nil {
