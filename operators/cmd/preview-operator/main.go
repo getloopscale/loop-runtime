@@ -2,7 +2,8 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Group C: Preview controller.
-// Self-contained — only needs RuntimeClient and BaseDomain.
+// Needs the CELL_0_KUBECONFIG cluster (the default for unplaced tenants), the
+// ClusterCredentials of every other cell, and BaseDomain.
 // Different scaling profile: TTL checks every 5 minutes.
 package main
 
@@ -21,6 +22,7 @@ import (
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
+	"github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/operatorboot"
 	"github.com/getloopscale/loopzero/operators/internal/preview"
 	"github.com/getloopscale/loopzero/operators/internal/tracing"
@@ -106,7 +108,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := preview.SetupPreviewController(mgr, runtimeClient, baseDomain); err != nil {
+	// Previews are created in the runtime cluster of their tenant's cell, the
+	// same cell the tenant-operator points the preview's ArgoCD Application at.
+	runtimeFactory := cellrouting.NewCellAwareRuntimeClientFactory(
+		mgr.GetClient(), runtimeClient, constants.NamespacePlatformSystem)
+	if err := preview.SetupPreviewController(mgr, runtimeFactory, baseDomain); err != nil {
 		setupLog.Error(err, "unable to setup PreviewController")
 		os.Exit(1)
 	}

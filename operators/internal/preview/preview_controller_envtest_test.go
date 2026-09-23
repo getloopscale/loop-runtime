@@ -48,9 +48,14 @@ func newPreviewCR(name, tenantSlug, projectSlug string, prNumber int, ttl time.D
 			Branch:    "feature/x",
 			ExpiresAt: &expires,
 			ReleaseID: "rel-test",
+			CellID:    previewCellID,
 		},
 	}
 }
+
+// previewCellID is the cell every preview in this suite is placed in, the way
+// the API stamps Spec.CellID at creation.
+const previewCellID = "cell-7"
 
 func previewKey(name string) types.NamespacedName {
 	return types.NamespacedName{Name: name, Namespace: "default"}
@@ -83,6 +88,12 @@ var _ = Describe("PreviewController", Ordered, func() {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: expectedNS}, &ns)).To(Succeed())
 				g.Expect(ns.Labels).To(HaveKeyWithValue("pod-security.kubernetes.io/enforce", "restricted"))
 				g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/preview", fmt.Sprintf("pr%d", prNumber)))
+			}, timeout, interval).Should(Succeed())
+		})
+
+		It("resolves the runtime cluster of the preview's cell", func() {
+			Eventually(func(g Gomega) {
+				g.Expect(cellFactory.Calls()).To(ContainElement(previewCellID))
 			}, timeout, interval).Should(Succeed())
 		})
 

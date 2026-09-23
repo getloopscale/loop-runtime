@@ -52,28 +52,20 @@ var previewSM = statemachine.NewPreviewTypedMachine()
 // +kubebuilder:rbac:groups=loopzero.io,resources=previewenvironments,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=loopzero.io,resources=previewenvironments/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=loopzero.io,resources=previewenvironments/finalizers,verbs=update
+// +kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch
+// +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 type PreviewReconciler struct {
 	client.Client
-	// RuntimeClient is the FALLBACK runtime cluster client used when
-	// RuntimeFactory is nil OR cell resolution fails. Pre-T1.1 this was
-	// the only path; post-T1.1 it remains as a back-compat fallback.
-	RuntimeClient client.Client
-	// RuntimeFactory resolves a per-cell runtime client from a tenant's
-	// CellID. T1.1 of deep-review-remediation-plan (closes find_arch_002 HIGH):
-	// when set, every reconcile path that touches the runtime cluster
-	// (namespace, NetworkPolicy, ResourceQuota, LimitRange, Service)
-	// consults this factory to route to the tenant's pinned cell instead
-	// of the static RuntimeClient.
-	//
-	// Fallback semantics:
-	//   - RuntimeFactory == nil → use RuntimeClient (legacy behavior).
-	//   - RuntimeFactory.Resolve(cellID) returns error → log + use
-	//     RuntimeClient with metric increment (degraded mode).
+	// RuntimeFactory resolves the runtime cluster of a preview's cell. It is
+	// the only way this controller reaches a runtime cluster, and there is no
+	// fallback cluster: every runtime write (namespace, NetworkPolicies,
+	// ResourceQuota, LimitRange, ServiceAccount) goes to the cell the preview's
+	// ArgoCD Application targets, or the reconcile fails and requeues.
 	//
 	// CellID source priority:
-	//   1. preview.Spec.CellID (set by API at PreviewEnvironment creation)
-	//   2. tenant.Spec.CellID (lookup; covers legacy CRs created pre-T1.1)
-	//   3. Empty → fallback RuntimeClient (last resort)
+	//   1. preview.Spec.CellID (set by the API at PreviewEnvironment creation)
+	//   2. tenant.Spec.CellID (CRs created before Spec.CellID existed)
 	RuntimeFactory cellrouting.RuntimeClientFactory
 	Scheme         *runtime.Scheme
 	BaseDomain     string
@@ -84,46 +76,33 @@ type PreviewReconciler struct {
 	IngressNamespace string
 }
 
-// runtimeClientForPreview resolves the appropriate runtime client for a
-// PreviewEnvironment based on its CellID. T1.1 of deep-review-remediation-plan.
-//
-// Returns the cell-specific client when RuntimeFactory is wired and the
-// preview has a CellID. Falls back to the static RuntimeClient when:
-//   - RuntimeFactory is nil (legacy deployment), OR
-//   - preview.Spec.CellID is empty AND tenant CellID lookup fails, OR
-//   - factory.Resolve returns an error (network issue, ClusterCredential
-//     missing — degraded mode)
-//
-// EC-7 of edge-case review: legacy CRs created BEFORE T1.1 don't have
-// CellID populated. We attempt to read tenant.Spec.CellID via the mgmt
-// client (r.Client). If that ALSO fails, we use RuntimeClient and emit
-// a metric so operators see the legacy-CR drift.
-func (r *PreviewReconciler) runtimeClientForPreview(ctx context.Context, preview *loopzerov1.PreviewEnvironment) client.Client {
-	if r.RuntimeFactory == nil {
-		return r.RuntimeClient
+// previewCell returns the cell a preview's runtime objects live in: its own
+// Spec.CellID, or its Tenant's for CRs created before that field existed. An
+// unreadable Tenant is an unknown cell, never a default one (EC-7).
+func (r *PreviewReconciler) previewCell(ctx context.Context, preview *loopzerov1.PreviewEnvironment) (string, error) {
+	if preview.Spec.CellID != "" {
+		return preview.Spec.CellID, nil
 	}
+	var tenant loopzerov1.Tenant
+	key := client.ObjectKey{Name: preview.Spec.TenantID, Namespace: preview.Namespace}
+	if err := r.Get(ctx, key, &tenant); err != nil {
+		return "", fmt.Errorf("preview %s: read tenant %s to resolve its cell: %w", preview.Name, preview.Spec.TenantID, err)
+	}
+	return tenant.Spec.CellID, nil
+}
 
-	cellID := preview.Spec.CellID
-	if cellID == "" {
-		// Legacy CR fallback: read tenant.Spec.CellID. Per EC-7 we MUST
-		// fallback to tenant lookup, NOT to default cell.
-		tenant := &loopzerov1.Tenant{}
-		err := r.Get(ctx, client.ObjectKey{Name: preview.Spec.TenantID, Namespace: preview.Namespace}, tenant)
-		if err == nil {
-			cellID = tenant.Spec.CellID
-		}
+// runtimeClientForPreview resolves the runtime cluster client of the
+// preview's cell.
+func (r *PreviewReconciler) runtimeClientForPreview(ctx context.Context, preview *loopzerov1.PreviewEnvironment) (client.Client, error) {
+	cellID, err := r.previewCell(ctx, preview)
+	if err != nil {
+		return nil, err
 	}
-	if cellID == "" {
-		return r.RuntimeClient
+	c, err := r.RuntimeFactory.For(ctx, cellID)
+	if err != nil {
+		return nil, fmt.Errorf("preview %s (cellID=%q): runtime cluster client: %w", preview.Name, cellID, err)
 	}
-
-	cellClient, err := r.RuntimeFactory.For(ctx, cellID)
-	if err != nil || cellClient == nil {
-		// Degraded mode — log + fallback. Don't fail the reconcile because
-		// preview reconcile is best-effort eventual; we'll retry next pass.
-		return r.RuntimeClient
-	}
-	return cellClient
+	return c, nil
 }
 
 // ingressNS returns the namespace where the ingress controller runs.
@@ -297,7 +276,11 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview, base
 			},
 		},
 	}
-	rtClient := r.runtimeClientForPreview(ctx, preview)
+	rtClient, err := r.runtimeClientForPreview(ctx, preview)
+	if err != nil {
+		r.failPreviewCondition(ctx, preview, base, conditions.TypePreviewNamespaceReady, "RuntimeClusterUnresolved", err.Error(), "")
+		return ctrl.Result{}, err
+	}
 	if _, err := controllerutil.CreateOrUpdate(ctx, rtClient, ns, func() error {
 		ns.Labels["pod-security.kubernetes.io/enforce"] = "restricted"
 		ns.Labels["pod-security.kubernetes.io/warn"] = "restricted"
@@ -312,14 +295,14 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview, base
 
 	// Sprint 5 / T1.2 — namespace hardening (NetworkPolicy + ResourceQuota +
 	// LimitRange). Each is its own condition for finer-grained observability.
-	if npErr := r.reconcilePreviewNetworkPolicies(ctx, nsName); npErr != nil {
+	if npErr := r.reconcilePreviewNetworkPolicies(ctx, rtClient, nsName); npErr != nil {
 		r.failPreviewCondition(ctx, preview, base, conditions.TypePreviewNetworkPolicyReady, "ApplyFailed", npErr.Error(), "NP failure")
 		return ctrl.Result{}, npErr
 	}
 	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNetworkPolicyReady,
 		metav1.ConditionTrue, "Ready", "Preview network policies applied (deny-all + allow-ingress + allow-egress)", preview.Generation)
 
-	if quotaErr := r.reconcilePreviewQuota(ctx, nsName); quotaErr != nil {
+	if quotaErr := r.reconcilePreviewQuota(ctx, rtClient, nsName); quotaErr != nil {
 		r.failPreviewCondition(ctx, preview, base, conditions.TypePreviewResourceQuotaReady, "ApplyFailed", quotaErr.Error(), "quota failure")
 		return ctrl.Result{}, quotaErr
 	}
@@ -333,7 +316,7 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview, base
 	// ArgoCD sync finds it on first apply. Ordering matters: SA must exist
 	// before the first deploy, otherwise pods CrashLoop with "serviceaccount
 	// loopzero-app not found" and the workload-readiness gate keeps requeuing.
-	if saErr := r.reconcilePreviewServiceAccount(ctx, nsName); saErr != nil {
+	if saErr := r.reconcilePreviewServiceAccount(ctx, rtClient, nsName); saErr != nil {
 		r.failPreviewCondition(ctx, preview, base, conditions.TypePreviewServiceAccountReady, "ApplyFailed", saErr.Error(), "SA failure")
 		return ctrl.Result{}, saErr
 	}
@@ -569,11 +552,20 @@ func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopze
 		return ctrl.Result{}, nil
 	}
 
-	// Phase 1 — namespace deletion attempt.
-	// T0.1 of deep-review-2026-05-10-remediation-plan (find_arch_002):
-	// route namespace ops through the cell-aware client so multi-cell
-	// previews land in the correct workload cluster.
-	rtClient := r.runtimeClientForPreview(ctx, preview)
+	// Phase 1 — namespace deletion attempt, in the preview's cell.
+	rtClient, err := r.runtimeClientForPreview(ctx, preview)
+	if err != nil {
+		if !errors.IsNotFound(err) || conditions.IsConditionTrue(preview.Status.Conditions, conditions.TypePreviewNamespaceReady) {
+			// A namespace was provisioned (or may have been) and its cell is
+			// unknown: releasing the finalizer would leak it.
+			return ctrl.Result{}, err
+		}
+		// Tenant gone, no recorded cell, and no namespace was ever provisioned.
+		rtClient = nil
+	}
+	if rtClient == nil {
+		return r.completePreviewDeletion(ctx, preview, base)
+	}
 	ns := &corev1.Namespace{}
 	getErr := rtClient.Get(ctx, client.ObjectKey{Name: nsName}, ns)
 	if getErr == nil {
@@ -631,16 +623,24 @@ func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopze
 		return ctrl.Result{RequeueAfter: previewCleanupRequeueDelay}, getErr
 	}
 
+	return r.completePreviewDeletion(ctx, preview, base)
+}
+
+// completePreviewDeletion records that the preview's namespace is gone and
+// drops the finalizer.
+func (r *PreviewReconciler) completePreviewDeletion(ctx context.Context, preview, base *loopzerov1.PreviewEnvironment) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
 	// Phase 2 — namespace gone. Mark the conditions, drop the finalizer.
 	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewNamespaceDeleted,
 		metav1.ConditionTrue, "Deleted", "Preview namespace removed", preview.Generation)
 	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewApplicationDeleted,
 		metav1.ConditionTrue, "Deleted",
-		// Antes desta linha dizia "Application CR deletion is owned by the API
-		// (best-effort)" — e o api nunca fez isso. Quem remove a Application órfã é o
-		// reaper do tenant-operator (pruneOrphanPreviewApps), que deriva o conjunto
-		// esperado e apaga o que sobra. ADR 2026-08-12-argocd-application-ownership
-		// (B-050): o operator é o dono do spec.
+		// This used to say "Application CR deletion is owned by the API
+		// (best-effort)", and the api never did it. The orphan Application is
+		// removed by the tenant-operator reaper (pruneOrphanPreviewApps), which
+		// derives the expected set and deletes the rest. ADR
+		// 2026-08-12-argocd-application-ownership (B-050): the operator owns spec.
 		"Namespace cascade removed the in-cluster workload; the orphan Application is reaped by the tenant operator.",
 		preview.Generation)
 
@@ -679,52 +679,25 @@ func (r *PreviewReconciler) bumpCleanupAttempts(preview *loopzerov1.PreviewEnvir
 }
 
 // SetupPreviewController registers the PreviewController with the manager.
+// factory is required: it is the only way this controller reaches a runtime
+// cluster, and it must resolve the same cell the preview's ArgoCD Application
+// targets.
 //
 // drift-baseline.md port #3: reads INGRESS_NAMESPACE from environment so
 // preview NetworkPolicies allow ingress from the same namespace where the
 // ingress controller (Traefik) runs. Empty value falls back to
 // constants.NamespaceIngress so allow-ingress-traefik NetworkPolicies in
 // preview namespaces match those in regular environments.
-func SetupPreviewController(mgr ctrl.Manager, runtimeClient client.Client, baseDomain string) error {
-	return setupPreviewControllerWithFactory(mgr, runtimeClient, nil, baseDomain)
-}
-
-// setupPreviewControllerWithFactory wires the PreviewReconciler with an
-// optional cell-aware RuntimeClientFactory. T1.1 of deep-review-remediation-plan
-// (closes find_arch_002 HIGH).
-//
-// When factory is nil, behavior is identical to SetupPreviewController
-// (single-cell legacy path). When factory is set, every runtime-cluster
-// operation routes through factory.For(cellID) per the
-// runtimeClientForPreview() resolution chain.
-//
-// Vocabulary: the hyphenated term above is the domain term for the
-// cluster that runs tenant workloads, and this line carries that sense
-// only — it names no cluster and no package. In particular it is
-// not apimachinery's runtime package (k8s.io/apimachinery/pkg/runtime, NOT Go's stdlib runtime — the stdlib one has no Scheme type, which is what `*runtime.Scheme` in this tree proves) (imported above as
-// k8s.io/apimachinery/pkg/runtime, used for the Scheme field), not
-// sigs.k8s.io/controller-runtime, and not any cluster's literal name.
-// See docs/decisions.md
-// § Decision on the domain term (2026-09-06).
-//
-// Audit gap (registration_test.go COMP-001 family, audit §6.F.1b
-// hygiene): made unexported because nothing outside this package calls
-// it directly — all callers route through SetupPreviewController(which
-// is the canonical exported entry point). Re-export when a real
-// cell-aware caller emerges.
-func setupPreviewControllerWithFactory(
-	mgr ctrl.Manager,
-	runtimeClient client.Client,
-	factory cellrouting.RuntimeClientFactory,
-	baseDomain string,
-) error {
+func SetupPreviewController(mgr ctrl.Manager, factory cellrouting.RuntimeClientFactory, baseDomain string) error {
+	if factory == nil {
+		return fmt.Errorf("preview controller: a runtime client factory is required")
+	}
 	ingressNS := os.Getenv("INGRESS_NAMESPACE")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.PreviewEnvironment{}, reconcileloop.ForOption()).
 		Named("preview").
 		Complete(&PreviewReconciler{
 			Client:           mgr.GetClient(),
-			RuntimeClient:    runtimeClient,
 			RuntimeFactory:   factory,
 			Scheme:           mgr.GetScheme(),
 			BaseDomain:       baseDomain,

@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
 )
 
 // controllerSource reads the WHOLE package with comments removed.
@@ -278,7 +279,7 @@ func capturedStatusPatches(t *testing.T, seed *loopzerov1.PreviewEnvironment) []
 		},
 	})
 
-	r := &PreviewReconciler{Client: c, Scheme: scheme, RuntimeClient: c}
+	r := &PreviewReconciler{Client: c, Scheme: scheme, RuntimeFactory: cellrouting.NewStaticRuntimeClientFactory(c)}
 	// The result is not asserted: this Reconcile is expected to fail somewhere
 	// downstream against a fake cluster. What is under test is the SHAPE of the
 	// status writes it emits on the way, not whether the reconcile succeeds.

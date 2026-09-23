@@ -129,7 +129,7 @@ type EnvtestConfig struct {
 	// EnableApp wires SetupApplicationController + SetupExposureController.
 	EnableApp bool
 
-	// EnablePreview wires SetupPreviewController.
+	// EnablePreview wires SetupPreviewController, routed through CellAwareFactory.
 	EnablePreview bool
 
 	// EnablePlatform wires SetupClusterCredentialController +
@@ -280,7 +280,7 @@ func StartEnvtest(t TestT, cfg EnvtestConfig) *EnvtestHandle {
 		}
 	}
 	if cfg.EnablePreview {
-		if err := SetupPreviewController(mgr, runtimeClient, baseDomain); err != nil {
+		if err := SetupPreviewController(mgr, h.CellAwareFactory, baseDomain); err != nil {
 			h.Stop()
 			t.Fatalf("SetupPreviewController: %v", err)
 		}

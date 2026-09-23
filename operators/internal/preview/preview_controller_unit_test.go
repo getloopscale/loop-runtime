@@ -4,14 +4,11 @@
 package preview
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
@@ -409,41 +406,6 @@ func TestPreviewReconciler_NamespaceName_RejectsLegacyFormat(t *testing.T) {
 	// Must contain the canonical "pr-{n}" separator (note the hyphen).
 	if !strings.Contains(got, "pr-42") {
 		t.Fatalf("namespace %q does not include canonical pr-{n} format", got)
-	}
-}
-
-// TestRuntimeClientForPreview_NilFactory_ReturnsFallback — EC-1 from
-// deep-review-2026-05-10-remediation-plan edge-cases review.
-//
-// When RuntimeFactory is nil (legacy deployment without multi-cell
-// wiring), runtimeClientForPreview MUST return the static r.RuntimeClient
-// — never nil. Returning nil would propagate to the namespace ops added
-// in T0.1 and panic at Get/Delete/CreateOrUpdate.
-func TestRuntimeClientForPreview_NilFactory_ReturnsFallback(t *testing.T) {
-	t.Parallel()
-
-	scheme := runtime.NewScheme()
-	_ = loopzerov1.AddToScheme(scheme)
-	staticClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := &PreviewReconciler{
-		RuntimeFactory: nil,
-		RuntimeClient:  staticClient,
-	}
-	preview := &loopzerov1.PreviewEnvironment{
-		ObjectMeta: metav1.ObjectMeta{Name: "p", Namespace: "loopzero-system"},
-		Spec: loopzerov1.PreviewEnvironmentSpec{
-			TenantID:  "tn-x",
-			ProjectID: "api",
-			CellID:    "cell-0", // even with CellID set, nil factory must fallback
-		},
-	}
-
-	got := r.runtimeClientForPreview(context.Background(), preview)
-	if got == nil {
-		t.Fatal("runtimeClientForPreview returned nil — must fallback to r.RuntimeClient when factory is nil")
-	}
-	if got != staticClient {
-		t.Errorf("runtimeClientForPreview returned non-static client when factory is nil")
 	}
 }
 
