@@ -98,7 +98,7 @@ func TestUnsupportedRuntimeStepsActuallyFail(t *testing.T) {
 		"validate-workspace":  s.ValidateStep(nil),
 		"install-deps":        s.InstallStep(nil),
 		"build-apps":          s.BuildStep(nil),
-		"security-scan":       s.ScanStep(),
+		"security-scan":       s.ScanStep(nil),
 		"generate-dockerfile": s.DockerfileStep(nil, 1),
 	}
 	for name, c := range steps {
@@ -136,7 +136,7 @@ func TestRealStrategySteps_EmitNoUnguardedPipefail(t *testing.T) {
 			"validate-workspace":  tc.s.ValidateStep(apps),
 			"install-deps":        tc.s.InstallStep(apps),
 			"build-apps":          tc.s.BuildStep(apps),
-			"security-scan":       tc.s.ScanStep(),
+			"security-scan":       tc.s.ScanStep(apps),
 			"generate-dockerfile": tc.s.DockerfileStep(apps, 1),
 		}
 		for step, c := range steps {

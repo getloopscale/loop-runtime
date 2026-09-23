@@ -184,7 +184,7 @@ func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workf
 			withSuffix(g.Strategy.ValidateStep(g.Apps), g.Suffix),
 			withSuffix(g.Strategy.InstallStep(g.Apps), g.Suffix),
 			withSuffix(g.Strategy.BuildStep(g.Apps), g.Suffix),
-			withSuffix(g.Strategy.ScanStep(), g.Suffix),
+			withSuffix(g.Strategy.ScanStep(g.Apps), g.Suffix),
 			withSuffix(g.Strategy.DockerfileStep(g.Apps, len(spec.Plan.Apps)), g.Suffix),
 		)
 	}

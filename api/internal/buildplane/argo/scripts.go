@@ -247,17 +247,51 @@ func scriptBuildPython(apps []deploycontracts.AppSpec) string {
 	return b.String() + "\n"
 }
 
-func scriptScanPython() string {
-	b := shellgen.New().Raw("set -uo pipefail").Cd("/workspace")
-	b.Raw(`if command -v pip-audit >/dev/null 2>&1; then`).
-		Raw(`  pip-audit 2>&1 || {`).
-		Raw(`    echo "ERROR: pip-audit found vulnerabilities"`).
+func scriptScanPython(apps []deploycontracts.AppSpec) string {
+	return pythonScanScript(workspaceMountPath, apps)
+}
+
+// pipAuditVersion pins the scanner the Python security gate installs when the
+// build image does not ship one, so the gate's behaviour does not drift with
+// whatever PyPI serves on the day of the build.
+const pipAuditVersion = "2.7.3"
+
+// pythonScanScript renders the Python security gate over the apps under root.
+//
+// The gate fails closed on both of the ways it can fail: a dependency with a
+// known vulnerability (pip-audit exits non-zero) and a scanner that could not
+// be made available. It audits each app's own dependency declaration —
+// requirements.txt, else the pyproject.toml project — never the environment
+// of the scan container, whose packages are not the app's.
+//
+// pip-audit is taken from PATH when the image provides it; otherwise it is
+// installed at a pinned version into a virtualenv under the workspace, which
+// is writable by the non-root build user where system site-packages is not.
+func pythonScanScript(root string, apps []deploycontracts.AppSpec) string {
+	venv := root + "/.cache/pip-audit-venv"
+	b := shellgen.New().Raw("set -uo pipefail").Cd(root).
+		Raw(`PIP_AUDIT=pip-audit`).
+		Raw(`if ! command -v pip-audit >/dev/null 2>&1; then`).
+		Raw(fmt.Sprintf(`  if ! python3 -m venv %s || ! %s/bin/pip install --no-cache-dir %s; then`,
+			shellgen.ShellQuote(venv), shellgen.ShellQuote(venv), shellgen.ShellQuote("pip-audit=="+pipAuditVersion))).
+		Raw(`    echo "ERROR: the Python dependency scanner could not be installed — the security scan did not run"`).
 		Raw(`    exit 1`).
-		Raw(`  }`).
-		Raw(`else`).
-		Raw(`  pip install pip-audit 2>/dev/null && pip-audit 2>&1 || {`).
-		Raw(`    echo "pip-audit not available or scan failed — skipping"`).
-		Raw(`  }`).
+		Raw(`  fi`).
+		Raw(fmt.Sprintf(`  PIP_AUDIT=%s/bin/pip-audit`, shellgen.ShellQuote(venv))).
+		Raw(`fi`).
+		Raw(`FOUND=0`)
+	for _, p := range appPaths(apps) {
+		dir := shellgen.ShellQuote(root + "/" + p)
+		req := shellgen.ShellQuote(root + "/" + p + "/requirements.txt")
+		b.Raw(fmt.Sprintf(`if [ -f %s ]; then`, req)).
+			Raw(fmt.Sprintf(`  "$PIP_AUDIT" -r %s || FOUND=1`, req)).
+			Raw(fmt.Sprintf(`elif [ -f %s/pyproject.toml ]; then`, dir)).
+			Raw(fmt.Sprintf(`  "$PIP_AUDIT" %s || FOUND=1`, dir)).
+			Raw(`fi`)
+	}
+	b.Raw(`if [ "$FOUND" -ne 0 ]; then`).
+		Raw(`  echo "ERROR: pip-audit found vulnerable dependencies (or could not audit them)"`).
+		Raw(`  exit 1`).
 		Raw(`fi`)
 	return b.String() + "\n"
 }

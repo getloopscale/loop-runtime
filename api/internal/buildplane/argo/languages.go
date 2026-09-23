@@ -30,7 +30,7 @@ type LanguageStrategy interface {
 	// BuildStep returns a template that builds the application.
 	BuildStep(apps []deploycontracts.AppSpec) *forge.Container
 	// ScanStep returns a template that runs security scanning.
-	ScanStep() *forge.Container
+	ScanStep(apps []deploycontracts.AppSpec) *forge.Container
 	// DockerfileStep returns a template that produces / validates the Dockerfile
 	// before BuildKit consumes it. Toda estrategia devolve hoje o container de
 	// geracao canonica; o texto anterior descrevia tambem um retorno
@@ -138,7 +138,9 @@ func (s *unsupportedStrategy) InstallStep(_ []deploycontracts.AppSpec) *forge.Co
 func (s *unsupportedStrategy) BuildStep(_ []deploycontracts.AppSpec) *forge.Container {
 	return s.failStep("build-apps")
 }
-func (s *unsupportedStrategy) ScanStep() *forge.Container { return s.failStep("security-scan") }
+func (s *unsupportedStrategy) ScanStep(_ []deploycontracts.AppSpec) *forge.Container {
+	return s.failStep("security-scan")
+}
 func (s *unsupportedStrategy) DockerfileStep(_ []deploycontracts.AppSpec, _ int) *forge.Container {
 	return s.failStep("generate-dockerfile")
 }
@@ -182,7 +184,7 @@ func (s *NodeStrategy) BuildStep(apps []deploycontracts.AppSpec) *forge.Containe
 	return buildContainer("build-apps", imageNode, forge.ResourcesMedium(), scriptBuildNode(apps))
 }
 
-func (s *NodeStrategy) ScanStep() *forge.Container {
+func (s *NodeStrategy) ScanStep(_ []deploycontracts.AppSpec) *forge.Container {
 	return buildContainer("security-scan", imageNode, forge.ResourcesSmall(), scriptScanNode())
 }
 
@@ -223,8 +225,8 @@ func (s *PythonStrategy) BuildStep(apps []deploycontracts.AppSpec) *forge.Contai
 	return buildContainer("build-apps", imagePython, forge.ResourcesMedium(), scriptBuildPython(apps))
 }
 
-func (s *PythonStrategy) ScanStep() *forge.Container {
-	return buildContainer("security-scan", imagePython, forge.ResourcesSmall(), scriptScanPython())
+func (s *PythonStrategy) ScanStep(apps []deploycontracts.AppSpec) *forge.Container {
+	return buildContainer("security-scan", imagePython, forge.ResourcesSmall(), scriptScanPython(apps))
 }
 
 func (s *PythonStrategy) DockerfileStep(apps []deploycontracts.AppSpec, totalApps int) *forge.Container {

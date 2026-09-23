@@ -87,7 +87,7 @@ func TestNodeStrategy_BuildStep_ReturnsContainerTemplate(t *testing.T) {
 
 func TestNodeStrategy_ScanStep_ReturnsContainerTemplate(t *testing.T) {
 	s := &NodeStrategy{}
-	c := s.ScanStep()
+	c := s.ScanStep(nil)
 
 	assertContainerShape(t, c, "security-scan", "node:22.12.0")
 }
