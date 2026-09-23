@@ -345,7 +345,6 @@ describe("loopzero-drill — Outputs schema v2 (L2-unlock plan D1 named exports)
     expect(src).toMatch(/teardownPolicy:/);
     expect(src).toMatch(/cellMapping:/);
     expect(src).toMatch(/"cell-0":\s*"runtimeCluster"/);
-    expect(src).toMatch(/"cell-0":\s*"runtimeCluster"/);
     expect(src).toMatch(/"cell-1":\s*"runtimeCluster2"/);
   });
 

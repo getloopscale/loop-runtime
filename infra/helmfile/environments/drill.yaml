@@ -109,20 +109,19 @@ inClusterPostgres: false
 underlyingStorageClass: do-block-storage
 
 # Per D3 cell mapping — drill mirrors prod cell-to-cluster topology:
-#   cell-0 + cell-0 → runtimeCluster (pulumi-drill output key)
-#   cell-1              → runtimeCluster2 (pulumi-drill output key)
+#   cell-0 → runtimeCluster  (pulumi-drill output key)
+#   cell-1 → runtimeCluster2 (pulumi-drill output key)
+# One cell per cluster since the 2026-08-09 1:1 unification.
 # Single-cell `cell0Id: cell-drill` removed per CTO directive
 # 2026-05-16 ("sistema NUNCA vai trabalhar com single cell").
 cells:
-  - id: cell-0
-    pulumiOutputKey: runtimeCluster
   - id: cell-0
     pulumiOutputKey: runtimeCluster
   - id: cell-1
     pulumiOutputKey: runtimeCluster2
 
 # DynamicRouter enabled — drill exercises full cell discovery + routing
-# semantics. With 3 cells discovered + 2 runtime clusters, routing rules
+# semantics. With 2 cells discovered on 2 runtime clusters, routing rules
 # are real (not synthetic).
 dynamicRouter: true
 
