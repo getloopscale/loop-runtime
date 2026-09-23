@@ -20,11 +20,14 @@ package store
 // readable. ListSecretNames NEVER returns the value column.
 
 import (
+	"errors"
+
 	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 
@@ -477,4 +480,33 @@ func (s *PostgresSecretStore) bridge() (generated.DBTX, error) {
 		return nil, fmt.Errorf("secret_store: DBTX %T does not implement SqlcBridge", s.DB)
 	}
 	return bridge.GeneratedDB(), nil
+}
+
+// ErrSecretNotFound is returned by ReadValue when no secret matches.
+var ErrSecretNotFound = errors.New("secret_store: secret not found")
+
+// ReadValue returns one secret's plaintext, scoped by (tenant, project,
+// environment, name). It is the read the External Secrets Operator broker
+// serves, and it decrypts through decryptFromStore — the one read-path
+// dispatcher — so the broker applies the same transit/legacy policy, refusals
+// and SecretDecryptFailedTotal reasons as every other secret read. An absent
+// row is ErrSecretNotFound, which is not a decrypt failure and is not counted.
+func (s *PostgresSecretStore) ReadValue(ctx context.Context, tenantID, projectID, env, name string) ([]byte, error) {
+	bridge, err := s.bridge()
+	if err != nil {
+		return nil, err
+	}
+	encrypted, err := generated.New().GetSecretEncryptedValue(ctx, bridge, generated.GetSecretEncryptedValueParams{
+		TenantID:    tenantID,
+		ProjectID:   projectID,
+		Environment: env,
+		Name:        name,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrSecretNotFound
+		}
+		return nil, fmt.Errorf("secret_store: read %s for tenant %s: %w", name, tenantID, err)
+	}
+	return s.decryptFromStore(ctx, tenantID, encrypted)
 }

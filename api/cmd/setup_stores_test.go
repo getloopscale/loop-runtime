@@ -21,6 +21,12 @@ package main
 
 import (
 	"context"
+	"errors"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -66,11 +72,10 @@ func TestSetupSecretStore_NilTransitFallsBackToLegacyAES(t *testing.T) {
 	if got == nil {
 		t.Fatalf("setupSecretStore: want non-nil got, got nil")
 	}
-	// Type assert: legacy path returns *store.PostgresSecretStore with
-	// vault field == nil. Cannot inspect the vault field directly
-	// (unexported), but we can use the type identity as proxy.
-	if _, ok := got.(*store.PostgresSecretStore); !ok {
-		t.Fatalf("setupSecretStore: want *store.PostgresSecretStore, got %T", got)
+	// Without transit the store has no write path (T10.3): a write is refused
+	// as an unavailable secrets backend before any database is touched.
+	if _, err := got.Set(context.Background(), "tn-1", "web", "production", "api", "DB_URL", []byte("v")); !errors.Is(err, loopzeroerrors.ErrSecretsBackendUnavailable) {
+		t.Fatalf("a store without transit must refuse writes, got %v", err)
 	}
 }
 
@@ -84,26 +89,19 @@ func TestSetupSecretStore_NonNilTransitWiresVaultDispatch(t *testing.T) {
 	// unwired but readable (decryptFromStore prefix detection still
 	// dispatches when older rows surface).
 	fake := &fakeTransit{}
-	got, err := setupSecretStore(nil, "", fake, newTestLogger())
+	got, err := setupSecretStore(unreachableDB(), "", fake, newTestLogger())
 	if err != nil {
 		t.Fatalf("setupSecretStore: %v", err)
 	}
 	if got == nil {
 		t.Fatalf("setupSecretStore: want non-nil got, got nil")
 	}
-	// The wire-up itself is observable via the constructor return
-	// type — vault path returns *store.PostgresSecretStore with
-	// s.vault wired. To assert dispatch actually flows through the
-	// fake transit, we would need a live DBTX to call store.Set;
-	// that is covered in the integration tests
-	// (api/internal/db/transit_dispatch_test.go). At the boot-time
-	// wire boundary, the proof is "we reached the
-	// NewPostgresSecretStoreWithVault branch" — verified by Set
-	// raising an error here is acceptable (no DB) AND by the
-	// constructor not returning an error (which would happen if the
-	// adapter was nil).
-	if _, ok := got.(*store.PostgresSecretStore); !ok {
-		t.Fatalf("setupSecretStore: want *store.PostgresSecretStore, got %T", got)
+	// A write goes through the transit client before it reaches the database:
+	// with no database here the write fails afterwards, but the encrypt call is
+	// the proof the store was wired with transit.
+	_, _ = got.Set(context.Background(), "tn-1", "web", "production", "api", "DB_URL", []byte("v"))
+	if fake.encryptCalls != 1 {
+		t.Fatalf("transit Encrypt calls = %d, want 1", fake.encryptCalls)
 	}
 }
 
@@ -136,3 +134,38 @@ func TestSetupSecretStore_BadAESKeyReturnsError(t *testing.T) {
 func TestTransitClientSatisfiesTheStoreContractWithoutAnAdapter(t *testing.T) {
 	var _ store.VaultTransitClient = (vault.Transit)(nil)
 }
+
+// errUnreachableDB is what every statement on unreachableDB returns.
+var errUnreachableDB = errors.New("test database: unreachable")
+
+// unreachableGenerated is a generated.DBTX whose every statement fails, so a
+// store can be driven up to its first database call without a database.
+type unreachableGenerated struct{}
+
+func (unreachableGenerated) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, errUnreachableDB
+}
+func (unreachableGenerated) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	return nil, errUnreachableDB
+}
+func (unreachableGenerated) QueryRow(context.Context, string, ...any) pgx.Row {
+	return unreachableRow{}
+}
+
+type unreachableRow struct{}
+
+func (unreachableRow) Scan(...any) error { return errUnreachableDB }
+
+// unreachableDBTX satisfies db.DBTX and db.SqlcBridge over unreachableGenerated.
+type unreachableDBTX struct{ unreachableGenerated }
+
+func (unreachableDBTX) QueryRow(context.Context, string, ...any) db.Row { return unreachableRow{} }
+func (unreachableDBTX) Query(context.Context, string, ...any) (db.Rows, error) {
+	return nil, errUnreachableDB
+}
+func (unreachableDBTX) Exec(context.Context, string, ...any) (db.ExecResult, error) {
+	return db.ExecResult{}, errUnreachableDB
+}
+func (unreachableDBTX) GeneratedDB() generated.DBTX { return unreachableGenerated{} }
+
+func unreachableDB() db.DBTX { return unreachableDBTX{} }

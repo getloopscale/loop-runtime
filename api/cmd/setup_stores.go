@@ -38,12 +38,16 @@ type StoreDeps struct {
 	EventStore       sse.EventStore
 	PgEventStore     *store.PostgresEventStore
 	SecretStore      secrets.SecretStore
-	BootstrapStore   ports.BootstrapStore
-	DomainStore      *store.PostgresDomainStore
-	CellStore        *store.PostgresCellStore
-	SourceStore      source.SourceStore
-	ObjUploader      sourceroutes.ObjectUploader
-	Locker           *adapters.PoolEnvironmentLocker
+	// PgSecretStore is the same store as SecretStore, typed concretely for the
+	// two consumers that need more than the route port: the deploy-time
+	// resyncer (ListForResync) and the ESO broker (ReadValue).
+	PgSecretStore  *store.PostgresSecretStore
+	BootstrapStore ports.BootstrapStore
+	DomainStore    *store.PostgresDomainStore
+	CellStore      *store.PostgresCellStore
+	SourceStore    source.SourceStore
+	ObjUploader    sourceroutes.ObjectUploader
+	Locker         *adapters.PoolEnvironmentLocker
 
 	// SSE adapter
 	BuildStoreReader sse.BuildStoreReader
@@ -115,6 +119,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 		EventStore:       pgEventStore,
 		PgEventStore:     pgEventStore,
 		SecretStore:      secretStore,
+		PgSecretStore:    secretStore,
 		BootstrapStore:   &store.PostgresBootstrapStore{DB: dbAdapter},
 		DomainStore:      &store.PostgresDomainStore{DB: dbAdapter},
 		CellStore:        &store.PostgresCellStore{DB: dbAdapter},
@@ -141,7 +146,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 // cfg.CryptoMode(); fail-loud refusal already fired upstream in
 // config.Validate() so reaching this function with the wrong combination
 // is a programming error, not a runtime error.
-func setupSecretStore(dbAdapter *db.PgxAdapter, encKeyHex string, transit vault.Transit, logger *slog.Logger) (secrets.SecretStore, error) {
+func setupSecretStore(dbAdapter db.DBTX, encKeyHex string, transit vault.Transit, logger *slog.Logger) (*store.PostgresSecretStore, error) {
 	var encKey []byte
 	if encKeyHex != "" {
 		var err error

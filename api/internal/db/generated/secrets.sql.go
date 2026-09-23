@@ -40,6 +40,39 @@ func (q *Queries) DeleteSecret(ctx context.Context, db DBTX, arg DeleteSecretPar
 	return result.RowsAffected(), nil
 }
 
+const getSecretEncryptedValue = `-- name: GetSecretEncryptedValue :one
+SELECT encrypted_value
+FROM secrets
+WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND name = $4
+ORDER BY app
+LIMIT 1
+`
+
+type GetSecretEncryptedValueParams struct {
+	TenantID    string `json:"tenant_id"`
+	ProjectID   string `json:"project_id"`
+	Environment string `json:"environment"`
+	Name        string `json:"name"`
+}
+
+// One secret's stored value for the broker that External Secrets Operator
+// calls. Scoped by (tenant, project, environment, name); app is not part of
+// the broker's URL contract, so same-name secrets across apps of one
+// environment collapse to one row by design (ADR D2 of
+// 2026-06-10-j22-layer2-code-review-fixes). The wrapper decrypts it through
+// the same dispatcher every other read uses.
+func (q *Queries) GetSecretEncryptedValue(ctx context.Context, db DBTX, arg GetSecretEncryptedValueParams) ([]byte, error) {
+	row := db.QueryRow(ctx, getSecretEncryptedValue,
+		arg.TenantID,
+		arg.ProjectID,
+		arg.Environment,
+		arg.Name,
+	)
+	var encrypted_value []byte
+	err := row.Scan(&encrypted_value)
+	return encrypted_value, err
+}
+
 const listSecretNames = `-- name: ListSecretNames :many
 SELECT name, environment, app
 FROM secrets

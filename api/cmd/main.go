@@ -381,15 +381,13 @@ func main() {
 	// secret store (PostgresSecretStore.ListForResync) and a workload
 	// K8s creator (the same SecretK8sSync used by POST /api/v1/secrets).
 	if buildHandler != nil && stores != nil && k8sDeps != nil && k8sDeps.SecretK8sSync != nil {
-		if pgStore, ok := stores.SecretStore.(*store.PostgresSecretStore); ok {
-			resyncer := &platform.SecretResyncer{
-				Store:  pgStore,
-				K8s:    k8sDeps.SecretK8sSync,
-				Logger: logger,
-			}
-			buildHandler = buildHandler.WithSecretResyncer(resyncer)
-			logger.Info("secret resyncer wired — deploy will repopulate ExternalSecrets post envEnsurer (V9 L20)")
+		resyncer := &platform.SecretResyncer{
+			Store:  stores.PgSecretStore,
+			K8s:    k8sDeps.SecretK8sSync,
+			Logger: logger,
 		}
+		buildHandler = buildHandler.WithSecretResyncer(resyncer)
+		logger.Info("secret resyncer wired — deploy will repopulate ExternalSecrets post envEnsurer (V9 L20)")
 	}
 
 	healthServices := setupHealthServices(cfg)
@@ -438,7 +436,7 @@ func main() {
 		// wrapper, so this is single-source-of-truth even when constructed
 		// twice (both writes go to the same audit_log table via WriteAuditLog).
 		auditLogger := &store.AuditLogger{DB: dbAdapter}
-		fetchDeps := setupSecretFetchDeps(dbAdapter.Pool, transit, cellStore, auditLogger)
+		fetchDeps := setupSecretFetchDeps(stores.PgSecretStore, cellStore, auditLogger)
 		brokerToken := os.Getenv("LOOPZERO_BROKER_TOKEN")
 		if fetchDeps != nil && brokerToken != "" {
 			rawHandler := secrets.NewSecretFetchHandler(*fetchDeps)
