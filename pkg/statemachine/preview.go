@@ -11,6 +11,7 @@ package statemachine
 // works without a translation layer — matching the TenantMachine
 // pattern that already aligns with loopzerov1.TenantPhase.
 const (
+	PreviewEmpty         State = ""
 	PreviewCreating      State = "Creating"
 	PreviewActive        State = "Active"
 	PreviewExpiring      State = "Expiring"
@@ -22,6 +23,7 @@ const (
 
 // PreviewEnvironment events as defined in spec section 5.3.
 const (
+	PreviewCreate              Event = "Create"
 	PreviewCreationCompleted   Event = "CreationCompleted"
 	PreviewCreationFailed      Event = "CreationFailed"
 	PreviewExpirationTriggered Event = "ExpirationTriggered"
@@ -33,12 +35,15 @@ const (
 
 // NewPreviewMachine returns the preview environment state machine per spec section 5.3.
 //
-// States: CREATING -> ACTIVE -> EXPIRING/DELETING -> DELETED
+// States: (empty) -> CREATING -> ACTIVE -> EXPIRING/DELETING -> DELETED
 // Terminal: DELETED
 func NewPreviewMachine() *Machine {
 	return NewMachine(MachineConfig{
 		Name: "PreviewEnvironment",
 		Transitions: []transition{
+			// A new CR enters the lifecycle
+			{From: PreviewEmpty, Event: PreviewCreate, To: PreviewCreating},
+
 			// Creation outcomes
 			{From: PreviewCreating, Event: PreviewCreationCompleted, To: PreviewActive},
 			{From: PreviewCreating, Event: PreviewCreationFailed, To: PreviewFailed},

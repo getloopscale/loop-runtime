@@ -192,9 +192,11 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	// finalizer block — so it takes its own snapshot (see reconcileDelete).
 	base := preview.DeepCopy()
 
-	// Initialize phase via state machine (T2.1 / COMP-002).
+	// A new CR enters the lifecycle through the state machine (T2.1 / COMP-002).
 	if preview.Status.Phase == "" {
-		preview.Status.Phase = loopzerov1.PreviewPhaseCreating
+		preview.Status.Phase = loopzerov1.PreviewPhase(
+			previewSM.Transition(statemachine.PPhEmpty, statemachine.PPEventCreate),
+		)
 		now := metav1.Now()
 		preview.Status.CreatedAt = &now
 	}

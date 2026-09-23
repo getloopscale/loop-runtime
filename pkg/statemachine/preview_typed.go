@@ -13,6 +13,7 @@ type PreviewPhase string
 type PreviewPhaseEvent string
 
 const (
+	PPhEmpty         = PreviewPhase(PreviewEmpty)
 	PPhCreating      = PreviewPhase(PreviewCreating)
 	PPhActive        = PreviewPhase(PreviewActive)
 	PPhExpiring      = PreviewPhase(PreviewExpiring)
@@ -23,6 +24,7 @@ const (
 )
 
 const (
+	PPEventCreate              = PreviewPhaseEvent(PreviewCreate)
 	PPEventCreationCompleted   = PreviewPhaseEvent(PreviewCreationCompleted)
 	PPEventCreationFailed      = PreviewPhaseEvent(PreviewCreationFailed)
 	PPEventExpirationTriggered = PreviewPhaseEvent(PreviewExpirationTriggered)
