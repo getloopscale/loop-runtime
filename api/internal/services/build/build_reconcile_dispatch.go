@@ -80,9 +80,16 @@ func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
 		// The sync.Map check above is the fast path (in-process). The PG
 		// claim adds the cross-replica guarantee: if another controller
 		// replica claimed this build, TryClaim returns false and we skip it.
-		if r.pgDedup != nil && !r.pgDedup.TryClaim(ctx, "builds", build.ID) {
-			r.active.Delete(build.ID) // undo the local LoadOrStore
-			continue
+		if r.pgDedup != nil {
+			claimed, err := r.pgDedup.TryClaim(ctx, "builds", build.ID)
+			if err != nil {
+				r.logger.Warn("reconcile loop: build claim failed; retrying next tick",
+					"build_id", build.ID, "error", err)
+			}
+			if !claimed {
+				r.active.Delete(build.ID) // undo the local LoadOrStore
+				continue
+			}
 		}
 
 		// Per-tenant backpressure: skip if this tenant has too many active builds.

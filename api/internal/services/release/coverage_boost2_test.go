@@ -82,8 +82,8 @@ func (f *fakeLockerStatic) WithLock(_ context.Context, _, _, _ string, fn func(t
 
 func TestPGClaimDedup_Disabled_TryClaimAlwaysTrue(t *testing.T) {
 	d := processing.NewPGClaimDedup(nil, false, "pod-1")
-	if !d.TryClaim(context.Background(), "builds", "bld-001") {
-		t.Error("disabled TryClaim should always return true")
+	if claimed, err := d.TryClaim(context.Background(), "builds", "bld-001"); !claimed || err != nil {
+		t.Error("disabled TryClaim should always grant")
 	}
 }
 
@@ -93,30 +93,16 @@ func TestPGClaimDedup_Disabled_ReleaseIsNoop(t *testing.T) {
 	d.Release(context.Background(), "builds", "bld-001")
 }
 
-func TestPGClaimDedup_Disabled_IsProcessingPGReturnsFalse(t *testing.T) {
-	d := processing.NewPGClaimDedup(nil, false, "pod-1")
-	if d.IsProcessingPG(context.Background(), "builds", "bld-001") {
-		t.Error("disabled IsProcessingPG should return false")
-	}
-}
-
 func TestPGClaimDedup_NilStore_TryClaimTrue(t *testing.T) {
 	d := processing.NewPGClaimDedup(nil, true, "pod-1")
-	if !d.TryClaim(context.Background(), "builds", "bld-001") {
-		t.Error("nil store TryClaim should return true")
+	if claimed, err := d.TryClaim(context.Background(), "builds", "bld-001"); !claimed || err != nil {
+		t.Error("nil store TryClaim should grant")
 	}
 }
 
 func TestPGClaimDedup_NilStore_ReleaseIsNoop(t *testing.T) {
 	d := processing.NewPGClaimDedup(nil, true, "pod-1")
 	d.Release(context.Background(), "builds", "bld-001")
-}
-
-func TestPGClaimDedup_NilStore_IsProcessingPGFalse(t *testing.T) {
-	d := processing.NewPGClaimDedup(nil, true, "pod-1")
-	if d.IsProcessingPG(context.Background(), "builds", "bld-001") {
-		t.Error("nil store IsProcessingPG should return false")
-	}
 }
 
 // =============================================================================

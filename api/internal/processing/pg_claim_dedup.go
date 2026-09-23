@@ -6,6 +6,7 @@ package processing
 import (
 	"context"
 	"errors"
+	"log/slog"
 )
 
 // PGClaimDedup provides a ClaimStore-backed deduplication layer that
@@ -36,45 +37,36 @@ func NewPGClaimDedup(store *ClaimStore, enabled bool, holder string) *PGClaimDed
 	}
 }
 
-// TryClaim attempts to claim a build/release for  Returns
-// true if this replica now owns the work, false if another replica
-// already claimed it. When PG claims are disabled, always returns true
-// (the sync.Map in the caller handles dedup locally).
-func (d *PGClaimDedup) TryClaim(ctx context.Context, kind Kind, id string) bool {
+// TryClaim attempts to claim a build/release for this replica. It returns
+// (true, nil) when this replica now owns the work and (false, nil) when a
+// live peer already holds it. A database failure is (false, err): the caller
+// must not read an outage as contention. When PG claims are disabled it always
+// grants (the sync.Map in the caller handles dedup locally).
+func (d *PGClaimDedup) TryClaim(ctx context.Context, kind Kind, id string) (bool, error) {
 	if !d.enabled || d.store == nil {
-		return true
+		return true, nil
 	}
 	err := d.store.Claim(ctx, kind, id, d.holder)
-	return err == nil
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, ErrClaimHeld):
+		return false, nil
+	default:
+		return false, err
+	}
 }
 
-// Release drops the claim for a completed/failed build/release. When
-// PG claims are disabled, this is a no-op (the sync.Map in the caller
-// handles cleanup via active.Delete).
+// Release drops the claim for a completed/failed build/release. When PG claims
+// are disabled, this is a no-op (the sync.Map in the caller handles cleanup
+// via active.Delete). A failed release leaves the row claimed until the claim
+// goes stale, so it is logged with its context.
 func (d *PGClaimDedup) Release(ctx context.Context, kind Kind, id string) {
 	if !d.enabled || d.store == nil {
 		return
 	}
-	_ = d.store.Release(ctx, kind, id, d.holder)
-}
-
-// IsProcessingPG checks if ANY replica has claimed this build (used by
-// the reaper to avoid competing with an active reconciliation). Returns
-// false when PG claims are disabled — the reaper falls back to the
-// sync.Map-based IsProcessing on the loop struct.
-func (d *PGClaimDedup) IsProcessingPG(ctx context.Context, kind Kind, id string) bool {
-	if !d.enabled || d.store == nil {
-		return false
+	if err := d.store.Release(ctx, kind, id, d.holder); err != nil {
+		slog.WarnContext(ctx, "processing: claim release failed; the claim stays until it goes stale",
+			"kind", kind, "id", id, "holder", d.holder, "stale_after", StaleAfter, "error", err)
 	}
-	// A build is "processing" if a claim exists and is not orphaned.
-	// The simplest check: try to claim it ourselves. If we get
-	// ErrClaimHeld, someone else has it.
-	err := d.store.Claim(ctx, kind, id, d.holder+"-probe")
-	if err == nil {
-		// We accidentally claimed it with a probe holder — release immediately.
-		_ = d.store.Release(ctx, kind, id, d.holder+"-probe")
-		return false
-	}
-	// ErrClaimHeld means another replica has it.
-	return errors.Is(err, ErrClaimHeld)
 }

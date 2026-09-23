@@ -200,9 +200,16 @@ func (r *ReleaseConvergenceLoop) tick(ctx context.Context) {
 		}
 
 		// Phase 0.2: cross-replica dedup via PG claims.
-		if r.pgDedup != nil && !r.pgDedup.TryClaim(ctx, "releases", rel.ID) {
-			r.active.Delete(rel.ID)
-			continue
+		if r.pgDedup != nil {
+			claimed, err := r.pgDedup.TryClaim(ctx, "releases", rel.ID)
+			if err != nil {
+				r.logger.Warn("release convergence: release claim failed; retrying next tick",
+					"release_id", rel.ID, "error", err)
+			}
+			if !claimed {
+				r.active.Delete(rel.ID)
+				continue
+			}
 		}
 
 		release := rel
