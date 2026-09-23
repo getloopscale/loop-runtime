@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeFixtureRepo(t *testing.T) string {
@@ -15,6 +17,12 @@ func writeFixtureRepo(t *testing.T) string {
 	root := t.TempDir()
 	// Minimal Taskfile.yml with a couple of tasks.
 	must(t, os.WriteFile(filepath.Join(root, "Taskfile.yml"), []byte(`version: '3'
+includes:
+  k3dfile:
+    taskfile: ./taskfiles/k3d.yml
+    flatten: true
+  quality:
+    taskfile: ./taskfiles/quality.yml
 tasks:
   setup:
     cmds:
@@ -126,21 +134,9 @@ func TestCheck_ToPlanTearDownAntiPatternFails(t *testing.T) {
 }
 
 func TestCheck_RealRepoPasses(t *testing.T) {
-	abs, err := filepath.Abs("..")
-	if err != nil {
-		t.Fatalf("abs: %v", err)
+	root := qtestutil.RootFile(t, skillsDir)
+	outcome, checkErr := Check(Config{RepoRoot: root})
+	if checkErr != nil {
+		t.Fatalf("real repo must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
 	}
-	for i := 0; i < 8; i++ {
-		if _, statErr := os.Stat(filepath.Join(abs, rootTaskfile)); statErr == nil {
-			if _, sErr := os.Stat(filepath.Join(abs, skillsDir)); sErr == nil {
-				outcome, checkErr := Check(Config{RepoRoot: abs})
-				if checkErr != nil {
-					t.Fatalf("real repo must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
-				}
-				return
-			}
-		}
-		abs = filepath.Dir(abs)
-	}
-	t.Skip("could not locate Taskfile.yml + .claude/skills within 8 parent dirs; skipping")
 }

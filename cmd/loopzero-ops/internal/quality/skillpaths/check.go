@@ -18,24 +18,11 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/taskfileinterface"
 )
 
-const (
-	skillsDir        = ".claude/skills"
-	rootTaskfile     = "Taskfile.yml"
-	taskfilesDirName = "taskfiles"
-)
-
-// flattenedSubfiles are the taskfile includes that use `flatten: true` in
-// Taskfile.yml — their task names appear at root namespace (e.g. `task setup`).
-var flattenedSubfiles = []string{"test", "helm", "infra", "dev", "db", "k3d", "security", "observability"}
-
-// namespacedSubfiles map filename → namespace prefix for includes WITHOUT
-// `flatten: true` in Taskfile.yml.
-var namespacedSubfiles = map[string]string{
-	"drill.yml":   "drill:",
-	"quality.yml": "quality:",
-}
+const skillsDir = ".claude/skills"
 
 // skipSkillsForTaskInvocationCheck are skills that are generic (not LoopZero-
 // customized) — their `task X` refs are not real LoopZero task refs.
@@ -64,7 +51,6 @@ var (
 	scriptRefRE    = regexp.MustCompile(`infra/scripts/[a-zA-Z0-9_./-]+\.sh`)
 	drillAbbrevRE  = regexp.MustCompile(`drill/[a-zA-Z0-9_-]+\.sh`)
 	backtickTaskRE = regexp.MustCompile("`task ([a-z][a-z0-9_:-]+)`")
-	taskNameLineRE = regexp.MustCompile(`^  ([a-z][a-z0-9:_-]*):[[:space:]]*(#.*)?$`)
 	dogfoodGHTokRE = regexp.MustCompile(`GH_TOKEN.*\.env|\.env.*GH_TOKEN`)
 	toPlanTeardown = regexp.MustCompile(`\btask teardown\b`)
 )
@@ -79,7 +65,7 @@ func Check(cfg Config) (Outcome, error) {
 		}
 	}
 
-	tasks, err := collectAllTaskNames(root)
+	tasks, err := taskfileinterface.CollectTaskNames(root)
 	if err != nil {
 		return Outcome{}, fmt.Errorf("collect task names: %w", err)
 	}
@@ -130,7 +116,7 @@ func Check(cfg Config) (Outcome, error) {
 		if !skipSkillsForTaskInvocationCheck[skillName] {
 			for _, task := range uniqTaskInvocations(body) {
 				out.CheckedTasks++
-				if _, present := tasks[task]; !present {
+				if !tasks[task] {
 					out.Failures = append(out.Failures, fmt.Sprintf("%s: references non-existent task '%s'", skillName, task))
 				}
 			}
@@ -149,65 +135,6 @@ func Check(cfg Config) (Outcome, error) {
 		return out, ErrViolations
 	}
 	return out, nil
-}
-
-// collectAllTaskNames walks Taskfile.yml + the include set (flattened + namespaced)
-// and returns the sorted set of canonical task names.
-func collectAllTaskNames(root string) (map[string]struct{}, error) {
-	set := map[string]struct{}{}
-	add := func(names []string, prefix string) {
-		for _, n := range names {
-			set[prefix+n] = struct{}{}
-		}
-	}
-	rootTasks, err := extractTasksFromFile(filepath.Join(root, rootTaskfile))
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", rootTaskfile, err)
-	}
-	add(rootTasks, "")
-	for _, sub := range flattenedSubfiles {
-		names, err := extractTasksFromFile(filepath.Join(root, taskfilesDirName, sub+".yml"))
-		if err != nil {
-			// Missing sub-file is not fatal (project may not have all subfiles).
-			continue
-		}
-		add(names, "")
-	}
-	for filename, prefix := range namespacedSubfiles {
-		names, err := extractTasksFromFile(filepath.Join(root, taskfilesDirName, filename))
-		if err != nil {
-			continue
-		}
-		add(names, prefix)
-	}
-	return set, nil
-}
-
-// extractTasksFromFile ports the bash awk task-name extractor.
-func extractTasksFromFile(path string) ([]string, error) {
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var names []string
-	inTasks := false
-	for _, line := range strings.Split(string(body), "\n") {
-		if !inTasks {
-			if strings.HasPrefix(line, "tasks:") {
-				inTasks = true
-			}
-			continue
-		}
-		// A top-level key (not indented) ends the tasks: block.
-		if len(line) > 0 && line[0] >= 'a' && line[0] <= 'z' {
-			inTasks = false
-			continue
-		}
-		if m := taskNameLineRE.FindStringSubmatch(line); m != nil {
-			names = append(names, m[1])
-		}
-	}
-	return names, nil
 }
 
 // uniqMatches returns the sorted unique regex matches over body.
