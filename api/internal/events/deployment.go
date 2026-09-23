@@ -10,7 +10,10 @@
 // stays in sync. There is no codegen today; the contract is honor-system.
 package events
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Event type constants for deployment-related SSE events. Each one
 // corresponds to exactly one TypeScript discriminator literal in
@@ -39,41 +42,54 @@ const (
 	EventRolloutAborted = "rollout.aborted"
 )
 
-// CanonicalStepNames is the allowlist of step names that get a dedicated
-// Prometheus counter label. Any step not in this list maps to label
-// `step="other"` (EC-16 cardinality guard).
-//
-// Order mirrors the Argo Workflow DAG order in the build pipeline. UI
-// groups these into 5 phases (Clone / Install / Build / Sign / Deliver).
-var CanonicalStepNames = []string{
-	"clone-repo",
-	"validate-workspace-node",
-	"validate-workspace-user-dockerfile",
-	"restore-cache-node",
-	"install-deps-node",
-	"install-deps-user-dockerfile",
-	"security-scan-node",
-	"security-scan-user-dockerfile",
-	"generate-dockerfile-node",
-	"dockerfile-lint-user-dockerfile",
-	"build-apps-node",
-	"build-apps-user-dockerfile",
-	"build-image-api",
-	"save-cache-node",
-	"sign-image-api",
-	"sbom-api",
-	"deliver-artifact-web",
+// stepFamily is one kind of build pipeline step. A step belongs to a family
+// when its name IS the family or is the family followed by "-" and a suffix:
+// a language for the per-language steps of a multi-language project
+// ("install-deps-python"), an app name for the per-app delivery steps
+// ("build-image-checkout").
+type stepFamily struct {
+	name  string
+	phase string
 }
 
-// IsCanonicalStep reports whether a step name is in the allowlist.
-// Used by the metrics layer to clamp cardinality.
-func IsCanonicalStep(name string) bool {
-	for _, s := range CanonicalStepNames {
-		if s == name {
-			return true
+// stepFamilies is the single source of truth for step -> UI phase grouping,
+// shared by the SSE timeline, the step metric and the build log labels.
+// Order mirrors the build pipeline DAG. The UI groups these into five phases
+// (Clone / Install / Build / Sign / Deliver); anything else is "other".
+var stepFamilies = []stepFamily{
+	{"clone-repo", "clone"},
+	{"validate-workspace", "clone"},
+	{"restore-cache", "install"},
+	{"install-deps", "install"},
+	{"security-scan", "install"},
+	{"generate-dockerfile", "build"},
+	{"build-apps", "build"},
+	{"build-image", "build"},
+	{"save-cache", "build"},
+	{"sign-image", "sign"},
+	{"sbom", "sign"},
+	{"attest-image", "sign"},
+	{"deliver-artifact", "deliver"},
+	{"mirror-harbor", "deliver"},
+}
+
+func familyOf(stepName string) (stepFamily, bool) {
+	for _, f := range stepFamilies {
+		if stepName == f.name || strings.HasPrefix(stepName, f.name+"-") {
+			return f, true
 		}
 	}
-	return false
+	return stepFamily{}, false
+}
+
+// StepMetricLabel returns the step's family ("build-image" for
+// "build-image-checkout"), or "other". Families are a fixed set, so the label
+// stays bounded however many apps and languages projects use (EC-16).
+func StepMetricLabel(stepName string) string {
+	if f, ok := familyOf(stepName); ok {
+		return f.name
+	}
+	return "other"
 }
 
 // BuildStepStartedPayload is the JSON body of a `build.step.started` event.
@@ -107,33 +123,12 @@ type BuildStepFailedPayload struct {
 	Suggestion      string    `json:"suggestion"`
 }
 
-// PhaseGroupForStep returns the UI phase group for a canonical step.
-// Unknown steps map to "other" (EC-11 fallback rendering).
+// PhaseGroupForStep returns the UI phase group (clone | install | build |
+// sign | deliver) of a build pipeline step, or "other" for a step outside
+// every family (EC-11 fallback rendering).
 func PhaseGroupForStep(stepName string) string {
-	switch stepName {
-	case "clone-repo",
-		"validate-workspace-node",
-		"validate-workspace-user-dockerfile":
-		return "clone"
-	case "restore-cache-node",
-		"install-deps-node",
-		"install-deps-user-dockerfile",
-		"security-scan-node",
-		"security-scan-user-dockerfile":
-		return "install"
-	case "generate-dockerfile-node",
-		"dockerfile-lint-user-dockerfile",
-		"build-apps-node",
-		"build-apps-user-dockerfile",
-		"build-image-api",
-		"save-cache-node":
-		return "build"
-	case "sign-image-api",
-		"sbom-api":
-		return "sign"
-	case "deliver-artifact-web":
-		return "deliver"
-	default:
-		return "other"
+	if f, ok := familyOf(stepName); ok {
+		return f.phase
 	}
+	return "other"
 }

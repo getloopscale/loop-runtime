@@ -383,13 +383,10 @@ func (w *ArgoStepWatcher) appendAndCount(ctx context.Context, buildID, eventType
 	cloudmetrics.DeploymentsStepEventsTotal.WithLabelValues(stepLabel, status).Inc()
 }
 
-// stepLabelFor returns the Prometheus label value: the canonical step
-// name if known, otherwise "other" (EC-16 cardinality cap).
+// stepLabelFor returns the Prometheus label value: the step's family, or
+// "other" (EC-16 cardinality cap).
 func stepLabelFor(name string) string {
-	if events.IsCanonicalStep(name) {
-		return name
-	}
-	return "other"
+	return events.StepMetricLabel(name)
 }
 
 // stripRetrySuffix removes the Argo retry suffix `(N)` from a step name.

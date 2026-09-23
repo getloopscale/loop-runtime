@@ -93,7 +93,7 @@ func expandPipefail(match string) string {
 // A tentativa protegida continua, agora pelo que de fato vale: onde a concha suporta
 // pipefail, um comando falho no meio de um cano DENTRO do script do usuario e detectado.
 func wrapWithLoopZeroMarkers(stepName, script string) string {
-	phase := phaseForStepFuzzy(stepName)
+	phase := events.PhaseGroupForStep(stepName)
 	display := humanizeStepName(stepName)
 
 	// Canonical 2026-06-16 (dash-compat shim): shellgen.SetE emits
@@ -155,38 +155,6 @@ case "$__loopzero_status" in ''|*[!0-9]*) __loopzero_status=1 ;; esac
 rm -f "$__loopzero_rc_file" 2>/dev/null || true
 exit "$__loopzero_status"
 `, phase, stepName, display, script)
-}
-
-// phaseForStepFuzzy resolves a phase group from a step name, accepting
-// either the canonical full name (matches events.PhaseGroupForStep)
-// or a buildContainer short name (e.g. "security-scan" vs canonical
-// "security-scan-node"). When the canonical lookup misses, fall back
-// to prefix matching against the canonical sets so phase labels stay
-// correct in Loki even when the strategy uses a language-agnostic
-// container name.
-func phaseForStepFuzzy(name string) string {
-	if p := events.PhaseGroupForStep(name); p != "other" {
-		return p
-	}
-	switch {
-	case strings.HasPrefix(name, "validate-workspace"), strings.HasPrefix(name, "clone-"):
-		return "clone"
-	case strings.HasPrefix(name, "restore-cache"),
-		strings.HasPrefix(name, "install-deps"),
-		strings.HasPrefix(name, "security-scan"):
-		return "install"
-	case strings.HasPrefix(name, "generate-dockerfile"),
-		strings.HasPrefix(name, "dockerfile-lint"),
-		strings.HasPrefix(name, "build-apps"),
-		strings.HasPrefix(name, "build-image"),
-		strings.HasPrefix(name, "save-cache"):
-		return "build"
-	case strings.HasPrefix(name, "sign-image"), strings.HasPrefix(name, "sbom"):
-		return "sign"
-	case strings.HasPrefix(name, "deliver-"):
-		return "deliver"
-	}
-	return "other"
 }
 
 // humanizeStepName converts an internal step name into a sentence-style

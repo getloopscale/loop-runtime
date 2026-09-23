@@ -514,11 +514,10 @@ var (
 	// Plan J-17 T1.3 (2026-06-06). Counts every Argo Workflow node phase
 	// transition that the argo_step_watcher service observed and emitted
 	// as an SSE event. Labels:
-	//   - step: one of events.CanonicalStepNames OR "other" (EC-16
-	//     cardinality guard — non-canonical step names like custom
-	//     Dockerfile steps land in "other" so the cardinality stays at
-	//     17 canonical + 1 "other" = 18 step values * 3 statuses = 54
-	//     series per cluster).
+	//   - step: the step family from events.StepMetricLabel ("build-image"
+	//     for "build-image-checkout") OR "other" (EC-16 cardinality guard —
+	//     families are a fixed set, so the label stays bounded however many
+	//     apps and languages projects use).
 	//   - status: started | succeeded | failed.
 	// SLO queries:
 	//   - "% builds with all steps succeeded": ratio of {status="failed"}
