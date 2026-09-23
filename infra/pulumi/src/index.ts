@@ -15,7 +15,7 @@
 
 import * as pulumi from "@pulumi/pulumi";
 import { loadStackConfig } from "./config/stack";
-import { createInfra, resolveProvider } from "./components/infra";
+import { createInfra } from "./components/infra";
 import { createStaticDelivery, StaticDeliveryOutput } from "./providers/cloudflare/static-delivery";
 import { createTunnel, TunnelOutput } from "./providers/cloudflare/tunnel";
 import { resolveOrphans, OrphanLookupResult } from "./core/adopt-or-create";
@@ -36,7 +36,6 @@ import {
 
 // --- Configuration ---
 const config = loadStackConfig();
-resolveProvider(config.provider, config); // factory side-effects only (provider registration)
 
 // --- Pre-flight: Adopt-or-create lookups (idempotency) ---
 const baseName = resourceName({

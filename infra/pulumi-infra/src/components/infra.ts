@@ -9,8 +9,6 @@ import { CloudProvider } from "../core/types";
 import { CloudProviderFactory } from "../contracts/provider";
 import { DatabaseClusterOutput } from "../contracts/database";
 import { DigitalOceanProviderFactory } from "../providers/digitalocean";
-import { AwsProviderFactory } from "../providers/aws";
-import { CloudflareDnsProvider } from "../providers/cloudflare/dns";
 import { InfraStackConfig } from "../config/stack";
 
 // ---------------------------------------------------------------------------
@@ -62,23 +60,17 @@ export interface InfraOutputs {
  * Resolves the concrete provider factory from the config string.
  * This is the ONLY place that maps provider name → implementation.
  *
- * When cfZoneId is set, DNS records are created in Cloudflare instead of the
- * cloud provider's DNS. Required when the domain's authoritative nameservers
- * are Cloudflare (common with CF Tunnel, WAF, or CDN).
+ * DigitalOcean is the only provider this stack has or will have: it is AS-IS
+ * legacy retired at AM10, and the AWS re-platform lives in Terraform
+ * (../loopzero-infra-live), not here. Any other name is a configuration error.
  */
-export function resolveProvider(provider: CloudProvider, config?: InfraStackConfig): CloudProviderFactory {
-  const cfDns = config?.cfZoneId
-    ? new CloudflareDnsProvider(config.cfZoneId)
-    : undefined;
-
+export function resolveProvider(provider: CloudProvider): CloudProviderFactory {
   switch (provider) {
     case "digitalocean":
-      return new DigitalOceanProviderFactory({ dnsOverride: cfDns });
-    case "aws":
-      return new AwsProviderFactory();
+      return new DigitalOceanProviderFactory();
     default:
       throw new InfraError({
-        message: `Unsupported provider: ${provider satisfies never}`,
+        message: `Unsupported provider: ${provider satisfies never} — this legacy stack provisions DigitalOcean only`,
         code: "INVALID_CONFIG",
         context: { provider },
       });
@@ -104,7 +96,7 @@ export function resolveProvider(provider: CloudProvider, config?: InfraStackConf
  *   Clusters, DB, Storage are independent of each other
  */
 export function createInfra(config: InfraStackConfig): InfraOutputs {
-  const factory = resolveProvider(config.provider, config);
+  const factory = resolveProvider(config.provider);
   const tags = standardTags(config.project, config.environment);
 
   const baseName = resourceName({

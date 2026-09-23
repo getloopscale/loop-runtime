@@ -4,7 +4,6 @@
 import { NetworkSpec, NetworkOutput } from "./network";
 import { KubernetesClusterSpec, KubernetesClusterOutput } from "./kubernetes";
 import { ObjectStorageSpec, ObjectStorageOutput, CdnSpec, CdnOutput, StorageEndpointSpec, StorageEndpointOutput } from "./storage";
-import { DnsRecordSpec, DnsRecordOutput } from "./dns";
 import { DatabaseClusterSpec, DatabaseClusterOutput } from "./database";
 import { ContainerRegistrySpec, ContainerRegistryOutput } from "./registry";
 
@@ -12,11 +11,8 @@ import { ContainerRegistrySpec, ContainerRegistryOutput } from "./registry";
  * Each provider capability is its own interface (ISP).
  * CloudProviderFactory composes them all.
  *
- * When adding a new provider:
- * 1. Create providers/{name}/ with individual resource files
- * 2. Create a node class map in providers/{name}/nodes.ts
- * 3. Implement CloudProviderFactory
- * 4. Add case to resolveProvider() in components/infra.ts
+ * This stack is AS-IS legacy retired at AM10 and implements DigitalOcean only;
+ * no provider is added here (new infrastructure is Terraform, ../loopzero-infra-live).
  */
 
 export interface IProviderNetwork {
@@ -31,10 +27,6 @@ export interface IProviderStorage {
   createObjectStorage(spec: ObjectStorageSpec): ObjectStorageOutput;
   createCdn(spec: CdnSpec): CdnOutput;
   getStorageEndpoint(spec: StorageEndpointSpec): StorageEndpointOutput;
-}
-
-export interface IProviderDns {
-  createDnsRecord(spec: DnsRecordSpec): DnsRecordOutput;
 }
 
 export interface IProviderDatabase {
@@ -53,6 +45,5 @@ export interface CloudProviderFactory
   extends IProviderNetwork,
     IProviderKubernetes,
     IProviderStorage,
-    IProviderDns,
     IProviderDatabase,
     IProviderRegistry {}

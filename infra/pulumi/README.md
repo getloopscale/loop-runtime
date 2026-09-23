@@ -1,6 +1,6 @@
 # loopzero-infra
 
-Infrastructure-as-Code for the LoopZero platform. Provisions a complete production topology on DigitalOcean (portable to AWS) using Pulumi.
+Infrastructure-as-Code for the LoopZero platform. Provisions a complete production topology on DigitalOcean using Pulumi.
 
 ## Topology
 
@@ -75,7 +75,6 @@ src/
 │   ├── network.ts              NetworkSpec / Output
 │   ├── kubernetes.ts           KubernetesClusterSpec / Output
 │   ├── storage.ts              ObjectStorageSpec / Output
-│   ├── dns.ts                  DnsRecordSpec / Output
 │   ├── compute.ts              ComputeInstanceSpec / Output (VMs)
 │   └── database.ts             DatabaseClusterSpec / Output
 ├── components/
@@ -87,7 +86,7 @@ src/
 │   ├── tags.test.ts            standardTags, tagsToStringArray
 │   ├── errors.test.ts          InfraError formatting + structured log
 │   ├── nodes.test.ts           resolveNodeSize, resolveDbSize
-│   └── dns-detection.test.ts   A vs CNAME vs AAAA auto-detection
+│   └── resolve-provider.test.ts DigitalOcean only; anything else is INVALID_CONFIG
 └── providers/
     ├── digitalocean/            Complete implementation (8 files)
     │   ├── index.ts             Factory
@@ -95,11 +94,9 @@ src/
     │   ├── network.ts           VPC
     │   ├── kubernetes.ts        DOKS cluster
     │   ├── storage.ts           Spaces bucket
-    │   ├── dns.ts               DNS records (A/CNAME/AAAA auto-detect)
-    │   ├── compute.ts           Droplets (VMs)
+        │   ├── compute.ts           Droplets (VMs)
     │   └── database.ts          Managed PostgreSQL
-    └── aws/
-        └── index.ts             Stub with an implementation guide
+    └── cloudflare/              Tunnel, Worker + KV static delivery
 ```
 
 ## Environments
@@ -301,31 +298,20 @@ CloudProviderFactory
 ├── IProviderNetwork          VPC / network
 ├── IProviderKubernetes       cluster K8s
 ├── IProviderStorage          object storage (S3-compatible)
-├── IProviderDns              DNS records
 ├── IProviderCompute          VMs (Droplet / EC2)
 └── IProviderDatabase         managed database (PostgreSQL)
 ```
 
 | Provider | Status |
 |----------|--------|
-| DigitalOcean | Implemented (6 capabilities) |
-| AWS | Stub with an implementation guide |
+| DigitalOcean | Implemented — the only provider this stack has |
 
-## Adding a new provider
-
-1. Create `src/providers/{name}/` with:
-   - `nodes.ts` — `NodeClass → instance type` + `NodeClass → DB size`
-   - `network.ts` — `IProviderNetwork`
-   - `kubernetes.ts` — `IProviderKubernetes`
-   - `storage.ts` — `IProviderStorage`
-   - `dns.ts` — `IProviderDns`
-   - `compute.ts` — `IProviderCompute`
-   - `database.ts` — `IProviderDatabase`
-   - `index.ts` — factory
-
-2. Register it in `src/components/infra.ts` → `resolveProvider()`
-
-3. Add the type in `src/core/types.ts` → `CloudProvider`
+No provider is added here. This stack is AS-IS legacy retired at AM10; the
+AWS re-platform is Terraform in `../loopzero-infra-modules` + `../loopzero-infra-live`
+(ADR `../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md`).
+The AWS stub and the unused DNS-record strategy (DigitalOcean + Cloudflare
+implementations nothing called) were removed on 2026-09-23; DNS for the
+platform is owned by the Cloudflare tunnel resource.
 
 ## Design decisions
 
