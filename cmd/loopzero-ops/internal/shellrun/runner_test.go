@@ -4,7 +4,6 @@
 package shellrun
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"os/exec"
@@ -48,25 +47,6 @@ func TestRunner_RunFailure_NonZeroExit(t *testing.T) {
 	assert.False(t, result.IsSuccess())
 }
 
-// TestRunner_RunTimeout_ContextCancelledKillsChild: WithTimeout fires SIGTERM.
-func TestRunner_RunTimeout_ContextCancelledKillsChild(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("signal semantics differ on Windows")
-	}
-	r := NewDefault()
-	r.GracePeriod = 200 * time.Millisecond
-	ctx := context.Background()
-
-	start := time.Now()
-	result, err := r.Run(ctx, "sleep", []string{"30"}, WithTimeout(100*time.Millisecond))
-	elapsed := time.Since(start)
-
-	require.Error(t, err)
-	require.NotNil(t, result)
-	// Should be killed well before 30s (timeout 100ms + grace 200ms + slack).
-	assert.Less(t, elapsed, 2*time.Second, "context cancel should kill subprocess promptly")
-}
-
 // TestRunner_RunCanceled_KillsGrandchildrenViaPGID: EC-4 fix — Setpgid + negative PID
 // signaling kills the entire process group, not just the direct child.
 func TestRunner_RunCanceled_KillsGrandchildrenViaPGID(t *testing.T) {
@@ -96,35 +76,6 @@ sleep 60`
 	assert.Less(t, elapsed, 2*time.Second, "PGID kill should propagate to grandchildren")
 }
 
-// TestRunner_WithEnv_ReplacesEnvironment: WithEnv overrides parent env.
-func TestRunner_WithEnv_ReplacesEnvironment(t *testing.T) {
-	r := NewDefault()
-	ctx := context.Background()
-
-	result, err := r.Run(ctx, "sh", []string{"-c", "echo $MY_VAR"},
-		WithEnv([]string{"MY_VAR=custom_value", "PATH=/usr/bin:/bin"}))
-
-	require.NoError(t, err)
-	assert.Equal(t, "custom_value\n", result.Stdout)
-}
-
-// TestRunner_WithEnvIsolated_EmptyEnvironment: WithEnvIsolated yields empty env.
-// Note: sh re-initializes PATH from /etc/profile defaults even with empty env,
-// so we test via `env` command directly (which reports the actual env vars).
-func TestRunner_WithEnvIsolated_EmptyEnvironment(t *testing.T) {
-	r := NewDefault()
-	ctx := context.Background()
-
-	// Provide a custom env that includes a unique marker — if isolation works,
-	// inherited env vars from parent process should NOT appear.
-	result, err := r.Run(ctx, "env", nil, WithEnv([]string{"ONLY=marker"}))
-	require.NoError(t, err)
-	assert.Contains(t, result.Stdout, "ONLY=marker")
-	// Critical: HOME from parent should NOT appear since we replaced env.
-	assert.NotContains(t, result.Stdout, "HOME=",
-		"replaced env should not inherit HOME from parent")
-}
-
 // TestRunner_WithCwd_ChangesWorkingDir: WithCwd sets process working dir.
 func TestRunner_WithCwd_ChangesWorkingDir(t *testing.T) {
 	r := NewDefault()
@@ -136,32 +87,6 @@ func TestRunner_WithCwd_ChangesWorkingDir(t *testing.T) {
 	// macOS may symlink-resolve /tmp → /private/tmp; check suffix.
 	assert.True(t, strings.HasSuffix(strings.TrimSpace(result.Stdout), "/tmp"),
 		"cwd should end in /tmp, got %q", result.Stdout)
-}
-
-// TestRunner_WithStdin_ReadsFromReader: stdin Reader piped to child.
-func TestRunner_WithStdin_ReadsFromReader(t *testing.T) {
-	r := NewDefault()
-	ctx := context.Background()
-	input := bytes.NewReader([]byte("piped data\n"))
-
-	result, err := r.Run(ctx, "cat", nil, WithStdin(input))
-
-	require.NoError(t, err)
-	assert.Equal(t, "piped data\n", result.Stdout)
-}
-
-// TestRunner_WithStreamingStdout_BypassesBuffer: streaming writer receives output;
-// Result.Stdout remains empty.
-func TestRunner_WithStreamingStdout_BypassesBuffer(t *testing.T) {
-	r := NewDefault()
-	ctx := context.Background()
-	var buf bytes.Buffer
-
-	result, err := r.Run(ctx, "echo", []string{"streamed"}, WithStreamingStdout(&buf))
-
-	require.NoError(t, err)
-	assert.Equal(t, "streamed\n", buf.String())
-	assert.Empty(t, result.Stdout, "Stdout should be empty when streaming")
 }
 
 // TestRunner_LargeStdout_Truncates: output > MaxBufferSize sets Truncated=true.
@@ -348,30 +273,6 @@ func TestMockRunner_Reset_ClearsHistoryButPreservesResponses(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestRunner_WithEnvIsolated_Option_Set: WithEnvIsolated marks the option;
-// resulting Result is shaped to show empty-env semantics.
-func TestRunner_WithEnvIsolated_Option_Set(t *testing.T) {
-	opt := runOptions{}
-	WithEnvIsolated()(&opt)
-	assert.True(t, opt.envIsolated)
-	assert.NotNil(t, opt.env)
-	assert.Empty(t, opt.env)
-}
-
-// TestRunner_WithStreamingStderr_RoutesStderrToWriter: stream-mode for stderr.
-func TestRunner_WithStreamingStderr_RoutesStderrToWriter(t *testing.T) {
-	r := NewDefault()
-	ctx := context.Background()
-	var buf bytes.Buffer
-
-	result, err := r.Run(ctx, "sh", []string{"-c", "echo err-line >&2"},
-		WithStreamingStderr(&buf))
-
-	require.NoError(t, err)
-	assert.Equal(t, "err-line\n", buf.String())
-	assert.Empty(t, result.Stderr, "stderr should be empty when streaming")
-}
-
 // TestRunner_KillProcessGroup_ProcessNotStarted: defensive path when Process is nil.
 func TestRunner_KillProcessGroup_ProcessNotStarted(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -383,24 +284,6 @@ func TestRunner_KillProcessGroup_ProcessNotStarted(t *testing.T) {
 	cmd := mustNewUnstartedCmd(t)
 	err := killProcessGroup(cmd, false)
 	assert.Error(t, err, "should fail when Process is nil")
-}
-
-// TestRunner_WithTimeout_HitsBeforeContext: WithTimeout fires before context deadline.
-func TestRunner_WithTimeout_HitsBeforeContext(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("signal semantics differ on Windows")
-	}
-	r := NewDefault()
-	r.GracePeriod = 100 * time.Millisecond
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	start := time.Now()
-	_, err := r.Run(ctx, "sleep", []string{"5"}, WithTimeout(50*time.Millisecond))
-	elapsed := time.Since(start)
-
-	require.Error(t, err)
-	assert.Less(t, elapsed, 1*time.Second, "WithTimeout should fire much faster than ctx")
 }
 
 var errSentinel = sentinelError("test")

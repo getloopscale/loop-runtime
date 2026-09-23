@@ -2,14 +2,11 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package shellrun provides typed subprocess execution for the
-// loopzero-ops binary toolbox. It replaces ad-hoc bash invocations
-// (`cmd1 | cmd2 && cmd3`) with a Runner interface that emits
-// structured logs, metrics, and traces per invocation.
+// loopzero-ops binary toolbox: a Runner interface (with a MockRunner for tests)
+// that captures output, logs each invocation with slog, and kills the whole
+// process group on cancellation.
 //
-// Plan: 2026-05-21-bash-to-go-migration-plan
-// ADR: docs/decisions.md (D7+D9)
-//
-// Phase 1 T1.1 of the bash → Go migration.
+// ADR: docs/decisions.md (D7+D9).
 package shellrun
 
 import "time"
@@ -28,21 +25,16 @@ type Result struct {
 
 	// Stdout is the captured standard output. Limited to MaxBufferSize
 	// (default 10 MiB); larger output triggers Truncated=true and the
-	// excess is dropped. For commands that emit large outputs (e.g.,
-	// `pulumi stack output --json`), use WithStreamingStdout(io.Writer).
+	// excess is dropped.
 	Stdout string `json:"stdout"`
 
 	// Stderr is the captured standard error. Same MaxBufferSize cap.
 	Stderr string `json:"stderr"`
 
-	// ExitCode is the process exit code:
-	//   0 — success
-	//   1 — usage error (mapped to OPS_USAGE)
-	//   2 — build failure (mapped to OPS_BUILD_FAILURE)
-	//   3 — deploy failure (mapped to OPS_DEPLOY_FAILURE)
-	//   4 — auth error (mapped to OPS_AUTH)
-	//   5 — partial failure (mapped to OPS_PARTIAL)
-	//   negative — process killed by signal (e.g., -9 for SIGKILL)
+	// ExitCode is the child process's own exit code, unmapped: 0 is success,
+	// any other value is whatever the child returned, and a negative value
+	// means the process was killed by a signal. Callers that report through
+	// loopzero-ops' exit-code contract map it themselves.
 	ExitCode int `json:"exit_code"`
 
 	// Duration is the wall-clock time from Run() start to subprocess
@@ -50,8 +42,6 @@ type Result struct {
 	Duration time.Duration `json:"duration_ns"`
 
 	// Truncated indicates Stdout or Stderr exceeded MaxBufferSize.
-	// Operators should re-run with WithStreamingStdout if they need
-	// the full output.
 	Truncated bool `json:"truncated"`
 }
 
@@ -68,6 +58,5 @@ func (r *Result) IsSignalKilled() bool {
 
 // MaxBufferSize bounds the captured Stdout/Stderr to prevent OOM on
 // pathological output. 10 MiB matches what typical orchestrator
-// commands (helmfile sync, pulumi up) produce. Callers needing larger
-// output use WithStreamingStdout.
+// commands (helmfile sync, pulumi up) produce.
 const MaxBufferSize = 10 * 1024 * 1024

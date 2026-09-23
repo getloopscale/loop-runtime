@@ -4,10 +4,10 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -34,6 +34,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/tenantcsppassthrough"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testcoveragereport"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/workercsp"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/shellrun"
 )
 
 // M9 Step 7: quality gate entry points for the "governance" theme, decomposed out of the
@@ -200,16 +201,9 @@ func runGitDiffToLines(args []string) int {
 	}
 	b := firstNonEmpty(*base, os.Getenv("BASE_REF"), "origin/main")
 	h := firstNonEmpty(*head, os.Getenv("HEAD_REF"), "HEAD")
-	// #nosec G204 -- b/h are CI-controlled git refs, not user input.
-	cmd := exec.Command("git", "diff", "--unified=0", b+"..."+h)
-	out, err := cmd.Output()
+	pairs, err := gitdiff.RunGitDiff(context.Background(), shellrun.NewDefault(), gitdiff.Config{BaseRef: b, HeadRef: h})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "git-diff-to-lines: git diff %s...%s: %v\n", b, h, err)
-		return 5
-	}
-	pairs, err := gitdiff.Parse(strings.NewReader(string(out)))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "git-diff-to-lines: parse: %v\n", err)
+		fmt.Fprintf(os.Stderr, "git-diff-to-lines: %v\n", err)
 		return 5
 	}
 	if s := gitdiff.FormatLines(pairs); s != "" {
