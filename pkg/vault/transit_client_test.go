@@ -597,21 +597,21 @@ func newRateLimitStub(t *testing.T, perSec int) (*TransitClient, *vaultStubT21) 
 	return c, stub
 }
 
-// TestTransitClient_RateLimitBurst — a FIACAO: `Encrypt` consulta mesmo o limitador.
+// TestTransitClient_RateLimitBurst — the WIRING: `Encrypt` really consults the limiter.
 //
-// Este teste afirmava a capacidade exata (10 permitidas, 5 recusadas) contando chamadas
-// HTTP reais. Isso reprovava por tempo: a 10/s o balde reabastece, entao bastava as 15
-// chamadas levarem mais de 100ms para entrar um token extra e a contagem virar 11 — medido
-// em 2026-08-10 durante a suite completa dos quatro modulos (B-014). Um teste que reprova
-// conforme a maquina esta ocupada e um bug, per `rules/testing.md` § 3.
+// This test used to assert the exact capacity (10 allowed, 5 refused) by counting real
+// HTTP calls. That failed on timing: at 10/s the bucket refills, so the 15 calls only had
+// to take longer than 100ms for an extra token to arrive and the count to become 11 —
+// measured 2026-08-10 during the full four-module suite (B-014). A test that fails when
+// the machine is busy is a bug, per `rules/testing.md` § 3.
 //
-// O contrato de capacidade — rajada exata, reabastecimento e isolamento por tenant — vive
-// agora em `transit_client_rate_clock_test.go`, com o instante injetado, onde e afirmavel
-// sem relogio de parede.
+// The capacity contract — exact burst, refill and per-tenant isolation — now lives in
+// `transit_client_rate_clock_test.go`, with the instant injected, where it can be asserted
+// without the wall clock.
 //
-// O que sobra aqui, e que aqueles testes NAO cobrem, e a fiacao: que o caminho publico
-// `Encrypt` de fato passa pelo limitador. A assercao e insensivel a um token a mais ou a
-// menos de proposito — ela responde "o limitador esta ligado?", nao "quantos passaram?".
+// What remains here, and those tests do NOT cover, is the wiring: that the public
+// `Encrypt` path goes through the limiter. The assertion is deliberately insensitive to
+// one token more or less — it answers "is the limiter on?", not "how many passed?".
 func TestTransitClient_RateLimitBurst(t *testing.T) {
 	c, _ := newRateLimitStub(t, 10)
 
@@ -630,13 +630,13 @@ func TestTransitClient_RateLimitBurst(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 	if allowed == 0 {
-		t.Error("nenhuma chamada passou — o limitador esta recusando tudo, nao limitando")
+		t.Error("no call passed — the limiter is refusing everything, not limiting")
 	}
 	if rateLimited == 0 {
-		t.Errorf("nenhuma das %d chamadas foi recusada — `Encrypt` nao consulta o limitador", N)
+		t.Errorf("none of the %d calls was refused — `Encrypt` does not consult the limiter", N)
 	}
 	if allowed+rateLimited != N {
-		t.Errorf("%d chamadas sumiram: permitidas=%d recusadas=%d de %d",
+		t.Errorf("%d calls vanished: allowed=%d refused=%d of %d",
 			N-(allowed+rateLimited), allowed, rateLimited, N)
 	}
 }
