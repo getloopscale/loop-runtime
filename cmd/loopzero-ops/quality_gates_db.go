@@ -234,7 +234,8 @@ func runSqlcTxProp(args []string) int {
 		fmt.Fprintf(os.Stderr, "\nFix: %s\n", sqlctxprop.ActionableFix())
 		return 1
 	}
-	fmt.Printf("sqlc-tx-prop: PASS — %d .go files scanned; no pool-bound sqlc calls inside withEnvironmentLock\n", outcome.Scanned)
+	fmt.Printf("sqlc-tx-prop: PASS — %d store file(s), %d transactional function(s); every query runs on the transaction it received\n",
+		outcome.Scanned, outcome.TxFunctions)
 	return 0
 }
 
