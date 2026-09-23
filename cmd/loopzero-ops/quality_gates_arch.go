@@ -543,7 +543,7 @@ func runSilentSurface(args []string) int {
 		return 1
 	}
 	if *report {
-		fmt.Printf("%d superfície(s) muda(s) em %d guarda(s) de rota (base %d):\n",
+		fmt.Printf("%d silent surface(s) in %d route guard(s) (baseline %d):\n",
 			len(v.Silent), v.Guarded, v.Baseline)
 		for _, s := range v.Silent {
 			fmt.Printf("  %s:%d  cfg.%s\n", silentsurface.RouterPath, s.Line, s.Field)
@@ -553,7 +553,7 @@ func runSilentSurface(args []string) int {
 	fmt.Println(v.Summary())
 	if !v.Pass {
 		for _, s := range v.Silent {
-			fmt.Printf("  %s:%d — cfg.%s registra rota e não reporta a decisão\n",
+			fmt.Printf("  %s:%d — cfg.%s registers a route and does not report the decision\n",
 				silentsurface.RouterPath, s.Line, s.Field)
 		}
 		fmt.Fprintln(os.Stderr, silentsurface.ActionableFix)
