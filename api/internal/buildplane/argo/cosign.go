@@ -100,7 +100,7 @@ func cosignSignTemplateWithParams(p CosignSignParams) *forge.Script {
 // cosignSignTemplateKeyBased is the original key-based signing template.
 // Renamed-extracted from `cosignSignTemplate` to make the mode-split explicit.
 func cosignSignTemplateKeyBased(appName, imageTag string, insecureRegistry bool) *forge.Script {
-	metadataFile := fmt.Sprintf("%s/metadata-%s.json", workspaceMountPath, appName)
+	metadataFile := metadataFileFor(appName)
 
 	// cosign v3 distinguishes: --allow-insecure-registry (self-signed TLS) from
 	// --allow-http-registry (plain HTTP). Local k3d registry serves plain HTTP.
@@ -132,7 +132,7 @@ func cosignSignTemplateKeyBased(appName, imageTag string, insecureRegistry bool)
 	script := fmt.Sprintf(`set -e
 # Extract digest from BuildKit metadata using sed.
 # BuildKit writes: {"containerimage.digest":"sha256:abc123..."}
-DIGEST=$(sed -n 's/.*"containerimage.digest":[[:space:]]*"\([^"]*\)".*/\1/p' %s)
+DIGEST=$(%s)
 if [ -z "$DIGEST" ]; then
   echo "ERROR: no digest found in metadata file" >&2
   exit 1
@@ -155,7 +155,7 @@ printf '%%s' "%s@${DIGEST}" > %s
 printf '%%s' "${DIGEST}"   > %s
 
 echo "Image signed successfully"
-`, metadataFile, imageTag, insecureFlag, cosignKeyMountPath, appName, imageTag,
+`, digestFromMetadata(metadataFile), imageTag, insecureFlag, cosignKeyMountPath, appName, imageTag,
 		imageTag, outSignaturePath, outDigestPath)
 
 	return &forge.Script{
@@ -229,7 +229,7 @@ echo "Image signed successfully"
 // The CODE is delivered (Plan P4.1 closure); runtime activation tracks
 // Sprint 9 readiness review.
 func cosignSignTemplateKeyless(p CosignSignParams) *forge.Script {
-	metadataFile := fmt.Sprintf("%s/metadata-%s.json", workspaceMountPath, p.AppName)
+	metadataFile := metadataFileFor(p.AppName)
 
 	insecureFlag := ""
 	if p.InsecureRegistry {
@@ -261,7 +261,7 @@ func cosignSignTemplateKeyless(p CosignSignParams) *forge.Script {
 
 	script := fmt.Sprintf(`set -e
 # Extract image digest from BuildKit metadata.
-DIGEST=$(sed -n 's/.*"containerimage.digest":[[:space:]]*"\([^"]*\)".*/\1/p' %s)
+DIGEST=$(%s)
 if [ -z "$DIGEST" ]; then
   echo "ERROR: no digest found in metadata file" >&2
   exit 1
@@ -321,7 +321,7 @@ printf '%%s' "${DIGEST}"   > %s
 
 echo "Image signed successfully (keyless)"
 `,
-		metadataFile,
+		digestFromMetadata(metadataFile),
 		p.ImageTag, fulcioURL, rekorURL,
 		oidcTokenPath, oidcTokenPath, oidcTokenPath,
 		fulcioURL, rekorURL, // SIGSTORE_FULCIO_URL + SIGSTORE_REKOR_URL env vars

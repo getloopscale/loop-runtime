@@ -55,7 +55,7 @@ func syftScanTemplate(
 	tenantID, projectID, commitSHA, appName, imageTag string,
 	insecureRegistry bool,
 ) *forge.Script {
-	metadataFile := fmt.Sprintf("%s/metadata-%s.json", workspaceMountPath, appName)
+	metadataFile := metadataFileFor(appName)
 	sbomLocalPath := fmt.Sprintf("%s/sbom-%s.cdx.json", sbomLocalDir, appName)
 	s3Key := fmt.Sprintf(sbomS3PathTemplate, tenantID, projectID, commitSHA, appName)
 
@@ -92,7 +92,7 @@ func syftScanTemplate(
 	// dev; in prod the default DO Spaces endpoint is used.
 	script := fmt.Sprintf(`set -e
 # Extract digest from BuildKit metadata.
-DIGEST=$(sed -n 's/.*"containerimage.digest":[[:space:]]*"\([^"]*\)".*/\1/p' %s)
+DIGEST=$(%s)
 if [ -z "$DIGEST" ]; then
   echo "ERROR: no digest found in metadata file" >&2
   exit 1
@@ -125,7 +125,7 @@ printf '%%s' "${COMPONENT_COUNT}" > %s
 
 echo "SBOM generated and uploaded successfully"
 `,
-		metadataFile,                     // 1: metadata path
+		digestFromMetadata(metadataFile), // 1: digest extraction from the metadata file
 		imageTag,                         // 2: image tag for echo
 		insecureEnv,                      // 3: syft env vars for insecure registry (Plan T6.1)
 		imageTag,                         // 4: scan target

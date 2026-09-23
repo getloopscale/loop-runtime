@@ -54,11 +54,10 @@ func TestBuildImageTemplate_DeclaresDigestOutput(t *testing.T) {
 // BuildKit --metadata-file. Without this, the output param declaration
 // captures an empty value.
 func TestBuildkitEntrypointScript_WritesDigestAfterSuccessfulBuild(t *testing.T) {
-	script := buildkitEntrypointScript("/run/buildkit/buildkitd.sock", false, "registry.example.com")
+	script := buildkitEntrypointScript("/run/buildkit/buildkitd.sock", false, "registry.example.com", metadataFileFor("api"))
 
-	// Must reference the metadata path glob (we don't know appName here;
-	// the entrypoint extracts it post-build by globbing).
-	if !strings.Contains(script, "metadata-") {
+	// Must reference this app's metadata file.
+	if !strings.Contains(script, "metadata-api.json") {
 		t.Errorf("entrypoint does not reference metadata file in post-build hook:\n%s", script)
 	}
 
@@ -82,7 +81,7 @@ func TestBuildkitEntrypointScript_WritesDigestAfterSuccessfulBuild(t *testing.T)
 
 	// Defensive: digest extraction must not fail the build. Look for
 	// `|| true` or equivalent error-tolerance near the digest extraction.
-	digestSection := script[digestIdx-200 : digestIdx+200]
+	digestSection := script[max(0, digestIdx-200):min(len(script), digestIdx+200)]
 	if !strings.Contains(digestSection, "|| true") && !strings.Contains(digestSection, "2>/dev/null") {
 		t.Errorf("digest extraction must be defensive (|| true / 2>/dev/null) so a missing/malformed metadata file does not fail the build:\n%s", digestSection)
 	}

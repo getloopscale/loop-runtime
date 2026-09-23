@@ -76,7 +76,7 @@ const attestStepActiveDeadlineSeconds = 180
 //     captured as Argo workflow output param for downstream persistence
 //     in releases.image_attestation_rekor_url DB column (T2.2 migration).
 func cosignAttestTemplate(p CosignAttestParams) *forge.Script {
-	metadataFile := fmt.Sprintf("%s/metadata-%s.json", workspaceMountPath, p.AppName)
+	metadataFile := metadataFileFor(p.AppName)
 	const outRekorURLPath = "/tmp/cosign-attest-rekor-url.txt"
 	const oidcTokenPath = "/var/run/secrets/sigstore/token" //nolint:gosec // G101 false positive: filesystem PATH, not credential value
 
@@ -137,7 +137,7 @@ REKOR_URL="%s"
 # Running attest before sign produces unlinked Rekor entries → SLSA L3 FAILS.
 
 # Extract digest from BuildKit metadata (same source as cosign-sign step).
-DIGEST=$(sed -n 's/.*"containerimage.digest":[[:space:]]*"\([^"]*\)".*/\1/p' %s)
+DIGEST=$(%s)
 if [ -z "$DIGEST" ]; then
   echo "ERROR: no digest found in metadata file" >&2
   exit 1
@@ -188,7 +188,7 @@ fi
 printf '%%s' "${REKOR_ENTRY_URL}" > %s
 
 echo "Attestation complete; Rekor entry: ${REKOR_ENTRY_URL:-<none>}"
-`, p.AppName, p.AppName, metadataFile, p.ImageTag, p.SBOMLocalPath,
+`, p.AppName, p.AppName, digestFromMetadata(metadataFile), p.ImageTag, p.SBOMLocalPath,
 		cyclonedxPredicateType, p.Keyless, p.SBOMLocalPath, p.SBOMLocalPath,
 		attestSetup, attestCmd, outRekorURLPath)
 

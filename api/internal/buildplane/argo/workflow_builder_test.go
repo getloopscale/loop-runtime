@@ -356,14 +356,14 @@ func TestWorkflowBuilder_Build_InsecureFlags_WhenRegistryInsecure(t *testing.T) 
 }
 
 func TestBuildkitEntrypointScript_InsecureIncludesEntitlement(t *testing.T) {
-	script := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", true, "k3d-loopzero-registry:5000")
+	script := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", true, "k3d-loopzero-registry:5000", metadataFileFor("api"))
 	if !strings.Contains(script, "--allow-insecure-entitlement security.insecure") {
 		t.Error("buildkitd must include --allow-insecure-entitlement security.insecure when insecure=true")
 	}
 }
 
 func TestBuildkitEntrypointScript_InsecureIncludesRegistryConfig(t *testing.T) {
-	script := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", true, "k3d-loopzero-registry:5000")
+	script := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", true, "k3d-loopzero-registry:5000", metadataFileFor("api"))
 	if !strings.Contains(script, "k3d-loopzero-registry:5000") {
 		t.Error("buildkitd entrypoint must reference the registry URL for insecure config")
 	}
@@ -376,7 +376,7 @@ func TestBuildkitEntrypointScript_InsecureIncludesRegistryConfig(t *testing.T) {
 }
 
 func TestBuildkitEntrypointScript_SecureExcludesEntitlement(t *testing.T) {
-	script := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", false, "registry.example.com")
+	script := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", false, "registry.example.com", metadataFileFor("api"))
 	if strings.Contains(script, "--allow-insecure-entitlement") {
 		t.Error("buildkitd must NOT include --allow-insecure-entitlement when insecure=false")
 	}
@@ -1215,53 +1215,6 @@ func TestWorkflowBuilder_BuildKit_WithCache_HasCacheArgs(t *testing.T) {
 
 	assertStringContains(t, argsStr, "--export-cache")
 	assertStringContains(t, argsStr, "--import-cache")
-}
-
-// ---------------------------------------------------------------------------
-// Digest parsing — BuildKit metadata file format
-// ---------------------------------------------------------------------------
-
-func TestParseBuildKitDigest_ValidJSON(t *testing.T) {
-	input := `{"containerimage.digest":"sha256:abc123def456"}`
-	digest, err := ParseBuildKitDigest([]byte(input))
-	if err != nil {
-		t.Fatalf("ParseBuildKitDigest() error: %v", err)
-	}
-	if digest != "sha256:abc123def456" {
-		t.Errorf("digest = %q, want sha256:abc123def456", digest)
-	}
-}
-
-func TestParseBuildKitDigest_MissingField(t *testing.T) {
-	input := `{"some.other.field":"value"}`
-	_, err := ParseBuildKitDigest([]byte(input))
-	if err == nil {
-		t.Error("expected error for missing containerimage.digest field")
-	}
-}
-
-func TestParseBuildKitDigest_EmptyDigest(t *testing.T) {
-	input := `{"containerimage.digest":""}`
-	_, err := ParseBuildKitDigest([]byte(input))
-	if err == nil {
-		t.Error("expected error for empty digest")
-	}
-}
-
-func TestParseBuildKitDigest_InvalidJSON(t *testing.T) {
-	input := `not json at all`
-	_, err := ParseBuildKitDigest([]byte(input))
-	if err == nil {
-		t.Error("expected error for invalid JSON")
-	}
-}
-
-func TestParseBuildKitDigest_MustStartWithSha256(t *testing.T) {
-	input := `{"containerimage.digest":"md5:notasha"}`
-	_, err := ParseBuildKitDigest([]byte(input))
-	if err == nil {
-		t.Error("expected error for non-sha256 digest")
-	}
 }
 
 // ---------------------------------------------------------------------------

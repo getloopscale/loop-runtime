@@ -10,7 +10,6 @@
 package argo
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -96,7 +95,8 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 			buildctlArgs = append(buildctlArgs, "--opt", fmt.Sprintf("build-arg:%s=%s", key, p.BuildArgs[key]))
 		}
 	}
-	buildctlArgs = append(buildctlArgs, "--metadata-file", fmt.Sprintf("%s/metadata-%s.json", workspaceMountPath, p.AppName))
+	metadataFile := metadataFileFor(p.AppName)
+	buildctlArgs = append(buildctlArgs, "--metadata-file", metadataFile)
 
 	// Task 3.1: SLSA provenance attestation on user-built images.
 	// BuildKit 0.11+ embeds provenance metadata in the image manifest.
@@ -112,7 +112,7 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 		// rootlesskit sets up user namespace, then runs the entrypoint script.
 		// Script starts buildkitd background, waits for socket, runs buildctl "$@".
 		// "--" is $0, "buildctl" is $1, rest of buildctlArgs become $2+.
-		Command: []string{"rootlesskit", "sh", "-c", buildkitEntrypointScript(socketPath, b.infraParams.RegistryInsecure, b.infraParams.RegistryURL), "--"},
+		Command: []string{"rootlesskit", "sh", "-c", buildkitEntrypointScript(socketPath, b.infraParams.RegistryInsecure, b.infraParams.RegistryURL, metadataFile), "--"},
 		Args:    append([]string{"buildctl"}, buildctlArgs...),
 		// CHG-2026-04-25-ATTESTATION-WIRE: surface the image digest as a
 		// workflow output parameter so the API can persist it on the
@@ -216,7 +216,7 @@ func dockerfileName(dockerfilePath string) string {
 //  3. Run buildctl "$@" and capture exit code
 //  4. Kill buildkitd on exit (trap ensures cleanup even on failure)
 //  5. Exit with buildctl's exit code
-func buildkitEntrypointScript(socketPath string, insecure bool, registryURL string) string {
+func buildkitEntrypointScript(socketPath string, insecure bool, registryURL, metadataFile string) string {
 	b := shellgen.New().Raw("set -e")
 
 	quotedSocket := shellgen.ShellQuote(socketPath)
@@ -277,19 +277,14 @@ func buildkitEntrypointScript(socketPath string, insecure bool, registryURL stri
 		Raw(`"$@"`).
 		Raw(`BUILD_EXIT=$?`).
 		Blank().
-		Comment("CHG-2026-04-25-ATTESTATION-WIRE: extract image digest from").
-		Comment("BuildKit metadata file and write to the workflow output").
-		Comment("path so Argo can capture it post-pod-termination.").
+		Comment("CHG-2026-04-25-ATTESTATION-WIRE: extract THIS app's image digest").
+		Comment("from its own BuildKit metadata file (the workspace is shared by").
+		Comment("every app's build) and write it to the workflow output path.").
 		Comment("Defensive: missing/malformed metadata MUST NOT fail the").
 		Comment("build — the digest is observability data; the deploy is").
 		Comment("the source of truth.").
-		Raw(`if [ "$BUILD_EXIT" -eq 0 ]; then`).
-		Raw(`  for f in /workspace/metadata-*.json; do`).
-		Raw(`    if [ -f "$f" ]; then`).
-		Raw(`      sed -n 's/.*"containerimage.digest":[[:space:]]*"\([^"]*\)".*/\1/p' "$f" > /tmp/build-digest.txt 2>/dev/null || true`).
-		Raw(`      break`).
-		Raw(`    fi`).
-		Raw(`  done`).
+		Raw(fmt.Sprintf(`if [ "$BUILD_EXIT" -eq 0 ] && [ -f %s ]; then`, shellgen.ShellQuote(metadataFile))).
+		Raw(fmt.Sprintf(`  %s > /tmp/build-digest.txt 2>/dev/null || true`, digestFromMetadata(metadataFile))).
 		Raw(`fi`).
 		Blank().
 		Comment("Graceful daemon shutdown — exit code is already captured").
@@ -301,28 +296,18 @@ func buildkitEntrypointScript(socketPath string, insecure bool, registryURL stri
 }
 
 // ---------------------------------------------------------------------------
-// Digest parsing
+// Digest extraction
 // ---------------------------------------------------------------------------
 
-// ParseBuildKitDigest extracts the container image digest from BuildKit's --metadata-file output.
-// BuildKit writes JSON like: {"containerimage.digest":"sha256:abc123..."}.
-// The digest MUST start with "sha256:" — any other format is treated as a build error.
-// Parsing failure must fail the build (deterministic digest extraction is critical for GitOps).
-func ParseBuildKitDigest(data []byte) (string, error) {
-	var metadata map[string]interface{}
-	if err := json.Unmarshal(data, &metadata); err != nil {
-		return "", fmt.Errorf("parse buildkit metadata: invalid JSON: %w", err)
-	}
-	digestVal, ok := metadata["containerimage.digest"]
-	if !ok {
-		return "", fmt.Errorf("parse buildkit metadata: missing field 'containerimage.digest'")
-	}
-	digest, ok := digestVal.(string)
-	if !ok || digest == "" {
-		return "", fmt.Errorf("parse buildkit metadata: 'containerimage.digest' is empty or not a string")
-	}
-	if !strings.HasPrefix(digest, "sha256:") {
-		return "", fmt.Errorf("parse buildkit metadata: digest %q does not start with 'sha256:'", digest)
-	}
-	return digest, nil
+// metadataFileFor is the BuildKit --metadata-file of one app's build on the
+// shared workspace. Every step that needs the app's image digest reads THIS
+// file: the workspace holds one per app.
+func metadataFileFor(appName string) string {
+	return fmt.Sprintf("%s/metadata-%s.json", workspaceMountPath, appName)
+}
+
+// digestFromMetadata is the shell command that prints the image digest
+// recorded in a BuildKit metadata file ({"containerimage.digest":"sha256:..."}).
+func digestFromMetadata(metadataFile string) string {
+	return `sed -n 's/.*"containerimage.digest":[[:space:]]*"\([^"]*\)".*/\1/p' ` + shellgen.ShellQuote(metadataFile)
 }
