@@ -88,7 +88,9 @@ func renderDefaultDeployment(t *testing.T) appsV1.Deployment {
 
 ### Pattern 2 — Multi-replica operator (loopzero-tenant/app/platform/preview-operator)
 
-Same as Pattern 1 plus:
+One table-driven suite, `operatorcharts/`, covers all four: they share one
+Deployment shape, so a new invariant is one check and a new operator is one row
+(`task helm:test:chart -- operatorcharts`). Same as Pattern 1 plus:
 - `--leader-elect=true` arg present
 - Health (8081) + metrics (8443) ports
 - ServiceAccount + ClusterRole + ClusterRoleBinding present
