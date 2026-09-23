@@ -72,14 +72,12 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 		// COPY . . then WORKDIR into the app subdir. Never the user subpath.
 		contextPath := "/workspace"
 
-		// Build args: user env + system vars
-		// SEC-002 fix: validate env key names before they reach buildctl --opt.
-		// T2.5 of deep-review-remediation-plan (closes find_sec_004 MEDIUM):
-		// also reject reserved-prefix env keys (LOOPZERO_*, KUBERNETES_*, AWS_*,
-		// DO_*, GOOGLE_*) at build-plan time so user submissions can't
-		// override platform-injected values. loopzero-dockerfile-lint already
-		// blocks these in user Dockerfiles (reservedEnvKeyPrefixes); this
-		// mirrors the check at the API submission layer for defense in depth.
+		// Build args are the platform's only: COMMIT_SHA and APP_NAME. No user
+		// value reaches `buildctl --opt` from here, which is why there is no
+		// key-name or reserved-prefix filter at this layer — AppUnit carries no
+		// env, and the filter that used to run here iterated a field nothing
+		// populated (removed in B-094). A future change that forwards user
+		// values into build args must bring its own validation with it.
 		buildArgs := make(map[string]string, 2)
 		buildArgs["COMMIT_SHA"] = commitSHA
 		buildArgs["APP_NAME"] = unit.Name
