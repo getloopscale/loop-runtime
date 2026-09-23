@@ -15,7 +15,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 )
 
 // BuildCompletionHandler abstracts the methods that BuildReconcileLoop calls on

@@ -6,7 +6,7 @@ package argo
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 )
 
 // O nome do passo de Dockerfile foi um PONTO DE VARIACAO de verdade: o caminho

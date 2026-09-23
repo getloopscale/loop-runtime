@@ -16,7 +16,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/api/internal/server/surfaces"
+	"github.com/getloopscale/loopzero/api/internal/surfaces"
 )
 
 // TestControlSurfaces_DesligadasSaoObservaveisComRazao is B-115 slice 1: the

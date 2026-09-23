@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"github.com/getloopscale/loopzero/api/internal/db"

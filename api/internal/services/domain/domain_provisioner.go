@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/manifests"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"

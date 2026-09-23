@@ -3,7 +3,7 @@ package build
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 )
 
 func TestTrace_ServicesJSONDefault_PathDivergence(t *testing.T) {

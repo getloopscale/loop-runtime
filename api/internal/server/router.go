@@ -32,8 +32,8 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/health"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/api/internal/routes/source"
-	"github.com/getloopscale/loopzero/api/internal/server/surfaces"
 	"github.com/getloopscale/loopzero/api/internal/sse"
+	"github.com/getloopscale/loopzero/api/internal/surfaces"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 

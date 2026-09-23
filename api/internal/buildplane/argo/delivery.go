@@ -6,7 +6,7 @@ package argo
 import (
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"

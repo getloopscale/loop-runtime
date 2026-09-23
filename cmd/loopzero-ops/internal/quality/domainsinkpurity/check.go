@@ -6,7 +6,7 @@
 //
 // # The finding
 //
-// `api/internal/services/deploycontracts` documents itself as the pure sink of
+// `api/internal/deploycontracts` documents itself as the pure sink of
 // the services acyclic DAG: every context may import it, it imports no sibling.
 // Measured 2026-08-12, it exposed four `api/internal/db` symbols in its PUBLIC
 // surface — `db.DBTX` (a transaction handle), `db.Build`, `db.Release` and
@@ -70,7 +70,7 @@ var ErrSinkLeakGrew = errors.New("the domain sink references a persistence symbo
 var ErrSinkNotFound = errors.New("the domain sink package was not found or holds no Go file — the gate examined nothing, so it cannot vouch for anything")
 
 // sinkDir is the package under ratchet, relative to the repo root.
-const sinkDir = "api/internal/services/deploycontracts"
+const sinkDir = "api/internal/deploycontracts"
 
 // persistenceImportPath is the package under ratchet, matched by PATH.
 //

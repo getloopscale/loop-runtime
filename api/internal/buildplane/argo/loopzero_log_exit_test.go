@@ -10,7 +10,7 @@ import (
 
 	forge "github.com/getloopscale/loopzero-forge"
 
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 )
 
 // runInContainerShell executes the wrapped script with `sh`, which is what the build

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 

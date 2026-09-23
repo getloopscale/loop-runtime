@@ -12,9 +12,9 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/scrub"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/manifests"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )

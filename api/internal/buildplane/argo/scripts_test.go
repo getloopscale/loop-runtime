@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 )
 
 func TestScriptInstallNode_PathWithSpaces_UsesQuoting(t *testing.T) {

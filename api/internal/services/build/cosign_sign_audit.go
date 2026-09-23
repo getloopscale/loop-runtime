@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
 )
 
 // T1.2 mitigation #3 of MEET-2026-05-12 launch readiness — per-sign

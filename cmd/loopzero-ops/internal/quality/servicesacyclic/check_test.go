@@ -25,7 +25,7 @@ const buildImportsRelease = `package build
 
 import (
 	"github.com/getloopscale/loopzero/api/internal/services/release"
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 )
 
 var _ = release.X
@@ -74,7 +74,7 @@ func TestCheck_LegalGraphPasses(t *testing.T) {
 	root := t.TempDir()
 	writeGo(t, root, "api/internal/services/build/b.go", buildImportsRelease)
 	writeGo(t, root, "api/internal/services/release/r.go", "package release\n\nvar X = 1\n")
-	writeGo(t, root, "api/internal/services/deploycontracts/s.go", deploycontractsLeaf)
+	writeGo(t, root, "api/internal/deploycontracts/s.go", deploycontractsLeaf)
 	writeGo(t, root, "api/internal/services/placement/p.go", placementLeaf)
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
@@ -102,7 +102,7 @@ func TestCheck_ReverseEdgeFails(t *testing.T) {
 
 func TestCheck_SharedLeafInvariant(t *testing.T) {
 	root := t.TempDir()
-	writeGo(t, root, "api/internal/services/deploycontracts/s.go", deploycontractsImportsBuild)
+	writeGo(t, root, "api/internal/deploycontracts/s.go", deploycontractsImportsBuild)
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -128,7 +128,7 @@ func TestCheck_UnknownContextFailsClosed(t *testing.T) {
 	root := t.TempDir()
 	// a subpackage not in the allow-list must fail-closed (forces registration).
 	writeGo(t, root, "api/internal/services/newthing/n.go", "package newthing\n\nfunc F() {}\n")
-	writeGo(t, root, "api/internal/services/deploycontracts/s.go", deploycontractsLeaf)
+	writeGo(t, root, "api/internal/deploycontracts/s.go", deploycontractsLeaf)
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -255,7 +255,7 @@ func TestCheck_ServicesPathNotADirErrors(t *testing.T) {
 // clone limpo, passava. Mesmo commit, vereditos opostos.
 func TestCheck_DiretorioVazioNaoEContextoDesconhecido(t *testing.T) {
 	root := t.TempDir()
-	writeGo(t, root, "api/internal/services/deploycontracts/s.go", deploycontractsLeaf)
+	writeGo(t, root, "api/internal/deploycontracts/s.go", deploycontractsLeaf)
 	if err := os.MkdirAll(filepath.Join(root, "api/internal/services/billing"), 0o755); err != nil {
 		t.Fatalf("criando diretorio vazio: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestCheck_DiretorioVazioNaoEContextoDesconhecido(t *testing.T) {
 // deny-by-default do gate.
 func TestCheck_SubpacoteComCodigoESemRegistroAindaReprova(t *testing.T) {
 	root := t.TempDir()
-	writeGo(t, root, "api/internal/services/deploycontracts/s.go", deploycontractsLeaf)
+	writeGo(t, root, "api/internal/deploycontracts/s.go", deploycontractsLeaf)
 	writeGo(t, root, "api/internal/services/billing/b.go", "package billing\n\nvar X = 1\n")
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {

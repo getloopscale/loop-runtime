@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 )
 
 // Sprint B T1.1 (ADR D1) — three structural invariants that keep the

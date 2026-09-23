@@ -6,7 +6,7 @@ package build
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 )
 
 // T0.2b (plan simplify-deploy-loopzerokit-only v2.0) — thread the declared start

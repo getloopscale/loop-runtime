@@ -5,7 +5,7 @@ package build
 
 import (
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 )
 
 // activationBuildFrom projects a persisted build row onto the delivery

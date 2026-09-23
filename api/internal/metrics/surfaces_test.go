@@ -10,7 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/getloopscale/loopzero/api/internal/server/surfaces"
+	"github.com/getloopscale/loopzero/api/internal/surfaces"
 )
 
 func TestPublishSurfaces_ZeroParaDesligadaUmParaLigada(t *testing.T) {

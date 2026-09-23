@@ -21,7 +21,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 

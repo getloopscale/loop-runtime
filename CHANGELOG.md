@@ -57,6 +57,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **api:** the `surfaces` registry moved from `api/internal/server/surfaces` to `api/internal/surfaces`, and `deploycontracts` from `api/internal/services/deploycontracts` to `api/internal/deploycontracts`. Twelve `api/internal` subtrees depended on each other in one cycle through `metrics → server` and `buildplane → services`; both packages are leaves or contracts, so moving them out dissolves the cycle. A new architecture test, `api/internal/archtest`, fails the build if any two `api/internal` subtrees import each other again — the check the Go compiler cannot make.
+
 - The five GitHub workflows are written in English. They carried 104 lines of Portuguese —
   comments, step names and error messages — in a repository about to be public, where the
   people who read a workflow to understand a failing check are exactly the people who do

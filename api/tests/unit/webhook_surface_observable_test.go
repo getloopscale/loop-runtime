@@ -12,7 +12,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/api/internal/server/surfaces"
+	"github.com/getloopscale/loopzero/api/internal/surfaces"
 )
 
 // TestWebhookSurface_AusenciaDoSegredoEhObservavelSemLerLog closes the third DoD

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 )
 
 // T1.1 (plan simplify-deploy-loopzerokit-only v2.0) — canonical Dockerfile generator.
