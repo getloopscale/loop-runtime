@@ -7,11 +7,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -26,11 +23,12 @@ import (
 //   - error rate < 1% at 100 RPS sustained
 //
 // Run:
-//   LOOPZERO_CAPACITY=1 LOOPZERO_MINIO_ENDPOINT=http://localhost:19000 \
-//   LOOPZERO_MINIO_ACCESS_KEY=... LOOPZERO_MINIO_SECRET_KEY=... \
-//   LOOPZERO_MINIO_BUCKET=loopzero-artifacts \
-//   go test ./infra/tests/performance/capacity/ -run TestCapacityMinIO -v \
-//     -args -rps=50 -duration=60s -workers=20
+//
+//	LOOPZERO_CAPACITY=1 LOOPZERO_MINIO_ENDPOINT=http://localhost:19000 \
+//	LOOPZERO_MINIO_ACCESS_KEY=... LOOPZERO_MINIO_SECRET_KEY=... \
+//	LOOPZERO_MINIO_BUCKET=loopzero-artifacts \
+//	go test ./infra/tests/performance/capacity/ -run TestCapacityMinIO -v \
+//	  -args -rps=50 -duration=60s -workers=20
 func TestCapacityMinIOPut(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
@@ -51,75 +49,21 @@ func TestCapacityMinIOPut(t *testing.T) {
 		payload[i] = byte(i % 256)
 	}
 
-	lat := NewLatencies(int(cfg.RPS*cfg.Duration.Seconds()) + 1000)
-	var total, errors int64
-
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Duration+30*time.Second)
-	defer cancel()
-	deadline := time.Now().Add(cfg.Duration)
-	interval := time.Duration(float64(time.Second) / cfg.RPS)
-	start := time.Now()
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, cfg.Workers)
-
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-		case <-time.After(interval):
-		}
-		if time.Now().After(deadline) {
-			break
-		}
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(seq int64) {
-			defer wg.Done()
-			defer func() { <-sem }()
-
+	result, _ := RunOpenLoop(context.Background(), cfg, "minio-put-1mb", AnyHTTPError,
+		func(ctx context.Context, seq int64) (int, error) {
 			key := fmt.Sprintf("capacity-bench/obj-%d-%d", seq, time.Now().UnixNano())
 			url := fmt.Sprintf("%s/%s/%s", endpoint, bucket, key)
-			req, _ := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewReader(payload))
+			req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(payload))
+			if err != nil {
+				return 0, err
+			}
 			// Simplified auth: MinIO accepts anonymous if policy allows (or use pre-signed).
 			// For capacity bench, a test bucket with policy=public (PUT) is simplest.
 			req.SetBasicAuth(accessKey, secretKey)
 			req.Header.Set("Content-Type", "application/octet-stream")
-
-			t0 := time.Now()
-			resp, err := http.DefaultClient.Do(req)
-			d := time.Since(t0)
-			lat.Record(d)
-			atomic.AddInt64(&total, 1)
-
-			if err != nil {
-				atomic.AddInt64(&errors, 1)
-				return
-			}
-			io.Copy(io.Discard, resp.Body)
-			resp.Body.Close()
-			if resp.StatusCode >= 400 {
-				atomic.AddInt64(&errors, 1)
-			}
-		}(total)
-	}
-	wg.Wait()
-
-	elapsed := time.Since(start)
-	result := Result{
-		Subsystem:    "minio-put-1mb",
-		StartedAt:    start,
-		Duration:     elapsed,
-		RequestedRPS: cfg.RPS,
-		Workers:      cfg.Workers,
-		TotalReqs:    total,
-		Errors:       errors,
-		ErrorRate:    float64(errors) / float64(total),
-		P50:          lat.Percentile(0.50),
-		P95:          lat.Percentile(0.95),
-		P99:          lat.Percentile(0.99),
-		ActualRPS:    float64(total) / elapsed.Seconds(),
-		Notes:        "1MB PUT — representative of build cache chunk",
-	}
+			return DoHTTP(req)
+		})
+	result.Notes = "1MB PUT — representative of build cache chunk"
 
 	t.Logf("=== minio-put-1mb ===")
 	t.Logf("  requests:    %d (errors: %d, rate: %.2f%%)", result.TotalReqs, result.Errors, result.ErrorRate*100)

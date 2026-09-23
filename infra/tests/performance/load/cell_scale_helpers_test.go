@@ -78,7 +78,7 @@ type DeploySimulator struct {
 	tenantID    string // For service auth identity
 	email       string // For service auth identity
 	client      *http.Client
-	builds      buildAPI // the shared build contract client
+	builds      BuildAPI // the shared build contract client
 }
 
 // simulatorPollInterval is how often a simulated deploy asks for its build.
@@ -102,12 +102,12 @@ func NewServiceAuthSimulator(apiURL, serviceAuth, userID, tenantID, email string
 
 func newDeploySimulator(s *DeploySimulator) *DeploySimulator {
 	s.client = &http.Client{Timeout: 180 * time.Second}
-	s.builds = buildAPI{
-		apiURL:       s.apiURL,
-		client:       s.client,
-		auth:         s.setAuth,
-		pollInterval: simulatorPollInterval,
-		retryBackoff: defaultSubmitBackoff,
+	s.builds = BuildAPI{
+		APIURL:       s.apiURL,
+		Client:       s.client,
+		Auth:         s.setAuth,
+		PollInterval: simulatorPollInterval,
+		RetryBackoff: DefaultSubmitBackoff,
 	}
 	return s
 }
@@ -226,7 +226,7 @@ apps:
 func (s *DeploySimulator) CreateBuild(ctx context.Context, projectName, env, commitSHA string) (string, error) {
 	payload := map[string]string{"project_id": projectName, "environment": env, "commit_sha": commitSHA}
 	key := fmt.Sprintf("load-test-%s-%s-%d", projectName, env, time.Now().UnixNano())
-	id, err := s.builds.submitBuild(ctx, payload, key)
+	id, err := s.builds.SubmitBuild(ctx, payload, key)
 	if err != nil {
 		return "", fmt.Errorf("create build %s: %w", projectName, err)
 	}
@@ -235,7 +235,7 @@ func (s *DeploySimulator) CreateBuild(ctx context.Context, projectName, env, com
 
 // WaitForBuild polls GET /api/v1/builds/:id until terminal state.
 func (s *DeploySimulator) WaitForBuild(ctx context.Context, buildID string) (string, time.Duration, error) {
-	return s.builds.waitForBuild(ctx, buildID)
+	return s.builds.WaitForBuild(ctx, buildID)
 }
 
 // SimulateDeploy runs the full deploy flow: upload → build → wait.

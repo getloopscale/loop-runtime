@@ -19,12 +19,9 @@
 package load
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"os/exec"
@@ -481,7 +478,7 @@ func (h *RealDeployHarness) RealDeploy(ctx context.Context, t TenantIdentity) Fu
 	}
 
 	// Stage 2: Submit build
-	buildID, submitDur, err := h.submitBuild(ctx, t, commitSHA)
+	buildID, submitDur, err := h.SubmitBuild(ctx, t, commitSHA)
 	result.Stages.BuildSubmit = submitDur
 	result.BuildID = buildID
 	if err != nil {
@@ -540,15 +537,11 @@ func (h *RealDeployHarness) CleanupTenant(ctx context.Context, t TenantIdentity)
 // --- Internal methods ---
 
 func (h *RealDeployHarness) setAuth(req *http.Request, t TenantIdentity) {
-	req.Header.Set("X-Service-Auth", h.serviceAuth)
-	req.Header.Set("X-LoopZero-User-ID", t.UserID)
-	req.Header.Set("X-LoopZero-Tenant", t.TenantID)
-	req.Header.Set("X-LoopZero-Email", t.Email)
+	ServiceAuthHeaders(h.serviceAuth, t)(req)
 }
 
 func (h *RealDeployHarness) uploadRealBundle(ctx context.Context, t TenantIdentity) (string, time.Duration, error) {
 	start := time.Now()
-
 	loopzeroYAML := fmt.Sprintf(`version: 2
 project: %s
 apps:
@@ -558,63 +551,25 @@ apps:
     render: server
     port: 3000
 `, t.ProjectName)
-
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-
-	yamlPart, err := writer.CreateFormField("loopzero_yaml")
-	if err != nil {
-		return "", time.Since(start), err
-	}
-	yamlPart.Write([]byte(loopzeroYAML))
-
-	bundlePart, err := writer.CreateFormFile("bundle", "source.bundle")
-	if err != nil {
-		return "", time.Since(start), err
-	}
-	bundlePart.Write(h.bundleBytes)
-	writer.Close()
-
-	req, err := http.NewRequestWithContext(ctx, "POST", h.apiURL+"/api/v1/source/upload", &body)
-	if err != nil {
-		return "", time.Since(start), err
-	}
-	h.setAuth(req, t)
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	resp, err := h.client.Do(req)
-	if err != nil {
-		return "", time.Since(start), fmt.Errorf("upload: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 && resp.StatusCode != 201 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return "", time.Since(start), fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var uploadResp struct {
-		CommitSHA string `json:"commit_sha"`
-	}
-	json.NewDecoder(resp.Body).Decode(&uploadResp)
-	return uploadResp.CommitSHA, time.Since(start), nil
+	sha, err := UploadSource(ctx, h.client, h.apiURL, ServiceAuthHeaders(h.serviceAuth, t), loopzeroYAML, h.bundleBytes)
+	return sha, time.Since(start), err
 }
 
 // harnessPollInterval is how often a real deploy asks for its build.
 const harnessPollInterval = 10 * time.Second
 
 // buildsFor is the shared build contract client acting as tenant t.
-func (h *RealDeployHarness) buildsFor(t TenantIdentity) buildAPI {
-	return buildAPI{
-		apiURL:       h.apiURL,
-		client:       h.client,
-		auth:         func(req *http.Request) { h.setAuth(req, t) },
-		pollInterval: harnessPollInterval,
-		retryBackoff: defaultSubmitBackoff,
+func (h *RealDeployHarness) buildsFor(t TenantIdentity) BuildAPI {
+	return BuildAPI{
+		APIURL:       h.apiURL,
+		Client:       h.client,
+		Auth:         ServiceAuthHeaders(h.serviceAuth, t),
+		PollInterval: harnessPollInterval,
+		RetryBackoff: DefaultSubmitBackoff,
 	}
 }
 
-func (h *RealDeployHarness) submitBuild(ctx context.Context, t TenantIdentity, commitSHA string) (string, time.Duration, error) {
+func (h *RealDeployHarness) SubmitBuild(ctx context.Context, t TenantIdentity, commitSHA string) (string, time.Duration, error) {
 	start := time.Now()
 	// CHG-002b 2026-04-27: build apps array from parsed loopzero.yaml so the
 	// payload mirrors what `loopzero deploy` would send. Previously hardcoded
@@ -627,12 +582,12 @@ func (h *RealDeployHarness) submitBuild(ctx context.Context, t TenantIdentity, c
 		"apps":        buildAppsPayload(h.apps),
 	}
 	key := fmt.Sprintf("lt-%s-%d", t.TenantID, time.Now().UnixNano())
-	id, err := h.buildsFor(t).submitBuild(ctx, payload, key)
+	id, err := h.buildsFor(t).SubmitBuild(ctx, payload, key)
 	return id, time.Since(start), err
 }
 
 func (h *RealDeployHarness) waitForBuild(ctx context.Context, t TenantIdentity, buildID string) (string, time.Duration, error) {
-	return h.buildsFor(t).waitForBuild(ctx, buildID)
+	return h.buildsFor(t).WaitForBuild(ctx, buildID)
 }
 
 func (h *RealDeployHarness) verifyAppLive(ctx context.Context, appURL string) (bool, time.Duration, error) {

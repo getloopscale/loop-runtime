@@ -7,11 +7,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -25,10 +22,11 @@ import (
 //   - Database pool saturation under write burst
 //
 // Run:
-//   LOOPZERO_CAPACITY=1 LOOPZERO_API_URL=https://api.dev.loopzero.example \
-//   LOOPZERO_SERVICE_AUTH=... \
-//   go test ./infra/tests/performance/capacity/ -run TestCapacityLoopZeroAPI -v \
-//     -args -rps=50 -duration=60s -workers=20
+//
+//	LOOPZERO_CAPACITY=1 LOOPZERO_API_URL=https://api.dev.loopzero.example \
+//	LOOPZERO_SERVICE_AUTH=... \
+//	go test ./infra/tests/performance/capacity/ -run TestCapacityLoopZeroAPI -v \
+//	  -args -rps=50 -duration=60s -workers=20
 func TestCapacityLoopZeroAPIBuildsSubmit(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
@@ -41,82 +39,22 @@ func TestCapacityLoopZeroAPIBuildsSubmit(t *testing.T) {
 	cfg := NewConfig("loopzero-api-build-submit")
 	t.Logf("config: rps=%v duration=%v workers=%d", cfg.RPS, cfg.Duration, cfg.Workers)
 
-	lat := NewLatencies(int(cfg.RPS*cfg.Duration.Seconds()) + 1000)
-	// total + errors protected via atomic ops below — no Mutex needed.
-	// (Earlier revision had a sync.Mutex here; go vet 2026-04-30 caught a
-	// dead-code copy: `_ = mu` flagged "assignment copies lock value to _".)
-	var total, errors int64
-
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Duration+30*time.Second)
-	defer cancel()
-	deadline := time.Now().Add(cfg.Duration)
-
-	interval := time.Duration(float64(time.Second) / cfg.RPS)
-	start := time.Now()
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, cfg.Workers)
-
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-		case <-time.After(interval):
-		}
-		if time.Now().After(deadline) {
-			break
-		}
-
-		wg.Add(1)
-		sem <- struct{}{}
-		go func() {
-			defer wg.Done()
-			defer func() { <-sem }()
-
-			// Non-destructive request: POST with an invalid tenant to
-			// hit admission/auth path without creating real builds.
-			body := []byte(`{"project_id":"cap-bench-nope","environment":"production","commit_sha":"0000","apps":[{"name":"api","build":"buildpack","framework":"node","render":"server","port":3000}]}`)
-			req, _ := http.NewRequestWithContext(ctx, "POST", apiURL+"/api/v1/builds", bytes.NewReader(body))
+	// Non-destructive request: POST with an invalid tenant to hit the
+	// admission/auth path without creating real builds. A 400/403/404 is the
+	// expected rejection; only a 5xx is a real error.
+	body := []byte(`{"project_id":"cap-bench-nope","environment":"production","commit_sha":"0000","apps":[{"name":"api","build":"buildpack","framework":"node","render":"server","port":3000}]}`)
+	result, _ := RunOpenLoop(context.Background(), cfg, "loopzero-api-build-submit", ServerErrors,
+		func(ctx context.Context, seq int64) (int, error) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL+"/api/v1/builds", bytes.NewReader(body))
+			if err != nil {
+				return 0, err
+			}
 			req.Header.Set("Authorization", "Bearer "+serviceAuth)
 			req.Header.Set("X-Service-Auth", serviceAuth)
 			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Idempotency-Key", fmt.Sprintf("cap-%d", time.Now().UnixNano()))
-
-			t0 := time.Now()
-			resp, err := http.DefaultClient.Do(req)
-			d := time.Since(t0)
-			lat.Record(d)
-			atomic.AddInt64(&total, 1)
-
-			if err != nil {
-				atomic.AddInt64(&errors, 1)
-				return
-			}
-			io.Copy(io.Discard, resp.Body)
-			resp.Body.Close()
-
-			// 400/404/403 expected (non-existent tenant). 5xx = real error.
-			if resp.StatusCode >= 500 {
-				atomic.AddInt64(&errors, 1)
-			}
-		}()
-	}
-	wg.Wait()
-
-	elapsed := time.Since(start)
-	result := Result{
-		Subsystem:    "loopzero-api-build-submit",
-		StartedAt:    start,
-		Duration:     elapsed,
-		RequestedRPS: cfg.RPS,
-		Workers:      cfg.Workers,
-		TotalReqs:    total,
-		Errors:       errors,
-		ErrorRate:    float64(errors) / float64(total),
-		P50:          lat.Percentile(0.50),
-		P95:          lat.Percentile(0.95),
-		P99:          lat.Percentile(0.99),
-		ActualRPS:    float64(total) / elapsed.Seconds(),
-	}
+			req.Header.Set("Idempotency-Key", fmt.Sprintf("cap-%d-%d", seq, time.Now().UnixNano()))
+			return DoHTTP(req)
+		})
 
 	t.Logf("=== loopzero-api-build-submit ===")
 	t.Logf("  requests:    %d (errors: %d, rate: %.2f%%)", result.TotalReqs, result.Errors, result.ErrorRate*100)
