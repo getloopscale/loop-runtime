@@ -26,7 +26,8 @@ import (
 // the EC absorptions:
 //  - EC-7 cross-tenant returns 404 NOT 403 (existence-leak-prevention)
 //  - EC-5 Flusher comma-ok form (500 not panic when Flusher missing)
-//  - EC-2 filter event_type=signal.changed (skips J-17 deploy events)
+//  - EC-2 (signal.changed of one env only) is the store query's job and is
+//    tested on PostgresEventStore.GetSignalsAfter in internal/sse
 //  - EC-9 Last-Event-ID dedup by id
 //  - validation: env query required (per memory feedback_j19)
 //  - happy path: SSE wire format named event + Flush per event
@@ -40,7 +41,7 @@ type fakeStatusSSEEventStore struct {
 	emitOnce atomic.Bool // emit events on first call only (avoid infinite loop in tests)
 }
 
-func (f *fakeStatusSSEEventStore) GetAfterForProject(_ context.Context, _ string, _ string, afterID int64) ([]sse.SSEEvent, error) {
+func (f *fakeStatusSSEEventStore) GetSignalsAfter(_ context.Context, _, _, _ string, afterID int64) ([]sse.SSEEvent, error) {
 	f.calls.Add(1)
 	if f.err != nil {
 		return nil, f.err
@@ -235,46 +236,6 @@ func TestStatusSSE_EmitsSignalChangedEvents(t *testing.T) {
 	// Content-Type must be set to text/event-stream.
 	if rec.Header().Get("Content-Type") != "text/event-stream" {
 		t.Errorf("expected Content-Type=text/event-stream, got %q", rec.Header().Get("Content-Type"))
-	}
-}
-
-func TestStatusSSE_FiltersNonSignalEvents(t *testing.T) {
-	t.Parallel()
-
-	// EC-2 absorption: sse_events table is shared with J-17 deploy events
-	// (deploy.completed, build.failed, rollout.aborted etc). Handler MUST
-	// filter event_type=signal.changed before emit so consumers don't see
-	// foreign events.
-	projects := &fakeStatusProjectStore{
-		project: &ports.ProjectResult{ID: "p1", Name: "my-app", TeamID: "acme"},
-	}
-	store := &fakeStatusSSEEventStore{
-		events: []sse.SSEEvent{
-			{ID: 1, EventType: "deploy.completed", Data: json.RawMessage(`{"deploy":"done"}`)},
-			{ID: 2, EventType: "signal.changed", Data: json.RawMessage(`{"status":"Healthy"}`)},
-			{ID: 3, EventType: "build.failed", Data: json.RawMessage(`{"build":"failed"}`)},
-		},
-	}
-	handler := status.NewStatusSSEHandler(projects, store, status.StatusSSEHandlerOpts{
-		PollInterval: 100 * time.Hour,
-		MaxDuration:  50 * time.Millisecond,
-	})
-
-	req := newSSERequest(t, "my-app", "production", true)
-	rec := httptest.NewRecorder()
-	handler.Get(rec, req)
-
-	body := rec.Body.String()
-	// signal.changed event MUST be emitted
-	if !strings.Contains(body, `"status":"Healthy"`) {
-		t.Errorf("expected signal.changed event in body, got:\n%s", body)
-	}
-	// deploy.completed + build.failed MUST be filtered out (zero matches)
-	if strings.Contains(body, "deploy.completed") {
-		t.Errorf("deploy.completed event must be filtered, got:\n%s", body)
-	}
-	if strings.Contains(body, "build.failed") {
-		t.Errorf("build.failed event must be filtered, got:\n%s", body)
 	}
 }
 

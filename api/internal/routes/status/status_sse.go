@@ -31,28 +31,33 @@ import (
 // Returns: text/event-stream emitting `event: signal.changed\ndata: <json>\nid: <int>\n\n`
 //
 // EC absorptions:
-//   - EC-2: filters event_type=signal.changed (skips J-17 deploy events in shared sse_events table)
+//   - EC-2: only signal.changed events of the requested env (the store query filters both)
 //   - EC-5: Flusher comma-ok form (500 on missing, NOT panic)
 //   - EC-7: cross-tenant returns 404 NOT_FOUND (existence-leak-prevention)
 //   - EC-9: Last-Event-ID dedup by id (replay > lastID; client SSE native handles reconnect)
 
-// StatusSSEEventStore is the minimal interface StatusSSEHandler needs from
-// sse.EventStore. ISP — handler depends on what it actually uses.
+// StatusSSEEventStore is the one read StatusSSEHandler needs: the
+// signal.changed events of ONE environment of a project (satisfied by
+// *sse.PostgresEventStore). The environment is part of the query because a
+// client subscribed to ?env=staging must never receive production signals.
 type StatusSSEEventStore interface {
-	GetAfterForProject(ctx context.Context, tenantID string, projectName string, afterID int64) ([]sse.SSEEvent, error)
+	GetSignalsAfter(ctx context.Context, tenantID, projectName, environment string, afterID int64) ([]sse.SSEEvent, error)
 }
 
 // StatusSSEHandler handles GET /api/v1/projects/{name}/signals/stream.
 type StatusSSEHandler struct {
 	projects   StatusProjectStore
 	eventStore StatusSSEEventStore
-	// pollInterval controls how often the handler re-queries GetAfterForProject
+	// pollInterval controls how often the handler re-queries GetSignalsAfter
 	// when no events arrived since the last poll. Default 2s. Test-tunable.
 	pollInterval time.Duration
 	// maxDuration caps the handler's loop lifetime so a single client
 	// can't hold a connection open forever. Default 30min. Test-tunable.
 	maxDuration time.Duration
-	logger      *slog.Logger
+	// heartbeatInterval keeps idle proxies from closing the connection.
+	heartbeatInterval time.Duration
+	gate              *sse.Gate
+	logger            *slog.Logger
 }
 
 // StatusSSEHandlerOpts configures NewStatusSSEHandler with test-tunable fields.
@@ -88,11 +93,13 @@ func NewStatusSSEHandler(projects StatusProjectStore, eventStore StatusSSEEventS
 		logger = slog.Default()
 	}
 	return &StatusSSEHandler{
-		projects:     projects,
-		eventStore:   eventStore,
-		pollInterval: poll,
-		maxDuration:  maxDur,
-		logger:       logger,
+		projects:          projects,
+		eventStore:        eventStore,
+		pollInterval:      poll,
+		maxDuration:       maxDur,
+		heartbeatInterval: 15 * time.Second,
+		gate:              sse.NewGate(0),
+		logger:            logger,
 	}
 }
 
@@ -103,7 +110,8 @@ func NewStatusSSEHandler(projects StatusProjectStore, eventStore StatusSSEEventS
 //  2. Project ownership check (cross-tenant 404 per existence-leak-prevention)
 //  3. Flusher comma-ok cast (500 if missing, NOT panic)
 //  4. Parse Last-Event-ID header for replay anchor
-//  5. Loop: GetAfterForProject + filter event_type=signal.changed + emit + flush
+//  5. Loop (sse.Loop): GetSignalsAfter for THIS env + emit, with heartbeats
+//     and bounded retry
 //  6. Exit on ctx cancellation (client disconnect) OR maxDuration timeout
 func (h *StatusSSEHandler) Get(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())
@@ -138,101 +146,53 @@ func (h *StatusSSEHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// EC-5 absorption: Flusher cast with comma-ok form. Production gateways
-	// (CDN/CloudFront) sometimes wrap the writer; if Flusher unavailable,
-	// return 500 honest — NOT panic per memory
-	// feedback_loopzero_cloud_sse_proxy_buffers_until_eof.
-	flusher, ok := w.(http.Flusher)
+	leave, ok := h.gate.Enter()
 	if !ok {
+		sse.WriteTooManyStreams(w)
+		return
+	}
+	defer leave()
+
+	// EC-5 absorption: a writer that cannot flush (some CDN wrappers) is an
+	// honest 500, never a panic.
+	stream, err := sse.Open(w)
+	if err != nil {
 		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "sse_flusher_unavailable",
 		})
 		return
 	}
 
-	// Parse Last-Event-ID header (browser-native EventSource sends this on
-	// reconnect). Falls back to ?since= query param for clients that can't
-	// set headers. EC-9 dedup: events with id <= lastID are skipped.
-	lastID := parseSinceID(r)
-
-	// SSE headers — must precede first Flush.
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no") // disable nginx buffering
-	w.WriteHeader(http.StatusOK)
-	// Initial flush sends headers immediately so client knows connection is open.
-	flusher.Flush()
-
 	ctx, cancel := context.WithTimeout(r.Context(), h.maxDuration)
 	defer cancel()
 
-	ticker := time.NewTicker(h.pollInterval)
-	defer ticker.Stop()
-
-	// Replay events with id > lastID, then poll for new ones.
-	if err := h.emitPending(ctx, w, flusher, uc.TenantID, name, &lastID); err != nil {
-		h.logger.Warn("status_sse: initial replay failed",
-			"err", err, "tenant_id", uc.TenantID, "project", name)
+	// EC-9: events with id <= lastID are never re-sent.
+	lastID := parseSinceID(r)
+	sendNew := func(ctx context.Context) (bool, error) {
+		events, err := h.eventStore.GetSignalsAfter(ctx, uc.TenantID, name, env, lastID)
+		if err != nil {
+			return false, fmt.Errorf("reading signals after %d: %w", lastID, err)
+		}
+		for _, ev := range events {
+			// Named `event: signal.changed` so the dashboard's
+			// addEventListener receives it.
+			if err := stream.SendEvent(ev); err != nil {
+				return true, err
+			}
+			lastID = ev.ID
+		}
+		return false, nil
+	}
+	if _, err := sendNew(ctx); err != nil {
+		h.logger.Warn("status_sse: initial replay failed", "err", err, "tenant_id", uc.TenantID, "project", name)
 		return
 	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			h.logger.Info("status_sse: client disconnected or maxDuration reached",
-				"tenant_id", uc.TenantID, "project", name)
-			return
-		case <-ticker.C:
-			if err := h.emitPending(ctx, w, flusher, uc.TenantID, name, &lastID); err != nil {
-				h.logger.Warn("status_sse: poll failed; closing stream",
-					"err", err, "tenant_id", uc.TenantID, "project", name)
-				return
-			}
-		}
+	loop := sse.Loop{Interval: h.pollInterval, Heartbeat: h.heartbeatInterval}
+	if err := loop.Run(ctx, stream, sendNew); err != nil {
+		h.logger.Warn("status_sse: stream closed", "err", err, "tenant_id", uc.TenantID, "project", name)
+		return
 	}
-}
-
-// emitPending queries GetAfterForProject + filters event_type=signal.changed +
-// emits each as SSE wire format + advances lastID.
-func (h *StatusSSEHandler) emitPending(
-	ctx context.Context,
-	w http.ResponseWriter,
-	flusher http.Flusher,
-	tenantID, projectName string,
-	lastID *int64,
-) error {
-	events, err := h.eventStore.GetAfterForProject(ctx, tenantID, projectName, *lastID)
-	if err != nil {
-		return fmt.Errorf("event store query: %w", err)
-	}
-	for _, ev := range events {
-		// EC-2 absorption: skip non-signal.changed events (sse_events table is
-		// shared with J-17 deploy events; downstream useStatusStream consumer
-		// only handles signal.changed; emit only what the consumer expects).
-		if ev.EventType != "signal.changed" {
-			// Advance lastID anyway so we don't re-query the skipped event.
-			if ev.ID > *lastID {
-				*lastID = ev.ID
-			}
-			continue
-		}
-		// SSE wire format per memory
-		// feedback_eventsource_named_events_vs_onmessage_2026_06_13: emit as
-		// named `event: signal.changed` so frontend addEventListener works.
-		if _, err := fmt.Fprintf(
-			w, "event: signal.changed\ndata: %s\nid: %d\n\n", string(ev.Data), ev.ID,
-		); err != nil {
-			// O cliente foi embora. Seguir o laco escreve num socket morto ate a
-			// lista acabar, e ainda avanca lastID por eventos que ninguem recebeu.
-			return fmt.Errorf("writing SSE frame for event %d: %w", ev.ID, err)
-		}
-		flusher.Flush()
-		if ev.ID > *lastID {
-			*lastID = ev.ID
-		}
-	}
-	return nil
+	h.logger.Info("status_sse: client disconnected or maxDuration reached", "tenant_id", uc.TenantID, "project", name)
 }
 
 // parseSinceID extracts the resume anchor from Last-Event-ID header OR

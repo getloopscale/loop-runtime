@@ -253,12 +253,10 @@ func setupOrchestrator(
 	}
 	metricsProxyHandler := metrics.NewMetricsProxyHandler(projectStore, promClient)
 
-	// T2.1 J-18 T1.3.b — SSE signal.changed stream handler.
-	// Wires canonical sse.EventStore (already constructed in setup_stores.go)
-	// to project-scoped SSE endpoint. Handler enforces tenant ownership +
-	// env validation + Flusher safety + Last-Event-ID dedup per plan
-	// 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1.
-	statusSSEHandler := status.NewStatusSSEHandler(projectStore, stores.EventStore, status.StatusSSEHandlerOpts{})
+	// T2.1 J-18 T1.3.b — SSE signal.changed stream handler, on the concrete
+	// PostgresEventStore (constructed in setup_stores.go): only it reads the
+	// environment-scoped signals, which are keyed by release id.
+	statusSSEHandler := status.NewStatusSSEHandler(projectStore, stores.PgEventStore, status.StatusSSEHandlerOpts{})
 
 	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate).
 	// Plan T2.2: real persistence via PostgresScalingStore (was: stub-202 returning acknowledged).

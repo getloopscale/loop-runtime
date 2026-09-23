@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -296,5 +297,38 @@ func TestPostgresEventStore_Append_RowsError(t *testing.T) {
 	_, err := store.Append(context.Background(), "bld-1", "ev", json.RawMessage(`{}`))
 	if err == nil {
 		t.Fatal("expected rows error")
+	}
+}
+
+// capturingQuery records the SQL and arguments of the last Query.
+type capturingQuery struct {
+	sql  string
+	args []any
+}
+
+func (c *capturingQuery) Query(_ context.Context, sql string, args ...any) (db.Rows, error) {
+	c.sql, c.args = sql, args
+	return &fakeRows{}, nil
+}
+
+func (c *capturingQuery) QueryRow(context.Context, string, ...any) db.Row { return nil }
+
+// signal.changed rows are keyed by RELEASE id, so they are reachable only
+// through releases, and a stream for one environment must read only that
+// environment's signals.
+func TestPostgresEventStore_GetSignalsAfter_ReadsOneEnvironmentsSignalsThroughReleases(t *testing.T) {
+	q := &capturingQuery{}
+	store := NewPostgresEventStore(q, &fakeExecQueryExecutor{})
+
+	if _, err := store.GetSignalsAfter(context.Background(), "tn-1", "shop", "staging", 5); err != nil {
+		t.Fatalf("GetSignalsAfter: %v", err)
+	}
+	for _, want := range []string{"JOIN releases r ON r.id = se.build_id", "r.environment = $3", "se.event_type = 'signal.changed'", "r.tenant_id = $1"} {
+		if !strings.Contains(q.sql, want) {
+			t.Errorf("query lacks %q:\n%s", want, q.sql)
+		}
+	}
+	if len(q.args) != 4 || q.args[0] != "tn-1" || q.args[1] != "shop" || q.args[2] != "staging" || q.args[3] != int64(5) {
+		t.Errorf("unexpected args %v", q.args)
 	}
 }

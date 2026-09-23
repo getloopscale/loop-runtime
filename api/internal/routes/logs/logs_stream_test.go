@@ -530,7 +530,10 @@ func TestStreamBuildLogs_SSEEventFormat(t *testing.T) {
 	}
 }
 
-func TestStreamBuildLogs_LokiError_Continues(t *testing.T) {
+// A log source that keeps failing must not be polled until maxDuration: after
+// the shared retry budget the stream ends with a stream.error the client can
+// act on (reconnect), instead of streaming silence for thirty minutes.
+func TestStreamBuildLogs_PersistentLokiErrorEndsTheStreamWithAnError(t *testing.T) {
 	builds := &fakeStreamBuildStore{
 		build: &LogBuild{ID: "bld-abc123", TenantID: "tn-test-123", Status: "SUCCEEDED"},
 	}
@@ -539,8 +542,8 @@ func TestStreamBuildLogs_LokiError_Continues(t *testing.T) {
 	}
 
 	h := NewLogStreamHandler(builds, querier, LogStreamHandlerOpts{
-		PollInterval: 10 * time.Millisecond,
-		MaxDuration:  100 * time.Millisecond,
+		PollInterval: time.Millisecond,
+		MaxDuration:  time.Hour,
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/logs/stream", nil)
@@ -548,10 +551,21 @@ func TestStreamBuildLogs_LokiError_Continues(t *testing.T) {
 	req = routestest.WithChiParam(req, "id", "bld-abc123")
 	w := httptest.NewRecorder()
 
-	h.StreamBuildLogs(w, req)
+	done := make(chan struct{})
+	go func() {
+		h.StreamBuildLogs(w, req)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("a persistently failing log source kept the stream open")
+	}
 
-	// Should still return 200 (SSE headers already sent)
 	if w.Code != http.StatusOK {
-		t.Fatalf("want 200 even on loki error, got %d", w.Code)
+		t.Fatalf("want 200 (headers already sent), got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "event: stream.error") {
+		t.Fatalf("want a stream.error event, got %q", w.Body.String())
 	}
 }

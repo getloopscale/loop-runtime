@@ -3,12 +3,12 @@
 
 // Package timeline — deploy timeline SSE handler (T4.2 of Phase D plan).
 //
-// Mirrors api/internal/sse/stream_handler.go shape with simplifications:
+// Built on the shared stream primitive (api/internal/sse/stream.go):
 //   - One event scope: deploy_id (vs build_id + project for J-17 stream)
 //   - Terminal events: deploy_timeline.live.completed | *.failed | *.canceled
 //   - Tenant filter at store layer (EC-3 / ADR D8 defense-in-depth)
-//   - 2s default poll + Flusher per chunk (SSE buffer trap from
-//     feedback_loopzero_cloud_sse_proxy_buffers_until_eof.md)
+//   - 2s default poll, a flush per event (proxies buffer until EOF
+//     otherwise), heartbeats and bounded retry from sse.Loop
 //   - 30min cap per ADR D6 (orphan stream guard)
 //
 // Package timeline serves GET /api/v1/deploys/{deployID}/timeline: the ordered
@@ -35,6 +35,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
 // deployTimelineEventTypePrefix is the canonical filter — the underlying
@@ -103,6 +105,7 @@ type DeployTimelineHandler struct {
 	store        DeployTimelineEventStore
 	pollInterval time.Duration
 	maxDuration  time.Duration
+	gate         *sse.Gate
 	logger       *slog.Logger
 }
 
@@ -125,6 +128,7 @@ func NewDeployTimelineHandler(store DeployTimelineEventStore, opts ...DTOption) 
 		store:        store,
 		pollInterval: 2 * time.Second,
 		maxDuration:  30 * time.Minute,
+		gate:         sse.NewGate(0),
 		logger:       slog.Default().With("component", "deploy_timeline_sse"),
 	}
 	for _, opt := range opts {
@@ -162,52 +166,39 @@ func (h *DeployTimelineHandler) Stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Last-Event-ID dedup — clients reconnecting resume from last seen ID.
-	afterID := int64(0)
-	if hdr := r.Header.Get("Last-Event-ID"); hdr != "" {
-		if id, perr := strconv.ParseInt(hdr, 10, 64); perr == nil && id > 0 {
-			afterID = id
-		}
+	leave, ok := h.gate.Enter()
+	if !ok {
+		sse.WriteTooManyStreams(w)
+		return
 	}
+	defer leave()
 
-	// SSE headers — Content-Type + no-buffer + flusher init.
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-
-	flusher, fok := w.(http.Flusher)
-	if !fok {
+	stream, err := sse.Open(w)
+	if err != nil {
 		http.Error(w, `{"error":"streaming unsupported"}`, http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
-	flusher.Flush()
-
 	ctx, cancel := context.WithTimeout(r.Context(), h.maxDuration)
 	defer cancel()
-	ticker := time.NewTicker(h.pollInterval)
-	defer ticker.Stop()
 
-	// Drain immediately + on every tick.
-	pollAndEmit := func() (terminal bool, err error) {
-		events, perr := h.store.GetAfterForDeploy(ctx, tenantID, deployID, afterID)
-		if perr != nil {
-			return false, perr
+	// Clients reconnecting resume after the last id they saw.
+	afterID := sse.LastEventID(r)
+	sendNew := func(ctx context.Context) (bool, error) {
+		events, err := h.store.GetAfterForDeploy(ctx, tenantID, deployID, afterID)
+		if err != nil {
+			return false, fmt.Errorf("reading timeline after %d: %w", afterID, err)
 		}
 		for _, ev := range events {
-			// Always advance afterID so the sse_events scan does not
-			// re-stream skipped rows on the next poll tick.
+			// Always advance, so skipped shared-table rows are not re-read.
 			afterID = ev.ID
-			// Filter shared-table siblings (build.step.*, build.started)
-			// so the dashboard only sees canonical deploy_timeline.*.
+			// The table is shared with build.step.* / build.started: the
+			// dashboard only understands deploy_timeline.*.
 			if !strings.HasPrefix(ev.EventType, deployTimelineEventTypePrefix) {
 				continue
 			}
-			if _, werr := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", ev.ID, ev.EventType, string(ev.Data)); werr != nil {
-				return false, werr
+			if err := stream.Send(strconv.FormatInt(ev.ID, 10), ev.EventType, ev.Data); err != nil {
+				return true, err
 			}
-			flusher.Flush()
 			if deployTimelineTerminalEvents[ev.EventType] {
 				return true, nil
 			}
@@ -215,26 +206,17 @@ func (h *DeployTimelineHandler) Stream(w http.ResponseWriter, r *http.Request) {
 		return false, nil
 	}
 
-	if term, perr := pollAndEmit(); perr != nil {
-		h.logger.Warn("initial poll error", "err", perr)
-		return
-	} else if term {
+	if done, err := sendNew(ctx); err != nil || done {
+		if err != nil {
+			h.logger.Warn("initial poll error", "err", err)
+		}
 		return
 	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			term, perr := pollAndEmit()
-			if perr != nil {
-				h.logger.Warn("poll error", "err", perr)
-				return
-			}
-			if term {
-				return
-			}
-		}
+	loop := sse.Loop{Interval: h.pollInterval, Heartbeat: deployTimelineHeartbeat}
+	if err := loop.Run(ctx, stream, sendNew); err != nil {
+		h.logger.Warn("timeline stream closed", "err", err, "deploy_id", deployID)
 	}
 }
+
+// deployTimelineHeartbeat keeps idle proxies from closing a quiet timeline.
+const deployTimelineHeartbeat = 15 * time.Second

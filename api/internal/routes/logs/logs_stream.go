@@ -6,6 +6,7 @@ package logs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/api/internal/sse"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -43,6 +45,7 @@ type LogStreamHandler struct {
 	querier      StreamLogQuerier
 	pollInterval time.Duration
 	maxDuration  time.Duration
+	gate         *sse.Gate
 	logger       *slog.Logger
 }
 
@@ -65,9 +68,13 @@ func NewLogStreamHandler(builds LogBuildStore, querier StreamLogQuerier, opts Lo
 		querier:      querier,
 		pollInterval: pollInterval,
 		maxDuration:  maxDuration,
+		gate:         sse.NewGate(0),
 		logger:       logger,
 	}
 }
+
+// logStreamHeartbeat keeps idle proxies from closing a quiet log stream.
+const logStreamHeartbeat = 15 * time.Second
 
 // sseLogEvent is the JSON payload for each SSE log event.
 // Uses product-friendly field names (no internal terms).
@@ -105,30 +112,8 @@ func (h *LogStreamHandler) StreamBuildLogs(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Check for flusher support (required for SSE)
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, `{"code":"INTERNAL_ERROR","message":"streaming not supported"}`, http.StatusInternalServerError)
-		return
-	}
-
-	// Set SSE headers
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-	flusher.Flush()
-
-	// Determine starting timestamp from Last-Event-ID header (nanosecond timestamp)
-	var sinceNano int64
-	if leID := r.Header.Get("Last-Event-ID"); leID != "" {
-		if parsed, parseErr := strconv.ParseInt(leID, 10, 64); parseErr == nil {
-			sinceNano = parsed
-		}
-	}
-
-	h.streamLoop(r.Context(), w, flusher, buildID, sinceNano, true)
+	// Resume from the nanosecond timestamp a reconnecting client sends.
+	h.serve(w, r, buildID, sse.LastEventID(r), true)
 }
 
 // StreamRuntimeLogs handles GET /api/v1/projects/{name}/logs/stream?env=<env>[&app=<app>].
@@ -166,21 +151,6 @@ func (h *LogStreamHandler) StreamRuntimeLogs(w http.ResponseWriter, r *http.Requ
 	// to the LogQL selector.
 	app := r.URL.Query().Get("app")
 
-	// Check for flusher support
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, `{"code":"INTERNAL_ERROR","message":"streaming not supported"}`, http.StatusInternalServerError)
-		return
-	}
-
-	// Set SSE headers
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-	flusher.Flush()
-
 	// Determine starting timestamp:
 	//  1. Last-Event-ID header (highest priority — SSE resume after reconnect)
 	//  2. ?since= query param (J-19 R1 TimeRangePicker — 2026-06-13 LIVE fix)
@@ -192,12 +162,7 @@ func (h *LogStreamHandler) StreamRuntimeLogs(w http.ResponseWriter, r *http.Requ
 	// always started from default 1h window. parseSinceParam reuses the
 	// same canonical accepted shapes as build-log handler (Beta Logs
 	// Gate Criterion 7): "Nh" / "Nm" / "Ns" / "Nd" / integer seconds.
-	var sinceNano int64
-	if leID := r.Header.Get("Last-Event-ID"); leID != "" {
-		if parsed, parseErr := strconv.ParseInt(leID, 10, 64); parseErr == nil {
-			sinceNano = parsed
-		}
-	}
+	sinceNano := sse.LastEventID(r)
 	if sinceNano == 0 {
 		if sinceSecs := parseSinceParam(r.URL.Query().Get("since")); sinceSecs > 0 {
 			sinceNano = time.Now().Add(-time.Duration(sinceSecs) * time.Second).UnixNano()
@@ -211,151 +176,120 @@ func (h *LogStreamHandler) StreamRuntimeLogs(w http.ResponseWriter, r *http.Requ
 	// means "no filter" downstream.
 	runtimeKey := fmt.Sprintf("runtime:%s:%s:%s:%s", uc.TenantID, env, projectName, app)
 
-	h.streamLoop(r.Context(), w, flusher, runtimeKey, sinceNano, false)
+	h.serve(w, r, runtimeKey, sinceNano, false)
 }
 
-// streamLoop is the core SSE polling loop. It queries Loki at regular intervals
-// and emits new log lines as SSE events.
+// serve opens the stream and polls Loki with the shared sse.Loop until the
+// client leaves, the stream is done, the source keeps failing, or the
+// platform cap (maxDuration) is reached.
 //
-// For build logs (isBuild=true), it stops when the build reaches a terminal state
-// and no new logs arrive for two consecutive polls.
-// For runtime logs, it streams until client disconnect or max duration.
-//
-// Plan 2026-06-15-code-review-49-findings-remediation T5.4 (R2-F3 HIGH):
-// CC 17 → ≤ 10 via 2 helper extracts (streamEntries + checkBuildTerminalDone).
-func (h *LogStreamHandler) streamLoop(
-	ctx context.Context,
-	w http.ResponseWriter,
-	flusher http.Flusher,
-	queryKey string,
-	sinceNano int64,
-	isBuild bool,
-) {
-	deadline := time.After(h.maxDuration)
-	pollTicker := time.NewTicker(h.pollInterval)
-	defer pollTicker.Stop()
-
-	// Track consecutive empty polls after build is terminal
-	var emptyPollsAfterTerminal int
-	const maxEmptyPollsAfterTerminal = 2
-
-	for {
-		select {
-		case <-ctx.Done():
-			h.logger.Info("log stream: client disconnected", "key", queryKey)
-			return
-		case <-deadline:
-			h.logger.Info("log stream: max duration reached", "key", queryKey)
-			// Beta Logs Gate Criterion 6 — enrich the timeout reason
-			// with a "why + next" so the operator doesn't think the
-			// stream died unexpectedly. 30 minutes is the platform
-			// cap to prevent forgotten `loopzero logs --follow` sessions
-			// from holding API resources indefinitely.
-			h.writeStreamEvent(w, flusher, "stream.timeout",
-				`{"reason":"Stream open for 30 minutes — platform cap to prevent forgotten sessions from holding resources. Rerun `+"`"+`loopzero logs --build <id> --follow`+"`"+` to resume from the latest position; the stream picks up where this one ended."}`)
-			return
-		case <-pollTicker.C:
-			// Poll Loki for new logs
-			entries, err := h.querier.QueryBuildLogsSince(ctx, queryKey, sinceNano, 500)
-			if err != nil {
-				if ctx.Err() != nil {
-					return
-				}
-				h.logger.Warn("log stream: loki query failed", "key", queryKey, "error", err)
-				continue
-			}
-
-			if !h.streamEntries(w, flusher, entries, &sinceNano) {
-				return
-			}
-
-			if isBuild && h.checkBuildTerminalDone(ctx, queryKey, len(entries), &emptyPollsAfterTerminal, maxEmptyPollsAfterTerminal, w, flusher) {
-				return
-			}
-		}
+// For build logs (isBuild), the stream is done once the build is terminal
+// and no new lines arrived for two consecutive polls. Runtime logs stream
+// until the client leaves or the cap.
+func (h *LogStreamHandler) serve(w http.ResponseWriter, r *http.Request, queryKey string, sinceNano int64, isBuild bool) {
+	leave, ok := h.gate.Enter()
+	if !ok {
+		sse.WriteTooManyStreams(w)
+		return
 	}
-}
+	defer leave()
 
-// streamEntries emits each Loki entry as an SSE log event + advances the
-// cursor. Returns true to continue the outer loop, false when a write
-// error occurs (client likely disconnected).
-func (h *LogStreamHandler) streamEntries(
-	w http.ResponseWriter,
-	flusher http.Flusher,
-	entries []ports.LogEntry,
-	sinceNano *int64,
-) bool {
-	for _, entry := range entries {
-		ts := entry.Timestamp
-		nsID := timestampToNano(ts)
-		evt := sseLogEvent{Timestamp: ts, Line: entry.Content, Step: entry.Step}
-		data, _ := json.Marshal(evt)
-		if writeErr := h.writeSSELogEvent(w, flusher, fmt.Sprintf("%d", nsID), data); writeErr != nil {
-			return false
-		}
-		if nsID > *sinceNano {
-			*sinceNano = nsID
-		}
-	}
-	return true
-}
-
-// checkBuildTerminalDone returns true when the build is terminal AND no
-// new logs have arrived for `maxEmptyPolls` consecutive polls. Writes
-// the stream.done event when terminal. Internal polling loop AFTER
-// auth gate; safe to use GetByID since the caller's tenant was already
-// validated at handler entry.
-func (h *LogStreamHandler) checkBuildTerminalDone(
-	ctx context.Context,
-	queryKey string,
-	entriesLen int,
-	emptyPolls *int,
-	maxEmptyPolls int,
-	w http.ResponseWriter,
-	flusher http.Flusher,
-) bool {
-	build, buildErr := h.builds.GetByID(ctx, queryKey)
-	if buildErr != nil {
-		// On ctx cancel return true (caller will exit on next iteration).
-		// On transient err return false to continue polling.
-		return ctx.Err() != nil
-	}
-	if build == nil || !statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
-		return false
-	}
-	if entriesLen == 0 {
-		*emptyPolls++
-	} else {
-		*emptyPolls = 0
-	}
-	if *emptyPolls < maxEmptyPolls {
-		return false
-	}
-	h.logger.Info("log stream: build terminal, no more logs",
-		"build_id", queryKey, "status", build.Status)
-	h.writeStreamEvent(w, flusher, "stream.done",
-		fmt.Sprintf(`{"status":"%s"}`, build.Status))
-	return true
-}
-
-// writeSSELogEvent writes a single log SSE event.
-func (h *LogStreamHandler) writeSSELogEvent(w http.ResponseWriter, flusher http.Flusher, id string, data []byte) error {
-	_, err := fmt.Fprintf(w, "id: %s\nevent: log\ndata: %s\n\n", id, string(data))
+	stream, err := sse.Open(w)
 	if err != nil {
-		return err
+		http.Error(w, `{"code":"INTERNAL_ERROR","message":"streaming not supported"}`, http.StatusInternalServerError)
+		return
 	}
-	flusher.Flush()
+	ctx, cancel := context.WithTimeout(r.Context(), h.maxDuration)
+	defer cancel()
+
+	tail := &logTail{h: h, stream: stream, queryKey: queryKey, sinceNano: sinceNano, isBuild: isBuild}
+	err = sse.Loop{Interval: h.pollInterval, Heartbeat: logStreamHeartbeat}.Run(ctx, stream, tail.poll)
+	switch {
+	case errors.Is(err, sse.ErrPollRetriesExhausted):
+		h.logger.Warn("log stream: log source kept failing, closing", "key", queryKey, "error", err)
+		_ = stream.Send("", "stream.error", []byte(`{"reason":"Logs are temporarily unavailable","action":"reconnect"}`))
+	case err != nil:
+		h.logger.Info("log stream: client gone", "key", queryKey, "error", err)
+	case errors.Is(ctx.Err(), context.DeadlineExceeded) && r.Context().Err() == nil:
+		h.logger.Info("log stream: max duration reached", "key", queryKey)
+		// Beta Logs Gate Criterion 6 — say why the stream ended and what to do.
+		_ = stream.Send("", "stream.timeout", []byte(`{"reason":"Stream open for 30 minutes — platform cap to prevent forgotten sessions from holding resources. Rerun `+"`"+`loopzero logs --build <id> --follow`+"`"+` to resume from the latest position; the stream picks up where this one ended."}`))
+	}
+}
+
+// logTail is one open log stream: its Loki cursor and end-of-build policy.
+type logTail struct {
+	h          *LogStreamHandler
+	stream     *sse.Stream
+	queryKey   string
+	sinceNano  int64
+	isBuild    bool
+	emptyPolls int
+}
+
+// maxEmptyPollsAfterTerminal is how many empty polls after a terminal build
+// the stream waits for straggling lines before it reports stream.done.
+const maxEmptyPollsAfterTerminal = 2
+
+// poll is one tick of the loop (an sse.PollFunc).
+func (t *logTail) poll(ctx context.Context) (bool, error) {
+	entries, err := t.h.querier.QueryBuildLogsSince(ctx, t.queryKey, t.sinceNano, 500)
+	if err != nil {
+		return false, fmt.Errorf("querying logs since %d: %w", t.sinceNano, err)
+	}
+	if err := t.send(entries); err != nil {
+		return true, err
+	}
+	if !t.isBuild {
+		return false, nil
+	}
+	return t.buildFinished(ctx, len(entries))
+}
+
+// send emits each Loki entry as a `log` event whose id is its nanosecond
+// timestamp (the resume anchor), and advances the cursor.
+func (t *logTail) send(entries []ports.LogEntry) error {
+	for _, entry := range entries {
+		nsID := timestampToNano(entry.Timestamp)
+		data, err := json.Marshal(sseLogEvent{Timestamp: entry.Timestamp, Line: entry.Content, Step: entry.Step})
+		if err != nil {
+			return fmt.Errorf("encoding log line: %w", err)
+		}
+		if err := t.stream.Send(strconv.FormatInt(nsID, 10), "log", data); err != nil {
+			return err
+		}
+		if nsID > t.sinceNano {
+			t.sinceNano = nsID
+		}
+	}
 	return nil
 }
 
-// writeStreamEvent writes a control SSE event (non-log).
-//
-// G705 false positive: SSE stream goes to JSON-parsing clients (CLI,
-// dashboard), not an HTML renderer; the `data` string is API-internal
-// event payload, never raw user input. Caller controls.
-func (h *LogStreamHandler) writeStreamEvent(w http.ResponseWriter, flusher http.Flusher, eventType string, data string) {
-	_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, data) //nolint:gosec // G705 false positive: SSE to JSON-parser clients
-	flusher.Flush()
+// buildFinished reports done — after writing stream.done — once the build is
+// terminal and no new lines arrived for maxEmptyPollsAfterTerminal polls. The
+// tenant was authorized at the handler entry, so GetByID is safe here.
+func (t *logTail) buildFinished(ctx context.Context, newLines int) (bool, error) {
+	build, err := t.h.builds.GetByID(ctx, t.queryKey)
+	if err != nil {
+		return false, fmt.Errorf("reading build status: %w", err)
+	}
+	if build == nil || !statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
+		return false, nil
+	}
+	if newLines == 0 {
+		t.emptyPolls++
+	} else {
+		t.emptyPolls = 0
+	}
+	if t.emptyPolls < maxEmptyPollsAfterTerminal {
+		return false, nil
+	}
+	t.h.logger.Info("log stream: build terminal, no more logs", "build_id", t.queryKey, "status", build.Status)
+	data, err := json.Marshal(map[string]string{"status": build.Status})
+	if err != nil {
+		return true, fmt.Errorf("encoding stream.done: %w", err)
+	}
+	return true, t.stream.Send("", "stream.done", data)
 }
 
 // timestampToNano converts an RFC3339 timestamp string to nanoseconds since epoch.
