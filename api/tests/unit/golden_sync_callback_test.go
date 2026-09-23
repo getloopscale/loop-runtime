@@ -34,6 +34,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -180,103 +181,15 @@ func (f *fakeSyncLocker) WithLock(_ context.Context, _, _, _ string, fn func(tx 
 	return fn(nil) // Execute immediately without real lock — unit test isolation.
 }
 
-// ---------------------------------------------------------------------------
-// Test 1: ParseArgoAppName — last-hyphen split
-// Pattern: table-driven (from argo-cd controller_test.go TestIsAppSyncStatusRefreshed)
-// ---------------------------------------------------------------------------
+// goldenLabelReader answers the one Application these tests sync, with the
+// labels the tenant operator puts on it; any other name has no labels.
+type goldenLabelReader struct{}
 
-func TestParseArgoAppName_LastHyphenSplit(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name       string
-		input      string
-		wantTenant string
-		wantEnv    string
-		wantOK     bool
-	}{
-		{
-			name:       "standard two-segment",
-			input:      "tenant-production",
-			wantTenant: "tenant",
-			wantEnv:    "production",
-			wantOK:     true,
-		},
-		{
-			name:       "tenant with hyphens (last-hyphen rule)",
-			input:      "tenant-abc-production",
-			wantTenant: "tenant-abc",
-			wantEnv:    "production",
-			wantOK:     true,
-		},
-		{
-			name:       "real-world tenant ID format",
-			input:      "tn-loopzero-production",
-			wantTenant: "tn-loopzero",
-			wantEnv:    "production",
-			wantOK:     true,
-		},
-		{
-			name:       "staging environment",
-			input:      "tn-myteam-staging",
-			wantTenant: "tn-myteam",
-			wantEnv:    "staging",
-			wantOK:     true,
-		},
-		{
-			name:       "deeply nested tenant ID",
-			input:      "tn-my-complex-org-dev",
-			wantTenant: "tn-my-complex-org",
-			wantEnv:    "dev",
-			wantOK:     true,
-		},
+func (goldenLabelReader) GetAppLabels(_ context.Context, appName string) (map[string]string, error) {
+	if appName != "tn-loopzero-web-production" {
+		return nil, nil
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			tenant, env, ok := release.ParseArgoAppName(tt.input)
-			if ok != tt.wantOK {
-				t.Fatalf("ParseArgoAppName(%q) ok = %v, want %v", tt.input, ok, tt.wantOK)
-			}
-			if tenant != tt.wantTenant {
-				t.Errorf("ParseArgoAppName(%q) tenant = %q, want %q", tt.input, tenant, tt.wantTenant)
-			}
-			if env != tt.wantEnv {
-				t.Errorf("ParseArgoAppName(%q) env = %q, want %q", tt.input, env, tt.wantEnv)
-			}
-		})
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Test 2: ParseArgoAppName edge cases — empty, no hyphen, leading/trailing hyphen
-// ---------------------------------------------------------------------------
-
-func TestParseArgoAppName_EdgeCases(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name  string
-		input string
-	}{
-		{name: "empty string", input: ""},
-		{name: "no hyphen", input: "tenantproduction"},
-		{name: "leading hyphen only", input: "-production"},
-		{name: "trailing hyphen only", input: "tenant-"},
-		{name: "single hyphen", input: "-"},
-		{name: "only hyphens", input: "---"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			_, _, ok := release.ParseArgoAppName(tt.input)
-			if ok {
-				t.Errorf("ParseArgoAppName(%q) should return false for invalid input", tt.input)
-			}
-		})
-	}
+	return map[string]string{naming.LabelTenant: "tn-loopzero", naming.LabelEnvironment: "production"}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -298,7 +211,8 @@ func newSyncCallbackFixture() *syncCallbackFixture {
 	logger := slog.Default()
 
 	return &syncCallbackFixture{
-		activator:      release.NewSyncCallbackActivator(rs, et, locker, es, "test.local", "", logger),
+		activator: release.NewSyncCallbackActivator(rs, et, locker, es, "test.local", "", logger).
+			WithAppLabelReader(goldenLabelReader{}),
 		releaseStore:   rs,
 		envTargetStore: et,
 		eventStore:     es,
@@ -335,7 +249,7 @@ func TestOnSyncCompleted_HappyPath_ActivatesPendingRelease(t *testing.T) {
 	f.releaseStore.statuses[release.ID] = string(statemachine.RPhPending)
 
 	// Act — ArgoCD reports tn-loopzero-production as Synced+Healthy with matching revision
-	err := f.activator.OnSyncCompleted("tn-loopzero-production", "abc123")
+	err := f.activator.OnSyncCompleted("tn-loopzero-web-production", "abc123")
 
 	// Assert
 	if err != nil {
@@ -375,7 +289,7 @@ func TestOnSyncCompleted_WrongTenant_ReleaseNotActivated(t *testing.T) {
 	f.releaseStore.statuses[release.ID] = string(statemachine.RPhPending)
 
 	// Act
-	err := f.activator.OnSyncCompleted("tn-loopzero-production", "abc123")
+	err := f.activator.OnSyncCompleted("tn-loopzero-web-production", "abc123")
 
 	// Assert — no error (idempotent), but release stays PENDING
 	if err != nil {
@@ -408,7 +322,7 @@ func TestOnSyncCompleted_RevisionMismatch_ReleaseSkipped(t *testing.T) {
 	f.releaseStore.statuses[release.ID] = string(statemachine.RPhPending)
 
 	// Act
-	err := f.activator.OnSyncCompleted("tn-loopzero-production", "def456")
+	err := f.activator.OnSyncCompleted("tn-loopzero-web-production", "def456")
 
 	// Assert — no error, but release stays PENDING due to revision mismatch
 	if err != nil {
@@ -439,7 +353,7 @@ func TestOnSyncCompleted_NoPendingReleases_NoError(t *testing.T) {
 	f.releaseStore.pending = nil
 
 	// Act
-	err := f.activator.OnSyncCompleted("tn-loopzero-production", "abc123")
+	err := f.activator.OnSyncCompleted("tn-loopzero-web-production", "abc123")
 
 	// Assert — idempotent: no error, no side effects
 	if err != nil {
@@ -456,7 +370,7 @@ func TestOnSyncCompleted_NoPendingReleases_NoError(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Test 7: OnSyncCompleted invalid app name — returns error
+// Test 7: OnSyncCompleted for an Application without identity labels — returns error
 // Mirrors argo-cd controller_test.go TestGetAppProj_invalidProjectNestedString:
 //   invalid input produces explicit error, not a panic
 // ---------------------------------------------------------------------------
@@ -482,13 +396,12 @@ func TestOnSyncCompleted_InvalidAppName_ReturnsError(t *testing.T) {
 			err := f.activator.OnSyncCompleted(tt.appName, "abc123")
 
 			if err == nil {
-				t.Fatalf("OnSyncCompleted(%q) should return error for invalid app name", tt.appName)
+				t.Fatalf("OnSyncCompleted(%q) should return error for an unlabelled application", tt.appName)
 			}
 
-			// Error message should mention the invalid app name
-			errMsg := err.Error()
-			if !strings.Contains(errMsg, "invalid app name") {
-				t.Errorf("error should mention 'invalid app name', got: %s", errMsg)
+			// The error must say why the application could not be identified.
+			if errMsg := err.Error(); !strings.Contains(errMsg, "labels") {
+				t.Errorf("error should explain the missing identity labels, got: %s", errMsg)
 			}
 		})
 	}
@@ -511,7 +424,7 @@ func TestOnSyncCompleted_Idempotent_SecondCallIsNoOp(t *testing.T) {
 	f.releaseStore.statuses[release.ID] = string(statemachine.RPhPending)
 
 	// Act — first call activates the release
-	err := f.activator.OnSyncCompleted("tn-loopzero-production", "abc123")
+	err := f.activator.OnSyncCompleted("tn-loopzero-web-production", "abc123")
 	if err != nil {
 		t.Fatalf("first OnSyncCompleted() unexpected error: %v", err)
 	}
@@ -526,7 +439,7 @@ func TestOnSyncCompleted_Idempotent_SecondCallIsNoOp(t *testing.T) {
 	eventsBefore := len(f.eventStore.events)
 
 	// Act — second call should be a no-op (release is no longer PENDING)
-	err = f.activator.OnSyncCompleted("tn-loopzero-production", "abc123")
+	err = f.activator.OnSyncCompleted("tn-loopzero-web-production", "abc123")
 
 	// Assert — no error, no additional side effects
 	if err != nil {

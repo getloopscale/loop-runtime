@@ -29,124 +29,73 @@ func newActivatorForLookupTest() *SyncCallbackActivator {
 	return &SyncCallbackActivator{logger: slog.Default()}
 }
 
-// TestLookupTenantEnv_LabelsPresent_BeatsParser verifies the label-based path
-// closes the code-005 hyphen ambiguity. App name `tn-loopzero-j-rollout-a`
-// would be LastIndex-parsed as (tn-loopzero-j-rollout, a) which is WRONG —
-// the correct (tenant, env) per labels is (tn-loopzero, j-rollout-a). The
-// activator must prefer the labels.
-func TestLookupTenantEnv_LabelsPresent_BeatsParser(t *testing.T) {
-	const appName = "tn-loopzero-j-rollout-a"
-	reader := &fakeLabelReader{
-		labels: map[string]map[string]string{
-			appName: {
-				"loopzero.io/tenant":      "tn-loopzero",
-				"loopzero.io/environment": "j-rollout-a",
-			},
-		},
-	}
+// labelsFor returns a reader that answers the given Application with its
+// tenant and environment labels.
+func labelsFor(appName, tenant, env string) *fakeLabelReader {
+	return &fakeLabelReader{labels: map[string]map[string]string{
+		appName: {"loopzero.io/tenant": tenant, "loopzero.io/environment": env},
+	}}
+}
+
+// The labels are authoritative even where every segment of the name contains a
+// hyphen — the case a positional parse of the name gets wrong.
+func TestLookupTenantEnv_ReadsTheIdentityFromTheLabels(t *testing.T) {
+	const appName = "tn-loopzero-web-j-rollout-a"
+	reader := labelsFor(appName, "tn-loopzero", "j-rollout-a")
 	a := newActivatorForLookupTest().WithAppLabelReader(reader)
 
-	tenant, env, ok := a.lookupTenantEnv(context.Background(), appName)
-	if !ok {
-		t.Fatal("expected ok=true via label path")
+	tenant, env, err := a.lookupTenantEnv(context.Background(), appName)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if tenant != "tn-loopzero" {
-		t.Errorf("tenant = %q, want tn-loopzero (parser would have given tn-loopzero-j-rollout — WRONG)", tenant)
-	}
-	if env != "j-rollout-a" {
-		t.Errorf("env = %q, want j-rollout-a (parser would have given 'a' — WRONG)", env)
+	if tenant != "tn-loopzero" || env != "j-rollout-a" {
+		t.Errorf("got (%q, %q), want (tn-loopzero, j-rollout-a)", tenant, env)
 	}
 	if reader.calls != 1 {
 		t.Errorf("expected exactly 1 reader call, got %d", reader.calls)
 	}
 }
 
-// TestLookupTenantEnv_NoLabels_FallsBackToParser confirms backward compat:
-// when an App has no labels (legacy app pre-dating commit 8854f64e), the
-// activator falls back to ParseArgoAppName so existing fixtures keep
-// working unchanged.
-func TestLookupTenantEnv_NoLabels_FallsBackToParser(t *testing.T) {
-	const appName = "tn-acme-production"
-	reader := &fakeLabelReader{
-		labels: map[string]map[string]string{
-			appName: nil, // App exists, but no labels set
-		},
+func TestLookupTenantEnv_FailsWhenTheApplicationHasNoLabels(t *testing.T) {
+	const appName = "tn-acme-web-production"
+	a := newActivatorForLookupTest().WithAppLabelReader(&fakeLabelReader{labels: map[string]map[string]string{appName: nil}})
+
+	_, _, err := a.lookupTenantEnv(context.Background(), appName)
+
+	if !errors.Is(err, errAppIdentityUnresolved) {
+		t.Fatalf("want errAppIdentityUnresolved, got %v", err)
 	}
+}
+
+// A partial label set must not yield a (tenant, "") pair that silently matches
+// no release.
+func TestLookupTenantEnv_FailsWhenTheEnvironmentLabelIsMissing(t *testing.T) {
+	const appName = "tn-acme-web-production"
+	reader := &fakeLabelReader{labels: map[string]map[string]string{appName: {"loopzero.io/tenant": "tn-acme"}}}
 	a := newActivatorForLookupTest().WithAppLabelReader(reader)
 
-	tenant, env, ok := a.lookupTenantEnv(context.Background(), appName)
-	if !ok {
-		t.Fatal("expected ok=true via parser fallback")
-	}
-	if tenant != "tn-acme" {
-		t.Errorf("tenant = %q, want tn-acme (parser path)", tenant)
-	}
-	if env != "production" {
-		t.Errorf("env = %q, want production (parser path)", env)
+	_, _, err := a.lookupTenantEnv(context.Background(), appName)
+
+	if !errors.Is(err, errAppIdentityUnresolved) {
+		t.Fatalf("want errAppIdentityUnresolved, got %v", err)
 	}
 }
 
-// TestLookupTenantEnv_OnlyTenantLabel_FallsBackToParser confirms that
-// partial labels (tenant present, env missing) trigger the fallback —
-// rather than returning a bogus (tenant, "") pair that would break
-// downstream FindPendingReleases lookup.
-func TestLookupTenantEnv_OnlyTenantLabel_FallsBackToParser(t *testing.T) {
-	const appName = "tn-acme-production"
-	reader := &fakeLabelReader{
-		labels: map[string]map[string]string{
-			appName: {
-				"loopzero.io/tenant": "tn-acme",
-				// loopzero.io/environment INTENTIONALLY missing
-			},
-		},
-	}
-	a := newActivatorForLookupTest().WithAppLabelReader(reader)
+func TestLookupTenantEnv_FailsWhenTheReaderErrors(t *testing.T) {
+	a := newActivatorForLookupTest().WithAppLabelReader(&fakeLabelReader{err: errors.New("k8s API unreachable")})
 
-	tenant, env, ok := a.lookupTenantEnv(context.Background(), appName)
-	if !ok {
-		t.Fatal("expected fallback to parser when env label missing")
-	}
-	if tenant != "tn-acme" || env != "production" {
-		t.Errorf("got (%q, %q), want (tn-acme, production) via parser fallback", tenant, env)
+	_, _, err := a.lookupTenantEnv(context.Background(), "tn-acme-web-production")
+
+	if !errors.Is(err, errAppIdentityUnresolved) {
+		t.Fatalf("want errAppIdentityUnresolved, got %v", err)
 	}
 }
 
-// TestLookupTenantEnv_ReaderError_FallsBackToParser confirms that a K8s API
-// error (NotFound, timeout, etc.) doesn't break callback activation — the
-// activator silently falls back to the LastIndex parser.
-func TestLookupTenantEnv_ReaderError_FallsBackToParser(t *testing.T) {
-	const appName = "tn-acme-production"
-	reader := &fakeLabelReader{err: errors.New("k8s API unreachable")}
-	a := newActivatorForLookupTest().WithAppLabelReader(reader)
+func TestLookupTenantEnv_FailsWhenNoReaderIsWired(t *testing.T) {
+	_, _, err := newActivatorForLookupTest().lookupTenantEnv(context.Background(), "tn-acme-web-production")
 
-	tenant, env, ok := a.lookupTenantEnv(context.Background(), appName)
-	if !ok {
-		t.Fatal("expected fallback to parser when reader errors")
-	}
-	if tenant != "tn-acme" || env != "production" {
-		t.Errorf("got (%q, %q), want (tn-acme, production) via parser fallback", tenant, env)
-	}
-}
-
-// TestLookupTenantEnv_NoReaderWired_FallsBackToParser confirms zero-config
-// behavior: when WithAppLabelReader is never called (e.g. in tests), the
-// activator behaves exactly as the pre-Sprint-B-B3 version did.
-func TestLookupTenantEnv_NoReaderWired_FallsBackToParser(t *testing.T) {
-	a := newActivatorForLookupTest() // intentionally no WithAppLabelReader
-
-	tenant, env, ok := a.lookupTenantEnv(context.Background(), "tn-acme-production")
-	if !ok || tenant != "tn-acme" || env != "production" {
-		t.Errorf("got ok=%v (%q, %q), want ok=true (tn-acme, production)", ok, tenant, env)
-	}
-}
-
-// TestLookupTenantEnv_InvalidAppName_BothPathsFail confirms the final
-// error path when both label lookup AND parser fail. This is the only
-// case where OnSyncCompleted returns "invalid app name".
-func TestLookupTenantEnv_InvalidAppName_BothPathsFail(t *testing.T) {
-	a := newActivatorForLookupTest()
-	_, _, ok := a.lookupTenantEnv(context.Background(), "nodelimiter")
-	if ok {
-		t.Fatal("expected ok=false for app name without hyphen")
+	if !errors.Is(err, errAppIdentityUnresolved) {
+		t.Fatalf("want errAppIdentityUnresolved, got %v", err)
 	}
 }

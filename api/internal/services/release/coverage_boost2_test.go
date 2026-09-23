@@ -6,6 +6,7 @@ package release
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -168,13 +169,14 @@ func TestNewSyncCallbackActivator(t *testing.T) {
 	}
 }
 
-func TestSyncCallbackActivator_OnSyncCompleted_InvalidAppName(t *testing.T) {
+func TestSyncCallbackActivator_OnSyncCompleted_UnlabelledAppIsRejected(t *testing.T) {
 	store := &fakeReleaseConvergenceStoreForCallback{}
-	activator := NewSyncCallbackActivator(store, nil, nil, nil, "dev.loopzero.example", "", nil)
+	activator := NewSyncCallbackActivator(store, nil, nil, nil, "dev.loopzero.example", "", nil).
+		WithAppLabelReader(&fakeLabelReader{})
 
 	err := activator.OnSyncCompleted("nohyphen", "abc123")
-	if err == nil {
-		t.Fatal("expected error for invalid app name")
+	if !errors.Is(err, errAppIdentityUnresolved) {
+		t.Fatalf("expected errAppIdentityUnresolved, got %v", err)
 	}
 }
 
@@ -183,10 +185,11 @@ func TestSyncCallbackActivator_OnSyncCompleted_NoMatchingReleases(t *testing.T) 
 		pendingReleases: nil, // no pending releases
 	}
 	es := &fakeCallbackEventStore{}
-	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.loopzero.example", "", testLogger())
+	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.loopzero.example", "", testLogger()).
+		WithAppLabelReader(labelsFor("tn-acme-app-production", "tn-acme", "production"))
 
 	// Should succeed with 0 activations
-	err := activator.OnSyncCompleted("tn-acme-production", "rev123")
+	err := activator.OnSyncCompleted("tn-acme-app-production", "rev123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -204,9 +207,10 @@ func TestSyncCallbackActivator_OnSyncCompleted_SkipsEmptyGitCommit(t *testing.T)
 		},
 	}
 	es := &fakeCallbackEventStore{}
-	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.loopzero.example", "", testLogger())
+	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.loopzero.example", "", testLogger()).
+		WithAppLabelReader(labelsFor("tn-acme-app-production", "tn-acme", "production"))
 
-	err := activator.OnSyncCompleted("tn-acme-production", "rev123")
+	err := activator.OnSyncCompleted("tn-acme-app-production", "rev123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -228,9 +232,10 @@ func TestSyncCallbackActivator_OnSyncCompleted_SkipsMismatchedRevision(t *testin
 		},
 	}
 	es := &fakeCallbackEventStore{}
-	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.loopzero.example", "", testLogger())
+	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.loopzero.example", "", testLogger()).
+		WithAppLabelReader(labelsFor("tn-acme-app-production", "tn-acme", "production"))
 
-	err := activator.OnSyncCompleted("tn-acme-production", "different-revision")
+	err := activator.OnSyncCompleted("tn-acme-app-production", "different-revision")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -256,9 +261,10 @@ func TestSyncCallbackActivator_OnSyncCompleted_ActivatesMatchingRelease(t *testi
 	ets := newFakeEnvTargetStoreStatic()
 	locker := &fakeLockerStatic{}
 
-	activator := NewSyncCallbackActivator(store, ets, locker, es, "dev.loopzero.example", "", testLogger())
+	activator := NewSyncCallbackActivator(store, ets, locker, es, "dev.loopzero.example", "", testLogger()).
+		WithAppLabelReader(labelsFor("tn-acme-app-production", "tn-acme", "production"))
 
-	err := activator.OnSyncCompleted("tn-acme-production", "commit-abc")
+	err := activator.OnSyncCompleted("tn-acme-app-production", "commit-abc")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -282,30 +288,6 @@ func (f *fakeCallbackEventStore) Append(_ context.Context, buildID, eventType st
 		EventType string
 	}{buildID, eventType})
 	return int64(len(f.events)), nil
-}
-
-// =============================================================================
-// ParseArgoAppName additional edge cases
-// =============================================================================
-
-func TestParseArgoAppName_OnlyNumbers(t *testing.T) {
-	_, _, ok := ParseArgoAppName("12345")
-	if ok {
-		t.Error("expected false for string without hyphen")
-	}
-}
-
-func TestParseArgoAppName_MultipleHyphens(t *testing.T) {
-	tenant, env, ok := ParseArgoAppName("tn-my-team-e2e-staging")
-	if !ok {
-		t.Fatal("expected ok=true")
-	}
-	if tenant != "tn-my-team-e2e" {
-		t.Errorf("tenant = %q, want tn-my-team-e2e", tenant)
-	}
-	if env != "staging" {
-		t.Errorf("env = %q, want staging", env)
-	}
 }
 
 // =============================================================================

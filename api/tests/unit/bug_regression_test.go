@@ -58,10 +58,10 @@ func TestBUG03_SetGitCommitFailurePreventsWrongVersionActivation(t *testing.T) {
 
 	activator := releasesvc.NewSyncCallbackActivator(
 		releaseStore, envTargetStore, locker, eventStore, "test.local", "", testLogger,
-	)
+	).WithAppLabelReader(callbackTestApps)
 
 	// Act: callback arrives with a revision, but release has empty GitCommit
-	err := activator.OnSyncCompleted("acme-production", "def456")
+	err := activator.OnSyncCompleted("acme-my-app-production", "def456")
 
 	// Assert: release should NOT be activated (revision mismatch guard)
 	if err != nil {

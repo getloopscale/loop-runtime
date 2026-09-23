@@ -4,45 +4,32 @@
 package unit
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
-func TestParseArgoAppName(t *testing.T) {
-	tests := []struct {
-		input  string
-		tenant string
-		env    string
-		ok     bool
-	}{
-		{"tn-loopzero-production", "tn-loopzero", "production", true},
-		{"acme-staging", "acme", "staging", true},
-		{"my-tenant-with-dashes-production", "my-tenant-with-dashes", "production", true},
-		{"", "", "", false},
-		{"nohyphen", "", "", false},
-		{"-leading", "", "", false},
-	}
+// labelledApps is an ArgoAppLabelReader answering each Application with the
+// tenant and environment labels the tenant operator sets on it.
+type labelledApps map[string][2]string // app name → {tenant, environment}
 
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			tenant, env, ok := release.ParseArgoAppName(tt.input)
-			if ok != tt.ok {
-				t.Fatalf("ParseArgoAppName(%q) ok=%v, want %v", tt.input, ok, tt.ok)
-			}
-			if ok {
-				if tenant != tt.tenant {
-					t.Errorf("tenant=%q, want %q", tenant, tt.tenant)
-				}
-				if env != tt.env {
-					t.Errorf("env=%q, want %q", env, tt.env)
-				}
-			}
-		})
+func (l labelledApps) GetAppLabels(_ context.Context, appName string) (map[string]string, error) {
+	ids, ok := l[appName]
+	if !ok {
+		return nil, nil
 	}
+	return map[string]string{naming.LabelTenant: ids[0], naming.LabelEnvironment: ids[1]}, nil
+}
+
+var callbackTestApps = labelledApps{
+	"tn-loopzero-my-app-production":   {"tn-loopzero", "production"},
+	"other-tenant-my-app-production": {"other-tenant", "production"},
+	"acme-my-app-production":         {"acme", "production"},
 }
 
 func TestSyncCallbackActivator_ActivatesPendingRelease(t *testing.T) {
@@ -60,10 +47,10 @@ func TestSyncCallbackActivator_ActivatesPendingRelease(t *testing.T) {
 
 	activator := release.NewSyncCallbackActivator(
 		releaseStore, envTargetStore, locker, eventStore, "test.local", "", testLogger,
-	)
+	).WithAppLabelReader(callbackTestApps)
 
-	// Act: simulate ArgoCD callback for tn-loopzero-production
-	err := activator.OnSyncCompleted("tn-loopzero-production", "abc123")
+	// Act: simulate the ArgoCD callback for the tenant's production application
+	err := activator.OnSyncCompleted("tn-loopzero-my-app-production", "abc123")
 
 	// Assert
 	if err != nil {
@@ -92,10 +79,10 @@ func TestSyncCallbackActivator_SkipsMismatchedRevision(t *testing.T) {
 
 	activator := release.NewSyncCallbackActivator(
 		releaseStore, envTargetStore, locker, eventStore, "test.local", "", testLogger,
-	)
+	).WithAppLabelReader(callbackTestApps)
 
 	// Act: callback with WRONG revision
-	err := activator.OnSyncCompleted("tn-loopzero-production", "wrong-sha")
+	err := activator.OnSyncCompleted("tn-loopzero-my-app-production", "wrong-sha")
 
 	// Assert: release stays PENDING (revision mismatch)
 	if err != nil {
@@ -121,10 +108,10 @@ func TestSyncCallbackActivator_IgnoresOtherTenants(t *testing.T) {
 
 	activator := release.NewSyncCallbackActivator(
 		releaseStore, envTargetStore, locker, eventStore, "test.local", "", testLogger,
-	)
+	).WithAppLabelReader(callbackTestApps)
 
 	// Act: callback for DIFFERENT tenant
-	err := activator.OnSyncCompleted("other-tenant-production", "abc123")
+	err := activator.OnSyncCompleted("other-tenant-my-app-production", "abc123")
 
 	// Assert: release stays PENDING
 	if err != nil {
@@ -154,10 +141,10 @@ func TestSyncCallbackActivator_SkipsEmptyGitCommit(t *testing.T) {
 
 	activator := release.NewSyncCallbackActivator(
 		releaseStore, envTargetStore, locker, eventStore, "test.local", "", testLogger,
-	)
+	).WithAppLabelReader(callbackTestApps)
 
 	// Act: callback arrives — release should be skipped (deferred to convergence loop)
-	err := activator.OnSyncCompleted("tn-loopzero-production", "abc123")
+	err := activator.OnSyncCompleted("tn-loopzero-my-app-production", "abc123")
 
 	// Assert: release stays PENDING, no activation
 	if err != nil {
@@ -168,37 +155,5 @@ func TestSyncCallbackActivator_SkipsEmptyGitCommit(t *testing.T) {
 	}
 	if envTargetStore.getActiveCalls() != 0 {
 		t.Errorf("expected SetActive NOT called (empty GitCommit skip), got %d calls", envTargetStore.getActiveCalls())
-	}
-}
-
-// --- ParseArgoAppName with tenant containing multiple hyphens ---
-
-func TestParseArgoAppName_TenantWithMultipleHyphens(t *testing.T) {
-	// "my-org-e2e-test-staging" → tenant="my-org-e2e-test", env="staging"
-	tenant, env, ok := release.ParseArgoAppName("my-org-e2e-test-staging")
-	if !ok {
-		t.Fatal("expected ok=true")
-	}
-	if tenant != "my-org-e2e-test" {
-		t.Errorf("expected tenant 'my-org-e2e-test', got %q", tenant)
-	}
-	if env != "staging" {
-		t.Errorf("expected env 'staging', got %q", env)
-	}
-}
-
-func TestParseArgoAppName_TrailingHyphen(t *testing.T) {
-	// "tenant-" → invalid (env would be empty)
-	_, _, ok := release.ParseArgoAppName("tenant-")
-	if ok {
-		t.Error("expected ok=false for trailing hyphen")
-	}
-}
-
-func TestParseArgoAppName_SingleChar(t *testing.T) {
-	// "x" → no hyphen → invalid
-	_, _, ok := release.ParseArgoAppName("x")
-	if ok {
-		t.Error("expected ok=false for single char without hyphen")
 	}
 }

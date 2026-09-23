@@ -14,20 +14,13 @@ import (
 
 // ArgoAppLabelReader reads the labels off an ArgoCD Application CR by name.
 //
-// Sprint B B3 (closes code-005): the legacy SyncCallbackActivator path used
-// ParseArgoAppName which calls `strings.LastIndex(appName, "-")` to split
-// `{tenantID}-{environment}`. Tenant IDs can contain hyphens (e.g.
-// `tn-loopzero-e2e`) AND env names can contain hyphens too (`j-rollout-a`,
-// `j-secrets`) — the LastIndex parse is ambiguous when both contain hyphens,
-// mis-routing the callback to the wrong (tenant, env) pair.
-//
-// MEET-ASYNC-AMENDMENT-2026-06-02-002 documented why the prior fix attempt
-// (tightening the env-name regex) was reverted (broke 11/66 journey
-// fixtures). This interface unblocks the closure without forcing fixture
-// migration: SyncCallbackActivator reads `loopzero.io/tenant` +
-// `loopzero.io/environment` labels off the live ArgoCD App CR, falling back to
-// the legacy parser only when the labels are absent (backward-compat for
-// apps that pre-date commit `8854f64e` which started emitting the env label).
+// SyncCallbackActivator resolves the Application's tenant and environment from
+// the loopzero.io/tenant and loopzero.io/environment labels the tenant operator sets.
+// It is the only decoder: the Application name is naming.ArgoAppName's
+// "{tenant}-{project}-{env}", every segment of which may contain hyphens, so no
+// positional split of the name inverts it. (A LastIndex("-") parser of the
+// pre-#271 "{tenant}-{env}" name ran as a fallback until 2026-09; it answered a
+// wrong tenant for every current name and was removed.)
 type ArgoAppLabelReader interface {
 	GetAppLabels(ctx context.Context, appName string) (map[string]string, error)
 }
@@ -44,10 +37,12 @@ var argoApplicationGVR = schema.GroupVersionResource{
 // CR from the configured namespace (typically "argocd" on the mgmt cluster).
 //
 // Failure modes:
-//   - App does not exist → returns wrapped NotFound error; caller falls back
-//     to ParseArgoAppName.
-//   - K8s API unreachable → returns the underlying error; caller falls back.
-//   - App exists but has no labels → returns nil map; caller falls back.
+//   - App does not exist → returns the wrapped NotFound error.
+//   - K8s API unreachable → returns the underlying error.
+//   - App exists but has no labels → returns a nil map.
+//
+// In every case the callback cannot identify the release and leaves its
+// activation to the convergence loop.
 //
 // The reader does NOT cache. Each callback issues one Get against the mgmt
 // API server. Volume is bounded by ArgoCD sync rate (default ~3min poll +

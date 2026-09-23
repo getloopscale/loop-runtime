@@ -8,13 +8,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
@@ -43,60 +43,53 @@ type SyncCallbackActivator struct {
 	// announces is the SAME publicly-resolvable URL `loopzero status` returns.
 	publicDomain string
 	logger       *slog.Logger
-	// Sprint B B3 (closes code-005): optional label-based lookup. When wired,
-	// OnSyncCompleted reads `loopzero.io/tenant` + `loopzero.io/environment` labels off
-	// the ArgoCD App CR instead of LastIndex-parsing the app name. Falls back
-	// to ParseArgoAppName when reader is nil OR labels are absent/empty.
+	// appLabelReader resolves tenant and environment from the loopzero.io/tenant
+	// and loopzero.io/environment labels on the ArgoCD Application CR — the only
+	// decoder of an Application's identity (see lookupTenantEnv).
 	appLabelReader ArgoAppLabelReader
 }
 
-// WithAppLabelReader wires a label-based tenant/env lookup that bypasses the
-// legacy LastIndex parser. Production code passes
-// NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd") in setup_orchestrator.go.
-// Tests pass an in-memory fake.
-//
-// Backward-compat: if reader is nil OR returns no labels OR returns a label
-// pair with empty tenant/env, OnSyncCompleted falls through to
-// ParseArgoAppName. This means existing apps that pre-date commit `8854f64e`
-// (which started emitting loopzero.io/environment on rendered Apps) keep working
-// unchanged. Closure of code-005 lands progressively as old apps re-render.
+// WithAppLabelReader wires the label-based tenant/environment lookup.
+// Production passes NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd") in
+// setup_orchestrator.go. Without a reader the callback cannot identify the
+// release, and activation is left to the convergence loop.
 func (a *SyncCallbackActivator) WithAppLabelReader(r ArgoAppLabelReader) *SyncCallbackActivator {
 	a.appLabelReader = r
 	return a
 }
 
-// lookupTenantEnv tries the label-based path first, falls back to the
-// LastIndex parser for backward compat. Returns ok=false only when BOTH
-// paths fail (label reader missing AND parser ambiguous).
+// errAppIdentityUnresolved is returned when the Application's tenant and
+// environment cannot be read from its labels. The callback is the fast path;
+// the convergence loop still activates the release.
+var errAppIdentityUnresolved = &loopzeroerrors.LoopZeroError{
+	Code:    "APP_IDENTITY_UNRESOLVED",
+	Message: "sync callback: application identity not resolvable from its labels",
+}
+
+// lookupTenantEnv reads the tenant and environment from the Application CR's
+// labels, which the tenant operator sets authoritatively.
 //
-// The label path is preferred because LastIndex-parse is structurally
-// ambiguous when tenant ID and env name both contain hyphens (e.g.
-// `tn-loopzero-j-rollout-a` → tenant=tn-loopzero-j-rollout, env=a — WRONG).
-// The labels are populated authoritatively by the operator that creates
-// the ArgoCD App CR (commit `8854f64e` plumbing in real_provisioner.go).
-func (a *SyncCallbackActivator) lookupTenantEnv(ctx context.Context, appName string) (tenantID, env string, ok bool) {
-	if a.appLabelReader != nil {
-		labels, err := a.appLabelReader.GetAppLabels(ctx, appName)
-		if err == nil && labels != nil {
-			tenantID = labels[naming.LabelTenant]
-			env = labels[naming.LabelEnvironment]
-			if tenantID != "" && env != "" {
-				return tenantID, env, true
-			}
-		}
-		// Label reader configured but App has no labels OR fetch failed —
-		// fall through to legacy parser silently. The failure is non-fatal
-		// because legacy apps without labels are still served correctly by
-		// LastIndex when env doesn't contain hyphens. Log at INFO so the
-		// fall-through is observable when debugging.
-		if a.logger != nil {
-			a.logger.Info("sync callback: label-based lookup miss, falling back to LastIndex parser",
-				"app", appName,
-				"err", err,
-			)
-		}
+// There is deliberately no fallback that parses the application name. The name
+// is naming.ArgoAppName's "{tenant}-{project}-{env}" (#271), where every segment
+// may contain hyphens, so no positional parse inverts it. The one that used to
+// run here split on the LAST hyphen — the pre-#271 two-segment format — and for
+// "tn-acme-web-production" answered tenant="tn-acme-web", which matched no
+// release: activation silently degraded to the convergence loop while the
+// callback reported nothing wrong.
+func (a *SyncCallbackActivator) lookupTenantEnv(ctx context.Context, appName string) (tenantID, env string, err error) {
+	if a.appLabelReader == nil {
+		return "", "", fmt.Errorf("%w: no label reader wired (app %q)", errAppIdentityUnresolved, appName)
 	}
-	return ParseArgoAppName(appName)
+	labels, readErr := a.appLabelReader.GetAppLabels(ctx, appName)
+	if readErr != nil {
+		return "", "", fmt.Errorf("%w: read labels of app %q: %w", errAppIdentityUnresolved, appName, readErr)
+	}
+	tenantID, env = labels[naming.LabelTenant], labels[naming.LabelEnvironment]
+	if tenantID == "" || env == "" {
+		return "", "", fmt.Errorf("%w: app %q lacks %s/%s labels", errAppIdentityUnresolved, appName,
+			naming.LabelTenant, naming.LabelEnvironment)
+	}
+	return tenantID, env, nil
 }
 
 // NewSyncCallbackActivator creates a new SyncCallbackActivator.
@@ -160,19 +153,14 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Sprint B B3 (closes code-005): prefer label-based lookup on the live
-	// ArgoCD App CR; fall back to LastIndex parser when labels are absent.
-	// The label path eliminates the hyphen ambiguity that the parser exhibits
-	// when tenant+env both contain hyphens (e.g. `tn-loopzero-j-rollout-a`).
-	tenantID, env, ok := a.lookupTenantEnv(ctx, appName)
-	if !ok {
-		return fmt.Errorf("sync callback: invalid app name %q (expected {tenant}-{env} or labeled App CR)", appName)
+	tenantID, env, err := a.lookupTenantEnv(ctx, appName)
+	if err != nil {
+		return err
 	}
 
 	// CODE-SCAN-001 fix: Use tenant+env-filtered query when available,
 	// avoiding full table scan of all PENDING releases.
 	var releases []db.Release
-	var err error
 	if finder, ok := a.releaseStore.(PendingReleaseByTenantEnvFinder); ok {
 		releases, err = finder.FindPendingReleasesByTenantEnv(ctx, tenantID, env)
 	} else {
@@ -249,24 +237,4 @@ func (a *SyncCallbackActivator) activateRelease(ctx context.Context, release *db
 		duration := int(time.Since(release.CreatedAt).Seconds())
 		return ActivateReleaseKernel(ctx, tx, release, a.releaseStore, a.envTargetStore, a.eventStore, a.deployEventStore, apps, duration, a.logger)
 	})
-}
-
-// ParseArgoAppName extracts tenantID and environment from an ArgoCD Application name.
-// Format: "{tenantID}-{environment}" (e.g., "tn-loopzero-production").
-//
-// ARCH-002 fix: Uses LastIndex("-") to split, which means the environment name
-// MUST NOT contain hyphens. This is enforced because:
-//   - Tenant IDs contain hyphens (e.g., "tn-loopzero-e2e")
-//   - Environment is always the last segment after the last hyphen
-//   - Sprint 5 preview environments MUST use underscore or single-word names
-//     (e.g., "preview_pr42" not "preview-pr-42")
-//
-// TODO(sprint-5): Consider switching to ArgoCD labels in the webhook payload
-// instead of parsing the app name. Labels contain tenant/env as separate fields.
-func ParseArgoAppName(appName string) (tenantID, env string, ok bool) {
-	idx := strings.LastIndex(appName, "-")
-	if idx <= 0 || idx >= len(appName)-1 {
-		return "", "", false
-	}
-	return appName[:idx], appName[idx+1:], true
 }

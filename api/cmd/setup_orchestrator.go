@@ -370,22 +370,18 @@ func setupOrchestrator(
 	syncCallbackActivator := release.NewSyncCallbackActivator(
 		stores.ReleaseStore, stores.EnvTargetStore, stores.Locker, stores.EventStore, cfg.BaseDomain, cfg.PublicDomain, logger,
 	).WithDeployEventStore(store.NewDeployEventStoreSqlc()) // J-16 slice 3 — deploy.succeeded outbox
-	// Sprint B B3 (closes code-005): wire label-based lookup so the activator
-	// reads `loopzero.io/{tenant,environment}` off the live ArgoCD App CR instead
-	// of LastIndex-parsing the app name (which is structurally ambiguous when
-	// both tenant and env contain hyphens, e.g. `tn-loopzero-j-rollout-a`).
-	// Reader uses the same mgmt dynamic client as CellPinner. Backward-compat:
-	// when an App has no labels (apps pre-dating commit `8854f64e`), the
-	// activator falls back to ParseArgoAppName, so existing fixtures continue
-	// to work unchanged. Closure of code-005 lands progressively as old apps
-	// re-render with the new label.
+	// The activator identifies the Application's tenant and environment from its
+	// loopzero.io/{tenant,environment} labels — the only decoder, since the
+	// "{tenant}-{project}-{env}" name cannot be split positionally. Without the
+	// mgmt dynamic client the callback cannot identify releases and activation
+	// falls to the convergence loop.
 	if mgmtDynamic := buildMgmtDynamicClient(logger); mgmtDynamic != nil {
 		syncCallbackActivator = syncCallbackActivator.WithAppLabelReader(
 			release.NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd"),
 		)
-		logger.Info("sync callback activator: label-based lookup wired (code-005 closure)")
+		logger.Info("sync callback activator: label-based lookup wired")
 	} else {
-		logger.Warn("sync callback activator: dynamic client unavailable; falling back to LastIndex parser (code-005 hyphen ambiguity remains)")
+		logger.Warn("sync callback activator: dynamic client unavailable; callback activation disabled, the convergence loop activates releases")
 	}
 	argoCallbackHandler := argocd.NewArgoCallbackHandler(syncCallbackActivator, logger, cfg.ArgoCallbackSecret)
 
