@@ -29,6 +29,9 @@ ralph-loop.local.md
 code-review-output-infra-tests/
 project-purge-output/
 architecture-output/
+# Schemathesis writes its per-run crash cache here. It is one fuzz run's output,
+# not source: findings worth keeping are filed, not committed as cache files.
+.schemathesis/
 # --------------------------------------------
 # Node.js / TypeScript (cli/)
 # --------------------------------------------

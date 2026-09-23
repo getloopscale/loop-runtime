@@ -1,7 +1,0 @@
-{
-  "format_version": 1,
-  "schemathesis_version": "4.22.3",
-  "schema_location": "api/openapi/engine.yaml",
-  "base_url": "http://localhost:13001",
-  "created_at": "2026-07-07T18:57:10.171172+00:00"
-}
