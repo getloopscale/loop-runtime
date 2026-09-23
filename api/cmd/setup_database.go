@@ -133,11 +133,9 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 		} else {
 			deps.StdDB = stdDB
 			deps.PlanLimiter = enforcement.NewPlanLimiter(enforcement.NewSQLLimitsStore(stdDB), logger)
-			// M4 (account-level tenancy, Phase 2): enforce the per-Account project
-			// cap at the API project-creation path. M5 (#106) routes this through the
-			// shared wireProjectCap helper so the API store and the build-orchestrator
-			// store are wired through ONE path and can never diverge again.
-			wireProjectCap(projectStore, &planLimiterCapAdapter{limiter: deps.PlanLimiter})
+			// The per-Account project cap is wired onto this store in main, once the
+			// cross-tenant (loopzero_worker) connection it counts through exists — see
+			// projectCapEnforcement.
 			logger.Info("plan enforcement enabled")
 		}
 	}

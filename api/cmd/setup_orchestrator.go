@@ -70,17 +70,48 @@ func (a *planLimiterCapAdapter) CheckProjectsValue(ctx context.Context, tenantID
 	return result.Allowed, result.Plan, result.Limit, nil
 }
 
-// wireProjectCap is the SINGLE path that wires a per-Account project-cap checker
-// onto a project store. Both project-creating stores — the API store
-// (setup_database.go) and the build-orchestrator store (setup_orchestrator.go) —
-// MUST go through here so they can never diverge again: the divergence (one store
-// capped, one not) was the exact root cause of #106. A nil checker leaves the
-// store unenforced (dev without a pool).
-func wireProjectCap(store *store.PostgresProjectStore, checker store.ProjectCapChecker) {
-	if store == nil || checker == nil {
+// projectCapEnforcement is everything a project store needs to enforce the
+// per-Account project cap, carried as ONE value so no store can be wired with
+// half of it. Both halves are load-bearing:
+//
+//   - checker resolves the plan's cap (nil = unenforced, dev without a pool);
+//   - crossTenant counts the Account's projects across ITS tenants. The request
+//     pool is RLS-scoped to one tenant since migration 000062, so a store
+//     counting through it turns a per-Account cap into a per-tenant one.
+//
+// planCap is the same adapter seen through the scaling port, so the build
+// orchestrator's replica cap and its project cap come from one limiter.
+type projectCapEnforcement struct {
+	checker     store.ProjectCapChecker
+	crossTenant db.DBTX
+	planCap     build.PlanCapChecker
+}
+
+// newProjectCapEnforcement builds the enforcement from the plan limiter and the
+// cross-tenant (loopzero_worker) connection. A nil limiter yields the zero value:
+// no enforcement, which is the dev-without-pool path.
+func newProjectCapEnforcement(limiter *enforcement.PlanLimiter, crossTenant db.DBTX) projectCapEnforcement {
+	if limiter == nil {
+		return projectCapEnforcement{}
+	}
+	adapter := &planLimiterCapAdapter{limiter: limiter}
+	return projectCapEnforcement{checker: adapter, crossTenant: crossTenant, planCap: adapter}
+}
+
+// wireProjectCap is the SINGLE path that wires the per-Account project cap onto
+// a project store. Both project-creating stores — the API store and the
+// build-orchestrator store — MUST go through here with the same
+// projectCapEnforcement, so they can never diverge again: the divergence (one
+// store capped, one not — then one store counting across tenants, one not) was
+// the root cause of #106. A nil checker leaves the store unenforced.
+func wireProjectCap(s *store.PostgresProjectStore, e projectCapEnforcement) {
+	if s == nil || e.checker == nil {
 		return
 	}
-	store.SetProjectCapChecker(checker)
+	s.SetProjectCapChecker(e.checker)
+	if e.crossTenant != nil {
+		s.SetCrossTenantCounter(e.crossTenant)
+	}
 }
 
 // OrchestratorDeps holds the build orchestrator and related handlers.
@@ -110,26 +141,17 @@ func setupOrchestrator(
 	cfg config.Config,
 	httpTransport *http.Transport,
 	logger *slog.Logger,
-	planLimiter *enforcement.PlanLimiter,
+	projectCap projectCapEnforcement,
 ) *OrchestratorDeps {
-	// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059): wire plan-cap enforcement.
-	// A nil limiter is legal — means the DB was unavailable (dev without pool)
-	// and enforcement is off. The orchestrator also accepts a nil PlanCap.
-	var planCap build.PlanCapChecker
-	// M5 (hermetic project-cap, #106): the orchestrator builds its OWN project
-	// store, which historically had NO cap checker — so the deploy-time
-	// EnsureProject path bypassed the per-Account project cap that M4 enforces on
-	// POST /api/v1/projects. Wire the SAME cap adapter onto this store via the
-	// shared wireProjectCap helper (the one path BOTH project-creating stores go
-	// through, so they can never diverge again — that divergence was the #106 root
-	// cause). The adapter doubles as the scaling PlanCap. nil limiter (dev without
-	// pool) leaves the store unenforced — no behavior change.
+	// The orchestrator builds its OWN project store for the deploy-time
+	// EnsureProject path (`loopzero deploy <new-name>`). It is wired through the same
+	// wireProjectCap and the same projectCapEnforcement as the API store, so the
+	// deploy path enforces the identical per-Account cap, counted across the
+	// Account's tenants. A zero projectCap (dev without a pool) leaves both the
+	// store and the scaling PlanCap unenforced; the orchestrator accepts nil.
 	buildProjectStore := &store.PostgresProjectStore{DB: dbAdapter}
-	if planLimiter != nil {
-		capAdapter := &planLimiterCapAdapter{limiter: planLimiter}
-		planCap = capAdapter
-		wireProjectCap(buildProjectStore, capAdapter)
-	}
+	wireProjectCap(buildProjectStore, projectCap)
+	planCap := projectCap.planCap
 
 	// B40 (CHG-2026-05-05-DOGFOOD-B40): instantiated BEFORE BuildOrchestrator
 	// because the orchestrator depends on it via Deps.ScalingResolver. The

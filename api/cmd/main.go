@@ -23,7 +23,6 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/pkg/enforcement"
 	"github.com/getloopscale/loopzero/pkg/logging"
 
 	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
@@ -208,26 +207,22 @@ func main() {
 			logger.Error("failed to setup background stores", "error", err)
 			os.Exit(1)
 		}
-		// O cap de projetos é POR CONTA e conta através dos tenants dela. O pool
-		// das requisições enxerga um tenant só desde a migration 000062, então
-		// sem isto o cap por conta vira cap por tenant — silenciosamente. Medido:
-		// conta com 2 tenants e 1 projeto cada devolvia 1 pelo pool de request e
-		// 2 pelo loopzero_worker. Ver internal/db/store/project_wrapper.go.
-		if dbDeps.ProjectStore != nil {
-			if ps, ok := dbDeps.ProjectStore.(*store.PostgresProjectStore); ok {
-				ps.SetCrossTenantCounter(bgAdapter)
-			}
+		// The project cap is PER ACCOUNT and counts across the Account's tenants.
+		// The request pool sees one tenant since migration 000062, so both
+		// project-creating stores (this API store and the orchestrator's deploy
+		// store) count through the background pool. Measured: an account with 2
+		// tenants and 1 project each read 1 through the request pool and 2
+		// through loopzero_worker. See internal/db/store/project_wrapper.go.
+		projectCap := newProjectCapEnforcement(dbDeps.PlanLimiter, bgAdapter)
+		if ps, ok := dbDeps.ProjectStore.(*store.PostgresProjectStore); ok {
+			wireProjectCap(ps, projectCap)
 		}
 		workflows, err = setupWorkflows(cfg, httpTransport, logger)
 		if err != nil {
 			logger.Error("failed to setup workflows", "error", err)
 			os.Exit(1)
 		}
-		var planLimiter *enforcement.PlanLimiter
-		if dbDeps != nil {
-			planLimiter = dbDeps.PlanLimiter
-		}
-		orchDeps = setupOrchestrator(dbAdapter, stores, workflows, cfg, httpTransport, logger, planLimiter)
+		orchDeps = setupOrchestrator(dbAdapter, stores, workflows, cfg, httpTransport, logger, projectCap)
 		ghDeps = setupGitHub(dbAdapter, stores, orchDeps.Orchestrator, k8sDeps, cfg, shutdownCtx, logger)
 	}
 
