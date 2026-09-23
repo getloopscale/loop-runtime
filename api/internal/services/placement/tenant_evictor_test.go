@@ -87,22 +87,11 @@ func TestMatchTenants_NilListerIgnoresPattern(t *testing.T) {
 	}
 }
 
-func TestEnqueueEviction_RejectsEmpty(t *testing.T) {
+func TestEvictTenants_RejectsEmpty(t *testing.T) {
 	ev := NewTenantEvictor(nil)
-	_, err := ev.EnqueueEviction(context.Background(), nil)
+	_, err := ev.EvictTenants(context.Background(), nil)
 	if err == nil {
 		t.Fatalf("expected err on empty tenant list")
-	}
-}
-
-func TestEnqueueEviction_ReturnsJobID(t *testing.T) {
-	ev := NewTenantEvictor(nil)
-	jobID, err := ev.EnqueueEviction(context.Background(), []string{"tn-a", "tn-b"})
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if jobID == "" {
-		t.Fatalf("expected non-empty job id")
 	}
 }
 
@@ -119,10 +108,10 @@ func (f *fakeDeleter) DeleteTenantsFKOrdered(_ context.Context, tenantIDs []stri
 	return f.counts, f.err
 }
 
-func TestEnqueueEviction_WithDeleter_RunsCleanup(t *testing.T) {
+func TestEvictTenants_WithDeleter_RunsCleanup(t *testing.T) {
 	d := &fakeDeleter{counts: TenantDeletionCounts{Tenants: 3, Projects: 5}}
 	ev := NewTenantEvictorWithDB(nil, d)
-	_, err := ev.EnqueueEviction(context.Background(), []string{"tn-a", "tn-b", "tn-c"})
+	result, err := ev.EvictTenants(context.Background(), []string{"tn-a", "tn-b", "tn-c"})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -132,32 +121,29 @@ func TestEnqueueEviction_WithDeleter_RunsCleanup(t *testing.T) {
 	if len(d.received) != 3 {
 		t.Fatalf("deleter should get 3 ids, got %d", len(d.received))
 	}
-	got := ev.GetLastCounts()
+	got := result.Database
 	if got.Tenants != 3 || got.Projects != 5 {
 		t.Fatalf("counts not surfaced: %+v", got)
 	}
 }
 
-func TestEnqueueEviction_DeleterError_Surfaces(t *testing.T) {
+func TestEvictTenants_DeleterError_Surfaces(t *testing.T) {
 	d := &fakeDeleter{err: errDeleterDown()}
 	ev := NewTenantEvictorWithDB(nil, d)
-	_, err := ev.EnqueueEviction(context.Background(), []string{"tn-a"})
+	_, err := ev.EvictTenants(context.Background(), []string{"tn-a"})
 	if err == nil {
 		t.Fatalf("expected err from deleter to propagate")
 	}
 }
 
-func TestEnqueueEviction_NilDeleter_SkipsCleanup(t *testing.T) {
+func TestEvictTenants_NilDeleter_SkipsCleanup(t *testing.T) {
 	ev := NewTenantEvictorWithDB(nil, nil)
-	jobID, err := ev.EnqueueEviction(context.Background(), []string{"tn-a"})
+	result, err := ev.EvictTenants(context.Background(), []string{"tn-a"})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if jobID == "" {
-		t.Fatalf("should still return a job id without deleter")
-	}
 	// counts default-zero when no deleter ran
-	if ev.GetLastCounts().Tenants != 0 {
+	if result.Database.Tenants != 0 {
 		t.Fatalf("counts should be zero without deleter")
 	}
 }
@@ -179,34 +165,34 @@ func (f *fakeK8sEvictor) EvictTenantsFromClusters(_ context.Context, tenantIDs [
 	return f.counts, f.err
 }
 
-func TestEnqueueEviction_Full_RunsK8sThenDB(t *testing.T) {
+func TestEvictTenants_Full_RunsK8sThenDB(t *testing.T) {
 	k8sFake := &fakeK8sEvictor{counts: K8sEvictionCounts{MgmtCRsDeleted: 5, NamespacesFinalized: 3}}
 	dbFake := &fakeDeleter{counts: TenantDeletionCounts{Tenants: 5}}
 	ev := NewTenantEvictorFull(nil, dbFake, k8sFake)
 
-	_, err := ev.EnqueueEviction(context.Background(), []string{"tn-a", "tn-b"})
+	result, err := ev.EvictTenants(context.Background(), []string{"tn-a", "tn-b"})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if k8sFake.called != 1 || dbFake.called != 1 {
 		t.Fatalf("both should be called once; k8s=%d db=%d", k8sFake.called, dbFake.called)
 	}
-	if ev.GetLastK8sCounts().MgmtCRsDeleted != 5 {
-		t.Fatalf("k8s counts not surfaced: %+v", ev.GetLastK8sCounts())
+	if result.Clusters.MgmtCRsDeleted != 5 {
+		t.Fatalf("k8s counts not surfaced: %+v", result.Clusters)
 	}
-	if ev.GetLastCounts().Tenants != 5 {
-		t.Fatalf("db counts not surfaced: %+v", ev.GetLastCounts())
+	if result.Database.Tenants != 5 {
+		t.Fatalf("db counts not surfaced: %+v", result.Database)
 	}
 }
 
-func TestEnqueueEviction_K8sError_SkipsDBCleanup(t *testing.T) {
+func TestEvictTenants_K8sError_SkipsDBCleanup(t *testing.T) {
 	// Critical invariant: if K8s teardown fails, DB must NOT be wiped.
 	// Otherwise the cluster is left with CRs referencing non-existent rows.
 	k8sFake := &fakeK8sEvictor{err: errors.New("apiserver down")}
 	dbFake := &fakeDeleter{}
 	ev := NewTenantEvictorFull(nil, dbFake, k8sFake)
 
-	_, err := ev.EnqueueEviction(context.Background(), []string{"tn-a"})
+	_, err := ev.EvictTenants(context.Background(), []string{"tn-a"})
 	if err == nil {
 		t.Fatalf("expected err to propagate")
 	}
@@ -215,10 +201,10 @@ func TestEnqueueEviction_K8sError_SkipsDBCleanup(t *testing.T) {
 	}
 }
 
-func TestEnqueueEviction_K8sOnly_NoDeleter(t *testing.T) {
+func TestEvictTenants_K8sOnly_NoDeleter(t *testing.T) {
 	k8sFake := &fakeK8sEvictor{}
 	ev := NewTenantEvictorFull(nil, nil, k8sFake)
-	_, err := ev.EnqueueEviction(context.Background(), []string{"tn-a"})
+	_, err := ev.EvictTenants(context.Background(), []string{"tn-a"})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

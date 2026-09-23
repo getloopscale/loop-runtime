@@ -123,6 +123,11 @@ func (a *tenantEvictorRouteAdapter) MatchTenants(ctx context.Context, pattern st
 	return a.Inner.MatchTenants(ctx, pattern, ids)
 }
 
+// EnqueueEviction satisfies the route's port. The eviction is synchronous and
+// no job table exists, so there is no job id to return; the route never read
+// the one the service used to fabricate ("evict-N-tenants", shared by every
+// eviction of N tenants).
 func (a *tenantEvictorRouteAdapter) EnqueueEviction(ctx context.Context, tenantIDs []string) (string, error) {
-	return a.Inner.EnqueueEviction(ctx, tenantIDs)
+	_, err := a.Inner.EvictTenants(ctx, tenantIDs)
+	return "", err
 }
