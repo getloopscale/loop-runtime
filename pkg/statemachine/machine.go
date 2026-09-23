@@ -10,9 +10,16 @@
 package statemachine
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
+
+// ErrInvalidTransition is wrapped by every TryTransition / SafeTransition
+// error: an unknown source state, an event not valid from the source state,
+// or a terminal source state. The wrapping error keeps the machine name,
+// state and event.
+var ErrInvalidTransition = errors.New("statemachine: invalid transition")
 
 // State represents a state in a state machine.
 type State string
@@ -122,26 +129,20 @@ func (m *Machine) Transition(current State, event Event) State {
 // an external source (e.g., CR status) that may have been manually edited.
 func (m *Machine) TryTransition(current State, event Event) (State, error) {
 	if m.terminal[current] {
-		return "", fmt.Errorf(
-			"statemachine %s: invalid transition — state %q is terminal, cannot process event %q",
-			m.name, current, event,
-		)
+		return "", fmt.Errorf("%w: machine %s: state %q is terminal, cannot process event %q",
+			ErrInvalidTransition, m.name, current, event)
 	}
 
 	events, ok := m.transitions[current]
 	if !ok {
-		return "", fmt.Errorf(
-			"statemachine %s: invalid transition — no transitions defined from state %q (event: %q)",
-			m.name, current, event,
-		)
+		return "", fmt.Errorf("%w: machine %s: no transitions defined from state %q (event: %q)",
+			ErrInvalidTransition, m.name, current, event)
 	}
 
 	next, ok := events[event]
 	if !ok {
-		return "", fmt.Errorf(
-			"statemachine %s: invalid transition — event %q is not valid from state %q",
-			m.name, current, event,
-		)
+		return "", fmt.Errorf("%w: machine %s: event %q is not valid from state %q",
+			ErrInvalidTransition, m.name, event, current)
 	}
 
 	return next, nil

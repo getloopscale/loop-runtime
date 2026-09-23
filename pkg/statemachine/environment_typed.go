@@ -13,74 +13,26 @@ type EnvironmentPhase string
 type EnvironmentPhaseEvent string
 
 const (
-	EPhEmpty    EnvironmentPhase = ""
-	EPhPending  EnvironmentPhase = "Pending"
-	EPhActive   EnvironmentPhase = "Active"
-	EPhFailed   EnvironmentPhase = "Failed"
-	EPhDeleting EnvironmentPhase = "Deleting"
+	EPhEmpty    = EnvironmentPhase(EnvironmentEmpty)
+	EPhPending  = EnvironmentPhase(EnvironmentPending)
+	EPhActive   = EnvironmentPhase(EnvironmentActive)
+	EPhFailed   = EnvironmentPhase(EnvironmentFailed)
+	EPhDeleting = EnvironmentPhase(EnvironmentDeleting)
 )
 
 const (
-	EPEventCreate          EnvironmentPhaseEvent = "Create"
-	EPEventProvisioned     EnvironmentPhaseEvent = "Provisioned"
-	EPEventProvisionFailed EnvironmentPhaseEvent = "ProvisionFailed"
-	EPEventRetry           EnvironmentPhaseEvent = "Retry"
-	EPEventDeleteRequested EnvironmentPhaseEvent = "DeleteRequested"
+	EPEventCreate          = EnvironmentPhaseEvent(EnvironmentCreate)
+	EPEventProvisioned     = EnvironmentPhaseEvent(EnvironmentProvisioned)
+	EPEventProvisionFailed = EnvironmentPhaseEvent(EnvironmentProvisionFailed)
+	EPEventRetry           = EnvironmentPhaseEvent(EnvironmentRetry)
+	EPEventDeleteRequested = EnvironmentPhaseEvent(EnvironmentDeleteRequested)
 )
 
-// EnvironmentTypedMachine is the typed wrapper around the shared *Machine.
-type EnvironmentTypedMachine struct {
-	inner *Machine
-}
+// EnvironmentTypedMachine is the typed EnvironmentPhase machine.
+type EnvironmentTypedMachine = Typed[EnvironmentPhase, EnvironmentPhaseEvent]
 
+// NewEnvironmentTypedMachine returns the typed machine over NewEnvironmentMachine(), which stays the
+// single source of the transition table and the terminal set.
 func NewEnvironmentTypedMachine() *EnvironmentTypedMachine {
-	return &EnvironmentTypedMachine{inner: NewEnvironmentMachine()}
-}
-
-func (m *EnvironmentTypedMachine) Transition(current EnvironmentPhase, event EnvironmentPhaseEvent) EnvironmentPhase {
-	return EnvironmentPhase(m.inner.Transition(State(current), Event(event)))
-}
-
-func (m *EnvironmentTypedMachine) TryTransition(current EnvironmentPhase, event EnvironmentPhaseEvent) (EnvironmentPhase, error) {
-	next, err := m.inner.TryTransition(State(current), Event(event))
-	if err != nil {
-		return "", err
-	}
-	return EnvironmentPhase(next), nil
-}
-
-func (m *EnvironmentTypedMachine) IsTerminal(p EnvironmentPhase) bool {
-	return m.inner.IsTerminal(State(p))
-}
-
-func (m *EnvironmentTypedMachine) Name() string {
-	return m.inner.Name()
-}
-
-func (m *EnvironmentTypedMachine) IsKnownState(p EnvironmentPhase) bool {
-	return m.inner.IsKnownState(State(p))
-}
-
-func (m *EnvironmentTypedMachine) IsKnownEvent(e EnvironmentPhaseEvent) bool {
-	return m.inner.IsKnownEvent(Event(e))
-}
-
-func (m *EnvironmentTypedMachine) MustParseState(s string) EnvironmentPhase {
-	return EnvironmentPhase(m.inner.MustParseState(s))
-}
-
-func (m *EnvironmentTypedMachine) MustParseEvent(e string) EnvironmentPhaseEvent {
-	return EnvironmentPhaseEvent(m.inner.MustParseEvent(e))
-}
-
-func (m *EnvironmentTypedMachine) ValidEvents(phase EnvironmentPhase) []EnvironmentPhaseEvent {
-	untyped := m.inner.ValidEvents(State(phase))
-	if untyped == nil {
-		return nil
-	}
-	out := make([]EnvironmentPhaseEvent, len(untyped))
-	for i, e := range untyped {
-		out[i] = EnvironmentPhaseEvent(e)
-	}
-	return out
+	return newTyped[EnvironmentPhase, EnvironmentPhaseEvent](NewEnvironmentMachine())
 }

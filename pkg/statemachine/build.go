@@ -48,12 +48,12 @@ const (
 // (SUCCEEDED, FAILED, or CANCELLED). RELEASING is explicitly NOT terminal —
 // it must be picked up by the reconcile loop for retry (MEET-2026-03-26-008).
 func IsBuildTerminal(state State) bool {
-	switch state {
-	case BuildSucceeded, BuildFailed, BuildCancelled:
-		return true
-	}
-	return false
+	return buildLifecycle.IsTerminal(state)
 }
+
+// buildLifecycle answers the package-level Build helpers from the one
+// transition table. A Machine is immutable, so sharing it is safe.
+var buildLifecycle = NewBuildMachine()
 
 // NewBuildMachine returns the build state machine per spec section 5.1.
 //

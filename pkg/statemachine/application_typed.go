@@ -16,78 +16,30 @@ type ApplicationPhase string
 type ApplicationPhaseEvent string
 
 const (
-	APhEmpty       ApplicationPhase = ""
-	APhProgressing ApplicationPhase = "Progressing"
-	APhServing     ApplicationPhase = "Serving"
-	APhReachable   ApplicationPhase = "Reachable"
-	APhDegraded    ApplicationPhase = "Degraded"
-	APhDown        ApplicationPhase = "Down"
-	APhCleaned     ApplicationPhase = "Cleaned"
+	APhEmpty       = ApplicationPhase(ApplicationEmpty)
+	APhProgressing = ApplicationPhase(ApplicationProgressing)
+	APhServing     = ApplicationPhase(ApplicationServing)
+	APhReachable   = ApplicationPhase(ApplicationReachable)
+	APhDegraded    = ApplicationPhase(ApplicationDegraded)
+	APhDown        = ApplicationPhase(ApplicationDown)
+	APhCleaned     = ApplicationPhase(ApplicationCleaned)
 )
 
 const (
-	APEventCreate         ApplicationPhaseEvent = "Create"
-	APEventEndpointsReady ApplicationPhaseEvent = "EndpointsReady"
-	APEventEndpointsLost  ApplicationPhaseEvent = "EndpointsLost"
-	APEventRouteOK        ApplicationPhaseEvent = "RouteOK"
-	APEventRouteFail      ApplicationPhaseEvent = "RouteFail"
-	APEventUpdate         ApplicationPhaseEvent = "Update"
-	APEventOrphaned       ApplicationPhaseEvent = "Orphaned"
+	APEventCreate         = ApplicationPhaseEvent(ApplicationCreate)
+	APEventEndpointsReady = ApplicationPhaseEvent(ApplicationEndpointsReady)
+	APEventEndpointsLost  = ApplicationPhaseEvent(ApplicationEndpointsLost)
+	APEventRouteOK        = ApplicationPhaseEvent(ApplicationRouteOK)
+	APEventRouteFail      = ApplicationPhaseEvent(ApplicationRouteFail)
+	APEventUpdate         = ApplicationPhaseEvent(ApplicationUpdate)
+	APEventOrphaned       = ApplicationPhaseEvent(ApplicationOrphaned)
 )
 
-// ApplicationTypedMachine is the typed wrapper around the shared *Machine.
-type ApplicationTypedMachine struct {
-	inner *Machine
-}
+// ApplicationTypedMachine is the typed ApplicationPhase machine.
+type ApplicationTypedMachine = Typed[ApplicationPhase, ApplicationPhaseEvent]
 
+// NewApplicationTypedMachine returns the typed machine over NewApplicationMachine(), which stays the
+// single source of the transition table and the terminal set.
 func NewApplicationTypedMachine() *ApplicationTypedMachine {
-	return &ApplicationTypedMachine{inner: NewApplicationMachine()}
-}
-
-func (m *ApplicationTypedMachine) Transition(current ApplicationPhase, event ApplicationPhaseEvent) ApplicationPhase {
-	return ApplicationPhase(m.inner.Transition(State(current), Event(event)))
-}
-
-func (m *ApplicationTypedMachine) TryTransition(current ApplicationPhase, event ApplicationPhaseEvent) (ApplicationPhase, error) {
-	next, err := m.inner.TryTransition(State(current), Event(event))
-	if err != nil {
-		return "", err
-	}
-	return ApplicationPhase(next), nil
-}
-
-func (m *ApplicationTypedMachine) IsTerminal(p ApplicationPhase) bool {
-	return m.inner.IsTerminal(State(p))
-}
-
-func (m *ApplicationTypedMachine) Name() string {
-	return m.inner.Name()
-}
-
-func (m *ApplicationTypedMachine) IsKnownState(p ApplicationPhase) bool {
-	return m.inner.IsKnownState(State(p))
-}
-
-func (m *ApplicationTypedMachine) IsKnownEvent(e ApplicationPhaseEvent) bool {
-	return m.inner.IsKnownEvent(Event(e))
-}
-
-func (m *ApplicationTypedMachine) MustParseState(s string) ApplicationPhase {
-	return ApplicationPhase(m.inner.MustParseState(s))
-}
-
-func (m *ApplicationTypedMachine) MustParseEvent(e string) ApplicationPhaseEvent {
-	return ApplicationPhaseEvent(m.inner.MustParseEvent(e))
-}
-
-func (m *ApplicationTypedMachine) ValidEvents(phase ApplicationPhase) []ApplicationPhaseEvent {
-	untyped := m.inner.ValidEvents(State(phase))
-	if untyped == nil {
-		return nil
-	}
-	out := make([]ApplicationPhaseEvent, len(untyped))
-	for i, e := range untyped {
-		out[i] = ApplicationPhaseEvent(e)
-	}
-	return out
+	return newTyped[ApplicationPhase, ApplicationPhaseEvent](NewApplicationMachine())
 }

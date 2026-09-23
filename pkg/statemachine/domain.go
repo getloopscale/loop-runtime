@@ -46,8 +46,12 @@ const (
 // IsDomainTerminal returns true for terminal domain states.
 // "removing" is terminal — row is deleted after gitops cleanup.
 func IsDomainTerminal(state State) bool {
-	return state == DomainRemoving
+	return domainLifecycle.IsTerminal(state)
 }
+
+// domainLifecycle answers the package-level Domain helpers from the one
+// transition table. A Machine is immutable, so sharing it is safe.
+var domainLifecycle = NewDomainMachine()
 
 // NewDomainMachine returns the domain state machine.
 //

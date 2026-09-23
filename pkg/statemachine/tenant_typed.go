@@ -15,80 +15,31 @@ type TenantPhase string
 type TenantPhaseEvent string
 
 const (
-	TPhEmpty           TenantPhase = ""
-	TPhProvisioning    TenantPhase = "Provisioning"
-	TPhActive          TenantPhase = "Active"
-	TPhSuspended       TenantPhase = "Suspended"
-	TPhPendingDeletion TenantPhase = "PendingDeletion"
-	TPhDeleting        TenantPhase = "Deleting"
+	TPhEmpty           = TenantPhase(TenantEmpty)
+	TPhProvisioning    = TenantPhase(TenantProvisioning)
+	TPhActive          = TenantPhase(TenantActive)
+	TPhSuspended       = TenantPhase(TenantSuspended)
+	TPhPendingDeletion = TenantPhase(TenantPendingDeletion)
+	TPhDeleting        = TenantPhase(TenantDeleting)
 )
 
 const (
-	TPEventCreate          TenantPhaseEvent = "Create"
-	TPEventAllReady        TenantPhaseEvent = "AllConditionsReady"
-	TPEventSpecChanged     TenantPhaseEvent = "SpecChanged"
-	TPEventSuspend         TenantPhaseEvent = "Suspend"
-	TPEventUnsuspend       TenantPhaseEvent = "Unsuspend"
-	TPEventRequestDeletion TenantPhaseEvent = "RequestDeletion"
-	TPEventGraceExpired    TenantPhaseEvent = "GraceExpired"
-	TPEventRestore         TenantPhaseEvent = "Restore"
-	TPEventDelete          TenantPhaseEvent = "Delete"
+	TPEventCreate          = TenantPhaseEvent(TenantCreate)
+	TPEventAllReady        = TenantPhaseEvent(TenantAllReady)
+	TPEventSpecChanged     = TenantPhaseEvent(TenantSpecChanged)
+	TPEventSuspend         = TenantPhaseEvent(TenantSuspend)
+	TPEventUnsuspend       = TenantPhaseEvent(TenantUnsuspend)
+	TPEventRequestDeletion = TenantPhaseEvent(TenantRequestDeletion)
+	TPEventGraceExpired    = TenantPhaseEvent(TenantGraceExpired)
+	TPEventRestore         = TenantPhaseEvent(TenantRestore)
+	TPEventDelete          = TenantPhaseEvent(TenantDelete)
 )
 
-// TenantTypedMachine is the typed wrapper around the shared *Machine.
-type TenantTypedMachine struct {
-	inner *Machine
-}
+// TenantTypedMachine is the typed TenantPhase machine.
+type TenantTypedMachine = Typed[TenantPhase, TenantPhaseEvent]
 
-// NewTenantTypedMachine constructs the typed Tenant state machine.
+// NewTenantTypedMachine returns the typed machine over NewTenantMachine(), which stays the
+// single source of the transition table and the terminal set.
 func NewTenantTypedMachine() *TenantTypedMachine {
-	return &TenantTypedMachine{inner: NewTenantMachine()}
-}
-
-func (m *TenantTypedMachine) Transition(current TenantPhase, event TenantPhaseEvent) TenantPhase {
-	return TenantPhase(m.inner.Transition(State(current), Event(event)))
-}
-
-func (m *TenantTypedMachine) TryTransition(current TenantPhase, event TenantPhaseEvent) (TenantPhase, error) {
-	next, err := m.inner.TryTransition(State(current), Event(event))
-	if err != nil {
-		return "", err
-	}
-	return TenantPhase(next), nil
-}
-
-func (m *TenantTypedMachine) IsTerminal(p TenantPhase) bool {
-	return m.inner.IsTerminal(State(p))
-}
-
-func (m *TenantTypedMachine) Name() string {
-	return m.inner.Name()
-}
-
-func (m *TenantTypedMachine) IsKnownState(p TenantPhase) bool {
-	return m.inner.IsKnownState(State(p))
-}
-
-func (m *TenantTypedMachine) IsKnownEvent(e TenantPhaseEvent) bool {
-	return m.inner.IsKnownEvent(Event(e))
-}
-
-func (m *TenantTypedMachine) MustParseState(s string) TenantPhase {
-	return TenantPhase(m.inner.MustParseState(s))
-}
-
-func (m *TenantTypedMachine) MustParseEvent(e string) TenantPhaseEvent {
-	return TenantPhaseEvent(m.inner.MustParseEvent(e))
-}
-
-func (m *TenantTypedMachine) ValidEvents(phase TenantPhase) []TenantPhaseEvent {
-	untyped := m.inner.ValidEvents(State(phase))
-	if untyped == nil {
-		return nil
-	}
-	out := make([]TenantPhaseEvent, len(untyped))
-	for i, e := range untyped {
-		out[i] = TenantPhaseEvent(e)
-	}
-	return out
+	return newTyped[TenantPhase, TenantPhaseEvent](NewTenantMachine())
 }

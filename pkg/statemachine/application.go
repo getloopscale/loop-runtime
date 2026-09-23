@@ -60,7 +60,9 @@ const (
 //	Down → Progressing (recovery via reconcile)
 //	Reachable/Degraded → Progressing (Update event, rolling deploy)
 //
-// No terminal state — application lives until CR is deleted.
+// Terminal: Cleaned — reached on ApplicationOrphaned, when the reaper finds
+// the manifest removed from the GitOps source past the grace period; nothing
+// transitions out of it.
 func NewApplicationMachine() *Machine {
 	return NewMachine(MachineConfig{
 		Name: "LoopZeroApplication",
