@@ -173,6 +173,43 @@ func (s *PostgresEventStore) GetAfterForProject(ctx context.Context, tenantID st
 	return events, nil
 }
 
+// GetSignalsAfter returns the signal.changed events of one environment of a
+// project, after afterID. Those events are appended by
+// ReleaseStoreSqlc.AppendSideEffect keyed by the RELEASE id (sse_events has a
+// build_id column but no foreign key), so they are joined through releases —
+// joining builds, as GetAfterForProject does, matches none of them.
+//
+// SECURITY: tenantID is enforced inside the SQL, as in GetAfterForProject.
+// releases.project_id stores the project NAME (CLAUDE.md convention).
+func (s *PostgresEventStore) GetSignalsAfter(ctx context.Context, tenantID, projectName, environment string, afterID int64) ([]SSEEvent, error) {
+	rows, err := s.queryDB.Query(ctx, `
+		SELECT se.id, se.build_id, se.event_type, se.data, se.created_at
+		FROM sse_events se
+		JOIN releases r ON r.id = se.build_id
+		WHERE r.tenant_id = $1 AND r.project_id = $2 AND r.environment = $3
+		  AND se.event_type = 'signal.changed' AND se.id > $4
+		ORDER BY se.id ASC
+		LIMIT 1000
+	`, tenantID, projectName, environment, afterID)
+	if err != nil {
+		return nil, fmt.Errorf("event store: get signals after failed: %w", err)
+	}
+	defer rows.Close()
+
+	events := make([]SSEEvent, 0)
+	for rows.Next() {
+		var ev SSEEvent
+		if err := rows.Scan(&ev.ID, &ev.BuildID, &ev.EventType, &ev.Data, &ev.CreatedAt); err != nil {
+			return nil, fmt.Errorf("event store: scan failed: %w", err)
+		}
+		events = append(events, ev)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("event store: rows error: %w", err)
+	}
+	return events, nil
+}
+
 // Prune deletes events older than the given duration and returns the total count of deleted rows.
 // MOD-2: Deletes in batches of pruneBatchSize to prevent long-running locks and I/O spikes
 // when pruning large backlogs (e.g., after pruner was down for days).
