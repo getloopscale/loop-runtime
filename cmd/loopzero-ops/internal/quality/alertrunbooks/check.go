@@ -12,6 +12,9 @@
 package alertrunbooks
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -154,9 +157,14 @@ func Check(cfg Config) *Outcome {
 	for _, rulesDir := range dirs {
 		dir := filepath.Join(root, rulesDir)
 		entries, err := os.ReadDir(dir)
+		if errors.Is(err, fs.ErrNotExist) {
+			// An absent directory is tolerated — test trees hold only one of them —
+			// but NOT silently: `DirsVarridos` counts how many existed, and zero fails.
+			continue
+		}
 		if err != nil {
-			// Diretorio ausente e' tolerado — as arvores de teste tem so' um deles — mas
-			// NAO em silencio: `DirsVarridos` conta quantos existiram, e zero e' falha.
+			out.Violations = append(out.Violations,
+				fmt.Sprintf("%s: unreadable rules directory, not audited: %v", rulesDir, err))
 			continue
 		}
 		out.DirsVarridos++
@@ -191,6 +199,9 @@ func varrerDiretorio(root, relDir, dir string, entries []os.DirEntry, excepted m
 		}
 		data, rerr := os.ReadFile(filepath.Join(dir, e.Name()))
 		if rerr != nil {
+			// An alert file nobody could read was never audited; it is not clean.
+			out.Violations = append(out.Violations,
+				fmt.Sprintf("%s/%s: unreadable, runbook links not checked: %v", relDir, e.Name(), rerr))
 			continue
 		}
 		for _, name := range missingRunbookAlerts(string(data), excepted) {

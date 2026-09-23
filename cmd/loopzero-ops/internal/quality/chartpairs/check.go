@@ -33,6 +33,7 @@ package chartpairs
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -69,20 +70,28 @@ type Outcome struct {
 	Stale      []string
 }
 
-// nomesDe lê o `name:` de cada Chart.yaml sob base.
-func nomesDe(base string) (map[string]bool, error) {
+// chartNames reads the `name:` of every Chart.yaml directly under base. An
+// absent tree holds no charts and a directory without Chart.yaml is not a
+// chart; any other read failure is an error, because it hides a name.
+func chartNames(base string) (map[string]bool, error) {
 	out := map[string]bool{}
-	entradas, err := os.ReadDir(base)
-	if err != nil {
-		return out, nil // árvore ausente é zero charts, não erro
+	entries, err := os.ReadDir(base)
+	if errors.Is(err, fs.ErrNotExist) {
+		return out, nil
 	}
-	for _, e := range entradas {
+	if err != nil {
+		return nil, fmt.Errorf("chart-pairs: read %s: %w", base, err)
+	}
+	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
 		b, err := os.ReadFile(filepath.Clean(filepath.Join(base, e.Name(), "Chart.yaml")))
-		if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
 			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("chart-pairs: read %s/Chart.yaml: %w", e.Name(), err)
 		}
 		if m := nameRE.FindSubmatch(b); m != nil {
 			out[string(m[1])] = true
@@ -99,8 +108,14 @@ func Check(cfg Config) (Outcome, error) {
 		root = "."
 	}
 
-	infra, _ := nomesDe(filepath.Join(root, "infra", "helm"))
-	pub, _ := nomesDe(filepath.Join(root, "charts"))
+	infra, err := chartNames(filepath.Join(root, "infra", "helm"))
+	if err != nil {
+		return out, err
+	}
+	pub, err := chartNames(filepath.Join(root, "charts"))
+	if err != nil {
+		return out, err
+	}
 	out.InfraHelm, out.Charts = len(infra), len(pub)
 
 	if out.InfraHelm == 0 && out.Charts == 0 {

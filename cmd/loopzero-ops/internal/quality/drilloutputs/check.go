@@ -132,9 +132,9 @@ func Check(cfg Config) (*Outcome, error) {
 }
 
 func scanFile(path string, out *Outcome) error {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- path comes from walking the repo root
 	if err != nil {
-		return nil // unreadable file skipped
+		return fmt.Errorf("%s: unreadable, so it was never scanned: %w", path, err)
 	}
 	defer f.Close()
 	lineNum := 0

@@ -178,7 +178,10 @@ func Check(cfg Config) (Outcome, error) {
 	if out.Scanned == 0 {
 		return out, ErrNothingScanned
 	}
-	out.Undeclared = undeclaredSurfaces(root, arquivos, reg.Anchor, declarados)
+	out.Undeclared, err = undeclaredSurfaces(root, arquivos, reg.Anchor, declarados)
+	if err != nil {
+		return out, err
+	}
 
 	if len(out.Broken) > 0 {
 		return out, fmt.Errorf("%w: %s", ErrGuardUnresolved, describe(out.Broken))
@@ -205,18 +208,24 @@ func describe(b []BrokenGuard) string {
 }
 
 // undeclaredSurfaces finds files that touch a billing input without being declared.
-func undeclaredSurfaces(root string, arquivos, ancora []string, declarados map[string]bool) []string {
+// A versioned file it cannot read is an error: it may be exactly the new
+// layer the sweep exists to catch.
+func undeclaredSurfaces(root string, arquivos, ancora []string, declarados map[string]bool) ([]string, error) {
 	var out []string
 	for _, rel := range arquivos {
 		if declarados[rel] || !scannable(rel) {
 			continue
 		}
-		if referencesAnchor(filepath.Join(root, rel), ancora) {
+		hit, err := referencesAnchor(filepath.Join(root, rel), ancora)
+		if err != nil {
+			return nil, fmt.Errorf("billing-layers: %s is versioned and unreadable, so it was not swept: %w", rel, err)
+		}
+		if hit {
 			out = append(out, rel)
 		}
 	}
 	sort.Strings(out)
-	return out
+	return out, nil
 }
 
 // scannable limits the sweep to the kinds of file a layer can live in.
@@ -236,10 +245,10 @@ func scannable(rel string) bool {
 	return false
 }
 
-func referencesAnchor(abs string, ancora []string) bool {
+func referencesAnchor(abs string, ancora []string) (bool, error) {
 	f, err := os.Open(filepath.Clean(abs))
 	if err != nil {
-		return false
+		return false, err
 	}
 	defer func() { _ = f.Close() }()
 
@@ -249,11 +258,11 @@ func referencesAnchor(abs string, ancora []string) bool {
 		linha := sc.Text()
 		for _, a := range ancora {
 			if strings.Contains(linha, a) {
-				return true
+				return true, nil
 			}
 		}
 	}
-	return false
+	return false, sc.Err()
 }
 
 // versionedFiles lists what git tracks — what will be published.

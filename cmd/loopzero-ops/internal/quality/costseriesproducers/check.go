@@ -383,7 +383,8 @@ func scanEmitters(root string) (map[string]string, error) {
 		// read-only scan of tracked sources, so there is nothing for a TOCTOU race to win.
 		data, rerr := os.ReadFile(path)
 		if rerr != nil {
-			return nil // unreadable single file must not abort the scan
+			// The unreadable file may be the one that declares a pinned metric.
+			return fmt.Errorf("%s: unreadable, so its metric declarations are unknown: %w", path, rerr)
 		}
 		rel, relErr := filepath.Rel(root, path)
 		if relErr != nil {

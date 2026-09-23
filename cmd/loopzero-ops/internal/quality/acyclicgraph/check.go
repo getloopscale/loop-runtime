@@ -152,7 +152,9 @@ func scanNode(n node) ([]string, error) {
 		fset := token.NewFileSet()
 		f, perr := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
 		if perr != nil {
-			return nil // unparseable file — not our concern; other gates catch syntax
+			// A file whose imports were never read is a hole in the DAG check,
+			// not a clean file.
+			return fmt.Errorf("%s: cannot parse imports, so its edges are unknown: %w", path, perr)
 		}
 		for _, spec := range f.Imports {
 			imp := strings.Trim(spec.Path.Value, `"`)
