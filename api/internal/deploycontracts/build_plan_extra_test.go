@@ -84,11 +84,11 @@ func TestCreateBuildPlan_MultiApp_DockerfileNaming(t *testing.T) {
 	}
 }
 
-func TestCreateBuildPlan_SystemBuildArgsSemprePresentes(t *testing.T) {
-	// B-094: este teste cobria o filtro de chave invalida sobre `AppUnit.Env`. O campo e o
-	// filtro sairam com a copia morta da regra de env reservado — nenhum site de producao
-	// populava o campo, entao o laco nunca iterava. O que sobrevive, e continua real, e' a
-	// garantia de que os build-args injetados pela plataforma chegam ao plano.
+func TestCreateBuildPlan_PlatformBuildArgsAreAlwaysPresent(t *testing.T) {
+	// B-094: this test covered the invalid-key filter over `AppUnit.Env`. The field and the
+	// filter left with the dead copy of the reserved-env rule — no production site populated
+	// the field, so the loop never iterated. What survives, and is still real, is the
+	// guarantee that the platform-injected build args reach the plan.
 	units := []AppUnit{
 		{Name: "api", Type: "server", Port: 3000, Path: ".", Runtime: "node", Build: "buildpack"},
 	}

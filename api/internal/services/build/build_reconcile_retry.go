@@ -158,7 +158,7 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 	})
 	if err != nil {
 		r.logger.Error("reconcile loop: manifest building failed on retry", "build_id", build.ID, "error", err)
-		r.failBuild(ctx, build, motivoDaFalhaDeManifestos(err))
+		r.failBuild(ctx, build, manifestFailureReason(err))
 		return
 	}
 

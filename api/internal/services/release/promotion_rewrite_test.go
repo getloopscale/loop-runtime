@@ -54,8 +54,8 @@ spec:
 func TestRewriteManifestsForEnv_RewritesNamespaceHostAndLabel(t *testing.T) {
 	// Empty projectID == legacy call site / pre-refactor fixture (the
 	// stagingManifestSample uses the old "loopzero-{tenant}-{env}" format).
-	// O reescritor ancora no namespace canônico (tenant, project, env). O candidato
-	// legado de dois segmentos foi deletado junto com o fallback de projectID vazio.
+	// The rewriter anchors on the canonical namespace (tenant, project, env). The
+	// legacy two-segment candidate was deleted together with the empty-projectID fallback.
 	out, err := rewriteManifestsForEnv(
 		stagingManifestSample,
 		"tn-e2etest",
@@ -240,16 +240,15 @@ data:
 	}
 }
 
-// TestRewriteManifestsForEnv_ProjectIDVazioFalhaAlto — o fallback para o formato de dois
-// segmentos "loopzero-{tenant}-{env}" foi deletado. Medido em 2026-08-08: ZERO namespaces
-// nesse formato existem em qualquer cluster, e a rota de promote sempre preenche o
-// ProjectID a partir do path param. O fallback protegia um estado que não existe — e o
-// preço era reescrever os manifests para um namespace inexistente em silêncio, mandando
-// o deploy para o vazio.
-func TestRewriteManifestsForEnv_ProjectIDVazioFalhaAlto(t *testing.T) {
+// TestRewriteManifestsForEnv_EmptyProjectIDFailsLoud — the fallback to the two-segment
+// "loopzero-{tenant}-{env}" format was deleted. Measured 2026-08-08: ZERO namespaces in that
+// format exist in any cluster, and the promote route always fills ProjectID from the path
+// param. The fallback protected a state that does not exist — and its price was silently
+// rewriting the manifests to a namespace that does not exist, sending the deploy nowhere.
+func TestRewriteManifestsForEnv_EmptyProjectIDFailsLoud(t *testing.T) {
 	_, err := rewriteManifestsForEnv(stagingManifestSample, "tn-e2etest", "", "staging", "production", "loopzero.local")
 	if err == nil {
-		t.Fatal("projectID vazio deve falhar alto: reescrever para um namespace de dois " +
-			"segmentos manda o deploy para um namespace que não existe")
+		t.Fatal("an empty projectID must fail loud: rewriting to a two-segment " +
+			"namespace sends the deploy to a namespace that does not exist")
 	}
 }

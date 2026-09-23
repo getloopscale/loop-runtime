@@ -85,13 +85,13 @@ type WorkflowSpec struct {
 	ProjectID   string
 	Environment string
 	CommitSHA   string
-	// NoCache carrega a INTENCAO do usuario — reconstruir do zero, sem reaproveitar
-	// trabalho anterior — e nao o mecanismo que a realiza. O comentario anterior
-	// dizia "Skip BuildKit layer cache", nomeando no contrato de dominio uma
-	// ferramenta que so' existe no construtor (`api/internal/buildplane/argo/buildkit.go:82`,
-	// o unico leitor que decide algo com este campo). Trocar de construtor nao
-	// muda o que o usuario pediu; mudava este comentario, e e' assim que o
-	// vocabulario de um plano vaza para onde ele nao tem endereco (B-062).
+	// NoCache carries the user's INTENT — rebuild from scratch, reusing no earlier
+	// work — not the mechanism that realises it. The previous comment said "Skip
+	// BuildKit layer cache", naming in the domain contract a tool that exists only
+	// in the builder (`api/internal/buildplane/argo/buildkit.go`, the one reader
+	// that decides anything with this field). Changing the builder does not change
+	// what the user asked for; it changed this comment, and that is how one plane's
+	// vocabulary leaks to where it has no address (B-062).
 	NoCache       bool
 	Apps          []AppSpec
 	Plan          *BuildPlan // v2: resolved build plan (when present, WorkflowBuilder uses this instead of Apps)

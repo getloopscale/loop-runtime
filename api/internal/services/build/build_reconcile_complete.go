@@ -89,7 +89,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	})
 	if err != nil {
 		r.logger.Error("reconcile loop: manifest building failed", "build_id", build.ID, "error", err)
-		r.failBuild(ctx, build, motivoDaFalhaDeManifestos(err))
+		r.failBuild(ctx, build, manifestFailureReason(err))
 		return
 	}
 
@@ -347,19 +347,20 @@ func emitSigstoreObservations(status *deploycontracts.WorkflowStatus, appName, r
 	metrics.ObserveRekorURLPersist(rekorURL)
 }
 
-// motivoDaFalhaDeManifestos monta a mensagem que o usuario le' quando o estagio de
-// manifestos falha.
+// manifestFailureReason builds the message the user reads when the manifest
+// stage fails.
 //
-// Ate' 2026-08-19 ela era a CONSTANTE "Failed to build manifests with custom
-// domains": nomeava a etapa e nao o dominio, o app nem o motivo, enquanto o erro
-// de verdade — por exemplo `missing image digest for app "api"` — ia so' para o
-// log (B-152). Quem recebia a falha nao tinha como saber qual app parou.
+// Until 2026-08-19 it was the CONSTANT "Failed to build manifests with custom
+// domains": it named the stage and not the domain, the app or the reason, while
+// the real error — for example `missing image digest for app "api"` — went only
+// to the log (B-152). Whoever received the failure could not tell which app
+// stopped.
 //
-// O motivo passa por `scrub.Text`, e e' isso que torna seguro carrega-lo: a mesma
-// tabela que impede termo interno de vazar no evento de timeline protege esta
-// mensagem. Sem ela, embutir texto de erro cru seria trocar uma mensagem inutil
-// por um vazamento da Regra 3.
-func motivoDaFalhaDeManifestos(err error) string {
+// The reason passes through `scrub.Text`, which is what makes carrying it safe:
+// the same table that keeps internal terms out of the timeline event protects
+// this message. Without it, embedding raw error text would trade a useless
+// message for a Rule 3 leak.
+func manifestFailureReason(err error) string {
 	if err == nil {
 		return "Manifest build failed"
 	}

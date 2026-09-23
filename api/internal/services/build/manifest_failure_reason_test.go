@@ -9,37 +9,37 @@ import (
 	"testing"
 )
 
-// A mensagem que o usuario recebia era a CONSTANTE "Failed to build manifests
-// with custom domains": nomeava a etapa e nao o dominio, o app nem o motivo
-// (B-152). O erro real ia so' para o log, entao quem recebia a falha nao tinha
-// como saber qual app parou.
-func TestMotivoDaFalhaNomeiaOAppDoErroReal(t *testing.T) {
+// The message the user received was the CONSTANT "Failed to build manifests
+// with custom domains": it named the stage and not the domain, the app or the
+// reason (B-152). The real error went only to the log, so whoever received the
+// failure could not tell which app stopped.
+func TestManifestFailureReason_NamesTheAppOfTheRealError(t *testing.T) {
 	err := errors.New(`manifest_builder: missing image digest for app "api"`)
-	msg := motivoDaFalhaDeManifestos(err)
+	msg := manifestFailureReason(err)
 
 	if !strings.Contains(msg, `"api"`) {
-		t.Errorf("a mensagem nao nomeia o app do erro real:\n%s", msg)
+		t.Errorf("the message does not name the app of the real error:\n%s", msg)
 	}
 	if !strings.Contains(msg, "digest") {
-		t.Errorf("a mensagem nao carrega o motivo:\n%s", msg)
+		t.Errorf("the message does not carry the reason:\n%s", msg)
 	}
 }
 
-// O que torna seguro carregar o motivo: ele passa pelo mesmo higienizador que
-// protege o evento de timeline. Sem isso, embutir texto de erro cru trocaria uma
-// mensagem inutil por um vazamento da Regra Inquebravel 3.
-func TestMotivoDaFalhaHigienizaTermoInterno(t *testing.T) {
+// What makes carrying the reason safe: it passes through the same scrubber that
+// protects the timeline event. Without it, embedding raw error text would trade
+// a useless message for a leak of Unbreakable Rule 3.
+func TestManifestFailureReason_ScrubsInternalTerms(t *testing.T) {
 	err := errors.New("ArgoCD sync failed while rendering manifests")
-	msg := motivoDaFalhaDeManifestos(err)
+	msg := manifestFailureReason(err)
 
 	if strings.Contains(strings.ToLower(msg), "argocd") {
-		t.Errorf("termo interno vazou para a mensagem do usuario:\n%s", msg)
+		t.Errorf("an internal term leaked into the user's message:\n%s", msg)
 	}
 }
 
-// Erro nulo nao pode produzir "Manifest build failed: " com sufixo vazio.
-func TestMotivoDaFalhaComErroNulo(t *testing.T) {
-	if msg := motivoDaFalhaDeManifestos(nil); strings.HasSuffix(msg, ": ") {
-		t.Errorf("mensagem com sufixo vazio: %q", msg)
+// A nil error must not produce "Manifest build failed: " with an empty suffix.
+func TestManifestFailureReason_NilErrorHasNoEmptySuffix(t *testing.T) {
+	if msg := manifestFailureReason(nil); strings.HasSuffix(msg, ": ") {
+		t.Errorf("message with an empty suffix: %q", msg)
 	}
 }

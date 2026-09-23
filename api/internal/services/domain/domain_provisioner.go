@@ -327,12 +327,12 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d ports.CustomD
 			return fmt.Errorf("build apps lookup failed: %w", err)
 		}
 
-		// CHG-2026-04-29-DOGFOOD iter 8 — manifest builder agora exige
-		// digest per-app (supply-chain VAP rejeita tag refs). Em domain
-		// provisioner único path disponível é release.ImageDigest, que
-		// é populado por phaseACreateRelease para Apps[0] apenas (per
-		// ADR-0014). Multi-app custom domains não emitidos aqui — fail
-		// explicit em vez de produzir manifest com imagem errada.
+		// CHG-2026-04-29-DOGFOOD iter 8 — the manifest builder now requires a
+		// per-app digest (the supply-chain VAP rejects tag refs). In the domain
+		// provisioner the only available source is release.ImageDigest, which
+		// phaseACreateRelease populates for Apps[0] only (per ADR-0014).
+		// Multi-app custom domains are not emitted here — fail explicitly
+		// instead of producing a manifest with the wrong image.
 		appDigests := make(map[string]string, len(apps))
 		if release.ImageDigest != nil && *release.ImageDigest != "" && len(apps) > 0 {
 			appDigests[apps[0].Name] = *release.ImageDigest
@@ -480,10 +480,10 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d ports.CustomDoma
 			return fmt.Errorf("build apps lookup failed: %w", err)
 		}
 
-		// CHG-2026-04-29-DOGFOOD iter 8 — manifest builder agora exige
-		// digest per-app (supply-chain VAP rejeita tag refs). No remove
-		// flow vale a mesma restrição do provisionDomain: o digest vem
-		// de release.ImageDigest e cobre apenas Apps[0] (per ADR-0014).
+		// CHG-2026-04-29-DOGFOOD iter 8 — the manifest builder now requires a
+		// per-app digest (the supply-chain VAP rejects tag refs). The remove
+		// flow has the same restriction as provisionDomain: the digest comes
+		// from release.ImageDigest and covers Apps[0] only (per ADR-0014).
 		appDigests := make(map[string]string, len(apps))
 		if release.ImageDigest != nil && *release.ImageDigest != "" && len(apps) > 0 {
 			appDigests[apps[0].Name] = *release.ImageDigest

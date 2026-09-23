@@ -18,7 +18,7 @@ import (
 )
 
 // TestReleaseConvergenceLoop_HealthCheck_ConvergingNotFlagged locks the fix for
-// loopzero-cloud#242 follow-up (the promote-to-production "sem sucesso" false alarm).
+// loopzero-cloud#242 follow-up (the promote-to-production "sem sucesso" false alarm).  // english-only: verbatim dashboard label
 //
 // Root cause: healthCheckActiveReleases discarded the `synced` return of
 // GetAppStatus and flagged FalseSuccessTotal whenever `!healthy`. But during

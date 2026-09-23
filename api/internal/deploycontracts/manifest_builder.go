@@ -50,13 +50,13 @@ func BuildManifestApps(ctx context.Context, input BuildManifestAppsInput) ([]man
 		// (server|worker only). Every app emits K8s manifests.
 
 		// CHG-2026-04-29-DOGFOOD iter 8 — supply-chain VAP enforcement.
-		// Mutable tags are rejected by `loopzero-require-image-signature` em
-		// tenant namespaces. Sem digest emitido pelo build pipeline o
-		// manifest produziria pods Forbidden no admission. Fail-loud aqui
-		// é melhor que silent failure no admission depois — caller é
-		// responsável por carregar digest (build_reconcile_complete via
-		// buildApps; domain_provisioner via attestation store).
-		// Não há fallback para ImageTag — legacy paths foram removidos.
+		// Mutable tags are rejected by `loopzero-require-image-signature` in
+		// tenant namespaces. Without a digest from the build pipeline the
+		// manifest would produce pods Forbidden at admission. Failing loud
+		// here beats a silent admission failure later — the caller is
+		// responsible for supplying the digest (build_reconcile_complete via
+		// buildApps; domain_provisioner via the release's image digest).
+		// There is no fallback to an image tag: the legacy paths were removed.
 		dig, ok := input.AppDigests[app.Name]
 		if !ok || dig == "" {
 			return nil, fmt.Errorf("manifest_builder: missing image digest for app %q (tenant=%s project=%s); "+
