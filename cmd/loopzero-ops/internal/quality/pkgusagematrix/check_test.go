@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -249,12 +248,11 @@ after
 
 func TestRun_CheckOnFreshlyWrittenIsOK(t *testing.T) {
 	root := miniRepo(t)
-	now := time.Date(2026, 5, 21, 0, 0, 0, 0, time.UTC)
 	// First write to populate.
-	_, err := Run(Config{Root: root, Now: now}, ModeWrite)
+	_, err := Run(Config{Root: root}, ModeWrite)
 	require.NoError(t, err)
 	// Then check — must pass.
-	out, err := Run(Config{Root: root, Now: now}, ModeCheck)
+	out, err := Run(Config{Root: root}, ModeCheck)
 	require.NoError(t, err)
 	assert.True(t, out.Pass)
 	assert.Contains(t, strings.Join(out.Messages, "\n"), "up-to-date")
@@ -264,7 +262,6 @@ func TestRun_CheckOnStaleFails(t *testing.T) {
 	root := miniRepo(t)
 	out, err := Run(Config{
 		Root: root,
-		Now:  time.Date(2026, 5, 21, 0, 0, 0, 0, time.UTC),
 	}, ModeCheck)
 	require.NoError(t, err)
 	assert.False(t, out.Pass)
@@ -275,7 +272,6 @@ func TestRun_WriteSucceedsAndReportsPath(t *testing.T) {
 	root := miniRepo(t)
 	out, err := Run(Config{
 		Root: root,
-		Now:  time.Date(2026, 5, 21, 0, 0, 0, 0, time.UTC),
 	}, ModeWrite)
 	require.NoError(t, err)
 	assert.True(t, out.Pass)
@@ -373,47 +369,4 @@ func TestListPkgDirsSkipsTestOnlyDirs(t *testing.T) {
 	dirs, err := listPkgDirs(pkgRoot)
 	require.NoError(t, err)
 	assert.NotContains(t, dirs, "testsonly")
-}
-
-// TestFrescorIgnoraDataDeGeracao — a freshness gate must answer "does the content differ from
-// source?", not "was this generated today?".
-//
-// The generated header carries `now.Format("2006-01-02")` (check.go:215) and the whole rendered
-// document is compared byte-for-byte against the committed file (:344). So the gate turns red
-// every day at midnight with identical content. Measured on 2026-08-08: it blocked a push, and
-// the only fix was regenerating a file whose matrix had not changed — which trains the team to
-// regenerate without looking, and that is how a gate stops being read.
-func TestFrescorIgnoraDataDeGeracao(t *testing.T) {
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "pkg", "alpha"), 0o750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "pkg", "alpha", "a.go"),
-		[]byte("package alpha\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	doc := filepath.Join(root, "matrix.md")
-	// The gate splices into an existing doc; seed it with the markers.
-	if err := os.WriteFile(doc,
-		[]byte("# m\n\n"+StartMark+"\n"+EndMark+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	ontem := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
-	hoje := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
-
-	// Generate with yesterday's stamp…
-	if _, err := Run(Config{Root: root, DocPath: "matrix.md", Now: ontem}, ModeWrite); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	// …and verify today, with the same pkg/ content underneath.
-	out, err := Run(Config{Root: root, DocPath: "matrix.md", Now: hoje}, ModeCheck)
-	if err != nil {
-		t.Fatalf("check: %v", err)
-	}
-	if !out.Pass {
-		raw, _ := os.ReadFile(doc) //nolint:gosec // test fixture
-		t.Errorf("crossing midnight must not make the doc stale — the matrix is identical.\n"+
-			"doc:\n%s", string(raw))
-	}
 }

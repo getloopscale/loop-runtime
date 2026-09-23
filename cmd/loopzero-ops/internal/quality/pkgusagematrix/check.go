@@ -22,7 +22,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -64,10 +63,6 @@ type Config struct {
 
 	// DocPath overrides DefaultDocPath.
 	DocPath string
-
-	// Now is the timestamp injection point (Mode=Write writes a date
-	// header). Zero → time.Now().UTC().
-	Now time.Time
 }
 
 // Outcome captures the gate result.
@@ -299,10 +294,6 @@ func Run(cfg Config, mode Mode) (*Outcome, error) {
 	docPath := cfg.DocPath
 	if docPath == "" {
 		docPath = DefaultDocPath
-	}
-	now := cfg.Now
-	if now.IsZero() {
-		now = time.Now().UTC()
 	}
 	resolvedDoc := resolvePath(root, docPath)
 	pkgRoot := filepath.Join(root, "pkg")

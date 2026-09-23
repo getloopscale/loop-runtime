@@ -29,13 +29,10 @@ import (
 	"strings"
 )
 
-var _ = regexp.MustCompile // retained for future assertions
-
 const (
-	valuesPath    = "infra/helm/ory-kratos/values.yaml.gotmpl"
-	allowlistPath = "infra/quality/shell-scripts-allowlist.md"
-	planSlug      = "kratos-self-service-rate-limit-systemic"
-	maxLoC        = 500
+	valuesPath = "infra/helm/ory-kratos/values.yaml.gotmpl"
+	planSlug   = "kratos-self-service-rate-limit-systemic"
+	maxLoC     = 500
 )
 
 // Config controls the check.

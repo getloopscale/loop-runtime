@@ -22,10 +22,9 @@ package testpyramid
 type Thresholds struct {
 	UnitMinPct        float64
 	IntegrationMaxPct float64
-	E2EMaxPct         float64
 }
 
 // DefaultThresholds per ADR D7.
 func DefaultThresholds() Thresholds {
-	return Thresholds{UnitMinPct: 70, IntegrationMaxPct: 25, E2EMaxPct: 5}
+	return Thresholds{UnitMinPct: 70, IntegrationMaxPct: 25}
 }

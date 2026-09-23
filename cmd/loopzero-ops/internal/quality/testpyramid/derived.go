@@ -73,7 +73,6 @@ const tolerancePct = 0.5
 
 // DerivedOutcome reports both verdicts: what blocks and what is merely reported.
 type DerivedOutcome struct {
-	Deferred bool
 	Total    int
 	UnitPct  float64
 	IntegPct float64
