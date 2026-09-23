@@ -289,7 +289,7 @@ tasks:
             echo "  [PASS] cell-1 platform — argo-rollouts + traefik deployed"
             PASS=$((PASS+1))
           else
-            echo "  [FAIL] cell-1 platform — missing argo-rollouts or traefik. Run: task k3d:bootstrap-cell-1"
+            echo "  [FAIL] cell-1 platform — missing argo-rollouts or traefik. Run: task k3d:bootstrap-cell CELL_CTX={{.CELL_1_CONTEXT}}"
             FAIL=$((FAIL+1))
           fi
         fi
@@ -392,7 +392,9 @@ tasks:
         # 1. Clusters respond
         smoke "mgmt cluster reachable"     kubectl --context {{.CORE_CONTEXT}} cluster-info
         smoke "build cluster reachable"    kubectl --context {{.BUILD_CONTEXT}} cluster-info
-        smoke "workload cluster reachable" kubectl --context {{.CELL_0_CONTEXT}} cluster-info
+        for CELL_CTX in {{.CELL_CONTEXTS}}; do
+          smoke "cell cluster $CELL_CTX reachable" kubectl --context "$CELL_CTX" cluster-info
+        done
 
         # 2. Core pods running
         smoke "postgresql pod running" kubectl --context {{.CORE_CONTEXT}} -n loopzero-system \

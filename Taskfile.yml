@@ -62,6 +62,15 @@ vars:
   # Status starts 'maintenance' in cells SQL table (migration 000006); migration
   # 000007 flips to 'active' after cell-1 activation invariants pass (now Ginkgo: ginkgo --label-filter=parity --focus='Cell-2 Activation', migrated from cell2-activation-gates.sh TB1.1 2026-05-24).
   CELL_1_CONTEXT: k3d-loopzero-cell-1
+  # The cell inventory, declared ONCE. Every per-cell step loops over this list
+  # (`for: { var: CELL_CONTEXTS }`) instead of naming each cell by hand: the
+  # hand-copied per-cell tasks drifted (F-21, D-FF-03 — a release added to one
+  # cell's list and not the other's). Adding a cell is one edit here.
+  CELL_CONTEXTS: '{{.CELL_0_CONTEXT}} {{.CELL_1_CONTEXT}}'
+  # Releases every cell cluster needs before a tenant can be placed on it. The
+  # standalone bootstrap only syncs what is named here, so a new runtime release
+  # that tenants depend on (argo-rollouts was F-21) MUST be added to this list.
+  CELL_BOOTSTRAP_RELEASES: cert-manager cluster-issuer traefik external-secrets argo-rollouts
   # Standardized port-forward ports (avoid conflicts between tasks)
   PG_PORT: 15432
   PG_HOST: localhost
@@ -278,7 +287,8 @@ tasks:
       actual patches (B14, B15, B17-19, B22, B23, B25-82+).
     cmds:
       - bash infra/helmfile/scripts/generate-secrets.sh standalone core
-      - task: k3d:bootstrap-cell-0
+      - task: k3d:bootstrap-cell
+        vars: { CELL_CTX: '{{.CELL_0_CONTEXT}}' }
       - bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh
       - HYDRA_NAMESPACE=loopzero-auth bash infra/helmfile/scripts/bootstrap-oauth-clients.sh
       - bash infra/scripts/production/provision-api-tokens.sh
@@ -311,9 +321,15 @@ tasks:
         else
           echo "[NOTICE] SKIP_SIGSTORE_LOCAL=1 — skipping Sigstore LOCAL stack bootstrap"
         fi
-      # 2026-05-14 (plan T0.2): provision runtime-2 platform BEFORE the
-      # CC bootstrap so cell-1 has a reachable workload destination.
-      - task: k3d:bootstrap-cell-1
+      # 2026-05-14 (plan T0.2): provision EVERY cell's platform BEFORE the CC
+      # bootstrap so each cell has a reachable workload destination. cell-0 was
+      # already synced above (the ESO step needs it); re-syncing it is a no-op.
+      # EC-1: k3d:heal first applies the H4 hostAlias to the other cells' nodes,
+      # without which their pods cannot pull from the local k3d registry.
+      - task: k3d:heal
+      - for: { var: CELL_CONTEXTS }
+        task: k3d:bootstrap-cell
+        vars: { CELL_CTX: '{{.ITEM}}' }
       # 2026-05-14 (plan T0.1): bootstrap all three cells atomically
       # (cell-0 + cell-0 + cell-1). Closes CTO Golden Rule #1 gap.
       - task: k3d:bootstrap-cells
@@ -334,73 +350,36 @@ tasks:
       - task: setup
       - echo "Clusters and dependencies are ready. Run 'tilt up' to start the dev loop."
 
-  k3d:bootstrap-cell-0:
+  k3d:bootstrap-cell:
     desc: |
-      Bootstrap the workload (k3d-loopzero-cell-0) cluster with cert-manager +
-      traefik + external-secrets + argo-rollouts via helmfile. Idempotent —
-      `helmfile sync` no-ops if releases match desired state. Required after
-      fresh `k3d cluster create loopzero-cell-0` (the runtime helmfile usually
-      only runs in production cells).
-      Discovered LIVE 2026-04-30: ArgoCD app sync to runtime fails with
-      "Certificate CRD not found" until this is run.
+      Bootstrap one cluster with the cell platform releases via helmfile
+      (default: CELL_BOOTSTRAP_RELEASES). Idempotent — `helmfile sync` no-ops
+      when releases match desired state. Required after a fresh
+      `k3d cluster create` of a cell: without cert-manager and cluster-issuer,
+      ArgoCD sync fails with "Certificate CRD not found" / "Referenced
+      ClusterIssuer not found" (D-FF-03); without argo-rollouts every
+      `loopzero deploy` fails to apply its Rollout (F-21).
 
-      F-21 fix (2026-05-07, argo-rollouts-progressive-delivery-plan T0.2):
-      argo-rollouts MUST be in this list. Without it, fresh cleanroom
-      bootstrap leaves the workload cluster without the Rollouts CRD, so
-      every `loopzero deploy` (default-on progressive delivery) fails to
-      apply the Rollout manifest and the journey suite cannot run.
-
-      D-FF-03 fix (2026-05-27, /dogfood live): cluster-issuer MUST be in
-      this list. Without it, `loopzero deploy` succeeds at build but fails at
-      ArgoCD sync with "Referenced ClusterIssuer not found: loopzero-ca-issuer"
-      — every Certificate stays in Issuing forever and ArgoCD app stays
-      OutOfSync/Missing waiting for healthy state. Discovered LIVE during
-      dogfood 2026-05-27: 5 of 8 Ginkgo journey failures all root-caused
-      to missing ClusterIssuer.
+      One task for every cell, parameterised by CELL_CTX, replacing the
+      hand-copied k3d:bootstrap-cell-0 / k3d:bootstrap-cell-1 pair whose
+      release lists had to be kept in step by hand.
+    requires:
+      vars: [CELL_CTX]
+    vars:
+      RELEASES: '{{.RELEASES | default .CELL_BOOTSTRAP_RELEASES}}'
     cmds:
-      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=cert-manager sync
-      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=cluster-issuer sync
-      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=traefik sync
-      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=external-secrets sync
-      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=argo-rollouts sync
+      - for: { var: RELEASES }
+        cmd: LOOPZERO_CELL_CONTEXT={{.CELL_CTX}} helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context {{.CELL_CTX}} --selector name={{.ITEM}} sync
 
   k3d:bootstrap-build-cert-manager:
     desc: |
-      Bootstrap cert-manager + cluster-issuer em loopzero-build cluster.
-      Required ANTES de Pulumi up Sigstore stack (per plan 2026-05-27-M07).
-      Sigstore Fulcio/Rekor/CTLog precisam TLS internos via loopzero-ca-issuer.
-      Idempotente — helmfile sync no-ops se já deployed.
+      Bootstrap cert-manager + cluster-issuer on the loopzero-build cluster.
+      Required BEFORE the Sigstore Pulumi stack (plan 2026-05-27-M07):
+      Fulcio/Rekor/CTLog need internal TLS through loopzero-ca-issuer.
+      Idempotent — helmfile sync no-ops when already deployed.
     cmds:
-      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-build helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-build --selector name=cert-manager sync
-      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-build helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-build --selector name=cluster-issuer sync
-
-  k3d:bootstrap-cell-1:
-    desc: |
-      Bootstrap the second cell cluster (k3d-loopzero-cell-1) with cert-manager
-      + traefik + external-secrets + argo-rollouts via helmfile. Mirrors
-      `k3d:bootstrap-cell-0` but targets the second cell.
-
-      Plan: 2026-05-14-dogfood-findings-and-multi-cell-coverage T0.2
-      Closes CTO Golden Rule #1 gap (cleanroom must be multi-cell by default).
-
-      EC-1 pre-step: H4 hostAlias must be applied to runtime-2 nodes so
-      helmfile can pull loopzero-packs/cosign/syft images from the local k3d
-      registry. Without this, pods land in ImagePullBackOff. The
-      `task k3d:heal` invocation below also covers runtime-2 (extended
-      2026-05-14).
-
-      D-FF-03 fix (2026-05-27, /dogfood live): cluster-issuer MUST be in
-      this list — same reason as k3d:bootstrap-cell-0 above. Otherwise
-      tenants pinned to cell-1 have no ClusterIssuer for cert-manager.
-
-      Idempotent: helmfile sync no-ops if releases match desired state.
-    cmds:
-      - task: k3d:heal
-      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-1 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=cert-manager sync
-      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-1 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=cluster-issuer sync
-      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-1 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=traefik sync
-      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-1 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=external-secrets sync
-      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-1 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-1 --selector name=argo-rollouts sync
+      - task: k3d:bootstrap-cell
+        vars: { CELL_CTX: '{{.BUILD_CONTEXT}}', RELEASES: cert-manager cluster-issuer }
 
   k3d:bootstrap-cells:
     desc: |

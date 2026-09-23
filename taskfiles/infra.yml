@@ -380,7 +380,9 @@ tasks:
       # Prometheus Operator CRs are cluster-scoped by kind but reference objects in specific clusters,
       # so each cluster needs the type registered independently before its charts install.
       - |
-        for CTX in {{.CORE_CONTEXT}} {{.BUILD_CONTEXT}} {{.CELL_0_CONTEXT}}; do
+        # Every cell from the inventory: this loop named only cell-0, so a chart
+        # on cell-1 that ships a ServiceMonitor failed for want of the CRD.
+        for CTX in {{.CORE_CONTEXT}} {{.BUILD_CONTEXT}} {{.CELL_CONTEXTS}}; do
           echo "=== Installing Prometheus CRDs + monitoring namespace on $CTX ==="
           kubectl --context "$CTX" create namespace monitoring --dry-run=client -o yaml \
             | kubectl --context "$CTX" apply -f -
@@ -396,15 +398,14 @@ tasks:
       - task: infra:install:monitoring-crds
       - task: infra:install:core
       - task: infra:install:build
-      # UMA CHAMADA POR CELULA. Chamar uma vez so deixava a cell-1 com 4 componentes
-      # contra 8 da cell-0 — e como ninguem escolhe a celula (o roteamento e
-      # bin-packing), o tenant que caisse nela recebia menos plataforma sem que nada
-      # avisasse. As celulas sao espelho por contrato; a lista abaixo cresce junto com
-      # `clusters:create`.
-      - task: infra:install:cell
-        vars: { CELL_CTX: '{{.CELL_0_CONTEXT}}' }
-      - task: infra:install:cell
-        vars: { CELL_CTX: '{{.CELL_1_CONTEXT}}' }
+      # ONE CALL PER CELL, over the inventory declared once in Taskfile.yml
+      # (CELL_CONTEXTS). Calling it once left cell-1 with 4 components against
+      # cell-0's 8, and since nobody chooses the cell (routing is bin-packing),
+      # a tenant landing there silently got less platform. Cells mirror each
+      # other by contract.
+      - for: { var: CELL_CONTEXTS }
+        task: infra:install:cell
+        vars: { CELL_CTX: '{{.ITEM}}' }
       - task: infra:install:monitoring
 
   # ---------------------------------------------------------------------------

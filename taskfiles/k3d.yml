@@ -8,8 +8,8 @@ version: "3"
 # infra-sota-hardening-plan.md. This stub establishes the includes contract.
 
 tasks:
-  # Migration target: extract from Taskfile.yml lines around 641-697 (registry,
-  # clusters), 1320-1352 (k3d:bootstrap-cell-0, k3d:heal).
+  # Migration target: extract the registry, clusters, k3d:bootstrap-cell and
+  # k3d:heal tasks from Taskfile.yml.
   # Until migration: tasks remain in Taskfile.yml. Adding new k3d:* tasks here
   # works because Task v3 includes merge namespaces.
 
