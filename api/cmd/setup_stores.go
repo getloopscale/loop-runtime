@@ -5,6 +5,7 @@ package main
 
 import (
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/ports"
@@ -15,9 +16,9 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/objectstore"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	sourceroutes "github.com/getloopscale/loopzero/api/internal/routes/source"
-	s3uploader "github.com/getloopscale/loopzero/api/internal/s3"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/vault"
 )
@@ -107,7 +108,11 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 	// S3 uploader for source bundles — build cluster reads from Spaces.
 	var objUploader sourceroutes.ObjectUploader
 	if cfg.MinIOEndpoint != "" && cfg.MinIOAccessKey != "" && cfg.MinIOSecretKey != "" {
-		objUploader = s3uploader.New(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey)
+		objStore, err := objectstore.NewS3Store(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey)
+		if err != nil {
+			return nil, fmt.Errorf("object store: %w", err)
+		}
+		objUploader = objStore
 		logger.Info("s3 uploader enabled", "endpoint", cfg.MinIOEndpoint)
 	}
 
