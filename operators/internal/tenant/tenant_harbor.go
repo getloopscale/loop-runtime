@@ -117,6 +117,11 @@ func (r *TenantReconciler) ensureHarborRobotAccounts(ctx context.Context, tenant
 
 	pullRobotName := "pull-" + tenant.Name
 
+	runtimeClient, err := r.runtimeClient(ctx, tenant)
+	if err != nil {
+		return err
+	}
+
 	// Self-healing for pull secrets: check each workload namespace.
 	pullSecretMissing := false
 	for _, env := range tenant.Spec.Environments {
@@ -124,7 +129,7 @@ func (r *TenantReconciler) ensureHarborRobotAccounts(ctx context.Context, tenant
 		if nsErr != nil {
 			return fmt.Errorf("invalid namespace for env %s: %w", env.Name, nsErr)
 		}
-		if !r.secretExists(ctx, r.RuntimeClient, envNs, k.SecretHarborPullCredentials) {
+		if !r.secretExists(ctx, runtimeClient, envNs, k.SecretHarborPullCredentials) {
 			slog.Info("harbor pull secret missing, forcing robot recreation",
 				"tenant", tenant.Name, "namespace", envNs, "secret", k.SecretHarborPullCredentials)
 			pullSecretMissing = true
@@ -150,14 +155,12 @@ func (r *TenantReconciler) ensureHarborRobotAccounts(ctx context.Context, tenant
 
 	// Store pull credentials in each workload namespace.
 	//
-	// CHG-002b 2026-04-28 — tolerate "namespace not found". The workload
-	// namespace is created by the EnvironmentController, which runs in
-	// parallel with the TenantController. On the first reconcile pass the
-	// namespace usually doesn't exist yet; failing the entire tenant
-	// reconcile would block ALL conditions from going True (and therefore
-	// block Phase=Active). Skipping silently is safe: the pull secret will
-	// be created on the next reconcile pass, and image pulls happen well
-	// after deploy time.
+	// CHG-002b 2026-04-28: the workload namespace is created by the
+	// EnvironmentController, and the Environment CRs are emitted by a later
+	// step of this very reconcile, so on the first pass the namespace does
+	// not exist yet. That NotFound is tolerated only while the Environment
+	// has not reported the namespace as provisioned; once it has, NotFound
+	// means a wrong cluster or a deleted namespace and fails the reconcile.
 	if pullCreds.Secret != "" {
 		ensured := 0
 		for _, env := range tenant.Spec.Environments {
@@ -165,22 +168,49 @@ func (r *TenantReconciler) ensureHarborRobotAccounts(ctx context.Context, tenant
 			if nsErr != nil {
 				return fmt.Errorf("invalid namespace for env %s: %w", env.Name, nsErr)
 			}
-			if err := r.ensureHarborPullSecret(ctx, envNs, tenant.Name, pullCreds); err != nil {
-				if errors.IsNotFound(err) {
-					slog.Info("harbor pull secret skipped — workload namespace not yet ready",
-						"tenant", tenant.Name, "namespace", envNs)
-					metrics.ReconcileErrors.WithLabelValues("tenant", "pull_secret_namespace_not_ready").Inc()
-					continue
-				}
+			err := r.ensureHarborPullSecret(ctx, runtimeClient, envNs, tenant.Name, pullCreds)
+			if err == nil {
+				ensured++
+				continue
+			}
+			if !errors.IsNotFound(err) {
 				return fmt.Errorf("harbor pull secret for %s/%s: %w", tenant.Name, env.Name, err)
 			}
-			ensured++
+			pending, pendErr := r.workloadNamespacePending(ctx, tenant, env)
+			if pendErr != nil {
+				return pendErr
+			}
+			if !pending {
+				return fmt.Errorf("harbor pull secret for %s/%s: namespace %s is reported provisioned but not found in cell %q: %w",
+					tenant.Name, env.Name, envNs, tenant.Spec.CellID, err)
+			}
+			slog.Info("harbor pull secret deferred — workload namespace not provisioned yet",
+				"tenant", tenant.Name, "namespace", envNs)
+			metrics.ReconcileErrors.WithLabelValues("tenant", "pull_secret_namespace_not_ready").Inc()
 		}
 		slog.Info("harbor pull robot credentials stored",
 			"tenant", tenant.Name, "ensured", ensured, "total", len(tenant.Spec.Environments), "robot", pullCreds.Username)
 	}
 
 	return nil
+}
+
+// workloadNamespacePending reports whether env's workload namespace is still
+// being provisioned: its Environment CR does not exist yet, or has not reported
+// NamespaceReady=True.
+func (r *TenantReconciler) workloadNamespacePending(ctx context.Context, tenant *loopzerov1.Tenant, env loopzerov1.TenantEnvironmentEntry) (bool, error) {
+	name, err := naming.EnvironmentCRName(tenant.Name, env.Project, env.Name)
+	if err != nil {
+		return false, fmt.Errorf("environment CR name for %s/%s: %w", env.Project, env.Name, err)
+	}
+	var envCR loopzerov1.Environment
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: tenant.Namespace}, &envCR); err != nil {
+		if errors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("read environment %s: %w", name, err)
+	}
+	return !conditions.IsConditionTrue(envCR.Status.Conditions, conditions.TypeEnvNamespaceReady), nil
 }
 
 // secretExists checks if a K8s Secret exists in the given namespace using the specified client.
@@ -312,7 +342,7 @@ func (r *TenantReconciler) ensureHarborRegistrySecret(ctx context.Context, names
 
 // ensureHarborPullSecret creates or updates the imagePullSecret in a workload namespace
 // with Harbor pull-only robot credentials.
-func (r *TenantReconciler) ensureHarborPullSecret(ctx context.Context, namespace, tenantName string, creds *harbor.RobotCredentials) error {
+func (r *TenantReconciler) ensureHarborPullSecret(ctx context.Context, runtimeClient client.Client, namespace, tenantName string, creds *harbor.RobotCredentials) error {
 	dockerConfigJSON, err := buildDockerConfigJSON(r.HarborRegistryHost, creds.Username, creds.Secret)
 	if err != nil {
 		return fmt.Errorf("ensureHarborPullSecret: %w", err)
@@ -321,7 +351,7 @@ func (r *TenantReconciler) ensureHarborPullSecret(ctx context.Context, namespace
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: k.SecretHarborPullCredentials, Namespace: namespace},
 	}
-	_, err = controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, secret, func() error {
+	_, err = controllerutil.CreateOrUpdate(ctx, runtimeClient, secret, func() error {
 		secret.Labels = map[string]string{
 			k.LabelTenant:    tenantName,
 			k.LabelManagedBy: k.ManagedByTenantController,

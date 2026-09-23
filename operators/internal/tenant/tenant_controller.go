@@ -29,6 +29,7 @@ import (
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/argocd"
+	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/gitea"
@@ -54,19 +55,21 @@ var tenantSM = statemachine.NewTenantTypedMachine()
 // resources on the build and runtime clusters using separate clients.
 //   - r.Client        → mgmt cluster (Tenant CRDs, status, Gitea, ArgoCD)
 //   - r.BuildClient   → build cluster (build-{tenant} namespaces, quotas, secrets)
-//   - r.RuntimeClient → runtime cluster ({tenant}-{env} namespaces, RBAC, network policies)
+//   - r.RuntimeFactory → the runtime cluster of the tenant's cell, by Spec.CellID
+//     (PriorityClass, Harbor pull secrets). There is no default runtime cluster:
+//     a tenant pinned to cell-1 must never have its runtime objects written to cell-0.
 //
 // ARCH-002: Field usage by sub-file:
-//   - tenant_controller.go: Client, Scheme, RuntimeClient (environment CRs)
+//   - tenant_controller.go: Client, Scheme (environment CRs)
 //   - tenant_build.go:      BuildClient, MinIOProvisioner, Credentials
 //   - tenant_gitops.go:     Client, GitProvisioner, ArgoCDProvisioner, GiteaURL, WorkloadClusterURL
 //   - tenant_credentials.go: BuildClient, Credentials (DOToken, RegistryDockerConfig)
-//   - tenant_priority.go:   RuntimeClient
-//   - tenant_harbor.go:     HarborClient, HarborRegistryHost, BuildClient, RuntimeClient
+//   - tenant_priority.go:   RuntimeFactory
+//   - tenant_harbor.go:     HarborClient, HarborRegistryHost, BuildClient, RuntimeFactory
 //
 // ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers for the LOCAL
 // (mgmt cluster) RBAC. controller-gen rbac generates ClusterRole rules
-// from these. Cross-cluster RBAC (BuildClient, RuntimeClient) is
+// from these. Cross-cluster RBAC (BuildClient, RuntimeFactory) is
 // hand-maintained per ADR-0026 condition #2 and lives in
 // charts/loopzero-tenant-operator/templates/cross-cluster-rbac.yaml.
 //
@@ -101,8 +104,8 @@ var tenantSM = statemachine.NewTenantTypedMachine()
 type TenantReconciler struct {
 	client.Client
 	Scheme             *runtime.Scheme
-	BuildClient        client.Client // targets the build cluster
-	RuntimeClient      client.Client // targets the runtime cluster
+	BuildClient        client.Client                    // targets the build cluster
+	RuntimeFactory     cellrouting.RuntimeClientFactory // resolves the runtime cluster of the tenant cell
 	GitProvisioner     gitea.GitRepoProvisioner
 	ArgoCDProvisioner  argocd.Provisioner
 	MinIOProvisioner   miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
@@ -127,6 +130,15 @@ type TenantControllerConfig struct {
 	Credentials             BuildCredentials             // storage + registry credentials
 	RegistryCIDRs           []string                     // CIDR ranges for container registry (RISK-007)
 	MaxConcurrentReconciles int                          // 0 defaults to 5 (MEET-052: backpressure for bulk deletion)
+}
+
+// runtimeClient resolves the runtime cluster of the tenant's cell.
+func (r *TenantReconciler) runtimeClient(ctx context.Context, tenant *loopzerov1.Tenant) (client.Client, error) {
+	c, err := r.RuntimeFactory.For(ctx, tenant.Spec.CellID)
+	if err != nil {
+		return nil, fmt.Errorf("tenant %s (cellID=%q): runtime cluster client: %w", tenant.Name, tenant.Spec.CellID, err)
+	}
+	return c, nil
 }
 
 // tenantDetailTypes are the per-step conditions that SetReadinessSummary
@@ -481,7 +493,10 @@ func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *
 // If empty, it defaults to the in-cluster Gitea service URL.
 // cfg.WorkloadClusterURL configures the workload cluster API server URL for ArgoCD Applications.
 // If empty, it defaults to "https://kubernetes.default.svc" (backward compatible for single-cluster setups).
-func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisioner, argoCDProvisioner argocd.Provisioner, buildClient client.Client, runtimeClient client.Client, cfg TenantControllerConfig) error {
+func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisioner, argoCDProvisioner argocd.Provisioner, buildClient client.Client, runtimeFactory cellrouting.RuntimeClientFactory, cfg TenantControllerConfig) error {
+	if runtimeFactory == nil {
+		return fmt.Errorf("tenant controller: a runtime client factory is required")
+	}
 	giteaURL := cfg.GiteaURL
 	if giteaURL == "" {
 		giteaURL = constants.DefaultGiteaURL
@@ -525,7 +540,7 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 			Client:             mgr.GetClient(),
 			Scheme:             mgr.GetScheme(),
 			BuildClient:        buildClient,
-			RuntimeClient:      runtimeClient,
+			RuntimeFactory:     runtimeFactory,
 			GitProvisioner:     gitProvisioner,
 			ArgoCDProvisioner:  argoCDProvisioner,
 			MinIOProvisioner:   cfg.MinIOProvisioner,

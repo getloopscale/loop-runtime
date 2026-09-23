@@ -123,7 +123,7 @@ type EnvtestConfig struct {
 	CRDPath string
 
 	// EnableTenant wires SetupTenantController + SetupEnvironmentControllerWithFactory,
-	// the latter routed through the tracking CellAwareFactory. Tenant suite uses this.
+	// both routed through the tracking CellAwareFactory. Tenant suite uses this.
 	EnableTenant bool
 
 	// EnableApp wires SetupApplicationController + SetupExposureController.
@@ -260,7 +260,7 @@ func StartEnvtest(t TestT, cfg EnvtestConfig) *EnvtestHandle {
 	}
 
 	if cfg.EnableTenant {
-		if err := SetupTenantController(mgr, h.FakeGit, h.FakeArgoCD, buildClient, runtimeClient); err != nil {
+		if err := SetupTenantController(mgr, h.FakeGit, h.FakeArgoCD, buildClient, h.CellAwareFactory); err != nil {
 			h.Stop()
 			t.Fatalf("SetupTenantController: %v", err)
 		}

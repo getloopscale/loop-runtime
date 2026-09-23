@@ -21,6 +21,7 @@ import (
 
 	"github.com/getloopscale/loopzero/operators/internal/app"
 	"github.com/getloopscale/loopzero/operators/internal/argocd"
+	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/gitea"
 	miniop "github.com/getloopscale/loopzero/operators/internal/minio"
@@ -327,13 +328,13 @@ func (f *FakeMinIOProvisioner) DeleteTenantCredentials(_ context.Context, tenant
 
 // SetupTenantController registers the TenantController with the given manager.
 // Use this in E2E tests to start the operator in-process against envtest.
-// buildClient and runtimeClient target the build and runtime clusters respectively.
-// In envtest, pass mgr.GetClient() for both (single API server).
+// buildClient targets the build cluster; runtimeFactory resolves the runtime
+// cluster of each tenant's cell (in envtest, the tracking factory).
 //
 // ADR-0023 D1: delegates to internal/tenant (canonical split-tree
 // implementation) instead of internal/controller (deprecated monolith).
-func SetupTenantController(mgr ctrl.Manager, gitProvisioner GitRepoProvisioner, argoCDProvisioner ArgoCDProvisioner, buildClient client.Client, runtimeClient client.Client) error {
-	return tenant.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeClient, tenant.TenantControllerConfig{})
+func SetupTenantController(mgr ctrl.Manager, gitProvisioner GitRepoProvisioner, argoCDProvisioner ArgoCDProvisioner, buildClient client.Client, runtimeFactory cellrouting.RuntimeClientFactory) error {
+	return tenant.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeFactory, tenant.TenantControllerConfig{})
 }
 
 // SetupClusterCredentialController registers the ClusterCredentialController with the given manager.

@@ -34,7 +34,8 @@ func priorityClassForPlan(plan loopzerov1.PlanTier) (name string, value int32, p
 // PriorityClasses are cluster-scoped and shared across tenants of the same plan,
 // so they must NOT be deleted when a tenant is deleted.
 //
-// ARCH-010: PriorityClasses are created on the RUNTIME cluster only, not the build cluster.
+// ARCH-010: PriorityClasses are created on the runtime cluster of the tenant's cell
+// only, not the build cluster.
 // Build cluster priority is intentionally flat — all builds are equal regardless of plan tier.
 // Rationale: build pods are short-lived and managed by Argo Workflows with its own queue
 // and parallelism controls. Plan-based priority would create starvation for starter tenants
@@ -42,12 +43,17 @@ func priorityClassForPlan(plan loopzerov1.PlanTier) (name string, value int32, p
 func (r *TenantReconciler) reconcilePriorityClass(ctx context.Context, tenant *loopzerov1.Tenant) error {
 	pcName, pcValue, preemptionPolicy := priorityClassForPlan(tenant.Spec.Plan)
 
+	runtimeClient, err := r.runtimeClient(ctx, tenant)
+	if err != nil {
+		return err
+	}
+
 	pc := &schedulingv1.PriorityClass{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: pcName,
 		},
 	}
-	result, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, pc, func() error {
+	result, err := controllerutil.CreateOrUpdate(ctx, runtimeClient, pc, func() error {
 		pc.Value = pcValue
 		pc.PreemptionPolicy = &preemptionPolicy
 		pc.GlobalDefault = false

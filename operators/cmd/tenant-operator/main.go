@@ -190,6 +190,10 @@ func main() {
 		setupLog.Error(err, "failed to create runtime cluster client")
 		os.Exit(1)
 	}
+	// The runtime cluster of each tenant's cell; cellID "" (never placed)
+	// resolves to the CELL_0_KUBECONFIG cluster.
+	runtimeFactory := cellrouting.NewCellAwareRuntimeClientFactory(
+		mgr.GetClient(), runtimeClient, constants.NamespacePlatformSystem)
 
 	// MinIO (optional)
 	var minIOProvisioner miniop.CredentialProvisioner
@@ -262,7 +266,7 @@ func main() {
 			tenantMaxConcurrent = n
 		}
 	}
-	if err := tenant.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeClient, tenant.TenantControllerConfig{
+	if err := tenant.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeFactory, tenant.TenantControllerConfig{
 		GiteaURL:                giteaURL,
 		WorkloadClusterURL:      os.Getenv("WORKLOAD_CLUSTER_URL"),
 		MinIOProvisioner:        minIOProvisioner,
@@ -282,11 +286,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// fix-all-platform-issues-plan T1.1: cell-aware Environment reconciler.
-	// Routes namespace/RBAC/NetworkPolicy/Quota writes per tenant.spec.cellID.
-	envFactory := cellrouting.NewCellAwareRuntimeClientFactory(
-		mgr.GetClient(), runtimeClient, "loopzero-system")
-	if err := environment.SetupEnvironmentControllerWithFactory(mgr, envFactory); err != nil {
+	// Both controllers write to the runtime cluster of the tenant's cell, so
+	// they share one factory (and its per-cell client cache).
+	if err := environment.SetupEnvironmentControllerWithFactory(mgr, runtimeFactory); err != nil {
 		setupLog.Error(err, "unable to setup EnvironmentController")
 		os.Exit(1)
 	}
