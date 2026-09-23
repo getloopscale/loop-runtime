@@ -30,11 +30,12 @@ tasks:
       # had been drifting, in a task nothing invokes. A number frozen by hand
       # protects only until the first change nobody remembers to mirror.
       #
-      # The baseline is re-frozen deliberately (see its header), so deriving
+      # The baseline is the oracle TestOracle_MatchesFrozenBaseline owns and
+      # re-freezes deliberately (see its header), so deriving
       # from it keeps ONE place to update and makes an un-mirrored registry
       # change fail here instead of passing silently.
       - |
-        BASE=docs/operations/baselines/2026-07-02-m9-gateset.before
+        BASE=cmd/loopzero-ops/testdata/gateset.frozen
         want=$(grep -vcE '^#|^$' "$BASE")
         n=$(/tmp/loopzero-ops quality --list --names | wc -l)
         [ "$n" -eq "$want" ] || {
