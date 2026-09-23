@@ -22,7 +22,7 @@ func TestValidateStripeKeyForEnv_ProdRequiresLiveKey(t *testing.T) {
 		{
 			name:      "prod + sk_live_ key → OK",
 			env:       "production",
-			stripeKey: "REDACTED_SECRET_047",
+			stripeKey: "sk_live_xxxxx",
 			wantErr:   false,
 		},
 		{
