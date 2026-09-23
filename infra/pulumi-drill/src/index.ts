@@ -140,7 +140,7 @@ const drillVpc = new LoopZeroVpc("drill-vpc", {
 // 4. DOKS clusters (4 — mgmt + build + runtime + runtime-2) — D1
 // =============================================================================
 //
-// Topology mirrors prod components/infra.ts:139-186.
+// Topology mirrors platformClusterPlans() in infra/pulumi/src/components/infra.ts.
 // Cell mapping per D3:
 //   cell-0 + cell-0 → runtimeCluster
 //   cell-1              → runtimeCluster2

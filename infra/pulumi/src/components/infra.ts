@@ -90,6 +90,56 @@ export function resolveProvider(provider: CloudProvider): CloudProviderFactory {
 }
 
 // ---------------------------------------------------------------------------
+// Cluster table
+// ---------------------------------------------------------------------------
+
+/** The InfraOutputs key each cluster is exported under. */
+export type PlatformClusterOutput = "mgmtCluster" | "runtimeCluster" | "runtimeCluster2" | "buildCluster";
+
+export interface PlatformClusterPlan {
+  readonly output: PlatformClusterOutput;
+  /** Pulumi resource name. Changing it renames — and replaces — a live cluster. */
+  readonly name: string;
+  readonly version?: string;
+  readonly nodeClass: PlatformStackConfig["mgmtNodeClass"];
+  readonly minNodes: number;
+  readonly maxNodes?: number;
+  readonly autoScale: boolean;
+}
+
+/**
+ * The four clusters of the platform topology, declared once. The ORDER is the
+ * order of the database firewall's trusted-cluster rules (mgmt, build, runtime,
+ * runtime-2), kept as it was so the refactor changes no rule. This stack is
+ * AS-IS legacy retired at AM10: a new cell is not added here (CLAUDE.md —
+ * no new Pulumi for target infra).
+ */
+export function platformClusterPlans(config: PlatformStackConfig, baseName: string): PlatformClusterPlan[] {
+  const plan = (
+    output: PlatformClusterOutput,
+    suffix: string,
+    version: string | undefined,
+    nodeClass: PlatformClusterPlan["nodeClass"],
+    minNodes: number,
+    maxNodes: number | undefined,
+  ): PlatformClusterPlan => ({
+    output,
+    name: `${baseName}-${suffix}`,
+    version,
+    nodeClass,
+    minNodes,
+    maxNodes,
+    autoScale: maxNodes !== undefined,
+  });
+  return [
+    plan("mgmtCluster", "mgmt", config.mgmtK8sVersion, config.mgmtNodeClass, config.mgmtMinNodes, config.mgmtMaxNodes),
+    plan("buildCluster", "build", config.buildK8sVersion, config.buildNodeClass, config.buildMinNodes, config.buildMaxNodes),
+    plan("runtimeCluster", "runtime", config.runtimeK8sVersion, config.runtimeNodeClass, config.runtimeMinNodes, config.runtimeMaxNodes),
+    plan("runtimeCluster2", "runtime-2", config.runtimeK8sVersion, config.runtimeNodeClass, config.runtimeMinNodes, config.runtimeMaxNodes),
+  ];
+}
+
+// ---------------------------------------------------------------------------
 // Phase 1 — Base Infrastructure (full production topology)
 // ---------------------------------------------------------------------------
 
@@ -126,67 +176,28 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
     importId: orphans?.vpcId,
   });
 
-  // --- Management cluster ---
+  // --- Kubernetes clusters (mgmt, runtime, runtime-2, build) ---
+  // One declared table (platformClusterPlans) instead of four hand-copied
+  // blocks. runtime-2 is the second cell (multi-cell via DynamicRouter +
+  // ClusterCredential discovery); build isolates Argo Workflows + BuildKit so
+  // build spikes do not starve platform services.
   const isProd = config.environment === "prod";
-  const mgmtCluster = factory.createKubernetesCluster({
-    name: `${baseName}-mgmt`,
-    region: config.region,
-    version: config.mgmtK8sVersion,
-    nodeClass: config.mgmtNodeClass,
-    minNodes: config.mgmtMinNodes,
-    maxNodes: config.mgmtMaxNodes,
-    autoScale: config.mgmtMaxNodes !== undefined,
-    network: { vpcId: network.vpcId },
-    tags,
-    protect: isProd,
-  });
-
-  // --- Runtime cluster ---
-  const runtimeCluster = factory.createKubernetesCluster({
-    name: `${baseName}-runtime`,
-    region: config.region,
-    version: config.runtimeK8sVersion,
-    nodeClass: config.runtimeNodeClass,
-    minNodes: config.runtimeMinNodes,
-    maxNodes: config.runtimeMaxNodes,
-    autoScale: config.runtimeMaxNodes !== undefined,
-    network: { vpcId: network.vpcId },
-    tags,
-    protect: isProd,
-  });
-
-  // --- Runtime cluster 2 (multi-cell) ---
-  // Second runtime cluster for multi-cell validation. Proves horizontal scaling
-  // via DynamicRouter + ClusterCredential discovery. Each cell operates independently
-  // with its own ArgoCD apps, namespaces, and ingress.
-  const runtimeCluster2 = factory.createKubernetesCluster({
-    name: `${baseName}-runtime-2`,
-    region: config.region,
-    version: config.runtimeK8sVersion,
-    nodeClass: config.runtimeNodeClass,
-    minNodes: config.runtimeMinNodes,
-    maxNodes: config.runtimeMaxNodes,
-    autoScale: config.runtimeMaxNodes !== undefined,
-    network: { vpcId: network.vpcId },
-    tags,
-    protect: isProd,
-  });
-
-  // --- Build cluster ---
-  // Isolated compute for Argo Workflows + BuildKit builds.
-  // Separate from mgmt to prevent build resource spikes from affecting platform services.
-  const buildCluster = factory.createKubernetesCluster({
-    name: `${baseName}-build`,
-    region: config.region,
-    version: config.buildK8sVersion,
-    nodeClass: config.buildNodeClass,
-    minNodes: config.buildMinNodes,
-    maxNodes: config.buildMaxNodes,
-    autoScale: config.buildMaxNodes !== undefined,
-    network: { vpcId: network.vpcId },
-    tags,
-    protect: isProd,
-  });
+  const clusters = {} as Record<PlatformClusterOutput, ReturnType<typeof factory.createKubernetesCluster>>;
+  for (const plan of platformClusterPlans(config, baseName)) {
+    clusters[plan.output] = factory.createKubernetesCluster({
+      name: plan.name,
+      region: config.region,
+      version: plan.version,
+      nodeClass: plan.nodeClass,
+      minNodes: plan.minNodes,
+      maxNodes: plan.maxNodes,
+      autoScale: plan.autoScale,
+      network: { vpcId: network.vpcId },
+      tags,
+      protect: isProd,
+    });
+  }
+  const { mgmtCluster, runtimeCluster, runtimeCluster2, buildCluster } = clusters;
 
   // --- Managed PostgreSQL ---
   const database = factory.createDatabaseCluster({
@@ -198,9 +209,10 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
     nodeCount: config.dbNodeCount,
     network: { vpcId: network.vpcId },
     tags,
-    // Allow all 3 DOKS clusters to connect — critical for pipeline idempotency.
-    // Without this, destroy+recreate leaves DB unreachable (no trusted sources).
-    trustedK8sClusters: [mgmtCluster.clusterId, buildCluster.clusterId, runtimeCluster.clusterId, runtimeCluster2.clusterId],
+    // Allow every cluster of the table to connect — critical for pipeline
+    // idempotency. Without this, destroy+recreate leaves DB unreachable (no
+    // trusted sources). Derived, so a cluster added to the table is trusted.
+    trustedK8sClusters: Object.values(clusters).map((c) => c.clusterId),
     // Protect databases in all environments — accidental deletion loses all tenant data.
     // Use `pulumi state unprotect` + `pulumi destroy --target` for intentional deletion.
     protect: true,
