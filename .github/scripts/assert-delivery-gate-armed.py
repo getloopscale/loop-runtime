@@ -344,12 +344,53 @@ def premise_0_ci_gates_the_pull_request(root: Path, report: Report) -> bool:
         )
         return False
 
+    # A trigger is not a gate. Until 2026-09-23 this premise returned here on the
+    # trigger alone, so a ci.yml that ran on the PR and checked nothing would have
+    # certified the trunk as guarded. The gates are READ from the workflow, never
+    # listed here a second time, and the verdict names them, so a reader sees how
+    # much of the quality gate the pull request actually faces.
+    ci_gates = sorted({m.group(1) for l in lines for m in QUALITY_GATE_CALL.finditer(l)})
+    if not ci_gates:
+        report.bad(
+            "PREMISE 0 — CI gates the pull request: "
+            f"{CI_WORKFLOW} triggers on `pull_request` but runs no quality gate "
+            "(no `loopzero-ops quality <gate>` step). A trigger with nothing behind it protects nothing."
+        )
+        return False
+
+    local_gates = sorted(_quality_gates_task_gates(root) - set(ci_gates))
     report.ok(
         "PREMISE 0 — CI gates the pull request: "
-        f"{CI_WORKFLOW} triggers on `pull_request`, so a change is checked BEFORE it "
-        "reaches the trunk, by CI rather than by a hook on the pusher's machine."
+        f"{CI_WORKFLOW} triggers on `pull_request` and runs {len(ci_gates)} quality gate(s) "
+        f"before the merge: {', '.join(ci_gates)}."
     )
+    if local_gates:
+        print(
+            f"  note {len(local_gates)} gate(s) of `task quality:gates` run only where the "
+            "task is run, NOT on the pull request: " + ", ".join(local_gates)
+        )
     return True
+
+
+# `loopzero-ops quality <gate>` as invoked from a workflow or a Taskfile line.
+QUALITY_GATE_CALL = re.compile(r"loopzero-ops\s+quality\s+([a-z0-9][a-z0-9-]*)")
+
+
+def _quality_gates_task_gates(root: Path) -> set[str]:
+    """The gates `task quality:gates` runs, read from taskfiles/quality.yml."""
+    taskfile = root / "taskfiles" / "quality.yml"
+    if not taskfile.is_file():
+        return set()
+    gates: set[str] = set()
+    in_gates = False
+    for raw in taskfile.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].rstrip()
+        if line.startswith("  ") and not line.startswith("   ") and line.endswith(":"):
+            in_gates = line.strip() == "gates:"
+            continue
+        if in_gates:
+            gates.update(m.group(1) for m in QUALITY_GATE_CALL.finditer(line))
+    return gates
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1,53 +1,28 @@
-# Branch protection config for Quality Gates Required Status Checks.
-# Plan 2026-05-21-comprehensive-quality-gates v1.1 T7.4 (EC-1 fix).
+# Branch protection: the status checks a pull request must pass before it merges.
 #
-# Status check names MUST match exactly the GitHub Actions workflow job
-# `name:` field (case-sensitive). Verify via Actions UI before activation.
+# Applied by infra/scripts/ci/branch-protection-update.sh (BRANCH=develop, then
+# BRANCH=main). Each name MUST be the exact `name:` of a job in .github/workflows —
+# cmd/loopzero-ops/branch_protection_checks_test.go fails otherwise.
 #
-# Phased rollout:
-#   1. Operator runs: BRANCH=develop bash infra/scripts/ci/branch-protection-update.sh
-#   2. Wait 7 days advisory mode; monitor false-positive rate
-#   3. Operator runs: BRANCH=main bash infra/scripts/ci/branch-protection-update.sh
+# ONE required check: `CI gate`, the aggregation job of ci.yml. It asserts the result
+# of every other CI job itself (a SKIPPED required check reports as passing, so the
+# aggregate is what cannot be bypassed), so requiring the individual jobs as well
+# would only duplicate it.
+#
+# This file listed 13 checks until 2026-09-23 — "Quality Gates - Coverage Report",
+# "Helm Charts / Render-time tests", "drill-hermetic-tests" and others — all produced
+# by workflows deleted on 2026-05-23. Applied, it would have blocked every merge
+# waiting for checks nothing could report.
+#
+# Applying it needs branch protection on the remote, which the current GitHub plan
+# of the organisation does not offer for this private repository (403, measured
+# 2026-09-06 — see .github/workflows/delivery-gate-armed.yml).
 
 branches:
   develop:
     required_status_checks:
-      # Phase 1 (coverage tooling)
-      - "Quality Gates - Coverage Report / Coverage Report (Go + CLI)"
-      - "Quality Gates - Coverage Report / Coverage scripts hermetic tests"
-
-      # Phase 2 (coverage gates)
-      - "Quality Gates - Coverage Diff Gate"
-      - "Quality Gates - Baseline Regression Gate"
-
-      # Phase 5 (PR discipline)
-      - "Quality Gates - PR Template Compliance"
-      - "Quality Gates - Bug-fix Regression Test Gate"
-      - "Quality Gates - Test Deletion Audit"
-
-      # Phase 6 (runtime + flaky + pyramid + mocks + skip)
-      - "Quality Gates - Runtime SLO"
-      - "Quality Gates - Test Pyramid"
-      - "Quality Gates - Mock Budget"
-      - "Quality Gates - Skip-Link Enforcement"
-
-      # Existing checks preserved
-      - "Helm Charts / Render-time tests (Plan 2026-05-20 T4.1)"
-      - "drill-hermetic-tests / drill-hermetic-tests"
+      - "CI gate"
 
   main:
-    # Same checks as develop — activated AFTER 7-day soak on develop
     required_status_checks:
-      - "Quality Gates - Coverage Report / Coverage Report (Go + CLI)"
-      - "Quality Gates - Coverage Report / Coverage scripts hermetic tests"
-      - "Quality Gates - Coverage Diff Gate"
-      - "Quality Gates - Baseline Regression Gate"
-      - "Quality Gates - PR Template Compliance"
-      - "Quality Gates - Bug-fix Regression Test Gate"
-      - "Quality Gates - Test Deletion Audit"
-      - "Quality Gates - Runtime SLO"
-      - "Quality Gates - Test Pyramid"
-      - "Quality Gates - Mock Budget"
-      - "Quality Gates - Skip-Link Enforcement"
-      - "Helm Charts / Render-time tests (Plan 2026-05-20 T4.1)"
-      - "drill-hermetic-tests / drill-hermetic-tests"
+      - "CI gate"
