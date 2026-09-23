@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/validation"
 	"log/slog"
 	"net/http"
 	"time"
@@ -222,7 +223,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate name (RFC 1123)
-	if !pagination.IsRFC1123Name(req.Name) {
+	if !validation.IsRFC1123Name(req.Name) {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidName.Wrap("project name must be lowercase, alphanumeric, and may contain hyphens"))
 		return
 	}

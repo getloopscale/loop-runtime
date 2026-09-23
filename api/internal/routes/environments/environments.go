@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/validation"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -397,8 +398,8 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate name format (RFC 1123: lowercase alphanumeric + hyphens, no leading hyphen)
-	if !pagination.IsRFC1123Name(req.Name) {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidName.Wrap("environment name must be lowercase, alphanumeric, and may contain hyphens"))
+	if err := validation.ValidateEnvironmentName(req.Name); err != nil {
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidName.Wrap(err.Error()))
 		return
 	}
 

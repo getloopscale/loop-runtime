@@ -17,7 +17,6 @@ package pagination
 
 import (
 	"net/http"
-	"regexp"
 	"strconv"
 )
 
@@ -101,25 +100,4 @@ func SliceWindow(total, paginationLimit, paginationOffset int) (int, int) {
 		to = total
 	}
 	return from, to
-}
-
-// rfc1123Name is the Kubernetes name rule: lowercase, alphanumeric, hyphens, max
-// 63 characters, no leading or trailing hyphen.
-var rfc1123Name = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
-
-// IsRFC1123Name reports whether s is a valid Kubernetes resource name.
-//
-// It moved here from the projects family when two families were split apart and
-// the compiler refused the shared regexp (B-080, slice-36). Two consumers is
-// below the rule-of-three that usually gates an abstraction — but the fence
-// forbids a family reaching into a sibling, so a leaf is the only legal home for
-// something both need, and duplicating a VALIDATION RULE duplicates knowledge
-// rather than lines.
-//
-// Deliberately NOT replaced by pkg/naming.ValidateKubernetesName, which is close
-// but not the same: it returns an error, checks emptiness and length separately,
-// and would change what these handlers reject and what they say when they do.
-// Consolidating the two is a validation change, and this slice is a move.
-func IsRFC1123Name(s string) bool {
-	return rfc1123Name.MatchString(s)
 }

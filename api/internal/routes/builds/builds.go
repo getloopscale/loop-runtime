@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"regexp"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
@@ -38,22 +37,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/validation"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
-
-// environmentRegex validates environment names (DA-10).
-//
-// Sprint B T3.2 (plan 2026-06-01-p2-interface-contracts-robustness, ADR D4)
-// REVERTED 2026-06-02 after trio dogfood regression: tightening to reject
-// hyphens broke 11/66 journey specs that use env names like j-rollout-a,
-// j-secrets, j-domain. Those names existed pre-T3.2 in DB-warmed setups
-// (grandfathered) but cleanroom-fresh resets the DB, making every env
-// "new" — the regex then rejects them at creation. Sponsor mandate trio
-// GREEN took precedence over closing code-005 MEDIUM in this iteration.
-// Future re-attempt requires migrating the e2e journey fixture names
-// FIRST (jrollouta etc.), then tightening the regex. Tracked as
-// follow-up in MEET-ASYNC-AMENDMENT-2026-06-02-002 (created post-revert).
-//
-// Lowercase, starts with letter, alphanumeric + hyphens, max 63 chars.
-var environmentRegex = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 
 // AppAutoscalingInput mirrors the CLI autoscaling payload (field names match
 // what the CLI deploy.ts sends — snake_case target_cpu).
@@ -359,11 +342,9 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Environment validation (DA-10): lowercase only
-	if !environmentRegex.MatchString(req.Environment) {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-			"INVALID_ENVIRONMENT",
-			"Environment names must be lowercase."))
+	// Environment validation (DA-10): the one environment-name rule.
+	if err := validation.ValidateEnvironmentName(req.Environment); err != nil {
+		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError("INVALID_ENVIRONMENT", err.Error()))
 		return
 	}
 

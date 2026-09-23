@@ -301,9 +301,12 @@ func TestBuildsRoute(t *testing.T) {
 		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 			t.Fatalf("failed to decode response: %v", err)
 		}
-		msg, _ := resp["message"].(string)
-		if msg != "Environment names must be lowercase." {
-			t.Errorf("expected 'Environment names must be lowercase.', got %q", msg)
+		// The code is the contract; the message names every rule the name broke.
+		if code, _ := resp["code"].(string); code != "INVALID_ENVIRONMENT" {
+			t.Errorf("expected code INVALID_ENVIRONMENT, got %q", code)
+		}
+		if msg, _ := resp["message"].(string); !strings.Contains(msg, "lowercase") {
+			t.Errorf("expected the message to name the lowercase rule, got %q", msg)
 		}
 	})
 

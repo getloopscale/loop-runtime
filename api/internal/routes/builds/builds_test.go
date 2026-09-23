@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+	"github.com/getloopscale/loopzero/api/internal/validation"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -187,6 +188,23 @@ func TestBuilds_Create_InvalidEnvironmentName(t *testing.T) {
 	}
 }
 
+// POST /builds and POST /environments accept the same environment names: a
+// name one of them refuses must not be deployable through the other.
+func TestBuilds_Create_RejectsAnEnvironmentNameThatIsNotADNSLabel(t *testing.T) {
+	h := NewBuildHandler(&fakeBuildOrch{submitResult: &SubmitBuildResult{BuildID: "bld-1"}}, slog.Default())
+
+	body := `{"project_id":"my-project","environment":"staging-","apps":[{"name":"app"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", bytes.NewBufferString(body))
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Create(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("a trailing-hyphen environment is not a namespace label: want 400, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
 // Sprint B T3.2 REVERTED 2026-06-02 — the regex tightening broke e2e
 // journey fixtures using hyphen env names (j-rollout-a, j-secrets, etc.)
 // in cleanroom-fresh DB state. Sponsor mandate trio GREEN took precedence
@@ -206,8 +224,8 @@ func TestEnvironmentRegex_AcceptsHyphensAfterRevert(t *testing.T) {
 	}
 	for _, name := range accepted {
 		t.Run(name, func(t *testing.T) {
-			if !environmentRegex.MatchString(name) {
-				t.Errorf("environmentRegex rejected %q after revert; legacy behavior must accept", name)
+			if err := validation.ValidateEnvironmentName(name); err != nil {
+				t.Errorf("rejected %q: hyphenated environment names stay valid: %v", name, err)
 			}
 		})
 	}
@@ -227,8 +245,8 @@ func TestEnvironmentRegex_AcceptsCanonicalNames(t *testing.T) {
 	}
 	for _, name := range accepted {
 		t.Run(name, func(t *testing.T) {
-			if !environmentRegex.MatchString(name) {
-				t.Errorf("environmentRegex rejected canonical %q", name)
+			if err := validation.ValidateEnvironmentName(name); err != nil {
+				t.Errorf("rejected canonical %q: %v", name, err)
 			}
 		})
 	}
