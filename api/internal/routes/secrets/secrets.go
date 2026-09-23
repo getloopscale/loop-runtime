@@ -118,7 +118,7 @@ type SecretProjectChecker interface {
 // ENVIRONMENT (plan_limits metric "secrets_per_env"), so the gate asks for
 // the count an environment would reach, never a tenant-wide total. J-22 T1.3.
 type SecretPlanLimiter interface {
-	CheckValue(tenantID, metric string, requested int) enforcement.LimitResult
+	CheckValue(ctx context.Context, tenantID, metric string, requested int) (enforcement.LimitResult, error)
 }
 
 // perEnvironmentLimitMetric is the plan_limits metric the gate checks.
@@ -446,7 +446,19 @@ func (h *SecretHandler) assertSecretPlanLimit(
 			return false
 		}
 		requested := len(existing) + countNewNames(existing, names)
-		res := h.planLimits.CheckValue(tenantID, perEnvironmentLimitMetric, requested)
+		res, err := h.planLimits.CheckValue(ctx, tenantID, perEnvironmentLimitMetric, requested)
+		if err != nil {
+			// The limiter fails closed: an unreadable plan is a refusal,
+			// never a pass and never a guessed 402.
+			slog.Error("secret bulk: plan limit cannot be read; refusing the batch",
+				"tenant", tenantID, "project", project, "env", env, "error", err)
+			var te *loopzeroerrors.LoopZeroError
+			if !errors.As(err, &te) {
+				te = loopzeroerrors.ErrPlatformDegraded
+			}
+			httpio.WriteLoopZeroError(w, te)
+			return false
+		}
 		if res.Allowed {
 			continue
 		}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // capLimiter allows up to cap secrets per environment and records what it
@@ -21,10 +22,18 @@ type capLimiter struct {
 	metric string
 }
 
-func (c *capLimiter) CheckValue(_, metric string, requested int) enforcement.LimitResult {
+func (c *capLimiter) CheckValue(_ context.Context, _, metric string, requested int) (enforcement.LimitResult, error) {
 	c.asked = append(c.asked, requested)
 	c.metric = metric
-	return enforcement.LimitResult{Allowed: requested <= c.cap, Plan: "starter", Limit: c.cap, Current: requested}
+	return enforcement.LimitResult{Allowed: requested <= c.cap, Plan: "starter", Limit: c.cap, Current: requested}, nil
+}
+
+// unreadableLimiter cannot read the plan, which is what the limiter reports
+// when its store is down.
+type unreadableLimiter struct{}
+
+func (unreadableLimiter) CheckValue(context.Context, string, string, int) (enforcement.LimitResult, error) {
+	return enforcement.LimitResult{}, loopzeroerrors.ErrPlatformDegraded
 }
 
 // envStore holds existing secrets per environment.
@@ -77,6 +86,22 @@ func TestSecretBulk_PlanGate_RefusesTheEnvironmentThatWouldExceedItsCap(t *testi
 
 	if w.Code != http.StatusPaymentRequired {
 		t.Fatalf("staging holds 1 of 1: adding one must be refused, got %d body=%s", w.Code, w.Body.String())
+	}
+	if store.sets != 0 {
+		t.Fatalf("a refused batch must write nothing, wrote %d", store.sets)
+	}
+}
+
+func TestSecretBulk_PlanGate_RefusesWhenThePlanCannotBeRead(t *testing.T) {
+	store := &envStore{byEnv: map[string][]ports.SecretMetadata{}}
+	h := NewSecretHandler(store, &lockCountingFake{})
+	h.SetPlanLimiter(unreadableLimiter{})
+	w := httptest.NewRecorder()
+
+	h.Bulk(w, bulkRequest(t, []map[string]any{{"name": "NEW_KEY", "value": "v", "envs": []string{"production"}}}))
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("an unreadable plan must refuse, never allow: got %d body=%s", w.Code, w.Body.String())
 	}
 	if store.sets != 0 {
 		t.Fatalf("a refused batch must write nothing, wrote %d", store.sets)

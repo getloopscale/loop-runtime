@@ -317,15 +317,14 @@ func TestSecretBulk_AuditLogPerKey(t *testing.T) {
 // fakePlanLimiterDeny is a SecretPlanLimiter that always denies.
 type fakePlanLimiterDeny struct{}
 
-func (fakePlanLimiterDeny) CheckValue(_, metric string, requested int) enforcement.LimitResult {
-	return enforcement.LimitResult{Allowed: false, Plan: "free", Metric: metric, Current: requested, Limit: 10}
+func (fakePlanLimiterDeny) CheckValue(_ context.Context, _, metric string, requested int) (enforcement.LimitResult, error) {
+	return enforcement.LimitResult{Allowed: false, Plan: "free", Metric: metric, Current: requested, Limit: 10}, nil
 }
 
 // TestSecretBulk_PlanLimit_402 — J-22 T1.3 absorbed: when the plan limit
 // gate denies the bulk creation request, response MUST be HTTP 402
 // PLAN_LIMIT_EXCEEDED with body {current, limit:"secrets", max, plan}.
 // store.Set MUST NOT be invoked. Audit log MUST NOT receive any rows.
-//
 func TestSecretBulk_PlanLimit_402(t *testing.T) {
 	store := &fakeSecretStoreT01{}
 	audit := &fakeAuditLoggerT12{}
