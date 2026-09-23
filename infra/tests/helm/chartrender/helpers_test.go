@@ -187,7 +187,7 @@ func TestNewOptions_rejects_gotmpl_values(t *testing.T) {
 	}
 
 	// Use an actual .gotmpl file from helmfile values dir
-	root, err := repoRoot()
+	root, err := RepoRoot()
 	if err != nil {
 		t.Fatalf("repo root: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestPublishedChartPath_rejects_bootstrap_only_chart(t *testing.T) {
 }
 
 // TestRepoRoot_resolves_from_anywhere addresses EC-5: chart path resolution
-// from non-CWD invocation. repoRoot uses runtime.Caller, not CWD, so should
+// from non-CWD invocation. RepoRoot uses runtime.Caller, not CWD, so should
 // work regardless of where tests are invoked from.
 func TestRepoRoot_resolves_from_anywhere(t *testing.T) {
 	t.Parallel()
@@ -323,9 +323,9 @@ func TestRepoRoot_resolves_from_anywhere(t *testing.T) {
 		t.Fatalf("chdir /tmp: %v", err)
 	}
 
-	root, err := repoRoot()
+	root, err := RepoRoot()
 	if err != nil {
-		t.Fatalf("repoRoot from /tmp: %v", err)
+		t.Fatalf("RepoRoot from /tmp: %v", err)
 	}
 	if !strings.Contains(root, "/loopzero") {
 		t.Errorf("expected root to contain /loopzero, got %s", root)

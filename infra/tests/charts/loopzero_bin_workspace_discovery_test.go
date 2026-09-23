@@ -21,11 +21,11 @@
 //
 // SCOPE DISCIPLINE — read before extending:
 //
-//   This guard ONLY asserts the workspace-relative discovery path is
-//   present + the older `LOOPZERO_BIN="${LOOPZERO_BIN:-loopzero}"` literal is GONE
-//   from code lines. It does NOT validate that the workspace topology
-//   itself is correct (the script's runtime `command -v` check is
-//   the canonical signal when discovery fails).
+//	This guard ONLY asserts the workspace-relative discovery path is
+//	present + the older `LOOPZERO_BIN="${LOOPZERO_BIN:-loopzero}"` literal is GONE
+//	from code lines. It does NOT validate that the workspace topology
+//	itself is correct (the script's runtime `command -v` check is
+//	the canonical signal when discovery fails).
 //
 // Cross-references:
 //   - Script: infra/scripts/local/connect-canonical-fixture.sh
@@ -45,10 +45,7 @@ import (
 
 func loadConnectFixtureForLoopZeroBin(t *testing.T) string {
 	t.Helper()
-	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
+	root := repoRoot(t)
 	p := filepath.Join(root, "infra/scripts/local/connect-canonical-fixture.sh")
 	b, err := os.ReadFile(p)
 	if err != nil {

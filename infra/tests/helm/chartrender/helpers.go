@@ -1,9 +1,14 @@
 // Package chartrender renders Helm charts for render-time tests.
 //
-// O nome anterior era `helpers`, e ele nao dizia nada: era o segundo pacote Go
-// com nome da familia generica na arvore (B-141). O que este pacote faz e
-// UMA coisa — resolver caminho de chart, montar opcoes, renderizar template e
-// desserializar o YAML resultante — e o nome passou a dizer isso.
+// It used to be called `helpers`, which said nothing: it was the second Go
+// package in the tree named after the generic family (B-141). What it does is
+// ONE thing — resolve a chart path, build options, render the template and
+// decode the resulting YAML — and the name now says so.
+//
+// It is the ONLY way a test in infra/tests renders a chart. A test that shells
+// out to `helm template` itself skips the ErrAmbiguousChart guard, the one-shot
+// `helm dep update` (so a chart with a `dependencies:` block fails to render in
+// a fresh clone), and the single missing-helm policy below.
 //
 // Plan 2026-05-20-helm-render-time-testing-terratest v1.1 — T1.2.
 //
@@ -101,12 +106,12 @@ func resolveDeps(chartPath string) error {
 	return depUpdateErr[chartPath]
 }
 
-// repoRoot returns the absolute path to the LoopZero repository root,
+// RepoRoot returns the absolute path to the LoopZero repository root,
 // regardless of the caller's CWD. Uses runtime.Caller to walk back
 // from this file's known location: infra/tests/helm/chartrender/chartrender.go
 //
 // This addresses edge case EC-5 (chart path resolution from non-CWD).
-func repoRoot() (string, error) {
+func RepoRoot() (string, error) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
 		return "", fmt.Errorf("runtime.Caller failed — cannot resolve chartrender.go location")
@@ -139,7 +144,7 @@ func BootstrapChartPath(chartName string) (string, error) {
 	if chartName == "" {
 		return "", fmt.Errorf("chart name cannot be empty")
 	}
-	root, err := repoRoot()
+	root, err := RepoRoot()
 	if err != nil {
 		return "", err
 	}
@@ -158,7 +163,7 @@ func PublishedChartPath(chartName string) (string, error) {
 	if chartName == "" {
 		return "", fmt.Errorf("chart name cannot be empty")
 	}
-	root, err := repoRoot()
+	root, err := RepoRoot()
 	if err != nil {
 		return "", err
 	}
@@ -189,7 +194,7 @@ func ChartPath(chartName string) (string, error) {
 	if chartName == "" {
 		return "", fmt.Errorf("chart name cannot be empty")
 	}
-	root, err := repoRoot()
+	root, err := RepoRoot()
 	if err != nil {
 		return "", err
 	}
@@ -293,6 +298,14 @@ func runHelmDepUpdate(chartPath string) error {
 // Per ADR D11: automatically invokes `helm dep update` for charts with
 // dependencies: block.
 func NewOptions(chartPath, envValuesFile string) (*helm.Options, error) {
+	// One policy for a missing helm binary, for every render test: fail. helm
+	// is a declared prerequisite (CLAUDE.md § Prerequisites), and a render test
+	// that skips without it reports green over a chart nobody rendered.
+	if _, err := exec.LookPath("helm"); err != nil {
+		return nil, fmt.Errorf("helm is not on PATH and is a declared prerequisite "+
+			"of every render test: %w", err)
+	}
+
 	// Resolve dependencies if chart has them (D11).
 	// Uses sync.Once cache (resolveDeps) so parallel tests on the same
 	// chart do not all race for helm's lock file → OOM.
@@ -306,7 +319,7 @@ func NewOptions(chartPath, envValuesFile string) (*helm.Options, error) {
 		// Resolve to absolute if relative
 		absPath := envValuesFile
 		if !filepath.IsAbs(envValuesFile) {
-			root, rerr := repoRoot()
+			root, rerr := RepoRoot()
 			if rerr != nil {
 				return nil, rerr
 			}
@@ -411,6 +424,15 @@ func RenderTemplate(t *testing.T, opts *helm.Options, chartPath, releaseName str
 	return entry.output
 }
 
+// RenderTemplateE renders like RenderTemplate but returns helm's error instead
+// of failing the test, and never caches. It exists for tests whose assertion IS
+// that a render fails — a chart's fail-closed `fail` guard — which must still go
+// through the facade so dependency resolution and chart-name resolution apply.
+func RenderTemplateE(t *testing.T, opts *helm.Options, chartPath, releaseName string, templates []string) (string, error) {
+	t.Helper()
+	return helm.RenderTemplateE(t, opts, chartPath, releaseName, templates)
+}
+
 // kindAndAPI is a minimal struct for sniffing kind from a YAML doc.
 type kindAndAPI struct {
 	APIVersion string `yaml:"apiVersion"`
@@ -430,7 +452,7 @@ func EnvStubPath(env, chartName string) string {
 // between "assert env divergence absent (no stub)" and "assert env
 // stub renders correctly (stub exists)".
 func HasEnvStub(env, chartName string) bool {
-	root, err := repoRoot()
+	root, err := RepoRoot()
 	if err != nil {
 		return false
 	}

@@ -4,7 +4,7 @@
 // install-config-contract Slice 5 — universal schema fail-fast invariant + the
 // loopzero-build-cwts referenced-secret contract + the loopzero-dashboard runtime-config
 // contract. Closes INCLUIR TUDO 7/7. Reuses helpers from the sibling contract
-// tests (same package `charts`): operatorChartDir, helmRequired, mdTableKeys,
+// tests (same package `charts`): operatorChartDir, renderChart, mdTableKeys,
 // readFile, camelAPI, setEqual, fileExists.
 package charts
 
@@ -18,14 +18,10 @@ import (
 	"testing"
 )
 
-// chartsRoot resolves the published-charts dir (../../../charts from infra/tests/charts).
+// chartsRoot resolves the published-charts dir.
 func chartsRoot(t *testing.T) string {
 	t.Helper()
-	d, err := filepath.Abs(filepath.Join("..", "..", "..", "charts"))
-	if err != nil {
-		t.Fatalf("resolve charts dir: %v", err)
-	}
-	return d
+	return filepath.Join(repoRoot(t), "charts")
 }
 
 // chartType returns the Chart.yaml `type:` (default "application" when absent).
@@ -127,7 +123,7 @@ func TestBuildCwtsSecretContract(t *testing.T) {
 	}
 
 	// (b) NAME — dedicated parser (NOT mdTableKeys); set-equal to rendered secretRef name.
-	refs := renderedSecretRefNames(helmRequired(t, c))
+	refs := renderedSecretRefNames(renderChart(t, c, defaultRelease, nil))
 	if len(refs) == 0 {
 		t.Fatalf("loopzero-build-cwts: no secretRef name rendered (guard vacuous)")
 	}
@@ -138,7 +134,7 @@ func TestBuildCwtsSecretContract(t *testing.T) {
 	setEqual(t, "loopzero-build-cwts referenced secret name", []string{docName}, refs)
 
 	// (c) SEAM — existingSecret override changes the rendered name to exactly the override.
-	custom := renderedSecretRefNames(helmRequired(t, c, "--set", "minio.existingSecret=probe-secret"))
+	custom := renderedSecretRefNames(renderChart(t, c, defaultRelease, map[string]string{"minio.existingSecret": "probe-secret"}))
 	setEqual(t, "loopzero-build-cwts existingSecret override", []string{"probe-secret"}, custom)
 }
 

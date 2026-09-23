@@ -10,27 +10,27 @@
 //
 // Why this gate exists:
 //
-//   The docker bridge gateway is the canonical k3d host-publish target — every
-//   `port: <host>:<nodePort>@loadbalancer` mapping (vault:8200, mgmt
-//   observability/tooling, workload ingress) DNAT-routes through the host's
-//   external listeners which the gateway exposes from inside the bridge. The
-//   workload-serverlb only publishes its OWN ports (8090/8443/30091/6444) and
-//   was wrongly chosen as the resolution target by an earlier J-17 Loki path
-//   that has long been superseded. The droplet probe 2026-06-20 (commit
-//   following T0.1 SPIKE) measured:
+//	The docker bridge gateway is the canonical k3d host-publish target — every
+//	`port: <host>:<nodePort>@loadbalancer` mapping (vault:8200, mgmt
+//	observability/tooling, workload ingress) DNAT-routes through the host's
+//	external listeners which the gateway exposes from inside the bridge. The
+//	workload-serverlb only publishes its OWN ports (8090/8443/30091/6444) and
+//	was wrongly chosen as the resolution target by an earlier J-17 Loki path
+//	that has long been superseded. The droplet probe 2026-06-20 (commit
+//	following T0.1 SPIKE) measured:
 //
-//     via GW (172.18.0.1) → vault:8200=HTTP 400 (OpenBao app-layer responded)
-//                        → mgmt :30082=200, :13001=404, :8090=301, :8443=404
-//                        → APIs :6443=400, :6444=400, :6447=400  ✅
-//     via WL (172.18.0.12) → EVERY port = TCP RST ≈ 0.4ms  ✗
+//	  via GW (172.18.0.1) → vault:8200=HTTP 400 (OpenBao app-layer responded)
+//	                     → mgmt :30082=200, :13001=404, :8090=301, :8443=404
+//	                     → APIs :6443=400, :6444=400, :6447=400  ✅
+//	  via WL (172.18.0.12) → EVERY port = TCP RST ≈ 0.4ms  ✗
 //
-//   The current script (`:34, :63, :77`) hardcodes WORKLOAD_LB_IP as the
-//   resolution target and re-pollutes mgmt CoreDNS on every `task setup`. That
-//   silently breaks the vault host-publish chain proved by T1.1 (#111-#114) —
-//   the mechanism is right, the name resolution is wrong. Option B (gateway-
-//   derived + guarded) over Option A (delete + trust k3d default) because this
-//   DNS class already burned 4 cycles on implicit resolution; explicit is the
-//   simplest correct design (KISS) per `architecture.md` fail-fast.
+//	The current script (`:34, :63, :77`) hardcodes WORKLOAD_LB_IP as the
+//	resolution target and re-pollutes mgmt CoreDNS on every `task setup`. That
+//	silently breaks the vault host-publish chain proved by T1.1 (#111-#114) —
+//	the mechanism is right, the name resolution is wrong. Option B (gateway-
+//	derived + guarded) over Option A (delete + trust k3d default) because this
+//	DNS class already burned 4 cycles on implicit resolution; explicit is the
+//	simplest correct design (KISS) per `architecture.md` fail-fast.
 //
 // The 4 assertions below all read the script as source — no kubectl, no
 // docker, no helmfile. Pure-text grep on the canonical file path.
@@ -53,10 +53,7 @@ import (
 
 // TestHostK3dInternalCanonical — locks the 4-assertion contract on the script.
 func TestHostK3dInternalCanonical(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
+	root := repoRoot(t)
 	scriptPath := filepath.Join(root, "infra/scripts/local/setup-cross-cluster-networking.sh")
 	if _, err := os.Stat(scriptPath); err != nil {
 		t.Fatalf("script not found at %s: %v", scriptPath, err)

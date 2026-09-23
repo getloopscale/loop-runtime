@@ -6,10 +6,10 @@
 //
 // Symptom (caught LIVE during seed-post-cleanroom-all.sh --verify):
 //
-//   [connect-fixture] ERROR mint_app_jwt: cannot resolve GITHUB_APP_ID
-//                            from loopzero-api pod running env
-//   [connect-fixture] WARN: no GitHub App installation found on
-//                            getloopscale/loopzerokit-example
+//	[connect-fixture] ERROR mint_app_jwt: cannot resolve GITHUB_APP_ID
+//	                         from loopzero-api pod running env
+//	[connect-fixture] WARN: no GitHub App installation found on
+//	                         getloopscale/loopzerokit-example
 //
 // Root cause: the `kubectl exec deployment/loopzero-api -c <container>` call
 // was targeting container name `api`, while the canonical container name
@@ -35,13 +35,13 @@
 //
 // SCOPE DISCIPLINE — read before extending the guard:
 //
-//   This guard ONLY asserts the kubectl exec selector used by
-//   `mint_app_jwt` to read the loopzero-api running env. It does NOT forbid
-//   other containers named `api` from existing in the project (e.g.,
-//   `loopzero-cloud` may have a container literally named `api`). The
-//   selector is wrong here because the deployment is `loopzero-api`, not
-//   `loopzero-cloud`. Extending the guard to forbid `-c api` globally would
-//   over-reach.
+//	This guard ONLY asserts the kubectl exec selector used by
+//	`mint_app_jwt` to read the loopzero-api running env. It does NOT forbid
+//	other containers named `api` from existing in the project (e.g.,
+//	`loopzero-cloud` may have a container literally named `api`). The
+//	selector is wrong here because the deployment is `loopzero-api`, not
+//	`loopzero-cloud`. Extending the guard to forbid `-c api` globally would
+//	over-reach.
 //
 // The audit is encoded as a pure function so the negative-control test
 // can mutate the in-memory body and PROVE the guard catches the revert.
@@ -66,8 +66,8 @@ import (
 // Regex inventory — raw strings so on-file escape sequences map cleanly
 // to on-disk bytes. The canonical Step 11 line shipped 2026-06-20 is:
 //
-//   app_id="$(kubectl --context="$CONTEXT" -n "$PG_NAMESPACE" exec deployment/loopzero-api -c loopzero-api -- \
-//     sh -c 'echo "$GITHUB_APP_ID"' 2>/dev/null | tr -d '\r\n' || true)"
+//	app_id="$(kubectl --context="$CONTEXT" -n "$PG_NAMESPACE" exec deployment/loopzero-api -c loopzero-api -- \
+//	  sh -c 'echo "$GITHUB_APP_ID"' 2>/dev/null | tr -d '\r\n' || true)"
 var (
 	reKubectlExecDeployLoopZeroApi = regexp.MustCompile(`kubectl --context="\$CONTEXT" -n "\$PG_NAMESPACE" exec deployment/loopzero-api -c loopzero-api --`)
 	reMintAppJwtFunc           = regexp.MustCompile(`^mint_app_jwt\(\) \{`)
@@ -76,10 +76,7 @@ var (
 
 func loadConnectCanonicalFixture(t *testing.T) string {
 	t.Helper()
-	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
+	root := repoRoot(t)
 	p := filepath.Join(root, "infra/scripts/local/connect-canonical-fixture.sh")
 	b, err := os.ReadFile(p)
 	if err != nil {

@@ -4,9 +4,9 @@
 // Meta-guard locking the infra/tests/charts/ Go-guards wiring into
 // `task quality:gates`. Closes the /review HIGH 2026-06-20:
 //
-//   "The 8 Go guards in loopzero/infra/tests/charts/ do NOT run in
-//    task quality:gates (the pre-push gate). taskfiles/test.yml:111
-//    runs only `go test ./unit/...`; nothing runs `./charts/`."
+//	"The 8 Go guards in loopzero/infra/tests/charts/ do NOT run in
+//	 task quality:gates (the pre-push gate). taskfiles/test.yml:111
+//	 runs only `go test ./unit/...`; nothing runs `./charts/`."
 //
 // Pre-2026-06-20, the slice's regression protection (NodePort/serverlb
 // T1.1, F-1 NetworkPolicy, gateway-derived host.k3d.internal T1.2, F1
@@ -22,18 +22,20 @@
 // (which blocks new `.sh` tests).
 //
 // SCOPE DISCIPLINE:
-//   This guard ONLY asserts the wiring shape in taskfiles/quality.yml.
-//   It does NOT validate the chart guards themselves — those are
-//   independent Test* functions in this same package.
+//
+//	This guard ONLY asserts the wiring shape in taskfiles/quality.yml.
+//	It does NOT validate the chart guards themselves — those are
+//	independent Test* functions in this same package.
 //
 // Triggers a FAIL if any of the following regresses:
-//   (a) the `go test ./charts/` line is removed/commented from
-//       quality:gates body
-//   (b) the helmfile pre-flight guard is removed (would re-introduce
-//       the silent-SKIP-of-central-guard anti-pattern)
-//   (c) LOOPZERO_TEST_SKIP_HELMFILE pre-flight guard is removed
-//   (d) anti-silent-pass invariants regress (|| true / 2>/dev/null /
-//       missing -count=1)
+//
+//	(a) the `go test ./charts/` line is removed/commented from
+//	    quality:gates body
+//	(b) the helmfile pre-flight guard is removed (would re-introduce
+//	    the silent-SKIP-of-central-guard anti-pattern)
+//	(c) LOOPZERO_TEST_SKIP_HELMFILE pre-flight guard is removed
+//	(d) anti-silent-pass invariants regress (|| true / 2>/dev/null /
+//	    missing -count=1)
 package charts
 
 import (
@@ -50,10 +52,7 @@ import (
 // task.
 func extractGatesBody(t *testing.T) string {
 	t.Helper()
-	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
+	root := repoRoot(t)
 	p := filepath.Join(root, "taskfiles/quality.yml")
 	b, err := os.ReadFile(p)
 	if err != nil {
@@ -111,7 +110,7 @@ func extractGatesBody(t *testing.T) string {
 // chartsWiredFileExists is a tiny helper used by section A assertions.
 func chartsWiredFileExists(t *testing.T, relPath string) bool {
 	t.Helper()
-	root, _ := filepath.Abs(filepath.Join("..", "..", ".."))
+	root := repoRoot(t)
 	_, err := os.Stat(filepath.Join(root, relPath))
 	return err == nil
 }

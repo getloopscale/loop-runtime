@@ -37,9 +37,9 @@ import (
 func TestBuildGate_AllHelmRenderPackagesCompile(t *testing.T) {
 	t.Parallel()
 	// infra/tests is the working dir resolved relative to this file.
-	root, err := repoRoot()
+	root, err := RepoRoot()
 	if err != nil {
-		t.Fatalf("repoRoot: %v", err)
+		t.Fatalf("RepoRoot: %v", err)
 	}
 	testsDir := filepath.Join(root, "infra", "tests")
 

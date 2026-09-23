@@ -5,12 +5,11 @@
 // These replace the bash hermetic tests of install-config-contract Slice 1 + 2
 // (loopzero-cloud-secret-manifest / eso-examples / reloader / no-inline-secret) — homed
 // as Go per the operational-logic-capability-architecture (un-homed-logic gate): test
-// logic belongs in Go, not new shell. helm-render assertions Skip when helm is absent.
+// logic belongs in Go, not new shell. helm-render assertions FAIL when helm is absent (one policy, owned by chartrender).
 package charts
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -19,31 +18,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// chartDir resolves charts/loopzero-cloud relative to this package (infra/tests/charts).
-func chartDir(t *testing.T) string {
+// cloudChartDir resolves the PUBLISHED loopzero-cloud chart. The name exists in both
+// chart trees, so it is reached by tree, never by bare name.
+func cloudChartDir(t *testing.T) string {
 	t.Helper()
-	d, err := filepath.Abs(filepath.Join("..", "..", "..", "charts", "loopzero-cloud"))
-	if err != nil {
-		t.Fatalf("resolve chart dir: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(d, "Chart.yaml")); err != nil {
-		t.Fatalf("chart not found at %s: %v", d, err)
-	}
-	return d
-}
-
-// helmTemplate runs `helm template <chart> [extra...]`; Skips if helm is absent.
-func helmTemplate(t *testing.T, chart string, extra ...string) string {
-	t.Helper()
-	if _, err := exec.LookPath("helm"); err != nil {
-		t.Skip("helm not installed — skipping render assertion")
-	}
-	args := append([]string{"template", chart}, extra...)
-	out, err := exec.Command("helm", args...).CombinedOutput()
-	if err != nil {
-		t.Fatalf("helm template %v failed: %v\n%s", extra, err, out)
-	}
-	return string(out)
+	return publishedChart(t, "loopzero-cloud")
 }
 
 // secretKeys are the Secret-typed env vars the cloud-API reads (config.go).
@@ -63,7 +42,7 @@ func readFile(t *testing.T, p string) string {
 
 // Slice 1 T3.1 — SECRETS.md documents every secret key + values.example is sentinel-only + renders.
 func TestLoopZeroCloudSecretManifest(t *testing.T) {
-	c := chartDir(t)
+	c := cloudChartDir(t)
 	secrets := readFile(t, filepath.Join(c, "SECRETS.md"))
 	for _, k := range secretKeys {
 		if !strings.Contains(secrets, k) {
@@ -80,7 +59,7 @@ func TestLoopZeroCloudSecretManifest(t *testing.T) {
 	if !strings.Contains(example, "existingSecret") {
 		t.Error("values.example.yaml missing existingSecret")
 	}
-	render := helmTemplate(t, c, "-f", filepath.Join(c, "values.example.yaml"))
+	render := renderChart(t, c, defaultRelease, nil, filepath.Join(c, "values.example.yaml"))
 	if render == "" {
 		t.Error("values.example.yaml rendered empty")
 	}
@@ -88,7 +67,7 @@ func TestLoopZeroCloudSecretManifest(t *testing.T) {
 
 // Slice 1 T3.2 — the 3 ESO examples are valid YAML, target the existingSecret convention, cover all keys.
 func TestLoopZeroCloudESOExamples(t *testing.T) {
-	c := chartDir(t)
+	c := cloudChartDir(t)
 	cases := map[string]string{
 		"eso-openbao.yaml": "vault", "eso-aws-sm.yaml": "aws", "eso-gcp-sm.yaml": "gcpsm",
 	}
@@ -122,12 +101,12 @@ func TestLoopZeroCloudESOExamples(t *testing.T) {
 
 // Slice 2 T1.1+T2.1 — Reloader annotation present iff enabled + README documents the install surface.
 func TestLoopZeroCloudReloaderOptIn(t *testing.T) {
-	c := chartDir(t)
-	enabled := helmTemplate(t, c, "--set", "reloader.enabled=true")
+	c := cloudChartDir(t)
+	enabled := renderChart(t, c, defaultRelease, map[string]string{"reloader.enabled": "true"})
 	if !strings.Contains(enabled, "reloader.stakater.com/auto") {
 		t.Error("reloader annotation absent when reloader.enabled=true")
 	}
-	def := helmTemplate(t, c)
+	def := renderChart(t, c, defaultRelease, nil)
 	if strings.Contains(def, "reloader.stakater.com") {
 		t.Error("reloader annotation leaked into default render (must be opt-in)")
 	}
@@ -169,7 +148,7 @@ func scanInlineSecret(body string) []string {
 
 // Slice 2 T3.1 — secrets-by-reference guard: no committed values file inlines a secret.
 func TestLoopZeroCloudNoInlineSecret(t *testing.T) {
-	c := chartDir(t)
+	c := cloudChartDir(t)
 	files, _ := filepath.Glob(filepath.Join(c, "values*.yaml"))
 	if len(files) == 0 {
 		t.Fatal("no values*.yaml found to scan")

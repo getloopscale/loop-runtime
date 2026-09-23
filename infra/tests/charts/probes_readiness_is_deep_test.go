@@ -4,8 +4,6 @@
 package charts
 
 import (
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -22,24 +20,17 @@ import (
 // aponte para um caminho de verificacao profunda. Fixar o literal faria qualquer renomeacao
 // de rota reprovar sem que nada tivesse piorado.
 func TestProntidaoEVivacidadeNaoCompartilhamOMesmoHandler(t *testing.T) {
-	if _, err := exec.LookPath("helm"); err != nil {
-		// FALHA, nao skip: `helm` e' pre-requisito declarado do repositorio, e um skip
-		// apagaria esta guarda em silencio na maquina onde ela mais importa.
-		t.Fatal("helm nao esta' no PATH, e e' pre-requisito declarado do repositorio")
-	}
-	raiz := repoRoot(t)
-
-	for _, chart := range []string{
-		filepath.Join("charts", "loopzero-api"),
-		filepath.Join("infra", "helm", "loopzero-api"),
+	for _, chart := range []struct {
+		name string
+		path string
+	}{
+		{"charts/loopzero-api", publishedChart(t, "loopzero-api")},
+		{"infra/helm/loopzero-api", bootstrapChart(t, "loopzero-api")},
 	} {
-		t.Run(chart, func(t *testing.T) {
-			out, err := exec.Command("helm", "template", "t", filepath.Join(raiz, chart)).CombinedOutput()
-			if err != nil {
-				t.Fatalf("helm template falhou: %v\n%s", err, truncate(string(out), 800))
-			}
-			vivo := caminhoDaSonda(string(out), "livenessProbe:")
-			pronto := caminhoDaSonda(string(out), "readinessProbe:")
+		t.Run(chart.name, func(t *testing.T) {
+			out := renderChart(t, chart.path, "t", nil)
+			vivo := caminhoDaSonda(out, "livenessProbe:")
+			pronto := caminhoDaSonda(out, "readinessProbe:")
 			// Era um Skip, e o gate `skip-link` estava certo em recusa-lo. Um chart que nao
 			// declara as duas sondas nao e' um caso fora de escopo deste teste: e' o caso PIOR
 			// que ele existe para pegar. Sem prontidao, o Kubernetes usa a vivacidade para

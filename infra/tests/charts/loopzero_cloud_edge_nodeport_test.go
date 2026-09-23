@@ -48,15 +48,9 @@ func TestLoopZeroCloudServiceIsNodePortForTheEdge(t *testing.T) {
 // only dev-public needs. The template must stay ClusterIP-capable, and emit the
 // nodePort line only when one is configured.
 func TestLoopZeroCloudNodePortIsOptional(t *testing.T) {
-	root := repoRoot(t)
-	cmd := exec.Command("helm", "template", "loopzero-cloud", "infra/helm/loopzero-cloud",
-		"--set", "service.type=ClusterIP", "--set", "service.nodePort=null")
-	cmd.Dir = root
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("helm template failed: %v\n%s", err, out)
-	}
-	svc := extractServiceBlock(string(out), "loopzero-cloud")
+	out := renderChart(t, bootstrapChart(t, "loopzero-cloud"), "loopzero-cloud",
+		map[string]string{"service.type": "ClusterIP", "service.nodePort": "null"})
+	svc := extractServiceBlock(out, "loopzero-cloud")
 	if strings.Contains(svc, "nodePort:") {
 		t.Errorf("a ClusterIP render must not emit nodePort; got:\n%s", svc)
 	}

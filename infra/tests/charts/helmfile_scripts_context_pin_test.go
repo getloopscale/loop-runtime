@@ -167,10 +167,7 @@ func auditScriptContextPin(relPath, body string) *contextPinFinding {
 // repo-relative-to-scripts-dir paths mapped to their bodies.
 func collectHelmfileScripts(t *testing.T) map[string]string {
 	t.Helper()
-	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
+	root := repoRoot(t)
 	base := filepath.Join(root, helmfileScriptsRelPath)
 
 	scripts := map[string]string{}

@@ -24,9 +24,9 @@
 //   - Plan: knowledge-base/plans/dev-public-cross-cluster-secrets-plan.md T1.2
 //   - Blueprint D1: workload identity replaces static credential
 //   - EC-1: OpenBao kubernetes-auth MUST review tokens against mgmt
-//           (JWKS-static OR kubernetes_host=mgmt + disable_local_ca_jwt)
+//     (JWKS-static OR kubernetes_host=mgmt + disable_local_ca_jwt)
 //   - EC-2: CoreDNS host-alias preserves the SAME hostname
-//           (`openbao.secrets-system.svc.cluster.local`) → cert SAN survives
+//     (`openbao.secrets-system.svc.cluster.local`) → cert SAN survives
 //   - EC-5: TokenRequest audience == OpenBao role `bound_audiences`
 //   - Issue #111 (Cleanroom canonical chain run 2026-06-18 Finding F-001)
 package charts
@@ -42,10 +42,7 @@ import (
 // resolved from this package's path (infra/tests/charts/).
 func readOverlay(t *testing.T, rel string) string {
 	t.Helper()
-	p, err := filepath.Abs(filepath.Join("..", "..", "..", "infra", rel))
-	if err != nil {
-		t.Fatalf("resolve %s: %v", rel, err)
-	}
+	p := filepath.Join(repoRoot(t), "infra", rel)
 	if _, err := os.Stat(p); err != nil {
 		t.Fatalf("%s not found at %s: %v", rel, p, err)
 	}

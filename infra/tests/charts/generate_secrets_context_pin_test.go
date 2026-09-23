@@ -16,12 +16,12 @@
 //
 // SCOPE DISCIPLINE — read before extending:
 //
-//   This guard asserts the wrapper shape + canonical default. It does
-//   NOT assert which specific `kubectl` calls exist downstream — the
-//   `kubectl()` function override is package-scoped, so every bare call
-//   inherits the context by construction. Future audits of the
-//   `command kubectl` escape hatch (deliberate raw bypass) belong in a
-//   different guard.
+//	This guard asserts the wrapper shape + canonical default. It does
+//	NOT assert which specific `kubectl` calls exist downstream — the
+//	`kubectl()` function override is package-scoped, so every bare call
+//	inherits the context by construction. Future audits of the
+//	`command kubectl` escape hatch (deliberate raw bypass) belong in a
+//	different guard.
 //
 // Cross-references:
 //   - Script: infra/helmfile/scripts/generate-secrets.sh
@@ -43,10 +43,7 @@ const generateSecretsRelPath = "infra/helmfile/scripts/generate-secrets.sh"
 
 func loadGenerateSecrets(t *testing.T) (body string, scriptPath string) {
 	t.Helper()
-	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
+	root := repoRoot(t)
 	scriptPath = filepath.Join(root, generateSecretsRelPath)
 	b, err := os.ReadFile(scriptPath)
 	if err != nil {

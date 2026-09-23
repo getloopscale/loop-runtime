@@ -24,36 +24,43 @@ package helm
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
 )
 
 const (
-	fenceName    = "loopzero-tenant-cr-shape"
-	bootstrapDir = "../../helm/admission-policies"
-	publishedDir = "../../../charts/loopzero-admission-policies"
+	fenceName = "loopzero-tenant-cr-shape"
+	// Chart NAMES, resolved through chartrender. The two differ, so each names
+	// exactly one chart and ChartPath resolves it without ambiguity.
+	bootstrapChart = "admission-policies"
+	publishedChart = "loopzero-admission-policies"
 )
 
-// render runs `helm template` with the given values files, newest last.
-func render(t *testing.T, chartDir string, valuesFiles ...string) string {
+// render renders the named chart with the given values files (relative to the
+// chart), newest last, through the chartrender facade.
+func render(t *testing.T, chartName string, valuesFiles ...string) string {
 	t.Helper()
-	args := []string{"template", "fence-probe", chartDir}
-	for _, v := range valuesFiles {
-		args = append(args, "-f", filepath.Join(chartDir, v))
-	}
-	out, err := exec.Command("helm", args...).CombinedOutput()
+	chartDir, err := chartrender.ChartPath(chartName)
 	if err != nil {
-		t.Fatalf("helm template %v: %v\n%s", args, err, out)
+		t.Fatalf("resolve chart %q: %v", chartName, err)
 	}
-	return string(out)
+	opts, err := chartrender.NewOptions(chartDir, "")
+	if err != nil {
+		t.Fatalf("render options for %s: %v", chartDir, err)
+	}
+	for _, v := range valuesFiles {
+		opts.ValuesFiles = append(opts.ValuesFiles, filepath.Join(chartDir, v))
+	}
+	return chartrender.RenderTemplate(t, opts, chartDir, "fence-probe", nil)
 }
 
 // The fence must render where the Tenant CRs live. `loopzero-crds` is installed by
 // core.helmfile only; cell.helmfile does not reference it.
 func TestTenantCrFence_RendersOnMgmt(t *testing.T) {
-	got := render(t, bootstrapDir, "values.yaml", "values-mgmt.yaml")
+	got := render(t, bootstrapChart, "values.yaml", "values-mgmt.yaml")
 	if !strings.Contains(got, fenceName) {
 		t.Errorf("%s is ABSENT from the mgmt render. Every loopzero.io Tenant lives in loopzero-system on "+
 			"mgmt, and this is the platform's only fence on its own CRs — there is no admission "+
@@ -65,7 +72,7 @@ func TestTenantCrFence_RendersOnMgmt(t *testing.T) {
 // absent one: it was read as coverage, and a slice-3 plan used that reading to
 // accept a risk as small.
 func TestTenantCrFence_DoesNotRenderOnCells(t *testing.T) {
-	got := render(t, bootstrapDir, "values.yaml")
+	got := render(t, bootstrapChart, "values.yaml")
 	if strings.Contains(got, fenceName) {
 		t.Errorf("%s renders from the base values, which is what the CELL clusters receive — and "+
 			"they install no `tenants` CRD (loopzero-crds appears 0 times in cell.helmfile). A policy "+
@@ -78,8 +85,8 @@ func TestTenantCrFence_DoesNotRenderOnCells(t *testing.T) {
 // system. Divergence here is exactly the B-046 class: the published chart
 // carried the template without the key that enables it.
 func TestTenantCrFence_BothChartsAgreeOnTheDefault(t *testing.T) {
-	bootstrap := strings.Contains(render(t, bootstrapDir, "values.yaml"), fenceName)
-	published := strings.Contains(render(t, publishedDir, "values.yaml"), fenceName)
+	bootstrap := strings.Contains(render(t, bootstrapChart, "values.yaml"), fenceName)
+	published := strings.Contains(render(t, publishedChart, "values.yaml"), fenceName)
 	if bootstrap != published {
 		t.Errorf("default disagrees between the charts: bootstrap renders it = %v, published = %v. "+
 			"Patching one without the other recreates B-046 — a fence that exists in dev and not "+
@@ -91,8 +98,8 @@ func TestTenantCrFence_BothChartsAgreeOnTheDefault(t *testing.T) {
 // for the wrong reason. This is the `PASS — 0 routes` shape (B-040).
 func TestTenantCrFence_RendersAreNotEmpty(t *testing.T) {
 	for name, out := range map[string]string{
-		"mgmt": render(t, bootstrapDir, "values.yaml", "values-mgmt.yaml"),
-		"base": render(t, bootstrapDir, "values.yaml"),
+		"mgmt": render(t, bootstrapChart, "values.yaml", "values-mgmt.yaml"),
+		"base": render(t, bootstrapChart, "values.yaml"),
 	} {
 		if !strings.Contains(out, "kind: ValidatingAdmissionPolicy") {
 			t.Errorf("%s render contains no ValidatingAdmissionPolicy at all; the absence assertion "+
@@ -115,7 +122,7 @@ func TestTenantCrFence_RendersAreNotEmpty(t *testing.T) {
 // tenant)` — no `&`, and one behind a helper. A grep-shaped check cannot see
 // that; comparing the two policies to each other can.
 func TestTenantCrFence_ExemptsTheSameIdentitiesAsItsSibling(t *testing.T) {
-	out := render(t, bootstrapDir, "values.yaml", "values-mgmt.yaml")
+	out := render(t, bootstrapChart, "values.yaml", "values-mgmt.yaml")
 
 	// Rendered together, so both policies are in one document set.
 	for _, sa := range []string{

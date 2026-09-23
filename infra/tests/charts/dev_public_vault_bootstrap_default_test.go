@@ -43,10 +43,7 @@ import (
 
 // TestDevPublicVaultBootstrapDefault — locks the 4-assertion contract.
 func TestDevPublicVaultBootstrapDefault(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
+	root := repoRoot(t)
 	seedPath := filepath.Join(root, "infra/scripts/local/seed-post-cleanroom-all.sh")
 	seedBytes, err := os.ReadFile(seedPath)
 	if err != nil {

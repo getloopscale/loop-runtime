@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package charts_test
+package charts
 
 import (
-	"os/exec"
 	"strings"
 	"testing"
 )
@@ -23,16 +22,8 @@ import (
 // A visible gap had become an invisible one that passed a gate. This is the
 // assertion that would have caught it, and it is deliberately about output.
 func TestAdmissionPolicies_PublishedRendersWhatBootstrapRenders(t *testing.T) {
-	render := func(chart string) string {
-		out, err := exec.Command("helm", "template", "ap", chart).CombinedOutput()
-		if err != nil {
-			t.Fatalf("helm template %s: %v\n%s", chart, err, out)
-		}
-		return string(out)
-	}
-
-	boot := render("../../helm/admission-policies")
-	pub := render("../../../charts/loopzero-admission-policies")
+	boot := renderChart(t, uniqueChart(t, "admission-policies"), "ap", nil)
+	pub := renderChart(t, uniqueChart(t, "loopzero-admission-policies"), "ap", nil)
 
 	// Compare the set of loopzero-* object names each chart emits. Names rather than
 	// the whole render keeps the assertion stable against ordering and formatting

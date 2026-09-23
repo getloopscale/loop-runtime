@@ -20,11 +20,11 @@
 //
 // SCOPE DISCIPLINE:
 //
-//   This guard ONLY asserts `host.k3d.internal` is in the rendered
-//   Certificate's `dnsNames`. It does NOT validate the full SAN list
-//   shape (the values.yaml file is the canonical SoT for the full
-//   set). Negative-control mutates the rendered output (NOT the
-//   values.yaml on disk).
+//	This guard ONLY asserts `host.k3d.internal` is in the rendered
+//	Certificate's `dnsNames`. It does NOT validate the full SAN list
+//	shape (the values.yaml file is the canonical SoT for the full
+//	set). Negative-control mutates the rendered output (NOT the
+//	values.yaml on disk).
 //
 // Cross-references:
 //   - Source values: infra/helm/openbao-cert/values.yaml `dnsNames`
@@ -35,25 +35,15 @@
 package charts
 
 import (
-	"os/exec"
 	"strings"
 	"testing"
 )
 
-const openbaoCertChartRelPath = "infra/helm/openbao-cert"
-
-// renderOpenbaoCert renders the openbao-cert chart via `helm template`
-// (hermetic — no kubectl, no network). Returns the multi-doc YAML.
+// renderOpenbaoCert renders the openbao-cert chart (hermetic — no kubectl,
+// no network). Returns the multi-doc YAML.
 func renderOpenbaoCert(t *testing.T) string {
 	t.Helper()
-	root := repoRoot(t)
-	cmd := exec.Command("helm", "template", openbaoCertChartRelPath)
-	cmd.Dir = root
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("helm template %s failed: %v\n%s", openbaoCertChartRelPath, err, string(out))
-	}
-	return string(out)
+	return renderChart(t, uniqueChart(t, "openbao-cert"), defaultRelease, nil)
 }
 
 // extractCertificateBlock returns the YAML block of the named
@@ -118,9 +108,6 @@ func auditOpenbaoCertSAN(certBlock string) []string {
 
 // TestOpenbaoCertSANCanonical runs the cert-SAN canonical regression-lock.
 func TestOpenbaoCertSANCanonical(t *testing.T) {
-	if _, err := exec.LookPath("helm"); err != nil {
-		t.Skip("helm not on PATH — skipping render assertion")
-	}
 	rendered := renderOpenbaoCert(t)
 	cert := extractCertificateBlock(rendered, "openbao")
 	if errs := auditOpenbaoCertSAN(cert); len(errs) > 0 {
@@ -135,9 +122,6 @@ func TestOpenbaoCertSANCanonical(t *testing.T) {
 // asserts the guard fires. A guard that passes the negative control is
 // theatre.
 func TestOpenbaoCertSANCanonical_NegativeControl(t *testing.T) {
-	if _, err := exec.LookPath("helm"); err != nil {
-		t.Skip("helm not on PATH — skipping negative-control render")
-	}
 	rendered := renderOpenbaoCert(t)
 	cert := extractCertificateBlock(rendered, "openbao")
 	if cert == "" {

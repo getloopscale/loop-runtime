@@ -4,7 +4,6 @@
 package charts
 
 import (
-	"os/exec"
 	"strings"
 	"testing"
 )
@@ -21,16 +20,12 @@ import (
 //
 // Terceira camada da issue #274, depois do namespace sem projeto e do RuntimeFactory nil.
 func TestAppOperatorPodeLerTenant(t *testing.T) {
-	dir := operatorChartDir(t, "loopzero-app-operator")
-	out, err := exec.Command("helm", "template", "rbac-check", dir).CombinedOutput()
-	if err != nil {
-		t.Fatalf("helm template: %v\n%s", err, out)
-	}
+	out := renderChart(t, uniqueChart(t, "loopzero-app-operator"), "rbac-check", nil)
 
 	// Isola o ClusterRole do operator: a regra de tenants tem de estar nele, não em
 	// qualquer outro documento do chart.
 	var clusterRole string
-	for _, doc := range strings.Split(string(out), "\n---") {
+	for _, doc := range strings.Split(out, "\n---") {
 		if strings.Contains(doc, "kind: ClusterRole") && !strings.Contains(doc, "kind: ClusterRoleBinding") {
 			clusterRole = doc
 			break

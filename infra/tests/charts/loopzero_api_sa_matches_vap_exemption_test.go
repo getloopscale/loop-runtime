@@ -5,7 +5,6 @@ package charts
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,14 +26,6 @@ import (
 // o nome fixo quanto com um `values.yaml` que casualmente derivasse o nome certo daquele
 // release — e a segunda forma nao e' garantia nenhuma.
 func TestServiceAccountDoChartPublicadoBateComAIsencaoDasVAPs(t *testing.T) {
-	if _, err := exec.LookPath("helm"); err != nil {
-		// FALHA, nao skip. `helm` e' pre-requisito declarado do repositorio (CLAUDE.md
-		// § Prerequisites, "Helm v3.14+"), e um skip apagaria esta guarda em silencio
-		// justamente na maquina onde alguem estaria renderizando charts sem ela. E' a
-		// mesma escolha do `hook_rm_guard_test.go`, e o gate `skip-link` recusa skip
-		// novo sem issue — com razao: skip e' divida invisivel.
-		t.Fatal("helm nao esta' no PATH, e e' pre-requisito declarado do repositorio")
-	}
 	raiz := repoRoot(t)
 
 	isentas := serviceAccountsIsentasPelasVAPs(t, raiz)
@@ -44,12 +35,8 @@ func TestServiceAccountDoChartPublicadoBateComAIsencaoDasVAPs(t *testing.T) {
 	}
 
 	for _, release := range []string{"loopzero", "um-release-qualquer"} {
-		out, err := exec.Command("helm", "template", release,
-			filepath.Join(raiz, "charts", "loopzero-api")).CombinedOutput()
-		if err != nil {
-			t.Fatalf("helm template %s falhou: %v\n%s", release, err, truncate(string(out), 800))
-		}
-		sa := primeiroValor(string(out), "serviceAccountName:")
+		out := renderChart(t, publishedChart(t, "loopzero-api"), release, nil)
+		sa := primeiroValor(out, "serviceAccountName:")
 		if sa == "" {
 			t.Fatalf("release %q: o render nao declara serviceAccountName", release)
 		}
