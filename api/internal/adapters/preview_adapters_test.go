@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package main
+package adapters
 
 import (
 	"context"
@@ -29,7 +29,7 @@ func (s previewBuildStore) GetBuildApps(context.Context, string) ([]db.BuildAppS
 // build's runtime, path, build mode and start command — without them the
 // strategy resolves to unsupported and the preview fails (loopzero#185 class).
 func TestPreviewAppsLookup_KeepsTheStoredBuildInstructions(t *testing.T) {
-	lookup := &previewAppsLookupAdapter{builds: previewBuildStore{apps: []db.BuildAppSpec{{
+	lookup := &PreviewAppsLookupAdapter{Builds: previewBuildStore{apps: []db.BuildAppSpec{{
 		Name: "api", Type: "server", Port: 8080,
 		Runtime: "node", Path: "apps/api", Build: "dockerfile", Start: "node server.js",
 	}}}}

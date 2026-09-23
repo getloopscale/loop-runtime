@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package main
+package adapters
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 // An unwired lookup cannot answer that question, so it must fail closed with an
 // error instead of claiming every project exists.
 func TestEnvProjectLookup_UnwiredLookupFailsClosed(t *testing.T) {
-	for name, a := range map[string]*envProjectLookupAdapter{
+	for name, a := range map[string]*EnvProjectLookupAdapter{
 		"nil adapter": nil,
 		"nil store":   {},
 	} {

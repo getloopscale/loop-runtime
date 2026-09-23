@@ -12,15 +12,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/build"
-
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
 	"github.com/getloopscale/loopzero/api/internal/leader"
-	"github.com/getloopscale/loopzero/pkg/correlation"
 
 	"k8s.io/klog/v2"
 )
@@ -58,32 +54,6 @@ func silenceKlog() {
 	_ = klogFlags.Set("logtostderr", "false")
 	_ = klogFlags.Set("alsologtostderr", "false")
 	_ = klogFlags.Set("stderrthreshold", "FATAL")
-}
-
-// appCRAdapter bridges workload.ApplicationCRManager to build.ApplicationCREnsurer.
-// Duplicated from api/cmd/main.go — the two binaries intentionally do not
-// share a package here because cmd/main.go has HTTP-specific helpers the
-// controller should never import.
-type appCRAdapter struct {
-	mgr *workload.ApplicationCRManager
-}
-
-func (a *appCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input build.ApplicationCRInput) error {
-	// Audit gap M08 #10 / §6.C.1: propagate correlation_id from ctx into
-	// the CR annotation. For controller-binary callers (post-build reconcile
-	// loops) the ctx typically does NOT carry a correlation ID — those are
-	// reconcile-internal flows. correlation.IDFromContext returns empty
-	// string in that case, which LoopZeroApplicationInput interprets as "omit
-	// the annotation" rather than "store empty value".
-	return a.mgr.EnsureLoopZeroApplication(ctx, workload.LoopZeroApplicationInput{
-		TenantID:      input.TenantID,
-		Project:       input.Project,
-		Environment:   input.Environment,
-		AppName:       input.AppName,
-		ServiceName:   input.ServiceName,
-		ServicePort:   input.ServicePort,
-		CorrelationID: correlation.IDFromContext(ctx),
-	})
 }
 
 // newHealthServer returns a minimal HTTP server exposing /healthz (liveness),

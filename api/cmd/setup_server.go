@@ -123,7 +123,7 @@ func buildServerConfig(
 		// owned by tenant B. The adapter scopes the lookup by tenant_id via the
 		// canonical GetByName query.
 		environmentHandler = environmentHandler.WithProjectLookup(
-			&envProjectLookupAdapter{store: dbDeps.ProjectStore},
+			&adapters.EnvProjectLookupAdapter{Store: dbDeps.ProjectStore},
 		)
 	}
 
@@ -410,7 +410,7 @@ func buildServerConfig(
 			ps, perr := previewsvc.NewPreviewService(previewsvc.PreviewServiceDeps{
 				Store:               previewStore,
 				Builds:              orchDeps.Orchestrator,
-				BuildApps:           &previewAppsLookupAdapter{builds: stores.BuildStore},
+				BuildApps:           &adapters.PreviewAppsLookupAdapter{Builds: stores.BuildStore},
 				BaseDomain:          cfg.BaseDomain,
 				PreviewPublicDomain: cfg.PreviewPublicDomain,
 				Logger:              logger,

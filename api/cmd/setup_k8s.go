@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
@@ -34,7 +35,7 @@ func setupK8s(cfg config.Config, logger *slog.Logger) (*K8sDeps, error) {
 	}
 
 	// Application CR manager — creates LoopZeroApplication CRs on mgmt cluster.
-	appCRMgr := &appCRAdapter{mgr: workload.NewApplicationCRManager(tenantCRMgr.Client, "")}
+	appCRMgr := &adapters.ApplicationCRAdapter{Mgr: workload.NewApplicationCRManager(tenantCRMgr.Client, "")}
 
 	// Secret K8s manager — creates K8s Secrets on mgmt + ExternalSecret CRs on workload.
 	// F-01 fix: Use interface variable to avoid Go nil interface trap.

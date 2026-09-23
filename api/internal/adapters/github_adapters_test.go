@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package main
+package adapters
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 // refused with an error; slicing it for the correlation id used to panic the
 // webhook goroutine before the orchestrator was ever reached.
 func TestBuildSubmitterAdapter_RefusesACommitSHAShorterThanTheCorrelationPrefix(t *testing.T) {
-	a := &buildSubmitterAdapter{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	a := &BuildSubmitterAdapter{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	for _, sha := range []string{"", "abc1234"} {
 		err := a.SubmitBuildFromWebhook(context.Background(), github.WebhookBuildRequest{
 			TenantID: "tn-1", ProjectName: "web", Environment: "production",

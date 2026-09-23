@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"log/slog"
 	"net/http"
 	"os"
@@ -58,7 +59,7 @@ func setupGitHub(
 	// Repository store for webhook lookups and CRUD. Required for the
 	// RepositoryHandler — always created when the DB is reachable.
 	repoStore := &store.PostgresRepositoryStore{DB: dbAdapter}
-	repoHandler := repositories.NewRepositoryHandler(&repoStoreAdapter{store: repoStore})
+	repoHandler := repositories.NewRepositoryHandler(&adapters.RepoStoreAdapter{Store: repoStore})
 
 	// GitHub App client for API calls (source download, commit status, PR comments).
 	// Optional — only needed when GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY are set.
@@ -90,15 +91,15 @@ func setupGitHub(
 	// installation-token mint.
 	var integrationsHandler *integrations.IntegrationsGitHubHandler
 	if ghAppClient != nil {
-		statusNotifier := github.NewStatusNotifier(ghAppClient, &repoLookupAdapter{store: repoStore}, &buildLookupAdapter{store: stores.BuildStore}, cfg.BaseDomain, logger)
+		statusNotifier := github.NewStatusNotifier(ghAppClient, &adapters.RepoLookupAdapter{Store: repoStore}, &adapters.BuildLookupAdapter{Store: stores.BuildStore}, cfg.BaseDomain, logger)
 		if statusNotifier != nil {
 			release.RegisterReleaseActivatedCallback(statusNotifier.OnBuildSucceeded)
 			release.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
 			logger.Info("github: commit status callbacks registered (global)")
 		}
 		integrationsHandler = integrations.NewIntegrationsGitHubHandler(
-			&installationRepoListerAdapter{client: ghAppClient},
-			&installationLookupAdapter{store: repoStore},
+			&adapters.InstallationRepoListerAdapter{Client: ghAppClient},
+			&adapters.InstallationLookupAdapter{Store: repoStore},
 		)
 		logger.Info("github: integrations handler registered", "endpoint", "/api/v1/integrations/github/installations/{id}/repositories")
 	}
@@ -112,9 +113,9 @@ func setupGitHub(
 	// (sponsor walkthrough catch 2026-06-09).
 	var buildSub github.BuildSubmitter
 	if orch != nil {
-		buildSub = &buildSubmitterAdapter{
-			orchestrator: orch,
-			logger:       logger,
+		buildSub = &adapters.BuildSubmitterAdapter{
+			Orchestrator: orch,
+			Logger:       logger,
 		}
 	}
 	var autoDeployer *github.AutoDeployer
@@ -178,12 +179,12 @@ func setupGitHub(
 	previewSvc, psErr := newPreviewLifecycle(preview.PreviewServiceDeps{
 		Store:     previewStore,
 		Builds:    orch,
-		BuildApps: &previewAppsLookupAdapter{builds: stores.BuildStore},
+		BuildApps: &adapters.PreviewAppsLookupAdapter{Builds: stores.BuildStore},
 		// LIVE catch 2026-06-07 J-23 bug #4: PreviewCRCreator interface
 		// had no production wiring. Canonical manager lives in
 		// internal/k8s next to TenantCRManager, sharing the namespace
 		// constant + dynamic client.
-		CRCreator:           &previewCRCreatorAdapter{mgr: k8sDeps.PreviewCRMgr},
+		CRCreator:           &adapters.PreviewCRCreatorAdapter{Mgr: k8sDeps.PreviewCRMgr},
 		BaseDomain:          cfg.BaseDomain,
 		PreviewPublicDomain: cfg.PreviewPublicDomain,
 		Logger:              logger,

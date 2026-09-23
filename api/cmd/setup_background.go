@@ -92,7 +92,7 @@ func setupDomains(
 	cfZoneClient := cfzone.NewClient(cfg.CFAccountID, cfg.CFAPIToken)
 	if cfg.CFZoneManagement && cfZoneClient != nil {
 		logger.Info("custom domains: CF Zone Management enabled (v2)")
-		domainHandler.WithCFZone(&cfZoneAdapter{client: cfZoneClient})
+		domainHandler.WithCFZone(&adapters.CFZoneAdapter{Client: cfZoneClient})
 	} else {
 		logger.Info("custom domains: TXT verification mode (v1)")
 	}
@@ -109,7 +109,7 @@ func setupDomains(
 		},
 	)
 	if cfg.CFZoneManagement && cfZoneClient != nil {
-		domainProvisioner.WithCFZone(&cfZoneStatusAdapter{client: cfZoneClient})
+		domainProvisioner.WithCFZone(&adapters.CFZoneStatusAdapter{Client: cfZoneClient})
 	}
 
 	domainHealthChecker := domain.NewDomainHealthChecker(

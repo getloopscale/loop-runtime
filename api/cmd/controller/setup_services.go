@@ -129,7 +129,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	if err != nil {
 		return controllerDeps{}, fmt.Errorf("tenant CR manager: %w", err)
 	}
-	appCRMgr := &appCRAdapter{mgr: workload.NewApplicationCRManager(tenantCRMgr.Client, "")}
+	appCRMgr := &adapters.ApplicationCRAdapter{Mgr: workload.NewApplicationCRManager(tenantCRMgr.Client, "")}
 
 	// ---- Build orchestrator (required by reconcile loop) ----
 	// M5 (#106) note: this orchestrator's project store is DELIBERATELY left

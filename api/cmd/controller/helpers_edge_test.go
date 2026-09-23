@@ -65,17 +65,6 @@ func TestPodName_EmptyHostname_ReturnsFallback(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// appCRAdapter
-// ---------------------------------------------------------------------------
-
-func TestAppCRAdapter_IsNotNilStruct(t *testing.T) {
-	// Verify the adapter type exists and can be instantiated
-	// (the mgr field would be nil but the struct itself is valid)
-	a := &appCRAdapter{mgr: nil}
-	_ = a // struct is non-nil by construction
-}
-
-// ---------------------------------------------------------------------------
 // controllerDeps — struct is valid with zero values
 // ---------------------------------------------------------------------------
 
