@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // A TRACKED PATH that does not exist has to show up, for the same reason an absent
@@ -31,11 +33,11 @@ import (
 // walkthrough that made the gate exist*, cited in the package's own doc. The gate would
 // go on saying PASS.
 func TestMissingTrackedPathSurfacesInsteadOfVanishing(t *testing.T) {
-	root := t.TempDir()
+	root := filepath.Join(t.TempDir(), "loopzero") // sibling roots resolve inside the temp dir
 	// A tree where the consumer roots exist but NO tracked path does: isolates the half
 	// under test from the signal the other half already emits.
 	for _, r := range consumerRoots {
-		if err := os.MkdirAll(filepath.Join(root, r), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, r.Repo, r.Path), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -62,7 +64,7 @@ func TestMissingTrackedPathSurfacesInsteadOfVanishing(t *testing.T) {
 // Without this, MissingTracked could be a list that always returns everything — green in
 // the test above and useless in life.
 func TestTrackedPathsExistInTheRealTree(t *testing.T) {
-	root := repoRootParaTeste(t)
+	root := qtestutil.MustRepoRoot()
 
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
@@ -89,7 +91,7 @@ func TestTrackedPathsExistInTheRealTree(t *testing.T) {
 // updating it leaves it red. Which is exactly the difference between the property
 // travelling with the rename and dying in it.
 func TestDeclaredContractSurfaceCoversThePortSink(t *testing.T) {
-	root := repoRootParaTeste(t)
+	root := qtestutil.MustRepoRoot()
 
 	var portFile string
 	for _, f := range trackedFiles {

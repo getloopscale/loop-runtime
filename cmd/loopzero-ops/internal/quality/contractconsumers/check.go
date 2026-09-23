@@ -22,11 +22,14 @@
 //     api/internal/routes/*.go
 //     api/internal/db/generated/*.go
 //   - For each removed field, greps consumers in:
-//     cloud/dashboard/src/  (TS/TSX)
-//     cli/src/              (TS)
-//     api/internal/         (Go)
+//     ../loopzero-cloud/dashboard/src/  (TS/TSX, sibling checkout)
+//     ../loopzero-cli/src/              (TS, sibling checkout)
+//     api/internal/                 (Go)
 //     for `.<tag>` references (e.g., `p.apps_count`, `b.apps`,
-//     `project.last_deploy`).
+//     `project.last_deploy`). A sibling checkout that is absent is reported
+//     in MissingRoots and makes the outcome Partial — the TypeScript readers
+//     are the ones the Go compiler cannot see, so a verdict without them
+//     must say it covered less.
 //   - Findings reported with file:line + the dropped field's JSON tag.
 //
 // What this gate does NOT detect (out-of-scope, by design):
@@ -86,10 +89,12 @@ type Outcome struct {
 	// TrackedFiles is the declared contract surface, mirroring ScanRoots: without it a
 	// caller can say HOW MANY tracked paths went missing but not out of how many.
 	TrackedFiles []string
-	// MissingRoots sao as raizes declaradas que NAO existem na arvore. `git grep`
-	// ignora pathspec que nao casa nada e devolve os matches dos que casam, entao
-	// uma raiz que sumiu vira cobertura perdida em silencio (B-100, B-040).
+	// MissingRoots are the declared consumer roots that do not exist on disk
+	// (typically a sibling checkout that is not cloned). They were not scanned.
 	MissingRoots []string
+	// Partial is true when at least one consumer root was not scanned: the
+	// verdict then covers less than the declared consumer surface.
+	Partial bool
 	// MissingTracked holds the declared TRACKED paths that do not exist in the tree.
 	// Same cause as MissingRoots, and the graver half: trackedFiles decides WHICH tags
 	// the gate ever looks at, so a path missing here does not merely shrink the search
@@ -118,11 +123,32 @@ var trackedFiles = []string{
 	"api/internal/routes/",       // any *.go under this dir
 }
 
-// consumerRoots enumerates directories grepped for dropped-field references.
-var consumerRoots = []string{
-	"cloud/dashboard/src/",
-	"cli/src/",
-	"api/internal/",
+// consumerRoot is one directory grepped for dropped-field references. Repo is
+// the git checkout that holds it, relative to Config.RepoRoot ("." for this
+// repository); the dashboard and the CLI left this repository at the
+// decomposition (M4, M2) and are read from their sibling checkouts.
+type consumerRoot struct {
+	Repo string
+	Path string
+}
+
+// String is the root as a path relative to Config.RepoRoot.
+func (c consumerRoot) String() string { return filepath.ToSlash(filepath.Join(c.Repo, c.Path)) + "/" }
+
+// consumerRoots enumerates the directories grepped for dropped-field references.
+var consumerRoots = []consumerRoot{
+	{Repo: "../loopzero-cloud", Path: "dashboard/src/"},
+	{Repo: "../loopzero-cli", Path: "src/"},
+	{Repo: ".", Path: "api/internal/"},
+}
+
+// scanRootNames renders consumerRoots for the Outcome.
+func scanRootNames() []string {
+	names := make([]string, 0, len(consumerRoots))
+	for _, c := range consumerRoots {
+		names = append(names, c.String())
+	}
+	return names
 }
 
 // jsonFieldRegex matches `Name Type `json:"tag[,opts]"“ style declarations.
@@ -147,40 +173,41 @@ func Check(cfg Config) (*Outcome, error) {
 		head = "HEAD"
 	}
 
-	// Calculado ANTES do primeiro retorno: no caminho de erro do git a cobertura
-	// tambem some, e e' o caminho em que ninguem olha.
-	ausentes := raizesAusentes(root)
-	rastreadosAusentes := missingTrackedPaths(root)
+	// Computed BEFORE the first return: on the git-error path coverage is lost
+	// too, and that is the path nobody looks at.
+	missingRoots := missingConsumerRoots(root)
+	missingTracked := missingTrackedPaths(root)
 
 	droppedTags, err := collectDroppedJSONTags(root, base, head)
 	if err != nil {
 		return &Outcome{
 			CommandError:   err.Error(),
-			ScanRoots:      consumerRoots,
+			ScanRoots:      scanRootNames(),
 			TrackedFiles:   trackedFiles,
-			MissingRoots:   ausentes,
-			MissingTracked: rastreadosAusentes,
+			MissingRoots:   missingRoots,
+			Partial:        len(missingRoots) > 0,
+			MissingTracked: missingTracked,
 		}, nil
 	}
 
 	out := &Outcome{
 		DroppedTags:    droppedTags,
-		ScanRoots:      consumerRoots,
+		ScanRoots:      scanRootNames(),
 		TrackedFiles:   trackedFiles,
-		MissingRoots:   ausentes,
-		MissingTracked: rastreadosAusentes,
+		MissingRoots:   missingRoots,
+		Partial:        len(missingRoots) > 0,
+		MissingTracked: missingTracked,
 		Pass:           true,
 	}
-	// Uma raiz declarada que nao existe e' cobertura perdida, e precisa aparecer
-	// mesmo quando nenhuma tag caiu: e' justamente no PASS que ela some sem deixar
-	// rastro. Nao derruba o gate sozinha — a decisao de para onde apontar esta' no
-	// B-100 — mas deixa de ser invisivel.
+	// A missing consumer root is lost coverage and must surface even when no
+	// tag dropped — that PASS is exactly where it would vanish. It does not fail
+	// the gate on its own; it makes the verdict Partial.
 	if len(droppedTags) == 0 {
 		return out, nil
 	}
 
 	for _, tag := range droppedTags {
-		findings, err := grepConsumersForTag(root, tag)
+		findings, err := grepConsumersForTag(root, tag, consumerRoots)
 		if err != nil {
 			out.CommandError = err.Error()
 			out.Pass = false
@@ -314,28 +341,24 @@ func structsDeclaringTagAt(root, rev, tag string) (int, error) {
 	return total, nil
 }
 
-// raizesAusentes devolve as raizes declaradas que nao existem sob root.
+// missingConsumerRoots returns the declared consumer roots absent under root.
 //
-// Existe porque `git grep -- a b c` ignora em silencio o pathspec que nao casa
-// nada. Duas das tres raizes declaradas sairam deste repositorio na decomposicao
-// (`cloud/dashboard/src/` -> ../loopzero-cloud, `cli/src/` -> ../loopzero-cli), e sao
-// justamente as de TypeScript — as que carregam o consumidor de FIO, que le' o
-// campo pelo nome do JSON e que o compilador nao ve'. O que sobrou e' Go, onde um
-// campo removido quebra a compilacao. Medido 2026-08-19.
-func raizesAusentes(root string) []string {
-	var ausentes []string
-	for _, r := range consumerRoots {
-		if _, err := os.Stat(filepath.Join(root, r)); err != nil {
-			ausentes = append(ausentes, r)
+// It exists because `git grep -- a b c` silently ignores a pathspec matching
+// nothing: a root that moved would become less coverage under the same verdict.
+func missingConsumerRoots(root string) []string {
+	var missing []string
+	for _, c := range consumerRoots {
+		if _, err := os.Stat(filepath.Join(root, c.Repo, c.Path)); err != nil {
+			missing = append(missing, c.String())
 		}
 	}
-	return ausentes
+	return missing
 }
 
 // missingTrackedPaths returns the paths declared in trackedFiles that do not exist
 // under root.
 //
-// Twin of raizesAusentes, and it exists because the asymmetry between the two WAS the
+// Twin of missingConsumerRoots, and it exists because the asymmetry between the two WAS the
 // hole: the CONSUMER list got an absence guard on 2026-08-19 (B-100/B-040) while the
 // TRACKED list, handed to the very same `git diff --` and `git grep --`, got none.
 //
@@ -343,80 +366,84 @@ func raizesAusentes(root string) []string {
 // the gate see a tag drop; an absent tracked path means the tag never shows up as
 // dropped at all, and the gate answers PASS over a contract surface it never read.
 func missingTrackedPaths(root string) []string {
-	var ausentes []string
+	var missing []string
 	for _, f := range trackedFiles {
 		if _, err := os.Stat(filepath.Join(root, f)); err != nil {
-			ausentes = append(ausentes, f)
+			missing = append(missing, f)
 		}
 	}
-	return ausentes
+	return missing
 }
 
-// grepConsumersForTag runs `git grep` for the dropped tag across consumer
-// roots, looking for `.tag\b` access patterns (struct field references or
-// JS object property access).
-func grepConsumersForTag(root, tag string) ([]Finding, error) {
+// grepConsumersForTag runs `git grep` for the dropped tag in every present
+// consumer root, looking for `.tag\b` access patterns (struct field references
+// or JS object property access). Absent roots are skipped — Check reports them
+// as MissingRoots. `git grep` exit 1 means "no match"; any other failure is an
+// error, never zero findings.
+func grepConsumersForTag(root, tag string, roots []consumerRoot) ([]Finding, error) {
 	pattern := `\.` + regexp.QuoteMeta(tag) + `\b`
-
-	args := []string{"-C", root, "grep", "-nE", pattern, "--"}
-	args = append(args, consumerRoots...)
-	cmd := exec.Command("git", args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	// `git grep` exits 1 when no matches — that's not an error for us.
-	_ = cmd.Run()
-	if stderr.Len() > 0 {
-		stderrStr := strings.TrimSpace(stderr.String())
-		// "exit status 1" is implicit no-match. Anything else is a real error.
-		if !strings.Contains(stderrStr, "fatal: ambiguous argument") &&
-			!strings.Contains(stderrStr, "did not match any") &&
-			stderrStr != "" {
-			// Pass-through stderr only when it's a true error.
-			// (No-match cases produce empty stderr + exit 1.)
-			// We keep noise low by NOT failing on benign stderr.
-			_ = stderrStr // intentionally tolerant
-		}
-	}
-
 	var findings []Finding
-	for _, line := range strings.Split(stdout.String(), "\n") {
-		if line == "" {
+	for _, c := range roots {
+		repo := filepath.Join(root, c.Repo)
+		if _, err := os.Stat(filepath.Join(repo, c.Path)); err != nil {
 			continue
 		}
-		// git grep format: file:lineno:content
+		cmd := exec.Command("git", "-C", repo, "grep", "-nE", pattern, "--", c.Path)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+				return nil, fmt.Errorf("git grep for %q in %s failed: %v (stderr: %s)",
+					tag, c.String(), err, strings.TrimSpace(stderr.String()))
+			}
+		}
+		findings = append(findings, parseGrepFindings(stdout.String(), tag, c.Repo)...)
+	}
+	return findings, nil
+}
+
+// parseGrepFindings turns `file:line:content` grep output into findings,
+// skipping the declaration site itself and test files.
+func parseGrepFindings(output, tag, repo string) []Finding {
+	var findings []Finding
+	for _, line := range strings.Split(output, "\n") {
 		parts := strings.SplitN(line, ":", 3)
 		if len(parts) < 3 {
 			continue
 		}
-		fileRel := parts[0]
-		var lineno int
-		fmt.Sscanf(parts[1], "%d", &lineno)
+		lineno, err := strconv.Atoi(parts[1])
+		if err != nil {
+			continue
+		}
 		snippet := strings.TrimSpace(parts[2])
-		// Skip the struct field declaration site itself — `json:"<tag>"`
-		// literal IS a match of `.<tag>` after the `:"`. Filter on the
-		// json: declaration pattern.
+		// The struct field declaration `json:"<tag>"` itself matches `.<tag>`.
 		if strings.Contains(snippet, fmt.Sprintf(`json:"%s"`, tag)) ||
 			strings.Contains(snippet, fmt.Sprintf(`json:"%s,`, tag)) {
 			continue
 		}
-		// Skip test files — they reference fields for assertion fixtures, not
-		// real consumer reads that would surface as UX bugs.
-		if strings.HasSuffix(fileRel, "_test.go") ||
-			strings.HasSuffix(fileRel, ".test.ts") ||
-			strings.HasSuffix(fileRel, ".test.tsx") ||
-			strings.HasSuffix(fileRel, ".spec.ts") ||
-			strings.HasSuffix(fileRel, ".spec.tsx") {
+		// Test files reference fields for assertion fixtures, not real reads.
+		if isTestFile(parts[0]) {
 			continue
 		}
 		findings = append(findings, Finding{
 			DroppedTag:      tag,
-			ConsumerFile:    fileRel,
+			ConsumerFile:    filepath.ToSlash(filepath.Join(repo, parts[0])),
 			ConsumerLine:    lineno,
 			ConsumerSnippet: snippet,
 		})
 	}
-	return findings, nil
+	return findings
+}
+
+func isTestFile(path string) bool {
+	for _, suf := range []string{"_test.go", ".test.ts", ".test.tsx", ".spec.ts", ".spec.tsx"} {
+		if strings.HasSuffix(path, suf) {
+			return true
+		}
+	}
+	return false
 }
 
 // ActionableFix returns the recommended remediation surface for FAIL output.

@@ -58,13 +58,12 @@ func runContractConsumers(args []string) int {
 		fmt.Fprintf(os.Stderr, "contract-consumers: %v\n", err)
 		return 5
 	}
-	// Cobertura perdida aparece SEMPRE — inclusive no PASS, que e' onde ela some sem
-	// deixar rastro. `git grep` ignora em silencio pathspec que nao casa nada, entao
-	// uma raiz declarada que sumiu da arvore vira menos varredura e mesmo veredito
-	// (B-100). Nao derruba o gate sozinha: para onde apontar e' decisao de reuniao.
-	if len(outcome.MissingRoots) > 0 {
-		fmt.Fprintf(os.Stderr, "contract-consumers: AVISO — %d de %d raiz(es) de consumidor nao existem "+
-			"nesta arvore e NAO foram varridas: %v\n", len(outcome.MissingRoots), len(outcome.ScanRoots),
+	// Lost coverage is ALWAYS printed — including on PASS, which is where it would
+	// vanish. A consumer root that is absent (usually a sibling checkout that is
+	// not cloned) makes the verdict PARTIAL; it does not fail the gate on its own.
+	if outcome.Partial {
+		fmt.Fprintf(os.Stderr, "contract-consumers: PARTIAL — %d of %d consumer root(s) do not exist "+
+			"and were NOT scanned: %v\n", len(outcome.MissingRoots), len(outcome.ScanRoots),
 			outcome.MissingRoots)
 	}
 	// A missing tracked path FAILS, and the difference from the warning above is
@@ -96,11 +95,15 @@ func runContractConsumers(args []string) int {
 		fmt.Fprintf(os.Stderr, "Fix:\n  %s\n", contractconsumers.ActionableFix())
 		return 1
 	}
+	verdict := "PASS"
+	if outcome.Partial {
+		verdict = "PASS (PARTIAL)"
+	}
 	if len(outcome.DroppedTags) == 0 {
-		fmt.Println("contract-consumers: PASS — no JSON tag drops in tracked files")
+		fmt.Printf("contract-consumers: %s — no JSON tag drops in tracked files\n", verdict)
 	} else {
-		fmt.Printf("contract-consumers: PASS — %d JSON tag(s) dropped + ZERO consumer reads found: %v\n",
-			len(outcome.DroppedTags), outcome.DroppedTags)
+		fmt.Printf("contract-consumers: %s — %d JSON tag(s) dropped + ZERO consumer reads found: %v\n",
+			verdict, len(outcome.DroppedTags), outcome.DroppedTags)
 	}
 	return 0
 }
