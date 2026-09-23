@@ -31,7 +31,30 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/server"
 )
 
-func ioNopCloser(r io.Reader) io.ReadCloser { return io.NopCloser(r) }
+// postUploadThroughServer sends the multipart body to a real listening
+// server, so the handler sees the request exactly as production traffic
+// arrives (streamed, no GetBody).
+func postUploadThroughServer(t *testing.T, h http.Handler, body *bytes.Buffer, contentType string) (int, []byte) {
+	t.Helper()
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/source/upload", io.NopCloser(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("Authorization", "Bearer test-token")
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp.StatusCode, respBody
+}
 
 func t61BaseCfg(logger *slog.Logger) server.Config {
 	return server.Config{
@@ -131,23 +154,16 @@ func TestSourceUpload_BundleFirstFieldOrder_Returns400(t *testing.T) {
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/source/upload", body)
-	req.Header.Set("Content-Type", w.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer test-token")
-	// Mark the body as repeatable so peekFirstMultipartFieldName can clone it.
-	bodyBytes := append([]byte{}, body.Bytes()...)
-	req.GetBody = func() (io.ReadCloser, error) {
-		return ioNopCloser(bytes.NewReader(bodyBytes)), nil
-	}
+	// Through a real server: net/http never gives a server-side request a
+	// GetBody, so a test that sets one by hand certifies a path production
+	// traffic cannot reach.
+	code, respBody := postUploadThroughServer(t, router, body, w.FormDataContentType())
 
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 MULTIPART_FIELD_ORDER, got %d body=%s", rec.Code, rec.Body.String())
+	if code != http.StatusBadRequest {
+		t.Fatalf("expected 400 MULTIPART_FIELD_ORDER, got %d body=%s", code, respBody)
 	}
 	var resp map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+	if err := json.Unmarshal(respBody, &resp); err != nil {
 		t.Fatalf("not JSON: %v", err)
 	}
 	if code, _ := resp["code"].(string); code != "MULTIPART_FIELD_ORDER" {
@@ -178,22 +194,13 @@ func TestSourceUpload_ServicesJSONFirstFieldOrder_NotRejectedByOrderGate(t *test
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/source/upload", body)
-	req.Header.Set("Content-Type", w.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer test-token")
-	bodyBytes := append([]byte{}, body.Bytes()...)
-	req.GetBody = func() (io.ReadCloser, error) {
-		return ioNopCloser(bytes.NewReader(bodyBytes)), nil
-	}
+	code, respBody := postUploadThroughServer(t, router, body, w.FormDataContentType())
 
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	if rec.Code == http.StatusBadRequest {
+	if code == http.StatusBadRequest {
 		var resp map[string]any
-		_ = json.Unmarshal(rec.Body.Bytes(), &resp)
-		if code, _ := resp["code"].(string); code == "MULTIPART_FIELD_ORDER" {
-			t.Fatalf("expected order gate to pass, got MULTIPART_FIELD_ORDER body=%s", rec.Body.String())
+		_ = json.Unmarshal(respBody, &resp)
+		if c, _ := resp["code"].(string); c == "MULTIPART_FIELD_ORDER" {
+			t.Fatalf("expected order gate to pass, got MULTIPART_FIELD_ORDER body=%s", respBody)
 		}
 	}
 }

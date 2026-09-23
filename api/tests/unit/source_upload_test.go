@@ -57,19 +57,21 @@ func newMultipartRequest(t *testing.T, bundleContent []byte, servicesJSON string
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
+	// services_json first, bundle second: the order is part of the wire
+	// contract (docs/loopzerokit-loopzerocloud-seam.md) and the handler enforces it.
+	if servicesJSON != "" {
+		err := writer.WriteField("services_json", servicesJSON)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	if bundleContent != nil {
 		part, err := writer.CreateFormFile("bundle", "bundle.git")
 		if err != nil {
 			t.Fatal(err)
 		}
 		_, err = part.Write(bundleContent)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if servicesJSON != "" {
-		err := writer.WriteField("services_json", servicesJSON)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -93,23 +95,23 @@ func newMultipartRequestWithFileYAML(t *testing.T, bundleContent []byte, service
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
-	if bundleContent != nil {
-		part, err := writer.CreateFormFile("bundle", "bundle.git")
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = part.Write(bundleContent)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	if servicesJSON != "" {
 		part, err := writer.CreateFormFile("services_json", "services.json")
 		if err != nil {
 			t.Fatal(err)
 		}
 		_, err = part.Write([]byte(servicesJSON))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if bundleContent != nil {
+		part, err := writer.CreateFormFile("bundle", "bundle.git")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = part.Write(bundleContent)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -204,12 +206,15 @@ func TestSourceUpload(t *testing.T) {
 		}
 	})
 
-	t.Run("no loopzero_yaml returns 422", func(t *testing.T) {
-		// Arrange
+	t.Run("form without services_json returns 422 E-008", func(t *testing.T) {
+		// Arrange -- a well-formed multipart body carrying no parts at all.
+		// A body whose FIRST part is the bundle is a field-order violation
+		// instead (400 MULTIPART_FIELD_ORDER, source_upload_field_limits_test):
+		// the manifest must be validated before any bundle byte is read.
 		store := newFakeSourceStore("abc123")
 		handler := sourceroutes.NewSourceHandler(store)
 
-		req := newMultipartRequest(t, []byte("fake-bundle"), "")
+		req := newMultipartRequest(t, nil, "")
 		req = req.WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
 		rec := httptest.NewRecorder()
 
@@ -251,17 +256,18 @@ func TestSourceUpload(t *testing.T) {
 		store := newFakeSourceStore("sha-legacy-reject")
 		handler := sourceroutes.NewSourceHandler(store)
 
-		// Arrange -- a bundle plus the legacy loopzero_yaml field and NO services_json.
+		// Arrange -- the legacy loopzero_yaml field in the manifest slot, then a
+		// bundle, and NO services_json.
 		body := &bytes.Buffer{}
 		writer := multipart.NewWriter(body)
+		if err := writer.WriteField("loopzero_yaml", "apps:\n  api:\n    type: server\n    port: 3000\n"); err != nil {
+			t.Fatal(err)
+		}
 		part, err := writer.CreateFormFile("bundle", "bundle.git")
 		if err != nil {
 			t.Fatal(err)
 		}
 		if _, err := part.Write([]byte("fake-bundle")); err != nil {
-			t.Fatal(err)
-		}
-		if err := writer.WriteField("loopzero_yaml", "apps:\n  api:\n    type: server\n    port: 3000\n"); err != nil {
 			t.Fatal(err)
 		}
 		if err := writer.Close(); err != nil {
