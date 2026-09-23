@@ -4,13 +4,16 @@
 package builds
 
 import (
-	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // T1.3 of deep-review-remediation-plan (closes find_arch_001 partial):
@@ -32,6 +35,11 @@ func NewBuildAttestationHandler(store AttestationStore, logger *slog.Logger) *Bu
 }
 
 // Get returns the supply chain attestation for a build.
+//
+// Tenant isolation: the tenant comes from the authenticated request, and a
+// build owned by another tenant answers 404 exactly like a build that does not
+// exist (ADR-0014). A store failure is a 500, never a 404 — reporting an outage
+// as "not found" tells the caller their build vanished.
 func (h *BuildAttestationHandler) Get(w http.ResponseWriter, r *http.Request) {
 	buildID := chi.URLParam(r, "id")
 	if buildID == "" {
@@ -39,16 +47,26 @@ func (h *BuildAttestationHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	info, err := h.store.GetBuildAttestation(r.Context(), buildID)
-	if err != nil {
-		h.logger.Error("attestation lookup failed",
-			"build_id", buildID,
-			"error", err,
-		)
-		http.Error(w, `{"error":"build not found"}`, http.StatusNotFound)
+	uc := auth.GetUserContext(r.Context())
+	if uc == nil || uc.TenantID == "" {
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(info)
+	info, err := h.store.GetBuildAttestationForTenant(r.Context(), uc.TenantID, buildID)
+	if err != nil {
+		if errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
+			return
+		}
+		h.logger.Error("attestation lookup failed",
+			"build_id", buildID,
+			"tenant_id", uc.TenantID,
+			"error", err,
+		)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+
+	httpio.WriteJSON(w, http.StatusOK, info)
 }

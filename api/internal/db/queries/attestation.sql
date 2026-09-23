@@ -12,16 +12,6 @@
 --   - Empty signature fields → signed=false (legacy releases pre-
 --     Phase 5)
 
--- tenantpredicate:exempt
--- name: GetLatestReleaseAttestationByBuild :one
--- Caller-trusted (internal/admin) variant: any tenant. NoRows →
--- wrapper maps to loopzeroerrors.ErrBuildNotFound.
-SELECT image_digest, image_signature, image_signed_at
-FROM releases
-WHERE build_id = $1
-ORDER BY created_at DESC
-LIMIT 1;
-
 -- name: GetLatestReleaseAttestationByBuildForTenant :one
 -- Tenant-isolated variant: cross-tenant reads return NoRows (mapped
 -- to ErrBuildNotFound in wrapper, NOT ErrForbidden) to avoid
