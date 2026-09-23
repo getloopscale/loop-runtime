@@ -36,6 +36,9 @@ var (
 	fakeGitProvider    *operatortest.FakeGitProvisioner
 	fakeArgoCDProvider *operatortest.FakeArgoCDProvisioner
 	fakeMinIOProvider  *operatortest.FakeMinIOProvisioner
+	// cellFactory is the factory the Tenant and Environment controllers
+	// resolve runtime clients through; specs assert which cell was used.
+	cellFactory *operatortest.FakeRuntimeClientFactory
 )
 
 func TestTenantControllers(t *testing.T) {
@@ -64,6 +67,7 @@ var _ = BeforeSuite(func() {
 	fakeGitProvider = h.FakeGit
 	fakeArgoCDProvider = h.FakeArgoCD
 	fakeMinIOProvider = h.FakeMinIO
+	cellFactory = h.CellAwareFactory
 })
 
 // Clear injected errors between test specs (preserves data state).
