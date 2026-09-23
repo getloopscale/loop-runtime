@@ -1,55 +1,51 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
 #
-# KEDA HTTP Add-on production overrides (DigitalOcean workload cluster).
-# Usage: helm upgrade --install keda-http-addon loopzero-keda-http-addon -f values.yaml -f values.production.yaml
+# KEDA HTTP Add-on production overrides (DigitalOcean workload cluster), layered
+# on top of values.yaml for the dev and prod environments by
+# cell.helmfile.yaml.gotmpl. Upstream keda-add-ons-http 0.8.0 shape.
 #
 # Requires: KEDA core must be installed first.
 
-http-add-on:
-  # ---------------------------------------------------------------------------
-  # Interceptor -- HA (2 replicas minimum)
-  # ---------------------------------------------------------------------------
-  interceptor:
-    replicas:
-      min: 2
-      max: 4
-    resources:
-      requests:
-        cpu: "100m"
-        memory: "128Mi"
-      limits:
-        cpu: "500m"
-        memory: "256Mi"
+# ---------------------------------------------------------------------------
+# Interceptor -- HA (2 replicas minimum)
+# ---------------------------------------------------------------------------
+interceptor:
+  replicas:
+    min: 2
+    max: 4
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
 
-  # ---------------------------------------------------------------------------
-  # Operator -- production sizing
-  # ---------------------------------------------------------------------------
-  operator:
-    resources:
-      requests:
-        cpu: "100m"
-        memory: "128Mi"
-      limits:
-        cpu: "500m"
-        memory: "256Mi"
+# ---------------------------------------------------------------------------
+# Operator -- production sizing
+# ---------------------------------------------------------------------------
+operator:
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
 
-  # ---------------------------------------------------------------------------
-  # Scaler -- production sizing
-  # ---------------------------------------------------------------------------
-  scaler:
-    resources:
-      requests:
-        cpu: "100m"
-        memory: "128Mi"
-      limits:
-        cpu: "500m"
-        memory: "256Mi"
+# ---------------------------------------------------------------------------
+# Scaler -- production sizing
+# ---------------------------------------------------------------------------
+scaler:
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
 
-  # ---------------------------------------------------------------------------
-  # PodDisruptionBudget -- interceptor must stay available during drains
-  # ---------------------------------------------------------------------------
-  podDisruptionBudget:
-    interceptor:
-      enabled: true
-      minAvailable: 1
+# No PodDisruptionBudget: keda-add-ons-http 0.8.0 ships no PDB template and no
+# value for one. Only the interceptor floor of 2 replicas above keeps a
+# single-node drain from taking every interceptor down at once.

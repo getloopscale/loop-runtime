@@ -149,6 +149,11 @@ releases:
     version: 2.16.1
     values:
       - ../helm/keda/values.yaml
+{{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}
+      # HA sizing for the DigitalOcean workload clusters (same env split as
+      # gitea's values-ha.yaml in core.helmfile).
+      - ../helm/keda/values.production.yaml
+{{- end }}
 
   - name: keda-http-addon
     namespace: keda
@@ -163,6 +168,9 @@ releases:
       - keda/keda
     values:
       - ../helm/keda-http-addon/values.yaml
+{{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}
+      - ../helm/keda-http-addon/values.production.yaml
+{{- end }}
 
   # argo-rollouts-progressive-delivery-plan T0.2 — Progressive delivery
   # controller. Manages Rollout/AnalysisRun/AnalysisTemplate/Experiment
