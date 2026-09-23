@@ -9,6 +9,7 @@ templates:
   - vap-require-image-signature.yaml
   - vap-protect-platform-networkpolicies.yaml
   - vap-argocd-managed-by.yaml
+  - vap-tenant-namespace.yaml
 
 tests:
   - it: disallow-latest-tag renders as ValidatingAdmissionPolicy
@@ -60,8 +61,11 @@ tests:
       - contains:
           path: spec.matchConditions
           content:
-            name: skip-cluster-internal-gc
+            name: exclude-system-actors
           any: true
+      - matchRegex:
+          path: spec.matchConditions[0].expression
+          pattern: "startsWith\\('system:serviceaccount:kube-system:'\\)"
 
   - it: require-image-signature renders when enabled
     template: vap-require-image-signature.yaml
@@ -70,3 +74,18 @@ tests:
     asserts:
       - hasDocuments:
           count: 2
+
+  - it: tenant-namespace exempts the platform's own controllers (B-095)
+    template: vap-tenant-namespace.yaml
+    set:
+      vaps.tenantNamespace: true
+    documentSelector:
+      path: kind
+      value: ValidatingAdmissionPolicy
+    asserts:
+      - contains:
+          path: spec.matchConditions
+          content:
+            name: exclude-system-actors
+          any: true
+
