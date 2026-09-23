@@ -18,9 +18,9 @@ import (
 // uses them to mint a fresh token.
 type notifyingProvider struct{ failures int }
 
-func (p *notifyingProvider) Token() string  { return "expired" }
-func (p *notifyingProvider) Refresh() error { return nil }
-func (p *notifyingProvider) OnAuthFailure() { p.failures++ }
+func (p *notifyingProvider) Token() (string, error) { return "expired", nil }
+func (p *notifyingProvider) Refresh() error         { return nil }
+func (p *notifyingProvider) OnAuthFailure()         { p.failures++ }
 
 // Every call the convergence loop makes must tell the token provider when the
 // token is rejected; otherwise an expired token observed there is never

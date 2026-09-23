@@ -14,8 +14,8 @@ import (
 func TestStaticTokenProvider(t *testing.T) {
 	p := NewStaticTokenProvider("my-jwt-token")
 
-	if p.Token() != "my-jwt-token" {
-		t.Errorf("expected 'my-jwt-token', got %q", p.Token())
+	if currentToken(p) != "my-jwt-token" {
+		t.Errorf("expected 'my-jwt-token', got %q", currentToken(p))
 	}
 	if err := p.Refresh(); err != nil {
 		t.Errorf("Refresh should be no-op, got error: %v", err)
@@ -35,8 +35,8 @@ func TestFileWatchTokenProvider_InitialRead(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	if p.Token() != "eyJhbGciOiJIUzI1NiJ9.test" {
-		t.Errorf("expected JWT token, got %q", p.Token())
+	if currentToken(p) != "eyJhbGciOiJIUzI1NiJ9.test" {
+		t.Errorf("expected JWT token, got %q", currentToken(p))
 	}
 }
 
@@ -77,8 +77,8 @@ func TestFileWatchTokenProvider_RefreshDetectsChange(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if p.Token() != "token-v1" {
-		t.Fatalf("expected token-v1, got %q", p.Token())
+	if currentToken(p) != "token-v1" {
+		t.Fatalf("expected token-v1, got %q", currentToken(p))
 	}
 
 	// Simulate Secret rotation
@@ -88,8 +88,8 @@ func TestFileWatchTokenProvider_RefreshDetectsChange(t *testing.T) {
 		t.Fatalf("refresh error: %v", err)
 	}
 
-	if p.Token() != "token-v2" {
-		t.Errorf("expected token-v2 after refresh, got %q", p.Token())
+	if currentToken(p) != "token-v2" {
+		t.Errorf("expected token-v2 after refresh, got %q", currentToken(p))
 	}
 }
 
@@ -106,8 +106,8 @@ func TestFileWatchTokenProvider_TrimsWhitespace(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if p.Token() != "my-token" {
-		t.Errorf("expected trimmed 'my-token', got %q", p.Token())
+	if currentToken(p) != "my-token" {
+		t.Errorf("expected trimmed 'my-token', got %q", currentToken(p))
 	}
 }
 
@@ -133,12 +133,22 @@ func TestFileWatchTokenProvider_BackgroundPoll(t *testing.T) {
 
 	// Poll until the background watcher detects the change.
 	deadline := time.After(5 * time.Second)
-	for p.Token() != "rotated" {
+	for currentToken(p) != "rotated" {
 		select {
 		case <-deadline:
-			t.Fatalf("timeout waiting for background poll to detect file change; token still %q", p.Token())
+			t.Fatalf("timeout waiting for background poll to detect file change; token still %q", currentToken(p))
 		default:
 			time.Sleep(5 * time.Millisecond) // intentional: tight poll checking background file watcher
 		}
 	}
+}
+
+// currentToken is the provider's token, or "" while it has none (tests poll
+// on it).
+func currentToken(p TokenProvider) string {
+	tok, err := p.Token()
+	if err != nil {
+		return ""
+	}
+	return tok
 }

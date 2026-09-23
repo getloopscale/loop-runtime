@@ -6,8 +6,8 @@ package argocd
 import (
 	"context"
 	"crypto/tls"
-	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -249,9 +250,9 @@ func (p *KubeMintingTokenProvider) loadCachedToken() string {
 // calls return immediately (closed channels never block on receive).
 //
 // On timeout (mint failed N times OR ArgoCD pod not Ready in 30s), the
-// method returns empty string + logs ERROR. Callers that previously
-// hit the empty-Bearer 401 cascade now either get a valid token OR a
-// loud failure signal — no silent path.
+// method returns ErrFirstMintTimedOut and logs ERROR; a provider stopped
+// before its first mint returns ErrTokenProviderStopped. Callers get
+// either a valid token OR an error — never an empty Bearer.
 //
 // If the seed Secret in the constructor populated p.token with a valid
 // token, the fast-path skips the channel entirely (token already
@@ -260,31 +261,38 @@ func (p *KubeMintingTokenProvider) loadCachedToken() string {
 // INTERNAL CALLERS: do NOT call Token() from inside the mint goroutine
 // (checkAndMaybeRefresh, mintAndPersist) — it would self-deadlock.
 // Use loadCachedToken() instead.
-func (p *KubeMintingTokenProvider) Token() string {
+func (p *KubeMintingTokenProvider) Token() (string, error) {
 	// Fast path: token already loaded (either seeded from Secret in
 	// constructor OR a previous mint completed). Avoid touching the
 	// channel — closed channels still incur a select cost.
 	if s := p.loadCachedToken(); s != "" {
-		return s
+		return s, nil
 	}
 
 	// Slow path: block until first mint or timeout.
 	select {
 	case <-p.firstMint:
 		// First mint completed (success). Re-read the atomic value.
-		return p.loadCachedToken()
+		return p.loadCachedToken(), nil
 	case <-p.stopCh:
-		// Provider stopped before first mint — system is shutting down.
-		return ""
+		return "", ErrTokenProviderStopped
 	case <-time.After(p.firstMintTimeout):
 		// Timed out waiting for first mint. Log loudly so operators
-		// see the failure rather than guessing why callers see 401s.
+		// see the failure rather than guessing why callers fail.
 		p.log.Error("kube_minting_token_provider: first mint timed out",
 			"timeout", p.firstMintTimeout,
 			"hint", "ArgoCD pod likely not Ready OR credentials Secret missing — check argocd-server pod + argocd-credentials secret")
-		return ""
+		return "", fmt.Errorf("%w after %s", ErrFirstMintTimedOut, p.firstMintTimeout)
 	}
 }
+
+// ErrTokenProviderStopped is returned by Token when the provider stopped
+// before it ever minted a token.
+var ErrTokenProviderStopped = errors.New("argocd token provider stopped before the first token was minted")
+
+// ErrFirstMintTimedOut is returned by Token when no token was minted within
+// the first-mint timeout.
+var ErrFirstMintTimedOut = errors.New("argocd token: first mint timed out")
 
 // Refresh implements TokenProvider.Refresh — synchronous mint + persist.
 // Single-flight: concurrent callers wait for the in-flight mint to finish.
@@ -590,49 +598,30 @@ func updateAgeMetric(issuedAt int64) {
 	metrics.ArgoCDTokenAgeSeconds.Set(float64(time.Now().Unix() - issuedAt))
 }
 
-// jwtExp parses the JWT exp claim. Returns 0 if missing/unparseable.
-func jwtExp(token string) int64 {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return 0
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		// Try standard padding (some encoders pad)
-		payload, err = base64.StdEncoding.DecodeString(parts[1])
-		if err != nil {
-			return 0
-		}
-	}
-	var claims struct {
-		Exp int64 `json:"exp"`
-	}
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return 0
-	}
-	return claims.Exp
-}
+// jwtExp returns the token's exp claim, or 0 when the token carries none or
+// cannot be parsed.
+func jwtExp(token string) int64 { return unverifiedClaims(token).exp }
 
-// jwtIat extracts the iat claim (issued-at).
-func jwtIat(token string) int64 {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return 0
+// jwtIat returns the token's iat (issued-at) claim, or 0.
+func jwtIat(token string) int64 { return unverifiedClaims(token).iat }
+
+type timeClaims struct{ exp, iat int64 }
+
+// unverifiedClaims reads exp and iat without verifying the signature: the
+// token came from ArgoCD itself, and only its lifetime is needed here.
+func unverifiedClaims(token string) timeClaims {
+	var claims jwt.RegisteredClaims
+	if _, _, err := jwt.NewParser(jwt.WithPaddingAllowed()).ParseUnverified(token, &claims); err != nil {
+		return timeClaims{}
 	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		payload, err = base64.StdEncoding.DecodeString(parts[1])
-		if err != nil {
-			return 0
-		}
+	var tc timeClaims
+	if claims.ExpiresAt != nil {
+		tc.exp = claims.ExpiresAt.Unix()
 	}
-	var claims struct {
-		Iat int64 `json:"iat"`
+	if claims.IssuedAt != nil {
+		tc.iat = claims.IssuedAt.Unix()
 	}
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return 0
-	}
-	return claims.Iat
+	return tc
 }
 
 // jwtIsValid returns true when the token has either exp=0 (non-expiring) OR

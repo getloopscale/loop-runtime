@@ -503,7 +503,11 @@ func (c *SyncClient) do(ctx context.Context, method, path string, body io.Reader
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
+	token, err := c.tokenProvider.Token()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", loopzeroerrors.ErrDeployServiceAuthFailed, err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
 	// B11 (CHG-2026-04-23): ArgoCD rejects a DELETE without Content-Type with
 	// HTTP 415, and the sync POST carries a JSON body.
 	req.Header.Set("Content-Type", "application/json")

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -39,7 +40,8 @@ func mintTokenJWT(t *testing.T, sub string, exp, iat int64) string {
 		t.Fatalf("marshal claims: %v", err)
 	}
 	payload := base64.RawURLEncoding.EncodeToString(body)
-	return fmt.Sprintf("%s.%s.signature", header, payload)
+	signature := base64.RawURLEncoding.EncodeToString([]byte("signature"))
+	return fmt.Sprintf("%s.%s.%s", header, payload, signature)
 }
 
 // fakeArgoCD is a tiny test double for the ArgoCD HTTP API.
@@ -200,7 +202,7 @@ func TestProvider_SeedsFromExistingSecret(t *testing.T) {
 	_, srv := newFakeArgoCD(t)
 	existing := mintTokenJWT(t, "loopzero-api:apiKey", 0, time.Now().Unix())
 	p := newProvider(t, srv.URL, tokenSecret(existing), credsSecret("bearer-x", "", ""))
-	if got := p.Token(); got != existing {
+	if got := currentToken(p); got != existing {
 		t.Fatalf("expected seeded token, got %q", got)
 	}
 }
@@ -217,9 +219,9 @@ func TestProvider_StartMintsWhenNoToken(t *testing.T) {
 	for {
 		select {
 		case <-deadline:
-			t.Fatalf("timeout: provider did not mint on startup; mintCount=%d token=%q", fa.mints(), p.Token())
+			t.Fatalf("timeout: provider did not mint on startup; mintCount=%d token=%q", fa.mints(), currentToken(p))
 		default:
-			if p.Token() != "" {
+			if currentToken(p) != "" {
 				if fa.mints() < 1 {
 					t.Fatalf("expected at least 1 mint, got %d", fa.mints())
 				}
@@ -254,7 +256,7 @@ func TestProvider_OnAuthFailure_TriggersReactiveMint(t *testing.T) {
 		t.Fatalf("reactive mint did not happen; mintCount=%d", fa.mints())
 	}
 	// Token swapped to the freshly-minted one.
-	if p.Token() == expiring {
+	if currentToken(p) == expiring {
 		t.Fatalf("token did not change after reactive mint")
 	}
 }
@@ -276,7 +278,7 @@ func TestProvider_ProactiveRefresh_WhenTokenNearExpiry(t *testing.T) {
 		case <-deadline:
 			t.Fatalf("proactive mint did not happen; mintCount=%d", fa.mints())
 		default:
-			if fa.mints() > 0 && p.Token() != expiring {
+			if fa.mints() > 0 && currentToken(p) != expiring {
 				return
 			}
 			time.Sleep(20 * time.Millisecond)
@@ -294,7 +296,7 @@ func TestProvider_PersistsMintedTokenToSecret(t *testing.T) {
 
 	// Wait for first mint.
 	deadline := time.After(1500 * time.Millisecond)
-	for p.Token() == "" {
+	for currentToken(p) == "" {
 		select {
 		case <-deadline:
 			t.Fatal("never minted")
@@ -308,7 +310,7 @@ func TestProvider_PersistsMintedTokenToSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Secret not created: %v", err)
 	}
-	if string(sec.Data["argocd-token"]) != p.Token() {
+	if string(sec.Data["argocd-token"]) != currentToken(p) {
 		t.Fatalf("Secret data does not match in-memory token")
 	}
 }
@@ -322,7 +324,7 @@ func TestProvider_LoginFlow_WhenNoBearer(t *testing.T) {
 	defer p.Stop()
 
 	deadline := time.After(1500 * time.Millisecond)
-	for p.Token() == "" {
+	for currentToken(p) == "" {
 		select {
 		case <-deadline:
 			t.Fatal("never minted")
@@ -429,7 +431,7 @@ func TestKubeMintingProvider_BlocksBeforeFirstMint(t *testing.T) {
 	defer p.Stop()
 
 	start := time.Now()
-	tok := p.Token()
+	tok := currentToken(p)
 	dur := time.Since(start)
 
 	if tok == "" {
@@ -443,12 +445,11 @@ func TestKubeMintingProvider_BlocksBeforeFirstMint(t *testing.T) {
 	}
 }
 
-// TestKubeMintingProvider_TimeoutReturnsEmpty — failure-mode invariant.
+// TestKubeMintingProvider_TimeoutReturnsAnError — failure-mode invariant.
 // Provider Start()ed but mint endpoint always returns 500. After
-// firstMintTimeout elapses, Token() returns empty (no panic, no hang
-// past timeout). Production callers observe "" + ERROR log + 401 from
-// upstream — explicit failure signal rather than silent cascade.
-func TestKubeMintingProvider_TimeoutReturnsEmpty(t *testing.T) {
+// firstMintTimeout elapses, Token() returns ErrFirstMintTimedOut (no panic,
+// no hang past timeout) — an explicit error, never an empty Bearer.
+func TestKubeMintingProvider_TimeoutReturnsAnError(t *testing.T) {
 	// (placeholder — replaced per-test via p.firstMintTimeout = ...)
 
 	fa, srv := newFakeArgoCD(t)
@@ -462,11 +463,11 @@ func TestKubeMintingProvider_TimeoutReturnsEmpty(t *testing.T) {
 	// runs and firstMint will never close until the timeout fires.
 	// This isolates the timeout path from the Start()/mint race.
 	start := time.Now()
-	tok := p.Token()
+	tok, err := p.Token()
 	dur := time.Since(start)
 
-	if tok != "" {
-		t.Errorf("Token() returned %q after timeout; expected empty", tok)
+	if !errors.Is(err, ErrFirstMintTimedOut) {
+		t.Errorf("Token() = (%q, %v) after timeout; want ErrFirstMintTimedOut", tok, err)
 	}
 	if dur < 150*time.Millisecond {
 		t.Errorf("Token() returned in %v — too fast; expected >=150ms (timeout override 200ms)", dur)
@@ -490,7 +491,7 @@ func TestKubeMintingProvider_PostMint_NonBlocking(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		start := time.Now()
-		tok := p.Token()
+		tok := currentToken(p)
 		dur := time.Since(start)
 		if tok != existing {
 			t.Fatalf("iter %d: got %q want %q", i, tok, existing)
@@ -522,8 +523,19 @@ func TestKubeMintingProvider_TokenBeforeStart_DoesNotPanic(t *testing.T) {
 		}
 	}()
 
-	tok := p.Token()
+	tok := currentToken(p)
 	if tok != "" {
 		t.Errorf("Token() returned %q on un-started provider; expected empty after timeout", tok)
+	}
+}
+
+func TestKubeMintingProvider_StoppedBeforeFirstMintReturnsAnError(t *testing.T) {
+	_, srv := newFakeArgoCD(t)
+	p := newProvider(t, srv.URL, credsSecret("bearer-x", "", ""))
+	p.firstMintTimeout = 5 * time.Second
+	p.Stop()
+
+	if _, err := p.Token(); !errors.Is(err, ErrTokenProviderStopped) {
+		t.Fatalf("Token() err = %v, want ErrTokenProviderStopped", err)
 	}
 }

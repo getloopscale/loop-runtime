@@ -17,8 +17,9 @@ import (
 // Implementations handle token storage, caching, and refresh.
 // MEET-2026-03-28-015: implemented for zero-downtime token rotation.
 type TokenProvider interface {
-	// Token returns the current valid token string.
-	Token() string
+	// Token returns the current valid token, or an error when none can be
+	// had (never an empty string standing in for the error).
+	Token() (string, error)
 	// Refresh forces a re-read of the token source (e.g., mounted Secret file).
 	// Returns nil if the token was successfully refreshed, error otherwise.
 	Refresh() error
@@ -48,7 +49,7 @@ func NewStaticTokenProvider(token string) *StaticTokenProvider {
 	return &StaticTokenProvider{token: token}
 }
 
-func (p *StaticTokenProvider) Token() string  { return p.token }
+func (p *StaticTokenProvider) Token() (string, error) { return p.token, nil }
 func (p *StaticTokenProvider) Refresh() error { return nil }
 
 // FileWatchTokenProvider reads the token from a file (mounted K8s Secret)
@@ -104,8 +105,14 @@ func NewFileWatchTokenProvider(cfg FileWatchConfig) (*FileWatchTokenProvider, er
 	return p, nil
 }
 
-// Token returns the cached token (lock-free read via atomic.Value).
-func (p *FileWatchTokenProvider) Token() string {
+// Token returns the cached token (lock-free read via atomic.Value). The
+// constructor reads the file once and fails if it cannot, so a token is
+// always cached by the time a caller holds the provider.
+func (p *FileWatchTokenProvider) Token() (string, error) {
+	return p.cachedToken(), nil
+}
+
+func (p *FileWatchTokenProvider) cachedToken() string {
 	v := p.token.Load()
 	if v == nil {
 		return ""
@@ -129,7 +136,7 @@ func (p *FileWatchTokenProvider) Refresh() error {
 		return fmt.Errorf("token file %s is empty", p.path)
 	}
 
-	oldToken := p.Token()
+	oldToken := p.cachedToken()
 	if newToken != oldToken {
 		p.token.Store(newToken)
 		if oldToken != "" {
