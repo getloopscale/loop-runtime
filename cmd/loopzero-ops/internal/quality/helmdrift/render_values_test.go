@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmrender"
 )
 
 // B-001 T2.1 RED.
@@ -29,7 +31,7 @@ import (
 // with no subprocess, so the check stays hermetic: the gate must not need the
 // toolchain it audits in order to test how it invokes it.
 func TestHelmTemplateArgsCarryTheSetValues(t *testing.T) {
-	got := helmTemplateArgs("charts/loopzero-api", matrixFor("loopzero-api:loopzero-api")[1])
+	got := helmrender.TemplateArgs("drift-probe", "charts/loopzero-api", matrixFor("loopzero-api:loopzero-api")[1])
 	joined := strings.Join(got, " ")
 
 	for _, want := range []string{
@@ -46,7 +48,7 @@ func TestHelmTemplateArgsCarryTheSetValues(t *testing.T) {
 		// its eleven approvals were measured under them, and a gate that changed
 		// its own baseline while adding a second comparison would make both
 		// findings unreadable.
-		bare := helmTemplateArgs("charts/loopzero-api", nil)
+		bare := helmrender.TemplateArgs("drift-probe", "charts/loopzero-api", nil)
 		if strings.Join(bare, " ") != "template drift-probe charts/loopzero-api" {
 			t.Errorf("a valueless render must be the original invocation, got %q", bare)
 		}
@@ -66,11 +68,11 @@ func TestMatrixPointsProduceDifferentPublishedOutput(t *testing.T) {
 	}
 	chart := filepath.Join("..", "..", "..", "..", "..", "charts", "loopzero-api")
 
-	on, err := helmRenderer{}.Render(chart, matrixFor("loopzero-api:loopzero-api")[0])
+	on, err := productionRenderer.Render(chart, matrixFor("loopzero-api:loopzero-api")[0])
 	if err != nil {
 		t.Fatalf("render at matrix point 0: %v", err)
 	}
-	off, err := helmRenderer{}.Render(chart, matrixFor("loopzero-api:loopzero-api")[1])
+	off, err := productionRenderer.Render(chart, matrixFor("loopzero-api:loopzero-api")[1])
 	if err != nil {
 		t.Fatalf("render at matrix point 1: %v", err)
 	}
@@ -87,7 +89,7 @@ func TestRenderErrorNamesTheChartAndTheSetList(t *testing.T) {
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Fatalf("helm is not on PATH and this test measures the production renderer: %v", err)
 	}
-	_, err := helmRenderer{}.Render(t.TempDir(), []string{"rbac.create=true"})
+	_, err := productionRenderer.Render(t.TempDir(), []string{"rbac.create=true"})
 	if err == nil {
 		t.Fatal("rendering a directory that is not a chart succeeded")
 	}

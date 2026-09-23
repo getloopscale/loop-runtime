@@ -4,14 +4,13 @@
 package helmoverlapparity
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
-	"os/exec"
 	"sort"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmrender"
 	"gopkg.in/yaml.v3"
 )
 
@@ -26,19 +25,10 @@ import (
 // strings); Check shells out to `helm template` for the real render (helm is a
 // documented quality:gates prerequisite).
 
-// renderHelm runs `helm template` on a chart dir and returns the rendered YAML.
-// Only stdout is the manifest stream: helm writes warnings to stderr, and
-// interleaving them with the YAML corrupts the documents being compared.
+// renderHelm renders a chart dir as release "parity" through quality/helmrender,
+// which keeps helm's stderr out of the manifest stream.
 func renderHelm(chartDir string) (string, error) {
-	// #nosec G204 -- chartDir is composed of fixed RepoRoot + declared pair entries.
-	cmd := exec.Command("helm", "template", "parity", chartDir)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("helm template %s: %v: %s", chartDir, err, strings.TrimSpace(stderr.String()))
-	}
-	return string(out), nil
+	return helmrender.Helm{Release: "parity"}.Render(chartDir, nil)
 }
 
 // deploymentPodSecurityContexts returns the set of pod-level securityContext

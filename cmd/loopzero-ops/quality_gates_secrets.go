@@ -15,6 +15,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esochartsanity"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esocreationpolicy"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esooverlay"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmrender"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noaesremaining"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noenvvaultsecrets"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/openbaobootstrapincore"
@@ -313,6 +314,10 @@ func runLoopZeroExternalSecretsChartSanity(args []string) int {
 	}
 	resolveDotRoot(root)
 	outcome, err := esochartsanity.Check(esochartsanity.Config{RepoRoot: *root})
+	if errors.Is(err, helmrender.ErrHelmUnavailable) {
+		fmt.Fprintf(os.Stderr, "loopzero-external-secrets-chart-sanity: FAIL — %v\n", err)
+		return 5
+	}
 	if errors.Is(err, esochartsanity.ErrChartMissing) {
 		fmt.Fprintln(os.Stderr, "loopzero-external-secrets-chart-sanity: FAIL — loopzero-external-secrets chart missing")
 		return 1
@@ -323,10 +328,6 @@ func runLoopZeroExternalSecretsChartSanity(args []string) int {
 			fmt.Fprintf(os.Stderr, "  %s\n", f)
 		}
 		return 1
-	}
-	if outcome.Warn {
-		fmt.Println("loopzero-external-secrets-chart-sanity: WARN (advisory-only: helm not on PATH)")
-		return 0
 	}
 	fmt.Println("loopzero-external-secrets-chart-sanity: PASS — 8 chart-sanity assertions across 5 canonical envs clean")
 	return 0
@@ -343,6 +344,10 @@ func runLoopZeroExternalSecretsCreationPolicy(args []string) int {
 	}
 	resolveDotRoot(root)
 	outcome, err := esocreationpolicy.Check(esocreationpolicy.Config{RepoRoot: *root})
+	if errors.Is(err, helmrender.ErrHelmUnavailable) {
+		fmt.Fprintf(os.Stderr, "loopzero-external-secrets-creation-policy: FAIL — %v\n", err)
+		return 5
+	}
 	if errors.Is(err, esocreationpolicy.ErrChartMissing) {
 		fmt.Fprintln(os.Stderr, "loopzero-external-secrets-creation-policy: FAIL — chart missing")
 		return 1
@@ -353,10 +358,6 @@ func runLoopZeroExternalSecretsCreationPolicy(args []string) int {
 			fmt.Fprintf(os.Stderr, "  %s\n", f)
 		}
 		return 1
-	}
-	if outcome.Warn {
-		fmt.Println("loopzero-external-secrets-creation-policy: WARN (advisory-only: helm not on PATH)")
-		return 0
 	}
 	fmt.Println("loopzero-external-secrets-creation-policy: PASS — 4 assertions (creationPolicy Orphan + Owner=0 + deletionPolicy Retain + count parity) clean")
 	return 0

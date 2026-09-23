@@ -24,15 +24,15 @@
 package esochartsanity
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmrender"
 )
 
 const (
@@ -49,7 +49,6 @@ type Config struct {
 
 // Outcome is the summary.
 type Outcome struct {
-	Warn     bool // helm not on PATH
 	Failures []string
 }
 
@@ -72,8 +71,8 @@ func Check(cfg Config) (Outcome, error) {
 	if _, err := os.Stat(chart); errors.Is(err, fs.ErrNotExist) {
 		return Outcome{}, ErrChartMissing
 	}
-	if _, err := exec.LookPath("helm"); err != nil {
-		return Outcome{Warn: true}, nil
+	if _, err := helmTemplate(chart, "vault-local"); errors.Is(err, helmrender.ErrHelmUnavailable) {
+		return Outcome{}, err
 	}
 
 	// Inventory expected count from values.yaml `^  - targetSecret:` entries.
@@ -150,20 +149,15 @@ func Check(cfg Config) (Outcome, error) {
 	return Outcome{}, nil
 }
 
-// helmTemplate runs `helm template loopzero-external-secrets <chart> [--set envName=X]`.
+// helmTemplate renders the chart as release loopzero-external-secrets, with
+// envName set when non-empty.
 func helmTemplate(chartDir, envName string) ([]byte, error) {
-	args := []string{"template", "loopzero-external-secrets", chartDir}
+	var sets []string
 	if envName != "" {
-		args = append(args, "--set", "envName="+envName)
+		sets = []string{"envName=" + envName}
 	}
-	cmd := exec.Command("helm", args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("%v: %v\n%s", args, err, stderr.String())
-	}
-	return stdout.Bytes(), nil
+	out, err := helmrender.Helm{Release: "loopzero-external-secrets"}.Render(chartDir, sets)
+	return []byte(out), err
 }
 
 func countMatches(content []byte, pattern string) int {

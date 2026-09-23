@@ -24,14 +24,14 @@
 package esocreationpolicy
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmrender"
 )
 
 const chartPath = "infra/helm/loopzero-external-secrets"
@@ -43,7 +43,6 @@ type Config struct {
 
 // Outcome is the summary.
 type Outcome struct {
-	Warn     bool
 	Failures []string
 }
 
@@ -66,18 +65,14 @@ func Check(cfg Config) (Outcome, error) {
 	if _, err := os.Stat(chart); errors.Is(err, fs.ErrNotExist) {
 		return Outcome{}, ErrChartMissing
 	}
-	if _, err := exec.LookPath("helm"); err != nil {
-		return Outcome{Warn: true}, nil
+	out, err := helmrender.Helm{Release: "loopzero-external-secrets"}.Render(chart, []string{"envName=test"})
+	if errors.Is(err, helmrender.ErrHelmUnavailable) {
+		return Outcome{}, err
 	}
-
-	cmd := exec.Command("helm", "template", "loopzero-external-secrets", chart, "--set", "envName=test")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return Outcome{Failures: []string{fmt.Sprintf("helm template failed: %v\n%s", err, stderr.String())}}, ErrViolations
+	if err != nil {
+		return Outcome{Failures: []string{fmt.Sprintf("helm template failed: %v", err)}}, ErrViolations
 	}
-	rendered := stdout.Bytes()
+	rendered := []byte(out)
 
 	var failures []string
 

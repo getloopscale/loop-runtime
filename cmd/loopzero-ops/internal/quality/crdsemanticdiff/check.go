@@ -16,14 +16,13 @@
 package crdsemanticdiff
 
 import (
-	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmrender"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -164,22 +163,13 @@ func walkAndStrip(node any) {
 	}
 }
 
-// renderChart runs `helm template <chartPath>`. When the override is set,
-// returns it verbatim (test hook — keeps unit tests hermetic without helm).
+// renderChart renders the chart through quality/helmrender. When the override
+// is set, returns it verbatim (test hook — keeps unit tests hermetic without helm).
 func renderChart(chartPath, override string) (string, error) {
 	if override != "" {
 		return override, nil
 	}
-	// #nosec G204 -- chartPath is a repo-internal chart dir (charts/loopzero-crds),
-	// resolved from config defaults, not user input.
-	cmd := exec.Command("helm", "template", chartPath)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("helm template %s: %w: %s", chartPath, err, stderr.String())
-	}
-	return string(out), nil
+	return helmrender.Helm{}.Render(chartPath, nil)
 }
 
 // listSourceFiles returns sorted `loopzero.io_*.yaml` files in dir.

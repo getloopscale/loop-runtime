@@ -118,7 +118,7 @@ func Check(cfg Config) (*Outcome, error) {
 	outcome := &Outcome{Pass: true}
 	r := cfg.Renderer
 	if r == nil {
-		r = helmRenderer{}
+		r = productionRenderer
 	}
 
 	pairs, err := discoverPairs(cfg.RepoRoot)

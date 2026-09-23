@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmrender"
 )
 
 func TestCheck_ChartMissing_FAIL(t *testing.T) {
@@ -19,20 +21,16 @@ func TestCheck_ChartMissing_FAIL(t *testing.T) {
 	}
 }
 
-func TestCheck_HelmAbsent_WARN(t *testing.T) {
+// Without helm the gate cannot render what it asserts on; that is an error,
+// never an advisory pass (quality/helmrender's policy).
+func TestCheck_HelmAbsent_IsErrHelmUnavailable(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, chartPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	oldPath := os.Getenv("PATH")
-	defer os.Setenv("PATH", oldPath)
-	os.Setenv("PATH", "/nonexistent")
-	outcome, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("expected nil (WARN), got %v", err)
-	}
-	if !outcome.Warn {
-		t.Fatalf("expected Warn=true, got Warn=%v", outcome.Warn)
+	t.Setenv("PATH", "/nonexistent")
+	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, helmrender.ErrHelmUnavailable) {
+		t.Fatalf("want helmrender.ErrHelmUnavailable, got %v", err)
 	}
 }
 
