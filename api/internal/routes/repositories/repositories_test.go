@@ -9,11 +9,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/ports"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/ports"
 
 	"github.com/getloopscale/loopzero/api/internal/github"
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
@@ -458,7 +459,7 @@ func TestRepositories_Connect_AutoDeployOmitted_DefaultsTrue(t *testing.T) {
 // recordingDeployer reports the context the connect-then-deploy ran under.
 type recordingDeployer struct{ ctxErr chan error }
 
-func (d recordingDeployer) HandlePush(ctx context.Context, _, _, _ string, _ int64, _, _, _, _ string) error {
+func (d recordingDeployer) HandlePush(ctx context.Context, _ github.PushRequest) error {
 	d.ctxErr <- ctx.Err()
 	return nil
 }

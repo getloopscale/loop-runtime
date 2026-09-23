@@ -73,8 +73,7 @@ type RepoIntrospector interface {
 // *github.AutoDeployer (DIP). Mirrors AutoDeployer.HandlePush signature
 // verbatim — see api/internal/github/autodeploy.go.
 type Autodeployer interface {
-	HandlePush(ctx context.Context, repoFullName, branch, commitSHA string,
-		installationID int64, tenantID, projectName, commitMessage, senderLogin string) error
+	HandlePush(ctx context.Context, req github.PushRequest) error
 }
 
 // RepositoryHandler handles project↔GitHub repository linking.
@@ -467,9 +466,11 @@ func (h *RepositoryHandler) triggerConnectThenDeploy(ctx context.Context, tenant
 		// but not the server: cancelled on graceful stop.
 		bgCtx, cancel := context.WithTimeout(h.serverCtx, 5*time.Minute)
 		defer cancel()
-		if depErr := deployer.HandlePush(bgCtx, repoFull, branch, head.SHA,
-			instID, tenantID, projectName,
-			head.CommitMessage, head.AuthorLogin); depErr != nil {
+		if depErr := deployer.HandlePush(bgCtx, github.PushRequest{
+			RepoFullName: repoFull, Branch: branch, CommitSHA: head.SHA, InstallationID: instID,
+			TenantID: tenantID, ProjectName: projectName,
+			CommitMessage: head.CommitMessage, SenderLogin: head.AuthorLogin,
+		}); depErr != nil {
 			slog.Error("connect-then-deploy: HandlePush failed",
 				"error", depErr, "project", projectName, "sha", head.SHA)
 		}

@@ -22,8 +22,7 @@ type linkedRepoLookup interface {
 
 // pushDeployer starts an auto-deploy for one push.
 type pushDeployer interface {
-	HandlePush(ctx context.Context, repoFullName, branch, commitSHA string,
-		installationID int64, tenantID, projectName, commitMessage, senderLogin string) error
+	HandlePush(ctx context.Context, req github.PushRequest) error
 }
 
 // installationRegistry records GitHub App installations.
@@ -79,11 +78,11 @@ func newPushHandler(shutdownCtx context.Context, repos linkedRepoLookup, deploye
 			// cannot hang forever.
 			deployCtx, cancel := context.WithTimeout(shutdownCtx, 5*time.Minute)
 			defer cancel()
-			if err := deployer.HandlePush(deployCtx,
-				event.Repository.FullName, event.Branch(), event.After,
-				event.Installation.ID, linked.TenantID, linked.ProjectName,
-				commitMsg, event.Sender.Login,
-			); err != nil {
+			if err := deployer.HandlePush(deployCtx, github.PushRequest{
+				RepoFullName: event.Repository.FullName, Branch: event.Branch(), CommitSHA: event.After,
+				InstallationID: event.Installation.ID, TenantID: linked.TenantID, ProjectName: linked.ProjectName,
+				CommitMessage: commitMsg, SenderLogin: event.Sender.Login,
+			}); err != nil {
 				log.Error("github webhook: auto-deploy failed", "error", err)
 			}
 		}()

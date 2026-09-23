@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/api/internal/github"
 	ghwebhook "github.com/getloopscale/loopzero/api/internal/github/webhook"
 	"github.com/getloopscale/loopzero/api/internal/services/preview"
 )
@@ -25,7 +26,7 @@ func (f failingRepoLookup) GetByRepo(context.Context, string) (*store.ProjectRep
 
 type unusedDeployer struct{}
 
-func (unusedDeployer) HandlePush(context.Context, string, string, string, int64, string, string, string, string) error {
+func (unusedDeployer) HandlePush(context.Context, github.PushRequest) error {
 	return nil
 }
 
