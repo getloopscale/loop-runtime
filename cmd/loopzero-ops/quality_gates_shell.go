@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/archivescriptrepo"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/danglingdata"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/danglingrefs"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/installgithooks"
@@ -26,32 +25,6 @@ import (
 // former quality_subcmd.go god file. Each func is referenced as a Run in
 // gateRegistry (quality_registry.go) — the single source of truth
 // (ADR 2026-07-03-m9-step7-gate-registration-mechanism).
-
-// runArchiveScriptRepoRoot enforces T1.2 of plan m1-commit-canonical-30-fixes —
-// no script in archive/canonical-tests-v1/scripts/local/ may resolve REPO_ROOT
-// via 3-dirs-up ($(dirname "$0")/../../..); canonical post-quarantine 289cf9d6
-// is 4-dirs-up.
-// Migrated from infra/tests/check-archive-script-repo-root_test.sh
-// (M-Migrate2 2026-07-10 M16 T2.2 Wave 1).
-func runArchiveScriptRepoRoot(args []string) int {
-	fs := flag.NewFlagSet("archive-script-repo-root", flag.ContinueOnError)
-	root := fs.String("root", ".", "repo root directory")
-	if err := fs.Parse(args); err != nil {
-		return 1
-	}
-	resolveDotRoot(root)
-	outcome, err := archivescriptrepo.Check(archivescriptrepo.Config{RepoRoot: *root})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "archive-script-repo-root: FAIL — %d 3-dirs-up violation(s):\n", len(outcome.Failures))
-		for _, f := range outcome.Failures {
-			fmt.Fprintf(os.Stderr, "  %s\n", f)
-		}
-		fmt.Fprintln(os.Stderr, "Fix: replace `$(dirname \"$0\")/../../..` with `$(dirname \"$0\")/../../../..` (canonical post-quarantine 289cf9d6).")
-		return 1
-	}
-	fmt.Println("archive-script-repo-root: PASS — no 3-dirs-up REPO_ROOT resolution in archive/canonical-tests-v1/scripts/local/")
-	return 0
-}
 
 // runDanglingDataRefs is the mirror backstop: fail if a deleted config/data
 // file is still referenced (live) by an executable caller. Closes the

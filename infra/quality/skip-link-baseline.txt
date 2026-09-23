@@ -92,7 +92,6 @@ cmd/loopzero-ops/internal/quality/agplisolation/check_failclosed_test.go	t.Skip(
 cmd/loopzero-ops/internal/quality/allowlistsunsets/check_test.go	t.Skip("python3 not on PATH; skipping (this gate is a driver for the Python script)")
 cmd/loopzero-ops/internal/quality/allowlistsunsets/check_test.go	t.Skip("could not locate the Python gate within 8 parent dirs")
 cmd/loopzero-ops/internal/quality/allowlistsunsets/check_test.go	t.Skip("python3 not on PATH")
-cmd/loopzero-ops/internal/quality/archivescriptrepo/check_test.go	t.Skipf("could not locate ROADMAP.md from %s (skipping)", cwd)
 cmd/loopzero-ops/internal/quality/caddyfilenodockerip/check_test.go	t.Skip("could not locate infra/local/Caddyfile within 8 parent dirs; skipping real-repo assertion")
 cmd/loopzero-ops/internal/quality/canonicalfixturerepo/check_failclosed_test.go	t.Skip("permission-based walk-error test needs non-root")
 cmd/loopzero-ops/internal/quality/chartdefaulttags/check_test.go	t.Skipf("%s", out.Reason)
