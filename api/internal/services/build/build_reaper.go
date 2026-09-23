@@ -34,15 +34,35 @@ type BuildReaperConfig struct {
 	CellID string
 }
 
-// DefaultBuildReaperConfig returns the spec-defined timeouts.
+// DefaultBuildReaperConfig returns the per-state timeouts the build state
+// machine declares (pkg/statemachine/build.go), so the machine stays the one
+// owner of those budgets; deployments override them through BUILD_*_TIMEOUT.
 func DefaultBuildReaperConfig() BuildReaperConfig {
-	return BuildReaperConfig{
-		QueueTimeout:     5 * time.Minute,
-		RunningTimeout:   30 * time.Minute,
-		ReleasingTimeout: 10 * time.Minute,
-		CancelTimeout:    60 * time.Second,
-		Interval:         30 * time.Second,
+	cfg := BuildReaperConfig{Interval: 30 * time.Second}
+	for _, tc := range statemachine.NewBuildTypedMachine().Timeouts() {
+		switch statemachine.BuildPhase(tc.State) {
+		case statemachine.BPhQueued:
+			cfg.QueueTimeout = tc.Timeout
+		case statemachine.BPhRunning:
+			cfg.RunningTimeout = tc.Timeout
+		case statemachine.BPhReleasing:
+			cfg.ReleasingTimeout = tc.Timeout
+		case statemachine.BPhCancelling:
+			cfg.CancelTimeout = tc.Timeout
+		}
 	}
+	return cfg
+}
+
+// buildTimeoutEvents maps each state the build machine times out to the event
+// the reaper fires when the budget is exceeded. Each pair is a legal machine
+// edge (TestBuildTimeoutEvents_MatchTheMachineTimeouts), and this table is the
+// only place the reaper encodes it.
+var buildTimeoutEvents = map[statemachine.BuildPhase]statemachine.BuildPhaseEvent{
+	statemachine.BPhQueued:     statemachine.BPEventQueueTimeout,
+	statemachine.BPhRunning:    statemachine.BPEventTimeout,
+	statemachine.BPhReleasing:  statemachine.BPEventReleaseTimeout,
+	statemachine.BPhCancelling: statemachine.BPEventCancelTimeout,
 }
 
 // StaleBuild represents a build that has exceeded its timeout.
@@ -157,21 +177,35 @@ func reaperStuckPodReason(stuckPodReason string) string {
 // Beta Logs Gate Criterion 6 — when a state-machine timeout fires, the
 // CLI exit message MUST include a likely cause so the operator has a
 // starting point for diagnosis. Each branch returns:
-//   - WHAT timed out (state + budget — drift-detector: matches pkg/statemachine/build.go:66)
+//   - WHAT timed out (state + the budget cfg actually applied — the budgets
+//     are configurable, so a hard-coded default would misreport)
 //   - LIKELY CAUSE (top 1-2 hypotheses observed in dogfood)
 //   - NEXT STEP (specific CLI command to run)
-func reaperReason(event statemachine.BuildPhaseEvent) string {
+func reaperReason(event statemachine.BuildPhaseEvent, cfg BuildReaperConfig) string {
 	switch event {
 	case statemachine.BPEventQueueTimeout:
-		return "Build was QUEUED for more than 5 minutes. Likely cause: build cluster is at capacity OR a previous build is still using the per-tenant concurrency slot. Next: run `loopzero status` to see pending builds; consider canceling a stuck build with `loopzero cancel`."
+		return "Build was QUEUED for more than " + humanBudget(cfg.QueueTimeout) + ". Likely cause: build cluster is at capacity OR a previous build is still using the per-tenant concurrency slot. Next: run `loopzero status` to see pending builds; consider canceling a stuck build with `loopzero cancel`."
 	case statemachine.BPEventTimeout:
-		return "Build was RUNNING for more than 30 minutes. Likely cause: image build step is slow (large layers, npm install resolving many packages) OR the build container is hung on a network call. Next: run `loopzero logs --build <id>` and check the LAST log line — that's the step where the build stalled."
+		return "Build was RUNNING for more than " + humanBudget(cfg.RunningTimeout) + ". Likely cause: image build step is slow (large layers, npm install resolving many packages) OR the build container is hung on a network call. Next: run `loopzero logs --build <id>` and check the LAST log line — that's the step where the build stalled."
 	case statemachine.BPEventReleaseTimeout:
-		return "Build was RELEASING (image built, release activation in flight) for more than 10 minutes. Likely cause: deployment sync is slow OR the workload cluster is unhealthy. Next: run `loopzero status` to see if the release became active; if not, retry with `loopzero deploy`."
+		return "Build was RELEASING (image built, release activation in flight) for more than " + humanBudget(cfg.ReleasingTimeout) + ". Likely cause: deployment sync is slow OR the workload cluster is unhealthy. Next: run `loopzero status` to see if the release became active; if not, retry with `loopzero deploy`."
 	case statemachine.BPEventCancelTimeout:
-		return "Cancellation did not complete within 60s. The build pod may need manual cleanup. Next: run `loopzero status` to confirm the build moved to CANCELLED; if still CANCELLING, contact support."
+		return "Cancellation did not complete within " + humanBudget(cfg.CancelTimeout) + ". The build pod may need manual cleanup. Next: run `loopzero status` to confirm the build moved to CANCELLED; if still CANCELLING, contact support."
 	default:
 		return "Build reaped due to timeout. Run `loopzero logs --build <id>` for context."
+	}
+}
+
+// humanBudget renders a timeout for the user: "60s" below two minutes, "N
+// minutes" for whole minutes, Go's duration syntax otherwise.
+func humanBudget(d time.Duration) string {
+	switch {
+	case d < 2*time.Minute:
+		return fmt.Sprintf("%ds", int(d/time.Second))
+	case d%time.Minute == 0:
+		return fmt.Sprintf("%d minutes", int(d/time.Minute))
+	default:
+		return d.String()
 	}
 }
 
@@ -241,7 +275,7 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 		if stuckPodReason != "" {
 			reason = reaperStuckPodReason(stuckPodReason)
 		} else {
-			reason = reaperReason(s.Event)
+			reason = reaperReason(s.Event, r.cfg)
 		}
 
 		err = r.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
@@ -352,17 +386,8 @@ func (c *PostgresStaleBuildChecker) FindStaleBuilds(ctx context.Context, cellID 
 			return nil, fmt.Errorf("scan stale build: %w", err)
 		}
 
-		var event statemachine.BuildPhaseEvent
-		switch statemachine.BuildPhase(status) {
-		case statemachine.BPhQueued:
-			event = statemachine.BPEventQueueTimeout
-		case statemachine.BPhRunning:
-			event = statemachine.BPEventTimeout
-		case statemachine.BPhReleasing:
-			event = statemachine.BPEventReleaseTimeout
-		case statemachine.BPhCancelling:
-			event = statemachine.BPEventCancelTimeout
-		default:
+		event, timesOut := buildTimeoutEvents[statemachine.BuildPhase(status)]
+		if !timesOut {
 			continue
 		}
 
