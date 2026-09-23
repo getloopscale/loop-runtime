@@ -6,6 +6,7 @@ package placement
 import (
 	"context"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -848,7 +849,7 @@ func TestNewAdvisoryLockSerializer_NilPool_ReturnsNil(t *testing.T) {
 // --- TxFromContext ---
 
 func TestTxFromContext_NoTx_ReturnsNil(t *testing.T) {
-	tx := TxFromContext(context.Background())
+	tx := dbtx.TxFromContext(context.Background())
 	if tx != nil {
 		t.Error("expected nil tx from context without tx")
 	}

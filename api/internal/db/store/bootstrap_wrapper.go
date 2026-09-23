@@ -13,7 +13,7 @@ package store
 // The 1 prod call site (api/cmd/setup_stores.go:90) uses struct-
 // literal `&db.PostgresBootstrapStore{DB: dbAdapter}` — preserved.
 //
-// MEET-053 D-01 SERIALIZABLE-via-TxFromContext pattern preserved:
+// MEET-053 D-01 SERIALIZABLE-via-dbtx.TxFromContext pattern preserved:
 // when placement runs AssignCell under the advisory lock serializer,
 // it injects the transaction into the context. The wrapper uses
 // TxFromContext to pick up that transaction so count-and-pick and
@@ -28,8 +28,8 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
@@ -60,8 +60,8 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req ports.Bootst
 	// injects the transaction into the context. Using it here ensures
 	// count-and-pick + INSERT run in the same transaction.
 	conn := s.DB
-	if tx := placement.TxFromContext(ctx); tx != nil {
-		conn = &db.PgxTxAdapter{Tx: tx}
+	if tx := dbtx.TxFromContext(ctx); tx != nil {
+		conn = tx
 	}
 
 	bridge, ok := conn.(db.SqlcBridge)

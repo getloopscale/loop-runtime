@@ -20,15 +20,15 @@ package store
 import (
 	"context"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // GetMemberships returns all tenant memberships for a given user ID.
-func (s *PostgresMembershipStore) GetMemberships(ctx context.Context, userID string) ([]auth.TenantMembership, error) {
+func (s *PostgresMembershipStore) GetMemberships(ctx context.Context, userID string) ([]ports.TenantMembership, error) {
 	bridge, ok := s.DB.(db.SqlcBridge)
 	if !ok {
 		return nil, fmt.Errorf("membership store: DBTX %T does not implement SqlcBridge", s.DB)
@@ -39,9 +39,9 @@ func (s *PostgresMembershipStore) GetMemberships(ctx context.Context, userID str
 	if err != nil {
 		return nil, fmt.Errorf("membership store: query failed: %w", err)
 	}
-	out := make([]auth.TenantMembership, 0, len(rows))
+	out := make([]ports.TenantMembership, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, auth.TenantMembership{
+		out = append(out, ports.TenantMembership{
 			TenantID: r.TenantID,
 			Role:     r.Role,
 		})

@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"net/http"
 	"strings"
 	"sync"
@@ -48,11 +49,9 @@ type TokenValidator interface {
 	ValidateToken(ctx context.Context, token string) (*TokenValidationResult, error)
 }
 
-// TenantMembership represents a user's membership in a tenant.
-type TenantMembership struct {
-	TenantID string
-	Role     string
-}
+// TenantMembership represents a user's membership in a tenant. The type is
+// owned by ports so the store that reads it does not import this middleware.
+type TenantMembership = ports.TenantMembership
 
 // MembershipStore retrieves tenant memberships for a user (DIP — abstracts DB).
 type MembershipStore interface {

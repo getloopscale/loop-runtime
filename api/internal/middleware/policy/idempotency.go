@@ -14,6 +14,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/getloopscale/loopzero/api/internal/ports"
+
 	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
@@ -23,15 +25,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// IdempotencyRecord holds a cached idempotent response.
-type IdempotencyRecord struct {
-	Key            string
-	Endpoint       string
-	TenantID       string
-	RequestHash    string
-	ResponseStatus int
-	ResponseBody   []byte
-}
+// IdempotencyRecord holds a cached idempotent response. The type is owned by
+// ports so the store that persists it does not import this middleware.
+type IdempotencyRecord = ports.IdempotencyRecord
 
 // IdempotencyStore abstracts persistence for idempotency keys (DIP).
 type IdempotencyStore interface {
