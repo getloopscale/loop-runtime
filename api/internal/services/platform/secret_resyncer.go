@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // namespaceTerminatingRetryWindow bounds how long ResyncEnv waits for a
@@ -62,6 +63,13 @@ type SecretK8sCreator interface {
 	CreateSecret(ctx context.Context, tenantID, projectID, env, app, name, value string) error
 }
 
+// ErrSecretResyncerMisconfigured is returned by a resyncer wired without its
+// Store or K8s creator.
+var ErrSecretResyncerMisconfigured = &loopzeroerrors.LoopZeroError{
+	Code:    loopzeroerrors.ErrInternalError.Code,
+	Message: "secret resyncer: Store and K8s are required",
+}
+
 // ResyncEnv lists all PG secrets in (tenant, project, env) and applies
 // each to the workload cluster via K8s.CreateSecret. Idempotent:
 // existing ExternalSecrets get an Update (per SecretK8sManager
@@ -72,8 +80,11 @@ type SecretK8sCreator interface {
 // being repopulated. The deploy that triggered this resync will see a
 // pod-start failure if a required secret remains missing.
 func (r *SecretResyncer) ResyncEnv(ctx context.Context, tenantID, projectID, env string) error {
+	// Callers skip a resyncer that is not wired at all (a nil interface). One
+	// that IS wired but lacks a dependency is a wiring bug: reporting success
+	// would re-introduce L20 — pods starting before their secrets exist.
 	if r == nil || r.Store == nil || r.K8s == nil {
-		return nil
+		return ErrSecretResyncerMisconfigured
 	}
 	entries, err := r.Store.ListForResync(ctx, tenantID, projectID, env)
 	if err != nil {
@@ -83,9 +94,11 @@ func (r *SecretResyncer) ResyncEnv(ctx context.Context, tenantID, projectID, env
 		return nil // nothing to resync
 	}
 	var firstErr error
+	failed := 0
 	for _, e := range entries {
 		syncErr := r.syncOneWithTerminatingRetry(ctx, tenantID, projectID, env, e)
 		if syncErr != nil {
+			failed++
 			if r.Logger != nil {
 				r.Logger.Error("secret resync: ExternalSecret create/update failed",
 					"tenant_id", tenantID,
@@ -103,7 +116,7 @@ func (r *SecretResyncer) ResyncEnv(ctx context.Context, tenantID, projectID, env
 	}
 	if firstErr != nil {
 		return fmt.Errorf("secret_resyncer: %d/%d secrets failed to sync (first: %w)",
-			countFailed(entries, firstErr), len(entries), firstErr)
+			failed, len(entries), firstErr)
 	}
 	if r.Logger != nil {
 		r.Logger.Info("secret resync completed",
@@ -114,16 +127,6 @@ func (r *SecretResyncer) ResyncEnv(ctx context.Context, tenantID, projectID, env
 		)
 	}
 	return nil
-}
-
-// countFailed is a placeholder for tracking how many secrets failed —
-// the current impl returns 1 when firstErr is set since we propagate
-// only firstErr. Future enhancement: track per-secret failure list.
-func countFailed(entries []store.SecretResyncEntry, firstErr error) int {
-	if firstErr == nil {
-		return 0
-	}
-	return 1 // conservative — only firstErr is captured today
 }
 
 // syncOneWithTerminatingRetry wraps K8s.CreateSecret with bounded retry

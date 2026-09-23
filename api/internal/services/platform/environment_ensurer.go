@@ -97,6 +97,13 @@ type EnvironmentEnsurer struct {
 	PollInterval time.Duration
 }
 
+// ErrEnvironmentEnsurerMisconfigured is returned by an ensurer wired without
+// its Lister or Adder.
+var ErrEnvironmentEnsurerMisconfigured = &loopzeroerrors.LoopZeroError{
+	Code:    loopzeroerrors.ErrInternalError.Code,
+	Message: "environment ensurer: Lister and Adder are required",
+}
+
 // EnsureEnvironment checks if the environment exists; creates + waits if not.
 //
 // Errors:
@@ -104,12 +111,11 @@ type EnvironmentEnsurer struct {
 //   - LoopZeroError(ENV_PROVISION_TIMEOUT) if operator doesn't reconcile in WaitTimeout
 //   - LoopZeroError(ENV_PROVISION_FAILED) wrapping the underlying error otherwise
 func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, project, envName string) error {
-	if e == nil {
-		return nil
-	}
-	if e.Lister == nil || e.Adder == nil {
-		// Defensive: misconfigured ensurer — fail open (legacy behavior).
-		return nil
+	// Callers skip an ensurer that is not wired at all (a nil interface). One
+	// that IS wired but lacks a dependency is a wiring bug, and reporting
+	// success would let the deploy proceed as if the environment existed.
+	if e == nil || e.Lister == nil || e.Adder == nil {
+		return ErrEnvironmentEnsurerMisconfigured
 	}
 
 	// 1. Cheap existence check — idempotent no-op for pre-existing tuples.

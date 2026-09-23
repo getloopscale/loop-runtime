@@ -7,6 +7,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/ports"
@@ -135,7 +136,14 @@ func setupOrchestrator(
 	// `scaleApply` closure below reuses the same scalingStore (single source
 	// of truth for app_scaling_config IO).
 	scalingStore := store.NewPostgresScalingStore(dbAdapter)
-	scalingResolver := scaling.NewDBScalingResolver(scalingStore)
+	scalingResolver, err := scaling.NewDBScalingResolver(scalingStore)
+	if err != nil {
+		// Unreachable with the store built on the line above; a wiring change
+		// that breaks it must stop the process rather than deploy the yaml's
+		// scaling while ignoring every persisted config.
+		logger.Error("setup orchestrator: scaling resolver", "error", err)
+		os.Exit(1)
+	}
 
 	// One container delivery activator serves both build activation and
 	// rollback, so the two write through the same outbox and read manifests

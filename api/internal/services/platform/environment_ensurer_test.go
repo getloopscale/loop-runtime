@@ -147,21 +147,20 @@ func TestEnsureEnvironment_AlreadyExistsErrorIsSuccess(t *testing.T) {
 	}
 }
 
-// TestEnsureEnvironment_NilStoreNoOp asserts safe behavior when ensurer is
-// misconfigured (Lister or Adder nil).
-// Plan T2.2 RED #5.
-func TestEnsureEnvironment_NilStoreNoOp(t *testing.T) {
+// A wired ensurer without its Lister or Adder is a wiring bug. Reporting
+// success would let the deploy proceed as if the environment existed (the
+// callers already skip an ensurer that is not wired at all).
+func TestEnsureEnvironment_MisconfiguredEnsurerFailsLoud(t *testing.T) {
 	e := &EnvironmentEnsurer{}
-	if err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview"); err != nil {
-		t.Errorf("expected nil for misconfigured ensurer (fail open), got %v", err)
+	if err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview"); !errors.Is(err, ErrEnvironmentEnsurerMisconfigured) {
+		t.Errorf("want ErrEnvironmentEnsurerMisconfigured, got %v", err)
 	}
 }
 
-// TestEnsureEnvironment_NilReceiver asserts a nil pointer also no-ops safely.
-func TestEnsureEnvironment_NilReceiver(t *testing.T) {
+func TestEnsureEnvironment_NilReceiverFailsLoud(t *testing.T) {
 	var e *EnvironmentEnsurer
-	if err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview"); err != nil {
-		t.Errorf("expected nil for nil receiver, got %v", err)
+	if err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview"); !errors.Is(err, ErrEnvironmentEnsurerMisconfigured) {
+		t.Errorf("want ErrEnvironmentEnsurerMisconfigured, got %v", err)
 	}
 }
 

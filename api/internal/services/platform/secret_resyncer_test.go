@@ -33,6 +33,7 @@ package platform
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -157,25 +158,24 @@ func TestSecretResyncer_L20_FirstDeploy(t *testing.T) {
 // h.secretResync != nil`). Without this test, a wiring drop that swaps
 // the wired resyncer for nil would silently re-introduce L20 — pods
 // would fail to start at first deploy with no operator-visible signal.
-func TestSecretResyncer_L20_NilResyncer_NotSynced(t *testing.T) {
-	// Nil receiver path — must not panic.
+func TestSecretResyncer_L20_MisconfiguredResyncerFailsLoud(t *testing.T) {
+	// A wired resyncer missing a dependency is a wiring bug: reporting success
+	// would silently re-introduce L20 (pods start before their secrets exist).
 	var nilR *SecretResyncer
-	if err := nilR.ResyncEnv(context.Background(), "tn-a", "proj-x", "production"); err != nil {
-		t.Errorf("nil receiver ResyncEnv must return nil, got %v", err)
+	if err := nilR.ResyncEnv(context.Background(), "tn-a", "proj-x", "production"); !errors.Is(err, ErrSecretResyncerMisconfigured) {
+		t.Errorf("nil receiver: want ErrSecretResyncerMisconfigured, got %v", err)
 	}
 
-	// Nil Store path — must not panic, must short-circuit.
 	rStore := &SecretResyncer{Store: nil, K8s: &fakeSecretK8sCreator{}}
-	if err := rStore.ResyncEnv(context.Background(), "tn-a", "proj-x", "production"); err != nil {
-		t.Errorf("nil Store ResyncEnv must return nil, got %v", err)
+	if err := rStore.ResyncEnv(context.Background(), "tn-a", "proj-x", "production"); !errors.Is(err, ErrSecretResyncerMisconfigured) {
+		t.Errorf("nil Store: want ErrSecretResyncerMisconfigured, got %v", err)
 	}
 
-	// Nil K8s path — must not panic, must short-circuit (do NOT list
-	// secrets if we cannot apply them; avoids unnecessary PG load).
+	// Nil K8s must refuse before listing: secrets it cannot apply are not read.
 	store := &fakeSecretResyncStore{}
 	rK8s := &SecretResyncer{Store: store, K8s: nil}
-	if err := rK8s.ResyncEnv(context.Background(), "tn-a", "proj-x", "production"); err != nil {
-		t.Errorf("nil K8s ResyncEnv must return nil, got %v", err)
+	if err := rK8s.ResyncEnv(context.Background(), "tn-a", "proj-x", "production"); !errors.Is(err, ErrSecretResyncerMisconfigured) {
+		t.Errorf("nil K8s: want ErrSecretResyncerMisconfigured, got %v", err)
 	}
 	if store.calls != 0 {
 		t.Errorf("nil K8s short-circuit MUST NOT call ListForResync; got %d calls", store.calls)
@@ -341,5 +341,22 @@ func TestSecretResyncer_NonTerminatingError_FailsFast(t *testing.T) {
 	}
 	if elapsed > 100*time.Millisecond {
 		t.Errorf("non-terminating error MUST fail fast; took %v", elapsed)
+	}
+}
+
+func TestSecretResyncer_ReportsHowManySecretsFailed(t *testing.T) {
+	rs := &fakeSecretResyncStore{entries: []store.SecretResyncEntry{{App: "api", Name: "A"}, {App: "api", Name: "B"}, {App: "api", Name: "C"}}}
+	k8s := &fakeSecretK8sCreator{errFor: func(c secretCall) error {
+		if c.Name == "C" {
+			return nil
+		}
+		return errors.New("forbidden")
+	}}
+	r := &SecretResyncer{Store: rs, K8s: k8s}
+
+	err := r.ResyncEnv(context.Background(), "tn-a", "proj-x", "production")
+
+	if err == nil || !strings.Contains(err.Error(), "2/3 secrets failed") {
+		t.Errorf("want the real failure count 2/3, got %v", err)
 	}
 }

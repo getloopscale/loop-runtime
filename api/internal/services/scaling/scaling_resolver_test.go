@@ -76,7 +76,7 @@ func TestResolve_DBRowOverridesYAML_FixedReplicas(t *testing.T) {
 			}, nil
 		},
 	}
-	r := NewDBScalingResolver(store)
+	r := mustResolver(t, store)
 
 	in := []deploycontracts.AppSpec{makeAppSpec("api", 1)}
 	out, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production", in)
@@ -106,7 +106,7 @@ func TestResolve_DBRowOverridesYAML_HPA(t *testing.T) {
 			}, nil
 		},
 	}
-	r := NewDBScalingResolver(store)
+	r := mustResolver(t, store)
 
 	in := []deploycontracts.AppSpec{makeAppSpec("api", 1)}
 	out, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production", in)
@@ -138,7 +138,7 @@ func TestResolve_DBRowOverridesYAML_KEDA(t *testing.T) {
 			}, nil
 		},
 	}
-	r := NewDBScalingResolver(store)
+	r := mustResolver(t, store)
 
 	in := []deploycontracts.AppSpec{makeAppSpec("api", 1)}
 	out, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production", in)
@@ -166,7 +166,7 @@ func TestResolve_NoDBRow_PreservesYAML(t *testing.T) {
 			return nil, store.ErrScalingConfigNotFound
 		},
 	}
-	r := NewDBScalingResolver(store)
+	r := mustResolver(t, store)
 
 	in := []deploycontracts.AppSpec{makeAppSpec("api", 2)}
 	out, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production", in)
@@ -188,7 +188,7 @@ func TestResolve_MultipleApps_OnlyOverrideMatching(t *testing.T) {
 			return nil, store.ErrScalingConfigNotFound
 		},
 	}
-	r := NewDBScalingResolver(store)
+	r := mustResolver(t, store)
 
 	in := []deploycontracts.AppSpec{makeAppSpec("api", 1), makeAppSpec("worker", 2)}
 	out, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production", in)
@@ -214,7 +214,7 @@ func TestResolve_DBError_PropagatesErr(t *testing.T) {
 			return nil, wantErr
 		},
 	}
-	r := NewDBScalingResolver(store)
+	r := mustResolver(t, store)
 
 	in := []deploycontracts.AppSpec{makeAppSpec("api", 1)}
 	_, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production", in)
@@ -227,22 +227,16 @@ func TestResolve_DBError_PropagatesErr(t *testing.T) {
 	}
 }
 
-func TestResolve_NilStore_ReturnsYAML(t *testing.T) {
-	r := NewDBScalingResolver(nil)
-
-	in := []deploycontracts.AppSpec{makeAppSpec("api", 7)}
-	out, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production", in)
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(out) != 1 || out[0].Replicas != 7 {
-		t.Errorf("expected yaml unchanged when store nil, got %+v", out)
+// A resolver without a store would silently deploy the yaml's scaling and
+// ignore every persisted scaling config; it must not be constructible.
+func TestNewDBScalingResolver_RefusesANilStore(t *testing.T) {
+	if _, err := NewDBScalingResolver(nil); err == nil {
+		t.Fatal("expected an error for a nil store")
 	}
 }
 
 func TestResolve_EmptyApps_ReturnsEmpty(t *testing.T) {
-	r := NewDBScalingResolver(&fakeScalingStore{})
+	r := mustResolver(t, &fakeScalingStore{})
 	out, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -250,4 +244,13 @@ func TestResolve_EmptyApps_ReturnsEmpty(t *testing.T) {
 	if len(out) != 0 {
 		t.Errorf("expected empty slice, got %d apps", len(out))
 	}
+}
+
+func mustResolver(t *testing.T, store ScalingConfigReader) ScalingResolver {
+	t.Helper()
+	r, err := NewDBScalingResolver(store)
+	if err != nil {
+		t.Fatalf("NewDBScalingResolver: %v", err)
+	}
+	return r
 }

@@ -15,10 +15,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // ScalingResolver merges yaml-supplied AppSpecs with persisted scaling
@@ -39,16 +39,18 @@ type ScalingConfigReader interface {
 }
 
 // dbScalingResolver implements ScalingResolver via a ScalingConfigReader.
-// Nil-safe: a nil store falls back to returning the yaml unchanged
-// (defensive — preserves current behavior if wiring missing).
 type dbScalingResolver struct {
 	store ScalingConfigReader
 }
 
-// NewDBScalingResolver constructs a resolver backed by the given store.
-// Passing nil produces a resolver that always returns yaml unchanged.
-func NewDBScalingResolver(store ScalingConfigReader) ScalingResolver {
-	return &dbScalingResolver{store: store}
+// NewDBScalingResolver constructs a resolver backed by the given store. A nil
+// store is refused: a resolver without one would deploy the yaml's scaling and
+// silently ignore every persisted scaling config.
+func NewDBScalingResolver(store ScalingConfigReader) (ScalingResolver, error) {
+	if store == nil {
+		return nil, &loopzeroerrors.LoopZeroError{Code: loopzeroerrors.ErrInternalError.Code, Message: "scaling resolver: store is required"}
+	}
+	return &dbScalingResolver{store: store}, nil
 }
 
 // Resolve walks fromYAML, queries the store for each app, and overrides
@@ -64,11 +66,6 @@ func (r *dbScalingResolver) Resolve(
 	tenantID, projectID, environment string,
 	fromYAML []deploycontracts.AppSpec,
 ) ([]deploycontracts.AppSpec, error) {
-	if r.store == nil {
-		slog.Warn("scaling resolver: store is nil, returning yaml unchanged",
-			"tenant", tenantID, "project", projectID, "environment", environment)
-		return fromYAML, nil
-	}
 	if len(fromYAML) == 0 {
 		return fromYAML, nil
 	}
