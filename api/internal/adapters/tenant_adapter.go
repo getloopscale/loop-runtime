@@ -41,6 +41,7 @@ func (a *TenantDBDeleterAdapter) DeleteTenantsFKOrdered(ctx context.Context, ten
 		Subscriptions:      c.Subscriptions,
 		TenantMembers:      c.TenantMembers,
 		Tenants:            c.Tenants,
+		MeteringCursors:    c.MeteringCursors,
 	}, nil
 }
 

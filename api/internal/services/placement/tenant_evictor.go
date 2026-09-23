@@ -46,6 +46,7 @@ type TenantDeletionCounts struct {
 	Subscriptions      int64 `json:"subscriptions"`
 	TenantMembers      int64 `json:"tenant_members"`
 	Tenants            int64 `json:"tenants"`
+	MeteringCursors    int64 `json:"metering_cursors"`
 }
 
 // TenantDBDeleter abstracts the FK-ordered DB cleanup. Used by EvictTenants
