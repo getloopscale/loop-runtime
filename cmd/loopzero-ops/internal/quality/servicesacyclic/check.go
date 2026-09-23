@@ -8,21 +8,26 @@
 // subpackages, the inter-context import graph MUST stay the acyclic DAG the split
 // produced — a deny-by-default import-linter with an explicit allow-list.
 //
-// The frozen topology (sink = deploycontracts):
+// The frozen topology between the services contexts:
 //
-//	build     → release, scaling, deploycontracts
-//	release   → deploycontracts
-//	scaling   → deploycontracts
-//	preview   → deploycontracts
-//	domain    → deploycontracts
-//	platform  → deploycontracts
+//	build     → release, scaling
+//	release   → (no sibling)
+//	scaling   → (no sibling)
+//	preview   → (no sibling)
+//	domain    → (no sibling)
+//	platform  → (no sibling)
 //	placement → (pure leaf)
-//	deploycontracts    → (pure leaf — imports NO other services subpackage)
+//
+// The shared sink every context depends on, deploycontracts, lives OUTSIDE the
+// services tree at api/internal/deploycontracts (moved there so the services
+// subtree and the build plane no longer import each other). It stays a pure
+// sink: it may import NO services context, and this gate checks that too —
+// otherwise a sink edge back into services would close a cycle through it.
 //
 // Any edge not in the allow-list FAILs: a new reverse edge (e.g. release → build)
-// would re-introduce a cycle; a new cross-leaf edge (placement → deploycontracts) would
-// erode the leaf invariant; a new subpackage not registered here forces a
-// conscious decision instead of silently widening the graph.
+// would re-introduce a cycle; a sink edge (deploycontracts → build) would erode
+// the sink invariant; a new subpackage not registered here forces a conscious
+// decision instead of silently widening the graph.
 //
 // AST-based: only genuine import specs are considered, so a string literal or
 // comment mentioning another context's import path is not a false edge.
@@ -73,6 +78,14 @@ const servicesImportPrefix = "github.com/getloopscale/loopzero/api/internal/serv
 // It cannot collide with a real subpackage (dir names never contain '<').
 const missingRootMarker = "<services-root-missing-or-empty>"
 
+// sinkRoot is the shared contracts package every services context depends on,
+// relative to RepoRoot. It is not a services context, so it is not in allowed;
+// it is scanned with an empty allow-list because it may import no context.
+const sinkRoot = "api/internal/deploycontracts"
+
+// sinkName is how a sink violation is reported in Violation.From.
+const sinkName = "deploycontracts"
+
 // `billing` NAO esta aqui, e a ausencia e' deliberada (B-065). O dominio foi
 // extraido para `../loopzero-cloud` no M4; `api/internal/services/billing` ficou como
 // diretorio VAZIO e nao rastreado, e o registro sobreviveu ao codigo. Um contexto
@@ -87,14 +100,13 @@ const missingRootMarker = "<services-root-missing-or-empty>"
 // subpackages A is permitted to import. A subpackage absent from this map is
 // unknown → fail-closed. An empty set means "pure leaf" (imports no sibling).
 var allowed = map[string]map[string]bool{
-	"build":           {"release": true, "scaling": true, "deploycontracts": true},
-	"release":         {"deploycontracts": true},
-	"scaling":         {"deploycontracts": true},
-	"preview":         {"deploycontracts": true},
-	"domain":          {"deploycontracts": true},
-	"platform":        {"deploycontracts": true},
-	"placement":       {},
-	"deploycontracts": {},
+	"build":     {"release": true, "scaling": true},
+	"release":   {},
+	"scaling":   {},
+	"preview":   {},
+	"domain":    {},
+	"platform":  {},
+	"placement": {},
 }
 
 // Check is the gate entry point.
@@ -177,6 +189,13 @@ func Check(cfg Config) (Outcome, error) {
 		unknown = append(unknown, missingRootMarker)
 	}
 
+	sinkViolations, sinkScanned, err := scanSink(cfg.RepoRoot)
+	if err != nil {
+		return Outcome{}, err
+	}
+	violations = append(violations, sinkViolations...)
+	scanned += sinkScanned
+
 	sort.Strings(unknown)
 	pass := len(violations) == 0 && len(unknown) == 0
 	return Outcome{Pass: pass, Violations: violations, Scanned: scanned, Unknown: unknown}, nil
@@ -232,11 +251,29 @@ func scanContext(dir, ctx string, allowedTargets map[string]bool) ([]Violation, 
 	return violations, scanned, err
 }
 
+// scanSink checks that the shared sink imports no services context. An absent
+// sink is not this gate's concern: domainsinkpurity fails closed when the sink
+// package is missing, and a missing sink cannot import anything.
+func scanSink(repoRoot string) ([]Violation, int, error) {
+	dir := filepath.Join(repoRoot, sinkRoot)
+	info, err := os.Stat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, 0, nil
+		}
+		return nil, 0, fmt.Errorf("stat %s: %w", dir, err)
+	}
+	if !info.IsDir() {
+		return nil, 0, fmt.Errorf("%s is not a directory", dir)
+	}
+	return scanContext(dir, sinkName, nil)
+}
+
 // ActionableFix returns the operator-facing message for FAIL output.
 func ActionableFix() string {
 	return "An inter-context import edge violates the frozen acyclic DAG of " +
 		"api/internal/services (M9 Step 6). Either (a) the dependency belongs in " +
-		"the deploycontracts/ leaf — move the shared symbol there; or (b) the edge is a " +
+		"the api/internal/deploycontracts sink — move the shared symbol there; or (b) the edge is a " +
 		"genuine new dependency that must be reviewed and added to the allow-list " +
 		"in servicesacyclic/check.go with an ADR justifying why it does not create " +
 		"a cycle. Reverse edges (e.g. release importing build) are forbidden — " +

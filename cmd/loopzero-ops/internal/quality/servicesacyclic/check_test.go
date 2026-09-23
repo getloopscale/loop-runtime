@@ -40,7 +40,7 @@ import "github.com/getloopscale/loopzero/api/internal/services/build"
 var _ = build.Z
 `
 
-// deploycontractsLeaf must import no sibling.
+// deploycontractsLeaf is the shared sink importing no services context.
 const deploycontractsLeaf = `package deploycontracts
 
 import "context"
@@ -48,7 +48,7 @@ import "context"
 var _ = context.Background
 `
 
-// deploycontractsImportsBuild breaks the leaf invariant.
+// deploycontractsImportsBuild breaks the sink invariant.
 const deploycontractsImportsBuild = `package deploycontracts
 
 import "github.com/getloopscale/loopzero/api/internal/services/build"
@@ -102,13 +102,17 @@ func TestCheck_ReverseEdgeFails(t *testing.T) {
 
 func TestCheck_SharedLeafInvariant(t *testing.T) {
 	root := t.TempDir()
+	writeGo(t, root, "api/internal/services/placement/p.go", placementLeaf)
 	writeGo(t, root, "api/internal/deploycontracts/s.go", deploycontractsImportsBuild)
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
 	if out.Pass {
-		t.Fatal("deploycontracts must import no sibling; deploycontracts → build must FAIL")
+		t.Fatal("deploycontracts must import no services context; deploycontracts → build must FAIL")
+	}
+	if len(out.Violations) != 1 || out.Violations[0].From != "deploycontracts" || out.Violations[0].To != "build" {
+		t.Errorf("want exactly one deploycontracts→build violation, got %+v", out.Violations)
 	}
 }
 
@@ -255,6 +259,7 @@ func TestCheck_ServicesPathNotADirErrors(t *testing.T) {
 // clone limpo, passava. Mesmo commit, vereditos opostos.
 func TestCheck_DiretorioVazioNaoEContextoDesconhecido(t *testing.T) {
 	root := t.TempDir()
+	writeGo(t, root, "api/internal/services/placement/p.go", placementLeaf)
 	writeGo(t, root, "api/internal/deploycontracts/s.go", deploycontractsLeaf)
 	if err := os.MkdirAll(filepath.Join(root, "api/internal/services/billing"), 0o755); err != nil {
 		t.Fatalf("criando diretorio vazio: %v", err)
