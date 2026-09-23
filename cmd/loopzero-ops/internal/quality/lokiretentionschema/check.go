@@ -19,10 +19,10 @@ package lokiretentionschema
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
 	"gopkg.in/yaml.v3"
 )
 
@@ -74,7 +74,7 @@ func Check(cfg Config) (Outcome, error) {
 
 	var failures []string
 
-	content, err := readFile(lokiPath)
+	content, err := qgshell.StatAndRead(lokiPath)
 	if err != nil {
 		failures = append(failures, fmt.Sprintf("loki values.yaml MISSING: %s", lokiValuesRel))
 		return Outcome{Failures: failures}, ErrViolations
@@ -121,13 +121,4 @@ func Check(cfg Config) (Outcome, error) {
 		return Outcome{Failures: failures}, ErrViolations
 	}
 	return Outcome{}, nil
-}
-
-func readFile(path string) ([]byte, error) {
-	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
-		return nil, err
-	} else if err != nil {
-		return nil, fmt.Errorf("stat %s: %w", path, err)
-	}
-	return os.ReadFile(path)
 }
