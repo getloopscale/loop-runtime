@@ -28,40 +28,7 @@ type BuildOrchestratorAdapter struct {
 }
 
 func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req builds.SubmitBuildInput) (*builds.SubmitBuildResult, error) {
-	var apps []deploycontracts.AppSpec
-	for _, app := range req.Apps {
-		appType := app.Type
-		if appType == "" {
-			appType = "server"
-		}
-		appPort := app.Port
-		if appPort == 0 && appType == "server" {
-			appPort = 8080
-		}
-		spec := deploycontracts.AppSpec{
-			Name:      app.Name,
-			Type:      appType,
-			Port:      appPort,
-			Path:      app.Path,
-			Runtime:   app.Runtime, // F-dom-2: services.json runtime is the build-strategy key
-			Build:     app.Build,
-			Start:     app.Start, // T0.2: declared start → canonical Dockerfile CMD
-			Rendering: app.Rendering,
-			Secrets:   app.Secrets,
-			// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059): forward scaling
-			// config to the orchestrator so plan caps and mutual exclusion
-			// can be enforced at the authoritative gate.
-			Replicas: app.Replicas,
-		}
-		if app.Autoscaling != nil {
-			spec.Autoscaling = &deploycontracts.AppAutoscalingSpec{
-				MinReplicas: app.Autoscaling.Min,
-				MaxReplicas: app.Autoscaling.Max,
-				TargetCPU:   app.Autoscaling.TargetCPU,
-			}
-		}
-		apps = append(apps, spec)
-	}
+	apps := appSpecsFromInput(req.Apps)
 
 	resp, err := a.Orch.SubmitBuild(ctx, deploycontracts.SubmitBuildRequest{
 		TenantID:      req.TenantID,
@@ -198,3 +165,43 @@ func (a *BuildOrchestratorAdapter) GetRedeploySource(ctx context.Context, tenant
 // prosa e apenas UM a verificava. Prosa nao compila; esta linha sim, e e ela que faz o
 // criterio conseguir dizer nao.
 var _ builds.BuildOrchestratorService = (*BuildOrchestratorAdapter)(nil)
+
+// appSpecsFromInput translates route-level app inputs into the orchestrator's
+// AppSpec. An app with no type is a server, and a server with no port listens
+// on 8080; other types keep the port they declared (a worker has none).
+func appSpecsFromInput(in []builds.AppInput) []deploycontracts.AppSpec {
+	var apps []deploycontracts.AppSpec
+	for _, app := range in {
+		appType := app.Type
+		if appType == "" {
+			appType = "server"
+		}
+		appPort := app.Port
+		if appPort == 0 && appType == "server" {
+			appPort = 8080
+		}
+		spec := deploycontracts.AppSpec{
+			Name:      app.Name,
+			Type:      appType,
+			Port:      appPort,
+			Path:      app.Path,
+			Runtime:   app.Runtime, // F-dom-2: services.json runtime is the build-strategy key
+			Build:     app.Build,
+			Start:     app.Start, // T0.2: declared start → canonical Dockerfile CMD
+			Rendering: app.Rendering,
+			Secrets:   app.Secrets,
+			// B15: forward scaling config so plan caps and mutual exclusion
+			// are enforced at the authoritative gate.
+			Replicas: app.Replicas,
+		}
+		if app.Autoscaling != nil {
+			spec.Autoscaling = &deploycontracts.AppAutoscalingSpec{
+				MinReplicas: app.Autoscaling.Min,
+				MaxReplicas: app.Autoscaling.Max,
+				TargetCPU:   app.Autoscaling.TargetCPU,
+			}
+		}
+		apps = append(apps, spec)
+	}
+	return apps
+}
