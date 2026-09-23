@@ -167,3 +167,28 @@ func TestPlanTierDisplayName_NamesEveryTierAndKeepsUnknownValuesVisible(t *testi
 		}
 	}
 }
+
+func TestParsePlanTier_AcceptsCanonicalValues(t *testing.T) {
+	for _, raw := range []string{"starter", "pro", "team", "enterprise"} {
+		got, err := ParsePlanTier(raw)
+		if err != nil || got.String() != raw {
+			t.Errorf("ParsePlanTier(%q) = (%q, %v), want (%q, nil)", raw, got, err, raw)
+		}
+	}
+}
+
+func TestParsePlanTier_MapsLegacyGrowthToPro(t *testing.T) {
+	got, err := ParsePlanTier("growth")
+	if err != nil || got != PlanTierPro {
+		t.Errorf("ParsePlanTier(growth) = (%q, %v), want (pro, nil)", got, err)
+	}
+}
+
+func TestParsePlanTier_RejectsUnknownWithoutDefaultingToStarter(t *testing.T) {
+	for _, raw := range []string{"", "gold", "TEAM"} {
+		got, err := ParsePlanTier(raw)
+		if !errors.Is(err, ErrUnknownPlanTier) || got != PlanTierUnknown {
+			t.Errorf("ParsePlanTier(%q) = (%q, %v), want (unknown, ErrUnknownPlanTier)", raw, got, err)
+		}
+	}
+}

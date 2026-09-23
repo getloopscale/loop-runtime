@@ -23,6 +23,7 @@ import (
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
+	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // TenantFixtureSeed is the Go port of
@@ -122,7 +123,16 @@ func (s *TenantFixtureSeed) Run(d Deps) Result {
 	if tenantID == "" {
 		return Result{Verdict: SKIP, Reason: "LOOPZERO_TENANT_ID not set (usually seeded by seed-admin-loopzero-dev)"}
 	}
-	planTier := osGetenvOr(tenantFixturePlanTierEnv, tenantFixtureDefaultPlanTier)
+	rawTier := osGetenvOr(tenantFixturePlanTierEnv, tenantFixtureDefaultPlanTier)
+	tier, err := domain.ParsePlanTier(strings.ToLower(strings.TrimSpace(rawTier)))
+	if err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("%s=%q: %v (expected starter, pro, team or enterprise)", tenantFixturePlanTierEnv, rawTier, err)}
+	}
+	crdPlan, err := tenantCRDPlan(tier)
+	if err != nil {
+		return Result{Verdict: FAIL, Reason: err.Error()}
+	}
+	planTier := tier.String()
 
 	if d.DryRun {
 		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would upsert subscription plan=%s + replay GH webhook + ensure Tenant CR + AppProject for %s", planTier, tenantID)}
@@ -151,7 +161,7 @@ func (s *TenantFixtureSeed) Run(d Deps) Result {
 
 	// Layer 3a + 3b — Tenant CR + AppProject unstructured.
 	if d.CtrlClient != nil {
-		if err := ensureTenantCR(d.Ctx, d.CtrlClient, tenantID, planTier); err != nil {
+		if err := ensureTenantCR(d.Ctx, d.CtrlClient, tenantID, crdPlan); err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3a Tenant CR: %v", err)}
 		}
 		if err := ensureAppProject(d.Ctx, d.CtrlClient, tenantID); err != nil {
@@ -249,24 +259,27 @@ func replayGitHubInstallationWebhook(ctx context.Context, whsec string) error {
 	return nil
 }
 
-// planTierToCRDEnum maps the plan-tier flag to the CRD PlanTier enum.
-// starter → starter / pro → growth / team → enterprise (per CLAUDE.md).
-func planTierToCRDEnum(tier string) string {
-	switch strings.ToLower(tier) {
-	case "team":
-		return "enterprise"
-	case "pro":
-		return "growth"
-	case "starter":
-		return "starter"
+// tenantCRDPlan maps a canonical subscription tier onto the Tenant CRD's plan
+// enum (starter;growth;enterprise, operators/api/v1/tenant_types.go). The CRD
+// predates the four-tier pricing: pro is its "growth", and team — which has no
+// CRD value of its own — takes the enterprise capabilities it was sold with.
+// An unknown tier is an error, never a starter default (ADR D4).
+func tenantCRDPlan(tier domain.PlanTier) (string, error) {
+	switch tier {
+	case domain.PlanTierStarter:
+		return "starter", nil
+	case domain.PlanTierPro:
+		return "growth", nil
+	case domain.PlanTierTeam, domain.PlanTierEnterprise:
+		return "enterprise", nil
 	default:
-		return "starter"
+		return "", fmt.Errorf("no Tenant CRD plan for tier %q: %w", tier, domain.ErrUnknownPlanTier)
 	}
 }
 
 // ensureTenantCR creates or updates the Tenant CR (unstructured — CRD may not
 // be in the scheme in fake-client tests; unstructured decouples).
-func ensureTenantCR(ctx context.Context, cli ctrlclient.Client, tenantID, planTier string) error {
+func ensureTenantCR(ctx context.Context, cli ctrlclient.Client, tenantID, crdPlan string) error {
 	displayName := osGetenvOr("LOOPZERO_TENANT_DISPLAY_NAME", "LoopZero Dev Tenant")
 	tenant := &unstructured.Unstructured{}
 	tenant.SetGroupVersionKind(schema.GroupVersionKind{Group: "loopzero.io", Version: "v1", Kind: "Tenant"})
@@ -275,7 +288,7 @@ func ensureTenantCR(ctx context.Context, cli ctrlclient.Client, tenantID, planTi
 	spec := map[string]any{
 		"cellID":      tenantFixtureCellID,
 		"displayName": displayName,
-		"plan":        planTierToCRDEnum(planTier),
+		"plan":        crdPlan,
 		"environments": []any{
 			map[string]any{
 				"cluster": tenantFixtureEnvCluster,

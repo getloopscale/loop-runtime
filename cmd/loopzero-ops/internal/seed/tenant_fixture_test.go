@@ -4,6 +4,8 @@
 package seed
 
 import (
+	"github.com/getloopscale/loopzero/pkg/domain"
+
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -104,19 +106,51 @@ func stubEnv(t *testing.T, kv map[string]string) func() {
 	return func() { osGetenv = orig }
 }
 
-func TestPlanTierToCRDEnum(t *testing.T) {
-	cases := map[string]string{
-		"team":    "enterprise",
-		"pro":     "growth",
-		"starter": "starter",
-		"":        "starter",
-		"other":   "starter",
-		"TEAM":    "enterprise",
+func TestTenantCRDPlan_MapsEveryCanonicalTier(t *testing.T) {
+	cases := map[domain.PlanTier]string{
+		domain.PlanTierStarter:    "starter",
+		domain.PlanTierPro:        "growth",
+		domain.PlanTierTeam:       "enterprise",
+		domain.PlanTierEnterprise: "enterprise",
 	}
-	for in, want := range cases {
-		if got := planTierToCRDEnum(in); got != want {
-			t.Errorf("planTierToCRDEnum(%q) = %q, want %q", in, got, want)
+	for tier, want := range cases {
+		got, err := tenantCRDPlan(tier)
+		if err != nil || got != want {
+			t.Errorf("tenantCRDPlan(%q) = (%q, %v), want (%q, nil)", tier, got, err, want)
 		}
+	}
+}
+
+func TestTenantCRDPlan_RejectsUnknownTier(t *testing.T) {
+	if got, err := tenantCRDPlan(domain.PlanTierUnknown); err == nil {
+		t.Fatalf("tenantCRDPlan(unknown) = %q, want an error", got)
+	}
+}
+
+// An unrecognised LOOPZERO_PLAN_TIER used to become "starter" silently — the
+// downgrade ADR D4 forbids. It must fail before anything is written.
+func TestTenantFixture_FailsOnUnknownPlanTier(t *testing.T) {
+	defer stubEnv(t, map[string]string{
+		tenantFixtureTenantIDEnv: "tn-x",
+		tenantFixturePlanTierEnv: "gold",
+	})()
+	got := NewTenantFixtureSeed().Run(Deps{Ctx: context.Background(), DryRun: true})
+	if got.Verdict != FAIL {
+		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
+	}
+	if !strings.Contains(got.Reason, "gold") {
+		t.Errorf("Reason should name the rejected value: %q", got.Reason)
+	}
+}
+
+func TestTenantFixture_AcceptsUppercasePlanTier(t *testing.T) {
+	defer stubEnv(t, map[string]string{
+		tenantFixtureTenantIDEnv: "tn-x",
+		tenantFixturePlanTierEnv: "PRO",
+	})()
+	got := NewTenantFixtureSeed().Run(Deps{Ctx: context.Background(), DryRun: true})
+	if got.Verdict != PASS || !strings.Contains(got.Reason, "plan=pro") {
+		t.Fatalf("Verdict = %s (%s), want PASS with plan=pro", got.Verdict, got.Reason)
 	}
 }
 
