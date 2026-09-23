@@ -40,7 +40,10 @@ func TestDigestFromMetadataReadsOnlyTheNamedAppsFile(t *testing.T) {
 }
 
 func TestBuildImageStepRecordsItsOwnAppsDigest(t *testing.T) {
-	script := buildkitEntrypointScript("/run/buildkit/buildkitd.sock", false, "registry.example.com", metadataFileFor("web"))
+	script, err := buildkitEntrypointScript("/run/buildkit/buildkitd.sock", false, "registry.example.com", metadataFileFor("web"))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if strings.Contains(script, "metadata-*") {
 		t.Errorf("build-image reads the first metadata file on the shared workspace, not its own:\n%s", script)

@@ -592,6 +592,9 @@ func (c Config) Validate() error {
 	if err := c.validateClusterIssuer(); err != nil {
 		return err
 	}
+	if err := c.validateRegistryURLs(); err != nil {
+		return err
+	}
 	if err := c.validateTimeouts(); err != nil {
 		return err
 	}
@@ -624,6 +627,18 @@ func (c Config) Validate() error {
 func (c Config) validateEnv() error {
 	if !isValidEnv(c.Env) {
 		return fmt.Errorf("LOOPZERO_ENV=%q invalid; allowed: development, staging, production", c.Env)
+	}
+	return nil
+}
+
+// validateRegistryURLs rejects registry hosts that would break the
+// buildkitd.toml the build step writes them into (a quote, backslash or line
+// break ends or injects a TOML table header).
+func (c Config) validateRegistryURLs() error {
+	for _, kv := range [][2]string{{"REGISTRY_URL", c.RegistryURL}, {"HARBOR_REGISTRY_URL", c.HarborRegistryURL}} {
+		if strings.ContainsAny(kv[1], "\"\\\r\n") {
+			return fmt.Errorf("%s=%q contains a quote, backslash or line break; it must be host[:port]", kv[0], kv[1])
+		}
 	}
 	return nil
 }

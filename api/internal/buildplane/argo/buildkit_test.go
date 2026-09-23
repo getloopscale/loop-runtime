@@ -25,13 +25,16 @@ func TestBuildImageTemplate_DeclaresDigestOutput(t *testing.T) {
 	b := &WorkflowBuilder{
 		infraParams: InfraParams{RegistryURL: "registry.example.com", RegistryInsecure: false},
 	}
-	c := b.buildkitContainer(buildkitParams{
+	c, err := b.buildkitContainer(buildkitParams{
 		AppName:        "api",
 		ImageTag:       "registry.example.com/org/api:abc",
 		ContextPath:    "/workspace/context",
 		DockerfilePath: "/workspace/Dockerfile",
 		CacheRef:       "registry.example.com/cache:api",
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	digestParam := findOutputParam(c, "digest")
 	if digestParam == nil {
@@ -54,7 +57,10 @@ func TestBuildImageTemplate_DeclaresDigestOutput(t *testing.T) {
 // BuildKit --metadata-file. Without this, the output param declaration
 // captures an empty value.
 func TestBuildkitEntrypointScript_WritesDigestAfterSuccessfulBuild(t *testing.T) {
-	script := buildkitEntrypointScript("/run/buildkit/buildkitd.sock", false, "registry.example.com", metadataFileFor("api"))
+	script, err := buildkitEntrypointScript("/run/buildkit/buildkitd.sock", false, "registry.example.com", metadataFileFor("api"))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Must reference this app's metadata file.
 	if !strings.Contains(script, "metadata-api.json") {
@@ -116,13 +122,16 @@ func TestBuildKit_DeadlineCappedAt1800s(t *testing.T) {
 	b := &WorkflowBuilder{
 		infraParams: InfraParams{RegistryURL: "registry.example.com", RegistryInsecure: false},
 	}
-	c := b.buildkitContainer(buildkitParams{
+	c, err := b.buildkitContainer(buildkitParams{
 		AppName:        "api",
 		ImageTag:       "registry.example.com/org/api:abc",
 		ContextPath:    "/workspace/context",
 		DockerfilePath: "/workspace/Dockerfile",
 		CacheRef:       "registry.example.com/cache:api",
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if c.ActiveDeadlineSeconds == nil {
 		t.Fatal("buildkit container missing ActiveDeadlineSeconds — orphan-execution window vs reaper RunningTimeout (30min)")
@@ -144,13 +153,16 @@ func TestBuildKit_RetryStrategy_RemainsBounded(t *testing.T) {
 	b := &WorkflowBuilder{
 		infraParams: InfraParams{RegistryURL: "registry.example.com", RegistryInsecure: false},
 	}
-	c := b.buildkitContainer(buildkitParams{
+	c, err := b.buildkitContainer(buildkitParams{
 		AppName:        "api",
 		ImageTag:       "registry.example.com/org/api:abc",
 		ContextPath:    "/workspace/context",
 		DockerfilePath: "/workspace/Dockerfile",
 		CacheRef:       "registry.example.com/cache:api",
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if c.RetryStrategy == nil {
 		t.Fatal("buildkit container missing RetryStrategy")

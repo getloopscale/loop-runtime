@@ -47,7 +47,7 @@ type buildkitParams struct {
 // buildkitTemplateFromPlan generates a single-container BuildKit template using resolved
 // fields from AppBuildPlan. Same architecture as buildkitTemplateForApp (MEET-2026-03-26-007)
 // but all paths, tags, and args come from the pre-resolved plan.
-func (b *WorkflowBuilder) buildkitTemplateFromPlan(spec deploycontracts.WorkflowSpec, plan deploycontracts.AppBuildPlan) *forge.Container {
+func (b *WorkflowBuilder) buildkitTemplateFromPlan(spec deploycontracts.WorkflowSpec, plan deploycontracts.AppBuildPlan) (*forge.Container, error) {
 	return b.buildkitContainer(buildkitParams{
 		AppName:        plan.AppName,
 		ImageTag:       plan.ImageTag,
@@ -66,7 +66,7 @@ func (b *WorkflowBuilder) buildkitTemplateFromPlan(spec deploycontracts.Workflow
 //
 // Cache: --import-cache and --export-cache use registry-based OCI cache.
 // Image digest: extracted from --metadata-file (JSON: {"containerimage.digest":"sha256:..."}).
-func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
+func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) (*forge.Container, error) {
 	socketPath := buildkitSocketPath
 
 	buildctlArgs := []string{
@@ -106,13 +106,18 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 		buildctlArgs = append(buildctlArgs, "--allow", "security.insecure")
 	}
 
+	entrypoint, err := buildkitEntrypointScript(socketPath, b.infraParams.RegistryInsecure, b.infraParams.RegistryURL, metadataFile)
+	if err != nil {
+		return nil, err
+	}
+
 	return &forge.Container{
 		Name:  naming.BuildImageStepName(p.AppName),
 		Image: imageBuildKit,
 		// rootlesskit sets up user namespace, then runs the entrypoint script.
 		// Script starts buildkitd background, waits for socket, runs buildctl "$@".
 		// "--" is $0, "buildctl" is $1, rest of buildctlArgs become $2+.
-		Command: []string{"rootlesskit", "sh", "-c", buildkitEntrypointScript(socketPath, b.infraParams.RegistryInsecure, b.infraParams.RegistryURL, metadataFile), "--"},
+		Command: []string{"rootlesskit", "sh", "-c", entrypoint, "--"},
 		Args:    append([]string{"buildctl"}, buildctlArgs...),
 		// CHG-2026-04-25-ATTESTATION-WIRE: surface the image digest as a
 		// workflow output parameter so the API can persist it on the
@@ -167,7 +172,7 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) *forge.Container {
 		// (future tenant-plan field); for pre-release, 30min is the
 		// documented per-build SLA.
 		ActiveDeadlineSeconds: forge.Ptr(1800),
-	}
+	}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -216,19 +221,17 @@ func dockerfileName(dockerfilePath string) string {
 //  3. Run buildctl "$@" and capture exit code
 //  4. Kill buildkitd on exit (trap ensures cleanup even on failure)
 //  5. Exit with buildctl's exit code
-func buildkitEntrypointScript(socketPath string, insecure bool, registryURL, metadataFile string) string {
+func buildkitEntrypointScript(socketPath string, insecure bool, registryURL, metadataFile string) (string, error) {
 	b := shellgen.New().Raw("set -e")
 
 	quotedSocket := shellgen.ShellQuote(socketPath)
 	buildkitdArgs := "--oci-worker-no-process-sandbox --addr " + quotedSocket
 
 	// Validate registryURL before TOML injection — reject characters that
-	// could break the TOML structure or inject arbitrary content.
-	for _, ch := range registryURL {
-		if ch == '"' || ch == '\n' || ch == '\r' || ch == '\\' {
-			// This is a programming error — registryURL should be a clean hostname:port.
-			panic(fmt.Sprintf("buildkit: registryURL contains invalid character %q", string(ch)))
-		}
+	// could break the TOML structure or inject arbitrary content. It is
+	// configuration, so a bad value is an error for the caller, not a panic.
+	if i := strings.IndexAny(registryURL, "\"\n\r\\"); i >= 0 {
+		return "", fmt.Errorf("buildkit: registry URL %q contains invalid character %q", registryURL, registryURL[i])
 	}
 
 	// Always configure buildkitd.toml with a docker.io mirror (mirror.gcr.io) to
@@ -292,7 +295,7 @@ func buildkitEntrypointScript(socketPath string, insecure bool, registryURL, met
 		Raw(`wait $DAEMON_PID 2>/dev/null || true`).
 		Raw(`exit $BUILD_EXIT`)
 
-	return b.String()
+	return b.String(), nil
 }
 
 // ---------------------------------------------------------------------------

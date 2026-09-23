@@ -202,7 +202,11 @@ func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workf
 			inlineTemplates = append(inlineTemplates, b.uploadAssetsTemplate(spec, appPlan))
 			continue
 		}
-		inlineTemplates = append(inlineTemplates, b.buildkitTemplateFromPlan(spec, appPlan))
+		buildkit, err := b.buildkitTemplateFromPlan(spec, appPlan)
+		if err != nil {
+			return nil, err
+		}
+		inlineTemplates = append(inlineTemplates, buildkit)
 		inlineTemplates = append(inlineTemplates, cosignSignTemplateWithParams(CosignSignParams{
 			AppName:          appPlan.AppName,
 			ImageTag:         appPlan.ImageTag,
@@ -271,6 +275,11 @@ func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workf
 		primaryLanguage = groups[0].Strategy.Name()
 	}
 
+	volumes, err := b.buildVolumes(spec.TenantID)
+	if err != nil {
+		return nil, err
+	}
+
 	wf := &forge.Workflow{
 		GenerateName:       fmt.Sprintf("loopzero-build-%s-", spec.BuildID),
 		Entrypoint:         entrypointName,
@@ -331,7 +340,7 @@ func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workf
 				StorageClassName: "local-path",
 			},
 		},
-		Volumes: b.buildVolumes(spec.TenantID),
+		Volumes: volumes,
 		// FSGroup ensures the PVC volume is writable by non-root user 1000.
 		// Without this, the PVC is mounted as root-owned and cp/mkdir fail.
 		SecurityContext: &model.PodSecurityContext{
@@ -541,7 +550,7 @@ func (b *WorkflowBuilder) buildOnExitDAG(spec deploycontracts.WorkflowSpec, grou
 // D4 dev-fallback: in development the Fulcio config has not yet been
 // upgraded to accept per-tenant audiences, so we keep the legacy shared
 // "sigstore" audience. Staging + production use the per-tenant form.
-func (b *WorkflowBuilder) buildVolumes(tenantID string) []forge.VolumeBuilder {
+func (b *WorkflowBuilder) buildVolumes(tenantID string) ([]forge.VolumeBuilder, error) {
 	vols := []forge.VolumeBuilder{
 		// Registry credentials for BuildKit push — mounted at /home/user/.docker/ in each build container.
 		&forge.SecretVolume{BaseVolume: forge.BaseVolume{Name: secretRegistryConfig}, SecretName: secretRegistryConfig},
@@ -553,20 +562,24 @@ func (b *WorkflowBuilder) buildVolumes(tenantID string) []forge.VolumeBuilder {
 		// 2026-06-01-p1-security-hardening: pod-level projected SA token
 		// volume with audience scoped per tenant. cosign reads token at
 		// /var/run/secrets/sigstore/token + presents to Fulcio for short-lived
-		// signing cert. Without this, keyless mode is teatro silencioso.
+		// signing cert. Without this, keyless mode is silent theatre.
+		audience, err := audienceFor(tenantID, b.infraParams.Env)
+		if err != nil {
+			return nil, err
+		}
 		expSec := int64(600) // K8s minimum (10min); kubelet rotates >80% expiry
 		vols = append(vols, &forge.ProjectedVolume{
 			BaseVolume: forge.BaseVolume{Name: sigstoreTokenVolumeName},
 			Sources: []forge.VolumeProjection{
 				{ServiceAccountToken: &forge.ServiceAccountTokenProjection{
-					Audience:          audienceFor(tenantID, b.infraParams.Env),
+					Audience:          audience,
 					Path:              "token",
 					ExpirationSeconds: &expSec,
 				}},
 			},
 		})
 	}
-	return vols
+	return vols, nil
 }
 
 // audienceFor returns the Fulcio audience for a build's projected SA token.
@@ -576,23 +589,25 @@ func (b *WorkflowBuilder) buildVolumes(tenantID string) []forge.VolumeBuilder {
 //     Fulcio config (T1.2) accepts the matching audience list/regex; a pod
 //     in tenant-A cannot mint a token with tenant-B's audience because the
 //     kubelet refuses (SA → namespace scope) AND Fulcio rejects mismatches.
-//   - "development" / unknown / empty: "sigstore" legacy shared (D4
-//     dev-fallback) — local k3d Fulcio not yet configured for the
-//     per-tenant form; preserves current cleanroom-fresh trio behaviour.
+//   - "development": "sigstore" legacy shared (D4 dev-fallback) — local k3d
+//     Fulcio not yet configured for the per-tenant form; preserves current
+//     cleanroom-fresh trio behaviour.
 //
-// Empty tenantID in production+staging is treated as a programming error
-// and returns "sigstore-MISSING-TENANT" which Fulcio will reject — fail
-// closed rather than silently fall back to legacy. The convention surfaces
-// in logs and is caught by Fulcio's audience allowlist (T1.2).
-func audienceFor(tenantID, env string) string {
+// Only an explicitly "development" environment may use the shared audience:
+// an unknown or empty environment name is an error, because falling back
+// would silently drop per-tenant signing isolation on a typo. An empty
+// tenantID in production/staging is an error too, rather than a sentinel
+// audience left for Fulcio to reject.
+func audienceFor(tenantID, env string) (string, error) {
 	switch env {
 	case "production", "staging":
 		if tenantID == "" {
-			return "sigstore-MISSING-TENANT"
+			return "", fmt.Errorf("argo: keyless signing in %s needs a tenant id for the per-tenant audience", env)
 		}
-		return "sigstore-" + tenantID
+		return "sigstore-" + tenantID, nil
+	case "development":
+		return "sigstore", nil // D4 dev fallback: legacy shared audience
 	default:
-		// development OR unknown — legacy shared audience (D4 fallback).
-		return "sigstore"
+		return "", fmt.Errorf("argo: keyless signing audience for environment %q is undefined (want development, staging or production)", env)
 	}
 }

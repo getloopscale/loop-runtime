@@ -356,14 +356,20 @@ func TestWorkflowBuilder_Build_InsecureFlags_WhenRegistryInsecure(t *testing.T) 
 }
 
 func TestBuildkitEntrypointScript_InsecureIncludesEntitlement(t *testing.T) {
-	script := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", true, "k3d-loopzero-registry:5000", metadataFileFor("api"))
+	script, err := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", true, "k3d-loopzero-registry:5000", metadataFileFor("api"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(script, "--allow-insecure-entitlement security.insecure") {
 		t.Error("buildkitd must include --allow-insecure-entitlement security.insecure when insecure=true")
 	}
 }
 
 func TestBuildkitEntrypointScript_InsecureIncludesRegistryConfig(t *testing.T) {
-	script := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", true, "k3d-loopzero-registry:5000", metadataFileFor("api"))
+	script, err := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", true, "k3d-loopzero-registry:5000", metadataFileFor("api"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(script, "k3d-loopzero-registry:5000") {
 		t.Error("buildkitd entrypoint must reference the registry URL for insecure config")
 	}
@@ -376,7 +382,10 @@ func TestBuildkitEntrypointScript_InsecureIncludesRegistryConfig(t *testing.T) {
 }
 
 func TestBuildkitEntrypointScript_SecureExcludesEntitlement(t *testing.T) {
-	script := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", false, "registry.example.com", metadataFileFor("api"))
+	script, err := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", false, "registry.example.com", metadataFileFor("api"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if strings.Contains(script, "--allow-insecure-entitlement") {
 		t.Error("buildkitd must NOT include --allow-insecure-entitlement when insecure=false")
 	}

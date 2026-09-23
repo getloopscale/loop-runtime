@@ -759,3 +759,17 @@ func TestLoad_OpenBaoTransitDefaultsDisabled(t *testing.T) {
 			cfg.OpenBaoVaultAddr, cfg.OpenBaoVaultRoleID, cfg.OpenBaoVaultSecretID)
 	}
 }
+
+// REGISTRY_URL is written into buildkitd.toml; a quote, backslash or line
+// break would break or inject TOML. It is rejected at startup, not at the
+// first build.
+func TestValidate_RejectsARegistryURLThatBreaksBuildkitConfig(t *testing.T) {
+	t.Setenv("LOOPZERO_CLUSTER_ISSUER", "letsencrypt-prod")
+	for _, bad := range []string{`registry"x`, "registry\nx", `registry\x`} {
+		t.Setenv("REGISTRY_URL", bad)
+		err := Load().Validate()
+		if err == nil || !contains(err.Error(), "REGISTRY_URL") {
+			t.Errorf("REGISTRY_URL=%q: Validate() = %v, want an error naming REGISTRY_URL", bad, err)
+		}
+	}
+}
