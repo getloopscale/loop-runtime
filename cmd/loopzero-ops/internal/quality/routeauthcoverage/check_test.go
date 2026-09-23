@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeFixture(t *testing.T, body string) string {
@@ -144,21 +146,11 @@ func adminExtra() {
 }
 
 func TestCheck_RealRepoRouterPasses(t *testing.T) {
-	abs, err := filepath.Abs("..")
-	if err != nil {
-		t.Fatalf("abs: %v", err)
+	abs := qtestutil.RootFile(t, routerPath)
+	outcome, checkErr := Check(Config{RepoRoot: abs})
+	if checkErr != nil {
+		t.Fatalf("real router.go must satisfy invariant. err=%v violations=%v", checkErr, outcome.Violations)
 	}
-	for i := 0; i < 8; i++ {
-		if _, statErr := os.Stat(filepath.Join(abs, routerPath)); statErr == nil {
-			outcome, checkErr := Check(Config{RepoRoot: abs})
-			if checkErr != nil {
-				t.Fatalf("real router.go must satisfy invariant. err=%v violations=%v", checkErr, outcome.Violations)
-			}
-			return
-		}
-		abs = filepath.Dir(abs)
-	}
-	t.Skip("could not locate api/internal/server/router.go within 8 parent dirs")
 }
 
 // --- B-040: the enumeration floor -----------------------------------------
@@ -244,7 +236,7 @@ func TestCheck_SingleRouteEnumerated_Passes(t *testing.T) {
 // criterion that would have caught the omission — `go test -run '...|RealTree'`
 // — passed vacuously, because no test name matched.
 func TestCheck_RealTreeStillPasses(t *testing.T) {
-	root := repoRootOrFail(t)
+	root := qtestutil.Root(t)
 	out, err := Check(Config{RepoRoot: root, MinRoutes: 1})
 	if err != nil {
 		t.Fatalf("the shipping tree must still pass; got %v", err)
@@ -265,23 +257,4 @@ func TestCheck_RealTreeStillPasses(t *testing.T) {
 	if out.PassCount != 70 {
 		t.Errorf("expected the 70 routes the AST enumerator sees (42 diretas + 28 na forma `r.With(...)`, medidas 2026-08-17); got %d — if this changed on purpose, update the number and say why", out.PassCount)
 	}
-}
-
-// Not finding go.work is a FAILURE, never a skip — same reasoning as
-// TestOracle_MatchesFrozenBaseline and as the floor this file just added.
-func repoRootOrFail(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	start := dir
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		dir = filepath.Dir(dir)
-	}
-	t.Fatalf("go.work not found within 8 levels above %s — the real-tree assertion cannot run, and skipping it would report green while measuring nothing", start)
-	return ""
 }

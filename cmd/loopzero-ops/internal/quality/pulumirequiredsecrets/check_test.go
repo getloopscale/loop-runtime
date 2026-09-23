@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeFile(t *testing.T, root, rel, body string) {
@@ -132,19 +134,9 @@ func TestCheck_DrillStackTolerantWhenAbsent(t *testing.T) {
 }
 
 func TestCheck_RealRepoPasses(t *testing.T) {
-	abs, err := filepath.Abs("..")
-	if err != nil {
-		t.Fatalf("abs: %v", err)
+	abs := qtestutil.RootFile(t, prodStackPath)
+	outcome, checkErr := Check(Config{RepoRoot: abs})
+	if checkErr != nil {
+		t.Fatalf("real repo must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
 	}
-	for i := 0; i < 8; i++ {
-		if _, statErr := os.Stat(filepath.Join(abs, prodStackPath)); statErr == nil {
-			outcome, checkErr := Check(Config{RepoRoot: abs})
-			if checkErr != nil {
-				t.Fatalf("real repo must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
-			}
-			return
-		}
-		abs = filepath.Dir(abs)
-	}
-	t.Skip("could not locate infra/pulumi/Pulumi.prod.yaml within 8 parent dirs")
 }

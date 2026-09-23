@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeFixture(t *testing.T, body string) string {
@@ -144,21 +146,11 @@ func TestCheck_MissingCaptureCountFails(t *testing.T) {
 }
 
 func TestCheck_RealRepoScriptPasses(t *testing.T) {
-	abs, err := filepath.Abs("..")
-	if err != nil {
-		t.Fatalf("abs: %v", err)
+	abs := qtestutil.RootFile(t, filepath.Join("infra", "scripts", "local", "vault-bootstrap-dev.sh"))
+	outcome, checkErr := Check(Config{RepoRoot: abs})
+	if checkErr != nil {
+		t.Fatalf("real script must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
 	}
-	for i := 0; i < 8; i++ {
-		if _, statErr := os.Stat(filepath.Join(abs, "infra", "scripts", "local", "vault-bootstrap-dev.sh")); statErr == nil {
-			outcome, checkErr := Check(Config{RepoRoot: abs})
-			if checkErr != nil {
-				t.Fatalf("real script must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
-			}
-			return
-		}
-		abs = filepath.Dir(abs)
-	}
-	t.Skip("could not locate vault-bootstrap-dev.sh within 8 parent dirs; skipping real-repo assertion")
 }
 
 // Small helpers to keep the test file self-contained.

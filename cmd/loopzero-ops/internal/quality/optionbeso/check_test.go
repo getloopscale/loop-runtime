@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeFixture(t *testing.T, doc, runtime string) string {
@@ -136,21 +138,11 @@ func TestCheck_MissingCrossRefsCanonicalFails(t *testing.T) {
 }
 
 func TestCheck_RealRepoDocPasses(t *testing.T) {
-	abs, err := filepath.Abs("..")
-	if err != nil {
-		t.Fatalf("abs: %v", err)
+	abs := qtestutil.RootFile(t, docPath)
+	outcome, checkErr := Check(Config{RepoRoot: abs})
+	if checkErr != nil {
+		t.Fatalf("real doc must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
 	}
-	for i := 0; i < 8; i++ {
-		if _, statErr := os.Stat(filepath.Join(abs, docPath)); statErr == nil {
-			outcome, checkErr := Check(Config{RepoRoot: abs})
-			if checkErr != nil {
-				t.Fatalf("real doc must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
-			}
-			return
-		}
-		abs = filepath.Dir(abs)
-	}
-	t.Skip("could not locate the Option B doc within 8 parent dirs; skipping real-repo assertion")
 }
 
 // tiny helpers

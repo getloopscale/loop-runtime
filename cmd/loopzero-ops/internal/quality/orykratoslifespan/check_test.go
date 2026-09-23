@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeFixture(t *testing.T, body string) string {
@@ -98,19 +100,9 @@ func TestCheck_FileTooLongFails(t *testing.T) {
 }
 
 func TestCheck_RealRepoPasses(t *testing.T) {
-	abs, err := filepath.Abs("..")
-	if err != nil {
-		t.Fatalf("abs: %v", err)
+	abs := qtestutil.RootFile(t, valuesPath)
+	outcome, checkErr := Check(Config{RepoRoot: abs})
+	if checkErr != nil {
+		t.Fatalf("real values.yaml.gotmpl must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
 	}
-	for i := 0; i < 8; i++ {
-		if _, statErr := os.Stat(filepath.Join(abs, valuesPath)); statErr == nil {
-			outcome, checkErr := Check(Config{RepoRoot: abs})
-			if checkErr != nil {
-				t.Fatalf("real values.yaml.gotmpl must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
-			}
-			return
-		}
-		abs = filepath.Dir(abs)
-	}
-	t.Skip("could not locate infra/helm/ory-kratos/values.yaml.gotmpl within 8 parent dirs")
 }

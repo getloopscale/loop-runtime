@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // tree writes subpackages under api/internal/routes/. Each entry maps a
@@ -135,30 +137,13 @@ func TestCheck_TestFilesAreScanned(t *testing.T) {
 
 // Against the real tree: one subpackage today (httpio), registered, no edges.
 func TestCheck_RealTree(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot(t)})
+	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
 	if err != nil {
 		t.Fatalf("the real tree must pass: unregistered=%v edges=%+v", out.Unregistered, out.Edges)
 	}
 	if len(out.Subpackages) == 0 {
 		t.Fatal("routes carries at least the httpio leaf; finding none means the walk is broken, not that the tree is clean")
 	}
-}
-
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	start := dir
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		dir = filepath.Dir(dir)
-	}
-	t.Fatalf("go.work not found within 8 levels above %s — the real-tree assertion cannot run, and skipping it would report green while measuring nothing", start)
-	return ""
 }
 
 // Matching by import PATH rather than by local name is what makes this fence
@@ -406,7 +391,7 @@ func TestCheck_ALeafWithAnEmptyAllowedEntryIsCoherent(t *testing.T) {
 // The real tree must be READ, not merely walked. Without this the count is free
 // to collapse — skipping _test.go drops 97 to 49 and every other test stays green.
 func TestCheck_RealTreeParsesBothTheParentAndTheSubpackages(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot(t)})
+	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
 	if err != nil {
 		t.Fatalf("real tree: %v", err)
 	}
@@ -415,7 +400,7 @@ func TestCheck_RealTreeParsesBothTheParentAndTheSubpackages(t *testing.T) {
 	// skipped _test.go — dropping the real read from 97 to 49 — sailed through it,
 	// because 49 is still greater than 4. A floor that any plausible regression
 	// clears is not a floor.
-	want := countGoFiles(t, repoRoot(t))
+	want := countGoFiles(t, qtestutil.Root(t))
 	if out.FilesParsed != want {
 		t.Fatalf("the walk parsed %d Go file(s) but api/internal/routes holds %d — a confident verdict over a miscount is worth less than no verdict",
 			out.FilesParsed, want)

@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // TestCheck_MissingChartFails asserts the sentinel error when chart dir absent.
@@ -44,30 +46,18 @@ func TestCheck_MissingHelmWarns(t *testing.T) {
 // operator machines with helm see the full render assertion; CI without
 // helm sees advisory fallthrough. Both are legitimate.
 func TestCheck_RealRepoPassesOrAdvisoryFallthrough(t *testing.T) {
-	abs, err := filepath.Abs("..")
-	if err != nil {
-		t.Fatalf("abs: %v", err)
+	abs := qtestutil.RootFile(t, chartPath)
+	outcome, checkErr := Check(Config{RepoRoot: abs})
+	if checkErr != nil {
+		// RootFile asserted the chart exists, so every error here — including
+		// ErrChartMissing — is a real disagreement, never a reason to pass.
+		// When helm renders and fails, the diagnostic must be a real contract violation
+		// (a false-PASS regression the gate should catch). Surface it clearly.
+		t.Fatalf("real chart failed rendered-envFrom contract. err=%v failures=%v", checkErr, outcome.Failures)
 	}
-	for i := 0; i < 8; i++ {
-		if _, statErr := os.Stat(filepath.Join(abs, chartPath)); statErr == nil {
-			outcome, checkErr := Check(Config{RepoRoot: abs})
-			if checkErr != nil {
-				if errors.Is(checkErr, ErrChartMissing) {
-					// unlikely — the chart dir exists per Stat above; still tolerant
-					return
-				}
-				// When helm renders and fails, the diagnostic must be a real contract violation
-				// (a false-PASS regression the gate should catch). Surface it clearly.
-				t.Fatalf("real chart failed rendered-envFrom contract. err=%v failures=%v", checkErr, outcome.Failures)
-			}
-			if outcome.Warn {
-				t.Log("helm not installed — advisory-only fallthrough (matches operator-time gate posture)")
-			}
-			return
-		}
-		abs = filepath.Dir(abs)
+	if outcome.Warn {
+		t.Log("helm not installed — advisory-only fallthrough (matches operator-time gate posture)")
 	}
-	t.Skip("could not locate infra/helm/loopzero-api within 8 parent dirs")
 }
 
 // TestCheck_HelmAbsentIsAdvisoryWhenChartExists deliberately re-asserts the
@@ -77,22 +67,12 @@ func TestCheck_HelmAbsentIsAdvisoryWhenChartExists(t *testing.T) {
 	if _, err := exec.LookPath("helm"); err == nil {
 		t.Skip("helm is installed; this test simulates the missing-helm branch and is redundant here")
 	}
-	abs, err := filepath.Abs("..")
-	if err != nil {
-		t.Fatalf("abs: %v", err)
+	abs := qtestutil.RootFile(t, chartPath)
+	outcome, checkErr := Check(Config{RepoRoot: abs})
+	if checkErr != nil {
+		t.Fatalf("chart exists but helm absent — must be advisory fallthrough, got err=%v", checkErr)
 	}
-	for i := 0; i < 8; i++ {
-		if _, statErr := os.Stat(filepath.Join(abs, chartPath)); statErr == nil {
-			outcome, checkErr := Check(Config{RepoRoot: abs})
-			if checkErr != nil {
-				t.Fatalf("chart exists but helm absent — must be advisory fallthrough, got err=%v", checkErr)
-			}
-			if !outcome.Warn {
-				t.Fatalf("expected Warn=true, got %+v", outcome)
-			}
-			return
-		}
-		abs = filepath.Dir(abs)
+	if !outcome.Warn {
+		t.Fatalf("expected Warn=true, got %+v", outcome)
 	}
-	t.Skip("could not locate infra/helm/loopzero-api")
 }

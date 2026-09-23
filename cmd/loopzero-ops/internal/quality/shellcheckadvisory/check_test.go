@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeScript(t *testing.T, root, rel, body string) {
@@ -93,19 +95,9 @@ func TestCheck_ExcludeCodesTolerated(t *testing.T) {
 }
 
 func TestCheck_RealRepoPassesOrIsAdvisoryFallthrough(t *testing.T) {
-	abs, err := filepath.Abs("..")
-	if err != nil {
-		t.Fatalf("abs: %v", err)
+	abs := qtestutil.RootFile(t, filepath.Join("infra", "scripts", "local"))
+	outcome, checkErr := Check(Config{RepoRoot: abs})
+	if checkErr != nil {
+		t.Fatalf("real repo shellcheck must be clean OR advisory-only. err=%v diagnostic=%q", checkErr, outcome.Diagnostic)
 	}
-	for i := 0; i < 8; i++ {
-		if _, statErr := os.Stat(filepath.Join(abs, "infra", "scripts", "local")); statErr == nil {
-			outcome, checkErr := Check(Config{RepoRoot: abs})
-			if checkErr != nil {
-				t.Fatalf("real repo shellcheck must be clean OR advisory-only. err=%v diagnostic=%q", checkErr, outcome.Diagnostic)
-			}
-			return
-		}
-		abs = filepath.Dir(abs)
-	}
-	t.Skip("could not locate infra/scripts/local within 8 parent dirs")
 }

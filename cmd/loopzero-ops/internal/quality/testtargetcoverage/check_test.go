@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // tree writes a synthetic repo: one go.mod per named module, plus a taskfile.
@@ -120,7 +122,7 @@ func TestCheck_MissingTaskfileIsAnError(t *testing.T) {
 
 // Against the real tree, which this slice is fixing.
 func TestCheck_RealTreeIsFullyCovered(t *testing.T) {
-	root := repoRoot(t)
+	root := qtestutil.Root(t)
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("err = %v; uncovered=%v", err, out.Uncovered)
@@ -146,22 +148,6 @@ func TestCheck_RealTreeIsFullyCovered(t *testing.T) {
 			t.Errorf("%s is not covered; it is the module this item was filed about", want)
 		}
 	}
-}
-
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		dir = filepath.Dir(dir)
-	}
-	t.Fatal("go.work not found walking up")
-	return ""
 }
 
 // LOW-1: the prefix boundary is the discipline that keeps `operators` from being

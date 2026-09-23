@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func arvore(t *testing.T, arquivos map[string]string) Config {
@@ -90,7 +92,7 @@ func TestVarreduraVaziaEErro(t *testing.T) {
 // falhava por causa dela antes do conserto do mesmo dia. Registrar o numero aqui e' o que
 // distingue "nao achou nada" de "nao procurou".
 func TestArvoreRealNaoTemCRForaDoNamespace(t *testing.T) {
-	raiz := repoRoot(t)
+	raiz := qtestutil.Root(t)
 	out, err := Check(Config{RepoRoot: raiz})
 	if err != nil {
 		t.Fatalf("err = %v", err)
@@ -99,20 +101,4 @@ func TestArvoreRealNaoTemCRForaDoNamespace(t *testing.T) {
 		t.Errorf("conferidas = %d (%+v); a arvore carregava tres seeds em 2026-08-19 — uma "+
 			"varredura que acha menos esta' medindo menos que a arvore", len(out.Conferidas), out.Conferidas)
 	}
-}
-
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		dir = filepath.Dir(dir)
-	}
-	t.Fatal("go.work nao encontrado subindo")
-	return ""
 }

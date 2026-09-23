@@ -4,34 +4,13 @@
 package servicesacyclic
 
 import (
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
-)
 
-// raizDoRepositorio sobe ate' o diretorio que contem `api/go.mod`. Procurada, nao
-// contada: contar niveis quebra no primeiro movimento de pacote.
-func raizDoRepositorio(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("cwd: %v", err)
-	}
-	for i := 0; i < 12; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "api", "go.mod")); err == nil {
-			return dir
-		}
-		pai := filepath.Dir(dir)
-		if pai == dir {
-			break
-		}
-		dir = pai
-	}
-	t.Fatal("nao achei a raiz do repositorio (procurei api/go.mod)")
-	return ""
-}
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+)
 
 // O `allowed` e' deny-by-default: um subpacote AUSENTE dele reprova, forcando
 // alguem a decidir conscientemente que contexto delimitado esta' criando. Um
@@ -48,7 +27,7 @@ func raizDoRepositorio(t *testing.T) string {
 // responderia coisas diferentes em maquinas diferentes. O indice do git e' o
 // mesmo em toda parte.
 func TestTodoContextoRegistradoTemCodigoRastreado(t *testing.T) {
-	raiz := raizDoRepositorio(t)
+	raiz := qtestutil.Root(t)
 	if len(allowed) == 0 {
 		t.Fatal("DAG congelado vazio: uma verificacao sobre nada passa por vacuidade")
 	}

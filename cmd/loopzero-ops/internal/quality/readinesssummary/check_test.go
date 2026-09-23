@@ -8,27 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-)
 
-func raizRepo(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("cwd: %v", err)
-	}
-	for i := 0; i < 12; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "operators", "go.mod")); err == nil {
-			return dir
-		}
-		pai := filepath.Dir(dir)
-		if pai == dir {
-			break
-		}
-		dir = pai
-	}
-	t.Fatal("nao achei a raiz do repositorio (procurei operators/go.mod)")
-	return ""
-}
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+)
 
 func escrever(t *testing.T, raiz, rel, corpo string) {
 	t.Helper()
@@ -124,7 +106,7 @@ func (r *R) escreveSemDobrar() error {
 // dispara; so' isto diz o que ele encontra no que existe (`rules/testing.md` § 4.2).
 // O resultado fica registrado aqui mesmo, inclusive se for zero.
 func TestPopulacaoRealDosSeisPacotes(t *testing.T) {
-	out, err := Check(Config{RepoRoot: raizRepo(t)})
+	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}

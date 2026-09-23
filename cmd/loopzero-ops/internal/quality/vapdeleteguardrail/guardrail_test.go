@@ -4,28 +4,11 @@
 package vapdeleteguardrail
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-)
 
-// findRepoRoot walks up until it finds go.work (the multi-module workspace root).
-func findRepoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	for i := 0; i < 10; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		dir = filepath.Dir(dir)
-	}
-	t.Fatal("go.work not found walking up from cwd")
-	return ""
-}
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+)
 
 // stubRender returns a canned render so the hermetic tests never need the helm binary
 // (crdsemanticdiff HelmRenderOverride precedent).
@@ -177,7 +160,7 @@ func TestGuardrail_AllowsOldObjectOnDelete(t *testing.T) {
 // YAML parse fails on both. This asserts the gate goes through a Renderer.
 
 func TestGuardrail_RendersViaHelmNotRawYAML(t *testing.T) {
-	root := findRepoRoot(t)
+	root := qtestutil.Root(t)
 	called := false
 	render := func(dir string, vals []string) (string, error) {
 		called = true
@@ -193,7 +176,7 @@ func TestGuardrail_RendersViaHelmNotRawYAML(t *testing.T) {
 // --- Repo-state checks: these are the RED tests for T1.1/T1.2/T1.4 -----------------
 
 func TestGuardrail_TemplateExistsInBootstrapChart(t *testing.T) {
-	root := findRepoRoot(t)
+	root := qtestutil.Root(t)
 	rep := Report{}
 	rep.checkTemplatePresent(root)
 	if !rep.OK() {
@@ -202,7 +185,7 @@ func TestGuardrail_TemplateExistsInBootstrapChart(t *testing.T) {
 }
 
 func TestGuardrail_DualChartParity(t *testing.T) {
-	root := findRepoRoot(t)
+	root := qtestutil.Root(t)
 	rep := Report{}
 	rep.checkParity(root)
 	if !rep.OK() {
@@ -211,7 +194,7 @@ func TestGuardrail_DualChartParity(t *testing.T) {
 }
 
 func TestGuardrail_ToggleDefaultsOff(t *testing.T) {
-	root := findRepoRoot(t)
+	root := qtestutil.Root(t)
 	rep := Report{}
 	rep.checkToggleDefaultOff(root)
 	if !rep.OK() {
@@ -220,7 +203,7 @@ func TestGuardrail_ToggleDefaultsOff(t *testing.T) {
 }
 
 func TestGuardrail_InstalledOnMgmt(t *testing.T) {
-	root := findRepoRoot(t)
+	root := qtestutil.Root(t)
 	rep := Report{}
 	rep.checkInstalledOnMgmt(root)
 	if !rep.OK() {
@@ -230,7 +213,7 @@ func TestGuardrail_InstalledOnMgmt(t *testing.T) {
 
 // End-to-end against the real repo with a stubbed renderer.
 func TestGuardrail_FullCheckAgainstRepo(t *testing.T) {
-	root := findRepoRoot(t)
+	root := qtestutil.Root(t)
 	rep := Check(root, stubRender(goodRender))
 	if !rep.OK() {
 		t.Fatalf("gate failing against repo state: %+v", rep.Findings)

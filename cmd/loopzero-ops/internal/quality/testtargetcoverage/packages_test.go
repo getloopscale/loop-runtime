@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // A granularidade passou de módulo para pacote — B-114. `runsTests` perguntava
@@ -169,7 +171,7 @@ func TestPackageExemptionRequiresAReason(t *testing.T) {
 // A população real (B-109): a árvore que ship precisa satisfazer a granularidade nova,
 // senão a mudança seria uma regra que o próprio repositório não cumpre.
 func TestRealTreeSatisfiesPackageGranularity(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot(t)})
+	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
 	if err != nil {
 		t.Fatalf("a árvore real precisa satisfazer a granularidade de pacote; err=%v\n  descobertos: %v", err, out.UncoveredPackages)
 	}

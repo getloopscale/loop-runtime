@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // withTaskfile writes a synthetic taskfile and returns a Config for it.
@@ -114,7 +116,7 @@ func TestCheck_UnreadableTaskfileIsAnError(t *testing.T) {
 // Against the real tree: the task was removed by this slice, so it must pass —
 // and must have actually read the file, not passed by reading nothing.
 func TestCheck_RealTreeHasNoShortcut(t *testing.T) {
-	root := repoRoot(t)
+	root := qtestutil.Root(t)
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("err = %v; violations=%v", err, out.Violations)
@@ -123,22 +125,6 @@ func TestCheck_RealTreeHasNoShortcut(t *testing.T) {
 		t.Errorf("LinesScanned = %d; taskfiles/k3d.yml is far longer — the gate did not read it",
 			out.LinesScanned)
 	}
-}
-
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		dir = filepath.Dir(dir)
-	}
-	t.Fatal("go.work not found walking up")
-	return ""
 }
 
 // --- the six evasions an independent review measured on 2026-08-12 ----------
