@@ -37,55 +37,6 @@ func TestB50LoopZeroCloudPort13002(t *testing.T) {
 	}
 }
 
-func TestB53ArgocdAppsValuesObject(t *testing.T) {
-	entries, err := os.ReadDir("../../argocd-bootstrap/apps")
-	if err != nil {
-		t.Fatalf("read apps dir: %v", err)
-	}
-	count := 0
-	for _, e := range entries {
-		if !strings.HasSuffix(e.Name(), ".yaml") {
-			continue
-		}
-		data, err := os.ReadFile("../../argocd-bootstrap/apps/" + e.Name())
-		if err != nil {
-			continue
-		}
-		if strings.Contains(string(data), "valuesObject:") {
-			count++
-		}
-	}
-	if count < 25 {
-		t.Errorf("B53 regression: only %d Apps have helm.valuesObject (expected >= 25 — see iter 26 follow-up)", count)
-	}
-}
-
-func TestB53ArgocdAppsNoAutomatedSelfHeal(t *testing.T) {
-	entries, err := os.ReadDir("../../argocd-bootstrap/apps")
-	if err != nil {
-		t.Fatalf("read apps dir: %v", err)
-	}
-	count := 0
-	for _, e := range entries {
-		if !strings.HasSuffix(e.Name(), ".yaml") {
-			continue
-		}
-		data, err := os.ReadFile("../../argocd-bootstrap/apps/" + e.Name())
-		if err != nil {
-			continue
-		}
-		// `selfHeal: true` triggers ArgoCD to overwrite helmfile state.
-		// Until T2 governance meeting decides re-enabling, this must be absent.
-		if strings.Contains(string(data), "selfHeal: true") {
-			t.Errorf("B53 regression: %s has selfHeal:true (governance meeting required first)", e.Name())
-			count++
-		}
-	}
-	if count > 0 {
-		t.Errorf("B53 regression: %d Apps still have selfHeal:true — governance meeting required", count)
-	}
-}
-
 func TestB59BuildClusterPortNotConflicting(t *testing.T) {
 	data, err := os.ReadFile("../../k3d/build-cluster.yaml")
 	if err != nil {

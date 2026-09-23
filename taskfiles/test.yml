@@ -691,22 +691,12 @@ tasks:
       # placeholders out of Task's Go-template parser.
       - bash infra/kubeconform-schemas/validate-helmfile-templates.sh
 
-  validate:argocd-sync-waves:
-    desc: |
-      Validates that the 38 ArgoCD App-of-Apps Application manifests have a
-      coherent sync-wave ordering — e.g., cert-manager (wave -3) before traefik
-      (-2) before loopzero-api (2) before smoke-test (99). Catches manual edits
-      that would make ArgoCD try to create resources before their CRDs exist.
-    cmds:
-      - python3 infra/argocd-bootstrap/validate-sync-waves.py
-
   validate:layered-bootstrap:
     desc: |
       Aggregate validation for CHG-2026-04-28-LAYERED-BOOTSTRAP — runs the full
       offline test suite (helm lint, helmfile YAML structure, regression tests).
     cmds:
       - task: validate:internal-charts
-      - task: validate:argocd-sync-waves
       - task: validate:helmfile-templates
       - bash infra/helmfile/scripts/test_helpers/run-all.sh
       - go test ./infra/tests/config/ -run "TestRegression|TestB18|TestB16|TestL3CoverageMatrix" -count=1

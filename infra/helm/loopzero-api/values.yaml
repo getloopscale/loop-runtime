@@ -151,8 +151,7 @@ vault:
 # carries the same workaround (infra/scripts/drill/drill-helmfile-bootstrap.sh).
 #
 # Left in place deliberately by B-191 rather than moved: promoting them to `env:`
-# is a live-behaviour change on the ArgoCD bootstrap path
-# (infra/argocd-bootstrap/apps/mgmt-loopzero-api.yaml renders this file), and this
+# is a live-behaviour change for every install that renders this file, and this
 # item's mandate was to measure the org before moving anything. Filed as
 # https://github.com/getloopscale/loopzero/issues/354, which also records what changes
 # for each of the three keys the day they are promoted.
@@ -190,9 +189,8 @@ tracing:
   # Gitea holds exactly one org, "loopzero" — "loopzero-platform" did not exist there.
   #
   # "loopzero-platform" is a real org, but not this one: it owns the CONTROL PLANE's
-  # own repositories (loopzero-platform/charts.git, loopzero-platform/argocd-bootstrap.git
-  # — see infra/argocd-bootstrap/apps/*.yaml). bootstrap-platform.sh creates both;
-  # nothing routes loopzero-platform through GITEA_ORG.
+  # own repositories (loopzero-platform/charts.git). bootstrap-platform.sh creates
+  # both orgs; nothing routes loopzero-platform through GITEA_ORG.
   #
   # Asserted by infra/tests/config/gitea_org_agreement_test.go, which discovers
   # every values file declaring the org and compares them against both Go

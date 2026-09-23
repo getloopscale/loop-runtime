@@ -49,9 +49,8 @@ import (
 //     mechanism on this knob.
 //
 // loopzero-platform IS a real organisation in this platform: it owns the control
-// plane's own repositories (loopzero-platform/charts.git,
-// loopzero-platform/argocd-bootstrap.git -- see infra/argocd-bootstrap/apps/*.yaml),
-// and infra/scripts/production/bootstrap-platform.sh creates it next to loopzero.
+// plane's own repositories (loopzero-platform/charts.git), and
+// infra/scripts/production/bootstrap-platform.sh creates it next to loopzero.
 // Nothing routes it through GITEA_ORG, and the token-provisioning scripts
 // (infra/scripts/production/provision-api-tokens.sh,
 // infra/scripts/drill/drill-helmfile-bootstrap.sh) ensure only loopzero.
