@@ -26,9 +26,8 @@ type Config struct {
 
 // Outcome is the gate result.
 type Outcome struct {
-	Pass     bool
-	Hits     []Hit
-	Warnings []string
+	Pass bool
+	Hits []Hit
 }
 
 // Hit is a single violation location.
@@ -59,10 +58,10 @@ func Check(cfg Config) (Outcome, error) {
 		if _, statErr := os.Stat(abs); os.IsNotExist(statErr) {
 			continue // scan dir legitimately absent — nothing to scan
 		}
-		// FIX-2 (M24, ADR-M24-3): fail-CLOSED. Capture + propagate the walk error
-		// instead of discarding it (`_ =`) and swallowing per-entry errors
-		// (`err != nil → return nil`). A security gate that cannot read the files
-		// it is meant to scan must NOT report clean. Mirrors advisorylock/check.go.
+		// Fail-CLOSED (ADR-M24-3): a walk error and a file that cannot be read are
+		// both returned, so Check errors instead of computing Pass over a file it
+		// never read. A security gate that cannot read what it scans must not
+		// report clean.
 		walkErr := filepath.Walk(abs, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
@@ -80,9 +79,7 @@ func Check(cfg Config) (Outcome, error) {
 			}
 			hits, err := scanFile(path, rel)
 			if err != nil {
-				out.Warnings = append(out.Warnings,
-					fmt.Sprintf("%s: scan error: %v", rel, err))
-				return nil
+				return fmt.Errorf("%s: %w", rel, err)
 			}
 			out.Hits = append(out.Hits, hits...)
 			return nil
@@ -141,9 +138,6 @@ func FormatOutcome(out Outcome) string {
 	for _, h := range out.Hits {
 		fmt.Fprintf(&sb, "  %s:%d — %s\n", h.File, h.Line, h.Reason)
 		fmt.Fprintf(&sb, "    Suggestion: %s\n", h.Suggestion)
-	}
-	for _, w := range out.Warnings {
-		fmt.Fprintf(&sb, "  WARN: %s\n", w)
 	}
 	return sb.String()
 }

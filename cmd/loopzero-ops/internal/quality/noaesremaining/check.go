@@ -223,9 +223,9 @@ func Check(cfg Config) (Outcome, error) {
 			out.FilesScanned++
 			hits, scanErr := scanFile(p, rel)
 			if scanErr != nil {
-				out.Warnings = append(out.Warnings,
-					fmt.Sprintf("%s: scan error: %v", rel, scanErr))
-				return nil
+				// A file counted as found and then not read would let the one
+				// file holding the AES path vouch for itself; fail closed.
+				return fmt.Errorf("%s: %w", rel, scanErr)
 			}
 			out.Hits = append(out.Hits, hits...)
 			return nil
