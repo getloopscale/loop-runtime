@@ -4,8 +4,11 @@
 package release
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,11 +38,16 @@ func (f *fakeReleaseStore) GetByID(ctx context.Context, id string) (*db.Release,
 
 type fakeAudit struct {
 	entries []ports.AuditEntryResult
+	total   int // rows matching the filter upstream; 0 means len(entries)
 	err     error
 }
 
 func (f *fakeAudit) ListAuditEntries(_ context.Context, _ string, _ ports.AuditFilter) ([]ports.AuditEntryResult, int, error) {
-	return f.entries, len(f.entries), f.err
+	total := f.total
+	if total == 0 {
+		total = len(f.entries)
+	}
+	return f.entries, total, f.err
 }
 
 type fakeBuildStore struct {
@@ -186,5 +194,58 @@ func TestReleaseInspector_Inspect_NilAudit_NoCrash(t *testing.T) {
 	}
 	if got.AuditLogEntries == nil {
 		t.Error("audit_log_entries must be non-nil empty slice for stable JSON shape")
+	}
+}
+
+// inspectorLoggingTo returns an inspector whose log output is captured in buf at
+// the most verbose level, so a test can assert what an operator would see.
+func inspectorLoggingTo(buf *bytes.Buffer, store db.ReleaseStore, audit ReleaseInspectorAuditQuerier) *releaseStoreInspector {
+	insp := NewReleaseInspector(store, audit, &fakeBuildStore{}).(*releaseStoreInspector)
+	insp.logger = slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	return insp
+}
+
+func TestReleaseInspector_AuditReadFailureIsObservableInTheLog(t *testing.T) {
+	rel := newRelease("rel-a1")
+	store := &fakeReleaseStore{get: func(_ context.Context, _ string) (*db.Release, error) { return rel, nil }}
+	var buf bytes.Buffer
+	insp := inspectorLoggingTo(&buf, store, &fakeAudit{err: errors.New("audit store offline")})
+
+	if _, err := insp.Inspect(context.Background(), "rel-a1"); err != nil {
+		t.Fatalf("an audit read failure must not fail the inspection: %v", err)
+	}
+
+	if !strings.Contains(buf.String(), "audit store offline") {
+		t.Errorf("the audit read failure left no trace in the log:\n%s", buf.String())
+	}
+}
+
+func TestReleaseInspector_AuditReadFailureIsDistinguishableFromAnEmptyTrail(t *testing.T) {
+	rel := newRelease("rel-a2")
+	store := &fakeReleaseStore{get: func(_ context.Context, _ string) (*db.Release, error) { return rel, nil }}
+
+	failed, _ := NewReleaseInspector(store, &fakeAudit{err: errors.New("offline")}, &fakeBuildStore{}).Inspect(context.Background(), "rel-a2")
+	empty, _ := NewReleaseInspector(store, &fakeAudit{}, &fakeBuildStore{}).Inspect(context.Background(), "rel-a2")
+
+	if failed.AuditLogStatus != AuditLogUnavailable {
+		t.Errorf("failed read: audit_log_status = %q, want %q", failed.AuditLogStatus, AuditLogUnavailable)
+	}
+	if empty.AuditLogStatus != AuditLogComplete {
+		t.Errorf("empty trail: audit_log_status = %q, want %q", empty.AuditLogStatus, AuditLogComplete)
+	}
+}
+
+func TestReleaseInspector_TruncatedAuditWindowIsSignalled(t *testing.T) {
+	rel := newRelease("rel-a3")
+	store := &fakeReleaseStore{get: func(_ context.Context, _ string) (*db.Release, error) { return rel, nil }}
+	audit := &fakeAudit{entries: []ports.AuditEntryResult{{ResourceID: "rel-other", CreatedAt: time.Now()}}, total: 500}
+
+	got, err := NewReleaseInspector(store, audit, &fakeBuildStore{}).Inspect(context.Background(), "rel-a3")
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.AuditLogStatus != AuditLogTruncated {
+		t.Errorf("audit_log_status = %q, want %q when the upstream window held more rows than were read", got.AuditLogStatus, AuditLogTruncated)
 	}
 }

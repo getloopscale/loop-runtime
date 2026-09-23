@@ -20,6 +20,7 @@ package release
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/ports"
@@ -53,7 +54,25 @@ type ReleaseInspection struct {
 	SigningPath              string                      `json:"signing_path"`     // "keyless" | "keyed" | "unsigned" | "unknown"
 	AttestationPath          string                      `json:"attestation_path"` // "present" | "absent" | "unknown"
 	AuditLogEntries          []ReleaseInspectionAuditRow `json:"audit_log_entries"`
+	// AuditLogStatus says how far audit_log_entries can be trusted: "complete",
+	// "unavailable" (the audit trail could not be read — an empty list then
+	// means nothing), or "truncated" (the release's rows may lie beyond the
+	// window that was read). Without it, "could not read" and "nothing to read"
+	// were the same empty array.
+	AuditLogStatus string `json:"audit_log_status"`
 }
+
+// Values of ReleaseInspection.AuditLogStatus.
+const (
+	AuditLogComplete    = "complete"
+	AuditLogUnavailable = "unavailable"
+	AuditLogTruncated   = "truncated"
+)
+
+// auditWindow is how many of the tenant's release audit rows one inspection
+// reads. The audit port has no ResourceID predicate, so the rows are filtered
+// in memory, and this cap keeps the diagnostic payload bounded.
+const auditWindow = 50
 
 // ReleaseInspectionAuditRow surfaces a single audit_log row relevant
 // to the release. We pick only the fields an operator triaging
@@ -88,6 +107,7 @@ type releaseStoreInspector struct {
 	releases   db.ReleaseStore
 	audit      ReleaseInspectorAuditQuerier
 	buildStore ReleaseInspectorBuildQuerier
+	logger     *slog.Logger
 }
 
 // ReleaseInspectorAuditQuerier is the minimal audit interface this
@@ -116,6 +136,7 @@ func NewReleaseInspector(
 		releases:   releases,
 		audit:      audit,
 		buildStore: buildStore,
+		logger:     slog.Default(),
 	}
 }
 
@@ -148,9 +169,16 @@ func (s *releaseStoreInspector) Inspect(ctx context.Context, releaseID string) (
 		out.ImageSignedAt = &s
 	}
 
-	// Workflow ID — optional. EC-14 graceful degrade.
+	// Workflow ID — optional. EC-14 graceful degrade: a reaped build answers
+	// "" with no error. Any other error is logged, since the payload cannot
+	// otherwise tell a lookup failure from a reaped workflow.
 	if s.buildStore != nil {
-		if wfID, wfErr := s.buildStore.GetWorkflowIDByBuildID(ctx, rel.BuildID); wfErr == nil && wfID != "" {
+		wfID, wfErr := s.buildStore.GetWorkflowIDByBuildID(ctx, rel.BuildID)
+		switch {
+		case wfErr != nil:
+			s.logger.WarnContext(ctx, "release inspection: workflow lookup failed",
+				"release_id", rel.ID, "build_id", rel.BuildID, "error", wfErr)
+		case wfID != "":
 			out.WorkflowID = &wfID
 		}
 	}
@@ -159,42 +187,43 @@ func (s *releaseStoreInspector) Inspect(ctx context.Context, releaseID string) (
 	out.SigningPath = derivedSigningPath(rel)
 	out.AttestationPath = derivedAttestationPath(rel)
 
-	// Audit log — ports.AuditFilter does NOT support a ResourceID
-	// predicate, so we fetch the tenant's audit window and filter
-	// in-memory to rows whose ResourceID matches this release.
-	// 50-row cap on the upstream fetch keeps the diagnostic payload
-	// bounded.
-	if s.audit != nil {
-		filter := ports.AuditFilter{
-			ResourceType: "release",
-			Limit:        50,
-		}
-		entries, _, auditErr := s.audit.ListAuditEntries(ctx, rel.TenantID, filter)
-		if auditErr == nil {
-			for _, e := range entries {
-				if e.ResourceID != rel.ID {
-					continue
-				}
-				out.AuditLogEntries = append(out.AuditLogEntries, ReleaseInspectionAuditRow{
-					Action:        e.Action,
-					Actor:         e.Actor,
-					ResourceID:    e.ResourceID,
-					CorrelationID: e.CorrelationID,
-					Metadata:      e.Metadata,
-					CreatedAt:     e.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-				})
-			}
-		}
-		// Audit fetch failure is non-fatal: 200 with empty audit list +
-		// other fields populated. Operators can re-run with verbose
-		// logging if the audit chain is the focus.
-	}
-	if out.AuditLogEntries == nil {
-		// Stable JSON shape: empty array, not null.
-		out.AuditLogEntries = []ReleaseInspectionAuditRow{}
-	}
-
+	out.AuditLogEntries, out.AuditLogStatus = s.auditRows(ctx, rel)
 	return out, nil
+}
+
+// auditRows reads the release's audit rows and reports how complete they are.
+// A read failure does not fail the inspection — the rest of the payload is
+// still the diagnosis the operator asked for — but it is logged and reported
+// as "unavailable", never as an empty trail.
+func (s *releaseStoreInspector) auditRows(ctx context.Context, rel *db.Release) ([]ReleaseInspectionAuditRow, string) {
+	rows := []ReleaseInspectionAuditRow{} // stable JSON shape: empty array, not null
+	if s.audit == nil {
+		return rows, AuditLogUnavailable
+	}
+	filter := ports.AuditFilter{ResourceType: "release", Limit: auditWindow}
+	entries, total, err := s.audit.ListAuditEntries(ctx, rel.TenantID, filter)
+	if err != nil {
+		s.logger.WarnContext(ctx, "release inspection: audit trail could not be read",
+			"release_id", rel.ID, "tenant_id", rel.TenantID, "error", err)
+		return rows, AuditLogUnavailable
+	}
+	for _, e := range entries {
+		if e.ResourceID != rel.ID {
+			continue
+		}
+		rows = append(rows, ReleaseInspectionAuditRow{
+			Action:        e.Action,
+			Actor:         e.Actor,
+			ResourceID:    e.ResourceID,
+			CorrelationID: e.CorrelationID,
+			Metadata:      e.Metadata,
+			CreatedAt:     e.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		})
+	}
+	if total > len(entries) {
+		return rows, AuditLogTruncated
+	}
+	return rows, AuditLogComplete
 }
 
 // derivedSigningPath inspects ImageSignature presence to classify the
