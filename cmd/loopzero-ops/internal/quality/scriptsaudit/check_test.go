@@ -237,7 +237,7 @@ func TestProposeDisposition_DeadCode(t *testing.T) {
 		LastMod: old,
 		Callers: nil,
 	}
-	disp := ProposeDisposition(s)
+	disp := ProposeDisposition(s, time.Now())
 	if disp != "DELETE-DEAD" {
 		t.Errorf("expected DELETE-DEAD, got %s", disp)
 	}
@@ -251,7 +251,7 @@ func TestProposeDisposition_HermeticTest(t *testing.T) {
 		LOC:     30,
 		LastMod: time.Now(),
 	}
-	disp := ProposeDisposition(s)
+	disp := ProposeDisposition(s, time.Now())
 	if disp != "AUTO-DIE" {
 		t.Errorf("expected AUTO-DIE for hermetic test pattern, got %s", disp)
 	}
@@ -268,10 +268,11 @@ func TestProposeDisposition_BareHelmWrapper(t *testing.T) {
 	}
 	s := Script{
 		Path:    path,
+		Body:    body,
 		LOC:     2,
 		LastMod: time.Now(),
 	}
-	disp := ProposeDisposition(s)
+	disp := ProposeDisposition(s, time.Now())
 	if disp != "DELEGATE-HELMFILE" {
 		t.Errorf("expected DELEGATE-HELMFILE, got %s", disp)
 	}
@@ -294,12 +295,8 @@ func TestScriptHasRealHelmInvocation(t *testing.T) {
 		{"none", "#!/bin/bash\nkubectl apply -f x.yaml\n", false},
 	}
 	for _, c := range cases {
-		path := filepath.Join(t.TempDir(), c.name+".sh")
-		if err := os.WriteFile(path, []byte(c.body), 0o644); err != nil {
-			t.Fatalf("write: %v", err)
-		}
-		if got := scriptHasRealHelmInvocation(path); got != c.want {
-			t.Errorf("%s: scriptHasRealHelmInvocation = %v, want %v", c.name, got, c.want)
+		if got := hasRealHelmInvocation(c.body); got != c.want {
+			t.Errorf("%s: hasRealHelmInvocation = %v, want %v", c.name, got, c.want)
 		}
 	}
 }
@@ -313,7 +310,7 @@ func TestProposeDisposition_PureLogicGate(t *testing.T) {
 		LastMod: time.Now(),
 		Callers: []string{".github/workflows/ci.yml"},
 	}
-	disp := ProposeDisposition(s)
+	disp := ProposeDisposition(s, time.Now())
 	if disp != "MIGRATE-GO-PUREFN" {
 		t.Errorf("expected MIGRATE-GO-PUREFN, got %s", disp)
 	}
@@ -331,8 +328,8 @@ func TestProposeDisposition_CheckScriptThatShellsOut_NotPureFn(t *testing.T) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	s := Script{Path: path, LOC: 3, LastMod: time.Now(), Callers: []string{".github/workflows/x.yml"}}
-	if disp := ProposeDisposition(s); disp == "MIGRATE-GO-PUREFN" {
+	s := Script{Path: path, Body: body, LOC: 3, LastMod: time.Now(), Callers: []string{".github/workflows/x.yml"}}
+	if disp := ProposeDisposition(s, time.Now()); disp == "MIGRATE-GO-PUREFN" {
 		t.Errorf("check-* that shells out must NOT be MIGRATE-GO-PUREFN, got %s", disp)
 	}
 }
@@ -346,8 +343,8 @@ func TestProposeDisposition_PureCheckScript_StaysPureFn(t *testing.T) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	s := Script{Path: path, LOC: 3, LastMod: time.Now(), Callers: []string{".github/workflows/x.yml"}}
-	if disp := ProposeDisposition(s); disp != "MIGRATE-GO-PUREFN" {
+	s := Script{Path: path, Body: body, LOC: 3, LastMod: time.Now(), Callers: []string{".github/workflows/x.yml"}}
+	if disp := ProposeDisposition(s, time.Now()); disp != "MIGRATE-GO-PUREFN" {
 		t.Errorf("pure check-* must stay MIGRATE-GO-PUREFN, got %s", disp)
 	}
 }
@@ -363,8 +360,8 @@ func TestProposeDisposition_GeneratorThatShellsOut_NotPureGenerator(t *testing.T
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	s := Script{Path: path, LOC: 3, LastMod: time.Now(), Callers: []string{"Taskfile.yml"}}
-	if disp := ProposeDisposition(s); disp == "MIGRATE-GENERATOR" {
+	s := Script{Path: path, Body: body, LOC: 3, LastMod: time.Now(), Callers: []string{"Taskfile.yml"}}
+	if disp := ProposeDisposition(s, time.Now()); disp == "MIGRATE-GENERATOR" {
 		t.Errorf("generate-* that shells out must NOT be MIGRATE-GENERATOR, got %s", disp)
 	}
 }
@@ -378,8 +375,8 @@ func TestProposeDisposition_PureGenerator_StaysGenerator(t *testing.T) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	s := Script{Path: path, LOC: 2, LastMod: time.Now(), Callers: []string{"Taskfile.yml"}}
-	if disp := ProposeDisposition(s); disp != "MIGRATE-GENERATOR" {
+	s := Script{Path: path, Body: body, LOC: 2, LastMod: time.Now(), Callers: []string{"Taskfile.yml"}}
+	if disp := ProposeDisposition(s, time.Now()); disp != "MIGRATE-GENERATOR" {
 		t.Errorf("pure generate-* must stay MIGRATE-GENERATOR, got %s", disp)
 	}
 }
@@ -397,7 +394,7 @@ func TestProposeDisposition_ScriptWithDynamicCaller_NotMarkedDead(t *testing.T) 
 		LastMod: old,
 		Callers: []string{"infra/scripts/main.sh"}, // tem caller documentado
 	}
-	disp := ProposeDisposition(s)
+	disp := ProposeDisposition(s, time.Now())
 	if disp == "DELETE-DEAD" {
 		t.Errorf("script with caller should not be DELETE-DEAD, got %s", disp)
 	}
@@ -502,8 +499,8 @@ func TestProposeDisposition_DelegateArgoCD(t *testing.T) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	s := Script{Path: path, LOC: 2, LastMod: time.Now()}
-	if disp := ProposeDisposition(s); disp != "DELEGATE-ARGOCD" {
+	s := Script{Path: path, Body: body, LOC: 2, LastMod: time.Now()}
+	if disp := ProposeDisposition(s, time.Now()); disp != "DELEGATE-ARGOCD" {
 		t.Errorf("expected DELEGATE-ARGOCD, got %s", disp)
 	}
 }
@@ -511,7 +508,7 @@ func TestProposeDisposition_DelegateArgoCD(t *testing.T) {
 // TestProposeDisposition_MigrateGoSDK — pulumi-*.sh
 func TestProposeDisposition_MigrateGoSDK(t *testing.T) {
 	s := Script{Path: "infra/scripts/pulumi-archive.sh", LOC: 50, LastMod: time.Now()}
-	if disp := ProposeDisposition(s); disp != "MIGRATE-GO-SDK" {
+	if disp := ProposeDisposition(s, time.Now()); disp != "MIGRATE-GO-SDK" {
 		t.Errorf("expected MIGRATE-GO-SDK, got %s", disp)
 	}
 }
@@ -519,11 +516,11 @@ func TestProposeDisposition_MigrateGoSDK(t *testing.T) {
 // TestProposeDisposition_Generator — gen-*.sh
 func TestProposeDisposition_Generator(t *testing.T) {
 	s := Script{Path: "infra/scripts/gen-state-machine-dots.sh", LOC: 30, LastMod: time.Now()}
-	if disp := ProposeDisposition(s); disp != "MIGRATE-GENERATOR" {
+	if disp := ProposeDisposition(s, time.Now()); disp != "MIGRATE-GENERATOR" {
 		t.Errorf("expected MIGRATE-GENERATOR for gen-*, got %s", disp)
 	}
 	s2 := Script{Path: "infra/scripts/generate-secrets.sh", LOC: 20, LastMod: time.Now()}
-	if disp := ProposeDisposition(s2); disp != "MIGRATE-GENERATOR" {
+	if disp := ProposeDisposition(s2, time.Now()); disp != "MIGRATE-GENERATOR" {
 		t.Errorf("expected MIGRATE-GENERATOR for generate-*, got %s", disp)
 	}
 }
@@ -531,11 +528,11 @@ func TestProposeDisposition_Generator(t *testing.T) {
 // TestProposeDisposition_MigrateGinkgo — test orchestrators
 func TestProposeDisposition_MigrateGinkgo(t *testing.T) {
 	s := Script{Path: "infra/tests/parity/validate-matrix.sh", LOC: 80, LastMod: time.Now()}
-	if disp := ProposeDisposition(s); disp != "MIGRATE-GINKGO" {
+	if disp := ProposeDisposition(s, time.Now()); disp != "MIGRATE-GINKGO" {
 		t.Errorf("expected MIGRATE-GINKGO for parity test, got %s", disp)
 	}
 	s2 := Script{Path: "infra/tests/dogfood/journey-01.sh", LOC: 60, LastMod: time.Now()}
-	if disp := ProposeDisposition(s2); disp != "MIGRATE-GINKGO" {
+	if disp := ProposeDisposition(s2, time.Now()); disp != "MIGRATE-GINKGO" {
 		t.Errorf("expected MIGRATE-GINKGO for dogfood, got %s", disp)
 	}
 }
@@ -543,7 +540,7 @@ func TestProposeDisposition_MigrateGinkgo(t *testing.T) {
 // TestProposeDisposition_KeepOperatorBreakGlass — break-glass small script
 func TestProposeDisposition_KeepOperatorBreakGlass(t *testing.T) {
 	s := Script{Path: "infra/scripts/break-glass.sh", LOC: 50, LastMod: time.Now()}
-	if disp := ProposeDisposition(s); disp != "KEEP-OPERATOR" {
+	if disp := ProposeDisposition(s, time.Now()); disp != "KEEP-OPERATOR" {
 		t.Errorf("expected KEEP-OPERATOR for break-glass, got %s", disp)
 	}
 }
@@ -551,7 +548,7 @@ func TestProposeDisposition_KeepOperatorBreakGlass(t *testing.T) {
 // TestProposeDisposition_ReviewNeededDefault — script not matching any heuristic
 func TestProposeDisposition_ReviewNeededDefault(t *testing.T) {
 	s := Script{Path: "infra/scripts/random-utility.sh", LOC: 200, LastMod: time.Now(), Callers: []string{"X"}}
-	if disp := ProposeDisposition(s); disp != "REVIEW-NEEDED" {
+	if disp := ProposeDisposition(s, time.Now()); disp != "REVIEW-NEEDED" {
 		t.Errorf("expected REVIEW-NEEDED default, got %s", disp)
 	}
 }
@@ -578,33 +575,29 @@ func TestIsolatedStemPresent(t *testing.T) {
 	}
 }
 
-// TestCountLines_EmptyFile — empty file returns 0 lines
-func TestCountLines_EmptyFile(t *testing.T) {
-	tmp := filepath.Join(t.TempDir(), "empty.sh")
-	if err := os.WriteFile(tmp, []byte(""), 0o644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	n, err := countLines(tmp)
-	if err != nil {
-		t.Fatalf("countLines: %v", err)
-	}
-	if n != 0 {
-		t.Errorf("expected 0 lines, got %d", n)
+func TestCountLines_EmptyContentIsZero(t *testing.T) {
+	if n := countLines(nil); n != 0 {
+		t.Errorf("countLines(empty) = %d, want 0", n)
 	}
 }
 
-// TestCountLines_NoTrailingNewline — last line counted even without final \n
-func TestCountLines_NoTrailingNewline(t *testing.T) {
-	tmp := filepath.Join(t.TempDir(), "noeol.sh")
-	if err := os.WriteFile(tmp, []byte("line1\nline2"), 0o644); err != nil {
-		t.Fatalf("write: %v", err)
+func TestCountLines_CountsALastLineWithoutNewline(t *testing.T) {
+	if n := countLines([]byte("line1\nline2")); n != 2 {
+		t.Errorf("countLines = %d, want 2", n)
 	}
-	n, err := countLines(tmp)
-	if err != nil {
-		t.Fatalf("countLines: %v", err)
+}
+
+// DELETE-DEAD is decided against the instant the caller passes, so the verdict
+// is a function of its inputs rather than of when the test runs.
+func TestProposeDisposition_AgeIsMeasuredAgainstTheGivenInstant(t *testing.T) {
+	lastMod := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	s := Script{Path: "infra/scripts/x.sh", LOC: 10, LastMod: lastMod}
+
+	if got := ProposeDisposition(s, lastMod.Add(89*24*time.Hour)); got == "DELETE-DEAD" {
+		t.Errorf("at 89 days: %s, want not DELETE-DEAD", got)
 	}
-	if n != 2 {
-		t.Errorf("expected 2 lines (last without \\n), got %d", n)
+	if got := ProposeDisposition(s, lastMod.Add(91*24*time.Hour)); got != "DELETE-DEAD" {
+		t.Errorf("at 91 days: %s, want DELETE-DEAD", got)
 	}
 }
 
@@ -722,7 +715,7 @@ func TestDetectsHookRegistration(t *testing.T) {
 		LastMod: old,
 		Callers: nil,
 	}
-	if disp := ProposeDisposition(s); disp == "DELETE-DEAD" {
+	if disp := ProposeDisposition(s, time.Now()); disp == "DELETE-DEAD" {
 		t.Errorf("harness hook must not be DELETE-DEAD, got %s", disp)
 	}
 }
@@ -745,5 +738,28 @@ func TestIsCallerSearchFile(t *testing.T) {
 		if got != want {
 			t.Errorf("isCallerSearchFile(%q) = %v, want %v", name, got, want)
 		}
+	}
+}
+
+// ScanRepo must classify by content read against --root, not against the
+// process working directory. The test process runs inside this package, so a
+// relative Script.Path read with os.ReadFile resolves to nothing and every
+// content rule silently falls through.
+func TestScanRepo_ClassifiesByContentRegardlessOfWorkingDirectory(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "check-cluster.sh"), []byte("#!/bin/bash\nkubectl get pods\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Taskfile.yml"), []byte("tasks:\n  c:\n    cmds:\n      - bash check-cluster.sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	scripts, err := ScanRepo(root)
+
+	if err != nil {
+		t.Fatalf("ScanRepo: %v", err)
+	}
+	if len(scripts) != 1 || scripts[0].Disposition != "KEEP-OPERATOR" {
+		t.Fatalf("scripts = %+v, want check-cluster.sh as KEEP-OPERATOR (it shells out to kubectl)", scripts)
 	}
 }
