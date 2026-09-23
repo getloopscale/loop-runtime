@@ -995,3 +995,9 @@ func TestDynamicRouter_Resolve_DeterministicConcurrent(t *testing.T) {
 			goroutines*callsPerG, drifts.Load())
 	}
 }
+
+func TestExtractRegion_NumberedCellWithoutRegion(t *testing.T) {
+	if got := ExtractRegion("cell-1"); got != "1" {
+		t.Errorf("ExtractRegion(cell-1) = %q, want 1", got)
+	}
+}

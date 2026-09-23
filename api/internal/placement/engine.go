@@ -12,11 +12,12 @@
 //	                   Serializer in production to prevent TOCTOU on
 //	                   concurrent tenant creation.
 //
-// CHG-2026-04-30-DELETE-SINGLE-CELL: DefaultEngine, DefaultCellID,
-// Engine interface, ExtractRegion, ConstraintEngine + CellLabelQuerier
-// were deleted. All were unused in production paths. The cell-0
-// row in tenants.cell_id remains as the SQL DEFAULT — this is data, not
-// code, and has its own comment in 000001_initial_schema.up.sql.
+// CHG-2026-04-30-DELETE-SINGLE-CELL deleted DefaultEngine, the Engine
+// interface, ConstraintEngine and CellLabelQuerier, all unused in production
+// paths. ExtractRegion (below) and DefaultCellID (cells.go) were kept: the
+// first feeds CellStatus.Region, the second names the dev single-cluster
+// cell. The cell-0 value of tenants.cell_id remains as the SQL DEFAULT — this
+// is data, not code, and has its own comment in 000001_initial_schema.up.sql.
 package placement
 
 import (
@@ -40,14 +41,14 @@ type TenantCellQuerier interface {
 // ExtractRegion derives a region label from a cell_id.
 // Convention: cell-{region}-{nn}. Examples:
 //
-//	"cell-0" → "default" (legacy single-cell installs)
+//	DefaultCellID  → "default" (legacy single-cell installs)
 //	"cell-sfo3-02" → "sfo3"
-//	"cell-0"       → "1" (no region encoded; rare)
+//	"cell-1"       → "1" (no region encoded; rare)
 //
 // Used by services/cell_service.go to populate CellStatus.Region in
 // API responses.
 func ExtractRegion(cellID string) string {
-	if cellID == "cell-0" {
+	if cellID == DefaultCellID {
 		return "default"
 	}
 	if len(cellID) > 5 { // strip "cell-" prefix
