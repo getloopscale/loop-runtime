@@ -11,7 +11,6 @@ package logs
 
 import (
 	"context"
-	"crypto/subtle"
 	"net/http"
 	"os"
 	"regexp"
@@ -28,24 +27,12 @@ import (
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
-// isDebugAuthorized matches the admin endpoint pattern (admin_pin_cell,
-// admin_evict): LOOPZERO_ADMIN_API=true env gates the feature, and the
-// X-Service-Auth header must match LOOPZERO_ADMIN_SERVICE_AUTH_SECRET to
-// authorize the call. Dashboard user JWTs CANNOT enable debug — only
-// operator service-to-service callers (CLI with admin token, runbook
-// scripts) carry the secret.
-//
-// Plan J-17 Layer 3 (2026-06-06) gate for ?mode=debug on /logs.
+// isDebugAuthorized gates ?mode=debug on /logs (plan J-17 Layer 3): the
+// LOOPZERO_ADMIN_API feature flag must be on, and the caller must be an operator
+// as defined by auth.AdminServiceAuthorized — the same predicate the admin
+// routes' middleware uses. Dashboard user JWTs CANNOT enable debug.
 func isDebugAuthorized(r *http.Request) bool {
-	if os.Getenv("LOOPZERO_ADMIN_API") != "true" {
-		return false
-	}
-	expected := os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET")
-	if expected == "" {
-		return false
-	}
-	got := strings.TrimSpace(r.Header.Get("X-Service-Auth"))
-	return subtle.ConstantTimeCompare([]byte(got), []byte(expected)) == 1
+	return os.Getenv("LOOPZERO_ADMIN_API") == "true" && auth.AdminServiceAuthorized(r)
 }
 
 // parseSinceParam converts a `?since=<value>` query parameter into a

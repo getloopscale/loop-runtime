@@ -181,14 +181,7 @@ func RequireAdminService(next http.Handler) http.Handler {
 				"Admin service authentication required. Set X-Service-Auth header.")
 			return
 		}
-		canonical := os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET")
-		canonicalPrev := os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS")
-
-		match := func(expected string) bool {
-			return expected != "" &&
-				subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
-		}
-		if match(canonical) || match(canonicalPrev) {
+		if AdminServiceAuthorized(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -196,6 +189,28 @@ func RequireAdminService(next http.Handler) http.Handler {
 		writeError(w, http.StatusForbidden, "FORBIDDEN",
 			"Invalid admin service-auth secret.")
 	})
+}
+
+// AdminServiceAuthorized reports whether the request carries the admin
+// service-auth secret in X-Service-Auth. It is the single definition of
+// "an operator is calling": RequireAdminService gates whole routes with it,
+// and a handler that only gates a MODE of a user route (logs ?mode=debug)
+// asks the same question here instead of re-reading the environment.
+//
+// Only the canonical LOOPZERO_ADMIN_SERVICE_AUTH_SECRET and its _PREVIOUS
+// rotation sibling are honoured — never the legacy LOOPZERO_SERVICE_AUTH_SECRET,
+// which the cloud proxy attaches to every forwarded user request.
+func AdminServiceAuthorized(r *http.Request) bool {
+	provided := r.Header.Get("X-Service-Auth")
+	if provided == "" {
+		return false
+	}
+	match := func(expected string) bool {
+		return expected != "" &&
+			subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
+	}
+	return match(os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET")) ||
+		match(os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS"))
 }
 
 // RequireAdmin is a middleware that requires a valid admin API key in the

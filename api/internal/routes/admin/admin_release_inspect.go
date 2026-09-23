@@ -6,9 +6,10 @@
 //
 // GET /api/v1/admin/releases/{id}/inspect
 //
-// Gated behind LOOPZERO_ADMIN_API=true. Requires X-Service-Auth header
-// matching LOOPZERO_SERVICE_AUTH_SECRET (constant-time compare). Returns
-// the diagnostic payload assembled by release.ReleaseInspector.
+// Gated behind LOOPZERO_ADMIN_API=true. Service authentication is NOT done
+// here: the router mounts this handler behind mwauth.RequireAdminService,
+// the one admin gate (canonical LOOPZERO_ADMIN_SERVICE_AUTH_SECRET only).
+// Returns the diagnostic payload assembled by release.ReleaseInspector.
 //
 // Exit-code-equivalent HTTP status mapping (CLI Rule 4):
 //   - 200 success
@@ -20,7 +21,6 @@
 package admin
 
 import (
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -40,14 +40,6 @@ func AdminReleaseInspectHandler(inspector release.ReleaseInspector) http.Handler
 	return func(w http.ResponseWriter, r *http.Request) {
 		if os.Getenv("LOOPZERO_ADMIN_API") != "true" {
 			httpio.WriteCodeErrorJSON(w, http.StatusNotFound, "NOT_FOUND", "Endpoint not available.")
-			return
-		}
-
-		serviceAuth := r.Header.Get("X-Service-Auth")
-		expected := os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET")
-		if expected == "" || serviceAuth == "" ||
-			subtle.ConstantTimeCompare([]byte(serviceAuth), []byte(expected)) != 1 {
-			httpio.WriteCodeErrorJSON(w, http.StatusForbidden, "FORBIDDEN", "Admin endpoint requires X-Service-Auth.")
 			return
 		}
 

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
 	"github.com/go-chi/chi/v5"
@@ -35,13 +36,15 @@ func (f *fakeInspector) Inspect(ctx context.Context, releaseID string) (*release
 func setupHandler(t *testing.T, inspector release.ReleaseInspector) http.Handler {
 	t.Helper()
 	r := chi.NewRouter()
-	r.Get("/api/v1/admin/releases/{id}/inspect", AdminReleaseInspectHandler(inspector))
+	// The router mounts this handler behind auth.RequireAdminService; the
+	// test exercises the same chain so the auth gate is covered with it.
+	r.With(auth.RequireAdminService).Get("/api/v1/admin/releases/{id}/inspect", AdminReleaseInspectHandler(inspector))
 	return r
 }
 
 func TestAdminReleaseInspect_HappyPath(t *testing.T) {
 	t.Setenv("LOOPZERO_ADMIN_API", "true")
-	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET", "secret-abc")
+	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret-abc")
 	insp := &fakeInspector{inspect: func(_ context.Context, _ string) (*release.ReleaseInspection, error) {
 		return &release.ReleaseInspection{
 			ReleaseID:       "rel-001",
@@ -76,7 +79,7 @@ func TestAdminReleaseInspect_HappyPath(t *testing.T) {
 
 func TestAdminReleaseInspect_403_WithoutServiceAuth(t *testing.T) {
 	t.Setenv("LOOPZERO_ADMIN_API", "true")
-	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET", "secret-abc")
+	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret-abc")
 	srv := setupHandler(t, &fakeInspector{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/releases/rel-001/inspect", nil)
@@ -91,7 +94,7 @@ func TestAdminReleaseInspect_403_WithoutServiceAuth(t *testing.T) {
 
 func TestAdminReleaseInspect_403_WithWrongServiceAuth(t *testing.T) {
 	t.Setenv("LOOPZERO_ADMIN_API", "true")
-	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET", "secret-abc")
+	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret-abc")
 	srv := setupHandler(t, &fakeInspector{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/releases/rel-001/inspect", nil)
@@ -105,10 +108,10 @@ func TestAdminReleaseInspect_403_WithWrongServiceAuth(t *testing.T) {
 }
 
 func TestAdminReleaseInspect_404_WhenAdminAPIDisabled(t *testing.T) {
-	// LOOPZERO_ADMIN_API NOT set → endpoint must look like it doesn't exist
-	// (no information leak to unauthenticated probes).
+	// LOOPZERO_ADMIN_API NOT set → an authenticated operator still sees 404:
+	// the flag hides the endpoint even from callers holding the secret.
 	t.Setenv("LOOPZERO_ADMIN_API", "")
-	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET", "secret-abc")
+	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret-abc")
 	srv := setupHandler(t, &fakeInspector{})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/releases/rel-001/inspect", nil)
@@ -123,7 +126,7 @@ func TestAdminReleaseInspect_404_WhenAdminAPIDisabled(t *testing.T) {
 
 func TestAdminReleaseInspect_404_ForUnknownRelease(t *testing.T) {
 	t.Setenv("LOOPZERO_ADMIN_API", "true")
-	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET", "secret-abc")
+	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret-abc")
 	insp := &fakeInspector{inspect: func(_ context.Context, id string) (*release.ReleaseInspection, error) {
 		return nil, release.ErrReleaseInspectionNotFound{ReleaseID: id}
 	}}
@@ -147,7 +150,7 @@ func TestAdminReleaseInspect_Returns_AttestationChain(t *testing.T) {
 	// image_attestation_rekor_url + signing_path so on-call can
 	// answer "which write path was taken" without log access.
 	t.Setenv("LOOPZERO_ADMIN_API", "true")
-	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET", "secret-abc")
+	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret-abc")
 	rekorURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=42"
 	insp := &fakeInspector{inspect: func(_ context.Context, _ string) (*release.ReleaseInspection, error) {
 		return &release.ReleaseInspection{

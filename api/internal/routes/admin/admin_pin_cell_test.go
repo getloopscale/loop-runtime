@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
 	"github.com/getloopscale/loopzero/api/internal/services/placement"
@@ -52,13 +53,17 @@ func doPin(t *testing.T, body any, p CellPinner, env map[string]string, headers 
 		req.Header.Set(k, v)
 	}
 	rec := httptest.NewRecorder()
-	AdminPinCellHandler(p, nil).ServeHTTP(rec, req)
+	// The router mounts this handler behind auth.RequireAdminService; the
+	// test exercises the same chain so the auth gate is covered with it.
+	auth.RequireAdminService(AdminPinCellHandler(p, nil)).ServeHTTP(rec, req)
 	return rec
 }
 
 func TestAdminPinCell_FeatureFlagOff_Returns404(t *testing.T) {
-	// LOOPZERO_ADMIN_API not set
-	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, &fakePinner{}, nil, nil)
+	// LOOPZERO_ADMIN_API not set: even an authenticated operator sees 404.
+	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, &fakePinner{},
+		map[string]string{"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s"},
+		map[string]string{"X-Service-Auth": "s"})
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
 	}

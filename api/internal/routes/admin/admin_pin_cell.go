@@ -22,7 +22,6 @@ package admin
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -92,14 +91,6 @@ func AdminPinCellHandler(pinner CellPinner, audit audit.AuditWriter) http.Handle
 		// Feature flag gate (matches admin_evict semantics).
 		if os.Getenv("LOOPZERO_ADMIN_API") != "true" {
 			http.NotFound(w, r)
-			return
-		}
-
-		// Service-auth gate.
-		auth := strings.TrimSpace(r.Header.Get("X-Service-Auth"))
-		expected := os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET")
-		if expected == "" || subtle.ConstantTimeCompare([]byte(auth), []byte(expected)) != 1 {
-			http.Error(w, `{"code":"forbidden","message":"admin endpoint requires X-Service-Auth"}`, http.StatusForbidden)
 			return
 		}
 

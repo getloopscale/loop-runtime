@@ -207,17 +207,18 @@ func NewRouter(cfg Config) *chi.Mux {
 		"sem banco — o CellPinner é construído sobre `PostgresCellStore` "+
 			"(setup_server.go:299). Esta é a ÚNICA rota que move um tenant de célula, "+
 			"então desligada ela não degrada: ela remove a operação") {
-		r.Post("/api/v1/admin/tenants/pin", admin.AdminPinCellHandler(cfg.AdminPinner, cfg.AuditWriter))
+		r.With(mwauth.RequireAdminService).Post("/api/v1/admin/tenants/pin", admin.AdminPinCellHandler(cfg.AdminPinner, cfg.AuditWriter))
 	}
 	// T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md:
 	// diagnostic read-only endpoint for on-call to inspect a release's
-	// signing + attestation chain without source access. The handler
-	// enforces LOOPZERO_ADMIN_API + X-Service-Auth itself.
+	// signing + attestation chain without source access. Like every admin
+	// route it sits behind mwauth.RequireAdminService; the handler keeps only
+	// the LOOPZERO_ADMIN_API feature gate.
 	if surfaces.Recorded(cfg.Surfaces, surfaces.ReleaseInspect, cfg.ReleaseInspector != nil,
 		"sem banco — construído em setup_server.go:315, dentro do bloco que exige "+
 			"`dbAdapter`. É a visão de plantão sobre a cadeia de assinatura de uma "+
 			"release; desligada, o plantão perde o diagnóstico exatamente quando precisa") {
-		r.Get("/api/v1/admin/releases/{id}/inspect", admin.AdminReleaseInspectHandler(cfg.ReleaseInspector))
+		r.With(mwauth.RequireAdminService).Get("/api/v1/admin/releases/{id}/inspect", admin.AdminReleaseInspectHandler(cfg.ReleaseInspector))
 	}
 
 	// Protected routes (auth required)
