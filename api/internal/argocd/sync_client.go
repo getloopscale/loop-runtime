@@ -65,7 +65,12 @@ type SyncClient struct {
 // NewSyncClient creates a SyncClient for real ArgoCD operations.
 // When cfg.TokenProvider is set, it is used for dynamic token sourcing.
 // Otherwise, cfg.Token is wrapped in a StaticTokenProvider.
-func NewSyncClient(cfg SyncClientConfig) *SyncClient {
+//
+// When cfg.CACertPath is set the operator asked for verified TLS, so a CA file
+// that cannot be read, or that holds no certificate, is an error: falling back
+// to InsecureSkipVerify would turn verification off on the channel carrying the
+// bearer token.
+func NewSyncClient(cfg SyncClientConfig) (*SyncClient, error) {
 	client := cfg.HTTPClient
 	if client == nil {
 		timeout := cfg.Timeout
@@ -78,19 +83,16 @@ func NewSyncClient(cfg SyncClientConfig) *SyncClient {
 		if cfg.CACertPath != "" {
 			caCert, err := os.ReadFile(cfg.CACertPath)
 			if err != nil {
-				slog.Error("argocd: failed to read CA cert, falling back to insecure",
-					"path", cfg.CACertPath, "error", err)
-				client.Transport = &http.Transport{
-					TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // fallback only
-				}
-			} else {
-				pool := x509.NewCertPool()
-				pool.AppendCertsFromPEM(caCert)
-				client.Transport = &http.Transport{
-					TLSClientConfig: &tls.Config{RootCAs: pool},
-				}
-				slog.Info("argocd: TLS verification enabled with custom CA", "path", cfg.CACertPath)
+				return nil, fmt.Errorf("argocd: read CA certificate %s: %w", cfg.CACertPath, err)
 			}
+			pool := x509.NewCertPool()
+			if !pool.AppendCertsFromPEM(caCert) {
+				return nil, fmt.Errorf("argocd: CA certificate file %s holds no PEM certificate", cfg.CACertPath)
+			}
+			client.Transport = &http.Transport{
+				TLSClientConfig: &tls.Config{RootCAs: pool},
+			}
+			slog.Info("argocd: TLS verification enabled with custom CA", "path", cfg.CACertPath)
 		} else if cfg.Insecure {
 			client.Transport = &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // local dev only
@@ -111,7 +113,7 @@ func NewSyncClient(cfg SyncClientConfig) *SyncClient {
 		tokenProvider: tp,
 		client:        client,
 		serializer:    NewSyncSerializer(),
-	}
+	}, nil
 }
 
 // ValidateToken checks that the configured token is valid by calling

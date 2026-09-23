@@ -43,9 +43,14 @@ func setupWorkflows(cfg config.Config, httpTransport *http.Transport, logger *sl
 		logger.Info("cloudflare KV client configured for static frontend routing")
 	}
 
+	syncClient, err := backgroundloops.NewSyncClient(cfg, httpTransport, logger)
+	if err != nil {
+		return nil, err
+	}
+
 	return &WorkflowDeps{
 		WorkflowSubmitter: workflowSubmitter,
-		SyncClient:        backgroundloops.NewSyncClient(cfg, httpTransport, logger),
+		SyncClient:        syncClient,
 		GitOpsPusher:      backgroundloops.NewGitOpsPusher(cfg),
 		KVClient:          kvClient,
 	}, nil

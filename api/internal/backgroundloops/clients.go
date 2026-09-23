@@ -68,8 +68,9 @@ func NewWorkflowSubmitter(cfg config.Config, logger *slog.Logger) (*platform.Cir
 // authenticates with the self-healing KubeMintingTokenProvider when the mgmt
 // cluster and the argocd-refresh-credentials Secret are reachable, and falls
 // back to the static cfg.ArgocdToken otherwise. transport is shared pooling
-// for the secure case; nil uses the default transport.
-func NewSyncClient(cfg config.Config, transport *http.Transport, logger *slog.Logger) *platform.CircuitBreakerSyncClient {
+// for the secure case; nil uses the default transport. A configured CA that
+// cannot be used is an error: the client never falls back to insecure TLS.
+func NewSyncClient(cfg config.Config, transport *http.Transport, logger *slog.Logger) (*platform.CircuitBreakerSyncClient, error) {
 	httpClient := &http.Client{Timeout: cfg.ArgocdClientTimeout}
 	if cfg.ArgocdInsecure {
 		// Local k3d only: cert-manager cannot issue for *.loopzero.local. Production
@@ -93,7 +94,11 @@ func NewSyncClient(cfg config.Config, transport *http.Transport, logger *slog.Lo
 	} else {
 		syncCfg.Token = cfg.ArgocdToken
 	}
-	return platform.NewCircuitBreakerSyncClient(argocd.NewSyncClient(syncCfg), circuitBreaker(cfg), logger)
+	raw, err := argocd.NewSyncClient(syncCfg)
+	if err != nil {
+		return nil, fmt.Errorf("deployment sync client: %w", err)
+	}
+	return platform.NewCircuitBreakerSyncClient(raw, circuitBreaker(cfg), logger), nil
 }
 
 // NewGitOpsPusher builds the Gitea pusher manifests are committed through.

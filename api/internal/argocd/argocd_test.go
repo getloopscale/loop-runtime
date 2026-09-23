@@ -20,8 +20,9 @@ import (
 // is in place (vs struct-literal bypass that breaks subsequent invariant
 // additions — caught regression iter Ralph 1 commit 088c721d). The httptest
 // server is plain HTTP so cfg.Insecure / CACertPath don't matter.
-func newHTTPTestSyncClient(serverURL string) *SyncClient {
-	return NewSyncClient(SyncClientConfig{
+func newHTTPTestSyncClient(t testing.TB, serverURL string) *SyncClient {
+	t.Helper()
+	return mustNewSyncClient(t, SyncClientConfig{
 		BaseURL: serverURL,
 		Token:   "test-token",
 		Timeout: 5 * time.Second,
@@ -54,7 +55,7 @@ func TestTriggerSync_HappyPath(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := newHTTPTestSyncClient(srv.URL)
+	client := newHTTPTestSyncClient(t, srv.URL)
 
 	// Act
 	err := client.TriggerSync(context.Background(), "my-app")
@@ -79,7 +80,7 @@ func TestTriggerSync_AppNotFound(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := newHTTPTestSyncClient(srv.URL)
+	client := newHTTPTestSyncClient(t, srv.URL)
 
 	// Act
 	err := client.TriggerSync(context.Background(), "nonexistent")
@@ -104,7 +105,7 @@ func TestTriggerSync_AuthFailed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := newHTTPTestSyncClient(srv.URL)
+	client := newHTTPTestSyncClient(t, srv.URL)
 
 	// Act
 	err := client.TriggerSync(context.Background(), "my-app")
@@ -129,7 +130,7 @@ func TestTriggerSync_ConflictReturnsTypedError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := newHTTPTestSyncClient(srv.URL)
+	client := newHTTPTestSyncClient(t, srv.URL)
 
 	// Act
 	err := client.TriggerSync(context.Background(), "my-app")
@@ -152,7 +153,7 @@ func TestGetAppStatus_Synced_Healthy(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := newHTTPTestSyncClient(srv.URL)
+	client := newHTTPTestSyncClient(t, srv.URL)
 
 	// Act
 	synced, healthy, err := client.GetAppStatus(context.Background(), "my-app", nil)
@@ -186,7 +187,7 @@ func TestGetAppStatus_PerResourceHealth(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := newHTTPTestSyncClient(srv.URL)
+	client := newHTTPTestSyncClient(t, srv.URL)
 
 	// Act: check only "web"
 	synced, healthy, err := client.GetAppStatus(context.Background(), "my-app", []string{"web"})
@@ -234,7 +235,7 @@ func TestGetAppStatus_RolloutCounted_AsWorkloadPrimitive(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := newHTTPTestSyncClient(srv.URL)
+	client := newHTTPTestSyncClient(t, srv.URL)
 	synced, healthy, err := client.GetAppStatus(context.Background(), "my-app", []string{"myproj-api"})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -264,7 +265,7 @@ func TestGetAppStatus_RolloutDegraded_BlocksHealthy(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := newHTTPTestSyncClient(srv.URL)
+	client := newHTTPTestSyncClient(t, srv.URL)
 	_, healthy, err := client.GetAppStatus(context.Background(), "my-app", []string{"bad-app-api"})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -281,7 +282,7 @@ func TestTerminateOperation_404IsIdempotent(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := newHTTPTestSyncClient(srv.URL)
+	client := newHTTPTestSyncClient(t, srv.URL)
 
 	// Act
 	err := client.TerminateOperation(context.Background(), "my-app")
@@ -303,7 +304,7 @@ func TestGetSyncRevision(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := newHTTPTestSyncClient(srv.URL)
+	client := newHTTPTestSyncClient(t, srv.URL)
 
 	// Act
 	rev, err := client.GetSyncRevision(context.Background(), "my-app")
@@ -328,7 +329,7 @@ func TestValidateToken_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := newHTTPTestSyncClient(srv.URL)
+	client := newHTTPTestSyncClient(t, srv.URL)
 
 	// Act
 	err := client.ValidateToken(context.Background())
@@ -346,7 +347,7 @@ func TestValidateToken_InvalidReturnsAuthError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := newHTTPTestSyncClient(srv.URL)
+	client := newHTTPTestSyncClient(t, srv.URL)
 
 	// Act
 	err := client.ValidateToken(context.Background())
@@ -355,4 +356,14 @@ func TestValidateToken_InvalidReturnsAuthError(t *testing.T) {
 	if err != loopzeroerrors.ErrDeployServiceAuthFailed {
 		t.Errorf("expected ErrDeployServiceAuthFailed, got: %v", err)
 	}
+}
+
+// mustNewSyncClient builds a SyncClient or fails the test.
+func mustNewSyncClient(t testing.TB, cfg SyncClientConfig) *SyncClient {
+	t.Helper()
+	c, err := NewSyncClient(cfg)
+	if err != nil {
+		t.Fatalf("NewSyncClient: %v", err)
+	}
+	return c
 }

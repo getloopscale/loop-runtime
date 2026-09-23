@@ -40,7 +40,10 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	if err != nil {
 		return nil, err
 	}
-	syncClient := backgroundloops.NewSyncClient(cfg, nil, logger)
+	syncClient, err := backgroundloops.NewSyncClient(cfg, nil, logger)
+	if err != nil {
+		return nil, err
+	}
 	gitopsPusher := backgroundloops.NewGitOpsPusher(cfg)
 
 	tenantCRMgr, err := tenancy.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)

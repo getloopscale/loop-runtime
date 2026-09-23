@@ -4,6 +4,8 @@
 package argocd
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -44,7 +46,7 @@ func TestSafePrefix_Empty(t *testing.T) {
 // =============================================================================
 
 func TestNewSyncClient_Basic(t *testing.T) {
-	c := NewSyncClient(SyncClientConfig{
+	c := mustNewSyncClient(t, SyncClientConfig{
 		BaseURL: "http://argocd:80",
 		Token:   "test-token",
 	})
@@ -61,7 +63,7 @@ func TestNewSyncClient_Basic(t *testing.T) {
 
 func TestNewSyncClient_WithTokenProvider(t *testing.T) {
 	tp := NewStaticTokenProvider("my-token")
-	c := NewSyncClient(SyncClientConfig{
+	c := mustNewSyncClient(t, SyncClientConfig{
 		BaseURL:       "https://argocd:443",
 		TokenProvider: tp,
 	})
@@ -73,14 +75,27 @@ func TestNewSyncClient_WithTokenProvider(t *testing.T) {
 	}
 }
 
-func TestNewSyncClient_WithCACertPath_Missing(t *testing.T) {
-	// Non-existent CA cert should fall back to insecure
-	c := NewSyncClient(SyncClientConfig{
+func TestNewSyncClient_UnreadableCACertIsAnError(t *testing.T) {
+	// Arrange: the operator asked for verified TLS with a CA that cannot be read.
+	// Act
+	_, err := NewSyncClient(SyncClientConfig{
 		BaseURL:    "https://argocd:443",
 		Token:      "test",
 		CACertPath: "/nonexistent/ca.crt",
 	})
-	if c == nil {
-		t.Fatal("expected non-nil client")
+	// Assert: verification must not silently turn off.
+	if err == nil {
+		t.Fatal("NewSyncClient succeeded with an unreadable CA — it used to fall back to InsecureSkipVerify")
+	}
+}
+
+func TestNewSyncClient_CAFileWithoutCertificatesIsAnError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ca.crt")
+	if err := os.WriteFile(path, []byte("not a PEM certificate"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := NewSyncClient(SyncClientConfig{BaseURL: "https://argocd:443", Token: "t", CACertPath: path})
+	if err == nil {
+		t.Fatal("NewSyncClient accepted a CA file holding no certificate — every request would fail TLS later")
 	}
 }

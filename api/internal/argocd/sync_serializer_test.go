@@ -201,7 +201,7 @@ func TestSyncSerializer_OpportunisticEviction(t *testing.T) {
 // the 90s default timeout (vs previous hardcoded 30s).
 // Plan T1.1 RED #6.
 func TestSyncClient_TimeoutDefault(t *testing.T) {
-	c := NewSyncClient(SyncClientConfig{BaseURL: "http://localhost"})
+	c := mustNewSyncClient(t, SyncClientConfig{BaseURL: "http://localhost"})
 	if c.client.Timeout != 90*time.Second {
 		t.Errorf("default Timeout = %v, want 90s", c.client.Timeout)
 	}
@@ -210,7 +210,7 @@ func TestSyncClient_TimeoutDefault(t *testing.T) {
 // TestSyncClient_TimeoutFromConfig asserts explicit cfg.Timeout overrides default.
 // Plan T1.1 RED #7.
 func TestSyncClient_TimeoutFromConfig(t *testing.T) {
-	c := NewSyncClient(SyncClientConfig{BaseURL: "http://localhost", Timeout: 60 * time.Second})
+	c := mustNewSyncClient(t, SyncClientConfig{BaseURL: "http://localhost", Timeout: 60 * time.Second})
 	if c.client.Timeout != 60*time.Second {
 		t.Errorf("configured Timeout = %v, want 60s", c.client.Timeout)
 	}

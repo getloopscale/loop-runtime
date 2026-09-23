@@ -68,11 +68,7 @@ func (s *PostgresCellStore) CountByCell(ctx context.Context) (map[string]int, er
 // (cells.capacity_tenants_max), satisfying placement.TenantCellQuerier. Cells
 // with NULL capacity are absent from the map.
 func (s *PostgresCellStore) CapacityByCell(ctx context.Context) (map[string]int, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
-	rows, err := generated.New().ListDeclaredCellCapacities(ctx, bridge)
+	rows, err := generated.New().ListDeclaredCellCapacities(ctx, s.bridge())
 	if err != nil {
 		return nil, fmt.Errorf("cell store: query declared capacities: %w", err)
 	}

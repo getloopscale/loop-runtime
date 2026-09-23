@@ -36,7 +36,7 @@ func newTestSyncClient(t *testing.T) *SyncClient {
 	t.Helper()
 	url, token := skipIfNoArgoCD(t)
 
-	return NewSyncClient(SyncClientConfig{
+	return mustNewSyncClient(t, SyncClientConfig{
 		BaseURL:  url,
 		Token:    token,
 		Insecure: true, // k3d uses self-signed certs
@@ -91,7 +91,7 @@ func TestSyncClient_TriggerSync_HardRefreshesBeforeSync(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewSyncClient(SyncClientConfig{
+	client := mustNewSyncClient(t, SyncClientConfig{
 		BaseURL: server.URL,
 		Token:   "test-token",
 	})
@@ -142,7 +142,7 @@ func TestSyncClient_TriggerSync_HardRefreshFailureDoesNotBlockSync(t *testing.T)
 	}))
 	defer server.Close()
 
-	client := NewSyncClient(SyncClientConfig{
+	client := mustNewSyncClient(t, SyncClientConfig{
 		BaseURL: server.URL,
 		Token:   "test-token",
 	})
@@ -168,7 +168,7 @@ func TestSyncClient_TerminateOperation_SendsContentType(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewSyncClient(SyncClientConfig{
+	client := mustNewSyncClient(t, SyncClientConfig{
 		BaseURL: server.URL,
 		Token:   "test-token",
 	})
@@ -192,7 +192,7 @@ func TestSyncClient_TriggerSync_404WrapsApplicationNotFoundSentinel(t *testing.T
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()
-	client := NewSyncClient(SyncClientConfig{BaseURL: server.URL, Token: "test-token"})
+	client := mustNewSyncClient(t, SyncClientConfig{BaseURL: server.URL, Token: "test-token"})
 
 	err := client.TriggerSync(context.Background(), "tn-foo-production")
 
