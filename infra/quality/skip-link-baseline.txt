@@ -107,7 +107,6 @@ cmd/loopzero-ops/internal/quality/esochartsanity/check_test.go	t.Skip("could not
 cmd/loopzero-ops/internal/quality/esocreationpolicy/check_test.go	t.Skip("helm not on PATH — skipping")
 cmd/loopzero-ops/internal/quality/esocreationpolicy/check_test.go	t.Skip("could not locate ROADMAP.md")
 cmd/loopzero-ops/internal/quality/esooverlay/check_test.go	t.Skip("could not locate the ESO overlay within 8 parent dirs; skipping real-repo assertion")
-cmd/loopzero-ops/internal/quality/k6loadrigor/check_test.go	t.Skip("could not locate k6 thresholds within 8 parent dirs; skipping")
 cmd/loopzero-ops/internal/quality/lokiretentionschema/check_test.go	t.Skipf("could not locate ROADMAP.md (skipping)")
 cmd/loopzero-ops/internal/quality/lokivaultretention/check_test.go	t.Skipf("could not locate ROADMAP.md (skipping)")
 cmd/loopzero-ops/internal/quality/nocloud/check_test.go	t.Skipf("could not locate ROADMAP.md from %s (skipping)", cwd)
