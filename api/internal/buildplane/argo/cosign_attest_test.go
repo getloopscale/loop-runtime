@@ -9,6 +9,10 @@ package argo
 import (
 	"strings"
 	"testing"
+
+	forge "github.com/getloopscale/loopzero-forge"
+
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 func TestCosignAttestTemplate_Renders(t *testing.T) {
@@ -175,11 +179,41 @@ func TestCosignAttestTemplate_ExportsRekorURL(t *testing.T) {
 // BOTH cosign-sign + sbom. Without sign dep, Rekor chain broken
 // (attestation lands before sig → unlinked → SLSA L3 fail).
 func TestWorkflowBuilder_AttestStepDependsOnSignAndSyft(t *testing.T) {
-	// This test exercises the DAG composition. We instantiate the builder
-	// with CosignAttestEnabled and verify the resulting DAG has the
-	// correct dependencies.
-	t.Skip("DAG composition test deferred to integration test in workflow_builder_test.go " +
-		"(requires full WorkflowBuilder fixture setup). See T2.2 GREEN.")
+	// Arrange
+	infra := testInfraParams()
+	infra.CosignAttestEnabled = true
+	infra.CosignKeyless = true
+	infra.Env = "development"
+
+	// Act
+	wf, err := NewWorkflowBuilder(infra).Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	// Assert
+	var attest *forge.Task
+	for _, tmpl := range wf.Templates {
+		if dag, ok := tmpl.(*forge.DAG); ok && dag.Name == entrypointName {
+			for _, task := range dag.Tasks {
+				if task.Name == naming.AttestStepName("api") {
+					attest = task
+				}
+			}
+		}
+	}
+	if attest == nil {
+		t.Fatal("no attest task in the build pipeline with CosignAttestEnabled")
+	}
+	deps := map[string]bool{}
+	for _, d := range attest.Dependencies {
+		deps[d] = true
+	}
+	for _, want := range []string{naming.SignStepName("api"), naming.SBOMStepName("api")} {
+		if !deps[want] {
+			t.Errorf("attest dependencies %v lack %q — the Rekor chain would break", attest.Dependencies, want)
+		}
+	}
 }
 
 // T1.2 of plan 2026-05-28-meet-001-engineering-closure v1.1.
