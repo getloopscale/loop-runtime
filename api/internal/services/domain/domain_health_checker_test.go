@@ -24,6 +24,7 @@ type fakeDomainHealthStore struct {
 	cnameChecked      map[string]int // domain → consecutive failures
 	failedDomains     map[string]string
 	statusUpdated     map[string]string
+	transitions       []struct{ Domain, From, To string }
 	deletedDomains    []string
 }
 
@@ -66,6 +67,11 @@ func (f *fakeDomainHealthStore) UpdateStatus(_ context.Context, domain, status s
 	f.statusUpdated[domain] = status
 	return nil
 }
+func (f *fakeDomainHealthStore) TransitionStatus(_ context.Context, domain, expected, next string) error {
+	f.transitions = append(f.transitions, struct{ Domain, From, To string }{domain, expected, next})
+	f.statusUpdated[domain] = next
+	return nil
+}
 func (f *fakeDomainHealthStore) Delete(_ context.Context, domain string) error {
 	f.deletedDomains = append(f.deletedDomains, domain)
 	return nil
@@ -77,8 +83,8 @@ func TestDomainHealthChecker_CleanupStalePending(t *testing.T) {
 	// Arrange
 	store := newFakeDomainHealthStore()
 	store.stalePending = []ports.CustomDomain{
-		{Domain: "stale.com", TenantID: "tn-1"},
-		{Domain: "old.com", TenantID: "tn-1"},
+		{Domain: "stale.com", TenantID: "tn-1", Status: "pending_verification"},
+		{Domain: "old.com", TenantID: "tn-1", Status: "pending_verification"},
 	}
 
 	checker := NewDomainHealthChecker(store, slog.Default(), DomainHealthCheckerConfig{
@@ -102,7 +108,7 @@ func TestDomainHealthChecker_ProvisioningTimeout(t *testing.T) {
 	// Arrange
 	store := newFakeDomainHealthStore()
 	store.staleProvisioning = []ports.CustomDomain{
-		{Domain: "stuck.com", TenantID: "tn-1"},
+		{Domain: "stuck.com", TenantID: "tn-1", Status: "provisioning"},
 	}
 
 	checker := NewDomainHealthChecker(store, slog.Default(), DomainHealthCheckerConfig{

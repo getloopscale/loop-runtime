@@ -13,6 +13,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // DomainHealthStore abstracts persistence needed by the health checker.
@@ -28,7 +29,7 @@ type DomainHealthStore interface {
 	UpdateVerified(ctx context.Context, domain string, verifiedAt time.Time) error
 	UpdateCNAMECheck(ctx context.Context, domain string, checkTime time.Time, consecutiveFailures int) error
 	UpdateFailure(ctx context.Context, domain, status, reason string) error
-	UpdateStatus(ctx context.Context, domain, status string) error
+	TransitionStatus(ctx context.Context, domain, expectedStatus, newStatus string) error
 	Delete(ctx context.Context, domain string) error
 }
 
@@ -154,6 +155,10 @@ func (h *DomainHealthChecker) autoVerifyPending(ctx context.Context) {
 			continue
 		}
 		if verified {
+			if _, err := nextDomainStatus(d.Domain, d.Status, statemachine.DomainVerify); err != nil {
+				h.logger.Warn("domain health: auto-verify skipped, status moved on", "error", err, "domain", d.Domain)
+				continue
+			}
 			now := time.Now().UTC()
 			if err := h.store.UpdateVerified(ctx, d.Domain, now); err != nil {
 				h.logger.Error("domain health: auto-verify update failed", "error", err, "domain", d.Domain)
@@ -223,7 +228,7 @@ func (h *DomainHealthChecker) checkCNAME(ctx context.Context) {
 				"domain", d.Domain,
 				"consecutive_failures", failures,
 				"grace_days", h.graceDays)
-			if err := h.store.UpdateStatus(ctx, d.Domain, "removing"); err != nil {
+			if _, err := transitionDomain(ctx, h.store, d.Domain, d.Status, statemachine.DomainRemove); err != nil {
 				h.logger.Error("domain health: transition to removing failed", "error", err, "domain", d.Domain)
 			}
 		}
@@ -259,7 +264,7 @@ func (h *DomainHealthChecker) cleanupStalePending(ctx context.Context) {
 		// FIND-005 fix: transition to "removing" instead of direct delete.
 		// This preserves the state machine invariant and lets the provisioner's
 		// processRemoving handle actual deletion (preventing race with concurrent verify).
-		if err := h.store.UpdateStatus(ctx, d.Domain, "removing"); err != nil {
+		if _, err := transitionDomain(ctx, h.store, d.Domain, d.Status, statemachine.DomainRemove); err != nil {
 			h.logger.Error("domain health: stale cleanup transition failed", "error", err, "domain", d.Domain)
 		} else {
 			h.logger.Info("domain health: stale pending domain marked for removal", "domain", d.Domain, "age_days", h.staleDays)
@@ -281,7 +286,12 @@ func (h *DomainHealthChecker) checkProvisioningTimeout(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if err := h.store.UpdateFailure(ctx, d.Domain, "failed",
+		failed, err := nextDomainStatus(d.Domain, d.Status, statemachine.DomainProvisionTimeout)
+		if err != nil {
+			h.logger.Warn("domain health: provisioning timeout skipped, status moved on", "error", err, "domain", d.Domain)
+			continue
+		}
+		if err := h.store.UpdateFailure(ctx, d.Domain, failed,
 			"Provisioning timed out after 1 hour. Run `loopzero deploy` to retry."); err != nil {
 			h.logger.Error("domain health: provisioning timeout transition failed", "error", err, "domain", d.Domain)
 		} else {

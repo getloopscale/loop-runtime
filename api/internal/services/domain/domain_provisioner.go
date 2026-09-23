@@ -14,6 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/manifests"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -25,7 +26,6 @@ type DomainProvisionerStore interface {
 	FindAndClaimVerified(ctx context.Context) ([]ports.CustomDomain, error)
 	FindRemoving(ctx context.Context) ([]ports.CustomDomain, error)
 	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]ports.CustomDomain, error)
-	UpdateStatus(ctx context.Context, domain, status string) error
 	TransitionStatus(ctx context.Context, domain, expectedStatus, newStatus string) error
 	UpdateCFZoneStatus(ctx context.Context, domain, cfZoneStatus string) error
 	UpdateFailure(ctx context.Context, domain, status, reason string) error
@@ -183,7 +183,12 @@ func (p *DomainProvisioner) processPendingNS(ctx context.Context) {
 		// Check timeout: 48h for NS propagation
 		if time.Since(d.CreatedAt) > 48*time.Hour {
 			log.Warn("domain provisioner: NS propagation timeout (48h)")
-			if err := p.store.UpdateFailure(ctx, d.Domain, "failed", "Nameserver propagation timed out after 48 hours. Ensure nameservers are set correctly at your registrar."); err != nil {
+			failed, err := nextDomainStatus(d.Domain, d.Status, statemachine.DomainNSTimeout)
+			if err != nil {
+				log.Warn("domain provisioner: NS timeout skipped, status moved on", "error", err)
+				continue
+			}
+			if err := p.store.UpdateFailure(ctx, d.Domain, failed, "Nameserver propagation timed out after 48 hours. Ensure nameservers are set correctly at your registrar."); err != nil {
 				log.Error("domain provisioner: failed to record NS timeout", "error", err)
 			}
 			continue
@@ -198,7 +203,7 @@ func (p *DomainProvisioner) processPendingNS(ctx context.Context) {
 
 		if status == "active" {
 			log.Info("domain provisioner: CF zone active, transitioning to ns_active")
-			if err := p.store.TransitionStatus(ctx, d.Domain, "pending_ns", "ns_active"); err != nil {
+			if _, err := transitionDomain(ctx, p.store, d.Domain, string(statemachine.DomainPendingNS), statemachine.DomainNSActivated); err != nil {
 				log.Error("domain provisioner: ns_active transition failed", "error", err)
 				continue
 			}
@@ -249,12 +254,13 @@ func (p *DomainProvisioner) processNSActive(ctx context.Context) {
 		}
 
 		// Transition ns_active → provisioning, then use the shared provisioning flow
-		if err := p.store.TransitionStatus(ctx, d.Domain, "ns_active", "provisioning"); err != nil {
+		next, err := transitionDomain(ctx, p.store, d.Domain, string(statemachine.DomainNSActive), statemachine.DomainProvision)
+		if err != nil {
 			p.logger.Warn("domain provisioner: ns_active→provisioning failed", "domain", d.Domain, "error", err)
 			continue
 		}
 
-		d.Status = "provisioning"
+		d.Status = next
 		p.provisionDomain(ctx, d)
 	}
 }
@@ -383,7 +389,12 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d ports.CustomD
 	if lockErr != nil {
 		log.Error("domain provisioner: lock/render failed", "error", lockErr)
 		metrics.DomainProvisioningDuration.WithLabelValues("failure").Observe(time.Since(start).Seconds())
-		if err2 := p.store.UpdateFailure(ctx, d.Domain, "failed", fmt.Sprintf("Provisioning failed: %v", lockErr)); err2 != nil {
+		failed, smErr := nextDomainStatus(d.Domain, string(statemachine.DomainProvisioning), statemachine.DomainProvisionFail)
+		if smErr != nil {
+			log.Error("domain provisioner: failure transition not in the domain machine", "error", smErr)
+			return
+		}
+		if err2 := p.store.UpdateFailure(ctx, d.Domain, failed, fmt.Sprintf("Provisioning failed: %v", lockErr)); err2 != nil {
 			log.Error("domain provisioner: failed to record failure", "error", err2)
 		}
 		return
@@ -402,7 +413,7 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d ports.CustomD
 
 	// Phase C: CAS transition provisioning → active (HIGH-05 fix).
 	// If a concurrent Delete already moved to "removing", this CAS fails harmlessly.
-	if err := p.store.TransitionStatus(ctx, d.Domain, "provisioning", "active"); err != nil {
+	if _, err := transitionDomain(ctx, p.store, d.Domain, string(statemachine.DomainProvisioning), statemachine.DomainActivate); err != nil {
 		log.Warn("domain provisioner: CAS active transition failed (domain may have been removed)", "error", err)
 		return
 	}
