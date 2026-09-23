@@ -32,28 +32,16 @@ import (
 
 // --- Fake external services for rollback tests ---
 
-type fakeRollbackGitReader struct{}
+// fakeRollbackDelivery stands in for the container delivery activator: these
+// tests prove the orchestrator's locking and state transitions against real
+// PostgreSQL, not the GitOps push or the sync, which have their own tests.
+type fakeRollbackDelivery struct{}
 
-func (f *fakeRollbackGitReader) GetManifestsAtCommit(ctx context.Context, tenantID, projectID, env, commitSHA string) ([]byte, error) {
-	return []byte("fake-manifests"), nil
-}
-
-type fakeRollbackGitPusher struct{}
-
-func (f *fakeRollbackGitPusher) Push(ctx context.Context, opts deploycontracts.GitOpsPushOpts) (string, error) {
-	return "fake-rollback-commit", nil
-}
-
-type fakeRollbackSyncClient struct{}
-
-func (f *fakeRollbackSyncClient) TriggerSync(ctx context.Context, appName string) error {
+func (fakeRollbackDelivery) Activate(context.Context, deploycontracts.ActivationBuild, deploycontracts.BuildCallbackRequest) error {
 	return nil
 }
 
-// WaitForSync satisfies the RollbackSyncClient interface (added when the
-// interface was extended). These integration tests never invoke the wait
-// path; kept as a no-op so the test file compiles.
-func (f *fakeRollbackSyncClient) WaitForSync(_ context.Context, _ string, _ time.Duration, _ []string) error {
+func (fakeRollbackDelivery) Rollback(context.Context, deploycontracts.RollbackDeliveryRequest) error {
 	return nil
 }
 
@@ -180,10 +168,8 @@ func TestRollback_SupersedesPreviousActiveRelease(t *testing.T) {
 	orch := release.NewRollbackOrchestrator(release.RollbackOrchestratorDeps{
 		Releases:   releaseStore,
 		EnvTargets: envTargetStore,
-		GitReader:  &fakeRollbackGitReader{},
-		GitPusher:  &fakeRollbackGitPusher{},
-		Sync:       &fakeRollbackSyncClient{},
 		Locker:     locker,
+		Delivery:   fakeRollbackDelivery{},
 		Logger:     slog.Default(),
 	})
 
@@ -308,10 +294,8 @@ func TestConcurrentRollbacks_ExactlyOneSucceeds(t *testing.T) {
 			orch := release.NewRollbackOrchestrator(release.RollbackOrchestratorDeps{
 				Releases:   releaseStore,
 				EnvTargets: envTargetStore,
-				GitReader:  &fakeRollbackGitReader{},
-				GitPusher:  &fakeRollbackGitPusher{},
-				Sync:       &fakeRollbackSyncClient{},
 				Locker:     locker,
+				Delivery:   fakeRollbackDelivery{},
 				Logger:     slog.Default(),
 			})
 

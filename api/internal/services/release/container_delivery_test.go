@@ -160,6 +160,8 @@ func (f *fakeLockerContainer) WithLock(_ context.Context, _, _, _ string, fn fun
 type fakeSyncContainer struct {
 	triggerErr error
 	triggered  bool
+	waitErr    error
+	waited     bool
 }
 
 func (f *fakeSyncContainer) TriggerSync(_ context.Context, _ string) error {
@@ -167,7 +169,8 @@ func (f *fakeSyncContainer) TriggerSync(_ context.Context, _ string) error {
 	return f.triggerErr
 }
 func (f *fakeSyncContainer) WaitForSync(_ context.Context, _ string, _ time.Duration, _ []string) error {
-	return nil
+	f.waited = true
+	return f.waitErr
 }
 
 // Sprint B T1.1 (ADR D1): stub methods to satisfy the widened SyncClient
@@ -682,5 +685,45 @@ func TestContainerSyncPolicy_TerminatesOnlyBeforeTheFinalStuckAttempt(t *testing
 	}
 	if !containerSyncPolicy.ShouldTerminate(containerSyncPolicy.MaxStuckAttempts - 1) {
 		t.Error("the stuck operation must be terminated before the final attempt")
+	}
+}
+
+// The DB safety invariant of rollback (LIVE sponsor mandate 2026-06-18): the
+// orchestrator flips release state only after delivery returns, so delivery
+// must not return before the sync is confirmed.
+func TestContainerDelivery_Rollback_WaitsForSyncConfirmation(t *testing.T) {
+	sync := &fakeSyncContainer{}
+	activator := NewContainerDeliveryActivator(ContainerDeliveryDeps{
+		Sync: sync, GitOps: &fakeGitOpsContainer{commitSHA: "sha"},
+		GitReader: &fakeGitReaderContainer{manifests: []byte("m")}, Locker: &fakeLockerContainer{},
+	})
+
+	err := activator.Rollback(context.Background(), deploycontracts.RollbackDeliveryRequest{
+		TenantID: "tn-1", ProjectID: "proj-1", Environment: "production",
+		TargetRelease: &deploycontracts.RollbackTarget{ID: "rel-old", GitCommit: "old"},
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !sync.waited {
+		t.Error("rollback delivery returned without waiting for sync confirmation")
+	}
+}
+
+func TestContainerDelivery_Rollback_SyncWaitFailureFailsTheDelivery(t *testing.T) {
+	sync := &fakeSyncContainer{waitErr: fmt.Errorf("argo sync timeout")}
+	activator := NewContainerDeliveryActivator(ContainerDeliveryDeps{
+		Sync: sync, GitOps: &fakeGitOpsContainer{commitSHA: "sha"},
+		GitReader: &fakeGitReaderContainer{manifests: []byte("m")}, Locker: &fakeLockerContainer{},
+	})
+
+	err := activator.Rollback(context.Background(), deploycontracts.RollbackDeliveryRequest{
+		TenantID: "tn-1", ProjectID: "proj-1", Environment: "production",
+		TargetRelease: &deploycontracts.RollbackTarget{ID: "rel-old", GitCommit: "old"},
+	})
+
+	if err == nil {
+		t.Fatal("a sync that never confirmed must fail the rollback delivery")
 	}
 }

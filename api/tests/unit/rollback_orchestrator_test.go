@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
@@ -88,32 +87,19 @@ func (f *fakeRollbackEnvTargetStore) SetActive(_ context.Context, _ db.DBTX, _, 
 	return nil
 }
 
-type fakeRollbackGitReader struct{}
-
-func (f *fakeRollbackGitReader) GetManifestsAtCommit(_ context.Context, _, _, _, _ string) ([]byte, error) {
-	return []byte("apiVersion: v1\nkind: Deployment"), nil
+// fakeRollbackDelivery stands in for the container delivery activator, which
+// re-delivers the manifests and waits for the sync; rollbackErr simulates that
+// step failing.
+type fakeRollbackDelivery struct {
+	rollbackErr error
 }
 
-type fakeRollbackGitPusher struct{}
-
-func (f *fakeRollbackGitPusher) Push(_ context.Context, _ deploycontracts.GitOpsPushOpts) (string, error) {
-	return "sha-abc123", nil
-}
-
-type fakeRollbackSyncClient struct {
-	triggerErr error
-}
-
-func (f *fakeRollbackSyncClient) TriggerSync(_ context.Context, _ string) error {
-	return f.triggerErr
-}
-
-// WaitForSync satisfies the RollbackSyncClient interface (added when the
-// interface was extended; this fake never blocks on sync confirmation in
-// these tests — the rollback orchestrator paths under test stop at
-// TriggerSync). Kept as a no-op so the test file compiles.
-func (f *fakeRollbackSyncClient) WaitForSync(_ context.Context, _ string, _ time.Duration, _ []string) error {
+func (f *fakeRollbackDelivery) Activate(context.Context, deploycontracts.ActivationBuild, deploycontracts.BuildCallbackRequest) error {
 	return nil
+}
+
+func (f *fakeRollbackDelivery) Rollback(context.Context, deploycontracts.RollbackDeliveryRequest) error {
+	return f.rollbackErr
 }
 
 // --- Tests ---
@@ -139,16 +125,14 @@ func TestRollbackOrchestrator_SyncFailureReturnsError(t *testing.T) {
 		},
 	}
 
-	syncClient := &fakeRollbackSyncClient{triggerErr: errors.New("argocd: connection refused")}
+	delivery := &fakeRollbackDelivery{rollbackErr: errors.New("argocd: connection refused")}
 	locker := &fakeDeleteLocker{} // reuse from project_deleter_test.go
 
 	orch := release.NewRollbackOrchestrator(release.RollbackOrchestratorDeps{
 		Releases:   releaseStore,
 		EnvTargets: &fakeRollbackEnvTargetStore{},
-		GitReader:  &fakeRollbackGitReader{},
-		GitPusher:  &fakeRollbackGitPusher{},
-		Sync:       syncClient,
 		Locker:     locker,
+		Delivery:   delivery,
 		Logger:     testLogger,
 	})
 
@@ -196,16 +180,14 @@ func TestRollbackOrchestrator_SyncSuccessCompletes(t *testing.T) {
 		},
 	}
 
-	syncClient := &fakeRollbackSyncClient{triggerErr: nil} // sync succeeds
+	delivery := &fakeRollbackDelivery{} // re-delivery and sync succeed
 	locker := &fakeDeleteLocker{}
 
 	orch := release.NewRollbackOrchestrator(release.RollbackOrchestratorDeps{
 		Releases:   releaseStore,
 		EnvTargets: &fakeRollbackEnvTargetStore{},
-		GitReader:  &fakeRollbackGitReader{},
-		GitPusher:  &fakeRollbackGitPusher{},
-		Sync:       syncClient,
 		Locker:     locker,
+		Delivery:   delivery,
 		Logger:     testLogger,
 	})
 

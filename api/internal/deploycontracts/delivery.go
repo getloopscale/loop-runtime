@@ -43,29 +43,33 @@ type ActivationBuild struct {
 	CreatedAt time.Time
 }
 
-// DeliveryActivator abstracts the release activation strategy (MEET-2026-03-26-009).
+// DeliveryActivator is the port through which the build and rollback paths hand
+// a release to the runtime (MEET-2026-03-26-009). Its one implementation is
+// release.ContainerDeliveryActivator, constructed once at the composition root
+// and shared by BuildOrchestrator and RollbackOrchestrator. Static delivery was
+// removed (build_plan.go T3.3); the port stays because it is what keeps the
+// build package independent of the release package's concrete type, and what
+// lets the orchestrators be tested without GitOps and ArgoCD.
 //
-// Both container and static delivery follow the same 5-phase semantic contract:
-//   - Phase A: create release (READY)
-//   - Phase B: deliver (push manifests to Gitea OR upload assets to S3)
-//   - Phase C: record result (PENDING or delivery-specific failure)
-//   - Phase D: verify (ArgoCD sync + health check OR integrity probe)
-//   - Phase E: finalize (ACTIVE or FAILED)
+// Activation runs these phases:
+//   - A: create the release (READY)
+//   - B: push manifests to the GitOps repository
+//   - C: record the result (PENDING, or GIT_MIRROR_FAILED)
+//   - D: trigger the sync; verification is asynchronous (callback activator +
+//     convergence loop) and moves the release to ACTIVE or SYNC_FAILED
 //
-// SSE events are delivery-agnostic: deploy.delivering, deploy.verifying, deploy.live.
-// Implementations MUST emit these same events — diverging means two products, not one.
-//
-// The BuildOrchestrator dispatches to the correct activator based on build.DeliveryModel.
-// Zero if/else branches in the orchestrator — polymorphism via this interface.
+// SSE events: deploy.delivering and deploy.verifying here; deploy.completed is
+// emitted by whichever asynchronous path activates the release.
 type DeliveryActivator interface {
-	// Activate runs the 5-phase release activation for a completed build.
-	// Returns nil on success (release is ACTIVE). Returns error if any phase fails
-	// (release may be in READY, PENDING, or a failure state depending on which phase failed).
+	// Activate runs phases A-D for a completed build. It returns nil once the
+	// release is PENDING and the sync was triggered; it returns an error if a
+	// phase fails (the release may then be READY, PENDING or in a failure state,
+	// depending on which phase failed).
 	Activate(ctx context.Context, build ActivationBuild, result BuildCallbackRequest) error
 
-	// Rollback delivers a previous release's artifacts to the runtime.
-	// For containers: fetches old manifests from Gitea, pushes them, triggers ArgoCD sync.
-	// For static: pushes IngressRoute with old release-id path.
+	// Rollback re-delivers a previous release's manifests (read back from the
+	// GitOps history), triggers the sync and returns only once the sync is
+	// confirmed, so the caller may flip release state afterwards.
 	// State machine transitions (ACTIVE→ROLLED_BACK, SUPERSEDED→ACTIVE) are handled
 	// by the RollbackOrchestrator, NOT by this method.
 	Rollback(ctx context.Context, req RollbackDeliveryRequest) error

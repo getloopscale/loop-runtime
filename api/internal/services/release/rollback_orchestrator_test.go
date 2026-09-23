@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log/slog"
 	"testing"
-	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
@@ -90,47 +89,6 @@ func (f *fakeRollbackEnvTargetStore) SetActive(_ context.Context, _ db.DBTX, ten
 	return nil
 }
 
-type fakeRollbackGitReader struct {
-	manifests map[string][]byte
-}
-
-func (f *fakeRollbackGitReader) GetManifestsAtCommit(_ context.Context, _, _, _, commitSHA string) ([]byte, error) {
-	m, ok := f.manifests[commitSHA]
-	if !ok {
-		return nil, fmt.Errorf("manifests not found for commit %s", commitSHA)
-	}
-	return m, nil
-}
-
-type fakeRollbackGitPusher struct {
-	pushed bool
-}
-
-func (f *fakeRollbackGitPusher) Push(_ context.Context, _ deploycontracts.GitOpsPushOpts) (string, error) {
-	f.pushed = true
-	return "commit-sha-rollback", nil
-}
-
-type fakeRollbackSyncClient struct {
-	synced     bool
-	waitCalled bool
-	waitErr    error
-}
-
-func (f *fakeRollbackSyncClient) TriggerSync(_ context.Context, _ string) error {
-	f.synced = true
-	return nil
-}
-
-func (f *fakeRollbackSyncClient) WaitForSync(_ context.Context, _ string, _ time.Duration, _ []string) error {
-	f.waitCalled = true
-	return f.waitErr
-}
-
-func (f *fakeRollbackSyncClient) ForceReconcile(_ context.Context, _ string) error {
-	return nil
-}
-
 type fakeRollbackLocker struct{}
 
 func (f *fakeRollbackLocker) WithLock(_ context.Context, _, _, _ string, fn func(tx db.DBTX) error) error {
@@ -139,7 +97,7 @@ func (f *fakeRollbackLocker) WithLock(_ context.Context, _, _, _ string, fn func
 
 // --- Tests ---
 
-func TestRollback_HappyPath_LegacyFallback(t *testing.T) {
+func TestRollback_HappyPath(t *testing.T) {
 	rs := newFakeRollbackReleaseStore()
 	activeRelease := &db.Release{
 		ID: "rel-2", TenantID: "tn-1", ProjectID: "proj-1",
@@ -158,18 +116,13 @@ func TestRollback_HappyPath_LegacyFallback(t *testing.T) {
 	rs.previousByEnv["tn-1-proj-1-production"] = targetRelease
 
 	ets := newFakeRollbackEnvTargetStore()
-	gitReader := &fakeRollbackGitReader{manifests: map[string][]byte{"abc123": []byte("manifests-yaml")}}
-	gitPusher := &fakeRollbackGitPusher{}
-	syncClient := &fakeRollbackSyncClient{}
+	delivery := &fakeDeliveryActivator{}
 
 	orch := NewRollbackOrchestrator(RollbackOrchestratorDeps{
 		Releases:   rs,
 		EnvTargets: ets,
-		GitReader:  gitReader,
-		GitPusher:  gitPusher,
-		Sync:       syncClient,
 		Locker:     &fakeRollbackLocker{},
-		Delivery:   nil, // legacy fallback path
+		Delivery:   delivery,
 		Logger:     slog.Default(),
 	})
 
@@ -191,11 +144,8 @@ func TestRollback_HappyPath_LegacyFallback(t *testing.T) {
 	if result.RolledBackRelease.ID != "rel-2" {
 		t.Errorf("expected rolled back rel-2, got %s", result.RolledBackRelease.ID)
 	}
-	if !gitPusher.pushed {
-		t.Error("expected git push")
-	}
-	if !syncClient.synced {
-		t.Error("expected argocd sync")
+	if delivery.lastReq.TargetRelease == nil || delivery.lastReq.TargetRelease.GitCommit != "abc123" {
+		t.Errorf("expected delivery to re-deliver the target's commit abc123, got %+v", delivery.lastReq.TargetRelease)
 	}
 	if ets.desired["tn-1-proj-1-production"] != "rel-1" {
 		t.Error("expected desired target set to target release")
@@ -225,10 +175,8 @@ func TestRollback_NoActiveRelease(t *testing.T) {
 	orch := NewRollbackOrchestrator(RollbackOrchestratorDeps{
 		Releases:   rs,
 		EnvTargets: newFakeRollbackEnvTargetStore(),
-		GitReader:  &fakeRollbackGitReader{},
-		GitPusher:  &fakeRollbackGitPusher{},
-		Sync:       &fakeRollbackSyncClient{},
 		Locker:     &fakeRollbackLocker{},
+		Delivery:   &fakeDeliveryActivator{},
 		Logger:     slog.Default(),
 	})
 
@@ -259,10 +207,8 @@ func TestRollback_NoPreviousRelease(t *testing.T) {
 	orch := NewRollbackOrchestrator(RollbackOrchestratorDeps{
 		Releases:   rs,
 		EnvTargets: newFakeRollbackEnvTargetStore(),
-		GitReader:  &fakeRollbackGitReader{},
-		GitPusher:  &fakeRollbackGitPusher{},
-		Sync:       &fakeRollbackSyncClient{},
 		Locker:     &fakeRollbackLocker{},
+		Delivery:   &fakeDeliveryActivator{},
 		Logger:     slog.Default(),
 	})
 
@@ -328,13 +274,15 @@ type fakeDeliveryActivator struct {
 	rollbackCalled bool
 	rollbackErr    error
 	onRollback     func() // runs during delivery, to simulate a concurrent change
+	lastReq        deploycontracts.RollbackDeliveryRequest
 }
 
 func (f *fakeDeliveryActivator) Activate(_ context.Context, _ deploycontracts.ActivationBuild, _ deploycontracts.BuildCallbackRequest) error {
 	return nil
 }
-func (f *fakeDeliveryActivator) Rollback(_ context.Context, _ deploycontracts.RollbackDeliveryRequest) error {
+func (f *fakeDeliveryActivator) Rollback(_ context.Context, req deploycontracts.RollbackDeliveryRequest) error {
 	f.rollbackCalled = true
+	f.lastReq = req
 	if f.onRollback != nil {
 		f.onRollback()
 	}
@@ -437,6 +385,7 @@ func TestRollback_SpecificReleaseNotFound(t *testing.T) {
 		Releases:   rs,
 		EnvTargets: newFakeRollbackEnvTargetStore(),
 		Locker:     &fakeRollbackLocker{},
+		Delivery:   &fakeDeliveryActivator{},
 		Logger:     slog.Default(),
 	})
 
@@ -538,95 +487,62 @@ func TestRollback_NoBaseDomain_EmptyURL(t *testing.T) {
 	}
 }
 
-// TestRollback_WaitsForSyncBeforeFlippingDB confirms the canonical
-// safety invariant: DB transitions ROLLING_BACK → ROLLED_BACK + target
-// → ACTIVE happen ONLY AFTER the delivery layer confirms the deployment
-// infrastructure has synced + pods are healthy. If WaitForSync fails,
-// the DB does NOT flip and the rollback is marked failed.
-//
-// LIVE-caught 2026-06-18 sponsor mandate: "o banco deve ser atualizado
-// somente COM GARANTIA MAXIMA QUE O ROLLBACK aconteceu". The previous
-// flow trigger-sync-then-flip risked DB lying about ACTIVE state while
-// pods still served the rolled-back code.
-func TestRollback_WaitsForSyncBeforeFlippingDB(t *testing.T) {
+// TestRollback_FlipsReleaseStateOnlyAfterDeliveryReturns pins the DB safety
+// invariant (LIVE sponsor mandate 2026-06-18): the current release is marked
+// ROLLED_BACK only after delivery — which waits for the sync, see
+// TestContainerDelivery_Rollback_WaitsForSyncConfirmation — has returned.
+func TestRollback_FlipsReleaseStateOnlyAfterDeliveryReturns(t *testing.T) {
 	rs := newFakeRollbackReleaseStore()
-	activeRelease := &db.Release{
-		ID: "rel-active", BuildID: "build-active", TenantID: "tn-1", ProjectID: "proj-1",
-		Environment: "production", Status: string(statemachine.ReleaseActive), GitCommit: "sha-active",
-	}
-	targetRelease := &db.Release{
-		ID: "rel-target", BuildID: "build-target", TenantID: "tn-1", ProjectID: "proj-1",
-		Environment: "production", Status: string(statemachine.ReleaseSuperseded), GitCommit: "sha-target",
-	}
+	activeRelease := &db.Release{ID: "rel-active", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", Status: string(statemachine.ReleaseActive), GitCommit: "sha-active"}
+	targetRelease := &db.Release{ID: "rel-target", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", Status: string(statemachine.ReleaseSuperseded), GitCommit: "sha-target"}
 	rs.releases["rel-active"] = activeRelease
 	rs.releases["rel-target"] = targetRelease
 	rs.activeByEnv["tn-1-proj-1-production"] = activeRelease
 	rs.previousByEnv["tn-1-proj-1-production"] = targetRelease
-
-	syncClient := &fakeRollbackSyncClient{waitErr: nil} // sync succeeds
-	gitReader := &fakeRollbackGitReader{manifests: map[string][]byte{"sha-target": []byte("apps:\n  - name: app")}}
-	gitPusher := &fakeRollbackGitPusher{}
-
+	var eventDuringDelivery string
+	delivery := &fakeDeliveryActivator{onRollback: func() { eventDuringDelivery = rs.lastStatus["rel-active"] }}
 	orch := NewRollbackOrchestrator(RollbackOrchestratorDeps{
-		Releases:   rs,
-		EnvTargets: newFakeRollbackEnvTargetStore(),
-		Locker:     &fakeRollbackLocker{},
-		GitReader:  gitReader,
-		GitPusher:  gitPusher,
-		Sync:       syncClient,
-		Logger:     slog.Default(),
+		Releases: rs, EnvTargets: newFakeRollbackEnvTargetStore(), Locker: &fakeRollbackLocker{},
+		Delivery: delivery, Logger: slog.Default(),
 	})
 
 	_, err := orch.Rollback(context.Background(), RollbackRequest{
 		TenantID: "tn-1", ProjectID: "proj-1", Environment: "production",
 	})
+
 	if err != nil {
 		t.Fatalf("rollback err: %v", err)
 	}
-	if !syncClient.waitCalled {
-		t.Errorf("WaitForSync NOT called — DB safety invariant violated: rollback flipped state without confirming sync")
+	if eventDuringDelivery != string(statemachine.ReleaseRollbackStarted) {
+		t.Errorf("during delivery the release must be ROLLING_BACK, last event was %q", eventDuringDelivery)
+	}
+	if rs.lastStatus["rel-active"] != string(statemachine.ReleaseRollbackCompleted) {
+		t.Errorf("after delivery the release must be ROLLED_BACK, last event was %q", rs.lastStatus["rel-active"])
 	}
 }
 
-// TestRollback_SyncWaitFails_DBStaysInRollingBack confirms that when
-// WaitForSync errors, the DB does NOT flip current to ROLLED_BACK and
-// the rollback is reported failed. Closes the LIVE risk of DB lying
-// ACTIVE while pods still serve the rolled-back code.
-func TestRollback_SyncWaitFails_DBStaysInRollingBack(t *testing.T) {
+func TestRollback_WithoutDeliveryRefusesBeforeChangingState(t *testing.T) {
 	rs := newFakeRollbackReleaseStore()
-	activeRelease := &db.Release{
-		ID: "rel-active", BuildID: "build-active", TenantID: "tn-1", ProjectID: "proj-1",
-		Environment: "production", Status: string(statemachine.ReleaseActive), GitCommit: "sha-active",
-	}
-	targetRelease := &db.Release{
-		ID: "rel-target", BuildID: "build-target", TenantID: "tn-1", ProjectID: "proj-1",
-		Environment: "production", Status: string(statemachine.ReleaseSuperseded), GitCommit: "sha-target",
-	}
+	activeRelease := &db.Release{ID: "rel-active", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", Status: string(statemachine.ReleaseActive)}
 	rs.releases["rel-active"] = activeRelease
-	rs.releases["rel-target"] = targetRelease
 	rs.activeByEnv["tn-1-proj-1-production"] = activeRelease
-	rs.previousByEnv["tn-1-proj-1-production"] = targetRelease
-
-	syncClient := &fakeRollbackSyncClient{waitErr: fmt.Errorf("argo sync timeout")}
 	orch := NewRollbackOrchestrator(RollbackOrchestratorDeps{
-		Releases:   rs,
-		EnvTargets: newFakeRollbackEnvTargetStore(),
-		Locker:     &fakeRollbackLocker{},
-		GitReader:  &fakeRollbackGitReader{manifests: map[string][]byte{"sha-target": []byte("apps: []")}},
-		GitPusher:  &fakeRollbackGitPusher{},
-		Sync:       syncClient,
-		Logger:     slog.Default(),
+		Releases: rs, EnvTargets: newFakeRollbackEnvTargetStore(), Locker: &fakeRollbackLocker{},
+		Logger: slog.Default(),
 	})
 
 	_, err := orch.Rollback(context.Background(), RollbackRequest{
 		TenantID: "tn-1", ProjectID: "proj-1", Environment: "production",
 	})
-	if err == nil {
-		t.Fatalf("expected error when WaitForSync fails")
+
+	if !errors.Is(err, errRollbackDeliveryNotWired) {
+		t.Fatalf("want errRollbackDeliveryNotWired, got %v", err)
 	}
-	// Sync wait failure → release stays in ROLLBACK_FAILED, NOT ROLLED_BACK.
-	if rs.lastStatus["rel-active"] == string(statemachine.ReleaseRollbackCompleted) {
-		t.Errorf("DB SAFETY VIOLATION: release marked ROLLED_BACK after sync wait failed (expected ROLLBACK_FAILED)")
+	if _, touched := rs.lastStatus["rel-active"]; touched {
+		t.Error("an unwired orchestrator must refuse before transitioning any release")
 	}
 }
 

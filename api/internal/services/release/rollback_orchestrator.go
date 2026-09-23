@@ -8,7 +8,6 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -33,40 +32,15 @@ type RollbackEnvTargetStore interface {
 	SetActive(ctx context.Context, tx db.DBTX, tenantID, projectID, env, releaseID string) error
 }
 
-// RollbackGitOpsReader abstracts manifest retrieval from git history (DIP).
-type RollbackGitOpsReader interface {
-	GetManifestsAtCommit(ctx context.Context, tenantID, projectID, env, commitSHA string) ([]byte, error)
-}
-
-// RollbackGitOpsPusher abstracts manifest push to gitops repo (DIP).
-type RollbackGitOpsPusher interface {
-	Push(ctx context.Context, opts deploycontracts.GitOpsPushOpts) (string, error)
-}
-
-// RollbackSyncClient abstracts ArgoCD sync operations (DIP).
-type RollbackSyncClient interface {
-	TriggerSync(ctx context.Context, appName string) error
-	// WaitForSync blocks until the deployment infrastructure confirms
-	// the gitops manifest has been applied AND the target workloads
-	// are healthy (or until timeout fires). Required for the canonical
-	// "DB safety invariant" — release state flip happens ONLY after
-	// this returns nil. LIVE-caught 2026-06-18 sponsor mandate.
-	WaitForSync(ctx context.Context, appName string, timeout time.Duration, deployedApps []string) error
-}
-
 // RollbackOrchestratorDeps contains all dependencies for the rollback orchestrator.
 type RollbackOrchestratorDeps struct {
 	Releases   RollbackReleaseStore
 	EnvTargets RollbackEnvTargetStore
-	GitReader  RollbackGitOpsReader
-	GitPusher  RollbackGitOpsPusher
-	Sync       RollbackSyncClient
 	Locker     deploycontracts.EnvironmentLocker
-	Delivery   deploycontracts.DeliveryActivator // MEET-009: polymorphic rollback delivery
-	// ArgocdSyncTimeout bounds the post-trigger sync confirmation wait.
-	// LIVE-caught 2026-06-18 sponsor mandate: DB state flip requires
-	// sync verification (not just trigger). Zero defaults to 120s.
-	ArgocdSyncTimeout time.Duration
+	// Delivery re-delivers the target release's artifacts and confirms the sync
+	// before Phase 5 flips any release state. Required — it is the same
+	// activator the build path uses, wired at the composition root.
+	Delivery deploycontracts.DeliveryActivator
 	// PublicDomain is the operator's public wildcard (LOOPZERO_PUBLIC_DOMAIN). The
 	// rollback URL is composed on it, falling back to the request's BaseDomain
 	// when it is unset — the same rule promotion and activation apply.
@@ -94,6 +68,14 @@ type RollbackResult struct {
 	URL                string
 }
 
+// errRollbackDeliveryNotWired is returned when the orchestrator was constructed
+// without a DeliveryActivator — a wiring bug, refused before any release state
+// changes rather than discovered as a nil-interface panic mid-rollback.
+var errRollbackDeliveryNotWired = &loopzeroerrors.LoopZeroError{
+	Code:    loopzeroerrors.ErrInternalError.Code,
+	Message: "rollback orchestrator: no delivery activator wired; set RollbackOrchestratorDeps.Delivery at the composition root",
+}
+
 // RollbackOrchestrator coordinates the rollback workflow.
 type RollbackOrchestrator struct {
 	deps RollbackOrchestratorDeps
@@ -105,11 +87,13 @@ func NewRollbackOrchestrator(deps RollbackOrchestratorDeps) *RollbackOrchestrato
 }
 
 // Rollback executes the rollback workflow:
-// 1. Lock environment
-// 2. Find current ACTIVE release and target release
-// 3. Fetch old manifests from git
-// 4. Push old manifests to gitops repo
-// 5. Transition current release: ACTIVE → ROLLING_BACK → ROLLED_BACK
+// 1. Lock environment; transition current ACTIVE release → ROLLING_BACK
+// 2. Resolve the target release
+// 3-4. Re-deliver the target's manifests through the DeliveryActivator and
+//
+//	wait for the sync to confirm them
+//
+// 5. Transition current release: ROLLING_BACK → ROLLED_BACK
 // 6. Reactivate target release: SUPERSEDED/ROLLED_BACK → ACTIVE
 // 7. Update environment target pointers
 func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest) (*RollbackResult, error) {
@@ -120,6 +104,10 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 			attribute.String("loopzero.environment", req.Environment),
 		))
 	defer span.End()
+
+	if o.deps.Delivery == nil {
+		return nil, errRollbackDeliveryNotWired
+	}
 
 	logger := o.deps.Logger.With(
 		"tenant_id", req.TenantID,
@@ -181,63 +169,18 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 		"target_release", targetRelease.ID,
 	)
 
-	// Phases 2-4 (OUTSIDE lock): delivery-specific rollback via DeliveryActivator.
-	// For containers: fetch old manifests from git, push to gitea, trigger ArgoCD sync.
-	// For static (future): push IngressRoute with old release-id path.
-	// MEET-2026-03-26-009: polymorphic rollback via interface.
-	if o.deps.Delivery != nil {
-		if err := o.deps.Delivery.Rollback(ctx, deploycontracts.RollbackDeliveryRequest{
-			TenantID:      req.TenantID,
-			ProjectID:     req.ProjectID,
-			ProjectName:   req.ProjectName,
-			Environment:   req.Environment,
-			TargetRelease: rollbackTargetFrom(targetRelease),
-			CorrelationID: req.CorrelationID,
-		}); err != nil {
-			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID, fmt.Errorf("rollback: delivery failed: %w", err))
-		}
-	} else {
-		// Legacy fallback: inline git fetch + push + sync (for backward compat in tests)
-		if targetRelease.GitCommit == "" {
-			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID, fmt.Errorf("target release has no git commit"))
-		}
-		manifests, err := o.deps.GitReader.GetManifestsAtCommit(ctx, req.TenantID, req.ProjectID, req.Environment, targetRelease.GitCommit)
-		if err != nil {
-			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID, fmt.Errorf("rollback: fetch manifests: %w", err))
-		}
-		_, err = o.deps.GitPusher.Push(ctx, deploycontracts.GitOpsPushOpts{
-			TenantID: req.TenantID, ProjectID: req.ProjectID, Environment: req.Environment,
-			Manifests: string(manifests), ReleaseID: targetRelease.ID, CorrelationID: req.CorrelationID,
-		})
-		if err != nil {
-			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID, fmt.Errorf("rollback: push manifests: %w", err))
-		}
-		// MEET-2026-03-27-012 Phase 0.2 + 1.4 fixed a name that used the project in
-		// place of the tenant. The canonical identity is tenant + project + env, via
-		// naming.ArgoAppName — the project belongs in the name, just not alone (#271).
-		// And do NOT swallow sync failure — a rollback that doesn't sync is a lie.
-		appName, nameErr := naming.ArgoAppName(req.TenantID, req.ProjectID, req.Environment)
-		if nameErr != nil {
-			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID,
-				fmt.Errorf("rollback: argocd application name: %w", nameErr))
-		}
-		if syncErr := o.deps.Sync.TriggerSync(ctx, appName); syncErr != nil {
-			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID,
-				fmt.Errorf("rollback: sync trigger failed for %s: %w", appName, syncErr))
-		}
-		// LIVE-caught 2026-06-18 sponsor mandate: "o banco deve ser
-		// atualizado somente COM GARANTIA MAXIMA QUE O ROLLBACK
-		// aconteceu". TriggerSync alone returns immediately + the
-		// deployment infrastructure might fail mid-sync. Wait for
-		// real confirmation before letting Phase 5 flip DB state.
-		timeout := o.deps.ArgocdSyncTimeout
-		if timeout == 0 {
-			timeout = 120 * time.Second
-		}
-		if waitErr := o.deps.Sync.WaitForSync(ctx, appName, timeout, nil); waitErr != nil {
-			return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID,
-				fmt.Errorf("rollback: sync wait failed for %s: %w", appName, waitErr))
-		}
+	// Phases 2-4 (OUTSIDE lock): re-deliver the target release's manifests and
+	// wait for the sync to confirm them. The delivery activator returns only
+	// after WaitForSync succeeds, which is what lets Phase 5 flip state safely.
+	if err := o.deps.Delivery.Rollback(ctx, deploycontracts.RollbackDeliveryRequest{
+		TenantID:      req.TenantID,
+		ProjectID:     req.ProjectID,
+		ProjectName:   req.ProjectName,
+		Environment:   req.Environment,
+		TargetRelease: rollbackTargetFrom(targetRelease),
+		CorrelationID: req.CorrelationID,
+	}); err != nil {
+		return nil, o.failRollback(ctx, req.TenantID, req.ProjectID, req.Environment, currentRelease.ID, fmt.Errorf("rollback: delivery failed: %w", err))
 	}
 
 	// Phase 5 (INSIDE lock): finalize — mark current as ROLLED_BACK, reactivate target.
