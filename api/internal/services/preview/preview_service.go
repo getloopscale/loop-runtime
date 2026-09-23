@@ -110,15 +110,12 @@ type PreviewServiceDeps struct {
 	// + CR; the single-slot SOT is skipped (legacy fallback, used in
 	// tests that don't exercise the substitute behavior).
 	SlotStore store.PreviewSlotStore
-	// EnvTargets is the canonical env_targets store. When set,
-	// OnBuildCompleted (status=succeeded) writes a kind='preview' row
-	// for (tenant, project, preview-pr-N) so GitOps can render the
-	// preview manifests symmetric with permanent envs (D2). Without
-	// this, the env_target row is missing and the manifest renderer's
-	// downstream consumers cannot resolve the preview env.
+	// EnvTargets is the canonical env_targets store. The kind='preview' row
+	// for (tenant, project, preview-pr-N) is written at activation by the
+	// container delivery activator (SetPreviewDesired); this service only
+	// removes it when the PR closes (DeletePreviewByPR).
 	//
-	// Optional — when nil, the env_target write is skipped (legacy
-	// fallback path used by tests).
+	// Optional — when nil, that cleanup is skipped (tests).
 	EnvTargets store.EnvironmentTargetStore
 }
 
@@ -364,28 +361,6 @@ func (s *PreviewService) DeletePreviewByPR(ctx context.Context, tenantID, projec
 				"preview", preview.ID, "error", err)
 		}
 	}
-	return nil
-}
-
-// OnBuildCompleted is invoked by the build callback path when a build
-// belonging to a preview transitions to SUCCEEDED or FAILED.
-//
-// status: domain build status from the callback ("succeeded" or "failed").
-func (s *PreviewService) OnBuildCompleted(ctx context.Context, previewID, buildID, status string) error {
-	var newStatus string
-	switch strings.ToLower(status) {
-	case "succeeded":
-		newStatus = store.PreviewStatusActive
-	case "failed":
-		newStatus = store.PreviewStatusFailed
-	default:
-		return fmt.Errorf("preview service: unsupported build callback status %q", status)
-	}
-	if err := s.deps.Store.UpdateStatus(ctx, nil, previewID, newStatus); err != nil {
-		return fmt.Errorf("preview service: update status failed: %w", err)
-	}
-	s.deps.Logger.Info("preview status updated from build callback",
-		"preview", previewID, "build", buildID, "status", newStatus)
 	return nil
 }
 

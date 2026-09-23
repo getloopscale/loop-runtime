@@ -353,51 +353,6 @@ func TestPreviewService_DeletePreviewByPR_NoOpWhenNotFound(t *testing.T) {
 }
 
 // =============================================================================
-// OnBuildCompleted
-// =============================================================================
-
-func TestPreviewService_OnBuildCompleted_Succeeded_TransitionsActive(t *testing.T) {
-	var capturedStatus string
-	store := &previewFakeStore{
-		updateStatusFn: func(_ context.Context, _ db.DBTX, _, status string) error {
-			capturedStatus = status
-			return nil
-		},
-	}
-	svc, _ := NewPreviewService(PreviewServiceDeps{Store: store})
-	if err := svc.OnBuildCompleted(context.Background(), "prev-x", "build-1", "succeeded"); err != nil {
-		t.Fatalf("unexpected: %v", err)
-	}
-	if capturedStatus != dbstore.PreviewStatusActive {
-		t.Errorf("status = %q, want %q", capturedStatus, dbstore.PreviewStatusActive)
-	}
-}
-
-func TestPreviewService_OnBuildCompleted_Failed_TransitionsFailed(t *testing.T) {
-	var capturedStatus string
-	store := &previewFakeStore{
-		updateStatusFn: func(_ context.Context, _ db.DBTX, _, status string) error {
-			capturedStatus = status
-			return nil
-		},
-	}
-	svc, _ := NewPreviewService(PreviewServiceDeps{Store: store})
-	if err := svc.OnBuildCompleted(context.Background(), "prev-x", "build-1", "failed"); err != nil {
-		t.Fatalf("unexpected: %v", err)
-	}
-	if capturedStatus != dbstore.PreviewStatusFailed {
-		t.Errorf("status = %q, want %q", capturedStatus, dbstore.PreviewStatusFailed)
-	}
-}
-
-func TestPreviewService_OnBuildCompleted_UnknownStatus_Errors(t *testing.T) {
-	svc, _ := NewPreviewService(PreviewServiceDeps{Store: &previewFakeStore{}})
-	if err := svc.OnBuildCompleted(context.Background(), "prev-x", "build-1", "weird"); err == nil {
-		t.Fatal("expected error for unknown status")
-	}
-}
-
-// =============================================================================
 // Compile-time interface assertion
 // =============================================================================
 
