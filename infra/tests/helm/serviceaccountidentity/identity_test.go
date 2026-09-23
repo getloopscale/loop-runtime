@@ -19,7 +19,6 @@
 package serviceaccountidentity_test
 
 import (
-	"os"
 	"path/filepath"
 	"regexp"
 	"testing"
@@ -35,39 +34,41 @@ import (
 // an unfixed tree.
 const controlRelease = "zzqq"
 
-// policyRel is READ, never written — the chart edits this test guards must not touch
+// mgmtOverlay is the values file of the admission-policies install that runs the delete
+// guard (core cluster). The exempt identities are no longer a literal in any template:
+// they are `systemActorExemptions.platformServiceAccounts`, expanded by the
+// loopzero-admission.systemActorExemptions helper, so only a render sees them — and
+// rendering with the overlay the guard is actually installed with reads the list that
+// is really enforced. Read-only: the chart edits this test guards must not touch
 // infra/helm/ (NFR-006).
-const policyRel = "infra/helm/admission-policies/templates/vap-protect-platform-deletes.yaml"
+const mgmtOverlay = "infra/helm/admission-policies/values-mgmt.yaml"
 
 // expectedAllowlistSize is the number of identities the policy carries today. It is a
 // derivation guard, not an assertion about the policy's contents: if the parse breaks,
 // this fails here and names the parse, instead of reporting every chart absent from an
 // empty set — a failure mode that would read like a real finding.
-const expectedAllowlistSize = 5
+const expectedAllowlistSize = 6
 
-// allowlistedIdentities parses the fully-qualified usernames out of the policy template.
-// Regex over the raw bytes, not YAML: the file is a Helm template carrying {{ }}
-// directives, and the list lives inside a folded scalar. Same shape the existing gate
-// uses at cmd/loopzero-ops/internal/quality/vapdeleteguardrail/guardrail.go.
+// allowlistedIdentities parses the fully-qualified usernames out of the rendered
+// delete-guard policy.
 func allowlistedIdentities(t *testing.T) map[string]bool {
 	t.Helper()
 
-	chartPath, err := chartrender.PublishedChartPath("loopzero-api")
+	chartPath, err := chartrender.BootstrapChartPath("admission-policies")
 	require.NoError(t, err)
-	// charts/loopzero-api -> charts -> repo root
-	repo := filepath.Dir(filepath.Dir(chartPath))
-
-	raw, err := os.ReadFile(filepath.Join(repo, policyRel))
+	opts, err := chartrender.NewOptions(chartPath, mgmtOverlay)
 	require.NoError(t, err)
+	rendered := chartrender.RenderTemplate(t, opts, chartPath, "delete-guard",
+		[]string{"templates/vap-protect-platform-deletes.yaml"})
 
 	out := map[string]bool{}
 	for _, m := range regexp.MustCompile(
-		`system:serviceaccount:loopzero-system:([a-z0-9-]+)`).FindAllStringSubmatch(string(raw), -1) {
+		`system:serviceaccount:loopzero-system:([a-z0-9-]+)`).FindAllStringSubmatch(rendered, -1) {
 		out[m[1]] = true
 	}
 	require.GreaterOrEqual(t, len(out), expectedAllowlistSize,
-		"derivation broken: parsed %d identities from %s — fix the parse before reading any "+
-			"result below as a finding", len(out), policyRel)
+		"derivation broken: parsed %d identities from the rendered delete guard (%s) — fix the "+
+			"parse before reading any result below as a finding", len(out), mgmtOverlay)
 	return out
 }
 
@@ -114,7 +115,7 @@ func TestServiceAccountIsAllowlistedAtAnyReleaseName(t *testing.T) {
 			require.True(t, exempt[sa.Name],
 				"release %q: %q is not in the delete-guard allowlist (%s) — the operator's "+
 					"DELETEs are refused during reconcile, not at install",
-				controlRelease, sa.Name, policyRel)
+				controlRelease, sa.Name, mgmtOverlay)
 		})
 	}
 }
