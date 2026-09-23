@@ -147,12 +147,42 @@ export interface PlatformStackConfig {
 
 }
 
+/** Where secretFromEnvOrConfig reads from; injectable so the rule is testable. */
+export interface SecretSources {
+  readonly env: Record<string, string | undefined>;
+  readonly getSecret: (key: string) => pulumi.Output<string> | undefined;
+}
+
+/**
+ * A credential that may come from the environment (CI secrets) or from the
+ * stack's Pulumi config: the environment variable wins when set and
+ * non-empty, the config secret otherwise, undefined when neither is set.
+ */
+export function secretFromEnvOrConfig(
+  envVar: string,
+  configKey: string,
+  sources: SecretSources,
+): pulumi.Output<string> | undefined {
+  const fromEnv = sources.env[envVar];
+  if (fromEnv) {
+    // pulumi.secret, not pulumi.output: a credential read from the
+    // environment must be encrypted in state exactly like one set with
+    // `pulumi config set --secret`.
+    return pulumi.secret(fromEnv);
+  }
+  return sources.getSecret(configKey) ?? undefined;
+}
+
 /**
  * Loads stack configuration from Pulumi config.
  * All required values fail-fast if missing — no silent defaults.
  */
 export function loadStackConfig(): PlatformStackConfig {
   const config = new pulumi.Config();
+  const secrets: SecretSources = {
+    env: process.env,
+    getSecret: (key) => config.getSecret(key),
+  };
 
   return {
     project: pulumi.getProject(),
@@ -212,44 +242,26 @@ export function loadStackConfig(): PlatformStackConfig {
 
     // Stripe Billing (Sprint 11, Phase 5)
     // Reads from env vars (GitHub Actions secrets) or Pulumi config (local dev).
-    stripeApiKey: process.env.LOOPZERO_STRIPE_API_KEY
-      ? pulumi.output(process.env.LOOPZERO_STRIPE_API_KEY)
-      : config.getSecret("stripeApiKey") ?? undefined,
-    stripeWebhookSecret: process.env.LOOPZERO_STRIPE_WEBHOOK_SECRET
-      ? pulumi.output(process.env.LOOPZERO_STRIPE_WEBHOOK_SECRET)
-      : config.getSecret("stripeWebhookSecret") ?? undefined,
+    stripeApiKey: secretFromEnvOrConfig("LOOPZERO_STRIPE_API_KEY", "stripeApiKey", secrets),
+    stripeWebhookSecret: secretFromEnvOrConfig("LOOPZERO_STRIPE_WEBHOOK_SECRET", "stripeWebhookSecret", secrets),
     stripePriceProId: config.get("stripePriceProId") ?? undefined,
     stripePriceTeamId: config.get("stripePriceTeamId") ?? undefined,
-    sessionTokenSecret: process.env.LOOPZERO_SESSION_TOKEN_SECRET
-      ? pulumi.output(process.env.LOOPZERO_SESSION_TOKEN_SECRET)
-      : config.getSecret("sessionTokenSecret") ?? undefined,
+    sessionTokenSecret: secretFromEnvOrConfig("LOOPZERO_SESSION_TOKEN_SECRET", "sessionTokenSecret", secrets),
 
     // Cloud→Engine service auth secret (MEET-2026-04-07-039)
-    serviceAuthSecret: process.env.LOOPZERO_SERVICE_AUTH_SECRET
-      ? pulumi.output(process.env.LOOPZERO_SERVICE_AUTH_SECRET)
-      : config.getSecret("serviceAuthSecret") ?? undefined,
+    serviceAuthSecret: secretFromEnvOrConfig("LOOPZERO_SERVICE_AUTH_SECRET", "serviceAuthSecret", secrets),
 
     // Resend API key for email delivery (MEET-036: HTTP API, not SMTP)
-    resendApiKey: process.env.LOOPZERO_RESEND_API_KEY
-      ? pulumi.output(process.env.LOOPZERO_RESEND_API_KEY)
-      : config.getSecret("resendApiKey") ?? undefined,
+    resendApiKey: secretFromEnvOrConfig("LOOPZERO_RESEND_API_KEY", "resendApiKey", secrets),
 
     // Ory Social Login — GitHub OAuth (Sprint 11, Phase 3)
     // Reads from env vars (GitHub Actions secrets) or Pulumi config (local dev).
-    githubOAuthClientId: process.env.LOOPZERO_GITHUB_CLIENT_ID
-      ? pulumi.output(process.env.LOOPZERO_GITHUB_CLIENT_ID)
-      : config.getSecret("githubOAuthClientId") ?? undefined,
-    githubOAuthClientSecret: process.env.LOOPZERO_GITHUB_CLIENT_SECRET
-      ? pulumi.output(process.env.LOOPZERO_GITHUB_CLIENT_SECRET)
-      : config.getSecret("githubOAuthClientSecret") ?? undefined,
+    githubOAuthClientId: secretFromEnvOrConfig("LOOPZERO_GITHUB_CLIENT_ID", "githubOAuthClientId", secrets),
+    githubOAuthClientSecret: secretFromEnvOrConfig("LOOPZERO_GITHUB_CLIENT_SECRET", "githubOAuthClientSecret", secrets),
 
     // Ory Social Login — Google OAuth (Sprint 11, Phase 3)
-    googleOAuthClientId: process.env.LOOPZERO_GOOGLE_CLIENT_ID
-      ? pulumi.output(process.env.LOOPZERO_GOOGLE_CLIENT_ID)
-      : config.getSecret("googleOAuthClientId") ?? undefined,
-    googleOAuthClientSecret: process.env.LOOPZERO_GOOGLE_CLIENT_SECRET
-      ? pulumi.output(process.env.LOOPZERO_GOOGLE_CLIENT_SECRET)
-      : config.getSecret("googleOAuthClientSecret") ?? undefined,
+    googleOAuthClientId: secretFromEnvOrConfig("LOOPZERO_GOOGLE_CLIENT_ID", "googleOAuthClientId", secrets),
+    googleOAuthClientSecret: secretFromEnvOrConfig("LOOPZERO_GOOGLE_CLIENT_SECRET", "googleOAuthClientSecret", secrets),
 
     // Cross-cluster observability — Loki push URL for runtime Promtail
     lokiPushUrl: config.get("lokiPushUrl") ?? undefined,
