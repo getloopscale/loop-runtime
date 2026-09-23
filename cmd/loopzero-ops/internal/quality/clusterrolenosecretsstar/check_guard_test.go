@@ -124,16 +124,16 @@ rules:
 // An unreadable clusterrole.yaml is a template the gate could not audit; a
 // security gate must fail closed rather than report it clean.
 func TestCheck_UnreadableClusterRole_FailsClosed(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("permission-based read-error test needs non-root (root bypasses chmod 000)")
-	}
 	tmp := t.TempDir()
 	writeChart(t, tmp, "unreadable", "rules: []\n")
 	p := filepath.Join(tmp, "charts", "unreadable", "templates", "clusterrole.yaml")
-	if err := os.Chmod(p, 0o000); err != nil {
+	// A dangling symlink is unreadable for every uid, root included.
+	if err := os.Remove(p); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(p, 0o644) })
+	if err := os.Symlink(filepath.Join(filepath.Dir(p), "does-not-exist"), p); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := Check(Config{RepoRoot: tmp}); err == nil {
 		t.Fatal("want an error for an unreadable clusterrole.yaml, got nil (fail-open)")

@@ -216,15 +216,16 @@ func TestOpenDebtResolvesFromTheVersionedRegistryWithoutABacklog(t *testing.T) {
 // A versioned file the sweep cannot read may be exactly the new layer it
 // exists to catch; it is an error, never a file without billing inputs.
 func TestUnreadableVersionedFileFailsTheSweep(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("permission-based read-error test needs non-root (root bypasses chmod 000)")
-	}
-	root := base(t, map[string]string{"locked.go": "package a\n"})
-	p := filepath.Join(root, "locked.go")
-	if err := os.Chmod(p, 0o000); err != nil {
+	root := base(t, nil)
+	// A tracked dangling symlink is unreadable for every uid, root included.
+	if err := os.Symlink("does-not-exist.go", filepath.Join(root, "locked.go")); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(p, 0o644) })
+	cmd := exec.Command("git", "add", "locked.go")
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v %s", err, out)
+	}
 	if _, err := run(t, root, ""); err == nil || !strings.Contains(err.Error(), "locked.go") {
 		t.Fatalf("want an error naming the unreadable file, got %v", err)
 	}

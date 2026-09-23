@@ -11,15 +11,15 @@ import (
 
 // An unreadable file in scope was never scanned; it is not a clean file.
 func TestUnreadableFileFailsInsteadOfBeingSkipped(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("permission-based read-error test needs non-root (root bypasses chmod 000)")
-	}
 	root := repo(t, map[string]string{"scripts/locked.sh": "echo hi\n"})
 	p := filepath.Join(root, "scripts", "locked.sh")
-	if err := os.Chmod(p, 0o000); err != nil {
+	// A dangling symlink is unreadable for every uid, root included.
+	if err := os.Remove(p); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(p, 0o644) })
+	if err := os.Symlink(filepath.Join(filepath.Dir(p), "does-not-exist"), p); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := Check(Config{Root: root}); err == nil {
 		t.Fatal("want an error for an unreadable file in scope, got nil")
 	}

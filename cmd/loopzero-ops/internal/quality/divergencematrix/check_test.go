@@ -176,18 +176,18 @@ func TestCheck_IDsOutsideTheSectionAreNotMatrixEntries(t *testing.T) {
 
 // An unreadable source file is an unaudited file, never a file without markers.
 func TestCheck_UnreadableSourceFile_FailsAsGateError(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("permission-based read-error test needs non-root (root bypasses chmod 000)")
-	}
 	root := fixtureRepo(t, "| LP-001 | OPEN | a | b |\n", map[string]string{
 		"api/main.go": "// LOCAL ONLY (LP-001)\n",
 		"api/x.go":    "package x\n",
 	})
 	p := filepath.Join(root, "api/x.go")
-	if err := os.Chmod(p, 0o000); err != nil {
+	// A dangling symlink is unreadable for every uid, root included.
+	if err := os.Remove(p); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(p, 0o644) })
+	if err := os.Symlink(filepath.Join(filepath.Dir(p), "does-not-exist"), p); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := Check(Config{RepoRoot: root}); err == nil {
 		t.Fatal("want an error for an unreadable source file, got nil")
 	}

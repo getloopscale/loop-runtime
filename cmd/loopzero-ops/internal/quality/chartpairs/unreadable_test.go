@@ -12,22 +12,15 @@ import (
 // A Chart.yaml the gate cannot read hides a chart name, and with it possibly a
 // pair; that is a gate error, not a chart that does not exist.
 func TestUnreadableChartYamlIsAnError(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("permission-based read-error test needs non-root (root bypasses chmod 000)")
-	}
 	base := t.TempDir()
 	dir := filepath.Join(base, "x")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	p := filepath.Join(dir, "Chart.yaml")
-	if err := os.WriteFile(p, []byte("name: x\n"), 0o644); err != nil {
+	// A Chart.yaml that is a directory cannot be read by any uid.
+	if err := os.MkdirAll(filepath.Join(dir, "Chart.yaml"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(p, 0o000); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(p, 0o644) })
 	if _, err := chartNames(base); err == nil {
 		t.Fatal("want an error for an unreadable Chart.yaml, got nil")
 	}
