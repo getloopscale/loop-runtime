@@ -943,16 +943,18 @@ func seedMeteringProjectsEnvs(t *testing.T, ctx context.Context, pool *pgxpool.P
 	       VALUES ($1,$2,'_','_','SUCCEEDED','c',$3)`, buildID, tenantID, u)
 	exec(`INSERT INTO releases (id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by)
 	       VALUES ($1,$2,$3,'_','_','ACTIVE','c',$4)`, relID, buildID, tenantID, u)
-	pid := map[string]string{}
 	for pname := range spec {
 		id := "p-" + tenantID + "-" + pname
-		pid[pname] = id
 		exec(`INSERT INTO projects (id, name, tenant_id, created_by) VALUES ($1,$2,$3,$4)`, id, pname, tenantID, u)
 	}
+	// environment_targets.project_id carries the project NAME in production:
+	// SetDesired is called with build.ProjectID / release.ProjectID, which the
+	// CLI and autodeploy fill with the name. Seeding the id here is what let the
+	// namespace enumeration match nothing in production while this test passed.
 	for pname, envs := range spec {
 		for _, env := range envs {
 			exec(`INSERT INTO environment_targets (tenant_id, project_id, environment, desired_release_id, updated_by, correlation_id)
-			       VALUES ($1,$2,$3,$4,$5,'c')`, tenantID, pid[pname], env, relID, u)
+			       VALUES ($1,$2,$3,$4,$5,'c')`, tenantID, pname, env, relID, u)
 		}
 	}
 	t.Cleanup(func() {

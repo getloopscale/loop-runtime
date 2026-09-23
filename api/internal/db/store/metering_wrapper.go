@@ -236,9 +236,12 @@ func (s *MeteringStore) NamespacesForTenant(ctx context.Context, tenantID string
 
 	namespaces := make([]string, 0, len(projects))
 	for _, p := range projects {
+		// environment_targets.project_id holds the project NAME (the deploy
+		// path writes build.ProjectID, which the CLI fills with the name), not
+		// projects.id. Querying by id matched nothing and metered no namespace.
 		targets, terr := q.ListEnvironmentTargetsByProject(ctx, s.pool, generated.ListEnvironmentTargetsByProjectParams{
 			TenantID:  tenantID,
-			ProjectID: p.ID,
+			ProjectID: p.Name,
 		})
 		if terr != nil {
 			return nil, fmt.Errorf("metering: list env targets for project %s (tenant %s): %w", p.Name, tenantID, terr)
