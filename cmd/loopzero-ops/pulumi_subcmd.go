@@ -23,6 +23,8 @@ COMMANDS:
               --dry-run         report intended exports, no S3 write
               --archive-only    skip pre-flight bucket checks (quarterly mode)
               --bucket NAME     override archive bucket
+              --accept-plaintext-hits
+                                upload archives the plaintext-secret scan flagged (after review)
 `
 
 // runPulumi dispatches the `loopzero-ops pulumi <command>` subcommands.
@@ -51,6 +53,7 @@ func runPulumiArchive(args []string) int {
 	dryRun := fs.Bool("dry-run", false, "report intended exports without writing to S3")
 	archiveOnly := fs.Bool("archive-only", false, "skip pre-flight bucket checks (quarterly mode)")
 	bucket := fs.String("bucket", "", "override archive bucket")
+	acceptHits := fs.Bool("accept-plaintext-hits", false, "upload archives whose plaintext-secret scan found candidates, after review")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
@@ -59,10 +62,11 @@ func runPulumiArchive(args []string) int {
 	}
 
 	outcome, err := archive.Run(archive.Config{
-		Root:          *root,
-		DryRun:        *dryRun,
-		ArchiveOnly:   *archiveOnly,
-		ArchiveBucket: *bucket,
+		Root:                *root,
+		DryRun:              *dryRun,
+		ArchiveOnly:         *archiveOnly,
+		ArchiveBucket:       *bucket,
+		AcceptPlaintextHits: *acceptHits,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "pulumi archive: %v\n", err)
