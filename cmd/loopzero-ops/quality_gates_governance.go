@@ -542,7 +542,11 @@ func runDecisionsDeletion(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	o := decisionsdeletion.Check(decisionsdeletion.Config{RepoRoot: *root, BaseRef: *base, HeadRef: *head})
+	o, err := decisionsdeletion.Check(decisionsdeletion.Config{RepoRoot: *root, BaseRef: *base, HeadRef: *head})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "decisions-deletion: %v\n", err)
+		return 5
+	}
 	for _, s := range o.Superseded {
 		fmt.Printf("✓ %s (properly superseded)\n", s)
 	}
@@ -552,13 +556,12 @@ func runDecisionsDeletion(args []string) int {
 			fmt.Fprintf(os.Stderr, "  - %s\n", v)
 		}
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Per Plan Amendment Policy, deletion of a ratified ADR/MEET/runbook/inventory")
-		fmt.Fprintln(os.Stderr, "requires a superseding file with 'superseded_by: <deleted-basename>' frontmatter,")
-		fmt.Fprintln(os.Stderr, "OR explicit MEET ratification of the deletion.")
+		fmt.Fprintln(os.Stderr, "Deleting a protected governance document (docs/decisions.md, docs/runbooks.md)")
+		fmt.Fprintln(os.Stderr, "requires a sibling .md with 'superseded_by: <deleted-basename>' frontmatter.")
 		return 1
 	}
 	if len(o.DeletedFiles) == 0 {
-		fmt.Println("✓ No protected decisions/meetings/runbooks deleted. Stability hook clean.")
+		fmt.Println("✓ No protected governance document deleted. Stability hook clean.")
 	} else {
 		fmt.Printf("✓ All %d deletion(s) properly superseded. Stability hook clean.\n", len(o.DeletedFiles))
 	}
