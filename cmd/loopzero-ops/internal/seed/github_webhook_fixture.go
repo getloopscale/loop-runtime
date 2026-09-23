@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
 )
 
 // GitHubWebhookFixtureSeed is the Go port of
@@ -123,7 +125,7 @@ func (s *GitHubWebhookFixtureSeed) Run(d Deps) Result {
 	if whsec == "" {
 		return Result{Verdict: SKIP, Reason: "github.webhook_secret empty"}
 	}
-	if IsPlaceholder(whsec) {
+	if credshape.IsPlaceholder(whsec) {
 		return Result{Verdict: SKIP, Reason: "github.webhook_secret placeholder"}
 	}
 	if err := ghAuthCheckFn(); err != nil {

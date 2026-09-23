@@ -6,12 +6,15 @@ package seed
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
 )
 
 // StripeWebhookEndpointSeed is the Go port of
@@ -62,17 +65,27 @@ type stripeAPIWebhookEndpointList struct {
 	Data []stripeAPIWebhookEndpoint `json:"data"`
 }
 
-func (s *StripeWebhookEndpointSeed) Run(d Deps) Result {
+// precondition applies the one Stripe key rule (credshape) and the one
+// capability policy (Deps.MissingInput) shared with stripe-api-keys, so both
+// seeds give the same verdict on the same input.
+func (s *StripeWebhookEndpointSeed) precondition(d Deps) (Result, bool) {
 	if d.Creds == nil {
-		return Result{Verdict: SKIP, Reason: "creds absent (no --creds-file / dev-credentials.json)"}
+		return d.MissingInput(CapabilityBilling, "dev-credentials.json absent"), true
+	}
+	switch err := credshape.ParseStripeSecretKey(d.Creds.Stripe.APIKey); {
+	case errors.Is(err, credshape.ErrStripeKeyPlaceholder):
+		return d.MissingInput(CapabilityBilling, "stripe.api_key placeholder/absent"), true
+	case err != nil:
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("stripe.api_key: %v", err)}, true
+	}
+	return Result{}, false
+}
+
+func (s *StripeWebhookEndpointSeed) Run(d Deps) Result {
+	if r, stop := s.precondition(d); stop {
+		return r
 	}
 	apiKey := strings.TrimSpace(d.Creds.Stripe.APIKey)
-	if apiKey == "" {
-		return Result{Verdict: SKIP, Reason: "stripe.api_key empty"}
-	}
-	if !stripeAPIKeyLooksReal(apiKey) {
-		return Result{Verdict: SKIP, Reason: "stripe.api_key placeholder shape (expected rk_/sk_ + test/live)"}
-	}
 
 	base := osGetenvOr(stripeAPIEnv, stripeAPIDefaultBase)
 	targetURL := osGetenvOr(stripeWebhookURLEnv, stripeDefaultWebhookURL)
@@ -98,10 +111,10 @@ func (s *StripeWebhookEndpointSeed) Run(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("create endpoint: %v", err)}
 	}
 	if created.ID == "" || created.Secret == "" {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Stripe API did not return id/secret (id=%q whsec=%q)", created.ID, created.Secret)}
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Stripe API did not return id/secret (id=%q, secret present=%t)", created.ID, created.Secret != "")}
 	}
 	if !stripeWhsecCanonical(created.Secret) {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("returned whsec is placeholder shape (prefix=%.12s)", created.Secret)}
+		return Result{Verdict: FAIL, Reason: "Stripe returned a webhook secret with a placeholder shape (whsec_dev_* or not whsec_*)"}
 	}
 
 	// Persist to dev-credentials.json — mode 0600 preserved by writeJSONAtomically.
@@ -127,13 +140,10 @@ func (s *StripeWebhookEndpointSeed) Run(d Deps) Result {
 
 // Verify probes that the canonical webhook_secret + endpoint remain live.
 func (s *StripeWebhookEndpointSeed) Verify(d Deps) Result {
-	if d.Creds == nil {
-		return Result{Verdict: SKIP, Reason: "creds absent"}
+	if r, stop := s.precondition(d); stop {
+		return r
 	}
 	apiKey := strings.TrimSpace(d.Creds.Stripe.APIKey)
-	if !stripeAPIKeyLooksReal(apiKey) {
-		return Result{Verdict: SKIP, Reason: "stripe.api_key placeholder"}
-	}
 	if !stripeWhsecCanonical(d.Creds.Stripe.WebhookSecret) {
 		return Result{Verdict: FAIL, Reason: "stripe.webhook_secret placeholder — canonical seed did not run"}
 	}
@@ -150,13 +160,6 @@ func (s *StripeWebhookEndpointSeed) Verify(d Deps) Result {
 }
 
 // --- Stripe API helpers ---
-
-func stripeAPIKeyLooksReal(k string) bool {
-	if !strings.HasPrefix(k, "rk_") && !strings.HasPrefix(k, "sk_") {
-		return false
-	}
-	return strings.Contains(k, "_test_") || strings.Contains(k, "_live_")
-}
 
 func stripeWhsecCanonical(v string) bool {
 	v = strings.TrimSpace(v)

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"strings"
 )
 
 // Creds is the sponsor-provided credential file (~/.loopzero/dev-credentials.json),
@@ -86,19 +85,4 @@ func LoadCreds(path string) (*Creds, error) {
 		return nil, fmt.Errorf("%w: %v", ErrCredsMalformed, err)
 	}
 	return &c, nil
-}
-
-// IsPlaceholder reports whether a credential value is empty or a known
-// placeholder sentinel (whsec_dev_*, REPLACE_*, etc.). Seeds treat a
-// placeholder like an absent value → SKIP (parity with the bash seeds).
-func IsPlaceholder(v string) bool {
-	if strings.TrimSpace(v) == "" {
-		return true
-	}
-	for _, p := range []string{"whsec_dev_", "REPLACE_", "PLACEHOLDER", "changeme"} {
-		if strings.Contains(v, p) {
-			return true
-		}
-	}
-	return false
 }

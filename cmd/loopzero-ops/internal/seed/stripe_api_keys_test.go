@@ -85,8 +85,8 @@ func TestStripeAPIKeys_SkipWhenCredsAbsent(t *testing.T) {
 	}
 }
 
-func TestStripeAPIKeys_SkipWhenLiteralPlaceholder(t *testing.T) {
-	for _, ph := range []string{"REDACTED_SECRET_050", "REDACTED_SECRET_051"} {
+func TestStripeAPIKeys_SkipWhenPlaceholderAndBillingNotRequired(t *testing.T) {
+	for _, ph := range []string{"sk_test_REPLACE_ME", "REPLACE_VIA_PULUMI", "sk_live_PLACEHOLDER"} {
 		t.Run(ph, func(t *testing.T) {
 			credsPath := writeStripeAPICreds(t, ph, "", "", "")
 			creds, _ := LoadCreds(credsPath)

@@ -33,6 +33,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
 )
 
 // Verdict é o resultado de uma sonda contra um caminho.
@@ -367,27 +369,24 @@ func DiscoveryLeak(doc map[string]any) []string {
 // A verificação é barata e o modo de falha é caro: um marcador quebra o login inteiro e
 // só aparece quando alguém tenta entrar.
 func PlaceholderLeak(config string) []string {
-	marcadores := []string{"REPLACE_VIA_PULUMI", "REPLACE_VIA_", "CHANGEME", "TODO_SET_ME"}
 	vistos := map[string]bool{}
 	var achados []string
 	for _, linha := range strings.Split(config, "\n") {
-		for _, m := range marcadores {
-			if !strings.Contains(linha, m) {
-				continue
-			}
-			campo := strings.TrimSpace(linha)
-			if i := strings.Index(campo, ":"); i > 0 {
-				campo = strings.TrimSpace(strings.TrimPrefix(campo[:i], "- "))
-			}
-			if vistos[campo] {
-				continue
-			}
-			vistos[campo] = true
-			achados = append(achados, fmt.Sprintf(
-				"%s ficou com o marcador %q em vez de uma credencial — o sync rodou sem a variável exportada",
-				campo, m))
-			break
+		m, ok := credshape.PlaceholderMarker(linha)
+		if !ok {
+			continue
 		}
+		campo := strings.TrimSpace(linha)
+		if i := strings.Index(campo, ":"); i > 0 {
+			campo = strings.TrimSpace(strings.TrimPrefix(campo[:i], "- "))
+		}
+		if vistos[campo] {
+			continue
+		}
+		vistos[campo] = true
+		achados = append(achados, fmt.Sprintf(
+			"%s ficou com o marcador %q em vez de uma credencial — o sync rodou sem a variável exportada",
+			campo, m))
 	}
 	sort.Strings(achados)
 	return achados

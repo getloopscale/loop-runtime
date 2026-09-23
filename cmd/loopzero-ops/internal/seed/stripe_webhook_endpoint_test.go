@@ -87,24 +87,6 @@ func stripeSetupStubbedEnv(t *testing.T, stubURL, credsPath, webhookURL string) 
 	return func() { osGetenv = origGetenv }
 }
 
-func TestStripeAPIKeyLooksReal(t *testing.T) {
-	cases := map[string]bool{
-		"rk_test_abc": true,
-		"sk_live_x":   true,
-		"sk_test_x":   true,
-		"rk_live_x":   true,
-		"pk_test_x":   false,
-		"whsec_dev":   false,
-		"":            false,
-		"rk_dev_x":    false,
-	}
-	for in, want := range cases {
-		if got := stripeAPIKeyLooksReal(in); got != want {
-			t.Errorf("stripeAPIKeyLooksReal(%q) = %v, want %v", in, got, want)
-		}
-	}
-}
-
 func TestStripeWhsecCanonical(t *testing.T) {
 	cases := map[string]bool{
 		"whsec_test_abc": true,
@@ -129,9 +111,19 @@ func TestStripeWebhookEndpoint_SkipWhenCredsAbsent(t *testing.T) {
 	}
 }
 
-func TestStripeWebhookEndpoint_SkipWhenAPIKeyPlaceholder(t *testing.T) {
+func TestStripeWebhookEndpoint_FailWhenAPIKeyIsPublishable(t *testing.T) {
 	creds := &Creds{}
 	creds.Stripe.APIKey = "pk_test_notallowed"
+	deps := Deps{Ctx: context.Background(), Creds: creds}
+	got := NewStripeWebhookEndpointSeed().Run(deps)
+	if got.Verdict != FAIL {
+		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
+	}
+}
+
+func TestStripeWebhookEndpoint_SkipWhenAPIKeyPlaceholder(t *testing.T) {
+	creds := &Creds{}
+	creds.Stripe.APIKey = "sk_test_REPLACE_ME"
 	deps := Deps{Ctx: context.Background(), Creds: creds}
 	got := NewStripeWebhookEndpointSeed().Run(deps)
 	if got.Verdict != SKIP {

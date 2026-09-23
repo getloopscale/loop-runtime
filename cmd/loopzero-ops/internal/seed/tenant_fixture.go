@@ -21,6 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
 )
 
 // TenantFixtureSeed is the Go port of
@@ -135,7 +137,7 @@ func (s *TenantFixtureSeed) Run(d Deps) Result {
 
 	// Layer 2 — GitHub webhook replay (skip-graceful when creds absent).
 	var webhookWarn string
-	if d.Creds != nil && !IsPlaceholder(d.Creds.GitHub.WebhookSecret) {
+	if d.Creds != nil && !credshape.IsPlaceholder(d.Creds.GitHub.WebhookSecret) {
 		if err := replayGitHubInstallationWebhook(d.Ctx, d.Creds.GitHub.WebhookSecret); err != nil {
 			// Non-fatal — the deploy chain may not be ready yet (bash parity).
 			// FIX-4 (M24): surface the error in the result reason instead of

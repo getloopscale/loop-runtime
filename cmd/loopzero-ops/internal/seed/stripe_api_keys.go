@@ -4,8 +4,11 @@
 package seed
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
 )
 
 // StripeAPIKeysSeed is the Go port of
@@ -23,8 +26,8 @@ import (
 //
 // Parity contract (D3):
 //   - creds absent (Deps.Creds == nil)                    → SKIP
-//   - stripe.api_key empty                                → SKIP
-//   - stripe.api_key ∈ {REDACTED_SECRET_050, REDACTED_SECRET_051} → SKIP
+//   - stripe.api_key empty or a placeholder               → Deps.MissingInput
+//     (SKIP, or FAIL when the environment declares billing)
 //   - stripe.api_key prefix not rk_/sk_ + test_/live_     → FAIL (EC-2)
 //   - k8s API error on Secret apply                       → FAIL
 //   - success                                             → PASS
@@ -45,13 +48,6 @@ const (
 	stripePriceTeamKey     = "STRIPE_PRICE_TEAM"
 	stripeCloudDeployment  = "loopzero-cloud"
 )
-
-// stripeAPIKeyPlaceholders is the small set of literal sentinels the bash seed
-// treats as SKIP-graceful (in addition to the generic IsPlaceholder check).
-var stripeAPIKeyPlaceholders = map[string]bool{
-	"REDACTED_SECRET_050": true,
-	"REDACTED_SECRET_051": true,
-}
 
 func (s *StripeAPIKeysSeed) Run(d Deps) Result {
 	if r, skip := s.precondition(d); skip {
@@ -108,29 +104,12 @@ func (s *StripeAPIKeysSeed) precondition(d Deps) (Result, bool) {
 	if d.Creds == nil {
 		return d.MissingInput(CapabilityBilling, "dev-credentials.json absent"), true
 	}
-	apiKey := d.Creds.Stripe.APIKey
-	if apiKey == "" || stripeAPIKeyPlaceholders[apiKey] {
+	switch err := credshape.ParseStripeSecretKey(d.Creds.Stripe.APIKey); {
+	case errors.Is(err, credshape.ErrStripeKeyPlaceholder):
 		return d.MissingInput(CapabilityBilling, "stripe.api_key placeholder/absent"), true
-	}
-	// EC-2: prefix guard prevents publishable_key (pk_*) silently accepted.
-	if !hasStripeAPIKeyPrefix(apiKey) {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("stripe.api_key wrong prefix (got %q…); expected rk_test_/rk_live_/sk_test_/sk_live_", first8(apiKey))}, true
+	case err != nil:
+		// EC-2: a publishable key (pk_*) must never be accepted as the secret key.
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("stripe.api_key: %v", err)}, true
 	}
 	return Result{}, false
-}
-
-func hasStripeAPIKeyPrefix(k string) bool {
-	for _, p := range []string{"rk_test_", "rk_live_", "sk_test_", "sk_live_"} {
-		if strings.HasPrefix(k, p) {
-			return true
-		}
-	}
-	return false
-}
-
-func first8(s string) string {
-	if len(s) <= 8 {
-		return s
-	}
-	return s[:8]
 }

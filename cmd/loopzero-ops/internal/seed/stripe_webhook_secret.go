@@ -6,6 +6,8 @@ package seed
 import (
 	"fmt"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
 )
 
 // StripeWebhookSecretSeed is the Go port of
@@ -19,7 +21,7 @@ import (
 //   - creds absent (Deps.Creds == nil)                 → SKIP
 //   - stripe.webhook_secret empty                      → SKIP
 //   - stripe.webhook_secret == "whsec_PLACEHOLDER"     → SKIP (M5 sponsor-blocked)
-//   - IsPlaceholder(webhook_secret) matches other sentinels (whsec_dev_, REPLACE_, …) → SKIP
+//   - credshape.IsPlaceholder(webhook_secret) matches other sentinels (whsec_dev_, REPLACE_, …) → SKIP
 //   - k8s API error                                    → FAIL
 //   - success (create OR update)                       → PASS
 type StripeWebhookSecretSeed struct{}
@@ -87,7 +89,7 @@ func (s *StripeWebhookSecretSeed) precondition(d Deps) (Result, bool) {
 		return d.MissingInput(CapabilityBilling, "dev-credentials.json absent"), true
 	}
 	wh := d.Creds.Stripe.WebhookSecret
-	if wh == "" || wh == stripePlaceholder || IsPlaceholder(wh) {
+	if wh == "" || wh == stripePlaceholder || credshape.IsPlaceholder(wh) {
 		return d.MissingInput(CapabilityBilling, "stripe.webhook_secret placeholder/absent"), true
 	}
 	return Result{}, false

@@ -31,8 +31,9 @@ type stripePreconditioner interface {
 
 func seedsDeStripe() map[string]stripePreconditioner {
 	return map[string]stripePreconditioner{
-		"webhook-secret": &StripeWebhookSecretSeed{},
-		"api-keys":       &StripeAPIKeysSeed{},
+		"webhook-secret":   &StripeWebhookSecretSeed{},
+		"api-keys":         &StripeAPIKeysSeed{},
+		"webhook-endpoint": &StripeWebhookEndpointSeed{},
 	}
 }
 
@@ -121,6 +122,60 @@ func TestARazaoDoFailDizOQueFazer(t *testing.T) {
 			}
 			if !strings.Contains(r, string(CapabilityBilling)) {
 				t.Errorf("a razão precisa nomear a capacidade exigida; veio %q", res.Reason)
+			}
+		})
+	}
+}
+
+// stripeKeySeeds are the seeds that read stripe.api_key. They must answer the
+// same question the same way: one rule (credshape.ParseStripeSecretKey), one
+// capability policy (Deps.MissingInput).
+func stripeKeySeeds() map[string]stripePreconditioner {
+	return map[string]stripePreconditioner{
+		"api-keys":         &StripeAPIKeysSeed{},
+		"webhook-endpoint": &StripeWebhookEndpointSeed{},
+	}
+}
+
+// A key with a valid secret prefix and a placeholder body passed the prefix
+// check and was written to loopzero-stripe-api-keys, restarting loopzero-cloud onto it.
+func TestStripeKeyWithPlaceholderBodyFailsWhenBillingIsRequired(t *testing.T) {
+	for name, s := range stripeKeySeeds() {
+		t.Run(name, func(t *testing.T) {
+			creds := &Creds{}
+			creds.Stripe.APIKey = "sk_test_REPLACE_ME"
+			creds.Stripe.WebhookSecret = "whsec_test_realvalue"
+			res, stopped := s.precondition(Deps{Creds: creds, Policy: NewEnvRequirementPolicy("dev-public")})
+			if !stopped || res.Verdict != FAIL {
+				t.Fatalf("want FAIL before any mutation, got stopped=%v %s (%s)", stopped, res.Verdict, res.Reason)
+			}
+		})
+	}
+}
+
+func TestStripeKeyWithPlaceholderBodySkipsWhenBillingIsNotRequired(t *testing.T) {
+	for name, s := range stripeKeySeeds() {
+		t.Run(name, func(t *testing.T) {
+			creds := &Creds{}
+			creds.Stripe.APIKey = "sk_test_REPLACE_ME"
+			res, stopped := s.precondition(Deps{Creds: creds, Policy: NewEnvRequirementPolicy("")})
+			if !stopped || res.Verdict != SKIP {
+				t.Fatalf("want SKIP, got stopped=%v %s (%s)", stopped, res.Verdict, res.Reason)
+			}
+		})
+	}
+}
+
+// A publishable key is a misconfiguration, not an absence: FAIL in every seed,
+// with or without a billing policy.
+func TestStripePublishableKeyFailsInEveryKeySeed(t *testing.T) {
+	for name, s := range stripeKeySeeds() {
+		t.Run(name, func(t *testing.T) {
+			creds := &Creds{}
+			creds.Stripe.APIKey = "pk_test_publishable"
+			res, stopped := s.precondition(Deps{Creds: creds})
+			if !stopped || res.Verdict != FAIL {
+				t.Fatalf("want FAIL, got stopped=%v %s (%s)", stopped, res.Verdict, res.Reason)
 			}
 		})
 	}
