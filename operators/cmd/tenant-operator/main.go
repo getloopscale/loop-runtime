@@ -286,7 +286,7 @@ func main() {
 	// Routes namespace/RBAC/NetworkPolicy/Quota writes per tenant.spec.cellID.
 	envFactory := cellrouting.NewCellAwareRuntimeClientFactory(
 		mgr.GetClient(), runtimeClient, "loopzero-system")
-	if err := environment.SetupEnvironmentControllerWithFactory(mgr, runtimeClient, envFactory); err != nil {
+	if err := environment.SetupEnvironmentControllerWithFactory(mgr, envFactory); err != nil {
 		setupLog.Error(err, "unable to setup EnvironmentController")
 		os.Exit(1)
 	}

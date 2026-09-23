@@ -43,17 +43,17 @@ var environmentSM = statemachine.NewEnvironmentTypedMachine()
 
 // EnvironmentReconciler reconciles an Environment object.
 //
-// Multi-cluster design: the Environment CR lives in the mgmt cluster,
-// but namespace/RBAC/NetworkPolicy resources are created on the runtime cluster.
-//   - r.Client          -> mgmt cluster (Environment CR + Tenant CR reads)
-//   - r.RuntimeClient   -> default runtime cluster (legacy single-cell fallback)
-//   - r.RuntimeFactory  -> cell-aware factory: returns the right runtime client
-//     based on tenant.spec.cellID (fix-all-platform-issues-plan T1.1, parity
-//     with operators/internal/controller/environment_controller.go from
-//     cell-1-activation-plan iter 4 BUG-FIX).
+// Multi-cluster design: the Environment CR lives in the mgmt cluster, while the
+// namespace, RBAC, NetworkPolicy and quota live on the runtime cluster of the
+// tenant's cell.
+//   - r.Client         -> mgmt cluster (Environment CR + Tenant CR reads)
+//   - r.RuntimeFactory -> the runtime cluster of a cell, by cellID. Required.
 //
-// All namespace/RBAC/NetworkPolicy/Quota writes MUST go through
-// runtimeClientForEnv() — direct r.RuntimeClient calls bypass cell awareness.
+// There is no fallback cluster. A cell that cannot be resolved fails the
+// reconcile and requeues with backoff: writing a tenant namespace to whichever
+// cluster happened to answer is the silent misplacement this design exists to
+// prevent. The only cell with a default client is cellID "" (a tenant that was
+// never placed), and that mapping belongs to the factory, not to this type.
 //
 // ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers for the LOCAL
 // (mgmt cluster) RBAC. Cross-cluster RBAC for runtime cluster
@@ -65,42 +65,29 @@ var environmentSM = statemachine.NewEnvironmentTypedMachine()
 // +kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch;patch
 type EnvironmentReconciler struct {
 	client.Client
-	RuntimeClient    client.Client
-	RuntimeFactory   cellrouting.RuntimeClientFactory // nil = single-cell mode (legacy)
+	RuntimeFactory   cellrouting.RuntimeClientFactory
 	Scheme           *runtime.Scheme
-	IngressNamespace string // Namespace where ingress controller (Traefik) runs. Default: loopzero-system.
+	IngressNamespace string // Namespace where ingress controller (Traefik) runs. Default: traefik.
 }
 
-// runtimeClientForEnv resolves the right runtime client for the given
-// Environment by looking up the parent Tenant's spec.cellID. Mirrors the
-// cell-aware lookup pattern from operators/internal/controller/.
-func (r *EnvironmentReconciler) runtimeClientForEnv(ctx context.Context, env *loopzerov1.Environment) (client.Client, error) {
-	if r.RuntimeFactory == nil {
-		if r.RuntimeClient == nil {
-			return nil, fmt.Errorf("environment %s: no RuntimeClient and no RuntimeFactory configured", env.Name)
-		}
-		return r.RuntimeClient, nil
-	}
-
+// tenantCell returns the cell the parent Tenant is placed in. The Tenant is the
+// canonical record of placement (tenants.cell_id mirrors into Spec.CellID), so
+// an unreadable Tenant is an unknown cell, never a default one.
+func (r *EnvironmentReconciler) tenantCell(ctx context.Context, env *loopzerov1.Environment) (string, error) {
 	var tenant loopzerov1.Tenant
-	if err := r.Get(ctx, client.ObjectKey{Name: env.Spec.TenantRef.Name, Namespace: env.Namespace}, &tenant); err != nil {
-		if err2 := r.Get(ctx, client.ObjectKey{Name: env.Spec.TenantRef.Name}, &tenant); err2 != nil {
-			if r.RuntimeClient != nil {
-				return r.RuntimeClient, nil
-			}
-			return nil, fmt.Errorf("environment %s: tenant %s not found and no fallback: %w",
-				env.Name, env.Spec.TenantRef.Name, err2)
-		}
+	key := client.ObjectKey{Name: env.Spec.TenantRef.Name, Namespace: env.Namespace}
+	if err := r.Get(ctx, key, &tenant); err != nil {
+		return "", fmt.Errorf("environment %s: read tenant %s to resolve its cell: %w",
+			env.Name, env.Spec.TenantRef.Name, err)
 	}
+	return tenant.Spec.CellID, nil
+}
 
-	cellID := tenant.Spec.CellID
+// runtimeClientForCell resolves the runtime cluster client of a cell.
+func (r *EnvironmentReconciler) runtimeClientForCell(ctx context.Context, env *loopzerov1.Environment, cellID string) (client.Client, error) {
 	c, err := r.RuntimeFactory.For(ctx, cellID)
 	if err != nil {
-		if r.RuntimeClient != nil {
-			return r.RuntimeClient, nil
-		}
-		return nil, fmt.Errorf("environment %s (cellID=%q): factory error and no fallback: %w",
-			env.Name, cellID, err)
+		return nil, fmt.Errorf("environment %s (cellID=%q): runtime cluster client: %w", env.Name, cellID, err)
 	}
 	return c, nil
 }
@@ -258,17 +245,32 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		fn             func() error
 	}
 
+	// Resolve the cell once for every step below. A failure here is surfaced on
+	// the namespace condition and requeued; nothing is written anywhere until
+	// the tenant's cell answers.
+	cellID, err := r.tenantCell(ctx, &env)
+	var runtimeClient client.Client
+	if err == nil {
+		runtimeClient, err = r.runtimeClientForCell(ctx, &env, cellID)
+	}
+	if err != nil {
+		conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvNamespaceReady,
+			metav1.ConditionFalse, "RuntimeClusterUnresolved", err.Error(), env.Generation)
+		if statusErr := r.Status().Patch(ctx, &env, client.MergeFrom(base)); statusErr != nil {
+			logger.Error(statusErr, "failed to persist RuntimeClusterUnresolved condition")
+		}
+		return ctrl.Result{}, err
+	}
+
 	steps := []envStep{
 		{conditions.TypeEnvNamespaceReady, "NamespaceReady", "namespace provisioned",
-			func() error { return r.reconcileNamespace(ctx, &env, nsName, tenantName) }},
+			func() error { return r.reconcileNamespace(ctx, runtimeClient, &env, nsName, tenantName) }},
 		{conditions.TypeEnvRBACReady, "RBACConfigured", "RBAC resources provisioned",
-			func() error { return r.reconcileRBAC(ctx, &env, nsName) }},
+			func() error { return r.reconcileRBAC(ctx, runtimeClient, &env, nsName) }},
 		{conditions.TypeEnvNetworkPolicyReady, "NetworkPoliciesConfigured", "network policies provisioned",
-			func() error {
-				return r.reconcileNetworkPolicies(ctx, &env, nsName)
-			}},
+			func() error { return r.reconcileNetworkPolicies(ctx, runtimeClient, nsName) }},
 		{conditions.TypeEnvQuotaReady, "QuotaReady", "resource quota applied",
-			func() error { return r.reconcileQuota(ctx, &env, nsName) }},
+			func() error { return r.reconcileQuota(ctx, runtimeClient, &env, nsName) }},
 	}
 
 	for _, step := range steps {
@@ -296,6 +298,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		env.Status.Phase = loopzerov1.EnvironmentPhase(next)
 	}
 	env.Status.Namespace = nsName
+	env.Status.CellID = cellID
 	env.Status.ObservedGeneration = env.Generation
 
 	// MA-1: merge-patch the accumulated status (phase + conditions + namespace +
@@ -342,23 +345,15 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 		}
 	}
 
-	// Delete namespace on cell-aware runtime cluster (T1.1 BUG-FIX).
+	// Delete the namespace in the cell it was provisioned in.
 	nsName := env.Spec.Namespace.Name
-	runtimeClient, rcErr := r.runtimeClientForEnv(ctx, env)
-	if rcErr != nil {
-		return ctrl.Result{}, rcErr
+	gone, err := r.deleteNamespace(ctx, env, nsName)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
-	ns := &corev1.Namespace{}
-	if err := runtimeClient.Get(ctx, client.ObjectKey{Name: nsName}, ns); err == nil {
-		if ns.Labels != nil && ns.Labels[constants.LabelTenant] == env.Spec.TenantRef.Name {
-			if ns.DeletionTimestamp.IsZero() {
-				if err := runtimeClient.Delete(ctx, ns); err != nil && !errors.IsNotFound(err) {
-					return ctrl.Result{}, err
-				}
-			}
-			logger.Info("namespace still exists, requeuing", "namespace", nsName)
-			return ctrl.Result{RequeueAfter: constants.RequeueNamespaceDeletionWait}, nil
-		}
+	if !gone {
+		logger.Info("namespace still exists, requeuing", "namespace", nsName)
+		return ctrl.Result{RequeueAfter: constants.RequeueNamespaceDeletionWait}, nil
 	}
 
 	// Namespace gone — retire a tupla do Tenant ANTES de soltar o finalizer, senao a
@@ -430,31 +425,79 @@ func (r *EnvironmentReconciler) pruneTenantEnvironmentEntry(ctx context.Context,
 	return nil
 }
 
-// SetupEnvironmentController registers the EnvironmentController with the manager.
+// deletionCell returns the cell holding this environment's namespace. The cell
+// recorded at provisioning wins: the Tenant may have been re-pinned since, and
+// the namespace is where it was created, not where the tenant points now.
+// Environments provisioned before the cell was recorded fall back to the
+// Tenant's current cell.
 //
-// Single-cell mode: pass nil as factory; legacy r.RuntimeClient is used for
-// every environment regardless of cellID.
-//
-// Multi-cell mode: pass a CellAwareRuntimeClientFactory built from
-// mgr.GetClient() (mgmt) + runtimeClient (legacy fallback for cell-0).
-//
-// fix-all-platform-issues-plan T1.1 — split-binary parity with the
-// monolithic controller from cell-1-activation-plan iter 4.
-//
-// Quality-Gate Phase 3: SetupEnvironmentController legacy wrapper removed
-// — all callers (cmd/* binaries + operatortest envtest_suite) now invoke
-// SetupEnvironmentControllerWithFactory directly with factory=nil for the
-// legacy single-cell path.
+// ok is false when nothing was ever provisioned (no recorded namespace) and the
+// cell is unknowable — the only case where there is nothing to delete.
+func (r *EnvironmentReconciler) deletionCell(ctx context.Context, env *loopzerov1.Environment) (cellID string, ok bool, err error) {
+	if env.Status.CellID != "" {
+		return env.Status.CellID, true, nil
+	}
+	cellID, err = r.tenantCell(ctx, env)
+	if err == nil {
+		return cellID, true, nil
+	}
+	if errors.IsNotFound(err) && env.Status.Namespace == "" {
+		return "", false, nil
+	}
+	return "", false, fmt.Errorf("environment %s: cannot locate the cell holding namespace %q: %w",
+		env.Name, env.Spec.Namespace.Name, err)
+}
 
-// SetupEnvironmentControllerWithFactory is the cell-aware entrypoint.
-func SetupEnvironmentControllerWithFactory(mgr ctrl.Manager, runtimeClient client.Client, factory cellrouting.RuntimeClientFactory) error {
+// deleteNamespace deletes the tenant-owned namespace in the environment's cell
+// and reports whether it is gone. Any lookup failure other than NotFound is
+// returned: "could not see it" is not "it is gone", and releasing the finalizer
+// on that confusion leaks the namespace and its workloads.
+func (r *EnvironmentReconciler) deleteNamespace(ctx context.Context, env *loopzerov1.Environment, nsName string) (bool, error) {
+	cellID, ok, err := r.deletionCell(ctx, env)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return true, nil
+	}
+	runtimeClient, err := r.runtimeClientForCell(ctx, env, cellID)
+	if err != nil {
+		return false, err
+	}
+
+	ns := &corev1.Namespace{}
+	if err := runtimeClient.Get(ctx, client.ObjectKey{Name: nsName}, ns); err != nil {
+		if errors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("environment %s: get namespace %s in cell %q: %w", env.Name, nsName, cellID, err)
+	}
+	if ns.Labels[constants.LabelTenant] != env.Spec.TenantRef.Name {
+		// Not ours: never delete a namespace another tenant (or nobody) owns.
+		return true, nil
+	}
+	if ns.DeletionTimestamp.IsZero() {
+		if err := runtimeClient.Delete(ctx, ns); err != nil && !errors.IsNotFound(err) {
+			return false, err
+		}
+	}
+	return false, nil
+}
+
+// SetupEnvironmentControllerWithFactory registers the EnvironmentController.
+// factory is required: it is the only way this controller reaches a runtime
+// cluster. A single-cell deployment passes a factory whose default client is
+// that cluster.
+func SetupEnvironmentControllerWithFactory(mgr ctrl.Manager, factory cellrouting.RuntimeClientFactory) error {
+	if factory == nil {
+		return fmt.Errorf("environment controller: a runtime client factory is required")
+	}
 	ingressNS := os.Getenv("INGRESS_NAMESPACE")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.Environment{}, reconcileloop.ForOption()).
 		Named("environment").
 		Complete(&EnvironmentReconciler{
 			Client:           mgr.GetClient(),
-			RuntimeClient:    runtimeClient,
 			RuntimeFactory:   factory,
 			Scheme:           mgr.GetScheme(),
 			IngressNamespace: ingressNS,

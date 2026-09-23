@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -20,14 +21,10 @@ import (
 )
 
 // reconcileNamespace ensures the namespace exists via CreateOrUpdate.
-// fix-all-platform-issues-plan T1.1 — cell-aware via runtimeClientForEnv.
-func (r *EnvironmentReconciler) reconcileNamespace(ctx context.Context, env *loopzerov1.Environment, nsName, tenantName string) error {
+// fix-all-platform-issues-plan T1.1 — writes through the cell client Reconcile resolved.
+func (r *EnvironmentReconciler) reconcileNamespace(ctx context.Context, runtimeClient client.Client, env *loopzerov1.Environment, nsName, tenantName string) error {
 	ctx, span := reconcileloop.StartChildSpan(ctx, "environment.namespace.ensure")
 	defer span.End()
-	runtimeClient, err := r.runtimeClientForEnv(ctx, env)
-	if err != nil {
-		return fmt.Errorf("namespace %s: %w", nsName, err)
-	}
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: nsName,
@@ -54,12 +51,8 @@ func (r *EnvironmentReconciler) reconcileNamespace(ctx context.Context, env *loo
 }
 
 // reconcileQuota ensures ResourceQuota and LimitRange exist if configured.
-// fix-all-platform-issues-plan T1.1 — cell-aware via runtimeClientForEnv.
-func (r *EnvironmentReconciler) reconcileQuota(ctx context.Context, env *loopzerov1.Environment, nsName string) error {
-	runtimeClient, err := r.runtimeClientForEnv(ctx, env)
-	if err != nil {
-		return fmt.Errorf("quota: cell-aware client: %w", err)
-	}
+// fix-all-platform-issues-plan T1.1 — writes through the cell client Reconcile resolved.
+func (r *EnvironmentReconciler) reconcileQuota(ctx context.Context, runtimeClient client.Client, env *loopzerov1.Environment, nsName string) error {
 	// ResourceQuota (only if spec.resourceQuota is set)
 	if env.Spec.ResourceQuota != nil {
 		cpuQty, err := resource.ParseQuantity(env.Spec.ResourceQuota.CPU)

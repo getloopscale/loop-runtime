@@ -22,12 +22,8 @@ import (
 )
 
 // reconcileRBAC ensures ServiceAccount, Role, and RoleBinding exist in the namespace.
-// fix-all-platform-issues-plan T1.1 — cell-aware via runtimeClientForEnv.
-func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzerov1.Environment, nsName string) error {
-	runtimeClient, err := r.runtimeClientForEnv(ctx, env)
-	if err != nil {
-		return fmt.Errorf("rbac: cell-aware client: %w", err)
-	}
+// fix-all-platform-issues-plan T1.1 — writes through the cell client Reconcile resolved.
+func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient client.Client, env *loopzerov1.Environment, nsName string) error {
 	// ServiceAccount
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -78,7 +74,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 	// em alguns profiles) de falha real: NotFound vira condição
 	// TypePullSecretReady=False/SourceMissing SEM log (idempotente, sem
 	// ruído); outras falhas continuam logadas.
-	switch err := r.ensurePullSecret(ctx, env, nsName); {
+	switch err := r.ensurePullSecret(ctx, runtimeClient, nsName); {
 	case err == nil:
 		conditions.SetCondition(&env.Status.Conditions, conditions.TypePullSecretReady,
 			metav1.ConditionTrue, conditions.ReasonReady, "Pull secret provisioned", env.Generation)
@@ -95,7 +91,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 	}
 
 	// Bug #24 complement: delete stuck ImagePullBackOff pods so ReplicaSet recreates them.
-	if err := r.kickStuckPullBackoffPods(ctx, env, nsName); err != nil {
+	if err := r.kickStuckPullBackoffPods(ctx, runtimeClient, nsName); err != nil {
 		log.FromContext(ctx).Info("kick stuck pull-backoff pods failed (non-fatal)", "error", err.Error(), "namespace", nsName)
 	}
 
@@ -133,12 +129,8 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 }
 
 // ensurePullSecret copies the registry pull secret from loopzero-system into the tenant namespace.
-// fix-all-platform-issues-plan T1.1 — cell-aware via runtimeClientForEnv.
-func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, env *loopzerov1.Environment, nsName string) error {
-	runtimeClient, err := r.runtimeClientForEnv(ctx, env)
-	if err != nil {
-		return fmt.Errorf("pull secret: cell-aware client: %w", err)
-	}
+// fix-all-platform-issues-plan T1.1 — writes through the cell client Reconcile resolved.
+func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, runtimeClient client.Client, nsName string) error {
 	var src corev1.Secret
 	srcKey := client.ObjectKey{Namespace: constants.NamespacePlatformSystem, Name: "loopzero-system"}
 	if err := r.Get(ctx, srcKey, &src); err != nil {
@@ -151,7 +143,7 @@ func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, env *loopz
 			Namespace: nsName,
 		},
 	}
-	_, err = controllerutil.CreateOrUpdate(ctx, runtimeClient, dst, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, runtimeClient, dst, func() error {
 		dst.Type = corev1.SecretTypeDockerConfigJson
 		dst.Data = src.Data
 		if dst.Labels == nil {
@@ -168,12 +160,8 @@ func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, env *loopz
 
 // kickStuckPullBackoffPods deletes pods stuck in ImagePullBackOff or ErrImagePull.
 // Bug #24 complement (scale-50k L2). Idempotent — no-op if no stuck pods.
-// fix-all-platform-issues-plan T1.1 — cell-aware via runtimeClientForEnv.
-func (r *EnvironmentReconciler) kickStuckPullBackoffPods(ctx context.Context, env *loopzerov1.Environment, nsName string) error {
-	runtimeClient, err := r.runtimeClientForEnv(ctx, env)
-	if err != nil {
-		return fmt.Errorf("kick pods: cell-aware client: %w", err)
-	}
+// fix-all-platform-issues-plan T1.1 — writes through the cell client Reconcile resolved.
+func (r *EnvironmentReconciler) kickStuckPullBackoffPods(ctx context.Context, runtimeClient client.Client, nsName string) error {
 	var pods corev1.PodList
 	if err := runtimeClient.List(ctx, &pods, client.InNamespace(nsName)); err != nil {
 		return fmt.Errorf("list pods in %s: %w", nsName, err)

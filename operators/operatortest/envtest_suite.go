@@ -58,9 +58,9 @@ type EnvtestHandle struct {
 	BuildClient client.Client
 	RuntimeCli  client.Client
 
-	// CellAwareFactory is non-nil when EnableCellAwareFactory was set in
-	// the EnvtestConfig. Tests assert against this to verify cell-aware
-	// code paths actually executed (T1.2 of deep-review-remediation-plan).
+	// CellAwareFactory is the factory every cell-aware controller in the
+	// suite resolves runtime clients through. Specs assert against Calls()
+	// to verify which cell a write was routed to.
 	CellAwareFactory *FakeRuntimeClientFactory
 }
 
@@ -122,8 +122,8 @@ type EnvtestConfig struct {
 	// CRD bases directory. Typically "../../config/crd/bases".
 	CRDPath string
 
-	// EnableTenant wires SetupTenantController + SetupEnvironmentControllerWithFactory
-	// (the cell-aware variant with factory=nil). Tenant suite uses this.
+	// EnableTenant wires SetupTenantController + SetupEnvironmentControllerWithFactory,
+	// the latter routed through the tracking CellAwareFactory. Tenant suite uses this.
 	EnableTenant bool
 
 	// EnableApp wires SetupApplicationController + SetupExposureController.
@@ -139,18 +139,6 @@ type EnvtestConfig struct {
 	// BaseDomain is used by Application and Preview controllers for hostname
 	// assignment. Defaults to "dev.loopzero.example" if empty.
 	BaseDomain string
-
-	// EnableCellAwareFactory wires a tracking fakeRuntimeClientFactory
-	// instead of nil for controller setups that accept a factory. T1.2 of
-	// deep-review-remediation-plan (closes find_arch_003 HIGH): pre-T1.2
-	// envtest suites passed factory=nil to every controller, so the
-	// CellAwareRuntimeClientFactory code paths had ZERO automated test
-	// coverage.
-	//
-	// When true, the factory routes For(cellID) calls to the existing
-	// runtimeClient and records each call in h.CellAwareFactoryCalls so
-	// tests can assert "factory was actually exercised".
-	EnableCellAwareFactory bool
 }
 
 // StartEnvtest brings up envtest, starts the manager with the configured
@@ -260,14 +248,11 @@ func StartEnvtest(t TestT, cfg EnvtestConfig) *EnvtestHandle {
 		RuntimeCli:  runtimeClient,
 	}
 
-	// T1.2 of deep-review-remediation-plan (closes find_arch_003 HIGH):
-	// when EnableCellAwareFactory is true, build a tracking factory
-	// routing all cellIDs to runtimeClient. Tests assert via
-	// h.CellAwareFactory.Calls() that cell-aware code paths actually
-	// executed.
-	if cfg.EnableCellAwareFactory {
-		h.CellAwareFactory = NewFakeRuntimeClientFactory(runtimeClient)
-	}
+	// Every cell-aware controller reaches the runtime cluster through this
+	// tracking factory, so a spec can assert via h.CellAwareFactory.Calls()
+	// which cell each write was routed to. envtest has one API server, so
+	// every cell resolves to it; the routing decision is what is observed.
+	h.CellAwareFactory = NewFakeRuntimeClientFactory(runtimeClient)
 
 	baseDomain := cfg.BaseDomain
 	if baseDomain == "" {
@@ -279,7 +264,7 @@ func StartEnvtest(t TestT, cfg EnvtestConfig) *EnvtestHandle {
 			h.Stop()
 			t.Fatalf("SetupTenantController: %v", err)
 		}
-		if err := environment.SetupEnvironmentControllerWithFactory(mgr, runtimeClient, nil); err != nil {
+		if err := environment.SetupEnvironmentControllerWithFactory(mgr, h.CellAwareFactory); err != nil {
 			h.Stop()
 			t.Fatalf("SetupEnvironmentControllerWithFactory: %v", err)
 		}

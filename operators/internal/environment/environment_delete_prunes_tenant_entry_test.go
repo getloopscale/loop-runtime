@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
 )
 
 // B-074. Apagar o Environment CR direto deixava a Application orfa: o reaper
@@ -62,7 +63,7 @@ func TestApagarEnvironmentRemoveATuplaDoTenantParaOReaperAlcancarAApplication(t 
 		WithStatusSubresource(&loopzerov1.Environment{}, &loopzerov1.Tenant{}).
 		Build()
 
-	r := &EnvironmentReconciler{Client: cl, RuntimeClient: cl, Scheme: s}
+	r := &EnvironmentReconciler{Client: cl, RuntimeFactory: cellrouting.NewStaticRuntimeClientFactory(cl), Scheme: s}
 	if _, err := r.Reconcile(context.Background(),
 		ctrl.Request{NamespacedName: types.NamespacedName{Name: "env-b074", Namespace: "default"}}); err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -99,7 +100,7 @@ func TestApagarEnvironmentSemTenantNaoTravaADelecao(t *testing.T) {
 		WithStatusSubresource(&loopzerov1.Environment{}).
 		Build()
 
-	r := &EnvironmentReconciler{Client: cl, RuntimeClient: cl, Scheme: s}
+	r := &EnvironmentReconciler{Client: cl, RuntimeFactory: cellrouting.NewStaticRuntimeClientFactory(cl), Scheme: s}
 	if _, err := r.Reconcile(context.Background(),
 		ctrl.Request{NamespacedName: types.NamespacedName{Name: "env-b074", Namespace: "default"}}); err != nil {
 		t.Fatalf("Reconcile devolveu erro sem Tenant: %v — o finalizer nunca sai e o CR fica preso", err)

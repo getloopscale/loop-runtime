@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
 )
 
 func t31TestScheme(t *testing.T) *runtime.Scheme {
@@ -93,7 +94,7 @@ func TestEnvironmentReconciler_NameTooLong_SetsObservedGeneration(t *testing.T) 
 		WithStatusSubresource(&loopzerov1.Environment{}).
 		Build()
 
-	r := &EnvironmentReconciler{Client: cl, RuntimeClient: cl, Scheme: s}
+	r := &EnvironmentReconciler{Client: cl, RuntimeFactory: cellrouting.NewStaticRuntimeClientFactory(cl), Scheme: s}
 	key := types.NamespacedName{Name: "tn-overflow-conflict", Namespace: "default"}
 
 	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: key}); err != nil {
@@ -149,7 +150,7 @@ func TestEnvironmentReconciler_NameTooLong_RequeuesOnStatusConflict(t *testing.T
 		WithInterceptorFuncs(ic).
 		Build()
 
-	r := &EnvironmentReconciler{Client: cl, RuntimeClient: cl, Scheme: s}
+	r := &EnvironmentReconciler{Client: cl, RuntimeFactory: cellrouting.NewStaticRuntimeClientFactory(cl), Scheme: s}
 	key := types.NamespacedName{Name: "tn-overflow-conflict", Namespace: "default"}
 
 	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: key}); err == nil {
@@ -192,7 +193,7 @@ func TestEnvironmentReconciler_DeleteFromEmpty_RemovesFinalizer(t *testing.T) {
 		WithStatusSubresource(&loopzerov1.Environment{}).
 		Build()
 
-	r := &EnvironmentReconciler{Client: cl, RuntimeClient: cl, Scheme: s}
+	r := &EnvironmentReconciler{Client: cl, RuntimeFactory: cellrouting.NewStaticRuntimeClientFactory(cl), Scheme: s}
 	key := types.NamespacedName{Name: "tn-del-empty", Namespace: "default"}
 
 	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: key}); err != nil {

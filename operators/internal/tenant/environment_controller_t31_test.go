@@ -66,7 +66,7 @@ var _ = Describe("T3.1 — EnvironmentController M2 canonical namespace + EC-3 o
 			// Spec.Namespace.Name is filtered out by the CRD's `Optional`
 			// validation but the controller recomputes from Project regardless.
 			env.Spec.Namespace.Name = "tn-t31-production" // M1-shaped (wrong) — controller must override
-			Expect(k8sClient.Create(ctx, env)).To(Succeed())
+			createWithParentTenant(env)
 
 			Eventually(func(g Gomega) {
 				var ns corev1.Namespace

@@ -119,6 +119,12 @@ type EnvironmentCRStatus struct {
 	// Namespace is the actual namespace name managed by this Environment.
 	Namespace string `json:"namespace,omitempty"`
 
+	// CellID is the cell whose runtime cluster holds Namespace, recorded when
+	// the namespace is provisioned. Deletion reads it so the namespace is
+	// removed where it was created, even after the Tenant was re-pinned to
+	// another cell or is already gone.
+	CellID string `json:"cellID,omitempty"`
+
 	// ObservedGeneration is the most recent generation observed by the controller.
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
