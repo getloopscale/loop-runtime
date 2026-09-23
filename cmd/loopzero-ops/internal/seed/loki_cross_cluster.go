@@ -115,14 +115,19 @@ func (s *LokiCrossClusterSeed) Run(d Deps) Result {
 	if d.DryRun {
 		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would set LOKI_URL=%s on loopzero-api", canonicalURL)}
 	}
-	got, _ := getDeploymentContainerEnv(d.Ctx, d.CtrlClient,
+	got, err := getDeploymentContainerEnv(d.Ctx, d.CtrlClient,
 		"loopzero-system", "loopzero-api", lokiLoopZeroAPILokiURLEnvVar)
+	if err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 read LOKI_URL: %v", err)}
+	}
 	if got != canonicalURL {
 		if err := setDeploymentContainerEnv(d.Ctx, d.CtrlClient,
 			"loopzero-system", "loopzero-api", lokiLoopZeroAPILokiURLEnvVar, canonicalURL); err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 set env: %v", err)}
 		}
-		_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, "loopzero-system", "loopzero-api", d.settleTimeout(loopzeroAPISettle))
+		if err := waitForRolloutSettled(d.Ctx, d.CtrlClient, "loopzero-system", "loopzero-api", d.settleTimeout(loopzeroAPISettle)); err != nil {
+			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 loopzero-api did not settle: %v", err)}
+		}
 	}
 	return Result{Verdict: PASS, Reason: fmt.Sprintf("canonical Loki cross-cluster chain (LOKI_URL=%s)", canonicalURL)}
 }

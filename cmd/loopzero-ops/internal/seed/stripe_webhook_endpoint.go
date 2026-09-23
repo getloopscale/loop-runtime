@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
 )
@@ -53,6 +54,10 @@ const (
 	stripeCredsPathEnv         = "LOOPZERO_DEV_CREDENTIALS" // matches bash env var
 	stripeWhsecPlaceholderPref = "whsec_dev_"
 )
+
+// stripeHTTPClient bounds every Stripe API call; http.DefaultClient has no
+// timeout, so a hung connection used to hang the whole seed chain.
+var stripeHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 // stripeAPIWebhookEndpoint mirrors the fields we read/write on the Stripe response.
 type stripeAPIWebhookEndpoint struct {
@@ -178,7 +183,7 @@ func stripeFindEndpointByURL(ctx context.Context, base, apiKey, targetURL string
 		return "", err
 	}
 	req.SetBasicAuth(apiKey, "")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := stripeHTTPClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -204,7 +209,7 @@ func stripeDeleteEndpoint(ctx context.Context, base, apiKey, id string) error {
 		return err
 	}
 	req.SetBasicAuth(apiKey, "")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := stripeHTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -234,7 +239,7 @@ func stripeCreateEndpoint(ctx context.Context, base, apiKey, targetURL string) (
 	}
 	req.SetBasicAuth(apiKey, "")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := stripeHTTPClient.Do(req)
 	if err != nil {
 		return stripeAPIWebhookEndpoint{}, err
 	}

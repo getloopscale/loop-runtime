@@ -4,6 +4,7 @@
 package seed
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -80,7 +81,9 @@ func (s *NetworkingCrossClusterCorednsSeed) Run(d Deps) Result {
 	if err := d.Kube.RolloutRestartDeployment(d.Ctx, corednsNamespace, corednsDeployment); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("rollout %s/%s: %v", corednsNamespace, corednsDeployment, err)}
 	}
-	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, corednsNamespace, corednsDeployment, d.settleTimeout(corednsSettle))
+	if err := waitForRolloutSettled(d.Ctx, d.CtrlClient, corednsNamespace, corednsDeployment, d.settleTimeout(corednsSettle)); err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("%s/%s did not settle after the NodeHosts patch: %v", corednsNamespace, corednsDeployment, err)}
+	}
 	return Result{Verdict: PASS, Reason: fmt.Sprintf("CoreDNS NodeHosts patched (%d canonical entries) + rolled out", len(hosts))}
 }
 
@@ -104,13 +107,17 @@ func (s *NetworkingCrossClusterCorednsSeed) Verify(d Deps) Result {
 }
 
 // discoverCorednsHosts returns hostname → IP for each present k3d container.
-// Missing containers are skipped (their entry is absent from the map).
+// An absent container is skipped (its entry is absent from the map); any other
+// docker failure is returned, so a dead daemon does not read as "no clusters".
 func discoverCorednsHosts() (map[string]string, error) {
 	out := map[string]string{}
 	for _, container := range corednsContainers {
 		ip, err := dockerInspectContainerIP(container)
+		if errors.Is(err, errContainerAbsent) {
+			continue
+		}
 		if err != nil {
-			continue // Missing container is skip-with-INFO (bash parity).
+			return nil, err
 		}
 		out[container] = ip
 		if alias, ok := corednsAliases[container]; ok {

@@ -172,7 +172,10 @@ func (s *SecretsSeedDevSeed) Verify(d Deps) Result {
 func openBaoKVPut(ctx context.Context, base, token, path string, data map[string]string) error {
 	body := map[string]interface{}{"data": data}
 	raw, _ := json.Marshal(body)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, base+"/v1/"+path, bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/v1/"+path, bytes.NewReader(raw))
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Vault-Token", token)
 	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} // #nosec G402 -- dev-only cleanroom TLS
@@ -190,7 +193,10 @@ func openBaoKVPut(ctx context.Context, base, token, path string, data map[string
 
 // openBaoKVExists probes GET /v1/<path>. Returns (true, nil) on 200.
 func openBaoKVExists(ctx context.Context, base, token, path string) (bool, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/"+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/"+path, nil)
+	if err != nil {
+		return false, fmt.Errorf("build request: %w", err)
+	}
 	req.Header.Set("X-Vault-Token", token)
 	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} // #nosec G402 -- dev-only
 	resp, err := (&http.Client{Timeout: 10 * time.Second, Transport: tr}).Do(req)

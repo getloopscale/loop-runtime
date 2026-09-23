@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -95,7 +96,9 @@ func (s *BrokerSeed) Run(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 chart path: %v", err)}
 	}
 	// Ensure loopzero-build ns exists on workload (chart post-render expects it).
-	_ = ensureNamespace(d, workloadCli, "loopzero-build")
+	if err := ensureNamespace(d, workloadCli, "loopzero-build"); err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 ensure ns loopzero-build: %v", err)}
+	}
 
 	if err := helmUpgradeBrokerChart(chartPath, apiURL); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 helm upgrade: %v", err)}
@@ -105,7 +108,9 @@ func (s *BrokerSeed) Run(d Deps) Result {
 	if err := d.Kube.RolloutRestartDeployment(d.Ctx, "loopzero-system", "loopzero-api"); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 4 rollout loopzero-api: %v", err)}
 	}
-	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, "loopzero-system", "loopzero-api", d.settleTimeout(loopzeroAPISettle))
+	if err := waitForRolloutSettled(d.Ctx, d.CtrlClient, "loopzero-system", "loopzero-api", d.settleTimeout(loopzeroAPISettle)); err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 4 loopzero-api did not settle: %v", err)}
+	}
 
 	return Result{Verdict: PASS, Reason: fmt.Sprintf("canonical broker chain seeded (%s token; apiURL=%s)", tokenAction(reused), apiURL)}
 }
@@ -138,14 +143,18 @@ func (s *BrokerSeed) Verify(d Deps) Result {
 }
 
 // brokerAcquireToken returns the canonical token — reusing the existing one
-// unless the Secret is missing (bash --rotate flag not surfaced today; add
-// when a caller needs it).
+// unless the Secret is absent or carries no token. Any other read error is
+// returned: regenerating on it would silently rotate the broker token on a
+// transient API failure.
 func brokerAcquireToken(d Deps) (token string, reused bool, err error) {
 	sec, err := d.Kube.GetSecret(d.Ctx, "loopzero-system", brokerSecretName)
-	if err == nil {
+	switch {
+	case err == nil:
 		if v := string(sec.Data[brokerTokenKey]); v != "" {
 			return v, true, nil
 		}
+	case !apierrors.IsNotFound(err):
+		return "", false, fmt.Errorf("read broker token: %w", err)
 	}
 	// Generate new (32 bytes hex = 64 chars — matches `openssl rand -hex 32`).
 	buf := make([]byte, 32)

@@ -168,6 +168,7 @@ func TestPatchKratosSeed_Run_PatchesAndRolloutsBoth(t *testing.T) {
 	}
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Namespace: kratosNamespace, Name: kratosDeployment},
+		Status:     settledDeploymentStatus,
 	}
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Namespace: kratosNamespace, Name: kratosCourierStatefulSet},

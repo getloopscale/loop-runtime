@@ -5,6 +5,7 @@ package seed
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -75,7 +76,9 @@ func (s *VaultCrossClusterAddrSeed) Run(d Deps) Result {
 
 	// EC-2 absorption: wait for any in-progress rollout to settle before
 	// triggering the env change (avoids double-rollout race).
-	_ = waitForRolloutSettled(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, d.settleTimeout(loopzeroAPISettle))
+	if err := waitForRolloutSettled(d.Ctx, d.CtrlClient, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, d.settleTimeout(loopzeroAPISettle)); err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("loopzero-api rollout in progress did not settle before the env change: %v", err)}
+	}
 
 	// Step 3 — set env on loopzero-api Deployment.
 	if err := setDeploymentContainerEnv(d.Ctx, d.CtrlClient,
@@ -142,6 +145,10 @@ func vaultServiceHTTPSNodePort(ctx context.Context, k KubeClient) (int32, error)
 // this is READ-ONLY container introspection, not shell-out for mutation.
 var dockerInspectFn = defaultDockerInspect
 
+// errContainerAbsent marks a docker inspect of a container that does not
+// exist — the one docker failure a caller may treat as "skip".
+var errContainerAbsent = errors.New("container does not exist")
+
 func dockerInspectContainerIP(container string) (string, error) {
 	return dockerInspectFn(container)
 }
@@ -151,6 +158,10 @@ func defaultDockerInspect(container string) (string, error) {
 	out, err := exec.Command("docker", "inspect",
 		container, "--format", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}").Output()
 	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && strings.Contains(string(ee.Stderr), "No such object") {
+			return "", fmt.Errorf("%s: %w", container, errContainerAbsent)
+		}
 		return "", fmt.Errorf("docker inspect %s: %w", container, err)
 	}
 	for _, ip := range strings.Fields(string(out)) {
@@ -240,9 +251,10 @@ const (
 	corednsSettle   = 60 * time.Second
 )
 
-// waitForRolloutSettled polls the Deployment until readyReplicas == desired
-// OR timeout. Errors are non-fatal on timeout: the seed can proceed and Kubernetes
-// will converge.
+// waitForRolloutSettled polls the Deployment until the controller has observed
+// the latest spec and ready/updated replicas equal the desired count, or the
+// timeout elapses. A timeout is returned as an error: a seed that restarted a
+// workload has not done its job until the workload is ready again.
 func waitForRolloutSettled(ctx context.Context, cli ctrlclient.Client,
 	namespace, name string, timeout time.Duration,
 ) error {
@@ -256,7 +268,8 @@ func waitForRolloutSettled(ctx context.Context, cli ctrlclient.Client,
 			if d.Spec.Replicas != nil {
 				want = *d.Spec.Replicas
 			}
-			return d.Status.ReadyReplicas == want && d.Status.UpdatedReplicas == want, nil
+			return d.Status.ObservedGeneration >= d.Generation &&
+				d.Status.ReadyReplicas == want && d.Status.UpdatedReplicas == want, nil
 		})
 }
 

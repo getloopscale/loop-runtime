@@ -88,6 +88,7 @@ func TestLokiCrossClusterSeed_Run_PatchesPromtailAndSetsLokiURL(t *testing.T) {
 	// Mgmt cluster fake client — loopzero-api Deployment for LOKI_URL env write.
 	apiDep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: "loopzero-api"},
+		Status:     settledDeploymentStatus,
 		Spec: appsv1.DeploymentSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
@@ -239,6 +240,7 @@ func TestLokiCrossClusterSeed_Verify_PassWhenCanonical(t *testing.T) {
 
 	apiDep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: "loopzero-api"},
+		Status:     settledDeploymentStatus,
 		Spec: appsv1.DeploymentSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
@@ -275,6 +277,7 @@ func TestLokiCrossClusterSeed_Verify_FailWhenEnvEmpty(t *testing.T) {
 
 	apiDep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: "loopzero-api"},
+		Status:     settledDeploymentStatus,
 		Spec: appsv1.DeploymentSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{

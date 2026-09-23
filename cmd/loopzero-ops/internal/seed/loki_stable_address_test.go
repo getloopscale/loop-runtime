@@ -65,6 +65,7 @@ func TestLokiCrossCluster_URLDerivaDoGatewayNaoDoContainer(t *testing.T) {
 
 	apiDep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: "loopzero-api"},
+		Status:     settledDeploymentStatus,
 		Spec: appsv1.DeploymentSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "loopzero-api"}}},
@@ -126,6 +127,7 @@ func TestLokiCrossCluster_FalhaAltoQuandoOGatewayNaoResolve(t *testing.T) {
 	buildC := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(pt, svc, ds).Build()
 	apiDep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: "loopzero-api"},
+		Status:     settledDeploymentStatus,
 		Spec: appsv1.DeploymentSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "loopzero-api"}}},

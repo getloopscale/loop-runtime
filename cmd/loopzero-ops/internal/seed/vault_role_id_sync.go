@@ -129,8 +129,11 @@ func readVaultUnsealRootToken() (string, error) {
 // openBaoReadRoleID hits the AppRole read endpoint with the root token.
 // Response shape: {"data":{"role_id":"<uuid>"}}.
 func openBaoReadRoleID(ctx context.Context, base, token string) (string, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		base+vaultRoleIDReadPathLoopZeroAPI, nil)
+	if err != nil {
+		return "", fmt.Errorf("build request: %w", err)
+	}
 	req.Header.Set("X-Vault-Token", token)
 	req.Header.Set("X-Vault-Request", "true")
 	// OpenBao ships with a self-signed cert in dev; canonical to skip verify.

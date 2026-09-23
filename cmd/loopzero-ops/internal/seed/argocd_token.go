@@ -114,7 +114,10 @@ func (s *ArgoCDTokenSeed) Verify(d Deps) Result {
 // the session bearer token from the response body.
 func argocdSessionLogin(ctx context.Context, base, user, pw string) (string, error) {
 	body, _ := json.Marshal(map[string]string{"username": user, "password": pw})
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/v1/session", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/v1/session", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("build request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
@@ -142,7 +145,10 @@ func argocdSessionLogin(ctx context.Context, base, user, pw string) (string, err
 func argocdMintAccountToken(ctx context.Context, base, session, account, name string) (string, error) {
 	body, _ := json.Marshal(map[string]string{"name": name})
 	url := fmt.Sprintf("%s/api/v1/account/%s/token", base, account)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("build request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+session)
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)

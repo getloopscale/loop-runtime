@@ -9,8 +9,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -163,7 +165,10 @@ func adminHydraLookupUserID(ctx context.Context, url, email string) (string, err
 func adminHydraRegisterOrRefresh(ctx context.Context, base, clientID, secretPath string) (string, error) {
 	// Probe first — 200 means already registered.
 	getURL := fmt.Sprintf("%s/admin/clients/%s", base, clientID)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("build request: %w", err)
+	}
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		return "", fmt.Errorf("GET client: %w", err)
@@ -173,10 +178,16 @@ func adminHydraRegisterOrRefresh(ctx context.Context, base, clientID, secretPath
 
 	var secret string
 	if existing {
-		if b, ferr := os.ReadFile(secretPath); ferr == nil && len(b) > 0 {
+		// Only an absent or empty file justifies minting a new secret; any
+		// other read failure would silently rotate a registered client.
+		b, ferr := os.ReadFile(secretPath)
+		switch {
+		case ferr == nil && len(b) > 0:
 			secret = string(b)
-		} else {
+		case ferr == nil || errors.Is(ferr, fs.ErrNotExist):
 			secret = mustHexSecret(adminCLIClientSecretBytes)
+		default:
+			return "", fmt.Errorf("read client secret %s: %w", secretPath, ferr)
 		}
 	} else {
 		secret = mustHexSecret(adminCLIClientSecretBytes)
@@ -204,7 +215,10 @@ func adminHydraRegisterOrRefresh(ctx context.Context, base, clientID, secretPath
 		target = getURL
 		wantCode = http.StatusOK
 	}
-	req2, _ := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(body))
+	req2, err := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("build request: %w", err)
+	}
 	req2.Header.Set("Content-Type", "application/json")
 	resp2, err := (&http.Client{Timeout: 10 * time.Second}).Do(req2)
 	if err != nil {
@@ -220,8 +234,11 @@ func adminHydraRegisterOrRefresh(ctx context.Context, base, clientID, secretPath
 
 // adminHydraGetClient probes GET /admin/clients/{id} and returns true when 200.
 func adminHydraGetClient(ctx context.Context, base, clientID string) (bool, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		fmt.Sprintf("%s/admin/clients/%s", base, clientID), nil)
+	if err != nil {
+		return false, fmt.Errorf("build request: %w", err)
+	}
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		return false, err

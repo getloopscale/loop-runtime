@@ -155,7 +155,10 @@ func (s *GiteaTokenSeed) Verify(d Deps) Result {
 
 // giteaProbeAuth probes GET /api/v1/user with basic auth. HTTP 200 = OK.
 func giteaProbeAuth(ctx context.Context, base, user, pw string) error {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/user", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/user", nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
 	req.SetBasicAuth(user, pw)
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
@@ -171,7 +174,10 @@ func giteaProbeAuth(ctx context.Context, base, user, pw string) error {
 
 // giteaEnsureOrg GETs /orgs/{name}. 200 = exists, 404 = create it (POST /orgs).
 func giteaEnsureOrg(ctx context.Context, base, user, pw, org string) error {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/orgs/"+org, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/orgs/"+org, nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
 	req.SetBasicAuth(user, pw)
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
@@ -186,7 +192,10 @@ func giteaEnsureOrg(ctx context.Context, base, user, pw, org string) error {
 		body, _ := json.Marshal(map[string]string{
 			"username": org, "full_name": "LoopZero Platform", "visibility": "private",
 		})
-		req2, _ := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/v1/orgs", bytes.NewReader(body))
+		req2, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/v1/orgs", bytes.NewReader(body))
+		if err != nil {
+			return fmt.Errorf("build request: %w", err)
+		}
 		req2.Header.Set("Content-Type", "application/json")
 		req2.SetBasicAuth(user, pw)
 		resp2, err := (&http.Client{Timeout: 10 * time.Second}).Do(req2)
@@ -207,8 +216,11 @@ func giteaEnsureOrg(ctx context.Context, base, user, pw, org string) error {
 // giteaDeleteLegacyTokens iterates /users/{user}/tokens and deletes any whose
 // name is `loopzero-api` or `loopzero-api-token` (canonical rotation pattern).
 func giteaDeleteLegacyTokens(ctx context.Context, base, user, pw string) error {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		fmt.Sprintf("%s/api/v1/users/%s/tokens", base, user), nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
 	req.SetBasicAuth(user, pw)
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
@@ -227,13 +239,30 @@ func giteaDeleteLegacyTokens(ctx context.Context, base, user, pw string) error {
 	}
 	for _, t := range tokens {
 		if t.Name == "loopzero-api" || t.Name == giteaTokenName {
-			delReq, _ := http.NewRequestWithContext(ctx, http.MethodDelete,
-				fmt.Sprintf("%s/api/v1/users/%s/tokens/%d", base, user, t.ID), nil)
-			delReq.SetBasicAuth(user, pw)
-			if delResp, err := (&http.Client{Timeout: 10 * time.Second}).Do(delReq); err == nil {
-				_ = delResp.Body.Close()
+			if err := giteaDeleteToken(ctx, base, user, pw, t.ID); err != nil {
+				return fmt.Errorf("delete legacy token %q (id %d): %w", t.Name, t.ID, err)
 			}
 		}
+	}
+	return nil
+}
+
+// giteaDeleteToken deletes one access token. Gitea answers 204 on success; a
+// token that is already gone (404) is the state the caller wanted.
+func giteaDeleteToken(ctx context.Context, base, user, pw string, id int64) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete,
+		fmt.Sprintf("%s/api/v1/users/%s/tokens/%d", base, user, id), nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	req.SetBasicAuth(user, pw)
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	return nil
 }
@@ -242,8 +271,11 @@ func giteaDeleteLegacyTokens(ctx context.Context, base, user, pw string) error {
 // returns the sha1 (that's what Gitea calls the raw token).
 func giteaMintToken(ctx context.Context, base, user, pw, name string, scopes []string) (string, error) {
 	body, _ := json.Marshal(map[string]any{"name": name, "scopes": scopes})
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		fmt.Sprintf("%s/api/v1/users/%s/tokens", base, user), bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("build request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.SetBasicAuth(user, pw)
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)

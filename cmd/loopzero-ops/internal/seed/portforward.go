@@ -138,7 +138,10 @@ func probeTunnelReady(ctx context.Context, port int, path string) error {
 	target := fmt.Sprintf("http://localhost:%d%s", port, path)
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+		if err != nil {
+			return fmt.Errorf("build tunnel probe request: %w", err)
+		}
 		resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
 		if err == nil {
 			code := resp.StatusCode

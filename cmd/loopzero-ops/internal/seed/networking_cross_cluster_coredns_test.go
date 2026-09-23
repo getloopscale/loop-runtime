@@ -79,7 +79,7 @@ func TestNetworkingCorednsSeed_HappyPath(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "coredns"},
 		Data:       map[string]string{"NodeHosts": "127.0.0.1 preexisting-alias\n"},
 	}
-	dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "coredns"}}
+	dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "coredns"}, Status: settledDeploymentStatus}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cm, dep).Build()
 	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c), CtrlClient: c}
 
@@ -138,7 +138,7 @@ func TestNetworkingCorednsSeed_FailWhenNoContainers(t *testing.T) {
 	orig := dockerInspectFn
 	defer func() { dockerInspectFn = orig }()
 	dockerInspectFn = func(container string) (string, error) {
-		return "", context.Canceled // any error → skipped
+		return "", errContainerAbsent // every container absent
 	}
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "coredns"},
