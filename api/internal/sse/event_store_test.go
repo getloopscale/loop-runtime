@@ -135,7 +135,7 @@ func TestPostgresEventStore_Append_Success(t *testing.T) {
 		items: [][]any{{int64(42)}},
 	}
 	qe := &fakeQueryExecutor{queryRows: rows}
-	ee := &fakeExecQueryExecutor{} // NOTIFY success
+	ee := &fakeExecQueryExecutor{}
 	store := NewPostgresEventStore(qe, ee)
 
 	id, err := store.Append(context.Background(), "bld-1", "build.started", json.RawMessage(`{}`))
@@ -147,20 +147,29 @@ func TestPostgresEventStore_Append_Success(t *testing.T) {
 	}
 }
 
-func TestPostgresEventStore_Append_NotifyFails_StillSucceeds(t *testing.T) {
-	rows := &fakeRows{
-		items: [][]any{{int64(7)}},
-	}
-	qe := &fakeQueryExecutor{queryRows: rows}
-	ee := &fakeExecQueryExecutor{execErr: errors.New("notify failed")} // NOTIFY fails
-	store := NewPostgresEventStore(qe, ee)
+// countingExec records every statement Append sends through the exec path.
+type countingExec struct {
+	fakeExecQueryExecutor
+	execs int
+}
 
-	id, err := store.Append(context.Background(), "bld-1", "build.started", json.RawMessage(`{}`))
-	if err != nil {
-		t.Fatalf("NOTIFY failure should not cause Append to fail: %v", err)
+func (c *countingExec) Exec(ctx context.Context, sql string, args ...any) (db.ExecResult, error) {
+	c.execs++
+	return c.fakeExecQueryExecutor.Exec(ctx, sql, args...)
+}
+
+// Nothing LISTENs on a notification channel — streams poll the table — so
+// Append is exactly one INSERT and pays no second round-trip.
+func TestPostgresEventStore_Append_IssuesOnlyTheInsert(t *testing.T) {
+	rows := &fakeRows{items: [][]any{{int64(7)}}}
+	exec := &countingExec{}
+	store := NewPostgresEventStore(&fakeQueryExecutor{queryRows: rows}, exec)
+
+	if _, err := store.Append(context.Background(), "bld-1", "build.started", json.RawMessage(`{}`)); err != nil {
+		t.Fatalf("append: %v", err)
 	}
-	if id != 7 {
-		t.Errorf("expected ID 7, got %d", id)
+	if exec.execs != 0 {
+		t.Fatalf("Append sent %d extra statement(s) besides the INSERT", exec.execs)
 	}
 }
 

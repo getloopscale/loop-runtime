@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -57,13 +56,9 @@ func NewPostgresEventStore(queryDB db.QueryExecutor, execDB db.ExecQueryExecutor
 	}
 }
 
-// Append inserts a new event into the sse_events table, sends a NOTIFY
-// on the "sse_events" channel, and returns the generated sequential ID.
-//
-// A-02 fix: The NOTIFY allows SSE stream handlers to wake up immediately
-// when new events are available instead of polling every second. This
-// reduces PostgreSQL QPS from ~200 (one per stream per second) to ~N
-// (one per actual event emitted, typically <10/s).
+// Append inserts a new event into the sse_events table and returns the
+// generated sequential ID. Streams discover it by polling (see pollCadence);
+// nothing LISTENs on a notification channel, so Append sends no NOTIFY.
 func (s *PostgresEventStore) Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error) {
 	rows, err := s.queryDB.Query(ctx,
 		"INSERT INTO sse_events (build_id, event_type, data) VALUES ($1, $2, $3) RETURNING id",
@@ -85,23 +80,6 @@ func (s *PostgresEventStore) Append(ctx context.Context, buildID string, eventTy
 
 	if err := rows.Err(); err != nil {
 		return 0, fmt.Errorf("event store: rows error: %w", err)
-	}
-
-	// Send NOTIFY to wake up SSE listeners for this build.
-	// Best-effort: if NOTIFY fails, SSE handlers will fall back to polling.
-	//
-	// Plan J-17 EC-2 (2026-06-06): PostgreSQL pg_notify silently
-	// truncates payloads larger than 8000 bytes. The payload here is
-	// just `build_id` (~16 chars), so we are nowhere near the limit.
-	// NEVER expand this payload to include the event body — listeners
-	// already SELECT the event row after waking, so the body would
-	// duplicate the work AND risk silent truncation that loses events.
-	if _, err := s.execDB.Exec(ctx,
-		"SELECT pg_notify('sse_events', $1)",
-		buildID,
-	); err != nil {
-		slog.Warn("event store: pg_notify failed, SSE listeners will fall back to polling",
-			"build_id", buildID, "error", err)
 	}
 
 	return id, nil
