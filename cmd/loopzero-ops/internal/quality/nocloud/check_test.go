@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeExec(t *testing.T, path, body string) {
@@ -129,20 +131,7 @@ func TestCheck_ViolationInEachOfThreeRoots(t *testing.T) {
 }
 
 func TestCheck_RealRepoPasses(t *testing.T) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	root := cwd
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(root, "ROADMAP.md")); err == nil {
-			break
-		}
-		root = filepath.Dir(root)
-	}
-	if _, err := os.Stat(filepath.Join(root, "ROADMAP.md")); err != nil {
-		t.Skipf("could not locate ROADMAP.md from %s (skipping)", cwd)
-	}
+	root := qtestutil.Root(t)
 
 	outcome, err := Check(Config{RepoRoot: root})
 	if err != nil {

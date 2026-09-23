@@ -16,6 +16,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // writeFile creates parent dirs + writes body at path. Fails the test on error.
@@ -162,20 +164,7 @@ func TestCheck_ScriptNotAllowlisted_FAIL(t *testing.T) {
 func TestCheck_RealRepoPasses(t *testing.T) {
 	// Traverse from this test file up to the repo root by locating ROADMAP.md.
 	// go.mod lives at cmd/loopzero-ops (submodule) — ROADMAP.md is the repo-root anchor.
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	root := cwd
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(root, "ROADMAP.md")); err == nil {
-			break
-		}
-		root = filepath.Dir(root)
-	}
-	if _, err := os.Stat(filepath.Join(root, "ROADMAP.md")); err != nil {
-		t.Skipf("could not locate ROADMAP.md from %s (skipping real-repo check)", cwd)
-	}
+	root := qtestutil.Root(t)
 
 	outcome, err := Check(Config{RepoRoot: root})
 	if err != nil {

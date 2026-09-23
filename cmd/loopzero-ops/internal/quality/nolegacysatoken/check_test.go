@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeYAML(t *testing.T, tmp, rel, content string) {
@@ -140,31 +142,15 @@ func TestFormatOutcome_FailHasHitDetails(t *testing.T) {
 	}
 }
 
-// LIVE invariant: the actual repo must PASS this gate (no legacy SA tokens
-// in chart templates).
+// LIVE invariant: the actual repo must PASS this gate (no legacy SA tokens in
+// chart templates). It used to skip on a failure, "pending T7"; the tree has
+// passed since, so a skip there could only ever hide a regression.
 func TestCheck_LIVE_Passes(t *testing.T) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	for cwd != "/" {
-		if _, err := os.Stat(filepath.Join(cwd, "CLAUDE.md")); err == nil {
-			break
-		}
-		cwd = filepath.Dir(cwd)
-	}
-	if cwd == "/" {
-		t.Skip("CLAUDE.md not found")
-	}
-	out, err := Check(Config{RepoRoot: cwd})
+	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 	if !out.Pass {
-		t.Logf("LIVE state — legacy SA-token literals still present (T7 migration pending):\n%s",
-			FormatOutcome(out))
-		// SKIP rather than FAIL — T7.4 deletion is operator-time; the gate's
-		// purpose is to PREVENT new legacy literals, not retro-delete pending ones.
-		t.Skip("LIVE state has pre-T7 legacy literals; gate enforces post-T7 invariant")
+		t.Fatalf("legacy SA-token literals present in the real tree:\n%s", FormatOutcome(out))
 	}
 }

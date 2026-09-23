@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeFile(t *testing.T, path, body string) {
@@ -132,20 +134,7 @@ func TestCheck_MissingInvariant_FAIL(t *testing.T) {
 }
 
 func TestCheck_RealRepoPasses(t *testing.T) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	root := cwd
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(root, "ROADMAP.md")); err == nil {
-			break
-		}
-		root = filepath.Dir(root)
-	}
-	if _, err := os.Stat(filepath.Join(root, "ROADMAP.md")); err != nil {
-		t.Skipf("could not locate ROADMAP.md (skipping)")
-	}
+	root := qtestutil.Root(t)
 	outcome, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("real repo violation: %v; %v", err, outcome.Failures)
