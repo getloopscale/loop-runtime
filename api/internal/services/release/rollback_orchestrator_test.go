@@ -149,7 +149,7 @@ func TestRollback_HappyPath_LegacyFallback(t *testing.T) {
 	targetRelease := &db.Release{
 		ID: "rel-1", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "production", Status: string(statemachine.ReleaseSuperseded),
-		GitCommit: "abc123", Apps: json.RawMessage(`[]`),
+		GitCommit: "abc123", Apps: json.RawMessage(`[{"name":"web","type":"server"}]`),
 	}
 
 	rs.releases["rel-2"] = activeRelease
@@ -465,6 +465,7 @@ func TestRollback_URLGeneration(t *testing.T) {
 		ID: "rel-1", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "staging", Status: string(statemachine.ReleaseSuperseded),
 		GitCommit: "sha123",
+		Apps:      json.RawMessage(`[{"name":"worker","type":"worker"},{"name":"web","type":"server"}]`),
 	}
 	rs.releases["rel-2"] = activeRelease
 	rs.releases["rel-1"] = targetRelease
@@ -490,7 +491,9 @@ func TestRollback_URLGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	expected := "https://my-app-staging.dev.loopzero.example"
+	// The canonical host the IngressRoute serves (naming.AppURL), not the legacy
+	// "{project}-{env}.{domain}" that Traefik answered with 404 (loopzero-cloud#159).
+	expected := "https://tn-1-proj-1-web-staging.dev.loopzero.example"
 	if result.URL != expected {
 		t.Errorf("URL = %q, want %q", result.URL, expected)
 	}
@@ -649,5 +652,34 @@ func TestRollback_CurrentReleaseVanishesBeforeFinalize_ReturnsReleaseNotFound(t 
 
 	if !errors.Is(err, loopzeroerrors.ErrReleaseNotFound) {
 		t.Fatalf("want ErrReleaseNotFound when the rolling-back release is gone, got %v", err)
+	}
+}
+
+func TestRollback_URLPrefersThePublicDomain(t *testing.T) {
+	rs := newFakeRollbackReleaseStore()
+	activeRelease := &db.Release{ID: "rel-2", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", Status: string(statemachine.ReleaseActive)}
+	targetRelease := &db.Release{ID: "rel-1", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", Status: string(statemachine.ReleaseSuperseded), GitCommit: "sha",
+		Apps: json.RawMessage(`[{"name":"web","type":"server"}]`)}
+	rs.releases["rel-2"] = activeRelease
+	rs.releases["rel-1"] = targetRelease
+	rs.activeByEnv["tn-1-proj-1-production"] = activeRelease
+	rs.previousByEnv["tn-1-proj-1-production"] = targetRelease
+	orch := NewRollbackOrchestrator(RollbackOrchestratorDeps{
+		Releases: rs, EnvTargets: newFakeRollbackEnvTargetStore(), Locker: &fakeRollbackLocker{},
+		Delivery: &fakeDeliveryActivator{}, PublicDomain: "apps.example.com", Logger: slog.Default(),
+	})
+
+	result, err := orch.Rollback(context.Background(), RollbackRequest{
+		TenantID: "tn-1", ProjectID: "proj-1", ProjectName: "my-app",
+		Environment: "production", BaseDomain: "loopzero.local",
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if want := "https://tn-1-proj-1-web-production.apps.example.com"; result.URL != want {
+		t.Errorf("URL = %q, want %q", result.URL, want)
 	}
 }

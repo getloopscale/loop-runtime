@@ -67,7 +67,11 @@ type RollbackOrchestratorDeps struct {
 	// LIVE-caught 2026-06-18 sponsor mandate: DB state flip requires
 	// sync verification (not just trigger). Zero defaults to 120s.
 	ArgocdSyncTimeout time.Duration
-	Logger            *slog.Logger
+	// PublicDomain is the operator's public wildcard (LOOPZERO_PUBLIC_DOMAIN). The
+	// rollback URL is composed on it, falling back to the request's BaseDomain
+	// when it is unset — the same rule promotion and activation apply.
+	PublicDomain string
+	Logger       *slog.Logger
 }
 
 // RollbackRequest contains the inputs for a rollback operation.
@@ -287,10 +291,8 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 		"reactivated_release", targetRelease.ID,
 	)
 
-	url := ""
-	if req.BaseDomain != "" {
-		url = fmt.Sprintf("https://%s-%s.%s", req.ProjectName, req.Environment, req.BaseDomain)
-	}
+	url := entryAppURL(req.TenantID, targetRelease.ProjectID, req.Environment, targetRelease.Apps,
+		userFacingDomain(o.deps.PublicDomain, req.BaseDomain))
 
 	return &RollbackResult{
 		ReactivatedRelease: targetRelease,

@@ -327,15 +327,8 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 	// suppressed — fail-closed matches status.go's ADR D3 pattern (dashboard
 	// then renders "URL pending"). Pre-fix: promote reported success + URL
 	// that 404s; post-fix: promote emits the same URL that serves.
-	url := ""
-	domain := o.deps.PublicDomain
-	if domain == "" {
-		domain = o.deps.BaseDomain
-	}
-	entryApp := naming.ResolveEntryAppFromApps(newRelease.Apps)
-	if domain != "" && entryApp != "" {
-		url = naming.AppURL(req.TenantID, req.ProjectName, entryApp, req.ToEnv, domain)
-	}
+	url := entryAppURL(req.TenantID, req.ProjectName, req.ToEnv, newRelease.Apps,
+		userFacingDomain(o.deps.PublicDomain, o.deps.BaseDomain))
 
 	logger.Info("promotion completed",
 		"promotion_id", promotionID,

@@ -113,7 +113,7 @@ func BuildAppRelease(registryURL, tenantID, projectID, appName, commitSHA, envir
 	imageRef := naming.ImageTag(registryURL, tenantID, projectID, appName, commitSHA)
 	url := ""
 	if appType == "server" {
-		url = fmt.Sprintf("https://%s-%s-%s-%s.%s", tenantID, projectID, appName, environment, baseDomain)
+		url = naming.AppURL(tenantID, projectID, appName, environment, baseDomain)
 	}
 	return AppRelease{
 		Name:        appName,

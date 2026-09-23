@@ -19,6 +19,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/events"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"go.opentelemetry.io/otel"
@@ -328,16 +329,12 @@ func releaseAppsToActivationApps(release *db.Release, baseDomain, publicDomain s
 	// announced by `loopzero deploy` is the SAME URL `loopzero status` returns
 	// AND publicly resolvable. Empty publicDomain → fall back to baseDomain
 	// (preserves the pre-#61 behavior for envs without a public wildcard).
-	domain := publicDomain
-	if domain == "" {
-		domain = baseDomain
-	}
+	domain := userFacingDomain(publicDomain, baseDomain)
 	apps := make([]ActivationAppInfo, 0, len(specs))
 	for _, s := range specs {
 		url := ""
-		if s.Type == "server" && domain != "" {
-			url = fmt.Sprintf("https://%s-%s-%s-%s.%s",
-				release.TenantID, release.ProjectID, s.Name, release.Environment, domain)
+		if s.Type == "server" {
+			url = naming.AppURL(release.TenantID, release.ProjectID, s.Name, release.Environment, domain)
 		}
 		apps = append(apps, ActivationAppInfo{Name: s.Name, Status: "deployed", URL: url})
 	}

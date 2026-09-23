@@ -10,6 +10,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // --- Test doubles ---
@@ -233,5 +234,15 @@ func TestBuildAppRelease_WorkerApp_NoURL(t *testing.T) {
 	rel := BuildAppRelease("registry.example.com", "tn-1", "my-app", "worker", "sha123", "production", "dev.loopzero.example", "worker", "container")
 	if rel.URL != "" {
 		t.Errorf("expected empty URL for worker app, got %q", rel.URL)
+	}
+}
+
+func TestBuildAppRelease_URLIsTheCanonicalAppURLEvenWhenTheHostIsTruncated(t *testing.T) {
+	long := "a-project-name-long-enough-to-push-the-subdomain-past-sixty-three"
+
+	rel := BuildAppRelease("registry.example.com", "tn-1", long, "api", "sha", "production", "example.com", "server", "container")
+
+	if want := naming.AppURL("tn-1", long, "api", "production", "example.com"); rel.URL != want {
+		t.Errorf("URL = %q, want the host the IngressRoute serves %q", rel.URL, want)
 	}
 }

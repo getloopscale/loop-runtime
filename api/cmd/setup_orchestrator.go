@@ -207,6 +207,7 @@ func setupOrchestrator(
 		Sync:              workflows.SyncClient,
 		Locker:            stores.Locker,
 		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
+		PublicDomain:      cfg.PublicDomain,
 		Logger:            logger,
 	})
 	rollbackService := &adapters.RollbackServiceAdapter{Orchestrator: rollbackOrch}
