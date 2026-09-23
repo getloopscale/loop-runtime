@@ -4,13 +4,16 @@
 package testdeletion
 
 import (
+	"errors"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/revrange"
 )
 
 // TestCheck_NoDeletions_Pass — empty diff → PASS.
 func TestCheck_NoDeletions_Pass(t *testing.T) {
-	o := Check(Config{DiffOverride: ptr("")})
+	o := mustCheck(t, Config{DiffOverride: ptr("")})
 	if !o.Pass {
 		t.Errorf("expected Pass on empty diff, got %v", o.Reason)
 	}
@@ -18,7 +21,7 @@ func TestCheck_NoDeletions_Pass(t *testing.T) {
 
 // TestCheck_NonTestDeletion_Pass — deleting a non-test file is not gated.
 func TestCheck_NonTestDeletion_Pass(t *testing.T) {
-	o := Check(Config{DiffOverride: ptr("api/main.go\nREADME.md\n")})
+	o := mustCheck(t, Config{DiffOverride: ptr("api/main.go\nREADME.md\n")})
 	if !o.Pass {
 		t.Errorf("expected Pass (no test files deleted), got %v", o.Reason)
 	}
@@ -26,7 +29,7 @@ func TestCheck_NonTestDeletion_Pass(t *testing.T) {
 
 // TestCheck_TestDeletionNoApproval_Fail — deleting a test without approval fails.
 func TestCheck_TestDeletionNoApproval_Fail(t *testing.T) {
-	o := Check(Config{DiffOverride: ptr("api/foo_test.go\n")})
+	o := mustCheck(t, Config{DiffOverride: ptr("api/foo_test.go\n")})
 	if o.Pass {
 		t.Error("expected Fail (test deleted without approval)")
 	}
@@ -37,7 +40,7 @@ func TestCheck_TestDeletionNoApproval_Fail(t *testing.T) {
 
 // TestCheck_TestDeletionWithLabel_Pass — approval label suppresses.
 func TestCheck_TestDeletionWithLabel_Pass(t *testing.T) {
-	o := Check(Config{
+	o := mustCheck(t, Config{
 		DiffOverride: ptr("api/foo_test.go\n"),
 		PRLabels:     "some-label, test-deletion-approved , other",
 	})
@@ -48,7 +51,7 @@ func TestCheck_TestDeletionWithLabel_Pass(t *testing.T) {
 
 // TestCheck_TestDeletionWithJustification_Pass — PR body justification suppresses.
 func TestCheck_TestDeletionWithJustification_Pass(t *testing.T) {
-	o := Check(Config{
+	o := mustCheck(t, Config{
 		DiffOverride: ptr("cli/x.test.ts\n"),
 		PRBody:       "This PR removes dead code.\nTest deletion justification: superseded by integration suite.\n",
 	})
@@ -59,7 +62,7 @@ func TestCheck_TestDeletionWithJustification_Pass(t *testing.T) {
 
 // TestCheck_JustificationCaseInsensitive — match is case-insensitive.
 func TestCheck_JustificationCaseInsensitive(t *testing.T) {
-	o := Check(Config{
+	o := mustCheck(t, Config{
 		DiffOverride: ptr("x.spec.tsx\n"),
 		PRBody:       "TEST DELETION JUSTIFICATION: framework migration",
 	})
@@ -72,7 +75,7 @@ func TestCheck_JustificationCaseInsensitive(t *testing.T) {
 func TestCheck_AllTestExtensions(t *testing.T) {
 	exts := []string{"a_test.go", "b.test.ts", "c.spec.ts", "d.test.tsx", "e.spec.tsx"}
 	for _, f := range exts {
-		o := Check(Config{DiffOverride: ptr(f + "\n")})
+		o := mustCheck(t, Config{DiffOverride: ptr(f + "\n")})
 		if o.Pass {
 			t.Errorf("expected Fail for deleted test %q", f)
 		}
@@ -81,7 +84,7 @@ func TestCheck_AllTestExtensions(t *testing.T) {
 
 // TestCheck_MixedDeletions_OnlyTestsGated — non-test deletions ignored, tests gated.
 func TestCheck_MixedDeletions_OnlyTestsGated(t *testing.T) {
-	o := Check(Config{DiffOverride: ptr("api/main.go\napi/foo_test.go\ndocs/x.md\n")})
+	o := mustCheck(t, Config{DiffOverride: ptr("api/main.go\napi/foo_test.go\ndocs/x.md\n")})
 	if o.Pass {
 		t.Error("expected Fail (one test deleted)")
 	}
@@ -124,7 +127,7 @@ func ptr(s string) *string { return &s }
 // wiring ledger.
 func TestJustificationInCommitMessage(t *testing.T) {
 	diff := "cmd/loopzero-ops/internal/quality/clibundlesize/check_test.go\n"
-	o := Check(Config{
+	o := mustCheck(t, Config{
 		DiffOverride: &diff,
 		CommitLog: "chore: delete the cli-bundle-size gate\n\n" +
 			"Test deletion justification: the gate guarded cli/dist, which left\n" +
@@ -142,7 +145,7 @@ func TestJustificationInCommitMessage(t *testing.T) {
 // channel must not become a way to pass by having any commit at all.
 func TestNoJustificationAnywhereStillFails(t *testing.T) {
 	diff := "api/tests/unit/thing_test.go\n"
-	o := Check(Config{
+	o := mustCheck(t, Config{
 		DiffOverride: &diff,
 		CommitLog:    "chore: tidy up\n\nRemoved some files.\n",
 	})
@@ -156,8 +159,28 @@ func TestNoJustificationAnywhereStillFails(t *testing.T) {
 // verdict depend on whatever this repo's history happens to say today.
 func TestHermeticRunIgnoresRealCommitLog(t *testing.T) {
 	diff := "api/tests/unit/thing_test.go\n"
-	o := Check(Config{DiffOverride: &diff}) // no CommitLog supplied
+	o := mustCheck(t, Config{DiffOverride: &diff}) // no CommitLog supplied
 	if o.Pass {
 		t.Error("a hermetic run with no justification must fail regardless of the repo's own history")
 	}
+}
+
+// A base ref that does not resolve (a shallow clone) must fail the gate: git
+// cannot diff, so "no deletions" would be a verdict about a comparison that was
+// never made.
+func TestCheck_UnreachableBaseRefIsAnError(t *testing.T) {
+	_, err := Check(Config{BaseRef: "origin/ref-that-does-not-exist", RepoDir: t.TempDir()})
+
+	if !errors.Is(err, revrange.ErrBaseRefUnreachable) {
+		t.Fatalf("err = %v, want revrange.ErrBaseRefUnreachable", err)
+	}
+}
+
+func mustCheck(t *testing.T, cfg Config) Outcome {
+	t.Helper()
+	o, err := Check(cfg)
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	return o
 }

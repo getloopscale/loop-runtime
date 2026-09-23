@@ -27,7 +27,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/gitref"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/revrange"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellscript"
 )
 
@@ -78,7 +78,7 @@ func Check(cfg Config) (*Outcome, error) {
 	}
 
 	// 2. EC-04 pre-flight: verify base-ref reachable
-	if err := gitref.VerifyRefReachable(cfg.RepoRoot, cfg.BaseRef); err != nil {
+	if err := revrange.VerifyReachable(cfg.RepoRoot, cfg.BaseRef); err != nil {
 		return nil, err
 	}
 

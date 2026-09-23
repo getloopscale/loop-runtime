@@ -23,7 +23,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/gitref"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/revrange"
 )
 
 // archiveDeleteMarker is the PR title substring that unlocks DELETE operations
@@ -65,7 +65,7 @@ func Check(cfg Config) (*Outcome, error) {
 		deleted = cfg.DiffDeleted
 	} else {
 		// Pre-flight: verify base-ref reachable (EC-04 from nonewbash).
-		if err := gitref.VerifyRefReachable(cfg.RepoRoot, cfg.BaseRef); err != nil {
+		if err := revrange.VerifyReachable(cfg.RepoRoot, cfg.BaseRef); err != nil {
 			return nil, err
 		}
 		addedOrMod, err = gitDiffAddedOrModified(cfg.RepoRoot, cfg.BaseRef, cfg.HeadRef, cfg.ArchivePathRoot)

@@ -134,12 +134,16 @@ func runCoverageDiff(args []string) int {
 
 func runTestDeletion(args []string) int {
 	_ = args
-	o := testdeletion.Check(testdeletion.Config{
+	o, err := testdeletion.Check(testdeletion.Config{
 		BaseRef:  os.Getenv("BASE_REF"),
 		HeadRef:  os.Getenv("HEAD_REF"),
 		PRBody:   os.Getenv("PR_BODY"),
 		PRLabels: os.Getenv("PR_LABELS"),
 	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[test-deletion] FAIL — the range could not be read: %v\n", err)
+		return 5
+	}
 	if len(o.DeletedTests) > 0 {
 		fmt.Fprintln(os.Stderr, "[test-deletion] TRUE test deletions detected:")
 		for _, f := range o.DeletedTests {

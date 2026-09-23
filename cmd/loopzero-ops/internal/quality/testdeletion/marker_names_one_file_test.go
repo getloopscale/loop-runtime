@@ -37,7 +37,7 @@ func skipUnlessMarkerScopeArmed(t *testing.T) {
 func TestMarkerNamingFileADoesNotApproveFileB(t *testing.T) {
 	skipUnlessMarkerScopeArmed(t)
 	diff := "api/foo_test.go\napi/unrelated_test.go\n"
-	o := Check(Config{
+	o := mustCheck(t, Config{
 		DiffOverride: &diff,
 		CommitLog: "chore: drop the foo suite\n\n" +
 			"Test deletion justification: api/foo_test.go covered a helper that\n" +
@@ -54,7 +54,7 @@ func TestMarkerNamingFileADoesNotApproveFileB(t *testing.T) {
 func TestPRBodyMarkerNamingFileADoesNotApproveFileB(t *testing.T) {
 	skipUnlessMarkerScopeArmed(t)
 	diff := "api/foo_test.go\napi/unrelated_test.go\n"
-	o := Check(Config{
+	o := mustCheck(t, Config{
 		DiffOverride: &diff,
 		PRBody:       "Test deletion justification: api/foo_test.go is superseded.\n",
 	})
@@ -71,7 +71,7 @@ func TestPRBodyMarkerNamingFileADoesNotApproveFileB(t *testing.T) {
 func TestMarkerInACommitThatDeletesNothingApprovesNothing(t *testing.T) {
 	skipUnlessMarkerScopeArmed(t)
 	diff := "api/foo_test.go\n"
-	o := Check(Config{
+	o := mustCheck(t, Config{
 		DiffOverride: &diff,
 		CommitLog: "refactor: move a helper\n\n(no deletions here)\n" +
 			"\x00\x00" + // separator stand-in; %B concatenates bodies
