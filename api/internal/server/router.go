@@ -633,7 +633,7 @@ func registerProtectedRoutes(
 		"passado por quem monta o servidor (parâmetro de setupServerConfig, setup_server.go:75) — nil quando o chamador não o construiu") {
 		r.Get("/api/v1/domains", cfg.DomainHandler.List)
 		r.Get("/api/v1/domains/{domain}", cfg.DomainHandler.Get)
-		r.With(append(rateLimitMiddlewares, idempotentMiddlewares...)...).Post("/api/v1/domains", cfg.DomainHandler.Create)
+		r.With(idempotentMiddlewares...).Post("/api/v1/domains", cfg.DomainHandler.Create)
 		// J11D7 LOCKED ADR: /verify uses per-(tenant, domain) limiter (1 req/30s)
 		// instead of the tenant-wide 60/min limiter. Falls back to the tenant
 		// limiter when VerifyRateLimiter is not wired (fail-open per ADR D3).
@@ -671,7 +671,7 @@ func registerProtectedRoutes(
 		r.Get("/api/v1/projects/{project}/previews", cfg.PreviewHandler.List)
 		r.Get("/api/v1/projects/{project}/previews/{id}", cfg.PreviewHandler.Get)
 		r.With(rateLimitMiddlewares...).Delete("/api/v1/projects/{project}/previews/{id}", cfg.PreviewHandler.Delete)
-		r.With(append(idempotentMiddlewares, rateLimitMiddlewares...)...).Post("/api/v1/projects/{project}/previews", cfg.PreviewHandler.Create)
+		r.With(idempotentMiddlewares...).Post("/api/v1/projects/{project}/previews", cfg.PreviewHandler.Create)
 	}
 
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Audit, cfg.AuditHandler != nil,
