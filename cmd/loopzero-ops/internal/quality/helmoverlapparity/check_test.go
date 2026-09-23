@@ -185,9 +185,9 @@ func TestCompareSemver_TableDriven(t *testing.T) {
 		{"0.1.0-rc1", "0.1.0", -1},
 		{"0.1.0", "0.1.0-rc1", 1},
 		{"0.1.0-rc1", "0.1.0-rc2", -1},
-		{"1.0.0+build1", "1.0.0+build2", 0}, // build metadata ignored
-		{"0.1.0", "0.10.0", -1},             // numeric, not lexical
-		{"0.1.0-rc.2", "0.1.0-rc.10", -1},   // semver §11: numeric identifiers compare numerically
+		{"1.0.0+build1", "1.0.0+build2", 0},  // build metadata ignored
+		{"0.1.0", "0.10.0", -1},              // numeric, not lexical
+		{"0.1.0-rc.2", "0.1.0-rc.10", -1},    // semver §11: numeric identifiers compare numerically
 		{"0.1.0-alpha", "0.1.0-alpha.1", -1}, // semver §11: fewer fields sort first
 	}
 	for _, tc := range cases {
