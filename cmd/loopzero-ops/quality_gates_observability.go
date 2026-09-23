@@ -128,7 +128,11 @@ func runOrphanAlerts(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	o := orphanalerts.Check(orphanalerts.Config{Root: *root})
+	o, err := orphanalerts.Check(orphanalerts.Config{Root: *root})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "orphan-alerts: FAIL — %v\n", err)
+		return 5
+	}
 	if !o.Pass {
 		fmt.Fprintf(os.Stderr, "FAIL — %d orphan alert(s) (vector(0) > 1 placeholder, metric not emitted):\n", len(o.Violations))
 		for _, v := range o.Violations {

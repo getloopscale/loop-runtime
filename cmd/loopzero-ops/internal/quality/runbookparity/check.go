@@ -128,15 +128,19 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	err = filepath.Walk(filepath.Join(root, "api"), func(p string, info os.FileInfo, werr error) error {
-		if werr != nil || info.IsDir() || !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
-			return nil //nolint:nilerr // arquivo ilegível não é achado deste gate
+		if werr != nil {
+			return werr
+		}
+		if info.IsDir() || !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
+			return nil
 		}
 		// #nosec G122 -- `p` vem do próprio Walk sobre `api/`, raiz derivada de constante, e
 		// é apenas LIDO. Não há escrita nem execução; o pior caso de um symlink é ler um .go
 		// que não é nosso, e o gate reporta a linha, não a segue.
 		f, oerr := os.Open(filepath.Clean(p))
 		if oerr != nil {
-			return nil //nolint:nilerr
+			// An unread file may be the one that contradicts the runbook.
+			return oerr
 		}
 		defer func() { _ = f.Close() }()
 		sc := bufio.NewScanner(f)
@@ -169,7 +173,7 @@ func Check(cfg Config) (Outcome, error) {
 			rel, _ := filepath.Rel(root, p)
 			out.Findings = append(out.Findings, Finding{File: rel, Line: n, Named: named, Prescribed: prescribed})
 		}
-		return nil
+		return sc.Err()
 	})
 	if err != nil {
 		return out, fmt.Errorf("varrendo api/: %w", err)

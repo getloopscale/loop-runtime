@@ -103,7 +103,11 @@ func listPkgDirs(pkgRoot string) ([]string, error) {
 		if name == "tools" {
 			continue
 		}
-		if !hasOwnGoSource(filepath.Join(pkgRoot, name)) {
+		ownSource, err := hasOwnGoSource(filepath.Join(pkgRoot, name))
+		if err != nil {
+			return nil, err
+		}
+		if !ownSource {
 			continue
 		}
 		dirs = append(dirs, name)
@@ -115,10 +119,10 @@ func listPkgDirs(pkgRoot string) ([]string, error) {
 // hasOwnGoSource reports whether dir contains a non-test .go file directly —
 // i.e. whether `import ".../pkg/<dir>"` resolves to anything. Sub-directories
 // are not consulted: those are separate packages with their own import paths.
-func hasOwnGoSource(dir string) bool {
+func hasOwnGoSource(dir string) (bool, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return false
+		return false, err
 	}
 	for _, e := range entries {
 		if e.IsDir() {
@@ -126,10 +130,10 @@ func hasOwnGoSource(dir string) bool {
 		}
 		n := e.Name()
 		if strings.HasSuffix(n, ".go") && !strings.HasSuffix(n, "_test.go") {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 // countConsumers walks all *.go files under root looking for the
@@ -144,7 +148,7 @@ func countConsumers(root, pkg string) (PkgRow, error) {
 
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return nil
+			return walkErr
 		}
 		if d.IsDir() {
 			n := d.Name()
@@ -164,7 +168,11 @@ func countConsumers(root, pkg string) (PkgRow, error) {
 		if strings.HasPrefix(rel, selfPrefix) || rel == filepath.ToSlash(selfPrefix[:len(selfPrefix)-1]) {
 			return nil
 		}
-		if !fileContainsImport(path, needle) {
+		imports, err := fileContainsImport(path, needle)
+		if err != nil {
+			return err
+		}
+		if !imports {
 			return nil
 		}
 		row.Total++
@@ -188,22 +196,26 @@ func countConsumers(root, pkg string) (PkgRow, error) {
 	return row, nil
 }
 
-// fileContainsImport scans path line-by-line for the literal needle.
-// Returns true on first hit. Returns false on I/O error (tolerated).
-func fileContainsImport(path string, needle []byte) bool {
+// fileContainsImport scans path line-by-line for the literal needle and
+// reports the first hit. A file that cannot be read is an error: counting it as
+// a non-consumer would publish a package in use as a dead-code candidate.
+func fileContainsImport(path string, needle []byte) (bool, error) {
 	f, err := os.Open(path) //nolint:gosec // operator-controlled
 	if err != nil {
-		return false
+		return false, err
 	}
 	defer func() { _ = f.Close() }()
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		if bytes.Contains(scanner.Bytes(), needle) {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	if err := scanner.Err(); err != nil {
+		return false, fmt.Errorf("reading %s: %w", path, err)
+	}
+	return false, nil
 }
 
 // renderTable produces the bash-compatible markdown table body.

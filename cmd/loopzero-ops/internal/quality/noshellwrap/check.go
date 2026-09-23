@@ -21,10 +21,10 @@
 //   - Dynamic CLIs (variable instead of literal) NOT detected — code review backstop
 //   - Non-Runner types with Run() method NOT distinguished — heuristic accepts
 //     occasional false positive in exchange for KISS implementation
-//   - Comments in unparseable Go files cause that file to be silently skipped
 package noshellwrap
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -79,9 +79,13 @@ var excludedDirs = map[string]bool{
 	"testdata":     true,
 }
 
+// ErrNothingScanned means the root held no non-test Go file.
+var ErrNothingScanned = errors.New("no non-test Go file under the root — the gate read nothing")
+
 // Check is the entry point invoked by `loopzero-ops quality no-shell-wrap`.
 func Check(cfg Config) (*Outcome, error) {
 	outcome := &Outcome{Pass: true}
+	scanned := 0
 
 	err := filepath.WalkDir(cfg.Root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -99,10 +103,11 @@ func Check(cfg Config) (*Outcome, error) {
 		if strings.HasSuffix(d.Name(), "_test.go") {
 			return nil
 		}
+		scanned++
 		viols, scanErr := scanFile(path)
 		if scanErr != nil {
-			// Unparseable file — skip silently per documented limitation
-			return nil
+			// An unparseable file is the one whose shell-wraps would go unread.
+			return scanErr
 		}
 		if len(viols) > 0 {
 			outcome.Pass = false
@@ -112,6 +117,9 @@ func Check(cfg Config) (*Outcome, error) {
 	})
 	if err != nil {
 		return nil, fmt.Errorf("walk %s: %w", cfg.Root, err)
+	}
+	if scanned == 0 {
+		return nil, fmt.Errorf("%s: %w", cfg.Root, ErrNothingScanned)
 	}
 	return outcome, nil
 }

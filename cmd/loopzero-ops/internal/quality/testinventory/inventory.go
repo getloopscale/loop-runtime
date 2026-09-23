@@ -167,7 +167,8 @@ func Derive(root string) (Inventory, error) {
 	var inv Inventory
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return nil //nolint:nilerr // um diretório ilegível não invalida a árvore
+			// An unreadable directory hides test files the pyramid would count.
+			return walkErr
 		}
 		if d.IsDir() {
 			if skipDirs[d.Name()] {
@@ -180,9 +181,13 @@ func Derive(root string) (Inventory, error) {
 		}
 		rel, relErr := filepath.Rel(root, path)
 		if relErr != nil {
-			return nil //nolint:nilerr
+			return relErr
 		}
-		cat, reason := Classify(filepath.ToSlash(rel), readHeader(path))
+		header, err := readHeader(path)
+		if err != nil {
+			return err
+		}
+		cat, reason := Classify(filepath.ToSlash(rel), header)
 		inv.Entries = append(inv.Entries, Entry{Path: filepath.ToSlash(rel), Category: cat, Reason: reason})
 		switch cat {
 		case E2E:
@@ -201,10 +206,12 @@ func Derive(root string) (Inventory, error) {
 }
 
 // readHeader returns the first lines of a file, where build constraints live.
-func readHeader(path string) string {
+// A file that cannot be read is an error: classifying it by path alone would
+// drop the build tag that decides its category.
+func readHeader(path string) (string, error) {
 	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
-		return ""
+		return "", err
 	}
 	defer f.Close()
 	var b strings.Builder
@@ -213,10 +220,13 @@ func readHeader(path string) string {
 		line := sc.Text()
 		b.WriteString(line)
 		b.WriteString("\n")
-		// A cláusula `package` encerra a região das build constraints.
+		// The package clause ends the region where build constraints live.
 		if strings.HasPrefix(strings.TrimSpace(line), "package ") {
 			break
 		}
 	}
-	return b.String()
+	if err := sc.Err(); err != nil {
+		return "", fmt.Errorf("reading %s: %w", path, err)
+	}
+	return b.String(), nil
 }

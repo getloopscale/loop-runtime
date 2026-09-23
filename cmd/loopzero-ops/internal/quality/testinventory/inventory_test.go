@@ -135,3 +135,16 @@ func TestRealTreeIsFullyEnumerated(t *testing.T) {
 		t.Fatal("zero e2e na árvore real — `infra/tests/e2e/` existe, e o inventário declarado dizia 1 de 710 justamente por não a enxergar")
 	}
 }
+
+// A test file whose header cannot be read would be classified on its path
+// alone, silently dropping a build tag that decides its category.
+func TestUnreadableTestFileIsAnError(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Symlink(filepath.Join(root, "missing-target"), filepath.Join(root, "x_test.go")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Derive(root); err == nil {
+		t.Fatal("an unreadable test file must be an error")
+	}
+}

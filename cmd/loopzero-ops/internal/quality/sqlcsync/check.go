@@ -26,6 +26,7 @@ package sqlcsync
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -133,17 +134,9 @@ func Check(cfg Config) (Outcome, error) {
 		return Outcome{}, fmt.Errorf("sqlc-sync: copy queries/: %w", err)
 	}
 
-	// Phase 0 baseline edge case: if queries/ is effectively empty (only
-	// .gitkeep), sqlc errors with "no queries contained in paths". Treat as
-	// PASS — gate is registered but trivially passes until Phase 1+ lands
-	// the first queries.sql. Acceptance criterion: "Gate exit 0 on Phase 0
-	// baseline (no generated code yet)".
-	if isQueriesDirEmpty(queriesDir) {
-		return Outcome{
-			Pass:        true,
-			Violations:  nil,
-			SqlcVersion: gotVersion,
-		}, nil
+	// Queries exist, so a queries dir with no .sql is a comparison of nothing.
+	if err := requireQueries(queriesDir); err != nil {
+		return Outcome{}, err
 	}
 
 	// Run sqlc generate inside tmpDb.
@@ -294,19 +287,22 @@ func truncate(s string, n int) string {
 	return s[:n] + "..."
 }
 
-// isQueriesDirEmpty returns true if the queries/ dir has no .sql files (only
-// .gitkeep or empty). Used for the Phase 0 baseline edge case.
-func isQueriesDirEmpty(dir string) bool {
+// ErrNoQueries means the queries dir holds no .sql file: sqlc would generate
+// nothing, and the gate would report the committed code in sync with nothing.
+var ErrNoQueries = errors.New("sqlc-sync: no .sql file under api/internal/db/queries — there is nothing to compare the committed generated/ against")
+
+// requireQueries fails when the queries dir cannot be read or holds no .sql.
+func requireQueries(dir string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return true
+		return fmt.Errorf("sqlc-sync: reading queries dir %s: %w", dir, err)
 	}
 	for _, e := range entries {
 		if !e.IsDir() && strings.HasSuffix(e.Name(), ".sql") {
-			return false
+			return nil
 		}
 	}
-	return true
+	return ErrNoQueries
 }
 
 // copyFile is a simple file copy helper.

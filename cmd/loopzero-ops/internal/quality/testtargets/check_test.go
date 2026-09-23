@@ -4,6 +4,7 @@
 package testtargets
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -126,6 +127,7 @@ func TestSkipsExcludedDirs(t *testing.T) {
 	root := fixture(t, map[string]string{
 		"node_modules/x/bad_test.sh":          "#!/bin/bash\nSCRIPT=\"$ROOT/infra/scripts/gone.sh\"\n",
 		".claude/worktrees/w/infra/y_test.sh": "#!/bin/bash\nSCRIPT=\"$ROOT/infra/scripts/gone.sh\"\n",
+		"infra/tests/ok_test.sh":              "#!/bin/bash\necho ok\n",
 	})
 	out, err := Check(Config{Root: root})
 	if err != nil {
@@ -136,20 +138,28 @@ func TestSkipsExcludedDirs(t *testing.T) {
 	}
 }
 
-// TestEmptyRootDefaultsToDot — Config{} uses "." without panicking.
+// TestEmptyRootDefaultsToDot — Config{} scans "." and, over a directory with no
+// test script, reports that it read nothing rather than a clean tree.
 func TestEmptyRootDefaultsToDot(t *testing.T) {
-	dir := t.TempDir()
-	wd, _ := os.Getwd()
-	defer func() { _ = os.Chdir(wd) }()
-	if err := os.Chdir(dir); err != nil {
-		t.Fatalf("chdir: %v", err)
+	t.Chdir(t.TempDir())
+
+	_, err := Check(Config{})
+
+	if !errors.Is(err, ErrNothingScanned) {
+		t.Fatalf("err = %v, want ErrNothingScanned", err)
 	}
-	out, err := Check(Config{})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
+}
+
+// TestUnreadableTestScriptIsAnError — a test script the gate cannot read is not
+// a script with no targets.
+func TestUnreadableTestScriptIsAnError(t *testing.T) {
+	root := fixture(t, map[string]string{"infra/tests/ok_test.sh": "#!/bin/bash\n"})
+	if err := os.Symlink(filepath.Join(root, "missing-target"), filepath.Join(root, "infra/tests/gone_test.sh")); err != nil {
+		t.Fatal(err)
 	}
-	if !out.Pass {
-		t.Errorf("empty dir should pass, got: %v", out.Violations)
+
+	if _, err := Check(Config{Root: root}); err == nil {
+		t.Fatal("an unreadable *_test.sh must be an error")
 	}
 }
 
@@ -158,6 +168,7 @@ func TestEmptyRootDefaultsToDot(t *testing.T) {
 func TestOnlyScansTestScripts(t *testing.T) {
 	root := fixture(t, map[string]string{
 		"infra/scripts/helper.sh": "#!/bin/bash\nSCRIPT=\"$ROOT/infra/scripts/gone.sh\"\n",
+		"infra/tests/ok_test.sh":  "#!/bin/bash\necho ok\n",
 	})
 	out, err := Check(Config{Root: root})
 	if err != nil {

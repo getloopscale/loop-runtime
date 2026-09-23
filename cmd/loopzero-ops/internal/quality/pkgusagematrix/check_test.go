@@ -62,18 +62,34 @@ func TestFileContainsImport_Match(t *testing.T) {
 	require.NoError(t, os.WriteFile(p, []byte(`package x
 import "github.com/getloopscale/loopzero/pkg/errors"
 `), 0o600))
-	assert.True(t, fileContainsImport(p, []byte(`"github.com/getloopscale/loopzero/pkg/errors"`)))
+	found, err := fileContainsImport(p, []byte(`"github.com/getloopscale/loopzero/pkg/errors"`))
+	require.NoError(t, err)
+	assert.True(t, found)
 }
 
 func TestFileContainsImport_NoMatch(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "a.go")
 	require.NoError(t, os.WriteFile(p, []byte("package x\n"), 0o600))
-	assert.False(t, fileContainsImport(p, []byte(`"github.com/getloopscale/loopzero/pkg/errors"`)))
+	found, err := fileContainsImport(p, []byte(`"github.com/getloopscale/loopzero/pkg/errors"`))
+	require.NoError(t, err)
+	assert.False(t, found)
 }
 
-func TestFileContainsImport_MissingFile(t *testing.T) {
-	assert.False(t, fileContainsImport("/tmp/zzz-no-file.go", []byte("x")))
+// An unreadable consumer is not a non-consumer: counting it as one publishes
+// "0 — dead code candidate" for a package in use.
+func TestFileContainsImport_MissingFileIsAnError(t *testing.T) {
+	_, err := fileContainsImport(filepath.Join(t.TempDir(), "no-file.go"), []byte("x"))
+	assert.Error(t, err)
+}
+
+func TestCountConsumers_UnreadableGoFileIsAnError(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.Symlink(filepath.Join(root, "missing-target"), filepath.Join(root, "consumer.go")))
+
+	_, err := countConsumers(root, "errors")
+
+	assert.Error(t, err)
 }
 
 // =============================================================================

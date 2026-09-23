@@ -123,3 +123,25 @@ func joinViolations(vs []Violation) string {
 	}
 	return strings.Join(parts, " ")
 }
+
+// A chart template the gate cannot read must not decide, by silence, that the
+// chart does not use the image helper — that would drop the chart from the
+// digest check.
+func TestScanChartValues_UnreadableTemplateIsAnError(t *testing.T) {
+	root := t.TempDir()
+	chartDir := filepath.Join(root, "charts", "api")
+	if err := os.MkdirAll(filepath.Join(chartDir, "templates"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(chartDir, "values.yaml"), []byte("image:\n  tag: dev\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "missing-target"), filepath.Join(chartDir, "templates", "deploy.yaml")); err != nil {
+		t.Fatal(err)
+	}
+
+	var out Outcome
+	if err := scanChartValues(filepath.Join(root, "charts"), &out); err == nil {
+		t.Fatal("an unreadable template must be an error")
+	}
+}

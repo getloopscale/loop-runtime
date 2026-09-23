@@ -77,6 +77,7 @@ func TestRunbookAusenteReprova(t *testing.T) {
 func TestZeroMensagensVarridasReprova(t *testing.T) {
 	root := arvore(t, map[string]string{
 		runbookRel: runbookOK,
+		"api/x.go": "package x\n",
 	})
 	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrNothingScanned) {
 		t.Fatalf("zero mensagens varridas reprova; err=%v", err)
@@ -131,5 +132,21 @@ func TestComentarioQueCitaAMensagemAntigaNaoEAchado(t *testing.T) {
 	})
 	if _, err := Check(Config{RepoRoot: root}); err != nil {
 		t.Fatalf("comentário que documenta o conserto não é achado: %v", err)
+	}
+}
+
+// A Go file under api/ the gate cannot read may be the one that contradicts the
+// runbook; skipping it reports agreement over code nobody read.
+func TestUnreadableGoFileIsAnError(t *testing.T) {
+	root := arvore(t, map[string]string{
+		runbookRel: runbookOK,
+		"api/internal/services/build/argo_step_watcher.go": "logger.Error(\"argo step watcher: build cluster auth failed — rotate loopzero-workflow-submitter token\",\n",
+	})
+	if err := os.Symlink(filepath.Join(root, "missing-target"), filepath.Join(root, "api", "unreadable.go")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Check(Config{RepoRoot: root}); err == nil {
+		t.Fatal("an unreadable Go file under api/ must be an error")
 	}
 }
