@@ -54,7 +54,7 @@
 package publishhygiene
 
 import (
-	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -150,11 +150,19 @@ type Finding struct {
 	Kind string // "home" — a metade de IP não foi transportada; ver o doc do pacote
 }
 
+// ErrUnverified means a versioned file could not be read, so nothing can be said
+// about what it would publish.
+var ErrUnverified = errors.New("a versioned file could not be read — its content is unverified, not clean")
+
 // Outcome reports the scan.
 type Outcome struct {
 	Scanned  int
 	Findings []Finding
 	Exempt   int
+	// Binary counts versioned files skipped as binary (they hold a NUL byte).
+	Binary int
+	// Unverified lists versioned files that could not be read, with the reason.
+	Unverified []string
 }
 
 // Check scans every versioned live file.
@@ -184,18 +192,26 @@ func Check(cfg Config) (Outcome, error) {
 			out.Exempt++
 			continue
 		}
-		out.Scanned++
-		fs, ferr := scanFile(filepath.Join(root, rel), rel)
+		data, ferr := os.ReadFile(filepath.Clean(filepath.Join(root, rel)))
 		if ferr != nil {
-			continue // binário ou ilegível: não é achado deste gate
+			out.Unverified = append(out.Unverified, fmt.Sprintf("%s: %v", rel, ferr))
+			continue
 		}
-		out.Findings = append(out.Findings, fs...)
-	}
-	if out.Scanned == 0 {
-		return out, ErrNothingScanned
+		if bytes.IndexByte(data, 0) >= 0 {
+			out.Binary++
+			continue
+		}
+		out.Scanned++
+		out.Findings = append(out.Findings, scanText(string(data), rel)...)
 	}
 	if len(out.Findings) > 0 {
 		return out, ErrLeak
+	}
+	if len(out.Unverified) > 0 {
+		return out, fmt.Errorf("%w: %s", ErrUnverified, strings.Join(out.Unverified, "; "))
+	}
+	if out.Scanned == 0 {
+		return out, ErrNothingScanned
 	}
 	return out, nil
 }
@@ -234,23 +250,14 @@ func versionedFiles(root string) ([]string, error) {
 	return out, nil
 }
 
-func scanFile(abs, rel string) ([]Finding, error) {
-	f, err := os.Open(filepath.Clean(abs))
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
+// scanText reports every workstation home path in content, line by line. The
+// whole file is read first, so no line is too long to be scanned.
+func scanText(content, rel string) []Finding {
 	var out []Finding
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 1024*1024), 1024*1024)
-	n := 0
-	for sc.Scan() {
-		n++
-		line := sc.Text()
+	for i, line := range strings.Split(content, "\n") {
 		if homeRE.MatchString(line) && !syntheticHomeRE.MatchString(line) && !urlHomeRE.MatchString(line) {
-			out = append(out, Finding{File: rel, Line: n, Text: strings.TrimSpace(line), Kind: "home"})
+			out = append(out, Finding{File: rel, Line: i + 1, Text: strings.TrimSpace(line), Kind: "home"})
 		}
 	}
-	return out, sc.Err()
+	return out
 }

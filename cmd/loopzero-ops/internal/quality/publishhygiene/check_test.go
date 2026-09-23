@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
@@ -156,5 +157,46 @@ func TestRealTreeIsClean(t *testing.T) {
 	}
 	if out.Scanned < 500 {
 		t.Fatalf("scanned=%d — a varredura está alcançando pouco da árvore", out.Scanned)
+	}
+}
+
+// A line longer than any scanner buffer must not cost the findings before it:
+// a workstation path next to a minified or base64 line is still a leak.
+func TestLeakBeforeAVeryLongLineIsKept(t *testing.T) {
+	long := strings.Repeat("x", 2*1024*1024)
+	root := gitTree(t, map[string]string{"a.md": "see " + realHome("x") + "\n" + long + "\n"})
+
+	out, err := Check(Config{RepoRoot: root})
+
+	if !errors.Is(err, ErrLeak) || len(out.Findings) != 1 {
+		t.Fatalf("the leak before the long line must be reported; findings=%v err=%v", out.Findings, err)
+	}
+}
+
+// A versioned file the gate cannot read is not a clean file.
+func TestUnreadableVersionedFileIsUnverified(t *testing.T) {
+	root := gitTree(t, map[string]string{"a.md": "clean\n", "b.md": "clean\n"})
+	if err := os.Remove(filepath.Join(root, "b.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "missing-target"), filepath.Join(root, "b.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := Check(Config{RepoRoot: root})
+
+	if !errors.Is(err, ErrUnverified) || len(out.Unverified) != 1 {
+		t.Fatalf("an unreadable versioned file must be unverified; out=%+v err=%v", out, err)
+	}
+}
+
+// A binary file is not a text leak and is counted apart, not as scanned text.
+func TestBinaryFileIsSkippedAndCounted(t *testing.T) {
+	root := gitTree(t, map[string]string{"a.md": "clean\n", "logo.png": "\x89PNG\x00" + realHome("x")})
+
+	out, err := Check(Config{RepoRoot: root})
+
+	if err != nil || out.Binary != 1 {
+		t.Fatalf("binary file must be skipped and counted; out=%+v err=%v", out, err)
 	}
 }
