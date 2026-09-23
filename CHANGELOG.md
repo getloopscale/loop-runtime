@@ -14,6 +14,13 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **api:** backlog B-119 — the build cache is keyed by name, so two tenants on the same
+  stack share nothing
+- **api:** backlog B-120 — a build with no lockfile warns and proceeds, so the platform
+  ships non-deterministic images
+- **api:** backlog B-121 — SLSA L3 attestation is off by default, and the code says what
+  that costs
+
 - Build provenance is attested to GitHub's native attestation registry, so `gh attestation
   verify` checks an image without anything installed. This is separate from the provenance
   buildx already embeds in the OCI manifest: that one is readable by whoever has the tooling,
