@@ -102,21 +102,19 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 	if h.activeStore == nil || h.membershipLookup == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"NOT_AVAILABLE",
-			"Team switching is not configured on this server.",
-			501,
-		))
+			"Team switching is not configured on this server."))
 		return
 	}
 
 	var req SwitchTeamRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-			"INVALID_REQUEST", "Invalid JSON body", 400))
+			"INVALID_REQUEST", "Invalid JSON body"))
 		return
 	}
 	if req.Name == "" {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-			"MISSING_FIELD", "Team name is required", 400))
+			"MISSING_FIELD", "Team name is required"))
 		return
 	}
 
@@ -126,7 +124,7 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 		slog.Error("switch team: membership lookup failed",
 			"user_id", uc.UserID, "error", err)
 		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-			"INTERNAL", "Unable to verify team membership.", 500))
+			"INTERNAL", "Unable to verify team membership."))
 		return
 	}
 	isMember := false
@@ -139,9 +137,7 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 	if !isMember {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"NOT_MEMBER",
-			"You are not a member of team \""+req.Name+"\". Run `loopzero whoami` to see your teams.",
-			403,
-		))
+			"You are not a member of team \""+req.Name+"\". Run `loopzero whoami` to see your teams."))
 		return
 	}
 
@@ -149,7 +145,7 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 		slog.Error("switch team: SetActiveTenant failed",
 			"user_id", uc.UserID, "tenant_id", req.Name, "error", err)
 		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
-			"INTERNAL", "Unable to persist team selection.", 500))
+			"INTERNAL", "Unable to persist team selection."))
 		return
 	}
 

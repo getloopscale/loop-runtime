@@ -84,16 +84,9 @@ func (e *LoopZeroError) Unwrap() error {
 
 // NewLoopZeroError creates a new LoopZeroError with the given code and message.
 //
-// The third int parameter (formerly HTTPStatus) is kept in the signature
-// for backward compatibility with callers from before T2.3 Stage C; it
-// is now IGNORED. New code should use the 2-parameter form via direct
-// struct literal:
-//
-//	return &errors.LoopZeroError{Code: "X", Message: "y"}
-//
-// HTTP status is resolved at the transport boundary via
-// pkg/errors/http.Status(err). See ADR-0030.
-func NewLoopZeroError(code, message string, _ int) *LoopZeroError {
+// A LoopZeroError carries no HTTP status: it is resolved at the transport
+// boundary by pkg/errors/http.Status from the code (ADR-0030).
+func NewLoopZeroError(code, message string) *LoopZeroError {
 	return &LoopZeroError{
 		Code:    code,
 		Message: message,
@@ -568,7 +561,7 @@ func NewIdempotencyConflict(key string) *LoopZeroError {
 // ACTIVE per env via the partial unique index; the second UPDATE hits
 // SQLSTATE 23505. Operator interpretation: race between sync_completion
 // callbacks; the loser retries on next reconcile tick (loop is idempotent).
-func NewConcurrentActivation(tenantID, projectID, env string) *LoopZeroError {
+func NewConcurrentActivation(projectID, env string) *LoopZeroError {
 	return &LoopZeroError{
 		Code: "CONCURRENT_ACTIVATION",
 		Message: fmt.Sprintf(

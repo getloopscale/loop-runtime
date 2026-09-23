@@ -190,7 +190,7 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"build_id", buildID,
 			"error", err,
 		)
-		errorshttp.WriteJSON(w, r, loopzeroerrors.NewLoopZeroError("INTERNAL_ERROR", "failed to fetch build", 0))
+		errorshttp.WriteJSON(w, r, loopzeroerrors.NewLoopZeroError("INTERNAL_ERROR", "failed to fetch build"))
 		return
 	}
 

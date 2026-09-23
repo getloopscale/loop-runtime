@@ -73,7 +73,7 @@ func TestNewLoopZeroError(t *testing.T) {
 	// Stage C: NewLoopZeroError still accepts the int third parameter for
 	// backward compatibility with pre-T2.3 callers, but the value is
 	// ignored — HTTP status now resolves via pkg/errors/http.Status.
-	err := NewLoopZeroError("CUSTOM", "custom message", 418)
+	err := NewLoopZeroError("CUSTOM", "custom message")
 	if err.Code != "CUSTOM" {
 		t.Errorf("expected code CUSTOM, got %q", err.Code)
 	}
@@ -505,7 +505,7 @@ func TestDisplayPlanName_AllValues(t *testing.T) {
 // 000022) rejects a second ACTIVE release for the same env.
 
 func TestNewConcurrentActivation_CodeAndContext(t *testing.T) {
-	err := NewConcurrentActivation("tn-A", "proj-x", "production")
+	err := NewConcurrentActivation("proj-x", "production")
 	if err.Code != "CONCURRENT_ACTIVATION" {
 		t.Errorf("Code mismatch: got %q, want CONCURRENT_ACTIVATION", err.Code)
 	}
@@ -525,8 +525,8 @@ func TestNewConcurrentActivation_CodeAndContext(t *testing.T) {
 // fresh struct each call so callers can wrap context without mutating
 // a shared global. Mirrors the discipline established by NewLockTimeout.
 func TestNewConcurrentActivation_DistinctInstances(t *testing.T) {
-	a := NewConcurrentActivation("tn", "p", "production")
-	b := NewConcurrentActivation("tn", "p", "production")
+	a := NewConcurrentActivation("p", "production")
+	b := NewConcurrentActivation("p", "production")
 	if a == b {
 		t.Error("factory MUST return distinct pointers (no shared global)")
 	}

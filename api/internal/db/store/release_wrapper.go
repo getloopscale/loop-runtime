@@ -326,9 +326,7 @@ func (s *ReleaseStoreSqlc) UpdateStatus(ctx context.Context, tx db.DBTX, release
 		// violations (e.g., a future PK collision) fall through to the
 		// generic wrapped error.
 		if isReleasesActiveUniqueViolation(err) {
-			return nil, loopzeroerrors.NewConcurrentActivation(
-				current.TenantID, current.ProjectID, current.Environment,
-			)
+			return nil, loopzeroerrors.NewConcurrentActivation(current.ProjectID, current.Environment)
 		}
 		return nil, fmt.Errorf("sqlc: update release status: %w", err)
 	}

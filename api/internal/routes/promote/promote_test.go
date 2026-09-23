@@ -420,7 +420,7 @@ func TestPromote_EnsureEnvironment_Failure_ShortCircuits_RedTeam158(t *testing.T
 	svc := &fakePromoteService{
 		result: &PromoteOutput{PromotionID: "should-not-reach"},
 	}
-	ensurer := &fakePromoteEnsurer{err: loopzeroerrors.NewLoopZeroError("ENV_PROVISION_TIMEOUT", "operator did not reconcile in time", 504)}
+	ensurer := &fakePromoteEnsurer{err: loopzeroerrors.NewLoopZeroError("ENV_PROVISION_TIMEOUT", "operator did not reconcile in time")}
 	h := NewPromoteHandler(projects, svc, "prod-dev.loopzero.example").WithEnvironmentEnsurer(ensurer)
 
 	body := `{"from":"preview","to":"production"}`

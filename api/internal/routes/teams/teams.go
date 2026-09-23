@@ -214,9 +214,7 @@ func (h *TeamHandler) Remove(w http.ResponseWriter, r *http.Request) {
 	if targetUser == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"TEAM_MEMBER_NOT_FOUND",
-			fmt.Sprintf("User %q is not a team member.", username),
-			http.StatusNotFound,
-		))
+			fmt.Sprintf("User %q is not a team member.", username)))
 		return
 	}
 	targetUserID := targetUser.ID
@@ -232,9 +230,7 @@ func (h *TeamHandler) Remove(w http.ResponseWriter, r *http.Request) {
 	if targetMember == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"TEAM_MEMBER_NOT_FOUND",
-			fmt.Sprintf("User %q is not a team member.", username),
-			http.StatusNotFound,
-		))
+			fmt.Sprintf("User %q is not a team member.", username)))
 		return
 	}
 

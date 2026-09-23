@@ -45,9 +45,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	if result.Status == "succeeded" && len(result.Apps) == 0 {
 		return loopzeroerrors.NewLoopZeroError(
 			"INVALID_CALLBACK",
-			"build callback reported success but provided no apps",
-			400,
-		)
+			"build callback reported success but provided no apps")
 	}
 
 	// Phase 1 (Lock 1): Transition build to terminal state.

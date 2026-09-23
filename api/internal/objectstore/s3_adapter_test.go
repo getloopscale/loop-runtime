@@ -69,7 +69,7 @@ func TestS3Adapter_PresignDelegates(t *testing.T) {
 // TestS3Adapter_UploadPropagatesError (EC-4): a LoopZeroError from the uploader is
 // returned as-is — the thin adapter never swallows (rules/error-handling.md).
 func TestS3Adapter_UploadPropagatesError(t *testing.T) {
-	sentinel := loopzeroerrors.NewLoopZeroError("INTERNAL", "s3 down", 500)
+	sentinel := loopzeroerrors.NewLoopZeroError("INTERNAL", "s3 down")
 	f := &fakeUploader{uploadErr: sentinel}
 	a := s3Adapter{up: f}
 	err := a.Upload(context.Background(), "b", "k", strings.NewReader("x"))

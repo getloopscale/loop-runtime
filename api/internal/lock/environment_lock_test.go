@@ -187,7 +187,7 @@ func TestWithEnvironmentLock_ErrorInFn(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 
-	fnErr := loopzeroerrors.NewLoopZeroError("TEST_ERROR", "something went wrong", 500)
+	fnErr := loopzeroerrors.NewLoopZeroError("TEST_ERROR", "something went wrong")
 
 	// Act: fn returns an error.
 	_, err := lock.WithEnvironmentLock(ctx, pool, "tenant-1", "project-err", "dev",

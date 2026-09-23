@@ -323,22 +323,22 @@ func parseScaleRequest(r *http.Request) (req scaleRequest, hasFixed, hasAuto boo
 	if hasFixed && *req.Replicas <= 0 {
 		err = loopzeroerrors.NewLoopZeroError(
 			"INVALID_REPLICAS",
-			"replicas must be > 0 (use 0 only via 'min: 0' on autoscaling, not 'replicas')",
-			http.StatusBadRequest)
+			"replicas must be > 0 (use 0 only via 'min: 0' on autoscaling, not 'replicas')")
+
 		return
 	}
 	if req.Min != nil && *req.Min < 0 {
 		err = loopzeroerrors.NewLoopZeroError(
 			"INVALID_REPLICAS",
-			"autoscaling 'min' must be >= 0",
-			http.StatusBadRequest)
+			"autoscaling 'min' must be >= 0")
+
 		return
 	}
 	if req.Max != nil && *req.Max <= 0 {
 		err = loopzeroerrors.NewLoopZeroError(
 			"INVALID_REPLICAS",
-			"autoscaling 'max' must be > 0",
-			http.StatusBadRequest)
+			"autoscaling 'max' must be > 0")
+
 		return
 	}
 	return

@@ -144,9 +144,7 @@ func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, pr
 		}
 		return loopzeroerrors.NewLoopZeroError(
 			"ENV_PROVISION_FAILED",
-			fmt.Sprintf("Failed to create environment %q: %s", envName, err.Error()),
-			500,
-		)
+			fmt.Sprintf("Failed to create environment %q: %s", envName, err.Error()))
 	}
 
 	// 3. Wait for operator to reconcile.
@@ -174,9 +172,8 @@ func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, pr
 					"Environment %q was created but is not yet ready after %s. "+
 						"Run `loopzero env list` to check status, then retry `loopzero deploy`.",
 					envName, timeout,
-				),
-				504,
-			)
+				))
+
 		case <-ticker.C:
 			exists, err := e.Lister.HasEnvironment(waitCtx, tenantID, project, envName)
 			if err != nil || !exists {

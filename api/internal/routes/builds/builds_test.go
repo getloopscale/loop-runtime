@@ -463,9 +463,7 @@ func TestBuilds_Redeploy_NotTerminalReturns409(t *testing.T) {
 	orch := &fakeBuildOrch{
 		redeployErr: loopzeroerrors.NewLoopZeroError(
 			"BUILD_NOT_TERMINAL",
-			"Cannot redeploy a build that is still in progress",
-			409,
-		),
+			"Cannot redeploy a build that is still in progress"),
 	}
 	h := NewBuildHandler(orch, slog.Default())
 

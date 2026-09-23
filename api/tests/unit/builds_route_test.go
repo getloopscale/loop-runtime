@@ -628,9 +628,7 @@ func TestBuildsCancelRoute(t *testing.T) {
 		orch := &fakeBuildOrchestrator{
 			cancelErr: loopzeroerrors.NewLoopZeroError(
 				"BUILD_ALREADY_COMPLETED",
-				"Build already completed.",
-				409,
-			),
+				"Build already completed."),
 		}
 		handler := newBuildHandler(orch, "test-secret")
 		router := buildRouter(handler)

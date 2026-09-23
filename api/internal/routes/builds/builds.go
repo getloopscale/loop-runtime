@@ -316,17 +316,13 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.ProjectID == "" {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"MISSING_FIELD",
-			"Project name is required. Check your loopzero.yaml.",
-			400,
-		))
+			"Project name is required. Check your loopzero.yaml."))
 		return
 	}
 	if req.Environment == "" {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"MISSING_FIELD",
-			"Environment is required",
-			400,
-		))
+			"Environment is required"))
 		return
 	}
 
@@ -358,14 +354,8 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"MISSING_FIELD",
-			// Red Team loopzero-cloud#123 — when this is a fresh deploy, guide
-			// the customer to the canonical `.loopzero/services.json` (loopzerokit
-			// v2). The legacy `loopzero.yaml` / `apps:` has been retired;
-			// following stale guidance leads users to edit a file the build
-			// silently ignores.
-			detail,
-			400,
-		))
+
+			detail))
 		return
 	}
 
@@ -373,9 +363,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if !environmentRegex.MatchString(req.Environment) {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"INVALID_ENVIRONMENT",
-			"Environment names must be lowercase.",
-			400,
-		))
+			"Environment names must be lowercase."))
 		return
 	}
 
@@ -397,9 +385,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 			} else {
 				httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 					"ENV_PROVISION_FAILED",
-					fmt.Sprintf("Failed to provision environment %q: %s", req.Environment, ensureErr.Error()),
-					500,
-				))
+					fmt.Sprintf("Failed to provision environment %q: %s", req.Environment, ensureErr.Error())))
 			}
 			return
 		}
@@ -437,17 +423,13 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 		if err := validation.ValidateAppName(app.Name); err != nil {
 			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"INVALID_APP_NAME",
-				fmt.Sprintf("Invalid name for app: %s", err.Error()),
-				400,
-			))
+				fmt.Sprintf("Invalid name for app: %s", err.Error())))
 			return
 		}
 		if err := validation.ValidateAppPath(app.Path); err != nil {
 			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"INVALID_APP_PATH",
-				fmt.Sprintf("Invalid path for app %q: %s", app.Name, err.Error()),
-				400,
-			))
+				fmt.Sprintf("Invalid path for app %q: %s", app.Name, err.Error())))
 			return
 		}
 	}
@@ -486,7 +468,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 				secs = 1
 			}
 			w.Header().Set("Retry-After", fmt.Sprintf("%d", secs))
-			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(code, message, 429))
+			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(code, message))
 			return
 		}
 	}
@@ -604,9 +586,7 @@ func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
 		if errors.Is(err, loopzeroerrors.ErrDeployInProgress) {
 			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"DEPLOY_IN_PROGRESS",
-				"A deploy is already in progress for this environment.",
-				409,
-			))
+				"A deploy is already in progress for this environment."))
 			return
 		}
 		httpio.WriteLoopZeroError(w, loopzeroErr)

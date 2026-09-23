@@ -25,7 +25,7 @@ import (
 // validation produces actionable client feedback. Status 400 inferred
 // from INVALID_ARGUMENT code by the HTTP error mapper.
 func newInvalidArgument(msg string) *loopzeroerrors.LoopZeroError {
-	return loopzeroerrors.NewLoopZeroError("INVALID_ARGUMENT", msg, 400)
+	return loopzeroerrors.NewLoopZeroError("INVALID_ARGUMENT", msg)
 }
 
 // ScalingConfig represents per-app scaling configuration persisted

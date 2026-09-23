@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
@@ -285,22 +284,17 @@ func enforceScaling(ctx context.Context, apps []deploycontracts.AppSpec, checker
 		if hasAutoscaling && a.Autoscaling.MinReplicas == 0 && a.Autoscaling.MaxReplicas > 0 && !kedaEnabled {
 			return loopzeroerrors.NewLoopZeroError(
 				"SCALE_TO_ZERO_UNAVAILABLE",
-				fmt.Sprintf("App '%s': scale-to-zero is not available on this cluster. Use min >= 1 for autoscaling, or contact support to enable scale-to-zero.", a.Name),
-				http.StatusBadRequest,
-			)
+				fmt.Sprintf("App '%s': scale-to-zero is not available on this cluster. Use min >= 1 for autoscaling, or contact support to enable scale-to-zero.", a.Name))
 		}
 
 		if hasReplicas && hasAutoscaling {
 			// B15: observe mutual-exclusion rejections under the same metric so
 			// dashboards show a single plan-enforcement signal.
 			metrics.PlanLimitViolations.WithLabelValues("scaling_ambiguous", "").Inc()
-			// Stage C of T2.3: HTTPStatus is resolved by errorshttp.Status()
-			// from the registered code; the int param is ignored.
+			// The HTTP status is resolved by errorshttp.Status from the code.
 			return loopzeroerrors.NewLoopZeroError(
 				loopzeroerrors.ErrScalingAmbiguous.Code,
-				fmt.Sprintf("App '%s': %s", a.Name, loopzeroerrors.ErrScalingAmbiguous.Message),
-				0,
-			)
+				fmt.Sprintf("App '%s': %s", a.Name, loopzeroerrors.ErrScalingAmbiguous.Message))
 		}
 		if checker == nil {
 			continue

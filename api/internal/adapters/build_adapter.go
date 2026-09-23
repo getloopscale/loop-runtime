@@ -174,9 +174,7 @@ func (a *BuildOrchestratorAdapter) GetRedeploySource(ctx context.Context, tenant
 	if !statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
 		return nil, loopzeroerrors.NewLoopZeroError(
 			"BUILD_NOT_TERMINAL",
-			"Cannot redeploy a build that is still in progress. Wait for it to finish first.",
-			409,
-		)
+			"Cannot redeploy a build that is still in progress. Wait for it to finish first.")
 	}
 	specs, specErr := a.BuildStore.GetBuildApps(ctx, buildID)
 	if specErr != nil {

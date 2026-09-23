@@ -216,17 +216,13 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"VALIDATION_FAILED",
 				"E-009: legacy loopzero_yaml not supported. This API version requires `.loopzero/services.json` emitted by LoopZeroKit ≥0.5.0. "+
-					"Upgrade LoopZeroKit and re-run `loopzerokit build --target loopzero-cloud` to regenerate the bundle.",
-				422,
-			))
+					"Upgrade LoopZeroKit and re-run `loopzerokit build --target loopzero-cloud` to regenerate the bundle."))
 			return
 		}
 		// EC-B3-7 (v3.1) — truncated/missing payload returns 422 with E-008 hint.
 		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"VALIDATION_FAILED",
-			"E-008: services.json is required (multipart form field `services_json`).",
-			422,
-		))
+			"E-008: services.json is required (multipart form field `services_json`)."))
 		return
 	}
 
@@ -257,9 +253,9 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 			}
 			httpio.WriteLoopZeroErrorWithFieldErrors(w, loopzeroerrors.NewLoopZeroError(
 				"VALIDATION_FAILED",
-				ve.Message,
-				422,
-			), fieldErrors)
+				ve.Message),
+
+				fieldErrors)
 			return
 		}
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
@@ -272,9 +268,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 			"MISSING_FIELD",
-			"Bundle file is required",
-			400,
-		))
+			"Bundle file is required"))
 		return
 	}
 	defer func() { _ = bundleFile.Close() }()

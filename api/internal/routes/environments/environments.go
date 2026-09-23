@@ -258,9 +258,7 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 			if !exists {
 				httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 					"PROJECT_NOT_FOUND",
-					fmt.Sprintf("project %q not found in your account", projectFilter),
-					404,
-				))
+					fmt.Sprintf("project %q not found in your account", projectFilter)))
 				return
 			}
 		}
@@ -448,9 +446,7 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 			// pattern already established for cross-tenant DELETE flows.
 			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"PROJECT_NOT_FOUND",
-				fmt.Sprintf("project %q not found in your account", req.Project),
-				404,
-			))
+				fmt.Sprintf("project %q not found in your account", req.Project)))
 			return
 		}
 	}
@@ -463,9 +459,7 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		if isAlreadyExistsErrorMsg(err) {
 			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"ENV_ALREADY_EXISTS",
-				fmt.Sprintf("environment %q already exists in project %q", req.Name, req.Project),
-				409,
-			))
+				fmt.Sprintf("environment %q already exists in project %q", req.Name, req.Project)))
 			return
 		}
 		slog.Error("failed to create environment",
@@ -538,9 +532,7 @@ func (h *EnvironmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"ENVIRONMENT_AMBIGUOUS",
 				fmt.Sprintf("environment '%s' exists in more than one project (%s); specify the project",
-					name, strings.Join(amb.Projects, ", ")),
-				400,
-			))
+					name, strings.Join(amb.Projects, ", "))))
 			return
 		}
 		slog.Error("failed to get environment detail",
