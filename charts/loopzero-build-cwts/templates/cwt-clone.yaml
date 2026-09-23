@@ -55,11 +55,7 @@ spec:
             BUNDLE_PATH="{{ "{{inputs.parameters.tenant-id}}" }}/source/{{ "{{inputs.parameters.build-id}}" }}.bundle"
             echo "Downloading source bundle: ${BUNDLE_PATH}"
 
-            mc alias set loopzero "$MINIO_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" \
-              {{- if .Values.minio.insecure }}
-              --insecure \
-              {{- end }}
-              --api S3v4 >/dev/null 2>&1
+            {{- include "loopzero-build-cwts.mcAlias" . | nindent 12 }}
 
             mc cp \
               {{- if .Values.minio.insecure }}
