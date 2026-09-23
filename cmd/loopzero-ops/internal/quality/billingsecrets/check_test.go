@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // A camada mais silenciosa das quatro.
@@ -126,7 +128,7 @@ func TestSemChartNaoInventaAchado(t *testing.T) {
 // Falha HOJE, de propósito: é a prova de que o defeito medido existe e de que o gate o
 // enxerga. Passa quando as linhas 123-132 e 84-85 forem corrigidas.
 func TestRepositorioRealPassa(t *testing.T) {
-	raiz := repoRootFromTest(t)
+	raiz := qtestutil.Root(t)
 	out, err := Check(Config{RepoRoot: raiz})
 	if err != nil {
 		t.Fatalf("Check no repositório real: %v", err)
@@ -134,21 +136,4 @@ func TestRepositorioRealPassa(t *testing.T) {
 	for _, f := range out.Findings {
 		t.Errorf("%s:%d — %s", f.File, f.Line, f.Why)
 	}
-}
-
-// repoRootFromTest sobe até encontrar a raiz do repositório.
-func repoRootFromTest(t *testing.T) string {
-	t.Helper()
-	d, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(d, "go.work")); err == nil {
-			return d
-		}
-		d = filepath.Dir(d)
-	}
-	t.Fatal("raiz do repositório não encontrada (go.work ausente)")
-	return ""
 }

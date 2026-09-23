@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func escreverRegra(t *testing.T, raiz, nome, corpo string) {
@@ -177,7 +179,7 @@ func TestUrlExternaContaComoNaoVerificavelEmVezDeSilencio(t *testing.T) {
 // A populacao real (`rules/testing.md` § 4.2). Um mutante prova que o detector
 // dispara; so' isto diz o que ele acha no que existe.
 func TestPopulacaoRealDosLinksDeRunbook(t *testing.T) {
-	out := Check(Config{Root: raizDoRepo(t)})
+	out := Check(Config{Root: qtestutil.Root(t)})
 	// Conta os CONFERIDOS, nao os problematicos. A primeira versao somava mortos +
 	// nao-verificaveis e tratava zero como "nao alcancou nada" — mas zero e' TAMBEM o
 	// resultado de todos os links estarem bons, que e' o estado atual da arvore. Confundir
@@ -194,24 +196,4 @@ func TestPopulacaoRealDosLinksDeRunbook(t *testing.T) {
 	for _, d := range out.LinksMortos {
 		t.Logf("  morto: %s [%s] %s — %s", d.Arquivo, d.Alerta, d.URL, d.Motivo)
 	}
-}
-
-func raizDoRepo(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("cwd: %v", err)
-	}
-	for i := 0; i < 12; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "api", "go.mod")); err == nil {
-			return dir
-		}
-		pai := filepath.Dir(dir)
-		if pai == dir {
-			break
-		}
-		dir = pai
-	}
-	t.Fatal("nao achei a raiz do repositorio")
-	return ""
 }

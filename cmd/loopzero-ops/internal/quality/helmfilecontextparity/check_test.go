@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // tree writes a synthetic repo with one taskfile and the named helmfiles.
@@ -152,7 +154,7 @@ func TestCheck_CommentNearAnInvocationIsNotParsed(t *testing.T) {
 // literal invocation must agree. A failure here is a real divergence, not a
 // fixture artefact.
 func TestCheck_RealTree(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot(t)})
+	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
 	if out.ComparedCount+out.SkippedParameterised == 0 {
 		t.Fatalf("the real tree has helmfile invocations; enumerating none means the parser is broken, not that the tree is clean")
 	}
@@ -178,7 +180,7 @@ func TestCheck_RealTree(t *testing.T) {
 // two implementations of the same count only agree when both are right.
 func countKubeContextLines(t *testing.T) int {
 	t.Helper()
-	root := repoRoot(t)
+	root := qtestutil.Root(t)
 	// Le' o conjunto varrido de `globsPadrao`, a declaracao unica do gate, em vez
 	// de repetir a lista aqui. O aviso que este comentario substitui ja' dizia o
 	// porque: omitir uma fonte faz a reconciliacao comparar DUAS ARVORES
@@ -207,25 +209,6 @@ func countKubeContextLines(t *testing.T) int {
 		}
 	}
 	return n
-}
-
-// repoRoot walks up to go.work. Not finding it is a FAILURE, never a skip — a
-// skip would make the one test that measures the REAL tree pass by not running.
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	start := dir
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		dir = filepath.Dir(dir)
-	}
-	t.Fatalf("go.work not found within 8 levels above %s — the real-tree assertion cannot run, and skipping it would report green while measuring nothing", start)
-	return ""
 }
 
 // MEASURED false positive, found by counting: the tree has 16 lines carrying
@@ -338,7 +321,7 @@ func TestCheck_PathEscapingTheRootIsNotRead(t *testing.T) {
 // A gate whose only real-tree assertion runs under conditions the CLI never uses
 // is verifying a configuration nobody runs.
 func TestCheck_RelativeRootBehavesLikeAbsolute(t *testing.T) {
-	abs := repoRoot(t)
+	abs := qtestutil.Root(t)
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)

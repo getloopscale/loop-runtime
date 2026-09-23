@@ -8,12 +8,14 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func sink(t *testing.T, files map[string]string) Config {
 	t.Helper()
 	root := t.TempDir()
-	dir := filepath.Join(root, "api", "internal", "services", "deploycontracts")
+	dir := filepath.Join(root, sinkDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -135,30 +137,13 @@ var _ = db.Release{}
 // Against the real tree. The frozen set is the one measured in the slice-4 plan;
 // a failure here is a real growth of the leak, not a fixture artefact.
 func TestCheck_RealTree(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot(t)})
+	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
 	if err != nil {
 		t.Fatalf("the sink's db surface grew beyond what slice-4 measured: new=%v gone=%v", out.New, out.Gone)
 	}
 	if len(out.Found) == 0 {
 		t.Fatal("the real sink references db types; finding none means the extractor is broken, not that the leak is closed")
 	}
-}
-
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	start := dir
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		dir = filepath.Dir(dir)
-	}
-	t.Fatalf("go.work not found within 8 levels above %s — the real-tree assertion cannot run, and skipping it would report green while measuring nothing", start)
-	return ""
 }
 
 // MEASURED bypass, found by probing rather than reading: with the local name

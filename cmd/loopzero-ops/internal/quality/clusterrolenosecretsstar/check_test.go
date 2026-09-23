@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // helper: write a chart file under tmpRoot/charts/<chartName>/templates/clusterrole.yaml
@@ -251,7 +253,7 @@ func TestFormatOutcome_FailIncludesHitDetails(t *testing.T) {
 // cluster-role-no-secrets-star`); asserting it here would pin the state of
 // charts this package does not own.
 func TestCheck_LIVE_LoopZeroAPIClusterRoleIsGuarded(t *testing.T) {
-	root := repoRoot(t)
+	root := qtestutil.Root(t)
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

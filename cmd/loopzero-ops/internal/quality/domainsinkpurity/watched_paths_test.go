@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // prefixoDoModulo e' o unico prefixo que os caminhos vigiados usam. Derivar o
@@ -25,7 +27,7 @@ const prefixoDoModulo = "github.com/getloopscale/loopzero/"
 // referencias publicas cruzaram com o gate verde". O que faltava era esta
 // verificacao, e sem ela o proximo movimento de pacote repete o episodio.
 func TestCaminhosVigiadosExistemNaArvore(t *testing.T) {
-	raiz := repoRoot(t)
+	raiz := qtestutil.Root(t)
 	if len(watchedImportPaths) == 0 {
 		t.Fatal("mapa de vigilancia vazio: um gate que vigia nada passa por vacuidade")
 	}
@@ -47,7 +49,7 @@ func TestCaminhosVigiadosExistemNaArvore(t *testing.T) {
 // O diretorio do sink tem o mesmo modo de falha, e e' pior: sem ele o gate nao
 // tem o que ler.
 func TestDiretorioDoSinkExiste(t *testing.T) {
-	dir := filepath.Join(repoRoot(t), sinkDir)
+	dir := filepath.Join(qtestutil.Root(t), sinkDir)
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		t.Fatalf("sinkDir aponta para %s, que nao existe", dir)
 	}

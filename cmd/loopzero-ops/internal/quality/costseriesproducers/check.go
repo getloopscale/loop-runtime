@@ -59,6 +59,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
 )
 
 // DefaultDeclarationFile is the pinned contract, repo-relative. It sits beside
@@ -418,29 +420,11 @@ func declaresMetric(src []byte, name string) bool {
 // Brace counting rather than a line-shape guess: the map is a composite
 // literal, and its closing brace is the one that balances the opening.
 func promQueriesBlock(src string) (string, bool) {
-	i := strings.Index(src, "var promQueries")
-	if i < 0 {
-		return "", false
-	}
-	open := strings.Index(src[i:], "{")
-	if open < 0 {
-		return "", false
-	}
-	open += i
-	depth := 0
-	for j := open; j < len(src); j++ {
-		switch src[j] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return src[open+1 : j], true
-			}
-		}
-	}
-	return "", false
+	return qgshell.ExtractBraceBlock(src, promQueriesOpenRe)
 }
+
+// promQueriesOpenRe opens the `var promQueries = map[...]...{` literal.
+var promQueriesOpenRe = regexp.MustCompile(`var promQueries\b[^{]*\{`)
 
 // seriesIn returns the sorted, de-duplicated loopzero_* series named in a PromQL
 // fragment.

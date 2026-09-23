@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 const happyFixture = `#!/usr/bin/env bash
@@ -106,40 +108,11 @@ func TestCheck_NotAllowlisted_FAIL(t *testing.T) {
 }
 
 func TestCheck_RealRepoPasses(t *testing.T) {
-	root := findRepoRoot(t)
+	root := qtestutil.Root(t)
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Errorf("real-repo check failed: %v; failures: %v", err, out.Failures)
 	}
-}
-
-func findRepoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// O MARCO E' `go.work`, e nao `ROADMAP.md`.
-	//
-	// `ROADMAP.md` foi apagado; `git log --all -- ROADMAP.md` ainda o mostra e o disco
-	// nao. Treze localizadores de raiz neste modulo usavam-no como marco e falhavam com
-	// "go.work not found within 10 parents — is this a checkout of loopzero?" — um erro que descreve a busca e nao a
-	// causa, e que manda o leitor procurar um arquivo que o projeto decidiu nao ter.
-	//
-	// `go.work` define o workspace de nove modulos e existe por construcao: um diretorio
-	// que o contem e' a raiz por definicao, nao por convencao revogavel.
-	for i := 0; i < 10; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatal("go.work not found — is this a checkout of loopzero?")
-		}
-		dir = parent
-	}
-	t.Fatal("go.work not found within 10 parents — is this a checkout of loopzero?")
-	return ""
 }
 
 func containsSubstr(list []string, substr string) bool {

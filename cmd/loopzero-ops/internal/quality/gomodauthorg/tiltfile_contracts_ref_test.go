@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // B-019 regression test.
@@ -36,11 +38,7 @@ var reRequiredContracts = regexp.MustCompile(`github\.com/(loopzero[a-z]+)/loopz
 
 func repoRootFromTest(t *testing.T) string {
 	t.Helper()
-	// package dir -> cmd/loopzero-ops/internal/quality/gomodauthorg ; root is 5 levels up.
-	root, err := filepath.Abs(filepath.Join("..", "..", "..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
+	root := qtestutil.Root(t)
 	if _, err := os.Stat(filepath.Join(root, "Tiltfile")); err != nil {
 		t.Fatalf("repo root %q has no Tiltfile: %v", root, err)
 	}

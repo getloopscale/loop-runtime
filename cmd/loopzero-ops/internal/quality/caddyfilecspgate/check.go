@@ -428,6 +428,9 @@ func Check(cfg Config) (*Outcome, error) {
 // only inside this block defeats the bypass where a Caddyfile sprinkles CIDR
 // strings in comments while keeping trusted_proxies empty. Returns (body,
 // true) on success; ("", false) when no `trusted_proxies static` is present.
+// leadingBraceRe matches the first `{` of a block that opens after whitespace.
+var leadingBraceRe = regexp.MustCompile(`^\s*\{`)
+
 func extractTrustedProxiesBlock(content string) (string, bool) {
 	// Two canonical shapes:
 	//   (1) `trusted_proxies static <ipv4cidr> <ipv6cidr> ...` over one or more
@@ -441,20 +444,7 @@ func extractTrustedProxiesBlock(content string) (string, bool) {
 	tail := content[loc[1]:]
 	// Brace form?
 	if i := indexNonSpace(tail); i >= 0 && tail[i] == '{' {
-		depth := 1
-		start := i + 1
-		for j := start; j < len(tail); j++ {
-			switch tail[j] {
-			case '{':
-				depth++
-			case '}':
-				depth--
-				if depth == 0 {
-					return tail[start:j], true
-				}
-			}
-		}
-		return "", false
+		return qgshell.ExtractBraceBlock(tail, leadingBraceRe)
 	}
 	// Line-continuation form: read until the first un-continued newline OR
 	// the next directive-terminating closing brace at the same level. Treat

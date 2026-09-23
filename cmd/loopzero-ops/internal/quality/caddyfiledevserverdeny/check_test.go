@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // Fixtures follow the pattern from caddyfilecspgate: create a synthetic
@@ -206,7 +208,7 @@ func TestCheck_MissingCaddyfile_SKIP(t *testing.T) {
 
 func TestCheck_RealRepo_PASS(t *testing.T) {
 	// Sanity: the real repo Caddyfile passes post-fix (M18/#141 remediation).
-	repoRoot := findRepoRoot(t)
+	repoRoot := qtestutil.Root(t)
 	out, err := Check(Config{RepoRoot: repoRoot})
 	if err != nil {
 		t.Fatalf("Check error: %v", err)
@@ -214,36 +216,6 @@ func TestCheck_RealRepo_PASS(t *testing.T) {
 	if !out.Pass {
 		t.Errorf("real-repo Caddyfile should pass #141 gate; violations: %v", out.Violations)
 	}
-}
-
-func findRepoRoot(t *testing.T) string {
-	t.Helper()
-	// O MARCO E' `go.work`, e nao `ROADMAP.md`.
-	//
-	// `ROADMAP.md` era o marco ate' ser apagado — `git log --all -- ROADMAP.md` ainda
-	// o mostra, e o disco nao. Medido 2026-09-16: este teste falhava com "ROADMAP.md
-	// not found within 10 parents", um erro que descreve a busca e nao a causa, e que
-	// manda o leitor procurar um arquivo que o projeto decidiu nao ter.
-	//
-	// `go.work` e' o marco certo para ESTE repositorio: ele define o workspace de nove
-	// modulos, existe por construcao, e um diretorio que o contem e' a raiz por
-	// definicao — nao por convencao que alguem pode revogar apagando um documento.
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	for i := 0; i < 10; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatal("ROADMAP.md not found walking up")
-		}
-		dir = parent
-	}
-	t.Fatal("go.work not found within 10 parents — is this a checkout of loopzero?")
-	return ""
 }
 
 func containsViolation(vs []string, substr string) bool {

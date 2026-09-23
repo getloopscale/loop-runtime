@@ -17,32 +17,14 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // clusterRoleDecl matches a ClusterRole DECLARATION: `kind: ClusterRole` at
 // column 0. An indented `kind: ClusterRole` is a roleRef inside a
 // ClusterRoleBinding and declares nothing.
 var clusterRoleDecl = regexp.MustCompile(`(?m)^kind:[ \t]*['"]?ClusterRole['"]?[ \t]*(#.*)?$`)
-
-// repoRoot walks up to the directory holding CLAUDE.md.
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	for cwd != "/" {
-		if _, err := os.Stat(filepath.Join(cwd, "CLAUDE.md")); err == nil {
-			return cwd
-		}
-		cwd = filepath.Dir(cwd)
-	}
-	// Fail rather than skip: CLAUDE.md is tracked at the repo root, so its absence
-	// means the harness is running somewhere it cannot measure — not that there is
-	// nothing to measure. A skip here would report that as a pass.
-	t.Fatal("CLAUDE.md not found in any parent — cannot resolve repo root")
-	return ""
-}
 
 // liveClusterRoleFiles returns every file under the gate's own scanDirs that
 // declares at least one ClusterRole, derived by `kind:` rather than by name.
@@ -148,7 +130,7 @@ rules:
 // called. Any divergence is coverage the gate silently does not have.
 func TestCheck_LIVE_SelectionIsRenameInvariant(t *testing.T) {
 	skipUnlessSelectorAuditArmed(t)
-	root := repoRoot(t)
+	root := qtestutil.Root(t)
 	files := liveClusterRoleFiles(t, root)
 	if len(files) == 0 {
 		// Zero found means the finder is broken, which is the very defect this test
@@ -204,7 +186,7 @@ func runOne(t *testing.T, basename string, body []byte) bool {
 // reports PASS over the whole repository.
 func TestCheck_LIVE_FlagsLoopZeroApiBootstrapSecretsGrant(t *testing.T) {
 	skipUnlessSelectorAuditArmed(t)
-	root := repoRoot(t)
+	root := qtestutil.Root(t)
 	const target = "infra/helm/loopzero-api/templates/serviceaccount.yaml"
 	if _, err := os.Stat(filepath.Join(root, target)); err != nil {
 		// The target is tracked, so absence is a broken checkout, not a missing input.

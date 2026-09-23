@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // O escopo varrido e' DECLARADO — `Taskfile.yml` + `taskfiles/*.yml` — e os
@@ -18,7 +20,7 @@ import (
 // O numero e' medido, nao escolhido: 24 invocacoes com `--kube-context` no
 // escopo declarado, em 2026-08-18.
 func TestDenominadorDoEscopoDeclaradoNaoEncolhe(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot(t)})
+	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -34,7 +36,7 @@ func TestDenominadorDoEscopoDeclaradoNaoEncolhe(t *testing.T) {
 // PASS sobre 4 de 28 invocacoes nao e' a mesma coisa que um PASS sobre 28 de 28,
 // e o texto anterior dava os dois numeros sem nunca dizer que um e' do outro.
 func TestSummaryDizAFracaoEnaoApenasOsNumeros(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot(t)})
+	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}

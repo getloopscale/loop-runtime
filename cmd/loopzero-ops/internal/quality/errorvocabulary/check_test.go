@@ -8,27 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-)
 
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("cwd: %v", err)
-	}
-	for i := 0; i < 12; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "api", "go.mod")); err == nil {
-			return dir
-		}
-		pai := filepath.Dir(dir)
-		if pai == dir {
-			break
-		}
-		dir = pai
-	}
-	t.Fatal("nao achei a raiz do repositorio (procurei api/go.mod)")
-	return ""
-}
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+)
 
 func escrever(t *testing.T, raiz, rel, corpo string) {
 	t.Helper()
@@ -106,7 +88,7 @@ func h() {
 // ele encontra no que existe. O item registrou que nenhuma mensagem carrega termo
 // banido hoje — o gate nasce verde, e este teste e' o que sustenta essa frase.
 func TestArvoreRealEstaLimpa(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot(t)})
+	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
