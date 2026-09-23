@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 // GiteaRepoManager creates and queries repos on a Gitea instance.
@@ -22,13 +23,17 @@ type GiteaRepoManager struct {
 	client  *http.Client
 }
 
-// NewGiteaRepoManager creates a GiteaRepoManager. When client is nil,
-// http.DefaultClient is used — passing nil previously caused a nil pointer
-// panic on the first request path (source/gitea_store.go, source/gogit_store.go
-// both pass nil intentionally because they don't share a client).
+// defaultGiteaTimeout bounds one Gitea API call when the caller supplies no
+// client of its own.
+const defaultGiteaTimeout = 30 * time.Second
+
+// NewGiteaRepoManager creates a GiteaRepoManager. When client is nil (the
+// source stores pass nil because they share no client), a client with a
+// timeout is used: http.DefaultClient has none, so a hung Gitea would block
+// the upload path forever.
 func NewGiteaRepoManager(baseURL, token, orgName string, client *http.Client) *GiteaRepoManager {
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: defaultGiteaTimeout}
 	}
 	return &GiteaRepoManager{
 		baseURL: baseURL,
