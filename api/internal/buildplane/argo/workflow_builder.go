@@ -149,116 +149,57 @@ func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workf
 	if spec.Plan == nil || len(spec.Plan.Apps) == 0 {
 		return nil, fmt.Errorf("argo: WorkflowSpec.Plan must be non-nil with at least one app (legacy spec.Apps fallback deleted in T1.3 CR-2)")
 	}
-	// Group apps by `ResolveStrategyForApp`.
-	//
-	// This text used to describe a `UserDockerfileStrategy` group for
-	// `build: dockerfile` apps. That type and path were REMOVED in T2.2 —
-	// `user_dockerfile_strategy_test.go` asserts the lint step is absent — and the
-	// comment stayed in the present tense describing what no longer exists
-	// (B-157). Grouping still holds by runtime: a monorepo with node and python
-	// cannot run one's Dockerfile generation over the other.
+	// Group apps by `ResolveStrategyForApp`: a monorepo with node and python
+	// cannot run one's Dockerfile generation over the other. (This used to
+	// describe a `UserDockerfileStrategy` group for `build: dockerfile` apps;
+	// that type and path were removed in T2.2, B-157.)
 	groups := groupApps(spec.Plan.Apps, func(p deploycontracts.AppBuildPlan) (string, deploycontracts.AppSpec) {
-		app := deploycontracts.AppSpec{
-			Name: p.AppName, Type: p.AppType, Port: p.Port,
-			Path: p.AppPath, Runtime: p.Runtime,
-			Build: p.Build, Start: p.Start, Secrets: p.Secrets,
-		}
+		app := appSpecFromPlan(p)
 		return ResolveStrategyForApp(app).Name(), app
 	})
 
-	// REVIEW-AP-3: Generate per-language inline templates for mixed-language support.
-	// Each language group gets its own validate/install/build/scan/dockerfile steps.
-	//
-	// `g.Strategy.DockerfileStep(...)` dispatches per strategy, and the
-	// orchestrator has NO `if app.Build == "dockerfile"` — the Strategy pattern is
-	// the dispatch axis, and that still holds.
-	//
-	// What no longer holds: this text used to say `UserDockerfileStrategy`
-	// invokes `loopzero-dockerfile-lint`. That type left in T2.2 and the linter is
-	// invoked by no path — measured 2026-08-19, no production code emits the step
-	// and no Go reads `LOOPZERO_DOCKERFILE_LINT_IMAGE` (B-157). Every strategy now
-	// generates the Dockerfile.
-	var inlineTemplates []forge.Templatable
-	for _, g := range groups {
-		inlineTemplates = append(inlineTemplates,
-			withSuffix(g.Strategy.ValidateStep(g.Apps), g.Suffix),
-			withSuffix(g.Strategy.InstallStep(g.Apps), g.Suffix),
-			withSuffix(g.Strategy.BuildStep(g.Apps), g.Suffix),
-			withSuffix(g.Strategy.ScanStep(g.Apps), g.Suffix),
-			withSuffix(g.Strategy.DockerfileStep(g.Apps, len(spec.Plan.Apps)), g.Suffix),
-		)
+	templates, onExitName, err := b.workflowTemplates(spec, groups)
+	if err != nil {
+		return nil, err
 	}
-	// Per-app delivery templates: BuildKit for containers, S3 upload for static.
-	// Sprint 6: Each container build is followed by a cosign signing step.
-	// MEET-048: When HarborRegistryURL is set, add a mirror template per container app.
-	// Sprint 6 / T1.1: Each container build is followed by cosign signing
-	// AND an SBOM scan (syft). The SBOM step is non-fatal at the DAG level
-	// (continueOn.failed) — see buildMainDAG.
-	// T1.3 (CR-2): legacy spec.Apps else branch deleted. Build() guard at the
-	// top enforces spec.Plan != nil with non-empty Apps, so this loop is the
-	// single emission path for per-app delivery templates.
-	for _, appPlan := range spec.Plan.Apps {
-		if appPlan.DeliveryModel == "static" {
-			inlineTemplates = append(inlineTemplates, b.uploadAssetsTemplate(spec, appPlan))
-			continue
-		}
-		buildkit, err := b.buildkitTemplateFromPlan(spec, appPlan)
-		if err != nil {
-			return nil, err
-		}
-		inlineTemplates = append(inlineTemplates, buildkit)
-		inlineTemplates = append(inlineTemplates, cosignSignTemplateWithParams(CosignSignParams{
-			AppName:          appPlan.AppName,
-			ImageTag:         appPlan.ImageTag,
-			InsecureRegistry: b.infraParams.RegistryInsecure,
-			Keyless:          b.infraParams.CosignKeyless,
-			FulcioURL:        b.infraParams.CosignFulcioURL,
-			RekorURL:         b.infraParams.CosignRekorURL,
-			InsecureSkipSCT:  b.infraParams.CosignInsecureSkipSCT, // T1.2 CR-1 fix
-		}))
-		inlineTemplates = append(inlineTemplates, syftScanTemplate(
-			spec.TenantID, spec.ProjectID, spec.CommitSHA,
-			appPlan.AppName, appPlan.ImageTag, b.infraParams.RegistryInsecure,
-		))
-		// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
-		if b.infraParams.CosignAttestEnabled {
-			sbomLocalPath := fmt.Sprintf("%s/sbom-%s.cdx.json", sbomLocalDir, appPlan.AppName)
-			inlineTemplates = append(inlineTemplates, cosignAttestTemplate(CosignAttestParams{
-				AppName:          appPlan.AppName,
-				ImageTag:         appPlan.ImageTag,
-				SBOMLocalPath:    sbomLocalPath,
-				Keyless:          b.infraParams.CosignKeyless,
-				InsecureRegistry: b.infraParams.RegistryInsecure,
-				FulcioURL:        b.infraParams.CosignFulcioURL,
-				RekorURL:         b.infraParams.CosignRekorURL,
-				InsecureSkipSCT:  b.infraParams.CosignInsecureSkipSCT, // T1.2 CR-1 fix
-			}))
-		}
-		if b.infraParams.HarborRegistryURL != "" {
-			harborTag := naming.ImageTag(b.infraParams.HarborRegistryURL, spec.TenantID, spec.ProjectID, appPlan.AppName, spec.CommitSHA)
-			inlineTemplates = append(inlineTemplates, harborMirrorTemplate(appPlan.AppName, appPlan.ImageTag, harborTag))
-		}
+	volumes, err := b.buildVolumes(spec.TenantID)
+	if err != nil {
+		return nil, err
 	}
+	return b.newWorkflowCR(spec, templates, onExitName, primaryLanguage(groups), volumes), nil
+}
 
-	// T3.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
-	// Per ADR D2: register single shared observability template invoked by
-	// mirror-harbor-{app} lifecycle hooks on Failed status. Skipped when
-	// HarborRegistryURL not set (no harbor mirrors exist → hook never fires).
-	if b.infraParams.HarborRegistryURL != "" {
-		inlineTemplates = append(inlineTemplates, harborMirrorObserveTemplate())
+// appSpecFromPlan is the one conversion from a resolved AppBuildPlan to the
+// AppSpec the language strategies read.
+func appSpecFromPlan(p deploycontracts.AppBuildPlan) deploycontracts.AppSpec {
+	return deploycontracts.AppSpec{
+		Name: p.AppName, Type: p.AppType, Port: p.Port,
+		Path: p.AppPath, Runtime: p.Runtime,
+		Build: p.Build, Start: p.Start, Secrets: p.Secrets,
 	}
+}
 
-	// Build the main DAG
+// primaryLanguage labels the workflow with the first group's language.
+func primaryLanguage(groups []languageGroup) string {
+	if len(groups) == 0 {
+		return "custom"
+	}
+	return groups[0].Strategy.Name()
+}
+
+// workflowTemplates returns every template of the workflow — the main DAG,
+// the onExit DAG when there is one (its name is returned too), the
+// per-language steps and the per-app delivery steps.
+func (b *WorkflowBuilder) workflowTemplates(spec deploycontracts.WorkflowSpec, groups []languageGroup) ([]forge.Templatable, string, error) {
 	mainDAG, err := b.buildMainDAG(spec, groups)
 	if err != nil {
-		return nil, fmt.Errorf("build main DAG: %w", err)
+		return nil, "", fmt.Errorf("build main DAG: %w", err)
 	}
-
-	// Build the onExit DAG (cache save per-language).
-	// Only add onExit if there are cache tasks — Argo requires ≥1 task per DAG.
+	// The onExit DAG saves caches per language; Argo requires >= 1 task per
+	// DAG, so it is absent when no language caches.
 	onExitDAG, err := b.buildOnExitDAG(spec, groups)
 	if err != nil {
-		return nil, fmt.Errorf("build onExit DAG: %w", err)
+		return nil, "", fmt.Errorf("build onExit DAG: %w", err)
 	}
 
 	templates := []forge.Templatable{mainDAG}
@@ -267,20 +208,91 @@ func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workf
 		templates = append(templates, onExitDAG)
 		onExitName = onExitDAGName
 	}
-	templates = append(templates, inlineTemplates...)
-
-	// Primary language for label (first group)
-	primaryLanguage := "custom"
-	if len(groups) > 0 {
-		primaryLanguage = groups[0].Strategy.Name()
+	templates = append(templates, languageTemplates(groups, len(spec.Plan.Apps))...)
+	for _, appPlan := range spec.Plan.Apps {
+		delivery, err := b.appDeliveryTemplates(spec, appPlan)
+		if err != nil {
+			return nil, "", err
+		}
+		templates = append(templates, delivery...)
 	}
+	// T3.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure, ADR D2: one
+	// shared observability template invoked by the mirror-harbor-{app}
+	// lifecycle hooks on Failed. Absent without Harbor (no hook can fire).
+	if b.infraParams.HarborRegistryURL != "" {
+		templates = append(templates, harborMirrorObserveTemplate())
+	}
+	return templates, onExitName, nil
+}
 
-	volumes, err := b.buildVolumes(spec.TenantID)
+// languageTemplates emits the per-language steps (REVIEW-AP-3, mixed-language
+// support): each group gets its own validate/install/build/scan/dockerfile.
+// `DockerfileStep` dispatches per strategy — the orchestrator has no
+// `if app.Build == "dockerfile"`; every strategy now generates the Dockerfile
+// (the `loopzero-dockerfile-lint` path left in T2.2, B-157).
+func languageTemplates(groups []languageGroup, totalApps int) []forge.Templatable {
+	var templates []forge.Templatable
+	for _, g := range groups {
+		templates = append(templates,
+			withSuffix(g.Strategy.ValidateStep(g.Apps), g.Suffix),
+			withSuffix(g.Strategy.InstallStep(g.Apps), g.Suffix),
+			withSuffix(g.Strategy.BuildStep(g.Apps), g.Suffix),
+			withSuffix(g.Strategy.ScanStep(g.Apps), g.Suffix),
+			withSuffix(g.Strategy.DockerfileStep(g.Apps, totalApps), g.Suffix),
+		)
+	}
+	return templates
+}
+
+// appDeliveryTemplates emits one app's delivery templates: an upload for a
+// static app; for a container app, the BuildKit build, the cosign signature,
+// the SBOM (non-fatal at the DAG level, see appDeliveryTasks), the SLSA
+// attestation when enabled, and the Harbor mirror when configured (MEET-048).
+func (b *WorkflowBuilder) appDeliveryTemplates(spec deploycontracts.WorkflowSpec, appPlan deploycontracts.AppBuildPlan) ([]forge.Templatable, error) {
+	if appPlan.DeliveryModel == "static" {
+		return []forge.Templatable{b.uploadAssetsTemplate(spec, appPlan)}, nil
+	}
+	buildkit, err := b.buildkitTemplateFromPlan(spec, appPlan)
 	if err != nil {
 		return nil, err
 	}
+	templates := []forge.Templatable{
+		buildkit,
+		cosignSignTemplateWithParams(CosignSignParams{
+			AppName:          appPlan.AppName,
+			ImageTag:         appPlan.ImageTag,
+			InsecureRegistry: b.infraParams.RegistryInsecure,
+			Keyless:          b.infraParams.CosignKeyless,
+			FulcioURL:        b.infraParams.CosignFulcioURL,
+			RekorURL:         b.infraParams.CosignRekorURL,
+			InsecureSkipSCT:  b.infraParams.CosignInsecureSkipSCT, // T1.2 CR-1 fix
+		}),
+		syftScanTemplate(spec.TenantID, spec.ProjectID, spec.CommitSHA,
+			appPlan.AppName, appPlan.ImageTag, b.infraParams.RegistryInsecure),
+	}
+	// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
+	if b.infraParams.CosignAttestEnabled {
+		templates = append(templates, cosignAttestTemplate(CosignAttestParams{
+			AppName:          appPlan.AppName,
+			ImageTag:         appPlan.ImageTag,
+			SBOMLocalPath:    fmt.Sprintf("%s/sbom-%s.cdx.json", sbomLocalDir, appPlan.AppName),
+			Keyless:          b.infraParams.CosignKeyless,
+			InsecureRegistry: b.infraParams.RegistryInsecure,
+			FulcioURL:        b.infraParams.CosignFulcioURL,
+			RekorURL:         b.infraParams.CosignRekorURL,
+			InsecureSkipSCT:  b.infraParams.CosignInsecureSkipSCT, // T1.2 CR-1 fix
+		}))
+	}
+	if b.infraParams.HarborRegistryURL != "" {
+		harborTag := naming.ImageTag(b.infraParams.HarborRegistryURL, spec.TenantID, spec.ProjectID, appPlan.AppName, spec.CommitSHA)
+		templates = append(templates, harborMirrorTemplate(appPlan.AppName, appPlan.ImageTag, harborTag))
+	}
+	return templates, nil
+}
 
-	wf := &forge.Workflow{
+// newWorkflowCR assembles the Workflow resource around its templates.
+func (b *WorkflowBuilder) newWorkflowCR(spec deploycontracts.WorkflowSpec, templates []forge.Templatable, onExitName, language string, volumes []forge.VolumeBuilder) *forge.Workflow {
+	return &forge.Workflow{
 		GenerateName:       fmt.Sprintf("loopzero-build-%s-", spec.BuildID),
 		Entrypoint:         entrypointName,
 		OnExit:             onExitName,
@@ -310,7 +322,7 @@ func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workf
 			labelProject:     spec.ProjectID,
 			labelEnvironment: spec.Environment,
 			labelBuildID:     spec.BuildID,
-			labelLanguage:    primaryLanguage,
+			labelLanguage:    language,
 		},
 		Annotations: map[string]string{
 			// Plan 2026-05-15 T8.1 (close-all-gaps audit M08): propagate
@@ -356,152 +368,125 @@ func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workf
 		// workspace PVC stays attached for the workflow's lifetime.
 		// No explicit Affinity is needed here.
 	}
-
-	return wf, nil
 }
 
 // buildMainDAG constructs the entrypoint DAG template.
 //
-// REVIEW-AP-3: The DAG now supports mixed-language monorepos. For each language
-// group, a set of per-language steps is created (with suffix like -node, -go).
-// The dependency chain within each group is: clone → restore-cache-{lang} →
-// validate-{lang} → install-{lang} → build-{lang} → dockerfile-{lang} →
-// [per-app BuildKit tasks].
+// REVIEW-AP-3: the DAG supports mixed-language monorepos. Each language group
+// gets its own steps (suffixed -node, -python, ...), chained clone ->
+// restore-cache -> validate -> install -> build/scan -> dockerfile, then the
+// per-app delivery tasks hang off their group's dockerfile (containers) or
+// build (static) step.
 func (b *WorkflowBuilder) buildMainDAG(spec deploycontracts.WorkflowSpec, groups []languageGroup) (*forge.DAG, error) {
-	dag := &forge.DAG{Name: entrypointName}
-
-	// Step 1: clone (shared across all languages — one source bundle)
+	// The CWT downloads source from MinIO (production) or clones from Gitea
+	// (local dev): build-id is the commit SHA for the MinIO path, project-id
+	// the Gitea repo name. One clone is shared by every language.
 	tasks := []*forge.Task{
-		// The CWT downloads source from MinIO (production) or clones from Gitea (local dev).
-		// We pass both build-id (commit SHA for MinIO path) and project-id (for Gitea repo name).
 		cwtTask("clone-repo", "loopzero-clone", "clone-repo", nil, map[string]string{
 			"tenant-id":  spec.TenantID,
 			"project-id": spec.ProjectID,
 			"build-id":   spec.CommitSHA,
 		}),
 	}
-
-	// Per-language build pipeline steps
 	for _, g := range groups {
-		suffix := g.Suffix
-
-		// restore-cache per language (different cache keys: node-modules vs go-modules)
-		restoreName := "restore-cache" + suffix
-		if g.Strategy.CacheKey() != "" {
-			tasks = append(tasks, cwtTask(restoreName, "loopzero-cache-restore", "restore-cache",
-				[]string{"clone-repo"}, map[string]string{
-					"tenant-id":  spec.TenantID,
-					"project-id": spec.ProjectID,
-					"cache-key":  g.Strategy.CacheKey(),
-				}))
-		} else {
-			// No cache for this language — create a no-op dependency anchor
-			restoreName = "clone-repo"
-		}
-
-		validateName := "validate-workspace" + suffix
-		tasks = append(tasks, inlineTask(validateName, validateName, []string{"clone-repo"}))
-
-		installName := "install-deps" + suffix
-		tasks = append(tasks, inlineTask(installName, installName, []string{restoreName, validateName}))
-
-		// CODE-002 fix: security-scan now depends on install-deps (not restore-cache).
-		// Previously, pip-audit scanned an empty Python environment because install
-		// and scan ran in parallel. Now scan sees installed packages.
-		scanName := "security-scan" + suffix
-		tasks = append(tasks, inlineTask(scanName, scanName, []string{installName}))
-
-		buildName := "build-apps" + suffix
-		tasks = append(tasks, inlineTask(buildName, buildName, []string{installName}))
-
-		// CODE-008 fix: generate-dockerfile now depends on security-scan AND build-apps.
-		// Previously, scan had no downstream deps — builds with critical vulnerabilities
-		// still produced container images. Now scan is a true gate.
-		//
-		// The Dockerfile step name comes from the `dockerfileStepTemplate` constant.
-		//
-		// It used to be asked of the Strategy, because there were two answers:
-		// "generate-dockerfile" for the language strategies and "dockerfile-lint"
-		// for the bring-your-own-Dockerfile path. That path left in T2.2 and the
-		// variation collapsed (B-068); the previous comment kept describing both as
-		// if they coexisted (B-157). If there are ever two again,
-		// `TestEveryStrategyEmitsTheSameDockerfileStepName` fails and says to
-		// restore the variation point instead of hard-coding a second literal here.
-		dockerfileTemplateName := dockerfileStepTemplate
-		dockerfileName := dockerfileTemplateName + suffix
-		tasks = append(tasks, inlineTask(dockerfileName, dockerfileName, []string{buildName, scanName}))
+		tasks = append(tasks, languageTasks(spec, g)...)
 	}
-
-	// Per-app delivery — BuildKit for containers, upload for static.
-	// Depends on its language group's dockerfile step (containers) or build step (static).
-	// Sprint 6: Each container build is followed by a cosign signing step.
-	// MEET-048: When HarborRegistryURL is configured, add a mirror step (crane copy)
-	// after build-image. Mirror is best-effort (continueOn.failed=true).
-	// T1.3 (CR-2): legacy spec.Apps else branch deleted. Build() guard at the
-	// top enforces spec.Plan != nil + len(spec.Plan.Apps) > 0, so the per-app
-	// DAG task wiring has a single emission path keyed by appPlan.DeliveryModel.
+	// T1.3 (CR-2): Build() guarantees spec.Plan has apps, so this is the one
+	// emission path for per-app tasks, keyed by appPlan.DeliveryModel.
 	for _, appPlan := range spec.Plan.Apps {
-		// Route by the app's Strategy. This text used to cite
-		// `build:dockerfile → UserDockerfileStrategy`, a path removed in T2.2
-		// (B-157) — routing is by runtime today.
-		// so suffix and dockerfile-step name match the actual emitted templates.
-		app := deploycontracts.AppSpec{
-			Name: appPlan.AppName, Type: appPlan.AppType, Port: appPlan.Port,
-			Path: appPlan.AppPath, Runtime: appPlan.Runtime,
-			Build: appPlan.Build, Start: appPlan.Start,
-		}
-		strategy := ResolveStrategyForApp(app)
-		suffix := suffixForStrategy(groups, strategy.Name())
-		dfTaskName := dockerfileStepTemplate + suffix
-		if appPlan.DeliveryModel == "static" {
-			taskName := fmt.Sprintf("deliver-artifact-%s", appPlan.AppName)
-			tasks = append(tasks, inlineTask(taskName, taskName, []string{"build-apps" + suffix}))
-			continue
-		}
-		buildTaskName := naming.BuildImageStepName(appPlan.AppName)
-		tasks = append(tasks, inlineTask(buildTaskName, buildTaskName, []string{dfTaskName}))
-		signTaskName := naming.SignStepName(appPlan.AppName)
-		tasks = append(tasks, inlineTask(signTaskName, signTaskName, []string{buildTaskName}))
-		// Sprint 6 / T1.1: SBOM scan after sign. continueOn.failed so
-		// SBOM failure does NOT block the deploy (best-effort observability,
-		// not a hard gate at this point).
-		sbomTaskName := naming.SBOMStepName(appPlan.AppName)
-		sbomTask := inlineTask(sbomTaskName, sbomTaskName, []string{signTaskName})
-		sbomTask.ContinueOn = &model.ContinueOn{Failed: true}
-		tasks = append(tasks, sbomTask)
-		// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
-		// v1.1 EC-NEW-5: attest depends on BOTH sign + sbom.
-		// SLSA L3 requires linked attestation; without dep on sign,
-		// attest could run before sig in Rekor → broken chain.
-		// Gated by InfraParams.CosignAttestEnabled — disabled by
-		// default until Sigstore active (T1.4) + operator flips.
-		if b.infraParams.CosignAttestEnabled {
-			attestTaskName := naming.AttestStepName(appPlan.AppName)
-			attestTask := inlineTask(attestTaskName, attestTaskName, []string{signTaskName, sbomTaskName})
-			// NO continueOn — per ADR D1, attestation failure FAILS the
-			// build (signed image alone is INSUFFICIENT for SLSA L3).
-			tasks = append(tasks, attestTask)
-		}
-		// MEET-048: dual-push mirror to Harbor (best-effort)
-		if b.infraParams.HarborRegistryURL != "" {
-			mirrorTaskName := fmt.Sprintf("mirror-harbor-%s", appPlan.AppName)
-			mirrorTask := inlineTask(mirrorTaskName, mirrorTaskName, []string{buildTaskName})
-			mirrorTask.ContinueOn = &model.ContinueOn{Failed: true}
-			// T3.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
-			// Per ADR D2: lifecycle hook fires harbor-mirror-observe
-			// template when this task reaches Failed phase. Restores
-			// signal to silent best-effort mirror failures.
-			mirrorTask.Hooks = map[string]model.LifecycleHook{
-				"exit": harborMirrorObservabilityHook(mirrorTaskName, appPlan.AppName, spec.TenantID, b.infraParams.HarborRegistryURL),
-			}
-			tasks = append(tasks, mirrorTask)
-		}
+		tasks = append(tasks, b.appDeliveryTasks(spec, groups, appPlan)...)
 	}
 
+	dag := &forge.DAG{Name: entrypointName}
 	if err := dag.AddTasks(tasks...); err != nil {
 		return nil, err
 	}
 	return dag, nil
+}
+
+// languageTasks wires one language group's steps after the shared clone.
+func languageTasks(spec deploycontracts.WorkflowSpec, g languageGroup) []*forge.Task {
+	suffix := g.Suffix
+	var tasks []*forge.Task
+
+	// restore-cache per language (different cache keys: node-modules vs pip);
+	// a language without a cache anchors on the clone instead.
+	restoreName := "clone-repo"
+	if g.Strategy.CacheKey() != "" {
+		restoreName = "restore-cache" + suffix
+		tasks = append(tasks, cwtTask(restoreName, "loopzero-cache-restore", "restore-cache",
+			[]string{"clone-repo"}, map[string]string{
+				"tenant-id":  spec.TenantID,
+				"project-id": spec.ProjectID,
+				"cache-key":  g.Strategy.CacheKey(),
+			}))
+	}
+
+	validateName := "validate-workspace" + suffix
+	installName := "install-deps" + suffix
+	// CODE-002 fix: security-scan depends on install-deps, so it sees the
+	// installed packages.
+	scanName := "security-scan" + suffix
+	buildName := "build-apps" + suffix
+	// CODE-008 fix: the Dockerfile step depends on security-scan AND
+	// build-apps, so the scan is a true gate. Its name is the
+	// `dockerfileStepTemplate` constant: the variation between strategies
+	// collapsed in T2.2 (B-068, B-157), and
+	// `TestEveryStrategyEmitsTheSameDockerfileStepName` fails if it returns.
+	dockerfileName := dockerfileStepTemplate + suffix
+	return append(tasks,
+		inlineTask(validateName, validateName, []string{"clone-repo"}),
+		inlineTask(installName, installName, []string{restoreName, validateName}),
+		inlineTask(scanName, scanName, []string{installName}),
+		inlineTask(buildName, buildName, []string{installName}),
+		inlineTask(dockerfileName, dockerfileName, []string{buildName, scanName}),
+	)
+}
+
+// appDeliveryTasks wires one app's delivery tasks after its language group's
+// steps: deliver-artifact for a static app; for a container app build-image,
+// sign-image, the SBOM, the attestation when enabled and the Harbor mirror
+// when configured.
+func (b *WorkflowBuilder) appDeliveryTasks(spec deploycontracts.WorkflowSpec, groups []languageGroup, appPlan deploycontracts.AppBuildPlan) []*forge.Task {
+	suffix := suffixForStrategy(groups, ResolveStrategyForApp(appSpecFromPlan(appPlan)).Name())
+	if appPlan.DeliveryModel == "static" {
+		taskName := fmt.Sprintf("deliver-artifact-%s", appPlan.AppName)
+		return []*forge.Task{inlineTask(taskName, taskName, []string{"build-apps" + suffix})}
+	}
+
+	buildTaskName := naming.BuildImageStepName(appPlan.AppName)
+	signTaskName := naming.SignStepName(appPlan.AppName)
+	sbomTaskName := naming.SBOMStepName(appPlan.AppName)
+	// Sprint 6 / T1.1: the SBOM runs after the signature with
+	// continueOn.failed — best-effort observability, not a hard gate.
+	sbomTask := inlineTask(sbomTaskName, sbomTaskName, []string{signTaskName})
+	sbomTask.ContinueOn = &model.ContinueOn{Failed: true}
+	tasks := []*forge.Task{
+		inlineTask(buildTaskName, buildTaskName, []string{dockerfileStepTemplate + suffix}),
+		inlineTask(signTaskName, signTaskName, []string{buildTaskName}),
+		sbomTask,
+	}
+
+	// v1.1 EC-NEW-5: attest depends on BOTH sign and sbom — SLSA L3 needs the
+	// attestation linked to a signature already in Rekor. No continueOn: per
+	// ADR D1 an attestation failure FAILS the build.
+	if b.infraParams.CosignAttestEnabled {
+		attestTaskName := naming.AttestStepName(appPlan.AppName)
+		tasks = append(tasks, inlineTask(attestTaskName, attestTaskName, []string{signTaskName, sbomTaskName}))
+	}
+	// MEET-048: best-effort dual-push mirror to Harbor. T3.1 / ADR D2: a
+	// lifecycle hook fires harbor-mirror-observe when it fails, so a silent
+	// best-effort failure still leaves a signal.
+	if b.infraParams.HarborRegistryURL != "" {
+		mirrorTaskName := fmt.Sprintf("mirror-harbor-%s", appPlan.AppName)
+		mirrorTask := inlineTask(mirrorTaskName, mirrorTaskName, []string{buildTaskName})
+		mirrorTask.ContinueOn = &model.ContinueOn{Failed: true}
+		mirrorTask.Hooks = map[string]model.LifecycleHook{
+			"exit": harborMirrorObservabilityHook(mirrorTaskName, appPlan.AppName, spec.TenantID, b.infraParams.HarborRegistryURL),
+		}
+		tasks = append(tasks, mirrorTask)
+	}
+	return tasks
 }
 
 // buildOnExitDAG constructs the finalize DAG (always runs, even on failure).
