@@ -152,3 +152,18 @@ func TestPlanTier_StringMatchesUnderlying(t *testing.T) {
 			PlanTierUnknown.String())
 	}
 }
+
+func TestPlanTierDisplayName_NamesEveryTierAndKeepsUnknownValuesVisible(t *testing.T) {
+	cases := map[PlanTier]string{
+		PlanTierStarter:    "Starter",
+		PlanTierPro:        "Pro",
+		PlanTierTeam:       "Team",
+		PlanTierEnterprise: "Enterprise",
+		PlanTier("growth"): "growth",
+	}
+	for tier, want := range cases {
+		if got := tier.DisplayName(); got != want {
+			t.Errorf("PlanTier(%q).DisplayName() = %q, want %q", tier, got, want)
+		}
+	}
+}

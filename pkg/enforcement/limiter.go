@@ -277,25 +277,12 @@ func (l *PlanLimiter) limits(ctx context.Context, tenantID string, plan domain.P
 func FormatLimitError(result LimitResult, upgradeURL string) map[string]interface{} {
 	return map[string]interface{}{
 		"code":        "PLAN_LIMIT_EXCEEDED",
-		"message":     fmt.Sprintf("Plan limit reached: %s allows %d %s (current: %d). Upgrade your plan to continue.", displayPlan(result.Plan), result.Limit, displayMetric(result.Metric), result.Current),
+		"message":     fmt.Sprintf("Plan limit reached: %s allows %d %s (current: %d). Upgrade your plan to continue.", domain.PlanTier(result.Plan).DisplayName(), result.Limit, displayMetric(result.Metric), result.Current),
 		"plan":        result.Plan,
 		"limit":       result.Metric,
 		"current":     result.Current,
 		"max":         result.Limit,
 		"upgrade_url": upgradeURL,
-	}
-}
-
-func displayPlan(plan string) string {
-	switch plan {
-	case "starter":
-		return "Starter"
-	case "pro":
-		return "Pro"
-	case "team":
-		return "Team"
-	default:
-		return plan
 	}
 }
 

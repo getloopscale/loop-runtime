@@ -20,6 +20,8 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+
+	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // stackDepth bounds frame capture in WrapWithStack — 32 frames is
@@ -451,20 +453,10 @@ func NewReplicasExceedPlan(plan string, limit, requested int, appName string) *L
 	}
 }
 
-// displayPlanName returns a human-friendly plan name.
+// displayPlanName returns the product name of a plan tier; the naming rule
+// lives once, on domain.PlanTier.
 func displayPlanName(plan string) string {
-	switch plan {
-	case "starter":
-		return "Starter"
-	case "pro":
-		return "Pro"
-	case "team":
-		return "Team"
-	case "enterprise":
-		return "Enterprise"
-	default:
-		return plan
-	}
+	return domain.PlanTier(plan).DisplayName()
 }
 
 // NewLockTimeout creates a LOCK_TIMEOUT error with optional detail.

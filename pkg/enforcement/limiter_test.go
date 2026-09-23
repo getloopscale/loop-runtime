@@ -710,3 +710,13 @@ func containsHelper(s, substr string) bool {
 	}
 	return false
 }
+
+// Every plan tier renders the same display name everywhere; enterprise used to
+// leak as the raw "enterprise" here while pkg/errors rendered "Enterprise".
+func TestFormatLimitError_UsesTheCanonicalPlanDisplayName(t *testing.T) {
+	msg := FormatLimitError(LimitResult{Plan: "enterprise", Metric: "seats", Limit: 50, Current: 50}, "")["message"].(string)
+
+	if !contains(msg, "Enterprise allows 50 team members") {
+		t.Fatalf("message = %q, want the Enterprise display name", msg)
+	}
+}

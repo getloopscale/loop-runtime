@@ -128,6 +128,24 @@ func (p PlanTier) IsValid() bool {
 	}
 }
 
+// DisplayName returns the product name of the tier as shown to users
+// ("Starter", "Pro", "Team", "Enterprise"). An unrecognised value is returned
+// as-is rather than invented, so an unexpected tier stays visible.
+func (p PlanTier) DisplayName() string {
+	switch p {
+	case PlanTierStarter:
+		return "Starter"
+	case PlanTierPro:
+		return "Pro"
+	case PlanTierTeam:
+		return "Team"
+	case PlanTierEnterprise:
+		return "Enterprise"
+	default:
+		return string(p)
+	}
+}
+
 // String returns the wire-format string used in DB columns, CRDs, and
 // JSON responses. PlanTierUnknown returns the empty string by design —
 // JSON marshallers + database drivers preserve that as NULL where
