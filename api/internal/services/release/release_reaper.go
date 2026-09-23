@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -230,7 +229,7 @@ func (r *ReleaseReaper) reap(ctx context.Context) int {
 			}
 
 			eventData := events.SafeJSONMarshal(map[string]string{
-				"deploy_id":  deriveDeployIDFromRelease(s.ID),
+				"deploy_id":  deriveDeployID(s.ID),
 				"release_id": s.ID,
 				"status":     "failed",
 				"error":      reason,
@@ -250,16 +249,6 @@ func (r *ReleaseReaper) reap(ctx context.Context) int {
 		r.logger.Info("release reaper: cycle complete", "reaped", reaped)
 	}
 	return reaped
-}
-
-// deriveDeployIDFromRelease creates a deploy_id from a release ID.
-// Uses the same logic as deriveDeployID in release_activator.go.
-func deriveDeployIDFromRelease(releaseID string) string {
-	hex := strings.TrimPrefix(releaseID, "rel-")
-	if len(hex) >= 8 {
-		return "d-" + hex[:8]
-	}
-	return "d-" + hex
 }
 
 // PostgresStaleReleaseChecker implements ReleaseStaleChecker using PostgreSQL.
