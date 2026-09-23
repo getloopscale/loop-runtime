@@ -296,11 +296,14 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 	// (strict CRD separation), but they still need an ArgoCD Application
 	// + AppProject destination to be deployable. Emitting them here keeps
 	// the AppProject single-source-of-truth.
-	previewEnvs, perr := r.listPreviewEnvsForTenant(ctx, tenant.Name)
-	if perr != nil {
-		log.FromContext(ctx).Info("argocd: preview env list failed (proceeding without)",
-			"tenant", tenant.Name, "error", perr.Error())
-		previewEnvs = nil
+	//
+	// A failed List is fatal for this step. The same slice decides which
+	// Applications the prune below protects, and an empty stand-in would
+	// delete every live preview of the tenant (the ArgoCD finalizer cascades
+	// the delete into the workload).
+	previewEnvs, err := r.listPreviewEnvsForTenant(ctx, tenant.Name)
+	if err != nil {
+		return fmt.Errorf("argocd appproject %s: %w", tenant.Name, err)
 	}
 	destNamespaces, err := buildAppProjectDestNamespaces(tenant, previewEnvs)
 	if err != nil {
