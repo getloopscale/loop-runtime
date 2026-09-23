@@ -44,16 +44,16 @@ var reservedEnvKeys = map[string]struct{}{
 // runtimeHijackEnvPrefixes blocks any key starting with one of these strings.
 // Order is insignificant — matching is OR over the slice.
 //
-// Esta e' hoje a UNICA copia da regra. Existiram outras duas — em
-// `services/deploycontracts/build_plan.go` e em `tools/loopzero-dockerfile-lint` — sobre o
-// SOMBREAMENTO do que a plataforma injeta (LOOPZERO_/AWS_/DO_/GOOGLE_/KUBERNETES_) em BUILD ARGS.
+// This is today the ONLY copy of the rule. Two others existed — in
+// `services/deploycontracts/build_plan.go` and in `tools/loopzero-dockerfile-lint` — about
+// SHADOWING what the platform injects (LOOPZERO_/AWS_/DO_/GOOGLE_/KUBERNETES_) in BUILD ARGS.
 //
-// As duas sairam: a ferramenta em 2026-08-19 (B-157), porque o caminho de Dockerfile fornecido
-// pelo usuario foi removido na T2.2; e a de `build_plan.go` no mesmo dia (B-094), porque iterava
-// `AppSpec.Env`, campo que nenhum site de producao populava. O laco nunca iterou. Guardar uma
-// regra sobre uma estrada vazia e' aparencia de protecao, nao protecao.
+// Both left: the tool on 2026-08-19 (B-157), because the user-supplied Dockerfile path was
+// removed in T2.2; and the `build_plan.go` one the same day (B-094), because it iterated
+// `AppSpec.Env`, a field no production site populated. The loop never iterated. Guarding a
+// rule on an empty road is the appearance of protection, not protection.
 //
-// ESTA lista e' alcancavel e roda de fato: it guards `ServiceEntry.Env` from
+// THIS list is reachable and actually runs: it guards `ServiceEntry.Env` from
 // services.json, which reaches the workload container env
 // (validator_services.go → services_input_mapping.go → renderer_deployment.go).
 // It stops a tenant from HIJACKING THE PROCESS — see the

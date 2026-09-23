@@ -182,10 +182,10 @@ func TestReservedEnv_SymbolNameDoesNotCollideWithFindSec004(t *testing.T) {
 	// The DECLARATION is what collides, not a mention: the doc-comment names the
 	// sibling rule on purpose, and forbidding that would remove the very sentence
 	// that keeps the next reader from confusing them.
-	// os.ReadDir + ParseFile em vez de parser.ParseDir (SA1019, depreciado desde Go
-	// 1.25 por nao considerar build tags). A alternativa que o aviso sugere,
-	// golang.org/x/tools/go/packages, seria uma dependencia nova para varrer um unico
-	// diretorio de arquivos deste pacote — a stdlib resolve, entao ela resolve.
+	// os.ReadDir + ParseFile instead of parser.ParseDir (SA1019, deprecated since Go
+	// 1.25 for ignoring build tags). The alternative the warning suggests,
+	// golang.org/x/tools/go/packages, would be a new dependency to scan a single
+	// directory of this package's files — the stdlib covers it, so it does.
 	fset := token.NewFileSet()
 	entries, err := os.ReadDir(".")
 	if err != nil {

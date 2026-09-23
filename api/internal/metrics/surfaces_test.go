@@ -13,57 +13,57 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/surfaces"
 )
 
-func TestPublishSurfaces_ZeroParaDesligadaUmParaLigada(t *testing.T) {
+func TestPublishSurfaces_ZeroForDisabledOneForEnabled(t *testing.T) {
 	PublishSurfaces([]surfaces.Surface{
-		{Name: "github_webhook", Enabled: false, Reason: "GITHUB_WEBHOOK_SECRET ausente"},
+		{Name: "github_webhook", Enabled: false, Reason: "GITHUB_WEBHOOK_SECRET missing"},
 		{Name: "billing", Enabled: true},
 	})
 
 	if got := testutil.ToFloat64(SurfaceEnabled.WithLabelValues("github_webhook")); got != 0 {
-		t.Errorf("superfície desligada = %v, esperado 0", got)
+		t.Errorf("disabled surface = %v, want 0", got)
 	}
 	if got := testutil.ToFloat64(SurfaceEnabled.WithLabelValues("billing")); got != 1 {
-		t.Errorf("superfície ligada = %v, esperado 1", got)
+		t.Errorf("enabled surface = %v, want 1", got)
 	}
 }
 
-func TestPublishSurfaces_LigadaEmiteSerieEmVezDeAusencia(t *testing.T) {
-	// Ausência de série e zero são indistinguíveis para quem alerta. Uma
-	// superfície LIGADA precisa emitir 1 explicitamente, senão o painel não
-	// consegue diferenciar "está no ar" de "esta versão nem conhece esta
-	// superfície" — que é a ambiguidade que o B-104 ataca.
-	PublishSurfaces([]surfaces.Surface{{Name: "so_ligada", Enabled: true}})
+func TestPublishSurfaces_EnabledEmitsASeriesInsteadOfAbsence(t *testing.T) {
+	// An absent series and a zero are indistinguishable to an alert. An ENABLED
+	// surface must emit 1 explicitly, or the dashboard cannot tell "it is up"
+	// from "this version does not even know this surface" — the ambiguity B-104
+	// addresses.
+	PublishSurfaces([]surfaces.Surface{{Name: "only_enabled", Enabled: true}})
 
 	n := testutil.CollectAndCount(SurfaceEnabled)
 	if n == 0 {
-		t.Fatal("nenhuma série coletada para uma superfície ligada")
+		t.Fatal("no series collected for an enabled surface")
 	}
 }
 
-func TestSurfaceEnabled_RazaoNaoEhLabel(t *testing.T) {
-	// A razão é texto livre. Texto livre em label é cardinalidade ilimitada,
-	// que é como um coletor cai. Ela pertence ao resumo de arranque.
-	desc := SurfaceEnabled.WithLabelValues("qualquer").Desc().String()
-	for _, proibido := range []string{"reason", "razao", "razão", "detail"} {
-		if strings.Contains(strings.ToLower(desc), proibido) {
-			t.Errorf("o descritor da métrica carrega o label proibido %q: %s", proibido, desc)
+func TestSurfaceEnabled_ReasonIsNotALabel(t *testing.T) {
+	// The reason is free text. Free text in a label is unbounded cardinality,
+	// which is how a collector falls over. It belongs in the startup summary.
+	desc := SurfaceEnabled.WithLabelValues("any").Desc().String()
+	for _, forbidden := range []string{"reason", "detail"} {
+		if strings.Contains(strings.ToLower(desc), forbidden) {
+			t.Errorf("the metric descriptor carries the forbidden label %q: %s", forbidden, desc)
 		}
 	}
 	if !strings.Contains(desc, "surface") {
-		t.Errorf("o descritor não declara o label `surface`: %s", desc)
+		t.Errorf("the descriptor does not declare the `surface` label: %s", desc)
 	}
 }
 
-func TestSurfaceEnabled_NomeCanonico(t *testing.T) {
-	// O nome é contrato de operação: painel e alerta apontam para ele.
+func TestSurfaceEnabled_CanonicalName(t *testing.T) {
+	// The name is an operations contract: dashboards and alerts point at it.
 	if !strings.Contains(SurfaceEnabled.WithLabelValues("x").Desc().String(), "loopzero_api_surface_enabled") {
-		t.Error("nome da métrica não é `loopzero_api_surface_enabled`")
+		t.Error("the metric is not named `loopzero_api_surface_enabled`")
 	}
 }
 
-func TestPublishSurfaces_ListaVaziaNaoEntraEmPanico(t *testing.T) {
-	// Um binário que não registrasse superfície nenhuma é improvável, mas
-	// publicar nada tem de ser um no-op silencioso, não um crash no arranque.
+func TestPublishSurfaces_EmptyListDoesNotPanic(t *testing.T) {
+	// A binary registering no surface at all is unlikely, but publishing nothing
+	// must be a silent no-op, not a crash at startup.
 	PublishSurfaces(nil)
 	PublishSurfaces([]surfaces.Surface{})
 }

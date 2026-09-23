@@ -10,34 +10,34 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
-// A degradacao silenciosa do teto de custo tem de virar estado do sistema.
+// The silent degradation of the cost cap must become system state.
 //
-// B-033: quando o agregador nao sobe, `cost_counters` fica vazia e TODO teto libera — e o
-// unico sinal era uma linha de log no boot de outro processo. Uma metrica com a razao como
-// rotulo torna isso consultavel: `unmeasured` alto significa que a protecao nao esta
-// avaliando nada, e `under_cap` zerado significa que ela nunca avaliou.
+// B-033: when the aggregator does not come up, `cost_counters` stays empty and EVERY cap
+// lets everything through — and the only signal was a log line at another process's boot.
+// A metric with the reason as a label makes that queryable: a high `unmeasured` means the
+// protection is evaluating nothing, and a zero `under_cap` means it never evaluated.
 func TestCostCapDecisions_IsRegisteredWithReasonLabel(t *testing.T) {
 	CostCapDecisionsTotal.WithLabelValues("build_minutes", "unmeasured").Inc()
 	CostCapDecisionsTotal.WithLabelValues("build_minutes", "under_cap").Inc()
 
 	n := testutil.CollectAndCount(CostCapDecisionsTotal)
 	if n < 2 {
-		t.Fatalf("esperava as duas series coletaveis, veio %d", n)
+		t.Fatalf("expected both series to be collectable, got %d", n)
 	}
 
 	if v := testutil.ToFloat64(CostCapDecisionsTotal.WithLabelValues("build_minutes", "unmeasured")); v < 1 {
-		t.Errorf("a serie `unmeasured` nao registrou: %v", v)
+		t.Errorf("the `unmeasured` series did not record: %v", v)
 	}
 }
 
-// O nome e os rotulos sao contrato de alerta: mudar em silencio quebra o painel de quem
-// depende deles.
+// The name and labels are an alerting contract: changing them silently breaks the
+// dashboards that depend on them.
 func TestCostCapDecisions_NameAndLabelsAreStable(t *testing.T) {
 	desc := CostCapDecisionsTotal.WithLabelValues("x", "y").Desc().String()
 
-	for _, esperado := range []string{"loopzero_cost_cap_decisions_total", "metric", "reason"} {
-		if !strings.Contains(desc, esperado) {
-			t.Errorf("descritor perdeu %q: %s", esperado, desc)
+	for _, expected := range []string{"loopzero_cost_cap_decisions_total", "metric", "reason"} {
+		if !strings.Contains(desc, expected) {
+			t.Errorf("descriptor lost %q: %s", expected, desc)
 		}
 	}
 }

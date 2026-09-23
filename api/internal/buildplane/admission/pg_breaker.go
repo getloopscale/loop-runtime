@@ -35,25 +35,25 @@ import (
 // breaker — reads do not worsen the saturation the breaker is trying to
 // prevent.
 //
-// LIGADO EM 2026-08-19 (B-054). Ate' essa data este breaker era construido, iniciado e parado
-// no shutdown — e `Allow()` nao tinha chamador de producao. Ele media a saturacao, disparava e
-// rearmava com histerese, registrava em log, e nenhuma decisao consultava.
+// WIRED ON 2026-08-19 (B-054). Until that date this breaker was built, started and stopped on
+// shutdown — and `Allow()` had no production caller. It measured saturation, tripped and re-armed
+// with hysteresis, logged, and no decision consulted it.
 //
-// Quem barrava requisicao era `api/internal/middleware/pgcircuitbreaker.go`, um portao percentual
-// SEM histerese. O instrumento que resolvia a oscilacao estava desligado e o que decidia tinha o
-// problema.
+// What rejected requests was `api/internal/middleware/pgcircuitbreaker.go`, a percentage gate
+// WITHOUT hysteresis. The instrument that solved the flapping was switched off and the one
+// deciding had the problem.
 //
-// Hoje o middleware consulta este breaker atraves de `middleware.PoolGate`, uma interface
-// declarada pelo CONSUMIDOR (`rules/architecture.md` § DIP) e satisfeita por `Allow()` sem que
-// este pacote saiba dela. A fiacao e' `cmd/setup_server.go` → `server.Config.PGPoolGate` →
+// Today the middleware consults this breaker through `middleware.PoolGate`, an interface declared
+// by the CONSUMER (`rules/architecture.md` § DIP) and satisfied by `Allow()` without this package
+// knowing about it. The wiring is `cmd/setup_server.go` → `server.Config.PGPoolGate` →
 // `server/router.go`.
 //
-// Consequencia para quem for procurar chamadores: uma varredura por IMPORTADORES deste pacote
-// nao encontra o middleware, porque ele nao o importa. Quem prova a ligacao e'
-// `TestOPortaoDoPoolEstaLigadoAoMiddleware`, que segue a atribuicao em vez do import.
+// Consequence for whoever looks for callers: a scan for IMPORTERS of this package does not find
+// the middleware, because it does not import it. What proves the wiring is
+// `TestPoolGateIsWiredIntoTheMiddleware`, which follows the assignment instead of the import.
 //
-// Uma ressalva que continua valendo: "deixar leitura passar" e' IMPOSTO pelo middleware, que
-// decide por metodo HTTP; o `Allow()` daqui nao ve a requisicao e nao pode impor isso sozinho.
+// One caveat still holds: "let reads through" is ENFORCED by the middleware, which decides by
+// HTTP method; `Allow()` here does not see the request and cannot enforce it alone.
 type PGPoolBreaker struct {
 	pool *pgxpool.Pool
 	cfg  BreakerConfig

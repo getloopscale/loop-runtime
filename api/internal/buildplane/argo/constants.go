@@ -18,14 +18,15 @@ const (
 	// to match the canonical LoopZeroKit framework requirement.
 	// Canonical 2026-06-16: node:22.12.0 (full Debian bookworm) for glibc
 	// compatibility with rollup native binaries (Alpine + musl breaks them
-	// per npm bug #4828). Toda forma `set -<flags>o pipefail` — a emitida por
-	// shellgen.SetE e a escrita a mao em scripts.go — e saneada em
-	// wrapWithLoopZeroMarkers (loopzero_log.go) para rodar sob /bin/sh -> dash no Debian.
+	// per npm bug #4828). Every `set -<flags>o pipefail` form — the one
+	// shellgen.SetE emits and the ones scripts.go writes by hand — is sanitised
+	// in wrapWithLoopZeroMarkers (loopzero_log.go) to run under /bin/sh -> dash on Debian.
 	//
-	// A afirmacao anterior falava so da forma literal de shellgen.SetE, e por isso era
-	// falsa: scripts.go escreve `set -uo pipefail` sem o `e`, essa forma escapava do
-	// saneador, e no dash a opcao ilegal MATA a concha na linha 1 com codigo 2. Ficou
-	// invisivel enquanto o status morria no cano do tee (B-153).
+	// The previous statement covered only shellgen.SetE's literal form, and was
+	// therefore false: scripts.go writes `set -uo pipefail` without the `e`, that
+	// form escaped the sanitiser, and under dash the illegal option KILLS the
+	// shell on line 1 with status 2. It stayed invisible while the status died in
+	// the tee pipe (B-153).
 	imageNode     = "node:22.12.0"
 	imageGolang   = "golang:1.22-alpine"
 	imagePython   = "python:3.12-alpine"

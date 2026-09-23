@@ -24,7 +24,7 @@ func runInContainerShell(t *testing.T, script string) int {
 		if ok := asExitError(err, &ee); ok {
 			return ee.ExitCode()
 		}
-		t.Fatalf("execução falhou por outro motivo: %v", err)
+		t.Fatalf("execution failed for another reason: %v", err)
 	}
 	return 0
 }
@@ -48,7 +48,7 @@ func TestWrapper_PropagatesNonZeroExit(t *testing.T) {
 exit 1`)
 
 	if rc := runInContainerShell(t, wrapped); rc == 0 {
-		t.Fatal("um passo que sai 1 reportou 0 — o status morreu no pipeline do tee")
+		t.Fatal("a step that exits 1 reported 0 — the status died in the tee pipeline")
 	}
 }
 
@@ -58,7 +58,7 @@ func TestWrapper_PreservesTheExactCode(t *testing.T) {
 	wrapped := wrapWithLoopZeroMarkers("build-apps", "exit 3")
 
 	if rc := runInContainerShell(t, wrapped); rc != 3 {
-		t.Fatalf("esperava código 3 preservado, veio %d", rc)
+		t.Fatalf("expected status 3 preserved, got %d", rc)
 	}
 }
 
@@ -67,25 +67,25 @@ func TestWrapper_KeepsSuccessSuccessful(t *testing.T) {
 	wrapped := wrapWithLoopZeroMarkers("clone-repo", "echo ok")
 
 	if rc := runInContainerShell(t, wrapped); rc != 0 {
-		t.Fatalf("passo bem-sucedido reprovou com %d", rc)
+		t.Fatalf("a successful step failed with %d", rc)
 	}
 }
 
 // The markers are the reason the wrapper exists; propagating the status must not cost them.
 func TestWrapper_StillEmitsMarkersOnFailure(t *testing.T) {
-	wrapped := wrapWithLoopZeroMarkers("install-deps", `echo "detalhe do erro" >&2
+	wrapped := wrapWithLoopZeroMarkers("install-deps", `echo "error detail" >&2
 exit 1`)
 
 	out, _ := exec.Command("sh", "-c", wrapped).CombinedOutput()
 	s := string(out)
 	if !strings.Contains(s, "level=error") {
-		t.Fatalf("marcador de erro ausente na saída:\n%s", s)
+		t.Fatalf("error marker missing from the output:\n%s", s)
 	}
-	// Exigir o texto DENTRO de uma linha de marcador. A revisao provou que a assercao
-	// anterior passava mesmo com o replay desabilitado: a string chegava pelo stderr cru
-	// via tee, nao pelo marcador que o usuario realmente le no painel.
-	if !strings.Contains(s, `level=error msg="detalhe do erro"`) {
-		t.Fatalf("a última saída do passo deve chegar como marcador, não só no fluxo cru:\n%s", s)
+	// Require the text INSIDE a marker line. Review proved the previous assertion
+	// passed even with the replay disabled: the string arrived through raw stderr
+	// via tee, not through the marker the user actually reads in the dashboard.
+	if !strings.Contains(s, `level=error msg="error detail"`) {
+		t.Fatalf("the step's last output must arrive as a marker, not only in the raw stream:\n%s", s)
 	}
 }
 
@@ -103,10 +103,10 @@ func TestUnsupportedRuntimeStepsActuallyFail(t *testing.T) {
 	}
 	for name, c := range steps {
 		if len(c.Args) == 0 {
-			t.Fatalf("%s: container sem script", name)
+			t.Fatalf("%s: container without a script", name)
 		}
 		if rc := runInContainerShell(t, c.Args[len(c.Args)-1]); rc == 0 {
-			t.Errorf("%s: passo de falha-fechada reportou sucesso", name)
+			t.Errorf("%s: a fail-closed step reported success", name)
 		}
 	}
 }
@@ -141,25 +141,25 @@ func TestRealStrategySteps_EmitNoUnguardedPipefail(t *testing.T) {
 		}
 		for step, c := range steps {
 			if len(c.Args) == 0 {
-				t.Fatalf("%s/%s: container sem script", tc.name, step)
+				t.Fatalf("%s/%s: container without a script", tc.name, step)
 			}
 			for _, line := range strings.Split(c.Args[len(c.Args)-1], "\n") {
 				trimmed := strings.TrimSpace(line)
-				// Comentario nao executa. Sem isto o proprio comentario do invólucro,
-				// que descreve o defeito, dispara o detector — a mesma armadilha que o
-				// gate runbook-parity ja pagou nesta base.
+				// A comment does not execute. Without this, the wrapper's own comment,
+				// which describes the defect, trips the detector — the same trap the
+				// runbook-parity gate already paid for in this codebase.
 				if strings.HasPrefix(trimmed, "#") {
 					continue
 				}
 				if !strings.Contains(trimmed, "o pipefail") {
 					continue
 				}
-				// A unica forma tolerada e a tentativa protegida em subshell, que o dash
-				// simplesmente ignora em vez de morrer.
+				// The only tolerated form is the guarded attempt in a subshell, which
+				// dash simply ignores instead of dying.
 				if strings.HasPrefix(trimmed, "(set -o pipefail)") {
 					continue
 				}
-				t.Errorf("%s/%s: %q chega cru na concha do container — o dash mata a concha aqui",
+				t.Errorf("%s/%s: %q reaches the container shell raw — dash kills the shell here",
 					tc.name, step, trimmed)
 			}
 		}
@@ -172,10 +172,10 @@ func TestSanitizer_PreservesOtherFlags(t *testing.T) {
 	out := wrapWithLoopZeroMarkers("build-apps", "set -uo pipefail\necho ok")
 
 	if !strings.Contains(out, "set -u") {
-		t.Fatalf("a opcao -u foi perdida na sanitizacao:\n%s", out)
+		t.Fatalf("the -u option was lost in sanitisation:\n%s", out)
 	}
 	if !strings.Contains(out, "(set -o pipefail) 2>/dev/null || true") {
-		t.Fatalf("a tentativa protegida de pipefail sumiu:\n%s", out)
+		t.Fatalf("the guarded pipefail attempt is gone:\n%s", out)
 	}
 }
 
@@ -193,10 +193,10 @@ func TestWrapper_GuardsAgainstAStatusThatIsNotANumber(t *testing.T) {
 	out := wrapWithLoopZeroMarkers("build-apps", "echo ok")
 
 	if !strings.Contains(out, "*[!0-9]*") {
-		t.Fatalf("sem guarda para status vazio ou nao-numerico:\n%s", out)
+		t.Fatalf("no guard for an empty or non-numeric status:\n%s", out)
 	}
 	if !strings.Contains(out, "__loopzero_status=1") {
-		t.Fatalf("a guarda deve normalizar para o fechamento declarado (1):\n%s", out)
+		t.Fatalf("the guard must normalise to the declared failure (1):\n%s", out)
 	}
 }
 
@@ -206,6 +206,6 @@ func TestWrapper_StatusFileAndStatusAreDistinctNames(t *testing.T) {
 	out := wrapWithLoopZeroMarkers("build-apps", "echo ok")
 
 	if strings.Contains(out, `__loopzero_rc=$(mktemp`) && strings.Contains(out, "__loopzero_rc=$?") {
-		t.Fatal("__loopzero_rc designa o caminho do arquivo E o status — um exit antecipado quebra o outro em silêncio")
+		t.Fatal("__loopzero_rc names both the file path AND the status — an early exit silently breaks the other")
 	}
 }

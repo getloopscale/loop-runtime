@@ -32,10 +32,10 @@ type LanguageStrategy interface {
 	// ScanStep returns a template that runs security scanning.
 	ScanStep(apps []deploycontracts.AppSpec) *forge.Container
 	// DockerfileStep returns a template that produces / validates the Dockerfile
-	// before BuildKit consumes it. Toda estrategia devolve hoje o container de
-	// geracao canonica; o texto anterior descrevia tambem um retorno
-	// `dockerfile-lint` para `UserDockerfileStrategy`, tipo removido em T2.2
-	// (B-157). Ver `dockerfileStepTemplate`, que registra o colapso da variacao.
+	// before BuildKit consumes it. Every strategy now returns the canonical
+	// generation container; this text used to also describe a `dockerfile-lint`
+	// return for `UserDockerfileStrategy`, a type removed in T2.2 (B-157). See
+	// `dockerfileStepTemplate`, which records the collapse of that variation.
 	// totalApps is the count across ALL groups for output path naming
 	// (matches dockerfilePathForApp / BuildKit consumer).
 	//
@@ -109,20 +109,22 @@ func (s *unsupportedStrategy) Name() string        { return "unsupported" }
 func (s *unsupportedStrategy) CacheKey() string    { return "" }
 func (s *unsupportedStrategy) CacheDirs() []string { return nil }
 
-// failStep emite o passo que falha alto quando o runtime nao e' da pilha fixa.
+// failStep emits the step that fails loudly when the runtime is not part of the
+// fixed stack.
 //
-// CAMPO AUSENTE e VALOR NAO SUPORTADO sao erros diferentes e tinham a mesma
-// mensagem: um `loopzero.yaml` sem `runtime` produzia `runtime "" is not supported`,
-// que acusa o usuario de ter escrito errado algo que ele nao escreveu, e nao diz
-// o que escrever (B-154). Medido ao vivo em 2026-08-18, no ultimo elo da cadeia
-// do B-152.
+// A MISSING field and an UNSUPPORTED value are different errors and used to
+// share one message: a `loopzero.yaml` without `runtime` produced
+// `runtime "" is not supported`, which accuses the user of mistyping something
+// they never wrote and does not say what to write (B-154). Measured live on
+// 2026-08-18, at the last link of the B-152 chain. Both messages are English,
+// the language of every other build message.
 func (s *unsupportedStrategy) failStep(name string) *forge.Container {
 	var msg string
 	if strings.TrimSpace(s.runtime) == "" {
-		msg = "loopzero: o loopzero.yaml nao declara `runtime` para este app — " +
-			"acrescente `runtime: python` ou `runtime: node`. " +
-			"LoopZeroCloud implanta a pilha fixa LoopZeroKit, e o runtime nao tem default: " +
-			"adivinhar aqui construiria a imagem errada em silencio."
+		msg = "loopzero: loopzero.yaml does not declare a `runtime` for this app — " +
+			"add `runtime: python` or `runtime: node`. " +
+			"LoopZeroCloud deploys the fixed LoopZeroKit stack and the runtime has no default: " +
+			"guessing here would silently build the wrong image."
 	} else {
 		msg = fmt.Sprintf("loopzero: runtime %q is not supported — LoopZeroCloud deploys the fixed LoopZeroKit stack (python, node)", s.runtime)
 	}
@@ -234,24 +236,24 @@ func (s *PythonStrategy) DockerfileStep(apps []deploycontracts.AppSpec, totalApp
 	return canonicalDockerfileStepOrFail("python", apps, totalApps)
 }
 
-// dockerfileStepTemplate e' o nome do passo que TODA estrategia emite hoje.
+// dockerfileStepTemplate is the name of the step EVERY strategy emits today.
 //
-// Isto ja' foi um ponto de variacao de verdade: o caminho "traga seu Dockerfile"
-// emitia `dockerfile-lint` enquanto as estrategias de linguagem emitiam
-// `generate-dockerfile`, e `buildMainDAG` precisava perguntar a estrategia qual
-// passo ela emitia para ligar as dependencias. Esse caminho foi REMOVIDO em T2.2
-// — `user_dockerfile_strategy_test.go` assere a ausencia do passo — e a variacao
-// colapsou sem que nada registrasse.
+// This was once a real variation point: the bring-your-own-Dockerfile path
+// emitted `dockerfile-lint` while the language strategies emitted
+// `generate-dockerfile`, and `buildMainDAG` had to ask the strategy which step
+// it emitted to wire the dependencies. That path was REMOVED in T2.2 —
+// `user_dockerfile_strategy_test.go` asserts the step is absent — and the
+// variation collapsed without anything recording it.
 //
-// O que restou era pior que um literal: uma funcao que CONSTRUIA UM CONTAINER
-// DESCARTAVEL so' para ler o nome dele (B-068). Um objeto descartado nao diz a
-// leitor nenhum se ainda ha' variacao; ele obriga cada um a ir conferir.
+// What was left was worse than a literal: a function that BUILT A THROWAWAY
+// CONTAINER only to read its name (B-068). A discarded object tells no reader
+// whether there is still variation; it forces each one to go and check.
 //
-// Se a variacao voltar — um novo modo de build que emita outro passo — o lugar de
-// restaurar o ponto de variacao e' aqui, e `TestTodaEstrategiaEmiteOMesmoNomeDePassoDeDockerfile`
-// reprova ate' que alguem o faca. NAO contorne fixando um literal no DAG: era
-// exatamente essa a armadilha registrada no `CLAUDE.md` quando os dois nomes
-// coexistiam.
+// If the variation returns — a new build mode that emits another step — this
+// is the place to restore the variation point, and
+// `TestEveryStrategyEmitsTheSameDockerfileStepName` fails until someone does.
+// Do NOT work around it by hard-coding a literal in the DAG: that is exactly
+// the trap `CLAUDE.md` recorded while the two names coexisted.
 const dockerfileStepTemplate = "generate-dockerfile"
 
 // ---------------------------------------------------------------------------

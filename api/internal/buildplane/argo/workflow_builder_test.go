@@ -123,8 +123,8 @@ func TestWorkflowBuilder_Build_SpecFields(t *testing.T) {
 	}
 
 	// F-13 (CHG-2026-04-29-DOGFOOD T5.5) — PodGC.Strategy = OnPodCompletion
-	// remove pods de step individuais (Success OU Error) após DeleteDelayDuration.
-	// Sem isso, pods Failed acumulam até GC do Workflow inteiro (24h).
+	// removes individual step pods (Success OR Error) after DeleteDelayDuration.
+	// Without it, Failed pods pile up until the whole Workflow is GC'd (24h).
 	if wf.PodGC == nil {
 		t.Fatal("F-13 regression: PodGC must be set on Workflow spec")
 	}

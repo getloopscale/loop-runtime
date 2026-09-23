@@ -83,8 +83,8 @@ func cosignAttestTemplate(p CosignAttestParams) *forge.Script {
 	// Build cosign attest command — keyed vs keyless variants per Keyless flag.
 	// Keyless mode (M2 of plan 2026-05-27-M07-to-3-85): uses Fulcio short-lived
 	// cert from projected SA OIDC token, NOT static --key. Discovered LIVE
-	// 2026-05-27 attest pod FAIL — original ship sempre usava --key mesmo em keyless.
-	// InsecureRegistry adds --allow-http-registry --allow-insecure-registry para k3d.
+	// 2026-05-27 attest pod FAIL — the original ship always passed --key, even in keyless mode.
+	// InsecureRegistry adds --allow-http-registry --allow-insecure-registry for k3d.
 	insecureFlag := ""
 	if p.InsecureRegistry {
 		insecureFlag = " --allow-http-registry --allow-insecure-registry"

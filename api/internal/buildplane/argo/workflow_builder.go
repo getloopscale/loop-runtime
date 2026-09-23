@@ -149,14 +149,14 @@ func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workf
 	if spec.Plan == nil || len(spec.Plan.Apps) == 0 {
 		return nil, fmt.Errorf("argo: WorkflowSpec.Plan must be non-nil with at least one app (legacy spec.Apps fallback deleted in T1.3 CR-2)")
 	}
-	// Agrupa apps por `ResolveStrategyForApp`.
+	// Group apps by `ResolveStrategyForApp`.
 	//
-	// O texto anterior descrevia um grupo `UserDockerfileStrategy` para apps
-	// `build: dockerfile`. Esse tipo e esse caminho foram REMOVIDOS em T2.2 —
-	// `user_dockerfile_strategy_test.go` assere a ausencia do passo de lint — e o
-	// comentario ficou no presente descrevendo o que nao existe mais (B-157). O
-	// agrupamento continua valendo pelo runtime: um monorepo com node e python nao
-	// pode rodar a geracao de Dockerfile de um sobre o outro.
+	// This text used to describe a `UserDockerfileStrategy` group for
+	// `build: dockerfile` apps. That type and path were REMOVED in T2.2 —
+	// `user_dockerfile_strategy_test.go` asserts the lint step is absent — and the
+	// comment stayed in the present tense describing what no longer exists
+	// (B-157). Grouping still holds by runtime: a monorepo with node and python
+	// cannot run one's Dockerfile generation over the other.
 	groups := groupApps(spec.Plan.Apps, func(p deploycontracts.AppBuildPlan) (string, deploycontracts.AppSpec) {
 		app := deploycontracts.AppSpec{
 			Name: p.AppName, Type: p.AppType, Port: p.Port,
@@ -169,15 +169,15 @@ func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workf
 	// REVIEW-AP-3: Generate per-language inline templates for mixed-language support.
 	// Each language group gets its own validate/install/build/scan/dockerfile steps.
 	//
-	// `g.Strategy.DockerfileStep(...)` despacha por estrategia, e o orquestrador
-	// NAO tem `if app.Build == "dockerfile"` — o padrao Strategy e' o eixo de
-	// despacho, e essa parte segue valendo.
+	// `g.Strategy.DockerfileStep(...)` dispatches per strategy, and the
+	// orchestrator has NO `if app.Build == "dockerfile"` — the Strategy pattern is
+	// the dispatch axis, and that still holds.
 	//
-	// O que nao vale mais: o texto anterior dizia que a `UserDockerfileStrategy`
-	// invoca o `loopzero-dockerfile-lint`. Esse tipo saiu em T2.2 e o linter nao e'
-	// invocado por caminho nenhum — medido em 2026-08-19, nenhum codigo de
-	// producao emite o passo e `LOOPZERO_DOCKERFILE_LINT_IMAGE` nao e' lida por
-	// nenhum Go (B-157). Hoje todas as estrategias geram o Dockerfile.
+	// What no longer holds: this text used to say `UserDockerfileStrategy`
+	// invokes `loopzero-dockerfile-lint`. That type left in T2.2 and the linter is
+	// invoked by no path — measured 2026-08-19, no production code emits the step
+	// and no Go reads `LOOPZERO_DOCKERFILE_LINT_IMAGE` (B-157). Every strategy now
+	// generates the Dockerfile.
 	var inlineTemplates []forge.Templatable
 	for _, g := range groups {
 		inlineTemplates = append(inlineTemplates,
@@ -282,16 +282,16 @@ func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workf
 			SecondsAfterSuccess:    forge.Ptr(ttlAfterSuccess),
 			SecondsAfterFailure:    forge.Ptr(ttlAfterFailure),
 		},
-		// F-13 (CHG-2026-04-29-DOGFOOD T5.5) — `OnPodCompletion` deleta o pod
-		// individual após cada step finalizar (Success OU Error). Sem isso,
-		// pods de step com Error ficavam acumulando na ns `argo` até o
-		// Workflow inteiro ser GC'd via TTLStrategy (default 4h success /
-		// 24h failure) — observado: 7+ pods Error pós iter 12.
-		// `DeleteDelayDuration: 5m` mantém pod visível 5 minutos para
-		// inspeção (`kubectl logs`/`describe`) antes do delete — janela
-		// suficiente para debug local + curta o suficiente para evitar
-		// acúmulo. Em produção, ttlAfterFailure (24h) ainda preserva o
-		// Workflow completo + artifacts em S3, então debug deep continua OK.
+		// F-13 (CHG-2026-04-29-DOGFOOD T5.5) — `OnPodCompletion` deletes each
+		// step's pod once the step finishes (Success OR Error). Without it,
+		// Error step pods piled up in the `argo` namespace until the whole
+		// Workflow was GC'd via TTLStrategy (default 4h success / 24h
+		// failure) — observed: 7+ Error pods after iter 12.
+		// `DeleteDelayDuration: 5m` keeps the pod visible for 5 minutes for
+		// inspection (`kubectl logs`/`describe`) before deletion — long enough
+		// for local debugging, short enough to avoid pile-up. In production,
+		// ttlAfterFailure (24h) still keeps the whole Workflow and its S3
+		// artifacts, so deep debugging still works.
 		PodGC: &forge.PodGC{
 			Strategy:            "OnPodCompletion",
 			DeleteDelayDuration: "5m",
@@ -409,15 +409,15 @@ func (b *WorkflowBuilder) buildMainDAG(spec deploycontracts.WorkflowSpec, groups
 		// Previously, scan had no downstream deps — builds with critical vulnerabilities
 		// still produced container images. Now scan is a true gate.
 		//
-		// O nome do passo de Dockerfile vem da constante `dockerfileStepTemplate`.
+		// The Dockerfile step name comes from the `dockerfileStepTemplate` constant.
 		//
-		// Ele ja' foi perguntado a Strategy, porque havia duas respostas:
-		// "generate-dockerfile" para as estrategias de linguagem e "dockerfile-lint"
-		// para o caminho "traga seu Dockerfile". Esse caminho saiu em T2.2 e a
-		// variacao colapsou (B-068); o comentario anterior seguia descrevendo as
-		// duas como se coexistissem (B-157). Se voltar a haver duas,
-		// `TestTodaEstrategiaEmiteOMesmoNomeDePassoDeDockerfile` reprova e manda
-		// restaurar o ponto de variacao em vez de fixar um segundo literal aqui.
+		// It used to be asked of the Strategy, because there were two answers:
+		// "generate-dockerfile" for the language strategies and "dockerfile-lint"
+		// for the bring-your-own-Dockerfile path. That path left in T2.2 and the
+		// variation collapsed (B-068); the previous comment kept describing both as
+		// if they coexisted (B-157). If there are ever two again,
+		// `TestEveryStrategyEmitsTheSameDockerfileStepName` fails and says to
+		// restore the variation point instead of hard-coding a second literal here.
 		dockerfileTemplateName := dockerfileStepTemplate
 		dockerfileName := dockerfileTemplateName + suffix
 		tasks = append(tasks, inlineTask(dockerfileName, dockerfileName, []string{buildName, scanName}))
@@ -432,9 +432,9 @@ func (b *WorkflowBuilder) buildMainDAG(spec deploycontracts.WorkflowSpec, groups
 	// top enforces spec.Plan != nil + len(spec.Plan.Apps) > 0, so the per-app
 	// DAG task wiring has a single emission path keyed by appPlan.DeliveryModel.
 	for _, appPlan := range spec.Plan.Apps {
-		// Roteia pela Strategy do app. O texto anterior citava
-		// `build:dockerfile → UserDockerfileStrategy`, caminho removido em T2.2
-		// (B-157) — hoje o roteamento e' por runtime.
+		// Route by the app's Strategy. This text used to cite
+		// `build:dockerfile → UserDockerfileStrategy`, a path removed in T2.2
+		// (B-157) — routing is by runtime today.
 		// so suffix and dockerfile-step name match the actual emitted templates.
 		app := deploycontracts.AppSpec{
 			Name: appPlan.AppName, Type: appPlan.AppType, Port: appPlan.Port,

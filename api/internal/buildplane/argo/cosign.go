@@ -140,7 +140,7 @@ fi
 echo "Signing image: %s@${DIGEST}"
 
 # Sign with cosign (key-based — cluster does not have OIDC provider for keyless)
-# LOCAL ONLY (LP-003): k3d service account tokens não aceitos por public Fulcio.
+# LOCAL ONLY (LP-003): public Fulcio does not accept k3d service account tokens.
 # Production GHA path (helm-charts.yml) uses keyless. Track-2 (in-cluster Argo) deferred to Sprint 9+ per MEET-2026-05-03-063.
 cosign sign --yes%s --key %s/cosign.key \
   -a "build-system=loopzero" \

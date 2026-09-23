@@ -126,9 +126,9 @@ func ValidateServicesJSONNative(content string) (*ServicesManifest, error) {
 		// uploading user). Legacy Field/Message scalars are set from the first
 		// leaf for backward-compat with consumers that haven't migrated to the
 		// Errors slice.
-		// errors.As e nao assercao direta: um erro embrulhado em qualquer ponto da
-		// cadeia derrubaria a assercao, e o usuario receberia uma mensagem generica
-		// no lugar da lista de erros por campo que esta funcao existe para produzir.
+		// errors.As rather than a direct assertion: an error wrapped anywhere in
+		// the chain would defeat the assertion, and the user would get a generic
+		// message instead of the per-field error list this function exists to produce.
 		var asValidErr *jsonschema.ValidationError
 		if errors.As(err, &asValidErr) {
 			fieldErrors := flattenJSONSchemaCauses(asValidErr)

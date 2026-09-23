@@ -106,7 +106,7 @@ func TestCanonicalDockerfile_Deterministic(t *testing.T) {
 	first := mustDockerfile(t, "node", app)
 	for i := 0; i < 20; i++ {
 		if got := mustDockerfile(t, "node", app); got != first {
-			t.Fatal("canonicalDockerfile deve ser deterministico")
+			t.Fatal("canonicalDockerfile must be deterministic")
 		}
 	}
 }

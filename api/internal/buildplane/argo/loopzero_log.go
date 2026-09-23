@@ -37,14 +37,14 @@ import (
 // Build / Sign / Deliver / Other. Keeping the mapping in api/internal/events as
 // the single source of truth avoids drift between pipeline and UI.
 
-// pipefailRE casa qualquer forma de set -<flags>o pipefail, nao so a literal do shellgen.
+// pipefailRE matches every `set -<flags>o pipefail` form, not only shellgen's literal.
 //
-// B-153 (revisao): o saneador substituia a string exata "set -euo pipefail". Mas scripts.go
-// escreve "set -uo pipefail" a mao, sem o e, e essa forma escapava. A imagem do Node e
-// Debian, cujo /bin/sh e dash, e set e builtin especial: a opcao ilegal MATA a concha na
-// primeira linha com codigo 2. Enquanto o status morria no cano do tee isso ficava
-// invisivel; ao propagar o status, todo build Node passaria a reprovar no security-scan —
-// trocando "nenhum passo consegue falhar" por "nenhum build Node consegue passar".
+// B-153 (review): the sanitiser replaced the exact string "set -euo pipefail". But
+// scripts.go writes "set -uo pipefail" by hand, without the e, and that form escaped. The
+// Node image is Debian, whose /bin/sh is dash, and set is a special builtin: the illegal
+// option KILLS the shell on the first line with status 2. While the status died in the tee
+// pipe this was invisible; once the status propagated, every Node build would have failed
+// at security-scan — trading "no step can fail" for "no Node build can pass".
 var pipefailRE = regexp.MustCompile(`set -([a-zA-Z]*)o pipefail`)
 
 // expandPipefail rewrites one match into the POSIX-safe equivalent, preserving the other
@@ -81,17 +81,17 @@ func expandPipefail(match string) string {
 //     the marker regex parser (Layer 4). The user finally sees WHY the
 //     build failed in the LogsTab without needing operator debug mode.
 //
-// O status do passo NAO depende de pipefail. Ele e capturado dentro do bloco, antes do
-// cano, e o invólucro termina com esse valor.
+// The step's status does NOT depend on pipefail. It is captured inside the block, before
+// the pipe, and the wrapper exits with that value.
 //
-// Este paragrafo dizia o contrario ate 2026-08-18: que pipefail era o que fazia o status
-// atravessar o cano para o tee, e que a nao-propagacao em dash puro era "rare in our
-// stack". As duas afirmacoes eram falsas, e da forma mais cara possivel — a nao-propagacao
-// era 100% dos passos, porque a tentativa de pipefail estava entre parenteses e morria com
-// o subshell. Medido ao vivo em B-153: cinco passos de falha-fechada reportaram Succeeded.
+// This paragraph said the opposite until 2026-08-18: that pipefail was what carried the
+// status through the pipe to tee, and that non-propagation under plain dash was "rare in
+// our stack". Both statements were false, in the most expensive way — non-propagation hit
+// 100% of steps, because the pipefail attempt sat in parentheses and died with the
+// subshell. Measured live in B-153: five fail-closed steps reported Succeeded.
 //
-// A tentativa protegida continua, agora pelo que de fato vale: onde a concha suporta
-// pipefail, um comando falho no meio de um cano DENTRO do script do usuario e detectado.
+// The guarded attempt remains, for what it is actually worth: where the shell supports
+// pipefail, a command failing mid-pipe INSIDE the user's script is detected.
 func wrapWithLoopZeroMarkers(stepName, script string) string {
 	phase := events.PhaseGroupForStep(stepName)
 	display := humanizeStepName(stepName)
@@ -128,19 +128,18 @@ __loopzero_on_exit() {
   rm -f "$__loopzero_log" 2>/dev/null || true
 }
 trap __loopzero_on_exit EXIT
-# O status do passo e capturado DENTRO do bloco, antes do pipe.
+# The step's status is captured INSIDE the block, before the pipe.
 #
-# B-153: aqui o script corria como um pipeline para o tee, e havia um set -o pipefail
-# dentro de parenteses. Duas coisas erradas ao mesmo tempo: o status de um pipeline POSIX
-# e o do ULTIMO comando (o tee, que sempre sucede), e a opcao pipefail ligada num subshell
-# e descartada junto com ele. Medido ao vivo: TODO passo construido por buildContainer
-# saia 0 fizesse o que fizesse — os cinco passos de falha-fechada do runtime nao suportado
-# reportaram Succeeded, e o build seguiu sem Dockerfile ate morrer com uma mensagem que
-# nao nomeava nada disso.
+# B-153: the script used to run as a pipeline into tee, with a set -o pipefail inside
+# parentheses. Two things were wrong at once: a POSIX pipeline's status is the LAST
+# command's (tee, which always succeeds), and a pipefail set in a subshell is discarded
+# with it. Measured live: EVERY step built by buildContainer exited 0 whatever it did —
+# the five fail-closed steps of an unsupported runtime reported Succeeded, and the build
+# went on without a Dockerfile until it died with a message naming none of this.
 #
-# A forma abaixo e POSIX (ash/dash/bash): o script roda num subshell, o status dele e
-# gravado por um echo que corre no bloco externo — nao abortado, porque o set -e do script
-# fica confinado ao subshell — e o shell termina com esse status.
+# The form below is POSIX (ash/dash/bash): the script runs in a subshell, its status is
+# recorded by an echo in the outer block — not aborted, because the script's set -e is
+# confined to the subshell — and the shell exits with that status.
 {
   (
 %[4]s
@@ -148,9 +147,9 @@ trap __loopzero_on_exit EXIT
   echo $? > "$__loopzero_rc_file"
 } 2>&1 | tee -a "$__loopzero_log"
 __loopzero_status=$(cat "$__loopzero_rc_file" 2>/dev/null || true)
-# Um arquivo VAZIO faz o cat sair 0, entao o fallback de erro nao cobre esse caso — e o
-# shell recusa um exit sem numero com 2. Fecha do mesmo jeito, mas com um valor que nao e o
-# que este codigo declara, e que manda quem depura procurar um passo inexistente.
+# An EMPTY file makes cat exit 0, so the error fallback does not cover that case — and the
+# shell rejects an exit with no number with 2. That still fails closed, but with a value
+# this code does not declare, sending whoever debugs it after a step that does not exist.
 case "$__loopzero_status" in ''|*[!0-9]*) __loopzero_status=1 ;; esac
 rm -f "$__loopzero_rc_file" 2>/dev/null || true
 exit "$__loopzero_status"

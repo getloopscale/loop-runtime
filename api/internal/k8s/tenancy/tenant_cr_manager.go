@@ -317,11 +317,11 @@ func applyTenantSpec(t *apiv1.Tenant, spec ports.TenantCRSpec) {
 		MaxStorage:          resource.MustParse("20Gi"),
 		MaxBuildConcurrency: 2,
 	}
-	// Environments: CRD declares `environments` em spec.required com MinItems=0.
-	// Slice nil sem omitempty serializa como "environments":null → admission rejeita
-	// (required + null inválido). Inicializar como slice vazio força JSON
-	// "environments":[] — válido per MinItems=0 e satisfaz required.
-	// EnvironmentEnsurer appenda a entrada de production logo após EnsureTenant.
+	// Environments: the CRD declares `environments` in spec.required with MinItems=0.
+	// A nil slice without omitempty serialises as "environments":null and admission
+	// rejects it (required + null is invalid). Initialising an empty slice forces
+	// "environments":[] — valid per MinItems=0 and satisfies required.
+	// EnvironmentEnsurer appends the production entry right after EnsureTenant.
 	if t.Spec.Environments == nil {
 		t.Spec.Environments = []apiv1.TenantEnvironmentEntry{}
 	}

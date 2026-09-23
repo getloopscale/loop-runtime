@@ -41,7 +41,7 @@ func TestUploadSendsASignedPathStylePutForAKeyNeedingEncoding(t *testing.T) {
 	store := newStore(t, srv.URL, "SECRET")
 
 	// Act
-	err := store.Upload(context.Background(), "loopzero-builds", "tn-1/source/my file é.bundle", strings.NewReader("payload"))
+	err := store.Upload(context.Background(), "loopzero-builds", "tn-1/source/my file é.bundle", strings.NewReader("payload")) // english-only: a non-ASCII key is the case under test
 
 	// Assert
 	if err != nil {

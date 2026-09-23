@@ -11,8 +11,8 @@ import (
 // TestBuildRuntimeLogQL_M2CanonicalAndLegacyMatched — T2.2 of plan
 // 2026-06-11-code-review-remediation. Post-M2 (2026-06-09) the canonical
 // namespace formula is `loopzero-{tenant}-{project}-{env}` per
-// pkg/naming.Namespace (sponsor verbatim "TUDO DEVERIA esta separado
-// por projeto" 2026-06-07). The Loki client was emitting the legacy
+// pkg/naming.Namespace (sponsor verbatim "TUDO DEVERIA esta separado // english-only: verbatim sponsor quote
+// por projeto" 2026-06-07). // english-only: verbatim sponsor quote The Loki client was emitting the legacy
 // 3-segment form `loopzero-{tenant}-{env}`, so logs for any M2-shaped
 // namespace silently disappeared from /logs queries.
 //
@@ -80,13 +80,13 @@ func TestBuildRuntimeLogQL_M2CanonicalShapeIsCorrect_T22(t *testing.T) {
 	if !strings.Contains(got, expectedM2) {
 		t.Errorf("expected M2 namespace %q in LogQL: got %q", expectedM2, got)
 	}
-	// A alternativa legada de dois segmentos foi deletada: namespaces de tenant caem na
-	// retenção padrão de 168h do Loki (só secrets-system tem o stream de 90 dias) e o
-	// rename M2 é de 2026-06-12 — aqueles logs expiraram semanas atrás. O seletor tem de
-	// ser igualdade exata, e não pode reintroduzir a forma antiga.
-	legacyDeletado := `"loopzero-tn-x-staging-eu-1"`
-	if strings.Contains(got, legacyDeletado) {
-		t.Errorf("o seletor legado de dois segmentos voltou: %q", got)
+	// The legacy two-segment alternative was deleted: tenant namespaces fall under Loki's
+	// default 168h retention (only secrets-system has the 90-day stream) and the M2 rename
+	// dates from 2026-06-12 — those logs expired weeks ago. The selector must be an exact
+	// match, and must not reintroduce the old form.
+	deletedLegacy := `"loopzero-tn-x-staging-eu-1"`
+	if strings.Contains(got, deletedLegacy) {
+		t.Errorf("the legacy two-segment selector is back: %q", got)
 	}
 }
 

@@ -108,14 +108,14 @@ func applyAll(s string) (string, int) {
 	return s, replacements
 }
 
-// Text higieniza uma string solta — mensagem de erro, motivo de falha — antes de
-// ela cruzar a fronteira da API.
+// Text sanitises a loose string — an error message, a failure reason — before it
+// crosses the API boundary.
 //
-// `ScrubEvent` cobre o evento de timeline, que era o unico caminho que existia
-// quando este pacote nasceu. Uma mensagem de falha de build sai por outro caminho
-// e chegava ao usuario como CONSTANTE, sem o motivo, justamente para nao arriscar
-// vazar termo interno (B-152). Com isto ela pode carregar o motivo: a mesma tabela
-// de substituicoes que protege o evento protege a mensagem.
+// `ScrubEvent` covers the timeline event, which was the only path that existed
+// when this package was born. A build failure message leaves by another path and
+// used to reach the user as a CONSTANT, without the reason, precisely to avoid
+// leaking an internal term (B-152). With this it can carry the reason: the same
+// replacement table that protects the event protects the message.
 func Text(s string) string {
 	out, _ := applyAll(s)
 	return out

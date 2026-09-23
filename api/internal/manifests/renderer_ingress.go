@@ -49,13 +49,13 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 	// Cert + IngressRoute names use the project-scoped resource name so two
 	// projects with same app name don't share a cert secret (Achado #17).
 	//
-	// #277: o nome vem de naming.AppCertSecretName, não de um Sprintf local. O exposure
-	// controller precisa procurar exatamente este Secret, e derivar o mesmo nome por duas
-	// fórmulas diferentes foi o que manteve todo ExposedRoute em Pending por 27 dias.
+	// #277: the name comes from naming.AppCertSecretName, not from a local Sprintf. The
+	// exposure controller must look up exactly this Secret, and deriving the same name with
+	// two different formulas is what kept every ExposedRoute Pending for 27 days.
 	tlsSecretName, certErr := naming.AppCertSecretName(ri.ProjectID, app.Name)
 	if certErr != nil {
-		// Fail-loud: um nome inválido aqui produziria um Certificate que o controller
-		// nunca encontraria — exatamente o modo de falha silenciosa da #277.
+		// Fail loud: an invalid name here would produce a Certificate the controller
+		// never finds — exactly the silent failure mode of #277.
 		panic(fmt.Sprintf("render: cert secret name for %s/%s: %v", ri.ProjectID, app.Name, certErr))
 	}
 

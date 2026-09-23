@@ -109,8 +109,8 @@ type Config struct {
 	// CosignKeyless=false (default): keyed mode via cosign-signing-key Secret.
 	// CosignKeyless=true: keyless via Fulcio + Rekor + projected SA token.
 	// Requires Sigstore stack provisioned on build cluster (per plan M2 Phase 7).
-	// Without this wire, helm values bonitos viram pod env mas InfraParams default
-	// fica false (keyed) — silent teatro pattern "Implemented but not wired" do CLAUDE.md.
+	// Without this wire, the helm values become pod env but InfraParams stays at its
+	// default false (keyed) — the silent "Implemented but not wired" pattern from CLAUDE.md.
 	CosignKeyless       bool
 	CosignAttestEnabled bool   // SLSA L3 SBOM-to-image attestation; requires CosignKeyless=true
 	CosignFulcioURL     string // Override default Fulcio URL when CosignKeyless=true. Empty = cosign default (sigstore public).

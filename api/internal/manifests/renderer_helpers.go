@@ -80,7 +80,7 @@ func intPtr(v int) *int { return &v }
 // reflects that uniformly so no env type needs special-case branching.
 //
 // J-23 sponsor-directed canonical refactor 2026-06-07 (verbatim
-// "TUDO DEVERIA esta separado por projeto"): single uniform formula,
+// "TUDO DEVERIA esta separado por projeto"): single uniform formula, // english-only: verbatim sponsor quote
 // no if/else for previews. Thin wrapper over pkg/naming.Namespace so
 // the renderer is the only place that emits the namespace string;
 // downstream consumers (tenant_gitops, preview controller, ArgoCD

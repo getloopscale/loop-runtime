@@ -216,8 +216,8 @@ func buildRuntimeLogQL(queryKey string) (string, error) {
 	}
 	// T2.2 of plan 2026-06-11-code-review-remediation: post-M2 canonical
 	// namespace formula is `loopzero-{tenant}-{project}-{env}` per
-	// pkg/naming.Namespace (sponsor verbatim "TUDO DEVERIA esta separado
-	// por projeto" 2026-06-07). Pre-T2.2 this client emitted only the
+	// pkg/naming.Namespace (sponsor verbatim "TUDO DEVERIA esta separado // english-only: verbatim sponsor quote
+	// por projeto" 2026-06-07). // english-only: verbatim sponsor quote Pre-T2.2 this client emitted only the
 	// legacy `loopzero-{tenant}-{env}` form, so logs for any M2-shaped
 	// namespace silently disappeared from /logs queries.
 	//
