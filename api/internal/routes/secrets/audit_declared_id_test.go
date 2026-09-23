@@ -19,7 +19,7 @@ import (
 // log had to know which routes hid the id where; the handler knows.
 func TestSecretsSetDeclaresProjectAsResourceID(t *testing.T) {
 	// Arrange.
-	h := NewSecretHandler(&fakeSecretStore2{})
+	h := NewSecretHandler(&fakeSecretStore2{}, &lockCountingFake{})
 	body := `{"name":"DB_URL","value":"redacted","environment":"production","app":"api"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets?project=my-app", bytes.NewBufferString(body))
 	req = routestest.WithAuditSlot(routestest.WithAuth(req, routestest.DefaultUserContext()))

@@ -42,7 +42,7 @@ func TestSecretsRoute(t *testing.T) {
 				{Name: "REDIS_URL", Environment: "production", App: "api"},
 			},
 		}
-		handler := secrets.NewSecretHandler(store)
+		handler := secrets.NewSecretHandler(store, &recordingLocker{})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/secrets?env=production&project=proj-123", nil).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -75,7 +75,7 @@ func TestSecretsRoute(t *testing.T) {
 		store := &fakeSecretStore{
 			secrets: []secrets.SecretMetadata{},
 		}
-		handler := secrets.NewSecretHandler(store)
+		handler := secrets.NewSecretHandler(store, &recordingLocker{})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/secrets?env=production&project=proj-123", nil).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -102,7 +102,7 @@ func TestSecretsRoute(t *testing.T) {
 		store := &fakeSecretStore{
 			secrets: []secrets.SecretMetadata{},
 		}
-		handler := secrets.NewSecretHandler(store)
+		handler := secrets.NewSecretHandler(store, &recordingLocker{})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/secrets?env=production&project=proj-123", nil)
 		rec := httptest.NewRecorder()
@@ -120,7 +120,7 @@ func TestSecretsRoute(t *testing.T) {
 				{Name: "DATABASE_URL", Environment: "production", App: "api"},
 			},
 		}
-		handler := secrets.NewSecretHandler(store)
+		handler := secrets.NewSecretHandler(store, &recordingLocker{})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/secrets?env=production&project=proj-123", nil).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))
@@ -163,7 +163,7 @@ func TestSecretsRoute(t *testing.T) {
 				return []secrets.SecretMetadata{}, nil
 			},
 		}
-		handler := secrets.NewSecretHandler(store)
+		handler := secrets.NewSecretHandler(store, &recordingLocker{})
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/secrets?env=production&project=proj-123", nil).
 			WithContext(makeAuthCtx("github-lucas", "acme", "owner"))

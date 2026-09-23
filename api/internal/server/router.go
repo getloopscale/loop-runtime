@@ -428,17 +428,14 @@ func registerProtectedRoutes(
 	}
 
 	// Secret routes
-	if surfaces.Recorded(cfg.Surfaces, surfaces.Secrets, cfg.SecretStore != nil,
-		"sem banco — o SecretStore vem de `stores` (setup_server.go:230)") {
-		secretHandler := secrets.NewSecretHandler(cfg.SecretStore)
+	// Sprint A T1.1 (closes comp-001 CRITICAL): every secret mutation runs
+	// under the environment lock, so the routes exist only when the lock does.
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Secrets, cfg.SecretStore != nil && cfg.SecretEnvLocker != nil,
+		"no database — the SecretStore and the environment locker both come from `stores` "+
+			"(setup_server.go), and a secret mutation outside the lock races a deploy") {
+		secretHandler := secrets.NewSecretHandler(cfg.SecretStore, cfg.SecretEnvLocker)
 		if cfg.SecretK8sSync != nil {
 			secretHandler.SetK8sSync(cfg.SecretK8sSync)
-		}
-		// Sprint A T1.1 (closes comp-001 CRITICAL): wire the environment
-		// lock so Set/DeleteSecret serialize with concurrent `loopzero deploy`
-		// flows holding the same pg_advisory_xact_lock key.
-		if cfg.SecretEnvLocker != nil {
-			secretHandler.SetLocker(cfg.SecretEnvLocker)
 		}
 		// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): wire
 		// the cross-tenant binding check (EC-03 absorption / CWE-204

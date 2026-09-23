@@ -34,24 +34,24 @@ func (f *fakeSecretStore2) Delete(_ context.Context, _, _, _, _, _ string) (bool
 }
 
 func TestNewSecretHandler_CreatesHandler(t *testing.T) {
-	h := NewSecretHandler(&fakeSecretStore2{})
+	h := NewSecretHandler(&fakeSecretStore2{}, &lockCountingFake{})
 	if h == nil {
 		t.Fatal("expected non-nil handler")
 	}
 }
 
 func TestSecretHandler_SetAuditLogger(t *testing.T) {
-	h := NewSecretHandler(&fakeSecretStore2{})
+	h := NewSecretHandler(&fakeSecretStore2{}, &lockCountingFake{})
 	h.SetAuditLogger(nil)
 }
 
 func TestSecretHandler_SetK8sSync(t *testing.T) {
-	h := NewSecretHandler(&fakeSecretStore2{})
+	h := NewSecretHandler(&fakeSecretStore2{}, &lockCountingFake{})
 	h.SetK8sSync(nil)
 }
 
 func TestSecretHandler_List_Unauthenticated(t *testing.T) {
-	h := NewSecretHandler(&fakeSecretStore2{})
+	h := NewSecretHandler(&fakeSecretStore2{}, &lockCountingFake{})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/secrets", nil)
 	w := httptest.NewRecorder()
 
@@ -63,7 +63,7 @@ func TestSecretHandler_List_Unauthenticated(t *testing.T) {
 }
 
 func TestSecretHandler_Set_Unauthenticated(t *testing.T) {
-	h := NewSecretHandler(&fakeSecretStore2{})
+	h := NewSecretHandler(&fakeSecretStore2{}, &lockCountingFake{})
 	body := `{"name":"DB_URL","value":"postgres://..."}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets", bytes.NewBufferString(body))
 	w := httptest.NewRecorder()
@@ -76,7 +76,7 @@ func TestSecretHandler_Set_Unauthenticated(t *testing.T) {
 }
 
 func TestSecretHandler_Delete_Unauthenticated(t *testing.T) {
-	h := NewSecretHandler(&fakeSecretStore2{})
+	h := NewSecretHandler(&fakeSecretStore2{}, &lockCountingFake{})
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/secrets/DB_URL", nil)
 	w := httptest.NewRecorder()
 

@@ -11,7 +11,7 @@
 //
 // 6 RED tests for v1.1 TDD:
 //   1. TestSprintA_SecretHandler_Set_AcquiresEnvLock_WhenLockerWired
-//   2. TestSprintA_SecretHandler_Set_SkipsEnvLock_WhenLockerNil
+//   2. (retired) the nil-locker path no longer exists — NewSecretHandler requires one
 //   3. TestSprintA_SecretHandler_Delete_AcquiresEnvLock_WhenLockerWired
 //   4. TestSprintA_ServerConfig_SecretEnvLocker_Field_Exists
 //   5. TestSprintA_SecretHandler_DeleteSecret_RejectsEmptyEnvParam (EC-1)
@@ -71,8 +71,7 @@ func TestSprintA_SecretHandler_Set_AcquiresEnvLock_WhenLockerWired(t *testing.T)
 	store := &fakeSecretStore{}
 	locker := &recordingLocker{}
 
-	handler := secrets.NewSecretHandler(store)
-	handler.SetLocker(locker)
+	handler := secrets.NewSecretHandler(store, locker)
 
 	body := bytes.NewBufferString(`{"name":"DB_URL","value":"postgres://x","environment":"production","app":"api"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets?project=acme-proj", body).
@@ -97,30 +96,6 @@ func TestSprintA_SecretHandler_Set_AcquiresEnvLock_WhenLockerWired(t *testing.T)
 }
 
 // =============================================================================
-// Test 2 — Set skips env lock when locker is nil (legacy/test path)
-// =============================================================================
-
-func TestSprintA_SecretHandler_Set_SkipsEnvLock_WhenLockerNil(t *testing.T) {
-	store := &fakeSecretStore{}
-	handler := secrets.NewSecretHandler(store)
-	// NO handler.SetLocker call — locker stays nil.
-
-	body := bytes.NewBufferString(`{"name":"DB_URL","value":"postgres://x","environment":"production","app":"api"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets?project=acme-proj", body).
-		WithContext(makeAuthCtx("u1", "tenant-x", "owner"))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-
-	handler.Set(rec, req)
-
-	if rec.Code != http.StatusOK && rec.Code != http.StatusCreated {
-		t.Fatalf("expected 2xx (legacy non-locked path), got %d: %s", rec.Code, rec.Body.String())
-	}
-	// No locker assertion — nil means we can't observe call.
-	// What matters: Set succeeds without an injected locker (regression guard).
-}
-
-// =============================================================================
 // Test 3 — Delete acquires env lock when locker wired
 // =============================================================================
 
@@ -128,8 +103,7 @@ func TestSprintA_SecretHandler_Delete_AcquiresEnvLock_WhenLockerWired(t *testing
 	store := &fakeSecretStore{}
 	locker := &recordingLocker{}
 
-	handler := secrets.NewSecretHandler(store)
-	handler.SetLocker(locker)
+	handler := secrets.NewSecretHandler(store, locker)
 
 	// chi.URLParam needs router context.
 	req := httptest.NewRequest(http.MethodDelete,
@@ -183,8 +157,7 @@ func TestSprintA_SecretHandler_DeleteSecret_RejectsEmptyEnvParam(t *testing.T) {
 	store := &fakeSecretStore{}
 	locker := &recordingLocker{}
 
-	handler := secrets.NewSecretHandler(store)
-	handler.SetLocker(locker)
+	handler := secrets.NewSecretHandler(store, locker)
 
 	// NO environment query param — should be rejected BEFORE locker is called.
 	req := httptest.NewRequest(http.MethodDelete,
@@ -233,8 +206,7 @@ func TestSprintA_SecretSet_LockKeyMatchesEnvironmentLock(t *testing.T) {
 	sharedLocker := &recordingLocker{}
 
 	// Secret handler.
-	secretsHandler := secrets.NewSecretHandler(&fakeSecretStore{})
-	secretsHandler.SetLocker(sharedLocker)
+	secretsHandler := secrets.NewSecretHandler(&fakeSecretStore{}, sharedLocker)
 
 	body := bytes.NewBufferString(`{"name":"DB_URL","value":"x","environment":"production","app":"api"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets?project=acme-proj", body).

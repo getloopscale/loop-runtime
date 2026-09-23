@@ -62,7 +62,7 @@ func (s *backendDownStore) ListNames(_ context.Context, _, _, _ string) ([]Secre
 // A secrets backend that cannot encrypt must NOT look like a generic server
 // fault. It has a distinct cause, a distinct owner and a distinct remedy.
 func TestSecretSet_BackendUnavailableIsTyped(t *testing.T) {
-	h := NewSecretHandler(&backendDownStore{})
+	h := NewSecretHandler(&backendDownStore{}, &lockCountingFake{})
 
 	body := `{"name":"QA_DB_URL","value":"postgres://qa:test@db.example.com/qa","environment":"production","app":"api"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets?project=loopzerokit-example",
@@ -102,7 +102,7 @@ func TestSecretSet_BackendUnavailableIsTyped(t *testing.T) {
 // product language, and it must NOT leak internal terms (Rule 3) — "OpenBao",
 // "Vault", "Transit" and "ESO" are ours, not the user's.
 func TestSecretSet_BackendErrorMessageIsActionableAndClean(t *testing.T) {
-	h := NewSecretHandler(&backendDownStore{})
+	h := NewSecretHandler(&backendDownStore{}, &lockCountingFake{})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets?project=loopzerokit-example",
 		strings.NewReader(`{"name":"K","value":"v","environment":"production","app":"api"}`))
@@ -136,7 +136,7 @@ func TestSecretSet_BackendErrorMessageIsActionableAndClean(t *testing.T) {
 // every store failure became SECRETS_BACKEND_UNAVAILABLE, the new code would be
 // as uninformative as the 500 it replaces — just with a more confident name.
 func TestSecretSet_UnrelatedErrorsStayInternal(t *testing.T) {
-	h := NewSecretHandler(&genericFailStore{})
+	h := NewSecretHandler(&genericFailStore{}, &lockCountingFake{})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets?project=p",
 		strings.NewReader(`{"name":"K","value":"v","environment":"production","app":"api"}`))

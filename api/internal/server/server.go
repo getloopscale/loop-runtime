@@ -161,8 +161,8 @@ type Config struct {
 	// Sprint A T1.1 (closes comp-001 CRITICAL — secret mutations were
 	// running without the advisory lock). Wired from cmd/setup_server.go
 	// using the same *adapters.PoolEnvironmentLocker injected into build
-	// orchestrators. nil-safe: when nil, SecretHandler falls back to
-	// the legacy non-locked path (test-friendly).
+	// orchestrators. Required by the secret routes: when nil they are not
+	// mounted (recorded as a disabled surface), never mounted unlocked.
 	SecretEnvLocker secrets.SecretEnvLocker
 	// SecretProjectChecker injects the cross-tenant binding check (T1.2 of
 	// plan 2026-06-10-j22-openbao-transit-eso-sync v1.2). When wired, Bulk

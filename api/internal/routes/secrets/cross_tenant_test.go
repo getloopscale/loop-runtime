@@ -91,7 +91,7 @@ func (f *crossTenantSecretStore) Delete(_ context.Context, tenantID, project, en
 // parameter that could imply a different tenant.
 func TestCrossTenant_Secret_List_PassesCallerTenantOnly(t *testing.T) {
 	store := &crossTenantSecretStore{listSecrets: nil}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 
 	// Act: tenant B lists secrets, querying with tenant A's project name.
 	req := httptest.NewRequest(http.MethodGet,
@@ -120,7 +120,7 @@ func TestCrossTenant_Secret_List_PassesCallerTenantOnly(t *testing.T) {
 // tenant-id implied by the request body or URL query.
 func TestCrossTenant_Secret_Set_PassesCallerTenantOnly(t *testing.T) {
 	store := &crossTenantSecretStore{setCreated: true}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 
 	// Act: tenant B writes a secret, with query project = tenant A's project.
 	body := `{"name":"` + xtSecretA + `","value":"adversarial","environment":"` +
@@ -146,7 +146,7 @@ func TestCrossTenant_Secret_Set_PassesCallerTenantOnly(t *testing.T) {
 // CALLER's tenant only.
 func TestCrossTenant_Secret_Delete_PassesCallerTenantOnly(t *testing.T) {
 	store := &crossTenantSecretStore{delDeleted: false} // not found under tenant B
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 
 	// Act
 	req := httptest.NewRequest(http.MethodDelete,
@@ -171,7 +171,7 @@ func TestCrossTenant_Secret_Delete_PassesCallerTenantOnly(t *testing.T) {
 
 // TestCrossTenant_Secret_List_Unauthenticated_Returns401 same for secret list.
 func TestCrossTenant_Secret_List_Unauthenticated_Returns401(t *testing.T) {
-	h := NewSecretHandler(&crossTenantSecretStore{})
+	h := NewSecretHandler(&crossTenantSecretStore{}, &lockCountingFake{})
 
 	req := httptest.NewRequest(http.MethodGet,
 		"/api/v1/secrets?env="+xtEnvProd, nil)
@@ -190,7 +190,7 @@ func TestCrossTenant_Secret_List_Unauthenticated_Returns401(t *testing.T) {
 // guards against future schema drift that might add one.
 func TestCrossTenant_Secret_Set_IgnoresTenantInBody(t *testing.T) {
 	store := &crossTenantSecretStore{setCreated: true}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 
 	// Adversarial body: includes a tenant_id field that should be IGNORED.
 	body := `{"name":"VAR","value":"v","environment":"prod","app":"a","tenant_id":"` + xtTenantA + `"}`

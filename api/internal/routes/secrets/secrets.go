@@ -60,9 +60,9 @@ type (
 // services layer exposes, including `shared.EnvironmentLocker` and
 // `adapters.PoolEnvironmentLocker`.
 //
-// Nil-safe: when handler.locker is nil, Set/DeleteSecret fall back to
-// the legacy non-locked path. Production wiring must inject the real
-// locker; this fallback keeps unit-test fakes simple.
+// Required: every secret mutation — single, bulk and delete — runs under
+// this lock (CLAUDE.md Rule 6). NewSecretHandler refuses a nil locker, so a
+// mis-wired server cannot silently mutate secrets unlocked.
 type SecretEnvLocker interface {
 	WithLock(ctx context.Context, tenant, project, env string, fn func(tx dbtx.DBTX) error) error
 }
@@ -130,13 +130,12 @@ type SecretHandler struct {
 	store          SecretStore
 	k8sSync        SecretK8sSync        // optional — nil disables K8s sync
 	audit          AuditLogger          // optional — nil disables audit logging
-	locker         SecretEnvLocker      // optional — nil disables environment lock (legacy path)
+	locker         SecretEnvLocker      // required — serializes every mutation with deploys (Rule 6)
 	planLimits     SecretPlanLimiter    // optional — nil disables plan-limit gate (legacy/test path)
 	projectChecker SecretProjectChecker // optional — nil disables T1.2 cross-tenant binding (legacy/test path)
 	transitClient  SecretTransit        // optional — nil disables T2.3 transit encrypt (legacy AES path)
 }
 
-// NewSecretHandler creates a new SecretHandler.
 // transitFailureStatus classifies an encryption failure for the per-environment
 // sync status.
 //
@@ -158,8 +157,15 @@ func transitFailureStatus(err error) string {
 	return "failed"
 }
 
-func NewSecretHandler(store SecretStore) *SecretHandler {
-	return &SecretHandler{store: store}
+// NewSecretHandler creates a SecretHandler. The store and the environment
+// locker are both required: a secret mutation outside the (tenant, project,
+// env) lock races a deploy capturing config, so a nil locker is a wiring bug
+// and is refused here rather than degraded to an unlocked path.
+func NewSecretHandler(store SecretStore, locker SecretEnvLocker) *SecretHandler {
+	if store == nil || locker == nil {
+		panic("secrets: NewSecretHandler requires a SecretStore and a SecretEnvLocker")
+	}
+	return &SecretHandler{store: store, locker: locker}
 }
 
 // SetAuditLogger configures audit logging for sensitive operations.
@@ -170,30 +176,6 @@ func (h *SecretHandler) SetAuditLogger(audit AuditLogger) {
 // SetK8sSync configures the K8s sync for creating Secrets and ExternalSecret CRs.
 func (h *SecretHandler) SetK8sSync(sync SecretK8sSync) {
 	h.k8sSync = sync
-}
-
-// SetLocker configures the environment lock for secret mutations. When set,
-// Set/DeleteSecret acquire a pg_advisory_xact_lock on the (tenant, project,
-// env) key BEFORE invoking the store mutation, serializing with concurrent
-// `loopzero deploy` flows that hold the same lock.
-//
-// Sprint A T1.1 (closes comp-001 CRITICAL): the locker was added to the
-// handler struct in deep-review-2026-05-10-remediation-plan but never
-// wired from server.Config. This setter mirrors SetK8sSync exactly so
-// server/router.go can inject the locker post-construction.
-//
-// Lock-domain parity (EC-2): inject *lock.PoolLocker (via
-// adapters.PoolEnvironmentLocker) — same advisory key as
-// lock.WithEnvironmentLock used by build handlers. Any other locker
-// implementation breaks cross-feature serialization.
-//
-// K8s sync OUTSIDE lock (EC-3, intentional design): h.k8sSync.CreateSecret
-// runs AFTER mutate returns AND AFTER the lock releases — PG is canonical,
-// K8s is eventual, and the lock has 5s timeout. Moving K8s sync inside
-// mutate is a REGRESSION VECTOR (would kill secret Sets every time K8s
-// API server is slow).
-func (h *SecretHandler) SetLocker(locker SecretEnvLocker) {
-	h.locker = locker
 }
 
 // SetPlanLimiter configures the plan-limit gate for secret mutations.
@@ -370,12 +352,7 @@ func (h *SecretHandler) Bulk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := make([]secretBulkResult, 0, len(req.Secrets))
-	for _, entry := range req.Secrets {
-		results = append(results, h.bulkProcessEntry(ctx, uc, project, entry))
-	}
-
-	httpio.WriteJSON(w, http.StatusOK, secretBulkResponse{Results: results})
+	httpio.WriteJSON(w, http.StatusOK, secretBulkResponse{Results: h.bulkProcess(ctx, uc, project, req.Secrets)})
 }
 
 // decodeAndValidateBulkRequest decodes the JSON body + enforces:
@@ -481,8 +458,6 @@ func (h *SecretHandler) assertSecretPlanLimit(
 }
 
 // bulkEnvAggregates collects per-env outcomes for a single bulk entry.
-// Extracted from SecretHandler.Bulk so the entry-level + env-level
-// processing pipelines are independently legible + testable.
 // T4.2 of plan 2026-06-11-code-review-remediation v1.2 + ADR D6.
 type bulkEnvAggregates struct {
 	syncStatusPerEnv map[string]string
@@ -492,135 +467,182 @@ type bulkEnvAggregates struct {
 	syncSuccesses    int
 }
 
-// bulkProcessEntry handles one batch entry (one secret key, N envs).
-// Encapsulates the per-entry pipeline:
-//  1. Validate the key name; INVALID_KEY short-circuits without touching
-//     the store.
-//  2. Run the per-env transit-encrypt → store.Set → k8sSync triad
-//     (continue-best-effort per EC-01).
-//  3. Aggregate per-env outcomes into the entry's Status/SyncStatus
-//     following the union-state contract (EC-02).
-//  4. Emit one SECRET_CREATED audit row per successful entry.
+func (a *bulkEnvAggregates) fail(env, status string, err error) {
+	if a.firstErr == nil {
+		a.firstErr = err
+	}
+	a.syncStatusPerEnv[env] = status
+	a.storeFailures++
+}
+
+// bulkEntryState is one entry of the batch as it moves through the phases.
+type bulkEntryState struct {
+	entry secretBulkEntry
+	valid bool
+	aggs  bulkEnvAggregates
+}
+
+// bulkWrite is one (entry, env) row waiting to be persisted. value is the
+// transit ciphertext when transit is wired, the plaintext otherwise.
+type bulkWrite struct {
+	state     *bulkEntryState
+	env       string
+	value     []byte
+	persisted bool
+}
+
+// bulkProcess runs the batch in four phases:
 //
-// Returns a fully-populated secretBulkResult ready to append.
-func (h *SecretHandler) bulkProcessEntry(ctx context.Context, uc *auth.UserContext, project string, entry secretBulkEntry) secretBulkResult {
+//  1. validate each key and seal each (key, env) value through transit —
+//     network work, done OUTSIDE any lock;
+//  2. persist, one (project, env) group at a time, INSIDE the environment
+//     lock, so a deploy capturing that environment's config sees either all
+//     of the batch's writes for it or none (CLAUDE.md Rule 6);
+//  3. sync to the workload cluster OUTSIDE the lock (EC-3: PG is canonical,
+//     K8s is eventual, and a slow API server must not hold the lock);
+//  4. fold per-env outcomes into one result per key, and audit.
+//
+// EC-01 continue-best-effort holds throughout: one env failing never stops
+// the others. len(results) == len(entries) is the response invariant.
+func (h *SecretHandler) bulkProcess(ctx context.Context, uc *auth.UserContext, project string, entries []secretBulkEntry) []secretBulkResult {
+	states := make([]*bulkEntryState, len(entries))
+	groups := map[string][]*bulkWrite{}
+	var envOrder []string
+	for i, entry := range entries {
+		st := &bulkEntryState{
+			entry: entry,
+			valid: secretNameRegex.MatchString(entry.Name),
+			aggs:  bulkEnvAggregates{syncStatusPerEnv: make(map[string]string, len(entry.Envs))},
+		}
+		states[i] = st
+		if !st.valid {
+			continue
+		}
+		for _, env := range entry.Envs {
+			value, err := h.sealForStore(ctx, uc.TenantID, entry.Value)
+			if err != nil {
+				// T2.3: a transit failure MUST NOT persist plaintext. B-072: a
+				// policy denial (permanent) and a timeout (transient) are
+				// reported differently — see transitFailureStatus.
+				st.aggs.fail(env, transitFailureStatus(err), err)
+				continue
+			}
+			if _, seen := groups[env]; !seen {
+				envOrder = append(envOrder, env)
+			}
+			groups[env] = append(groups[env], &bulkWrite{state: st, env: env, value: value})
+		}
+	}
+
+	for _, env := range envOrder {
+		h.persistEnvGroup(ctx, uc.TenantID, project, env, groups[env])
+	}
+	for _, env := range envOrder {
+		for _, wr := range groups[env] {
+			if wr.persisted {
+				h.syncBulkWrite(ctx, uc.TenantID, project, wr)
+			}
+		}
+	}
+
+	results := make([]secretBulkResult, 0, len(states))
+	for _, st := range states {
+		results = append(results, h.bulkEntryResult(ctx, uc, project, st))
+	}
+	return results
+}
+
+// sealForStore encrypts a value through OpenBao transit when it is wired
+// (T2.3), so PG never receives plaintext; without transit the store's own
+// AES wrapper encrypts at rest (legacy/test path).
+func (h *SecretHandler) sealForStore(ctx context.Context, tenantID, value string) ([]byte, error) {
+	if h.transitClient == nil {
+		return []byte(value), nil
+	}
+	ct, err := h.transitClient.Encrypt(ctx, tenantID, []byte(value))
+	if err != nil {
+		return nil, err
+	}
+	return []byte(ct), nil
+}
+
+// persistEnvGroup writes every row of one (project, env) group inside the
+// environment lock. A lock that cannot be taken (a deploy holds it past the
+// timeout) fails every row of THIS group only.
+func (h *SecretHandler) persistEnvGroup(ctx context.Context, tenantID, project, env string, group []*bulkWrite) {
+	lockErr := h.locker.WithLock(ctx, tenantID, project, env, func(_ dbtx.DBTX) error {
+		for _, wr := range group {
+			if _, err := h.store.Set(ctx, tenantID, project, env, "", wr.state.entry.Name, wr.value); err != nil {
+				wr.state.aggs.fail(env, "failed", err)
+				continue
+			}
+			wr.persisted = true
+		}
+		return nil
+	})
+	if lockErr == nil {
+		return
+	}
+	slog.Warn("secret bulk: environment lock not acquired",
+		"tenant", tenantID, "project", project, "env", env, "error", lockErr)
+	for _, wr := range group {
+		if !wr.persisted {
+			wr.state.aggs.fail(env, "failed", lockErr)
+		}
+	}
+}
+
+// syncBulkWrite materializes one persisted row on the workload cluster
+// (D2 ADR). Without a workload sync the row stays canonical in PG and is
+// reported "pending"; B-176 requires the same skip metric the single-set
+// path emits, once per persisted row, because
+// sum(loopzero_secret_externalsecret_total) is the trigger docs/decisions.md § 2
+// relies on to notice the secrets table stopped being empty.
+func (h *SecretHandler) syncBulkWrite(ctx context.Context, tenantID, project string, wr *bulkWrite) {
+	aggs := &wr.state.aggs
+	name := wr.state.entry.Name
+	if h.k8sSync == nil {
+		metrics.SecretExternalSecretTotal.WithLabelValues("skip").Inc()
+		aggs.syncStatusPerEnv[wr.env] = "pending"
+		return
+	}
+	if err := h.k8sSync.CreateSecret(ctx, tenantID, project, wr.env, "", name, wr.state.entry.Value); err != nil {
+		aggs.syncStatusPerEnv[wr.env] = "failed"
+		aggs.syncFailures++
+		slog.Warn("k8sSync.CreateSecret failed for bulk entry env",
+			"name", name, "env", wr.env, "tenant", tenantID, "error", err)
+		return
+	}
+	aggs.syncStatusPerEnv[wr.env] = "synced"
+	aggs.syncSuccesses++
+}
+
+// bulkEntryResult folds one entry's per-env outcomes into its result and
+// writes one SECRET_CREATED audit row when at least one env persisted.
+func (h *SecretHandler) bulkEntryResult(ctx context.Context, uc *auth.UserContext, project string, st *bulkEntryState) secretBulkResult {
 	result := secretBulkResult{
-		Name:       entry.Name,
+		Name:       st.entry.Name,
 		Status:     "created",
 		SyncStatus: "pending",
 	}
-	if !secretNameRegex.MatchString(entry.Name) {
+	if !st.valid {
 		result.Status = "failed"
 		result.Error = "INVALID_KEY"
 		result.ErrorCode = "INVALID_KEY"
 		return result
 	}
+	h.bulkAggregateStatus(&result, st.entry, st.aggs)
+	result.SyncStatusPerEnv = st.aggs.syncStatusPerEnv
 
-	aggs := h.bulkProcessEnvs(ctx, uc, project, entry)
-	h.bulkAggregateStatus(&result, entry, aggs)
-	result.SyncStatusPerEnv = aggs.syncStatusPerEnv
-
-	// Audit log per-key (T1.2 J-22 invariant): one row per logical
-	// SECRET_CREATED action when at least one env persisted to PG.
-	// INVALID_KEY short-circuit handled above; non-"created" Status
-	// implies storeFailures == len(entry.Envs) so no audit.
 	if h.audit != nil && result.Status == "created" {
 		if auditErr := h.audit.LogAudit(ctx, uc.TenantID, "SECRET_CREATED", uc.UserID,
-			"secret", entry.Name, "",
-			map[string]any{"envs": entry.Envs, "project": project}); auditErr != nil {
+			"secret", st.entry.Name, "",
+			map[string]any{"envs": st.entry.Envs, "project": project}); auditErr != nil {
 			slog.Error("failed to write audit log for secret bulk",
-				"name", entry.Name, "error", auditErr)
+				"name", st.entry.Name, "error", auditErr)
 		}
 	}
 	return result
-}
-
-// bulkProcessEnvs runs the transit→store→k8sSync triad for every env
-// of one entry. Implements EC-01 continue-best-effort: a failure for
-// one env MUST NOT short-circuit the others. Returns the aggregates
-// the caller folds into the entry-level result.
-func (h *SecretHandler) bulkProcessEnvs(ctx context.Context, uc *auth.UserContext, project string, entry secretBulkEntry) bulkEnvAggregates {
-	aggs := bulkEnvAggregates{
-		syncStatusPerEnv: make(map[string]string, len(entry.Envs)),
-	}
-	for _, env := range entry.Envs {
-		// T2.3 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2):
-		// when transit is wired, encrypt the plaintext via OpenBao
-		// BEFORE persisting to PG. On transit failure, MUST NOT
-		// persist plaintext — increment storeFailures + skip the
-		// store.Set + skip k8sSync for this env (continue-best-effort
-		// per EC-01 still respected; remaining envs unaffected).
-		valueBytes := []byte(entry.Value)
-		if h.transitClient != nil {
-			ct, terr := h.transitClient.Encrypt(ctx, uc.TenantID, valueBytes)
-			if terr != nil {
-				if aggs.firstErr == nil {
-					aggs.firstErr = terr
-				}
-				// A policy denial and a network timeout are opposite facts for
-				// whoever is on call: the denial is PERMANENT and needs an
-				// operator, the timeout is transient and clears itself. Both
-				// reported "failed" until 2026-08-13, so the operator waited for
-				// something that was never going to improve — the
-				// treat-every-error-alike shape Rule 8 forbids (B-072).
-				//
-				// The typed error existed and had no reader: ErrTransitKeyCreateFailed
-				// appeared nowhere outside its own declaration and its test.
-				aggs.syncStatusPerEnv[env] = transitFailureStatus(terr)
-				aggs.storeFailures++
-				continue
-			}
-			valueBytes = []byte(ct)
-		}
-		if _, err := h.store.Set(ctx, uc.TenantID, project, env, "", entry.Name, valueBytes); err != nil {
-			if aggs.firstErr == nil {
-				aggs.firstErr = err
-			}
-			aggs.syncStatusPerEnv[env] = "failed"
-			aggs.storeFailures++
-			continue
-		}
-
-		// store.Set succeeded for this env; now invoke k8sSync per D2 ADR
-		// (k8sSync runs OUTSIDE lock; PG row is canonical even on sync
-		// failure — eventual consistency via ESO ExternalSecret CR).
-		if h.k8sSync == nil {
-			// B-176: emit the SAME series the single-set path emits for this
-			// exact condition (the else-branch at the end of Set). Until this
-			// line existed, a bulk write against a deployment with no workload
-			// sync persisted rows in `secrets` and left
-			// sum(loopzero_secret_externalsecret_total) at zero, because only one
-			// of the two paths that handle "no workload sync" was counting.
-			//
-			// That sum is load-bearing, not decoration:
-			// docs/decisions.md
-			// § 2 names it as the trigger that fires without anyone running a
-			// query — the signal that the `secrets` table stopped being empty
-			// and the deferred B-126 canary became work. The hole sat exactly
-			// where that event could pass.
-			//
-			// Once per PERSISTED ROW, matching the single-set contract. A
-			// per-entry emission would under-count a multi-env write.
-			//
-			// The API-facing status stays "pending" — the caller's contract is
-			// unchanged. "skip" is the metric's word for the sync path being
-			// bypassed; "pending" is the user's word for a row that is
-			// canonical in PG and not yet materialized.
-			metrics.SecretExternalSecretTotal.WithLabelValues("skip").Inc()
-			aggs.syncStatusPerEnv[env] = "pending"
-			continue
-		}
-		if syncErr := h.k8sSync.CreateSecret(ctx, uc.TenantID, project, env, "", entry.Name, entry.Value); syncErr != nil {
-			aggs.syncStatusPerEnv[env] = "failed"
-			aggs.syncFailures++
-			slog.Warn("k8sSync.CreateSecret failed for bulk entry env",
-				"name", entry.Name, "env", env, "tenant", uc.TenantID, "error", syncErr)
-			continue
-		}
-		aggs.syncStatusPerEnv[env] = "synced"
-		aggs.syncSuccesses++
-	}
-	return aggs
 }
 
 // bulkAggregateStatus folds per-env aggregates into the entry-level
@@ -752,20 +774,13 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 
 	// T1.1 of deep-review-2026-05-10-remediation-plan: serialize mutations
 	// per (tenant, project, env) so concurrent `loopzero secret set` + a deploy
-	// capturing config cannot race. Falls back to non-locked path when
-	// locker is nil (tests + boot path).
+	// capturing config cannot race.
 	var created bool
-	mutate := func(_ dbtx.DBTX) error {
+	err := h.locker.WithLock(ctx, uc.TenantID, project, req.Environment, func(_ dbtx.DBTX) error {
 		var setErr error
 		created, setErr = h.store.Set(ctx, uc.TenantID, project, req.Environment, req.App, req.Name, []byte(req.Value))
 		return setErr
-	}
-	var err error
-	if h.locker != nil {
-		err = h.locker.WithLock(ctx, uc.TenantID, project, req.Environment, mutate)
-	} else {
-		err = mutate(nil)
-	}
+	})
 	if err != nil {
 		if errors.Is(err, loopzeroerrors.ErrLockTimeout) {
 			httpio.WriteJSON(w, http.StatusConflict, map[string]string{
@@ -886,17 +901,11 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 
 	// T1.1 of deep-review-2026-05-10-remediation-plan: same lock as Set.
 	var deleted bool
-	mutate := func(_ dbtx.DBTX) error {
+	err := h.locker.WithLock(ctx, uc.TenantID, project, env, func(_ dbtx.DBTX) error {
 		var delErr error
 		deleted, delErr = h.store.Delete(ctx, uc.TenantID, project, env, app, name)
 		return delErr
-	}
-	var err error
-	if h.locker != nil {
-		err = h.locker.WithLock(ctx, uc.TenantID, project, env, mutate)
-	} else {
-		err = mutate(nil)
-	}
+	})
 	if err != nil {
 		if errors.Is(err, loopzeroerrors.ErrLockTimeout) {
 			httpio.WriteJSON(w, http.StatusConflict, map[string]string{

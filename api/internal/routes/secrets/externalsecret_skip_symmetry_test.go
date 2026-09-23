@@ -49,7 +49,7 @@ func externalSecretSkips() float64 {
 func TestExternalSecretSkip_BothWritePathsEmitWhenSyncIsNil(t *testing.T) {
 	t.Run("single set", func(t *testing.T) {
 		store := &fakeSecretStoreT01{}
-		h := NewSecretHandler(store) // k8sSync stays nil — the condition under test
+		h := NewSecretHandler(store, &lockCountingFake{}) // k8sSync stays nil — the condition under test
 
 		body, err := json.Marshal(map[string]string{
 			"environment": "production",
@@ -81,7 +81,7 @@ func TestExternalSecretSkip_BothWritePathsEmitWhenSyncIsNil(t *testing.T) {
 
 	t.Run("bulk", func(t *testing.T) {
 		store := &fakeSecretStoreT01{}
-		h := NewSecretHandler(store) // k8sSync stays nil — the same condition
+		h := NewSecretHandler(store, &lockCountingFake{}) // k8sSync stays nil — the same condition
 
 		entry := secretBulkEntry{
 			Name:  "DB_PASS",
@@ -90,7 +90,7 @@ func TestExternalSecretSkip_BothWritePathsEmitWhenSyncIsNil(t *testing.T) {
 		}
 
 		before := externalSecretSkips()
-		aggs := h.bulkProcessEnvs(context.Background(), routestest.DefaultUserContext(), "proj-x", entry)
+		results := h.bulkProcess(context.Background(), routestest.DefaultUserContext(), "proj-x", []secretBulkEntry{entry})
 
 		if store.setCalls != len(entry.Envs) {
 			t.Fatalf("both rows must be persisted before the counter is judged; store.Set calls = %d, want %d",
@@ -106,7 +106,7 @@ func TestExternalSecretSkip_BothWritePathsEmitWhenSyncIsNil(t *testing.T) {
 		// The API-facing status is unchanged by B-176: the caller still reads
 		// "pending". Only the metric was missing.
 		for _, env := range entry.Envs {
-			if got := aggs.syncStatusPerEnv[env]; got != "pending" {
+			if got := results[0].SyncStatusPerEnv[env]; got != "pending" {
 				t.Fatalf("sync status for env %q = %q, want %q — the counter was the gap, not the response contract",
 					env, got, "pending")
 			}

@@ -75,8 +75,7 @@ func (f *fakeSecretStoreT01) Delete(_ context.Context, _, _, _, _, _ string) (bo
 func TestSecretSet_AcquiresEnvLock(t *testing.T) {
 	store := &fakeSecretStoreT01{}
 	locker := &lockCountingFake{}
-	h := NewSecretHandler(store)
-	h.SetLocker(locker)
+	h := NewSecretHandler(store, locker)
 
 	body, _ := json.Marshal(map[string]string{
 		"environment": "production",
@@ -106,40 +105,16 @@ func TestSecretSet_AcquiresEnvLock(t *testing.T) {
 	}
 }
 
-// TestSecretSet_LegacyPathStillWorks_WhenLockerNil proves the nil-locker
-// fallback (legacy/test path) does not panic and still invokes the store.
-// This guards the NewSecretHandler default (no locker), used by unit tests
-// + legacy boot paths.
-func TestSecretSet_LegacyPathStillWorks_WhenLockerNil(t *testing.T) {
-	store := &fakeSecretStoreT01{}
-	h := NewSecretHandler(store)
-	// NO SetLocker call — h.locker stays nil.
-
-	body, _ := json.Marshal(map[string]string{
-		"environment": "production",
-		"app":         "api",
-		"name":        "DB_PASS",
-		"value":       "s3cret",
-	})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets?project=proj-x", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req = routestest.WithAuth(req, routestest.DefaultUserContext())
-	w := httptest.NewRecorder()
-
+// TestNewSecretHandler_RefusesANilLocker: a secret mutation outside the
+// (tenant, project, env) lock races a deploy capturing config, so an unlocked
+// handler is a wiring bug refused at construction — there is no unlocked path.
+func TestNewSecretHandler_RefusesANilLocker(t *testing.T) {
 	defer func() {
-		if rec := recover(); rec != nil {
-			t.Fatalf("nil-locker path must NOT panic; got %v", rec)
+		if recover() == nil {
+			t.Fatal("NewSecretHandler accepted a nil locker")
 		}
 	}()
-
-	h.Set(w, req)
-
-	if w.Code != http.StatusOK && w.Code != http.StatusCreated {
-		t.Fatalf("want 200/201 on legacy path, got %d body=%s", w.Code, w.Body.String())
-	}
-	if store.setCalls != 1 {
-		t.Fatalf("store.Set should fire exactly 1x even without locker; got %d", store.setCalls)
-	}
+	NewSecretHandler(&fakeSecretStoreT01{}, nil)
 }
 
 // TestSecretDelete_AcquiresEnvLock mirrors the Set test for Delete handler
@@ -147,8 +122,7 @@ func TestSecretSet_LegacyPathStillWorks_WhenLockerNil(t *testing.T) {
 func TestSecretDelete_AcquiresEnvLock(t *testing.T) {
 	store := &fakeSecretStoreT01{}
 	locker := &lockCountingFake{}
-	h := NewSecretHandler(store)
-	h.SetLocker(locker)
+	h := NewSecretHandler(store, locker)
 
 	req := httptest.NewRequest(http.MethodDelete,
 		"/api/v1/secrets/DB_PASS?project=proj-x&environment=production&app=api", nil)
@@ -182,8 +156,7 @@ func TestSecretDelete_AcquiresEnvLock(t *testing.T) {
 func TestSecretDelete_RejectsEmptyEnvParam(t *testing.T) {
 	store := &fakeSecretStoreT01{}
 	locker := &lockCountingFake{}
-	h := NewSecretHandler(store)
-	h.SetLocker(locker)
+	h := NewSecretHandler(store, locker)
 
 	// NO environment query param — only project + app + name.
 	req := httptest.NewRequest(http.MethodDelete,
@@ -231,7 +204,7 @@ func TestSecretDelete_RejectsEmptyEnvParam(t *testing.T) {
 //   - EC-15 (whitespace preservation in values) — verified via Set already
 func TestSecretBulk_ShapeInvariant(t *testing.T) {
 	store := &fakeSecretStoreT01{}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 
 	body, _ := json.Marshal(map[string]any{
 		"project": "proj-x",
@@ -306,7 +279,7 @@ func (f *fakeAuditLoggerT12) LogAudit(_ context.Context, _, action, _, resourceT
 func TestSecretBulk_AuditLogPerKey(t *testing.T) {
 	store := &fakeSecretStoreT01{}
 	audit := &fakeAuditLoggerT12{}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 	h.SetAuditLogger(audit)
 
 	body, _ := json.Marshal(map[string]any{
@@ -359,7 +332,7 @@ func (fakePlanLimiterDeny) IsAllowedToCreate(_ context.Context, _ string, _ int)
 func TestSecretBulk_PlanLimit_402(t *testing.T) {
 	store := &fakeSecretStoreT01{}
 	audit := &fakeAuditLoggerT12{}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 	h.SetAuditLogger(audit)
 	h.SetPlanLimiter(fakePlanLimiterDeny{})
 
@@ -403,7 +376,7 @@ func TestSecretBulk_PlanLimit_402(t *testing.T) {
 func TestSecretBulk_DuplicateKeyInBatch_400(t *testing.T) {
 	store := &fakeSecretStoreT01{}
 	audit := &fakeAuditLoggerT12{}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 	h.SetAuditLogger(audit)
 
 	body, _ := json.Marshal(map[string]any{
@@ -442,7 +415,7 @@ func TestSecretBulk_DuplicateKeyInBatch_400(t *testing.T) {
 // PAYLOAD_TOO_LARGE without invoking the store.
 func TestSecretBulk_SizeCap(t *testing.T) {
 	store := &fakeSecretStoreT01{}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 
 	secrets := make([]map[string]any, 0, 101)
 	for i := 0; i < 101; i++ {
@@ -539,7 +512,7 @@ func TestSecretBulk_K8sSyncPerEnv(t *testing.T) {
 	store := &fakeSecretStoreT01{}
 	audit := &fakeAuditLoggerT12{}
 	k8s := &fakeK8sSyncT11{}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 	h.SetAuditLogger(audit)
 	h.SetK8sSync(k8s)
 
@@ -592,7 +565,7 @@ func TestSecretBulk_K8sSyncSkipsInvalidKey(t *testing.T) {
 	store := &fakeSecretStoreT01{}
 	audit := &fakeAuditLoggerT12{}
 	k8s := &fakeK8sSyncT11{}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 	h.SetAuditLogger(audit)
 	h.SetK8sSync(k8s)
 
@@ -639,7 +612,7 @@ func TestSecretBulk_PartialEnvFailureReturnsPerEnvStatus(t *testing.T) {
 			"staging": errFakeK8sSync,
 		},
 	}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 	h.SetAuditLogger(audit)
 	h.SetK8sSync(k8s)
 
@@ -709,7 +682,7 @@ func TestSecretBulk_StoreFailureContinuesRemainingKeys(t *testing.T) {
 	}
 	audit := &fakeAuditLoggerT12{}
 	k8s := &fakeK8sSyncT11{}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 	h.SetAuditLogger(audit)
 	h.SetK8sSync(k8s)
 
@@ -821,7 +794,7 @@ func TestSecretBulk_CrossTenantBindingReturns404(t *testing.T) {
 			"proj-of-tn-Y": "tn-other-tenant", // owned by a DIFFERENT tenant
 		},
 	}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 	h.SetAuditLogger(audit)
 	h.SetK8sSync(k8s)
 	h.SetProjectChecker(checker)
@@ -882,7 +855,7 @@ func TestSecretBulk_NonexistentProjectReturns404(t *testing.T) {
 	checker := &fakeProjectCheckerT12{
 		owned: map[string]string{}, // no projects at all
 	}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 	h.SetAuditLogger(audit)
 	h.SetK8sSync(k8s)
 	h.SetProjectChecker(checker)
@@ -978,7 +951,7 @@ func (r *recordingStore) Delete(_ context.Context, _, _, _, _, _ string) (bool, 
 func TestSecretBulk_UsesTransitEncryptWhenWired(t *testing.T) {
 	store := &recordingStore{}
 	transit := &fakeTransitT23{ciphertext: "vault:v1:SENTINEL"}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 	h.SetTransitClient(transit)
 
 	body, _ := json.Marshal(map[string]any{
@@ -1020,7 +993,7 @@ func TestSecretBulk_UsesTransitEncryptWhenWired(t *testing.T) {
 // still sees plaintext).
 func TestSecretBulk_LegacyPathStillWorksWhenTransitNil(t *testing.T) {
 	store := &recordingStore{}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 	// No SetTransitClient call → transitClient stays nil.
 
 	body, _ := json.Marshal(map[string]any{
@@ -1063,7 +1036,7 @@ func TestSecretBulk_TransitFailureDoesNotPersistPlaintext(t *testing.T) {
 			"secret-that-fails": errors.New("simulated transit failure"),
 		},
 	}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 	h.SetTransitClient(transit)
 
 	body, _ := json.Marshal(map[string]any{
@@ -1114,7 +1087,7 @@ func TestSecretBulk_TransitFailureDoesNotPersistPlaintext(t *testing.T) {
 func TestSecretBulk_CrossTenantAndNonexistentResponsesByteIdentical(t *testing.T) {
 	makeReq := func(checker *fakeProjectCheckerT12, projectName string) []byte {
 		store := &fakeSecretStoreT01{}
-		h := NewSecretHandler(store)
+		h := NewSecretHandler(store, &lockCountingFake{})
 		h.SetProjectChecker(checker)
 		body, _ := json.Marshal(map[string]any{
 			"project": projectName,
@@ -1159,7 +1132,7 @@ func TestSecretHandler_List_NonExistentProject_Returns404_RedTeam92(t *testing.T
 			"owned-project": "tn-test-123",
 		},
 	}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 	h.SetProjectChecker(checker)
 
 	req := httptest.NewRequest(http.MethodGet,
@@ -1182,7 +1155,7 @@ func TestSecretHandler_List_ExistingProject_AllowsThrough_RedTeam92(t *testing.T
 	checker := &fakeProjectCheckerT12{
 		owned: map[string]string{"owned-project": "tn-test-123"},
 	}
-	h := NewSecretHandler(store)
+	h := NewSecretHandler(store, &lockCountingFake{})
 	h.SetProjectChecker(checker)
 
 	req := httptest.NewRequest(http.MethodGet,
