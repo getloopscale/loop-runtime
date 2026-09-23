@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/gitref"
 )
 
 // archiveDeleteMarker is the PR title substring that unlocks DELETE operations
@@ -63,7 +65,7 @@ func Check(cfg Config) (*Outcome, error) {
 		deleted = cfg.DiffDeleted
 	} else {
 		// Pre-flight: verify base-ref reachable (EC-04 from nonewbash).
-		if err := verifyRefReachable(cfg.RepoRoot, cfg.BaseRef); err != nil {
+		if err := gitref.VerifyRefReachable(cfg.RepoRoot, cfg.BaseRef); err != nil {
 			return nil, err
 		}
 		addedOrMod, err = gitDiffAddedOrModified(cfg.RepoRoot, cfg.BaseRef, cfg.HeadRef, cfg.ArchivePathRoot)
@@ -112,22 +114,6 @@ func Check(cfg Config) (*Outcome, error) {
 // because git always emits forward slashes regardless of OS.
 func isUnder(path, prefix string) bool {
 	return strings.HasPrefix(path, prefix)
-}
-
-// verifyRefReachable does `git rev-parse --verify <ref>` to confirm presence.
-// On failure, returns a typed error with BASE_REF_UNREACHABLE.
-func verifyRefReachable(repoRoot, ref string) error {
-	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", ref+"^{commit}")
-	cmd.Dir = repoRoot
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf(
-			"BASE_REF_UNREACHABLE: base ref %q not found in local git history. "+
-				"This typically means a shallow clone (default GitHub Actions checkout depth=1). "+
-				"Fix: set `fetch-depth: 0` on actions/checkout@v4 step, OR run "+
-				"`git fetch origin %s` before invoking the gate. Underlying: %v",
-			ref, ref, err)
-	}
-	return nil
 }
 
 // gitDiffAddedOrModified returns paths under archivePathRoot with status A (added) or M (modified)

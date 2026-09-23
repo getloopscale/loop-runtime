@@ -27,6 +27,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/gitref"
 )
 
 // Config tells Check where to operate.
@@ -76,7 +78,7 @@ func Check(cfg Config) (*Outcome, error) {
 	}
 
 	// 2. EC-04 pre-flight: verify base-ref reachable
-	if err := verifyRefReachable(cfg.RepoRoot, cfg.BaseRef); err != nil {
+	if err := gitref.VerifyRefReachable(cfg.RepoRoot, cfg.BaseRef); err != nil {
 		return nil, err
 	}
 
@@ -98,23 +100,6 @@ func Check(cfg Config) (*Outcome, error) {
 		}
 	}
 	return outcome, nil
-}
-
-// verifyRefReachable does `git rev-parse --verify <ref>` to confirm presence.
-// On failure, returns a typed error with BASE_REF_UNREACHABLE and the actionable
-// hint to set fetch-depth: 0 in CI.
-func verifyRefReachable(repoRoot, ref string) error {
-	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", ref+"^{commit}")
-	cmd.Dir = repoRoot
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf(
-			"BASE_REF_UNREACHABLE: base ref %q not found in local git history. "+
-				"This typically means a shallow clone (default GitHub Actions checkout depth=1). "+
-				"Fix: set `fetch-depth: 0` on actions/checkout@v4 step, OR run "+
-				"`git fetch origin %s` before invoking the gate. Underlying: %v",
-			ref, ref, err)
-	}
-	return nil
 }
 
 // gitDiffAdded runs `git diff --name-only --diff-filter=AR base...head -- '*.sh'`
