@@ -122,6 +122,12 @@ func runDocsContractRefs(args []string) int {
 		fmt.Fprintf(os.Stderr, "docs-contract-refs: %v\n", err)
 		return 2
 	}
+	if len(out.NotVerified) > 0 {
+		fmt.Printf("docs-contract-refs: PASS (PARTIAL) — %d normative reference(s) resolve (%d allowlisted with a sunset); "+
+			"%d reference(s) into the ecosystem kit NOT verified: the kit is not installed on this checkout\n",
+			out.Checked, out.Allowlisted, len(out.NotVerified))
+		return 0
+	}
 	fmt.Printf("docs-contract-refs: PASS — %d normative reference(s) resolve (%d allowlisted with a sunset)\n",
 		out.Checked, out.Allowlisted)
 	return 0
@@ -180,7 +186,7 @@ func runEcosystemValidators(args []string) int {
 
 	out, err := ecosystemvalidators.Check(ecosystemvalidators.Config{RepoRoot: *root})
 	if out.Advisory {
-		fmt.Println("ecosystem-validators: ADVISORY — python3 ausente; nada foi concluído")
+		fmt.Printf("ecosystem-validators: ADVISORY — nothing was concluded: %s\n", out.AdvisoryReason)
 		return 0
 	}
 	if err != nil {

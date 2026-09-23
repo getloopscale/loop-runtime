@@ -44,39 +44,9 @@ func TestModeWarnPasses(t *testing.T) {
 	}
 }
 
-func TestModeEnforceWithADRPasses(t *testing.T) {
-	root := setup(t, enforceValues, map[string]string{
-		".claude/knowledge-base/decisions/0050-deny.md": "Decision: flip find_infra_008 cutover.\n",
-	})
-	o := Check(Config{Root: root})
-	if !o.Pass {
-		t.Errorf("enforce with ADR sign-off should pass, got %+v", o)
-	}
-}
-
-func TestModeEnforceWithMeetingPasses(t *testing.T) {
-	root := setup(t, enforceValues, map[string]string{
-		".claude/knowledge-base/meetings/MEET-x.md": "policyMode enforce ratified.\n",
-	})
-	o := Check(Config{Root: root})
-	if !o.Pass {
-		t.Errorf("enforce with MEET sign-off should pass, got %+v", o)
-	}
-}
-
-func TestModeEnforceWithLegacyADRPasses(t *testing.T) {
-	root := setup(t, enforceValues, map[string]string{
-		"docs/meetings/adr/0050.md": "T8.6 deny-flip approved.\n",
-	})
-	o := Check(Config{Root: root})
-	if !o.Pass {
-		t.Errorf("enforce with legacy ADR should pass, got %+v", o)
-	}
-}
-
 func TestModeEnforceWithoutSignOffFails(t *testing.T) {
 	root := setup(t, enforceValues, map[string]string{
-		".claude/knowledge-base/decisions/unrelated.md": "Some other decision.\n",
+		"docs/decisions.md": "# Decisions\n\nSome other decision.\n",
 	})
 	o := Check(Config{Root: root})
 	if o.Pass {
@@ -84,8 +54,8 @@ func TestModeEnforceWithoutSignOffFails(t *testing.T) {
 	}
 }
 
-func TestModeEnforceNoADRDirFails(t *testing.T) {
-	root := setup(t, enforceValues, nil) // no ADR/MEET dirs at all
+func TestModeEnforceWithoutADecisionsDocFails(t *testing.T) {
+	root := setup(t, enforceValues, nil) // no docs/decisions.md at all
 	o := Check(Config{Root: root})
 	if o.Pass {
 		t.Error("enforce with no sign-off dirs must fail")
@@ -117,10 +87,23 @@ func TestModeFieldAbsentPasses(t *testing.T) {
 	}
 }
 
-func TestMissingValuesFilePasses(t *testing.T) {
+// The values file is the gate's subject; when it cannot be read the mode was
+// never checked, and that is not a pass.
+func TestMissingValuesFileFails(t *testing.T) {
 	root := setup(t, "<absent>", nil)
-	if !Check(Config{Root: root}).Pass {
-		t.Error("missing values.yaml should pass")
+	if Check(Config{Root: root}).Pass {
+		t.Error("an unreadable values.yaml must not pass")
+	}
+}
+
+// A sign-off written under the gitignored .claude tree reaches nobody who
+// clones, so the gate no longer accepts one there.
+func TestSignOffUnderGitignoredKitTreeIsNotAccepted(t *testing.T) {
+	root := setup(t, enforceValues, map[string]string{
+		".claude/knowledge-base/decisions/0050-deny.md": "Decision: flip find_infra_008 cutover.\n",
+	})
+	if Check(Config{Root: root}).Pass {
+		t.Error("a sign-off under .claude/ must not satisfy the gate")
 	}
 }
 

@@ -89,8 +89,11 @@ type Result struct {
 
 // Outcome reports the run.
 type Outcome struct {
-	Advisory bool // no interpreter; nothing was concluded
-	Results  []Result
+	// Advisory means nothing was concluded: the interpreter or the kit itself
+	// is absent. AdvisoryReason says which.
+	Advisory       bool
+	AdvisoryReason string
+	Results        []Result
 }
 
 // Failed lists the validators that exited non-zero.
@@ -122,6 +125,14 @@ type Config struct {
 }
 
 const defaultTimeout = 2 * time.Minute
+
+// kitInstalled reports whether eco holds the kit's mechanisms tree. The kit is
+// an installed, gitignored dependency in consumer repositories (this one
+// included), so a clone may legitimately not have it.
+func kitInstalled(eco string) bool {
+	fi, err := os.Stat(filepath.Join(eco, "mechanisms"))
+	return err == nil && fi.IsDir()
+}
 
 // resolveEco returns the ecosystem directory, honouring both layouts.
 //
@@ -156,8 +167,12 @@ func Check(cfg Config) (Outcome, error) {
 	}
 	eco := resolveEco(cfg.RepoRoot, cfg.EcoRel)
 
+	if !kitInstalled(eco) {
+		return Outcome{Advisory: true, AdvisoryReason: "the ecosystem kit is not installed here (no mechanisms/ under " +
+			eco + "); it is a gitignored dependency, so a clone without it has nothing to run"}, nil
+	}
 	if _, err := exec.LookPath("python3"); err != nil {
-		return Outcome{Advisory: true}, nil
+		return Outcome{Advisory: true, AdvisoryReason: "python3 is not on PATH"}, nil
 	}
 
 	var out Outcome

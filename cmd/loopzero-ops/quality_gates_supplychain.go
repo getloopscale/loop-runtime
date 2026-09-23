@@ -320,8 +320,8 @@ func runClusterImagePolicyMode(args []string) int {
 		fmt.Fprintf(os.Stderr, "FAIL — clusterImagePolicy.mode governance violation: %s\n", o.Reason)
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "The deny-flip rejects unsigned images at admission. Either revert mode to")
-		fmt.Fprintln(os.Stderr, "'warn', OR add an ADR in .claude/knowledge-base/decisions/ (or a MEET record)")
-		fmt.Fprintln(os.Stderr, "referencing the cutover (T8.6 / find_infra_008 / deny-mode / mitigation #4).")
+		fmt.Fprintln(os.Stderr, "'warn', OR record the decision in docs/decisions.md referencing the cutover")
+		fmt.Fprintln(os.Stderr, "(T8.6 / find_infra_008 / deny-flip / deny-mode / mitigation #4).")
 		return 1
 	}
 	fmt.Printf("PASS — %s\n", o.Reason)

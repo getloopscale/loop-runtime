@@ -27,7 +27,7 @@ func escreverArquivo(t *testing.T, raiz, rel, corpo string) {
 func TestDocumentoDeDecisaoNaoResolveIdQueApenasMenciona(t *testing.T) {
 	raiz := t.TempDir()
 	escreverArquivo(t, raiz, "pkg/a/a.go", "package a\n\n// per ADR-0024\nvar X = 1\n")
-	escreverArquivo(t, raiz, "docs/wiki/decisions/2026-08-12-contrato.md",
+	escreverArquivo(t, raiz, "docs/decisions/2026-08-12-contrato.md",
 		"# Duas regras mandam o oposto\n\n**Data:** 2026-08-12\n\n"+
 			"O `ADR-0024` e' citado por 8 pontos de codigo e NAO EXISTE.\n")
 
@@ -48,7 +48,7 @@ func TestDocumentoDeDecisaoNaoResolveIdQueApenasMenciona(t *testing.T) {
 func TestDocumentoDeDecisaoResolveOIdQueDeclaraNoCabecalho(t *testing.T) {
 	raiz := t.TempDir()
 	escreverArquivo(t, raiz, "pkg/a/a.go", "package a\n\n// per ADR-0024\nvar X = 1\n")
-	escreverArquivo(t, raiz, "docs/wiki/decisions/adr-0024.md",
+	escreverArquivo(t, raiz, "docs/decisions/adr-0024.md",
 		"# ADR-0024: quem escreve o status\n\n**Status:** ACCEPTED\n")
 
 	out, err := Check(Config{RepoRoot: raiz})

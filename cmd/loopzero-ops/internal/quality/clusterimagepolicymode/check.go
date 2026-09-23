@@ -12,6 +12,7 @@
 package clusterimagepolicymode
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -23,21 +24,18 @@ const (
 	DefaultValuesFile = "infra/helm/admission-policies/values.yaml"
 	// DefaultDecisionsDoc is where a decision in THIS repository is written: one of the
 	// six living documents the 2026-09-11 consolidation left, and versioned, so it reaches
-	// whoever clones. Checked first, ahead of the three directories below.
+	// whoever clones. It is the only place a sign-off is accepted: the directories the
+	// gate used to fall back to were under the gitignored .claude/ tree (or no longer
+	// existed), so a sign-off found there held on one machine only.
 	DefaultDecisionsDoc = "docs/decisions.md"
-	DefaultADRDir       = ".claude/knowledge-base/decisions"
-	DefaultMeetingDir   = ".claude/knowledge-base/meetings"
-	DefaultLegacyADR    = "docs/meetings/adr"
 )
 
 var (
 	clusterBlockRe = regexp.MustCompile(`^clusterImagePolicy:`)
 	topLevelKeyRe  = regexp.MustCompile(`^[a-zA-Z]`)
 	modeLineRe     = regexp.MustCompile(`^[[:space:]]+mode:[[:space:]]*(.+)$`)
-	// Sign-off keyword sets (case-sensitive, matching the bash grep -E).
-	adrKeywordRe     = regexp.MustCompile(`T8\.6|find_infra_008|clusterimagepolicy.*enforce|deny-flip|deny-mode|T1\.2.*#4|mitigation #4`)
-	meetingKeywordRe = regexp.MustCompile(`deny-mode|policyMode.*enforce|T1\.2.*#4|mitigation #4`)
-	legacyKeywordRe  = regexp.MustCompile(`T8\.6|find_infra_008`)
+	// signOffRe names the cutover (case-sensitive, matching the bash grep -E).
+	signOffRe = regexp.MustCompile(`T8\.6|find_infra_008|clusterimagepolicy.*enforce|deny-flip|deny-mode|T1\.2.*#4|mitigation #4`)
 )
 
 // Config drives the gate.
@@ -45,9 +43,6 @@ type Config struct {
 	Root         string
 	DecisionsDoc string // default DefaultDecisionsDoc
 	ValuesFile   string // default DefaultValuesFile
-	ADRDir       string // default DefaultADRDir
-	MeetingDir   string // default DefaultMeetingDir
-	LegacyADR    string // default DefaultLegacyADR
 }
 
 // Outcome captures the result.
@@ -65,13 +60,10 @@ func Check(cfg Config) *Outcome {
 	}
 	valuesFile := orDefault(cfg.ValuesFile, DefaultValuesFile)
 	decisionsDoc := orDefault(cfg.DecisionsDoc, DefaultDecisionsDoc)
-	adrDir := orDefault(cfg.ADRDir, DefaultADRDir)
-	meetingDir := orDefault(cfg.MeetingDir, DefaultMeetingDir)
-	legacyADR := orDefault(cfg.LegacyADR, DefaultLegacyADR)
 
-	data, err := os.ReadFile(filepath.Join(root, valuesFile))
+	data, err := os.ReadFile(filepath.Join(root, valuesFile)) // #nosec G304 -- path under the repo root
 	if err != nil {
-		return &Outcome{Pass: true, Reason: "values.yaml not found (chart not present in this snapshot)"}
+		return &Outcome{Pass: false, Reason: fmt.Sprintf("cannot read %s, so the mode was never checked: %v", valuesFile, err)}
 	}
 
 	mode := extractMode(string(data))
@@ -81,21 +73,8 @@ func Check(cfg Config) *Outcome {
 	case mode == "warn":
 		return &Outcome{Pass: true, Mode: mode, Reason: "mode is 'warn' (Sprint 6 default; Sprint 9 cutover pending)"}
 	case mode == "enforce":
-		// The versioned document first. The three directories below are kept as fallbacks
-		// for an installation that still has them; measured 2026-09-16, none of the three
-		// exists here, which made this gate unsatisfiable — every path it could accept was
-		// absent, so no operator action could have satisfied it.
-		if fileMatches(filepath.Join(root, decisionsDoc), adrKeywordRe) {
+		if fileMatches(filepath.Join(root, decisionsDoc), signOffRe) {
 			return &Outcome{Pass: true, Mode: mode, Reason: "mode 'enforce' with sign-off in " + decisionsDoc}
-		}
-		if anyMDMatches(filepath.Join(root, adrDir), adrKeywordRe) {
-			return &Outcome{Pass: true, Mode: mode, Reason: "mode 'enforce' with ADR sign-off (knowledge-base/decisions)"}
-		}
-		if anyMDMatches(filepath.Join(root, meetingDir), meetingKeywordRe) {
-			return &Outcome{Pass: true, Mode: mode, Reason: "mode 'enforce' with MEET sign-off (knowledge-base/meetings)"}
-		}
-		if anyMDMatches(filepath.Join(root, legacyADR), legacyKeywordRe) {
-			return &Outcome{Pass: true, Mode: mode, Reason: "mode 'enforce' with legacy ADR sign-off (docs/meetings/adr)"}
 		}
 		return &Outcome{Pass: false, Mode: mode,
 			Reason: "mode 'enforce' but no record references the deny-flip cutover — write it in " + decisionsDoc}
@@ -135,27 +114,6 @@ func extractMode(content string) string {
 		}
 	}
 	return ""
-}
-
-// anyMDMatches reports whether any top-level *.md file in dir matches re.
-func anyMDMatches(dir string, re *regexp.Regexp) bool {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return false
-	}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			continue
-		}
-		if re.Match(data) {
-			return true
-		}
-	}
-	return false
 }
 
 func orDefault(v, def string) string {
