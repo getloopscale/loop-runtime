@@ -224,3 +224,63 @@ func TestMeteringLoop_Tick_Disabled_FreshnessDoesNotGrow(t *testing.T) {
 		t.Errorf("a disabled loop must not accumulate staleness (keep-alive): first=%v second=%v", first, second)
 	}
 }
+
+// freshnessAfterTwoTicks runs two ticks a minute apart and returns the
+// freshness observed at the start of each.
+func freshnessAfterTwoTicks(r runner, ks killSwitch) (first, second float64) {
+	m := &fakeMetrics{}
+	clk := &advanceableClock{now: loopEpoch}
+	loop := NewLoop(r, ks, m, clk, time.Minute)
+	clk.advance(time.Minute)
+	loop.tick(context.Background())
+	clk.advance(time.Minute)
+	loop.tick(context.Background())
+	first = m.lastFreshness
+	clk.advance(time.Minute)
+	loop.tick(context.Background())
+	return first, m.lastFreshness
+}
+
+// An unreadable kill-switch is an outage (the database is unreachable), not an
+// idle loop: no pass metered, so billing staleness must grow and alert.
+func TestMeteringLoop_Tick_KillSwitchError_FreshnessGrows(t *testing.T) {
+	first, second := freshnessAfterTwoTicks(&fakeRunner{}, &fakeKillSwitch{err: errors.New("db down")})
+	if second <= first {
+		t.Errorf("freshness must grow while the kill-switch is unreadable: first=%v second=%v", first, second)
+	}
+}
+
+// A deleted kill-switch row is an operational alarm (EC-5), not a deliberate off.
+func TestMeteringLoop_Tick_KillSwitchRowAbsent_FreshnessGrows(t *testing.T) {
+	first, second := freshnessAfterTwoTicks(&fakeRunner{}, &fakeKillSwitch{found: false})
+	if second <= first {
+		t.Errorf("freshness must grow while the kill-switch row is absent: first=%v second=%v", first, second)
+	}
+}
+
+// A pass in which every tenant failed metered nothing.
+func TestMeteringLoop_Tick_EveryTenantFailed_FreshnessGrows(t *testing.T) {
+	runner := &fakeRunner{err: &PassError{Failed: 2, Total: 2, Err: errors.New("cells unreachable")}}
+	first, second := freshnessAfterTwoTicks(runner, &fakeKillSwitch{enabled: true, found: true})
+	if second <= first {
+		t.Errorf("freshness must grow when every tenant failed: first=%v second=%v", first, second)
+	}
+}
+
+// A pass that could not even list the tenants metered nothing either.
+func TestMeteringLoop_Tick_ListingFailed_FreshnessGrows(t *testing.T) {
+	runner := &fakeRunner{err: errors.New("metering: list active tenants: db down")}
+	first, second := freshnessAfterTwoTicks(runner, &fakeKillSwitch{enabled: true, found: true})
+	if second <= first {
+		t.Errorf("freshness must grow when the tenant list failed: first=%v second=%v", first, second)
+	}
+}
+
+// A degraded pass in which some tenants were metered keeps the loop fresh.
+func TestMeteringLoop_Tick_SomeTenantsMetered_FreshnessHolds(t *testing.T) {
+	runner := &fakeRunner{err: &PassError{Failed: 1, Total: 2, Err: errors.New("one cell unreachable")}}
+	first, second := freshnessAfterTwoTicks(runner, &fakeKillSwitch{enabled: true, found: true})
+	if second > first {
+		t.Errorf("a partially successful pass must keep freshness: first=%v second=%v", first, second)
+	}
+}

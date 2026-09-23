@@ -20,6 +20,7 @@ package metering
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync/atomic"
 	"time"
@@ -91,17 +92,16 @@ func (l *Loop) tick(ctx context.Context) {
 
 	enabled, found, err := l.killSwitch.IsMeteringEnabled(ctx)
 	if err != nil {
-		// EC-5 fail-safe: an unreadable kill-switch HOLDS — never bill blind. Idle,
-		// not stale: bump lastSuccess so the freshness gauge does not alarm.
+		// EC-5 fail-safe: an unreadable kill-switch HOLDS — never bill blind. It is
+		// an outage (the store is unreachable), not idleness: lastSuccess is NOT
+		// advanced, so the freshness gauge grows and alerts on the billing gap.
 		slog.WarnContext(ctx, "metering: kill-switch unreadable — skipping pass (fail-safe)", "err", err)
-		l.lastSuccess = l.clock.Now()
 		return
 	}
 	if !found {
-		// EC-5: the config row is absent → DISABLED + WARN (operational alarm — a
-		// seeded row was deleted). Idle, not stale.
+		// EC-5: the config row is absent → DISABLED + WARN. A seeded row was
+		// deleted — an operational alarm, so freshness is left to grow.
 		slog.WarnContext(ctx, "metering: kill-switch row absent — metering disabled (EC-5)")
-		l.lastSuccess = l.clock.Now()
 		return
 	}
 	if !enabled {
@@ -113,16 +113,24 @@ func (l *Loop) tick(ctx context.Context) {
 
 	start := l.clock.Now()
 	runErr := l.runner.RunOnce(ctx)
-	// The pass ran to completion (even a degraded pass with per-tenant HOLDs means
-	// the LOOP is alive) — record its wall-clock + anchor freshness. A panic returns
-	// above without reaching here, leaving lastSuccess frozen (the alarm signal).
 	l.metrics.PassDuration(l.clock.Now().Sub(start).Seconds())
-	l.lastSuccess = l.clock.Now()
-	if runErr != nil {
-		// A degraded pass (one or more tenants failed) is logged, never fatal —
-		// the per-tenant failures are already isolated inside RunOnce (SC-3).
-		slog.WarnContext(ctx, "metering: pass completed with tenant failures", "err", runErr)
+	// Freshness is anchored only by a pass that metered something: a clean pass,
+	// or a degraded one in which some tenants were metered (per-tenant failures
+	// are isolated inside RunOnce, SC-3). A pass that failed for every tenant, or
+	// could not list them, leaves lastSuccess frozen — the alarm signal. A panic
+	// returns above without reaching here, with the same effect.
+	if runErr == nil || meteredSome(runErr) {
+		l.lastSuccess = l.clock.Now()
 	}
+	if runErr != nil {
+		slog.WarnContext(ctx, "metering: pass completed with failures", "err", runErr)
+	}
+}
+
+// meteredSome reports whether a failed pass still metered at least one tenant.
+func meteredSome(err error) bool {
+	var pe *PassError
+	return errors.As(err, &pe) && pe.Failed < pe.Total
 }
 
 // Run drives tick on the interval until ctx is cancelled. The leader gate is the
