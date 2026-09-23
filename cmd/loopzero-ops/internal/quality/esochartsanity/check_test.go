@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmrender"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func TestCheck_ChartMissing_FAIL(t *testing.T) {
@@ -38,20 +39,7 @@ func TestCheck_RealRepoWithHelm(t *testing.T) {
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Skip("helm not on PATH — skipping LIVE render")
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	root := cwd
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(root, "ROADMAP.md")); err == nil {
-			break
-		}
-		root = filepath.Dir(root)
-	}
-	if _, err := os.Stat(filepath.Join(root, "ROADMAP.md")); err != nil {
-		t.Skip("could not locate ROADMAP.md")
-	}
+	root := qtestutil.Root(t)
 	outcome, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("real-repo violation: %v; %v", err, outcome.Failures)
