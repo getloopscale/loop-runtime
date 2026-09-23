@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"log/slog"
 	"os"
 	"sync"
@@ -168,7 +169,7 @@ func setupDomains(
 ) (*domains.DomainHandler, *domain.DomainProvisioner, *domain.DomainHealthChecker, *cfzone.Client) {
 	cnameTarget := "cname." + cfg.BaseDomain
 	domainValidator := ports.NewValidator(cfg.BaseDomain, nil)
-	dnsVerifier := &ports.DNSVerifier{}
+	dnsVerifier := &adapters.DNSTXTVerifier{}
 	domainHandler := domains.NewDomainHandler(stores.DomainStore, dnsVerifier, domainValidator, cnameTarget)
 
 	cfZoneClient := cfzone.NewClient(cfg.CFAccountID, cfg.CFAPIToken)
