@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // SubmitBuildErrorReason discriminates failure modes returned by
@@ -62,7 +63,7 @@ const (
 )
 
 // stageToReason maps canonical stage labels to the typed reason consumed by
-// pkg/errors.NewBuildSubmitFailedFromReason. Per Sprint 6 ADR D2.
+// SubmitBuildError.UserError. Per Sprint 6 ADR D2.
 var stageToReason = map[SubmitBuildStage]SubmitBuildErrorReason{
 	StageCheckActiveBuilds: ReasonBuildSubmitDBWriteFailed,
 	StageResolveScaling:    ReasonBuildSubmitDBWriteFailed,
@@ -93,10 +94,34 @@ func (r SubmitBuildErrorReason) String() string {
 	return "Unknown"
 }
 
+// reasonSummaries is the actionable summary of each reason, composed with the
+// verbatim cause by loopzeroerrors.NewComposed. It lives beside the enum so a new
+// reason and its copy change together. Product language only (Rule 3).
+var reasonSummaries = map[SubmitBuildErrorReason]string{
+	ReasonBuildSubmitWorkflowFailed:      "Build trigger failed at workflow submit",
+	ReasonBuildSubmitProjectEnsureFailed: "Build trigger failed while ensuring the project exists",
+	ReasonBuildSubmitDBWriteFailed:       "Build trigger failed at a database write step",
+	ReasonBuildSubmitAppNormalizeFailed:  "Build trigger failed validating one of the apps",
+	ReasonBuildSubmitUnknown:             "Build trigger failed (cause not classified)",
+}
+
+// Summary returns the user-facing summary of the reason, or "" for a value
+// outside the enum (the caller then falls back to the neutral message).
+func (r SubmitBuildErrorReason) Summary() string {
+	return reasonSummaries[r]
+}
+
+// UserError is the BUILD_SUBMIT_FAILED error shown to the user: the reason's
+// summary composed with the scrubbed detail, or a trace reference when the
+// detail says nothing useful.
+func (e *SubmitBuildError) UserError(traceID string) *loopzeroerrors.LoopZeroError {
+	return loopzeroerrors.NewComposed(loopzeroerrors.ErrBuildSubmitFailed, e.Reason.Summary(), e.Detail, traceID)
+}
+
 // SubmitBuildError is the discriminated typed error returned by
 // BuildOrchestrator.SubmitBuild after Sprint 6. Mirrors the Sprint 5
 // canonical *PushBundleError so routes/builds.go::mapBuildError can dispatch
-// via AsSubmitBuildError to NewBuildSubmitFailedFromReason.
+// via AsSubmitBuildError to SubmitBuildError.UserError.
 type SubmitBuildError struct {
 	Reason SubmitBuildErrorReason
 	Stage  SubmitBuildStage

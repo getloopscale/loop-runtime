@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // MaxBundleBytes is the size ceiling for source bundles. Larger payloads
@@ -86,6 +88,34 @@ func (r PushBundleErrorReason) String() string {
 		return s
 	}
 	return "Unknown"
+}
+
+// reasonSummaries is the operator-actionable summary of each reason, composed
+// with the verbatim cause by loopzeroerrors.NewComposed ("<summary>: <detail>").
+// It lives beside the enum so a new reason and its copy change together.
+// Product language only (Rule 3): "source backend", never the component name.
+var reasonSummaries = map[PushBundleErrorReason]string{
+	ReasonSourceBackendUnreachable: "Source backend is unreachable (network or DNS failure)",
+	ReasonRemoteRejectedPush:       "The remote rejected the push",
+	ReasonBundleMalformed:          "The source bundle is malformed. Re-run `loopzero deploy` from your project root",
+	ReasonBundleTooLarge:           "The source bundle exceeds the size limit. Reduce the size of your source tree",
+	ReasonArchiveReadError:         "Could not read the source archive. Check your project files and try again",
+	ReasonSourceBackendAuthFailure: "Source backend rejected authentication",
+	ReasonSourceBackendCapacity:    "Source backend is out of capacity",
+	ReasonUnknownDownstream:        "Source upload failed (cause not classified)",
+}
+
+// Summary returns the user-facing summary of the reason, or "" for a value
+// outside the enum (the caller then falls back to the neutral message).
+func (r PushBundleErrorReason) Summary() string {
+	return reasonSummaries[r]
+}
+
+// UserError is the SOURCE_UPLOAD_FAILED error shown to the user: the reason's
+// summary composed with the scrubbed detail, or a trace reference when the
+// detail says nothing useful.
+func (e *PushBundleError) UserError(traceID string) *loopzeroerrors.LoopZeroError {
+	return loopzeroerrors.NewComposed(loopzeroerrors.ErrSourceUploadFailed, e.Reason.Summary(), e.Detail, traceID)
 }
 
 // PushBundleError is the discriminated typed error returned by PushBundle.

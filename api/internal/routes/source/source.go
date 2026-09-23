@@ -362,8 +362,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 			// to placeholder-only, the operator gets "Reference: <id>.
 			// Contact support if it persists." (closes #35 Red Team
 			// original suggestion).
-			httpio.WriteLoopZeroError(w, loopzeroerrors.NewSourceUploadFailedFromPushReasonWithTrace(
-				pushErr.Reason.String(), pushErr.Detail, correlation.Read(r)))
+			httpio.WriteLoopZeroError(w, pushErr.UserError(correlation.Read(r)))
 			return
 		}
 		// Fallback: untyped failure (downstream helper that didn't get

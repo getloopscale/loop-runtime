@@ -616,7 +616,7 @@ func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
 	// Sprint 6 ADR D3: dispatch wrap-site discriminated *SubmitBuildError
 	// BEFORE the generic catchall. The reason label is the wire form
 	// (Stringer output); the verbatim cause is composed into the user-
-	// facing message via pkg/errors.NewBuildSubmitFailedFromReason.
+	// facing message via SubmitBuildError.UserError.
 	if se, ok := build.AsSubmitBuildError(err); ok {
 		slog.Error("build trigger failed (typed)",
 			"reason", se.Reason.String(),
@@ -630,8 +630,7 @@ func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
 		// gets a "Reference: <id>. Contact support if it persists." handle
 		// to the server-side log (closes the #35 Red Team original
 		// suggestion of separating client-facing from server-side cause).
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewBuildSubmitFailedFromReasonWithTrace(
-			se.Reason.String(), se.Detail, correlation.Read(r)))
+		httpio.WriteLoopZeroError(w, se.UserError(correlation.Read(r)))
 		return
 	}
 
