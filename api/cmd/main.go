@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"github.com/getloopscale/loopzero/api/internal/leader"
 	"log/slog"
 	"net/http"
 	"net/http/pprof"
@@ -252,34 +253,37 @@ func main() {
 		dh, domainProvisioner, domainHealthChecker, cfZoneClient := setupDomains(stores, workflows, cfg, logger)
 		domainHandler = dh
 
-		// MEET-ASYNC-AMENDMENT-2026-05-12-003 Option A (RATIFIED 2026-05-12):
-		// run leader election in a goroutine so HTTP server starts immediately.
-		// Passive standby pods serve /healthz (probes pass) while waiting for
-		// the lock; only the leader runs background reconcile loops.
-		// Pre-fix: synchronous setupLeaderElection blocked main() up to 60s,
-		// causing 2nd replica liveness/startup probe failure -> crashloop.
-		//
-		// Iter 19 fix: do NOT defer LeaderConn.Release() inside this goroutine.
-		// startLeaderLoops spawns runLeaderHeartbeat (setup_background.go:422)
-		// which OWNS the conn for its lifetime. When the wrapping goroutine
-		// returns, the deferred Release() yanks the conn out from under the
-		// heartbeat -> panic in pgxpool.Conn.QueryRow. The conn is cleaned
-		// up at process exit via pgxpool.Close (line 116 main.go).
-		bgWg.Add(1)
-		go func() {
-			defer bgWg.Done()
-			leaderResult := setupLeaderElection(dbAdapter.Pool, shutdownCtx, logger)
-
-			if leaderResult.IsLeader {
-				startLeaderLoops(shutdownCtx, &bgWg, leaderResult.LeaderConn,
-					bgAdapter, bgStores, workflows, orchDeps, k8sDeps, cellRouter,
-					domainProvisioner, domainHealthChecker, cfZoneClient, cfg, logger)
+		// The election runs in a goroutine so the HTTP server starts at once;
+		// standby replicas serve traffic while waiting (MEET-ASYNC-AMENDMENT-
+		// 2026-05-12-003 Option A). The lease is the fenced generation lease
+		// the controller binary uses, under the same name, so the two binaries
+		// never run the loops together. With LOOPZERO_DISABLE_LEGACY_LOOPS=true the
+		// API does not compete: the controller owns the loops.
+		if cfg.DisableLegacyLoops {
+			logger.Info("LOOPZERO_DISABLE_LEGACY_LOOPS=true — loops will not run here; controller binary owns them")
+			metrics.LeaderStatus.Set(0)
+		} else {
+			leaderCfg := leader.DefaultConfig()
+			ticker := time.NewTicker(leaderCfg.HeartbeatInterval)
+			election := &loopsElection{
+				acquirer: leader.NewAcquirer(bgAdapter, leaderCfg),
+				name:     leader.BackgroundLoopsLeaseName,
+				cellID:   db.CellDefault,
+				holder:   leaseHolder(),
+				tick:     ticker.C,
+				logger:   logger,
 			}
-			// Non-leader: setupLeaderElection already started the
-			// startNonLeaderReelection goroutine which polls every 60s
-			// and os.Exit(0) when lock acquired. LeaderConn lives for
-			// the lifetime of that re-election goroutine.
-		}()
+			bgWg.Add(1)
+			go func() {
+				defer bgWg.Done()
+				defer ticker.Stop()
+				election.run(shutdownCtx, func(loopsCtx context.Context) {
+					startLeaderLoops(loopsCtx, &bgWg,
+						bgAdapter, bgStores, workflows, orchDeps, k8sDeps, cellRouter,
+						domainProvisioner, domainHealthChecker, cfZoneClient, cfg, logger)
+				})
+			}()
+		}
 	}
 	defer waitForBackgroundGoroutines(&bgWg, logger)
 
@@ -506,4 +510,16 @@ func setupBuildHandler(
 	// funcao que devolve so' o handler. Passou para `setup_server.go`, onde a config do servidor
 	// e' montada e onde ele pode ser entregue ao middleware que decide.
 	return buildHandler
+}
+
+// leaseHolder names this process in the leader lease: the pod name Kubernetes
+// puts in HOSTNAME, or the OS hostname outside it.
+func leaseHolder() string {
+	if n := os.Getenv("HOSTNAME"); n != "" {
+		return n
+	}
+	if n, err := os.Hostname(); err == nil {
+		return n
+	}
+	return "loopzero-api"
 }

@@ -23,98 +23,15 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/getloopscale/loopzero/api/internal/cfkv"
 	"github.com/getloopscale/loopzero/api/internal/cfzone"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
-
-// LeaderElectionResult holds leader election state.
-type LeaderElectionResult struct {
-	IsLeader   bool
-	LeaderConn *pgxpool.Conn
-}
-
-const leaderLockID int64 = 0x7468656F6C656164 // "loopzerolead" in hex
-
-// setupLeaderElection acquires the leader advisory lock.
-// Caller must defer LeaderConn.Release() on shutdown.
-func setupLeaderElection(
-	pool *pgxpool.Pool,
-	shutdownCtx context.Context,
-	logger *slog.Logger,
-) *LeaderElectionResult {
-	leaderConn, err := pool.Acquire(context.Background())
-	if err != nil {
-		logger.Error("failed to acquire database connection for leader election", "error", err)
-		os.Exit(1)
-	}
-
-	var isLeader bool
-	logger.Info("starting leader election", "lockID", leaderLockID, "maxAttempts", 12)
-	for attempt := 0; attempt < 12; attempt++ {
-		if err := leaderConn.QueryRow(context.Background(),
-			"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&isLeader); err != nil {
-			logger.Error("failed to acquire leader lock", "error", err)
-			os.Exit(1)
-		}
-		if isLeader {
-			break
-		}
-		logger.Info("leader lock held by another instance, retrying...", "attempt", attempt+1, "max", 12)
-		time.Sleep(5 * time.Second)
-	}
-
-	if isLeader {
-		metrics.LeaderStatus.Set(1)
-		logger.Info("leader lock acquired — background loops will start on this replica")
-	} else {
-		metrics.LeaderStatus.Set(0)
-		logger.Warn("another API instance holds the leader lock — background loops will NOT start on this replica",
-			"hint", "The API can serve HTTP requests but reconcile/reaper loops are disabled.")
-		startNonLeaderReelection(leaderConn, shutdownCtx, logger)
-	}
-
-	return &LeaderElectionResult{IsLeader: isLeader, LeaderConn: leaderConn}
-}
-
-// startNonLeaderReelection periodically retries leader acquisition for non-leader pods.
-func startNonLeaderReelection(leaderConn *pgxpool.Conn, shutdownCtx context.Context, logger *slog.Logger) {
-	go func() {
-		ticker := time.NewTicker(60 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-shutdownCtx.Done():
-				return
-			case <-ticker.C:
-				var acquired bool
-				// Derive from shutdownCtx so shutdown cancels in-flight
-				// pg_try_advisory_lock attempts. Was context.Background()
-				// which leaked the attempt past shutdown signal.
-				reelCtx, reelCancel := context.WithTimeout(shutdownCtx, 5*time.Second)
-				if err := leaderConn.QueryRow(reelCtx,
-					"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&acquired); err != nil {
-					reelCancel()
-					continue
-				}
-				reelCancel()
-				if acquired {
-					logger.Info("non-leader pod acquired leader lock — restarting to enable background loops")
-					metrics.LeaderStatus.Set(1)
-					os.Exit(0)
-				}
-			}
-		}
-	}()
-}
 
 // setupCellRouter creates the DynamicRouter — the ONE router used in
 // production. There is no single-cell mode, no PassthroughRouter, no
@@ -382,45 +299,12 @@ func createOptionalLoops(
 	return loops
 }
 
-// runLeaderHeartbeat monitors the leader advisory lock and exits if lost.
-func runLeaderHeartbeat(
-	shutdownCtx context.Context,
-	leaderConn *pgxpool.Conn,
-	logger *slog.Logger,
-) {
-	ticker := time.NewTicker(60 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-shutdownCtx.Done():
-			return
-		case <-ticker.C:
-			var stillLeader bool
-			heartbeatCtx, heartbeatCancel := context.WithTimeout(context.Background(), 10*time.Second)
-			if err := leaderConn.QueryRow(heartbeatCtx,
-				"SELECT pg_try_advisory_lock($1)", leaderLockID).Scan(&stillLeader); err != nil {
-				heartbeatCancel()
-				logger.Error("leader heartbeat: lock check failed — exiting", "error", err)
-				metrics.LeaderStatus.Set(0)
-				os.Exit(1)
-			}
-			heartbeatCancel()
-			if !stillLeader {
-				logger.Error("leader heartbeat: lock LOST — exiting for re-election")
-				metrics.LeaderStatus.Set(0)
-				os.Exit(1)
-			}
-			metrics.LeaderStatus.Set(1)
-		}
-	}
-}
-
-// startLeaderLoops starts every leader-only loop over the BACKGROUND pool.
-// See createCoreLoops for why it must not be the request pool.
+// startLeaderLoops starts every leader-only loop over the BACKGROUND pool, each
+// bound to ctx: the loops stop when the election cancels it (lease fenced or
+// shutdown). See createCoreLoops for why it must not be the request pool.
 func startLeaderLoops(
-	shutdownCtx context.Context,
+	ctx context.Context,
 	bgWg *sync.WaitGroup,
-	leaderConn *pgxpool.Conn,
 	bgAdapter *db.PgxAdapter,
 	stores *StoreDeps,
 	workflows *WorkflowDeps,
@@ -433,31 +317,18 @@ func startLeaderLoops(
 	cfg config.Config,
 	logger *slog.Logger,
 ) {
-	if cfg.DisableLegacyLoops {
-		logger.Info("LOOPZERO_DISABLE_LEGACY_LOOPS=true — loops will not run here; controller binary owns them")
-		metrics.LeaderStatus.Set(0)
-		return
-	}
-
 	coreLoops := createCoreLoops(bgAdapter, stores, workflows, orchDeps, k8sDeps, cellRouter, domainProvisioner, domainHealthChecker, cfg, logger)
 	optionalLoops := createOptionalLoops(stores, workflows, cfZoneClient, cfg, logger)
 	allLoops := append(coreLoops, optionalLoops...)
 
-	// Start all loops + 1 slot for leader heartbeat
-	bgWg.Add(len(allLoops) + 1)
+	bgWg.Add(len(allLoops))
 	for _, loop := range allLoops {
 		l := loop // capture for goroutine
 		go func() {
 			defer bgWg.Done()
-			l.start(shutdownCtx)
+			l.start(ctx)
 		}()
 	}
-
-	// Leader heartbeat
-	go func() {
-		defer bgWg.Done()
-		runLeaderHeartbeat(shutdownCtx, leaderConn, logger)
-	}()
 }
 
 // waitForBackgroundGoroutines waits up to 30s for background goroutines to stop.

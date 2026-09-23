@@ -6,10 +6,11 @@
 //
 // # Why a generation counter?
 //
-// The controller binary uses `pg_try_advisory_lock` as the primary leader
-// election mechanism. Advisory locks are session-scoped — the lock is
-// released when the Postgres connection closes. This is almost the right
-// thing, but it has one failure mode: a pod that has been network-isolated
+// Leader election used to rest on `pg_try_advisory_lock`. Advisory locks
+// taken that way are session-scoped — the lock is released when the Postgres
+// connection closes — and re-entrant, so re-running the lock on the holder's
+// connection cannot tell a live lease from a lost one. It also has one
+// failure mode: a pod that has been network-isolated
 // can still hold the advisory lock until Postgres detects the dead
 // connection via TCP keepalive (11–90s depending on kernel tuning). During
 // that window, a new leader can be elected while the old leader still
@@ -32,8 +33,9 @@
 //  2. Pass Lease.GenerationID into every state-mutating SQL WHERE clause.
 //  3. Release() the lease on clean shutdown (best effort; not required
 //     for correctness because a missed heartbeat is an adequate signal).
-//  4. Exit the process if Heartbeat() returns ErrFenced — another leader
-//     has taken over.
+//  4. Stop everything started under the lease if Heartbeat() returns
+//     ErrFenced — another leader has taken over. The controller exits; the
+//     API cancels the context its loops run under and re-enters the election.
 //
 // The package deliberately does NOT start goroutines. The caller owns the
 // heartbeat loop so tests and the controller main can drive it explicitly.
@@ -48,6 +50,13 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
+
+// BackgroundLoopsLeaseName is the lease that owns the platform's background
+// loops (build reconcile, reapers, convergence, pruners). The controller
+// binary and the API take the SAME lease, so the two can never run the loops
+// at once. The value predates the API using it and is kept so existing
+// leader_generations rows keep their meaning.
+const BackgroundLoopsLeaseName = "loopzero-controller"
 
 // ErrFenced is returned by Heartbeat or Validate when the lease has been
 // taken over by another holder (a higher generation exists in PG, or the

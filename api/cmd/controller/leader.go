@@ -14,9 +14,10 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
-// leaderLoopName is the name the controller binary uses in the
-// leader_generations table. Paired with cell_id from config.
-const leaderLoopName = "loopzero-controller"
+// leaderLoopName is the lease the controller binary takes in the
+// leader_generations table, paired with cell_id from config. It is the same
+// lease the API takes when it runs the loops itself.
+const leaderLoopName = leader.BackgroundLoopsLeaseName
 
 // runHeartbeat refreshes the leader lease every HeartbeatInterval. On
 // ErrFenced it sets LeaderStatus=0 and invokes cancelRoot() which cascades
