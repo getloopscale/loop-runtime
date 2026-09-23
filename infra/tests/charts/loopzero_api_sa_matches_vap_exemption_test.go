@@ -10,93 +10,97 @@ import (
 	"testing"
 )
 
-// A ServiceAccount que o chart PUBLICADO renderiza precisa ser a mesma que as politicas
-// de admissao isentam — e precisa ser assim para QUALQUER nome de release.
+// The ServiceAccount the PUBLISHED chart renders must be the one the admission
+// policies exempt — and it must be so for ANY release name.
 //
 // # B-096
 //
-// Ate' 2026-08-19, `charts/loopzero-api/values.yaml` deixava `serviceAccount.name: ""`, entao
-// o nome derivava do release: `helm template t charts/loopzero-api` rendia `t-loopzero-api`. As
-// VAPs isentam `system:serviceaccount:loopzero-system:loopzero-api`. Um deploy pelo chart
-// publicado subia o loopzero-api com identidade que as proprias cercas da plataforma tratam
-// como estranha, e a falha aparecia como `Forbidden` na reconciliacao — nao como erro de
-// instalacao.
+// Until 2026-08-19 `charts/loopzero-api/values.yaml` left `serviceAccount.name: ""`,
+// so the name derived from the release: `helm template t charts/loopzero-api`
+// rendered `t-loopzero-api`. The VAPs exempt
+// `system:serviceaccount:loopzero-system:loopzero-api`. A deploy through the published
+// chart brought loopzero-api up with an identity the platform's own fences treat as
+// foreign, and the failure surfaced as `Forbidden` during reconciliation — not
+// as an install error.
 //
-// O teste roda com DOIS nomes de release de proposito. Com um so', ele passaria tanto com
-// o nome fixo quanto com um `values.yaml` que casualmente derivasse o nome certo daquele
-// release — e a segunda forma nao e' garantia nenhuma.
-func TestServiceAccountDoChartPublicadoBateComAIsencaoDasVAPs(t *testing.T) {
-	raiz := repoRoot(t)
+// The test renders under TWO release names on purpose. With one, it would pass
+// both with the fixed name and with a values.yaml that happened to derive the
+// right name from that release — and the second is no guarantee at all.
+func TestPublishedChartServiceAccountMatchesTheVAPExemption(t *testing.T) {
+	root := repoRoot(t)
 
-	isentas := serviceAccountsIsentasPelasVAPs(t, raiz)
-	if len(isentas) == 0 {
-		t.Fatal("nenhuma ServiceAccount isenta encontrada nas VAPs — uma varredura que nao alcanca " +
-			"nada reporta verde sobre nada, e este teste inteiro dependeria dela")
+	exempt := serviceAccountsExemptedByVAPs(t, root)
+	if len(exempt) == 0 {
+		t.Fatal("no exempt ServiceAccount found in the VAPs — a sweep that reaches nothing " +
+			"reports green over nothing, and this whole test depends on it")
 	}
 
-	for _, release := range []string{"loopzero", "um-release-qualquer"} {
+	for _, release := range []string{"loopzero", "any-release-name"} {
 		out := renderChart(t, publishedChart(t, "loopzero-api"), release, nil)
-		sa := primeiroValor(out, "serviceAccountName:")
+		sa := firstValue(out, "serviceAccountName:")
 		if sa == "" {
-			t.Fatalf("release %q: o render nao declara serviceAccountName", release)
+			t.Fatalf("release %q: the render declares no serviceAccountName", release)
 		}
-		if !isentas[sa] {
-			t.Errorf("release %q: o chart publicado renderiza a ServiceAccount %q, e as VAPs isentam %v.\n"+
-				"Um deploy por este chart subiria o loopzero-api com identidade que as proprias cercas da "+
-				"plataforma tratam como estranha — a falha aparece como Forbidden na reconciliacao, nao "+
-				"como erro de instalacao (B-096).", release, sa, chaves(isentas))
+		if !exempt[sa] {
+			t.Errorf("release %q: the published chart renders ServiceAccount %q, and the VAPs exempt %v.\n"+
+				"A deploy through this chart would bring loopzero-api up with an identity the platform's "+
+				"own fences treat as foreign — the failure shows as Forbidden during reconciliation, "+
+				"not as an install error (B-096).", release, sa, keys(exempt))
 		}
 	}
 }
 
-// serviceAccountsIsentasPelasVAPs le' as isencoes declaradas nos templates das politicas.
-// Le' o FONTE em vez de renderizar: a lista e' literal nos arquivos, e renderizar exigiria
-// os values do overlay — mais peças para a mesma resposta.
-func serviceAccountsIsentasPelasVAPs(t *testing.T, raiz string) map[string]bool {
+// serviceAccountsExemptedByVAPs reads the exemptions declared in the policy
+// templates. It reads the SOURCE instead of rendering: the list is literal in
+// the files, and rendering would need the overlay's values — more parts for the
+// same answer.
+func serviceAccountsExemptedByVAPs(t *testing.T, root string) map[string]bool {
 	t.Helper()
-	dir := filepath.Join(raiz, "infra", "helm", "admission-policies", "templates")
-	entradas, err := os.ReadDir(dir)
+	dir := filepath.Join(root, "infra", "helm", "admission-policies", "templates")
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		t.Fatalf("lendo %s: %v", dir, err)
+		t.Fatalf("reading %s: %v", dir, err)
 	}
-	isentas := map[string]bool{}
-	for _, e := range entradas {
+	exempt := map[string]bool{}
+	for _, e := range entries {
 		if e.IsDir() || !strings.HasPrefix(e.Name(), "vap-") {
 			continue
 		}
-		b, rerr := os.ReadFile(filepath.Clean(filepath.Join(dir, e.Name())))
-		if rerr != nil {
-			continue
+		path := filepath.Clean(filepath.Join(dir, e.Name()))
+		b, err := os.ReadFile(path)
+		if err != nil {
+			// An unreadable policy is one whose exemptions this sweep never saw.
+			t.Fatalf("reading %s: %v", path, err)
 		}
-		for _, linha := range strings.Split(string(b), "\n") {
-			const marca = "system:serviceaccount:loopzero-system:"
-			i := strings.Index(linha, marca)
+		for _, line := range strings.Split(string(b), "\n") {
+			const prefix = "system:serviceaccount:loopzero-system:"
+			i := strings.Index(line, prefix)
 			if i < 0 {
 				continue
 			}
-			resto := linha[i+len(marca):]
-			fim := strings.IndexAny(resto, "'\",: \t")
-			if fim < 0 {
-				fim = len(resto)
+			rest := line[i+len(prefix):]
+			end := strings.IndexAny(rest, "'\",: \t")
+			if end < 0 {
+				end = len(rest)
 			}
-			if nome := resto[:fim]; nome != "" {
-				isentas[nome] = true
+			if name := rest[:end]; name != "" {
+				exempt[name] = true
 			}
 		}
 	}
-	return isentas
+	return exempt
 }
 
-func primeiroValor(rendered, chave string) string {
-	for _, linha := range strings.Split(rendered, "\n") {
-		if i := strings.Index(linha, chave); i >= 0 {
-			return strings.TrimSpace(linha[i+len(chave):])
+func firstValue(rendered, key string) string {
+	for _, line := range strings.Split(rendered, "\n") {
+		if i := strings.Index(line, key); i >= 0 {
+			return strings.TrimSpace(line[i+len(key):])
 		}
 	}
 	return ""
 }
 
-func chaves(m map[string]bool) []string {
+func keys(m map[string]bool) []string {
 	var k []string
 	for s := range m {
 		k = append(k, s)

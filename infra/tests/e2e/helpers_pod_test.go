@@ -34,14 +34,14 @@ func mustE2ENamespace(project, env string) string {
 
 // proveDead verifies that all resources for a project are cleaned up
 // (namespace gone or zero resources with loopzero.io/project label).
-// This is the "Prova de Morte" assertion from bash journeys.
+// This is the "proof of death" assertion from the bash journeys.
 // 2026-05-20 drill-parity: uses kubectlForCluster(ClusterWorkload, ...).
 func proveDead(tenant, project, env string) {
-	// O namespace é a tripla (tenant, project, env). Enquanto isto computava dois
-	// segmentos, a "prova de morte" checava um namespace que nunca existiu — e passava
-	// sempre, provando nada.
+	// The namespace is the (tenant, project, env) triple. While this computed two
+	// segments, the proof of death checked a namespace that never existed — and
+	// always passed, proving nothing.
 	ns, nsErr := naming.Namespace(tenant, project, env)
-	Expect(nsErr).NotTo(HaveOccurred(), "proveDead: namespace inválido para %s/%s/%s", tenant, project, env)
+	Expect(nsErr).NotTo(HaveOccurred(), "proveDead: invalid namespace for %s/%s/%s", tenant, project, env)
 
 	Eventually(func() bool {
 		// Check if namespace still exists.
@@ -74,7 +74,7 @@ func proveDead(tenant, project, env string) {
 		}
 		return true
 	}, cleanupTimeout, cleanupPollInterval).Should(BeTrue(),
-		"Prova de Morte failed: resources still exist for project %s in %s", project, ns)
+		"proof of death failed: resources still exist for project %s in %s", project, ns)
 }
 
 // waitAppHealthyViaKubectl is the V9 Option-B bypass for local k3d

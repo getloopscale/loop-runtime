@@ -70,8 +70,8 @@ func renderVaultHelmfileOpenbao(t *testing.T) string {
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		_, comoLer := ClassificarFalhaDeRender(string(out))
-		t.Fatalf("helmfile template failed: %v\n%s\n\n%s", err, truncate(string(out), 1200), comoLer)
+		_, howToRead := ClassifyRenderFailure(string(out))
+		t.Fatalf("helmfile template failed: %v\n%s\n\n%s", err, truncate(string(out), 1200), howToRead)
 	}
 	return string(out)
 }
