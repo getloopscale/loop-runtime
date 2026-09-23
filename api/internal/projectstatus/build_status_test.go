@@ -1,4 +1,7 @@
-package enforcement_test
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package projectstatus_test
 
 // EC-1 absorption from plan
 // 2026-06-08-dashboard-screens-review-fixes — exhaustive table-driven
@@ -16,21 +19,21 @@ package enforcement_test
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loopzero/api/internal/projectstatus"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 func TestMapBuildStatusToProjectStatus_CoversAllSevenBuildStates(t *testing.T) {
 	cases := []struct {
 		state statemachine.State
-		want  enforcement.ProjectStatus
+		want  projectstatus.ProjectStatus
 	}{
-		{statemachine.BuildQueued, enforcement.ProjectStatusQueued},
-		{statemachine.BuildRunning, enforcement.ProjectStatusBuilding},
-		{statemachine.BuildReleasing, enforcement.ProjectStatusBuilding},
-		{statemachine.BuildSucceeded, enforcement.ProjectStatusLive},
-		{statemachine.BuildFailed, enforcement.ProjectStatusFailed},
-		{statemachine.BuildCancelling, enforcement.ProjectStatusBuilding},
+		{statemachine.BuildQueued, projectstatus.ProjectStatusQueued},
+		{statemachine.BuildRunning, projectstatus.ProjectStatusBuilding},
+		{statemachine.BuildReleasing, projectstatus.ProjectStatusBuilding},
+		{statemachine.BuildSucceeded, projectstatus.ProjectStatusLive},
+		{statemachine.BuildFailed, projectstatus.ProjectStatusFailed},
+		{statemachine.BuildCancelling, projectstatus.ProjectStatusBuilding},
 		// Sponsor LIVE-caught 2026-06-18: CANCELLED is intentional (user
 		// pressed Cancel), FAILED is unexpected. Lumping them under
 		// ProjectStatusFailed produced visually-broken /projects rows for
@@ -38,7 +41,7 @@ func TestMapBuildStatusToProjectStatus_CoversAllSevenBuildStates(t *testing.T) {
 		// release was still ACTIVE serving production. Cancelled now
 		// lands in Idle; the release-aware MapProjectStatus is the
 		// canonical aggregator that consults the release state first.
-		{statemachine.BuildCancelled, enforcement.ProjectStatusIdle},
+		{statemachine.BuildCancelled, projectstatus.ProjectStatusIdle},
 	}
 	if len(cases) != 7 {
 		t.Fatalf("EC-1 contract: expected exhaustive 7-state coverage, got %d. "+
@@ -46,7 +49,7 @@ func TestMapBuildStatusToProjectStatus_CoversAllSevenBuildStates(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(string(c.state), func(t *testing.T) {
-			got := enforcement.MapBuildStatusToProjectStatus(c.state)
+			got := projectstatus.MapBuildStatusToProjectStatus(c.state)
 			if got != c.want {
 				t.Errorf("MapBuildStatusToProjectStatus(%q) = %q, want %q",
 					c.state, got, c.want)
@@ -58,9 +61,9 @@ func TestMapBuildStatusToProjectStatus_CoversAllSevenBuildStates(t *testing.T) {
 func TestMapBuildStatusToProjectStatus_EmptyStateIsIdle(t *testing.T) {
 	// "No latest build row" (zero rows in JOIN LATERAL) → empty state → idle.
 	// This is the explicit fallback for projects with zero builds.
-	if got := enforcement.MapBuildStatusToProjectStatus(""); got != enforcement.ProjectStatusIdle {
+	if got := projectstatus.MapBuildStatusToProjectStatus(""); got != projectstatus.ProjectStatusIdle {
 		t.Errorf("MapBuildStatusToProjectStatus(empty) = %q, want %q",
-			got, enforcement.ProjectStatusIdle)
+			got, projectstatus.ProjectStatusIdle)
 	}
 }
 
@@ -68,20 +71,20 @@ func TestMapBuildStatusToProjectStatus_UnknownStateIsIdle(t *testing.T) {
 	// Defense in depth: unknown state (e.g., future BuildState added to
 	// pkg/statemachine without this helper being updated) falls through
 	// to idle in production. Test-time assertion guarantees no panic.
-	if got := enforcement.MapBuildStatusToProjectStatus("UNKNOWN_FUTURE_STATE"); got != enforcement.ProjectStatusIdle {
+	if got := projectstatus.MapBuildStatusToProjectStatus("UNKNOWN_FUTURE_STATE"); got != projectstatus.ProjectStatusIdle {
 		t.Errorf("MapBuildStatusToProjectStatus(unknown) = %q, want %q",
-			got, enforcement.ProjectStatusIdle)
+			got, projectstatus.ProjectStatusIdle)
 	}
 }
 
 func TestProjectStatusConstants_AreCorrectStrings(t *testing.T) {
 	// Lock the wire-format strings consumed by dashboard StatusDot.
-	cases := map[enforcement.ProjectStatus]string{
-		enforcement.ProjectStatusLive:     "live",
-		enforcement.ProjectStatusBuilding: "building",
-		enforcement.ProjectStatusFailed:   "failed",
-		enforcement.ProjectStatusIdle:     "idle",
-		enforcement.ProjectStatusQueued:   "queued",
+	cases := map[projectstatus.ProjectStatus]string{
+		projectstatus.ProjectStatusLive:     "live",
+		projectstatus.ProjectStatusBuilding: "building",
+		projectstatus.ProjectStatusFailed:   "failed",
+		projectstatus.ProjectStatusIdle:     "idle",
+		projectstatus.ProjectStatusQueued:   "queued",
 	}
 	for got, want := range cases {
 		if string(got) != want {

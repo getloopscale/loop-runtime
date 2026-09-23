@@ -7,8 +7,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -144,51 +142,43 @@ func TestCheckProjectsValue_AccountWithoutSubscriptionIsStarter(t *testing.T) {
 	}
 }
 
-func serveThroughMiddleware(t *testing.T, limiter *PlanLimiter, count UsageCounter) (*httptest.ResponseRecorder, bool) {
-	t.Helper()
-	innerCalled := false
-	mw := Middleware(limiter, OperationCheck{Metric: "seats", CountFn: count},
-		func(*http.Request) string { return "tn-x" }, "/billing")
-	rec := httptest.NewRecorder()
-	mw(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { innerCalled = true })).
-		ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/members", nil))
-	return rec, innerCalled
-}
-
-// A usage counter that cannot count must stop the request. Reading the failure
-// as "zero used" lets every quota pass during a database outage.
-func TestMiddleware_Answers503WhenUsageCannotBeCounted(t *testing.T) {
+// A usage counter that cannot count must stop the operation. Reading the
+// failure as "zero used" lets every quota pass during a database outage.
+func TestCheckUsage_FailsClosedWhenUsageCannotBeCounted(t *testing.T) {
 	limiter := NewPlanLimiter(&fakeLimitsStore{
 		plans:  map[string]string{"tn-x": "team"},
 		limits: map[[2]string][2]int{{"team", "seats"}: {10, 0}},
 	}, testLogger())
 
-	rec, innerCalled := serveThroughMiddleware(t, limiter,
+	_, err := limiter.CheckUsage(context.Background(), "tn-x", "seats",
 		func(context.Context, string) (int, error) { return 0, errStoreDown })
 
-	if innerCalled || rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("count failure must answer 503 without calling the handler; got %d, inner=%v", rec.Code, innerCalled)
+	requireDegraded(t, err, errStoreDown)
+}
+
+func TestCheckUsage_ChecksTheCountedUsageAgainstTheLimit(t *testing.T) {
+	limiter := NewPlanLimiter(&fakeLimitsStore{
+		plans:  map[string]string{"tn-x": "team"},
+		limits: map[[2]string][2]int{{"team", "seats"}: {10, 0}},
+	}, testLogger())
+
+	got, err := limiter.CheckUsage(context.Background(), "tn-x", "seats",
+		func(context.Context, string) (int, error) { return 10, nil })
+
+	requireNoLimitErr(t, err)
+	if got.Allowed || got.Current != 10 || got.Limit != 10 {
+		t.Fatalf("10 of 10 seats must deny, got %+v", got)
 	}
 }
 
-func TestMiddleware_Answers503WhenThePlanCannotBeResolved(t *testing.T) {
-	limiter := NewPlanLimiter(&fakeLimitsStore{planErr: errStoreDown}, testLogger())
-
-	rec, innerCalled := serveThroughMiddleware(t, limiter,
-		func(context.Context, string) (int, error) { return 0, nil })
-
-	if innerCalled || rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("plan failure must answer 503 without calling the handler; got %d, inner=%v", rec.Code, innerCalled)
-	}
-}
-
-func TestMiddleware_DevModeDoesNotCountUsage(t *testing.T) {
+func TestCheckUsage_DevModeDoesNotCountUsage(t *testing.T) {
 	counted := false
 
-	rec, innerCalled := serveThroughMiddleware(t, NewPlanLimiter(nil, testLogger()),
+	got, err := NewPlanLimiter(nil, testLogger()).CheckUsage(context.Background(), "tn-x", "seats",
 		func(context.Context, string) (int, error) { counted = true; return 0, nil })
 
-	if counted || !innerCalled || rec.Code != http.StatusOK {
-		t.Fatalf("dev mode must pass through without counting; counted=%v inner=%v code=%d", counted, innerCalled, rec.Code)
+	requireNoLimitErr(t, err)
+	if counted || !got.Allowed {
+		t.Fatalf("dev mode must allow without counting; counted=%v got=%+v", counted, got)
 	}
 }

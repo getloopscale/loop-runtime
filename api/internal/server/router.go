@@ -34,7 +34,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/source"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/api/internal/surfaces"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
 // enforcementMetricBuildMinutes is the canonical metric label for the cost
@@ -293,10 +292,10 @@ func NewRouter(cfg Config) *chi.Mux {
 			// per-Account at the single creation path (PostgresProjectStore,
 			// atomic advisory-lock count+insert) with the canonical 422
 			// PROJECTS_EXCEED_PLAN — see cmd/setup_database.go SetProjectCapChecker.
-			buildEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
-				Metric:  "builds_per_month",
-				CountFn: usage.BuildsThisMonth,
-			}, tenantFromCtx, upgradeURL)
+			buildEnforcement := policy.PlanLimits(cfg.PlanLimiter, policy.PlanLimitCheck{
+				Metric: "builds_per_month",
+				Count:  usage.BuildsThisMonth,
+			}, tenantFromCtx, upgradeURL, cfg.Logger)
 
 			// T1.9 (Wave 1): cost cap gates the build route on build_minutes.
 			// Nil-safe: when CostEnforcer is unset (boot before wire, or
@@ -308,15 +307,15 @@ func NewRouter(cfg Config) *chi.Mux {
 			// (Bug A fix): PermanentEnvironments counts only
 			// `kind = 'permanent'` rows, so previews (single-slot model via
 			// preview_slot table) NEVER count against plan_limits.environments.
-			envEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
-				Metric:  "environments",
-				CountFn: usage.PermanentEnvironments,
-			}, tenantFromCtx, upgradeURL)
+			envEnforcement := policy.PlanLimits(cfg.PlanLimiter, policy.PlanLimitCheck{
+				Metric: "environments",
+				Count:  usage.PermanentEnvironments,
+			}, tenantFromCtx, upgradeURL, cfg.Logger)
 
-			seatEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
-				Metric:  "seats",
-				CountFn: usage.Seats,
-			}, tenantFromCtx, upgradeURL)
+			seatEnforcement := policy.PlanLimits(cfg.PlanLimiter, policy.PlanLimitCheck{
+				Metric: "seats",
+				Count:  usage.Seats,
+			}, tenantFromCtx, upgradeURL, cfg.Logger)
 
 			registerProtectedRoutes(r, cfg, rateLimitMiddlewares, idempotentMiddlewares,
 				buildEnforcement, envEnforcement, seatEnforcement, buildCostGate)

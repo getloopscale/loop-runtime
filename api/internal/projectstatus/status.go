@@ -1,13 +1,16 @@
-package enforcement
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
 
-// Helper that maps a build-state string (the status persisted on the
-// builds table — `pkg/statemachine.BuildState` constants) to the
-// dashboard-facing ProjectStatus enum surfaced on /projects's StatusDot.
+// Package projectstatus maps a project's latest build and release state to the
+// deploy status the /projects list shows (the dashboard's StatusDot). It is
+// presentation of engine state, so it lives beside the API that serves it
+// rather than in the shared plan-limit policy package.
 //
 // Per plan 2026-06-08-dashboard-screens-review-fixes T2.1 + ADR D2 +
 // EC-1 absorption. Exhaustive 7-state mapping locks the "code is
 // authoritative" contract from CLAUDE.md Rule 2: dashboard consumes
 // the mapping but does NOT re-derive it client-side.
+package projectstatus
 
 import (
 	"github.com/getloopscale/loopzero-contracts/plan"
@@ -18,7 +21,7 @@ import (
 // enum moved to pkg/plan (value vocabulary); the MAPPING below stays
 // engine-side because it imports pkg/statemachine, which must NEVER reach the
 // contracts surface (plan m1-decouple-in-place D3). The aliases are retained as
-// enforcement-internal shorthand (external consumers import plan.ProjectStatus*
+// package-internal shorthand (external consumers import plan.ProjectStatus*
 // directly); not a re-export path (v1.2 amendment).
 type ProjectStatus = plan.ProjectStatus
 

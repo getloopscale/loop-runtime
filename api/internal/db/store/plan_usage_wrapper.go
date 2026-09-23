@@ -23,7 +23,7 @@ type txBeginner interface {
 // PostgresPlanUsageStore measures the usage the plan-limit middleware gates:
 // builds this month, permanent environments and seats. Each method has the
 // shape of enforcement.UsageCounter, so the router passes the method values
-// straight to enforcement.Middleware.
+// straight to policy.PlanLimits.
 //
 // Every count runs in a read-only transaction scoped to the counted tenant
 // (app.tenant_id). builds, environment_targets and tenant_members are under

@@ -272,35 +272,3 @@ func (l *PlanLimiter) limits(ctx context.Context, tenantID string, plan domain.P
 	}
 	return hard, soft, nil
 }
-
-// FormatLimitError creates a user-facing error message for a plan limit violation.
-func FormatLimitError(result LimitResult, upgradeURL string) map[string]interface{} {
-	return map[string]interface{}{
-		"code":        "PLAN_LIMIT_EXCEEDED",
-		"message":     fmt.Sprintf("Plan limit reached: %s allows %d %s (current: %d). Upgrade your plan to continue.", domain.PlanTier(result.Plan).DisplayName(), result.Limit, displayMetric(result.Metric), result.Current),
-		"plan":        result.Plan,
-		"limit":       result.Metric,
-		"current":     result.Current,
-		"max":         result.Limit,
-		"upgrade_url": upgradeURL,
-	}
-}
-
-func displayMetric(metric string) string {
-	switch metric {
-	case "projects":
-		return "projects"
-	case "services_per_project":
-		return "services per project"
-	case "environments":
-		return "environments"
-	case "builds_per_month":
-		return "builds per month"
-	case "seats":
-		return "team members"
-	case "secrets_per_env":
-		return "secrets per environment"
-	default:
-		return metric
-	}
-}

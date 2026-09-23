@@ -35,7 +35,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loopzero/api/internal/projectstatus"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -385,7 +385,7 @@ func (s *PostgresProjectStore) ListByTenant(ctx context.Context, tenantID string
 // 2026-06-08-dashboard-screens-review-fixes T2.1 + ADR D2.
 // Raw build status from the latest build row is mapped to the 5-value
 // dashboard ProjectStatus enum via
-// pkg/enforcement.MapBuildStatusToProjectStatus (exhaustive 7-state
+// api/internal/projectstatus.MapBuildStatusToProjectStatus (exhaustive 7-state
 // switch per EC-1 absorption).
 func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tenantID string) ([]ports.ProjectSummary, error) {
 	bridge, ok := s.DB.(db.SqlcBridge)
@@ -417,7 +417,7 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 			// MapProjectStatus reads release first, falls back to build
 			// when no release is consultable. See aggregate_project_
 			// status_test.go for the canonical decision tree.
-			LastDeployStatus: string(enforcement.MapProjectStatus(
+			LastDeployStatus: string(projectstatus.MapProjectStatus(
 				statemachine.State(r.ActiveReleaseStatusRaw),
 				statemachine.State(r.LastDeployStatusRaw),
 				r.LatestBuildEnvironment,

@@ -243,7 +243,7 @@ type ProjectResult struct {
 // additive over ProjectResult — legacy consumers ignore the 2 new
 // trailing fields. LastDeployStatus is the 5-value enum from
 // pkg/plan.ProjectStatus (kept as string here to avoid a domain
-// → pkg/enforcement import edge; the wrapper layer is the SoT mapper).
+// → projectstatus import edge; the wrapper layer is the SoT mapper).
 type ProjectSummary struct {
 	ID               string    `json:"id"`
 	Name             string    `json:"name"`
@@ -277,7 +277,7 @@ type ProjectSummary struct {
 	ActiveEnvCount int64 `json:"active_env_count"`
 	// LastDeployStatus is one of: "live", "building", "failed", "idle",
 	// "queued" — derived from the latest build's status via
-	// pkg/enforcement.MapBuildStatusToProjectStatus.
+	// api/internal/projectstatus.MapBuildStatusToProjectStatus.
 	LastDeployStatus string `json:"last_deploy_status"`
 	// LastDeployAt + AppsCount + LatestFramework — T5.3 LIVE-bug fix 2026-06-08.
 	// Plan 2026-06-08-dashboard-screens-review-fixes T2.1 originally dropped

@@ -71,7 +71,7 @@ WHERE tenant_id = $1 AND name = $2;
 --     was cancelled but whose earlier release was still ACTIVE serving
 --     production. The aggregate status MUST consider release state, not
 --     just latest build. Caller now calls
---     pkg/enforcement.MapProjectStatus(active_release_status_raw,
+--     api/internal/projectstatus.MapProjectStatus(active_release_status_raw,
 --     last_deploy_status_raw) which prefers the release-state SoT and
 --     falls back to the build state only when no release is consultable.
 -- Per plan 2026-06-08-dashboard-screens-review-fixes T2.1 + ADR D2 +
@@ -142,7 +142,7 @@ LEFT JOIN LATERAL (
   -- (non-preview) env; a project with zero permanent envs is by
   -- definition preview-only at the env_targets layer. Combined with
   -- the latest_build_environment + active_release_status signals in
-  -- enforcement.MapProjectStatus, this is the canonical disambiguator
+  -- projectstatus.MapProjectStatus, this is the canonical disambiguator
   -- the dashboard's "Live envs" / "URL hero" pair was missing.
   SELECT COUNT(*) AS cnt
   FROM environment_targets et
@@ -187,7 +187,7 @@ LEFT JOIN LATERAL (
   -- mapper falls back to the latest build instead of attributing a stale
   -- release to the current truth. Sponsor LIVE-caught 2026-06-18
   -- (loopzerokit-example). The status set is the one
-  -- pkg/enforcement.MapProjectStatus decides on.
+  -- api/internal/projectstatus.MapProjectStatus decides on.
   SELECT r.status
   FROM releases r
   WHERE r.tenant_id = p.tenant_id AND r.project_id = p.name
