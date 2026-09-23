@@ -49,6 +49,9 @@ type RepositoryStore interface {
 	GetByProject(ctx context.Context, tenantID, projectName string) (*ProjectRepository, error)
 	GetByRepo(ctx context.Context, repoFullName string) (*ProjectRepository, error)
 	SaveInstallation(ctx context.Context, id int64, accountLogin, accountType string, tenantID *string) error
+	// InstallationTenant returns the tenant a GitHub installation is bound
+	// to, or "" when it is unclaimed or unknown.
+	InstallationTenant(ctx context.Context, installationID int64) (string, error)
 }
 
 // RepoIntrospector abstracts the GitHub API calls the Connect handler makes
@@ -149,7 +152,24 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 		return // checkRepoLinkConflict wrote the response
 	}
 
-	// Ensure installation is saved
+	// An installation bound to another tenant is not rebound: the upsert
+	// below would COALESCE this caller's tenant over the existing binding.
+	// 403, as the repository picker answers for the same installation.
+	owner, err := h.store.InstallationTenant(ctx, req.InstallationID)
+	if err != nil {
+		slog.ErrorContext(ctx, "installation lookup failed", "error", err, "installation_id", req.InstallationID)
+		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
+		return
+	}
+	if owner != "" && owner != uc.TenantID {
+		httpio.WriteJSON(w, http.StatusForbidden, map[string]string{
+			"code":    "FORBIDDEN",
+			"message": "You do not have access to this installation.",
+		})
+		return
+	}
+
+	// Bind the installation to this tenant (first connect) or keep it.
 	tenantID := uc.TenantID
 	if err := h.store.SaveInstallation(ctx, req.InstallationID, "", "User", &tenantID); err != nil {
 		slog.ErrorContext(ctx, "save installation failed", "error", err)

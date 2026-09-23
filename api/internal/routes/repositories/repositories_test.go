@@ -30,6 +30,14 @@ type fakeRepoStore struct {
 	// the request → store mapping (otherwise we couldn't tell true-by-default
 	// from true-by-handler-default).
 	lastLinkAutoDeploy *bool
+	// installationTenant is the tenant the installation is bound to ("" =
+	// unclaimed or unknown); saveInstCalls counts binding writes.
+	installationTenant string
+	saveInstCalls      int
+}
+
+func (f *fakeRepoStore) InstallationTenant(_ context.Context, _ int64) (string, error) {
+	return f.installationTenant, nil
 }
 
 func (f *fakeRepoStore) LinkRepository(_ context.Context, _, _, _ string, _ int64, _ string, autoDeploy bool) error {
@@ -51,7 +59,31 @@ func (f *fakeRepoStore) GetByRepo(_ context.Context, _ string) (*ProjectReposito
 }
 
 func (f *fakeRepoStore) SaveInstallation(_ context.Context, _ int64, _, _ string, _ *string) error {
+	f.saveInstCalls++
 	return f.saveInstErr
+}
+
+// An installation already bound to another tenant must not be rebound by a
+// Connect: the upsert COALESCEs the caller's tenant over the existing one,
+// so without this check any owner could take over another team's GitHub
+// installation and its repositories.
+func TestRepositories_Connect_RefusesAnInstallationBoundToAnotherTenant(t *testing.T) {
+	store := &fakeRepoStore{installationTenant: "tn-someone-else"}
+	h := NewRepositoryHandler(store)
+
+	body, _ := json.Marshal(map[string]any{"repo": "acme/web", "installation_id": 42})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/shop/connect", bytes.NewReader(body))
+	req = routestest.WithChiParam(routestest.WithAuth(req, routestest.DefaultUserContext()), "name", "shop")
+	w := httptest.NewRecorder()
+
+	h.Connect(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("want 403, got %d body=%s", w.Code, w.Body.String())
+	}
+	if store.saveInstCalls != 0 {
+		t.Fatalf("the installation binding was rewritten (%d writes)", store.saveInstCalls)
+	}
 }
 
 // --- Tests ---

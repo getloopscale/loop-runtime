@@ -69,6 +69,19 @@ func (a *repoStoreAdapter) SaveInstallation(ctx context.Context, id int64, accou
 	return a.store.SaveInstallation(ctx, id, accountLogin, accountType, tenantID)
 }
 
+// InstallationTenant reports the tenant an installation is bound to; "" when
+// it is unclaimed (created by the installation webhook, tenant NULL) or absent.
+func (a *repoStoreAdapter) InstallationTenant(ctx context.Context, installationID int64) (string, error) {
+	inst, err := a.store.GetInstallation(ctx, installationID)
+	if err != nil {
+		return "", err
+	}
+	if inst == nil || inst.TenantID == nil {
+		return "", nil
+	}
+	return *inst.TenantID, nil
+}
+
 // installationLookupAdapter bridges store.PostgresRepositoryStore →
 // routes.InstallationLookup. Returns the minimal routes.InstallationRecord
 // shape the integrations handler needs for tenant-boundary checks,
