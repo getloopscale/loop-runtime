@@ -239,7 +239,7 @@ func runLokiVaultRetention(args []string) int {
 		}
 		return 1
 	}
-	fmt.Println("loki-vault-retention: PASS — 14 hermetic assertions (T8.2 retention_stream + T8.5 archive CronJob hardening) clean")
+	fmt.Println("loki-vault-retention: PASS — T8.5 archive CronJob hardening assertions clean")
 	return 0
 }
 
