@@ -192,9 +192,9 @@ func runProdImageDigests(args []string) int {
 }
 
 // runTrivyScan wraps `trivy fs --severity CRITICAL,HIGH` as a quality gate.
-// T4.7 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap. Skip-on-missing —
-// returns exit 0 with Skipped reason when trivy binary absent (local-dev
-// fallback). PR-time enforcement happens in chosen CI platform (T0.2).
+// It fails closed: a missing scanner or a scan that could not complete exits 1
+// with the reason, exactly like a finding — there is no path that exits 0
+// without a completed scan.
 func runTrivyScan(args []string) int {
 	fs := flag.NewFlagSet("trivy-scan", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory to scan")
@@ -208,12 +208,8 @@ func runTrivyScan(args []string) int {
 		Severities: *severities,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "trivy-scan: %v\n", err)
-		return 5
-	}
-	if outcome.Skipped {
-		fmt.Printf("trivy-scan: SKIP — %s\n", outcome.Reason)
-		return 0
+		fmt.Fprintf(os.Stderr, "trivy-scan: FAIL — %v\n", err)
+		return 1
 	}
 	if !outcome.Pass {
 		fmt.Fprintf(os.Stderr, "trivy-scan: FAIL\n%s\n", outcome.Reason)
@@ -224,7 +220,7 @@ func runTrivyScan(args []string) int {
 }
 
 // runTrufflehogScan wraps `trufflehog git --only-verified --fail` as
-// a quality gate. T4.7 of plan. Same skip-on-missing pattern as trivy.
+// a quality gate. T4.7 of plan. Fails closed on a missing or failed scan.
 func runTrufflehogScan(args []string) int {
 	fs := flag.NewFlagSet("trufflehog-scan", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory to scan")

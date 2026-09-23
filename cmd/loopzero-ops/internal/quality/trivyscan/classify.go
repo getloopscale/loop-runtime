@@ -19,8 +19,9 @@ import "strings"
 //
 // Matching is anchored on the tab/space-delimited log field to avoid firing on
 // a package or CVE description that merely contains the word — a false
-// execution-error would silently downgrade a real finding to Skipped, which is
-// the one mistake this function must never make.
+// execution-error would relabel a real finding as a failed scan, hiding the
+// findings table behind a network story — the one mistake this function must
+// never make.
 func classifyExitOne(out string) (execError bool, detail string) {
 	for _, line := range strings.Split(out, "\n") {
 		for _, field := range strings.FieldsFunc(line, func(r rune) bool {

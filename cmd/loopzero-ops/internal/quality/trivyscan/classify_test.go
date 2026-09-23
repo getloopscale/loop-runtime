@@ -3,10 +3,9 @@
 
 // Regression-lock: `trivy fs --exit-code 1` returns **1 for two unrelated
 // outcomes** — "matching-severity vulnerabilities were found" and "the scan
-// could not complete". Check() already intends to separate them (exit 1 =>
-// findings, any other exit => execution error => Skipped), but that intent is
-// unreachable through the exit code alone, because trivy spends the same 1 on
-// a FATAL.
+// could not complete". Check() separates them (exit 1 => findings, any other
+// exit => execution error), but the exit code alone cannot, because trivy
+// spends the same 1 on a FATAL.
 //
 // Observed 2026-07-30 during a `task quality:gates` run:
 //
@@ -26,9 +25,10 @@
 //     signal that the scan did not actually happen. Silence about coverage is
 //     how a security gate becomes decorative.
 //
-// The honest classification is the one Check() already wanted: a FATAL is an
-// execution error, so the outcome is Skipped-with-reason, not Fail. Skipped is
-// visible and truthful; Fail here is a lie in both directions.
+// The honest classification is an execution error: Check() returns
+// ErrScanFailed carrying the FATAL line. The gate still goes red — no scan
+// happened, so there is no verdict to report as green — but it says why, and it
+// never claims vulnerabilities were found.
 package trivyscan
 
 import "testing"
