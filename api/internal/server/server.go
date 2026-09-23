@@ -164,6 +164,10 @@ type Config struct {
 	// orchestrators. Required by the secret routes: when nil they are not
 	// mounted (recorded as a disabled surface), never mounted unlocked.
 	SecretEnvLocker secrets.SecretEnvLocker
+	// SecretAuditLogger writes the SECRET_* domain audit rows. Wired from
+	// cmd/setup_server.go with the same store.AuditLogger the orchestrator
+	// uses; nil only where there is no database.
+	SecretAuditLogger secrets.AuditLogger
 	// SecretProjectChecker injects the cross-tenant binding check (T1.2 of
 	// plan 2026-06-10-j22-openbao-transit-eso-sync v1.2). When wired, Bulk
 	// resolves the requested project's owning tenant via the tenant-scoped

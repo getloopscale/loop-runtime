@@ -437,6 +437,15 @@ func registerProtectedRoutes(
 		if cfg.SecretK8sSync != nil {
 			secretHandler.SetK8sSync(cfg.SecretK8sSync)
 		}
+		// SECRET_CREATED / SECRET_UPDATED / SECRET_DELETED / PROJECT_LOOKUP_FAILED
+		// domain audit rows, and the J-22 T1.3 per-environment plan gate. Both
+		// were implemented on the handler and never wired here.
+		if cfg.SecretAuditLogger != nil {
+			secretHandler.SetAuditLogger(cfg.SecretAuditLogger)
+		}
+		if cfg.PlanLimiter != nil {
+			secretHandler.SetPlanLimiter(cfg.PlanLimiter)
+		}
 		// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): wire
 		// the cross-tenant binding check (EC-03 absorption / CWE-204
 		// defense). Production injects *store.PostgresProjectStore directly.

@@ -27,6 +27,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
 // --- Fakes ---
@@ -316,8 +317,8 @@ func TestSecretBulk_AuditLogPerKey(t *testing.T) {
 // fakePlanLimiterDeny is a SecretPlanLimiter that always denies.
 type fakePlanLimiterDeny struct{}
 
-func (fakePlanLimiterDeny) IsAllowedToCreate(_ context.Context, _ string, _ int) (bool, int, int, string) {
-	return false, 10, 10, "free"
+func (fakePlanLimiterDeny) CheckValue(_, metric string, requested int) enforcement.LimitResult {
+	return enforcement.LimitResult{Allowed: false, Plan: "free", Metric: metric, Current: requested, Limit: 10}
 }
 
 // TestSecretBulk_PlanLimit_402 — J-22 T1.3 absorbed: when the plan limit
@@ -325,10 +326,6 @@ func (fakePlanLimiterDeny) IsAllowedToCreate(_ context.Context, _ string, _ int)
 // PLAN_LIMIT_EXCEEDED with body {current, limit:"secrets", max, plan}.
 // store.Set MUST NOT be invoked. Audit log MUST NOT receive any rows.
 //
-// EC-10 (pg_advisory_xact_lock race-safe gate) remains DEFERRED to a
-// follow-up iteration. The existing SecretEnvLocker (already wired on
-// Set/Delete) can be reused; current iteration only locks the per-tenant
-// limit-check invariant.
 func TestSecretBulk_PlanLimit_402(t *testing.T) {
 	store := &fakeSecretStoreT01{}
 	audit := &fakeAuditLoggerT12{}

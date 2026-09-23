@@ -43,6 +43,7 @@ import (
 	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/pkg/enforcement"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -112,18 +113,16 @@ type SecretProjectChecker interface {
 	GetByName(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error)
 }
 
-// SecretPlanLimiter — narrow interface (ISP) for the plan-limit gate.
-// Production wires *enforcement.PlanLimiter via an adapter; tests pass a
-// fake. Returns:
-//   - allowed: false when adding `adding` secrets would exceed the cap
-//   - current: current secret count for the tenant
-//   - max: hard limit per the tenant's plan
-//   - plan: tenant's plan name ("free" / "pro" / "team" / "enterprise")
-//
-// J-22 T1.3.
+// SecretPlanLimiter — narrow interface (ISP) for the plan-limit gate,
+// satisfied directly by *enforcement.PlanLimiter. The plan caps secrets PER
+// ENVIRONMENT (plan_limits metric "secrets_per_env"), so the gate asks for
+// the count an environment would reach, never a tenant-wide total. J-22 T1.3.
 type SecretPlanLimiter interface {
-	IsAllowedToCreate(ctx context.Context, tenantID string, adding int) (allowed bool, current int, max int, plan string)
+	CheckValue(tenantID, metric string, requested int) enforcement.LimitResult
 }
+
+// perEnvironmentLimitMetric is the plan_limits metric the gate checks.
+const perEnvironmentLimitMetric = "secrets_per_env"
 
 // SecretHandler provides HTTP handlers for secret operations.
 type SecretHandler struct {
@@ -131,7 +130,7 @@ type SecretHandler struct {
 	k8sSync        SecretK8sSync        // optional — nil disables K8s sync
 	audit          AuditLogger          // optional — nil disables audit logging
 	locker         SecretEnvLocker      // required — serializes every mutation with deploys (Rule 6)
-	planLimits     SecretPlanLimiter    // optional — nil disables plan-limit gate (legacy/test path)
+	planLimits     SecretPlanLimiter    // nil only where no plan is enforced (no database: dev/test)
 	projectChecker SecretProjectChecker // optional — nil disables T1.2 cross-tenant binding (legacy/test path)
 	transitClient  SecretTransit        // optional — nil disables T2.3 transit encrypt (legacy AES path)
 }
@@ -179,9 +178,9 @@ func (h *SecretHandler) SetK8sSync(sync SecretK8sSync) {
 }
 
 // SetPlanLimiter configures the plan-limit gate for secret mutations.
-// J-22 T1.3: when wired, Bulk consults the gate BEFORE invoking store.Set;
-// denied requests return 402 PLAN_LIMIT_EXCEEDED without store/audit calls.
-// Nil-safe: when planLimits is nil, Bulk skips the check (legacy/test path).
+// J-22 T1.3: Bulk consults the gate BEFORE invoking store.Set; denied
+// requests return 402 PLAN_LIMIT_EXCEEDED without store/audit calls. The
+// router wires it from server.Config.PlanLimiter.
 func (h *SecretHandler) SetPlanLimiter(limiter SecretPlanLimiter) {
 	h.planLimits = limiter
 }
@@ -348,7 +347,7 @@ func (h *SecretHandler) Bulk(w http.ResponseWriter, r *http.Request) {
 	if !h.assertSecretProjectBinding(ctx, w, uc.TenantID, uc.UserID, project) {
 		return
 	}
-	if !h.assertSecretPlanLimit(ctx, w, uc.TenantID, req.Secrets) {
+	if !h.assertSecretPlanLimit(ctx, w, uc.TenantID, project, req.Secrets) {
 		return
 	}
 
@@ -420,41 +419,81 @@ func (h *SecretHandler) assertSecretProjectBinding(
 	return false
 }
 
-// assertSecretPlanLimit implements J-22 T1.3 plan-limit gate. Returns
-// true to continue, false when 402 PLAN_LIMIT_EXCEEDED was written.
-// EC-10 race-safe lock remains DEFERRED.
+// assertSecretPlanLimit implements the J-22 T1.3 plan-limit gate. For every
+// environment the batch touches it counts the secrets the environment already
+// holds plus the ones the batch would ADD (an existing name is an update, not
+// an addition) and asks the plan whether that total fits "secrets_per_env".
+// Returns true to continue; false when 402 PLAN_LIMIT_EXCEEDED (or a 500 for
+// an unreadable store) was written.
+//
+// The count is taken before the per-environment lock, so two concurrent
+// uploads can each fit alone and together exceed the cap (EC-10).
 func (h *SecretHandler) assertSecretPlanLimit(
 	ctx context.Context,
 	w http.ResponseWriter,
-	tenantID string,
+	tenantID, project string,
 	secrets []secretBulkEntry,
 ) bool {
 	if h.planLimits == nil {
 		return true
 	}
-	var adding int
+	for env, names := range bulkNamesByEnv(secrets) {
+		existing, err := h.store.ListNames(ctx, tenantID, project, env)
+		if err != nil {
+			slog.Error("secret bulk: cannot count existing secrets for the plan gate",
+				"tenant", tenantID, "project", project, "env", env, "error", err)
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			return false
+		}
+		requested := len(existing) + countNewNames(existing, names)
+		res := h.planLimits.CheckValue(tenantID, perEnvironmentLimitMetric, requested)
+		if res.Allowed {
+			continue
+		}
+		httpio.WriteJSON(w, http.StatusPaymentRequired, map[string]any{
+			"code": "PLAN_LIMIT_EXCEEDED",
+			"message": fmt.Sprintf("plan %q allows %d secrets per environment; %q would reach %d",
+				res.Plan, res.Limit, env, requested),
+			"current": len(existing),
+			"limit":   "secrets",
+			"max":     res.Limit,
+			"plan":    res.Plan,
+		})
+		return false
+	}
+	return true
+}
+
+// bulkNamesByEnv groups the valid key names of a batch by environment.
+func bulkNamesByEnv(secrets []secretBulkEntry) map[string][]string {
+	byEnv := map[string][]string{}
 	for _, e := range secrets {
 		if !secretNameRegex.MatchString(e.Name) {
 			continue
 		}
-		adding += len(e.Envs)
+		for _, env := range e.Envs {
+			byEnv[env] = append(byEnv[env], e.Name)
+		}
 	}
-	if adding == 0 {
-		return true
+	return byEnv
+}
+
+// countNewNames counts batch names with no existing app-less row: bulk writes
+// app "", so only those rows are overwritten rather than added.
+func countNewNames(existing []SecretMetadata, names []string) int {
+	have := make(map[string]struct{}, len(existing))
+	for _, m := range existing {
+		if m.App == "" {
+			have[m.Name] = struct{}{}
+		}
 	}
-	allowed, current, max, plan := h.planLimits.IsAllowedToCreate(ctx, tenantID, adding)
-	if allowed {
-		return true
+	added := 0
+	for _, n := range names {
+		if _, ok := have[n]; !ok {
+			added++
+		}
 	}
-	httpio.WriteJSON(w, http.StatusPaymentRequired, map[string]any{
-		"code":    "PLAN_LIMIT_EXCEEDED",
-		"message": fmt.Sprintf("plan %q allows %d secrets, currently at %d", plan, max, current),
-		"current": current,
-		"limit":   "secrets",
-		"max":     max,
-		"plan":    plan,
-	})
-	return false
+	return added
 }
 
 // bulkEnvAggregates collects per-env outcomes for a single bulk entry.
