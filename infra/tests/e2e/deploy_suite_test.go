@@ -22,7 +22,6 @@ package e2e
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -107,18 +106,11 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	// was too short — drill full suite runs 4h+ and token expired mid-suite,
 	// causing all post-1h specs to fail AUTH_REQUIRED. Use 86400 (24h) matching
 	// JWT actual TTL from Hydra client_credentials grant.
-	loginCmd := exec.Command("loopzero", "login",
-		"--token", token,
-		"--expires-in", "86400",
-		"--json",
-	)
-	loginCmd.Env = append(os.Environ(),
-		"LOOPZERO_API_URL="+apiURL(),
-		"XDG_CONFIG_HOME="+xdgDir,
-	)
-	loginOut, loginErr := loginCmd.CombinedOutput()
-	Expect(loginErr).NotTo(HaveOccurred(),
-		"loopzero login --token failed: %s", string(loginOut))
+	loginOut, loginErrOut, loginCode := execLoopZero(
+		loopzeroInvocation{env: []string{"XDG_CONFIG_HOME=" + xdgDir}},
+		"login", "--token", token, "--expires-in", "86400", "--json")
+	Expect(loginCode).To(Equal(0),
+		"loopzero login --token failed (exit %d): %s%s", loginCode, loginOut, loginErrOut)
 	// Sanity: configStore file exists at expected path.
 	cfgPath := filepath.Join(xdgDir, "loopzero", "config.json")
 	if _, statErr := os.Stat(cfgPath); statErr != nil {

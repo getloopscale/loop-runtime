@@ -112,16 +112,11 @@ func e2eBaseDomain() string {
 // cascades through cancel builds + gitops remove + ArgoCD sync and exceeds
 // 30s on LIVE k3d (observed flakes in journey 73/75 run, 2026-05-06).
 func ensureProjectDeleted(project string) {
-	cmd := exec.Command("loopzero", "project", "delete", project, "--yes", "--json")
-	// T2 amendment 2026-05-13: auth via configStore (XDG_CONFIG_HOME from
-	// BeforeSuite). LOOPZERO_TOKEN= stripped to avoid env override of configStore.
-	cmd.Env = append(os.Environ(),
-		"LOOPZERO_API_URL="+apiURL(),
-		"LOOPZERO_API_TIMEOUT=120000",
-		"LOOPZERO_TOKEN=",
-	)
-	// Ignore errors — project may not exist.
-	_ = cmd.Run()
+	// The exit code is not checked: an absent project is the expected case.
+	// A CLI that never started is not, and would leave the project behind.
+	_, stderr, exitCode := execLoopZero(loopzeroInvocation{env: []string{longAPITimeout}},
+		"project", "delete", project, "--yes", "--json")
+	Expect(exitCode).NotTo(Equal(-1), "loopzero did not start: %s", stderr)
 }
 
 // resolveToken returns the JWT to inject into spawned loopzero CLI processes.

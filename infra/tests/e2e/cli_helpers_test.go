@@ -17,6 +17,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -33,25 +34,42 @@ var internalTerms = forbiddenInternalTerms
 // Kept as alias for backward compatibility with existing tests.
 var allowedExitCodes = allowedExitCodesMap
 
-// runLoopZero executes `loopzero <args...>` with E2E env vars and captures
-// stdout/stderr/exitCode.
+// loopzeroInvocation describes one run of the `loopzero` CLI. The zero value is the
+// suite default: the E2E API URL, auth from the per-suite configStore, and the
+// current working directory.
+type loopzeroInvocation struct {
+	// dir is the working directory; empty means the test process's own.
+	dir string
+	// env entries are applied AFTER the defaults, so a KEY=value here wins
+	// (os/exec keeps the last value of a duplicated key).
+	env []string
+	// unset names keys removed from the inherited environment entirely —
+	// "absent", which an empty value is not.
+	unset []string
+}
+
+// execLoopZero is the one place an E2E spec spawns `loopzero`. It captures stdout,
+// stderr and the exit code; a CLI that never started reports -1, never 0, so an
+// exit-0 assertion cannot pass with no binary on PATH.
 //
 // T2 amendment 2026-05-13 (finding-2026-05-13-e2e-token-refresh-divergence):
 // auth comes from the per-suite XDG_CONFIG_HOME populated by BeforeSuite via
 // `loopzero login --token`, NOT from LOOPZERO_TOKEN env injection. The CLI reads the
-// token from configStore (production parity per Rule 10).
-//
-// LOOPZERO_TOKEN env is intentionally NOT forwarded — if it's set in the parent
-// process it would silently override configStore (configStore.getToken()
-// checks env first), defeating the refactor. Callers that need to override
-// the resolved token should write to the test XDG configStore directly.
-func runLoopZero(args ...string) (stdout, stderr string, exitCode int) {
+// token from configStore (production parity per Rule 10). LOOPZERO_TOKEN is
+// therefore hard-stripped by default — if the parent process had it set it
+// would silently override configStore. A spec that deliberately sends a
+// token passes it in loopzeroInvocation.env.
+func execLoopZero(inv loopzeroInvocation, args ...string) (stdout, stderr string, exitCode int) {
 	cmd := exec.Command("loopzero", args...)
-	cmd.Env = append(os.Environ(),
-		"LOOPZERO_API_URL="+apiURL(),
-		// Hard-strip the parent LOOPZERO_TOKEN so configStore is the only source.
-		"LOOPZERO_TOKEN=",
-	)
+	cmd.Dir = inv.dir
+	env := make([]string, 0, len(os.Environ())+2+len(inv.env))
+	for _, kv := range os.Environ() {
+		if !hasEnvKey(kv, inv.unset) {
+			env = append(env, kv)
+		}
+	}
+	env = append(env, "LOOPZERO_API_URL="+apiURL(), "LOOPZERO_TOKEN=")
+	cmd.Env = append(env, inv.env...)
 
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout = &outBuf
@@ -60,48 +78,41 @@ func runLoopZero(args ...string) (stdout, stderr string, exitCode int) {
 	err := cmd.Run()
 	exitCode = 0
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		} else {
 			exitCode = -1
+			errBuf.WriteString("\n[execLoopZero] loopzero did not start: " + err.Error())
 		}
 	}
 	return outBuf.String(), errBuf.String(), exitCode
 }
 
-// runLoopZeroInDir executes `loopzero <args...>` with the given working directory.
-// Used for commands like `validate`, `project delete`, `deploy` that operate on cwd.
-//
-// Migrated from cli_validate_test.go on 2026-05-25 when that file (and 50
-// other cli_*_test.go specs) was deleted per user mandate to absorb only
-// journey-relevant tests. LOOPZERO_API_TIMEOUT is bumped to 120s (vs CLI
-// default 30s in cli/src/config/constants.ts:53) because project delete
-// cascades through cancel builds + gitops remove + ArgoCD sync and exceeds
-// 30s on LIVE k3d. Auth via configStore (XDG_CONFIG_HOME from BeforeSuite),
-// matching runLoopZero per T2 amendment 2026-05-13.
-func runLoopZeroInDir(dir string, args ...string) (stdout, stderr string, exitCode int) {
-	cmd := exec.Command("loopzero", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
-		"LOOPZERO_API_URL="+apiURL(),
-		"LOOPZERO_API_TIMEOUT=120000",
-		"LOOPZERO_TOKEN=",
-	)
-
-	var outBuf, errBuf strings.Builder
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-
-	err := cmd.Run()
-	exitCode = 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
-			exitCode = -1
+// hasEnvKey reports whether the KEY=value entry kv names one of keys.
+func hasEnvKey(kv string, keys []string) bool {
+	for _, k := range keys {
+		if strings.HasPrefix(kv, k+"=") {
+			return true
 		}
 	}
-	return outBuf.String(), errBuf.String(), exitCode
+	return false
+}
+
+// runLoopZero executes `loopzero <args...>` with the suite defaults.
+func runLoopZero(args ...string) (stdout, stderr string, exitCode int) {
+	return execLoopZero(loopzeroInvocation{}, args...)
+}
+
+// longAPITimeout bumps LOOPZERO_API_TIMEOUT to 120s (vs CLI default 30s in
+// cli/src/config/constants.ts:53): project delete cascades through cancel
+// builds + gitops remove + sync and exceeds 30s on LIVE k3d.
+const longAPITimeout = "LOOPZERO_API_TIMEOUT=120000"
+
+// runLoopZeroInDir executes `loopzero <args...>` in dir, for commands like `validate`,
+// `project delete` and `deploy` that operate on cwd.
+func runLoopZeroInDir(dir string, args ...string) (stdout, stderr string, exitCode int) {
+	return execLoopZero(loopzeroInvocation{dir: dir, env: []string{longAPITimeout}}, args...)
 }
 
 // expectAllowedExitCode asserts that `code` is one of 0/1/2/3/4/5 per Rule 4.

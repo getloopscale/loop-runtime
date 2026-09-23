@@ -25,15 +25,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"os/exec"
 	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/getloopscale/loopzero/infra/scripts/seed"
 )
 
 var _ = Describe("Journey: User Dockerfile happy path", Ordered, Label("journey", "user-dockerfile"), func() {
@@ -76,7 +72,7 @@ var _ = Describe("Journey: User Dockerfile happy path", Ordered, Label("journey"
 	})
 
 	It("T4.3: pod is Running and app responds", func() {
-		ns := "loopzero-" + seed.TenantID + "-" + env
+		ns := mustE2ENamespace(project, env)
 		resName := project + "-" + app
 
 		// Wait for Pod (via Rollout) Running. Drill-aware via kubectlForCluster.
@@ -141,24 +137,12 @@ var _ = Describe("Journey: User Dockerfile rejection path", Ordered, Label("jour
 // reach a specific terminal status. Unlike deployAndWaitSuccess, it does
 // NOT assert success — used for negative paths.
 func deployAndExpectBuildTerminal(dir, env, expectedStatus string, timeout time.Duration) string {
-	args := []string{"deploy", "--env", env, "--no-wait", "--json"}
-	cmd := exec.Command("loopzero", args...)
-	cmd.Dir = dir
-	// T2 amendment 2026-05-13: auth via configStore (XDG_CONFIG_HOME from
-	// BeforeSuite), not LOOPZERO_TOKEN env injection.
-	cmd.Env = append(os.Environ(),
-		"LOOPZERO_API_URL="+apiURL(),
-		"LOOPZERO_TOKEN=",
-	)
-
-	var stdoutBuf, stderrBuf strings.Builder
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
-
-	// We don't care about exit code for submission — even if the build is
-	// destined to fail, the SUBMISSION should succeed (HTTP 202).
-	_ = cmd.Run()
-	stdout := stdoutBuf.String()
+	// Only a CLI that never started is a submission failure here: even a build
+	// destined to fail is SUBMITTED successfully (HTTP 202), and the build_id
+	// parse below is what proves it.
+	stdout, stderr, exitCode := execLoopZero(loopzeroInvocation{dir: dir},
+		"deploy", "--env", env, "--no-wait", "--json")
+	Expect(exitCode).NotTo(Equal(-1), "loopzero did not start: %s", stderr)
 
 	// Parse build_id from JSON.
 	result := make(map[string]interface{})
@@ -173,7 +157,7 @@ func deployAndExpectBuildTerminal(dir, env, expectedStatus string, timeout time.
 	buildID, _ := result["build_id"].(string)
 	Expect(buildID).NotTo(BeEmpty(),
 		"deploy submission did not return build_id\nstdout: %s\nstderr: %s",
-		stdout, stderrBuf.String())
+		stdout, stderr)
 
 	// Wait for terminal status.
 	status := waitBuildTerminal(buildID, timeout)

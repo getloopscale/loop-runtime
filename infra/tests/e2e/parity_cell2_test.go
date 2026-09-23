@@ -33,9 +33,8 @@ import (
 )
 
 const (
-	cell2MgmtCtx = "k3d-loopzero-core"
-	cell1Ctx     = "k3d-loopzero-cell-0"   // cell-0 target (per H12/CLAUDE.md)
-	cell2RtCtx   = "k3d-loopzero-cell-1"  // cell-1 target (per H14)
+	cell1Ctx   = "k3d-loopzero-cell-0" // cell-0 target (per H12/CLAUDE.md)
+	cell2RtCtx = "k3d-loopzero-cell-1" // cell-1 target (per H14)
 	// standalone deterministic PG password (chart pins it; bash c1's Secret
 	// lookup is empty — see finding-2026-05-24).
 	cell2PGPass = "loopzero-dev-password"
@@ -43,7 +42,7 @@ const (
 
 // kmgmt runs kubectl against the mgmt cluster and returns trimmed stdout.
 func kmgmt(args ...string) (string, error) {
-	out, err := exec.Command("kubectl", append([]string{"--context", cell2MgmtCtx}, args...)...).CombinedOutput()
+	out, err := kubectlForCluster(ClusterMgmt, args...).CombinedOutput()
 	return strings.TrimSpace(string(out)), err
 }
 

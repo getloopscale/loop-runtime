@@ -17,6 +17,21 @@ import (
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
+// e2eNamespace is the workload namespace of the E2E tenant's (project, env),
+// derived by the platform's own naming rule. Specs never spell it by hand: the
+// two-segment "loopzero-<tenant>-<env>" they used to build names a namespace no
+// deploy creates, and an absence check there passes vacuously.
+func e2eNamespace(project, env string) (string, error) {
+	return naming.Namespace(seed.TenantID, project, env)
+}
+
+// mustE2ENamespace is e2eNamespace for spec bodies, failing the spec on error.
+func mustE2ENamespace(project, env string) string {
+	ns, err := e2eNamespace(project, env)
+	Expect(err).NotTo(HaveOccurred(), "workload namespace for %s/%s", project, env)
+	return ns
+}
+
 // proveDead verifies that all resources for a project are cleaned up
 // (namespace gone or zero resources with loopzero.io/project label).
 // This is the "Prova de Morte" assertion from bash journeys.
@@ -72,7 +87,7 @@ func proveDead(tenant, project, env string) {
 //
 // Parameters:
 //   - project, app, env: identify the workload (namespace
-//     "loopzero-<tenant>-<env>", label "app=<project>-<app>")
+//     e2eNamespace(project, env), label "app=<project>-<app>")
 //   - path: HTTP path to GET (e.g., "/health")
 //   - timeout: Eventually() budget
 //
@@ -90,7 +105,7 @@ func proveDead(tenant, project, env string) {
 // container's filesystem.
 func waitAppHealthyViaKubectl(project, app, env, path string, timeout time.Duration) {
 	resName := project + "-" + app
-	ns := "loopzero-" + seed.TenantID + "-" + env
+	ns := mustE2ENamespace(project, env)
 
 	Eventually(func() error {
 		// Find a Running+Ready pod for this app.
