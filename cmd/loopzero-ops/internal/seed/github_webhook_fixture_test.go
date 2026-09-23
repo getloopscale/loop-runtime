@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -15,11 +17,15 @@ import (
 type ghAPIStub struct {
 	responses map[string][]byte // key = URL path in argv
 	calls     [][]string
+	lastBody  []byte
 	errOnPath map[string]error
 }
 
-func (s *ghAPIStub) call(args ...string) ([]byte, error) {
+func (s *ghAPIStub) call(body []byte, args ...string) ([]byte, error) {
 	s.calls = append(s.calls, args)
+	if body != nil {
+		s.lastBody = body
+	}
 	// find path — either bare `path` or `-X VERB path`.
 	var path string
 	for i, a := range args {
@@ -131,13 +137,13 @@ func TestGitHubWebhookFixture_CreatesNewHook(t *testing.T) {
 	// we drive the POST by returning createdHook when the argv contains `-X POST`.
 	orig := ghAPIFn
 	defer func() { ghAPIFn = orig }()
-	ghAPIFn = func(args ...string) ([]byte, error) {
+	ghAPIFn = func(body []byte, args ...string) ([]byte, error) {
 		for _, a := range args {
 			if a == "POST" {
 				return createdHook, nil
 			}
 		}
-		return stub.call(args...)
+		return stub.call(body, args...)
 	}
 
 	deps := Deps{Ctx: context.Background(), Creds: makeGhWebhookCreds("whsec_abc")}
@@ -240,27 +246,134 @@ func TestGitHubWebhookFixture_Verify_FailWhenNoHook(t *testing.T) {
 	}
 }
 
-func TestGhHookMutateArgs_ContainsCanonicalFields(t *testing.T) {
-	args := ghHookMutateArgs("/repos/x/y/hooks/1", "PATCH", "https://example/webhook", "whsec_secret")
-	joined := strings.Join(args, " ")
-	for _, want := range []string{
-		"-X PATCH",
-		"/repos/x/y/hooks/1",
-		"active=true",
-		"events[]=push",
-		"events[]=pull_request",
-		"config[url]=https://example/webhook",
-		"config[secret]=whsec_secret",
-		"config[insecure_ssl]=0",
+func TestGhHookBody_ContainsCanonicalFields(t *testing.T) {
+	body, err := ghHookBody("https://example/webhook", "whsec_secret", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("body is not JSON: %v", err)
+	}
+	if got["active"] != true {
+		t.Errorf("active = %v, want true", got["active"])
+	}
+	if _, named := got["name"]; named {
+		t.Errorf("PATCH body must not carry name; got %v", got)
+	}
+	cfg := got["config"].(map[string]any)
+	for k, want := range map[string]string{
+		"url": "https://example/webhook", "secret": "whsec_secret",
+		"content_type": "json", "insecure_ssl": "0",
 	} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("args missing %q; got: %s", want, joined)
+		if cfg[k] != want {
+			t.Errorf("config[%s] = %v, want %q", k, cfg[k], want)
 		}
+	}
+	events := got["events"].([]any)
+	if len(events) != 2 || events[0] != "push" || events[1] != "pull_request" {
+		t.Errorf("events = %v", events)
+	}
+}
+
+func TestGhHookBody_CreateCarriesName(t *testing.T) {
+	body, err := ghHookBody("https://example/webhook", "whsec_secret", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `"name":"web"`) {
+		t.Errorf("create body missing name=web: %s", body)
 	}
 }
 
 func TestGitHubWebhookFixture_Name(t *testing.T) {
 	if got := NewGitHubWebhookFixtureSeed().Name(); got != "github-webhook-fixture" {
 		t.Errorf("Name = %q", got)
+	}
+}
+
+// The webhook secret is an HMAC key. It must never reach the gh argv — argv is
+// world-readable in the process table and was echoed verbatim into the error a
+// failing PATCH/POST returned, which Run copied into Result.Reason and the seed
+// printed to stdout and --json.
+func TestGhHookMutation_KeepsSecretOutOfArgv(t *testing.T) {
+	defer stubGhAuth(t, nil)()
+	const whsec = "whsec_must_not_leak_0123456789"
+	admin, _ := json.Marshal(ghRepoPermissions{Permissions: struct {
+		Admin bool `json:"admin"`
+	}{Admin: true}})
+	existing, _ := json.Marshal([]ghWebhook{
+		{ID: 99, Config: ghWebhookConfig{URL: ghFixtureDefaultWebhookURL}},
+	})
+	stub := &ghAPIStub{responses: map[string][]byte{
+		"/repos/getloopscale/loopzerokit-example":       admin,
+		"/repos/getloopscale/loopzerokit-example/hooks": existing,
+	}}
+	defer stubGhAPI(t, stub)()
+
+	got := NewGitHubWebhookFixtureSeed().Run(Deps{Ctx: context.Background(), Creds: makeGhWebhookCreds(whsec)})
+	if got.Verdict != PASS {
+		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
+	}
+	for _, argv := range stub.calls {
+		if strings.Contains(strings.Join(argv, " "), whsec) {
+			t.Fatalf("webhook secret reached gh argv: %v", argv)
+		}
+	}
+	if !strings.Contains(string(stub.lastBody), whsec) {
+		t.Fatalf("PATCH body on stdin does not carry the secret; body=%q", stub.lastBody)
+	}
+}
+
+func TestGitHubWebhookFixture_FailedPatchReasonOmitsSecret(t *testing.T) {
+	defer stubGhAuth(t, nil)()
+	const whsec = "whsec_must_not_leak_0123456789"
+	admin, _ := json.Marshal(ghRepoPermissions{Permissions: struct {
+		Admin bool `json:"admin"`
+	}{Admin: true}})
+	existing, _ := json.Marshal([]ghWebhook{
+		{ID: 99, Config: ghWebhookConfig{URL: ghFixtureDefaultWebhookURL}},
+	})
+	stub := &ghAPIStub{
+		responses: map[string][]byte{
+			"/repos/getloopscale/loopzerokit-example":       admin,
+			"/repos/getloopscale/loopzerokit-example/hooks": existing,
+		},
+		errOnPath: map[string]error{"/repos/getloopscale/loopzerokit-example/hooks/99": errors.New("HTTP 422")},
+	}
+	defer stubGhAPI(t, stub)()
+
+	got := NewGitHubWebhookFixtureSeed().Run(Deps{Ctx: context.Background(), Creds: makeGhWebhookCreds(whsec)})
+	if got.Verdict != FAIL {
+		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
+	}
+	if strings.Contains(got.Reason, whsec) {
+		t.Fatalf("Reason leaks the webhook secret: %q", got.Reason)
+	}
+}
+
+// defaultGhAPI is exercised against a fake `gh` on PATH that fails, so the real
+// error formatting is what gets asserted.
+func TestDefaultGhAPI_ErrorNamesVerbAndPathOnly(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "gh")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\necho 'Validation Failed' >&2\nexit 1\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+
+	const whsec = "whsec_must_not_leak_0123456789"
+	_, err := defaultGhAPI([]byte(`{"config":{"secret":"`+whsec+`"}}`), "-X", "PATCH", "/repos/o/r/hooks/1", "--input", "-")
+	if err == nil {
+		t.Fatal("expected an error from the failing fake gh")
+	}
+	msg := err.Error()
+	if strings.Contains(msg, whsec) {
+		t.Fatalf("error leaks the secret: %q", msg)
+	}
+	for _, want := range []string{"PATCH", "/repos/o/r/hooks/1", "Validation Failed"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error %q missing %q", msg, want)
+		}
 	}
 }
