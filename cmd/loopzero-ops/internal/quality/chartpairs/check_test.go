@@ -10,106 +10,128 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/chartpairs"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
-func tree(t *testing.T, infraHelm, charts map[string]string, registro string) string {
+func tree(t *testing.T, infraHelm, charts map[string]string, registry string) string {
 	t.Helper()
 	root := t.TempDir()
-	escrever := func(base, dir, nome string) {
+	write := func(base, dir, name string) {
 		p := filepath.Join(root, base, dir, "Chart.yaml")
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(p, []byte("apiVersion: v2\nname: "+nome+"\nversion: 0.1.0\n"), 0o644); err != nil {
+		if err := os.WriteFile(p, []byte("apiVersion: v2\nname: "+name+"\nversion: 0.1.0\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for dir, nome := range infraHelm {
-		escrever("infra/helm", dir, nome)
+	for dir, name := range infraHelm {
+		write("infra/helm", dir, name)
 	}
-	for dir, nome := range charts {
-		escrever("charts", dir, nome)
+	for dir, name := range charts {
+		write("charts", dir, name)
 	}
 	p := filepath.Join(root, "infra/quality/chart-pairs.txt")
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(p, []byte(registro), 0o644); err != nil {
+	if err := os.WriteFile(p, []byte(registry), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return root
 }
 
-// O registro tem de listar exatamente os pares que existem em disco.
-//
-// B-056, medido 2026-08-18: dois charts declaram o MESMO `name` em arvores com ciclos de
-// vida distintos — `infra/helm/` (bootstrap, Helmfile L2) e `charts/` (OCI publicado,
-// ArgoCD L3). O `CLAUDE.md` manda manter o par em paridade, e a unica forma de saber de
-// qual se fala e pelo caminho.
+// The registry must list exactly the pairs that exist on disk.
 func TestRegistryMatchesDisk(t *testing.T) {
 	root := tree(t,
 		map[string]string{"loopzero-api": "loopzero-api", "gitea": "gitea"},
-		map[string]string{"loopzero-api": "loopzero-api", "so-em-charts": "so-em-charts"},
-		"# registro\nloopzero-api | ambos servem a API; o de infra/helm faz bootstrap, o de charts e publicado\n")
+		map[string]string{"loopzero-api": "loopzero-api", "charts-only": "charts-only"},
+		"# registry\nloopzero-api | loopzero-api | infra/helm bootstraps it; charts/ is published\n")
 
-	if _, err := chartpairs.Check(chartpairs.Config{RepoRoot: root}); err != nil {
-		t.Fatalf("registro bate com o disco; veio %v", err)
+	out, err := chartpairs.Check(chartpairs.Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("registry matches disk; got %v", err)
+	}
+	if len(out.Pairs) != 1 || out.Pairs[0] != "loopzero-api" {
+		t.Errorf("want [loopzero-api], got %v", out.Pairs)
 	}
 }
 
-// Par novo sem declaracao e o caso que faz o contrato de paridade envelhecer em silencio.
+// A new pair without a declaration is how the parity contract ages in silence.
 func TestUndeclaredPairIsRefused(t *testing.T) {
 	root := tree(t,
 		map[string]string{"loopzero-api": "loopzero-api", "loopzero-cloud": "loopzero-cloud"},
 		map[string]string{"loopzero-api": "loopzero-api", "loopzero-cloud": "loopzero-cloud"},
-		"# registro\nloopzero-api | nota\n")
+		"# registry\nloopzero-api | loopzero-api | note\n")
 
 	out, err := chartpairs.Check(chartpairs.Config{RepoRoot: root})
 	if !errors.Is(err, chartpairs.ErrUndeclared) {
-		t.Fatalf("esperava ErrUndeclared, veio %v", err)
+		t.Fatalf("want ErrUndeclared, got %v", err)
 	}
 	if len(out.Undeclared) != 1 || out.Undeclared[0] != "loopzero-cloud" {
-		t.Errorf("esperava loopzero-cloud como nao declarado, veio %v", out.Undeclared)
+		t.Errorf("want loopzero-cloud undeclared, got %v", out.Undeclared)
 	}
 }
 
-// Declaracao que sobreviveu ao par: e o defeito que o `CLAUDE.md` tinha — mandava aplicar o
-// mesmo conserto num par que nao existe, porque `infra/helm/loopzero-admission-policies` nunca
-// existiu. Diluir o contrato com um par inexistente enfraquece os que sao reais.
+// A declaration that outlived its pair: the defect CLAUDE.md had.
 func TestStaleDeclarationIsRefused(t *testing.T) {
 	root := tree(t,
 		map[string]string{"loopzero-api": "loopzero-api"},
 		map[string]string{"loopzero-api": "loopzero-api"},
-		"# registro\nloopzero-api | nota\nloopzero-fantasma | par que nao existe\n")
+		"# registry\nloopzero-api | loopzero-api | note\nloopzero-ghost | loopzero-ghost | a pair that does not exist\n")
 
 	out, err := chartpairs.Check(chartpairs.Config{RepoRoot: root})
 	if !errors.Is(err, chartpairs.ErrStale) {
-		t.Fatalf("esperava ErrStale, veio %v", err)
+		t.Fatalf("want ErrStale, got %v", err)
 	}
-	if len(out.Stale) != 1 || out.Stale[0] != "loopzero-fantasma" {
-		t.Errorf("esperava loopzero-fantasma como obsoleto, veio %v", out.Stale)
+	if len(out.Stale) != 1 || out.Stale[0] != "loopzero-ghost" {
+		t.Errorf("want loopzero-ghost stale, got %v", out.Stale)
 	}
 }
 
-// Zero pares em disco com registro nao vazio tambem e divergencia; e zero com zero e
-// legitimo, mas nao pode ser confundido com "nao varri nada".
+// A conceptual pair (different chart names) is declared, not discovered.
+func TestConceptualPairIsCheckedByDirectory(t *testing.T) {
+	registry := "# registry\nadmission-policies | loopzero-admission-policies | conceptual\n"
+	root := tree(t,
+		map[string]string{"admission-policies": "admission-policies"},
+		map[string]string{"loopzero-admission-policies": "loopzero-admission-policies"},
+		registry)
+	out, err := chartpairs.Check(chartpairs.Config{RepoRoot: root})
+	if err != nil || len(out.Pairs) != 1 || out.Pairs[0] != "admission-policies↔loopzero-admission-policies" {
+		t.Fatalf("want the conceptual pair present, got %v %v", out.Pairs, err)
+	}
+	root = tree(t, map[string]string{"admission-policies": "admission-policies"}, map[string]string{"x": "x"}, registry)
+	if _, err := chartpairs.Check(chartpairs.Config{RepoRoot: root}); !errors.Is(err, chartpairs.ErrStale) {
+		t.Fatalf("a conceptual pair missing its published side is stale; got %v", err)
+	}
+}
+
+func TestMalformedRegistryLineIsRefused(t *testing.T) {
+	root := tree(t, map[string]string{"loopzero-api": "loopzero-api"}, map[string]string{"loopzero-api": "loopzero-api"},
+		"loopzero-api | old two-field format\n")
+	if _, err := chartpairs.Check(chartpairs.Config{RepoRoot: root}); !errors.Is(err, chartpairs.ErrRegistryMissing) {
+		t.Fatalf("want ErrRegistryMissing for a two-field line, got %v", err)
+	}
+}
+
+// No charts at all is refused: zero with zero must not read as "scanned clean".
 func TestNoChartsAtAllIsRefused(t *testing.T) {
 	root := t.TempDir()
 	if _, err := chartpairs.Check(chartpairs.Config{RepoRoot: root}); !errors.Is(err, chartpairs.ErrNothingScanned) {
-		t.Fatalf("esperava ErrNothingScanned, veio %v", err)
+		t.Fatalf("want ErrNothingScanned, got %v", err)
 	}
 }
 
-// A populacao real deste repositorio.
+// The real population of this repository.
 func TestRealTree(t *testing.T) {
-	out, err := chartpairs.Check(chartpairs.Config{RepoRoot: filepath.Join("..", "..", "..", "..", "..")})
+	out, err := chartpairs.Check(chartpairs.Config{RepoRoot: qtestutil.Root(t)})
 	if err != nil {
-		t.Fatalf("arvore real diverge: %v (pares=%v nao-declarados=%v obsoletos=%v)",
+		t.Fatalf("real tree diverges: %v (pairs=%v undeclared=%v stale=%v)",
 			err, out.Pairs, out.Undeclared, out.Stale)
 	}
 	if len(out.Pairs) == 0 {
-		t.Fatal("zero pares medidos — verde sobre nada")
+		t.Fatal("zero pairs measured — green over nothing")
 	}
-	t.Logf("populacao real: %d chart(s) em infra/helm, %d em charts/, pares: %v",
+	t.Logf("real population: %d chart(s) in infra/helm, %d in charts/, pairs: %v",
 		out.InfraHelm, out.Charts, out.Pairs)
 }

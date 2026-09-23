@@ -32,12 +32,16 @@ import (
 	"strings"
 
 	"github.com/blang/semver/v4"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/chartpairs"
 	"gopkg.in/yaml.v3"
 )
 
 // Config tells Check which repo to scan.
 type Config struct {
 	RepoRoot string
+	// Pairs overrides the pair registry (infra/quality/chart-pairs.txt, read
+	// through chartpairs.LoadRegistry) — for fixtures. Nil reads the registry.
+	Pairs []Pair
 }
 
 // Pair maps a bootstrap chart dir to its published counterpart.
@@ -46,11 +50,20 @@ type Pair struct {
 	PublishedDir string // relative to RepoRoot/charts
 }
 
-// DefaultPairs are the 3 overlapping charts per CLAUDE.md "Helm Chart Dual System".
-var DefaultPairs = []Pair{
-	{BootstrapDir: "loopzero-api", PublishedDir: "loopzero-api"},
-	{BootstrapDir: "loopzero-cloud", PublishedDir: "loopzero-cloud"},
-	{BootstrapDir: "admission-policies", PublishedDir: "loopzero-admission-policies"},
+// declaredPairs returns cfg.Pairs, or the pairs declared in the registry.
+func declaredPairs(cfg Config) ([]Pair, error) {
+	if cfg.Pairs != nil {
+		return cfg.Pairs, nil
+	}
+	declared, err := chartpairs.LoadRegistry(cfg.RepoRoot)
+	if err != nil {
+		return nil, err
+	}
+	pairs := make([]Pair, 0, len(declared))
+	for _, d := range declared {
+		pairs = append(pairs, Pair{BootstrapDir: d.Bootstrap, PublishedDir: d.Published})
+	}
+	return pairs, nil
 }
 
 // Violation captures a single drift finding.
@@ -81,14 +94,18 @@ type chartYaml struct {
 	Version string `yaml:"version"`
 }
 
-// Check verifies all DefaultPairs and returns an Outcome.
+// Check verifies every declared pair and returns an Outcome.
 //
 // Missing Chart.yaml in either side of a pair = Violation with reason="missing".
 // Unparseable semver = Violation with reason="invalid version".
 // Bootstrap > published = Violation with reason="drift".
 func Check(cfg Config) (*Outcome, error) {
+	pairs, err := declaredPairs(cfg)
+	if err != nil {
+		return nil, err
+	}
 	out := &Outcome{Pass: true}
-	for _, pair := range DefaultPairs {
+	for _, pair := range pairs {
 		bootstrapPath := filepath.Join(cfg.RepoRoot, "infra/helm", pair.BootstrapDir, "Chart.yaml")
 		publishedPath := filepath.Join(cfg.RepoRoot, "charts", pair.PublishedDir, "Chart.yaml")
 
@@ -173,7 +190,7 @@ func Check(cfg Config) (*Outcome, error) {
 }
 
 func readChartVersion(path string) (string, error) {
-	// #nosec G304 -- path is composed of fixed RepoRoot + DefaultPairs entries.
+	// #nosec G304 -- path is composed of fixed RepoRoot + declared pair entries.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err

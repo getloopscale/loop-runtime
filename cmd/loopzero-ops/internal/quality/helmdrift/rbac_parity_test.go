@@ -59,6 +59,7 @@ func parityTreeNamed(t *testing.T, chart string, bootstrap, published []byte) (*
 	write("infra/helm/"+chart, bootstrap)
 	write("charts/"+chart, published)
 
+	declareFixturePairs(t, root)
 	out, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
 	if err != nil {
 		t.Fatalf("Check: %v", err)

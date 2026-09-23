@@ -100,7 +100,7 @@ func diffChartContent(bootstrapValues, publishedValues, chartName string) []Viol
 
 // readValues parses a values.yaml into a generic map.
 func readValues(path string) (map[string]any, error) {
-	// #nosec G304 -- path is composed of fixed RepoRoot + DefaultPairs entries.
+	// #nosec G304 -- path is composed of fixed RepoRoot + declared pair entries.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err

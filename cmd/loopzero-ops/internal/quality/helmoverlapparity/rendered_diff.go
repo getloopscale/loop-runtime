@@ -30,7 +30,7 @@ import (
 // Only stdout is the manifest stream: helm writes warnings to stderr, and
 // interleaving them with the YAML corrupts the documents being compared.
 func renderHelm(chartDir string) (string, error) {
-	// #nosec G204 -- chartDir is composed of fixed RepoRoot + DefaultPairs entries.
+	// #nosec G204 -- chartDir is composed of fixed RepoRoot + declared pair entries.
 	cmd := exec.Command("helm", "template", "parity", chartDir)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

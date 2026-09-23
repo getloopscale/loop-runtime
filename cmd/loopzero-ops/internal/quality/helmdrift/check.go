@@ -21,39 +21,21 @@
 // both sides of the loopzero-api pair install exactly one ClusterRole, so the pair
 // was green while it diverged on 174 cells of a 200-cell union.
 //
-// # "Declared pair" means two different things in this repository
+// # Which pairs
 //
-// This gate discovers pairs from DISK: every charts/loopzero-* that also exists under
-// infra/helm/, plus the conceptualPairs map below for the ones whose names differ.
-// The `chart-pairs` gate reads a written registry, infra/quality/chart-pairs.txt,
-// which by its own scope lists only the SAME-NAME pairs — two today, where this
-// gate audits three.
-//
-// The two sources are deliberately NOT unified here. Making this gate read that
-// file would drop the conceptual pair it currently audits, which is a change to
-// the KIND comparison's coverage and has nothing to do with the RBAC comparison
-// B-001 added; and making that gate scan disk would end the "declaration that
-// outlived its pair" check it exists for. Unification is its own piece of work
-// with its own evidence, and TestThePairSourcesDivergeAndTheDivergenceIsRecorded
-// fails the day somebody does it — so this note cannot quietly become false.
-//
-// It is recorded HERE rather than in a backlog entry because BACKLOG.md is
-// gitignored in this repository (.gitignore:295): a note filed there reaches
-// nobody who clones.
+// The pairs are read from infra/quality/chart-pairs.txt through
+// chartpairs.LoadRegistry — the same registry the chart-pairs gate keeps
+// honest against disk — so this gate, chart-pairs and helm-overlap-parity
+// audit one list. Until 2026-09-23 this gate discovered pairs from disk plus a
+// hard-coded map of differently-named pairs, and the three disagreed.
 package helmdrift
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
-)
 
-// conceptualPairs maps published-chart → bootstrap-chart when names differ.
-var conceptualPairs = map[string]string{
-	"loopzero-admission-policies": "admission-policies",
-}
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/chartpairs"
+)
 
 // approval is one file's licence to differ between the two charts.
 type approval struct {
@@ -153,41 +135,18 @@ func Check(cfg Config) (*Outcome, error) {
 // pair is one published↔bootstrap chart pair this gate audits.
 type pair struct{ published, bootstrap string }
 
-// discoverPairs returns the pairs, in a deterministic order.
+// discoverPairs returns the declared pairs, in registry (label) order.
 //
 // Split out of Check so WHICH pairs this gate audits can be asserted without
-// rendering anything — the question is answered from directory names, and a test
-// that had to run `helm` to ask it would be measuring the toolchain instead.
+// rendering anything.
 func discoverPairs(repoRoot string) ([]pair, error) {
-	var pairs []pair
-
-	// Same-name overlaps: charts/loopzero-*/ that also exist in infra/helm/.
-	entries, err := os.ReadDir(filepath.Join(repoRoot, "charts"))
-	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("read charts/: %w", err)
+	declared, err := chartpairs.LoadRegistry(repoRoot)
+	if err != nil {
+		return nil, err
 	}
-	var sameName []string
-	for _, e := range entries {
-		if !e.IsDir() || !strings.HasPrefix(e.Name(), "loopzero-") {
-			continue
-		}
-		if dirExists(filepath.Join(repoRoot, "infra/helm", e.Name())) {
-			sameName = append(sameName, e.Name())
-		}
-	}
-	sort.Strings(sameName)
-	for _, name := range sameName {
-		pairs = append(pairs, pair{published: name, bootstrap: name})
-	}
-
-	// Conceptual pairs (different names). Deterministic order for stable output.
-	var pubNames []string
-	for p := range conceptualPairs {
-		pubNames = append(pubNames, p)
-	}
-	sort.Strings(pubNames)
-	for _, pub := range pubNames {
-		pairs = append(pairs, pair{published: pub, bootstrap: conceptualPairs[pub]})
+	pairs := make([]pair, 0, len(declared))
+	for _, d := range declared {
+		pairs = append(pairs, pair{published: d.Published, bootstrap: d.Bootstrap})
 	}
 	return pairs, nil
 }

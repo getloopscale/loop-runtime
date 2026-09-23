@@ -7,6 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/chartpairs"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // writeChart writes a stub Chart.yaml. helper for tests.
@@ -21,6 +24,14 @@ func writeChart(t *testing.T, dir, name, version string) {
 	}
 }
 
+// fixturePairs are the pairs the fixtures lay out; Check reads the registry
+// only when Config.Pairs is nil.
+var fixturePairs = []Pair{
+	{BootstrapDir: "loopzero-api", PublishedDir: "loopzero-api"},
+	{BootstrapDir: "loopzero-cloud", PublishedDir: "loopzero-cloud"},
+	{BootstrapDir: "admission-policies", PublishedDir: "loopzero-admission-policies"},
+}
+
 func mkRepoWithPair(t *testing.T, bootstrapName, bootstrapVer, publishedName, publishedVer string) string {
 	t.Helper()
 	root := t.TempDir()
@@ -31,11 +42,11 @@ func mkRepoWithPair(t *testing.T, bootstrapName, bootstrapVer, publishedName, pu
 
 func TestPass_VersionsEqual(t *testing.T) {
 	root := t.TempDir()
-	for _, p := range DefaultPairs {
+	for _, p := range fixturePairs {
 		writeChart(t, filepath.Join(root, "infra/helm", p.BootstrapDir), p.BootstrapDir, "0.2.0")
 		writeChart(t, filepath.Join(root, "charts", p.PublishedDir), p.PublishedDir, "0.2.0")
 	}
-	got, err := Check(Config{RepoRoot: root})
+	got, err := Check(Config{RepoRoot: root, Pairs: fixturePairs})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -49,11 +60,11 @@ func TestPass_VersionsEqual(t *testing.T) {
 
 func TestPass_BootstrapBehindPublished(t *testing.T) {
 	root := t.TempDir()
-	for _, p := range DefaultPairs {
+	for _, p := range fixturePairs {
 		writeChart(t, filepath.Join(root, "infra/helm", p.BootstrapDir), p.BootstrapDir, "0.1.0")
 		writeChart(t, filepath.Join(root, "charts", p.PublishedDir), p.PublishedDir, "0.3.0")
 	}
-	got, err := Check(Config{RepoRoot: root})
+	got, err := Check(Config{RepoRoot: root, Pairs: fixturePairs})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -65,14 +76,14 @@ func TestPass_BootstrapBehindPublished(t *testing.T) {
 func TestFail_BootstrapAheadPublished(t *testing.T) {
 	root := mkRepoWithPair(t, "loopzero-api", "0.5.0", "loopzero-api", "0.2.0")
 	// Other pairs missing -> additional violations; keep them in parity to isolate drift.
-	for _, p := range DefaultPairs {
+	for _, p := range fixturePairs {
 		if p.BootstrapDir == "loopzero-api" {
 			continue
 		}
 		writeChart(t, filepath.Join(root, "infra/helm", p.BootstrapDir), p.BootstrapDir, "0.1.0")
 		writeChart(t, filepath.Join(root, "charts", p.PublishedDir), p.PublishedDir, "0.1.0")
 	}
-	got, err := Check(Config{RepoRoot: root})
+	got, err := Check(Config{RepoRoot: root, Pairs: fixturePairs})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -94,10 +105,10 @@ func TestFail_BootstrapAheadPublished(t *testing.T) {
 func TestFail_BootstrapChartYamlMissing(t *testing.T) {
 	root := t.TempDir()
 	// Only create published; bootstrap dir absent
-	for _, p := range DefaultPairs {
+	for _, p := range fixturePairs {
 		writeChart(t, filepath.Join(root, "charts", p.PublishedDir), p.PublishedDir, "0.2.0")
 	}
-	got, err := Check(Config{RepoRoot: root})
+	got, err := Check(Config{RepoRoot: root, Pairs: fixturePairs})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -111,10 +122,10 @@ func TestFail_BootstrapChartYamlMissing(t *testing.T) {
 
 func TestFail_PublishedChartYamlMissing(t *testing.T) {
 	root := t.TempDir()
-	for _, p := range DefaultPairs {
+	for _, p := range fixturePairs {
 		writeChart(t, filepath.Join(root, "infra/helm", p.BootstrapDir), p.BootstrapDir, "0.2.0")
 	}
-	got, err := Check(Config{RepoRoot: root})
+	got, err := Check(Config{RepoRoot: root, Pairs: fixturePairs})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -128,11 +139,11 @@ func TestFail_PublishedChartYamlMissing(t *testing.T) {
 
 func TestFail_InvalidSemver(t *testing.T) {
 	root := t.TempDir()
-	for _, p := range DefaultPairs {
+	for _, p := range fixturePairs {
 		writeChart(t, filepath.Join(root, "infra/helm", p.BootstrapDir), p.BootstrapDir, "garbage")
 		writeChart(t, filepath.Join(root, "charts", p.PublishedDir), p.PublishedDir, "0.2.0")
 	}
-	got, err := Check(Config{RepoRoot: root})
+	got, err := Check(Config{RepoRoot: root, Pairs: fixturePairs})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -144,11 +155,11 @@ func TestFail_InvalidSemver(t *testing.T) {
 func TestPrereleaseSemver_BootstrapPrereleaseBehindRelease(t *testing.T) {
 	// EC-10 (SHOULD TEST) — 0.1.0-rc1 < 0.1.0 per semver spec
 	root := t.TempDir()
-	for _, p := range DefaultPairs {
+	for _, p := range fixturePairs {
 		writeChart(t, filepath.Join(root, "infra/helm", p.BootstrapDir), p.BootstrapDir, "0.1.0-rc1")
 		writeChart(t, filepath.Join(root, "charts", p.PublishedDir), p.PublishedDir, "0.1.0")
 	}
-	got, err := Check(Config{RepoRoot: root})
+	got, err := Check(Config{RepoRoot: root, Pairs: fixturePairs})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -159,11 +170,11 @@ func TestPrereleaseSemver_BootstrapPrereleaseBehindRelease(t *testing.T) {
 
 func TestPrereleaseSemver_BootstrapReleaseAheadPrerelease(t *testing.T) {
 	root := t.TempDir()
-	for _, p := range DefaultPairs {
+	for _, p := range fixturePairs {
 		writeChart(t, filepath.Join(root, "infra/helm", p.BootstrapDir), p.BootstrapDir, "0.1.0")
 		writeChart(t, filepath.Join(root, "charts", p.PublishedDir), p.PublishedDir, "0.1.0-rc1")
 	}
-	got, err := Check(Config{RepoRoot: root})
+	got, err := Check(Config{RepoRoot: root, Pairs: fixturePairs})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -198,6 +209,28 @@ func TestCompareSemver_TableDriven(t *testing.T) {
 		}
 		if got != tc.want {
 			t.Errorf("compareSemver(%q,%q) = %d, want %d", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
+
+// With no override the pairs come from the registry — the one list the
+// chart-pairs gate keeps honest against disk.
+func TestDeclaredPairsComeFromTheRegistry(t *testing.T) {
+	root := qtestutil.Root(t)
+	got, err := declaredPairs(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := chartpairs.LoadRegistry(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 || len(got) != len(want) {
+		t.Fatalf("got %d pair(s), registry declares %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i].BootstrapDir != want[i].Bootstrap || got[i].PublishedDir != want[i].Published {
+			t.Errorf("pair %d: got %+v, registry %+v", i, got[i], want[i])
 		}
 	}
 }

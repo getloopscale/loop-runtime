@@ -530,7 +530,7 @@ func runChartPairs(args []string) int {
 		fmt.Fprintf(os.Stderr, "chart-pairs: FAIL — %v\n", err)
 		return 2
 	}
-	fmt.Printf("chart-pairs: PASS — %d em infra/helm, %d em charts/, %d par(es) declarado(s): %v\n",
+	fmt.Printf("chart-pairs: PASS — %d in infra/helm, %d in charts/, %d declared pair(s): %v\n",
 		out.InfraHelm, out.Charts, len(out.Pairs), out.Pairs)
 	return 0
 }

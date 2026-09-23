@@ -37,6 +37,7 @@ func TestCheck_NoDrift_Pass(t *testing.T) {
 	root := t.TempDir()
 	mkTemplates(t, root, "charts/loopzero-foo", "Deployment.yaml", "Service.yaml")
 	mkTemplates(t, root, "infra/helm/loopzero-foo", "Deployment.yaml", "Service.yaml")
+	declareFixturePairs(t, root)
 	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -51,6 +52,7 @@ func TestCheck_UnapprovedDrift_Fail(t *testing.T) {
 	root := t.TempDir()
 	mkTemplates(t, root, "charts/loopzero-foo", "Deployment.yaml", "Service.yaml", "Secret.yaml")
 	mkTemplates(t, root, "infra/helm/loopzero-foo", "Deployment.yaml")
+	declareFixturePairs(t, root)
 	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -74,6 +76,7 @@ func TestCheck_ApprovedDrift_Pass(t *testing.T) {
 	root := t.TempDir()
 	mkTemplates(t, root, "charts/loopzero-api", "Deployment.yaml", "ConfigMap.yaml", "Secret.yaml")
 	mkTemplates(t, root, "infra/helm/loopzero-api", "Deployment.yaml")
+	declareFixturePairs(t, root)
 	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -91,6 +94,7 @@ func TestCheck_ConceptualPair(t *testing.T) {
 	root := t.TempDir()
 	mkTemplates(t, root, "charts/loopzero-admission-policies", "ConfigMap.yaml", "Secret.yaml")
 	mkTemplates(t, root, "infra/helm/admission-policies", "ConfigMap.yaml")
+	declareFixturePairs(t, root)
 	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -112,6 +116,7 @@ func TestCheck_OnlyPublishedExists_NoCrash(t *testing.T) {
 	root := t.TempDir()
 	mkTemplates(t, root, "charts/loopzero-orphan", "a.yaml")
 	// no infra/helm/loopzero-orphan
+	declareFixturePairs(t, root)
 	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -148,6 +153,7 @@ func TestApprovedPair_DoesNotBlessAnUnseenFile(t *testing.T) {
 	touch("charts/loopzero-api/templates/a.yaml", "ConfigMap")
 	touch("charts/loopzero-api/templates/b.yaml", "CronJob")
 
+	declareFixturePairs(t, root)
 	out, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
 	if err != nil {
 		t.Fatalf("check: %v", err)
