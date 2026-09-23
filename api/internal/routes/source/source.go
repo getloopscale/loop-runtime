@@ -34,14 +34,8 @@ package source
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sort"
 	"time"
 
@@ -143,130 +137,16 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer form.close()
-	manifest, tmpFile := form.manifest, form.bundle
 
-	// Project name + sorted app names derived from the native manifest (T3.1).
-	// ProjectNameFromManifest preserves the v1 "services-bundle" legacy fallback.
-	projectName := source.ProjectNameFromManifest(manifest)
-	appNames := source.AppNamesFromManifest(manifest)
-
-	// Push bundle to source store (Gitea) — repo: loopzero-source-{tenant}-{project}
-	result, err := h.store.PushBundle(ctx, uc.TenantID, projectName, tmpFile)
-	if err != nil {
-		// Plan v1.2 T1.2 (cutover-deep-review-hardening): DNS-1123 violation
-		// on tenantID/projectID — surface as 400 with field-specific message
-		// so the user can correct the input. Detected via errors.Is on the
-		// sentinel exported by internal/source.
-		if errors.Is(err, source.ErrInvalidTenantOrProject) {
-			slog.Info("source upload rejected: invalid tenant or project ID",
-				"team_id", uc.TenantID, "project", projectName, "error", err.Error())
-			httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
-				Code:    "INVALID_TENANT_OR_PROJECT",
-				Message: err.Error(),
-			})
-			return
-		}
-		// Plan T2.1 (2026-05-14, F-03 fix): when concurrent deploys race on
-		// the same project's source repo, gitea rejects the second push with
-		// "cannot lock ref" / "remote rejected" / "failed to update ref".
-		// This is the SAME root cause as a concurrent deploy already in
-		// progress — emit DEPLOY_IN_PROGRESS so the user sees one consistent
-		// error code instead of SOURCE_UPLOAD_FAILED + DEPLOY_IN_PROGRESS for
-		// the same race. Distinct from real upload failures (network, MinIO
-		// 503, malformed bundle) which keep SOURCE_UPLOAD_FAILED.
-		//
-		// EC-3 absorption: Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.3
-		// preserves this discriminator UNCHANGED. Order matters: gitea-race
-		// substring matching takes precedence OVER the new typed-error mapping
-		// below, because PushBundle wraps gitea-race errors in a typed
-		// *PushBundleError{Reason: ReasonRemoteRejectedPush} that we want to
-		// surface as DEPLOY_IN_PROGRESS 409 (the F-03 fix) — NOT as
-		// SOURCE_UPLOAD_FAILED 500. Calling source.IsGiteaRaceCondition(err)
-		// works because *PushBundleError.Error() embeds the underlying cause
-		// message; the substring set survives the typed wrap.
-		if source.IsGiteaRaceCondition(err) {
-			slog.Info("source upload race resolved as DEPLOY_IN_PROGRESS",
-				"team_id", uc.TenantID, "project", projectName, "error", err.Error())
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrDeployInProgress)
-			return
-		}
-		// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.3 (closes
-		// loopzero-cloud#31): typed PushBundleError mapping — emit a specific
-		// actionable Message per failure mode instead of the misleading
-		// legacy "Ensure your git history is clean" string.
-		if pushErr, ok := source.AsPushBundleError(err); ok {
-			slog.Error("source upload failed (typed)",
-				"team_id", uc.TenantID, "project", projectName,
-				"reason", pushErr.Reason.String(), "detail", pushErr.Detail,
-				"cause", err.Error())
-			// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1: thread
-			// the correlation ID so when Sprint 7 scrub collapses Detail
-			// to placeholder-only, the operator gets "Reference: <id>.
-			// Contact support if it persists." (closes #35 Red Team
-			// original suggestion).
-			httpio.WriteLoopZeroError(w, pushErr.UserError(correlation.Read(r)))
-			return
-		}
-		// Fallback: untyped failure (downstream helper that didn't get
-		// wrapped). Emit the neutral generic fallback per Sprint 4.
-		slog.Error("source upload failed", "error", err, "team_id", uc.TenantID)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
+	publisher := bundlePublisher{store: h.store, objects: h.objStore, bucket: h.sourceBucket}
+	projectName := source.ProjectNameFromManifest(form.manifest)
+	sourceID, perr := publisher.publish(ctx, uc.TenantID, projectName, form.bundle, correlation.Read(r))
+	if perr != nil {
+		httpio.WriteLoopZeroError(w, perr)
 		return
 	}
 
-	// Clean up the git bundle temp dir if one was created (tar.gz flow).
-	if result.GitBundlePath != "" {
-		defer func() { _ = os.RemoveAll(filepath.Dir(result.GitBundlePath)) }()
-	}
-
-	// Upload bundle to object storage (Spaces/MinIO) for build cluster access.
-	if h.objStore != nil {
-		objKey := fmt.Sprintf("%s/source/%s.bundle", uc.TenantID, result.SourceID)
-
-		// For tar.gz sources, PushBundle already created a git bundle (in GitBundlePath).
-		// For git bundle sources, reuse the original uploaded bundle.
-		var uploadReader io.Reader
-		if result.GitBundlePath != "" {
-			gitBundleFile, openErr := os.Open(result.GitBundlePath)
-			if openErr != nil {
-				httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
-				return
-			}
-			defer func() { _ = gitBundleFile.Close() }()
-			uploadReader = gitBundleFile
-		} else {
-			if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
-				httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
-				return
-			}
-			uploadReader = tmpFile
-		}
-
-		// CHG-2026-04-29-DOGFOOD iter 9 — when the object store is
-		// configured the upload is part of the build contract: the
-		// clone-repo step pulls the bundle from this exact key and a
-		// missing object causes opaque pipeline failures. The previous
-		// `non-fatal in dev` branch returned 200 to the CLI on upload
-		// failure, then the workflow failed on bundle download —
-		// silent-success is exactly what error-handling rules forbid.
-		// Local must equal production (Rule 10): the upload either
-		// succeeds or the request fails with ErrSourceUploadFailed.
-		if uploadErr := h.objStore.Upload(ctx, h.sourceBucket, objKey, uploadReader); uploadErr != nil {
-			slog.Error("object store upload failed", "error", uploadErr, "key", objKey)
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrSourceUploadFailed)
-			return
-		}
-	}
-
-	// Sort app names for deterministic output
+	appNames := source.AppNamesFromManifest(form.manifest)
 	sort.Strings(appNames)
-
-	resp := SourceUploadResponse{
-		CommitSHA: result.SourceID,
-		Apps:      appNames,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(resp)
+	httpio.WriteJSON(w, http.StatusOK, SourceUploadResponse{CommitSHA: sourceID, Apps: appNames})
 }
