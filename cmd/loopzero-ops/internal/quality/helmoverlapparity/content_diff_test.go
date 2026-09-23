@@ -178,3 +178,16 @@ spec:
 		t.Fatalf("got %d violations, want 1 (securityContext present on one side only)", len(vs))
 	}
 }
+
+// A document that fails to decode used to end the stream silently, so the
+// securityContext sets were compared over a truncated document list and could
+// compare equal over partial data.
+func TestRenderedDiff_MalformedDocumentIsAViolationNotTruncation(t *testing.T) {
+	good := "kind: Deployment\nspec:\n  template:\n    spec:\n      securityContext:\n        runAsUser: 1000\n"
+	malformed := good + "---\nkind: Deployment\nspec: [unclosed\n---\n" +
+		"kind: Deployment\nspec:\n  template:\n    spec:\n      securityContext:\n        runAsUser: 0\n"
+	vs := diffRenderedSecurityContext(malformed, good, "loopzero-api")
+	if len(vs) == 0 {
+		t.Fatal("a rendered stream that cannot be decoded must be a violation, not a shorter stream")
+	}
+}

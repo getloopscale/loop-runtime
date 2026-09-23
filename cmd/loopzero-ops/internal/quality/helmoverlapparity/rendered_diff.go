@@ -4,7 +4,10 @@
 package helmoverlapparity
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os/exec"
 	"sort"
 	"strings"
@@ -24,11 +27,16 @@ import (
 // documented quality:gates prerequisite).
 
 // renderHelm runs `helm template` on a chart dir and returns the rendered YAML.
+// Only stdout is the manifest stream: helm writes warnings to stderr, and
+// interleaving them with the YAML corrupts the documents being compared.
 func renderHelm(chartDir string) (string, error) {
 	// #nosec G204 -- chartDir is composed of fixed RepoRoot + DefaultPairs entries.
-	out, err := exec.Command("helm", "template", "parity", chartDir).CombinedOutput()
+	cmd := exec.Command("helm", "template", "parity", chartDir)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("helm template %s: %v: %s", chartDir, err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("helm template %s: %v: %s", chartDir, err, strings.TrimSpace(stderr.String()))
 	}
 	return string(out), nil
 }
@@ -37,13 +45,17 @@ func renderHelm(chartDir string) (string, error) {
 // signatures ("runAsUser=1000,runAsNonRoot=true") across every Deployment in the
 // rendered YAML. Absence of a securityContext on a Deployment is represented as
 // the sentinel "<none>" so a dropped non-root guarantee surfaces as drift.
-func deploymentPodSecurityContexts(rendered string) map[string]bool {
+// A document that fails to decode is an error: stopping there would compare
+// the sets over a truncated stream.
+func deploymentPodSecurityContexts(rendered string) (map[string]bool, error) {
 	set := map[string]bool{}
 	dec := yaml.NewDecoder(strings.NewReader(rendered))
 	for {
 		var doc map[string]any
-		if err := dec.Decode(&doc); err != nil {
-			break
+		if err := dec.Decode(&doc); errors.Is(err, io.EOF) {
+			return set, nil
+		} else if err != nil {
+			return nil, fmt.Errorf("decode rendered manifest %d: %w", len(set)+1, err)
 		}
 		if doc == nil {
 			continue
@@ -53,7 +65,6 @@ func deploymentPodSecurityContexts(rendered string) map[string]bool {
 		}
 		set[podSecurityContextSignature(doc)] = true
 	}
-	return set
 }
 
 // podSecurityContextSignature extracts spec.template.spec.securityContext of a
@@ -92,8 +103,11 @@ var invariantSecurityFields = []string{"runAsUser", "runAsNonRoot"}
 // of the two rendered chart copies. If the sets differ, the charts have diverged
 // on a security-critical field the values.yaml diff cannot see — a Violation.
 func diffRenderedSecurityContext(bootstrapRendered, publishedRendered, chartName string) []Violation {
-	b := deploymentPodSecurityContexts(bootstrapRendered)
-	p := deploymentPodSecurityContexts(publishedRendered)
+	b, berr := deploymentPodSecurityContexts(bootstrapRendered)
+	p, perr := deploymentPodSecurityContexts(publishedRendered)
+	if err := errors.Join(berr, perr); err != nil {
+		return []Violation{{Reason: fmt.Sprintf("rendered output of %q cannot be compared: %v", chartName, err)}}
+	}
 	if setsEqual(b, p) {
 		return nil
 	}
