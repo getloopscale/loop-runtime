@@ -88,8 +88,8 @@ func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 	})
 
 	cfg := Config{
-		TokenValidator:            validadorFixo{},
-		MemberStore:               membroFixo{},
+		TokenValidator:            fixedTokenValidator{},
+		MemberStore:               fixedMembership{},
 		AuditWriter:               writer,
 		BuildHandler:              &builds.BuildHandler{},
 		BuildAttestationHandler:   &builds.BuildAttestationHandler{},
@@ -118,7 +118,7 @@ func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 	}
 	r := NewRouter(cfg)
 
-	rotas := rotasMutantes(t, r)
+	rotas := mutatingRoutes(t, r)
 	if len(rotas) < 17 {
 		t.Fatalf("baseline dumper walked %d mutating route(s); fixture must reach the audited group "+
 			"(the same ≥17 floor that TestEveryMutatingRouteRecordsItsDeclaredAction enforces).", len(rotas))
@@ -129,14 +129,14 @@ func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 
 	for _, rt := range rotas {
 		lastResourceID = ""
-		req := httptest.NewRequest(rt.metodo, concretizar(rt.padrao), nil)
-		auditar.ServeHTTP(httptest.NewRecorder(), comUsuario(req))
+		req := httptest.NewRequest(rt.method, concretePath(rt.pattern), nil)
+		auditar.ServeHTTP(httptest.NewRecorder(), withFixedUser(req))
 		src := "none"
 		if lastResourceID != "" {
 			src = "url"
 		}
 		rows = append(rows, row{
-			method: rt.metodo, path: rt.padrao,
+			method: rt.method, path: rt.pattern,
 			source: src, value: lastResourceID,
 		})
 	}

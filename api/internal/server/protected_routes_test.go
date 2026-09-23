@@ -58,8 +58,8 @@ type (
 // fullProtectedConfig mounts every protected route family.
 func fullProtectedConfig() Config {
 	return Config{
-		TokenValidator:            validadorFixo{},
-		MemberStore:               membroFixo{},
+		TokenValidator:            fixedTokenValidator{},
+		MemberStore:               fixedMembership{},
 		RateLimiter:               &ratelimit.RateLimiter{},
 		VerifyRateLimiter:         &ratelimit.VerifyRateLimiter{},
 		IdempotencyStore:          stubIdempotencyStore{},

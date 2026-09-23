@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	"github.com/getloopscale/loopzero/api/internal/routes/projects"
@@ -51,6 +52,12 @@ func (c routeChains) limited(extra ...middleware) []middleware {
 // idempotentWith returns the idempotent chain followed by extra.
 func (c routeChains) idempotentWith(extra ...middleware) []middleware {
 	return concatMiddleware(c.idempotent, extra)
+}
+
+// audited declares a route's audit identity (see audit.Declare): the action
+// name and resource type its audit row records.
+func audited(action, resourceType string) middleware {
+	return mwaudit.Declare(action, resourceType)
 }
 
 // concatMiddleware always allocates, so no two routes share a backing array.
@@ -164,7 +171,7 @@ func registerSourceRoutes(r chi.Router, cfg Config, ch routeChains) {
 	}
 	h := source.NewSourceHandler(cfg.SourceStore, opts...)
 	// Rate limited, not idempotent: a 500 MB body is not hashed for replay.
-	r.With(ch.limited()...).Post("/api/v1/source/upload", h.Upload)
+	r.With(ch.limited(audited("source.uploaded", "source"))...).Post("/api/v1/source/upload", h.Upload)
 }
 
 func registerProjectRoutes(r chi.Router, cfg Config, ch routeChains) {
@@ -188,9 +195,9 @@ func registerProjectRoutes(r chi.Router, cfg Config, ch routeChains) {
 	}
 	r.Get("/api/v1/projects", h.List)
 	r.Get("/api/v1/projects/{name}", h.Get)
-	r.With(ch.limited()...).Post("/api/v1/projects", h.Create)
-	r.With(ch.limited()...).Delete("/api/v1/projects/{name}", h.Delete)
-	r.With(ch.limited()...).Delete("/api/v1/projects/{name}/environments/{env}", h.DeleteEnvironment)
+	r.With(ch.limited(audited("project.created", "project"))...).Post("/api/v1/projects", h.Create)
+	r.With(ch.limited(audited("project.deleted", "project"))...).Delete("/api/v1/projects/{name}", h.Delete)
+	r.With(ch.limited(audited("environment.deleted", "environment"))...).Delete("/api/v1/projects/{name}/environments/{env}", h.DeleteEnvironment)
 }
 
 func registerEventStreamRoutes(r chi.Router, cfg Config, _ routeChains) {
@@ -251,11 +258,11 @@ func registerSecretRoutes(r chi.Router, cfg Config, ch routeChains) {
 		h.SetTransitClient(cfg.SecretTransit)
 	}
 	r.Get("/api/v1/secrets", h.List)
-	r.With(ch.limited()...).Post("/api/v1/secrets", h.Set)
+	r.With(ch.limited(audited("secret.set", "secret"))...).Post("/api/v1/secrets", h.Set)
 	// J-22 T1.1: /secrets/bulk is registered BEFORE /secrets/{name} so chi
 	// resolves the literal before the wildcard (the reverse answered 405).
-	r.With(ch.limited()...).Post("/api/v1/secrets/bulk", h.Bulk)
-	r.With(ch.limited()...).Delete("/api/v1/secrets/{name}", h.DeleteSecret)
+	r.With(ch.limited(audited("secret.set", "secret"))...).Post("/api/v1/secrets/bulk", h.Bulk)
+	r.With(ch.limited(audited("secret.deleted", "secret"))...).Delete("/api/v1/secrets/{name}", h.DeleteSecret)
 }
 
 func registerBuildRoutes(r chi.Router, cfg Config, ch routeChains) {
@@ -267,8 +274,8 @@ func registerBuildRoutes(r chi.Router, cfg Config, ch routeChains) {
 	r.Get("/api/v1/builds/{id}", cfg.BuildHandler.Get)
 	// Wave 1 T1.9: rate limit → idempotency → builds/month cap → build-minutes
 	// cap → handler. Either cap can answer 402 with its own upgrade copy.
-	r.With(ch.idempotentWith(ch.buildQuota, ch.buildMinutes)...).Post("/api/v1/builds", cfg.BuildHandler.Create)
-	r.With(ch.limited()...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
+	r.With(ch.idempotentWith(audited("build.submitted", "build"), ch.buildQuota, ch.buildMinutes)...).Post("/api/v1/builds", cfg.BuildHandler.Create)
+	r.With(ch.limited(audited("build.cancelled", "build"))...).Post("/api/v1/builds/{id}/cancel", cfg.BuildHandler.Cancel)
 }
 
 // registerBuildReadRoutes mounts the read-only views over one build.
@@ -339,15 +346,15 @@ func registerProjectReadRoutes(r chi.Router, cfg Config, _ routeChains) {
 func registerReleaseRoutes(r chi.Router, cfg Config, ch routeChains) {
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Scale, cfg.ScaleHandler != nil,
 		"no database — comes from `orchDeps` (setup_server.go), which requires `dbAdapter`") {
-		r.With(ch.limited()...).Post("/api/v1/projects/{name}/scale", cfg.ScaleHandler.Scale)
+		r.With(ch.limited(audited("project.scaled", "project"))...).Post("/api/v1/projects/{name}/scale", cfg.ScaleHandler.Scale)
 	}
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Rollback, cfg.RollbackHandler != nil,
 		"no database — comes from `orchDeps`. Without it there is no way to revert a release") {
-		r.With(ch.limited()...).Post("/api/v1/projects/{name}/rollback", cfg.RollbackHandler.Create)
+		r.With(ch.limited(audited("rollback.executed", "release"))...).Post("/api/v1/projects/{name}/rollback", cfg.RollbackHandler.Create)
 	}
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Promote, cfg.PromoteHandler != nil,
 		"no database — comes from `orchDeps`") {
-		r.With(ch.limited()...).Post("/api/v1/projects/{name}/promote", cfg.PromoteHandler.Create)
+		r.With(ch.limited(audited("release.promoted", "release"))...).Post("/api/v1/projects/{name}/promote", cfg.PromoteHandler.Create)
 	}
 }
 
@@ -357,9 +364,9 @@ func registerTeamRoutes(r chi.Router, cfg Config, ch routeChains) {
 		return
 	}
 	r.Get("/api/v1/teams/members", cfg.TeamHandler.List)
-	r.With(ch.limited(ch.seatQuota)...).Post("/api/v1/teams/members", cfg.TeamHandler.Add)
-	r.With(ch.limited()...).Delete("/api/v1/teams/members/{username}", cfg.TeamHandler.Remove)
-	r.With(ch.limited()...).Patch("/api/v1/teams/members/{username}", cfg.TeamHandler.UpdateRole)
+	r.With(ch.limited(audited("member.added", "member"), ch.seatQuota)...).Post("/api/v1/teams/members", cfg.TeamHandler.Add)
+	r.With(ch.limited(audited("member.removed", "member"))...).Delete("/api/v1/teams/members/{username}", cfg.TeamHandler.Remove)
+	r.With(ch.limited(audited("member.role_changed", "member"))...).Patch("/api/v1/teams/members/{username}", cfg.TeamHandler.UpdateRole)
 }
 
 // registerTenantRoutes: the soft-deletion cycle (MEET-052).
@@ -369,9 +376,9 @@ func registerTenantRoutes(r chi.Router, cfg Config, ch routeChains) {
 		return
 	}
 	h := tenants.NewTenantHandler(cfg.TenantDeletionStore, cfg.Logger)
-	r.With(ch.limited()...).Delete("/api/v1/tenants/{id}", h.Delete)
-	r.With(ch.limited()...).Post("/api/v1/tenants/{id}/restore", h.Restore)
-	r.With(ch.limited(mwauth.RequireAdmin)...).Post("/api/v1/tenants/bulk-delete", h.Delete)
+	r.With(ch.limited(audited("tenant.deleted", "tenant"))...).Delete("/api/v1/tenants/{id}", h.Delete)
+	r.With(ch.limited(audited("tenant.restored", "tenant"))...).Post("/api/v1/tenants/{id}/restore", h.Restore)
+	r.With(ch.limited(audited("tenant.bulk_deleted", "tenant"), mwauth.RequireAdmin)...).Post("/api/v1/tenants/bulk-delete", h.Delete)
 }
 
 // registerBillingRoutes: T1.6 (find_billing_route_not_wired).
@@ -385,7 +392,7 @@ func registerBillingRoutes(r chi.Router, cfg Config, ch routeChains) {
 	// `owner`, as loopzero-cloud requires for the same capability: any member
 	// opening the billing portal is horizontal escalation to invoices,
 	// payment method and history.
-	r.With(ch.limited(mwauth.RequireRole("owner"))...).Post("/api/v1/billing/portal", cfg.BillingHandler.Portal)
+	r.With(ch.limited(audited("billing.portal_opened", "billing"), mwauth.RequireRole("owner"))...).Post("/api/v1/billing/portal", cfg.BillingHandler.Portal)
 }
 
 func registerEnvironmentRoutes(r chi.Router, cfg Config, ch routeChains) {
@@ -396,8 +403,8 @@ func registerEnvironmentRoutes(r chi.Router, cfg Config, ch routeChains) {
 	}
 	r.Get("/api/v1/environments", cfg.EnvironmentHandler.List)
 	r.Get("/api/v1/environments/{name}", cfg.EnvironmentHandler.Get)
-	r.With(ch.limited(ch.environmentQuota)...).Post("/api/v1/environments", cfg.EnvironmentHandler.Create)
-	r.With(ch.limited()...).Delete("/api/v1/environments/{name}", cfg.EnvironmentHandler.Delete)
+	r.With(ch.limited(audited("environment.created", "environment"), ch.environmentQuota)...).Post("/api/v1/environments", cfg.EnvironmentHandler.Create)
+	r.With(ch.limited(audited("environment.deleted", "environment"))...).Delete("/api/v1/environments/{name}", cfg.EnvironmentHandler.Delete)
 }
 
 // registerDomainRoutes: custom domains (MEET-2026-04-05-033).
@@ -408,15 +415,15 @@ func registerDomainRoutes(r chi.Router, cfg Config, ch routeChains) {
 	}
 	r.Get("/api/v1/domains", cfg.DomainHandler.List)
 	r.Get("/api/v1/domains/{domain}", cfg.DomainHandler.Get)
-	r.With(ch.idempotentWith()...).Post("/api/v1/domains", cfg.DomainHandler.Create)
+	r.With(ch.idempotentWith(audited("domain.added", "domain"))...).Post("/api/v1/domains", cfg.DomainHandler.Create)
 	// J11D7 LOCKED ADR: /verify uses the per-(tenant, domain) limiter in front
 	// of the tenant-wide one; without it, the tenant limiter alone (ADR D3).
-	verify := ch.limited()
+	verify := ch.limited(audited("domain.verified", "domain"))
 	if cfg.VerifyRateLimiter != nil {
-		verify = concatMiddleware([]middleware{cfg.VerifyRateLimiter.Middleware()}, ch.rateLimited)
+		verify = concatMiddleware([]middleware{cfg.VerifyRateLimiter.Middleware()}, verify)
 	}
 	r.With(verify...).Post("/api/v1/domains/{domain}/verify", cfg.DomainHandler.Verify)
-	r.With(ch.limited()...).Delete("/api/v1/domains/{domain}", cfg.DomainHandler.Delete)
+	r.With(ch.limited(audited("domain.removed", "domain"))...).Delete("/api/v1/domains/{domain}", cfg.DomainHandler.Delete)
 }
 
 // registerRepositoryRoutes: GitHub App connection (auto-deploy) and the
@@ -424,8 +431,8 @@ func registerDomainRoutes(r chi.Router, cfg Config, ch routeChains) {
 func registerRepositoryRoutes(r chi.Router, cfg Config, ch routeChains) {
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Repositories, cfg.RepositoryHandler != nil,
 		"no GitHub dependencies — comes from `ghDeps` (setup_server.go), which needs GitHub App credentials and, before them, the database") {
-		r.With(ch.limited()...).Post("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Connect)
-		r.With(ch.limited()...).Delete("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Disconnect)
+		r.With(ch.limited(audited("repository.connected", "repository"))...).Post("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Connect)
+		r.With(ch.limited(audited("repository.disconnected", "repository"))...).Delete("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Disconnect)
 		r.Get("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.GetConnection)
 	}
 	if surfaces.Recorded(cfg.Surfaces, surfaces.IntegrationsGitHub, cfg.IntegrationsGitHubHandler != nil,
@@ -443,8 +450,8 @@ func registerPreviewRoutes(r chi.Router, cfg Config, ch routeChains) {
 	}
 	r.Get("/api/v1/projects/{project}/previews", cfg.PreviewHandler.List)
 	r.Get("/api/v1/projects/{project}/previews/{id}", cfg.PreviewHandler.Get)
-	r.With(ch.limited()...).Delete("/api/v1/projects/{project}/previews/{id}", cfg.PreviewHandler.Delete)
-	r.With(ch.idempotentWith()...).Post("/api/v1/projects/{project}/previews", cfg.PreviewHandler.Create)
+	r.With(ch.limited(audited("preview.deleted", "preview"))...).Delete("/api/v1/projects/{project}/previews/{id}", cfg.PreviewHandler.Delete)
+	r.With(ch.idempotentWith(audited("preview.created", "preview"))...).Post("/api/v1/projects/{project}/previews", cfg.PreviewHandler.Create)
 }
 
 func registerAuditRoutes(r chi.Router, cfg Config, _ routeChains) {

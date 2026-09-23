@@ -165,7 +165,7 @@ func TestCrossTenant_Idempotency_KeyTenantScoped(t *testing.T) {
 // admin_evict_test.go (which exercise X-Service-Auth happy path).
 func TestCrossTenant_Admin_PassThrough_Allowed(t *testing.T) {
 	// Spec: admin endpoints write audit_log rows. The (already-implemented)
-	// audit hook is in api/internal/middleware/audit.go:deriveAction
+	// audit identity is declared per route (audit.Declare, api/internal/server/protected_routes.go)
 	// — "admin.tenants_evicted" / "admin.tenants_pinned" reflect the
 	// admin verb. This proves cross-tenant operations BY ADMINS produce
 	// observable, queryable audit trails.

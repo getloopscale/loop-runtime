@@ -258,7 +258,7 @@ func NewRouter(cfg Config) *chi.Mux {
 				"no database — `NewPostgresActiveTeamStore` (setup_server.go) runs inside the "+
 					"block that requires `dbAdapter`. Without it /whoami falls back to the "+
 					"middleware heuristic and switching teams disappears") {
-				r.With(chains.limited()...).Post("/api/v1/auth/team/switch", auth.SwitchTeam)
+				r.With(chains.limited(audited("team.switched", "team"))...).Post("/api/v1/auth/team/switch", auth.SwitchTeam)
 			}
 
 			registerProtectedRoutes(r, cfg, chains)

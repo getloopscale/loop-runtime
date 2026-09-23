@@ -74,11 +74,12 @@ func AuditLog(logger *slog.Logger, auditWriter AuditWriter) func(http.Handler) h
 
 			// Write to audit_log table (fire-and-forget)
 			if auditWriter != nil && tenantID != "" {
+				action, resourceType := resolveIdentity(r)
 				auditWriter(
 					tenantID,
-					deriveAction(r.Method, r.URL.Path),
+					action,
 					userID,
-					extractResourceType(r.URL.Path),
+					resourceType,
 					resolveResourceID(r),
 					correlationID,
 					map[string]any{
@@ -91,6 +92,21 @@ func AuditLog(logger *slog.Logger, auditWriter AuditWriter) func(http.Handler) h
 			}
 		})
 	}
+}
+
+// resolveIdentity returns the action and resource type the route declared
+// (Declare). A mutation that reached the middleware undeclared is recorded as
+// "undeclared.<METHOD>" / "undeclared" — a bounded name with no path segment
+// or id in it, so it never multiplies audit cardinality — and warned about;
+// the server tests require every mounted mutation to declare.
+func resolveIdentity(r *http.Request) (action, resourceType string) {
+	action, resourceType = declaredIdentity(r.Context())
+	if action != "" {
+		return action, resourceType
+	}
+	slog.Warn("audit: mutation without a declared audit identity (mount audit.Declare on the route)",
+		"method", r.Method, "path", r.URL.Path)
+	return "undeclared." + r.Method, "undeclared"
 }
 
 // resolveResourceID applies the B-059 fallback order: what the handler declared,

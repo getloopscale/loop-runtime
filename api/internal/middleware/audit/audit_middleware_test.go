@@ -117,41 +117,6 @@ func TestAuditLog_EnrichResourceID_MalformedBody(t *testing.T) {
 
 // --- Audit actions tests ---
 
-func TestDeriveAction(t *testing.T) {
-	tests := []struct {
-		method, path, want string
-	}{
-		{"POST", "/api/v1/projects", "project.created"},
-		{"POST", "/api/v1/builds", "build.submitted"},
-		{"POST", "/api/v1/builds/123/cancel", "build.cancelled"},
-		{"DELETE", "/api/v1/projects/my-app", "project.deleted"},
-		{"DELETE", "/api/v1/secrets/DB_URL", "secret.deleted"},
-		{"PATCH", "/api/v1/teams/members/paulo", "member.role_changed"},
-	}
-	for _, tt := range tests {
-		got := deriveAction(tt.method, tt.path)
-		if got != tt.want {
-			t.Errorf("deriveAction(%q, %q) = %q, want %q", tt.method, tt.path, got, tt.want)
-		}
-	}
-}
-
-func TestExtractResourceType(t *testing.T) {
-	tests := []struct {
-		path, want string
-	}{
-		{"/api/v1/projects/my-app", "project"},
-		{"/api/v1/builds/123", "build"},
-		{"/api/v1/secrets/DB_URL", "secret"},
-	}
-	for _, tt := range tests {
-		got := extractResourceType(tt.path)
-		if got != tt.want {
-			t.Errorf("extractResourceType(%q) = %q, want %q", tt.path, got, tt.want)
-		}
-	}
-}
-
 func TestExtractResourceID(t *testing.T) {
 	tests := []struct {
 		path, want string

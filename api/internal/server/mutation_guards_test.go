@@ -114,7 +114,7 @@ func serveRecovering(h http.Handler, req *http.Request) *httptest.ResponseRecord
 
 func mutationRequest(route string, withKey bool) *http.Request {
 	parts := strings.SplitN(route, " ", 2)
-	req := httptest.NewRequest(parts[0], concretizar(parts[1]), strings.NewReader(`{}`))
+	req := httptest.NewRequest(parts[0], concretePath(parts[1]), strings.NewReader(`{}`))
 	req.Header.Set("Authorization", "Bearer fixed")
 	req.Header.Set("Content-Type", "application/json")
 	if withKey {
