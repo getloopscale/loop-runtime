@@ -68,31 +68,6 @@ type SecretEnvLocker interface {
 	WithLock(ctx context.Context, tenant, project, env string, fn func(tx dbtx.DBTX) error) error
 }
 
-// SecretTransit — narrow interface (ISP) for the OpenBao transit encryption
-// adapter consumed by the Bulk write path (T2.3 of plan
-// 2026-06-10-j22-openbao-transit-eso-sync v1.2).
-//
-// When wired, Bulk MUST encrypt every entry.Value via Encrypt BEFORE
-// persisting to PG so the secrets.encrypted_value BYTEA column never
-// stores plaintext. Tenant-scoped (per-tenant transit key per D4 ADR).
-//
-// Production injects pkg/vault.Transit directly — the value
-// setupTransitClient returns, which is a *vault.TransitClient. There is no
-// adapter in between: B-058 deleted api/internal/adapters/vault_transit_adapter.go
-// rather than moving it, because its own doc recorded that the signatures matched
-// byte-for-byte and only the method names differed, which makes the bridge a
-// no-op. The adapter went in 2f8910db3 on 2026-08-16; this comment went on
-// naming it for 19 more days, and nothing failed, because nothing checks a
-// comment. The claim is now asserted at compile time in
-// api/cmd/setup_transit.go instead of stated here.
-//
-// Nil-safe: when transitClient is nil, Bulk falls back to the legacy path where
-// the existing AES key in secret_wrapper.go encrypts at the store layer
-// (legacy/test path).
-type SecretTransit interface {
-	Encrypt(ctx context.Context, tenantID string, plaintext []byte) (ciphertext string, err error)
-}
-
 // SecretProjectChecker — narrow interface (ISP) for the tenant-scoped
 // project existence check. T1.2 of plan
 // 2026-06-10-j22-openbao-transit-eso-sync v1.2: Bulk MUST resolve the
@@ -132,7 +107,6 @@ type SecretHandler struct {
 	locker         SecretEnvLocker      // required — serializes every mutation with deploys (Rule 6)
 	planLimits     SecretPlanLimiter    // nil only where no plan is enforced (no database: dev/test)
 	projectChecker SecretProjectChecker // optional — nil disables T1.2 cross-tenant binding (legacy/test path)
-	transitClient  SecretTransit        // optional — nil disables T2.3 transit encrypt (legacy AES path)
 }
 
 // transitFailureStatus classifies an encryption failure for the per-environment
@@ -183,21 +157,6 @@ func (h *SecretHandler) SetK8sSync(sync SecretK8sSync) {
 // router wires it from server.Config.Guards.PlanLimiter.
 func (h *SecretHandler) SetPlanLimiter(limiter SecretPlanLimiter) {
 	h.planLimits = limiter
-}
-
-// SetTransitClient configures the OpenBao transit encrypt path (T2.3 of
-// plan 2026-06-10-j22-openbao-transit-eso-sync v1.2). When wired, the
-// Bulk handler encrypts every entry.Value via transit.Encrypt BEFORE
-// invoking store.Set so PG never receives plaintext bytes.
-//
-// Nil-safe: when transitClient is nil, Bulk falls back to the legacy
-// path where the existing AES-GCM wrapper in secret_wrapper.go encrypts
-// at the store layer (legacy/test path). D6 ADR fail-loud refusal at
-// boot time (T2.5) ensures production never lands on the legacy path
-// silently — operator must opt-in via LOOPZERO_DEV=true or set
-// OPENBAO_TRANSIT_ENABLED=true.
-func (h *SecretHandler) SetTransitClient(client SecretTransit) {
-	h.transitClient = client
 }
 
 // SetProjectChecker configures the cross-tenant binding check (T1.2 of plan
@@ -534,7 +493,8 @@ type bulkEntryState struct {
 }
 
 // bulkWrite is one (entry, env) row waiting to be persisted. value is the
-// transit ciphertext when transit is wired, the plaintext otherwise.
+// plaintext: the store is the single encryption boundary, and it encrypts
+// through transit or refuses — it never persists plaintext.
 type bulkWrite struct {
 	state     *bulkEntryState
 	env       string
@@ -544,8 +504,7 @@ type bulkWrite struct {
 
 // bulkProcess runs the batch in four phases:
 //
-//  1. validate each key and seal each (key, env) value through transit —
-//     network work, done OUTSIDE any lock;
+//  1. validate each key and group each (key, env) write by environment;
 //  2. persist, one (project, env) group at a time, INSIDE the environment
 //     lock, so a deploy capturing that environment's config sees either all
 //     of the batch's writes for it or none (CLAUDE.md Rule 6);
@@ -570,18 +529,10 @@ func (h *SecretHandler) bulkProcess(ctx context.Context, uc *auth.UserContext, p
 			continue
 		}
 		for _, env := range entry.Envs {
-			value, err := h.sealForStore(ctx, uc.TenantID, entry.Value)
-			if err != nil {
-				// T2.3: a transit failure MUST NOT persist plaintext. B-072: a
-				// policy denial (permanent) and a timeout (transient) are
-				// reported differently — see transitFailureStatus.
-				st.aggs.fail(env, transitFailureStatus(err), err)
-				continue
-			}
 			if _, seen := groups[env]; !seen {
 				envOrder = append(envOrder, env)
 			}
-			groups[env] = append(groups[env], &bulkWrite{state: st, env: env, value: value})
+			groups[env] = append(groups[env], &bulkWrite{state: st, env: env, value: []byte(entry.Value)})
 		}
 	}
 
@@ -603,20 +554,6 @@ func (h *SecretHandler) bulkProcess(ctx context.Context, uc *auth.UserContext, p
 	return results
 }
 
-// sealForStore encrypts a value through OpenBao transit when it is wired
-// (T2.3), so PG never receives plaintext; without transit the store's own
-// AES wrapper encrypts at rest (legacy/test path).
-func (h *SecretHandler) sealForStore(ctx context.Context, tenantID, value string) ([]byte, error) {
-	if h.transitClient == nil {
-		return []byte(value), nil
-	}
-	ct, err := h.transitClient.Encrypt(ctx, tenantID, []byte(value))
-	if err != nil {
-		return nil, err
-	}
-	return []byte(ct), nil
-}
-
 // persistEnvGroup writes every row of one (project, env) group inside the
 // environment lock. A lock that cannot be taken (a deploy holds it past the
 // timeout) fails every row of THIS group only.
@@ -624,7 +561,10 @@ func (h *SecretHandler) persistEnvGroup(ctx context.Context, tenantID, project, 
 	lockErr := h.locker.WithLock(ctx, tenantID, project, env, func(_ dbtx.DBTX) error {
 		for _, wr := range group {
 			if _, err := h.store.Set(ctx, tenantID, project, env, "", wr.state.entry.Name, wr.value); err != nil {
-				wr.state.aggs.fail(env, "failed", err)
+				// The store keeps the transit cause in its error chain, so a
+				// policy denial (permanent) still reads as "denied" and a
+				// timeout (transient) as "failed" — B-072.
+				wr.state.aggs.fail(env, transitFailureStatus(err), err)
 				continue
 			}
 			wr.persisted = true

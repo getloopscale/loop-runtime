@@ -422,17 +422,6 @@ func main() {
 	verifyRateLimiter := ratelimit.NewVerifyRateLimiter(1, 30*time.Second)
 	srvCfg.Guards.VerifyRateLimiter = verifyRateLimiter
 
-	// T2.3+T2.5 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): thread
-	// the OpenBao transit client into router so SecretHandler.Bulk encrypts
-	// every entry.Value via Encrypt BEFORE store.Set. The store ALSO
-	// dispatches through the SAME vault (handler-encrypted bytes carry the
-	// vault:v1: prefix → encryptForStore passes-through, no double-encrypt;
-	// reads via decryptFromStore detect the prefix → vault decrypt). nil
-	// when CryptoMode != "transit"; router's nil guard keeps the legacy
-	// path active in that case.
-	if transit != nil {
-		srvCfg.Secrets.Transit = transit
-	}
 	// Layer 2 ESO sync chain (plan 2026-06-10-j22-openbao-transit-eso-sync
 	// v1.2 D3): wire Secrets.FetchHandler for the broker endpoint
 	// /internal/v1/secret-fetch/{tenant_id}/{secret_name}. ESO running in

@@ -20,6 +20,7 @@ package store
 // readable. ListSecretNames NEVER returns the value column.
 
 import (
+	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -82,7 +83,7 @@ var vaultPrefix = []byte("vault:v1:")
 // or partial-write race conditions).
 type PostgresSecretStore struct {
 	DB            db.DBTX
-	encryptionKey []byte // 32-byte legacy AES-256-GCM key, READ path only; nil = pre-T10.3 rows are unreadable
+	encryptionKey []byte // 32-byte legacy AES-256-GCM key, READ path only; nil = pre-T10.3 rows are unreadable (decrypt refuses)
 
 	// Vault transit client (T3.4/T3.5). REQUIRED for writes since T10.3:
 	// nil means encryptForStore refuses. Read path handles both Vault + AES.
@@ -178,7 +179,8 @@ func tenantAAD(tenantID string) []byte {
 // confirm zero legacy rows remain).
 func (s *PostgresSecretStore) decrypt(encrypted, aad []byte) ([]byte, error) {
 	if s.encryptionKey == nil {
-		return encrypted, nil // matches encrypt() local-dev path
+		return nil, fmt.Errorf("secret_store: no legacy AES key configured to read a non-transit row: %w",
+			loopzeroerrors.ErrSecretsBackendUnavailable)
 	}
 	block, err := aes.NewCipher(s.encryptionKey)
 	if err != nil {
@@ -219,21 +221,12 @@ func (s *PostgresSecretStore) decrypt(encrypted, aad []byte) ([]byte, error) {
 // a store wired without Transit and a Transit backend that cannot be
 // reached are the same condition, and both deserve 503 over a generic 500.
 //
-// T2.5 wire-up (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): the
-// Bulk handler MAY pre-encrypt via h.transitClient.Encrypt (T2.3 contract).
-// When that happens and the store ALSO has s.vault wired (canonical
-// production wire-path), encrypting again here would produce a vault:v1:
-// envelope around an already-vault:v1: payload — DOUBLE ENCRYPT — and
-// the read dispatcher would unwrap only the outer layer, surfacing the
-// inner vault:v1:... string as "plaintext". Defense: detect the
-// vault:v1: prefix on input and pass-through; the row already carries
-// canonical ciphertext.
+// The input is always the user's plaintext. It is never sniffed for a
+// "vault:v1:" prefix: a value is data, not a format marker, and treating one
+// that happens to start with the prefix as already-encrypted let it bypass
+// both the transit encryption and the no-transit refusal. The store is the
+// single encryption boundary; no caller pre-encrypts.
 func (s *PostgresSecretStore) encryptForStore(ctx context.Context, tenantID string, plaintext []byte) ([]byte, error) {
-	if bytesHasPrefix(plaintext, vaultPrefix) {
-		// Caller already encrypted via vault.Transit (T2.3 handler-layer).
-		// Pass-through — no double-encrypt.
-		return plaintext, nil
-	}
 	if s.vault == nil {
 		// T10.3: no AES fallback. Refusing loses the write; falling back
 		// would have kept it under a key the platform stopped managing.
@@ -257,7 +250,8 @@ func (s *PostgresSecretStore) encryptForStore(ctx context.Context, tenantID stri
 
 // decryptFromStore is the read-path dispatcher (T3.4).
 // EC-06 MUST FIX P2: empty/nil ciphertext returns error (no AES panic).
-// Prefix detection: "vault:v1:" → Transit decrypt; else → AES legacy.
+// Prefix detection: "vault:v1:" → Transit decrypt (ErrSecretsBackendUnavailable
+// when no transit client is wired); else → AES legacy.
 // Sprint D D3: AES path passes tenantAAD; decrypt tries AAD first then
 // falls back to nil for backward compat with pre-D3 ciphertexts.
 //
@@ -279,7 +273,12 @@ func (s *PostgresSecretStore) decryptFromStore(ctx context.Context, tenantID str
 		metrics.SecretDecryptFailedTotal.WithLabelValues("empty_ciphertext").Inc()
 		return nil, fmt.Errorf("secret_store: empty ciphertext for tenant %s (EC-06 NULL row guard)", tenantID)
 	}
-	if s.vault != nil && bytesHasPrefix(ciphertext, vaultPrefix) {
+	if bytes.HasPrefix(ciphertext, vaultPrefix) {
+		if s.vault == nil {
+			metrics.SecretDecryptFailedTotal.WithLabelValues("vault_transit_error").Inc()
+			return nil, fmt.Errorf("secret_store: transit row for tenant %s but no transit client wired: %w",
+				tenantID, loopzeroerrors.ErrSecretsBackendUnavailable)
+		}
 		plain, err := s.vault.Decrypt(ctx, tenantID, string(ciphertext))
 		if err != nil {
 			// Key side: a revoked or rotated transit key lands here, and so
@@ -301,20 +300,6 @@ func (s *PostgresSecretStore) decryptFromStore(ctx context.Context, tenantID str
 		return nil, err
 	}
 	return plain, nil
-}
-
-// bytesHasPrefix returns true if b starts with prefix. Inlined to avoid
-// importing "bytes" just for HasPrefix.
-func bytesHasPrefix(b, prefix []byte) bool {
-	if len(b) < len(prefix) {
-		return false
-	}
-	for i := range prefix {
-		if b[i] != prefix[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // Set creates or updates a secret. Uses sqlc-generated UpsertSecret

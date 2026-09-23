@@ -247,9 +247,6 @@ type SecretsConfig struct {
 	// project of another tenant and a missing one (existence-leak
 	// prevention). Nil skips the check.
 	ProjectChecker secrets.SecretProjectChecker
-	// Transit encrypts bulk values before the store sees them. Nil disables
-	// handler-layer encryption.
-	Transit secrets.SecretTransit
 	// FetchHandler serves /internal/v1/secret-fetch/{tenant_id}/{name}, the
 	// broker the runtime cluster resolves secrets through. Nil leaves the
 	// route unregistered (the caller retries on 404).

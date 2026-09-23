@@ -261,10 +261,6 @@ func registerSecretRoutes(r chi.Router, cfg Config, ch routeChains) {
 	if cfg.Secrets.ProjectChecker != nil {
 		h.SetProjectChecker(cfg.Secrets.ProjectChecker)
 	}
-	// T2.3+T2.5: OpenBao transit encryption so plaintext never reaches PG.
-	if cfg.Secrets.Transit != nil {
-		h.SetTransitClient(cfg.Secrets.Transit)
-	}
 	r.Get("/api/v1/secrets", h.List)
 	r.With(ch.limited(audited("secret.set", "secret"))...).Post("/api/v1/secrets", h.Set)
 	// J-22 T1.1: /secrets/bulk is registered BEFORE /secrets/{name} so chi

@@ -889,49 +889,30 @@ func TestSecretBulk_NonexistentProjectReturns404(t *testing.T) {
 }
 
 // ============================================================================
-// T2.3 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 — Bulk encrypt
-// via transit.Encrypt BEFORE store.Set so PG never receives plaintext.
+// The store is the single encryption boundary (principle_violations#180): the
+// Bulk handler hands it the user's value and never pre-encrypts or sniffs.
 // ============================================================================
 
-// fakeTransitT23 stubs SecretTransit. When err is set, Encrypt fails; else
-// returns a deterministic sentinel ciphertext that the test asserts on.
-type fakeTransitT23 struct {
-	mu           sync.Mutex
-	encryptCalls []string // formatted as "tenant:plaintext"
-	ciphertext   string
-	failOnName   map[string]error // map keyed by plaintext bytes (we test by sentinel value)
-}
-
-func (f *fakeTransitT23) Encrypt(_ context.Context, tenantID string, plaintext []byte) (string, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.encryptCalls = append(f.encryptCalls, tenantID+":"+string(plaintext))
-	if err, ok := f.failOnName[string(plaintext)]; ok {
-		return "", err
-	}
-	if f.ciphertext != "" {
-		return f.ciphertext, nil
-	}
-	return "vault:v1:SENTINEL-" + tenantID, nil
-}
-
-// recordingStore stubs SecretStore and captures the value bytes Set
-// received so the test can assert that ciphertext (not plaintext) was
-// persisted.
+// recordingStore stubs SecretStore, captures the value bytes Set received and
+// fails the names listed in failWith.
 type recordingStore struct {
 	mu       sync.Mutex
 	setCalls int
-	values   []string // captured value-bytes per Set call, as string
+	values   []string // captured value-bytes per successful Set call
+	failWith map[string]error
 }
 
 func (r *recordingStore) ListNames(_ context.Context, _, _, _ string) ([]ports.SecretMetadata, error) {
 	return nil, nil
 }
 
-func (r *recordingStore) Set(_ context.Context, _, _, _, _, _ string, value []byte) (bool, error) {
+func (r *recordingStore) Set(_ context.Context, _, _, _, _, name string, value []byte) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.setCalls++
+	if err, ok := r.failWith[name]; ok {
+		return false, err
+	}
 	r.values = append(r.values, string(value))
 	return true, nil
 }
@@ -940,132 +921,59 @@ func (r *recordingStore) Delete(_ context.Context, _, _, _, _, _ string) (bool, 
 	return true, nil
 }
 
-// TestSecretBulk_UsesTransitEncryptWhenWired — plan T2.3 acceptance: when
-// the transit client is wired, the Bulk handler MUST encrypt every entry
-// value before calling store.Set, and the persisted byte stream MUST be
-// the transit ciphertext (vault:v1:...), NOT the plaintext.
-func TestSecretBulk_UsesTransitEncryptWhenWired(t *testing.T) {
-	store := &recordingStore{}
-	transit := &fakeTransitT23{ciphertext: "vault:v1:SENTINEL"}
-	h := NewSecretHandler(store, &lockCountingFake{})
-	h.SetTransitClient(transit)
-
-	body, _ := json.Marshal(map[string]any{
-		"project": "proj-x",
-		"secrets": []map[string]any{
-			{"name": "DATABASE_URL", "value": "postgres://x", "envs": []string{"production"}},
-		},
-	})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+func postBulk(t *testing.T, h *SecretHandler, secrets []map[string]any) secretBulkResponse {
+	t.Helper()
 	w := httptest.NewRecorder()
-
-	h.Bulk(w, req)
-
+	h.Bulk(w, bulkRequest(t, secrets))
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
 	}
-	if got := len(transit.encryptCalls); got != 1 {
-		t.Errorf("transit.Encrypt calls: got %d want 1", got)
+	var resp secretBulkResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode bulk response: %v", err)
 	}
-	if got := store.setCalls; got != 1 {
-		t.Errorf("store.Set calls: got %d want 1", got)
-	}
-	if len(store.values) != 1 {
-		t.Fatalf("store value-bytes captured: got %d want 1", len(store.values))
-	}
-	if store.values[0] != "vault:v1:SENTINEL" {
-		t.Errorf("persisted bytes: got %q want %q (PG MUST receive ciphertext, NOT plaintext)",
-			store.values[0], "vault:v1:SENTINEL")
+	return resp
+}
+
+// The handler passes the user's value to the store untouched, including a value
+// that happens to look like transit ciphertext: encrypting is the store's job,
+// and a value is data, not a format marker.
+func TestSecretBulk_HandsTheUserValueToTheStore(t *testing.T) {
+	store := &recordingStore{}
+	h := NewSecretHandler(store, &lockCountingFake{})
+
+	postBulk(t, h, []map[string]any{
+		{"name": "DATABASE_URL", "value": "vault:v1:looks-like-ciphertext", "envs": []string{"production"}},
+	})
+
+	if len(store.values) != 1 || store.values[0] != "vault:v1:looks-like-ciphertext" {
+		t.Errorf("store must receive the user's value; got %v", store.values)
 	}
 }
 
-// TestSecretBulk_LegacyPathStillWorksWhenTransitNil — regression: when
-// transit is NOT wired (legacy path), Bulk continues to pass plaintext
-// to store.Set, which encrypts it via the AES wrapper. The persisted
-// bytes equal the plaintext (the wrapper encrypts at the store layer,
-// not at the handler layer, so from the handler's perspective store.Set
-// still sees plaintext).
-func TestSecretBulk_LegacyPathStillWorksWhenTransitNil(t *testing.T) {
-	store := &recordingStore{}
+// A transit policy denial raised by the store reads "denied" for that env —
+// permanent, needs an operator — while the other entries of the batch are
+// still written (EC-01 continue-best-effort).
+func TestSecretBulk_StoreTransitDenialReadsAsDenied(t *testing.T) {
+	store := &recordingStore{failWith: map[string]error{
+		"BAD_SECRET": fmt.Errorf("secret_store: encrypt: %w", loopzerovault.ErrTransitKeyCreateFailed),
+	}}
 	h := NewSecretHandler(store, &lockCountingFake{})
-	// No SetTransitClient call → transitClient stays nil.
 
-	body, _ := json.Marshal(map[string]any{
-		"project": "proj-x",
-		"secrets": []map[string]any{
-			{"name": "DATABASE_URL", "value": "postgres://x", "envs": []string{"production"}},
-		},
+	resp := postBulk(t, h, []map[string]any{
+		{"name": "OK_SECRET", "value": "plain-ok", "envs": []string{"production"}},
+		{"name": "BAD_SECRET", "value": "plain-bad", "envs": []string{"production"}},
 	})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req = routestest.WithAuth(req, routestest.DefaultUserContext())
-	w := httptest.NewRecorder()
 
-	h.Bulk(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d", w.Code)
+	statuses := map[string]string{}
+	for _, r := range resp.Results {
+		statuses[r.Name] = r.SyncStatusPerEnv["production"]
 	}
-	if got := store.setCalls; got != 1 {
-		t.Errorf("store.Set calls: got %d want 1", got)
+	if statuses["BAD_SECRET"] != "denied" {
+		t.Errorf("BAD_SECRET production status = %q, want denied", statuses["BAD_SECRET"])
 	}
-	if len(store.values) != 1 || store.values[0] != "postgres://x" {
-		t.Errorf("legacy path: store should receive plaintext bytes (AES wrapper encrypts at store layer); got %v",
-			store.values)
-	}
-}
-
-// TestSecretBulk_TransitFailureDoesNotPersistPlaintext — security
-// invariant: when transit.Encrypt fails for an env, that env MUST NOT
-// reach store.Set with plaintext bytes. The entire entry's PG row for
-// that env is skipped; sync_status_per_env[env]="failed".
-//
-// Other envs of the same key + other keys in the batch are unaffected
-// (EC-01 continue-best-effort honored).
-func TestSecretBulk_TransitFailureDoesNotPersistPlaintext(t *testing.T) {
-	store := &recordingStore{}
-	transit := &fakeTransitT23{
-		ciphertext: "vault:v1:OK",
-		failOnName: map[string]error{
-			"secret-that-fails": errors.New("simulated transit failure"),
-		},
-	}
-	h := NewSecretHandler(store, &lockCountingFake{})
-	h.SetTransitClient(transit)
-
-	body, _ := json.Marshal(map[string]any{
-		"project": "proj-x",
-		"secrets": []map[string]any{
-			{"name": "OK_SECRET", "value": "plain-ok", "envs": []string{"production"}},
-			{"name": "BAD_SECRET", "value": "secret-that-fails", "envs": []string{"production"}},
-		},
-	})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req = routestest.WithAuth(req, routestest.DefaultUserContext())
-	w := httptest.NewRecorder()
-
-	h.Bulk(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d", w.Code)
-	}
-	// Exactly 1 store.Set call (for the OK secret); the failing entry
-	// MUST be skipped.
-	if got := store.setCalls; got != 1 {
-		t.Errorf("store.Set calls: got %d want 1 (BAD_SECRET MUST be skipped on transit failure)", got)
-	}
-	if len(store.values) != 1 || store.values[0] != "vault:v1:OK" {
-		t.Errorf("persisted bytes: got %v want [vault:v1:OK]", store.values)
-	}
-	// Defense-in-depth: scan the captured store values for any plaintext
-	// leak that resembles the failing secret's value.
-	for _, v := range store.values {
-		if v == "secret-that-fails" {
-			t.Errorf("CRITICAL: plaintext leaked into store on transit failure: %q", v)
-		}
+	if len(store.values) != 1 || store.values[0] != "plain-ok" {
+		t.Errorf("OK_SECRET must still be written; got %v", store.values)
 	}
 }
 
