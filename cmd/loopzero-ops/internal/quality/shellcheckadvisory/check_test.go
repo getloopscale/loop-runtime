@@ -24,17 +24,12 @@ func writeScript(t *testing.T, root, rel, body string) {
 	}
 }
 
-func TestCheck_EmptyRepoIsClean(t *testing.T) {
+func TestCheck_EmptyRepoIsNothingScanned(t *testing.T) {
 	if _, err := exec.LookPath("shellcheck"); err != nil {
 		t.Skip("shellcheck not installed; advisory fallthrough tested separately")
 	}
-	root := t.TempDir()
-	outcome, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("expected PASS, got err=%v diagnostic=%q", err, outcome.Diagnostic)
-	}
-	if outcome.ScannedFiles != 0 {
-		t.Fatalf("expected 0 files scanned, got %d", outcome.ScannedFiles)
+	if _, err := Check(Config{RepoRoot: t.TempDir()}); !errors.Is(err, ErrNothingScanned) {
+		t.Fatalf("an empty tree is a scan that read nothing; err=%v", err)
 	}
 }
 

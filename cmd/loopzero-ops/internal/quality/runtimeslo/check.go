@@ -51,7 +51,8 @@ func Check(cfg Config) (*Outcome, error) {
 	f, err := os.Open(cfg.LogFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &Outcome{Pass: true, Skipped: true}, nil
+			// No log is no verdict: Skipped, and not a pass.
+			return &Outcome{Skipped: true}, nil
 		}
 		return nil, fmt.Errorf("open log %s: %w", cfg.LogFile, err)
 	}

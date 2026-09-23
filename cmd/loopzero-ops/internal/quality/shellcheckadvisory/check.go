@@ -66,9 +66,13 @@ type Outcome struct {
 // ErrViolations means shellcheck flagged at least one violation.
 var ErrViolations = errors.New("shellcheck emitted violations across operator/CI script set")
 
+// ErrNothingScanned means the configured scan paths held no shell script.
+var ErrNothingScanned = errors.New("no shell script found under the scan paths — the gate linted nothing")
+
 // Check runs the shellcheck pass with the same tolerated codes as the bash
 // script. When shellcheck is not installed, returns nil error with
-// Outcome.Warn=true (advisory-only fallthrough).
+// Outcome.Warn=true (advisory-only fallthrough). A scan that finds no script
+// returns ErrNothingScanned.
 func Check(cfg Config) (Outcome, error) {
 	root := cfg.RepoRoot
 	if root == "" {
@@ -86,8 +90,8 @@ func Check(cfg Config) (Outcome, error) {
 		return Outcome{}, fmt.Errorf("gather scan files: %w", err)
 	}
 	if len(files) == 0 {
-		// No scripts to lint; treat as clean.
-		return Outcome{Warn: false, ScannedFiles: 0}, nil
+		// Zero scripts is a scan that read nothing, not a clean tree.
+		return Outcome{}, ErrNothingScanned
 	}
 
 	args := []string{"-e", strings.Join(excludeCodes, ",")}

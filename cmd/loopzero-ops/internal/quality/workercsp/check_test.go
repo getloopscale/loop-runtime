@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // writeWorker drops a synthetic worker source into a temp repo root.
@@ -57,6 +59,27 @@ func TestCheck(t *testing.T) {
 			name:     "style-src unsafe-inline alone does NOT fail the gate",
 			body:     `"Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"`,
 			wantPass: true,
+		},
+		{
+			// With no script-src, default-src is the script policy.
+			name:       "default-src fallback with unsafe-inline fails",
+			body:       `"Content-Security-Policy": "default-src 'self' 'unsafe-inline'; style-src 'self'"`,
+			wantPass:   false,
+			wantDetail: "default-src permits 'unsafe-inline'",
+		},
+		{
+			name:       "a CSP with neither script-src nor default-src fails",
+			body:       `"Content-Security-Policy": "style-src 'self'; img-src 'self'"`,
+			wantPass:   false,
+			wantDetail: "script is unrestricted",
+		},
+		{
+			// Removing the header entirely used to PASS with a reason claiming
+			// script-src permitted nothing unsafe — a directive that did not exist.
+			name:       "no CSP header at all fails",
+			body:       `const H = { "X-Frame-Options": "DENY" };`,
+			wantPass:   false,
+			wantDetail: "no Content-Security-Policy header",
 		},
 		{
 			// The directive body stops at the `;`. Without that boundary a
@@ -111,28 +134,14 @@ func TestCheck_MissingWorkerIsNotASilentPass(t *testing.T) {
 	}
 }
 
-// TestCheck_AgainstLiveRepo pins the CURRENT state of the real worker. It is
-// expected RED until issue #235 is fixed — the fix lives in
-// infra/cloudflare/, a governance-gated path. The gate is registered but
-// deliberately NOT wired into quality:gates for exactly that reason; see the
-// `failingGate` entry in cmd/loopzero-ops/quality_gate_wiring_test.go.
+// TestCheck_AgainstLiveRepo: the real worker passes — the gate is wired into
+// quality:gates, so a regression here is a red gate.
 func TestCheck_AgainstLiveRepo(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", "..", "..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
-	out, err := Check(Config{RepoRoot: root})
+	out, err := Check(Config{RepoRoot: qtestutil.RootFile(t, DefaultWorkerPath)})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
-	if out.Skipped {
-		t.Skipf("worker not found from this path: %s", out.Reason)
-	}
-	if out.Pass {
-		t.Log("worker CSP is clean — issue #235 appears fixed; wire this gate into taskfiles/quality.yml and drop its failingGate ledger entry")
-		return
-	}
-	for _, f := range out.Findings {
-		t.Logf("KNOWN (#235) %s:%d — %s", DefaultWorkerPath, f.Line, f.Detail)
+	if !out.Pass {
+		t.Fatalf("real worker CSP: %+v", out.Findings)
 	}
 }

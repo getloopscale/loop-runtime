@@ -77,8 +77,8 @@ func TestCheck_MissingLog_Skip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
-	if !o.Pass || !o.Skipped {
-		t.Errorf("expected Pass+Skipped, got pass=%v skipped=%v", o.Pass, o.Skipped)
+	if o.Pass || !o.Skipped {
+		t.Errorf("a missing log is a skip, not a pass; got pass=%v skipped=%v", o.Pass, o.Skipped)
 	}
 }
 

@@ -4,6 +4,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -334,6 +335,10 @@ func runShellcheckAdvisory(args []string) int {
 	}
 	resolveDotRoot(root)
 	outcome, err := shellcheckadvisory.Check(shellcheckadvisory.Config{RepoRoot: *root})
+	if errors.Is(err, shellcheckadvisory.ErrNothingScanned) {
+		fmt.Fprintf(os.Stderr, "shellcheck-advisory: FAIL — %v\n", err)
+		return 1
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "shellcheck-advisory: FAIL — %d file(s) scanned; violations follow:\n%s\n", outcome.ScannedFiles, outcome.Diagnostic)
 		return 1
