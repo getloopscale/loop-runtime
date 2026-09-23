@@ -46,33 +46,3 @@ var SensitiveTables = []string{
 	"tenant_tombstones",
 	"cells",
 }
-
-// IsSensitive returns true if the given table name is on the
-// SensitiveTables list (case-insensitive).
-func IsSensitive(table string) bool {
-	for _, t := range SensitiveTables {
-		if eqIgnoreCase(t, table) {
-			return true
-		}
-	}
-	return false
-}
-
-func eqIgnoreCase(a, b string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := 0; i < len(a); i++ {
-		ca, cb := a[i], b[i]
-		if ca >= 'A' && ca <= 'Z' {
-			ca += 32
-		}
-		if cb >= 'A' && cb <= 'Z' {
-			cb += 32
-		}
-		if ca != cb {
-			return false
-		}
-	}
-	return true
-}

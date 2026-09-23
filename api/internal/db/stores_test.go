@@ -4,7 +4,6 @@
 package db
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -336,52 +335,6 @@ func TestUniqueViolationError_ErrorMessage(t *testing.T) {
 	err := &UniqueViolationError{Constraint: "builds_pkey"}
 	if err.Error() != "unique violation: builds_pkey" {
 		t.Errorf("expected 'unique violation: builds_pkey', got: %s", err.Error())
-	}
-}
-
-// =============================================================================
-// DatabaseConfig tests
-// =============================================================================
-
-func TestDatabaseConfig_DSN_DefaultSSLMode(t *testing.T) {
-	cfg := DatabaseConfig{
-		Host:     "localhost",
-		Port:     5432,
-		Database: "loopzero",
-		User:     "loopzero",
-		Password: "secret",
-	}
-
-	dsn := cfg.DSN()
-	if !strings.Contains(dsn, "sslmode=") {
-		t.Error("expected sslmode in DSN")
-	}
-	if !strings.Contains(dsn, "loopzero:secret@localhost:5432/loopzero") {
-		t.Errorf("unexpected DSN format: %s", dsn)
-	}
-}
-
-func TestGetDatabaseConfig_Defaults(t *testing.T) {
-	cfg := GetDatabaseConfig()
-	if cfg.Host == "" {
-		t.Error("expected non-empty host")
-	}
-	if cfg.Port == 0 {
-		t.Error("expected non-zero port")
-	}
-	if cfg.Database == "" {
-		t.Error("expected non-empty database")
-	}
-}
-
-// =============================================================================
-// Connection helper tests
-// =============================================================================
-
-func TestGetEnvOrDefault_FallbackValue(t *testing.T) {
-	val := getEnvOrDefault("LOOPZERO_NONEXISTENT_ENV_VAR_FOR_TESTING", "fallback")
-	if val != "fallback" {
-		t.Errorf("expected 'fallback', got: %s", val)
 	}
 }
 

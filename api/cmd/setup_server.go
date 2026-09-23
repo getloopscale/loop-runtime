@@ -6,11 +6,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/middleware/observability"
 	"log/slog"
 	"os"
-	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/middleware/observability"
 
 	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
 	"github.com/getloopscale/loopzero/api/internal/ports"
@@ -524,59 +524,6 @@ func buildMgmtDynamicClient(logger *slog.Logger) dynamic.Interface {
 		return nil
 	}
 	return dyn
-}
-
-// validateStripeKeyForEnv is the 6th test condition of T2.7 conditional
-// approval (per CVP + GitOps in MEET-2026-05-27 + ADR-2026-05-27-T2.7-RAK).
-//
-// Production environments require Stripe LIVE keys; test-mode keys
-// (sk_test_*) MUST NOT be used in production because they are non-functional
-// against real customer accounts — billing would silently fail, but the
-// API would still claim to be wired (test mode keys return real-looking
-// URLs that point at Stripe's test dashboard, NOT customer portals).
-// This drift would be invisible from cluster monitoring (no 4xx/5xx from
-// Stripe API — keys work; they just work against the test world).
-//
-// The validation runs at boot time so misconfiguration fails-fast at
-// service startup rather than at first customer interaction. Operator
-// must either (a) provide a sk_live_* key via ESO Secret, or (b) unset
-// STRIPE_SECRET_KEY to fall back to the legacy placeholder URL (and
-// accept that Portal endpoint will return a non-functional link).
-//
-// Stripe Restricted Access Keys (RAKs) use the same sk_live_ prefix per
-// Stripe documentation, so this assertion correctly admits both full
-// keys + RAKs in production.
-//
-// Returns nil if validation passes; non-nil error if production env
-// has a non-live key prefix.
-func validateStripeKeyForEnv(env, stripeKey string) error {
-	// Only enforce in production. Development/staging may use test keys.
-	if !isProductionEnv(env) {
-		return nil
-	}
-	if strings.HasPrefix(stripeKey, "sk_live_") {
-		return nil
-	}
-	// Truncate prefix for safe error messages (never log full key).
-	prefix := stripeKey
-	if len(prefix) > 8 {
-		prefix = prefix[:8]
-	}
-	return fmt.Errorf(
-		"BOOT REFUSED: LOOPZERO_ENV=%q requires STRIPE_SECRET_KEY prefix sk_live_*, "+
-			"got prefix %q. This is a defense-in-depth check against silent test-mode "+
-			"drift in production (revenue leak invisible from cluster). Per "+
-			"ADR-2026-05-27-T2.7-RAK. Rotate the ESO Secret to a sk_live_* key OR "+
-			"unset STRIPE_SECRET_KEY to fall back to the legacy placeholder URL",
-		env, prefix,
-	)
-}
-
-// isProductionEnv matches the convention from config.IsProduction().
-// Mirrored locally (not imported) so this helper is testable without
-// constructing a full Config struct.
-func isProductionEnv(env string) bool {
-	return strings.EqualFold(env, "production")
 }
 
 // =============================================================================
