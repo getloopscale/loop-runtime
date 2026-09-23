@@ -26,10 +26,11 @@
 package leak
 
 import (
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exposure"
+
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -183,15 +184,6 @@ func isenta(família string) bool {
 	return false
 }
 
-// classeDaLinha devolve a coluna `class` do inventario, vazia quando ausente.
-func classeDaLinha(linha string) string {
-	partes := strings.Split(linha, "|")
-	if len(partes) < 2 {
-		return ""
-	}
-	return strings.TrimSpace(partes[1])
-}
-
 // SemCoberturaDeIdentidade remove dos buracos as familias que a sonda de identidade JA
 // cobre.
 //
@@ -230,36 +222,23 @@ func SemCoberturaDeIdentidade(buracos []string, alvos []Target) []string {
 //
 // Devolve os alvos e as famílias declaradas SEM representante, que são buraco de
 // cobertura e não silêncio.
-func Targets(inventário string, host string) (alvos []Target, semRepresentante []string, err error) {
-	b, err := os.ReadFile(inventário)
+func Targets(inventory string, host string) (alvos []Target, semRepresentante []string, err error) {
+	decls, err := loadInventory(inventory)
 	if err != nil {
-		return nil, nil, fmt.Errorf("ler inventário de exposição %s: %w", inventário, err)
+		return nil, nil, err
 	}
 
 	vistos := map[string]bool{}
-	for _, linha := range strings.Split(string(b), "\n") {
-		linha = strings.TrimSpace(linha)
-		if linha == "" || strings.HasPrefix(linha, "#") {
+	for _, d := range decls {
+		if d.Site != host {
 			continue
 		}
-		decl := linha
-		if i := strings.Index(linha, "|"); i >= 0 {
-			decl = strings.TrimSpace(linha[:i])
-		}
-		campos := strings.Fields(decl)
-		if len(campos) < 2 || campos[0] != host {
+		// An `internal` route returns no user data, so there is no credential
+		// for it to deny: demanding a 401 from it would be a category error.
+		if d.Class == exposure.ClassInternal {
 			continue
 		}
-		// A coluna `class` do inventario ja declara o que a rota expoe. Uma rota `internal`
-		// nao tem credencial a negar — exigir 401 dela e erro de categoria, e era ruido
-		// (achado M-3 da revisao de B-025). Ler a classe daqui tambem apaga a duplicacao:
-		// `isentas` e a coluna codificavam a mesma decisao em dois lugares, que e a
-		// "segunda lista que envelheceria sozinha" citada acima como razao de ler o
-		// inventario.
-		if classeDaLinha(linha) == "internal" {
-			continue
-		}
-		família := campos[1]
+		família := d.Path
 		if vistos[família] {
 			continue
 		}
@@ -272,9 +251,8 @@ func Targets(inventário string, host string) (alvos []Target, semRepresentante 
 			alvos = append(alvos, Target{Host: host, Path: p})
 			continue
 		}
-		// O buraco carrega o host: sem isso o relatorio mostra varias linhas identicas
-		// dizendo apenas "-", e quem le continua sem saber qual host esta descoberto.
-		// Trocar silencio por ruido anonimo nao e conserto (B-025).
+		// The hole carries its host, so a report with several holes says which
+		// host is uncovered.
 		semRepresentante = append(semRepresentante, host+" "+família)
 	}
 

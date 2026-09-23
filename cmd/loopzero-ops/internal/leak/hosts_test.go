@@ -242,3 +242,16 @@ func TestCoveredByIdentity_RemovesTheContradiction(t *testing.T) {
 		t.Error("/oauth2/* NAO e sondado pela identidade e deve continuar sendo buraco")
 	}
 }
+
+// A row the probe cannot read is a declaration it would silently not probe.
+// The inventory format is shared with the proxy-exposure gate, which rejects
+// the same row; the probe must not treat it as absent.
+func TestHostsAndTargets_RefuseAMalformedInventory(t *testing.T) {
+	inv := escreverInventario(t, "app-dev.loopzero.example /v1/* | reviewed | ok\napp-dev.loopzero.example /v2/* | nonsense\n")
+	if _, err := leak.Hosts(inv); err == nil {
+		t.Error("Hosts: want an error for a malformed row")
+	}
+	if _, _, err := leak.Targets(inv, "app-dev.loopzero.example"); err == nil {
+		t.Error("Targets: want an error for a malformed row")
+	}
+}
