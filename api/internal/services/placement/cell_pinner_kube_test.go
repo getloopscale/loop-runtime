@@ -13,6 +13,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -116,25 +117,56 @@ func TestCellPinner_WithKubeClient_StoreErrorSkipsCRPatch(t *testing.T) {
 	}
 }
 
-func TestCellPinner_WithKubeClient_CRPatchFailureDoesNotRollbackDB(t *testing.T) {
-	// Store succeeds (DB updated). Use a fake client that has NO seeded
-	// tenant — patch will return a not-found error. Pin() must:
-	//   - return prev_cell from the store (DB succeeded)
-	//   - NOT return the CR error to the caller (logged + manual fix)
-	store := &mockPinnerStore{prevCell: "cell-0"}
-	scheme := runtime.NewScheme()
-	gvrToListKind := map[schema.GroupVersionResource]string{
-		tenantGVR: "TenantList",
-	}
-	emptyClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrToListKind)
-	p := NewCellPinner(store).WithKubeClient(emptyClient, "loopzero-system")
+// emptyTenantClient has no Tenant CR, so every patch fails with not-found.
+func emptyTenantClient() *dynamicfake.FakeDynamicClient {
+	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{tenantGVR: "TenantList"})
+}
 
-	prev, err := p.Pin(context.Background(), "tn-missing", "cell-1")
-	if err != nil {
-		t.Fatalf("Pin must NOT return CR-patch errors to caller: %v", err)
+func noBackoff(int) time.Duration { return 0 }
+
+func TestCellPinner_CRPatchFailure_RevertsTheDatabaseAndReportsNotApplied(t *testing.T) {
+	store := &mockPinnerStore{prevCell: "cell-0"}
+	p := NewCellPinner(store).WithKubeClient(emptyTenantClient(), "loopzero-system")
+	p.patchBackoff = noBackoff
+
+	_, err := p.Pin(context.Background(), "tn-missing", "cell-1")
+
+	if !errors.Is(err, ErrCellPinNotApplied) {
+		t.Fatalf("want ErrCellPinNotApplied, got %v", err)
 	}
-	if prev != "cell-0" {
-		t.Errorf("expected prev=cell-0 from successful DB update, got %q", prev)
+	if want := []string{"cell-1", "cell-0"}; strings.Join(store.pinnedTo, ",") != strings.Join(want, ",") {
+		t.Errorf("store pins = %v, want the move then its reversal %v", store.pinnedTo, want)
+	}
+}
+
+func TestCellPinner_CRPatchFailure_WithFailedRevert_ReportsDivergence(t *testing.T) {
+	store := &mockPinnerStore{prevCell: "cell-0", errOnCell: map[string]error{"cell-0": ErrCellNotPinnable}}
+	p := NewCellPinner(store).WithKubeClient(emptyTenantClient(), "loopzero-system")
+	p.patchBackoff = noBackoff
+
+	_, err := p.Pin(context.Background(), "tn-missing", "cell-1")
+
+	if !errors.Is(err, ErrCellPinDiverged) {
+		t.Fatalf("want ErrCellPinDiverged, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "loopzero-tenant-cr-shape") {
+		t.Errorf("a divergence must carry the repair hint; got %v", err)
+	}
+}
+
+func TestCellPinner_CRPatchFailure_WithNoPreviousCell_ReportsDivergence(t *testing.T) {
+	store := &mockPinnerStore{prevCell: ""}
+	p := NewCellPinner(store).WithKubeClient(emptyTenantClient(), "loopzero-system")
+	p.patchBackoff = noBackoff
+
+	_, err := p.Pin(context.Background(), "tn-missing", "cell-1")
+
+	if !errors.Is(err, ErrCellPinDiverged) {
+		t.Fatalf("a tenant with no previous cell cannot be reverted; want ErrCellPinDiverged, got %v", err)
+	}
+	if len(store.pinnedTo) != 1 {
+		t.Errorf("no revert may be attempted without a previous cell; store pins = %v", store.pinnedTo)
 	}
 }
 

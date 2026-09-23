@@ -15,9 +15,11 @@ import (
 )
 
 type mockPinnerStore struct {
-	prevCell string
-	err      error
-	captured struct {
+	prevCell  string
+	err       error
+	errOnCell map[string]error // per-target-cell error, checked before err
+	pinnedTo  []string         // every cellID the store was asked to pin to, in order
+	captured  struct {
 		tenantID string
 		cellID   string
 		called   bool
@@ -28,6 +30,10 @@ func (m *mockPinnerStore) PinTenantToCell(_ context.Context, tenantID, cellID st
 	m.captured.tenantID = tenantID
 	m.captured.cellID = cellID
 	m.captured.called = true
+	m.pinnedTo = append(m.pinnedTo, cellID)
+	if e, ok := m.errOnCell[cellID]; ok {
+		return "", e
+	}
 	return m.prevCell, m.err
 }
 
