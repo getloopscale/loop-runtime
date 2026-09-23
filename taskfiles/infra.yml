@@ -584,7 +584,7 @@ tasks:
         # the Secret. Read it at call time: a literal here goes stale the moment the
         # release is reinstalled, which is how the previous one came to be wrong.
         GRAFANA_PASS=$(kubectl --context {{.CORE_CONTEXT}} -n monitoring get secret \
-          monitoring-grafana -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d)
+          monitoring-grafana -o jsonpath='{.data.admin-password}' 2>/dev/null | openssl base64 -d -A)
         if [ -z "$GRAFANA_PASS" ]; then
           echo "  (not checked: could not read the Grafana admin secret in ns/monitoring)"
         else
