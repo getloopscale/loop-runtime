@@ -275,17 +275,27 @@ LEFT JOIN LATERAL (
 ) latest_build ON true
 LEFT JOIN LATERAL (
   -- Pick the most recent non-terminal release. The release-state SoT
-  -- prefers ACTIVE (currently serving) > ROLLING_BACK (in-flight) >
-  -- FAILED / ROLLBACK_FAILED (release-level failure). Terminal
-  -- historical states (SUPERSEDED, ROLLED_BACK, CANCELLED) are
-  -- excluded so the mapper falls back to the latest build instead of
-  -- attributing a stale release to the current truth. Sponsor
-  -- LIVE-caught 2026-06-18 (loopzerokit-example).
+  -- prefers ACTIVE (currently serving) > in flight (ROLLING_BACK, READY,
+  -- PENDING) > release-level failure (ROLLBACK_FAILED, SYNC_FAILED,
+  -- GIT_MIRROR_FAILED, DRIFT_ALERT), newest first within a rank. Historical
+  -- states (SUPERSEDED, ROLLED_BACK, CANCELLED, ARCHIVED) are excluded so the
+  -- mapper falls back to the latest build instead of attributing a stale
+  -- release to the current truth. Sponsor LIVE-caught 2026-06-18
+  -- (loopzerokit-example). The status set is the one
+  -- pkg/enforcement.MapProjectStatus decides on.
   SELECT r.status
   FROM releases r
   WHERE r.tenant_id = p.tenant_id AND r.project_id = p.name
-    AND r.status IN ('ACTIVE', 'ROLLING_BACK', 'FAILED', 'ROLLBACK_FAILED')
-  ORDER BY r.created_at DESC, r.id DESC
+    AND r.status IN ('ACTIVE', 'ROLLING_BACK', 'READY', 'PENDING',
+                     'ROLLBACK_FAILED', 'SYNC_FAILED', 'GIT_MIRROR_FAILED', 'DRIFT_ALERT')
+  ORDER BY CASE r.status
+             WHEN 'ACTIVE' THEN 0
+             WHEN 'ROLLING_BACK' THEN 1
+             WHEN 'READY' THEN 1
+             WHEN 'PENDING' THEN 1
+             ELSE 2
+           END,
+           r.created_at DESC, r.id DESC
   LIMIT 1
 ) active_release ON true
 LEFT JOIN LATERAL (
@@ -344,9 +354,9 @@ type ListProjectsWithSummaryByTenantRow struct {
 //     `framework` indicator. loopzero.yaml apps schema has `type` (server/
 //     static/worker/etc.), not `framework`; the dashboard renders as a
 //     Badge so the type string is the canonical "what is this app" label
-//   - active_release_status_raw: status string of the most recent
-//     ACTIVE-or-mid-flight release (ROLLING_BACK / ROLLBACK_FAILED /
-//     FAILED also surface here so the aggregate mapper can decide).
+//   - active_release_status_raw: status of the release that decides the
+//     project's status — ACTIVE first, then in flight, then a release-level
+//     failure (see the active_release LATERAL below).
 //     Sponsor LIVE-caught 2026-06-18: the dashboard's /projects status
 //     column was misreporting "Failed" for projects whose latest build
 //     was cancelled but whose earlier release was still ACTIVE serving

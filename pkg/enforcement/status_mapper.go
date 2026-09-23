@@ -74,57 +74,45 @@ func MapBuildStatusToProjectStatus(state statemachine.State) ProjectStatus {
 // trumps the latest build state because a build is just an attempt —
 // the release is the canonical observation of what landed.
 //
-// Decision tree (in order — first match wins):
+// activeRelease is the state of the release the projects summary query
+// (ListProjectsWithSummaryByTenant) selected for the project; the zero State
+// means no such release. Every Release state is decided here — first match
+// wins:
 //
-//   - activeReleaseStatus == "ACTIVE" → Live
-//     The project has a release serving production. The latest build
-//     is irrelevant — it may have been cancelled, failed, or be still
-//     running; users care that traffic is being served.
+//   - ACTIVE → Live. The project has a release serving production; the
+//     latest build is irrelevant (it may have been cancelled or failed).
 //
-//   - activeReleaseStatus == "ROLLING_BACK" → Building (in-flight)
-//     A rollback is mid-flight. We surface this in the existing
-//     "Building" bucket so the StatusDot animates and the user knows
-//     the project is mid-flight, not idle.
+//   - READY, PENDING, ROLLING_BACK → Building. A release is in flight, so
+//     the StatusDot animates instead of reporting a build result.
 //
-//   - activeReleaseStatus ∈ {"FAILED", "ROLLBACK_FAILED"} → Failed
-//     The release-state SoT genuinely reports failure (e.g., manifest
-//     reconcile permanently failed, rollback collapsed). Do NOT fall
-//     back to the latest build — the release is the authoritative
-//     "what landed" answer.
+//   - GIT_MIRROR_FAILED, SYNC_FAILED, DRIFT_ALERT, ROLLBACK_FAILED → Failed.
+//     The release itself failed to land (or to roll back); a succeeded build
+//     behind it must not read as Live.
 //
-//   - otherwise → fall back to MapBuildStatusToProjectStatus on the
-//     latest build state. This covers:
+//   - SUPERSEDED, ROLLED_BACK, CANCELLED, ARCHIVED, none → fall back to
+//     MapBuildStatusToProjectStatus on the latest build: a historical
+//     release is not the current truth, the latest build attempt is.
 //
-//   - Cold projects (no release ever) — only build status to read.
-//
-//   - Terminal non-active releases (SUPERSEDED, ROLLED_BACK,
-//     CANCELLED) — the historical release is not the current truth;
-//     the latest build attempt is.
-//
-// activeReleaseStatus is the string from the releases table (uppercased
-// status enum). Empty string means "no eligible release row" — the
-// SQL query returns this when the project has no release at all OR
-// when the only releases are in a terminal state.
-//
-// latestBuildEnv is the latest build's `environment` column ("preview",
-// "production", "staging", ...). Red Team loopzero-cloud#41 absorption
-// (2026-06-27): when there is no active release AND the latest build
-// SUCCEEDED in a preview-only environment, return ProjectStatusPreview
-// — the project is preview-only (no production release ever shipped),
-// so the dashboard renders a "Preview" badge instead of "Live" with a
-// confusing "URL PENDING" hint. Empty latestBuildEnv = unknown
-// (defensive — fall back to the legacy build-state mapping).
-func MapProjectStatus(activeReleaseStatus string, latestBuildState statemachine.State, latestBuildEnv string) ProjectStatus {
-	switch activeReleaseStatus {
-	case "ACTIVE":
+// latestBuildEnv is the latest build's `environment` column. Red Team
+// loopzero-cloud#41 absorption (2026-06-27): when no release decides the status
+// and the latest build SUCCEEDED in a preview-only environment, return
+// ProjectStatusPreview — the project is preview-only, so the dashboard
+// renders a "Preview" badge instead of "Live" with a confusing
+// "URL PENDING" hint.
+func MapProjectStatus(activeRelease, latestBuildState statemachine.State, latestBuildEnv string) ProjectStatus {
+	switch activeRelease {
+	case statemachine.ReleaseActive:
 		return ProjectStatusLive
-	case "ROLLING_BACK":
+	case statemachine.ReleaseReady,
+		statemachine.ReleasePending,
+		statemachine.ReleaseRollingBack:
 		return ProjectStatusBuilding
-	case "FAILED", "ROLLBACK_FAILED":
+	case statemachine.ReleaseGitMirrorFailed,
+		statemachine.ReleaseSyncFailed,
+		statemachine.ReleaseDriftAlert,
+		statemachine.ReleaseRollbackFailed:
 		return ProjectStatusFailed
 	}
-	// Red Team #41: BuildSucceeded + preview env + no active release =
-	// preview-only project. Surface as "Preview" instead of "Live".
 	if latestBuildState == statemachine.BuildSucceeded && latestBuildEnv == "preview" {
 		return ProjectStatusPreview
 	}

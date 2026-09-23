@@ -418,7 +418,7 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 			// when no release is consultable. See aggregate_project_
 			// status_test.go for the canonical decision tree.
 			LastDeployStatus: string(enforcement.MapProjectStatus(
-				r.ActiveReleaseStatusRaw,
+				statemachine.State(r.ActiveReleaseStatusRaw),
 				statemachine.State(r.LastDeployStatusRaw),
 				r.LatestBuildEnvironment,
 			)),
