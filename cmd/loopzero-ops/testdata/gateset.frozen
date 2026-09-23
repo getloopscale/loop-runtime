@@ -17,7 +17,7 @@ caddyfile-no-docker-ip	gates	Blocks hardcoded 172.18.x.x Docker network IPs in i
 canonical-fixture-repo	gates	Rejects legacy loopzero-repotest fixture in LIVE test/seed scripts; canonical is getloopscale/loopzerokit-example (M-Migrate2 2026-07-07 replaces infra/tests/check-canonical-fixture-repo_test.sh).
 chart-default-tags	gates	loopzero-owned charts must not default their image tag to a mutable ref (#232).
 chart-pairs	gates	Chart que existe nas duas arvores com o mesmo nome precisa estar declarado.
-check-allowlist-sunsets	gates	Hermetic contract test for .claude/scripts/check-allowlist-sunsets.py (T5.2.a): 5 fixture cases + missing-file + LIVE rules/code-review-allowlist.txt check. Exits 0 for future/today/missing/live-clean; catches past-sunset (exit 1) and malformed/bad-date (exit 2). Requires python3. M-Migrate2 2026-07-07 replaces infra/tests/check-allowlist-sunsets_test.sh.
+check-allowlist-sunsets	gates	Every exemption in rules/code-review-allowlist.txt carries a sunset, and on that date it stops exempting anything
 cli-exit-codes	gates	Enforces the permanent CLI exit-code contract (0/1/2/3/4/5 only).
 cluster-rename-guard	gates	Proves the cluster rename (B-001: mgmt->core, vault->secrets) touched only cluster identifiers. Asserts every line a pre-rename baseline classified GENERIC still exists byte-for-byte — `vault` carries 74 such lines naming OpenBao, `mgmt` carries zero. Refuses to run when the baseline cannot be proven an ancestor of HEAD, because a baseline captured after the first edit compares the new state with itself and passes forever. T0.1 of plans/cluster-rename-core-secrets-plan.md.
 cluster-role-no-secrets-star	gates	Forbids unconditional cluster-wide secrets/configmaps RBAC grants.
