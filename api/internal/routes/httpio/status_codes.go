@@ -30,6 +30,13 @@ var apiStatusByCode = map[string]int{
 	"SERVICES_JSON_TOO_LARGE": http.StatusRequestEntityTooLarge,
 	"NOT_MEMBER":              http.StatusForbidden,      // routes/auth — team switch
 	"NOT_AVAILABLE":           http.StatusNotImplemented, // routes/auth — feature not configured
+	// These five answered 500 until they were registered: their authors
+	// passed the intended status to NewLoopZeroError, which ignored it.
+	"INVALID_APP_NAME":          http.StatusBadRequest,     // routes/builds — app name validation
+	"INVALID_APP_PATH":          http.StatusBadRequest,     // routes/builds — app path validation
+	"ENVIRONMENT_AMBIGUOUS":     http.StatusBadRequest,     // routes/environments — name in several projects
+	"SCALE_TO_ZERO_UNAVAILABLE": http.StatusBadRequest,     // services/build — min 0 without KEDA
+	"ENV_PROVISION_TIMEOUT":     http.StatusGatewayTimeout, // services/platform — env not ready in time
 }
 
 func init() {

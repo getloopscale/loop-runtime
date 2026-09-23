@@ -27,6 +27,13 @@ func TestAPIErrorCodesAnswerTheirRegisteredStatus(t *testing.T) {
 		"SERVICES_JSON_TOO_LARGE": http.StatusRequestEntityTooLarge,
 		"NOT_MEMBER":              http.StatusForbidden,
 		"NOT_AVAILABLE":           http.StatusNotImplemented,
+		// Their authors passed these statuses to NewLoopZeroError, which ignored
+		// them: all five answered 500.
+		"INVALID_APP_NAME":          http.StatusBadRequest,
+		"INVALID_APP_PATH":          http.StatusBadRequest,
+		"ENVIRONMENT_AMBIGUOUS":     http.StatusBadRequest,
+		"SCALE_TO_ZERO_UNAVAILABLE": http.StatusBadRequest,
+		"ENV_PROVISION_TIMEOUT":     http.StatusGatewayTimeout,
 	}
 	for code, want := range cases {
 		if got := errorshttp.Status(&loopzeroerrors.LoopZeroError{Code: code}); got != want {
