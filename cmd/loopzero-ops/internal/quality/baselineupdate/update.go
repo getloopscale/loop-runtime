@@ -17,7 +17,6 @@
 package baselineupdate
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -141,7 +140,7 @@ func Run(cfg Config) (*Result, error) {
 	}
 
 	if cfg.DryRun {
-		body, err := marshalJSON(merged)
+		body, err := baseline.Marshal(merged)
 		if err != nil {
 			return nil, err
 		}
@@ -190,19 +189,4 @@ func readLCOV(path string) ([]coverageparse.PackageCoverage, error) {
 	}
 	defer func() { _ = f.Close() }()
 	return coverageparse.ParseLCOV(f)
-}
-
-// marshalJSON renders the baseline as indented JSON with trailing
-// newline. Mirrors baseline.Save's serialization so DryRun output
-// matches what would land on disk byte-for-byte.
-func marshalJSON(b *baseline.Baseline) ([]byte, error) {
-	out, err := json.MarshalIndent(b, "", "  ")
-	if err != nil {
-		return nil, &loopzeroerrors.LoopZeroError{
-			Code:    "OPS_DEPLOY_FAILURE",
-			Message: fmt.Sprintf("baselineupdate: json.MarshalIndent failed: %v", err),
-			Cause:   err,
-		}
-	}
-	return append(out, '\n'), nil
 }

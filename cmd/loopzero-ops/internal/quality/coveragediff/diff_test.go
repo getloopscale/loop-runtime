@@ -361,14 +361,3 @@ func TestOutcome_WriteMessages(t *testing.T) {
 	require.NoError(t, o.WriteMessages(&buf))
 	assert.Equal(t, "line1\nline2\n", buf.String())
 }
-
-// =============================================================================
-// Helpers
-// =============================================================================
-
-func TestRoundTo1Decimal(t *testing.T) {
-	assert.Equal(t, 0.0, roundTo1Decimal(0))
-	assert.Equal(t, 50.0, roundTo1Decimal(50))
-	assert.Equal(t, 33.3, roundTo1Decimal(1.0/3.0*100))
-	assert.Equal(t, 66.7, roundTo1Decimal(2.0/3.0*100))
-}

@@ -181,7 +181,7 @@ func Run(cfg Config) (*Outcome, error) {
 		return out, nil
 	}
 
-	out.Ratio = roundTo1Decimal(float64(out.CoveredSource) / float64(out.TotalSource) * 100)
+	out.Ratio = coverageparse.RoundTo1Decimal(float64(out.CoveredSource) / float64(out.TotalSource) * 100)
 	out.Messages = append(out.Messages, fmt.Sprintf(
 		"[coverage-diff] touched source lines: %d / covered: %d = %.1f%%",
 		out.TotalSource, out.CoveredSource, out.Ratio,
@@ -311,10 +311,4 @@ func (o *Outcome) WriteMessages(w io.Writer) error {
 		}
 	}
 	return nil
-}
-
-// roundTo1Decimal rounds float to 1 decimal place via printf+ParseFloat.
-func roundTo1Decimal(f float64) float64 {
-	rounded, _ := strconv.ParseFloat(fmt.Sprintf("%.1f", f), 64)
-	return rounded
 }

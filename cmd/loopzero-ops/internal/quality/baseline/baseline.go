@@ -112,19 +112,27 @@ func Load(path string) (*Baseline, error) {
 	return &b, nil
 }
 
-// Save writes the baseline JSON to path with 0o644 perms. Packages
-// are sorted alphabetically for deterministic diffs.
-func Save(path string, b *Baseline) error {
-	// json.Marshal sorts map keys alphabetically by default.
+// Marshal renders the baseline exactly as Save writes it: indented JSON with
+// packages in alphabetical order (json.Marshal sorts map keys) and a trailing
+// newline for POSIX-friendly diffs.
+func Marshal(b *Baseline) ([]byte, error) {
 	out, err := json.MarshalIndent(b, "", "  ")
 	if err != nil {
-		return &loopzeroerrors.LoopZeroError{
+		return nil, &loopzeroerrors.LoopZeroError{
 			Code:    "OPS_DEPLOY_FAILURE",
 			Message: fmt.Sprintf("baseline: json.MarshalIndent failed: %v", err),
 			Cause:   err,
 		}
 	}
-	out = append(out, '\n')                                // trailing newline for POSIX-friendly diffs
+	return append(out, '\n'), nil
+}
+
+// Save writes the baseline JSON to path with 0o644 perms.
+func Save(path string, b *Baseline) error {
+	out, err := Marshal(b)
+	if err != nil {
+		return err
+	}
 	if err := os.WriteFile(path, out, 0o644); err != nil { //nolint:gosec // operator-readable
 		return &loopzeroerrors.LoopZeroError{
 			Code:    "OPS_DEPLOY_FAILURE",
