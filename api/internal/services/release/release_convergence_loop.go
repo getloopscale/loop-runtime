@@ -6,7 +6,6 @@ package release
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -23,7 +22,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/events"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/services/syncrecovery"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -254,13 +253,7 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 				"environment", release.Environment, "error", nameErr)
 			return
 		}
-		if termErr := r.sync_.TerminateOperation(ctx, argoApp); termErr != nil {
-			r.logger.Error("release convergence: failed to terminate stuck operation",
-				"app", argoApp, "error", termErr)
-		} else {
-			r.logger.Info("release convergence: terminated stuck operation on timeout",
-				"app", argoApp, "release_id", release.ID)
-		}
+		syncrecovery.Terminate(ctx, r.sync_, argoApp, r.logger.With("release_id", release.ID, "reason", "sync_timeout"))
 		r.failRelease(ctx, release, "Sync timeout: service did not become healthy within the time limit")
 		return
 	}
@@ -510,6 +503,11 @@ func classifyAbortReason(reason string) string {
 	}
 }
 
+// convergenceSyncPolicy is the stuck-operation rule the convergence loop applies
+// across ticks: it retries once per tick rather than inside one call, so only the
+// termination threshold of the shared policy applies here.
+var convergenceSyncPolicy = syncrecovery.Policy{TerminateAfterStuck: 2}
+
 // maxSyncRetriggers bounds the number of times the convergence loop will
 // retrigger TriggerSync for a single release. Prevents infinite retry loops.
 const maxSyncRetriggers = 3
@@ -558,29 +556,18 @@ func (r *ReleaseConvergenceLoop) retriggerSyncIfNeeded(ctx context.Context, rele
 		// release ACTIVE timeout because their syncs were never re-tried
 		// successfully — the loop logged "sync retrigger failed" every poll
 		// for the full 5min sync_timeout window without ever calling
-		// TerminateOperation. The existing timeout-side TerminateOperation
-		// (line ~230) fires only AFTER failure; this new pre-failure path
+		// TerminateOperation. The timeout-side termination in verifyRelease
+		// fires only AFTER failure; this pre-failure path
 		// recovers without losing the release.
-		if errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress) {
-			// Count this specific failure mode in the retrigger counter.
-			// After 2 consecutive failures (counter increments to 2 after
-			// the first failed retrigger gets the counter to 1, this
-			// second time gets it to 2), attempt termination.
-			//
-			// Why 2: a single transient race is normal (operation completes
-			// between the check and the retrigger). 2 consecutive
-			// failures = the operation is stuck.
+		if syncrecovery.IsStuck(err) {
+			// Count the stuck failure in the same counter as a retrigger, so the
+			// policy's threshold is reached after two consecutive stuck ticks. One
+			// is a normal race (the operation completes between the status check and
+			// the retrigger); two means the lock is stuck.
 			counter.Add(1)
-			if counter.Load() >= 2 {
-				// Sprint B T1.1: TerminateOperation is now part of the SyncClient
-				// interface (was a duck-typed assertion pre-ADR D1).
-				if termErr := r.sync_.TerminateOperation(ctx, argoAppName); termErr != nil {
-					r.logger.Error("release convergence: failed to terminate stuck sync operation",
-						"release_id", release.ID, "app", argoAppName, "error", termErr)
-				} else {
-					r.logger.Info("release convergence: terminated stuck sync operation (L21 — pre-timeout recovery)",
-						"release_id", release.ID, "app", argoAppName, "consecutive_failures", counter.Load())
-				}
+			if convergenceSyncPolicy.ShouldTerminate(int(counter.Load())) {
+				syncrecovery.Terminate(ctx, r.sync_, argoAppName,
+					r.logger.With("release_id", release.ID, "reason", "pre_timeout_recovery"))
 			}
 		}
 		return

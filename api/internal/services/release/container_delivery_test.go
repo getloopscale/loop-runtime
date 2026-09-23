@@ -675,3 +675,12 @@ func TestPhaseACreateRelease_MultiApp_PrimaryOnly(t *testing.T) {
 func (f *fakeReleaseStoreContainer) AppendSideEffect(_ context.Context, _ db.DBTX, _ string, _ map[string]any) error {
 	return nil
 }
+
+func TestContainerSyncPolicy_TerminatesOnlyBeforeTheFinalStuckAttempt(t *testing.T) {
+	if containerSyncPolicy.ShouldTerminate(containerSyncPolicy.MaxStuckAttempts - 2) {
+		t.Error("an earlier attempt must not cancel a peer's in-flight sync")
+	}
+	if !containerSyncPolicy.ShouldTerminate(containerSyncPolicy.MaxStuckAttempts - 1) {
+		t.Error("the stuck operation must be terminated before the final attempt")
+	}
+}

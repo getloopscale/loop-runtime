@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
@@ -544,5 +545,20 @@ func TestProjectDeleter_NoEnvTargets_FallbackSyncsTheProductionApplicationOfThis
 	}
 	if len(sync.syncedApps) != 1 || sync.syncedApps[0] != "tn-1-orphan-app-production" {
 		t.Errorf("fallback prune sync must target the tenant-project-production application; got %v", sync.syncedApps)
+	}
+}
+
+func TestPruneSyncPolicy_BacksOffOneThenThreeSeconds(t *testing.T) {
+	if got := pruneSyncPolicy.Backoff(1, false); got != time.Second {
+		t.Errorf("first backoff = %v, want 1s", got)
+	}
+	if got := pruneSyncPolicy.Backoff(2, true); got != 3*time.Second {
+		t.Errorf("second backoff = %v, want 3s", got)
+	}
+}
+
+func TestPruneSyncPolicy_TerminatesOnTheFirstStuckFailure(t *testing.T) {
+	if !pruneSyncPolicy.ShouldTerminate(1) {
+		t.Error("a project being deleted has no peer sync worth waiting for; terminate at once")
 	}
 }

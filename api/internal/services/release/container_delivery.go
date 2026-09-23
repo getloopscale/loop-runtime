@@ -6,7 +6,6 @@ package release
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -18,7 +17,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/events"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/services/syncrecovery"
 	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -510,82 +509,27 @@ func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build d
 	})
 }
 
+// containerSyncPolicy is the budget container delivery gives the initial sync.
+//
+// A stuck operation gets 8 attempts on a 5s linear cadence (~35s): during a
+// burst of deploys the operation lock is usually a peer's sync finishing, and
+// the SyncSerializer already serialises per application, so waiting drains the
+// queue. The stuck operation is terminated only before the FINAL attempt, so an
+// earlier attempt never cancels a peer's legitimate sync (V9 dogfood 2026-05-29/30).
+// Any other failure keeps a 3-attempt exponential budget (1s, 2s) so a genuine
+// outage fails fast.
+var containerSyncPolicy = syncrecovery.Policy{
+	MaxAttempts:         3,
+	MaxStuckAttempts:    8,
+	TerminateAfterStuck: 7,
+	Backoff: func(failures int, stuck bool) time.Duration {
+		if stuck {
+			return 5 * time.Second
+		}
+		return time.Duration(1<<uint(failures-1)) * time.Second
+	},
+}
+
 func (c *ContainerDeliveryActivator) triggerSyncWithRetry(ctx context.Context, appName string) error {
-	// V9 dogfood 2026-05-29 unblock: per-error-type budget. Recoverable
-	// errors (ErrSyncOperationInProgress) get 8 attempts with linear
-	// backoff (let app-level lock queue drain naturally during dogfood
-	// concurrency); non-recoverable errors keep the 3-attempt budget
-	// (faster fail for genuine failures, preserves test contracts).
-	const (
-		maxAttempts = 3 // for non-recoverable errors (fail-fast on connection-refused etc)
-		// V9 dogfood 2026-05-30 final tuning: 8 attempts × 5s linear
-		// backoff = 40s per activation budget. Combined with reaper
-		// maxActivationAttempts=10 × Interval=30s tick: ~5min total
-		// in-flight budget per build. The SyncSerializer already
-		// serializes per-app at the API layer; this budget covers
-		// cumulative wait for upstream in-flight syncs.
-		maxAttemptsSyncInProgress  = 8
-		opInProgressLinearBackoffS = 5
-	)
-	var lastErr error
-	for attempt := 0; ; attempt++ {
-		err := c.sync.TriggerSync(ctx, appName)
-		if err == nil {
-			return nil
-		}
-		lastErr = err
-
-		isOpInProgress := errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress)
-		budget := maxAttempts
-		if isOpInProgress {
-			budget = maxAttemptsSyncInProgress
-		}
-		if attempt+1 >= budget {
-			break
-		}
-
-		// MEET-2026-03-29-019 + V9 concurrency-aware: for stuck
-		// operations only terminate on the SECOND-TO-LAST attempt
-		// (earlier attempts back off and let queue drain without
-		// canceling a peer's sync; final attempt fails fast).
-		if isOpInProgress && attempt == budget-2 {
-			slog.Warn("argocd sync operation in progress — terminating stuck operation before final retry",
-				"app", appName, "attempt", attempt+1)
-			type terminator interface {
-				TerminateOperation(ctx context.Context, appName string) error
-			}
-			if t, ok := c.sync.(terminator); ok {
-				if termErr := t.TerminateOperation(ctx, appName); termErr != nil {
-					slog.Error("failed to terminate stuck argocd operation",
-						"app", appName, "error", termErr)
-				} else {
-					slog.Info("terminated stuck argocd operation",
-						"app", appName)
-				}
-			}
-		} else if isOpInProgress {
-			slog.Info("argocd sync operation in progress — backing off to let queue drain",
-				"app", appName, "attempt", attempt+1)
-		} else {
-			slog.Warn("argocd trigger sync failed, retrying",
-				"app", appName, "attempt", attempt+1, "error", err)
-		}
-
-		var backoff time.Duration
-		if isOpInProgress {
-			// Linear backoff (predictable cadence): 5s, 5s, 5s, 5s, 5s, 5s, 5s
-			// Total budget: ~35s for 8 attempts = fits in 60s service timeout
-			// budget while letting an ArgoCD sync queue of ~5-7 syncs drain.
-			backoff = time.Duration(opInProgressLinearBackoffS) * time.Second
-		} else {
-			// Exponential backoff (existing behavior): 1s, 2s, 4s
-			backoff = time.Duration(1<<uint(attempt)) * time.Second
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(backoff):
-		}
-	}
-	return lastErr
+	return syncrecovery.Trigger(ctx, c.sync, appName, containerSyncPolicy, slog.Default())
 }

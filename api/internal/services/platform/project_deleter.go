@@ -5,7 +5,6 @@ package platform
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -15,7 +14,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/api/internal/services/syncrecovery"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
@@ -23,12 +22,6 @@ import (
 // Used by ProjectDeleter to stop running builds during project deletion.
 type WorkflowCanceller interface {
 	Cancel(ctx context.Context, namespace, workflowID string) error
-}
-
-// ArgoSyncer triggers ArgoCD sync for an application.
-// Used by ProjectDeleter to trigger prune after gitops manifest removal.
-type ArgoSyncer interface {
-	TriggerSync(ctx context.Context, appName string) error
 }
 
 // ProjectDeleterDeps holds all dependencies for ProjectDeleter.
@@ -40,8 +33,8 @@ type ProjectDeleterDeps struct {
 	ScalingStore      store.ScalingStore // nil-safe: when nil, skips app_scaling_config cascade
 	Locker            deploycontracts.EnvironmentLocker
 	GitOps            deploycontracts.GitOpsPusher
-	WorkflowCanceller WorkflowCanceller // nil-safe: skips workflow cancel if not set
-	Sync              ArgoSyncer        // nil-safe: skips ArgoCD sync trigger if not set
+	WorkflowCanceller WorkflowCanceller   // nil-safe: skips workflow cancel if not set
+	Sync              syncrecovery.Syncer // nil-safe: skips ArgoCD sync trigger if not set
 }
 
 // ProjectDeleteProjectStore defines the project store operations needed by ProjectDeleter.
@@ -61,7 +54,7 @@ type ProjectDeleter struct {
 	locker            deploycontracts.EnvironmentLocker
 	gitops            deploycontracts.GitOpsPusher
 	workflowCanceller WorkflowCanceller
-	sync              ArgoSyncer
+	sync              syncrecovery.Syncer
 }
 
 // NewProjectDeleter creates a new ProjectDeleter with all dependencies injected.
@@ -167,20 +160,7 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req ports.ProjectDeleteInpu
 				}
 				syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
 				defer syncCancel()
-				syncErr := d.sync.TriggerSync(syncCtx, argoAppName)
-				if syncErr != nil && errors.Is(syncErr, loopzeroerrors.ErrSyncOperationInProgress) {
-					slog.Warn("argocd sync stuck on fallback — terminating + retry",
-						"app", argoAppName)
-					type terminator interface {
-						TerminateOperation(ctx context.Context, appName string) error
-					}
-					if t, ok := d.sync.(terminator); ok {
-						if termErr := t.TerminateOperation(syncCtx, argoAppName); termErr == nil {
-							time.Sleep(1 * time.Second)
-							syncErr = d.sync.TriggerSync(syncCtx, argoAppName)
-						}
-					}
-				}
+				syncErr := syncrecovery.Trigger(syncCtx, d.sync, argoAppName, fallbackPruneSyncPolicy, slog.Default())
 				if syncErr != nil {
 					slog.Warn("argocd sync after fallback delete failed",
 						"app", argoAppName, "error", syncErr)
@@ -303,9 +283,11 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req ports.Projec
 		// because manifests-removed-from-Git + resources-still-running is identically
 		// broken state (ArgoCD detect drift, can't reconcile).
 		//
-		// Fix: 3-attempt exponential backoff (1s/3s/9s ≈ 13s total) to ride out
-		// transient auth/network blips; if still failing, return error → caller emits
-		// 5xx + user sees "delete partially failed, retry".
+		// Fix: pruneSyncPolicy retries 3 times (1s, then 3s) to ride out transient
+		// auth/network blips and terminates a stuck operation left by a broken
+		// Rollout (finding-2026-05-26-dogfood-cleanup-prove-death-race); if still
+		// failing, return error → caller emits 5xx + user sees "delete partially
+		// failed, retry".
 		argoAppName, nameErr := naming.ArgoAppName(req.TenantID, gitopsProjectID, env)
 		if nameErr != nil {
 			return cancelledBuilds, fmt.Errorf("project delete: prune sync: %w", nameErr)
@@ -313,51 +295,10 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req ports.Projec
 		syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
 		defer syncCancel()
 
-		var lastErr error
-		for attempt := 1; attempt <= 3; attempt++ {
-			lastErr = d.sync.TriggerSync(syncCtx, argoAppName)
-			if lastErr == nil {
-				slog.Info("argocd sync triggered after gitops remove",
-					"app", argoAppName, "project", req.ProjectName, "environment", env,
-					"attempt", attempt)
-				break
-			}
-			// MEET-2026-03-29-019 + finding-2026-05-26-dogfood-cleanup-prove-death-race:
-			// when ArgoCD app has a stuck operation (e.g., previous broken
-			// Rollout left operationState=Failed), TriggerSync returns
-			// ErrSyncOperationInProgress and retry alone hits the same wall.
-			// Terminate stuck op BEFORE retrying so prune can proceed and
-			// orphan K8s resources for THIS project get cleaned up.
-			if errors.Is(lastErr, loopzeroerrors.ErrSyncOperationInProgress) {
-				slog.Warn("argocd sync stuck — terminating operation before retry",
-					"app", argoAppName, "attempt", attempt)
-				type terminator interface {
-					TerminateOperation(ctx context.Context, appName string) error
-				}
-				if t, ok := d.sync.(terminator); ok {
-					if termErr := t.TerminateOperation(syncCtx, argoAppName); termErr != nil {
-						slog.Error("failed to terminate stuck argocd operation",
-							"app", argoAppName, "error", termErr)
-					} else {
-						slog.Info("terminated stuck argocd operation",
-							"app", argoAppName)
-					}
-				}
-			} else {
-				slog.Warn("argocd sync attempt failed",
-					"app", argoAppName, "attempt", attempt, "error", lastErr)
-			}
-			if attempt < 3 {
-				backoff := time.Duration(1<<uint(attempt-1)) * 3 * time.Second // 3s, 6s
-				if attempt == 1 {
-					backoff = 1 * time.Second // 1s, 3s, 9s — fast first retry
-				}
-				select {
-				case <-syncCtx.Done():
-					lastErr = syncCtx.Err()
-				case <-time.After(backoff):
-				}
-			}
+		lastErr := syncrecovery.Trigger(syncCtx, d.sync, argoAppName, pruneSyncPolicy, slog.Default())
+		if lastErr == nil {
+			slog.Info("argocd sync triggered after gitops remove",
+				"app", argoAppName, "project", req.ProjectName, "environment", env)
 		}
 		if lastErr != nil {
 			return cancelledBuilds, fmt.Errorf("project delete: argocd sync failed after 3 attempts for %s (gitops manifests removed but K8s resources remain — retry delete or sync ArgoCD app %s manually): %w",
@@ -366,6 +307,32 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req ports.Projec
 	}
 
 	return cancelledBuilds, nil
+}
+
+// pruneSyncPolicy drives the prune sync after a project's manifests leave GitOps.
+// Every stuck failure terminates the operation immediately: the application is
+// being emptied, so there is no peer sync worth waiting for. Three attempts with
+// a 1s-then-3s backoff ride out a transient auth or network blip.
+var pruneSyncPolicy = syncrecovery.Policy{
+	MaxAttempts:         3,
+	MaxStuckAttempts:    3,
+	TerminateAfterStuck: 1,
+	Backoff: func(failures int, _ bool) time.Duration {
+		backoff := time.Second
+		for i := 1; i < failures; i++ {
+			backoff *= 3
+		}
+		return backoff
+	},
+}
+
+// fallbackPruneSyncPolicy is the best-effort variant used when no environment
+// target exists: one attempt, plus one retry after terminating a stuck operation.
+var fallbackPruneSyncPolicy = syncrecovery.Policy{
+	MaxAttempts:         1,
+	MaxStuckAttempts:    2,
+	TerminateAfterStuck: 1,
+	Backoff:             func(int, bool) time.Duration { return time.Second },
 }
 
 // cancelWorkflows cancels Argo Workflows for cancelled builds (best-effort).
