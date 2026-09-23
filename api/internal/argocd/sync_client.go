@@ -5,11 +5,11 @@
 package argocd
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -120,22 +120,19 @@ func NewSyncClient(cfg SyncClientConfig) (*SyncClient, error) {
 // GET /api/v1/session/userinfo. Returns ErrDeployServiceAuthFailed if invalid.
 // Called at API startup to fail fast with a clear error (MEET-013 Phase 1.7).
 func (c *SyncClient) ValidateToken(ctx context.Context) error {
-	url := fmt.Sprintf("%s/api/v1/session/userinfo", c.baseURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return fmt.Errorf("validate token: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
-
-	resp, err := c.client.Do(req)
-	if err != nil {
+	resp, err := c.do(ctx, http.MethodGet, "/api/v1/session/userinfo", nil)
+	var statusErr *apiStatusError
+	switch {
+	case errors.As(err, &statusErr):
+		// Only a rejected token fails validation; any other status says the
+		// service answered, which is what this startup check establishes.
+		return nil
+	case errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed):
+		return err
+	case err != nil:
 		return fmt.Errorf("validate token: deployment sync service unreachable: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return loopzeroerrors.ErrDeployServiceAuthFailed
-	}
+	drainAndClose(resp)
 	return nil
 }
 
@@ -190,73 +187,38 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 			trace.WithAttributes(attribute.String("error", err.Error())))
 	}
 
-	url := fmt.Sprintf("%s/api/v1/applications/%s/sync", c.baseURL, appName)
+	resp, err := c.do(ctx, http.MethodPost, "/api/v1/applications/"+appName+"/sync", strings.NewReader(`{"prune": true}`))
+	if err == nil {
+		drainAndClose(resp)
+		return nil
+	}
+	syncErr := syncError(appName, err)
+	span.RecordError(syncErr)
+	span.SetStatus(codes.Error, syncErr.Error())
+	return syncErr
+}
 
-	body := strings.NewReader(`{"prune": true}`)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
-	if err != nil {
-		return fmt.Errorf("argocd sync: create request: %w", err)
+// syncError maps a failed sync POST to the error its callers act on.
+func syncError(appName string, err error) error {
+	var statusErr *apiStatusError
+	if !errors.As(err, &statusErr) {
+		return withOp("argocd sync", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return fmt.Errorf("argocd sync: request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		// CHG-2026-04-30-DOGFOOD-LOCAL-HEAL NEW-15: signal the token provider
-		// to mint a fresh token. KubeMintingTokenProvider implements
-		// AuthFailureNotifier; StaticTokenProvider does not — it's a no-op.
-		// The next caller (or the circuit-breaker retry) picks up the new
-		// token via tokenProvider.Token() in subsequent requests.
-		if notifier, ok := c.tokenProvider.(AuthFailureNotifier); ok {
-			notifier.OnAuthFailure()
-		}
-		span.RecordError(loopzeroerrors.ErrDeployServiceAuthFailed)
-		span.SetStatus(codes.Error, "auth failed")
-		return loopzeroerrors.ErrDeployServiceAuthFailed
-	}
-	if resp.StatusCode == 404 {
-		syncErr := fmt.Errorf("argocd sync: application %q not found: %w", appName, deploycontracts.ErrSyncApplicationNotFound)
-		span.RecordError(syncErr)
-		span.SetStatus(codes.Error, syncErr.Error())
-		return syncErr
-	}
-	// MEET-2026-03-29-019: Return typed error for 409 so callers can
-	// distinguish "operation in progress" from other failures.
-	// This error must NOT count toward the circuit breaker threshold.
-	if resp.StatusCode == 409 {
-		span.RecordError(loopzeroerrors.ErrSyncOperationInProgress)
-		span.SetStatus(codes.Error, "sync operation in progress")
+	switch {
+	case statusErr.code == http.StatusNotFound:
+		return fmt.Errorf("argocd sync: application %q not found: %w", appName, deploycontracts.ErrSyncApplicationNotFound)
+	// MEET-2026-03-29-019: a typed error for 409 lets callers tell "operation
+	// in progress" from other failures; it must NOT count toward the circuit
+	// breaker threshold.
+	case statusErr.code == http.StatusConflict,
+		// V9 dogfood 2026-05-29: ArgoCD returns 400 (not 409) for "another
+		// operation is already in progress"; the callers already retry with
+		// TerminateOperation on ErrSyncOperationInProgress.
+		statusErr.code == http.StatusBadRequest && strings.Contains(statusErr.body, "another operation is already in progress"):
 		return loopzeroerrors.ErrSyncOperationInProgress
+	default:
+		return fmt.Errorf("argocd sync: %w", err)
 	}
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
-		// V9 dogfood 2026-05-29: ArgoCD returns 400 (not 409) for
-		// "another operation is already in progress" — the dogfood
-		// concurrency races multiple deploys against the same shared
-		// `e2e-tenant-production` app. Legacy status-only check
-		// missed 400; callers (container_delivery.go +
-		// project_deleter.go) ALREADY have retry-with-
-		// TerminateOperation for ErrSyncOperationInProgress, so we
-		// map this status+body combination to the same typed error.
-		if bytes.Contains(respBody, []byte("another operation is already in progress")) {
-			span.RecordError(loopzeroerrors.ErrSyncOperationInProgress)
-			span.SetStatus(codes.Error, "sync operation in progress (status 400)")
-			return loopzeroerrors.ErrSyncOperationInProgress
-		}
-		syncErr := fmt.Errorf("argocd sync: status %d: %s", resp.StatusCode, string(respBody))
-		span.RecordError(syncErr)
-		span.SetStatus(codes.Error, syncErr.Error())
-		return syncErr
-	}
-
-	return nil
 }
 
 // MEET-2026-04-22-058 (B12): removeSkipReconcile deleted. The skip-reconcile
@@ -281,36 +243,7 @@ func (c *SyncClient) hardRefresh(ctx context.Context, appName string) error {
 	refreshCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	url := fmt.Sprintf("%s/api/v1/applications/%s?refresh=hard", c.baseURL, appName)
-	req, err := http.NewRequestWithContext(refreshCtx, http.MethodGet, url, nil)
-	if err != nil {
-		return fmt.Errorf("hard refresh: create request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("hard refresh: request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		// Same auth-failure signal path as TriggerSync.
-		if notifier, ok := c.tokenProvider.(AuthFailureNotifier); ok {
-			notifier.OnAuthFailure()
-		}
-		return loopzeroerrors.ErrDeployServiceAuthFailed
-	}
-	if resp.StatusCode == 404 {
-		return fmt.Errorf("hard refresh: application %q not found", appName)
-	}
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("hard refresh: status %d: %s", resp.StatusCode, string(respBody))
-	}
-	// Drain body so HTTP keep-alive can reuse the connection.
-	_, _ = io.Copy(io.Discard, resp.Body)
-	return nil
+	return c.refresh(refreshCtx, "hard refresh", appName, "hard")
 }
 
 // ForceReconcile patches the Application's metadata.annotations to set
@@ -365,35 +298,21 @@ func (c *SyncClient) ForceReconcile(ctx context.Context, appName string) error {
 	//   "If refresh parameter is provided, it can take values:
 	//    - normal: compare desired vs live, update status
 	//    - hard:   re-fetch repo + compare + update status (cache invalidation)"
-	url := fmt.Sprintf("%s/api/v1/applications/%s?refresh=normal", c.baseURL, appName)
+	return c.refresh(reconcileCtx, "force reconcile", appName, "normal")
+}
 
-	req, err := http.NewRequestWithContext(reconcileCtx, http.MethodGet, url, nil)
-	if err != nil {
-		return fmt.Errorf("force reconcile: create request: %w", err)
+// refresh GETs the Application with ?refresh=<mode>, which makes ArgoCD
+// recompute (hard also re-fetches the repo). Nothing is mutated.
+func (c *SyncClient) refresh(ctx context.Context, op, appName, mode string) error {
+	resp, err := c.do(ctx, http.MethodGet, "/api/v1/applications/"+appName+"?refresh="+mode, nil)
+	var statusErr *apiStatusError
+	switch {
+	case errors.As(err, &statusErr) && statusErr.code == http.StatusNotFound:
+		return fmt.Errorf("%s: application %q not found", op, appName)
+	case err != nil:
+		return withOp(op, err)
 	}
-	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("force reconcile: request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		if notifier, ok := c.tokenProvider.(AuthFailureNotifier); ok {
-			notifier.OnAuthFailure()
-		}
-		return loopzeroerrors.ErrDeployServiceAuthFailed
-	}
-	if resp.StatusCode == 404 {
-		return fmt.Errorf("force reconcile: application %q not found", appName)
-	}
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("force reconcile: status %d: %s", resp.StatusCode, string(respBody))
-	}
-	// Drain body so HTTP keep-alive can reuse the connection.
-	_, _ = io.Copy(io.Discard, resp.Body)
+	drainAndClose(resp)
 	return nil
 }
 
@@ -401,35 +320,15 @@ func (c *SyncClient) ForceReconcile(ctx context.Context, appName string) error {
 // MEET-2026-03-29-019: Used when TriggerSync returns ErrSyncOperationInProgress
 // and the operation is stuck. This clears the operation lock so a new sync can start.
 func (c *SyncClient) TerminateOperation(ctx context.Context, appName string) error {
-	url := fmt.Sprintf("%s/api/v1/applications/%s/operation", c.baseURL, appName)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
-	if err != nil {
-		return fmt.Errorf("argocd terminate: create request: %w", err)
+	resp, err := c.do(ctx, http.MethodDelete, "/api/v1/applications/"+appName+"/operation", nil)
+	var statusErr *apiStatusError
+	switch {
+	case errors.As(err, &statusErr) && statusErr.code == http.StatusNotFound:
+		return nil // no operation is running — idempotent success
+	case err != nil:
+		return withOp("argocd terminate", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
-	// B11 (CHG-2026-04-23): ArgoCD rejects DELETE without Content-Type
-	// with HTTP 415 "Invalid content type", blocking stuck-operation recovery.
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("argocd terminate: request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return loopzeroerrors.ErrDeployServiceAuthFailed
-	}
-	// 404 means no operation is running — idempotent success
-	if resp.StatusCode == 404 {
-		return nil
-	}
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("argocd terminate: status %d: %s", resp.StatusCode, string(respBody))
-	}
-
+	drainAndClose(resp)
 	return nil
 }
 
@@ -478,30 +377,11 @@ type resourceStatus struct {
 // Deployments matching those app names — so one degraded app doesn't block others.
 // Exported for use by the ReleaseConvergenceLoop (MEET-2026-03-27-012).
 func (c *SyncClient) GetAppStatus(ctx context.Context, appName string, deployedApps []string) (synced bool, healthy bool, err error) {
-	url := fmt.Sprintf("%s/api/v1/applications/%s", c.baseURL, appName)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	resp, err := c.getApplication(ctx, "get app status", appName)
 	if err != nil {
 		return false, false, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return false, false, fmt.Errorf("get app status: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return false, false, loopzeroerrors.ErrDeployServiceAuthFailed
-	}
-	if resp.StatusCode == 404 {
-		return false, false, fmt.Errorf("application %q not found", appName)
-	}
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return false, false, fmt.Errorf("get app status %d: %s", resp.StatusCode, string(respBody))
-	}
+	defer drainAndClose(resp)
 
 	var app struct {
 		Status struct {
@@ -566,26 +446,11 @@ func (c *SyncClient) GetAppStatus(ctx context.Context, appName string, deployedA
 // Used to verify the synced revision matches the expected commit SHA.
 // MEET-2026-03-27-012 Phase 1.2: prevents silent wrong-version activation.
 func (c *SyncClient) GetSyncRevision(ctx context.Context, appName string) (string, error) {
-	url := fmt.Sprintf("%s/api/v1/applications/%s", c.baseURL, appName)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	resp, err := c.getApplication(ctx, "get sync revision", appName)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("get sync revision: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return "", loopzeroerrors.ErrDeployServiceAuthFailed
-	}
-	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("get sync revision: status %d", resp.StatusCode)
-	}
+	defer drainAndClose(resp)
 
 	var app struct {
 		Status struct {
@@ -598,4 +463,82 @@ func (c *SyncClient) GetSyncRevision(ctx context.Context, appName string) (strin
 		return "", fmt.Errorf("decode sync revision: %w", err)
 	}
 	return app.Status.Sync.Revision, nil
+}
+
+// getApplication GETs one Application; a missing one is reported by name.
+func (c *SyncClient) getApplication(ctx context.Context, op, appName string) (*http.Response, error) {
+	resp, err := c.do(ctx, http.MethodGet, "/api/v1/applications/"+appName, nil)
+	var statusErr *apiStatusError
+	switch {
+	case errors.As(err, &statusErr) && statusErr.code == http.StatusNotFound:
+		return nil, fmt.Errorf("%s: application %q not found", op, appName)
+	case err != nil:
+		return nil, withOp(op, err)
+	}
+	return resp, nil
+}
+
+// maxErrorBody bounds how much of an error response is kept in an error.
+const maxErrorBody = 4 << 10
+
+// apiStatusError is an HTTP status >= 400 from the ArgoCD API, other than an
+// authentication failure, with a bounded snippet of the response body.
+type apiStatusError struct {
+	code int
+	body string
+}
+
+func (e *apiStatusError) Error() string {
+	return fmt.Sprintf("status %d: %s", e.code, e.body)
+}
+
+// do sends one authenticated request to the ArgoCD API and applies the
+// handling every call shares. A 401/403 notifies the token provider — so a
+// minting provider refreshes an expired token whichever call observed it —
+// and returns ErrDeployServiceAuthFailed. Any other status >= 400 is an
+// *apiStatusError carrying the start of the body. On success the caller owns
+// resp.Body.
+func (c *SyncClient) do(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.tokenProvider.Token())
+	// B11 (CHG-2026-04-23): ArgoCD rejects a DELETE without Content-Type with
+	// HTTP 415, and the sync POST carries a JSON body.
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	if resp.StatusCode < http.StatusBadRequest {
+		return resp, nil
+	}
+	defer drainAndClose(resp)
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		// CHG-2026-04-30-DOGFOOD-LOCAL-HEAL NEW-15: the minting provider mints
+		// a fresh token; the static one is not a notifier.
+		if notifier, ok := c.tokenProvider.(AuthFailureNotifier); ok {
+			notifier.OnAuthFailure()
+		}
+		return nil, loopzeroerrors.ErrDeployServiceAuthFailed
+	}
+	snippet, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
+	return nil, &apiStatusError{code: resp.StatusCode, body: string(snippet)}
+}
+
+// drainAndClose reads what is left of a body so the connection can be reused.
+func drainAndClose(resp *http.Response) {
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+}
+
+// withOp names the operation on an error, except the credential rejection,
+// which callers match by identity and is returned as-is.
+func withOp(op string, err error) error {
+	if errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed) {
+		return err
+	}
+	return fmt.Errorf("%s: %w", op, err)
 }
