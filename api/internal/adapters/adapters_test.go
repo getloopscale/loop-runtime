@@ -76,8 +76,9 @@ func TestPgxRowAdapter_Scan_SuccessReturnsNil(t *testing.T) {
 
 // fakeBuildStore implements db.BuildStore with minimal stub methods.
 type fakeBuildStore struct {
-	build *db.Build
-	apps  []db.BuildAppSpec
+	build   *db.Build
+	apps    []db.BuildAppSpec
+	appsErr error
 }
 
 func (f *fakeBuildStore) GetByID(_ context.Context, id string) (*db.Build, error) {
@@ -101,7 +102,7 @@ func (f *fakeBuildStore) GetByIDForTenant(ctx context.Context, tenantID, buildID
 }
 
 func (f *fakeBuildStore) GetBuildApps(_ context.Context, _ string) ([]db.BuildAppSpec, error) {
-	return f.apps, nil
+	return f.apps, f.appsErr
 }
 
 // Stubs for interface satisfaction (not used in these tests).

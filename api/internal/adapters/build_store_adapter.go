@@ -6,6 +6,8 @@ package adapters
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"time"
 
 	buildroutes "github.com/getloopscale/loopzero/api/internal/routes/builds"
@@ -103,6 +105,11 @@ func (a *StatusBuildStoreAdapter) ListByProject(ctx context.Context, tenantID, p
 	}
 	result := make([]status.StatusBuild, len(builds))
 	for i, b := range builds {
+		scaling, serr := extractScalingFromAppsSpec(b.AppsSpec)
+		if serr != nil {
+			slog.WarnContext(ctx, "build status: apps_spec does not decode; scaling omitted",
+				"build_id", b.ID, "tenant_id", tenantID, "error", serr)
+		}
 		result[i] = status.StatusBuild{
 			ID:              b.ID,
 			Environment:     b.Environment,
@@ -112,21 +119,22 @@ func (a *StatusBuildStoreAdapter) ListByProject(ctx context.Context, tenantID, p
 			FinishedAt:      b.FinishedAt,
 			DurationSeconds: b.DurationSeconds,
 			ErrorMessage:    b.ErrorMessage,
-			Scaling:         extractScalingFromAppsSpec(b.AppsSpec),
+			Scaling:         scaling,
 		}
 	}
 	return result, nil
 }
 
 // extractScalingFromAppsSpec parses the first app's autoscaling config from the
-// build's apps_spec JSON. Returns nil if no autoscaling is configured.
-func extractScalingFromAppsSpec(appsSpec json.RawMessage) *status.StatusBuildScaling {
+// build's apps_spec JSON. Returns (nil, nil) when no autoscaling is configured
+// and an error when the stored value is not the array of apps it should be.
+func extractScalingFromAppsSpec(appsSpec json.RawMessage) (*status.StatusBuildScaling, error) {
 	if len(appsSpec) == 0 {
-		return nil
+		return nil, nil
 	}
 	var apps []db.BuildAppSpec
 	if err := json.Unmarshal(appsSpec, &apps); err != nil {
-		return nil
+		return nil, fmt.Errorf("decode apps_spec: %w", err)
 	}
 	// Use the first app with autoscaling configured (matches Apps[0] pattern).
 	for _, app := range apps {
@@ -134,10 +142,10 @@ func extractScalingFromAppsSpec(appsSpec json.RawMessage) *status.StatusBuildSca
 			return &status.StatusBuildScaling{
 				MinReplicas: app.Autoscaling.MinReplicas,
 				MaxReplicas: app.Autoscaling.MaxReplicas,
-			}
+			}, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // BuildListStoreAdapter implements routes.BuildListStore using db.BuildStore.
@@ -152,6 +160,14 @@ func (a *BuildListStoreAdapter) ListByProjectAndEnv(ctx context.Context, tenantI
 	}
 	result := make([]buildroutes.BuildListItem, len(builds))
 	for i, b := range builds {
+		apps, aerr := decodeAppsSpecForListing(b.AppsSpec)
+		if aerr != nil {
+			// apps_spec is a display denormalization; the row still lists, but
+			// a spec that does not decode is recorded with the build it names
+			// rather than shown as "no apps".
+			slog.WarnContext(ctx, "build list: apps_spec does not decode; apps omitted",
+				"build_id", b.ID, "tenant_id", tenantID, "error", aerr)
+		}
 		result[i] = buildroutes.BuildListItem{
 			ID:              b.ID,
 			ProjectID:       b.ProjectID,
@@ -164,44 +180,38 @@ func (a *BuildListStoreAdapter) ListByProjectAndEnv(ctx context.Context, tenantI
 			FinishedAt:      b.FinishedAt,
 			DurationSeconds: b.DurationSeconds,
 			ErrorMessage:    b.ErrorMessage,
-			// T5.3 LIVE-bug iter 20 (2026-06-08): parse apps_spec JSONB
-			// → []routes.BuildAppInfo. Empty/invalid JSON resolves to nil
-			// slice (omitempty drops it from the JSON response). Parse
-			// errors are silently swallowed because apps_spec is a
-			// best-effort denormalization for display — the build itself
-			// is the source of truth, and the dashboard renders empty
-			// apps lists gracefully via the appsFromBuild?.length guard.
-			Apps: decodeAppsSpecForListing(b.AppsSpec),
+			Apps:            apps,
 		}
 	}
 	return result, total, nil
 }
 
 // decodeAppsSpecForListing parses a build's apps_spec JSONB column into
-// the route-level []routes.BuildAppInfo slice for serialization. Returns
-// nil on empty/invalid input so the omitempty JSON tag drops the field.
+// the route-level []routes.BuildAppInfo slice for serialization. Empty input
+// is (nil, nil) so the omitempty JSON tag drops the field; a value that is not
+// an array of apps is an error for the caller to record.
 // loopzero.yaml apps schema: [{ "name": "...", "type": "...", "port": N,
 // "rendering": "..." }] — we surface only name + type per the dashboard
 // Apps card contract (BuildAppInfo in api/internal/routes/builds.go).
-func decodeAppsSpecForListing(raw json.RawMessage) []buildroutes.BuildAppInfo {
+func decodeAppsSpecForListing(raw json.RawMessage) ([]buildroutes.BuildAppInfo, error) {
 	if len(raw) == 0 {
-		return nil
+		return nil, nil
 	}
 	var parsed []struct {
 		Name string `json:"name"`
 		Type string `json:"type"`
 	}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return nil
+		return nil, fmt.Errorf("decode apps_spec: %w", err)
 	}
 	if len(parsed) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := make([]buildroutes.BuildAppInfo, len(parsed))
 	for i, p := range parsed {
 		out[i] = buildroutes.BuildAppInfo{Name: p.Name, Type: p.Type}
 	}
-	return out
+	return out, nil
 }
 
 // ListEnvsForProject delegates to the underlying db.BuildStore. Post

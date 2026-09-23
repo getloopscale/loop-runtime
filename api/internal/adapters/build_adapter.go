@@ -5,6 +5,7 @@ package adapters
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
@@ -104,8 +105,12 @@ func (a *BuildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID s
 	if build.FinishedAt != nil {
 		resp.FinishedAt = build.FinishedAt.UTC().Format(time.RFC3339)
 	}
-	// Populate apps from stored spec
-	apps, _ := a.BuildStore.GetBuildApps(ctx, buildID)
+	// Populate apps from stored spec. A failed read is an error, not an empty
+	// app list: the response would otherwise assert something unobserved.
+	apps, err := a.BuildStore.GetBuildApps(ctx, buildID)
+	if err != nil {
+		return nil, fmt.Errorf("build status %s: read apps: %w", buildID, err)
+	}
 	for _, app := range apps {
 		resp.Apps = append(resp.Apps, builds.BuildAppInfo{
 			Name: app.Name,

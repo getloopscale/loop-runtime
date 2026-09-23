@@ -47,6 +47,10 @@ func (a *repoLookupAdapter) GetByProject(ctx context.Context, tenantID, projectN
 	return r.RepoFullName, r.InstallationID, nil
 }
 
+// correlationSHAPrefixLen is how much of the commit SHA the push correlation id
+// carries.
+const correlationSHAPrefixLen = 8
+
 // buildSubmitterAdapter bridges github.BuildSubmitter → build.BuildOrchestrator.
 type buildSubmitterAdapter struct {
 	orchestrator *build.BuildOrchestrator
@@ -56,6 +60,13 @@ type buildSubmitterAdapter struct {
 func (a *buildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req github.WebhookBuildRequest) error {
 	if req.LoopZeroYaml == nil {
 		return fmt.Errorf("no loopzero.yaml parsed")
+	}
+	// The SHA comes from the webhook payload; it is validated here, before it
+	// is sliced into the correlation id, so a malformed delivery is refused
+	// instead of panicking the webhook goroutine.
+	if len(req.CommitSHA) < correlationSHAPrefixLen {
+		return fmt.Errorf("auto-deploy: commit SHA %q for %s is shorter than %d characters",
+			req.CommitSHA, req.RepoFullName, correlationSHAPrefixLen)
 	}
 
 	// Sponsor LIVE-caught 2026-06-18: this conversion previously lived
@@ -83,7 +94,7 @@ func (a *buildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req 
 		CommitSHA:     req.CommitSHA,
 		Apps:          apps,
 		CreatedBy:     fmt.Sprintf("github-push:%s", req.SenderLogin),
-		CorrelationID: fmt.Sprintf("gh-push-%s-%s", req.RepoFullName, req.CommitSHA[:8]),
+		CorrelationID: fmt.Sprintf("gh-push-%s-%s", req.RepoFullName, req.CommitSHA[:correlationSHAPrefixLen]),
 	})
 	if err != nil {
 		return fmt.Errorf("build submit failed: %w", err)

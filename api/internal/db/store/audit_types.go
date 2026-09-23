@@ -23,6 +23,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 )
@@ -60,7 +61,10 @@ type AuditLogger struct {
 // adapter).
 func (a *AuditLogger) LogAudit(ctx context.Context, tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) error {
 	if a == nil || a.DB == nil {
-		return nil // nil-safe: silent no-op
+		// Nothing can be written without a database. Reporting it lets the
+		// caller log a lost audit row instead of believing it was recorded.
+		return fmt.Errorf("audit: no database wired, %s on %s/%s by %s was not recorded",
+			action, resourceType, resourceID, actor)
 	}
 	return WriteAuditLog(ctx, a.DB, AuditEntry{
 		TenantID:      tenantID,

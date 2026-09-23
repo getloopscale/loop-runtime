@@ -117,9 +117,12 @@ func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID stri
 			e.CreatedAt = r.CreatedAt.Time
 		}
 		if len(r.Metadata) > 0 {
-			// Match legacy: ignore unmarshal errors silently —
-			// metadata is best-effort enrichment, not load-bearing.
-			_ = json.Unmarshal(r.Metadata, &e.Metadata)
+			// Metadata is written as a JSON object. One that is not is a
+			// corrupt audit record, reported with the row it belongs to.
+			if err := json.Unmarshal(r.Metadata, &e.Metadata); err != nil {
+				return nil, 0, fmt.Errorf("audit: %s on %s/%s: metadata is not a JSON object: %w",
+					r.Action, r.ResourceType, r.ResourceID, err)
+			}
 		}
 		entries = append(entries, e)
 	}
