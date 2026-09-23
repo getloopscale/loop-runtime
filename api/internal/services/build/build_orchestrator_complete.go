@@ -157,16 +157,16 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	}
 
 	// Build should be in RELEASING state after Phase 1 (MEET-2026-03-26-008).
-	// Phase 2: Release activation via DeliveryActivator (MEET-2026-03-26-009).
-	// Dispatches to the appropriate DeliveryActivator implementation
-	// based on build plan. Each sub-phase acquires/releases its own lock.
+	// Phase 2: Release activation via the DeliveryActivator wired at the
+	// composition root (MEET-2026-03-26-009). Each sub-phase acquires and
+	// releases its own lock.
 	// Write CF KV routing entries for static apps BEFORE activation (Sprint 10).
 	// The assets are already in S3 at this point (uploaded by Argo Workflow).
 	// Writing KV early ensures the CF Worker serves the new version immediately,
 	// even if the ArgoCD sync (container delivery) takes longer or fails.
 	o.writeStaticRoutingEntries(ctx, build, result)
 
-	activationErr := o.delivery.Activate(ctx, activationBuildFrom(build), result)
+	activationErr := o.activate(ctx, build, result)
 
 	if activationErr != nil {
 		// BRC-002 fix: if the delivery activator already handled the failure

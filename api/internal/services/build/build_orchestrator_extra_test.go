@@ -11,6 +11,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/services/release"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -586,6 +587,7 @@ func TestBuildOrchestrator_OnBuildCompleted_SucceededBuild(t *testing.T) {
 		EventStore:     es,
 		Sync:           sync,
 		GitOps:         gitops,
+		Delivery:       containerDeliveryFor(rs, ets, es, sync, gitops),
 	})
 
 	err := orch.OnBuildCompleted(context.Background(), "bld-ok", deploycontracts.BuildCallbackRequest{
@@ -675,6 +677,7 @@ func TestBuildOrchestrator_RetryReleaseActivation_Success(t *testing.T) {
 		EventStore:     es,
 		Sync:           sync,
 		GitOps:         gitops,
+		Delivery:       containerDeliveryFor(rs, ets, es, sync, gitops),
 	})
 
 	err := orch.RetryReleaseActivation(context.Background(), build, deploycontracts.BuildCallbackRequest{
@@ -753,4 +756,26 @@ func TestBuildOrchestrator_SubmitBuild_ProjectCapRejection_PropagatesTypedError(
 	if !errors.As(err, &te) || te.Code != "PROJECTS_EXCEED_PLAN" {
 		t.Fatalf("SubmitBuild must propagate the typed PROJECTS_EXCEED_PLAN error unchanged; got %v", err)
 	}
+}
+
+func TestBuildOrchestrator_ActivationWithoutDeliveryFailsWithAWiringError(t *testing.T) {
+	orch := NewBuildOrchestrator(BuildOrchestratorDeps{})
+	build := &db.Build{ID: "bld-1", TenantID: "tn-1", ProjectID: "proj-1", Environment: "production"}
+
+	err := orch.activate(context.Background(), build, deploycontracts.BuildCallbackRequest{})
+
+	if !errors.Is(err, errDeliveryNotWired) {
+		t.Fatalf("want errDeliveryNotWired, got %v", err)
+	}
+}
+
+// containerDeliveryFor wires the production delivery activator over the same
+// fakes the orchestrator uses, so a test that reaches activation exercises the
+// real container delivery path, as the composition root does.
+func containerDeliveryFor(rs *fakeReleaseStoreContainer, ets *fakeEnvTargetStoreContainer, es *fakeEventStoreContainer,
+	sync *fakeSyncContainer, gitops *fakeGitOpsContainer) deploycontracts.DeliveryActivator {
+	return release.NewContainerDeliveryActivator(release.ContainerDeliveryDeps{
+		ReleaseStore: rs, EnvTargetStore: ets, EventStore: es,
+		Sync: sync, Locker: &fakeLockerContainer{}, GitOps: gitops,
+	})
 }

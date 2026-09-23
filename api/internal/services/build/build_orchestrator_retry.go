@@ -29,7 +29,7 @@ func (o *BuildOrchestrator) RetryReleaseActivation(ctx context.Context, build *d
 	// Phase 4A: Track retry amplification for release activation retries.
 	metrics.RetryAmplificationTotal.WithLabelValues("release_activation").Inc()
 
-	activationErr := o.delivery.Activate(ctx, activationBuildFrom(build), result)
+	activationErr := o.activate(ctx, build, result)
 	if activationErr != nil {
 		slog.Warn("retry release activation: Phase 2 failed, will retry on next tick",
 			"build_id", build.ID, "error", activationErr)

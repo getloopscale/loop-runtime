@@ -140,6 +140,21 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	// cap is wired on the API server's orchestrator (cmd/setup_orchestrator.go),
 	// which owns every project-creating path. If the controller is ever changed
 	// to submit/re-submit builds, wire SetProjectCapChecker here too.
+	// The controller activates builds through the reconcile loop, so it needs
+	// the same container delivery the API server wires; it used to receive it
+	// implicitly from a fallback inside NewBuildOrchestrator.
+	delivery := release.NewContainerDeliveryActivator(release.ContainerDeliveryDeps{
+		ReleaseStore:      releaseStore,
+		EnvTargetStore:    envTargetStore,
+		EventStore:        pgEventStore,
+		Sync:              syncClient,
+		Locker:            locker,
+		GitOps:            gitopsPusher,
+		GitReader:         gitopsPusher,
+		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
+		DeployEventStore:  store.NewDeployEventStoreSqlc(), // J-16 slice 3: deploy.succeeded outbox
+	})
+
 	orch := build.NewBuildOrchestrator(build.BuildOrchestratorDeps{
 		BuildStore:        buildStore,
 		ReleaseStore:      releaseStore,
@@ -150,6 +165,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		Sync:              syncClient,
 		Locker:            locker,
 		GitOps:            gitopsPusher,
+		Delivery:          delivery,
 		RegistryURL:       cfg.RegistryURL,
 		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
 		BaseDomain:        cfg.BaseDomain,

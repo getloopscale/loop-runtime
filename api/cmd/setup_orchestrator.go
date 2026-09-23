@@ -137,6 +137,29 @@ func setupOrchestrator(
 	scalingStore := store.NewPostgresScalingStore(dbAdapter)
 	scalingResolver := scaling.NewDBScalingResolver(scalingStore)
 
+	// One container delivery activator serves both build activation and
+	// rollback, so the two write through the same outbox and read manifests
+	// back with the same reader. It used to be built inside NewBuildOrchestrator
+	// as a fallback, which hid a concrete sqlc store in the build package and
+	// left rollback on a separate inline copy of the same delivery steps.
+	delivery := release.NewContainerDeliveryActivator(release.ContainerDeliveryDeps{
+		ReleaseStore:      stores.ReleaseStore,
+		EnvTargetStore:    stores.EnvTargetStore,
+		EventStore:        stores.PgEventStore,
+		Sync:              workflows.SyncClient,
+		Locker:            stores.Locker,
+		GitOps:            workflows.GitOpsPusher,
+		GitReader:         workflows.GitOpsPusher,
+		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
+		// Sprint 6 / T3.1: per-app attestation persistence (signature + SBOM).
+		// T1.3b: the sqlc-backed wrapper preserves the ALL-signed atomicity
+		// invariant + F-S2-01 FK race closure (SaveAppAttestationsTx requires a
+		// non-nil tx for the atomic release+attestation commit).
+		AppAttestationStore: store.NewAppAttestationStoreSqlc(dbAdapter),
+		// J-16 slice 3: deploy.succeeded outbox.
+		DeployEventStore: store.NewDeployEventStoreSqlc(),
+	})
+
 	orch := build.NewBuildOrchestrator(build.BuildOrchestratorDeps{
 		BuildStore:        stores.BuildStore,
 		ReleaseStore:      stores.ReleaseStore,
@@ -147,18 +170,13 @@ func setupOrchestrator(
 		Sync:              workflows.SyncClient,
 		Locker:            stores.Locker,
 		GitOps:            workflows.GitOpsPusher,
+		Delivery:          delivery,
 		RegistryURL:       cfg.RegistryURL,
 		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
 		KVClient:          workflows.KVClient,
 		BaseDomain:        cfg.BaseDomain,
 		PlanCap:           planCap,
 		ScalingResolver:   scalingResolver, // B40
-		// Sprint 6 / T3.1: per-app attestation persistence (signature + SBOM).
-		// T1.3b (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper
-		// satisfies store.AppAttestationStore 1:1 — preserves ALL-signed
-		// atomicity invariant + F-S2-01 FK race closure (SaveAppAttestations
-		// Tx requires non-nil tx for atomic release+attestation commit).
-		AppAttestationStore: store.NewAppAttestationStoreSqlc(dbAdapter),
 		// T1.2 mitigation #3 of MEET-2026-05-12: per-sign cosign audit
 		// log. AuditLogger reuses WriteAuditLog as the canonical SQL.
 		AuditLogger: &store.AuditLogger{DB: dbAdapter},
@@ -206,6 +224,7 @@ func setupOrchestrator(
 		GitPusher:         workflows.GitOpsPusher,
 		Sync:              workflows.SyncClient,
 		Locker:            stores.Locker,
+		Delivery:          delivery,
 		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
 		PublicDomain:      cfg.PublicDomain,
 		Logger:            logger,

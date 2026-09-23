@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/release"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 
 	"github.com/getloopscale/loopzero/api/internal/services/scaling"
 
@@ -68,15 +68,18 @@ type BuildOrchestratorDeps struct {
 	EventStore     interface {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
-	Workflow          deploycontracts.WorkflowSubmitter
-	Sync              deploycontracts.SyncClient
-	Locker            deploycontracts.EnvironmentLocker
-	GitOps            deploycontracts.GitOpsPusher
-	Delivery          deploycontracts.DeliveryActivator // MEET-009: polymorphic release activation
-	RegistryURL       string                            // Container registry URL for BuildPlan image tag resolution
-	ArgocdSyncTimeout time.Duration                     // 0 = default 120s
-	KVClient          StaticRoutingClient               // CF KV client for static frontend routing (nil = disabled)
-	BaseDomain        string                            // Base domain for app hostnames
+	Workflow deploycontracts.WorkflowSubmitter
+	Sync     deploycontracts.SyncClient
+	Locker   deploycontracts.EnvironmentLocker
+	GitOps   deploycontracts.GitOpsPusher
+	// Delivery activates a completed build. Required: it is constructed once at
+	// the composition root and shared with the rollback orchestrator, so both
+	// write through the same outbox and read manifests with the same reader.
+	Delivery          deploycontracts.DeliveryActivator
+	RegistryURL       string              // Container registry URL for BuildPlan image tag resolution
+	ArgocdSyncTimeout time.Duration       // 0 = default 120s
+	KVClient          StaticRoutingClient // CF KV client for static frontend routing (nil = disabled)
+	BaseDomain        string              // Base domain for app hostnames
 	// B15: plan-cap enforcement for per-service replica count. nil = disabled.
 	PlanCap PlanCapChecker
 	// KEDAEnabled gates scale-to-zero (MinReplicas=0). When false, min:0 is rejected.
@@ -87,10 +90,6 @@ type BuildOrchestratorDeps struct {
 	// (D1) and plan caps operate on resolved config (MEET-2026-04-23-059
 	// Constraint 6). Nil = disabled (yaml-only — backward-compat).
 	ScalingResolver scaling.ScalingResolver
-	// Sprint 6 / T3.1: per-app attestation store. When non-nil, the
-	// container delivery activator persists per-app signature + SBOM
-	// metadata to release_app_attestations.
-	AppAttestationStore store.AppAttestationStore
 	// AuditLogger persists supply-chain audit events. When non-nil and
 	// the build callback reports SUCCEEDED, the orchestrator emits one
 	// `image.signed` audit entry per app with a cosign signature
@@ -170,23 +169,6 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 	if registryURL == "" {
 		registryURL = "k3d-loopzero-registry:5000" // local dev default
 	}
-	// MEET-009: If no DeliveryActivator provided, create default ContainerDeliveryActivator.
-	// This ensures backward compatibility -- existing call sites don't need to change.
-	delivery := deps.Delivery
-	if delivery == nil {
-		delivery = release.NewContainerDeliveryActivator(release.ContainerDeliveryDeps{
-			ReleaseStore:        deps.ReleaseStore,
-			EnvTargetStore:      deps.EnvTargetStore,
-			EventStore:          deps.EventStore,
-			Sync:                deps.Sync,
-			Locker:              deps.Locker,
-			GitOps:              deps.GitOps,
-			ArgocdSyncTimeout:   syncTimeout,
-			AppAttestationStore: deps.AppAttestationStore,        // Sprint 6 / T3.1
-			DeployEventStore:    store.NewDeployEventStoreSqlc(), // J-16 slice 3 — deploy.succeeded outbox
-		})
-	}
-
 	return &BuildOrchestrator{
 		buildStore:          deps.BuildStore,
 		releaseStore:        deps.ReleaseStore,
@@ -197,7 +179,7 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		sync:                deps.Sync,
 		locker:              deps.Locker,
 		gitops:              deps.GitOps,
-		delivery:            delivery,
+		delivery:            deps.Delivery,
 		registryURL:         registryURL,
 		argocdSyncTimeout:   syncTimeout,
 		kvClient:            deps.KVClient,
@@ -236,4 +218,20 @@ func (o *BuildOrchestrator) resolveScaling(
 // Used by the reconcile loop to determine whether Activate() has already been called.
 func (o *BuildOrchestrator) FindReleaseForBuild(ctx context.Context, buildID string) (*db.Release, error) {
 	return o.releaseStore.GetLatestByBuildID(ctx, buildID)
+}
+
+// errDeliveryNotWired is returned when a build reaches activation on an
+// orchestrator constructed without a DeliveryActivator — a wiring bug that must
+// fail the activation loudly rather than panic on a nil interface.
+var errDeliveryNotWired = &loopzeroerrors.LoopZeroError{
+	Code:    loopzeroerrors.ErrInternalError.Code,
+	Message: "build orchestrator: no delivery activator wired; set BuildOrchestratorDeps.Delivery at the composition root",
+}
+
+// activate hands a completed build to the wired delivery activator.
+func (o *BuildOrchestrator) activate(ctx context.Context, build *db.Build, result deploycontracts.BuildCallbackRequest) error {
+	if o.delivery == nil {
+		return errDeliveryNotWired
+	}
+	return o.delivery.Activate(ctx, activationBuildFrom(build), result)
 }

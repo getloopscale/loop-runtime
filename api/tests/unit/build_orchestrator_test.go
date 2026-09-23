@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
+	"github.com/getloopscale/loopzero/api/internal/services/release"
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
@@ -586,6 +587,10 @@ func (f *orchestratorFakes) buildOrchestrator() *build.BuildOrchestrator {
 		Sync:           f.sync,
 		Locker:         f.locker,
 		GitOps:         f.gitops,
+		Delivery: release.NewContainerDeliveryActivator(release.ContainerDeliveryDeps{
+			ReleaseStore: f.releaseStore, EnvTargetStore: f.envTargetStore, EventStore: f.eventStore,
+			Sync: f.sync, Locker: f.locker, GitOps: f.gitops,
+		}),
 	})
 }
 
