@@ -79,12 +79,12 @@ DO UPDATE SET
   updated_at         = NOW();
 
 -- name: CountPermanentEnvironments :one
--- D5 (Bug A fix): enforcement-facing count. Returns the number of DISTINCT
--- permanent environments a tenant has across all projects. Used by
--- pkg/enforcement/limiter.go to gate POST /api/v1/environments against the
--- plan_limits.environments cap. Preview environments are NOT counted —
--- they are managed under the single-slot model (preview_slot table).
-SELECT COUNT(DISTINCT environment)::int FROM environment_targets
+-- Plan enforcement: counts a tenant's permanent (project, environment) tuples,
+-- gated against plan_limits.environments. M2 v1.2 interprets that cap per
+-- tuple, and the primary key makes each tuple one row, so COUNT(*) is the
+-- per-tuple count (DISTINCT environment would collapse web/prod and api/prod
+-- into one). Preview environments live in preview_slot and are NOT counted.
+SELECT COUNT(*)::int FROM environment_targets
 WHERE tenant_id = $1 AND kind = 'permanent';
 
 -- name: ListPermanentEnvironments :many

@@ -286,6 +286,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			if upgradeURL == "" {
 				upgradeURL = "/billing"
 			}
+			usage := cfg.planUsage()
 
 			// M4 (account-level tenancy, Phase 2): the per-TENANT projects 402
 			// middleware was REMOVED here. The project cap is now enforced
@@ -294,7 +295,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			// PROJECTS_EXCEED_PLAN — see cmd/setup_database.go SetProjectCapChecker.
 			buildEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
 				Metric:  "builds_per_month",
-				CountFn: enforcement.CountBuildsThisMonth(cfg.PlanLimiter),
+				CountFn: usage.BuildsThisMonth,
 			}, tenantFromCtx, upgradeURL)
 
 			// T1.9 (Wave 1): cost cap gates the build route on build_minutes.
@@ -304,21 +305,17 @@ func NewRouter(cfg Config) *chi.Mux {
 			buildCostGate := cfg.CostEnforcer.Middleware(enforcementMetricBuildMinutes)
 
 			// D5 of plan 2026-06-07-preview-as-category-single-slot-plan.md
-			// (Bug A fix): CountPermanentEnvironments filters by
-			// `kind = 'permanent'` so previews (single-slot model via
-			// preview_slot table) NEVER count against
-			// plan_limits.environments. Pre-2026-06-07 the inline query
-			// `SELECT COUNT(*) FROM environment_targets` mixed both kinds
-			// and a tenant with 1 permanent prod env + 2 preview-pr-N
-			// rows hit "current=3, max=3" PLAN_LIMIT_EXCEEDED on Pro.
+			// (Bug A fix): PermanentEnvironments counts only
+			// `kind = 'permanent'` rows, so previews (single-slot model via
+			// preview_slot table) NEVER count against plan_limits.environments.
 			envEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
 				Metric:  "environments",
-				CountFn: enforcement.CountPermanentEnvironments(cfg.PlanLimiter),
+				CountFn: usage.PermanentEnvironments,
 			}, tenantFromCtx, upgradeURL)
 
 			seatEnforcement := enforcement.Middleware(cfg.PlanLimiter, enforcement.OperationCheck{
 				Metric:  "seats",
-				CountFn: enforcement.CountRows(cfg.PlanLimiter, "SELECT COUNT(*) FROM tenant_members WHERE tenant_id = $1"),
+				CountFn: usage.Seats,
 			}, tenantFromCtx, upgradeURL)
 
 			registerProtectedRoutes(r, cfg, rateLimitMiddlewares, idempotentMiddlewares,

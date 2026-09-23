@@ -4,6 +4,7 @@
 package enforcement
 
 import (
+	"context"
 	"database/sql"
 	"log/slog"
 	"net/http"
@@ -67,7 +68,8 @@ func setupSubscriptionMock(t *testing.T, tenant, plan string) (*sql.DB, sqlmock.
 
 func TestCheckLimit_NilLimiter(t *testing.T) {
 	var limiter *PlanLimiter
-	result := limiter.CheckLimit("tn-test", "projects", 5)
+	result, err := limiter.CheckLimit(context.Background(), "tn-test", "projects", 5)
+	requireNoLimitErr(t, err)
 	if !result.Allowed {
 		t.Error("nil limiter should allow everything")
 	}
@@ -77,8 +79,9 @@ func TestCheckLimit_NilLimiter(t *testing.T) {
 }
 
 func TestCheckLimit_NilDB(t *testing.T) {
-	limiter := &PlanLimiter{db: nil}
-	result := limiter.CheckLimit("tn-test", "projects", 5)
+	limiter := &PlanLimiter{}
+	result, err := limiter.CheckLimit(context.Background(), "tn-test", "projects", 5)
+	requireNoLimitErr(t, err)
 	if !result.Allowed {
 		t.Error("nil DB should allow everything")
 	}
@@ -100,8 +103,9 @@ func TestCheckLimit_EnterprisePlan_AlwaysAllowed(t *testing.T) {
 		WithArgs("tn-ent").
 		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("enterprise"))
 
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckLimit("tn-ent", "projects", 9999)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckLimit(context.Background(), "tn-ent", "projects", 9999)
+	requireNoLimitErr(t, err)
 
 	if !result.Allowed {
 		t.Error("enterprise plan should always be allowed")
@@ -120,8 +124,9 @@ func TestCheckLimit_EnterprisePlan_AlwaysAllowed(t *testing.T) {
 
 func TestCheckLimit_StarterPlan_UnderLimit_Allowed(t *testing.T) {
 	db, _ := setupPlanLimitMocks(t, "tn-starter", "starter", "projects", 1, nil)
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckLimit("tn-starter", "projects", 0)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckLimit(context.Background(), "tn-starter", "projects", 0)
+	requireNoLimitErr(t, err)
 	if !result.Allowed {
 		t.Error("starter with 0 projects should be allowed (limit=1)")
 	}
@@ -135,8 +140,9 @@ func TestCheckLimit_StarterPlan_UnderLimit_Allowed(t *testing.T) {
 
 func TestCheckLimit_StarterPlan_AtLimit_Blocked(t *testing.T) {
 	db, _ := setupPlanLimitMocks(t, "tn-starter", "starter", "projects", 1, nil)
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckLimit("tn-starter", "projects", 1)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckLimit(context.Background(), "tn-starter", "projects", 1)
+	requireNoLimitErr(t, err)
 	if result.Allowed {
 		t.Error("starter at limit (1/1) should be blocked")
 	}
@@ -154,8 +160,9 @@ func TestCheckLimit_StarterPlan_AtLimit_Blocked(t *testing.T) {
 
 func TestCheckLimit_ProPlan_UnderLimit_Allowed(t *testing.T) {
 	db, _ := setupPlanLimitMocks(t, "tn-pro", "pro", "projects", 3, nil)
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckLimit("tn-pro", "projects", 2)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckLimit(context.Background(), "tn-pro", "projects", 2)
+	requireNoLimitErr(t, err)
 	if !result.Allowed {
 		t.Error("pro with 2/3 projects should be allowed")
 	}
@@ -163,8 +170,9 @@ func TestCheckLimit_ProPlan_UnderLimit_Allowed(t *testing.T) {
 
 func TestCheckLimit_ProPlan_AtLimit_Blocked(t *testing.T) {
 	db, _ := setupPlanLimitMocks(t, "tn-pro", "pro", "projects", 3, nil)
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckLimit("tn-pro", "projects", 3)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckLimit(context.Background(), "tn-pro", "projects", 3)
+	requireNoLimitErr(t, err)
 	if result.Allowed {
 		t.Error("pro at limit (3/3) should be blocked")
 	}
@@ -189,8 +197,9 @@ func TestCheckLimit_BuildsPerMonth_Enforced(t *testing.T) {
 		WithArgs("starter", "builds_per_month").
 		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(100, nil))
 
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckLimit("tn-test", "builds_per_month", 100)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckLimit(context.Background(), "tn-test", "builds_per_month", 100)
+	requireNoLimitErr(t, err)
 
 	if result.Allowed {
 		t.Error("at builds_per_month limit should be blocked")
@@ -206,8 +215,9 @@ func TestCheckLimit_BuildsPerMonth_Enforced(t *testing.T) {
 
 func TestCheckLimit_SeatsLimit_Enforced(t *testing.T) {
 	db, _ := setupPlanLimitMocks(t, "tn-team", "team", "seats", 10, nil)
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckLimit("tn-team", "seats", 10)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckLimit(context.Background(), "tn-team", "seats", 10)
+	requireNoLimitErr(t, err)
 	if result.Allowed {
 		t.Error("at seats limit should be blocked")
 	}
@@ -219,8 +229,9 @@ func TestCheckLimit_SeatsLimit_Enforced(t *testing.T) {
 
 func TestCheckLimit_EnvironmentsLimit_Enforced(t *testing.T) {
 	db, _ := setupPlanLimitMocks(t, "tn-test", "starter", "environments", 2, nil)
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckLimit("tn-test", "environments", 2)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckLimit(context.Background(), "tn-test", "environments", 2)
+	requireNoLimitErr(t, err)
 	if result.Allowed {
 		t.Error("at environments limit should be blocked")
 	}
@@ -228,8 +239,9 @@ func TestCheckLimit_EnvironmentsLimit_Enforced(t *testing.T) {
 
 func TestCheckLimit_EnvironmentsLimit_UnderLimit(t *testing.T) {
 	db, _ := setupPlanLimitMocks(t, "tn-test", "pro", "environments", 5, nil)
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckLimit("tn-test", "environments", 3)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckLimit(context.Background(), "tn-test", "environments", 3)
+	requireNoLimitErr(t, err)
 	if !result.Allowed {
 		t.Error("under environments limit should be allowed")
 	}
@@ -242,8 +254,9 @@ func TestCheckLimit_EnvironmentsLimit_UnderLimit(t *testing.T) {
 func TestCheckLimit_SoftLimit_OverageAllowed(t *testing.T) {
 	// Hard limit 10, soft limit 8 — at 9, allowed but SoftOver=true.
 	db, _ := setupPlanLimitMocks(t, "tn-team", "team", "seats", 10, 8)
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckLimit("tn-team", "seats", 9)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckLimit(context.Background(), "tn-team", "seats", 9)
+	requireNoLimitErr(t, err)
 	if !result.Allowed {
 		t.Error("soft over should still be allowed")
 	}
@@ -263,8 +276,9 @@ func TestCheckLimit_NegativeHardLimit_Unlimited(t *testing.T) {
 	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
 		WithArgs("pro", "builds_per_month").
 		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(nil, nil))
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckLimit("tn-test", "builds_per_month", 999)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckLimit(context.Background(), "tn-test", "builds_per_month", 999)
+	requireNoLimitErr(t, err)
 	if !result.Allowed {
 		t.Error("NULL hard limit should mean unlimited")
 	}
@@ -291,17 +305,13 @@ func TestCheckLimit_MissingSubscription_FallbackStarter(t *testing.T) {
 		WithArgs("starter", "projects").
 		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(1, nil))
 
-	fallbackCalled := false
-	limiter := NewPlanLimiter(db, testLogger())
-	limiter.OnFallbackStarter = func() { fallbackCalled = true }
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
 
-	result := limiter.CheckLimit("tn-unknown", "projects", 0)
+	result, err := limiter.CheckLimit(context.Background(), "tn-unknown", "projects", 0)
+	requireNoLimitErr(t, err)
 
 	if result.Plan != "starter" {
 		t.Errorf("Plan = %q, want starter (fallback)", result.Plan)
-	}
-	if !fallbackCalled {
-		t.Error("OnFallbackStarter callback should have been called")
 	}
 	if !result.Allowed {
 		t.Error("0/1 should be allowed on starter")
@@ -314,106 +324,11 @@ func TestCheckLimit_MissingSubscription_FallbackStarter(t *testing.T) {
 
 func TestCheckLimit_MissingLimitsRow_DeniedByDefault(t *testing.T) {
 	db, _ := setupPlanLimitMocksNoRow(t, "tn-test", "starter", "unknown_metric")
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckLimit("tn-test", "unknown_metric", 0)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckLimit(context.Background(), "tn-test", "unknown_metric", 0)
+	requireNoLimitErr(t, err)
 	if result.Allowed {
 		t.Error("missing plan_limits row should deny by default (fail closed)")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// GetBuildTimeout
-// ---------------------------------------------------------------------------
-
-func TestGetBuildTimeout_NilLimiter(t *testing.T) {
-	var limiter *PlanLimiter
-	timeout := limiter.GetBuildTimeout("tn-test")
-	if timeout != 1800 {
-		t.Errorf("nil limiter timeout = %d, want 1800", timeout)
-	}
-}
-
-func TestGetBuildTimeout_NilDB(t *testing.T) {
-	limiter := &PlanLimiter{db: nil}
-	timeout := limiter.GetBuildTimeout("tn-test")
-	if timeout != 1800 {
-		t.Errorf("nil DB timeout = %d, want 1800", timeout)
-	}
-}
-
-func TestGetBuildTimeout_FromDB(t *testing.T) {
-	db, _ := setupPlanLimitMocks(t, "tn-pro", "pro", "build_timeout_seconds", 3600, nil)
-	limiter := NewPlanLimiter(db, testLogger())
-	timeout := limiter.GetBuildTimeout("tn-pro")
-	if timeout != 3600 {
-		t.Errorf("timeout = %d, want 3600", timeout)
-	}
-}
-
-func TestGetBuildTimeout_MissingRow_Default(t *testing.T) {
-	db, _ := setupPlanLimitMocksNoRow(t, "tn-test", "starter", "build_timeout_seconds")
-	limiter := NewPlanLimiter(db, testLogger())
-	timeout := limiter.GetBuildTimeout("tn-test")
-	if timeout != 1800 {
-		t.Errorf("timeout = %d, want 1800 (default)", timeout)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// GetRateLimit
-// ---------------------------------------------------------------------------
-
-func TestGetRateLimit_NilLimiter(t *testing.T) {
-	var limiter *PlanLimiter
-	rate := limiter.GetRateLimit("tn-test")
-	if rate != 300 {
-		t.Errorf("nil limiter rate = %d, want 300", rate)
-	}
-}
-
-func TestGetRateLimit_FromDB(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("SELECT plan FROM subscriptions").
-		WithArgs("tn-team").
-		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("team"))
-
-	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
-		WithArgs("team", "api_requests_per_min").
-		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(600, nil))
-
-	limiter := NewPlanLimiter(db, testLogger())
-	rate := limiter.GetRateLimit("tn-team")
-
-	if rate != 600 {
-		t.Errorf("rate = %d, want 600", rate)
-	}
-}
-
-func TestGetRateLimit_MissingRow_Default(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("SELECT plan FROM subscriptions").
-		WithArgs("tn-test").
-		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("starter"))
-
-	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").
-		WithArgs("starter", "api_requests_per_min").
-		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}))
-
-	limiter := NewPlanLimiter(db, testLogger())
-	rate := limiter.GetRateLimit("tn-test")
-
-	if rate != 60 {
-		t.Errorf("rate = %d, want 60 (default)", rate)
 	}
 }
 
@@ -521,7 +436,7 @@ func TestMiddleware_NilLimiter_Passes(t *testing.T) {
 
 	mw := Middleware(nil, OperationCheck{
 		Metric:  "projects",
-		CountFn: func(tenantID string) int { return 999 },
+		CountFn: func(context.Context, string) (int, error) { return 999, nil },
 	}, func(r *http.Request) string { return "tn-test" }, "")
 
 	handler := mw(inner)
@@ -555,7 +470,7 @@ func TestMiddleware_BlocksOverLimit_402(t *testing.T) {
 		WithArgs("starter", "projects").
 		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(1, nil))
 
-	limiter := NewPlanLimiter(db, testLogger())
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
 
 	innerCalled := false
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -566,7 +481,7 @@ func TestMiddleware_BlocksOverLimit_402(t *testing.T) {
 		limiter,
 		OperationCheck{
 			Metric:  "projects",
-			CountFn: func(tenantID string) int { return 1 }, // at limit
+			CountFn: func(context.Context, string) (int, error) { return 1, nil }, // at limit
 		},
 		func(r *http.Request) string { return "tn-blocked" },
 		"https://billing.example.com",
@@ -603,7 +518,7 @@ func TestMiddleware_PassesUnderLimit_200(t *testing.T) {
 		WithArgs("pro", "projects").
 		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(3, nil))
 
-	limiter := NewPlanLimiter(db, testLogger())
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
 
 	innerCalled := false
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -615,7 +530,7 @@ func TestMiddleware_PassesUnderLimit_200(t *testing.T) {
 		limiter,
 		OperationCheck{
 			Metric:  "projects",
-			CountFn: func(tenantID string) int { return 1 }, // under limit
+			CountFn: func(context.Context, string) (int, error) { return 1, nil }, // under limit
 		},
 		func(r *http.Request) string { return "tn-ok" },
 		"",
@@ -635,64 +550,6 @@ func TestMiddleware_PassesUnderLimit_200(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// CountRows
-// ---------------------------------------------------------------------------
-
-func TestCountRows_NilLimiter(t *testing.T) {
-	fn := CountRows(nil, "SELECT COUNT(*) FROM projects WHERE tenant_id = $1")
-	count := fn("tn-test")
-	if count != 0 {
-		t.Errorf("nil limiter count = %d, want 0", count)
-	}
-}
-
-func TestCountRows_NilDB(t *testing.T) {
-	limiter := &PlanLimiter{db: nil}
-	fn := CountRows(limiter, "SELECT COUNT(*) FROM projects WHERE tenant_id = $1")
-	count := fn("tn-test")
-	if count != 0 {
-		t.Errorf("nil DB count = %d, want 0", count)
-	}
-}
-
-func TestCountRows_ReturnsCount(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("SELECT COUNT").
-		WithArgs("tn-test").
-		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(7))
-
-	limiter := NewPlanLimiter(db, testLogger())
-	fn := CountRows(limiter, "SELECT COUNT(*) FROM projects WHERE tenant_id = $1")
-	count := fn("tn-test")
-
-	if count != 7 {
-		t.Errorf("count = %d, want 7", count)
-	}
-}
-
-func TestCountBuildsThisMonth_NilLimiter(t *testing.T) {
-	fn := CountBuildsThisMonth(nil)
-	count := fn("tn-test")
-	if count != 0 {
-		t.Errorf("nil limiter count = %d, want 0", count)
-	}
-}
-
-func TestCountBuildsThisMonth_NilDB(t *testing.T) {
-	limiter := &PlanLimiter{db: nil}
-	fn := CountBuildsThisMonth(limiter)
-	count := fn("tn-test")
-	if count != 0 {
-		t.Errorf("nil DB count = %d, want 0", count)
-	}
-}
-
-// ---------------------------------------------------------------------------
 // CheckValue — B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059)
 // ---------------------------------------------------------------------------
 // Unlike CheckLimit (which answers "is this operation within limits given
@@ -701,7 +558,8 @@ func TestCountBuildsThisMonth_NilDB(t *testing.T) {
 
 func TestCheckValue_NilLimiter_Allowed(t *testing.T) {
 	var limiter *PlanLimiter
-	result := limiter.CheckValue("tn-test", "max_replicas_per_service", 999)
+	result, err := limiter.CheckValue(context.Background(), "tn-test", "max_replicas_per_service", 999)
+	requireNoLimitErr(t, err)
 	if !result.Allowed {
 		t.Error("nil limiter should allow everything")
 	}
@@ -718,8 +576,9 @@ func TestCheckValue_EnterprisePlan_AlwaysAllowed(t *testing.T) {
 		WithArgs("tn-ent").
 		WillReturnRows(sqlmock.NewRows([]string{"plan"}).AddRow("enterprise"))
 
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckValue("tn-ent", "max_replicas_per_service", 1000)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckValue(context.Background(), "tn-ent", "max_replicas_per_service", 1000)
+	requireNoLimitErr(t, err)
 
 	if !result.Allowed {
 		t.Error("enterprise plan should always be allowed")
@@ -741,8 +600,9 @@ func TestCheckValue_StarterCap2_Requested2_Allowed(t *testing.T) {
 		WithArgs("starter", "max_replicas_per_service").
 		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(2, nil))
 
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckValue("tn-starter", "max_replicas_per_service", 2)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckValue(context.Background(), "tn-starter", "max_replicas_per_service", 2)
+	requireNoLimitErr(t, err)
 
 	if !result.Allowed {
 		t.Errorf("requested==cap should be allowed, got %+v", result)
@@ -770,8 +630,9 @@ func TestCheckValue_StarterCap2_Requested3_Blocked(t *testing.T) {
 		WithArgs("starter", "max_replicas_per_service").
 		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(2, nil))
 
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckValue("tn-starter", "max_replicas_per_service", 3)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckValue(context.Background(), "tn-starter", "max_replicas_per_service", 3)
+	requireNoLimitErr(t, err)
 
 	if result.Allowed {
 		t.Error("requested > cap should be blocked")
@@ -799,8 +660,9 @@ func TestCheckValue_NullHardLimit_Unlimited(t *testing.T) {
 		WithArgs("team", "max_replicas_per_service").
 		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(nil, nil))
 
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckValue("tn-team", "max_replicas_per_service", 100)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckValue(context.Background(), "tn-team", "max_replicas_per_service", 100)
+	requireNoLimitErr(t, err)
 
 	if !result.Allowed {
 		t.Error("NULL hard_limit should mean unlimited")
@@ -823,31 +685,12 @@ func TestCheckValue_MissingPlanLimitsRow_DenyByDefault(t *testing.T) {
 		WithArgs("starter", "max_replicas_per_service").
 		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}))
 
-	limiter := NewPlanLimiter(db, testLogger())
-	result := limiter.CheckValue("tn-starter", "max_replicas_per_service", 5)
+	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	result, err := limiter.CheckValue(context.Background(), "tn-starter", "max_replicas_per_service", 5)
+	requireNoLimitErr(t, err)
 
 	if result.Allowed {
 		t.Error("missing plan_limits row should deny by default (fail closed)")
-	}
-}
-
-func TestCountBuildsThisMonth_ReturnsCount(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("SELECT COUNT").
-		WithArgs("tn-test", sqlmock.AnyArg()). // period start is dynamic
-		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(42))
-
-	limiter := NewPlanLimiter(db, testLogger())
-	fn := CountBuildsThisMonth(limiter)
-	count := fn("tn-test")
-
-	if count != 42 {
-		t.Errorf("count = %d, want 42", count)
 	}
 }
 

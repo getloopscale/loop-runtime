@@ -23,8 +23,8 @@ import (
 // stubCapChecker is a fake store.ProjectCapChecker with a fixed bounded cap.
 type stubCapChecker struct{ cap int }
 
-func (s stubCapChecker) CheckProjectsValue(_ string, _ int) (bool, string, int) {
-	return false, "starter", s.cap
+func (s stubCapChecker) CheckProjectsValue(_ context.Context, _ string, _ int) (bool, string, int, error) {
+	return false, "starter", s.cap, nil
 }
 
 // nonPgxDBTX is a minimal db.DBTX that is NOT a *db.PgxAdapter, so the cap path

@@ -40,9 +40,12 @@ func violationCount(plan string) float64 {
 // realProjectCapChecker adapts a real PlanLimiter to store.ProjectCapChecker.
 type realProjectCapChecker struct{ l *enforcement.PlanLimiter }
 
-func (c realProjectCapChecker) CheckProjectsValue(tenantID string, current int) (bool, string, int) {
-	r := c.l.CheckProjectsValue(tenantID, current)
-	return r.Allowed, r.Plan, r.Limit
+func (c realProjectCapChecker) CheckProjectsValue(ctx context.Context, tenantID string, current int) (bool, string, int, error) {
+	r, err := c.l.CheckProjectsValue(ctx, tenantID, current)
+	if err != nil {
+		return false, "", 0, err
+	}
+	return r.Allowed, r.Plan, r.Limit, nil
 }
 
 func m4Store(t *testing.T) (*store.PostgresProjectStore, *sql.DB) {
@@ -53,7 +56,7 @@ func m4Store(t *testing.T) (*store.PostgresProjectStore, *sql.DB) {
 		t.Fatalf("open stdlib DB: %v", err)
 	}
 	t.Cleanup(func() { _ = stdDB.Close() })
-	limiter := enforcement.NewPlanLimiter(stdDB, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	limiter := enforcement.NewPlanLimiter(enforcement.NewSQLLimitsStore(stdDB), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	store := &store.PostgresProjectStore{DB: &db.PgxAdapter{Pool: pool}}
 	store.SetProjectCapChecker(realProjectCapChecker{l: limiter})
 	return store, stdDB

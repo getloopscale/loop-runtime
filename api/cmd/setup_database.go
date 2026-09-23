@@ -132,7 +132,7 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 			_ = stdDB.Close()
 		} else {
 			deps.StdDB = stdDB
-			deps.PlanLimiter = enforcement.NewPlanLimiter(stdDB, logger)
+			deps.PlanLimiter = enforcement.NewPlanLimiter(enforcement.NewSQLLimitsStore(stdDB), logger)
 			// M4 (account-level tenancy, Phase 2): enforce the per-Account project
 			// cap at the API project-creation path. M5 (#106) routes this through the
 			// shared wireProjectCap helper so the API store and the build-orchestrator

@@ -136,6 +136,25 @@ func (q *Queries) CountBuildsByProjectAndEnv(ctx context.Context, db DBTX, arg C
 	return count, err
 }
 
+const countTenantBuildsSince = `-- name: CountTenantBuildsSince :one
+SELECT COUNT(*)::int FROM builds
+WHERE tenant_id = $1 AND created_at >= $2
+`
+
+type CountTenantBuildsSinceParams struct {
+	TenantID  string             `json:"tenant_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+// Plan enforcement: builds a tenant started since the given instant (the
+// start of the billing month), gated against plan_limits.builds_per_month.
+func (q *Queries) CountTenantBuildsSince(ctx context.Context, db DBTX, arg CountTenantBuildsSinceParams) (int32, error) {
+	row := db.QueryRow(ctx, countTenantBuildsSince, arg.TenantID, arg.CreatedAt)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const findActiveBuildsByCell = `-- name: FindActiveBuildsByCell :many
 SELECT id, tenant_id, project_id, environment, status, correlation_id, created_by, commit_sha, apps_spec, workflow_id, error_message, duration_seconds, cell_id, processing_by, processing_since, created_at, started_at, finished_at, bundle_digest FROM builds
 WHERE cell_id = $1

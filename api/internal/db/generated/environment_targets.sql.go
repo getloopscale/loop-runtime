@@ -10,15 +10,15 @@ import (
 )
 
 const countPermanentEnvironments = `-- name: CountPermanentEnvironments :one
-SELECT COUNT(DISTINCT environment)::int FROM environment_targets
+SELECT COUNT(*)::int FROM environment_targets
 WHERE tenant_id = $1 AND kind = 'permanent'
 `
 
-// D5 (Bug A fix): enforcement-facing count. Returns the number of DISTINCT
-// permanent environments a tenant has across all projects. Used by
-// pkg/enforcement/limiter.go to gate POST /api/v1/environments against the
-// plan_limits.environments cap. Preview environments are NOT counted —
-// they are managed under the single-slot model (preview_slot table).
+// Plan enforcement: counts a tenant's permanent (project, environment) tuples,
+// gated against plan_limits.environments. M2 v1.2 interprets that cap per
+// tuple, and the primary key makes each tuple one row, so COUNT(*) is the
+// per-tuple count (DISTINCT environment would collapse web/prod and api/prod
+// into one). Preview environments live in preview_slot and are NOT counted.
 func (q *Queries) CountPermanentEnvironments(ctx context.Context, db DBTX, tenantID string) (int32, error) {
 	row := db.QueryRow(ctx, countPermanentEnvironments, tenantID)
 	var column_1 int32

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -527,10 +528,14 @@ func TestScale_ResponseCarriesMonthlyCostAndPlanTier(t *testing.T) {
 type fakeScaleReplicasChecker struct {
 	cap  int
 	plan string
+	err  error
 }
 
-func (f *fakeScaleReplicasChecker) CheckReplicasValue(_ string, requested int) (bool, string, int) {
-	return requested <= f.cap, f.plan, f.cap
+func (f *fakeScaleReplicasChecker) CheckReplicasValue(_ context.Context, _ string, requested int) (bool, string, int, error) {
+	if f.err != nil {
+		return false, "", 0, f.err
+	}
+	return requested <= f.cap, f.plan, f.cap, nil
 }
 
 func TestScaleHandler_FixedReplicasOverCap_Returns422_RedTeam101(t *testing.T) {
@@ -782,4 +787,28 @@ func TestScaleHandler_EnsureProductionWired_WaiveIsAccepted(t *testing.T) {
 		}
 	}()
 	h.EnsureProductionWired()
+}
+
+// A replica cap that cannot be verified answers 503, never applies the scale.
+func TestScaleHandler_ReplicaCapUnverifiable_Returns503(t *testing.T) {
+	applied := false
+	h := NewScaleHandler(&fakeScaleProjectStore{
+		project: &ports.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
+	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
+		applied = true
+		return true, nil
+	}, true)
+	h.SetReplicasChecker(&fakeScaleReplicasChecker{err: errors.New("limits store down")})
+	h.SetPlanTierStore(fakePlanTierStore{plan: "starter"})
+
+	body, _ := json.Marshal(map[string]any{"app": "web", "environment": "production", "replicas": 2})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/p/scale", bytes.NewReader(body))
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "p")
+	w := httptest.NewRecorder()
+	h.Scale(w, req)
+
+	if w.Code != http.StatusServiceUnavailable || applied {
+		t.Fatalf("want 503 without applying, got %d applied=%v body=%s", w.Code, applied, w.Body.String())
+	}
 }

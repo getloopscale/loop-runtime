@@ -12,18 +12,15 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 )
 
-// Um tenant sem linha em `subscriptions` é o estado NORMAL de quem acabou de entrar — não é
-// degradação de plataforma.
+// A tenant with no row in `subscriptions` is the NORMAL state of a tenant that
+// just signed up — not a platform fault.
 //
-// Medido em 2026-08-18 no droplet: `POST /api/v1/projects` devolvia
-// `503 PLATFORM_DEGRADED — plan tier resolution failed for tn-e2etest`, porque
-// `QueryRow().Scan()` devolve `sql.ErrNoRows` e `ResolvePlanTier` trata todo erro como fatal.
-//
-// E o código documentava o contrário em TRÊS lugares que não concordavam entre si: o contrato
-// da interface pedia `("starter", nil)`, o doc do método dizia `("starter", error)`, e a
-// implementação fazia `("", ErrNoRows)`. O caminho de onboarding que `ResolvePlanTier`
-// documenta (`raw == ""` → Starter sem erro) era inalcançável.
-func TestGetTenantPlanSemAssinaturaNaoEErro(t *testing.T) {
+// Measured 2026-08-18 (B-140): `POST /api/v1/projects` answered
+// `503 PLATFORM_DEGRADED — plan tier resolution failed`, because
+// `QueryRow().Scan()` returned `sql.ErrNoRows` and `ResolvePlanTier` treats
+// every error as fatal. The onboarding path `ResolvePlanTier` documents
+// (`raw == ""` → Starter without an error) was unreachable.
+func TestGetTenantPlan_NoSubscriptionIsNotAnError(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
@@ -31,24 +28,22 @@ func TestGetTenantPlanSemAssinaturaNaoEErro(t *testing.T) {
 	defer func() { _ = db.Close() }()
 
 	mock.ExpectQuery("SELECT plan FROM subscriptions").
-		WithArgs("tn-novo").
+		WithArgs("tn-new").
 		WillReturnError(sql.ErrNoRows)
 
 	s := &sqlLimitsStore{db: db}
-	plan, err := s.GetTenantPlan(context.Background(), "tn-novo")
+	plan, err := s.GetTenantPlan(context.Background(), "tn-new")
 	if err != nil {
-		t.Fatalf("linha ausente não é erro — é tenant novo: %v", err)
+		t.Fatalf("a missing row is a new tenant, not an error: %v", err)
 	}
 	if plan != "" {
-		t.Fatalf("precisa devolver vazio, não %q — é o vazio que faz o OnFallbackStarter "+
-			"disparar (limiter.go:259) E o ResolvePlanTier cair para Starter sem erro. "+
-			"Devolver \"starter\" aqui silenciaria a métrica", plan)
+		t.Fatalf("want the empty plan (ResolvePlanTier maps it to Starter), got %q", plan)
 	}
 }
 
-// A fronteira: um erro REAL de banco continua sendo erro. Sem isto, o conserto acima
-// transformaria indisponibilidade de banco em "tenant novo".
-func TestGetTenantPlanErroRealContinuaErro(t *testing.T) {
+// The boundary: a REAL database error stays an error. Without this, the fix
+// above would turn a database outage into "new tenant".
+func TestGetTenantPlan_DatabaseErrorStaysAnError(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("sqlmock: %v", err)
@@ -60,6 +55,6 @@ func TestGetTenantPlanErroRealContinuaErro(t *testing.T) {
 
 	s := &sqlLimitsStore{db: db}
 	if _, err := s.GetTenantPlan(context.Background(), "tn-x"); err == nil {
-		t.Fatal("banco fora do ar É erro, e tratá-lo como tenant novo esconderia indisponibilidade")
+		t.Fatal("a database outage is an error; treating it as a new tenant would hide it")
 	}
 }

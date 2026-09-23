@@ -10,39 +10,24 @@ import (
 	"fmt"
 )
 
-// LimitsStore is the read-only interface PlanLimiter uses to look up a
-// tenant's plan and the (hard, soft) limit pair for a given metric.
-//
-// Per ADR-0033 (DIP via LimitsStore interface): pkg/enforcement no longer
-// hard-couples to *sql.DB at the type level. The default constructor
-// NewPlanLimiter still accepts *sql.DB for backward compatibility, but
-// callers that want to mock, test, or back the limiter with a different
-// store (in-memory cache, OPA policy fetcher) can implement this
-// interface and use NewPlanLimiterWithStore.
+// LimitsStore is the read-only port PlanLimiter uses to look up a tenant's
+// plan and the (hard, soft) limit pair for a given metric (ADR-0033).
 //
 // Implementations MUST:
 //
-//   - Return ("", nil) when the subscription row is missing. CORRIGIDO
-//     2026-08-18 (B-140): este contrato pedia ("starter", nil), o doc do
-//     metodo dizia ("starter", error), e a implementacao fazia
-//     ("", ErrNoRows) — tres afirmacoes divergentes sobre o mesmo caso, e
-//     nenhuma delas era o que rodava. O erro chegava a `ResolvePlanTier`
-//     como fatal e virava 503 na criacao do primeiro projeto de todo
-//     tenant novo.
-//     "" e nao "starter" porque `OnFallbackStarter` (metrica de "caiu para
-//     starter") so dispara quando GetTenantPlan devolve erro OU plano
-//     vazio; devolver "starter" silenciaria a contagem.
+//   - Return ("", nil) from GetTenantPlan when the tenant has no active
+//     subscription. That is the normal state of a tenant that just signed up,
+//     not a platform fault: domain.ResolvePlanTier maps "" to Starter. Any
+//     other failure (transport, partial read) MUST be a non-nil error.
 //
 //   - Return (-1, _, nil) for hardLimit when the metric has no
 //     enforced cap for the plan (NULL hard_limit row).
 //
-//   - Return (0, _, nil) for hardLimit when the (plan, metric) row is
-//     missing — the limiter treats this as fail-closed (denies the
-//     request) per ADR-0033 enumeration.
+//   - Return (0, _, nil) — or sql.ErrNoRows — when the (plan, metric) row
+//     is missing; the limiter denies the request (fail closed).
 type LimitsStore interface {
-	// GetTenantPlan returns the active plan name (e.g., "starter",
-	// "pro") for the given tenant, or ("", nil) when no subscription row
-	// exists — ver a nota do contrato acima (B-140).
+	// GetTenantPlan returns the raw plan column (e.g., "starter", "pro")
+	// of the tenant's active subscription, or ("", nil) when none exists.
 	GetTenantPlan(ctx context.Context, tenantID string) (string, error)
 
 	// GetLimits returns the (hard, soft) limits for the given (plan,
@@ -75,18 +60,8 @@ func (s *sqlLimitsStore) GetTenantPlan(ctx context.Context, tenantID string) (st
 		"SELECT plan FROM subscriptions WHERE tenant_id = $1 AND status IN ('active', 'trialing') LIMIT 1",
 		tenantID,
 	).Scan(&plan)
-	// Linha ausente NAO e erro: e o estado normal de um tenant que acabou de entrar.
-	//
-	// Medido em 2026-08-18 (B-140): propagar `ErrNoRows` fazia `ResolvePlanTier` tratar a
-	// condicao como fatal, e `POST /api/v1/projects` devolvia 503 PLATFORM_DEGRADED — a
-	// PRIMEIRA acao da jornada central do produto, para todo tenant novo.
-	//
-	// Devolve "" e nao "starter", apesar de o contrato da interface acima pedir "starter",
-	// e a razao foi medida: `limiter.go:259` dispara `OnFallbackStarter` quando
-	// `err != nil || plan == ""`. Devolver "starter" silenciaria essa metrica — ninguem
-	// contaria quantos tenants caem no fallback. Com "", os DOIS consumidores ficam certos:
-	// `ResolvePlanTier` cai para Starter sem erro (o caminho que ele ja documentava como o
-	// unico legitimo, e que era inalcancavel), e a metrica continua disparando.
+	// No row is a tenant with no subscription yet — the onboarding state, not
+	// an error (see the LimitsStore contract).
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
@@ -96,9 +71,11 @@ func (s *sqlLimitsStore) GetTenantPlan(ctx context.Context, tenantID string) (st
 	return plan, nil
 }
 
-// GetAccountPlanByTenant implements LimitsStore. M4: resolves the plan of the
-// tenant's Account (one subscription per Account since M2 — UNIQUE(account_id)),
-// joining through tenants.account_id (NOT NULL since M3 000044).
+// GetAccountPlanByTenant resolves the plan of the tenant's Account (M4; one
+// subscription per Account since M2 — UNIQUE(account_id)), joining through
+// tenants.account_id (NOT NULL since M3 000044). Like GetTenantPlan, an
+// Account with no active subscription answers ("", nil): the Starter cap,
+// never an outage.
 func (s *sqlLimitsStore) GetAccountPlanByTenant(ctx context.Context, tenantID string) (string, error) {
 	if s == nil || s.db == nil {
 		return "", fmt.Errorf("nil sql limits store")
@@ -110,6 +87,9 @@ func (s *sqlLimitsStore) GetAccountPlanByTenant(ctx context.Context, tenantID st
 		   AND status IN ('active', 'trialing') LIMIT 1`,
 		tenantID,
 	).Scan(&plan)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
 	if err != nil {
 		return "", err
 	}

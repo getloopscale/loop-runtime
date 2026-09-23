@@ -3,7 +3,11 @@
 
 package store
 
-import "github.com/getloopscale/loopzero/api/internal/db"
+import (
+	"context"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
+)
 
 // project_types.go — public struct for the projects domain that
 // survives the T2.1 (Batch A #4) deletion of the legacy
@@ -19,7 +23,7 @@ import "github.com/getloopscale/loopzero/api/internal/db"
 // Co-located with the adapter in db/store/ per ADR 2026-07-03-m9-db-store-
 // subpackage-topology D2 (negligible external port footprint; not a smell).
 type ProjectCapChecker interface {
-	CheckProjectsValue(tenantID string, current int) (allowed bool, plan string, cap int)
+	CheckProjectsValue(ctx context.Context, tenantID string, current int) (allowed bool, plan string, cap int, err error)
 }
 
 // PostgresProjectStore creates projects in PostgreSQL. Implements

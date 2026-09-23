@@ -4,6 +4,7 @@
 package enforcement
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -26,7 +27,7 @@ func TestMiddleware_BlocksAtLimit(t *testing.T) {
 		nil, // nil limiter = allow (dev mode)
 		OperationCheck{
 			Metric:  "projects",
-			CountFn: func(tenantID string) int { return 999 },
+			CountFn: func(context.Context, string) (int, error) { return 999, nil },
 		},
 		func(r *http.Request) string { return "tn-test" },
 		"https://billing.example.com",
@@ -53,12 +54,12 @@ func TestMiddleware_EmptyTenantPasses(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	limiter := &PlanLimiter{db: nil} // nil DB = allow
+	limiter := &PlanLimiter{} // nil DB = allow
 	mw := Middleware(
 		limiter,
 		OperationCheck{
 			Metric:  "projects",
-			CountFn: func(tenantID string) int { return 999 },
+			CountFn: func(context.Context, string) (int, error) { return 999, nil },
 		},
 		func(r *http.Request) string { return "" }, // empty tenant
 		"",

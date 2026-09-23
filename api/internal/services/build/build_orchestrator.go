@@ -53,9 +53,10 @@ type ProjectEnsurer interface {
 //
 // CheckReplicasValue returns (allowed, planName, cap) for the given tenant
 // and requested replica count. Callers map (allowed=false, plan, cap) into
-// ErrReplicasExceedPlan with full context for the user.
+// ErrReplicasExceedPlan with full context for the user. A non-nil error means
+// the cap could not be verified; the submission is refused with it.
 type PlanCapChecker interface {
-	CheckReplicasValue(tenantID string, requested int) (allowed bool, plan string, limit int)
+	CheckReplicasValue(ctx context.Context, tenantID string, requested int) (allowed bool, plan string, limit int, err error)
 }
 
 // BuildOrchestratorDeps holds all dependencies for BuildOrchestrator.

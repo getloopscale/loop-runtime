@@ -22,6 +22,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -55,10 +56,11 @@ type m5CapChecker struct {
 	allowed bool
 	plan    string
 	cap     int
+	err     error
 }
 
-func (f m5CapChecker) CheckProjectsValue(_ string, _ int) (bool, string, int) {
-	return f.allowed, f.plan, f.cap
+func (f m5CapChecker) CheckProjectsValue(_ context.Context, _ string, _ int) (bool, string, int, error) {
+	return f.allowed, f.plan, f.cap, f.err
 }
 
 // --- enforceProjectCapTx (the cap rule, shared by both paths) ---
@@ -163,5 +165,30 @@ func TestEnsureProject_FailsClosedWhenBoundedCapNeedsPgxPoolButNoneAvailable(t *
 
 	if err == nil {
 		t.Fatal("bounded cap without a pgx pool must fail closed, got nil")
+	}
+}
+
+// A cap that cannot be verified refuses the insert with the checker's error.
+func TestEnsureProject_CapCheckErrorPropagates(t *testing.T) {
+	boom := errors.New("limits store down")
+	store := &PostgresProjectStore{DB: &dbtest.FakeDBTX{}}
+	store.SetProjectCapChecker(m5CapChecker{err: boom})
+
+	err := store.EnsureProject(context.Background(), nil, "tenant-1", "newproj", "user-1")
+
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want the cap-check error", err)
+	}
+}
+
+func TestCreateProject_CapCheckErrorPropagates(t *testing.T) {
+	boom := errors.New("limits store down")
+	store := &PostgresProjectStore{DB: &dbtest.FakeDBTX{}}
+	store.SetProjectCapChecker(m5CapChecker{err: boom})
+
+	_, err := store.CreateProject(context.Background(), ports.CreateProjectInput{TenantID: "tenant-1", Name: "newproj"})
+
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want the cap-check error", err)
 	}
 }

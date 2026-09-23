@@ -43,24 +43,30 @@ type planLimiterCapAdapter struct {
 	limiter *enforcement.PlanLimiter
 }
 
-func (a *planLimiterCapAdapter) CheckReplicasValue(tenantID string, requested int) (bool, string, int) {
+func (a *planLimiterCapAdapter) CheckReplicasValue(ctx context.Context, tenantID string, requested int) (bool, string, int, error) {
 	if a == nil || a.limiter == nil {
-		return true, "dev", 0
+		return true, "dev", 0, nil
 	}
-	result := a.limiter.CheckValue(tenantID, "max_replicas_per_service", requested)
-	return result.Allowed, result.Plan, result.Limit
+	result, err := a.limiter.CheckValue(ctx, tenantID, "max_replicas_per_service", requested)
+	if err != nil {
+		return false, "", 0, err
+	}
+	return result.Allowed, result.Plan, result.Limit, nil
 }
 
 // CheckProjectsValue resolves the per-Account project cap (M4). Mirrors
 // CheckReplicasValue; satisfies store.ProjectCapChecker so the project-creation
 // store can enforce the cap atomically. Returns (allowed, plan, cap) where
 // cap < 0 = unlimited.
-func (a *planLimiterCapAdapter) CheckProjectsValue(tenantID string, current int) (bool, string, int) {
+func (a *planLimiterCapAdapter) CheckProjectsValue(ctx context.Context, tenantID string, current int) (bool, string, int, error) {
 	if a == nil || a.limiter == nil {
-		return true, "dev", -1 // dev/no-limiter → unlimited (no enforcement)
+		return true, "dev", -1, nil // dev/no-limiter → unlimited (no enforcement)
 	}
-	result := a.limiter.CheckProjectsValue(tenantID, current)
-	return result.Allowed, result.Plan, result.Limit
+	result, err := a.limiter.CheckProjectsValue(ctx, tenantID, current)
+	if err != nil {
+		return false, "", 0, err
+	}
+	return result.Allowed, result.Plan, result.Limit, nil
 }
 
 // wireProjectCap is the SINGLE path that wires a per-Account project-cap checker

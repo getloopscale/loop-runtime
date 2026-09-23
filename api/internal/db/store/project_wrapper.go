@@ -63,7 +63,10 @@ func (s *PostgresProjectStore) CreateProject(ctx context.Context, input ports.Cr
 		return s.insertProject(ctx, input)
 	}
 	// Resolve the cap up-front (no lock). cap < 0 = unlimited → no enforcement.
-	_, plan, cap := s.capChecker.CheckProjectsValue(input.TenantID, 0)
+	_, plan, cap, err := s.capChecker.CheckProjectsValue(ctx, input.TenantID, 0)
+	if err != nil {
+		return ports.ProjectResult{}, err
+	}
 	if cap < 0 {
 		return s.insertProject(ctx, input) // EC-6: unlimited never locks/counts
 	}
@@ -241,7 +244,10 @@ func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input po
 // and the nil-checker (dev) path stay zero-overhead (the early returns below).
 func (s *PostgresProjectStore) EnsureProject(ctx context.Context, tx db.DBTX, tenantID, name, createdBy string) error {
 	if s.capChecker != nil {
-		_, plan, cap := s.capChecker.CheckProjectsValue(tenantID, 0)
+		_, plan, cap, err := s.capChecker.CheckProjectsValue(ctx, tenantID, 0)
+		if err != nil {
+			return err
+		}
 		if cap >= 0 { // bounded plan → enforce atomically (cap < 0 = unlimited, EC-6)
 			return s.ensureProjectCapped(ctx, tx, tenantID, name, createdBy, plan, cap)
 		}

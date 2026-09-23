@@ -27,22 +27,26 @@ type fakePlanCapChecker struct {
 	allow    map[int]bool
 	planName string
 	cap      int
+	err      error // non-nil: the cap cannot be verified
 	// recorded captures the last requested value for assertion.
 	recordedRequested int
 	recordedCalled    int
 }
 
-func (f *fakePlanCapChecker) CheckReplicasValue(tenantID string, requested int) (allowed bool, plan string, limit int) {
+func (f *fakePlanCapChecker) CheckReplicasValue(_ context.Context, tenantID string, requested int) (allowed bool, plan string, limit int, err error) {
 	f.recordedRequested = requested
 	f.recordedCalled++
+	if f.err != nil {
+		return false, "", 0, f.err
+	}
 	if f.allow == nil {
-		return true, f.planName, f.cap
+		return true, f.planName, f.cap, nil
 	}
 	v, ok := f.allow[requested]
 	if !ok {
-		return true, f.planName, f.cap
+		return true, f.planName, f.cap, nil
 	}
-	return v, f.planName, f.cap
+	return v, f.planName, f.cap, nil
 }
 
 // Starter plan: requesting 3 replicas (cap=2) → 422 REPLICAS_EXCEED_PLAN.
@@ -306,5 +310,34 @@ func TestSubmitBuild_NilPlanCapChecker_AllowsAll(t *testing.T) {
 	}
 	if len(bs.builds) != 1 {
 		t.Errorf("expected build created when checker is nil, got %d", len(bs.builds))
+	}
+}
+
+// A replica cap that cannot be verified refuses the submission with the
+// checker's typed error; it never reads as "allowed".
+func TestSubmitBuild_ReplicaCapUnverifiable_RefusesWithPlatformDegraded(t *testing.T) {
+	bs := newFakeBuildStoreOrch()
+	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
+		BuildStore: bs,
+		Locker:     &fakeLockerContainer{},
+		Workflow:   &fakeWorkflowSubmitterOrch{workflowID: "wf-1"},
+		EventStore: &fakeEventStoreContainer{},
+		PlanCap:    &fakePlanCapChecker{err: loopzeroerrors.ErrPlatformDegraded.Wrap("limits store down")},
+	})
+
+	_, err := orch.SubmitBuild(context.Background(), deploycontracts.SubmitBuildRequest{
+		TenantID:    "tn-a",
+		ProjectID:   "proj-1",
+		Environment: "production",
+		Apps: []deploycontracts.AppSpec{
+			{Name: "api", Type: "server", Port: 3000, Runtime: "node", Replicas: 2},
+		},
+	})
+
+	if !errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {
+		t.Fatalf("err = %v, want PLATFORM_DEGRADED", err)
+	}
+	if len(bs.builds) != 0 {
+		t.Errorf("no build may be created when the cap cannot be verified; got %d", len(bs.builds))
 	}
 }

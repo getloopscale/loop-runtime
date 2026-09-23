@@ -30,6 +30,19 @@ func (q *Queries) AddTenantMember(ctx context.Context, db DBTX, arg AddTenantMem
 	return err
 }
 
+const countTenantMembers = `-- name: CountTenantMembers :one
+SELECT COUNT(*)::int FROM tenant_members
+WHERE tenant_id = $1
+`
+
+// Plan enforcement: seats in use, gated against plan_limits.seats.
+func (q *Queries) CountTenantMembers(ctx context.Context, db DBTX, tenantID string) (int32, error) {
+	row := db.QueryRow(ctx, countTenantMembers, tenantID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getTenantMember = `-- name: GetTenantMember :one
 SELECT u.username, COALESCE(u.email, '') AS email, tm.role, tm.created_at
 FROM tenant_members tm

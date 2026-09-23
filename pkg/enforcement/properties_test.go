@@ -16,6 +16,7 @@
 package enforcement
 
 import (
+	"context"
 	"testing"
 	"testing/quick"
 )
@@ -29,8 +30,9 @@ func TestProperty_EnterprisePlanAlwaysAllowsCheckLimit(t *testing.T) {
 			plans:  map[string]string{"tn-enterprise": "enterprise"},
 			limits: map[[2]string][2]int{}, // none — enterprise short-circuits
 		}
-		limiter := NewPlanLimiterWithStore(store, testLogger())
-		got := limiter.CheckLimit("tn-enterprise", metric, int(currentCount))
+		limiter := NewPlanLimiter(store, testLogger())
+		got, err := limiter.CheckLimit(context.Background(), "tn-enterprise", metric, int(currentCount))
+		requireNoLimitErr(t, err)
 		return got.Allowed && got.Plan == "enterprise"
 	}
 	if err := quick.Check(f, &quick.Config{MaxCount: 5000}); err != nil {
@@ -46,8 +48,9 @@ func TestProperty_EnterprisePlanAlwaysAllowsCheckValue(t *testing.T) {
 			plans:  map[string]string{"tn-enterprise": "enterprise"},
 			limits: map[[2]string][2]int{},
 		}
-		limiter := NewPlanLimiterWithStore(store, testLogger())
-		got := limiter.CheckValue("tn-enterprise", metric, int(requested))
+		limiter := NewPlanLimiter(store, testLogger())
+		got, err := limiter.CheckValue(context.Background(), "tn-enterprise", metric, int(requested))
+		requireNoLimitErr(t, err)
 		return got.Allowed && got.Plan == "enterprise"
 	}
 	if err := quick.Check(f, &quick.Config{MaxCount: 5000}); err != nil {
@@ -63,8 +66,9 @@ func TestProperty_UnlimitedHardLimitAlwaysAllows(t *testing.T) {
 			plans:  map[string]string{"tn-team": "team"},
 			limits: map[[2]string][2]int{{"team", "projects"}: {-1, 0}},
 		}
-		limiter := NewPlanLimiterWithStore(store, testLogger())
-		got := limiter.CheckLimit("tn-team", "projects", int(currentCount))
+		limiter := NewPlanLimiter(store, testLogger())
+		got, err := limiter.CheckLimit(context.Background(), "tn-team", "projects", int(currentCount))
+		requireNoLimitErr(t, err)
 		return got.Allowed
 	}
 	if err := quick.Check(f, &quick.Config{MaxCount: 5000}); err != nil {
@@ -80,12 +84,14 @@ func TestProperty_CheckLimitDeterministic(t *testing.T) {
 		plans:  map[string]string{"tn-acme": "starter"},
 		limits: map[[2]string][2]int{{"starter", "projects"}: {3, 0}},
 	}
-	limiter := NewPlanLimiterWithStore(store, testLogger())
+	limiter := NewPlanLimiter(store, testLogger())
 
 	f := func(count uint8) bool {
-		first := limiter.CheckLimit("tn-acme", "projects", int(count))
+		first, err := limiter.CheckLimit(context.Background(), "tn-acme", "projects", int(count))
+		requireNoLimitErr(t, err)
 		for i := 0; i < 20; i++ {
-			r := limiter.CheckLimit("tn-acme", "projects", int(count))
+			r, err := limiter.CheckLimit(context.Background(), "tn-acme", "projects", int(count))
+			requireNoLimitErr(t, err)
 			if r.Allowed != first.Allowed || r.Plan != first.Plan ||
 				r.Limit != first.Limit || r.Current != first.Current {
 				return false
@@ -109,11 +115,14 @@ func TestProperty_CheckLimit_HardLimitBoundary(t *testing.T) {
 			plans:  map[string]string{"tn-acme": "starter"},
 			limits: map[[2]string][2]int{{"starter", "projects"}: {int(hard), 0}},
 		}
-		limiter := NewPlanLimiterWithStore(store, testLogger())
+		limiter := NewPlanLimiter(store, testLogger())
 
-		under := limiter.CheckLimit("tn-acme", "projects", int(hard)-1)
-		at := limiter.CheckLimit("tn-acme", "projects", int(hard))
-		over := limiter.CheckLimit("tn-acme", "projects", int(hard)+1)
+		under, err := limiter.CheckLimit(context.Background(), "tn-acme", "projects", int(hard)-1)
+		requireNoLimitErr(t, err)
+		at, err := limiter.CheckLimit(context.Background(), "tn-acme", "projects", int(hard))
+		requireNoLimitErr(t, err)
+		over, err := limiter.CheckLimit(context.Background(), "tn-acme", "projects", int(hard)+1)
+		requireNoLimitErr(t, err)
 
 		return under.Allowed && !at.Allowed && !over.Allowed
 	}
@@ -134,10 +143,12 @@ func TestProperty_CheckValue_RequestExceedsCap(t *testing.T) {
 			plans:  map[string]string{"tn-acme": "starter"},
 			limits: map[[2]string][2]int{{"starter", "replicas"}: {int(hard), 0}},
 		}
-		limiter := NewPlanLimiterWithStore(store, testLogger())
+		limiter := NewPlanLimiter(store, testLogger())
 
-		under := limiter.CheckValue("tn-acme", "replicas", int(hard))
-		over := limiter.CheckValue("tn-acme", "replicas", int(hard)+1)
+		under, err := limiter.CheckValue(context.Background(), "tn-acme", "replicas", int(hard))
+		requireNoLimitErr(t, err)
+		over, err := limiter.CheckValue(context.Background(), "tn-acme", "replicas", int(hard)+1)
+		requireNoLimitErr(t, err)
 
 		// At exactly hard: CheckValue should ALLOW (== cap is fine).
 		// Above hard: must DENY.

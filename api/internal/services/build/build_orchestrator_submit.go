@@ -88,7 +88,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 		// it via the *LoopZeroError ladder branch with its own code, not as
 		// SubmitBuildError. The wrap helper EC-3 guard also short-circuits
 		// any *LoopZeroError that reaches it (defense-in-depth).
-		if err := enforceScaling(req.Apps, o.planCap, req.TenantID, o.kedaEnabled); err != nil {
+		if err := enforceScaling(ctx, req.Apps, o.planCap, req.TenantID, o.kedaEnabled); err != nil {
 			return err
 		}
 
@@ -276,7 +276,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 // B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059) Constraint 6: the check MUST
 // live in SubmitBuild so both CLI and GitHub App auto-deploy paths are covered.
 // A nil checker disables enforcement (dev / legacy callsites).
-func enforceScaling(apps []deploycontracts.AppSpec, checker PlanCapChecker, tenantID string, kedaEnabled bool) error {
+func enforceScaling(ctx context.Context, apps []deploycontracts.AppSpec, checker PlanCapChecker, tenantID string, kedaEnabled bool) error {
 	for _, a := range apps {
 		hasReplicas := a.Replicas > 0
 		hasAutoscaling := a.Autoscaling != nil
@@ -319,7 +319,10 @@ func enforceScaling(apps []deploycontracts.AppSpec, checker PlanCapChecker, tena
 		if requested <= 0 {
 			continue
 		}
-		allowed, plan, cap := checker.CheckReplicasValue(tenantID, requested)
+		allowed, plan, cap, err := checker.CheckReplicasValue(ctx, tenantID, requested)
+		if err != nil {
+			return err
+		}
 		if !allowed {
 			// B15 MEET-059 action #9: emit counter so dashboards/alerts can
 			// surface plan-limit friction without scraping audit logs.

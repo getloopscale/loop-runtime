@@ -226,6 +226,10 @@ type Config struct {
 	// routes. Wired by api/cmd/setup_server.go.
 	ReleaseInspector release.ReleaseInspector
 	PlanLimiter      *enforcement.PlanLimiter
+	// PlanUsage measures the usage PlanLimiter gates (builds this month,
+	// permanent environments, seats). Set together with PlanLimiter; each
+	// method is an enforcement.UsageCounter.
+	PlanUsage PlanUsage
 	// CostEnforcer gates quantity-style metrics (egress bytes, registry pulls,
 	// build minutes) against per-plan caps from cost_counters (migration 000017).
 	// Distinct from PlanLimiter which gates rate-style limits (builds/month,
@@ -338,4 +342,40 @@ func Run(cfg Config) error {
 	//   a) bgWg wait (up to 30s for background goroutines to finish)
 	//   b) dbAdapter.Close() (connection pool closed only after goroutines drain)
 	return srv.Shutdown(ctx)
+}
+
+// PlanUsage is the usage port the plan-limit middlewares count through. A
+// counting error is returned, never read as zero: the middleware fails closed.
+type PlanUsage interface {
+	BuildsThisMonth(ctx context.Context, tenantID string) (int, error)
+	PermanentEnvironments(ctx context.Context, tenantID string) (int, error)
+	Seats(ctx context.Context, tenantID string) (int, error)
+}
+
+// unconfiguredPlanUsage stands in when a PlanLimiter is wired without a
+// PlanUsage. Every count fails, so the middleware refuses the request rather
+// than enforcing against a usage of zero. With no PlanLimiter the middleware
+// passes through before counting, so dev boots are unaffected.
+type unconfiguredPlanUsage struct{}
+
+var errPlanUsageUnconfigured = errors.New("plan usage store is not configured")
+
+func (unconfiguredPlanUsage) BuildsThisMonth(context.Context, string) (int, error) {
+	return 0, errPlanUsageUnconfigured
+}
+
+func (unconfiguredPlanUsage) PermanentEnvironments(context.Context, string) (int, error) {
+	return 0, errPlanUsageUnconfigured
+}
+
+func (unconfiguredPlanUsage) Seats(context.Context, string) (int, error) {
+	return 0, errPlanUsageUnconfigured
+}
+
+// planUsage returns the configured PlanUsage, or one that refuses to count.
+func (c *Config) planUsage() PlanUsage {
+	if c.PlanUsage == nil {
+		return unconfiguredPlanUsage{}
+	}
+	return c.PlanUsage
 }

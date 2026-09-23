@@ -183,6 +183,9 @@ func buildServerConfig(
 		sc.ProjectStore = dbDeps.ProjectStore
 		sc.DB = dbDeps.DBHealth
 		sc.PlanLimiter = dbDeps.PlanLimiter
+		if dbDeps.PlanLimiter != nil {
+			sc.PlanUsage = store.NewPostgresPlanUsageStore(dbDeps.DBAdapter)
+		}
 		// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): the existing
 		// *store.PostgresProjectStore doubles as the cross-tenant binding checker
 		// (EC-03 absorption — 404 byte-identical between cross-tenant attempts and
