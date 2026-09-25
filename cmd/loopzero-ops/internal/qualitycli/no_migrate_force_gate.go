@@ -1,0 +1,52 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package qualitycli
+
+import (
+	"flag"
+	"fmt"
+	"os"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nomigrateforce"
+)
+
+func init() {
+	register(Gate{
+		Name:    "no-migrate-force",
+		Summary: "Forbids forced/destructive DB migration operations.",
+		Setup:   setupNoMigrateForce,
+	})
+}
+
+func setupNoMigrateForce(_ *flag.FlagSet) Check {
+	return func(inv Invocation) (Outcome, error) {
+		o, err := nomigrateforce.Check(nomigrateforce.Config{Root: inv.Root})
+		if err != nil {
+			return Fail, err
+		}
+		if !o.Pass {
+			// allowlist: migrate force (this is the gate's own diagnostic message)
+			msg := fmt.Sprintf("%d unallowlisted occurrence(s) of 'migrate force' in production code. "+
+				"Per CORRECTIONS.txt item B, forcing a migration on a production DB corrupts "+
+				"schema_migrations. Use psql for ad-hoc SQL, OR add a '# allowlist: migrate force "+
+				"(rationale)' marker on the same line or within 3 lines above.", len(o.Blocked))
+			if os.Getenv("GITHUB_ACTIONS") != "" {
+				fmt.Fprintf(inv.Stdout, "::error::%s\n", msg)
+			} else {
+				fmt.Fprintf(inv.Stderr, "[no-migrate-force] BLOCK: %s\n", msg)
+			}
+			fmt.Fprintln(inv.Stderr, "[no-migrate-force] blocked matches:")
+			for _, b := range o.Blocked {
+				fmt.Fprintf(inv.Stderr, "  %s\n", b)
+			}
+			return Fail, nil
+		}
+		if o.MatchCount > 0 {
+			fmt.Fprintf(inv.Stdout, "[no-migrate-force] all %d matches allowlisted — OK.\n", o.MatchCount)
+		} else {
+			fmt.Fprintln(inv.Stdout, "[no-migrate-force] no matches — OK.")
+		}
+		return Pass, nil
+	}
+}

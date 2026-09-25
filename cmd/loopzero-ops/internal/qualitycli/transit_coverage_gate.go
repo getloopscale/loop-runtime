@@ -1,0 +1,37 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package qualitycli
+
+import (
+	"flag"
+	"fmt"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/transitcoverage"
+)
+
+func init() {
+	register(Gate{
+		Name:    "transit-coverage",
+		Summary: "Enforces the OpenBao transit dispatcher invariant (encrypt/decrypt-for-store).",
+		Setup:   setupTransitCoverage,
+	})
+}
+
+// setupTransitCoverage is the Go home for the vault-prefix-format / transit-
+// coverage gate (T3.7 of plan 2026-06-02-openbao-adoption v1.3). Enforces
+// the FAANG dual-path invariant: Set/ListForResync MUST use the dispatcher
+// (encryptForStore/decryptFromStore), never bypass to raw s.encrypt/decrypt.
+func setupTransitCoverage(_ *flag.FlagSet) Check {
+	return func(inv Invocation) (Outcome, error) {
+		outcome, err := transitcoverage.Check(transitcoverage.Config{RepoRoot: inv.Root})
+		if err != nil {
+			return Fail, err
+		}
+		fmt.Fprint(inv.Stderr, outcome.FormatReport())
+		if !outcome.Pass {
+			return Fail, nil
+		}
+		return Pass, nil
+	}
+}

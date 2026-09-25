@@ -1,0 +1,88 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package qualitycli
+
+import (
+	"flag"
+	"fmt"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/contractconsumers"
+)
+
+func init() {
+	register(Gate{
+		Name:    "contract-consumers",
+		Summary: "Verifies cross-repo contract consumers stay in sync with the contract.",
+		Setup:   setupContractConsumers,
+	})
+}
+
+// setupContractConsumers detects backend response shape narrowing (Go struct
+// field with `json:"<tag>"` REMOVED in the PR diff) when at least one
+// consumer in cloud/dashboard/src/, cli/src/, or api/internal/ still reads
+// that field. See cmd/loopzero-ops/internal/quality/contractconsumers/check.go package doc for
+// scope + non-scope + plan rationale. Sponsor mandate 2026-06-08: this
+// gate REDUCES the bug rate that reaches the sponsor walkthrough; sponsor
+// walkthrough remains the final visual gate.
+func setupContractConsumers(fs *flag.FlagSet) Check {
+	baseRef := fs.String("base-ref", "origin/develop", "git ref the PR branches from")
+	headRef := fs.String("head-ref", "HEAD", "git ref of the PR HEAD")
+	return func(inv Invocation) (Outcome, error) {
+		outcome, err := contractconsumers.Check(contractconsumers.Config{
+			RepoRoot: inv.Root,
+			BaseRef:  *baseRef,
+			HeadRef:  *headRef,
+		})
+		if err != nil {
+			return Fail, err
+		}
+		// Lost coverage is ALWAYS printed — including on PASS, which is where it would
+		// vanish. A consumer root that is absent (usually a sibling checkout that is
+		// not cloned) makes the verdict PARTIAL; it does not fail the gate on its own.
+		if outcome.Partial {
+			fmt.Fprintf(inv.Stderr, "contract-consumers: PARTIAL — %d of %d consumer root(s) do not exist "+
+				"and were NOT scanned: %v\n", len(outcome.MissingRoots), len(outcome.ScanRoots),
+				outcome.MissingRoots)
+		}
+		// A missing tracked path FAILS, and the difference from the warning above is
+		// deliberate. An absent consumer root shrinks where the gate hunts for the READER of
+		// the field, and where to repoint those is a meeting decision (B-100) — hence a
+		// warning. An absent tracked path takes away the gate's ability to see the field DROP
+		// at all: it starts answering PASS over a contract surface it never read, and nothing
+		// in the verdict text changes. That is not reduced coverage, it is a verdict without
+		// a subject, and the fix depends on no meeting — point the list at the new path.
+		if len(outcome.MissingTracked) > 0 {
+			fmt.Fprintf(inv.Stderr, "contract-consumers: FAIL — %d of %d tracked path(s) do not exist "+
+				"in this tree: %v\n", len(outcome.MissingTracked), len(outcome.TrackedFiles),
+				outcome.MissingTracked)
+			fmt.Fprintf(inv.Stderr, "  git diff/grep silently ignore a pathspec matching nothing, so this "+
+				"gate would be reporting PASS without reading that surface.\n"+
+				"  Fix: point trackedFiles in cmd/loopzero-ops/internal/quality/contractconsumers/check.go "+
+				"at the new path.\n")
+			return Fail, nil
+		}
+		if outcome.CommandError != "" {
+			return Fail, fmt.Errorf("git/grep: %s", outcome.CommandError)
+		}
+		if !outcome.Pass {
+			fmt.Fprintf(inv.Stderr, "contract-consumers: FAIL — %d consumer reference(s) to dropped JSON tag(s) (between %s and %s):\n",
+				len(outcome.Findings), *baseRef, *headRef)
+			fmt.Fprint(inv.Stderr, contractconsumers.FormatFindings(outcome.Findings))
+			fmt.Fprintln(inv.Stderr, "")
+			fmt.Fprintf(inv.Stderr, "Fix:\n  %s\n", contractconsumers.ActionableFix())
+			return Fail, nil
+		}
+		verdict := "PASS"
+		if outcome.Partial {
+			verdict = "PASS (PARTIAL)"
+		}
+		if len(outcome.DroppedTags) == 0 {
+			fmt.Fprintf(inv.Stdout, "contract-consumers: %s — no JSON tag drops in tracked files\n", verdict)
+		} else {
+			fmt.Fprintf(inv.Stdout, "contract-consumers: %s — %d JSON tag(s) dropped + ZERO consumer reads found: %v\n",
+				verdict, len(outcome.DroppedTags), outcome.DroppedTags)
+		}
+		return Pass, nil
+	}
+}

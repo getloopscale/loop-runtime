@@ -35,7 +35,7 @@ tasks:
       # from it keeps ONE place to update and makes an un-mirrored registry
       # change fail here instead of passing silently.
       - |
-        BASE=cmd/loopzero-ops/testdata/gateset.frozen
+        BASE=cmd/loopzero-ops/internal/qualitycli/testdata/gateset.frozen
         want=$(grep -vcE '^#|^$' "$BASE")
         n=$(/tmp/loopzero-ops quality --list --names | wc -l)
         [ "$n" -eq "$want" ] || {
@@ -211,8 +211,9 @@ tasks:
       # makes them enforce from here on. The rest of the #255 backlog stays out on
       # purpose: nine more report real findings (wiring them would turn this task
       # red for reasons unrelated to the change under test), two exceed a 25s
-      # budget, and three pass vacuously. Their status is recorded per-gate in
-      # cmd/loopzero-ops/quality_gate_wiring_test.go rather than left as a silent `-`.
+      # budget, and three pass vacuously. Their status is recorded per gate, as
+      # the Wiring field of each spec under cmd/loopzero-ops/internal/qualitycli/,
+      # rather than left as a silent `-`.
       - /tmp/loopzero-ops quality agpl-isolation
       - /tmp/loopzero-ops quality contract-consumers
       - /tmp/loopzero-ops quality decisions-deletion
@@ -344,7 +345,7 @@ tasks:
       - /tmp/loopzero-ops quality cluster-rename-guard                             # B-001 T0.1: prova que o rename de cluster (mgmt->core, vault->secrets) tocou so identificadores. Toda linha classificada GENERIC antes do rename tem de sobreviver byte a byte — sao 70, e `vault` responde pela maioria porque ali a palavra nomeia o OpenBao.
       - /tmp/loopzero-ops quality route-auth-coverage                                # M-Migrate2 (2026-07-07): replaced infra/tests/check-route-auth-coverage_test.sh with pure-logic Go gate. R2-F8 HIGH: every router.go route MUST be inside middleware.Auth group OR registerProtectedRoutes OR explicit public-allowlist. 40 routes verified.
       # M16 Phase 1 hygiene (2026-07-10): 5 previously-registered M-Migrate2 gates wired in per plan D1 (Rule 3 dead-code closure).
-      - /tmp/loopzero-ops quality webhook-canonical-path                             # M16 T1.1 (2026-07-10): pre-Wave-1 backfill. Registered in quality_registry.go:85 by M-Migrate2 (2026-07-07 replaces infra/tests/check-webhook-canonical-path_test.sh) but not wired into quality:gates until now.
+      - /tmp/loopzero-ops quality webhook-canonical-path                             # M16 T1.1 (2026-07-10): pre-Wave-1 backfill. Registered by M-Migrate2 (2026-07-07 replaces infra/tests/check-webhook-canonical-path_test.sh) but not wired into quality:gates until now.
       - /tmp/loopzero-ops quality oidc-cred-admin-loopzero                            # M16 T1.2 (2026-07-10): pre-Wave-1 backfill. Registered by M-Migrate2 (2026-07-07 replaces infra/tests/check-oidc-cred-admin-loopzero_test.sh) but not wired until now.
       - /tmp/loopzero-ops quality canonical-fixture-repo                             # M16 T1.3 (2026-07-10): pre-Wave-1 backfill. Registered by M-Migrate2 (2026-07-07) but not wired until now.
       - /tmp/loopzero-ops quality install-git-hooks                                  # M16 T1.4 (2026-07-10): pre-Wave-1 backfill. Registered by M-Migrate2 (2026-07-07) but not wired until now.

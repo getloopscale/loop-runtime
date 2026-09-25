@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package qualitycli
+
+import (
+	"flag"
+	"fmt"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfilenodockerip"
+)
+
+func init() {
+	register(Gate{
+		Name:    "caddyfile-no-docker-ip",
+		Summary: "Blocks hardcoded 172.18.x.x Docker network IPs in infra/local/Caddyfile + enforces canonical https://127.0.0.1:8443 upstream in both wildcard blocks (M-Migrate2 2026-07-07 replaces infra/tests/check-caddyfile-no-docker-network-ip_test.sh — closes Red Team loopzero-cloud#127 guard).",
+		Setup:   setupCaddyfileNoDockerIP,
+	})
+}
+
+// setupCaddyfileNoDockerIP enforces that the canonical infra/local/Caddyfile does
+// NOT hardcode Docker network IPs (172.18.x.x) in non-comment lines and that
+// both wildcard blocks reverse_proxy to the stable https://127.0.0.1:8443.
+// Migrated from infra/tests/check-caddyfile-no-docker-network-ip_test.sh
+// (M-Migrate2 continuation 2026-07-07 — closes Red Team loopzero-cloud#127 guard).
+func setupCaddyfileNoDockerIP(_ *flag.FlagSet) Check {
+	return func(inv Invocation) (Outcome, error) {
+		outcome, err := caddyfilenodockerip.Check(caddyfilenodockerip.Config{RepoRoot: inv.Root})
+		if err != nil {
+			if !isViolation(err, caddyfilenodockerip.ErrViolations) {
+				return Fail, err
+			}
+			fmt.Fprintf(inv.Stderr, "caddyfile-no-docker-ip: FAIL — %d violation(s):\n", len(outcome.Violations))
+			for _, v := range outcome.Violations {
+				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+			}
+			return Fail, nil
+		}
+		fmt.Fprintln(inv.Stdout, "caddyfile-no-docker-ip: PASS — Caddyfile canonical (no 172.18.x.x, both wildcard blocks use https://127.0.0.1:8443)")
+		return Pass, nil
+	}
+}

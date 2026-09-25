@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package qualitycli
+
+import (
+	"flag"
+	"fmt"
+	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nolegacysatoken"
+)
+
+func init() {
+	register(Gate{
+		Name:    "no-legacy-sa-token-secret",
+		Summary: "Forbids legacy kubernetes.io/service-account-token Secrets.",
+		Setup:   setupNoLegacySATokenSecret,
+	})
+}
+
+// setupNoLegacySATokenSecret is the Go home for the no-legacy-sa-token-secret
+// gate (T7.6 of plan 2026-06-02-openbao-adoption v1.3).
+func setupNoLegacySATokenSecret(fs *flag.FlagSet) Check {
+	allowlist := fs.String("allowlist", "", "comma-separated allowlisted paths")
+	return func(inv Invocation) (Outcome, error) {
+		cfg := nolegacysatoken.Config{RepoRoot: inv.Root}
+		if *allowlist != "" {
+			for _, p := range strings.Split(*allowlist, ",") {
+				cfg.AllowlistPaths = append(cfg.AllowlistPaths, strings.TrimSpace(p))
+			}
+		}
+		outcome, err := nolegacysatoken.Check(cfg)
+		if err != nil {
+			return Fail, err
+		}
+		fmt.Fprint(inv.Stderr, nolegacysatoken.FormatOutcome(outcome))
+		if !outcome.Pass {
+			return Fail, nil
+		}
+		return Pass, nil
+	}
+}

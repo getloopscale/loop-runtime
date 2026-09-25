@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package qualitycli
+
+import (
+	"flag"
+	"fmt"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/securitycontext"
+)
+
+func init() {
+	register(Gate{
+		Name:    "security-context",
+		Summary: "Enforces pod securityContext (non-root, limits, probes).",
+		Setup:   setupSecurityContext,
+	})
+}
+
+func setupSecurityContext(fs *flag.FlagSet) Check {
+	gate := fs.Bool("gate", false, "gate mode: exit 1 if any NON-CONFORMANT chart lacks an ADR exception")
+	return func(inv Invocation) (Outcome, error) {
+		o, err := securitycontext.Check(securitycontext.Config{Root: inv.Root})
+		if err != nil {
+			return Fail, err
+		}
+
+		if *gate {
+			if o.Pass {
+				fmt.Fprintln(inv.Stdout, "✅ securityContext audit GREEN — 0 NON-CONFORMANT charts without ADR exception.")
+				return Pass, nil
+			}
+			fmt.Fprintf(inv.Stderr, "❌ securityContext audit FAILED — %d NON-CONFORMANT chart(s) without ADR:\n", len(o.Violations))
+			for _, v := range o.Violations {
+				fmt.Fprintf(inv.Stderr, "  - %s\n", v)
+				fmt.Fprintf(inv.Stderr, "    Action: fix securityContext in infra/helm/%s/, OR create infra/helm/%s/ADR-securitycontext-exception.md\n", v, v)
+			}
+			return Fail, nil
+		}
+
+		// report mode — markdown matrix to stdout.
+		yn := func(b bool) string {
+			if b {
+				return "yes"
+			}
+			return "no"
+		}
+		fmt.Fprintln(inv.Stdout, "# securityContext Audit — infra/helm/")
+		fmt.Fprintln(inv.Stdout)
+		fmt.Fprintf(inv.Stdout, "**Charts inspected:** %d\n\n", len(o.Charts))
+		fmt.Fprintln(inv.Stdout, "| Chart | runAsNonRoot | readOnlyRootFS | drop:[ALL] | allowPrivilegeEscalation:false | Status | ADR Exception |")
+		fmt.Fprintln(inv.Stdout, "|---|---|---|---|---|---|---|")
+		var conformant, partial, nonconf, na int
+		for _, c := range o.Charts {
+			if !c.PodBearing {
+				fmt.Fprintf(inv.Stdout, "| %s | n/a | n/a | n/a | n/a | N/A (no pods) | — |\n", c.Name)
+				na++
+				continue
+			}
+			adr := "—"
+			if c.HasADR {
+				adr = "✅ exists"
+			} else if c.Status == "NON-CONFORMANT" {
+				adr = "❌ missing"
+			}
+			fmt.Fprintf(inv.Stdout, "| %s | %s | %s | %s | %s | %s | %s |\n",
+				c.Name, yn(c.RunAsNonRoot), yn(c.ReadOnlyRootFS), yn(c.DropAll), yn(c.NoPrivEsc), c.Status, adr)
+			switch c.Status {
+			case "CONFORMANT":
+				conformant++
+			case "PARTIAL":
+				partial++
+			case "NON-CONFORMANT":
+				nonconf++
+			}
+		}
+		fmt.Fprintf(inv.Stdout, "\n## Summary\n\n- CONFORMANT: %d/%d\n- PARTIAL: %d/%d\n- NON-CONFORMANT: %d/%d\n- N/A (no pods): %d/%d\n- NON-CONFORMANT without ADR: %d\n",
+			conformant, len(o.Charts), partial, len(o.Charts), nonconf, len(o.Charts), na, len(o.Charts), len(o.Violations))
+		return Pass, nil
+	}
+}

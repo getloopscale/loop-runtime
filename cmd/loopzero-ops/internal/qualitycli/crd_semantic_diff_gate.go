@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package qualitycli
+
+import (
+	"flag"
+	"fmt"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/crdsemanticdiff"
+)
+
+func init() {
+	register(Gate{
+		Name:    "crd-semantic-diff",
+		Summary: "Semantic diff of CRD schemas to catch breaking spec changes.",
+		Setup:   setupCRDSemanticDiff,
+	})
+}
+
+// setupCRDSemanticDiff is the gate replacing crd-semantic-diff.sh: detects
+// semantic drift between source CRDs and the rendered loopzero-crds chart.
+// Shells out to `helm template` directly (no shared abstraction); unit tests
+// are hermetic via the override hook.
+func setupCRDSemanticDiff(fs *flag.FlagSet) Check {
+	crd := fs.String("crd", "", "limit to a single CRD short-name (e.g. tenants)")
+	verbose := fs.Bool("verbose", false, "append inline diff snippets")
+	return func(inv Invocation) (Outcome, error) {
+		outcome, err := crdsemanticdiff.Check(crdsemanticdiff.Config{
+			Root:      inv.Root,
+			CRDFilter: *crd,
+			Verbose:   *verbose,
+		})
+		if err != nil {
+			return Fail, err
+		}
+		for _, m := range outcome.Messages {
+			fmt.Fprintln(inv.Stdout, m)
+		}
+		if !outcome.Pass {
+			return Fail, nil
+		}
+		return Pass, nil
+	}
+}

@@ -58,7 +58,7 @@ api/internal/db/store/cost_wrapper.go | acesso a `cost_counters`; lê e escreve,
 api/internal/db/generated/models.go | gerado por sqlc a partir do schema; espelha a coluna, não a política
 cmd/loopzero-ops/internal/quality/billingsecrets/check.go | é a GUARDA da camada secret-mount, não a camada
 cmd/loopzero-ops/internal/quality/devpublicenv/check.go | confere presença de variáveis do dev-public; não decide nada sobre cobrança
-cmd/loopzero-ops/quality_gates_authz.go | fiação de subcomando do loopzero-ops
+cmd/loopzero-ops/internal/qualitycli/billing_secrets_gate.go | loopzero-ops gate adapter; it names the billing secrets to explain the gate and decides nothing about billing
 infra/helmfile/environments/dev-public.yaml | declara o ambiente; o valor que liga a cobrança mora em values/dev-public/
 taskfiles/infra.yml | task de operador que IMPRIME o comando de criar o Secret à mão; instrução, não caminho de execução
 taskfiles/quality.yml | comentário citando `LOOPZERO_PROMETHEUS_URL` e `CostEnforcer` para justificar o wire do gate `check-loopzero-cloud-cost-aggregator-wiring` sob `quality:gates`; é documentação da razão do gate, não caminho de cobrança

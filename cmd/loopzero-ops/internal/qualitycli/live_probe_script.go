@@ -1,0 +1,33 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package qualitycli
+
+import (
+	"fmt"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/liveprobescript"
+)
+
+// liveProbeScriptCheck runs one live probe script contract
+// (quality/liveprobescript). Every such gate shares the output shape and the
+// verdicts: a violated assertion is a violation; an error with no assertion
+// behind it means the contract could not be evaluated.
+func liveProbeScriptCheck(spec liveprobescript.Spec) Check {
+	return func(inv Invocation) (Outcome, error) {
+		outcome, err := liveprobescript.Check(inv.Root, spec)
+		if err != nil {
+			if len(outcome.Failures) == 0 {
+				return Fail, err
+			}
+			fmt.Fprintf(inv.Stderr, "%s: FAIL — %d assertion(s) violated:\n", spec.Gate, len(outcome.Failures))
+			for _, v := range outcome.Failures {
+				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+			}
+			return Fail, nil
+		}
+		n := spec.Assertions()
+		fmt.Fprintf(inv.Stdout, "%s: PASS — %d/%d hermetic assertions on %s\n", spec.Gate, n, n, spec.Script)
+		return Pass, nil
+	}
+}

@@ -21,6 +21,8 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/qualitycli"
 )
 
 const helpText = `loopzero-ops — LoopZero operator toolbox (Phase 0 minimal skeleton)
@@ -54,7 +56,7 @@ func run(args []string) int {
 		fmt.Print(helpText)
 		return 0
 	case "quality":
-		return runQuality(args[1:])
+		return qualitycli.Main(args[1:], os.Stdout, os.Stderr)
 	case "pulumi":
 		return runPulumi(args[1:])
 	case "drill":
