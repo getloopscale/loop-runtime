@@ -5,9 +5,9 @@
 //
 // loopzero-monitoring is a bundle of Prometheus operator artifacts, read from
 // infra/helm/monitoring through the chart's `rules` and `dashboards` symlinks:
-//   - 10 PrometheusRule manifests (capacity, critical, database, domains,
-//     otel-pipeline, probes, registry, sigstore, tracing, warning)
-//   - 27 ConfigMap dashboards consumed by Grafana sidecar (label
+//   - 9 PrometheusRule manifests (capacity, critical, database, domains,
+//     otel-pipeline, probes, sigstore, tracing, warning)
+//   - 26 ConfigMap dashboards consumed by Grafana sidecar (label
 //     grafana_dashboard=1) — every dashboard in infra/helm/monitoring/dashboards
 package loopzeromonitoring_test
 
@@ -24,8 +24,8 @@ import (
 const (
 	chartName        = "loopzero-monitoring"
 	releaseName      = "loopzero-monitoring-test"
-	expectedRules    = 10 // count locked: the 10 rule files prometheusrules.yaml publishes
-	expectedDashCMs  = 27 // count locked: the 27 dashboards in infra/helm/monitoring/dashboards
+	expectedRules    = 9  // count locked: the 9 rule files prometheusrules.yaml publishes
+	expectedDashCMs  = 26 // count locked: the 26 dashboards in infra/helm/monitoring/dashboards
 	grafanaDiscovery = "grafana_dashboard"
 )
 

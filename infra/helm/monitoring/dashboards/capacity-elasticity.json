@@ -339,7 +339,7 @@
       },
       "targets": [
         {
-          "expr": "ALERTS{alertname=~\"GiteaAuthLatencyHigh|ArgoWorkflowQuotaExceeded|HPAAtMaxReplicas|PVCPendingSustained|TenantReconcileBacklog|BuildFailureRateHigh|LoopZeroPodCrashLooping|HarborCanaryFailing|LoopZeroHighAPILatency\"}",
+          "expr": "ALERTS{alertname=~\"GiteaAuthLatencyHigh|ArgoWorkflowQuotaExceeded|HPAAtMaxReplicas|PVCPendingSustained|TenantReconcileBacklog|BuildFailureRateHigh|LoopZeroPodCrashLooping|LoopZeroHighAPILatency\"}",
           "format": "table"
         }
       ]

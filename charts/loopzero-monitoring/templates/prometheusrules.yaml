@@ -20,7 +20,6 @@ release namespace, everything else is published as written.
   "warning" "prometheusrule-warning.yaml"
   "database" "prometheusrule-database.yaml"
   "domains" "prometheusrule-domains.yaml"
-  "registry" "prometheusrule-registry.yaml"
   "otelPipeline" "prometheusrule-otel-pipeline.yaml"
   "probes" "prometheusrule-probes.yaml"
   "tracing" "prometheusrule-tracing.yaml"

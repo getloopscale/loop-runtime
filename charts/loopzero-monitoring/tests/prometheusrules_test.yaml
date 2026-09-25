@@ -10,7 +10,7 @@ tests:
   - it: renders one PrometheusRule per rule file
     asserts:
       - hasDocuments:
-          count: 10
+          count: 9
       - isKind:
           of: PrometheusRule
       - isAPIVersion:
@@ -43,7 +43,7 @@ tests:
       prometheusRules.database.enabled: false
     asserts:
       - hasDocuments:
-          count: 9
+          count: 8
 
   - it: disabling all rules publishes none
     set:
