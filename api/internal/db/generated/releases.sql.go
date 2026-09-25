@@ -63,21 +63,27 @@ SET status = 'CANCELLED'
 WHERE tenant_id = $1
   AND project_id = $2
   AND environment = $3
-  AND status <> 'CANCELLED'
-  AND status <> 'ROLLED_BACK'
+  AND status = ANY($4::text[])
 RETURNING id
 `
 
 type CancelReleasesByEnvParams struct {
-	TenantID    string `json:"tenant_id"`
-	ProjectID   string `json:"project_id"`
-	Environment string `json:"environment"`
+	TenantID     string   `json:"tenant_id"`
+	ProjectID    string   `json:"project_id"`
+	Environment  string   `json:"environment"`
+	FromStatuses []string `json:"from_statuses"`
 }
 
-// Cancels all non-CANCELLED releases for a (tenant, project, env) tuple.
-// Used by `loopzero cancel` (env-scoped) + tenant deletion cascade.
+// Cancels the releases of a (tenant, project, env) tuple whose status is in
+// from_statuses. The caller computes from_statuses from the release state
+// machine (ProjectDeleted edges), so the transition table never leaks here.
 func (q *Queries) CancelReleasesByEnv(ctx context.Context, db DBTX, arg CancelReleasesByEnvParams) ([]string, error) {
-	rows, err := db.Query(ctx, cancelReleasesByEnv, arg.TenantID, arg.ProjectID, arg.Environment)
+	rows, err := db.Query(ctx, cancelReleasesByEnv,
+		arg.TenantID,
+		arg.ProjectID,
+		arg.Environment,
+		arg.FromStatuses,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -594,6 +600,42 @@ func (q *Queries) InsertRelease(ctx context.Context, db DBTX, arg InsertReleaseP
 		&i.ImageAttestationRekorUrl,
 	)
 	return i, err
+}
+
+const listReleaseStatusesByEnv = `-- name: ListReleaseStatusesByEnv :many
+SELECT DISTINCT status FROM releases
+WHERE tenant_id = $1
+  AND project_id = $2
+  AND environment = $3
+`
+
+type ListReleaseStatusesByEnvParams struct {
+	TenantID    string `json:"tenant_id"`
+	ProjectID   string `json:"project_id"`
+	Environment string `json:"environment"`
+}
+
+// The distinct statuses present for a (tenant, project, env) tuple. The
+// project-delete cascade reads them so the release state machine, not SQL,
+// decides which of them move to CANCELLED.
+func (q *Queries) ListReleaseStatusesByEnv(ctx context.Context, db DBTX, arg ListReleaseStatusesByEnvParams) ([]string, error) {
+	rows, err := db.Query(ctx, listReleaseStatusesByEnv, arg.TenantID, arg.ProjectID, arg.Environment)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var status string
+		if err := rows.Scan(&status); err != nil {
+			return nil, err
+		}
+		items = append(items, status)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listReleasesByEnv = `-- name: ListReleasesByEnv :many

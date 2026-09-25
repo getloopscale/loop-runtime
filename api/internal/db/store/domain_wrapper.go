@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
@@ -268,15 +269,29 @@ func (s *PostgresDomainStore) CountByTenant(ctx context.Context, tenantID string
 // Background reaper methods
 // =========================================================================
 
+// FindAndClaimVerified claims the verified domains for provisioning. The
+// target status is derived from the Domain machine's DomainProvision edge,
+// never spelled here.
 func (s *PostgresDomainStore) FindAndClaimVerified(ctx context.Context) ([]ports.CustomDomain, error) {
-	return s.ClaimByStatus(ctx, "verified", "provisioning")
+	return s.claimByStatus(ctx, string(statemachine.DomainVerified), string(verifiedClaimTarget()))
 }
 
+// FindRemoving claims (FOR UPDATE SKIP LOCKED) the domains being removed
+// without moving them: removing -> removing is a claim, not a transition.
 func (s *PostgresDomainStore) FindRemoving(ctx context.Context) ([]ports.CustomDomain, error) {
-	return s.ClaimByStatus(ctx, "removing", "removing")
+	removing := string(statemachine.DomainRemoving)
+	return s.claimByStatus(ctx, removing, removing)
 }
 
-func (s *PostgresDomainStore) ClaimByStatus(ctx context.Context, fromStatus, toStatus string) ([]ports.CustomDomain, error) {
+// verifiedClaimTarget is where the Domain machine sends a verified domain the
+// provisioner claims.
+func verifiedClaimTarget() statemachine.State {
+	return domainMachine.Transition(statemachine.DomainVerified, statemachine.DomainProvision)
+}
+
+// claimByStatus is unexported on purpose: it writes any status string, so the
+// only callers are the two claims above, whose statuses come from the machine.
+func (s *PostgresDomainStore) claimByStatus(ctx context.Context, fromStatus, toStatus string) ([]ports.CustomDomain, error) {
 	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.ClaimCustomDomainsByStatus(ctx, bridge, generated.ClaimCustomDomainsByStatusParams{

@@ -469,20 +469,51 @@ func (s *ReleaseStoreSqlc) AppendSideEffect(ctx context.Context, tx db.DBTX, id 
 	return nil
 }
 
-// CancelAllByEnv transitions every non-terminal release for the given
-// (tenant, project, env) to CANCELLED. Returns the COUNT of releases
-// cancelled. Matches legacy PostgresReleaseStore.CancelAllByEnv contract
-// per ProjectDeleter consumer (project_deleter.go: cancelledReleases > 0).
+// CancelAllByEnv cancels the releases of a (tenant, project, env) tuple as the
+// project-delete cascade: a release moves to CANCELLED only when the release
+// machine has a ProjectDeleted edge from its status (so ARCHIVED and
+// CANCELLED, both terminal, are left alone). It reads the statuses present,
+// lets the machine choose, and updates only those — the transition table
+// never leaks into SQL. Returns the COUNT of releases cancelled (the
+// ProjectDeleter consumer checks cancelledReleases > 0). Runs on the caller's
+// tx, under the environment lock.
 func (s *ReleaseStoreSqlc) CancelAllByEnv(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (int, error) {
-	ids, err := s.q.CancelReleasesByEnv(ctx, s.gen(tx), generated.CancelReleasesByEnvParams{
+	present, err := s.q.ListReleaseStatusesByEnv(ctx, s.gen(tx), generated.ListReleaseStatusesByEnvParams{
 		TenantID:    tenantID,
 		ProjectID:   projectID,
 		Environment: env,
 	})
 	if err != nil {
+		return 0, fmt.Errorf("sqlc: list release statuses by env: %w", err)
+	}
+	from := statusesCancelledOnProjectDelete(present)
+	if len(from) == 0 {
+		return 0, nil
+	}
+	ids, err := s.q.CancelReleasesByEnv(ctx, s.gen(tx), generated.CancelReleasesByEnvParams{
+		TenantID:     tenantID,
+		ProjectID:    projectID,
+		Environment:  env,
+		FromStatuses: from,
+	})
+	if err != nil {
 		return 0, fmt.Errorf("sqlc: cancel releases by env: %w", err)
 	}
 	return len(ids), nil
+}
+
+// statusesCancelledOnProjectDelete keeps, in order, the statuses from which
+// the release machine moves to CANCELLED on ProjectDeleted. A status the
+// machine does not know is never cancelled.
+func statusesCancelledOnProjectDelete(statuses []string) []string {
+	out := make([]string, 0, len(statuses))
+	for _, st := range statuses {
+		next, err := releaseMachine.TryTransition(statemachine.ReleasePhase(st), statemachine.RPEventProjectDeleted)
+		if err == nil && next == statemachine.RPhCancelled {
+			out = append(out, st)
+		}
+	}
+	return out
 }
 
 // FindPendingReleases returns up to 100 PENDING releases scoped to the
