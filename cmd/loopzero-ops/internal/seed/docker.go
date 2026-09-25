@@ -4,6 +4,7 @@
 package seed
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -34,4 +35,38 @@ func defaultDockerInspect(container string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no IPAddress found for %s (State.Running?)", container)
+}
+
+// defaultDockerNetworkInspect returns the IPv4 address (no CIDR) of the given
+// container inside the docker network. D1 exemption: read-only introspection.
+//
+// A container address shuffles on every restart, so a consumer of it must be
+// re-run after one. The peer kubeconfigs still need it: the k3s API server
+// certificate carries the node IP in its SANs, and no stable host alias.
+func defaultDockerNetworkInspect(network, container string) (string, error) {
+	out, err := exec.Command("docker", "network", "inspect", network).Output()
+	if err != nil {
+		return "", fmt.Errorf("docker network inspect %s: %w", network, err)
+	}
+	// Response is `[{...}]` (an array of network entries).
+	var nets []struct {
+		Containers map[string]struct {
+			Name string `json:"Name"`
+			IPv4 string `json:"IPv4Address"`
+		} `json:"Containers"`
+	}
+	if err := json.Unmarshal(out, &nets); err != nil {
+		return "", fmt.Errorf("parse docker network inspect: %w", err)
+	}
+	for _, n := range nets {
+		for _, c := range n.Containers {
+			if c.Name == container {
+				ip, _, _ := strings.Cut(c.IPv4, "/")
+				if ip != "" {
+					return ip, nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("container %s not found in network %s", container, network)
 }

@@ -31,6 +31,8 @@ type Host struct {
 	PGConnect func(ctx context.Context, connString string) (pgConn, error)
 	// DockerContainerIP returns a container's first IP address.
 	DockerContainerIP func(container string) (string, error)
+	// DockerNetworkIP returns a container's IPv4 address inside a docker network.
+	DockerNetworkIP func(network, container string) (string, error)
 	// GHAPI runs `gh api` with args, sending body (when non-nil) on stdin.
 	GHAPI func(body []byte, args ...string) ([]byte, error)
 	// GHAuthCheck reports whether gh is authenticated.
@@ -82,6 +84,13 @@ func (h Host) pgConnect(ctx context.Context, connString string) (pgConn, error) 
 		return h.PGConnect(ctx, connString)
 	}
 	return pgxConnect(ctx, connString)
+}
+
+func (h Host) dockerNetworkIP(network, container string) (string, error) {
+	if h.DockerNetworkIP != nil {
+		return h.DockerNetworkIP(network, container)
+	}
+	return defaultDockerNetworkInspect(network, container)
 }
 
 func (h Host) dockerContainerIP(container string) (string, error) {
