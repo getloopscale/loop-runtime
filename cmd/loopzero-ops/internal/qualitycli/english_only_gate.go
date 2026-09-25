@@ -25,7 +25,7 @@ func setupEnglishOnly(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if len(r.Findings) > 0 {
-			inv.Stderr.Printf("english-only: FAIL — %d line(s) in %d scanned file(s) are not English:\n", len(r.Findings), r.Files)
+			inv.Stderr.Printf("%s: FAIL — %d line(s) in %d scanned file(s) are not English:\n", inv.Name, len(r.Findings), r.Files)
 			for _, f := range r.Findings {
 				inv.Stderr.Printf("  %s\n", f)
 			}
@@ -36,8 +36,10 @@ func setupEnglishOnly(_ *flag.FlagSet) Check {
 			inv.Stderr.Println("and a reason of at least five words.")
 			return Fail, nil
 		}
-		inv.Stdout.Printf("english-only: PASS — %d tracked text file(s) scanned, %d generated skipped, %d exempted line(s) with a reason\n",
-			r.Files, r.Generated, r.Exempted)
+		// The gate name comes from the invocation: written literally, it would read
+		// as an exemption marker to the gate itself.
+		inv.Stdout.Printf("%s: PASS — %d tracked text file(s) scanned, %d generated skipped, %d exempted line(s) with a reason\n",
+			inv.Name, r.Files, r.Generated, r.Exempted)
 		return Pass, nil
 	}
 }
