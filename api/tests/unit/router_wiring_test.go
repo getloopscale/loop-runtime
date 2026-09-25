@@ -319,7 +319,6 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 		// Tenant deletion routes
 		{"DELETE", "/api/v1/tenants/test-tenant-id", true, false},
 		{"POST", "/api/v1/tenants/test-tenant-id/restore", true, false},
-		{"POST", "/api/v1/tenants/bulk-delete", true, false},
 
 		// Environment routes
 		{"GET", "/api/v1/environments", true, false},
@@ -332,6 +331,7 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 		{"GET", "/api/v1/domains/example.com", true, false},
 		{"POST", "/api/v1/domains", true, false},
 		{"POST", "/api/v1/domains/example.com/verify", true, false},
+		{"GET", "/api/v1/domains/example.com/dns-records", true, false},
 		{"DELETE", "/api/v1/domains/example.com", true, false},
 
 		// Repository connection routes

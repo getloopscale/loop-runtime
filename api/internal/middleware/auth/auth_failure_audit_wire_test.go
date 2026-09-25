@@ -174,52 +174,6 @@ func TestRequireAdminService_AcceptsCanonicalPrevious(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------------
-// RequireAdmin
-// -----------------------------------------------------------------------------
-
-func TestAuthFailureAudit_Wire_RequireAdmin_MissingHeader(t *testing.T) {
-	cap := newCapturingDefault()
-	defer clearDefault()
-
-	handler := RequireAdmin(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		t.Fatal("next must not be called")
-	}))
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/y", nil)
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-
-	events := cap.captured()
-	if len(events) != 1 || events[0].action != AuthFailureAdminMismatch {
-		t.Fatalf("want 1 AuthFailureAdminMismatch event, got %+v", events)
-	}
-}
-
-func TestAuthFailureAudit_Wire_RequireAdmin_InvalidKey(t *testing.T) {
-	cap := newCapturingDefault()
-	defer clearDefault()
-
-	// Set a known admin key so we can send a different one and trigger reject.
-	prev := AdminAPIKey
-	AdminAPIKey = "the-real-admin-key"
-	defer func() { AdminAPIKey = prev }()
-
-	handler := RequireAdmin(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		t.Fatal("next must not be called")
-	}))
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/y", nil)
-	req.Header.Set("X-Admin-Key", "wrong-key")
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-
-	events := cap.captured()
-	if len(events) != 1 || events[0].action != AuthFailureAdminMismatch {
-		t.Fatalf("want 1 AuthFailureAdminMismatch event, got %+v", events)
-	}
-}
-
-// -----------------------------------------------------------------------------
 // AuthWithTTL — Bearer path
 // -----------------------------------------------------------------------------
 
@@ -431,7 +385,7 @@ func TestAuthFailureAudit_Wire_NilAuditor_NoPanic(t *testing.T) {
 	clearDefault() // ensure nil
 	defer clearDefault()
 
-	handler := RequireAdmin(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	handler := RequireAdminService(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("next must not be called")
 	}))
 

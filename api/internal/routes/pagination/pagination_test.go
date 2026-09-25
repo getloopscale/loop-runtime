@@ -4,76 +4,47 @@
 package pagination
 
 import (
-	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
-func TestParsePagination_Defaults(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/items", nil)
-	p := ParsePagination(r)
-
-	if p.Limit != DefaultPageSize {
-		t.Errorf("expected default limit %d, got %d", DefaultPageSize, p.Limit)
+func TestParsePaginationParams(t *testing.T) {
+	cases := []struct {
+		name, query           string
+		wantLimit, wantOffset int
+	}{
+		{"defaults", "", DefaultPageSize, 0},
+		{"custom limit and offset", "?limit=20&offset=40", 20, 40},
+		{"limit capped at max", "?limit=500", MaxPageSize, 0},
+		{"non-numeric limit falls back", "?limit=abc", DefaultPageSize, 0},
+		{"negative limit falls back", "?limit=-5", DefaultPageSize, 0},
+		{"zero limit is kept", "?limit=0", 0, 0},
+		{"negative offset clamps to zero", "?offset=-3", DefaultPageSize, 0},
+		{"non-numeric offset falls back", "?offset=x", DefaultPageSize, 0},
 	}
-	if p.Cursor != "" {
-		t.Errorf("expected empty cursor, got %q", p.Cursor)
-	}
-}
-
-func TestParsePagination_CustomLimit(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/items?limit=25", nil)
-	p := ParsePagination(r)
-
-	if p.Limit != 25 {
-		t.Errorf("expected limit 25, got %d", p.Limit)
-	}
-}
-
-func TestParsePagination_LimitExceedsMax(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/items?limit=500", nil)
-	p := ParsePagination(r)
-
-	if p.Limit != MaxPageSize {
-		t.Errorf("expected max limit %d, got %d", MaxPageSize, p.Limit)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			limit, offset := ParsePaginationParams(httptest.NewRequest("GET", "/items"+c.query, nil))
+			if limit != c.wantLimit || offset != c.wantOffset {
+				t.Errorf("ParsePaginationParams(%q) = (%d, %d), want (%d, %d)", c.query, limit, offset, c.wantLimit, c.wantOffset)
+			}
+		})
 	}
 }
 
-func TestParsePagination_InvalidLimit(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/items?limit=abc", nil)
-	p := ParsePagination(r)
-
-	if p.Limit != DefaultPageSize {
-		t.Errorf("expected default limit %d on invalid input, got %d", DefaultPageSize, p.Limit)
+func TestSliceWindow(t *testing.T) {
+	cases := []struct {
+		total, limit, offset, from, to int
+	}{
+		{10, 3, 0, 0, 3},
+		{10, 3, 8, 8, 10},
+		{10, 3, 12, 10, 10},
+		{0, 50, 0, 0, 0},
 	}
-}
-
-func TestParsePagination_ZeroLimit(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/items?limit=0", nil)
-	p := ParsePagination(r)
-
-	if p.Limit != DefaultPageSize {
-		t.Errorf("expected default limit %d on zero, got %d", DefaultPageSize, p.Limit)
-	}
-}
-
-func TestParsePagination_NegativeLimit(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/items?limit=-5", nil)
-	p := ParsePagination(r)
-
-	if p.Limit != DefaultPageSize {
-		t.Errorf("expected default limit %d on negative, got %d", DefaultPageSize, p.Limit)
-	}
-}
-
-func TestParsePagination_WithCursor(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/items?cursor=abc123&limit=10", nil)
-	p := ParsePagination(r)
-
-	if p.Cursor != "abc123" {
-		t.Errorf("expected cursor %q, got %q", "abc123", p.Cursor)
-	}
-	if p.Limit != 10 {
-		t.Errorf("expected limit 10, got %d", p.Limit)
+	for _, c := range cases {
+		from, to := SliceWindow(c.total, c.limit, c.offset)
+		if from != c.from || to != c.to {
+			t.Errorf("SliceWindow(%d, %d, %d) = [%d, %d), want [%d, %d)", c.total, c.limit, c.offset, from, to, c.from, c.to)
+		}
 	}
 }

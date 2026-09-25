@@ -169,14 +169,14 @@ var protectedFamilies = []protectedFamily{
 		"GET /api/v1/teams/members", "POST /api/v1/teams/members",
 		"DELETE /api/v1/teams/members/{username}", "PATCH /api/v1/teams/members/{username}"}},
 	{surfaces.TenantDeletion, func(c *Config) { c.TenantDeletionStore = nil }, []string{
-		"DELETE /api/v1/tenants/{id}", "POST /api/v1/tenants/{id}/restore", "POST /api/v1/tenants/bulk-delete"}},
+		"DELETE /api/v1/tenants/{id}", "POST /api/v1/tenants/{id}/restore"}},
 	{surfaces.Billing, func(c *Config) { c.BillingHandler = nil }, []string{
 		"GET /api/v1/billing", "POST /api/v1/billing/portal"}},
 	{surfaces.Environments, func(c *Config) { c.EnvironmentHandler = nil }, []string{
 		"GET /api/v1/environments", "GET /api/v1/environments/{name}", "POST /api/v1/environments",
 		"DELETE /api/v1/environments/{name}"}},
 	{surfaces.Domains, func(c *Config) { c.DomainHandler = nil }, []string{
-		"GET /api/v1/domains", "GET /api/v1/domains/{domain}", "POST /api/v1/domains",
+		"GET /api/v1/domains", "GET /api/v1/domains/{domain}", "GET /api/v1/domains/{domain}/dns-records", "POST /api/v1/domains",
 		"POST /api/v1/domains/{domain}/verify", "DELETE /api/v1/domains/{domain}"}},
 	{surfaces.Repositories, func(c *Config) { c.RepositoryHandler = nil }, []string{
 		"POST /api/v1/projects/{name}/connect", "DELETE /api/v1/projects/{name}/connect",

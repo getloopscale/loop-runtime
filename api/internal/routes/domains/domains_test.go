@@ -28,6 +28,7 @@ type fakeDomainStore struct {
 	deleteErr    error
 	transErr     error
 	updateVerErr error
+	getErr       error
 }
 
 func (f *fakeDomainStore) Create(_ context.Context, _ *CustomDomain) error {
@@ -35,7 +36,7 @@ func (f *fakeDomainStore) Create(_ context.Context, _ *CustomDomain) error {
 }
 
 func (f *fakeDomainStore) GetByDomainAndTenant(_ context.Context, _, _ string) (*CustomDomain, error) {
-	return f.domain, nil
+	return f.domain, f.getErr
 }
 
 func (f *fakeDomainStore) ListByTenant(_ context.Context, _ string, _ DomainListFilter) ([]CustomDomain, int, error) {
@@ -777,45 +778,21 @@ func TestDomains_DNS_ListRecords_Unauthenticated(t *testing.T) {
 	}
 }
 
-func TestDomains_DNS_AddRecords_MemberForbidden(t *testing.T) {
-	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+// A store failure is not "domain not found": the CLI would tell the user
+// their domain does not exist while the database is down.
+func TestDomains_DNS_ListRecords_StoreFailureIs500(t *testing.T) {
+	h := NewDomainHandler(&fakeDomainStore{getErr: errors.New("connection refused")}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 	h.cfZone = &fakeCFZoneManager{}
 
-	body := `{"records":[{"type":"A","name":"sub","content":"1.2.3.4"}]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/dns-records", bytes.NewBufferString(body))
-	req = routestest.WithAuth(req, routestest.MemberUserContext())
-	req = routestest.WithChiParam(req, "domain", "example.com")
-	w := httptest.NewRecorder()
-
-	h.AddDNSRecords(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("want 403, got %d body=%s", w.Code, w.Body.String())
-	}
-}
-
-func TestDomains_DNS_AddRecords_ProtectedType(t *testing.T) {
-	zoneID := "zone-123"
-	store := &fakeDomainStore{
-		domain: &CustomDomain{
-			Domain:   "example.com",
-			Status:   "active",
-			CFZoneID: &zoneID,
-		},
-	}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
-	h.cfZone = &fakeCFZoneManager{}
-
-	body := `{"records":[{"type":"NS","name":"example.com","content":"ns1.example.com"}]}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/dns-records", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/example.com/dns-records", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	req = routestest.WithChiParam(req, "domain", "example.com")
 	w := httptest.NewRecorder()
 
-	h.AddDNSRecords(w, req)
+	h.ListDNSRecords(w, req)
 
-	if w.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("want 422, got %d body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 

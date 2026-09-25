@@ -378,7 +378,6 @@ func registerTenantRoutes(r chi.Router, cfg Config, ch routeChains) {
 	h := tenants.NewTenantHandler(cfg.TenantDeletionStore, cfg.Logger)
 	r.With(ch.limited(audited("tenant.deleted", "tenant"))...).Delete("/api/v1/tenants/{id}", h.Delete)
 	r.With(ch.limited(audited("tenant.restored", "tenant"))...).Post("/api/v1/tenants/{id}/restore", h.Restore)
-	r.With(ch.limited(audited("tenant.bulk_deleted", "tenant"), mwauth.RequireAdmin)...).Post("/api/v1/tenants/bulk-delete", h.Delete)
 }
 
 // registerBillingRoutes: T1.6 (find_billing_route_not_wired).
@@ -415,6 +414,7 @@ func registerDomainRoutes(r chi.Router, cfg Config, ch routeChains) {
 	}
 	r.Get("/api/v1/domains", cfg.DomainHandler.List)
 	r.Get("/api/v1/domains/{domain}", cfg.DomainHandler.Get)
+	r.Get("/api/v1/domains/{domain}/dns-records", cfg.DomainHandler.ListDNSRecords)
 	r.With(ch.idempotentWith(audited("domain.added", "domain"))...).Post("/api/v1/domains", cfg.DomainHandler.Create)
 	// J11D7 LOCKED ADR: /verify uses the per-(tenant, domain) limiter in front
 	// of the tenant-wide one; without it, the tenant limiter alone (ADR D3).

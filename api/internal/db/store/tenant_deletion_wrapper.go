@@ -32,7 +32,7 @@ import (
 // leaving its doc comments behind over no code at all.
 //
 // The consequence was not cosmetic. `DELETE /api/v1/tenants/{id}`,
-// `POST /api/v1/tenants/{id}/restore` and `POST /api/v1/tenants/bulk-delete` are
+// `POST /api/v1/tenants/{id}/restore` (and a bulk-delete route since removed) were
 // guarded by `if cfg.TenantDeletionStore != nil`, so none of them was ever
 // registered in any deployment — while the dashboard's account-deletion screen
 // called the first one for real, and two rounds of client-side bug fixes were

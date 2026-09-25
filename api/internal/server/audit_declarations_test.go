@@ -45,7 +45,6 @@ var wantAuditIdentity = map[string]auditIdentity{
 	"PATCH /api/v1/teams/members/{username}":            {"member.role_changed", "member"},
 	"DELETE /api/v1/tenants/{id}":                       {"tenant.deleted", "tenant"},
 	"POST /api/v1/tenants/{id}/restore":                 {"tenant.restored", "tenant"},
-	"POST /api/v1/tenants/bulk-delete":                  {"tenant.bulk_deleted", "tenant"},
 	"POST /api/v1/billing/portal":                       {"billing.portal_opened", "billing"},
 	"POST /api/v1/environments":                         {"environment.created", "environment"},
 	"DELETE /api/v1/environments/{name}":                {"environment.deleted", "environment"},

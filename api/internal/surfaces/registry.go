@@ -142,16 +142,9 @@ const (
 	Promote = "promote"
 	// Teams is team membership management.
 	Teams = "teams"
-	// TenantDeletion is soft-delete, restore and bulk-delete of a tenant.
-	//
-	// Measured 2026-08-16: `Config.TenantDeletionStore` is declared and NEVER
-	// ASSIGNED anywhere in production code. The interface exists, the Postgres
-	// implementation exists, the handler exists, the three routes are written —
-	// and the field stays nil in every deployment, so none of them has ever been
-	// reachable. This is the "implemented but not wired" pattern CLAUDE.md names
-	// by that title, and it is the single strongest argument for this whole item:
-	// a permanent zero on this series would have made it visible from the day it
-	// landed. Tracked as its own item.
+	// TenantDeletion is soft-delete and restore of a tenant. It is recorded
+	// here because its store once went unassigned in every deployment
+	// (B-117), leaving both routes unreachable with nothing to show it.
 	TenantDeletion = "tenant_deletion"
 	// Billing is the plan + usage read.
 	Billing = "billing"

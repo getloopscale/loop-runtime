@@ -5,11 +5,8 @@ package domains
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
@@ -79,7 +76,7 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// --- v2: DNS Record Management ---
+// --- v2: DNS records ---
 
 // ListDNSRecords returns DNS records for a CF-managed domain (GET /api/v1/domains/{domain}/dns-records).
 func (h *DomainHandler) ListDNSRecords(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +90,12 @@ func (h *DomainHandler) ListDNSRecords(w http.ResponseWriter, r *http.Request) {
 
 	domainName := chi.URLParam(r, "domain")
 	d, err := h.store.GetByDomainAndTenant(ctx, domainName, uc.TenantID)
-	if err != nil || d == nil {
+	if err != nil {
+		slog.ErrorContext(ctx, "domain lookup failed", "domain", domainName, "error", err)
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		return
+	}
+	if d == nil {
 		// CHG-2026-04-23-AUDIT-13: typed error shape.
 		httpio.WriteLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
 		return
@@ -118,82 +120,5 @@ func (h *DomainHandler) ListDNSRecords(w http.ResponseWriter, r *http.Request) {
 		"domain":  domainName,
 		"records": records,
 		"total":   len(records),
-	})
-}
-
-// AddDNSRecords adds DNS records to a CF-managed domain (POST /api/v1/domains/{domain}/dns-records).
-func (h *DomainHandler) AddDNSRecords(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
-	defer cancel()
-	uc := auth.GetUserContext(ctx)
-	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
-		return
-	}
-
-	if uc.Role != "owner" && uc.Role != "admin" {
-		httpio.WriteJSON(w, http.StatusForbidden, map[string]string{"code": "FORBIDDEN", "message": "Only team owners and admins can manage DNS records."})
-		return
-	}
-
-	domainName := chi.URLParam(r, "domain")
-	d, err := h.store.GetByDomainAndTenant(ctx, domainName, uc.TenantID)
-	if err != nil || d == nil {
-		// CHG-2026-04-23-AUDIT-13: typed error shape.
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
-		return
-	}
-
-	if !d.IsCFManaged() || h.cfZone == nil {
-		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{"code": "NOT_CF_MANAGED", "message": "DNS management only available for Cloudflare-managed domains."})
-		return
-	}
-
-	var req struct {
-		Records []CFDNSRecord `json:"records"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{"code": "INTERNAL_ERROR", "message": "invalid request body"})
-		return
-	}
-
-	const maxDNSRecordsPerRequest = 50
-	if len(req.Records) > maxDNSRecordsPerRequest {
-		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
-			"error": fmt.Sprintf("Too many records (max %d per request).", maxDNSRecordsPerRequest),
-			"code":  "TOO_MANY_RECORDS",
-		})
-		return
-	}
-
-	// Validate: reject protected record types
-	for _, rec := range req.Records {
-		upperType := strings.ToUpper(rec.Type)
-		if upperType == "NS" || upperType == "SOA" {
-			httpio.WriteJSON(w, http.StatusUnprocessableEntity, map[string]string{
-				"error": fmt.Sprintf("Cannot add %s records — these are managed by the platform.", upperType),
-				"code":  "PROTECTED_RECORD",
-			})
-			return
-		}
-	}
-
-	var created []CFDNSRecord
-	for _, rec := range req.Records {
-		result, err := h.cfZone.CreateDNSRecord(ctx, *d.CFZoneID, rec)
-		if err != nil {
-			slog.ErrorContext(ctx, "cf create dns record failed", "domain", domainName, "record", rec.Name, "error", err)
-			httpio.WriteJSON(w, http.StatusBadGateway, map[string]string{
-				"error": fmt.Sprintf("Failed to add record %s %s: %v", rec.Type, rec.Name, err),
-			})
-			return
-		}
-		created = append(created, *result)
-	}
-
-	httpio.WriteJSON(w, http.StatusCreated, map[string]interface{}{
-		"ok":      true,
-		"created": len(created),
-		"records": created,
 	})
 }

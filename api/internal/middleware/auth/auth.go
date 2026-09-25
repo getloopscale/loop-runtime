@@ -103,8 +103,9 @@ var ServiceAuthSecret string
 var ServiceAuthSecretPrevious string
 
 // AdminAPIKey is the platform-admin API key for cross-tenant operations.
-// Set from LOOPZERO_ADMIN_API_KEY env var. When empty, admin endpoints are disabled.
-// MEET-052 Security VETO: Required for force-delete, bulk-delete, and admin operations.
+// Set from LOOPZERO_ADMIN_API_KEY env var. When empty, no request is treated as a
+// platform admin. MEET-052 Security VETO: the tenant force-delete path
+// (tenants.Delete / Restore) requires it.
 var AdminAPIKey string
 
 // AdminAPIKeyPrevious is the previous admin API key for zero-downtime rotation.
@@ -211,26 +212,6 @@ func AdminServiceAuthorized(r *http.Request) bool {
 	}
 	return match(os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET")) ||
 		match(os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS"))
-}
-
-// RequireAdmin is a middleware that requires a valid admin API key in the
-// X-Admin-Key header. Used for cross-tenant operations (force-delete, bulk-delete).
-// MEET-052 Security VETO: No destructive admin endpoint may be exposed without this.
-func RequireAdmin(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		key := r.Header.Get("X-Admin-Key")
-		if key == "" {
-			emitAuthFailure(r, AuthFailureAdminMismatch, "missing X-Admin-Key header", nil)
-			writeError(w, http.StatusForbidden, "FORBIDDEN", "Admin API key required. Set X-Admin-Key header.")
-			return
-		}
-		if !ValidateAdminAPIKey(key) {
-			emitAuthFailure(r, AuthFailureAdminMismatch, "invalid X-Admin-Key", nil)
-			writeError(w, http.StatusForbidden, "FORBIDDEN", "Invalid admin API key")
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 // AuthWithTTL is like Auth but with a configurable cache TTL.

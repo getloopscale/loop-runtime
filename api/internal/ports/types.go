@@ -392,7 +392,7 @@ type BootstrapRequest struct {
 }
 
 // BootstrapStore abstracts the database operations for bootstrap.
-// Implemented by PostgresBootstrapStore (production) and InMemoryBootstrapStore (tests).
+// Implemented by PostgresBootstrapStore (production) and bootstraptest.InMemoryStore (tests).
 type BootstrapStore interface {
 	// Bootstrap creates the admin user, tenant, and membership records.
 	// Returns (userID, tenantID, created, error).

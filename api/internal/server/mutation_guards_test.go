@@ -47,7 +47,6 @@ var idempotencyKeyNotRequired = map[string]string{
 	"PATCH /api/v1/teams/members/{username}":            "writes an absolute role",
 	"DELETE /api/v1/tenants/{id}":                       "deleting what is already gone leaves the same state",
 	"POST /api/v1/tenants/{id}/restore":                 "rate limited; no client retries it automatically",
-	"POST /api/v1/tenants/bulk-delete":                  "rate limited; no client retries it automatically",
 	"POST /api/v1/billing/portal":                       "rate limited; no client retries it automatically",
 	"POST /api/v1/environments":                         "a retry of a created environment answers 409",
 	"DELETE /api/v1/environments/{name}":                "deleting what is already gone leaves the same state",

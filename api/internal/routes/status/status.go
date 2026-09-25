@@ -161,20 +161,6 @@ type scalingStatusResponse struct {
 	ScaledToZero bool `json:"scaled_to_zero"`
 }
 
-// rolloutStatusResponse describes the canary rollout state for the active
-// release (argo-rollouts-progressive-delivery-plan T4.3). Present only when
-// progressive delivery is enabled and the release has rollout data.
-//
-// Phase values: "Healthy" | "Progressing" | "Paused" | "Degraded" | "Aborted".
-// AnalysisStatus values: "running" | "successful" | "failed" | "inconclusive".
-type rolloutStatusResponse struct {
-	Phase          string `json:"phase"`
-	CurrentStep    int    `json:"current_step,omitempty"`
-	TotalSteps     int    `json:"total_steps,omitempty"`
-	CanaryWeight   int    `json:"canary_weight,omitempty"`
-	AnalysisStatus string `json:"analysis_status,omitempty"`
-}
-
 // envHintResponse names a sibling environment that has a SUCCEEDED build /
 // active release while the queried env is empty. Surfaced as
 // `other_envs_with_releases` on the status response so the CLI / dashboard
@@ -200,13 +186,6 @@ type statusResponse struct {
 	// legacy shape when no other envs have releases.
 	OtherEnvsWithReleases []envHintResponse      `json:"other_envs_with_releases,omitempty"`
 	Scaling               *scalingStatusResponse `json:"scaling,omitempty"`
-	// Rollout is the progressive-delivery state for the active release.
-	// Optional/null when:
-	//   - release used legacy Deployment manifests (D8 fallback path), OR
-	//   - rollout state couldn't be queried (degraded mode), OR
-	//   - the release predates progressive delivery rollout (legacy data).
-	// argo-rollouts-progressive-delivery-plan T4.3.
-	Rollout *rolloutStatusResponse `json:"rollout,omitempty"`
 
 	// MetricsRangeURL is the Grafana deep-link templated URL for the J-18
 	// Status page "Open in Grafana" affordance. Format:

@@ -133,8 +133,7 @@ type PreviewSlotInfo struct {
 // when it doesn't (404 path); error for I/O failure (500 path).
 //
 // Nil EnvProjectLookup on the handler is intentionally permitted so
-// legacy test fixtures and dev-mode setups (StubEnvironmentManager) keep
-// working without a DB plumbing. Production wiring (api/cmd/main.go)
+// test fixtures and no-database boots keep working without DB plumbing. Production wiring (api/cmd/main.go)
 // MUST inject a real implementation backed by the projects table.
 type EnvProjectLookup interface {
 	ProjectExistsForTenant(ctx context.Context, tenantID, projectName string) (bool, error)
@@ -428,9 +427,8 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// slug owned by tenant B and create an Environment that would land
 	// in B's namespace. The lookup query MUST include `tenant_id = $1`.
 	//
-	// Nil projectStore → legacy mode (test fixtures + dev shims); the
-	// gate is bypassed there because the StubEnvironmentManager doesn't
-	// touch real namespaces.
+	// Nil projectStore → test fixtures and no-database boots, where there is
+	// no projects table to check against; the gate is skipped there.
 	if h.projectStore != nil {
 		exists, perr := h.projectStore.ProjectExistsForTenant(ctx, uc.TenantID, req.Project)
 		if perr != nil {
@@ -626,44 +624,4 @@ func (h *EnvironmentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		resp["warnings"] = warnings
 	}
 	httpio.WriteJSON(w, http.StatusOK, resp)
-}
-
-// StubEnvironmentManager is a stub implementation of EnvironmentManager
-// that returns hardcoded data. Used in dev mode while the real K8s
-// integration (TenantCRManager) is done later.
-type StubEnvironmentManager struct{}
-
-// ListEnvironments returns a hardcoded list with a single production environment.
-// M2 v1.2: production is the legacy permanent env (no project) per ADR D2.
-func (s *StubEnvironmentManager) ListEnvironments(_ context.Context, _ string) ([]EnvironmentEntry, error) {
-	return []EnvironmentEntry{
-		{Name: pkgdomain.DefaultPermanentEnv, Status: "active"},
-	}, nil
-}
-
-// AddEnvironment is a no-op stub.
-// M2 v1.2: signature carries `project` for the canonical 3-segment
-// namespace `loopzero-<tenant>-<project>-<env>`. Stub ignores arg.
-func (s *StubEnvironmentManager) AddEnvironment(_ context.Context, _, _, _ string) error {
-	return nil
-}
-
-// RemoveEnvironment is a no-op stub.
-// M2 v1.2: signature carries `project`.
-func (s *StubEnvironmentManager) RemoveEnvironment(_ context.Context, _, _, _ string) error {
-	return nil
-}
-
-// GetEnvironmentDetail returns a hardcoded detail for production, nil otherwise.
-// M2 v1.2: signature carries `project` so the stub can route per-(project, env)
-// lookups in dev mode; for the legacy "production" tuple, project is "" (D2).
-func (s *StubEnvironmentManager) GetEnvironmentDetail(_ context.Context, _ string, _ string, envName string) (*EnvironmentDetail, error) {
-	if envName == pkgdomain.DefaultPermanentEnv {
-		return &EnvironmentDetail{
-			Name:     pkgdomain.DefaultPermanentEnv,
-			Status:   "active",
-			Projects: []EnvProjectInfo{},
-		}, nil
-	}
-	return nil, nil
 }

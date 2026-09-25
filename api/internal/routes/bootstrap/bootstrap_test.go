@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package bootstrap
+package bootstrap_test
 
 import (
 	"bytes"
@@ -10,9 +10,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/routes/bootstrap"
+	"github.com/getloopscale/loopzero/api/internal/routes/bootstrap/bootstraptest"
 )
 
-// --- Fake CellPlacementEngine ---
+// --- Fake bootstrap.CellPlacementEngine ---
 
 type fakeCellPlacement struct {
 	cellID string
@@ -33,9 +36,9 @@ func (f *fakeCellPlacement) AssignAndExecute(_ context.Context, fn func(ctx cont
 // --- Tests ---
 
 func TestBootstrap_HappyPath(t *testing.T) {
-	store := NewInMemoryBootstrapStore()
+	store := bootstraptest.NewInMemoryStore()
 	placement := &fakeCellPlacement{cellID: "cell-0"}
-	h := NewBootstrapHandler(store, "", placement)
+	h := bootstrap.NewBootstrapHandler(store, "", placement)
 
 	body := `{"admin_github_id":"12345","admin_login":"testuser","tenant_slug":"my-team"}`
 	req := httptest.NewRequest(http.MethodPost, "/internal/bootstrap", bytes.NewBufferString(body))
@@ -47,7 +50,7 @@ func TestBootstrap_HappyPath(t *testing.T) {
 		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
 	}
 
-	var resp BootstrapResponse
+	var resp bootstrap.BootstrapResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -66,9 +69,9 @@ func TestBootstrap_HappyPath(t *testing.T) {
 }
 
 func TestBootstrap_Idempotent(t *testing.T) {
-	store := NewInMemoryBootstrapStore()
+	store := bootstraptest.NewInMemoryStore()
 	placement := &fakeCellPlacement{cellID: "cell-0"}
-	h := NewBootstrapHandler(store, "", placement)
+	h := bootstrap.NewBootstrapHandler(store, "", placement)
 
 	body := `{"admin_github_id":"12345","admin_login":"testuser","tenant_slug":"my-team"}`
 
@@ -88,7 +91,7 @@ func TestBootstrap_Idempotent(t *testing.T) {
 		t.Fatalf("second: want 200, got %d body=%s", w.Code, w.Body.String())
 	}
 
-	var resp BootstrapResponse
+	var resp bootstrap.BootstrapResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -98,9 +101,9 @@ func TestBootstrap_Idempotent(t *testing.T) {
 }
 
 func TestBootstrap_MissingGitHubID(t *testing.T) {
-	store := NewInMemoryBootstrapStore()
+	store := bootstraptest.NewInMemoryStore()
 	placement := &fakeCellPlacement{cellID: "cell-0"}
-	h := NewBootstrapHandler(store, "", placement)
+	h := bootstrap.NewBootstrapHandler(store, "", placement)
 
 	body := `{"admin_login":"testuser","tenant_slug":"my-team"}`
 	req := httptest.NewRequest(http.MethodPost, "/internal/bootstrap", bytes.NewBufferString(body))
@@ -114,9 +117,9 @@ func TestBootstrap_MissingGitHubID(t *testing.T) {
 }
 
 func TestBootstrap_MissingAdminLogin(t *testing.T) {
-	store := NewInMemoryBootstrapStore()
+	store := bootstraptest.NewInMemoryStore()
 	placement := &fakeCellPlacement{cellID: "cell-0"}
-	h := NewBootstrapHandler(store, "", placement)
+	h := bootstrap.NewBootstrapHandler(store, "", placement)
 
 	body := `{"admin_github_id":"12345","tenant_slug":"my-team"}`
 	req := httptest.NewRequest(http.MethodPost, "/internal/bootstrap", bytes.NewBufferString(body))
@@ -130,9 +133,9 @@ func TestBootstrap_MissingAdminLogin(t *testing.T) {
 }
 
 func TestBootstrap_MissingTenantSlug(t *testing.T) {
-	store := NewInMemoryBootstrapStore()
+	store := bootstraptest.NewInMemoryStore()
 	placement := &fakeCellPlacement{cellID: "cell-0"}
-	h := NewBootstrapHandler(store, "", placement)
+	h := bootstrap.NewBootstrapHandler(store, "", placement)
 
 	body := `{"admin_github_id":"12345","admin_login":"testuser"}`
 	req := httptest.NewRequest(http.MethodPost, "/internal/bootstrap", bytes.NewBufferString(body))
@@ -146,9 +149,9 @@ func TestBootstrap_MissingTenantSlug(t *testing.T) {
 }
 
 func TestBootstrap_InvalidJSON(t *testing.T) {
-	store := NewInMemoryBootstrapStore()
+	store := bootstraptest.NewInMemoryStore()
 	placement := &fakeCellPlacement{cellID: "cell-0"}
-	h := NewBootstrapHandler(store, "", placement)
+	h := bootstrap.NewBootstrapHandler(store, "", placement)
 
 	req := httptest.NewRequest(http.MethodPost, "/internal/bootstrap", bytes.NewBufferString("not-json"))
 	w := httptest.NewRecorder()
@@ -161,9 +164,9 @@ func TestBootstrap_InvalidJSON(t *testing.T) {
 }
 
 func TestBootstrap_SecretRequired_Unauthorized(t *testing.T) {
-	store := NewInMemoryBootstrapStore()
+	store := bootstraptest.NewInMemoryStore()
 	placement := &fakeCellPlacement{cellID: "cell-0"}
-	h := NewBootstrapHandler(store, "my-secret", placement)
+	h := bootstrap.NewBootstrapHandler(store, "my-secret", placement)
 
 	body := `{"admin_github_id":"12345","admin_login":"testuser","tenant_slug":"my-team"}`
 	req := httptest.NewRequest(http.MethodPost, "/internal/bootstrap", bytes.NewBufferString(body))
@@ -178,9 +181,9 @@ func TestBootstrap_SecretRequired_Unauthorized(t *testing.T) {
 }
 
 func TestBootstrap_SecretRequired_CorrectSecret(t *testing.T) {
-	store := NewInMemoryBootstrapStore()
+	store := bootstraptest.NewInMemoryStore()
 	placement := &fakeCellPlacement{cellID: "cell-0"}
-	h := NewBootstrapHandler(store, "my-secret", placement)
+	h := bootstrap.NewBootstrapHandler(store, "my-secret", placement)
 
 	body := `{"admin_github_id":"12345","admin_login":"testuser","tenant_slug":"my-team"}`
 	req := httptest.NewRequest(http.MethodPost, "/internal/bootstrap", bytes.NewBufferString(body))
@@ -195,9 +198,9 @@ func TestBootstrap_SecretRequired_CorrectSecret(t *testing.T) {
 }
 
 func TestBootstrap_DefaultPlan(t *testing.T) {
-	store := NewInMemoryBootstrapStore()
+	store := bootstraptest.NewInMemoryStore()
 	placement := &fakeCellPlacement{cellID: "cell-0"}
-	h := NewBootstrapHandler(store, "", placement)
+	h := bootstrap.NewBootstrapHandler(store, "", placement)
 
 	// No "plan" field — should default to "starter"
 	body := `{"admin_github_id":"12345","admin_login":"testuser","tenant_slug":"my-team"}`
