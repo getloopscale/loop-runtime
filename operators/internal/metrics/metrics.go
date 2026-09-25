@@ -14,8 +14,12 @@
 package metrics
 
 import (
+	"log/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
+
+	cb "github.com/getloopscale/loopzero/pkg/circuitbreaker"
 )
 
 var (
@@ -47,25 +51,6 @@ var (
 		[]string{"controller", "result"},
 	)
 
-	// ProvisionerDuration measures the duration of provisioner operations in seconds.
-	ProvisionerDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "loopzero_operator_provisioner_duration_seconds",
-			Help:    "Duration of provisioner operations (gitea, argocd, harbor, minio).",
-			Buckets: prometheus.DefBuckets,
-		},
-		[]string{"provisioner", "operation"},
-	)
-
-	// CRDCount tracks the number of CRD instances by type (set during reconcile).
-	CRDCount = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "loopzero_operator_crd_count",
-			Help: "Current count of CRD instances by type.",
-		},
-		[]string{"crd_type"},
-	)
-
 	// MEET-052: Tenant deletion per-step metrics.
 
 	// TenantDeletionStepDuration measures the duration of each cleanup step
@@ -87,8 +72,9 @@ var (
 		},
 	)
 
-	// TenantCircuitBreakerState tracks circuit breaker state per dependency.
-	// 0=closed, 1=open, 2=half-one.
+	// TenantCircuitBreakerState tracks circuit breaker state per dependency
+	// (0=closed, 1=open, 2=half-open), written by
+	// ObserveCircuitBreakerTransition on every state change.
 	TenantCircuitBreakerState = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "loopzero_tenant_cb_state",
@@ -99,78 +85,17 @@ var (
 
 	// MisplacedTenantTotal counts Tenant CRs found outside the canonical
 	// namespace `loopzero-system` (ADR-0018 v2 / MEET-ADR-0018 condition C5).
-	// Emitted by tenant-controller startup scan + every reconcile cycle that
-	// detects a misplaced CR. Non-zero value should fire the
-	// MisplacedTenantDetected alert in Prometheus (>5 min sustained).
-	//
-	// Pre-fix this counter did not exist; misplaced CRs went undetected and
-	// were processed by the cluster-wide informer (iter 7-8 of dogfood). With
-	// C9 cache scoping the operator no longer sees them, but the startup
-	// scan uses an unscoped client to surface the gap explicitly — fail-loud
-	// per platform-architect C2.
+	// Written by tenant.MisplacedTenantScanner, which lists Tenants
+	// cluster-wide through an uncached reader at start and every 5 minutes:
+	// with C9 cache scoping no reconciler can see a misplaced CR, so the
+	// scan is what surfaces it (fail-loud per platform-architect C2).
+	// Non-zero value fires the MisplacedTenantDetected alert (>5 min).
 	MisplacedTenantTotal = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "loopzero_misplaced_tenant_total",
 			Help: "Tenant CRs found outside canonical namespace loopzero-system (ADR-0018 invariant).",
 		},
 		[]string{"namespace"},
-	)
-
-	// ─── ADR-0027 D5 / plan T5.2 — Level IV "Deep Insights" metrics ───
-	//
-	// These metrics satisfy the L4 capability rubric (≥10 controller-specific
-	// metrics + ≥3 SLO alerts) per capability-matrix.md. Emitted by:
-	//   - SelfHealTotal: Application reaper transitions; preview TTL expiries;
-	//                    cell credential token refresh (in-process).
-	//   - OrphanCRTotal: detected on reaper sweeps + on per-reconcile checks.
-	//   - FinalizerBlockedSeconds: how long finalizer holds delete; alert
-	//                              when P95 > deletion budget.
-	//   - ReconcileQueueDepth: surface by `controller_runtime_active_workers`
-	//                         saturation; T5.2 adds the LoopZero-flavored gauge
-	//                         for cross-binary aggregation.
-
-	// SelfHealTotal counts in-process self-heal events (ADR-0027 L5
-	// evidence). Examples: application_reaper transition; preview
-	// TTL expiry; cluster credential token refresh.
-	SelfHealTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "loopzero_self_heal_total",
-			Help: "In-process self-heal events by controller and action (ADR-0027 L5 evidence).",
-		},
-		[]string{"controller", "action"},
-	)
-
-	// OrphanCRTotal counts orphan CR detections (e.g., LoopZeroApplication
-	// whose gitops manifest disappeared). Per ADR-0027 L4/L5 boundary.
-	OrphanCRTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "loopzero_orphan_cr_total",
-			Help: "Orphan CRs detected by reaper sweeps (manifest removed from gitops).",
-		},
-		[]string{"kind"},
-	)
-
-	// FinalizerBlockedSeconds tracks how long a finalizer holds the
-	// deletion of a CR. P95 above the deletion budget (typically 5min)
-	// triggers an SLO alert.
-	FinalizerBlockedSeconds = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "loopzero_finalizer_blocked_seconds",
-			Help:    "Duration that a finalizer held a CR deletion before unblocking.",
-			Buckets: []float64{0.5, 1, 5, 10, 30, 60, 120, 300, 600},
-		},
-		[]string{"kind"},
-	)
-
-	// ReconcileQueueDepth surfaces per-controller workqueue backlog.
-	// Aggregated across the 4 split binaries via Prometheus federation
-	// (ADR-0023 split topology). Saturation alert fires when sustained > N.
-	ReconcileQueueDepth = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "loopzero_reconcile_queue_depth",
-			Help: "Current workqueue backlog per controller.",
-		},
-		[]string{"controller"},
 	)
 
 	// ClusterCredentialCAFetchTotal counts live CA fetch attempts in
@@ -195,18 +120,20 @@ func init() {
 		ReconcileDuration,
 		ReconcileErrors,
 		ReconcileTotal,
-		ProvisionerDuration,
-		CRDCount,
 		TenantDeletionStepDuration,
 		TenantDeletionStuckTotal,
 		TenantCircuitBreakerState,
 		MisplacedTenantTotal,
-		// ADR-0027 L4 metrics:
-		SelfHealTotal,
-		OrphanCRTotal,
-		FinalizerBlockedSeconds,
-		ReconcileQueueDepth,
 		// Op B (plan 2026-05-25-live-ca-fetch-clustercredential):
 		ClusterCredentialCAFetchTotal,
 	)
+}
+
+// ObserveCircuitBreakerTransition is the state-change callback for the
+// operators' circuit breakers: it logs the transition and publishes the new
+// state in TenantCircuitBreakerState, so an open breaker is visible on
+// /metrics and not only in the log.
+func ObserveCircuitBreakerTransition(name string, from, to cb.State) {
+	slog.Info("circuit breaker state change", "breaker", name, "from", from.String(), "to", to.String())
+	TenantCircuitBreakerState.WithLabelValues(name).Set(float64(to))
 }

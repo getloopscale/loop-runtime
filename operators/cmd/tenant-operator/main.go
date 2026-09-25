@@ -33,14 +33,13 @@ import (
 	"github.com/getloopscale/loopzero/operators/internal/environment"
 	"github.com/getloopscale/loopzero/operators/internal/gitea"
 	"github.com/getloopscale/loopzero/operators/internal/harbor"
+	"github.com/getloopscale/loopzero/operators/internal/metrics"
 	miniop "github.com/getloopscale/loopzero/operators/internal/minio"
 	"github.com/getloopscale/loopzero/operators/internal/operatorboot"
 	"github.com/getloopscale/loopzero/operators/internal/tenant"
 	"github.com/getloopscale/loopzero/operators/internal/tracing"
 	cb "github.com/getloopscale/loopzero/pkg/circuitbreaker"
 	"github.com/getloopscale/loopzero/pkg/healthcheck"
-
-	_ "github.com/getloopscale/loopzero/operators/internal/metrics"
 )
 
 var scheme = runtime.NewScheme()
@@ -51,13 +50,6 @@ func init() {
 	}
 	if err := loopzerov1.AddToScheme(scheme); err != nil {
 		panic(fmt.Sprintf("failed to register loopzero/v1 scheme: %v", err))
-	}
-}
-
-func cbStateLoggerFunc() func(string, cb.State, cb.State) {
-	return func(name string, from, to cb.State) {
-		slog.Info("circuit breaker state change",
-			"breaker", name, "from", from.String(), "to", to.String())
 	}
 }
 
@@ -126,7 +118,7 @@ func main() {
 	}
 
 	// --- Provisioners ---
-	cbStateLogger := cbStateLoggerFunc()
+	cbStateLogger := metrics.ObserveCircuitBreakerTransition
 
 	giteaURL := os.Getenv("GITEA_URL")
 	if giteaURL == "" {
@@ -290,6 +282,13 @@ func main() {
 	// they share one factory (and its per-cell client cache).
 	if err := environment.SetupEnvironmentControllerWithFactory(mgr, runtimeFactory); err != nil {
 		setupLog.Error(err, "unable to setup EnvironmentController")
+		os.Exit(1)
+	}
+
+	// ADR-0018 C2/C5: the cache cannot see a Tenant outside loopzero-system, so an
+	// uncached cluster-wide scan publishes loopzero_misplaced_tenant_total.
+	if err := mgr.Add(&tenant.MisplacedTenantScanner{Reader: mgr.GetAPIReader()}); err != nil {
+		setupLog.Error(err, "unable to add the misplaced Tenant scan")
 		os.Exit(1)
 	}
 

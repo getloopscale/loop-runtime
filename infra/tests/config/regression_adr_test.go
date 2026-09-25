@@ -67,12 +67,12 @@ func TestADR0018C1_NoEnvVarOverride(t *testing.T) {
 //   - the C9 cache scoping, which makes a Tenant outside loopzero-system invisible to
 //     the operator -- infra/tests/unit/cache_scoping_test.go and
 //     operators/cmd/cache_scoping_test.go, both live;
-//   - the C2 startup SCAN itself is covered by NOTHING, because it is not
-//     implemented: MisplacedTenantTotal is declared and registered but has no
-//     writer anywhere in operators/, api/ or pkg/, so the two alerts that query
-//     loopzero_misplaced_tenant_total can never fire. Tracked as B-189. This test
-//     asserts the metric is DECLARED and says so in its name; it deliberately
-//     does not assert something weaker under C2's name and call that coverage.
+//   - the C2 SCAN is tenant.MisplacedTenantScanner (operators/internal/tenant),
+//     wired in operators/cmd/tenant-operator and covered by that package's unit
+//     tests; it is the writer of loopzero_misplaced_tenant_total. Until it existed
+//     the metric had no writer and the two alerts querying it could never fire
+//     (B-189). This test still asserts only that the metric is DECLARED, and
+//     says so in its name.
 func TestADR0018C5_MisplacedTenantMetricDeclared(t *testing.T) {
 	metricsData, err := os.ReadFile("../../../operators/internal/metrics/metrics.go")
 	if err != nil {

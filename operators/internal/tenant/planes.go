@@ -67,15 +67,16 @@ var planoDoCliente = map[string]plano{
 // teste reprova ate' alguem decidir a que plano aquilo pertence.
 var planosDoArquivo = map[string][]plano{
 	// a propria costura nao chama cliente nenhum
-	"planes.go":              {},
-	"registry_auth_merge.go": {},
-	"tenant_build.go":        {planoBuild},
-	"tenant_controller.go":   {planoBuild, planoControl, planoSecrets},
-	"tenant_credentials.go":  {},
-	"tenant_deletion.go":     {planoBuild, planoControl},
-	"tenant_gitops.go":       {planoControl},
-	"tenant_harbor.go":       {planoBuild},
-	"tenant_priority.go":     {},
+	"planes.go":                {},
+	"registry_auth_merge.go":   {},
+	"tenant_build.go":          {planoBuild},
+	"tenant_controller.go":     {planoBuild, planoControl, planoSecrets},
+	"tenant_credentials.go":    {},
+	"tenant_deletion.go":       {planoBuild, planoControl},
+	"tenant_gitops.go":         {planoControl},
+	"tenant_harbor.go":         {planoBuild},
+	"tenant_priority.go":       {},
+	"misplaced_tenant_scan.go": {},
 }
 
 // serve responde se o arquivo declarou o plano dado.
