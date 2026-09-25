@@ -141,6 +141,11 @@ func scanNode(n node) ([]string, error) {
 			if _, skip := skipDirs[d.Name()]; skip {
 				return filepath.SkipDir
 			}
+			// The Go toolchain never compiles a directory whose name starts with
+			// "." or "_", so nothing in one is an edge of the build graph.
+			if path != n.dir && (strings.HasPrefix(d.Name(), ".") || strings.HasPrefix(d.Name(), "_")) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if !strings.HasSuffix(path, ".go") {

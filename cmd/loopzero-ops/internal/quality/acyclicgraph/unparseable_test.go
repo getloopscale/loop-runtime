@@ -20,3 +20,17 @@ func TestAcyclicGraph_UnparseableGoFile_FailsInsteadOfBeingSkipped(t *testing.T)
 		t.Fatalf("want an error naming the unparseable file, got %v", err)
 	}
 }
+
+// The toolchain never compiles a directory whose name starts with "." or "_",
+// so a .go file there has no edges in the build graph. Measured 2026-09-25: a
+// template named Dockerfile.go inside the gitignored .claude/ kit stopped the
+// gate with "cannot parse imports" on every developer machine that had the
+// kit installed, although no clone of the repository carries that file.
+func TestAcyclicGraph_DirectoriesTheToolchainIgnoresAreNotScanned(t *testing.T) {
+	engine := layout(t)
+	writeGo(t, engine, ".claude/skills/x/Dockerfile.go", "# not Go\nFROM scratch\n")
+	writeGo(t, engine, "_scratch/y.go", "not go either\n")
+	if _, err := Check(Config{RepoRoot: engine}); err != nil {
+		t.Fatalf("files the Go toolchain never compiles must not be parsed, got %v", err)
+	}
+}
