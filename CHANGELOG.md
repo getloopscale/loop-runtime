@@ -269,6 +269,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- loopzero-ops quality gates, the gate list and loopzero-ops leak exit 5 (could not complete) instead of 0 when their report could not be written, for example to a closed pipe; a failing command keeps its own status
+
 - Rotating a secret the tenant operator reads through another component's path (the Gitea token, the MinIO keys) refreshes the operator's copy and restarts the operator again, instead of restarting only the API and leaving the operator on the old value (principle_violations#237)
 
 - loopzero-ops quality billing-layers and routes-acyclic recognise the cost gate's new location and the shared plan-tier policy package instead of failing on them
