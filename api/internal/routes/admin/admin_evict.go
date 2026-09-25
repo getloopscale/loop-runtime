@@ -29,7 +29,6 @@ package admin
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -37,8 +36,6 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
-
-	"github.com/google/uuid"
 )
 
 // AdminEvictInput is the body for POST /api/v1/admin/tenants/evict.
@@ -116,8 +113,11 @@ func AdminEvictHandler(evictor TenantEvictor) http.HandlerFunc {
 
 		matched, err := evictor.MatchTenants(ctx, input.Pattern, input.IDs)
 		if err != nil {
+			// Same split as the enqueue failure below (CWE-209): the upstream
+			// error goes to the log, the caller gets a message safe to show.
+			slog.ErrorContext(ctx, "eviction tenant match failed", "err", err, "pattern", input.Pattern, "ids_count", len(input.IDs))
 			httpio.WriteCodeErrorJSON(w, http.StatusInternalServerError, "MATCH_FAILED",
-				fmt.Sprintf("Failed to resolve tenants: %v", err))
+				"Failed to resolve tenants. Please retry.")
 			return
 		}
 
@@ -131,8 +131,8 @@ func AdminEvictHandler(evictor TenantEvictor) http.HandlerFunc {
 			return
 		}
 
-		jobID := uuid.NewString()
-		if _, err := evictor.EnqueueEviction(ctx, matched); err != nil {
+		jobID, err := evictor.EnqueueEviction(ctx, matched)
+		if err != nil {
 			// T2.1 of plan qa-sprint1-cleanup-2026-06-24 v1.2 — closes #20
 			// (CWE-209 info-disclosure). Split client message + server log:
 			// the prior `fmt.Sprintf("%v", err)` leaked k8s ServiceAccount,
@@ -141,9 +141,8 @@ func AdminEvictHandler(evictor TenantEvictor) http.HandlerFunc {
 			// detailed err goes to slog (Loki/audit ingest); the client gets
 			// a generic message that is unconditionally safe regardless of
 			// the err shape coming from k8s/ArgoCD upstream.
-			slog.Error("eviction enqueue failed",
+			slog.ErrorContext(ctx, "eviction enqueue failed",
 				"err", err,
-				"job_id", jobID,
 				"tenants_matched_count", len(matched),
 			)
 			httpio.WriteCodeErrorJSON(w, http.StatusInternalServerError, "ENQUEUE_FAILED",

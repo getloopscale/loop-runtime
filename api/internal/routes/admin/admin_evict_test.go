@@ -184,6 +184,25 @@ func TestAdminEvict_Live_Returns202(t *testing.T) {
 	if !resp.Accepted || resp.Queued != 1 {
 		t.Fatalf("unexpected response: %+v", resp)
 	}
+	if resp.JobID != "job-1" {
+		t.Errorf("job_id = %q, want the id the eviction queue returned (job-1)", resp.JobID)
+	}
+}
+
+// A tenant-matching failure must not echo the upstream error to the caller
+// (CWE-209, as for enqueue): it can carry database or cluster internals.
+func TestAdminEvict_MatchFailure_SanitizesErrorBody(t *testing.T) {
+	ev := &fakeEvictor{matchErr: errors.New(`pq: relation "tenants" does not exist on host db-primary.loopzero-system`)}
+	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%"}, ev,
+		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s"},
+		map[string]string{"X-Service-Auth": "s"},
+	)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500, got %d", w.Code)
+	}
+	if strings.Contains(w.Body.String(), "loopzero-system") || strings.Contains(w.Body.String(), "relation") {
+		t.Errorf("response leaks the upstream error: %s", w.Body.String())
+	}
 }
 
 // T2.1 of plan qa-sprint1-cleanup-2026-06-24 v1.2 — closes #20 (CWE-209).
