@@ -6,9 +6,9 @@ package release
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -18,6 +18,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/events"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/services/syncrecovery"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -133,7 +134,7 @@ func (c *ContainerDeliveryActivator) Activate(ctx context.Context, build deployc
 		// MEET-2026-04-04-029 P3: 404 (app not found) is recoverable — the TenantController
 		// may not have created the ArgoCD Application yet. Leave release in PENDING and let
 		// the convergence loop retrigger sync once the Application CR exists.
-		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "DEPLOY_SERVICE_AUTH_FAILED") {
+		if errors.Is(err, deploycontracts.ErrSyncApplicationNotFound) || errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed) {
 			slog.Warn("argocd sync trigger failed (recoverable) — release stays PENDING for convergence loop retry",
 				"build_id", build.ID, "app", argoAppName, "error", err,
 				"hint", "If this persists, verify the environment exists for this tenant and ArgoCD credentials are valid")

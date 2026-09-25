@@ -14,6 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -417,7 +418,7 @@ func TestContainerDelivery_Activate_SyncTrigger404_StaysPending(t *testing.T) {
 	rs := newFakeReleaseStoreContainer()
 	es := &fakeEventStoreContainer{}
 	gitops := &fakeGitOpsContainer{commitSHA: "sha-2"}
-	syncClient := &fakeSyncContainer{triggerErr: fmt.Errorf("application not found")}
+	syncClient := &fakeSyncContainer{triggerErr: fmt.Errorf("argocd sync: application %q not found: %w", "x", deploycontracts.ErrSyncApplicationNotFound)}
 
 	activator := NewContainerDeliveryActivator(ContainerDeliveryDeps{
 		ReleaseStore:   rs,
@@ -448,6 +449,68 @@ func TestContainerDelivery_Activate_SyncTrigger404_StaysPending(t *testing.T) {
 	relID := "rel-build-404"
 	if rs.lastStatus[relID] != string(statemachine.ReleaseGitMirrorCompleted) {
 		t.Errorf("expected GIT_MIRROR_COMPLETED (PENDING), got %s", rs.lastStatus[relID])
+	}
+}
+
+// A transport error whose text happens to contain "not found" (a DNS lookup
+// failure) is not the ArgoCD Application being absent. Classifying by the
+// message text used to leave such releases PENDING forever instead of failing
+// them; only the typed sentinel may mark a sync failure as recoverable.
+func TestContainerDelivery_Activate_SyncTriggerDNSNotFound_FailsRelease(t *testing.T) {
+	rs := newFakeReleaseStoreContainer()
+	syncClient := &fakeSyncContainer{triggerErr: fmt.Errorf("dial tcp: lookup argocd-server: host not found")}
+	activator := NewContainerDeliveryActivator(ContainerDeliveryDeps{
+		ReleaseStore:   rs,
+		EnvTargetStore: newFakeEnvTargetStoreContainer(),
+		EventStore:     &fakeEventStoreContainer{},
+		Sync:           syncClient,
+		Locker:         &fakeLockerContainer{},
+		GitOps:         &fakeGitOpsContainer{commitSHA: "sha-dns"},
+	})
+	build := deploycontracts.ActivationBuild{
+		ID: "build-dns", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", CreatedBy: "user-1",
+	}
+	result := deploycontracts.BuildCallbackRequest{
+		Status: "succeeded", Apps: []deploycontracts.AppRelease{{Name: "api"}}, Manifests: "manifests",
+	}
+
+	err := activator.Activate(context.Background(), build, result)
+
+	if err == nil {
+		t.Fatal("a DNS failure must fail the release, not leave it PENDING")
+	}
+	if got := rs.lastStatus["rel-build-dns"]; got != string(statemachine.ReleaseSyncFailed_) {
+		t.Errorf("expected SYNC_FAILED, got %s", got)
+	}
+}
+
+func TestContainerDelivery_Activate_SyncTriggerAuthFailed_StaysPending(t *testing.T) {
+	rs := newFakeReleaseStoreContainer()
+	syncClient := &fakeSyncContainer{triggerErr: loopzeroerrors.ErrDeployServiceAuthFailed}
+	activator := NewContainerDeliveryActivator(ContainerDeliveryDeps{
+		ReleaseStore:   rs,
+		EnvTargetStore: newFakeEnvTargetStoreContainer(),
+		EventStore:     &fakeEventStoreContainer{},
+		Sync:           syncClient,
+		Locker:         &fakeLockerContainer{},
+		GitOps:         &fakeGitOpsContainer{commitSHA: "sha-auth"},
+	})
+	build := deploycontracts.ActivationBuild{
+		ID: "build-auth", TenantID: "tn-1", ProjectID: "proj-1",
+		Environment: "production", CreatedBy: "user-1",
+	}
+	result := deploycontracts.BuildCallbackRequest{
+		Status: "succeeded", Apps: []deploycontracts.AppRelease{{Name: "api"}}, Manifests: "manifests",
+	}
+
+	err := activator.Activate(context.Background(), build, result)
+
+	if err != nil {
+		t.Fatalf("an auth failure is recoverable (token re-mint), got: %v", err)
+	}
+	if got := rs.lastStatus["rel-build-auth"]; got != string(statemachine.ReleaseGitMirrorCompleted) {
+		t.Errorf("expected GIT_MIRROR_COMPLETED (PENDING), got %s", got)
 	}
 }
 

@@ -5,11 +5,14 @@ package argocd
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 )
 
 // These tests run against real ArgoCD.
@@ -178,5 +181,22 @@ func TestSyncClient_TerminateOperation_SendsContentType(t *testing.T) {
 	}
 	if capturedContentType != "application/json" {
 		t.Errorf("Content-Type: got %q, want %q", capturedContentType, "application/json")
+	}
+}
+
+// A 404 on POST /sync is the one outcome delivery may treat as "the
+// Application does not exist yet, retry later". It is carried by a sentinel,
+// not by the message text, so callers never have to match "not found".
+func TestSyncClient_TriggerSync_404WrapsApplicationNotFoundSentinel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	client := NewSyncClient(SyncClientConfig{BaseURL: server.URL, Token: "test-token"})
+
+	err := client.TriggerSync(context.Background(), "tn-foo-production")
+
+	if !errors.Is(err, deploycontracts.ErrSyncApplicationNotFound) {
+		t.Fatalf("expected ErrSyncApplicationNotFound, got %v", err)
 	}
 }

@@ -15,6 +15,12 @@ import (
 // BRC-002 fix: prevents duplicate deploy.sync_failed SSE events.
 var ErrActivationAlreadyHandled = errors.New("activation failure already handled by delivery activator")
 
+// ErrSyncApplicationNotFound is wrapped by SyncClient.TriggerSync when the
+// ArgoCD Application does not exist (HTTP 404). It is the only signal delivery
+// may read as "not created yet, retry later": classifying by the message text
+// also matched transport errors such as "host not found".
+var ErrSyncApplicationNotFound = errors.New("argocd application not found")
+
 // ActivationBuild is the completed build handed to delivery, reduced to the
 // fields the activation contract actually reads.
 //

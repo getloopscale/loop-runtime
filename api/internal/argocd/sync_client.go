@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -219,7 +220,7 @@ func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
 		return loopzeroerrors.ErrDeployServiceAuthFailed
 	}
 	if resp.StatusCode == 404 {
-		syncErr := fmt.Errorf("argocd sync: application %q not found", appName)
+		syncErr := fmt.Errorf("argocd sync: application %q not found: %w", appName, deploycontracts.ErrSyncApplicationNotFound)
 		span.RecordError(syncErr)
 		span.SetStatus(codes.Error, syncErr.Error())
 		return syncErr
