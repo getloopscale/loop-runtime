@@ -115,6 +115,10 @@ the mode is `warn`. Drill runs, deliberately.
 or `harbor.dev.loopzero.example/loopzero-platform/**` without a cosign signature. Nothing else:
 images outside those globs are not matched.
 
+*Corrected 2026-09-25.* The `harbor.dev.loopzero.example/loopzero-platform/**` glob left both
+ClusterImagePolicies when Harbor was retired ("Retire Harbor", below); the policies now
+match the DOCR glob alone.
+
 **What was rejected.** `warn` everywhere — it makes the deny path untested until the day
 it matters, which is the argument the drill environment already settles. `enforce`
 everywhere including the published chart — that decides for a self-hoster what their
@@ -130,6 +134,66 @@ the fix replaced the instance and not the class. Recorded here under
 `.claude/rules/autonomy-envelope.md` § *A structural decision the contract wants
 recorded*, which makes the record the decision rather than a note about one, and
 requires it to name who is affected, what breaks and what was rejected — above.
+### Registry
+
+| Date | Decision |
+|---|---|
+| 2026-09-25 | **Retire Harbor; the registry is managed** — ECR on AWS, provisioned in `../loopzero-infra-live`; a self-hoster brings their own registry through `REGISTRY_URL`; locally `k3d-loopzero-registry` stays. Harbor leaves the engine entirely: the Helmfile releases, the wrapper chart, the api dual-push mirror, the tenant-operator provisioner, the admission allowlist entries, the monitoring rules and the Harbor-only resources of the legacy Pulumi stack. **Supersedes MEET-2026-04-11-048** (the DOCR→Harbor migration). Full record below the table. |
+
+**Retire Harbor; the registry is managed** (2026-09-25). Decided by the project owner.
+
+**Context — what was measured** (#381, `design_pattern_findings#30`). Helmfile installed the
+upstream `harbor/harbor` 1.16.2 chart with `infra/helm/harbor/values.yaml`, a values file
+written for the wrapper chart and therefore nested under `harbor:`. The upstream chart reads
+top-level keys, so every value was ignored: each environment with `profile.harbor: true` —
+dev, dev-public, standalone, standalone-multi, standalone-public and **prod** — ran Harbor with
+the vendor's documented default admin password, an in-cluster database and Redis, and an
+Ingress. None of the hardening MEET-048 described (external `harbor_db`, S3 storage, admin
+password from ESO, ClusterIP behind Traefik) was applied. And nothing used it: the api
+dual-push mirror (`config.harborRegistryUrl`) and the tenant-operator robot-account
+provisioner (`config.harborUrl`) were empty in every environment. A reachable,
+default-credential service with zero consumers.
+
+**What was rejected.**
+- *Fix Harbor as MEET-048 intended* — point Helmfile at the wrapper chart, move the values,
+  wire the admin password from ESO. It repairs the install and still leaves a stateful
+  registry (database, Redis, object storage, GC, upgrades, robot-account rotation) that the
+  platform operates for no consumer. The AWS re-platform ADR already makes the registry a
+  managed L1 primitive.
+- *Keep it as a pull-through mirror or DR copy* — the mirror existed and was never turned on;
+  a second copy of every image is a need nobody has stated, and ECR replication covers it
+  if one appears, without a second system to run.
+- *A lighter self-hosted registry (Zot, CNCF distribution)* — the same operational burden in
+  a smaller package, and still a registry this repository would have to harden, back up and
+  patch. A self-hoster who wants one runs it and hands the engine `REGISTRY_URL`.
+
+**Consequences.**
+- The engine carries no registry code: tenant images go to `REGISTRY_URL` only. ECR is
+  provisioned in `../loopzero-infra-live` (AWS re-platform ADR, AM5); no ECR code or Terraform
+  lives here.
+- A values file still setting a retired key (`config.harborRegistryUrl` on loopzero-api,
+  `config.harbor*` / `secrets.harborAdminPassword` on loopzero-tenant-operator,
+  `registries.harborPrefix` on loopzero-admission-policies) fails at install: the chart schemas
+  refuse unknown keys. The binaries no longer read any `HARBOR_*` variable.
+- **Vulnerability scanning is a follow-up, not implemented here.** The only image scanner
+  anywhere near the pipeline was Harbor's bundled Trivy — disabled in the intended values, and
+  running only because those values were ignored; nothing consumed its results. The
+  recommendation, in order: first a Trivy scan of the built image in the build pipeline —
+  the pipeline already produces a CycloneDX SBOM with syft, which Trivy can scan; later ECR
+  enhanced scanning, owned by the registry owner in `../loopzero-infra-live`.
+- The per-plan registry storage quota (`HarborQuotaBytes`: 5 GB starter, 50 GB paid,
+  unlimited enterprise) was enforced only through Harbor projects and leaves with them. A
+  per-tenant storage bound on ECR, if wanted, is a lifecycle policy in `../loopzero-infra-live`.
+- **Removing a release from a helmfile does not uninstall it.** On every cluster where Harbor
+  ran, the cleanup is manual: `helm uninstall harbor harbor-redis -n loopzero-system`, then delete
+  the PVCs the two releases left (`kubectl -n loopzero-system get pvc | grep -i harbor`), the
+  Secrets `harbor-admin` and `harbor-redis-credentials`, and any Harbor Ingress still present;
+  treat the admin credential as exposed wherever Harbor was reachable. On the legacy Pulumi
+  stack the next `pulumi up` plans to delete the container-images bucket (empty it first), the
+  `harbor_db` database and the Harbor Valkey cluster; in prod that cluster is `protect: true`
+  with `retainOnDelete`, so unprotect it (`pulumi state unprotect`), let `up` drop it from
+  state, and delete it in DigitalOcean.
+
 ### Code structure
 
 | Date | Decision |
