@@ -133,13 +133,33 @@ func Check(cfg Config) (Outcome, error) {
 		return Outcome{}, fmt.Errorf("%w: %w", ErrRouterUnparseable, perr)
 	}
 
-	authStart, authEnd, protStart, protEnd := authRanges(fset, file)
+	authStart, authEnd, protStart, protEnd, authCallsProtected := authRanges(fset, file)
 	if authStart == 0 {
 		return Outcome{}, ErrAuthGroupMissing
 	}
 
 	pass := 0
 	var violations []string
+
+	// registerProtectedRoutes may live outside router.go and reach its routes
+	// through family registrars; follow it. Its routes are protected exactly
+	// when the Auth group is what calls it.
+	protected, protectedSites, perr := protectedFunctions(root)
+	if perr != nil {
+		return Outcome{}, fmt.Errorf("server package: %w", perr)
+	}
+	for _, site := range protectedSites {
+		if site.File == routerPath {
+			continue // enumerated below with router.go's own ranges
+		}
+		if authCallsProtected {
+			pass++
+			continue
+		}
+		violations = append(violations, fmt.Sprintf("%s:%d  %s  (registered by %s, which the Auth group does not call)",
+			site.File, site.Line, site.Pattern, protectedEntry))
+	}
+
 	for _, site := range enumerateFile(fset, file, routerPath) {
 		route := site.Pattern
 		lineNo := site.Line
@@ -207,7 +227,7 @@ func Check(cfg Config) (Outcome, error) {
 	if declared == nil {
 		declared = DefaultOffRouterMounts
 	}
-	undeclared, serr := scanOffRouter(root, declared)
+	undeclared, serr := scanOffRouter(root, declared, protected)
 	if serr != nil {
 		return outcome, fmt.Errorf("tree scan: %w", serr)
 	}

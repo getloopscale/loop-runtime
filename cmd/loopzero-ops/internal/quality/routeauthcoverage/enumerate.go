@@ -69,8 +69,13 @@ type RouteSite struct {
 
 // enumerateFile returns every route registration in one parsed file.
 func enumerateFile(fset *token.FileSet, file *ast.File, rel string) []RouteSite {
+	return enumerateNode(fset, file, rel)
+}
+
+// enumerateNode returns every route registration under one AST node.
+func enumerateNode(fset *token.FileSet, node ast.Node, rel string) []RouteSite {
 	var sites []RouteSite
-	ast.Inspect(file, func(n ast.Node) bool {
+	ast.Inspect(node, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
@@ -123,7 +128,7 @@ func firstRouteLiteral(args []ast.Expr) (string, bool) {
 // Positions come from the AST rather than from brace counting: a brace inside a
 // string or a comment shifts a counter and silently moves the range, which is the
 // class of defect this whole change removes.
-func authRanges(fset *token.FileSet, file *ast.File) (authStart, authEnd, protStart, protEnd int) {
+func authRanges(fset *token.FileSet, file *ast.File) (authStart, authEnd, protStart, protEnd int, authCallsProtected bool) {
 	qualifiers := authQualifiers(file)
 	ast.Inspect(file, func(n ast.Node) bool {
 		if fn, ok := n.(*ast.FuncDecl); ok && fn.Name.Name == "registerProtectedRoutes" && fn.Body != nil {
@@ -145,6 +150,7 @@ func authRanges(fset *token.FileSet, file *ast.File) (authStart, authEnd, protSt
 		}
 		authStart = fset.Position(lit.Body.Lbrace).Line
 		authEnd = fset.Position(lit.Body.Rbrace).Line
+		authCallsProtected = calls(lit.Body, protectedEntry)
 		return true
 	})
 	return
@@ -212,7 +218,7 @@ func mentionsAuth(block *ast.BlockStmt, qualifiers map[string]bool) bool {
 // would mean following the call chain from the mount helper back to its caller, and
 // an analysis that gets THAT wrong is worse than no analysis — it would vouch for a
 // route it never understood. What it refuses is the invisibility.
-func scanOffRouter(root string, declared map[string]string) ([]string, error) {
+func scanOffRouter(root string, declared map[string]string, protected []funcSpan) ([]string, error) {
 	apiDir := filepath.Join(root, "api")
 	var undeclared []string
 
@@ -240,7 +246,14 @@ func scanOffRouter(root string, declared map[string]string) ([]string, error) {
 			// reporter for the whole module.
 			return nil //nolint:nilerr
 		}
-		sites := enumerateOnChiRouterParams(fset, f, rel)
+		var sites []RouteSite
+		for _, s := range enumerateOnChiRouterParams(fset, f, rel) {
+			// Registrations reached from registerProtectedRoutes are counted,
+			// with their protection, by Check — not off-router mounts.
+			if !inSpans(protected, s.File, s.Line) {
+				sites = append(sites, s)
+			}
+		}
 		if len(sites) == 0 {
 			return nil
 		}
