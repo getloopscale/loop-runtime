@@ -54,7 +54,7 @@ var previewSM = statemachine.NewPreviewTypedMachine()
 // +kubebuilder:rbac:groups=loopzero.io,resources=previewenvironments/finalizers,verbs=update
 // +kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch
 // +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch
 type PreviewReconciler struct {
 	client.Client
 	// RuntimeFactory resolves the runtime cluster of a preview's cell. It is

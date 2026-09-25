@@ -40,6 +40,13 @@ var operatorSecretAccessTable = []operatorSecretAccess{
 		// read in the workload's cell, with the cell's own identity.
 		namespaces: map[string][]string{"loopzero-system": {"get", "list", "watch"}},
 	},
+	{
+		chart: "loopzero-preview-operator",
+		// cell kubeconfig Secrets (CellAwareRuntimeClientFactory), read through
+		// the manager cache. Preview namespaces live in the cell, reached with
+		// the cell's own identity.
+		namespaces: map[string][]string{"loopzero-system": {"get", "list", "watch"}},
+	},
 }
 
 // TestOperatorCharts_GrantNoClusterWideSecretOrConfigMapAccess — a ClusterRole

@@ -20,13 +20,21 @@ rules:
   # --- Cell routing: resolve the runtime cluster of a preview's cell ---
   # A preview is provisioned in the cell its tenant is placed in. The cell comes
   # from the PreviewEnvironment (or, for older CRs, its Tenant), and the cell's
-  # kubeconfig from its ClusterCredential and that credential's Secret.
+  # kubeconfig from its ClusterCredential and that credential's Secret. The
+  # Secret lives in loopzero-system and is read through a Secret cache scoped to
+  # that namespace: the grant is the namespaced Role in role-secret-access.yaml,
+  # not a rule here.
   - apiGroups: ["loopzero.io"]
     resources: ["tenants", "clustercredentials"]
     verbs: ["get", "list", "watch"]
+  {{- if .Values.rbac.legacyClusterWideSecrets }}
+  # Cutover escape hatch (values.yaml rbac.legacyClusterWideSecrets): an
+  # operator image that predates the scoped Secret cache lists Secrets in
+  # every namespace. Read only; off by default.
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "list", "watch"]
+  {{- end }}
 
   # --- Namespaces: create/manage preview namespaces ---
   - apiGroups: [""]

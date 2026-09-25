@@ -23,6 +23,13 @@ rules:
     resources: ["previewenvironments/finalizers"]
     verbs: ["update"]
 
+  # --- Cell routing: resolve the runtime cluster of a preview's cell ---
+  # Mirrors charts/loopzero-preview-operator/templates/clusterrole.yaml. The
+  # kubeconfig Secret itself is read through the Role below, not here.
+  - apiGroups: ["loopzero.io"]
+    resources: ["tenants", "clustercredentials"]
+    verbs: ["get", "list", "watch"]
+
   # --- Namespaces: create/delete preview namespaces ---
   - apiGroups: [""]
     resources: ["namespaces"]
@@ -56,6 +63,33 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: preview-operator
+subjects:
+  - kind: ServiceAccount
+    name: preview-operator
+    namespace: loopzero-system
+---
+# Secret read in loopzero-system only: cell kubeconfigs. The operator's Secret
+# cache watches this namespace alone. Mirrors
+# charts/loopzero-preview-operator/templates/role-secret-access.yaml.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: preview-operator-secrets-loopzero-system
+  namespace: loopzero-system
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: preview-operator-secrets-loopzero-system
+  namespace: loopzero-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: preview-operator-secrets-loopzero-system
 subjects:
   - kind: ServiceAccount
     name: preview-operator
