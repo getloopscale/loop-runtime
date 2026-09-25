@@ -40,7 +40,7 @@ var binaryWiringMatrix = []binaryWiringEntry{
 		pkgImport: "tenant",
 		pkgDir:    "../internal/tenant",
 		mainPath:  "tenant-operator/main.go",
-		setupFunc: "main",
+		setupFunc: "setupControllers",
 	},
 	{
 		name:      "app-operator",

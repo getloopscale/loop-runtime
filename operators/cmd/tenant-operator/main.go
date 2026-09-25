@@ -12,8 +12,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
-	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -73,6 +71,12 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	setupLog := ctrl.Log.WithName("setup")
 
+	cfg, err := loadConfig(os.Getenv)
+	if err != nil {
+		setupLog.Error(err, "invalid tenant-operator configuration")
+		os.Exit(1)
+	}
+
 	tracingShutdown, tracingErr := tracing.Init(context.Background(), "loopzero-tenant-operator")
 	if tracingErr != nil {
 		setupLog.Error(tracingErr, "tracing init failed — continuing without tracing")
@@ -117,178 +121,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// --- Provisioners ---
-	cbStateLogger := metrics.ObserveCircuitBreakerTransition
-
-	giteaURL := os.Getenv("GITEA_URL")
-	if giteaURL == "" {
-		giteaURL = constants.DefaultGiteaURL
-	}
-	giteaToken := os.Getenv("GITEA_TOKEN")
-	if giteaToken == "" {
-		setupLog.Error(nil, "GITEA_TOKEN is required")
-		os.Exit(1)
-	}
-	// B-069: the organisation is configuration, not a literal. It was a
-	// hardcoded "loopzero" here, while the API side reads GITEA_ORG -- so any
-	// deployment that set the org got repos created in one organisation and
-	// pushed to another. Same envOr shape as GITEA_URL above.
-	giteaOrg := os.Getenv("GITEA_ORG")
-	if giteaOrg == "" {
-		giteaOrg = constants.DefaultGiteaOrg
-	}
-	gitProvisionerRaw := gitea.NewRealProvisioner(giteaURL, giteaToken, giteaOrg)
-	giteaCB := cb.New(cb.Config{
-		Name: "gitea", OpenThreshold: 5, CloseThreshold: 1,
-		RetryInterval: 120 * time.Second,
-	}, cbStateLogger)
-	gitProvisioner := gitea.NewCircuitBreakerProvisioner(gitProvisionerRaw, giteaCB, slog.Default())
-
-	argoCDNamespace := os.Getenv("ARGOCD_NAMESPACE")
-	if argoCDNamespace == "" {
-		argoCDNamespace = constants.DefaultArgoCDNamespace
-	}
-	dynClient, err := dynamic.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		setupLog.Error(err, "unable to create dynamic client for ArgoCD provisioner")
-		os.Exit(1)
-	}
-	argoCDProvisionerRaw := argocd.NewRealProvisioner(argoCDNamespace, dynClient)
-	argoCDCB := cb.New(cb.Config{
-		Name: "argocd", OpenThreshold: 5, CloseThreshold: 1,
-		RetryInterval: 120 * time.Second,
-	}, cbStateLogger)
-	argoCDProvisioner := argocd.NewCircuitBreakerProvisioner(argoCDProvisionerRaw, argoCDCB, slog.Default())
-
-	// Multi-cluster clients
-	buildKubeconfig := os.Getenv("BUILD_KUBECONFIG")
-	if buildKubeconfig == "" {
-		setupLog.Error(nil, "BUILD_KUBECONFIG is required")
-		os.Exit(1)
-	}
-	buildClient, err := cellrouting.CreateClusterClient(setupLog, buildKubeconfig, scheme, "build")
-	if err != nil {
-		setupLog.Error(err, "failed to create build cluster client")
-		os.Exit(1)
-	}
-
-	cell0Kubeconfig := os.Getenv("CELL_0_KUBECONFIG")
-	if cell0Kubeconfig == "" {
-		setupLog.Error(nil, "CELL_0_KUBECONFIG is required")
-		os.Exit(1)
-	}
-	runtimeClient, err := cellrouting.CreateClusterClient(setupLog, cell0Kubeconfig, scheme, "runtime")
-	if err != nil {
-		setupLog.Error(err, "failed to create runtime cluster client")
-		os.Exit(1)
-	}
-	// The runtime cluster of each tenant's cell; cellID "" (never placed)
-	// resolves to the CELL_0_KUBECONFIG cluster.
-	runtimeFactory := cellrouting.NewCellAwareRuntimeClientFactory(
-		mgr.GetClient(), runtimeClient, constants.NamespacePlatformSystem)
-
-	// MinIO (optional)
-	var minIOProvisioner miniop.CredentialProvisioner
-	minIOEndpoint := os.Getenv("MINIO_ENDPOINT")
-	minIOAccessKey := os.Getenv("MINIO_ACCESS_KEY")
-	minIOSecretKey := os.Getenv("MINIO_SECRET_KEY")
-	if minIOEndpoint != "" && minIOAccessKey != "" && minIOSecretKey != "" {
-		rawProvisioner, err := miniop.NewAdminProvisioner(miniop.AdminConfig{
-			Endpoint:  minIOEndpoint,
-			AccessKey: minIOAccessKey,
-			SecretKey: minIOSecretKey,
-		})
-		if err != nil {
-			setupLog.Error(err, "failed to create MinIO admin provisioner")
-			os.Exit(1)
-		}
-		minIOCB := cb.New(cb.Config{
-			Name: "minio", OpenThreshold: 5, CloseThreshold: 1,
-			RetryInterval: 120 * time.Second,
-		}, cbStateLogger)
-		minIOProvisioner = miniop.NewCircuitBreakerProvisioner(rawProvisioner, minIOCB, slog.Default())
-		setupLog.Info("minio per-tenant provisioner enabled", "endpoint", minIOEndpoint)
-	}
-
-	// Harbor (optional)
-	var harborClient harbor.Provisioner
-	var harborRegistryHost string
-	harborURL := os.Getenv("HARBOR_URL")
-	if harborURL != "" {
-		harborUser := os.Getenv("HARBOR_ADMIN_USERNAME")
-		harborPass := os.Getenv("HARBOR_ADMIN_PASSWORD")
-		if harborUser == "" || harborPass == "" {
-			setupLog.Error(nil, "HARBOR_ADMIN_USERNAME and HARBOR_ADMIN_PASSWORD required when HARBOR_URL is set")
-			os.Exit(1)
-		}
-		harborReal := harbor.NewClient(harborURL, harborUser, harborPass)
-		harborCB := cb.New(cb.Config{
-			Name: "harbor", OpenThreshold: 5, CloseThreshold: 1,
-			RetryInterval: 120 * time.Second,
-		}, cbStateLogger)
-		harborClient = harbor.NewCircuitBreakerClient(harborReal, harborCB, slog.Default())
-		harborRegistryHost = os.Getenv("HARBOR_REGISTRY_HOST")
-		if harborRegistryHost == "" {
-			harborRegistryHost = strings.TrimPrefix(strings.TrimPrefix(harborURL, "https://"), "http://")
-		}
-		setupLog.Info("harbor integration enabled", "url", harborURL)
-	}
-
-	// Registry CIDRs
-	var registryCIDRs []string
-	if cidrs := os.Getenv("REGISTRY_CIDRS"); cidrs != "" {
-		for _, c := range strings.Split(cidrs, ",") {
-			if trimmed := strings.TrimSpace(c); trimmed != "" {
-				registryCIDRs = append(registryCIDRs, trimmed)
-			}
-		}
-	}
-
-	doToken := os.Getenv("DIGITALOCEAN_TOKEN")
-	registryDockerConfig := os.Getenv("REGISTRY_DOCKER_CONFIG")
-	if doToken != "" && registryDockerConfig != "" {
-		setupLog.Error(nil, "DIGITALOCEAN_TOKEN and REGISTRY_DOCKER_CONFIG are mutually exclusive")
-		os.Exit(1)
-	}
-
-	// --- Controllers ---
-	tenantMaxConcurrent := 0
-	if v := os.Getenv("LOOPZERO_TENANT_MAX_CONCURRENT"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			tenantMaxConcurrent = n
-		}
-	}
-	if err := tenant.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeFactory, tenant.TenantControllerConfig{
-		GiteaURL:                giteaURL,
-		WorkloadClusterURL:      os.Getenv("WORKLOAD_CLUSTER_URL"),
-		MinIOProvisioner:        minIOProvisioner,
-		HarborClient:            harborClient,
-		HarborRegistryHost:      harborRegistryHost,
-		RegistryCIDRs:           registryCIDRs,
-		MaxConcurrentReconciles: tenantMaxConcurrent,
-		Credentials: tenant.BuildCredentials{
-			MinIOEndpoint:         minIOEndpoint,
-			SpacesAccessKeyID:     os.Getenv("SPACES_ACCESS_KEY_ID"),
-			SpacesSecretAccessKey: os.Getenv("SPACES_SECRET_ACCESS_KEY"),
-			DOToken:               doToken,
-			RegistryDockerConfig:  registryDockerConfig,
-		},
-	}); err != nil {
-		setupLog.Error(err, "unable to setup TenantController")
-		os.Exit(1)
-	}
-
-	// Both controllers write to the runtime cluster of the tenant's cell, so
-	// they share one factory (and its per-cell client cache).
-	if err := environment.SetupEnvironmentControllerWithFactory(mgr, runtimeFactory); err != nil {
-		setupLog.Error(err, "unable to setup EnvironmentController")
-		os.Exit(1)
-	}
-
-	// ADR-0018 C2/C5: the cache cannot see a Tenant outside loopzero-system, so an
-	// uncached cluster-wide scan publishes loopzero_misplaced_tenant_total.
-	if err := mgr.Add(&tenant.MisplacedTenantScanner{Reader: mgr.GetAPIReader()}); err != nil {
-		setupLog.Error(err, "unable to add the misplaced Tenant scan")
+	if err := setupControllers(mgr, cfg); err != nil {
+		setupLog.Error(err, "unable to set up the tenant-operator controllers")
 		os.Exit(1)
 	}
 
@@ -307,4 +141,106 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// newBreaker is the circuit breaker every external provisioner gets: open
+// after 5 consecutive failures, one probe every 2 minutes, state changes
+// published as metrics.
+func newBreaker(name string) *cb.Breaker {
+	return cb.New(cb.Config{
+		Name: name, OpenThreshold: 5, CloseThreshold: 1, RetryInterval: 120 * time.Second,
+	}, metrics.ObserveCircuitBreakerTransition)
+}
+
+// setupControllers builds the provisioners and cluster clients cfg
+// describes and registers the Tenant and Environment controllers and the
+// misplaced-Tenant scan on mgr.
+func setupControllers(mgr ctrl.Manager, cfg config) error {
+	gitProvisioner := gitea.NewCircuitBreakerProvisioner(
+		gitea.NewRealProvisioner(cfg.GiteaURL, cfg.GiteaToken, cfg.GiteaOrg), newBreaker("gitea"), slog.Default())
+
+	dynClient, err := dynamic.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("dynamic client for the ArgoCD provisioner: %w", err)
+	}
+	argoCDProvisioner := argocd.NewCircuitBreakerProvisioner(
+		argocd.NewRealProvisioner(cfg.ArgoCDNamespace, dynClient), newBreaker("argocd"), slog.Default())
+
+	setupLog := ctrl.Log.WithName("setup")
+	buildClient, err := cellrouting.CreateClusterClient(setupLog, cfg.BuildKubeconfig, scheme, "build")
+	if err != nil {
+		return fmt.Errorf("build cluster client: %w", err)
+	}
+	runtimeClient, err := cellrouting.CreateClusterClient(setupLog, cfg.Cell0Kubeconfig, scheme, "runtime")
+	if err != nil {
+		return fmt.Errorf("runtime cluster client: %w", err)
+	}
+	// The runtime cluster of each tenant's cell; cellID "" (never placed)
+	// resolves to the CELL_0_KUBECONFIG cluster. Tenant and Environment
+	// controllers share it, and its per-cell client cache.
+	runtimeFactory := cellrouting.NewCellAwareRuntimeClientFactory(
+		mgr.GetClient(), runtimeClient, constants.NamespacePlatformSystem)
+
+	minIOProvisioner, err := newMinIOProvisioner(cfg.MinIO)
+	if err != nil {
+		return err
+	}
+	harborClient, harborRegistryHost := newHarborClient(cfg.Harbor)
+
+	minIOEndpoint := ""
+	if cfg.MinIO != nil {
+		minIOEndpoint = cfg.MinIO.Endpoint
+	}
+	if err := tenant.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeFactory, tenant.TenantControllerConfig{
+		GiteaURL:                cfg.GiteaURL,
+		WorkloadClusterURL:      cfg.WorkloadClusterURL,
+		MinIOProvisioner:        minIOProvisioner,
+		HarborClient:            harborClient,
+		HarborRegistryHost:      harborRegistryHost,
+		RegistryCIDRs:           cfg.RegistryCIDRs,
+		MaxConcurrentReconciles: cfg.TenantMaxConcurrent,
+		Credentials: tenant.BuildCredentials{
+			MinIOEndpoint:         minIOEndpoint,
+			SpacesAccessKeyID:     cfg.SpacesAccessKeyID,
+			SpacesSecretAccessKey: cfg.SpacesSecretKey,
+			DOToken:               cfg.DOToken,
+			RegistryDockerConfig:  cfg.RegistryDockerConfig,
+		},
+	}); err != nil {
+		return fmt.Errorf("TenantController: %w", err)
+	}
+	if err := environment.SetupEnvironmentControllerWithFactory(mgr, runtimeFactory); err != nil {
+		return fmt.Errorf("EnvironmentController: %w", err)
+	}
+	// ADR-0018 C2/C5: the cache cannot see a Tenant outside loopzero-system, so an
+	// uncached cluster-wide scan publishes loopzero_misplaced_tenant_total.
+	if err := mgr.Add(&tenant.MisplacedTenantScanner{Reader: mgr.GetAPIReader()}); err != nil {
+		return fmt.Errorf("misplaced Tenant scan: %w", err)
+	}
+	return nil
+}
+
+// newMinIOProvisioner returns nil when MinIO is not configured.
+func newMinIOProvisioner(cfg *minIOConfig) (miniop.CredentialProvisioner, error) {
+	if cfg == nil {
+		return nil, nil
+	}
+	raw, err := miniop.NewAdminProvisioner(miniop.AdminConfig{
+		Endpoint: cfg.Endpoint, AccessKey: cfg.AccessKey, SecretKey: cfg.SecretKey,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("MinIO admin provisioner: %w", err)
+	}
+	ctrl.Log.WithName("setup").Info("minio per-tenant provisioner enabled", "endpoint", cfg.Endpoint)
+	return miniop.NewCircuitBreakerProvisioner(raw, newBreaker("minio"), slog.Default()), nil
+}
+
+// newHarborClient returns a nil client when Harbor is not configured.
+func newHarborClient(cfg *harborConfig) (harbor.Provisioner, string) {
+	if cfg == nil {
+		return nil, ""
+	}
+	ctrl.Log.WithName("setup").Info("harbor integration enabled", "url", cfg.URL)
+	client := harbor.NewCircuitBreakerClient(harbor.NewClient(cfg.URL, cfg.Username, cfg.Password), newBreaker("harbor"), slog.Default())
+	return client, cfg.RegistryHost
 }

@@ -170,11 +170,10 @@ func main() {
 			setupLog.Error(nil, "LOOPZERO_DATA_PLANE_POLLER_ENABLED=true but PG_URL / PROMETHEUS_URL missing — refusing to start")
 			os.Exit(1)
 		}
-		interval := 30 * time.Second
-		if raw := os.Getenv("LOOPZERO_DATA_PLANE_POLLER_INTERVAL"); raw != "" {
-			if v, err := time.ParseDuration(raw); err == nil && v > 0 {
-				interval = v
-			}
+		interval, err := operatorboot.PositiveDuration(os.Getenv, "LOOPZERO_DATA_PLANE_POLLER_INTERVAL", 30*time.Second)
+		if err != nil {
+			setupLog.Error(err, "data-plane-poller: invalid interval — refusing to start")
+			os.Exit(1)
 		}
 		db, err := sql.Open("pgx", pgURL)
 		if err != nil {
