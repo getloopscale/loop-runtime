@@ -34,7 +34,7 @@ import (
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
-const previewFinalizer = "loopzero.io/preview-cleanup"
+const previewFinalizer = constants.FinalizerPreview
 
 // previewSM is the PreviewEnvironment lifecycle state machine (spec §5.3).
 // T2.1 / COMP-002: phase transitions in this controller are now routed
@@ -266,7 +266,7 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview, base
 			Name: nsName,
 			Labels: map[string]string{
 				constants.LabelTenant:    preview.Spec.TenantID,
-				constants.LabelManagedBy: "preview-controller",
+				constants.LabelManagedBy: constants.ManagedByPreviewController,
 				"loopzero.io/preview":        fmt.Sprintf("pr%d", preview.Spec.PRNumber),
 			},
 		},

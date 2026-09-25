@@ -14,4 +14,5 @@ const (
 	FinalizerClusterCredential    = "loopzero.io/clustercredential-cleanup"
 	FinalizerGitRepositoryBinding = "platform.loopzero.io/repo-binding-cleanup"
 	FinalizerPlatformBootstrap    = "loopzero.io/bootstrap-cleanup"
+	FinalizerPreview              = "loopzero.io/preview-cleanup"
 )

@@ -75,7 +75,7 @@ func (r *PreviewReconciler) reconcilePreviewNetworkPolicies(ctx context.Context,
 func (r *PreviewReconciler) reconcilePreviewServiceAccount(ctx context.Context, rtClient client.Client, nsName string) error {
 	appSA := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "loopzero-app",
+			Name:      constants.SAApp,
 			Namespace: nsName,
 		},
 	}
@@ -84,7 +84,7 @@ func (r *PreviewReconciler) reconcilePreviewServiceAccount(ctx context.Context, 
 		if appSA.Labels == nil {
 			appSA.Labels = make(map[string]string)
 		}
-		appSA.Labels[constants.LabelManagedBy] = "preview-controller"
+		appSA.Labels[constants.LabelManagedBy] = constants.ManagedByPreviewController
 		appSA.AutomountServiceAccountToken = &falseVal
 		return nil
 	})

@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/operators/internal/constants"
 )
 
 // kubeconfigKey is the Secret data key holding a cell's kubeconfig.
@@ -62,10 +63,10 @@ type cachedCellClient struct {
 
 // NewCellAwareRuntimeClientFactory builds a factory wired to the mgmt
 // cluster client + a default runtime client (legacy single-cell path).
-// MgmtNamespace defaults to "loopzero-system" if empty.
+// MgmtNamespace defaults to constants.NamespacePlatformSystem if empty.
 func NewCellAwareRuntimeClientFactory(mgmtClient, defaultClient client.Client, mgmtNamespace string) *CellAwareRuntimeClientFactory {
 	if mgmtNamespace == "" {
-		mgmtNamespace = "loopzero-system"
+		mgmtNamespace = constants.NamespacePlatformSystem
 	}
 	return &CellAwareRuntimeClientFactory{
 		MgmtClient:    mgmtClient,

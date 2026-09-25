@@ -55,10 +55,6 @@ const (
 	// HTTPTimeoutExternal is the timeout for calls to external APIs (DigitalOcean).
 	HTTPTimeoutExternal = 10 * time.Second
 
-	// HTTPTimeoutMinIO is the timeout for MinIO Admin API calls.
-	// Slightly shorter than default because MinIO is expected to be local.
-	HTTPTimeoutMinIO = 15 * time.Second
-
 	// ProbeTimeout is the HTTP client timeout for reachability probes.
 	ProbeTimeout = 5 * time.Second
 
@@ -112,11 +108,6 @@ const (
 	// HarborRobotAccountTTL is the maximum lifetime for Harbor robot accounts.
 	// MEET-048 mandate: TTL must not exceed 24h.
 	HarborRobotAccountTTL = 24 * time.Hour
-
-	// HarborRobotRefreshThreshold is the minimum remaining validity before a
-	// Harbor robot account is rotated. Accounts are refreshed when less than
-	// this duration remains, avoiding credential expiry during builds.
-	HarborRobotRefreshThreshold = 2 * time.Hour
 )
 
 // --- External API URLs ---

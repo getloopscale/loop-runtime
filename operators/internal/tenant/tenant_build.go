@@ -525,7 +525,7 @@ func (r *TenantReconciler) reconcileBuildNetworkPolicy(ctx context.Context, name
 		minioEgress := networkingv1.NetworkPolicyEgressRule{
 			To: []networkingv1.NetworkPolicyPeer{{
 				NamespaceSelector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{"kubernetes.io/metadata.name": "loopzero-system"},
+					MatchLabels: map[string]string{"kubernetes.io/metadata.name": k.NamespacePlatformSystem},
 				},
 				PodSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{"app": "minio"},

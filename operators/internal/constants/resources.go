@@ -18,6 +18,10 @@ const (
 	// SecretPlatformTokens is the platform-wide Secret storing Gitea/ArgoCD tokens.
 	SecretPlatformTokens = "loopzero-platform-tokens"
 
+	// SecretRegistryPull is the registry pull secret kept in
+	// NamespacePlatformSystem and copied into every environment namespace.
+	SecretRegistryPull = "loopzero-system"
+
 	// SecretArgoCDInitialAdmin is the default ArgoCD admin password Secret.
 	SecretArgoCDInitialAdmin = "argocd-initial-admin-secret" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
 )
@@ -57,6 +61,10 @@ const (
 
 	// SADeployer is the ServiceAccount for ArgoCD-managed deployments in environment namespaces.
 	SADeployer = "loopzero-deployer"
+
+	// SAApp is the ServiceAccount tenant workloads run as in environment and
+	// preview namespaces; it carries the registry pull secret.
+	SAApp = "loopzero-app"
 )
 
 // --- ResourceQuota and Role Names ---

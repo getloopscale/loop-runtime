@@ -266,9 +266,9 @@ func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app, 
 		if route.Labels == nil {
 			route.Labels = map[string]string{}
 		}
-		route.Labels["loopzero.io/tenant"] = app.Spec.TenantRef
-		route.Labels["loopzero.io/project"] = app.Spec.Project
-		route.Labels["loopzero.io/environment"] = app.Spec.Environment
+		route.Labels[constants.LabelTenant] = app.Spec.TenantRef
+		route.Labels[constants.LabelProject] = app.Spec.Project
+		route.Labels[constants.LabelEnvironment] = app.Spec.Environment
 		return controllerutil.SetControllerReference(app, route, r.Scheme)
 	})
 	if err != nil {
@@ -450,9 +450,9 @@ func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app
 	if err := workloadClient.List(cellCtx, &pods,
 		client.InNamespace(ns),
 		client.MatchingLabels{
-			"loopzero.io/project":     app.Spec.Project,
-			"loopzero.io/app-name":    app.Spec.ServiceName,
-			"loopzero.io/environment": app.Spec.Environment,
+			constants.LabelProject:     app.Spec.Project,
+			"loopzero.io/app-name":         app.Spec.ServiceName,
+			constants.LabelEnvironment: app.Spec.Environment,
 		},
 	); err != nil {
 		logger.V(1).Info("workload-status: pod list failed (graceful degrade)",

@@ -4,8 +4,10 @@
 // Package constants centralizes all string identifiers used across LoopZero operators.
 //
 // Every Kubernetes label key, annotation key, finalizer name, resource name, and
-// well-known value used in controllers MUST be defined here. No string literal
-// identifiers should appear in controller code — use these constants instead.
+// well-known value shared across controllers is defined here, and controller
+// code uses these constants rather than string literals. A value only one
+// package uses stays in that package (for example harbor's robot renewal
+// threshold).
 //
 // This eliminates the "scattered strings" anti-pattern where the same identifier
 // (e.g., "loopzero.io/tenant") appears in 15+ locations with no single source of truth.
@@ -19,6 +21,9 @@ const (
 
 	// LabelEnvironment identifies the environment on a resource.
 	LabelEnvironment = "loopzero.io/environment"
+
+	// LabelProject identifies the project on a resource.
+	LabelProject = "loopzero.io/project"
 
 	// LabelComponent identifies the LoopZero subsystem (build, runtime, etc.).
 	LabelComponent = "loopzero.io/component"
@@ -44,6 +49,7 @@ const (
 	ManagedByClusterCredentialController = "clustercredential-controller"
 	ManagedByGitRepoBindingController    = "gitrepositorybinding-controller"
 	ManagedByPlatformBootstrapController = "platformbootstrap-controller"
+	ManagedByPreviewController           = "preview-controller"
 )
 
 // --- ArgoCD Label Keys and Values ---

@@ -98,7 +98,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient
 
 	appSA := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "loopzero-app",
+			Name:      constants.SAApp,
 			Namespace: nsName,
 		},
 	}
@@ -110,12 +110,12 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient
 		falseVal := false
 		appSA.AutomountServiceAccountToken = &falseVal
 		appSA.ImagePullSecrets = []corev1.LocalObjectReference{
-			{Name: "loopzero-system"},
+			{Name: constants.SecretRegistryPull},
 		}
 		var defaultSA corev1.ServiceAccount
 		if err := runtimeClient.Get(ctx, client.ObjectKey{Namespace: nsName, Name: "default"}, &defaultSA); err == nil {
 			for _, ref := range defaultSA.ImagePullSecrets {
-				if ref.Name == "loopzero-system" {
+				if ref.Name == constants.SecretRegistryPull {
 					continue
 				}
 				appSA.ImagePullSecrets = append(appSA.ImagePullSecrets, ref)
@@ -123,7 +123,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient
 		}
 		return nil
 	}); err != nil {
-		return fmt.Errorf("serviceaccount %s/loopzero-app: %w", nsName, err)
+		return fmt.Errorf("serviceaccount %s/%s: %w", nsName, constants.SAApp, err)
 	}
 
 	return nil
@@ -133,14 +133,14 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient
 // fix-all-platform-issues-plan T1.1 — writes through the cell client Reconcile resolved.
 func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, runtimeClient client.Client, nsName string) error {
 	var src corev1.Secret
-	srcKey := client.ObjectKey{Namespace: constants.NamespacePlatformSystem, Name: "loopzero-system"}
+	srcKey := client.ObjectKey{Namespace: constants.NamespacePlatformSystem, Name: constants.SecretRegistryPull}
 	if err := r.Get(ctx, srcKey, &src); err != nil {
 		return fmt.Errorf("source pull secret loopzero-system/loopzero-system: %w", err)
 	}
 
 	dst := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "loopzero-system",
+			Name:      constants.SecretRegistryPull,
 			Namespace: nsName,
 		},
 	}
