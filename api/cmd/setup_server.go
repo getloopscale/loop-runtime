@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"log/slog"
-	"os"
 
 	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
@@ -136,7 +135,7 @@ func baseServerConfig(w serverWiring) server.Config {
 		Secrets:            server.SecretsConfig{K8sSync: w.k8sDeps.SecretK8sSync},
 		Guards: server.RouteGuards{
 			RateLimiter: w.rateLimiter,
-			UpgradeURL:  os.Getenv("BILLING_UPGRADE_URL"),
+			UpgradeURL:  cfg.BillingUpgradeURL,
 		},
 		Timeouts: server.HTTPTimeouts{
 			ReadHeader: cfg.ReadHeaderTimeout,

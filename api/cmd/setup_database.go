@@ -32,8 +32,12 @@ type DatabaseDeps struct {
 	DBAdapter    *db.PgxAdapter
 	MemberStore  auth.MembershipStore
 	ProjectStore ports.ProjectStore
-	DBHealth     health.DBHealthChecker
-	PlanLimiter  *enforcement.PlanLimiter
+	// PostgresProjects is the same instance as ProjectStore, typed concretely
+	// so the per-Account project cap can be wired onto it without a type
+	// assertion in main.
+	PostgresProjects *store.PostgresProjectStore
+	DBHealth         health.DBHealthChecker
+	PlanLimiter      *enforcement.PlanLimiter
 
 	// StdDB is the stdlib sql.DB used for plan enforcement (caller must defer Close).
 	StdDB *sql.DB
@@ -115,11 +119,12 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 	// project-cap checker onto it once the PlanLimiter is built below.
 	projectStore := &store.PostgresProjectStore{DB: poolCfg}
 	deps := &DatabaseDeps{
-		DBAdapter:     poolCfg,
-		MemberStore:   &store.PostgresMembershipStore{DB: poolCfg},
-		ProjectStore:  projectStore,
-		DBHealth:      poolCfg,
-		PoolCollector: poolCollector,
+		DBAdapter:        poolCfg,
+		MemberStore:      &store.PostgresMembershipStore{DB: poolCfg},
+		ProjectStore:     projectStore,
+		PostgresProjects: projectStore,
+		DBHealth:         poolCfg,
+		PoolCollector:    poolCollector,
 	}
 
 	// Plan enforcement limiter (stdlib sql.DB for simple queries). Quotas are

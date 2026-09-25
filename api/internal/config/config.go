@@ -291,6 +291,26 @@ type Config struct {
 	// Env: LOOPZERO_DISABLE_LEGACY_LOOPS ("true" to disable loops in the API).
 	DisableLegacyLoops bool
 
+	// API process switches, read here once rather than ad hoc in main.
+	//
+	// PprofEnabled starts the pprof server (LOOPZERO_PPROF_ENABLED "true" or "1";
+	// default off, dev/debug only) on PprofAddr (LOOPZERO_PPROF_ADDR, default
+	// ":6060"), reachable by port-forward and never by the public ingress.
+	PprofEnabled bool
+	PprofAddr    string
+	// EnvReadinessChecker makes EnsureEnvironment poll the Environment CR
+	// until status.phase is Active (LOOPZERO_ENV_READINESS_CHECKER "true").
+	EnvReadinessChecker bool
+	// BrokerToken is the bearer the ESO secret-fetch broker requires
+	// (LOOPZERO_BROKER_TOKEN); empty disables the broker endpoint.
+	BrokerToken string
+	// TrustedProxyCIDRs lists the proxies whose X-Forwarded-For the pre-auth
+	// IP rate limit honours (LOOPZERO_TRUSTED_PROXY_CIDRS, comma-separated).
+	TrustedProxyCIDRs string
+	// BillingUpgradeURL is the upgrade link a quota refusal points to
+	// (BILLING_UPGRADE_URL).
+	BillingUpgradeURL string
+
 	// Roadmap 07 — Backpressure and Admission Control.
 	//
 	// When AdmissionControl is true, the API consults the build admission
@@ -504,6 +524,13 @@ func Load() Config {
 		// Roadmap 02 — API Loop Extraction. When true, the API does not run
 		// any background loops (controller binary runs them instead).
 		DisableLegacyLoops: os.Getenv("LOOPZERO_DISABLE_LEGACY_LOOPS") == "true",
+
+		PprofEnabled:        pprofEnabled(os.Getenv("LOOPZERO_PPROF_ENABLED")),
+		PprofAddr:           envOr("LOOPZERO_PPROF_ADDR", ":6060"),
+		EnvReadinessChecker: os.Getenv("LOOPZERO_ENV_READINESS_CHECKER") == "true",
+		BrokerToken:         os.Getenv("LOOPZERO_BROKER_TOKEN"),
+		TrustedProxyCIDRs:   os.Getenv("LOOPZERO_TRUSTED_PROXY_CIDRS"),
+		BillingUpgradeURL:   os.Getenv("BILLING_UPGRADE_URL"),
 
 		// Roadmap 07 — Backpressure & Admission Control.
 		AdmissionControl:             os.Getenv("LOOPZERO_ADMISSION_CONTROL") == "true",
@@ -870,6 +897,12 @@ func envTime(key string) time.Time {
 		slog.Warn("invalid timestamp in environment variable — ignoring", "key", key, "value", v)
 	}
 	return time.Time{}
+}
+
+// pprofEnabled accepts exactly "true" or "1": profiling is opt-in, so any
+// other spelling (including "TRUE" and "yes") leaves it off.
+func pprofEnabled(v string) bool {
+	return v == "true" || v == "1"
 }
 
 // envBool parses an environment variable as bool. Accepts "true", "1", "yes" (case-insensitive)

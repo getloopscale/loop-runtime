@@ -5,11 +5,12 @@ package main
 
 import (
 	"context"
-	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
+
+	"github.com/getloopscale/loopzero/api/internal/adapters"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 

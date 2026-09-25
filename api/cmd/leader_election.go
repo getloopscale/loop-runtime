@@ -7,8 +7,11 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/leader"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
@@ -111,4 +114,35 @@ func (e *loopsElection) release(lease *leader.Lease) {
 	if err := e.acquirer.Release(ctx, lease); err != nil && !errors.Is(err, leader.ErrFenced) {
 		e.logger.Warn("background loops lease: release failed", "error", err)
 	}
+}
+
+// startLoopsElection runs the loops election in a goroutine, so the HTTP
+// server starts at once and standby replicas serve traffic while they wait.
+// The lease is the fenced generation lease the controller binary takes, under
+// the same name, so the two binaries never run the loops together. With
+// LOOPZERO_DISABLE_LEGACY_LOOPS=true the API does not compete: the controller
+// owns the loops.
+func startLoopsElection(ctx context.Context, bgWg *sync.WaitGroup, cfg config.Config,
+	bgAdapter *db.PgxAdapter, logger *slog.Logger, startLoops func(context.Context)) {
+	if cfg.DisableLegacyLoops {
+		logger.Info("LOOPZERO_DISABLE_LEGACY_LOOPS=true — loops will not run here; controller binary owns them")
+		metrics.LeaderStatus.Set(0)
+		return
+	}
+	leaderCfg := leader.DefaultConfig()
+	ticker := time.NewTicker(leaderCfg.HeartbeatInterval)
+	election := &loopsElection{
+		acquirer: leader.NewAcquirer(bgAdapter, leaderCfg),
+		name:     leader.BackgroundLoopsLeaseName,
+		cellID:   db.CellDefault,
+		holder:   leaseHolder(),
+		tick:     ticker.C,
+		logger:   logger,
+	}
+	bgWg.Add(1)
+	go func() {
+		defer bgWg.Done()
+		defer ticker.Stop()
+		election.run(ctx, startLoops)
+	}()
 }

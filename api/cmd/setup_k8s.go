@@ -5,8 +5,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"log/slog"
+
+	"github.com/getloopscale/loopzero/api/internal/adapters"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 

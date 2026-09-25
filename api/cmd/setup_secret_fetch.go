@@ -17,10 +17,14 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/pkg/vault"
 
 	"github.com/jackc/pgx/v5"
 
@@ -187,4 +191,25 @@ func brokerBearerMiddleware(expectedToken string, next http.HandlerFunc) http.Ha
 		})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
+}
+
+// newSecretFetchBroker serves /internal/v1/secret-fetch/{tenant_id}/{name}
+// for ESO's webhook ClusterSecretStore: it loads the vault:v1: ciphertext,
+// decrypts it through OpenBao transit and returns plaintext_b64, behind the
+// broker bearer token. Nil (route not registered) when transit, the database
+// or the cell store is missing, or when no broker token is configured.
+func newSecretFetchBroker(cfg config.Config, transit vault.Transit, dbAdapter *db.PgxAdapter,
+	cellStore *store.PostgresCellStore, stores *StoreDeps, logger *slog.Logger) http.HandlerFunc {
+	if transit == nil || dbAdapter == nil || cellStore == nil || stores == nil {
+		return nil
+	}
+	fetchDeps := setupSecretFetchDeps(stores.PgSecretStore, cellStore, &store.AuditLogger{DB: dbAdapter})
+	if fetchDeps == nil {
+		return nil
+	}
+	if cfg.BrokerToken == "" {
+		logger.Warn("secret-fetch broker disabled: LOOPZERO_BROKER_TOKEN not set", "component", "broker")
+		return nil
+	}
+	return brokerBearerMiddleware(cfg.BrokerToken, secrets.NewSecretFetchHandler(*fetchDeps))
 }

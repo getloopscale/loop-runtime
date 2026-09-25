@@ -142,6 +142,7 @@ func setupOrchestrator(
 	httpTransport *http.Transport,
 	logger *slog.Logger,
 	projectCap projectCapEnforcement,
+	envEnsurer *platform.EnvironmentEnsurer,
 ) *OrchestratorDeps {
 	// The orchestrator builds its OWN project store for the deploy-time
 	// EnsureProject path (`loopzero deploy <new-name>`). It is wired through the same
@@ -280,6 +281,10 @@ func setupOrchestrator(
 	})
 	promoteService := &adapters.PromoteServiceAdapter{Orchestrator: promotionOrch}
 	promoteHandler := promote.NewPromoteHandler(projectStore, promoteService, cfg.BaseDomain)
+	if envEnsurer != nil {
+		// promote --to <new env> creates the target env like deploy does (#158).
+		promoteHandler = promoteHandler.WithEnvironmentEnsurer(envEnsurer)
+	}
 
 	// Status handler — wires project, build, and release stores (H6 status endpoint)
 	statusBuildStore := &adapters.StatusBuildStoreAdapter{Store: stores.BuildStore}
