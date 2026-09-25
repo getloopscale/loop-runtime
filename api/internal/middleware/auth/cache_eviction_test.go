@@ -103,6 +103,12 @@ func TestEvictCache_DeletesOldestWhenStillOverTarget(t *testing.T) {
 	if cacheSize.Load() > target {
 		t.Fatalf("expected cache size <= %d after eviction, got %d", target, cacheSize.Load())
 	}
+	if _, ok := cache.Load("token-0"); ok {
+		t.Error("oldest entry token-0 survived eviction; eviction must remove oldest first")
+	}
+	if _, ok := cache.Load(fmt.Sprintf("token-%d", count-1)); !ok {
+		t.Error("newest entry was evicted; eviction must keep the most recent entries")
+	}
 }
 
 func TestEvictCache_ConcurrentAccess_NoDataRace(t *testing.T) {
