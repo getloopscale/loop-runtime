@@ -6,6 +6,7 @@ require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/stretchr/testify v1.11.1
+	github.com/getloopscale/loopzero/infra/scripts v0.0.0
 	github.com/getloopscale/loopzero/pkg v0.0.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.35.2
@@ -80,4 +81,7 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-replace github.com/getloopscale/loopzero/pkg => ../../pkg
+replace (
+	github.com/getloopscale/loopzero/infra/scripts => ../../infra/scripts
+	github.com/getloopscale/loopzero/pkg => ../../pkg
+)

@@ -26,6 +26,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/getloopscale/loopzero/infra/scripts/bootstrapuser"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
@@ -59,7 +60,23 @@ const (
 	AuthToken = "e2e-token-dev"
 	// Username is the unique handle for the E2E user (users.username NOT NULL).
 	Username = "e2e-user"
+	// AccountID is the E2E user's account. tenants.account_id and
+	// subscriptions.account_id are NOT NULL (migrations 000044 and 000043).
+	AccountID = "acct-e2e"
 )
+
+// bootstrapUser is the Hydra JWT subject the dogfood token carries. The E2E
+// seed leaves it a member of the E2E tenant only; the rule is the shared one
+// the local and drill seeds apply (infra/scripts/bootstrapuser).
+var bootstrapUser = bootstrapuser.User{
+	ID:          "loopzero-bootstrap",
+	Email:       "bootstrap@loopzero.local",
+	DisplayName: "Bootstrap User",
+	Username:    "bootstrap",
+	AccountID:   "acct-bootstrap",
+	TenantID:    TenantID,
+	Role:        "owner",
+}
 
 // Config holds configuration for the seed operation.
 type Config struct {
@@ -115,92 +132,14 @@ func Run(cfg Config) error {
 	return nil
 }
 
-// SeedDatabase inserts user, tenant, membership, and project via psql.
-// All statements use ON CONFLICT DO NOTHING for idempotency.
-//
-// LoopZero's CLI does not yet support the X-LoopZero-Tenant header (T2 — see plan
-// MEET-ASYNC-AMENDMENT-002). Therefore the JWT subject (loopzero-bootstrap)
-// MUST resolve to a single tenant or every deploy fails with TENANT_REQUIRED.
-// We enforce that invariant by stripping any non-E2E memberships of
-// loopzero-bootstrap before re-asserting the canonical e2e-tenant membership.
-//
-// The dogfood seed-local-user.sh re-creates tn-e2etest membership on demand,
-// so this cleanup is safe and reversible.
+// SeedDatabase inserts the E2E user, account, tenant, subscription, project and
+// the bootstrap user's single membership through pgx. Every statement is
+// idempotent.
 func SeedDatabase(dbURL string) error {
-	sql := fmt.Sprintf(`
--- Strip any prior tn-e2etest membership of bootstrap so the JWT resolves to
--- exactly one tenant (e2e-tenant) — required because the CLI cannot send
--- the X-LoopZero-Tenant header today.
-DELETE FROM tenant_members
-WHERE user_id = 'loopzero-bootstrap' AND tenant_id <> '%s';
-
--- Strip orphan app_scaling_config rows for this tenant. The project_deleter
--- cascade was added 2026-05-06 (CHG-AUDIT-RESOURCE-ID + scaling cascade),
--- so historical sessions may have left rows behind. Clean before seed so
--- ScalingResolver sees pristine state when journeys (re)deploy fixtures.
-DELETE FROM app_scaling_config WHERE tenant_id = '%s';
-`+`
--- Defensive: ensure cell-0 exists in cells before tenant INSERT
--- (dogfood-2026-05-08-fixes T3.1, ADR D4 + EC-4 mitigation). Currently
--- tenants.cell_id has DEFAULT 'cell-0' so the INSERT below works
--- even without an explicit value, but if a future migration adds a FK
--- to cells.cell_id this guard prevents a violation. Idempotent.
-INSERT INTO cells (cell_id, display_name, status, region)
-VALUES ('cell-0', 'Default cell (local)', 'active', 'local')
-ON CONFLICT (cell_id) DO NOTHING;
-
-INSERT INTO users (id, email, github_id, display_name, username)
-VALUES ('%s', '%s', %d, 'e2e-user', '%s')
-ON CONFLICT (id) DO NOTHING;
-
--- tenants.cell_id is NOT NULL with DEFAULT 'cell-0' so this INSERT
--- works even without an explicit value. Explicit cell_id improves clarity
--- and ensures behaviour is identical regardless of future schema changes.
--- COALESCE on conflict preserves any manual pin (e.g., from loopzero admin
--- tenants pin) on re-seed (EC-11).
-INSERT INTO tenants (id, display_name, slug, owner_id, cell_id)
-VALUES ('%s', '%s', '%s', '%s', 'cell-0')
-ON CONFLICT (id) DO UPDATE SET cell_id = COALESCE(tenants.cell_id, EXCLUDED.cell_id);
-
--- Pin the e2e tenant to the enterprise plan so the suite is not capped
--- by builds_per_month / projects / seats limits. The plan_limits row for
--- enterprise is NULL,NULL (unlimited) per migration 000002. Without this
--- subscriptions row, the tenant defaults to starter (50 builds/month) and
--- a long session of journey reruns trips PLAN_LIMIT_EXCEEDED.
---
--- ORDER MATTERS: subscriptions.tenant_id has FK to tenants.id, so this
--- INSERT MUST follow INSERT INTO tenants above. Cleanroom dogfood 2026-05-07
--- caught the inverted ordering (F-01) when pristine DB had no e2e-tenant row.
-INSERT INTO subscriptions (id, tenant_id, plan, status)
-VALUES ('sub-e2e-enterprise', '%s', 'enterprise', 'active')
-ON CONFLICT (tenant_id) DO UPDATE SET plan = 'enterprise', status = 'active', updated_at = now();
-
-INSERT INTO tenant_members (tenant_id, user_id, role)
-VALUES ('%s', '%s', '%s')
-ON CONFLICT (tenant_id, user_id) DO NOTHING;
-
--- Grant loopzero-bootstrap (Hydra JWT subject) membership in the E2E tenant.
--- The dogfood JWT in ~/.loopzero/local-dogfood-token.txt has sub=loopzero-bootstrap;
--- without this row, deploys against e2e-tenant fail with UNAUTHORIZED.
--- The bootstrap user is created by infra/helmfile/scripts/seed-local-user.sh.
-INSERT INTO tenant_members (tenant_id, user_id, role)
-VALUES ('%s', 'loopzero-bootstrap', 'owner')
-ON CONFLICT (tenant_id, user_id) DO NOTHING;
-
-INSERT INTO projects (id, tenant_id, name, created_by)
-VALUES ('%s', '%s', '%s', '%s')
-ON CONFLICT (id) DO NOTHING;
-`,
-		TenantID, // strip non-canonical bootstrap memberships
-		TenantID, // strip orphan app_scaling_config rows
-		UserID, Email, GitHubID, Username,
-		TenantID, DisplayName, TenantID, UserID, // slug = TenantID
-		TenantID, // pin tenant to enterprise plan (subscriptions FK → tenants.id)
-		TenantID, UserID, Role,
-		TenantID, // bootstrap E2E membership
-		ProjectID, TenantID, ProjectName, UserID,
-	)
-
+	sql, err := seedSQL()
+	if err != nil {
+		return err
+	}
 	// Use pgx directly (same driver as loopzero-api) instead of `psql` binary.
 	// Plan 2026-05-19-drill-skills-rigor-restoration: drill validation uses
 	// managed DOKS PG (no psql binary needed on host). Eliminates dependency
@@ -217,6 +156,81 @@ ON CONFLICT (id) DO NOTHING;
 		return fmt.Errorf("pgx exec failed: %w", err)
 	}
 	return nil
+}
+
+// seedSQL is the script SeedDatabase runs, in foreign-key order.
+//
+// LoopZero's CLI does not yet support the X-LoopZero-Tenant header (T2 — see plan
+// MEET-ASYNC-AMENDMENT-002). Therefore the JWT subject (loopzero-bootstrap) MUST
+// resolve to a single tenant or every deploy fails with TENANT_REQUIRED. That
+// rule is appended last, once the E2E tenant it points at exists; the dogfood
+// seed-local-user.sh re-creates the tn-e2etest membership on demand, so moving
+// the user here is reversible.
+func seedSQL() (string, error) {
+	sql := fmt.Sprintf(`
+-- Strip orphan app_scaling_config rows for this tenant. The project_deleter
+-- cascade was added 2026-05-06 (CHG-AUDIT-RESOURCE-ID + scaling cascade),
+-- so historical sessions may have left rows behind. Clean before seed so
+-- ScalingResolver sees pristine state when journeys (re)deploy fixtures.
+DELETE FROM app_scaling_config WHERE tenant_id = '%s';
+
+-- Defensive: ensure cell-0 exists in cells before tenant INSERT
+-- (dogfood-2026-05-08-fixes T3.1, ADR D4 + EC-4 mitigation). Idempotent.
+INSERT INTO cells (cell_id, display_name, status, region)
+VALUES ('cell-0', 'Default cell (local)', 'active', 'local')
+ON CONFLICT (cell_id) DO NOTHING;
+
+INSERT INTO users (id, email, github_id, display_name, username)
+VALUES ('%s', '%s', %d, 'e2e-user', '%s')
+ON CONFLICT (id) DO NOTHING;
+
+-- One account per owner (UNIQUE owner_id, migration 000034); an account the
+-- user already owns is kept.
+INSERT INTO accounts (id, display_name, plan, owner_id)
+VALUES ('%s', '%s', 'starter', '%s')
+ON CONFLICT (owner_id) DO NOTHING;
+
+-- COALESCE on conflict preserves any manual pin (e.g., from loopzero admin
+-- tenants pin) on re-seed (EC-11). account_id is resolved by owner so the
+-- tenant lands on whichever account the E2E user owns.
+INSERT INTO tenants (id, display_name, slug, owner_id, cell_id, account_id)
+SELECT '%s', '%s', '%s', '%s', 'cell-0', a.id FROM accounts a WHERE a.owner_id = '%s'
+ON CONFLICT (id) DO UPDATE SET cell_id = COALESCE(tenants.cell_id, EXCLUDED.cell_id);
+
+-- Pin the e2e tenant to the enterprise plan so the suite is not capped
+-- by builds_per_month / projects / seats limits. The plan_limits row for
+-- enterprise is NULL,NULL (unlimited) per migration 000002. Without this
+-- subscriptions row, the tenant defaults to starter (50 builds/month) and
+-- a long session of journey reruns trips PLAN_LIMIT_EXCEEDED.
+--
+-- ORDER MATTERS: subscriptions references tenants and accounts, so this
+-- INSERT MUST follow both. The unique key is account_id since migration
+-- 000042 dropped subscriptions_tenant_id_key.
+INSERT INTO subscriptions (id, tenant_id, account_id, plan, status)
+SELECT 'sub-e2e-enterprise', '%s', a.id, 'enterprise', 'active' FROM accounts a WHERE a.owner_id = '%s'
+ON CONFLICT (account_id) DO UPDATE SET plan = 'enterprise', status = 'active', updated_at = now();
+
+INSERT INTO tenant_members (tenant_id, user_id, role)
+VALUES ('%s', '%s', '%s')
+ON CONFLICT (tenant_id, user_id) DO NOTHING;
+
+INSERT INTO projects (id, tenant_id, name, created_by)
+VALUES ('%s', '%s', '%s', '%s')
+ON CONFLICT (id) DO NOTHING;
+`,
+		TenantID, // strip orphan app_scaling_config rows
+		UserID, Email, GitHubID, Username,
+		AccountID, DisplayName, UserID,
+		TenantID, DisplayName, TenantID, UserID, UserID, // slug = TenantID
+		TenantID, UserID, // pin tenant to enterprise plan
+		TenantID, UserID, Role,
+		ProjectID, TenantID, ProjectName, UserID,
+	)
+	bootstrap, err := bootstrapUser.SQL()
+	if err != nil {
+		return "", fmt.Errorf("bootstrap user seed: %w", err)
+	}
+	return sql + bootstrap, nil
 }
 
 // kubectlArgs returns ["kubectl", "--kubeconfig", path] when DRILL_KUBECONFIG

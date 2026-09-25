@@ -37,6 +37,7 @@ SUBCOMMANDS:
   chaos <subcommand> [flags]           Chaos runner pure-logic helpers (see chaos --help)
   seed <name> [flags]                  Canonical post-Cleanroom seeds (see seed --help)
   dsn <field>                          Print one part of a Postgres DSN read on stdin
+  sql <script> [flags]                 Render a seed script for psql (see sql --help)
 
 EXIT CODES (every subcommand):
   0  success
@@ -71,6 +72,8 @@ func run(args []string) int {
 		return runSeed(args[1:])
 	case "dsn":
 		return runDSNMain(args[1:])
+	case "sql":
+		return runSQLMain(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n\n%s", args[0], helpText)
 		return 1

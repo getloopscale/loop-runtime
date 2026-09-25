@@ -40,6 +40,7 @@
 #   DRILL_PG_PORT     — managed PG port (default 25060 DO managed PG)
 #   SEED_USER_ID      — user id (default loopzero-bootstrap)
 #   SEED_TENANT_ID    — tenant id (default tn-e2etest)
+#   SEED_ACCOUNT_ID   — account created when the user owns none (default acct-bootstrap)
 #
 # EC-04 fix: explicit Hydra readiness wait BEFORE exec (race condition where
 # helmfile sync returns but Hydra pod still in init → exec fail → run wasted).
@@ -68,6 +69,7 @@ SEED_ROLE="${SEED_ROLE:-owner}"
 SEED_EMAIL="${SEED_EMAIL:-bootstrap@loopzero.local}"
 SEED_DISPLAY_NAME="${SEED_DISPLAY_NAME:-Drill Bootstrap}"
 SEED_USERNAME="${SEED_USERNAME:-bootstrap}"
+SEED_ACCOUNT_ID="${SEED_ACCOUNT_ID:-acct-bootstrap}"
 
 NS_LOOPZERO="${LOOPZERO_NAMESPACE:-loopzero-system}"
 # Bug #35 LIVE fix (2026-05-18 iter 28): drill helmfile installs ory-hydra
@@ -121,7 +123,6 @@ fi
 # DRILL_PG_HOST may be managed PG endpoint (Pulumi output) OR in-cluster
 # postgresql svc (default). If managed PG, use psql client directly (script
 # expects DRILL_PG_HOST + DRILL_PG_PASS env). Else exec into pod.
-SEED_SLUG=$(printf '%s' "$SEED_TENANT_ID" | tr -c 'a-zA-Z0-9' '-' | tr '[:upper:]' '[:lower:]')
 
 # Bug #37 LIVE FIX (2026-05-18 iter 30): drill uses managed PG (no in-cluster
 # postgresql svc). If DRILL_PG_HOST unset, auto-read from Pulumi outputs.
@@ -210,34 +211,16 @@ else
 fi
 
 log "Seeding user=$SEED_USER_ID tenant=$SEED_TENANT_ID role=$SEED_ROLE"
-run_psql -c "
-INSERT INTO users (id, email, display_name, username)
-VALUES ('$SEED_USER_ID', '$SEED_EMAIL', '$SEED_DISPLAY_NAME', '$SEED_USERNAME')
-ON CONFLICT (id) DO UPDATE SET
-  email = EXCLUDED.email,
-  display_name = EXCLUDED.display_name,
-  username = EXCLUDED.username,
-  updated_at = now();
-" >/dev/null
-
-run_psql -c "
-INSERT INTO tenants (id, slug, owner_id, display_name)
-VALUES ('$SEED_TENANT_ID', '$SEED_SLUG', '$SEED_USER_ID', '$SEED_TENANT_ID')
-ON CONFLICT (id) DO NOTHING;
-" >/dev/null
-
-run_psql -c "
-DELETE FROM tenant_members
-WHERE user_id = '$SEED_USER_ID' AND tenant_id <> '$SEED_TENANT_ID';
-" >/dev/null
-
-run_psql -c "
-INSERT INTO tenant_members (tenant_id, user_id, role)
-VALUES ('$SEED_TENANT_ID', '$SEED_USER_ID', '$SEED_ROLE')
-ON CONFLICT (tenant_id, user_id) DO UPDATE SET
-  role = EXCLUDED.role,
-  updated_at = now();
-" >/dev/null
+# The bootstrap-user rule (user + account + tenant + exactly ONE membership)
+# lives once in `loopzero-ops sql bootstrap-user`, shared with the local and E2E
+# seeds. This copy used to insert the tenant without account_id, which fails on
+# every database migrated past 000044. Rendered first, so a refused field stops
+# here instead of reaching the psql pod.
+SEED_SQL="$(loopzero_ops sql bootstrap-user \
+  --user-id "$SEED_USER_ID" --email "$SEED_EMAIL" --display-name "$SEED_DISPLAY_NAME" \
+  --username "$SEED_USERNAME" --account-id "$SEED_ACCOUNT_ID" \
+  --tenant-id "$SEED_TENANT_ID" --role "$SEED_ROLE")"
+run_psql -c "$SEED_SQL" >/dev/null
 log "Seed complete"
 
 # --- Hydra port-forward + JWT mint via shared lib ---
