@@ -20,6 +20,8 @@
 //
 //   - httpio holds the response writers every family needs;
 //   - pagination holds the request-parsing helpers;
+//   - plantier holds what a route does when the tenant's plan cannot be read
+//     (billing, projects, scale and status share it);
 //   - routestest holds test request helpers. It is TEST-ONLY, because its helpers
 //     hand back an owner-role identity for a fixed tenant — a production import
 //     of it is auth-shaped.
@@ -39,6 +41,7 @@ var leaves = map[string]bool{
 	"httpio":     true,
 	"routestest": true,
 	"pagination": true,
+	"plantier":   true,
 }
 
 // testOnlyLeaves may be imported from _test.go files only.
@@ -54,6 +57,7 @@ var allowed = map[string]map[string]bool{
 	"httpio":     {},
 	"routestest": {},
 	"pagination": {},
+	"plantier":   {},
 
 	// families
 	"version":      {},
@@ -62,8 +66,8 @@ var allowed = map[string]map[string]bool{
 	"domains":      {"httpio": true, "routestest": true},
 	"secrets":      {"httpio": true, "routestest": true},
 	"preview":      {"httpio": true, "routestest": true},
-	"billing":      {"httpio": true, "routestest": true},
-	"scale":        {"httpio": true, "routestest": true},
+	"billing":      {"httpio": true, "routestest": true, "plantier": true},
+	"scale":        {"httpio": true, "routestest": true, "plantier": true},
 	"audit":        {"httpio": true, "routestest": true},
 	"health":       {"routestest": true},
 	"integrations": {"httpio": true, "routestest": true},
@@ -71,12 +75,12 @@ var allowed = map[string]map[string]bool{
 	"auth":         {"httpio": true, "routestest": true},
 	"teams":        {"httpio": true, "routestest": true},
 	"admin":        {"httpio": true},
-	"projects":     {"httpio": true, "routestest": true, "pagination": true},
+	"projects":     {"httpio": true, "routestest": true, "pagination": true, "plantier": true},
 	"environments": {"httpio": true, "routestest": true, "pagination": true},
 	"builds":       {"httpio": true, "routestest": true, "pagination": true},
 	"promote":      {"httpio": true, "routestest": true},
 	"rollback":     {"httpio": true, "routestest": true},
-	"status":       {"httpio": true, "routestest": true},
+	"status":       {"httpio": true, "routestest": true, "plantier": true},
 	"logs":         {"httpio": true, "routestest": true},
 	"metrics":      {"httpio": true},
 	"timeline":     {},

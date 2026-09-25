@@ -5,6 +5,7 @@ package routesacyclic
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -408,36 +409,34 @@ func TestCheck_RealTreeParsesBothTheParentAndTheSubpackages(t *testing.T) {
 	}
 }
 
-// countGoFiles counts .go files at the top of routes/ and in its subpackages,
-// deliberately naive and independent of Check's walk: two implementations of the
-// same count only agree when both are right.
+// countGoFiles counts every .go file under routes/, at any depth, skipping the
+// directories the Go toolchain ignores (testdata, dot- and underscore-prefixed).
+// Deliberately naive and independent of Check's walk: two implementations of the
+// same count only agree when both are right. It descends at any depth because a
+// package nested inside a family (bootstrap/bootstraptest) is compiled and read
+// like any other; a one-level count reported it as a miscount by the walk.
 func countGoFiles(t *testing.T, repo string) int {
 	t.Helper()
 	n := 0
-	base := filepath.Join(repo, routesDir)
-	top, err := os.ReadDir(base)
+	err := filepath.WalkDir(filepath.Join(repo, routesDir), func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if path != filepath.Join(repo, routesDir) &&
+				(name == "testdata" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(d.Name(), ".go") {
+			n++
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
-	}
-	for _, e := range top {
-		if !e.IsDir() {
-			if strings.HasSuffix(e.Name(), ".go") {
-				n++
-			}
-			continue
-		}
-		if e.Name() == "testdata" || strings.HasPrefix(e.Name(), ".") || strings.HasPrefix(e.Name(), "_") {
-			continue
-		}
-		sub, err := os.ReadDir(filepath.Join(base, e.Name()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, f := range sub {
-			if !f.IsDir() && strings.HasSuffix(f.Name(), ".go") {
-				n++
-			}
-		}
 	}
 	return n
 }
