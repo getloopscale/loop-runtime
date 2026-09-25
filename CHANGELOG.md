@@ -69,6 +69,14 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `task dev-public:patch-kratos` is replaced by `task dev-public:sync-kratos`, which re-syncs the ory-kratos release and refuses to run without the OAuth and Resend credentials (principle_violations#67)
+
+- `loopzero-ops seed broker` writes only the broker token; the broker store is installed by the cell helmfile on dev-public, addressing loopzero-api at a stable `host.k3d.internal` port instead of a container IP (principle_violations#67)
+
+- `loopzero-ops seed vault-role-id-sync` writes the OpenBao role id into Secret `loopzero-openbao-approle` instead of the loopzero-api Deployment, and the stale role ids committed in the dev-public and Tilt values are gone (principle_violations#67)
+
+- `helmfile sync` now renders every value the post-Cleanroom seeds used to patch into live objects: loopzero-api's LOKI_URL, the build cluster's Loki cross-cluster NodePort Service, the build Promtail push URL, and the cell secret-fetch broker (release `loopzero-broker`); the `patch-kratos`, `hydra-urls`, `loki-cross-cluster` and `vault-cross-cluster-addr` seeds are removed (principle_violations#67)
+
 - `chart-default-tags` also checks the bootstrap values of charts Helmfile installs from `charts/`, and `helm-topology-index` now lists those releases, so both still cover what Helmfile installs after the pairs became one chart (design_pattern_findings#29)
 
 - Helmfile now installs `charts/loopzero-api` with bootstrap values in place of the duplicate `infra/helm/loopzero-api`; the API keeps the same environment, and on an existing cluster the `loopzero-api` Deployment is recreated once because its selector changes (design_pattern_findings#29)
@@ -236,6 +244,8 @@ to [Semantic Versioning](https://semver.org/).
   correct. Names present in exactly one tree are unaffected (#B-002)
 
 ### Removed
+
+- The secret-fetch broker is no longer installed on standalone-multi cells: its chart forbids a plaintext bearer outside dev-public, a guard the seed bypassed by always passing `envName=dev-public` (principle_violations#67)
 
 - The `task helm:test:env` target is removed: after the per-environment loopzero-api stubs went with the bootstrap chart it selected no test (design_pattern_findings#29)
 
