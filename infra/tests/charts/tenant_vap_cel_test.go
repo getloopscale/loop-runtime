@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package tenant
+package charts
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,9 +21,12 @@ import (
 // tests the exact CEL hermetically, without depending on the apiserver
 // ValidatingAdmissionPolicy feature-gate config (plan T1.1 / ADR D1).
 
-// vapDoc is the minimal shape we read out of the VAP YAML.
+// vapDoc is the minimal shape we read out of the rendered VAP.
 type vapDoc struct {
-	Kind string `yaml:"kind"`
+	Kind     string `yaml:"kind"`
+	Metadata struct {
+		Name string `yaml:"name"`
+	} `yaml:"metadata"`
 	Spec struct {
 		Validations []struct {
 			Expression string `yaml:"expression"`
@@ -36,26 +38,24 @@ type vapDoc struct {
 	} `yaml:"spec"`
 }
 
-// loadTenantVAP reads the rendered VAP template and returns the shape-validation
-// and immutability CEL expressions + the system-exclusion matchCondition.
+// loadTenantVAP renders the bootstrap admission-policies chart and returns the
+// shape-validation and immutability CEL expressions of loopzero-tenant-cr-shape,
+// plus its system-exclusion matchCondition. It reads the RENDER, not the
+// template: the exclusion is produced by the loopzero-admission.systemActorExemptions
+// helper, so a template read sees an include line and no expression at all.
 func loadTenantVAP(t *testing.T) (shapeExpr, cellImmutableExpr, systemExcludeExpr string) {
 	t.Helper()
-	// repo root is 3 dirs up from operators/internal/tenant.
-	root := filepath.Join("..", "..", "..")
-	path := filepath.Join(root, "infra/helm/admission-policies/templates/vap-tenant-cr-shape.yaml")
-	data, err := os.ReadFile(path) // #nosec G304 -- fixed test fixture path
-	if err != nil {
-		t.Fatalf("read VAP: %v", err)
-	}
-	// The template is Helm-guarded with {{- if ... }}; strip the guard lines so
-	// the body is parseable YAML (the guard is a boolean toggle, default true).
-	body := stripHelmGuards(string(data))
-	for _, doc := range strings.Split(body, "\n---") {
+	// The policy is off in the base values (the cells hold no Tenants) and on
+	// in values-mgmt.yaml, where the Tenants live — render the install that
+	// enforces it, so turning it off there fails these tests too.
+	chart := uniqueChart(t, "admission-policies")
+	rendered := renderChart(t, chart, "ap", nil, filepath.Join(chart, "values-mgmt.yaml"))
+	for _, doc := range strings.Split(rendered, "\n---") {
 		var v vapDoc
 		if err := yaml.Unmarshal([]byte(doc), &v); err != nil {
 			continue
 		}
-		if v.Kind != "ValidatingAdmissionPolicy" {
+		if v.Kind != "ValidatingAdmissionPolicy" || v.Metadata.Name != "loopzero-tenant-cr-shape" {
 			continue
 		}
 		if len(v.Spec.Validations) >= 2 {
@@ -72,17 +72,6 @@ func loadTenantVAP(t *testing.T) (shapeExpr, cellImmutableExpr, systemExcludeExp
 		t.Fatalf("could not extract all CEL exprs: shape=%q immutable=%q exclude=%q", shapeExpr, cellImmutableExpr, systemExcludeExpr)
 	}
 	return
-}
-
-func stripHelmGuards(s string) string {
-	var out []string
-	for _, line := range strings.Split(s, "\n") {
-		if strings.Contains(line, "{{") {
-			continue
-		}
-		out = append(out, line)
-	}
-	return strings.Join(out, "\n")
 }
 
 // evalCEL compiles expr with object/oldObject/request vars and evaluates it.
