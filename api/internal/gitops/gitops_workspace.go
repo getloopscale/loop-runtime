@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 const (
@@ -32,7 +34,7 @@ type gitopsWorkspace struct {
 // EMPTY repo succeeds, so a failing clone means the repo could not be reached
 // (network, auth, server error) — never "nothing there".
 func (p *GiteaGitOpsPusher) openWorkspace(ctx context.Context, tenantID, op string) (*gitopsWorkspace, func(), error) {
-	repoName := gitopsRepoName(tenantID)
+	repoName := naming.TenantGitOpsRepoName(tenantID)
 	if err := p.repo.EnsureRepo(ctx, repoName, true); err != nil {
 		return nil, nil, fmt.Errorf("gitops %s: ensure repo: %w", op, err)
 	}
@@ -55,12 +57,6 @@ func (p *GiteaGitOpsPusher) openWorkspace(ctx context.Context, tenantID, op stri
 		}
 	}
 	return ws, cleanup, nil
-}
-
-// gitopsRepoName is the tenant GitOps repository name (TenantController
-// convention).
-func gitopsRepoName(tenantID string) string {
-	return tenantID + "-gitops"
 }
 
 func (w *gitopsWorkspace) writeFile(rel, content string) error {

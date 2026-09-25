@@ -28,6 +28,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // SecretK8sManager creates K8s Secrets on mgmt cluster and ExternalSecret CRs
@@ -108,13 +109,10 @@ func secretName(tenantID, app, name string) string {
 // create from the ExternalSecret CR. When `app` is empty (tenant-wide
 // secret), the app segment is omitted so the name does not end on a
 // trailing hyphen, which would violate the K8s DNS-1123 label grammar
-// `[a-z0-9]([-a-z0-9]*[a-z0-9])?`. Must match envFrom secretRef in
-// manifests/renderer.go.
+// `[a-z0-9]([-a-z0-9]*[a-z0-9])?`. naming.UserSecretName is shared with the
+// renderer's envFrom, so the name written here is the name mounted there.
 func targetSecretName(tenantID, projectID, env, app string) string {
-	if app == "" {
-		return fmt.Sprintf("user-secrets-%s-%s-%s", tenantID, projectID, env)
-	}
-	return fmt.Sprintf("user-secrets-%s-%s-%s-%s", tenantID, projectID, env, app)
+	return naming.UserSecretName(tenantID, projectID, env, app)
 }
 
 // externalSecretName generates a K8s-compatible name for an ExternalSecret CR.

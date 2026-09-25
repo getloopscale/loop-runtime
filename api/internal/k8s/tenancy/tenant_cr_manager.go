@@ -25,6 +25,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // tenantNamespace is the canonical namespace for all Tenant + Environment CRs.
@@ -304,7 +305,7 @@ func applyTenantSpec(t *apiv1.Tenant, spec ports.TenantCRSpec) {
 	t.Spec.DisplayName = t.Name
 	t.Spec.Plan = apiv1.PlanTier(plan)
 	t.Spec.GitOps = apiv1.GitOpsSpec{
-		RepoName: fmt.Sprintf("%s-gitops", t.Name),
+		RepoName: naming.TenantGitOpsRepoName(t.Name),
 		Branch:   "main",
 	}
 	t.Spec.Preview = apiv1.PreviewSpec{

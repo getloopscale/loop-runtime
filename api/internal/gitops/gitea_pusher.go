@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loopzero/pkg/naming"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -188,7 +189,7 @@ func (p *GiteaGitOpsPusher) Remove(ctx context.Context, opts deploycontracts.Git
 // Uses the Gitea raw content API: GET /api/v1/repos/{owner}/{repo}/raw/{filepath}?ref={commit}
 // The filepath follows the convention: {env}/{projectID}/manifests.yaml
 func (p *GiteaGitOpsPusher) GetManifestsAtCommit(ctx context.Context, tenantID, projectID, env, commitSHA string) ([]byte, error) {
-	repoName := gitopsRepoName(tenantID)
+	repoName := naming.TenantGitOpsRepoName(tenantID)
 	filePath := fmt.Sprintf("%s/%s/manifests.yaml", env, projectID)
 
 	url := fmt.Sprintf("%s/api/v1/repos/%s/%s/raw/%s?ref=%s",

@@ -22,6 +22,8 @@ package manifests
 import (
 	"fmt"
 	"sort"
+
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // buildRollout creates an Argo Rollouts Rollout resource for an app.
@@ -435,8 +437,7 @@ func buildAppContainer(ri renderScope, app AppManifestInput, port int) k8sContai
 	}
 
 	if len(app.Secrets) > 0 {
-		secretRefName := fmt.Sprintf("user-secrets-%s-%s-%s-%s",
-			ri.TenantID, ri.ProjectID, ri.Environment, app.Name)
+		secretRefName := naming.UserSecretName(ri.TenantID, ri.ProjectID, ri.Environment, app.Name)
 		container.EnvFrom = []k8sEnvFromSource{
 			{SecretRef: k8sSecretRef{Name: secretRefName}},
 		}
