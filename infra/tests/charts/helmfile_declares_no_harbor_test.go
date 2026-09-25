@@ -44,7 +44,6 @@ type listedRelease struct {
 func TestNoPlatformHelmfileDeclaresAHarborRelease(t *testing.T) {
 	for _, env := range declaredPlatformEnvironments(t) {
 		for _, helmfile := range platformHelmfiles {
-			env, helmfile := env, helmfile
 			t.Run(env+"/"+helmfile, func(t *testing.T) {
 				t.Parallel()
 				out := helmfileRun(t, []string{"LOOPZERO_DB_PASSWORD=unused", "LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0"},

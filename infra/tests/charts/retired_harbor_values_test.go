@@ -29,7 +29,6 @@ func TestAnInstallStillSettingAHarborKeyIsRefused(t *testing.T) {
 		{"loopzero-tenant-operator", "secrets.harborAdminPassword"},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.chart+"/"+tc.key, func(t *testing.T) {
 			_, err := renderChartE(t, publishedChart(t, tc.chart), "retired-harbor",
 				map[string]string{tc.key: "harbor.example.com"})
