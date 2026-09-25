@@ -6,7 +6,6 @@ package cfzone
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -231,88 +230,15 @@ func TestTriggerActivationCheck(t *testing.T) {
 }
 
 // newTestClient creates a Client pointing to a test HTTP server.
-func newTestClient(baseURL, accountID, apiToken string) *testClient {
-	return &testClient{
-		Client: Client{
-			accountID:  accountID,
-			apiToken:   apiToken,
-			httpClient: &http.Client{Timeout: 5 * time.Second},
-		},
-		baseURL: baseURL + "/client/v4",
+// newTestClient points the real Client at a test server, so every test
+// exercises the production methods rather than a copy of them.
+func newTestClient(baseURL, accountID, apiToken string) *Client {
+	return &Client{
+		accountID:  accountID,
+		apiToken:   apiToken,
+		baseURL:    baseURL + "/client/v4",
+		httpClient: &http.Client{Timeout: 5 * time.Second},
 	}
-}
-
-// testClient overrides the base URL for testing.
-type testClient struct {
-	Client
-	baseURL string
-}
-
-// Proxy methods that use the test base URL
-func (tc *testClient) CreateZone(ctx context.Context, domain string) (*ZoneInfo, error) {
-	body := map[string]interface{}{
-		"name":    domain,
-		"account": map[string]string{"id": tc.accountID},
-		"type":    "full",
-	}
-	var resp cfResponse[ZoneInfo]
-	if err := tc.doWithBase(ctx, tc.baseURL, "POST", "/zones", body, &resp); err != nil {
-		return nil, err
-	}
-	if !resp.Success {
-		return nil, fmt.Errorf("cfzone: create zone %s: %s", domain, formatErrors(resp.Errors))
-	}
-	return &resp.Result, nil
-}
-
-func (tc *testClient) GetZoneStatus(ctx context.Context, zoneID string) (string, error) {
-	var resp cfResponse[ZoneInfo]
-	if err := tc.doWithBase(ctx, tc.baseURL, "GET", "/zones/"+zoneID, nil, &resp); err != nil {
-		return "", err
-	}
-	if !resp.Success {
-		return "", fmt.Errorf("%s", formatErrors(resp.Errors))
-	}
-	return resp.Result.Status, nil
-}
-
-func (tc *testClient) DeleteZone(ctx context.Context, zoneID string) error {
-	var resp cfResponse[json.RawMessage]
-	return tc.doWithBase(ctx, tc.baseURL, "DELETE", "/zones/"+zoneID, nil, &resp)
-}
-
-func (tc *testClient) ScanDNSRecords(ctx context.Context, zoneID string) error {
-	var resp cfResponse[ScanResult]
-	if err := tc.doWithBase(ctx, tc.baseURL, "POST", "/zones/"+zoneID+"/dns_records/scan", nil, &resp); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (tc *testClient) ListDNSRecords(ctx context.Context, zoneID string) ([]DNSRecord, error) {
-	var resp cfListResponse[DNSRecord]
-	if err := tc.doWithBase(ctx, tc.baseURL, "GET", "/zones/"+zoneID+"/dns_records?per_page=100", nil, &resp); err != nil {
-		return nil, err
-	}
-	return resp.Result, nil
-}
-
-func (tc *testClient) CreateDNSRecord(ctx context.Context, zoneID string, record DNSRecord) (*DNSRecord, error) {
-	var resp cfResponse[DNSRecord]
-	if err := tc.doWithBase(ctx, tc.baseURL, "POST", "/zones/"+zoneID+"/dns_records", record, &resp); err != nil {
-		return nil, err
-	}
-	return &resp.Result, nil
-}
-
-func (tc *testClient) DeleteDNSRecord(ctx context.Context, zoneID, recordID string) error {
-	var resp cfResponse[json.RawMessage]
-	return tc.doWithBase(ctx, tc.baseURL, "DELETE", "/zones/"+zoneID+"/dns_records/"+recordID, nil, &resp)
-}
-
-func (tc *testClient) TriggerActivationCheck(ctx context.Context, zoneID string) error {
-	var resp cfResponse[json.RawMessage]
-	return tc.doWithBase(ctx, tc.baseURL, "PUT", "/zones/"+zoneID+"/activation_check", nil, &resp)
 }
 
 // --- Additional coverage tests ---
@@ -364,14 +290,14 @@ func TestDeleteZone_Error(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// Verify response directly since testClient.DeleteZone doesn't check Success
+	// Verify response directly since this reads the raw envelope
 	c := &Client{
 		accountID:  "acct",
 		apiToken:   "token",
 		httpClient: srv.Client(),
 	}
 	var resp cfResponse[json.RawMessage]
-	_ = c.doWithBase(context.Background(), srv.URL+"/client/v4", "DELETE", "/zones/bad-zone", nil, &resp)
+	_ = withBase(c, srv.URL+"/client/v4").send(context.Background(), "DELETE", "/zones/bad-zone", nil, &resp)
 	if resp.Success {
 		t.Fatal("expected success=false")
 	}
@@ -396,7 +322,7 @@ func TestScanDNSRecords_Error(t *testing.T) {
 		httpClient: srv.Client(),
 	}
 	var resp cfResponse[ScanResult]
-	_ = c.doWithBase(context.Background(), srv.URL+"/client/v4", "POST", "/zones/zone-123/dns_records/scan", nil, &resp)
+	_ = withBase(c, srv.URL+"/client/v4").send(context.Background(), "POST", "/zones/zone-123/dns_records/scan", nil, &resp)
 	if resp.Success {
 		t.Fatal("expected success=false")
 	}
@@ -418,7 +344,7 @@ func TestListDNSRecords_Error(t *testing.T) {
 		httpClient: srv.Client(),
 	}
 	var resp cfListResponse[DNSRecord]
-	_ = c.doWithBase(context.Background(), srv.URL+"/client/v4", "GET", "/zones/zone-123/dns_records?per_page=100", nil, &resp)
+	_ = withBase(c, srv.URL+"/client/v4").send(context.Background(), "GET", "/zones/zone-123/dns_records?per_page=100", nil, &resp)
 	if resp.Success {
 		t.Fatal("expected success=false")
 	}
@@ -440,7 +366,7 @@ func TestCreateDNSRecord_Error(t *testing.T) {
 		httpClient: srv.Client(),
 	}
 	var resp cfResponse[DNSRecord]
-	_ = c.doWithBase(context.Background(), srv.URL+"/client/v4", "POST", "/zones/zone-123/dns_records", DNSRecord{
+	_ = withBase(c, srv.URL+"/client/v4").send(context.Background(), "POST", "/zones/zone-123/dns_records", DNSRecord{
 		Type: "A", Name: "test.com", Content: "1.2.3.4",
 	}, &resp)
 	if resp.Success {
@@ -460,16 +386,16 @@ func TestDeleteDNSRecord_Error(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// Use the real Client with doWithBase to test the actual error path.
+	// Use the real Client through send to test the actual error path.
 	// The testClient.DeleteDNSRecord skips the Success check, so we call
-	// the real Client's method via doWithBase + check manually.
+	// the real Client through send + check manually.
 	c := &Client{
 		accountID:  "acct",
 		apiToken:   "token",
 		httpClient: srv.Client(),
 	}
 	var resp cfResponse[json.RawMessage]
-	_ = c.doWithBase(context.Background(), srv.URL+"/client/v4", "DELETE", "/zones/zone-123/dns_records/rec-bad", nil, &resp)
+	_ = withBase(c, srv.URL+"/client/v4").send(context.Background(), "DELETE", "/zones/zone-123/dns_records/rec-bad", nil, &resp)
 	if resp.Success {
 		t.Fatal("expected success=false in response")
 	}
@@ -489,7 +415,7 @@ func TestDoWithBase_InvalidJSON(t *testing.T) {
 
 	c := newTestClient(srv.URL, "acct", "token")
 	var resp cfResponse[ZoneInfo]
-	err := c.doWithBase(context.Background(), srv.URL+"/client/v4", "GET", "/zones/test", nil, &resp)
+	err := withBase(c, srv.URL+"/client/v4").send(context.Background(), "GET", "/zones/test", nil, &resp)
 	if err == nil {
 		t.Fatal("expected unmarshal error for invalid JSON response")
 	}
@@ -513,7 +439,7 @@ func TestDoWithBase_SetsAuthAndContentType(t *testing.T) {
 
 	// POST with body should set Content-Type
 	var resp cfResponse[ZoneInfo]
-	_ = c.doWithBase(context.Background(), srv.URL, "POST", "/zones", map[string]string{"name": "test"}, &resp)
+	_ = withBase(c, srv.URL).send(context.Background(), "POST", "/zones", map[string]string{"name": "test"}, &resp)
 	if capturedAuth != "Bearer my-secret-token" {
 		t.Errorf("auth = %q, want Bearer my-secret-token", capturedAuth)
 	}
@@ -538,7 +464,7 @@ func TestDoWithBase_GET_NoContentType(t *testing.T) {
 
 	// GET with nil body should not set Content-Type
 	var resp cfResponse[ZoneInfo]
-	_ = c.doWithBase(context.Background(), srv.URL, "GET", "/zones/test", nil, &resp)
+	_ = withBase(c, srv.URL).send(context.Background(), "GET", "/zones/test", nil, &resp)
 	if capturedContentType != "" {
 		t.Errorf("GET should not set Content-Type, got %q", capturedContentType)
 	}
@@ -555,7 +481,7 @@ func TestDoWithBase_ContextCancelled(t *testing.T) {
 	cancel()
 
 	var resp cfResponse[ZoneInfo]
-	err := c.doWithBase(ctx, srv.URL+"/client/v4", "GET", "/zones/test", nil, &resp)
+	err := withBase(c, srv.URL+"/client/v4").send(ctx, "GET", "/zones/test", nil, &resp)
 	if err == nil {
 		t.Fatal("expected error for cancelled context")
 	}
@@ -720,4 +646,11 @@ func TestRealClient_TriggerActivationCheck(t *testing.T) {
 	if err := c.TriggerActivationCheck(context.Background(), "z1"); err != nil {
 		t.Fatalf("TriggerActivationCheck: %v", err)
 	}
+}
+
+// withBase points c at base and returns it, for tests that read the raw
+// response envelope through send.
+func withBase(c *Client, base string) *Client {
+	c.baseURL = base
+	return c
 }

@@ -17,6 +17,13 @@ import (
 
 const (
 	cfAPIBase = "https://api.cloudflare.com/client/v4"
+	// callTimeout bounds one HTTP call; maxAttempts and retryBackoff shape the
+	// retry of idempotent calls (500ms, then 1s).
+	callTimeout  = 8 * time.Second
+	maxAttempts  = 3
+	retryBackoff = 500 * time.Millisecond
+	// dnsRecordsPerPage is Cloudflare's largest page for DNS record listing.
+	dnsRecordsPerPage = 100
 )
 
 // Client interacts with the Cloudflare Zone Management and DNS APIs.
@@ -25,6 +32,7 @@ const (
 type Client struct {
 	accountID   string
 	apiToken    string
+	baseURL     string // cfAPIBase in production
 	httpClient  *http.Client
 	rateLimiter *rate.Limiter // CF API: 1200 req/5min = 4 req/s
 }
@@ -38,6 +46,7 @@ func NewClient(accountID, apiToken string) *Client {
 	return &Client{
 		accountID: accountID,
 		apiToken:  apiToken,
+		baseURL:   cfAPIBase,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -82,6 +91,9 @@ func (c *Client) TriggerActivationCheck(ctx context.Context, zoneID string) erro
 	if err := c.do(ctx, "PUT", "/zones/"+zoneID+"/activation_check", nil, &resp); err != nil {
 		return fmt.Errorf("cfzone: activation check %s: %w", zoneID, err)
 	}
+	if !resp.Success {
+		return fmt.Errorf("cfzone: activation check %s: %s", zoneID, formatErrors(resp.Errors))
+	}
 	return nil
 }
 
@@ -111,16 +123,25 @@ func (c *Client) ScanDNSRecords(ctx context.Context, zoneID string) error {
 	return nil
 }
 
-// ListDNSRecords returns all DNS records in the zone.
+// ListDNSRecords returns all DNS records in the zone, following
+// result_info.total_pages: the apex-conflict check needs every record, and a
+// single page stops at 100.
 func (c *Client) ListDNSRecords(ctx context.Context, zoneID string) ([]DNSRecord, error) {
-	var resp cfListResponse[DNSRecord]
-	if err := c.do(ctx, "GET", "/zones/"+zoneID+"/dns_records?per_page=100", nil, &resp); err != nil {
-		return nil, fmt.Errorf("cfzone: list records %s: %w", zoneID, err)
+	var records []DNSRecord
+	for page := 1; ; page++ {
+		var resp cfListResponse[DNSRecord]
+		path := fmt.Sprintf("/zones/%s/dns_records?per_page=%d&page=%d", zoneID, dnsRecordsPerPage, page)
+		if err := c.do(ctx, "GET", path, nil, &resp); err != nil {
+			return nil, fmt.Errorf("cfzone: list records %s page %d: %w", zoneID, page, err)
+		}
+		if !resp.Success {
+			return nil, fmt.Errorf("cfzone: list records %s page %d: %s", zoneID, page, formatErrors(resp.Errors))
+		}
+		records = append(records, resp.Result...)
+		if page >= resp.ResultInfo.TotalPages {
+			return records, nil
+		}
 	}
-	if !resp.Success {
-		return nil, fmt.Errorf("cfzone: list records %s: %s", zoneID, formatErrors(resp.Errors))
-	}
-	return resp.Result, nil
 }
 
 // CreateDNSRecord adds a DNS record to the zone.
@@ -157,30 +178,34 @@ func (c *Client) do(ctx context.Context, method, path string, body interface{}, 
 		}
 	}
 
-	// MEET-044 P0: Per-call timeout (8s) + retry (3 attempts) with backoff.
-	// CF API calls without timeout can hang indefinitely during CF outages,
-	// blocking domain provisioning threads.
+	// MEET-044 P0: per-call timeout, so a CF outage cannot hang provisioning.
+	// Only idempotent methods are retried: a POST that timed out may already
+	// have created the zone or record, and sending it again would duplicate it
+	// or fail with "already exists".
+	attempts := 1
+	if method != http.MethodPost {
+		attempts = maxAttempts
+	}
 	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
-		callCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
-		lastErr = c.doWithBase(callCtx, cfAPIBase, method, path, body, result)
+	for attempt := 0; attempt < attempts; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return lastErr
+			case <-time.After(time.Duration(attempt) * retryBackoff):
+			}
+		}
+		callCtx, cancel := context.WithTimeout(ctx, callTimeout)
+		lastErr = c.send(callCtx, method, path, body, result)
 		cancel()
-		if lastErr == nil {
-			return nil
-		}
-		// Don't retry on context cancellation (parent cancelled)
-		if ctx.Err() != nil {
+		if lastErr == nil || ctx.Err() != nil {
 			return lastErr
-		}
-		// Backoff: 500ms, 1s
-		if attempt < 2 {
-			time.Sleep(time.Duration(500*(attempt+1)) * time.Millisecond)
 		}
 	}
 	return lastErr
 }
 
-func (c *Client) doWithBase(ctx context.Context, base, method, path string, body interface{}, result interface{}) error {
+func (c *Client) send(ctx context.Context, method, path string, body interface{}, result interface{}) error {
 	var bodyReader io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -190,7 +215,7 @@ func (c *Client) doWithBase(ctx context.Context, base, method, path string, body
 		bodyReader = bytes.NewReader(data)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, base+path, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bodyReader)
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}

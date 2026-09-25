@@ -59,6 +59,8 @@ type cfListResponse[T any] struct {
 	Result     []T       `json:"result"`
 	Errors     []cfError `json:"errors"`
 	ResultInfo struct {
+		Page       int `json:"page"`
+		TotalPages int `json:"total_pages"`
 		TotalCount int `json:"total_count"`
 	} `json:"result_info"`
 }
