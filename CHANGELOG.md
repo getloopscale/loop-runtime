@@ -14,6 +14,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `POST /internal/bootstrap` accepts `admin_user_id`, `admin_email` and `admin_display_name`, so a tenant can be provisioned for a login identity and not only a GitHub one (principle_violations#58, #383)
+
 - `loopzero-ops quality english-only` gate, wired into `task quality:gates`: every git-tracked text file must be English, and a line keeps Portuguese only with an inline `english-only` exemption stating a reason of at least five words (#380)
 
 - `loopzero-ops seed cluster-kubeconfigs` mints loopzero-api's build and cell-0 kubeconfigs with the scoped build identity, a 30-day token and each cluster's live CA (principle_violations#236)
@@ -76,6 +78,10 @@ to [Semantic Versioning](https://semver.org/).
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
 ### Changed
+
+- The data-plane readiness poller behind the dashboard's project badge now runs in loopzero-api instead of loopzero-app-operator: configure it with `dataPlanePoller.{enabled,prometheusUrl,interval}` on the loopzero-api chart; the app-operator chart no longer accepts `dataPlanePoller` and no longer takes a database connection string (principle_violations#68)
+
+- The `admin-loopzero-dev` dev seed provisions the admin tenant through the engine (`LOOPZERO_API_URL`, `LOOPZERO_BOOTSTRAP_SECRET`) instead of writing tables directly, and derives each seeded identity's username and tenant slug from its email (principle_violations#58)
 
 - Comments, log and error messages, test names and chart descriptions across the engine, charts, Helmfile, Taskfiles and scripts are now English (#380)
 
@@ -261,6 +267,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- The `AUDIT_ENFORCE_DOMAIN_ENUM` setting: it was never read on the audit-log write path, so setting it never rejected anything (principle_violations#300)
+
 - `infra/scripts/local/regen_build_runtime_kubeconfigs.py`, replaced by `loopzero-ops seed cluster-kubeconfigs` (principle_violations#236)
 
 - `infra/scripts/production/operator-cutover-execute.sh`, `infra/scripts/production/bootstrap-platform.sh` and `infra/scripts/security/rekor-archive-old-entries.sh`: none could complete — the cutover's pre-flight and rollback scripts were gone, the bootstrap script had no caller and restarted deployments that no longer exist, and the Rekor archiver exited 1 on every run (principle_violations#240)
@@ -318,6 +326,14 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- Deploying to a team that was deleted and recreated under the same name no longer fails because its deployment repository was left archived (principle_violations#98)
+
+- A deployed app's status URL and route health checks now use the same hostname the platform routes traffic to, instead of a shorter one no route matched; existing apps move to the routed hostname on their next reconcile (principle_violations#231)
+
+- `POST /internal/bootstrap` provisions tenants again: it creates the owner's account and places the tenant in a cell, and refuses a tenant slug another identity owns with `409 TENANT_SLUG_TAKEN` instead of adding the caller to that tenant (principle_violations#58, #383)
+
+- Plan limits, the per-account project cap, the cost cap and the plan shown by billing and scale now use the team's real subscription; they were reading every team as Starter (principle_violations#215, #382)
 
 - `task k3d:heal` no longer rewrites loopzero-api's build credential with a 24-hour, cluster-admin token that expired and broke deploys; it uses `loopzero-ops seed cluster-kubeconfigs` and exits non-zero when that fails (principle_violations#236)
 
