@@ -49,6 +49,7 @@ drill-creds-isolation	-	Ensures DR-drill credentials are isolated from productio
 drill-outputs-consumers	gates	Verifies drill Pulumi-output consumers use the canonical schema.
 ecosystem-validators	gates	Runs `check_xrefs.py` and `test_e2e_smoke.py`, which the golden-rule change protocol requires green and which no gate ran (B-129). Reports FAIL and WARN SEPARATELY: adding them would let the warning erase the failure.
 error-vocabulary	gates	An authored error message must not carry an internal term forbidden by Rule 3.
+feature-fence	gates	Deny-by-default fence over api/internal by feature: registered features, kernel and composition roots; HTTP and adapter packages stay inside their feature.
 git-diff-to-lines	-	Utility: converts a git diff into a changed-line set for other gates.
 gomod-auth-org	gates	The org build files authenticate to matches the org go.mod requires (a drift makes git fetch unauthenticated and GitHub answer 'not found').
 helm-diff-structural	-	Structural pre-sync Helm diff to catch drift before apply.

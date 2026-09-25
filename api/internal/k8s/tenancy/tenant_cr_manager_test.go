@@ -10,8 +10,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/environments"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -137,10 +135,6 @@ func TestTenantCRManager_EnsureTenant_UpdatesPlan(t *testing.T) {
 
 func TestTenantCRManager_ImplementsInterface(t *testing.T) {
 	var _ ports.TenantCRManager = (*TenantCRManager)(nil)
-}
-
-func TestTenantCRManager_ImplementsEnvironmentManager(t *testing.T) {
-	var _ environments.EnvironmentManager = (*TenantCRManager)(nil)
 }
 
 func TestTenantCRManager_AddEnvironment(t *testing.T) {

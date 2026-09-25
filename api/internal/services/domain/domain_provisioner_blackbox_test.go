@@ -14,7 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/routes/domains"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/pkg/logging"
 )
 
@@ -33,11 +33,11 @@ func testAppDigests() map[string]string {
 // --- Fakes ---
 
 type fakeDomainProvisionerStore struct {
-	claimedVerified []domains.CustomDomain
-	removing        []domains.CustomDomain
-	activeByApp     map[string][]domains.CustomDomain // key: "tenant/project/app/env"
-	statuses        map[string]string                 // domain → status
-	failures        map[string]string                 // domain → failure reason
+	claimedVerified []ports.CustomDomain
+	removing        []ports.CustomDomain
+	activeByApp     map[string][]ports.CustomDomain // key: "tenant/project/app/env"
+	statuses        map[string]string               // domain → status
+	failures        map[string]string               // domain → failure reason
 	deleted         []string
 	claimErr        error
 	listActiveErr   error
@@ -45,22 +45,22 @@ type fakeDomainProvisionerStore struct {
 
 func newFakeDomainStore() *fakeDomainProvisionerStore {
 	return &fakeDomainProvisionerStore{
-		activeByApp: make(map[string][]domains.CustomDomain),
+		activeByApp: make(map[string][]ports.CustomDomain),
 		statuses:    make(map[string]string),
 		failures:    make(map[string]string),
 	}
 }
 
-func (f *fakeDomainProvisionerStore) FindAndClaimVerified(ctx context.Context) ([]domains.CustomDomain, error) {
+func (f *fakeDomainProvisionerStore) FindAndClaimVerified(ctx context.Context) ([]ports.CustomDomain, error) {
 	if f.claimErr != nil {
 		return nil, f.claimErr
 	}
 	return f.claimedVerified, nil
 }
-func (f *fakeDomainProvisionerStore) FindRemoving(ctx context.Context) ([]domains.CustomDomain, error) {
+func (f *fakeDomainProvisionerStore) FindRemoving(ctx context.Context) ([]ports.CustomDomain, error) {
 	return f.removing, nil
 }
-func (f *fakeDomainProvisionerStore) ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]domains.CustomDomain, error) {
+func (f *fakeDomainProvisionerStore) ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]ports.CustomDomain, error) {
 	if f.listActiveErr != nil {
 		return nil, f.listActiveErr
 	}
@@ -90,10 +90,10 @@ func (f *fakeDomainProvisionerStore) Delete(ctx context.Context, domain string) 
 func (f *fakeDomainProvisionerStore) UpdateCFZoneStatus(ctx context.Context, domain, cfZoneStatus string) error {
 	return nil
 }
-func (f *fakeDomainProvisionerStore) FindPendingNS(ctx context.Context) ([]domains.CustomDomain, error) {
+func (f *fakeDomainProvisionerStore) FindPendingNS(ctx context.Context) ([]ports.CustomDomain, error) {
 	return nil, nil
 }
-func (f *fakeDomainProvisionerStore) FindNSActive(ctx context.Context) ([]domains.CustomDomain, error) {
+func (f *fakeDomainProvisionerStore) FindNSActive(ctx context.Context) ([]ports.CustomDomain, error) {
 	return nil, nil
 }
 
@@ -124,8 +124,8 @@ func (f *fakeDomainBuildReader) GetBuildApps(ctx context.Context, buildID string
 
 // --- Helper ---
 
-func testDomain() domains.CustomDomain {
-	return domains.CustomDomain{
+func testDomain() ports.CustomDomain {
+	return ports.CustomDomain{
 		ID:          "dom-test1234",
 		TenantID:    "tn-acme",
 		ProjectName: "webapp",
@@ -185,7 +185,7 @@ func newTestProvisioner(
 // MEET-034 test #1: No active release → skip gracefully
 func TestProvisionDomain_NoActiveRelease_SkipsGracefully(t *testing.T) {
 	store := newFakeDomainStore()
-	store.claimedVerified = []domains.CustomDomain{testDomain()}
+	store.claimedVerified = []ports.CustomDomain{testDomain()}
 	releaseStore := &fakeDomainReleaseReader{release: nil} // no active release
 	buildStore := &fakeDomainBuildReader{}
 	gitops := &fakeGitOpsPusher{}
@@ -253,7 +253,7 @@ func TestProvisionDomain_GitopsPushFailure_StaysInProvisioning(t *testing.T) {
 // MEET-034 test #4: Remove with no active release → deletes row directly
 func TestRemoveDomain_NoActiveRelease_DeletesRowDirectly(t *testing.T) {
 	store := newFakeDomainStore()
-	store.removing = []domains.CustomDomain{testDomain()}
+	store.removing = []ports.CustomDomain{testDomain()}
 	releaseStore := &fakeDomainReleaseReader{release: nil}
 	buildStore := &fakeDomainBuildReader{}
 	gitops := &fakeGitOpsPusher{}
@@ -271,7 +271,7 @@ func TestRemoveDomain_NoActiveRelease_DeletesRowDirectly(t *testing.T) {
 // MEET-034 test #5: Remove re-renders without domain, pushes, then deletes
 func TestRemoveDomain_BuildManifestApps_ExcludesDomain(t *testing.T) {
 	store := newFakeDomainStore()
-	store.activeByApp["tn-acme/webapp/api/production"] = []domains.CustomDomain{
+	store.activeByApp["tn-acme/webapp/api/production"] = []ports.CustomDomain{
 		{Domain: "api.mycompany.com", ID: "dom-1"},
 		{Domain: "staging.mycompany.com", ID: "dom-2"},
 	}
@@ -318,7 +318,7 @@ func TestRemoveDomain_GitopsPushFailure_LeavesInRemoving(t *testing.T) {
 // MEET-034 test #7: BuildManifestApps includes custom domains in manifests
 func TestBuildManifestApps_IncludesCustomDomains(t *testing.T) {
 	store := newFakeDomainStore()
-	store.activeByApp["tn-acme/webapp/api/production"] = []domains.CustomDomain{
+	store.activeByApp["tn-acme/webapp/api/production"] = []ports.CustomDomain{
 		{Domain: "api.mycompany.com", ID: "dom-1"},
 	}
 
