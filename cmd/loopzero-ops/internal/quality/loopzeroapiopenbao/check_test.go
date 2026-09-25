@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
@@ -74,5 +75,38 @@ func TestCheck_HelmAbsentIsAdvisoryWhenChartExists(t *testing.T) {
 	}
 	if !outcome.Warn {
 		t.Fatalf("expected Warn=true, got %+v", outcome)
+	}
+}
+
+// renderedContract is the smallest render that satisfies every assertion.
+const renderedContract = `# plan 2026-06-10-j22-openbao-transit-eso-sync, see docs/runbooks.md
+envFrom:
+  - secretRef:
+      name: loopzero-service-auth
+  - secretRef:
+      name: loopzero-openbao-approle
+      optional: true
+`
+
+// The chart is read by people who clone the repository. A citation of an
+// assistant's private memory resolves for nobody, so the gate must not demand one.
+func TestCheckRendered_NoAssistantMemoryCitationRequired(t *testing.T) {
+	if failures := checkRendered(renderedContract); len(failures) != 0 {
+		t.Fatalf("a render without a private-memory citation was refused: %v", failures)
+	}
+}
+
+func TestCheckRendered_InlineSecretIDIsForbidden(t *testing.T) {
+	rendered := renderedContract + "env:\n  - name: OPENBAO_VAULT_SECRET_ID\n    value: s3cr3t\n"
+	failures := checkRendered(rendered)
+	if len(failures) != 1 {
+		t.Fatalf("want exactly the inline-value failure, got %v", failures)
+	}
+}
+
+func TestCheckRendered_ApproleNotOptionalFails(t *testing.T) {
+	rendered := strings.Replace(renderedContract, "optional: true", "optional: false", 1)
+	if failures := checkRendered(rendered); len(failures) != 1 {
+		t.Fatalf("want exactly the optional=true failure, got %v", failures)
 	}
 }

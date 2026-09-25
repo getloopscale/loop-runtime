@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
@@ -216,4 +217,15 @@ func joinLines(ls []string) string {
 		buf = append(buf, l...)
 	}
 	return string(buf)
+}
+
+// The doc is read by people who clone the repository. A citation of an
+// assistant's private memory resolves for nobody, so the gate must not demand one.
+func TestCheck_DocWithoutAnAssistantMemoryCitationPasses(t *testing.T) {
+	doc := strings.Replace(canonicalDoc, "Memory: feedback_productive_idle_runbook_preauthor_2026_06_10.\n", "", 1)
+	root := writeFixture(t, doc, canonicalRuntime)
+	outcome, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("a doc with no private-memory citation was refused: err=%v failures=%v", err, outcome.Failures)
+	}
 }

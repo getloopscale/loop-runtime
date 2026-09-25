@@ -1,5 +1,5 @@
 // Package optionbeso is a hermetic contract test for
-// docs/runbooks.md.
+// docs/operations/option-b-mgmt-helmfile-eso-deploy.md.
 //
 // Locks that the Option B analysis doc:
 //   - Documents 4 sub-paths (B1, B2, B3, B4) with each rated.
@@ -145,9 +145,8 @@ func Check(cfg Config) (Outcome, error) {
 	forbidRE("Co-Authored-By trailer forbidden", `(?i)Co-Authored-By`)
 	assertRE("Rule 4 mandate cited (or sponsor verbatim/authorization)", `Rule 4|sponsor.*verbatim|sponsor.*authorization`)
 
-	// K: plan slug + canonical memories cited.
+	// K: plan slug cited.
 	assertRE("J-22 plan slug cited", `2026-06-10-j22-openbao-transit-eso-sync`)
-	assertRE("productive-idle mandate memory cited", `feedback_productive_idle_runbook_preauthor_2026_06_10`)
 
 	if len(failures) > 0 {
 		return Outcome{Failures: failures}, ErrViolations

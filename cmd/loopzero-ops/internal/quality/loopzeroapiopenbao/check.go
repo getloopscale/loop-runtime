@@ -3,10 +3,8 @@
 // unconditionally wires the AppRole secret_id from K8s Secret
 // `loopzero-openbao-approle` via envFrom.secretRef with optional=true.
 //
-// Defense against the canonical drift mode (inline-literal secret_id
-// reintroduced via `kubectl set env` on a hot-fix branch) — caught
-// canonically by feedback_no_hardcode_gate_2026_06_09 +
-// feedback_secret_canonical_no_hardcode.
+// Defense against the canonical drift mode: an inline-literal secret_id
+// reintroduced via `kubectl set env` on a hot-fix branch.
 //
 // Migrated from infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh
 // (M-Migrate2 continuation 2026-07-07). Renders the loopzero-api chart via
@@ -53,7 +51,7 @@ var ErrChartMissing = errors.New("loopzero-api chart missing")
 // anti-pattern the guard closes.
 var inlineValueRE = regexp.MustCompile(`(?m)^\s*-\s*name:\s*OPENBAO_VAULT_SECRET_ID\s*\n\s*value:`)
 
-// Check runs the 6 rendered-chart assertions.
+// Check renders the chart and applies the envFrom contract to the output.
 func Check(cfg Config) (Outcome, error) {
 	root := cfg.RepoRoot
 	if root == "" {
@@ -79,8 +77,15 @@ func Check(cfg Config) (Outcome, error) {
 	if err := cmd.Run(); err != nil {
 		return Outcome{Failures: []string{fmt.Sprintf("helm template failed: %v\n%s", err, stderr.String())}}, ErrViolations
 	}
-	rendered := stdout.String()
+	if failures := checkRendered(stdout.String()); len(failures) > 0 {
+		return Outcome{Failures: failures}, ErrViolations
+	}
+	return Outcome{}, nil
+}
 
+// checkRendered applies the envFrom contract to a rendered chart and returns
+// one failure per broken assertion.
+func checkRendered(rendered string) []string {
 	var failures []string
 	assertContains := func(desc, needle string) {
 		if !strings.Contains(rendered, needle) {
@@ -100,9 +105,9 @@ func Check(cfg Config) (Outcome, error) {
 
 	// B — comment block cites plan + runbook
 	assertContains("B1 chart comment cites plan 2026-06-10-j22-openbao-transit-eso-sync", "2026-06-10-j22-openbao-transit-eso-sync")
-	// O needle era `openbao-transit-cutover-runbook.md`, consolidado em `docs/runbooks.md`
-	// (secao `Transit cutover`). Exigir um nome de arquivo apagado pede ao chart que aponte
-	// para o que ninguem pode abrir; este exige o caminho que um leitor segue hoje.
+	// The needle used to be `openbao-transit-cutover-runbook.md`, consolidated into
+	// `docs/runbooks.md` (section `Transit cutover`). Requiring a deleted file name asks
+	// the chart to point at what nobody can open; this requires the path a reader follows.
 	assertContains("B2 chart comment points at the cutover runbook", "docs/runbooks.md")
 
 	// C — anti-hardcode gate: no inline `value:` following OPENBAO_VAULT_SECRET_ID
@@ -113,13 +118,7 @@ func Check(cfg Config) (Outcome, error) {
 	// D — sibling envFrom entries still render
 	assertContains("D1 loopzero-service-auth envFrom still present", "name: loopzero-service-auth")
 
-	// E — memory pointer cited
-	assertContains("E1 chart comment references the secret-canonical memory", "feedback_secret_canonical_no_hardcode")
-
-	if len(failures) > 0 {
-		return Outcome{Failures: failures}, ErrViolations
-	}
-	return Outcome{}, nil
+	return failures
 }
 
 // hasOptionalTrueAfter searches the window from the first line matching
