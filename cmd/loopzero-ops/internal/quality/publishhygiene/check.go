@@ -185,7 +185,8 @@ func Check(cfg Config) (Outcome, error) {
 	if err != nil {
 		return out, err
 	}
-	for _, rel := range files {
+	for _, f := range files {
+		rel := f.path
 		if isAuditTrail(rel) {
 			continue
 		}
@@ -193,7 +194,7 @@ func Check(cfg Config) (Outcome, error) {
 			out.Exempt++
 			continue
 		}
-		data, ferr := os.ReadFile(filepath.Clean(filepath.Join(root, rel)))
+		data, ferr := f.publishedContent(root)
 		if ferr != nil {
 			out.Unverified = append(out.Unverified, fmt.Sprintf("%s: %v", rel, ferr))
 			continue
@@ -234,19 +235,52 @@ func isAuditTrail(rel string) bool {
 	return false
 }
 
-// versionedFiles lists what git tracks — what will be published, not the working dir.
-func versionedFiles(root string) ([]string, error) {
-	cmd := exec.Command("git", "ls-files")
+// symlinkMode is the git index mode of a versioned symbolic link.
+const symlinkMode = "120000"
+
+// versionedFile is one entry of the git index.
+type versionedFile struct {
+	path    string
+	symlink bool
+}
+
+// publishedContent is what git publishes for the entry. For a symlink that is
+// the target text, never the target's content: a link to a directory is a
+// readable one-line blob, and the directory's own files are versioned — and
+// scanned — under their own paths.
+func (f versionedFile) publishedContent(root string) ([]byte, error) {
+	full := filepath.Clean(filepath.Join(root, f.path))
+	if f.symlink {
+		target, err := os.Readlink(full)
+		if err != nil {
+			return nil, err
+		}
+		return []byte(target), nil
+	}
+	return os.ReadFile(full)
+}
+
+// versionedFiles lists what git tracks — what will be published, not the
+// working dir — with the index mode that says how each entry is published.
+func versionedFiles(root string) ([]versionedFile, error) {
+	cmd := exec.Command("git", "ls-files", "-s", "-z")
 	cmd.Dir = root
 	body, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git ls-files in %s: %w", root, err)
 	}
-	var out []string
-	for _, l := range strings.Split(string(body), "\n") {
-		if l = strings.TrimSpace(l); l != "" {
-			out = append(out, l)
+	var out []versionedFile
+	for _, entry := range strings.Split(string(body), "\x00") {
+		if entry == "" {
+			continue
 		}
+		// "<mode> <object> <stage>\t<path>"
+		meta, path, ok := strings.Cut(entry, "\t")
+		if !ok {
+			return nil, fmt.Errorf("git ls-files -s in %s: unexpected entry %q", root, entry)
+		}
+		mode, _, _ := strings.Cut(meta, " ")
+		out = append(out, versionedFile{path: path, symlink: mode == symlinkMode})
 	}
 	return out, nil
 }
