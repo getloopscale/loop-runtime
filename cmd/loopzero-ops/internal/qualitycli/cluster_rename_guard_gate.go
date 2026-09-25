@@ -22,7 +22,7 @@ func init() {
 // vault → secrets) touched only cluster identifiers, never a line where the
 // same word meant something else.
 //
-// T0.1 of .claude/knowledge-base/plans/cluster-rename-core-secrets-plan.md. At
+// Task T0.1 of the cluster-rename plan (B-001). At
 // 1.388 changed occurrences a human reviewing the diff catches errors of form,
 // not of classification — so this gate is the real reviewer.
 func setupClusterRenameGuard(fs *flag.FlagSet) Check {

@@ -44,7 +44,6 @@ func setupCaddyfileCSP(_ *flag.FlagSet) Check {
 				fmt.Fprintf(inv.Stderr, "  %s\n", v)
 			}
 			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintln(inv.Stderr, "Per plan caddyfile-csp-vite-dev-vs-prod-bundle v1.1: the operator-local-edge")
 			fmt.Fprintln(inv.Stderr, "Per plan caddyfile-app-dev-prod-bundle-file-server-canonical v1 (closes Red Team")
 			fmt.Fprintln(inv.Stderr, "loopzero-cloud#66): the operator-local Caddyfile app-dev block MUST serve the")
 			fmt.Fprintln(inv.Stderr, "prod-bundle via file_server + emit canonical CSP from dashboard/nginx.conf.")

@@ -45,7 +45,6 @@ func setupQuarantineProtect(fs *flag.FlagSet) Check {
 			}
 			fmt.Fprintln(inv.Stderr, "")
 			fmt.Fprintln(inv.Stderr, "Per ADR-2026-06-17-T3 D5: build the new suite at infra/tests/livetest/ paths instead.")
-			fmt.Fprintln(inv.Stderr, "Plan: knowledge-base/plans/canonical-tests-rewrite-v2-plan.md")
 			return Fail, nil
 		}
 		fmt.Fprintln(inv.Stdout, "quarantine-protect: PASS — no quarantine violations")

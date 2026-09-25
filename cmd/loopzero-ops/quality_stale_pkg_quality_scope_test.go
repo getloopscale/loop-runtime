@@ -1,15 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// RED test for B-014, written to MEASURE and left UNTRACKED.
-//
 // TestNoStalePkgQualityPath (quality_stale_pkg_quality_path_test.go) roots at
-// filepath.Abs(".") — the test binary's own directory, cmd/loopzero-ops. It
-// therefore cannot see a stale `pkg/quality/` citation anywhere else in the
-// repository, and it passes today for that reason rather than because the tree
-// is clean.
-//
-// This test applies the SAME matcher from the repository root. It fails now.
+// filepath.Abs(".") — the test binary's own directory, cmd/loopzero-ops — so it
+// cannot see a stale `pkg/quality/` citation anywhere else in the repository.
+// This test applies the same matcher from the repository root (B-014).
 package main
 
 import (

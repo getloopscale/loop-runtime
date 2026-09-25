@@ -23,7 +23,7 @@ import (
 //
 // Sets `OPENBAO_VAULT_ADDR=https://<serverlb-ip>:<nodeport>` on the mgmt/loopzero-system/
 // loopzero-api Deployment env so it can reach OpenBao that runs in the SEPARATE
-// k3d-loopzero-secrets cluster (Jeito A per cleanroom-up-live-test-mandate.md).
+// k3d-loopzero-secrets cluster.
 //
 // Cross-cluster discovery:
 //  1. Vault Service `openbao.secrets-system` in the vault cluster → https NodePort

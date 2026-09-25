@@ -73,6 +73,8 @@ none for anyone else. The gate inventory lives in `cmd/loopzero-ops`.
 
 ```bash
 task quality:build                 # build the gate binary to /tmp/loopzero-ops — do this FIRST
+                                   # every gate exits 0 pass, 1 usage error or a violation,
+                                   # 5 when it could not complete (an input it could not read)
 /tmp/loopzero-ops quality --list       # the inventory: NAME / WIRED / SUMMARY — the oracle
 /tmp/loopzero-ops quality <gate>       # run one gate
 
@@ -294,6 +296,14 @@ error. If one still exits 5 on such a path, that is the bug, not your checkout.
 escapes are deliberate and documented in its own header: `git push --no-verify`, or
 `LOOPZERO_SKIP_PREPUSH=1 git push`. Use them to see the push itself fail rather than the
 gate — then fix what the gate found.
+
+The hook this replaced parsed each push command, and 26 Go tests covered it — push via
+`git -C`, `--dry-run` elsewhere in a compound command, pushes in subshells. They were
+removed with it on 2026-09-16. The pre-push hook receives no command to parse, so that
+class of bypass cannot occur in the same form; nothing tests that, and nothing yet
+asserts the hook is installed and armed on a given machine. CI's own guard is
+`.github/scripts/assert_delivery_gate_armed.py`, which first asks whether CI gates the
+pull request at all.
 
 ## Local-prod divergence matrix (LP-NNN)
 
