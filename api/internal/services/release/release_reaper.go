@@ -58,14 +58,6 @@ type ReleaseStaleChecker interface {
 	FindStaleReleases(ctx context.Context, cellID string, readyTimeout, pendingTimeout time.Duration) ([]StaleRelease, error)
 }
 
-// ReleaseReaper periodically checks for stale releases and transitions them to failure states.
-// This implements the timeout enforcement from spec §5.2.
-//
-// - Releases stuck in READY past ReadyTimeout are transitioned via GitPushTimeout → GIT_MIRROR_FAILED
-// - Releases stuck in PENDING past PendingTimeout are transitioned via SyncTimeout → SYNC_FAILED
-//
-// Unlike BuildReaper, the ReleaseReaper does not need to check external workflow status —
-// it only checks database state.
 // ReleaseReaperStore is the part of the release store the reaper uses:
 // re-reading a stale release, transitioning it, and recording why (ISP —
 // the full db.ReleaseStore has fifteen methods).
@@ -75,6 +67,14 @@ type ReleaseReaperStore interface {
 	AppendSideEffect(ctx context.Context, tx db.DBTX, id string, patch map[string]any) error
 }
 
+// ReleaseReaper periodically checks for stale releases and transitions them to failure states.
+// This implements the timeout enforcement from spec §5.2.
+//
+// - Releases stuck in READY past ReadyTimeout are transitioned via GitPushTimeout → GIT_MIRROR_FAILED
+// - Releases stuck in PENDING past PendingTimeout are transitioned via SyncTimeout → SYNC_FAILED
+//
+// Unlike BuildReaper, the ReleaseReaper does not need to check external workflow status —
+// it only checks database state.
 type ReleaseReaper struct {
 	releaseStore ReleaseReaperStore
 	checker      ReleaseStaleChecker

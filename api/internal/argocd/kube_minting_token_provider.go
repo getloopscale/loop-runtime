@@ -517,10 +517,9 @@ func (p *KubeMintingTokenProvider) mintToken(ctx context.Context, creds refreshC
 
 func (p *KubeMintingTokenProvider) argocdLogin(ctx context.Context, user, pass string) (string, error) {
 	url := p.cfg.ArgoCDBaseURL + "/api/v1/session"
-	body, err := json.Marshal(struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}{user, pass})
+	// ArgoCD's session endpoint takes the credentials in the request body; a
+	// map keeps them out of a named struct type that could be logged or reused.
+	body, err := json.Marshal(map[string]string{"username": user, "password": pass})
 	if err != nil {
 		return "", fmt.Errorf("encode login: %w", err)
 	}

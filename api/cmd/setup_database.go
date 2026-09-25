@@ -156,7 +156,7 @@ func openPlanEnforcementDB(dbURL string) (*sql.DB, error) {
 	stdDB.SetMaxOpenConns(2)
 	if err := stdDB.Ping(); err != nil {
 		if cerr := stdDB.Close(); cerr != nil {
-			return nil, fmt.Errorf("plan enforcement: ping database: %w (close: %v)", err, cerr)
+			return nil, fmt.Errorf("plan enforcement: ping database: %w", errors.Join(err, fmt.Errorf("close: %w", cerr)))
 		}
 		return nil, fmt.Errorf("plan enforcement: ping database: %w", err)
 	}

@@ -4,6 +4,7 @@
 // Custom domain validation rules. MEET-2026-04-05-033 §6.4. The DNS TXT
 // verifier that used to live here is infrastructure and moved to
 // api/internal/adapters.
+
 package ports
 
 import (

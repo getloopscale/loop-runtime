@@ -62,7 +62,7 @@ func IsSyncStuck(err error) bool {
 	return errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress)
 }
 
-// Terminate kills the in-flight operation on appName, logs the outcome at the
+// TerminateStuckSync kills the in-flight operation on appName, logs the outcome at the
 // level it deserves, and reports whether the operation was terminated. A failed
 // termination is not returned as an error because no caller can do more with it
 // than log it: the next TriggerSync is what reports whether the lock cleared, and
@@ -76,7 +76,7 @@ func TerminateStuckSync(ctx context.Context, s SyncRecoveryClient, appName strin
 	return true
 }
 
-// Trigger runs TriggerSync on appName under policy p, terminating a stuck
+// TriggerSyncWithRecovery runs TriggerSync on appName under policy p, terminating a stuck
 // operation when the policy says so. It returns nil on the first successful
 // trigger, ctx.Err() when the context ends during a backoff, and otherwise the
 // last trigger error once the budget is exhausted.

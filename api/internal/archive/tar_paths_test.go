@@ -195,7 +195,7 @@ func TestExtractionBudgetEnforcesEachLimit(t *testing.T) {
 					break
 				}
 			}
-			if !errors.Is(err, tc.want) && !(err == nil && tc.want == nil) {
+			if !errors.Is(err, tc.want) && (err != nil || tc.want != nil) {
 				t.Fatalf("err = %v, want %v", err, tc.want)
 			}
 		})

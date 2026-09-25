@@ -38,7 +38,7 @@ func (s *scriptedRecoveryClient) TerminateOperation(_ context.Context, _ string)
 	return s.terminateErr
 }
 
-var stuck = fmt.Errorf("wrapped: %w", loopzeroerrors.ErrSyncOperationInProgress)
+var errStuck = fmt.Errorf("wrapped: %w", loopzeroerrors.ErrSyncOperationInProgress)
 
 func silentLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
@@ -84,7 +84,7 @@ func TestTrigger_NonStuckFailureStopsAtMaxAttempts(t *testing.T) {
 }
 
 func TestTrigger_StuckFailureUsesTheStuckBudget(t *testing.T) {
-	s := &scriptedRecoveryClient{triggerErrs: []error{stuck, stuck, stuck, stuck, stuck}}
+	s := &scriptedRecoveryClient{triggerErrs: []error{errStuck, errStuck, errStuck, errStuck, errStuck}}
 	var waits []time.Duration
 
 	err := triggerSyncWithRecovery(context.Background(), s, "app", SyncRecoveryPolicy{MaxAttempts: 2, MaxStuckAttempts: 4, Backoff: linearBackoff(time.Second)}, silentLogger(), recordRecoveryWaits(&waits))
@@ -98,7 +98,7 @@ func TestTrigger_StuckFailureUsesTheStuckBudget(t *testing.T) {
 }
 
 func TestTrigger_TerminatesOnceConsecutiveStuckReachesThreshold(t *testing.T) {
-	s := &scriptedRecoveryClient{triggerErrs: []error{stuck, stuck, nil}}
+	s := &scriptedRecoveryClient{triggerErrs: []error{errStuck, errStuck, nil}}
 	var waits []time.Duration
 
 	err := triggerSyncWithRecovery(context.Background(), s, "app", SyncRecoveryPolicy{MaxAttempts: 3, MaxStuckAttempts: 3, TerminateAfterStuck: 2, Backoff: linearBackoff(time.Second)}, silentLogger(), recordRecoveryWaits(&waits))
@@ -129,7 +129,7 @@ func TestTrigger_DoesNotTerminateOnANonStuckFailure(t *testing.T) {
 }
 
 func TestTrigger_RetriesAfterAFailedTermination(t *testing.T) {
-	s := &scriptedRecoveryClient{triggerErrs: []error{stuck, nil}, terminateErr: errors.New("403")}
+	s := &scriptedRecoveryClient{triggerErrs: []error{errStuck, nil}, terminateErr: errors.New("403")}
 	var waits []time.Duration
 
 	err := triggerSyncWithRecovery(context.Background(), s, "app", SyncRecoveryPolicy{MaxAttempts: 2, MaxStuckAttempts: 2, TerminateAfterStuck: 1, Backoff: linearBackoff(time.Second)}, silentLogger(), recordRecoveryWaits(&waits))
@@ -140,7 +140,7 @@ func TestTrigger_RetriesAfterAFailedTermination(t *testing.T) {
 }
 
 func TestTrigger_PassesFailureCountAndKindToBackoff(t *testing.T) {
-	s := &scriptedRecoveryClient{triggerErrs: []error{errors.New("x"), stuck, nil}}
+	s := &scriptedRecoveryClient{triggerErrs: []error{errors.New("x"), errStuck, nil}}
 	var waits []time.Duration
 	backoff := func(failures int, stuck bool) time.Duration {
 		if stuck {

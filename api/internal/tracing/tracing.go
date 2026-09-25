@@ -82,14 +82,6 @@ const (
 	maxQueueSize = 2048
 )
 
-// Init configures the OTel TracerProvider with OTLP gRPC exporter.
-// Returns a shutdown function for graceful shutdown.
-//
-// If LOOPZERO_TRACING_ENABLED is "false" (C7), returns a no-op shutdown
-// with zero overhead — no TracerProvider is registered.
-//
-// If the Collector is unreachable, the API continues normally.
-// Spans are dropped after queue exhaustion (graceful degradation).
 // Options is what Init needs from configuration (config.Config carries it).
 type Options struct {
 	// Enabled turns export on; when false Init registers nothing.
@@ -101,6 +93,14 @@ type Options struct {
 	Environment string
 }
 
+// Init configures the OTel TracerProvider with OTLP gRPC exporter.
+// Returns a shutdown function for graceful shutdown.
+//
+// If LOOPZERO_TRACING_ENABLED is "false" (C7), returns a no-op shutdown
+// with zero overhead — no TracerProvider is registered.
+//
+// If the Collector is unreachable, the API continues normally.
+// Spans are dropped after queue exhaustion (graceful degradation).
 func Init(ctx context.Context, serviceName string, opts Options) (shutdown func(context.Context) error, err error) {
 	if !opts.Enabled {
 		slog.Info("tracing disabled via LOOPZERO_TRACING_ENABLED=false")
