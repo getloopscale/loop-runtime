@@ -4,5 +4,5 @@
   "ratio_unit_pct": 73.5,
   "ratio_integration_pct": 15.7,
   "ratio_e2e_pct": 10.8,
-  "note": "Derivada da arvore por testinventory.Derive, nao declarada. Congelada ao fechar o B-106, que mediu o arquivo anterior descrevendo 375 de 988 arquivos (62% cego) e declarando 99,4% unit. A catraca so permite melhora; o alvo do ADR D7 (e2e <= 5%) foi RETIRADO para o eixo e2e em 2026-09-06 pela emenda docs/decisions.md (B-137, Option A ratificada pelo sponsor). Unit >= 70% e integracao <= 25% seguem reportados como aspiration gaps."
+  "note": "Derived from the tree by testinventory.Derive, not declared. Frozen when B-106 closed, which measured the previous file describing 375 of 988 files (62% blind) and declaring 99.4% unit. The ratchet only allows improvement; the ADR D7 target (e2e <= 5%) was WITHDRAWN for the e2e axis on 2026-09-06 by the docs/decisions.md amendment (B-137, Option A ratified by the sponsor). Unit >= 70% and integration <= 25% are still reported as aspiration gaps."
 }

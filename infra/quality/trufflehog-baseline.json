@@ -1,5 +1,5 @@
 {
-  "note": "Conjunto de candidatos ADJUDICADOS do trufflehog. Um candidato fora daqui REPROVA o gate até alguém regravar com `loopzero-ops quality trufflehog-scan --write` — e é o diff dessa regravação que é a adjudicação. `--write` RECUSA enquanto houver achado vivo: esta lista adjudica \"isto não é segredo\", nunca \"este segredo pode viver aqui\". `id` é sha256(detector+bruto) truncado — nenhum material de segredo mora neste arquivo. Ver B-143.",
+  "note": "Set of ADJUDICATED trufflehog candidates. A candidate outside this set FAILS the gate until someone rewrites it with `loopzero-ops quality trufflehog-scan --write` — and the diff of that rewrite is the adjudication. `--write` REFUSES while any live finding exists: this list adjudicates \"this is not a secret\", never \"this secret may live here\". `id` is a truncated sha256(detector+raw) — no secret material lives in this file. See B-143.",
   "entries": [
     {
       "id": "e0ae7fcc5b7dad8a",

@@ -123,3 +123,44 @@ func TestCheck_ScanningNothingIsAnError(t *testing.T) {
 		t.Fatal("Check over a repository with no tracked text file returned no error; a scan over nothing is not a pass")
 	}
 }
+
+const capturedPortuguese = `    "content": "O exemplo usa HashiCorp Vault, e isso nao muda",` // english-only: fixture must be Portuguese to exercise the gate
+
+func TestScanLines_CapturedFieldOfARegisteredFilePasses(t *testing.T) {
+	findings, exempted, err := ScanLines(clusterRenameBaseline, "{\n"+capturedPortuguese+"\n}\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 0 || exempted != 1 {
+		t.Fatalf("findings = %+v, exempted = %d; want the captured line exempted", findings, exempted)
+	}
+}
+
+func TestScanLines_AuthoredFieldOfARegisteredFileIsAFinding(t *testing.T) {
+	line := `  "note": "Ocorrencias classificadas antes da primeira edicao, e nao depois",` // english-only: fixture must be Portuguese to exercise the gate
+	findings, _, err := ScanLines(clusterRenameBaseline, "{\n"+line+"\n}\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("findings = %+v, want the authored note reported", findings)
+	}
+}
+
+func TestScanLines_CapturedFieldOfAnUnregisteredFileIsAFinding(t *testing.T) {
+	findings, _, err := ScanLines("infra/quality/other.json", "{\n"+capturedPortuguese+"\n}\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("findings = %+v, want a capture key to exempt nothing outside a registered file", findings)
+	}
+}
+
+func TestVerbatimCaptures_EveryEntryStatesAReason(t *testing.T) {
+	for path, c := range verbatimCaptures {
+		if reasonWords(c.reason) < minReasonWords || len(c.keys) == 0 {
+			t.Errorf("verbatimCaptures[%q] = %+v: a registered capture needs its keys and a reason of at least %d words", path, c, minReasonWords)
+		}
+	}
+}

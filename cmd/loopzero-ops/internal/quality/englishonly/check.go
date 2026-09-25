@@ -21,7 +21,9 @@
 // the gate exists to prevent. The legitimate cases are copy whose language is
 // a product requirement, verbatim quotations, and fixtures that must be
 // Portuguese to exercise what they test. A marker with no reason is itself a
-// finding.
+// finding. JSON cannot carry a comment, so a JSON file that stores other
+// files' lines verbatim is registered in verbatimCaptures instead, with the
+// keys that hold the captures and the reason.
 //
 // Why a repository gate: the only language check was an advisory editor hook
 // in a local, gitignored kit. It ran on the file being edited, never on the
@@ -72,6 +74,49 @@ const generatedHeaderBytes = 2048
 
 // excludedPrefixes are repository-relative directories outside the gate.
 var excludedPrefixes = []string{".squad/"}
+
+// clusterRenameBaseline is the one tracked file today that stores other files'
+// lines verbatim.
+const clusterRenameBaseline = "infra/quality/snapshots/cluster-topology-naming-generic-baseline.json"
+
+// capture is a JSON file whose values under keys are byte-for-byte copies of
+// lines captured from other files. JSON has no comments, so these lines cannot
+// carry an inline exemption; the registry is where their reason is written.
+// Only the listed keys are exempt: the file's authored fields (notes, reasons)
+// are scanned like any other line.
+type capture struct {
+	keys   []string
+	reason string
+}
+
+var verbatimCaptures = map[string]capture{
+	clusterRenameBaseline: {
+		keys: []string{"content", "before", "after"},
+		reason: "cluster-rename-guard asserts that each captured line still exists byte for byte; " +
+			"a translated capture no longer matches the file it was taken from, so the proof would break",
+	},
+}
+
+// jsonKeyRE reads the key of a one-line JSON member: `  "content": "..."`.
+var jsonKeyRE = regexp.MustCompile(`^\s*"([^"]+)"\s*:`)
+
+// isVerbatimCapture reports whether line holds a registered capture of rel.
+func isVerbatimCapture(rel, line string) bool {
+	c, ok := verbatimCaptures[rel]
+	if !ok {
+		return false
+	}
+	m := jsonKeyRE.FindStringSubmatch(line)
+	if m == nil {
+		return false
+	}
+	for _, k := range c.keys {
+		if m[1] == k {
+			return true
+		}
+	}
+	return false
+}
 
 // Config configures a run.
 type Config struct {
@@ -173,6 +218,10 @@ func scan(rel string, data []byte) ([]Finding, int, error) {
 				continue
 			}
 			findings = append(findings, Finding{Path: rel, Line: i + 1, Kind: KindExemptionWithoutReason, Text: strings.TrimSpace(line)})
+			continue
+		}
+		if isVerbatimCapture(rel, line) {
+			exempted++
 			continue
 		}
 		if v := Classify(line); v.Portuguese {
