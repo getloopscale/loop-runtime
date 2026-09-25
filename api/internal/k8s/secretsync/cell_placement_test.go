@@ -11,6 +11,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // fixedCell is a TenantCellLookup that places every tenant on one cell.
@@ -42,7 +45,7 @@ func TestCreateSecretRefusesATenantPlacedOnAnotherCell(t *testing.T) {
 	mgr, mgmt, dyn := newPlacedManager(fixedCell("cell-1"))
 
 	// Act
-	err := mgr.CreateSecret(context.Background(), "tn-1", "shop", "production", "api", "KEY", "v")
+	err := mgr.CreateSecret(context.Background(), ports.SecretRef{Env: domain.EnvRef{TenantID: "tn-1", Project: "shop", EnvName: "production"}, App: "api", Name: "KEY"}, "v")
 
 	// Assert
 	if !errors.Is(err, ErrTenantCellNotServed) {
@@ -56,7 +59,7 @@ func TestCreateSecretRefusesATenantPlacedOnAnotherCell(t *testing.T) {
 func TestDeleteSecretRefusesATenantPlacedOnAnotherCell(t *testing.T) {
 	mgr, mgmt, dyn := newPlacedManager(fixedCell("cell-1"))
 
-	err := mgr.DeleteSecret(context.Background(), "tn-1", "shop", "production", "api", "KEY")
+	err := mgr.DeleteSecret(context.Background(), ports.SecretRef{Env: domain.EnvRef{TenantID: "tn-1", Project: "shop", EnvName: "production"}, App: "api", Name: "KEY"})
 
 	if !errors.Is(err, ErrTenantCellNotServed) {
 		t.Fatalf("err = %v, want ErrTenantCellNotServed", err)
@@ -69,7 +72,7 @@ func TestDeleteSecretRefusesATenantPlacedOnAnotherCell(t *testing.T) {
 func TestCreateSecretFailsWhenTheTenantCellCannotBeRead(t *testing.T) {
 	mgr, mgmt, _ := newPlacedManager(failingCellLookup{})
 
-	err := mgr.CreateSecret(context.Background(), "tn-1", "shop", "production", "api", "KEY", "v")
+	err := mgr.CreateSecret(context.Background(), ports.SecretRef{Env: domain.EnvRef{TenantID: "tn-1", Project: "shop", EnvName: "production"}, App: "api", Name: "KEY"}, "v")
 
 	if err == nil {
 		t.Fatal("CreateSecret wrote a secret without knowing which cell the tenant is on")
@@ -82,7 +85,7 @@ func TestCreateSecretFailsWhenTheTenantCellCannotBeRead(t *testing.T) {
 func TestCreateSecretWritesForATenantOnTheServedCell(t *testing.T) {
 	mgr, _, dyn := newPlacedManager(fixedCell("cell-0"))
 
-	err := mgr.CreateSecret(context.Background(), "tn-1", "shop", "production", "api", "KEY", "v")
+	err := mgr.CreateSecret(context.Background(), ports.SecretRef{Env: domain.EnvRef{TenantID: "tn-1", Project: "shop", EnvName: "production"}, App: "api", Name: "KEY"}, "v")
 
 	if err != nil {
 		t.Fatalf("CreateSecret: %v", err)

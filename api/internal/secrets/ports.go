@@ -20,9 +20,10 @@ type SecretStore interface {
 }
 
 // SecretK8sSync abstracts K8s Secret + ExternalSecret CR creation (DIP).
-// projectID is the canonical M2 namespace segment (per pkg/naming.Namespace);
-// the runtime ExternalSecret CR lives at loopzero-{tenantID}-{projectID}-{env}.
+// ref.Env.Project is the canonical M2 namespace segment (per
+// pkg/naming.Namespace); the runtime ExternalSecret CR lives at
+// loopzero-{tenant}-{project}-{env}.
 type SecretK8sSync interface {
-	CreateSecret(ctx context.Context, tenantID, projectID, env, app, name, value string) error
-	DeleteSecret(ctx context.Context, tenantID, projectID, env, app, name string) error
+	CreateSecret(ctx context.Context, ref ports.SecretRef, value string) error
+	DeleteSecret(ctx context.Context, ref ports.SecretRef) error
 }

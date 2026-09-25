@@ -45,6 +45,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // fakeSecretResyncStore implements SecretResyncStore with a configurable
@@ -86,13 +87,13 @@ type fakeSecretK8sCreator struct {
 	errFor func(c secretCall) error
 }
 
-func (f *fakeSecretK8sCreator) CreateSecret(_ context.Context, tenantID, projectID, env, app, name, value string) error {
+func (f *fakeSecretK8sCreator) CreateSecret(_ context.Context, ref ports.SecretRef, value string) error {
 	c := secretCall{
-		TenantID:  tenantID,
-		ProjectID: projectID,
-		Env:       env,
-		App:       app,
-		Name:      name,
+		TenantID:  ref.Env.TenantID,
+		ProjectID: ref.Env.Project,
+		Env:       ref.Env.EnvName,
+		App:       ref.App,
+		Name:      ref.Name,
 		Value:     value,
 	}
 	f.mu.Lock()

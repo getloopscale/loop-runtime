@@ -34,6 +34,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/httpio"
 	"github.com/getloopscale/loopzero/api/internal/secrets"
+	"github.com/getloopscale/loopzero/pkg/domain"
 	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
 
 	"github.com/go-chi/chi/v5"
@@ -598,7 +599,10 @@ func (h *SecretHandler) syncBulkWrite(ctx context.Context, tenantID, project str
 		aggs.syncStatusPerEnv[wr.env] = "pending"
 		return
 	}
-	if err := h.k8sSync.CreateSecret(ctx, tenantID, project, wr.env, "", name, wr.state.entry.Value); err != nil {
+	if err := h.k8sSync.CreateSecret(ctx, ports.SecretRef{
+		Env:  domain.EnvRef{TenantID: tenantID, Project: project, EnvName: wr.env},
+		Name: name,
+	}, wr.state.entry.Value); err != nil {
 		aggs.syncStatusPerEnv[wr.env] = "failed"
 		aggs.syncFailures++
 		slog.Warn("k8sSync.CreateSecret failed for bulk entry env",
@@ -838,7 +842,11 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 	// and TestExternalSecretSkip_BothWritePathsEmitWhenSyncIsNil fails, which
 	// is the point of asserting them in one test.
 	if h.k8sSync != nil {
-		if syncErr := h.k8sSync.CreateSecret(ctx, uc.TenantID, project, req.Environment, req.App, req.Name, req.Value); syncErr != nil {
+		if syncErr := h.k8sSync.CreateSecret(ctx, ports.SecretRef{
+			Env:  domain.EnvRef{TenantID: uc.TenantID, Project: project, EnvName: req.Environment},
+			App:  req.App,
+			Name: req.Name,
+		}, req.Value); syncErr != nil {
 			// Log but don't fail — PG is source of truth, K8s sync is eventual
 			slog.Error("failed to sync secret to K8s", "name", req.Name, "error", syncErr)
 		}
@@ -929,7 +937,11 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 
 	// Remove K8s Secret from mgmt + ExternalSecret CR from workload
 	if h.k8sSync != nil {
-		if syncErr := h.k8sSync.DeleteSecret(ctx, uc.TenantID, project, env, app, name); syncErr != nil {
+		if syncErr := h.k8sSync.DeleteSecret(ctx, ports.SecretRef{
+			Env:  domain.EnvRef{TenantID: uc.TenantID, Project: project, EnvName: env},
+			App:  app,
+			Name: name,
+		}); syncErr != nil {
 			slog.Error("failed to delete secret from K8s", "name", name, "error", syncErr)
 		}
 	}

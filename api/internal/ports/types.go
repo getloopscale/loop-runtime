@@ -16,6 +16,8 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // --- Domain (Custom Domains) ---
@@ -156,6 +158,17 @@ type SecretMetadata struct {
 	Name        string `json:"name"`
 	Environment string `json:"environment"`
 	App         string `json:"app"`
+}
+
+// SecretRef identifies one secret delivered to a workload: the environment it
+// belongs to, the app it is scoped to (empty for a secret every app of the
+// environment receives) and its name. It is the Parameter Object the secret
+// sync port takes, so the five identifiers travel as one named value instead of
+// a positional string tuple that transposes silently.
+type SecretRef struct {
+	Env  domain.EnvRef
+	App  string
+	Name string
 }
 
 // --- Projects ---

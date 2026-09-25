@@ -455,20 +455,20 @@ type fakeK8sSyncT11 struct {
 	failOnEnv   map[string]error // env → error to return on CreateSecret
 }
 
-func (f *fakeK8sSyncT11) CreateSecret(_ context.Context, tenant, project, env, _, name, _ string) error {
+func (f *fakeK8sSyncT11) CreateSecret(_ context.Context, ref ports.SecretRef, _ string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.createCalls = append(f.createCalls, tenant+":"+project+":"+env+":"+name)
-	if err, ok := f.failOnEnv[env]; ok {
+	f.createCalls = append(f.createCalls, ref.Env.TenantID+":"+ref.Env.Project+":"+ref.Env.EnvName+":"+ref.Name)
+	if err, ok := f.failOnEnv[ref.Env.EnvName]; ok {
 		return err
 	}
 	return nil
 }
 
-func (f *fakeK8sSyncT11) DeleteSecret(_ context.Context, tenant, project, env, _, name string) error {
+func (f *fakeK8sSyncT11) DeleteSecret(_ context.Context, ref ports.SecretRef) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.deleteCalls = append(f.deleteCalls, tenant+":"+project+":"+env+":"+name)
+	f.deleteCalls = append(f.deleteCalls, ref.Env.TenantID+":"+ref.Env.Project+":"+ref.Env.EnvName+":"+ref.Name)
 	return nil
 }
 

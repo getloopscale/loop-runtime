@@ -27,6 +27,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/k8s"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
@@ -189,9 +190,91 @@ func tenantNamespaceFor(tenantID, projectID, env string) (string, error) {
 	return ns, nil
 }
 
+// externalSecretObject builds the ExternalSecret CR that makes ESO deliver the
+// secret named by ref into namespace: the broker ClusterSecretStore as source,
+// and the workload Secret the renderer's envFrom points at as target.
+func externalSecretObject(ref ports.SecretRef, namespace string) *unstructured.Unstructured {
+	tenantID, projectID, env := ref.Env.TenantID, ref.Env.Project, ref.Env.EnvName
+	app, name := ref.App, ref.Name
+	esName := externalSecretName(app, name)
+	esLabels := buildSecretLabels(tenantID, projectID, app)
+	esLabelsAny := make(map[string]interface{}, len(esLabels))
+	for k, v := range esLabels {
+		esLabelsAny[k] = v
+	}
+
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "external-secrets.io/v1beta1",
+			"kind":       "ExternalSecret",
+			"metadata": map[string]interface{}{
+				"name":      esName,
+				"namespace": namespace,
+				"labels":    esLabelsAny,
+			},
+			"spec": map[string]interface{}{
+				"refreshInterval": "30s",
+				"secretStoreRef": map[string]interface{}{
+					// Plan v1.2 D3 + plan 2026-06-02-openbao-adoption T4.1:
+					// `loopzero-broker` is the canonical ESO ClusterSecretStore for
+					// user secrets. provider.webhook calls loopzero-api's
+					// /internal/v1/secret-fetch/{tenant_id}/{secret_name}
+					// endpoint with a Bearer token; loopzero-api validates the
+					// auth, enforces tenant↔cell binding (EC-07), decrypts
+					// the vault:v1: ciphertext via OpenBao transit, and
+					// returns plaintext_b64. ESO base64-decodes into the
+					// materialized K8s Secret. LIVE-validated 2026-06-10
+					// J-22 walkthrough (ClusterSecretStore Ready=True +
+					// in-cluster probe HTTP 200 + plaintext round-trip).
+					"name": "loopzero-broker",
+					"kind": "ClusterSecretStore",
+				},
+				"target": map[string]interface{}{
+					// Must match envFrom secretRef in manifests/renderer.go.
+					// When app is empty (tenant-wide secret), omit the trailing
+					// segment so the K8s resource name stays inside the
+					// `[a-z0-9]([-a-z0-9]*[a-z0-9])?` grammar. Trailing hyphen
+					// LIVE-caught 2026-06-10 J-22 walkthrough.
+					"name":           targetSecretName(tenantID, projectID, env, app),
+					"creationPolicy": "Owner",
+				},
+				"data": []interface{}{
+					map[string]interface{}{
+						"secretKey": name,
+						"remoteRef": map[string]interface{}{
+							// loopzero-broker webhook URL substitutes 2 variables into
+							// the path: `.remoteRef.key` (tenant_id) +
+							// `.remoteRef.property` (composite `secretName.projectID.env`).
+							// T2.1 + ADR D2 of plan 2026-06-10-j22-layer2-code-review-fixes
+							// (closes HIGH #15 scope-drop): project + environment thread
+							// through to broker SQL composite-key scope.
+							//
+							// 2026-06-11 LIVE walkthrough catch — ESO v1beta1 CRD strict
+							// decoder REJECTS spec.data[].remoteRef.metadata as unknown
+							// field. So the encoding moves into the `property` field
+							// using `.` as separator (EC-08 regex `^[A-Z][A-Z0-9_]*$`
+							// forbids `.` in secret names → safe non-ambiguous delimiter).
+							// Broker parses property → split on `.` → 3 parts.
+							//
+							// Slashes are also problematic: ESO URL-encodes `/` inside a
+							// SINGLE value (e.g., `tn-X/SECRET` → `tn-X%2FSECRET`) which
+							// chi rejects as 404. Dot delimiter survives URL encoding +
+							// chi routing.
+							"key":      tenantID,
+							"property": fmt.Sprintf("%s.%s.%s", name, projectID, env),
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 // CreateSecret creates a K8s Secret on the mgmt cluster and an ExternalSecret CR
 // on the runtime cluster for ESO to sync the value to the workload namespace.
-func (m *SecretK8sManager) CreateSecret(ctx context.Context, tenantID, projectID, env, app, name, value string) error {
+func (m *SecretK8sManager) CreateSecret(ctx context.Context, ref ports.SecretRef, value string) error {
+	tenantID, projectID, env := ref.Env.TenantID, ref.Env.Project, ref.Env.EnvName
+	app, name := ref.App, ref.Name
 	if err := m.requireServedCell(ctx, tenantID); err != nil {
 		// B-177: the row is already persisted when CreateSecret runs, so this
 		// exit counts like every other one.
@@ -254,77 +337,7 @@ func (m *SecretK8sManager) CreateSecret(ctx context.Context, tenantID, projectID
 		return err
 	}
 	esName := externalSecretName(app, name)
-	esLabels := buildSecretLabels(tenantID, projectID, app)
-	esLabelsAny := make(map[string]interface{}, len(esLabels))
-	for k, v := range esLabels {
-		esLabelsAny[k] = v
-	}
-
-	externalSecret := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "external-secrets.io/v1beta1",
-			"kind":       "ExternalSecret",
-			"metadata": map[string]interface{}{
-				"name":      esName,
-				"namespace": tenantNS,
-				"labels":    esLabelsAny,
-			},
-			"spec": map[string]interface{}{
-				"refreshInterval": "30s",
-				"secretStoreRef": map[string]interface{}{
-					// Plan v1.2 D3 + plan 2026-06-02-openbao-adoption T4.1:
-					// `loopzero-broker` is the canonical ESO ClusterSecretStore for
-					// user secrets. provider.webhook calls loopzero-api's
-					// /internal/v1/secret-fetch/{tenant_id}/{secret_name}
-					// endpoint with a Bearer token; loopzero-api validates the
-					// auth, enforces tenant↔cell binding (EC-07), decrypts
-					// the vault:v1: ciphertext via OpenBao transit, and
-					// returns plaintext_b64. ESO base64-decodes into the
-					// materialized K8s Secret. LIVE-validated 2026-06-10
-					// J-22 walkthrough (ClusterSecretStore Ready=True +
-					// in-cluster probe HTTP 200 + plaintext round-trip).
-					"name": "loopzero-broker",
-					"kind": "ClusterSecretStore",
-				},
-				"target": map[string]interface{}{
-					// Must match envFrom secretRef in manifests/renderer.go.
-					// When app is empty (tenant-wide secret), omit the trailing
-					// segment so the K8s resource name stays inside the
-					// `[a-z0-9]([-a-z0-9]*[a-z0-9])?` grammar. Trailing hyphen
-					// LIVE-caught 2026-06-10 J-22 walkthrough.
-					"name":           targetSecretName(tenantID, projectID, env, app),
-					"creationPolicy": "Owner",
-				},
-				"data": []interface{}{
-					map[string]interface{}{
-						"secretKey": name,
-						"remoteRef": map[string]interface{}{
-							// loopzero-broker webhook URL substitutes 2 variables into
-							// the path: `.remoteRef.key` (tenant_id) +
-							// `.remoteRef.property` (composite `secretName.projectID.env`).
-							// T2.1 + ADR D2 of plan 2026-06-10-j22-layer2-code-review-fixes
-							// (closes HIGH #15 scope-drop): project + environment thread
-							// through to broker SQL composite-key scope.
-							//
-							// 2026-06-11 LIVE walkthrough catch — ESO v1beta1 CRD strict
-							// decoder REJECTS spec.data[].remoteRef.metadata as unknown
-							// field. So the encoding moves into the `property` field
-							// using `.` as separator (EC-08 regex `^[A-Z][A-Z0-9_]*$`
-							// forbids `.` in secret names → safe non-ambiguous delimiter).
-							// Broker parses property → split on `.` → 3 parts.
-							//
-							// Slashes are also problematic: ESO URL-encodes `/` inside a
-							// SINGLE value (e.g., `tn-X/SECRET` → `tn-X%2FSECRET`) which
-							// chi rejects as 404. Dot delimiter survives URL encoding +
-							// chi routing.
-							"key":      tenantID,
-							"property": fmt.Sprintf("%s.%s.%s", name, projectID, env),
-						},
-					},
-				},
-			},
-		},
-	}
+	externalSecret := externalSecretObject(ref, tenantNS)
 
 	existing, err := m.runtimeDynamic.Resource(externalSecretGVR).Namespace(tenantNS).Get(ctx, esName, metav1.GetOptions{})
 	if err != nil {
@@ -388,10 +401,12 @@ func (m *SecretK8sManager) CreateSecret(ctx context.Context, tenantID, projectID
 }
 
 // DeleteSecret removes the K8s Secret from mgmt and ExternalSecret CR from runtime.
-// projectID is the canonical M2 namespace segment (per `pkg/naming.Namespace`).
-// LIVE-caught 2026-06-10 J-22 walkthrough: signature extended with projectID
-// so the delete path mirrors CreateSecret's M2 canonical 3-segment namespace.
-func (m *SecretK8sManager) DeleteSecret(ctx context.Context, tenantID, projectID, env, app, name string) error {
+// ref.Env.Project is the canonical M2 namespace segment (per
+// `pkg/naming.Namespace`), so the delete path mirrors CreateSecret's M2
+// canonical 3-segment namespace.
+func (m *SecretK8sManager) DeleteSecret(ctx context.Context, ref ports.SecretRef) error {
+	tenantID, projectID, env := ref.Env.TenantID, ref.Env.Project, ref.Env.EnvName
+	app, name := ref.App, ref.Name
 	if err := m.requireServedCell(ctx, tenantID); err != nil {
 		return err
 	}

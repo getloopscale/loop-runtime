@@ -13,6 +13,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -62,7 +64,7 @@ type SecretResyncStore interface {
 // k8s.SecretK8sManager.CreateSecret used by POST /api/v1/secrets, so the
 // resyncer can reuse the same wired implementation.
 type SecretK8sCreator interface {
-	CreateSecret(ctx context.Context, tenantID, projectID, env, app, name, value string) error
+	CreateSecret(ctx context.Context, ref ports.SecretRef, value string) error
 }
 
 // ErrSecretResyncerMisconfigured is returned by a resyncer wired without its
@@ -147,7 +149,11 @@ func (r *SecretResyncer) syncOneWithTerminatingRetry(ctx context.Context, tenant
 	attempt := 0
 	for {
 		attempt++
-		err := r.K8s.CreateSecret(ctx, tenantID, projectID, env, e.App, e.Name, e.Value)
+		err := r.K8s.CreateSecret(ctx, ports.SecretRef{
+			Env:  domain.EnvRef{TenantID: tenantID, Project: projectID, EnvName: env},
+			App:  e.App,
+			Name: e.Name,
+		}, e.Value)
 		if err == nil {
 			if attempt > 1 && r.Logger != nil {
 				r.Logger.Info("secret resync: succeeded after namespace-terminating retry",
