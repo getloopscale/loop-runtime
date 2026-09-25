@@ -14,6 +14,12 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `loopzero-ops seed cluster-kubeconfigs` mints loopzero-api's build and cell-0 kubeconfigs with the scoped build identity, a 30-day token and each cluster's live CA (principle_violations#236)
+
+- `loopzero-ops sql bootstrap-user` renders the seed that leaves the bootstrap user in exactly one tenant, shared by the local, drill and E2E seeds (principle_violations#236)
+
+- `loopzero-ops dsn <field>` prints one part of a Postgres DSN read on stdin (user, password, host, port, database), accepting postgres:// and postgresql:// and failing instead of echoing an unparseable value (principle_violations#236)
+
 - Operator charts accept `rbac.legacyClusterWideSecrets` (default `false`), a cutover escape hatch that restores cluster-wide Secret read for an operator image built before the scoped Secret cache (principle_violations#149, principle_violations#150)
 
 - loopzero-ops quality contract-consumers reads infra/quality/contract-drops.txt: a JSON field removed on purpose is recorded per tag and file with its reason, stays listed on every run, and a recorded removal that no longer matches the diff fails the gate
@@ -68,6 +74,10 @@ to [Semantic Versioning](https://semver.org/).
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
 ### Changed
+
+- `provision-api-tokens.sh` and the drill bootstrap provision the Gitea and ArgoCD tokens with `loopzero-ops seed gitea-token`, `argocd-token` and `argocd-gitea-creds`, and stop when a token cannot be minted instead of storing an empty one (principle_violations#236)
+
+- The Sigstore volume alerts and the zero-ready operator alert no longer tell on-call to run scripts that do not exist; the Sigstore alerts point at a new `docs/runbooks.md` § Sigstore storage section on expanding the volume (principle_violations#240)
 
 - `task dev-public:patch-kratos` is replaced by `task dev-public:sync-kratos`, which re-syncs the ory-kratos release and refuses to run without the OAuth and Resend credentials (principle_violations#67)
 
@@ -245,6 +255,12 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- `infra/scripts/local/regen_build_runtime_kubeconfigs.py`, replaced by `loopzero-ops seed cluster-kubeconfigs` (principle_violations#236)
+
+- `infra/scripts/production/operator-cutover-execute.sh`, `infra/scripts/production/bootstrap-platform.sh` and `infra/scripts/security/rekor-archive-old-entries.sh`: none could complete — the cutover's pre-flight and rollback scripts were gone, the bootstrap script had no caller and restarted deployments that no longer exist, and the Rekor archiver exited 1 on every run (principle_violations#240)
+
+- `task check` and `infra/scripts/local/check-sprint.sh`: every category it dispatched to had been deleted, so it reported WARN for all eight and exited 0 without checking anything; use `task doctor` (principle_violations#240)
+
 - The secret-fetch broker is no longer installed on standalone-multi cells: its chart forbids a plaintext bearer outside dev-public, a guard the seed bypassed by always passing `envName=dev-public` (principle_violations#67)
 
 - The `task helm:test:env` target is removed: after the per-environment loopzero-api stubs went with the bootstrap chart it selected no test (design_pattern_findings#29)
@@ -296,6 +312,12 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- `task k3d:heal` no longer rewrites loopzero-api's build credential with a 24-hour, cluster-admin token that expired and broke deploys; it uses `loopzero-ops seed cluster-kubeconfigs` and exits non-zero when that fails (principle_violations#236)
+
+- Provisioning the Gitea or ArgoCD token no longer erases the other token, or the Cloudflare token, from the `loopzero-api-tokens` Secret; each writes only its own key (principle_violations#236)
+
+- The drill JWT seed (`drill-mint-jwt.sh`) and the E2E database seed no longer fail with `null value in column "account_id"` on databases migrated past the account migrations (principle_violations#236)
 
 - On the multi-cluster local topologies (dev-public, standalone-public, standalone-multi), cell log shippers now push to the build cluster's published Loki port, so workload logs from the cells reach Loki; they pushed to a Service the cells do not have or to a stale container IP (principle_violations#67)
 
