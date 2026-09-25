@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -167,7 +169,7 @@ func wrapDownstreamPushError(err error) error {
 		return err
 	}
 	msg := err.Error()
-	lower := strings.ToLower(msg)
+	class := classifyPushError(err)
 
 	// 1. Network class (Sprint 4 — unchanged): backend unreachable (DNS / TCP
 	//    refused / TLS / timeout). Detail is intentionally FIXED to avoid
@@ -176,19 +178,19 @@ func wrapDownstreamPushError(err error) error {
 	//    available via errors.Unwrap for operator logs (see source.go handler).
 	//    Sprint 5 ADR D3 composition (verbatim cause in Detail) applies to the
 	//    other 4 buckets below; the network bucket is the deliberate exception.
-	if isNetworkClass(lower) {
+	if class == pushErrNetwork {
 		return NewPushBundleError(ReasonSourceBackendUnreachable, err,
 			"source backend is unreachable (network or DNS failure)")
 	}
 	// 2. Auth class (Sprint 5 — NEW per ADR D2): 401 / 403 / authentication-
 	//    required / permission-denied patterns. The detail preserves the
 	//    verbatim cause for the operator's diagnosis.
-	if isAuthClass(lower) {
+	if class == pushErrAuth {
 		return NewPushBundleError(ReasonSourceBackendAuthFailure, err, msg)
 	}
 	// 3. Capacity class (Sprint 5 — NEW): 507 / quota-exceeded / no-space-left
 	//    patterns. The detail preserves the verbatim cause.
-	if isCapacityClass(lower) {
+	if class == pushErrCapacity {
 		return NewPushBundleError(ReasonSourceBackendCapacity, err, msg)
 	}
 	// 4. Genuine remote-rejected (Sprint 5 — NARROWED per ADR D2): only the
@@ -197,7 +199,7 @@ func wrapDownstreamPushError(err error) error {
 	//    "remote rejected" / "cannot lock ref" / "stale info" patterns at the
 	//    DEPLOY_IN_PROGRESS 409 ladder entry BEFORE pushErr.Reason is consulted
 	//    (EC-3 preserved).
-	if isGenuineRemoteRejected(lower) {
+	if class == pushErrRemoteRejected {
 		return NewPushBundleError(ReasonRemoteRejectedPush, err, msg)
 	}
 	// 5. Default mapping (Sprint 5 — CHANGED per ADR D2): unknown downstream.
@@ -209,48 +211,72 @@ func wrapDownstreamPushError(err error) error {
 	return NewPushBundleError(ReasonUnknownDownstream, err, msg)
 }
 
-// isNetworkClass reports whether lower-cased msg matches a network-unreachable
-// pattern (Sprint 4 substrings preserved verbatim).
-func isNetworkClass(lower string) bool {
-	return strings.Contains(lower, "connection refused") ||
-		strings.Contains(lower, "no such host") ||
-		strings.Contains(lower, "i/o timeout") ||
-		strings.Contains(lower, "tls handshake") ||
-		strings.Contains(lower, "eof") ||
-		strings.Contains(lower, "context deadline exceeded") ||
-		strings.Contains(lower, "dial tcp")
+// pushErrClass is the bucket a push failure falls in.
+type pushErrClass int
+
+const (
+	pushErrUnknown pushErrClass = iota
+	pushErrNetwork
+	pushErrAuth
+	pushErrCapacity
+	pushErrRemoteRejected
+)
+
+// classifyPushError decides the bucket from typed information first — a
+// net.Error, a timeout, a Gitea HTTP status, git's own stderr — and only then
+// from the message text, with patterns anchored to whole words and to a
+// status context, so digits inside a SHA or "eof" inside a word decide
+// nothing.
+func classifyPushError(err error) pushErrClass {
+	var netErr net.Error
+	if errors.As(err, &netErr) || errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return pushErrNetwork
+	}
+	var status *gitclient.HTTPStatusError
+	if errors.As(err, &status) {
+		switch status.StatusCode {
+		case http.StatusUnauthorized, http.StatusForbidden:
+			return pushErrAuth
+		case http.StatusInsufficientStorage:
+			return pushErrCapacity
+		}
+		return pushErrUnknown
+	}
+	text := err.Error()
+	var cmdErr *gitclient.CommandError
+	if errors.As(err, &cmdErr) {
+		text = cmdErr.Output
+	}
+	return classifyPushText(strings.ToLower(text))
 }
 
-// isAuthClass reports whether lower-cased msg matches an auth-class pattern.
-// Sprint 5 plan ADR D2 (closes loopzero-cloud#33).
-func isAuthClass(lower string) bool {
-	return strings.Contains(lower, "401") ||
-		strings.Contains(lower, "403") ||
-		strings.Contains(lower, "authentication required") ||
-		strings.Contains(lower, "authorization failed") ||
-		strings.Contains(lower, "permission denied") ||
-		strings.Contains(lower, "forbidden") ||
-		strings.Contains(lower, "unauthorized")
-}
+var (
+	networkTextRe = regexp.MustCompile(`connection refused|no such host|i/o timeout|tls handshake|` +
+		`context deadline exceeded|dial tcp|could not resolve host|failed to connect|\bunexpected eof\b|\beof\b`)
+	authTextRe = regexp.MustCompile(`(?:status|returned|error:?|code)\s*:?\s*40[13]\b|` +
+		`authentication (?:required|failed)|authorization failed|permission denied|\bforbidden\b|\bunauthorized\b`)
+	capacityTextRe = regexp.MustCompile(`(?:status|returned|error:?|code)\s*:?\s*507\b|` +
+		`quota exceeded|no space left|insufficient storage|disk full`)
+	remoteRejectedTextRe = regexp.MustCompile(`pre-receive hook (?:declined|failed)`)
+)
 
-// isCapacityClass reports whether lower-cased msg matches a capacity-class
-// pattern. Sprint 5 plan ADR D2.
-func isCapacityClass(lower string) bool {
-	return strings.Contains(lower, "507") ||
-		strings.Contains(lower, "quota exceeded") ||
-		strings.Contains(lower, "no space left") ||
-		strings.Contains(lower, "insufficient storage") ||
-		strings.Contains(lower, "disk full")
-}
-
-// isGenuineRemoteRejected reports whether lower-cased msg matches a LITERAL
-// git pre-receive rejection pattern. Sprint 5 plan ADR D2: narrows the bucket
-// from Sprint 4's catchall to only the actual git stderr signature, so generic
-// gitea-race "remote rejected" substrings continue to be handled by the route
-// handler's DEPLOY_IN_PROGRESS 409 ladder (EC-3 preserved).
-func isGenuineRemoteRejected(lower string) bool {
-	return strings.Contains(lower, "pre-receive hook declined") ||
-		strings.Contains(lower, "pre-receive hook failed")
+// classifyPushText is the last resort for an error that carries no type.
+// "pre-receive hook" is the only remote-rejected signature: generic
+// "remote rejected" / "cannot lock ref" stay with the route handler's
+// DEPLOY_IN_PROGRESS ladder (EC-3).
+func classifyPushText(lower string) pushErrClass {
+	switch {
+	case networkTextRe.MatchString(lower):
+		return pushErrNetwork
+	case authTextRe.MatchString(lower):
+		return pushErrAuth
+	case capacityTextRe.MatchString(lower):
+		return pushErrCapacity
+	case remoteRejectedTextRe.MatchString(lower):
+		return pushErrRemoteRejected
+	}
+	return pushErrUnknown
 }
 
 // pushGitBundle handles git bundle format (original flow).

@@ -101,7 +101,7 @@ func (m *GiteaRepoManager) EnsureRepo(ctx context.Context, repoName string, auto
 	_ = resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
-		return fmt.Errorf("create repo: status %d", resp.StatusCode)
+		return &HTTPStatusError{Op: "create repo", StatusCode: resp.StatusCode}
 	}
 
 	return nil

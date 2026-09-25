@@ -56,7 +56,7 @@ func (r *GitRunner) Run(ctx context.Context, dir string, args ...string) error {
 	if err != nil {
 		sanitizedOutput := r.sanitizeOutput(string(output))
 		sanitizedArgs := r.sanitizeArgs(args)
-		return fmt.Errorf("git %s: %w (output: %s)", strings.Join(sanitizedArgs, " "), err, strings.TrimSpace(sanitizedOutput))
+		return &CommandError{Args: strings.Join(sanitizedArgs, " "), Output: strings.TrimSpace(sanitizedOutput), Err: err}
 	}
 	return nil
 }
