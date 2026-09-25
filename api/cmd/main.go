@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 
@@ -352,7 +353,7 @@ func main() {
 		}
 		if os.Getenv("LOOPZERO_ENV_READINESS_CHECKER") == "true" {
 			if mgmtDynamic := buildMgmtDynamicClient(logger); mgmtDynamic != nil {
-				ensurer.ReadinessChecker = platform.NewEnvironmentCRReader(mgmtDynamic, "loopzero-system")
+				ensurer.ReadinessChecker = adapters.NewEnvironmentCRReader(mgmtDynamic, "loopzero-system")
 				logger.Info("env readiness checker wired — EnsureEnvironment will poll Environment CR.status.phase before returning (Sprint A trio-fix 2026-06-01)")
 			}
 		} else {

@@ -21,7 +21,7 @@
 // is causally ordered AFTER the tenant-controller has updated AppProject
 // destinations. Single signal, no double-check needed.
 
-package platform
+package adapters
 
 import (
 	"context"

@@ -385,7 +385,7 @@ func setupOrchestrator(
 	// falls to the convergence loop.
 	if mgmtDynamic := buildMgmtDynamicClient(logger); mgmtDynamic != nil {
 		syncCallbackActivator = syncCallbackActivator.WithAppLabelReader(
-			release.NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd"),
+			adapters.NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd"),
 		)
 		logger.Info("sync callback activator: label-based lookup wired")
 	} else {

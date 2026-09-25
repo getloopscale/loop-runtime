@@ -50,7 +50,7 @@ type SyncCallbackActivator struct {
 }
 
 // WithAppLabelReader wires the label-based tenant/environment lookup.
-// Production passes NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd") in
+// Production passes adapters.NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd") in
 // setup_orchestrator.go. Without a reader the callback cannot identify the
 // release, and activation is left to the convergence loop.
 func (a *SyncCallbackActivator) WithAppLabelReader(r ArgoAppLabelReader) *SyncCallbackActivator {
