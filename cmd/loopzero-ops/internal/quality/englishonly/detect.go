@@ -68,17 +68,9 @@ type Verdict struct {
 	Evidence []string
 }
 
-var (
-	// codeSpans are removed before reading words: a URL, and inline code in
-	// backticks, name things rather than say them.
-	codeSpans = regexp.MustCompile("https?://\\S+|`[^`]*`")
-	// rawToken splits on whitespace and on punctuation that never sits inside
-	// a word.
-	rawToken = regexp.MustCompile(`[^\s()\[\]{}<>"“”,;:!?|*#=]+`)
-	// camelCase marks an identifier: a lower-case letter followed by an
-	// upper-case one inside one token.
-	camelCase = regexp.MustCompile(`\p{Ll}\p{Lu}`)
-)
+// codeSpans are removed before reading words: a URL, and inline code in
+// backticks, name things rather than say them.
+var codeSpans = regexp.MustCompile("https?://\\S+|`[^`]*`")
 
 // Classify decides whether one line is Portuguese.
 //
@@ -134,19 +126,43 @@ func Classify(line string) Verdict {
 
 // words returns the lower-cased prose words of a line.
 func words(line string) []string {
+	if strings.Contains(line, "`") || strings.Contains(line, "http") {
+		line = codeSpans.ReplaceAllString(line, " ")
+	}
 	var out []string
-	for _, raw := range rawToken.FindAllString(codeSpans.ReplaceAllString(line, " "), -1) {
+	for _, raw := range strings.FieldsFunc(line, isTokenSeparator) {
 		if strings.ContainsAny(raw, `/_\`) {
 			continue // a path or an identifier
 		}
 		for _, part := range strings.Split(strings.Trim(raw, "."), "-") {
-			if part == "" || strings.Contains(part, ".") || camelCase.MatchString(part) || strings.ContainsAny(part, "0123456789") {
+			if part == "" || strings.Contains(part, ".") || strings.ContainsAny(part, "0123456789") || isCamelCase(part) {
 				continue
 			}
 			out = append(out, strings.ToLower(part))
 		}
 	}
 	return out
+}
+
+// isTokenSeparator splits on whitespace and on punctuation that never sits
+// inside a word.
+func isTokenSeparator(r rune) bool {
+	return unicode.IsSpace(r) || strings.ContainsRune(tokenSeparators, r)
+}
+
+const tokenSeparators = "()[]{}<>\"“”,;:!?|*#="
+
+// isCamelCase marks an identifier: a lower-case letter followed by an
+// upper-case one inside one token.
+func isCamelCase(s string) bool {
+	prevLower := false
+	for _, r := range s {
+		if prevLower && unicode.IsUpper(r) {
+			return true
+		}
+		prevLower = unicode.IsLower(r)
+	}
+	return false
 }
 
 func isAllLetters(s string) bool {
