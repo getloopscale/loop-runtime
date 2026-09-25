@@ -120,3 +120,11 @@ func TestAppURL_consistent_with_AppHostname(t *testing.T) {
 		t.Fatalf("AppURL/AppHostname mismatch: url=%q host=%q", url, host)
 	}
 }
+
+// An empty trailing part leaves a trailing hyphen, which RFC 1123 forbids;
+// the label is trimmed even when it is well under the cap.
+func TestAppHostname_trims_a_trailing_hyphen_without_truncating(t *testing.T) {
+	if got := AppHostname("tn-a", "shop", "web", "", "apps.example.com"); got != "tn-a-shop-web.apps.example.com" {
+		t.Fatalf("got %q", got)
+	}
+}

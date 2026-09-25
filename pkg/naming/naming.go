@@ -35,11 +35,18 @@ func Sanitize(s string) string {
 	s = strings.ToLower(s)
 	s = nonAlphanumRegexp.ReplaceAllString(s, "-")
 	s = strings.Trim(s, "-")
-	if len(s) > MaxKubernetesNameLength {
-		s = s[:MaxKubernetesNameLength]
-		s = strings.TrimRight(s, "-")
+	return truncateLabel(s, MaxKubernetesNameLength)
+}
+
+// truncateLabel cuts s to at most max bytes and removes trailing hyphens, so
+// the result is still a valid RFC 1123 label end. The trim applies even when
+// no cut was needed: a composed label with an empty last part ends in a
+// hyphen too.
+func truncateLabel(s string, max int) string {
+	if len(s) > max {
+		s = s[:max]
 	}
-	return s
+	return strings.TrimRight(s, "-")
 }
 
 // ValidateKubernetesName checks whether a name conforms to RFC 1123 DNS label
@@ -100,20 +107,7 @@ func TenantNamespace(tenantName string) (string, error) {
 // canonical refactor 2026-06-07 (verbatim "TUDO DEVERIA esta separado
 // por projeto"): no special-case branches for previews vs envs.
 func Namespace(tenantSlug, projectSlug, envName string) (string, error) {
-	if tenantSlug == "" {
-		return "", fmt.Errorf("tenant slug must not be empty")
-	}
-	if projectSlug == "" {
-		return "", fmt.Errorf("project slug must not be empty")
-	}
-	if envName == "" {
-		return "", fmt.Errorf("env name must not be empty")
-	}
-	name := fmt.Sprintf("loopzero-%s-%s-%s", tenantSlug, projectSlug, envName)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("namespace %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("namespace", "loopzero-%s-%s-%s", tenantSlug, projectSlug, envName)
 }
 
 // IsPreviewEnv reports whether an env name is a preview-flavor environment.
@@ -162,8 +156,13 @@ func GitOpsRepoName(teamSlug, projectSlug, envName string) (string, error) {
 	return composeName("gitops repo name", "%s-%s-%s", teamSlug, projectSlug, envName)
 }
 
-// Hostname returns the hostname for a service in an environment.
-// Format: "{projectSlug}-{envName}.{baseDomain}"
+// Hostname returns "{projectSlug}-{envName}.{baseDomain}".
+//
+// This is NOT the hostname the platform routes: the IngressRoute renderer and
+// the status URL both use AppHostname ("{tenant}-{project}-{app}-{env}"),
+// and a host built here does not match that Host rule (the J-25 defect).
+// Its one remaining caller is the operator's default for an unset
+// LoopZeroApplication.spec.hostname; new callers should use AppHostname.
 // The subdomain part is sanitized to ensure RFC 1123 compliance.
 // Returns an error if the sanitized subdomain is empty (all-special-char inputs).
 func Hostname(projectSlug, envName, baseDomain string) (string, error) {
@@ -221,11 +220,7 @@ func CertSecretName(hostname string) (string, error) {
 	if sanitized == "" {
 		return "", fmt.Errorf("cert secret name is empty after sanitizing hostname %q", hostname)
 	}
-	if len(sanitized) > maxBase {
-		sanitized = sanitized[:maxBase]
-		sanitized = strings.TrimRight(sanitized, "-")
-	}
-	return sanitized + suffix, nil
+	return truncateLabel(sanitized, maxBase) + suffix, nil
 }
 
 // GitRepoBindingName returns the GitRepositoryBinding CR name for a tenant's environment.
