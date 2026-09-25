@@ -27,10 +27,39 @@ tests:
     set:
       vaps.restrictRegistries: true
       registries.docrPrefix: "registry.digitalocean.com/loopzero-system/"
-      registries.harborPrefix: "harbor.dev.loopzero.example/loopzero-platform/"
     asserts:
       - hasDocuments:
           count: 2
+
+  # Harbor was retired (docs/decisions.md, "Retire Harbor"): the default allowlist
+  # admits the configured registry prefix and nothing that points at Harbor.
+  - it: restrict-registries admits no Harbor prefix by default
+    template: vap-restrict-registries.yaml
+    set:
+      vaps.restrictRegistries: true
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: spec.validations[0].expression
+          pattern: 'startsWith\("registry\.digitalocean\.com/loopzero-system/"\)'
+      - notMatchRegex:
+          path: spec.validations[0].expression
+          pattern: '(?i)harbor'
+      - notMatchRegex:
+          path: spec.validations[1].expression
+          pattern: '(?i)harbor'
+      - notMatchRegex:
+          path: spec.validations[2].expression
+          pattern: '(?i)harbor'
+
+  - it: restrict-registries refuses a harborPrefix value
+    template: vap-restrict-registries.yaml
+    set:
+      vaps.restrictRegistries: true
+      registries.harborPrefix: "harbor.example.com/loopzero-platform/"
+    asserts:
+      - failedTemplate:
+          errorPattern: "harborPrefix"
 
   - it: require-resource-limits renders when enabled
     template: vap-require-resource-limits.yaml

@@ -28,16 +28,16 @@ import (
 
 // The default render — what every cell install receives. The counts were 6/6/2
 // and had gone stale: loopzero-require-image-digest (T2.3, default ON in warn mode)
-// is the seventh policy and binding, and loopzero-harbor-mirror-alerts the third
-// PrometheusRule (with loopzero-policy-controller-alerts and
-// loopzero-tenant-namespace-alerts). Measured 2026-09-25 by rendering the chart.
+// is the seventh policy and binding. The PrometheusRules are
+// loopzero-policy-controller-alerts and loopzero-tenant-namespace-alerts; a third,
+// loopzero-harbor-mirror-alerts, left with the Harbor mirror on 2026-09-25.
 const (
 	chartName        = "loopzero-admission-policies"
 	releaseName      = "loopzero-admission-policies-test"
 	expectedVAPs     = 7
 	expectedBindings = 7
 	expectedCIPs     = 1
-	expectedPRs      = 3
+	expectedPRs      = 2
 )
 
 // VAP minimal schema — full type is in k8s.io/api/admissionregistration/v1

@@ -67,8 +67,8 @@ spec:
                   echo "[tuf-expiry-emitter] expiry=$EXPIRY_EPOCH (after $EXPIRY_DAYS days)"
                   echo "[tuf-expiry-emitter] pushgateway=$PUSHGW_URL"
 
-                  # POST metric to Pushgateway with 48h TTL (longer than 24h
-                  # Harbor pattern — TUF expiry alerts are slower-cadence)
+                  # POST metric to Pushgateway with 48h TTL (TUF expiry
+                  # alerts are slower-cadence than a 24h push)
                   cat <<EOF | curl --max-time 30 --connect-timeout 5 \
                     -X POST \
                     -H "Content-Type: text/plain" \

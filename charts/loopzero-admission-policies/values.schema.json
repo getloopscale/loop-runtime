@@ -7,18 +7,13 @@
   "properties": {
     "registries": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "docrPrefix": {
           "type": "string",
           "minLength": 5,
           "pattern": "^[^\\s]+/$",
           "description": "DOCR registry prefix. MUST end with '/' and contain no whitespace: the anchored pattern catches 'registry with space/', which an unanchored '/$' accepted (2026-05-20). Used as a string-prefix match in the restrict-registries VAP, so an empty or malformed prefix is the B16 bug class."
-        },
-        "harborPrefix": {
-          "type": "string",
-          "minLength": 5,
-          "pattern": "^[^\\s]+/$",
-          "description": "Harbor registry prefix. Same B16 risk and the same anchored pattern as docrPrefix."
         },
         "additionalPrefixes": {
           "type": "array",
@@ -27,12 +22,11 @@
             "minLength": 1,
             "pattern": "^[^\\s]+/$"
           },
-          "description": "Opt-in additional registry prefixes accepted by the restrict-registries VAP. Empty by default (production allows only DOCR and Harbor); local installs add k3d-loopzero-registry:5000/ for locally built images."
+          "description": "Opt-in additional registry prefixes accepted by the restrict-registries VAP. Empty by default (production allows only docrPrefix); local installs add k3d-loopzero-registry:5000/ for locally built images."
         }
       },
       "required": [
-        "docrPrefix",
-        "harborPrefix"
+        "docrPrefix"
       ]
     },
     "vaps": {

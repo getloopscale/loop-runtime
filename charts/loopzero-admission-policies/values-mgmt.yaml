@@ -103,7 +103,7 @@ clusterImagePolicy:
 # The `vap-delete-guardrail` gate therefore asserts "no cosign POLICY objects" (which would
 # be functional) rather than "no cosign-related object at all".
 
-# The chart's PrometheusRules cover cosign/sigstore/harbor, none of which run on core.
+# The chart's PrometheusRules cover cosign/sigstore, none of which run on core.
 # The D4 alert ships separately in task T2.1. `alerts.enabled: false` also leaves
 # `alerts.sigstoreEnabled` at its default (false), so no sigstore rule or CronJob renders.
 #

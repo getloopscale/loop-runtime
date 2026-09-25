@@ -12,10 +12,9 @@
 # restrict-registries VAP.
 registries:
   docrPrefix: "registry.digitalocean.com/loopzero-system/"
-  harborPrefix: "harbor.dev.loopzero.example/loopzero-platform/"
   # Opt-in list of additional registry prefixes accepted by the
-  # restrict-registries VAP. Default: empty (production only allows DOCR +
-  # Harbor). Local installs add "k3d-loopzero-registry:5000/" so locally built
+  # restrict-registries VAP. Default: empty (production only allows the
+  # registry above). Local installs add "k3d-loopzero-registry:5000/" so locally built
   # images pass admission while production semantics stay intact.
   additionalPrefixes: []
 
@@ -39,7 +38,6 @@ clusterImagePolicy:
   staticAction: pass
   imageGlobs:
     - "registry.digitalocean.com/loopzero-system/**"
-    - "harbor.dev.loopzero.example/loopzero-platform/**"
 
 # INF-G16 + MEET-2026-05-03-063 (MEET-B Track-1) + ADR-0040 (charts SBOM parity).
 # loopzero-images-keyless: ClusterImagePolicy with Fulcio keyless authority.
@@ -53,7 +51,6 @@ clusterImagePolicyKeyless:
   mode: warn       # warn during transition; flip to enforce at cutover
   imageGlobs:
     - "registry.digitalocean.com/loopzero-system/**"
-    - "harbor.dev.loopzero.example/loopzero-platform/**"
   fulcioURL: https://fulcio.sigstore.dev
   rekorURL: https://rekor.sigstore.dev
   # v1.1 EC-NEW-4 fix — oidcIssuer MUST be set explicitly post-Sigstore
