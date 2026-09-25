@@ -52,6 +52,21 @@ type Config struct {
 	MetricsPort string
 	Env         string // "development" or "production"
 
+	// TracingEnabled turns OpenTelemetry export on (LOOPZERO_TRACING_ENABLED,
+	// default true); OTelEndpoint is the collector (OTEL_EXPORTER_OTLP_ENDPOINT,
+	// empty = the tracing package default).
+	TracingEnabled bool
+	OTelEndpoint   string
+
+	// GitHubAPIBaseURL is the GitHub REST root (GITHUB_API_BASE_URL); a GitHub
+	// Enterprise Server install points it at its appliance.
+	GitHubAPIBaseURL string
+
+	// EnvBlocklistMode is how services.json env keys on the reserved blocklist
+	// are handled (LOOPZERO_ENV_BLOCKLIST_MODE): "enforce" (default) or "warn".
+	// Warn is refused in production.
+	EnvBlocklistMode string
+
 	// HTTP Server Timeouts
 	ReadHeaderTimeout    time.Duration
 	ReadTimeout          time.Duration
@@ -382,6 +397,11 @@ func Load() Config {
 		MetricsPort: envOr("METRICS_PORT", "9090"),
 		Env:         envOr("LOOPZERO_ENV", "development"),
 
+		TracingEnabled:   envBool("LOOPZERO_TRACING_ENABLED", true),
+		OTelEndpoint:     os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		GitHubAPIBaseURL: envOr("GITHUB_API_BASE_URL", "https://api.github.com"),
+		EnvBlocklistMode: strings.ToLower(strings.TrimSpace(envOr("LOOPZERO_ENV_BLOCKLIST_MODE", "enforce"))),
+
 		// HTTP Server Timeouts
 		ReadHeaderTimeout:    l.duration("SERVER_READ_HEADER_TIMEOUT", 10*time.Second),
 		ReadTimeout:          l.duration("SERVER_READ_TIMEOUT", 30*time.Second),
@@ -599,6 +619,9 @@ func (c Config) Validate() error {
 	if err := c.validateEnv(); err != nil {
 		return err
 	}
+	if err := c.validateEnvBlocklistMode(); err != nil {
+		return err
+	}
 	if err := c.validateClusterIssuer(); err != nil {
 		return err
 	}
@@ -644,6 +667,23 @@ func (c Config) validateEnv() error {
 // validateRegistryURLs rejects registry hosts that would break the
 // buildkitd.toml the build step writes them into (a quote, backslash or line
 // break ends or injects a TOML table header).
+// validateEnvBlocklistMode refuses an unknown mode, and warn in production:
+// the blocklist is what stops a tenant setting LD_PRELOAD or PATH on its
+// own process.
+func (c Config) validateEnvBlocklistMode() error {
+	switch c.EnvBlocklistMode {
+	case "", "enforce": // the zero value is the safe default
+		return nil
+	case "warn":
+		if c.IsProduction() {
+			return fmt.Errorf("config: LOOPZERO_ENV_BLOCKLIST_MODE=warn is not allowed in production")
+		}
+		return nil
+	default:
+		return fmt.Errorf("config: LOOPZERO_ENV_BLOCKLIST_MODE=%q must be enforce or warn", c.EnvBlocklistMode)
+	}
+}
+
 func (c Config) validateRegistryURLs() error {
 	for _, kv := range [][2]string{{"REGISTRY_URL", c.RegistryURL}, {"HARBOR_REGISTRY_URL", c.HarborRegistryURL}} {
 		if strings.ContainsAny(kv[1], "\"\\\r\n") {

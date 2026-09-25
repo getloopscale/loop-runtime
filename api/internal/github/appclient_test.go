@@ -48,24 +48,16 @@ func newTestAppClient(t *testing.T, server *httptest.Server) *AppClient {
 	}
 }
 
-// TestResolveGitHubAPIBase_DefaultsWhenEnvUnset — T2.4 of plan
-// 2026-06-11-code-review-remediation v1.2. Fallback path is DOcumented
-// in the public DefaultGitHubAPIBase constant.
-func TestResolveGitHubAPIBase_DefaultsWhenEnvUnset(t *testing.T) {
-	t.Setenv("GITHUB_API_BASE_URL", "")
-	if got := resolveGitHubAPIBase(); got != DefaultGitHubAPIBase {
-		t.Errorf("expected default %q, got %q", DefaultGitHubAPIBase, got)
-	}
-}
+func TestNewAppClientUsesTheGivenAPIBase(t *testing.T) {
+	pemStr, _ := generateTestRSAKey(t)
 
-// TestResolveGitHubAPIBase_HonorsEnvOverride — T2.4 closure invariant:
-// GHES operators MUST be able to point LoopZero at their appliance via the
-// canonical env var without forking. Per sponsor mandate 2026-06-11
-// "PROIBINDO CONFIGURAÇÃO HARDCODED".
-func TestResolveGitHubAPIBase_HonorsEnvOverride(t *testing.T) {
-	t.Setenv("GITHUB_API_BASE_URL", "https://github.acme.corp/api/v3")
-	if got := resolveGitHubAPIBase(); got != "https://github.acme.corp/api/v3" {
-		t.Errorf("env override ignored: got %q", got)
+	c, err := NewAppClient(42, pemStr, "https://github.acme.corp/api/v3")
+
+	if err != nil {
+		t.Fatalf("NewAppClient: %v", err)
+	}
+	if got := c.apiBase(); got != "https://github.acme.corp/api/v3" {
+		t.Errorf("apiBase() = %q, want the configured GitHub Enterprise root", got)
 	}
 }
 
@@ -84,7 +76,7 @@ func TestNewAppClient_ValidCredentials(t *testing.T) {
 	pemStr, _ := generateTestRSAKey(t)
 
 	// Act
-	client, err := NewAppClient(42, pemStr)
+	client, err := NewAppClient(42, pemStr, "")
 
 	// Assert
 	if err != nil {
@@ -103,7 +95,7 @@ func TestNewAppClient_ZeroAppID_ReturnsNil(t *testing.T) {
 	pemStr, _ := generateTestRSAKey(t)
 
 	// Act
-	client, err := NewAppClient(0, pemStr)
+	client, err := NewAppClient(0, pemStr, "")
 
 	// Assert
 	if err != nil {
@@ -116,7 +108,7 @@ func TestNewAppClient_ZeroAppID_ReturnsNil(t *testing.T) {
 
 func TestNewAppClient_EmptyPEM_ReturnsNil(t *testing.T) {
 	// Act
-	client, err := NewAppClient(42, "")
+	client, err := NewAppClient(42, "", "")
 
 	// Assert
 	if err != nil {
@@ -129,7 +121,7 @@ func TestNewAppClient_EmptyPEM_ReturnsNil(t *testing.T) {
 
 func TestNewAppClient_InvalidPEM_ReturnsError(t *testing.T) {
 	// Act
-	client, err := NewAppClient(42, "not-a-valid-pem")
+	client, err := NewAppClient(42, "not-a-valid-pem", "")
 
 	// Assert
 	if err == nil {
@@ -151,7 +143,7 @@ func TestNewAppClient_InvalidRSAKey_ReturnsError(t *testing.T) {
 	})
 
 	// Act
-	client, err := NewAppClient(42, string(badPEM))
+	client, err := NewAppClient(42, string(badPEM), "")
 
 	// Assert
 	if err == nil {

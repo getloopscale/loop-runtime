@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -33,26 +32,13 @@ const (
 	DefaultGitHubAPIBase = "https://api.github.com"
 )
 
-// resolveGitHubAPIBase returns the GitHub API root URL, preferring
-// GITHUB_API_BASE_URL env var when set. T2.4 of plan
-// 2026-06-11-code-review-remediation v1.2 — closes the hardcoded
-// `githubAPIBase` constant that lived at module scope and blocked GHES
-// operators from using LoopZero without forking. Per sponsor mandate
-// 2026-06-11 "PROIBINDO CONFIGURAÇÃO HARDCODED".
-func resolveGitHubAPIBase() string {
-	if v := os.Getenv("GITHUB_API_BASE_URL"); v != "" {
-		return v
-	}
-	return DefaultGitHubAPIBase
-}
-
 // AppClient authenticates as a GitHub App and manages installation tokens.
 // Thread-safe: tokens are cached and refreshed automatically.
 type AppClient struct {
 	appID      int64
 	privateKey *rsa.PrivateKey
 	httpClient *http.Client
-	baseURL    string // T2.4: resolved at construction from GITHUB_API_BASE_URL (defaults to DefaultGitHubAPIBase).
+	baseURL    string // GitHub REST root; empty means DefaultGitHubAPIBase.
 
 	mu         sync.RWMutex
 	tokenCache map[int64]*cachedToken
@@ -65,7 +51,10 @@ type cachedToken struct {
 
 // NewAppClient creates a GitHub App client from App ID and PEM-encoded private key.
 // Returns nil if credentials are missing (acceptable in local dev).
-func NewAppClient(appID int64, privateKeyPEM string) (*AppClient, error) {
+// apiBaseURL is the GitHub REST root (config.GitHubAPIBaseURL); a GitHub
+// Enterprise Server install points it at its appliance. Empty means
+// DefaultGitHubAPIBase.
+func NewAppClient(appID int64, privateKeyPEM, apiBaseURL string) (*AppClient, error) {
 	if appID == 0 || privateKeyPEM == "" {
 		return nil, nil
 	}
@@ -84,7 +73,7 @@ func NewAppClient(appID int64, privateKeyPEM string) (*AppClient, error) {
 		appID:      appID,
 		privateKey: key,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
-		baseURL:    resolveGitHubAPIBase(),
+		baseURL:    apiBaseURL,
 		tokenCache: make(map[int64]*cachedToken),
 	}, nil
 }

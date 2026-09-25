@@ -53,7 +53,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	tracingShutdown, err := tracing.Init(context.Background(), "loopzero-api")
+	tracingShutdown, err := tracing.Init(context.Background(), "loopzero-api", tracing.Options{Enabled: cfg.TracingEnabled, Endpoint: cfg.OTelEndpoint, Environment: cfg.Env})
 	if err != nil {
 		logger.Warn("tracing disabled", "error", err)
 	} else {

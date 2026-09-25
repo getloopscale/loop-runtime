@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"os"
 	"strings"
 	"time"
 
@@ -91,16 +90,30 @@ const (
 //
 // If the Collector is unreachable, the API continues normally.
 // Spans are dropped after queue exhaustion (graceful degradation).
-func Init(ctx context.Context, serviceName string) (shutdown func(context.Context) error, err error) {
-	// C7: Feature flag — default true in dev, false in prod.
-	if !isEnabled() {
+// Options is what Init needs from configuration (config.Config carries it).
+type Options struct {
+	// Enabled turns export on; when false Init registers nothing.
+	Enabled bool
+	// Endpoint is the OTLP collector; empty means DefaultEndpoint.
+	Endpoint string
+	// Environment is the deployment.environment resource attribute; empty
+	// means "development".
+	Environment string
+}
+
+func Init(ctx context.Context, serviceName string, opts Options) (shutdown func(context.Context) error, err error) {
+	if !opts.Enabled {
 		slog.Info("tracing disabled via LOOPZERO_TRACING_ENABLED=false")
 		return func(context.Context) error { return nil }, nil
 	}
 
-	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	endpoint := opts.Endpoint
 	if endpoint == "" {
 		endpoint = DefaultEndpoint
+	}
+	environment := opts.Environment
+	if environment == "" {
+		environment = "development"
 	}
 
 	// Plan T3.1 D9 — DNS pre-check. If the endpoint hostname is unresolvable,
@@ -130,7 +143,7 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceName(serviceName),
-			semconv.DeploymentEnvironmentName(getEnv()),
+			semconv.DeploymentEnvironmentName(environment),
 		),
 		resource.WithTelemetrySDK(),
 		resource.WithHost(),
@@ -166,32 +179,4 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 	)
 
 	return tp.Shutdown, nil
-}
-
-// isEnabled checks the LOOPZERO_TRACING_ENABLED feature flag (C7).
-//
-// Default: "true" unless explicitly set to "false" or "0".
-//
-// T-OBS-007 of deep-review-remediation-plan: previously the package header
-// comment said "default true dev, false prod" but production gets the
-// SAME default-true behavior as dev — production has to explicitly set
-// LOOPZERO_TRACING_ENABLED=false to disable. Per dogfood-2026-05-08-fixes
-// T0.1, the local Tilt YAML + bootstrap chart explicitly set false; the
-// PRODUCTION default remains tracing-enabled (the OTel collector
-// downstream gates whether spans actually flow).
-func isEnabled() bool {
-	v := os.Getenv("LOOPZERO_TRACING_ENABLED")
-	if v == "" {
-		return true // Default enabled in BOTH dev and prod — local Tilt + bootstrap chart explicitly disable.
-	}
-	return !strings.EqualFold(v, "false") && v != "0"
-}
-
-// getEnv returns the deployment environment name for resource attributes.
-func getEnv() string {
-	env := os.Getenv("LOOPZERO_ENV")
-	if env == "" {
-		return "development"
-	}
-	return env
 }

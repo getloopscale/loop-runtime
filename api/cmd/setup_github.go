@@ -74,7 +74,7 @@ func setupGitHub(
 			os.Exit(1)
 		}
 		var clientErr error
-		ghAppClient, clientErr = github.NewAppClient(appID, appPrivateKey)
+		ghAppClient, clientErr = github.NewAppClient(appID, appPrivateKey, cfg.GitHubAPIBaseURL)
 		if clientErr != nil {
 			logger.Error("github app client creation failed", "error", clientErr)
 		} else if ghAppClient != nil {
