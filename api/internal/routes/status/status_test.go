@@ -378,7 +378,7 @@ func TestStatus_Get_NoBuildsNoRelease(t *testing.T) {
 // The user-facing field MUST surface the user-pushed commit. The DB
 // column `releases.git_commit` keeps the gitops commit for activator
 // integrity; this is API-surface aliasing only.
-func TestStatus_ActiveReleaseGitCommitMatchesBuildCommitSHA_RedTeam85(t *testing.T) {
+func TestStatus_ActiveReleaseGitCommitMatchesBuildCommitSHA(t *testing.T) {
 	now := time.Now()
 	const appCommit = "e52f2f41d8334f7fc506ca646ef53b34ad4ddb55"
 	const gitopsCommit = "de6b5c5b728265cc229599143a0d979ceed9bc00"
@@ -451,7 +451,7 @@ func TestStatus_ActiveReleaseGitCommitMatchesBuildCommitSHA_RedTeam85(t *testing
 //
 // Fixture: 1 SUCCEEDED build in env=preview, NO build / release in env=production.
 // Expected: GET ?env=production returns `other_envs_with_releases:[{environment:"preview",has_release:true}]`.
-func TestStatus_EmptyProductionWithPreviewRelease_SurfacesHint_RedTeam70(t *testing.T) {
+func TestStatus_EmptyProductionWithPreviewRelease_SurfacesHint(t *testing.T) {
 	now := time.Now()
 	projects := &fakeStatusProjectStore{
 		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
@@ -505,7 +505,7 @@ func TestStatus_EmptyProductionWithPreviewRelease_SurfacesHint_RedTeam70(t *test
 
 // Companion regression-protector: when the queried env HAS its own build,
 // the hint field MUST stay omitted (no noise on the happy path).
-func TestStatus_EmptyProductionWithNoSiblings_OmitsHint_RedTeam70(t *testing.T) {
+func TestStatus_EmptyProductionWithNoSiblings_OmitsHint(t *testing.T) {
 	projects := &fakeStatusProjectStore{
 		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},
 	}
@@ -541,7 +541,7 @@ func TestStatus_EmptyProductionWithNoSiblings_OmitsHint_RedTeam70(t *testing.T) 
 
 // Boundary case: a sibling env that has a build but it FAILED — should NOT
 // surface as a hint (we only point users at envs that actually have a release).
-func TestStatus_EmptyProductionWithFailedSibling_OmitsHint_RedTeam70(t *testing.T) {
+func TestStatus_EmptyProductionWithFailedSibling_OmitsHint(t *testing.T) {
 	now := time.Now()
 	projects := &fakeStatusProjectStore{
 		project: &ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},

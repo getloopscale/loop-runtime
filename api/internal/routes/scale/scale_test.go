@@ -534,7 +534,7 @@ func (f *fakeScaleReplicasChecker) CheckReplicasValue(_ string, requested int) (
 	return requested <= f.cap, f.plan, f.cap
 }
 
-func TestScaleHandler_FixedReplicasOverCap_Returns422_RedTeam101(t *testing.T) {
+func TestScaleHandler_FixedReplicasOverCap_Returns422(t *testing.T) {
 	h := NewScaleHandler(&fakeScaleProjectStore{
 		project: &ports.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
 	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
@@ -562,7 +562,7 @@ func TestScaleHandler_FixedReplicasOverCap_Returns422_RedTeam101(t *testing.T) {
 	}
 }
 
-func TestScaleHandler_AutoscalingMaxOverCap_Returns422_RedTeam101(t *testing.T) {
+func TestScaleHandler_AutoscalingMaxOverCap_Returns422(t *testing.T) {
 	h := NewScaleHandler(&fakeScaleProjectStore{
 		project: &ports.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
 	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
@@ -588,7 +588,7 @@ func TestScaleHandler_AutoscalingMaxOverCap_Returns422_RedTeam101(t *testing.T) 
 	}
 }
 
-func TestScaleHandler_FixedReplicasUnderCap_AllowsThrough_RedTeam101(t *testing.T) {
+func TestScaleHandler_FixedReplicasUnderCap_AllowsThrough(t *testing.T) {
 	h := NewScaleHandler(&fakeScaleProjectStore{
 		project: &ports.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
 	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
@@ -616,7 +616,7 @@ func TestScaleHandler_FixedReplicasUnderCap_AllowsThrough_RedTeam101(t *testing.
 	}
 }
 
-func TestScaleHandler_NilChecker_NoEnforcement_RedTeam101(t *testing.T) {
+func TestScaleHandler_NilChecker_NoEnforcement(t *testing.T) {
 	// Backwards-compat: no checker wired (tests/dev) → cap not enforced.
 	h := NewScaleHandler(&fakeScaleProjectStore{
 		project: &ports.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
@@ -650,7 +650,7 @@ func TestScaleHandler_NilChecker_NoEnforcement_RedTeam101(t *testing.T) {
 // negative-input axes: fixed replicas <= 0 / autoscaling min < 0 /
 // autoscaling max <= 0.
 
-func TestScaleHandler_FixedReplicasNegative_Returns400InvalidReplicas_RedTeam103(t *testing.T) {
+func TestScaleHandler_FixedReplicasNegative_Returns400InvalidReplicas(t *testing.T) {
 	h := NewScaleHandler(&fakeScaleProjectStore{
 		project: &ports.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
 	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
@@ -678,7 +678,7 @@ func TestScaleHandler_FixedReplicasNegative_Returns400InvalidReplicas_RedTeam103
 	}
 }
 
-func TestScaleHandler_AutoscalingMinNegative_Returns400InvalidReplicas_RedTeam103(t *testing.T) {
+func TestScaleHandler_AutoscalingMinNegative_Returns400InvalidReplicas(t *testing.T) {
 	h := NewScaleHandler(&fakeScaleProjectStore{
 		project: &ports.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
 	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
@@ -706,7 +706,7 @@ func TestScaleHandler_AutoscalingMinNegative_Returns400InvalidReplicas_RedTeam10
 	}
 }
 
-func TestScaleHandler_AutoscalingMaxZero_Returns400InvalidReplicas_RedTeam103(t *testing.T) {
+func TestScaleHandler_AutoscalingMaxZero_Returns400InvalidReplicas(t *testing.T) {
 	h := NewScaleHandler(&fakeScaleProjectStore{
 		project: &ports.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
 	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {

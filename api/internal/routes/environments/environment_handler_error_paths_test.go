@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Error-path coverage for the environment handler, moved out of the parent's
-// coverage_boost_test.go when the family was extracted (B-080, slice-36).
+// The environment handler's refusal and failure paths: unauthenticated
+// callers, malformed bodies, missing names and store failures.
 package environments
 
 import (

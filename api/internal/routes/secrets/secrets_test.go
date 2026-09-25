@@ -1119,7 +1119,7 @@ func TestSecretBulk_CrossTenantAndNonexistentResponsesByteIdentical(t *testing.T
 // projects with 404 PROJECT_NOT_FOUND instead of 200 + empty list.
 // Without this, the dashboard's Secrets page rendered functional UI
 // (with "Add secret" form) on top of a deleted project.
-func TestSecretHandler_List_NonExistentProject_Returns404_RedTeam92(t *testing.T) {
+func TestSecretHandler_List_NonExistentProject_Returns404(t *testing.T) {
 	store := &fakeSecretStoreT01{}
 	checker := &fakeProjectCheckerT12{
 		owned: map[string]string{
@@ -1146,7 +1146,7 @@ func TestSecretHandler_List_NonExistentProject_Returns404_RedTeam92(t *testing.T
 	}
 }
 
-func TestSecretHandler_List_ExistingProject_AllowsThrough_RedTeam92(t *testing.T) {
+func TestSecretHandler_List_ExistingProject_AllowsThrough(t *testing.T) {
 	store := &fakeSecretStoreT01{}
 	checker := &fakeProjectCheckerT12{
 		owned: map[string]string{"owned-project": "tn-test-123"},

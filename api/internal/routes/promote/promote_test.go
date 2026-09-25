@@ -363,7 +363,7 @@ func (f *fakePromoteEnsurer) EnsureEnvironment(_ context.Context, tenantID, proj
 // state: promote never called EnsureEnvironment → Tenant CR spec.environments[]
 // missing the tuple → AppProject destinations never extended → sync failed →
 // release SYNC_FAILED → CLI reports success + URL that 404s.
-func TestPromote_EnsuresTargetEnvironment_BeforeService_RedTeam158(t *testing.T) {
+func TestPromote_EnsuresTargetEnvironment_BeforeService(t *testing.T) {
 	projects := &fakePromoteProjectStore{project: &ports.ProjectResult{ID: "p1", Name: "loopzerokit-example"}}
 	svc := &fakePromoteService{
 		result: &PromoteOutput{
@@ -407,7 +407,7 @@ func TestPromote_EnsuresTargetEnvironment_BeforeService_RedTeam158(t *testing.T)
 // When EnsureEnvironment fails, the handler MUST NOT invoke the promote service
 // (would create a release row without a viable target env → the exact
 // SYNC_FAILED trap #158 fixes).
-func TestPromote_EnsureEnvironment_Failure_ShortCircuits_RedTeam158(t *testing.T) {
+func TestPromote_EnsureEnvironment_Failure_ShortCircuits(t *testing.T) {
 	projects := &fakePromoteProjectStore{project: &ports.ProjectResult{ID: "p1", Name: "loopzerokit-example"}}
 	svc := &fakePromoteService{
 		result: &PromoteOutput{PromotionID: "should-not-reach"},

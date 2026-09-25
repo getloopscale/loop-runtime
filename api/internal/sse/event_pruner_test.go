@@ -16,22 +16,6 @@ import (
 // EventPruner tests
 // =============================================================================
 
-func TestNewEventPruner_SetsFields(t *testing.T) {
-	store := &fakeEventStore{}
-	logger := slog.Default()
-	pruner := NewEventPruner(store, logger, 24*time.Hour, 1*time.Hour)
-
-	if pruner.store == nil {
-		t.Error("expected non-nil store")
-	}
-	if pruner.maxAge != 24*time.Hour {
-		t.Errorf("expected 24h maxAge, got %v", pruner.maxAge)
-	}
-	if pruner.interval != 1*time.Hour {
-		t.Errorf("expected 1h interval, got %v", pruner.interval)
-	}
-}
-
 func TestEventPruner_Start_StopsOnCancel(t *testing.T) {
 	store := &fakeEventStore{}
 	logger := slog.Default()

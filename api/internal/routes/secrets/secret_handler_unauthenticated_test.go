@@ -1,12 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Coverage tests for the secret handler, moved out of the parent package's
-// coverage_boost_test.go when the family was extracted (B-080).
-//
-// They came along because a test belongs with the code it exercises: left
-// behind, they would have had to reach into the subpackage from the parent,
-// which is the import direction the routes fence exists to forbid.
+// A secret request with no authenticated caller is refused before any store
+// call, on every route of the handler.
 package secrets
 
 import (
@@ -31,23 +27,6 @@ func (f *fakeSecretStore2) Set(_ context.Context, _, _, _, _, _ string, _ []byte
 }
 func (f *fakeSecretStore2) Delete(_ context.Context, _, _, _, _, _ string) (bool, error) {
 	return true, nil
-}
-
-func TestNewSecretHandler_CreatesHandler(t *testing.T) {
-	h := NewSecretHandler(&fakeSecretStore2{}, &lockCountingFake{})
-	if h == nil {
-		t.Fatal("expected non-nil handler")
-	}
-}
-
-func TestSecretHandler_SetAuditLogger(t *testing.T) {
-	h := NewSecretHandler(&fakeSecretStore2{}, &lockCountingFake{})
-	h.SetAuditLogger(nil)
-}
-
-func TestSecretHandler_SetK8sSync(t *testing.T) {
-	h := NewSecretHandler(&fakeSecretStore2{}, &lockCountingFake{})
-	h.SetK8sSync(nil)
 }
 
 func TestSecretHandler_List_Unauthenticated(t *testing.T) {

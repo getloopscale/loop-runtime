@@ -418,7 +418,7 @@ func (f *fakeActiveReleaseLookup) HasActiveRelease(_ context.Context, _, _, _ st
 	return f.active, f.err
 }
 
-func TestEnvs_Create_Returns400WhenProjectMissing_M2(t *testing.T) {
+func TestEnvs_Create_Returns400WhenProjectMissing(t *testing.T) {
 	h := NewEnvironmentHandler(&fakeEnvMgr{})
 	body := `{"name":"staging"}` // no project
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/environments",
@@ -436,7 +436,7 @@ func TestEnvs_Create_Returns400WhenProjectMissing_M2(t *testing.T) {
 	}
 }
 
-func TestEnvs_Create_Returns404WhenProjectNotInTenant_M2(t *testing.T) {
+func TestEnvs_Create_Returns404WhenProjectNotInTenant(t *testing.T) {
 	pl := &fakeProjectLookup{exists: map[string]bool{}} // empty
 	h := NewEnvironmentHandler(&fakeEnvMgr{}).WithProjectLookup(pl)
 
@@ -456,10 +456,10 @@ func TestEnvs_Create_Returns404WhenProjectNotInTenant_M2(t *testing.T) {
 	}
 }
 
-// TestEnvs_Create_RejectsProjectFromOtherTenant_M2 — EC-1 SEPA-CRITICAL.
+// TestEnvs_Create_RejectsProjectFromOtherTenant — EC-1 SEPA-CRITICAL.
 // User of tenant A passes a project slug owned by tenant B → 404 (NOT 201).
 // Asserts the validateProject query was scoped to caller's tenant_id.
-func TestEnvs_Create_RejectsProjectFromOtherTenant_M2(t *testing.T) {
+func TestEnvs_Create_RejectsProjectFromOtherTenant(t *testing.T) {
 	pl := &fakeProjectLookup{
 		exists: map[string]bool{
 			"tn-other::web": true, // owned by tenant B
@@ -489,7 +489,7 @@ func TestEnvs_Create_RejectsProjectFromOtherTenant_M2(t *testing.T) {
 	}
 }
 
-func TestEnvs_Create_ResponseIncludesProject_M2(t *testing.T) {
+func TestEnvs_Create_ResponseIncludesProject(t *testing.T) {
 	pl := &fakeProjectLookup{exists: map[string]bool{"tn-test-123::web": true}}
 	h := NewEnvironmentHandler(&fakeEnvMgr{}).WithProjectLookup(pl)
 
@@ -509,7 +509,7 @@ func TestEnvs_Create_ResponseIncludesProject_M2(t *testing.T) {
 	}
 }
 
-func TestEnvs_Create_DuplicateReturns409_M2(t *testing.T) {
+func TestEnvs_Create_DuplicateReturns409(t *testing.T) {
 	pl := &fakeProjectLookup{exists: map[string]bool{"tn-test-123::web": true}}
 	mgr := &fakeEnvMgr{addErr: ports.ErrEnvironmentExists}
 	h := NewEnvironmentHandler(mgr).WithProjectLookup(pl)
@@ -527,7 +527,7 @@ func TestEnvs_Create_DuplicateReturns409_M2(t *testing.T) {
 	}
 }
 
-func TestEnvs_Create_ProductionRejectedCrossProject_M2(t *testing.T) {
+func TestEnvs_Create_ProductionRejectedCrossProject(t *testing.T) {
 	pl := &fakeProjectLookup{exists: map[string]bool{"tn-test-123::web": true}}
 	h := NewEnvironmentHandler(&fakeEnvMgr{}).WithProjectLookup(pl)
 
@@ -545,7 +545,7 @@ func TestEnvs_Create_ProductionRejectedCrossProject_M2(t *testing.T) {
 	}
 }
 
-func TestEnvs_Delete_PropagatesProjectQuery_M2(t *testing.T) {
+func TestEnvs_Delete_PropagatesProjectQuery(t *testing.T) {
 	mgr := &fakeEnvMgr{}
 	h := NewEnvironmentHandler(mgr)
 
@@ -565,7 +565,7 @@ func TestEnvs_Delete_PropagatesProjectQuery_M2(t *testing.T) {
 	}
 }
 
-func TestEnvs_Delete_WarnsOnActiveRelease_M2(t *testing.T) {
+func TestEnvs_Delete_WarnsOnActiveRelease(t *testing.T) {
 	mgr := &fakeEnvMgr{}
 	rl := &fakeActiveReleaseLookup{active: true}
 	h := NewEnvironmentHandler(mgr).WithActiveReleaseLookup(rl)
@@ -657,7 +657,7 @@ func TestEnvs_Delete_WarningRule3Compliant(t *testing.T) {
 	}
 }
 
-func TestEnvs_Get_PropagatesProjectQuery_M2(t *testing.T) {
+func TestEnvs_Get_PropagatesProjectQuery(t *testing.T) {
 	mgr := &fakeEnvMgr{detail: &EnvironmentDetail{Name: "staging", Status: "active"}}
 	h := NewEnvironmentHandler(mgr)
 
@@ -674,12 +674,12 @@ func TestEnvs_Get_PropagatesProjectQuery_M2(t *testing.T) {
 	}
 }
 
-// TestEnvs_List_ReturnsProjectInEachEntry_M2 — T4.4. Asserts the
+// TestEnvs_List_ReturnsProjectInEachEntry — T4.4. Asserts the
 // `project` field is propagated from the EnvironmentEntry struct
 // (populated by T2.1 TenantCRManager.ListEnvironments) into the JSON
 // response body. Backward-compat: omitempty preserves legacy production
 // entries with empty project.
-func TestEnvs_List_ReturnsProjectInEachEntry_M2(t *testing.T) {
+func TestEnvs_List_ReturnsProjectInEachEntry(t *testing.T) {
 	mgr := &fakeEnvMgr{
 		envs: []EnvironmentEntry{
 			{Name: "production", Status: "active"},              // legacy (no project)
@@ -725,7 +725,7 @@ func TestEnvs_List_ReturnsProjectInEachEntry_M2(t *testing.T) {
 // (filter-honored / cross-tenant-rejected / under-filter-allowed) per
 // feedback_issue_fix_requires_failing_e2e_test_2026_06_25.
 
-func TestEnvs_List_FilterByProjectHonored_RedTeam48(t *testing.T) {
+func TestEnvs_List_FilterByProjectHonored(t *testing.T) {
 	mgr := &fakeEnvMgr{
 		envs: []EnvironmentEntry{
 			{Name: "production", Status: "active"}, // legacy — must always surface
@@ -758,7 +758,7 @@ func TestEnvs_List_FilterByProjectHonored_RedTeam48(t *testing.T) {
 	}
 }
 
-func TestEnvs_List_FilterByCrossTenantProjectRejected_RedTeam48(t *testing.T) {
+func TestEnvs_List_FilterByCrossTenantProjectRejected(t *testing.T) {
 	mgr := &fakeEnvMgr{
 		envs: []EnvironmentEntry{
 			{Name: "production", Status: "active"},
@@ -786,7 +786,7 @@ func TestEnvs_List_FilterByCrossTenantProjectRejected_RedTeam48(t *testing.T) {
 	}
 }
 
-func TestEnvs_List_NoFilter_LegacyShapeUnchanged_RedTeam48(t *testing.T) {
+func TestEnvs_List_NoFilter_LegacyShapeUnchanged(t *testing.T) {
 	mgr := &fakeEnvMgr{
 		envs: []EnvironmentEntry{
 			{Name: "production", Status: "active"},
