@@ -7,11 +7,11 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/pkg/circuitbreaker"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -22,14 +22,31 @@ type CircuitBreakerConfig struct {
 	RetryInterval  time.Duration // time to wait before allowing a recovery probe
 }
 
-// circuitState represents the internal state of the circuit breaker.
-type circuitState int
+// newBreaker builds the shared pkg/circuitbreaker state machine both
+// decorators in this package run on. isExcluded names the errors that are
+// surfaced to the caller without counting as a dependency failure.
+func newBreaker(name string, cfg CircuitBreakerConfig, isExcluded func(error) bool,
+	onStateChange func(name string, from, to circuitbreaker.State)) *circuitbreaker.Breaker {
+	return circuitbreaker.New(circuitbreaker.Config{
+		Name:           name,
+		OpenThreshold:  cfg.OpenThreshold,
+		CloseThreshold: cfg.CloseThreshold,
+		RetryInterval:  cfg.RetryInterval,
+		IsExcluded:     isExcluded,
+	}, onStateChange)
+}
 
-const (
-	circuitClosed   circuitState = iota // normal operation
-	circuitOpen                         // rejecting requests
-	circuitHalfOpen                     // allowing a single probe
-)
+// runGuarded runs fn under the breaker. An open circuit is reported as the
+// product error ErrPlatformDegraded, which is what callers match on.
+func runGuarded(ctx context.Context, b *circuitbreaker.Breaker, fn func(context.Context) error) error {
+	_, err := circuitbreaker.Execute(ctx, b, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, fn(ctx)
+	})
+	if errors.Is(err, circuitbreaker.ErrCircuitOpen) {
+		return loopzeroerrors.ErrPlatformDegraded
+	}
+	return err
+}
 
 // CircuitBreakerSyncClient wraps a SyncClient with an in-memory circuit breaker.
 //
@@ -45,18 +62,9 @@ const (
 //   - Circuit breaker state does not need to survive API restarts — starting
 //     CLOSED and detecting failure naturally is the correct behavior
 type CircuitBreakerSyncClient struct {
-	inner          deploycontracts.SyncClient
-	logger         *slog.Logger
-	openThreshold  int
-	closeThreshold int
-	retryInterval  time.Duration
-
-	mu           sync.RWMutex
-	state        circuitState
-	failureCount int
-	successCount int
-	lastFailure  time.Time
-	openedAt     time.Time
+	inner   deploycontracts.SyncClient
+	logger  *slog.Logger
+	breaker *circuitbreaker.Breaker
 }
 
 // Compile-time assertion that *CircuitBreakerSyncClient satisfies the full
@@ -69,36 +77,23 @@ var _ deploycontracts.SyncClient = (*CircuitBreakerSyncClient)(nil)
 
 // NewCircuitBreakerSyncClient creates an in-memory circuit breaker wrapping a SyncClient.
 func NewCircuitBreakerSyncClient(inner deploycontracts.SyncClient, cfg CircuitBreakerConfig, logger *slog.Logger) *CircuitBreakerSyncClient {
-	return &CircuitBreakerSyncClient{
-		inner:          inner,
-		logger:         logger,
-		openThreshold:  cfg.OpenThreshold,
-		closeThreshold: cfg.CloseThreshold,
-		retryInterval:  cfg.RetryInterval,
-		state:          circuitClosed,
-	}
+	cb := &CircuitBreakerSyncClient{inner: inner, logger: logger}
+	cb.breaker = newBreaker("argocd-sync", cfg, isSyncFailureExcluded, cb.onStateChange)
+	return cb
 }
 
 // TriggerSync delegates to the inner SyncClient with circuit breaker protection.
 func (cb *CircuitBreakerSyncClient) TriggerSync(ctx context.Context, appName string) error {
-	if err := cb.preCheck(); err != nil {
-		return err
-	}
-
-	err := cb.inner.TriggerSync(ctx, appName)
-	cb.recordResult(err)
-	return err
+	return cb.guard(ctx, func(ctx context.Context) error {
+		return cb.inner.TriggerSync(ctx, appName)
+	})
 }
 
 // WaitForSync delegates to the inner SyncClient with circuit breaker protection.
 func (cb *CircuitBreakerSyncClient) WaitForSync(ctx context.Context, appName string, timeout time.Duration, deployedApps []string) error {
-	if err := cb.preCheck(); err != nil {
-		return err
-	}
-
-	err := cb.inner.WaitForSync(ctx, appName, timeout, deployedApps)
-	cb.recordResult(err)
-	return err
+	return cb.guard(ctx, func(ctx context.Context) error {
+		return cb.inner.WaitForSync(ctx, appName, timeout, deployedApps)
+	})
 }
 
 // GetAppStatus delegates to the inner SyncClient. Read-only, so it bypasses the
@@ -129,90 +124,42 @@ func (cb *CircuitBreakerSyncClient) GetSyncRevision(ctx context.Context, appName
 	return cb.inner.GetSyncRevision(ctx, appName)
 }
 
-// preCheck evaluates the circuit state. Returns ErrPlatformDegraded if the
-// circuit is open and no recovery probe is due.
-func (cb *CircuitBreakerSyncClient) preCheck() error {
-	cb.mu.RLock()
-	state := cb.state
-	openedAt := cb.openedAt
-	cb.mu.RUnlock()
-
-	if state == circuitClosed {
-		return nil
-	}
-
-	// Circuit is open — check if enough time has passed for a recovery probe
-	if time.Since(openedAt) < cb.retryInterval {
-		return loopzeroerrors.ErrPlatformDegraded
-	}
-
-	// Transition to half-open: allow one probe through
-	cb.mu.Lock()
-	if cb.state == circuitOpen {
-		cb.state = circuitHalfOpen
-		cb.successCount = 0
-		metrics.ArgoCDCircuitState.Set(2) // half-open
-		cb.logger.Info("circuit breaker: transitioning to half-open, allowing recovery probe")
-	}
-	cb.mu.Unlock()
-
-	return nil
-}
-
-// recordResult updates the circuit breaker state based on the sync result.
-// Auth failures (401/403) are NOT counted toward the open threshold — they
-// indicate a credential problem, not a transient ArgoCD outage (MEET-013 Phase 1.3).
-func (cb *CircuitBreakerSyncClient) recordResult(err error) {
-	// Auth failures bypass the circuit breaker entirely (MEET-013 Phase 1.3)
-	if err != nil && errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed) {
+// guard runs fn under the breaker and reports the two excluded outcomes:
+// neither says anything about ArgoCD's availability, so neither is counted.
+func (cb *CircuitBreakerSyncClient) guard(ctx context.Context, fn func(context.Context) error) error {
+	err := runGuarded(ctx, cb.breaker, fn)
+	switch {
+	case errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed):
 		metrics.ArgoCDAuthFailures.Inc()
 		cb.logger.Error("argocd auth failure — not counted toward circuit breaker",
 			"suggestion", "check ARGOCD_TOKEN validity and regenerate if expired")
-		return
-	}
-	// MEET-2026-03-29-019: 409 "operation in progress" is NOT a transient failure —
-	// it means a previous sync is stuck. Counting it toward the CB threshold would
-	// cause a single stuck Application to trip the circuit for the ENTIRE platform.
-	if err != nil && errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress) {
+	case errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress):
 		cb.logger.Warn("argocd sync operation in progress — not counted toward circuit breaker")
-		return
 	}
+	return err
+}
 
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
+// isSyncFailureExcluded: an auth failure is a credential problem (the token
+// provider re-mints), and an operation in progress is ArgoCD working — neither
+// means ArgoCD is down. Every other error, caller cancellation included,
+// counts toward the threshold.
+func isSyncFailureExcluded(err error) bool {
+	return errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed) ||
+		errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress)
+}
 
-	if err != nil {
-		cb.successCount = 0
-		cb.failureCount++
-		cb.lastFailure = time.Now()
-
-		if cb.state == circuitHalfOpen {
-			// Recovery probe failed — back to open
-			cb.state = circuitOpen
-			cb.openedAt = time.Now()
-			metrics.ArgoCDCircuitState.Set(1) // open
-			cb.logger.Warn("circuit breaker: recovery probe failed, re-opening circuit",
-				"failure_count", cb.failureCount)
-			return
-		}
-
-		if cb.failureCount >= cb.openThreshold && cb.state == circuitClosed {
-			cb.state = circuitOpen
-			cb.openedAt = time.Now()
-			metrics.ArgoCDCircuitState.Set(1) // open
-			cb.logger.Error("circuit breaker: opened — too many consecutive failures",
-				"failure_count", cb.failureCount, "threshold", cb.openThreshold)
-		}
-	} else {
-		cb.failureCount = 0
-		cb.successCount++
-
-		if cb.state == circuitHalfOpen && cb.successCount >= cb.closeThreshold {
-			cb.state = circuitClosed
-			metrics.ArgoCDCircuitState.Set(0) // closed
-			cb.logger.Info("circuit breaker: closed — recovery confirmed",
-				"success_count", cb.successCount, "threshold", cb.closeThreshold)
-			cb.successCount = 0
-		}
+// onStateChange publishes the state to the ArgoCDCircuitState gauge
+// (0 closed, 1 open, 2 half-open) and logs the transition.
+func (cb *CircuitBreakerSyncClient) onStateChange(_ string, from, to circuitbreaker.State) {
+	switch to {
+	case circuitbreaker.Closed:
+		metrics.ArgoCDCircuitState.Set(0)
+		cb.logger.Info("circuit breaker: closed — recovery confirmed")
+	case circuitbreaker.Open:
+		metrics.ArgoCDCircuitState.Set(1)
+		cb.logger.Error("circuit breaker: opened — ArgoCD calls are failing", "from", from.String())
+	case circuitbreaker.HalfOpen:
+		metrics.ArgoCDCircuitState.Set(2)
+		cb.logger.Info("circuit breaker: transitioning to half-open, allowing recovery probe")
 	}
 }

@@ -7,11 +7,9 @@ package platform
 import (
 	"context"
 	"log/slog"
-	"sync"
-	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/circuitbreaker"
 )
 
 // CircuitBreakerWorkflowSubmitter wraps a WorkflowSubmitter with circuit breaker
@@ -28,17 +26,9 @@ import (
 // should always attempt to reach the cluster (GetStatus is used by the reconcile
 // loop and reaper, Cancel is best-effort).
 type CircuitBreakerWorkflowSubmitter struct {
-	inner          deploycontracts.WorkflowSubmitter
-	logger         *slog.Logger
-	openThreshold  int
-	closeThreshold int
-	retryInterval  time.Duration
-
-	mu           sync.RWMutex
-	state        circuitState
-	failureCount int
-	successCount int
-	openedAt     time.Time
+	inner   deploycontracts.WorkflowSubmitter
+	logger  *slog.Logger
+	breaker *circuitbreaker.Breaker
 }
 
 // NewCircuitBreakerWorkflowSubmitter creates a circuit breaker wrapper around
@@ -49,25 +39,23 @@ func NewCircuitBreakerWorkflowSubmitter(
 	cfg CircuitBreakerConfig,
 	logger *slog.Logger,
 ) *CircuitBreakerWorkflowSubmitter {
-	return &CircuitBreakerWorkflowSubmitter{
-		inner:          inner,
-		logger:         logger,
-		openThreshold:  cfg.OpenThreshold,
-		closeThreshold: cfg.CloseThreshold,
-		retryInterval:  cfg.RetryInterval,
-		state:          circuitClosed,
-	}
+	cb := &CircuitBreakerWorkflowSubmitter{inner: inner, logger: logger}
+	// Every Submit error counts, caller cancellation included — the behaviour
+	// this decorator had before it ran on pkg/circuitbreaker.
+	countAll := func(error) bool { return false }
+	cb.breaker = newBreaker("argo-workflows-submit", cfg, countAll, cb.onStateChange)
+	return cb
 }
 
 // Submit delegates to the inner WorkflowSubmitter with circuit breaker protection.
 // Returns ErrPlatformDegraded immediately when the circuit is open.
 func (cb *CircuitBreakerWorkflowSubmitter) Submit(ctx context.Context, spec deploycontracts.WorkflowSpec) (string, error) {
-	if err := cb.submitPreCheck(); err != nil {
-		return "", err
-	}
-
-	id, err := cb.inner.Submit(ctx, spec)
-	cb.recordSubmitResult(err)
+	var id string
+	err := runGuarded(ctx, cb.breaker, func(ctx context.Context) error {
+		var submitErr error
+		id, submitErr = cb.inner.Submit(ctx, spec)
+		return submitErr
+	})
 	return id, err
 }
 
@@ -82,64 +70,14 @@ func (cb *CircuitBreakerWorkflowSubmitter) GetStatus(ctx context.Context, namesp
 	return cb.inner.GetStatus(ctx, namespace, workflowID)
 }
 
-// submitPreCheck evaluates the circuit state for submit operations.
-func (cb *CircuitBreakerWorkflowSubmitter) submitPreCheck() error {
-	cb.mu.RLock()
-	state := cb.state
-	openedAt := cb.openedAt
-	cb.mu.RUnlock()
-
-	if state == circuitClosed {
-		return nil
-	}
-
-	if time.Since(openedAt) < cb.retryInterval {
-		return loopzeroerrors.ErrPlatformDegraded
-	}
-
-	cb.mu.Lock()
-	if cb.state == circuitOpen {
-		cb.state = circuitHalfOpen
-		cb.successCount = 0
+// onStateChange logs each transition of the submit circuit.
+func (cb *CircuitBreakerWorkflowSubmitter) onStateChange(_ string, _, to circuitbreaker.State) {
+	switch to {
+	case circuitbreaker.Closed:
+		cb.logger.Info("workflow circuit breaker: closed — build cluster recovered")
+	case circuitbreaker.Open:
+		cb.logger.Error("workflow circuit breaker: opened — build cluster unavailable")
+	case circuitbreaker.HalfOpen:
 		cb.logger.Info("workflow circuit breaker: transitioning to half-open, allowing recovery probe")
-	}
-	cb.mu.Unlock()
-
-	return nil
-}
-
-// recordSubmitResult updates circuit state based on submit result.
-func (cb *CircuitBreakerWorkflowSubmitter) recordSubmitResult(err error) {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-
-	if err != nil {
-		cb.successCount = 0
-		cb.failureCount++
-
-		if cb.state == circuitHalfOpen {
-			cb.state = circuitOpen
-			cb.openedAt = time.Now()
-			cb.logger.Warn("workflow circuit breaker: recovery probe failed, re-opening",
-				"failure_count", cb.failureCount)
-			return
-		}
-
-		if cb.failureCount >= cb.openThreshold && cb.state == circuitClosed {
-			cb.state = circuitOpen
-			cb.openedAt = time.Now()
-			cb.logger.Error("workflow circuit breaker: opened — build cluster unavailable",
-				"failure_count", cb.failureCount, "threshold", cb.openThreshold)
-		}
-	} else {
-		cb.failureCount = 0
-		cb.successCount++
-
-		if cb.state == circuitHalfOpen && cb.successCount >= cb.closeThreshold {
-			cb.state = circuitClosed
-			cb.logger.Info("workflow circuit breaker: closed — build cluster recovered",
-				"success_count", cb.successCount, "threshold", cb.closeThreshold)
-			cb.successCount = 0
-		}
 	}
 }

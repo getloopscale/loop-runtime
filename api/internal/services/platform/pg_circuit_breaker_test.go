@@ -10,6 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -32,10 +35,8 @@ func (f *fakeSyncClientCB) WaitForSync(_ context.Context, _ string, _ time.Durat
 // Sprint B T1.1 (ADR D1): stub methods to satisfy the widened SyncClient
 // interface. Circuit-breaker tests exercise only Trigger/Wait error paths;
 // the recovery methods (ForceReconcile, GetSyncRevision, TerminateOperation,
-// GetAppStatus) flow through preCheck identically and don't need bespoke
-// coverage here — CircuitBreakerSyncClient's own implementations of those
-// methods are tested via the convergence-loop integration paths in
-// internal/services/release_convergence_loop_test.go.
+// GetAppStatus) bypass the breaker and are covered by the passthrough tests
+// below.
 func (f *fakeSyncClientCB) ForceReconcile(_ context.Context, _ string) error {
 	return f.waitErr
 }
@@ -241,5 +242,30 @@ func TestPGCircuitBreaker_GetSyncRevision_Passthrough(t *testing.T) {
 	}
 	if rev != "" {
 		t.Errorf("expected empty revision, got %q", rev)
+	}
+}
+
+// The circuit state gauge follows every transition: 0 closed, 1 open,
+// 2 half-open. Dashboards and alerts read these exact values.
+func TestPGCircuitBreaker_StateGaugeFollowsTransitions(t *testing.T) {
+	inner := &fakeSyncClientCB{triggerErr: fmt.Errorf("down")}
+	cb := NewCircuitBreakerSyncClient(inner, CircuitBreakerConfig{
+		OpenThreshold:  1,
+		CloseThreshold: 1,
+		RetryInterval:  1 * time.Millisecond,
+	}, slog.Default())
+
+	_ = cb.TriggerSync(context.Background(), "app-1")
+	if got := testutil.ToFloat64(metrics.ArgoCDCircuitState); got != 1 {
+		t.Fatalf("after opening: gauge = %v, want 1", got)
+	}
+	time.Sleep(5 * time.Millisecond)
+	inner.triggerErr = nil
+	if err := cb.TriggerSync(context.Background(), "app-1"); err != nil {
+		t.Fatalf("recovery probe: %v", err)
+	}
+
+	if got := testutil.ToFloat64(metrics.ArgoCDCircuitState); got != 0 {
+		t.Errorf("after recovery: gauge = %v, want 0", got)
 	}
 }
