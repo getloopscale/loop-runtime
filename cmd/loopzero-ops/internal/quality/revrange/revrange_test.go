@@ -38,3 +38,11 @@ func TestVerifyReachable_RefusesAnUnknownRef(t *testing.T) {
 		t.Fatalf("err = %v, want ErrBaseRefUnreachable", err)
 	}
 }
+
+func TestVerifyReachable_RefusesADirectoryThatIsNotARepository(t *testing.T) {
+	err := VerifyReachable(t.TempDir(), "HEAD")
+
+	if !errors.Is(err, ErrBaseRefUnreachable) {
+		t.Fatalf("outside a git repository no ref resolves; err = %v, want ErrBaseRefUnreachable", err)
+	}
+}

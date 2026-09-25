@@ -28,7 +28,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/gitref"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/revrange"
 )
 
 // ProtectedDocs are the governance documents under deletion guard, relative
@@ -57,7 +57,7 @@ type Outcome struct {
 func Check(cfg Config) (*Outcome, error) {
 	root, base, head := withDefaults(cfg)
 	for _, ref := range []string{base, head} {
-		if err := gitref.VerifyRefReachable(root, ref); err != nil {
+		if err := revrange.VerifyReachable(root, ref); err != nil {
 			return nil, err
 		}
 	}

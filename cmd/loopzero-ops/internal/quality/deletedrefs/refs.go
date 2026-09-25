@@ -25,7 +25,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/gitref"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/revrange"
 )
 
 // Spec is what a dangling-reference gate looks for.
@@ -49,7 +49,7 @@ type Spec struct {
 // Violations returns one message per live reference to a file deleted between
 // base and head. An unreachable base ref is an error, never an empty diff.
 func Violations(spec Spec, repoRoot, base, head string) ([]string, error) {
-	if err := gitref.VerifyRefReachable(repoRoot, base); err != nil {
+	if err := revrange.VerifyReachable(repoRoot, base); err != nil {
 		return nil, err
 	}
 	deleted, err := deletedPaths(spec, repoRoot, base, head)
