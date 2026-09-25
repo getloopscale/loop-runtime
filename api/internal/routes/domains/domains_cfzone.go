@@ -58,8 +58,7 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 	})
 	if cnameErr != nil {
 		slog.ErrorContext(ctx, "cf cname create failed", "domain", req.Domain, "error", cnameErr)
-		// Rollback: delete the zone
-		_ = h.cfZone.DeleteZone(ctx, zone.ZoneID)
+		h.rollBackZone(ctx, zone.ZoneID, req.Domain)
 		httpio.WriteJSON(w, http.StatusBadGateway, map[string]string{
 			"error": "Failed to configure domain routing. Please try again.",
 			"code":  "CF_ZONE_ERROR",
@@ -89,8 +88,7 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 
 	if err := h.store.CreateWithCFZone(ctx, domain); err != nil {
 		if errors.Is(err, ports.ErrDomainExists) {
-			// Rollback zone
-			_ = h.cfZone.DeleteZone(ctx, zone.ZoneID)
+			h.rollBackZone(ctx, zone.ZoneID, req.Domain)
 			httpio.WriteJSON(w, http.StatusConflict, map[string]string{
 				"error": "domain already registered",
 				"code":  "DOMAIN_ALREADY_EXISTS",
@@ -98,7 +96,7 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 			return
 		}
 		slog.ErrorContext(ctx, "domain create failed", "error", err)
-		_ = h.cfZone.DeleteZone(ctx, zone.ZoneID)
+		h.rollBackZone(ctx, zone.ZoneID, req.Domain)
 		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to register domain"})
 		return
 	}
@@ -128,6 +126,10 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 func (h *DomainHandler) removeConflictingApexRecords(ctx context.Context, zoneID, domain string) {
 	scannedRecords, listErr := h.cfZone.ListDNSRecords(ctx, zoneID)
 	if listErr != nil {
+		// The routing record is created next; a conflicting apex record left
+		// here makes that create fail, and the request then rolls back.
+		slog.WarnContext(ctx, "cf apex record listing failed; conflicting records not removed",
+			"domain", domain, "zone_id", zoneID, "error", listErr)
 		return
 	}
 	for _, rec := range scannedRecords {
@@ -135,7 +137,7 @@ func (h *DomainHandler) removeConflictingApexRecords(ctx context.Context, zoneID
 			(rec.Name == domain || rec.Name == "@") {
 			slog.InfoContext(ctx, "cf removing conflicting apex record",
 				"domain", domain, "type", rec.Type, "content", rec.Content)
-			_ = h.cfZone.DeleteDNSRecord(ctx, zoneID, rec.ID)
+			h.deleteRecordCompensating(ctx, zoneID, domain, rec)
 		}
 	}
 }
@@ -146,6 +148,8 @@ func (h *DomainHandler) removeConflictingApexRecords(ctx context.Context, zoneID
 func (h *DomainHandler) dedupAndListZoneRecords(ctx context.Context, zoneID, domain string) ([]CFDNSRecord, int) {
 	records, listErr := h.cfZone.ListDNSRecords(ctx, zoneID)
 	if listErr != nil {
+		slog.WarnContext(ctx, "cf zone record listing failed; imported records not reported",
+			"domain", domain, "zone_id", zoneID, "error", listErr)
 		return nil, 0
 	}
 	var deduped []CFDNSRecord
@@ -156,11 +160,34 @@ func (h *DomainHandler) dedupAndListZoneRecords(ctx context.Context, zoneID, dom
 		if seen[key] {
 			slog.InfoContext(ctx, "cf removing duplicate record",
 				"domain", domain, "type", rec.Type, "name", rec.Name)
-			_ = h.cfZone.DeleteDNSRecord(ctx, zoneID, rec.ID)
+			h.deleteRecordCompensating(ctx, zoneID, domain, rec)
 			continue
 		}
 		seen[key] = true
 		deduped = append(deduped, rec)
 	}
 	return deduped, len(deduped)
+}
+
+// rollBackZone deletes a zone this request created and will not use. When the
+// delete fails the zone is orphaned — no domain row points at it — so the
+// failure is logged with the zone id an operator needs to remove it, and
+// counted so it can be alerted on.
+func (h *DomainHandler) rollBackZone(ctx context.Context, zoneID, domain string) {
+	if err := h.cfZone.DeleteZone(ctx, zoneID); err != nil {
+		metrics.DomainZoneCleanupFailuresTotal.WithLabelValues("delete_zone").Inc()
+		slog.ErrorContext(ctx, "cf zone rollback failed; zone orphaned",
+			"domain", domain, "zone_id", zoneID, "error", err)
+	}
+}
+
+// deleteRecordCompensating removes a record the setup does not want (an apex
+// conflict or a duplicate). A failure leaves the record in the zone; it is
+// logged and counted rather than failing the setup.
+func (h *DomainHandler) deleteRecordCompensating(ctx context.Context, zoneID, domain string, rec CFDNSRecord) {
+	if err := h.cfZone.DeleteDNSRecord(ctx, zoneID, rec.ID); err != nil {
+		metrics.DomainZoneCleanupFailuresTotal.WithLabelValues("delete_record").Inc()
+		slog.WarnContext(ctx, "cf record delete failed; record left in zone",
+			"domain", domain, "zone_id", zoneID, "record_id", rec.ID, "type", rec.Type, "error", err)
+	}
 }

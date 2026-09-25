@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -689,6 +691,9 @@ type fakeCFZoneManager struct {
 	recordErr  error
 	created    *CFDNSRecord
 	createErr  error
+	// deleteZoneErr fails DeleteZone; deletedZones records every attempt.
+	deleteZoneErr error
+	deletedZones  []string
 }
 
 func (f *fakeCFZoneManager) CreateZone(_ context.Context, _ string) (*CFZoneResult, error) {
@@ -709,7 +714,10 @@ func (f *fakeCFZoneManager) CreateDNSRecord(_ context.Context, _ string, _ CFDNS
 }
 
 func (f *fakeCFZoneManager) DeleteDNSRecord(_ context.Context, _, _ string) error { return nil }
-func (f *fakeCFZoneManager) DeleteZone(_ context.Context, _ string) error         { return nil }
+func (f *fakeCFZoneManager) DeleteZone(_ context.Context, zoneID string) error {
+	f.deletedZones = append(f.deletedZones, zoneID)
+	return f.deleteZoneErr
+}
 
 func TestDomains_DNS_ListRecords_NotCFManaged(t *testing.T) {
 	store := &fakeDomainStore{
@@ -793,6 +801,38 @@ func TestDomains_DNS_ListRecords_StoreFailureIs500(t *testing.T) {
 
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("want 500, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// When the routing record cannot be created the request undoes the zone it
+// created. If that undo fails the zone is orphaned — nothing points at it —
+// so the failure must be counted, not discarded.
+func TestDomains_Create_V2_CFZone_CountsAZoneItCouldNotRollBack(t *testing.T) {
+	cfZone := &fakeCFZoneManager{
+		zoneResult:    &CFZoneResult{ZoneID: "zone-orphan", Nameservers: []string{"ns1"}},
+		createErr:     errors.New("record rejected"),
+		deleteZoneErr: errors.New("provider timeout"),
+	}
+	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h.cfZone = cfZone
+	failures := metrics.DomainZoneCleanupFailuresTotal.WithLabelValues("delete_zone")
+	before := testutil.ToFloat64(failures)
+
+	body := `{"domain":"example.com","project":"my-api","app":"web","environment":"production"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body))
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Create(w, req)
+
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("want 502, got %d body=%s", w.Code, w.Body.String())
+	}
+	if len(cfZone.deletedZones) != 1 || cfZone.deletedZones[0] != "zone-orphan" {
+		t.Fatalf("rollback attempted on %v, want [zone-orphan]", cfZone.deletedZones)
+	}
+	if got := testutil.ToFloat64(failures) - before; got != 1 {
+		t.Errorf("zone cleanup failures counted %v, want 1", got)
 	}
 }
 

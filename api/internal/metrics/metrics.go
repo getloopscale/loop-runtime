@@ -861,4 +861,14 @@ var (
 		Name: "loopzero_domain_verify_rate_limited_total",
 		Help: "Total POST /verify requests rejected by the per-(tenant, domain) rate limiter.",
 	}, []string{"tenant"})
+
+	// DomainZoneCleanupFailuresTotal counts compensating DNS-provider calls
+	// that failed while setting up a custom domain: a zone the request created
+	// and could not delete (operation="delete_zone") is left with no domain
+	// pointing at it; a record it could not delete (operation="delete_record")
+	// is a conflicting or duplicate record left in the zone.
+	DomainZoneCleanupFailuresTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_domain_zone_cleanup_failures_total",
+		Help: "Total compensating DNS-provider deletes that failed during custom domain setup.",
+	}, []string{"operation"})
 )

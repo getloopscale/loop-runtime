@@ -188,6 +188,7 @@ func TestMetricDefinitions_Extended(t *testing.T) {
 		{"OrphanedTenants", metrics.OrphanedTenants},
 		{"LeaderStatus", metrics.LeaderStatus},
 		{"CustomDomainsTotal", metrics.CustomDomainsTotal},
+		{"DomainZoneCleanupFailuresTotal", metrics.DomainZoneCleanupFailuresTotal},
 		{"DomainVerificationDuration", metrics.DomainVerificationDuration},
 		{"DomainProvisioningDuration", metrics.DomainProvisioningDuration},
 		{"DomainTLSExpiryDays", metrics.DomainTLSExpiryDays},
