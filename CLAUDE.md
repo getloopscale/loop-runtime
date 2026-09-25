@@ -64,7 +64,7 @@ cd operators  && go test ./...   # Ginkgo + envtest
 cd cmd/loopzero-ops && go test ./...
 
 # A single Go test / package
-cd api && go test ./internal/services/... -run TestScalingResolver -v
+cd api && go test ./internal/scaling/... -run TestResolve -v
 
 # A single Ginkgo spec (E2E). NOTE: `go test -timeout` alone does NOT extend the
 # Ginkgo suite timeout (its own default is 60min) — pass -ginkgo.timeout too:

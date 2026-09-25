@@ -12,7 +12,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 
-	"github.com/getloopscale/loopzero/api/internal/services/release"
+	"github.com/getloopscale/loopzero/api/internal/release"
 
 	previewsvc "github.com/getloopscale/loopzero/api/internal/preview"
 

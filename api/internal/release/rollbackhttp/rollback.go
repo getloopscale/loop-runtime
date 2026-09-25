@@ -1,8 +1,8 @@
-// Package rollback serves the rollback endpoint: returning an environment to a
+// Package rollbackhttp serves the rollback endpoint: returning an environment to a
 // previous release.
 //
 // Twentieth family to leave the flat `routes` package (B-080, slice-38).
-package rollback
+package rollbackhttp
 
 import (
 	"context"

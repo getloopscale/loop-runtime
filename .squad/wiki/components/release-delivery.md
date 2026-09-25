@@ -2,7 +2,7 @@
 type: Component
 title: "Release delivery — GitOps push, ArgoCD sync, activation"
 description: "Turns a succeeded build into a release row, a commit in the tenant GitOps repository, and an ArgoCD sync confirmed before activation."
-resource: "api/internal/services/release"
+resource: "api/internal/release"
 tags:
   - release
   - gitops
@@ -10,13 +10,13 @@ tags:
   - rollback
 sources:
   - id: rd-rel
-    resource: "api/internal/services/release/argo_app_label_reader.go#L1"
+    resource: "api/internal/release/argo_app_label_reader.go#L1"
     note: "services/release"
   - id: rd-gitops
     resource: "api/internal/gitops/gitea_pusher.go#L3"
     note: "gitops"
   - id: rd-argocd
-    resource: "api/internal/argocd/sync_client.go#L1"
+    resource: "api/internal/release/argocd/sync_client.go#L1"
     note: "argocd"
   - id: rd-man
     resource: "api/internal/manifests/renderer.go#L3"
@@ -34,10 +34,10 @@ sources:
     resource: "api/internal/gitops/gitea_pusher.go#L116"
     note: "git clone --depth 5 of the tenant gitops repo into a temp dir on every push; the rollback path additionally reads manifests at a specific historical commit, whi"
   - id: rd-sync
-    resource: "api/internal/argocd/sync_client.go#L190"
+    resource: "api/internal/release/argocd/sync_client.go#L190"
     note: "POST /api/v1/applications/{app}/sync with {\"prune\": true} against the ArgoCD API, bearer-authenticated, preceded by a best-effort hard refresh to drop the repo-"
   - id: rd-outbox
-    resource: "api/internal/services/release/release_activator.go#L230"
+    resource: "api/internal/release/release_activator.go#L230"
     note: "transactional outbox: one row per terminal deploy transition, written in the SAME transaction as the state change. loopzero-cloud drains it; this repository never r"
 generated:
   by: loop-system-cartography/0.1.0
@@ -60,9 +60,9 @@ the lock again.
 
 | Component | Path | Kind | Layer | Anchor | What it is |
 |---|---|---|---|---|---|
-| `api.services.release` | `api/internal/services/release` | package | application | `api/internal/services/release/argo_app_label_reader.go:1` | Release convergence; imports db, db/store, events, metrics, ports, processing, deploycontracts. |
+| `api.services.release` | `api/internal/release` | package | application | `api/internal/release/argo_app_label_reader.go:1` | Release convergence; imports db, db/store, events, metrics, ports, processing, deploycontracts. |
 | `api.gitops` | `api/internal/gitops` | package | infrastructure | `api/internal/gitops/gitea_pusher.go:3` | Commits rendered manifests into the tenant's Gitea repo, plus a manifest gate. |
-| `api.argocd` | `api/internal/argocd` | package | infrastructure | `api/internal/argocd/sync_client.go:1` | ArgoCD HTTP sync client plus a serializer and a token provider that mints a Kubernetes SA token rather than holding a static one. |
+| `api.argocd` | `api/internal/release/argocd` | package | infrastructure | `api/internal/release/argocd/sync_client.go:1` | ArgoCD HTTP sync client plus a serializer and a token provider that mints a Kubernetes SA token rather than holding a static one. |
 | `api.gitclient` | `api/internal/gitclient` | package | infrastructure | `api/internal/gitclient/runner.go:3` | The single place exec.CommandContext runs git, with credential sanitisation. Three consumers: buildplane/source, gitops, github. |
 | `api.manifests` | `api/internal/manifests` | package | application | `api/internal/manifests/renderer.go:3` | Renders Rollout/Deployment, Services, IngressRoute/TraefikService and AnalysisTemplate from typed Go structs. Its only third-party import is sigs.k8s.io/yaml — no client-go, no cluster access. |
 | `api.services.domain` | `api/internal/domains` | package | application | `api/internal/domains/domain_cf_reconciler.go:1` | Custom-domain services; imports db, manifests, metrics, ports, deploycontracts. |
@@ -115,13 +115,13 @@ incident where rollback returned success while pods still served the rolled-back
 
 # Evidence
 
-[^rd-rel]: `api/internal/services/release/argo_app_label_reader.go:1`
+[^rd-rel]: `api/internal/release/argo_app_label_reader.go:1`
 [^rd-gitops]: `api/internal/gitops/gitea_pusher.go:3`
-[^rd-argocd]: `api/internal/argocd/sync_client.go:1`
+[^rd-argocd]: `api/internal/release/argocd/sync_client.go:1`
 [^rd-man]: `api/internal/manifests/renderer.go:3`
 [^rd-dom]: `api/internal/domains/domain_cf_reconciler.go:1`
 [^rd-prev]: `api/internal/preview/preview_service.go:1`
 [^rd-push]: `api/internal/gitops/gitea_pusher.go:174`
 [^rd-clone]: `api/internal/gitops/gitea_pusher.go:116`
-[^rd-sync]: `api/internal/argocd/sync_client.go:190`
-[^rd-outbox]: `api/internal/services/release/release_activator.go:230`
+[^rd-sync]: `api/internal/release/argocd/sync_client.go:190`
+[^rd-outbox]: `api/internal/release/release_activator.go:230`

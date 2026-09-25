@@ -14,7 +14,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
-	"github.com/getloopscale/loopzero/api/internal/services/release"
+	"github.com/getloopscale/loopzero/api/internal/release"
 
 	"github.com/getloopscale/loopzero/api/internal/preview"
 

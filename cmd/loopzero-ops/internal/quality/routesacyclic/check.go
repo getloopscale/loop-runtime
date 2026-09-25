@@ -42,11 +42,7 @@ var testOnlyLeaves = map[string]bool{}
 // a declaration rather than a discovery.
 var allowed = map[string]map[string]bool{
 	// families
-	"admin":    {},
-	"builds":   {},
-	"promote":  {},
-	"rollback": {},
-	"argocd":   {},
+	"builds": {},
 }
 
 // Config controls the gate.

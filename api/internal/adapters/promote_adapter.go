@@ -6,9 +6,9 @@ package adapters
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/promote"
+	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
 
-	"github.com/getloopscale/loopzero/api/internal/services/release"
+	"github.com/getloopscale/loopzero/api/internal/release"
 )
 
 // PromoteServiceAdapter bridges the promotion orchestrator to the route handler interface.
@@ -18,7 +18,7 @@ type PromoteServiceAdapter struct {
 }
 
 // Promote converts route-layer types to service-layer types and delegates to the orchestrator.
-func (a *PromoteServiceAdapter) Promote(ctx context.Context, req promote.PromoteInput) (*promote.PromoteOutput, error) {
+func (a *PromoteServiceAdapter) Promote(ctx context.Context, req promotehttp.PromoteInput) (*promotehttp.PromoteOutput, error) {
 	result, err := a.Orchestrator.Promote(ctx, release.PromotionRequest{
 		TenantID:      req.TenantID,
 		ProjectID:     req.ProjectID,
@@ -32,7 +32,7 @@ func (a *PromoteServiceAdapter) Promote(ctx context.Context, req promote.Promote
 		return nil, err
 	}
 
-	return &promote.PromoteOutput{
+	return &promotehttp.PromoteOutput{
 		PromotionID:     result.PromotionID,
 		SourceReleaseID: result.SourceRelease.ID,
 		NewReleaseID:    result.NewRelease.ID,
@@ -47,4 +47,4 @@ func (a *PromoteServiceAdapter) Promote(ctx context.Context, req promote.Promote
 // B-058: this file did NOT declare, not even in prose, what it adapted — and the package's
 // admission criterion was "it is an adapter", which refuses nothing. The port was discovered
 // from the consumer, and is now written where the compiler checks it.
-var _ promote.PromoteService = (*PromoteServiceAdapter)(nil)
+var _ promotehttp.PromoteService = (*PromoteServiceAdapter)(nil)

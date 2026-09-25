@@ -31,7 +31,7 @@ func a() {
 	_ = appName
 }
 `)
-	write(t, root, "api/internal/services/release/container_delivery.go", `package release
+	write(t, root, "api/internal/release/container_delivery.go", `package release
 func b() {
 	argoAppName := fmt.Sprintf("%s-%s", build.TenantID, build.Environment)
 	_ = argoAppName
@@ -84,7 +84,7 @@ func d() {
 // for the apps INSIDE a release. It has no tenant term, so it does not match.
 func TestDoesNotFlagReleaseAppName(t *testing.T) {
 	root := t.TempDir()
-	write(t, root, "api/internal/services/release/release_convergence_loop.go", `package release
+	write(t, root, "api/internal/release/release_convergence_loop.go", `package release
 func d() {
 	appRef := fmt.Sprintf("%s-%s", release.ProjectID, app.Name)
 	_ = appRef

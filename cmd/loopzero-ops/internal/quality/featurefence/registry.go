@@ -22,6 +22,7 @@ var registry = map[string]Entry{
 	"preview":        {Kind: Feature},
 	"projectmetrics": {Kind: Feature},
 	"projects":       {Kind: Feature},
+	"release":        {Kind: Feature, Deps: []string{"placement"}},
 	"repositories":   {Kind: Feature},
 	"scaling":        {Kind: Feature},
 	"secrets":        {Kind: Feature},
@@ -64,12 +65,11 @@ var registry = map[string]Entry{
 
 	// ── layer folders being dissolved into features ─────────────────────────
 	// Each entry below disappears when its code reaches the feature that owns it.
-	"adapters":   {Kind: Layer, Deps: []string{"buildplane", "db", "deploycontracts", "domains", "environments", "github", "integrations", "k8s", "lock", "logs", "placement", "ports", "preview", "repositories", "routes", "services", "sse", "status", "timeline"}},
-	"argocd":     {Kind: Layer, Deps: []string{"deploycontracts", "k8s", "metrics", "placement"}},
+	"adapters":   {Kind: Layer, Deps: []string{"buildplane", "db", "deploycontracts", "domains", "environments", "github", "integrations", "k8s", "lock", "logs", "placement", "ports", "preview", "release", "repositories", "routes", "services", "sse", "status", "timeline"}},
 	"buildplane": {Kind: Layer, Deps: []string{"archive", "deploycontracts", "events", "gitclient", "k8s", "metrics", "scrub"}},
 	"cfkv":       {Kind: Layer, Deps: []string{"metrics"}},
-	"routes":     {Kind: Layer, Deps: []string{"buildplane", "correlation", "db", "github", "httpio", "k8s", "metrics", "middleware", "pagination", "plantier", "ports", "routestest", "services", "sse", "validation"}},
-	"services":   {Kind: Layer, Deps: []string{"cfkv", "db", "deploycontracts", "events", "manifests", "metrics", "placement", "ports", "processing", "scaling", "scrub", "sse"}},
+	"routes":     {Kind: Layer, Deps: []string{"buildplane", "correlation", "db", "github", "httpio", "k8s", "metrics", "middleware", "pagination", "plantier", "ports", "release", "routestest", "services", "sse", "validation"}},
+	"services":   {Kind: Layer, Deps: []string{"cfkv", "db", "deploycontracts", "events", "manifests", "metrics", "placement", "ports", "processing", "release", "scaling", "scrub", "sse"}},
 
 	// ── composition roots ───────────────────────────────────────────────────
 	"server":          {Kind: Composition},

@@ -179,7 +179,7 @@ type WorkflowSubmitter interface {
 }
 
 // SyncClient is the ArgoCD sync port. Every implementer MUST satisfy these 6 methods:
-//   - *argocd.SyncClient (production, api/internal/argocd/sync_client.go)
+//   - *argocd.SyncClient (production, api/internal/release/argocd/sync_client.go)
 //   - *CircuitBreakerSyncClient (production wrapper, pg_circuit_breaker.go)
 //   - test fakes in *_test.go
 type SyncClient interface {

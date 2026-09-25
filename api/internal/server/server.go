@@ -21,16 +21,16 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
 	"github.com/getloopscale/loopzero/api/internal/projects"
-	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
+	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
+	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
+	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/promote"
-	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
 	"github.com/getloopscale/loopzero/api/internal/timeline/timelinehttp"
 
-	"github.com/getloopscale/loopzero/api/internal/services/release"
+	"github.com/getloopscale/loopzero/api/internal/release"
 
 	// Aliased because `routes/metrics` (the proxy route family, imported above)
 	// already takes the name `metrics` in this file. Same collision as
@@ -95,7 +95,7 @@ type Config struct {
 	// build handler — single source of truth for env creation / PG
 	// environments row writes. nil-safe: when nil, ProjectHandler.Create
 	// behaves identically to the pre-T4.1 handler (TestProjectCreate_BackwardCompatNoEnsurer).
-	ProjectEnvEnsurer promote.EnvironmentEnsurer
+	ProjectEnvEnsurer promotehttp.EnvironmentEnsurer
 	SourceStore       source.SourceStore
 	ObjectUploader    sourceroutes.ObjectUploader // optional: upload bundles to S3/Spaces for build access
 	SourceBucket      string                      // S3 bucket name for source bundles (env: SOURCE_BUCKET)
@@ -115,11 +115,11 @@ type Config struct {
 	// Sprint 6 / T1.2: handler for GET /api/v1/builds/{id}/sbom. Returns
 	// per-app SBOM metadata + presigned download URLs from S3.
 	BuildSBOMHandler    *builds.BuildSBOMHandler
-	ArgoCallbackHandler *argocd.ArgoCallbackHandler
+	ArgoCallbackHandler *argocdhttp.ArgoCallbackHandler
 	LogsHandler         *logshttp.LogsHandler
 	LogStreamHandler    *logshttp.LogStreamHandler
-	RollbackHandler     *rollback.RollbackHandler
-	PromoteHandler      *promote.PromoteHandler
+	RollbackHandler     *rollbackhttp.RollbackHandler
+	PromoteHandler      *promotehttp.PromoteHandler
 	StatusHandler       *statushttp.StatusHandler
 	MetricsProxyHandler *projectmetricshttp.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy
 	StatusSSEHandler    *statushttp.StatusSSEHandler            // T2.1 J-18 T1.3.b — SSE signal.changed stream

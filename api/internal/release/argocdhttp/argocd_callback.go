@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package argocd serves /internal/argocd-callback: the sync notification the
+// Package argocdhttp serves /internal/argocd-callback: the sync notification the
 // GitOps controller posts back when an application reaches a new state.
 //
 // Twenty-fifth and last family to leave the flat `routes` package (B-080,
 // slice-40). Internal-only, no user context — a sibling of the webhook in how the
 // router registers it.
-package argocd
+package argocdhttp
 
 import (
 	"crypto/subtle"

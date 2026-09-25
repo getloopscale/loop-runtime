@@ -13,15 +13,15 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
 	"github.com/getloopscale/loopzero/api/internal/projects"
-	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
+	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
+	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
+	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/promote"
-	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
-	"github.com/getloopscale/loopzero/api/internal/services/release"
+	"github.com/getloopscale/loopzero/api/internal/release"
 
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
 
@@ -120,8 +120,8 @@ type OrchestratorDeps struct {
 	BuildOrchestrator   builds.BuildOrchestratorService
 	LogsHandler         *logshttp.LogsHandler
 	LogStreamHandler    *logshttp.LogStreamHandler
-	RollbackHandler     *rollback.RollbackHandler
-	PromoteHandler      *promote.PromoteHandler
+	RollbackHandler     *rollbackhttp.RollbackHandler
+	PromoteHandler      *promotehttp.PromoteHandler
 	StatusHandler       *statushttp.StatusHandler
 	MetricsProxyHandler *projectmetricshttp.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
 	StatusSSEHandler    *statushttp.StatusSSEHandler            // T2.1 J-18 T1.3.b — SSE signal.changed stream
@@ -129,7 +129,7 @@ type OrchestratorDeps struct {
 	BuildListHandler    *builds.BuildListHandler
 	BuildStatsHandler   *builds.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
 	ProjectDeleter      projects.Deleter
-	ArgoCallbackHandler *argocd.ArgoCallbackHandler
+	ArgoCallbackHandler *argocdhttp.ArgoCallbackHandler
 }
 
 // setupOrchestrator creates the build orchestrator, logs, rollback, status,
@@ -257,7 +257,7 @@ func setupOrchestrator(
 	})
 	rollbackService := &adapters.RollbackServiceAdapter{Orchestrator: rollbackOrch}
 	projectStore := &store.PostgresProjectStore{DB: dbAdapter}
-	rollbackHandler := rollback.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain).
+	rollbackHandler := rollbackhttp.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain).
 		WithReleaseLookup(&adapters.RollbackReleaseLookupAdapter{Store: stores.ReleaseStore})
 
 	// Promotion orchestrator — coordinates release promotion across environments
@@ -280,7 +280,7 @@ func setupOrchestrator(
 		Logger:       logger,
 	})
 	promoteService := &adapters.PromoteServiceAdapter{Orchestrator: promotionOrch}
-	promoteHandler := promote.NewPromoteHandler(projectStore, promoteService, cfg.BaseDomain)
+	promoteHandler := promotehttp.NewPromoteHandler(projectStore, promoteService, cfg.BaseDomain)
 	if envEnsurer != nil {
 		// promote --to <new env> creates the target env like deploy does (#158).
 		promoteHandler = promoteHandler.WithEnvironmentEnsurer(envEnsurer)
@@ -418,7 +418,7 @@ func setupOrchestrator(
 	} else {
 		logger.Warn("sync callback activator: dynamic client unavailable; callback activation disabled, the convergence loop activates releases")
 	}
-	argoCallbackHandler := argocd.NewArgoCallbackHandler(syncCallbackActivator, logger, cfg.ArgoCallbackSecret)
+	argoCallbackHandler := argocdhttp.NewArgoCallbackHandler(syncCallbackActivator, logger, cfg.ArgoCallbackSecret)
 
 	return &OrchestratorDeps{
 		Orchestrator:        orch,

@@ -24,10 +24,10 @@ sources:
     resource: "api/internal/middleware/auth/auth_failure_audit.go#L143"
     note: "Emit a metric on the auth audit-log fail-open path (EC-NEW-12)"
   - id: wi-sync_callback_activator-go-157
-    resource: "api/internal/services/release/sync_callback_activator.go#L157"
+    resource: "api/internal/release/sync_callback_activator.go#L157"
     note: "TODO(T6.4 + T1.3): replace context.Background() once OTel trace propagation reaches the ArgoCD callback handler"
   - id: wi-sync_callback_activator-go-264
-    resource: "api/internal/services/release/sync_callback_activator.go#L264"
+    resource: "api/internal/release/sync_callback_activator.go#L264"
     note: "TODO(sprint-5): read tenant/env from ArgoCD labels instead of parsing the app name"
 generated:
   by: loop-system-cartography/0.1.0
@@ -52,7 +52,7 @@ filtered on that before recording anything.[^wi-todo-noise]
 |---|---|---|
 | 154 | Rename the Traefik Helm release to ${role}-traefik on the next destroy+recreate cycle | `infra/pulumi-platform/src/components/bootstrap-shared.ts:234` |
 | 153 | Re-add the resource with proper import handling once the pipeline is green | `infra/pulumi-infra/src/index.ts:129` |
-| 125 | TODO(T6.4 + T1.3): replace context.Background() once OTel trace propagation reaches the ArgoCD callback handler | `api/internal/services/release/sync_callback_activator.go:157` |
+| 125 | TODO(T6.4 + T1.3): replace context.Background() once OTel trace propagation reaches the ArgoCD callback handler | `api/internal/release/sync_callback_activator.go:157` |
 | 31 | TODO(#255) failingGate — gate works and FAILS on a real finding; fix the finding, then wire | `cmd/loopzero-ops/quality_gate_wiring_test.go:147` |
 | 31 | TODO(#255) slowGate — exceeds the 25s budget; needs profiling or a narrower scan before it can gate every push | `cmd/loopzero-ops/quality_gate_wiring_test.go:150` |
 | 31 | TODO(#255) brokenGate — produces a wrong verdict; must be repaired before it can be wired | `cmd/loopzero-ops/quality_gate_wiring_test.go:170` |
@@ -81,7 +81,7 @@ as active.
 
 | Age (days) | Item | Anchor |
 |---|---|---|
-| 166 | TODO(sprint-5): read tenant/env from ArgoCD labels instead of parsing the app name | `api/internal/services/release/sync_callback_activator.go:264` |
+| 166 | TODO(sprint-5): read tenant/env from ArgoCD labels instead of parsing the app name | `api/internal/release/sync_callback_activator.go:264` |
 | 118 | Migrate meta to flat metaDomain/metaExpiresAtIso — documented TODO, explicitly out of scope here | `infra/pulumi-drill/src/__tests__/structure.test.ts:339` |
 
 # Relationships
@@ -106,5 +106,5 @@ as active.
 [^wi-index-ts-129]: `infra/pulumi-infra/src/index.ts:129`
 [^wi-tenant_controller-go-145]: `operators/internal/tenant/tenant_controller.go:145`
 [^wi-auth_failure_audit-go-143]: `api/internal/middleware/auth/auth_failure_audit.go:143`
-[^wi-sync_callback_activator-go-157]: `api/internal/services/release/sync_callback_activator.go:157`
-[^wi-sync_callback_activator-go-264]: `api/internal/services/release/sync_callback_activator.go:264`
+[^wi-sync_callback_activator-go-157]: `api/internal/release/sync_callback_activator.go:157`
+[^wi-sync_callback_activator-go-264]: `api/internal/release/sync_callback_activator.go:264`

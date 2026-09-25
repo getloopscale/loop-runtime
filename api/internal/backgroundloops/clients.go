@@ -24,11 +24,11 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/getloopscale/loopzero/api/internal/argocd"
 	"github.com/getloopscale/loopzero/api/internal/buildplane/argo"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/gitops"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loopzero/api/internal/release/argocd"
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
 )
 

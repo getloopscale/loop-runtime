@@ -22,10 +22,10 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/preview/previewhttp"
 	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
+	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
+	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/promote"
-	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
 	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 	"github.com/getloopscale/loopzero/api/internal/source"
@@ -79,8 +79,8 @@ func fullProtectedConfig() Config {
 		ScaleHandler:              &scalinghttp.ScaleHandler{},
 		BuildListHandler:          &builds.BuildListHandler{},
 		BuildStatsHandler:         &builds.BuildStatsHandler{},
-		RollbackHandler:           &rollback.RollbackHandler{},
-		PromoteHandler:            &promote.PromoteHandler{},
+		RollbackHandler:           &rollbackhttp.RollbackHandler{},
+		PromoteHandler:            &promotehttp.PromoteHandler{},
 		TeamHandler:               &teamshttp.TeamHandler{},
 		TenantDeletionStore:       stubTenantDeletion{},
 		BillingHandler:            &billinghttp.BillingHandler{},

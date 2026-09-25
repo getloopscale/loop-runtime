@@ -16,8 +16,8 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 
+	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
 
@@ -220,7 +220,7 @@ func main() {
 	// The same ensurer serves deploy and project creation (and promote,
 	// wired in setupOrchestrator). The build handler exists only with the
 	// orchestrator, i.e. with a database.
-	var projectEnvEnsurer promote.EnvironmentEnsurer
+	var projectEnvEnsurer promotehttp.EnvironmentEnsurer
 	if buildHandler != nil && envEnsurer != nil {
 		buildHandler = buildHandler.WithEnvironmentEnsurer(envEnsurer)
 		projectEnvEnsurer = envEnsurer

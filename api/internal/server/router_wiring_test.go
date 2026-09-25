@@ -10,9 +10,9 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
 	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
+	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
+	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
@@ -189,7 +189,7 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 
 	buildHandler := builds.NewBuildHandler(nil, logger)
 	logsHandler := logshttp.NewLogsHandler(nil, nil)
-	rollbackHandler := rollback.NewRollbackHandler(nil, nil, "test.local")
+	rollbackHandler := rollbackhttp.NewRollbackHandler(nil, nil, "test.local")
 	statusHandler := statushttp.NewStatusHandler(nil, nil, nil, "test.local", "", "")
 	buildListHandler := builds.NewBuildListHandler(nil)
 	environmentHandler := environmentshttp.NewEnvironmentHandler(nil)
@@ -201,7 +201,7 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	// invokes the handler body (handler unit tests own that contract).
 	integrationsGitHubHandler := integrationshttp.NewIntegrationsGitHubHandler(nil, nil)
 	auditHandler := audithttp.NewAuditHandler(nil)
-	argoCallbackHandler := argocd.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret")
+	argoCallbackHandler := argocdhttp.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret")
 
 	cfg := server.Config{
 		Port:                      "0",

@@ -17,8 +17,8 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
 	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
 	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
+	"github.com/getloopscale/loopzero/api/internal/release"
 	"github.com/getloopscale/loopzero/api/internal/services/build"
-	"github.com/getloopscale/loopzero/api/internal/services/release"
 )
 
 // setupServices builds the stores and cluster clients the controller needs and

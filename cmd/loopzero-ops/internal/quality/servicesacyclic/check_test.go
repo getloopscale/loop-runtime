@@ -34,13 +34,12 @@ func importing(pkg string, contexts ...string) string {
 	return body
 }
 
-// legalTree is the frozen DAG in miniature: build reaches release,
-// everything else is self-contained.
+// legalTree is the frozen DAG in miniature: the two contexts left, each
+// self-contained.
 func legalTree(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	writeGo(t, root, "api/internal/services/build/b.go", importing("build", "release"))
-	writeGo(t, root, "api/internal/services/release/r.go", importing("release"))
+	writeGo(t, root, "api/internal/services/build/b.go", importing("build"))
 	writeGo(t, root, "api/internal/services/platform/p.go", importing("platform"))
 	return root
 }
@@ -55,24 +54,24 @@ func TestCheck_LegalGraphPasses(t *testing.T) {
 
 func TestCheck_ReverseEdgeFails(t *testing.T) {
 	root := legalTree(t)
-	writeGo(t, root, "api/internal/services/release/back.go", importing("release", "build"))
+	writeGo(t, root, "api/internal/services/platform/back.go", importing("platform", "build"))
 
 	out, err := Check(Config{RepoRoot: root})
 
 	if !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
-		t.Fatalf("release → build is the reverse edge the split removed; err = %v", err)
+		t.Fatalf("platform → build is not in the allow-list; err = %v", err)
 	}
-	if out.Edges[0].From != "release" || out.Edges[0].To != "build" {
-		t.Errorf("want release → build, got %+v", out.Edges[0])
+	if out.Edges[0].From != "platform" || out.Edges[0].To != "build" {
+		t.Errorf("want platform → build, got %+v", out.Edges[0])
 	}
 }
 
 func TestCheck_CrossEdgeBetweenSelfContainedContextsFails(t *testing.T) {
 	root := legalTree(t)
-	writeGo(t, root, "api/internal/services/platform/x.go", importing("platform", "release"))
+	writeGo(t, root, "api/internal/services/build/x.go", importing("build", "platform"))
 
 	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
-		t.Fatalf("platform → release is not in the allow-list; err = %v", err)
+		t.Fatalf("build → platform is not in the allow-list; err = %v", err)
 	}
 }
 
@@ -92,7 +91,7 @@ func TestCheck_UnregisteredContextFails(t *testing.T) {
 
 func TestCheck_ForbiddenEdgeInATestFileFails(t *testing.T) {
 	root := legalTree(t)
-	writeGo(t, root, "api/internal/services/release/r_test.go", importing("release", "build"))
+	writeGo(t, root, "api/internal/services/platform/r_test.go", importing("platform", "build"))
 
 	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
 		t.Fatalf("a test import is still a build edge; err = %v", err)
@@ -101,11 +100,11 @@ func TestCheck_ForbiddenEdgeInATestFileFails(t *testing.T) {
 
 func TestCheck_NestedPackageDoesNotEscapeItsContext(t *testing.T) {
 	root := legalTree(t)
-	writeGo(t, root, "api/internal/services/release/internal/helper/h.go", importing("helper", "build"))
+	writeGo(t, root, "api/internal/services/platform/internal/helper/h.go", importing("helper", "build"))
 
 	out, err := Check(Config{RepoRoot: root})
 
-	if !errors.Is(err, subpackagefence.ErrForbiddenEdge) || out.Edges[0].From != "release" {
+	if !errors.Is(err, subpackagefence.ErrForbiddenEdge) || out.Edges[0].From != "platform" {
 		t.Fatalf("nesting must not bypass the fence; err = %v edges = %+v", err, out.Edges)
 	}
 }

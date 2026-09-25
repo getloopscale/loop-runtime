@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	releasesvc "github.com/getloopscale/loopzero/api/internal/services/release"
+	releasesvc "github.com/getloopscale/loopzero/api/internal/release"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 

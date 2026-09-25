@@ -3,9 +3,9 @@ package adapters
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
+	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
 
-	"github.com/getloopscale/loopzero/api/internal/services/release"
+	"github.com/getloopscale/loopzero/api/internal/release"
 )
 
 // RollbackServiceAdapter bridges the rollback orchestrator to the route handler interface.
@@ -15,7 +15,7 @@ type RollbackServiceAdapter struct {
 }
 
 // Rollback converts route-layer types to service-layer types and delegates to the orchestrator.
-func (a *RollbackServiceAdapter) Rollback(ctx context.Context, req rollback.RollbackInput) (*rollback.RollbackOutput, error) {
+func (a *RollbackServiceAdapter) Rollback(ctx context.Context, req rollbackhttp.RollbackInput) (*rollbackhttp.RollbackOutput, error) {
 	result, err := a.Orchestrator.Rollback(ctx, release.RollbackRequest{
 		TenantID:      req.TenantID,
 		ProjectID:     req.ProjectID,
@@ -30,7 +30,7 @@ func (a *RollbackServiceAdapter) Rollback(ctx context.Context, req rollback.Roll
 		return nil, err
 	}
 
-	return &rollback.RollbackOutput{
+	return &rollbackhttp.RollbackOutput{
 		RolledBackReleaseID:  result.RolledBackRelease.ID,
 		ReactivatedReleaseID: result.ReactivatedRelease.ID,
 		Environment:          result.Environment,
@@ -43,4 +43,4 @@ func (a *RollbackServiceAdapter) Rollback(ctx context.Context, req rollback.Roll
 // B-058: this file did NOT declare, not even in prose, what it adapted — and the package's
 // admission criterion was "it is an adapter", which refuses nothing. The port was discovered
 // from the consumer, and is now written where the compiler checks it.
-var _ rollback.RollbackService = (*RollbackServiceAdapter)(nil)
+var _ rollbackhttp.RollbackService = (*RollbackServiceAdapter)(nil)

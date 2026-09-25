@@ -20,9 +20,9 @@ import (
 	"context"
 	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
+	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
+	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 	"log/slog"
@@ -88,7 +88,7 @@ func TestSourceUpload_Unauthenticated_Returns401(t *testing.T) {
 		BootstrapSecret:      "test-bootstrap-secret",
 		BuildHandler:         builds.NewBuildHandler(nil, logger),
 		LogsHandler:          logshttp.NewLogsHandler(nil, nil),
-		RollbackHandler:      rollback.NewRollbackHandler(nil, nil, "test.local"),
+		RollbackHandler:      rollbackhttp.NewRollbackHandler(nil, nil, "test.local"),
 		StatusHandler:        statushttp.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environmentshttp.NewEnvironmentHandler(nil),
@@ -96,7 +96,7 @@ func TestSourceUpload_Unauthenticated_Returns401(t *testing.T) {
 		DomainHandler:        domainshttp.NewDomainHandler(nil, nil, nil, "test.local"),
 		RepositoryHandler:    repositorieshttp.NewRepositoryHandler(nil),
 		AuditHandler:         audithttp.NewAuditHandler(nil),
-		ArgoCallbackHandler:  argocd.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
+		ArgoCallbackHandler:  argocdhttp.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
 		LogStreamHandler:     logshttp.NewLogStreamHandler(nil, nil, logshttp.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
 		TenantDeletionStore:  &stubTenantDeletionStore{},
@@ -138,7 +138,7 @@ func TestSourceUpload_InvalidBearerToken_Returns401(t *testing.T) {
 		BootstrapSecret:      "test-bootstrap-secret",
 		BuildHandler:         builds.NewBuildHandler(nil, logger),
 		LogsHandler:          logshttp.NewLogsHandler(nil, nil),
-		RollbackHandler:      rollback.NewRollbackHandler(nil, nil, "test.local"),
+		RollbackHandler:      rollbackhttp.NewRollbackHandler(nil, nil, "test.local"),
 		StatusHandler:        statushttp.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environmentshttp.NewEnvironmentHandler(nil),
@@ -146,7 +146,7 @@ func TestSourceUpload_InvalidBearerToken_Returns401(t *testing.T) {
 		DomainHandler:        domainshttp.NewDomainHandler(nil, nil, nil, "test.local"),
 		RepositoryHandler:    repositorieshttp.NewRepositoryHandler(nil),
 		AuditHandler:         audithttp.NewAuditHandler(nil),
-		ArgoCallbackHandler:  argocd.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
+		ArgoCallbackHandler:  argocdhttp.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
 		LogStreamHandler:     logshttp.NewLogStreamHandler(nil, nil, logshttp.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
 		TenantDeletionStore:  &stubTenantDeletionStore{},
@@ -191,7 +191,7 @@ func TestSourceUpload_XServiceAuthHeader_DoesNotBypass(t *testing.T) {
 		BootstrapSecret:      "test-bootstrap-secret",
 		BuildHandler:         builds.NewBuildHandler(nil, logger),
 		LogsHandler:          logshttp.NewLogsHandler(nil, nil),
-		RollbackHandler:      rollback.NewRollbackHandler(nil, nil, "test.local"),
+		RollbackHandler:      rollbackhttp.NewRollbackHandler(nil, nil, "test.local"),
 		StatusHandler:        statushttp.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environmentshttp.NewEnvironmentHandler(nil),
@@ -199,7 +199,7 @@ func TestSourceUpload_XServiceAuthHeader_DoesNotBypass(t *testing.T) {
 		DomainHandler:        domainshttp.NewDomainHandler(nil, nil, nil, "test.local"),
 		RepositoryHandler:    repositorieshttp.NewRepositoryHandler(nil),
 		AuditHandler:         audithttp.NewAuditHandler(nil),
-		ArgoCallbackHandler:  argocd.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
+		ArgoCallbackHandler:  argocdhttp.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
 		LogStreamHandler:     logshttp.NewLogStreamHandler(nil, nil, logshttp.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
 		TenantDeletionStore:  &stubTenantDeletionStore{},

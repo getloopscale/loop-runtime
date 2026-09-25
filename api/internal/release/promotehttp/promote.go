@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package promote serves the promotion endpoint: moving a release from one
+// Package promotehttp serves the promotion endpoint: moving a release from one
 // environment to the next.
 //
 // Nineteenth family to leave the flat `routes` package (B-080, slice-38),
@@ -11,7 +11,7 @@
 // It declares its own `EnvironmentEnsurer`, the third package to do so: a Go
 // interface is structural, so each consumer naming the one method it calls is
 // cheaper and more honest than a shared package nobody owns.
-package promote
+package promotehttp
 
 import (
 	"context"

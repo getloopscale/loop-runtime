@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package admin
+package releasehttp
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/services/release"
+	"github.com/getloopscale/loopzero/api/internal/release"
 
 	"github.com/go-chi/chi/v5"
 )

@@ -24,11 +24,11 @@ import (
 	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
+	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
+	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
+	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/promote"
-	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
 	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
@@ -94,11 +94,11 @@ func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 		BuildHandler:              &builds.BuildHandler{},
 		BuildAttestationHandler:   &builds.BuildAttestationHandler{},
 		BuildSBOMHandler:          &builds.BuildSBOMHandler{},
-		ArgoCallbackHandler:       &argocd.ArgoCallbackHandler{},
+		ArgoCallbackHandler:       &argocdhttp.ArgoCallbackHandler{},
 		LogsHandler:               &logshttp.LogsHandler{},
 		LogStreamHandler:          &logshttp.LogStreamHandler{},
-		RollbackHandler:           &rollback.RollbackHandler{},
-		PromoteHandler:            &promote.PromoteHandler{},
+		RollbackHandler:           &rollbackhttp.RollbackHandler{},
+		PromoteHandler:            &promotehttp.PromoteHandler{},
 		StatusHandler:             &statushttp.StatusHandler{},
 		ScaleHandler:              &scalinghttp.ScaleHandler{},
 		BuildListHandler:          &builds.BuildListHandler{},

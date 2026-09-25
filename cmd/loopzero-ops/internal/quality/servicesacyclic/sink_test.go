@@ -39,7 +39,7 @@ func TestCheck_SinkWithoutContextImportsPasses(t *testing.T) {
 
 func TestCheck_SinkTestFileImportingAContextFails(t *testing.T) {
 	root := legalTree(t)
-	writeGo(t, root, "api/internal/deploycontracts/c_test.go", importing("deploycontracts", "release"))
+	writeGo(t, root, "api/internal/deploycontracts/c_test.go", importing("deploycontracts", "platform"))
 
 	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
 		t.Fatalf("a test file in the sink importing a context still couples the two; got %v", err)

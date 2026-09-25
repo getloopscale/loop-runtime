@@ -727,7 +727,7 @@ cd operators     && go test ./...   # Operators (Ginkgo + envtest)
 cd cmd/loopzero-ops  && go test ./...   # Ops + quality binary
 
 # One package / one test
-cd api && go test ./internal/services/... -run TestScalingResolver -v
+cd api && go test ./internal/scaling/... -run TestResolve -v
 
 # One Ginkgo spec. `go test -timeout` alone does NOT raise Ginkgo's own 60min
 # suite timeout — pass -ginkgo.timeout too, or deploy-heavy suites hit TIMEDOUT:

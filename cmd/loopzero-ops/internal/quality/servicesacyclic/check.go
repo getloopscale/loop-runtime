@@ -7,18 +7,17 @@
 // routesacyclic. The inter-context import graph must stay the acyclic DAG the M9
 // split produced, deny-by-default:
 //
-//	build     → release
-//	release   → (no sibling)
+//	build     → (no sibling)
 //	platform  → (no sibling)
 //
 // The shared types every context needs live in api/internal/deploycontracts,
 // OUTSIDE this package, which is why no context needs a sibling to reach them.
 //
-// scaling, preview, domain and placement left for their feature directories when api/internal was
-// organized by feature (2026-09-25); feature-fence governs them there.
+// release, scaling, preview, domain and placement left for their feature
+// directories when api/internal was organized by feature (2026-09-25);
+// feature-fence governs them there.
 //
-// Any edge not in the allow-list fails: a reverse edge (release → build) would
-// re-create a cycle, a new cross edge erodes the split, and a new context that is
+// Any edge not in the allow-list fails: a reverse edge would re-create a cycle, a new cross edge erodes the split, and a new context that is
 // not registered forces a conscious decision instead of silently widening the
 // graph. The registry itself is checked for cycles before the tree is read.
 //
@@ -56,8 +55,7 @@ const (
 // allowed is the deny-by-default registry: allowed[A] is the set of contexts A
 // may import.
 var allowed = map[string]map[string]bool{
-	"build":    {"release": true},
-	"release":  {},
+	"build":    {},
 	"platform": {},
 }
 
@@ -133,7 +131,7 @@ func ActionableFix() string {
 		"in api/internal/deploycontracts — move it there; or (b) the edge is a " +
 		"genuine new dependency that must be reviewed and added to the allow-list " +
 		"in servicesacyclic/check.go, which refuses any addition that creates a " +
-		"cycle. Reverse edges (e.g. release importing build) are forbidden — they " +
+		"cycle. Reverse edges are forbidden — they " +
 		"re-introduce the cycle the split removed. An unregistered context needs " +
 		"the same decision before it may exist."
 }

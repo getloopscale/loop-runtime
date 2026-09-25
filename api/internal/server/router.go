@@ -19,7 +19,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/auth/authhttp"
 	"github.com/getloopscale/loopzero/api/internal/placement/placementhttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/admin"
+	"github.com/getloopscale/loopzero/api/internal/release/releasehttp"
 	"github.com/getloopscale/loopzero/api/internal/version/versionhttp"
 
 	"github.com/go-chi/chi/v5"
@@ -221,7 +221,7 @@ func NewRouter(cfg Config) *chi.Mux {
 		"no database — built in setup_server.go:315, inside the block that requires "+
 			"`dbAdapter`. It is on-call's view of a release's signing chain; turned off, "+
 			"on-call loses the diagnosis exactly when it is needed") {
-		r.With(authn.RequireAdminService).Get("/api/v1/admin/releases/{id}/inspect", admin.AdminReleaseInspectHandler(cfg.Admin.ReleaseInspector, cfg.Admin.APIEnabled))
+		r.With(authn.RequireAdminService).Get("/api/v1/admin/releases/{id}/inspect", releasehttp.AdminReleaseInspectHandler(cfg.Admin.ReleaseInspector, cfg.Admin.APIEnabled))
 	}
 
 	// Protected routes (auth required)

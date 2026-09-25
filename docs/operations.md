@@ -47,7 +47,7 @@ Per module — **the root does not cover them**, there is no root `go.mod`:
 
 ```bash
 cd api && go test ./...          # also pkg, operators, cmd/loopzero-ops
-cd api && go test ./internal/services/... -run TestScalingResolver -v
+cd api && go test ./internal/scaling/... -run TestResolve -v
 ```
 
 A single Ginkgo spec. `go test -timeout` alone does **not** extend the Ginkgo suite timeout

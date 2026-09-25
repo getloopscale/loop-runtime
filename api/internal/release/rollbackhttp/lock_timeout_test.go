@@ -6,7 +6,7 @@
 // cases. Both were reached only from the parent's shared coverage file, which is
 // the import direction the routes fence forbids once the family is its own
 // package.
-package rollback
+package rollbackhttp
 
 import (
 	"bytes"

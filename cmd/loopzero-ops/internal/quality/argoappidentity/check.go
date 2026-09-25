@@ -52,7 +52,7 @@ import (
 // scanRoots are the trees where an ArgoCD Application name can legitimately be needed.
 var scanRoots = []string{
 	"operators/internal/tenant",
-	"api/internal/services/release",
+	"api/internal/release",
 }
 
 // adHocRe matches `fmt.Sprintf("%s-%s", <x>.TenantID|<x>.Name, <y>)` — the shape that

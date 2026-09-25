@@ -18,10 +18,10 @@
 //         (maps to CLI exit 1)
 //   - 500 unexpected internal error
 
-// Package admin serves the release-inspection operator endpoint; eviction and
+// Package releasehttp serves the release-inspection operator endpoint; eviction and
 // cell pinning moved to the placement feature (api/internal organized by
 // feature, 2026-09-25).
-package admin
+package releasehttp
 
 import (
 	"encoding/json"
@@ -30,7 +30,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/httpio"
 
-	"github.com/getloopscale/loopzero/api/internal/services/release"
+	"github.com/getloopscale/loopzero/api/internal/release"
 
 	"github.com/go-chi/chi/v5"
 )

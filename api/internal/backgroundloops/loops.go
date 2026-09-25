@@ -17,9 +17,9 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
 	"github.com/getloopscale/loopzero/api/internal/gitops"
 	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loopzero/api/internal/release"
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
-	"github.com/getloopscale/loopzero/api/internal/services/release"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 

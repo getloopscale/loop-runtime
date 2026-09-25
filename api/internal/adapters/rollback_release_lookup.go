@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
+	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
 )
 
 // RollbackReleaseLookupAdapter satisfies routes.RollbackReleaseLookup
@@ -49,4 +49,4 @@ func (a *RollbackReleaseLookupAdapter) GetLatestReleaseForBuild(ctx context.Cont
 // B-058: this file did NOT declare, not even in prose, what it adapted — and the package's
 // admission criterion was "it is an adapter", which refuses nothing. The port was discovered
 // from the consumer, and is now written where the compiler checks it.
-var _ rollback.RollbackReleaseLookup = (*RollbackReleaseLookupAdapter)(nil)
+var _ rollbackhttp.RollbackReleaseLookup = (*RollbackReleaseLookupAdapter)(nil)
