@@ -178,13 +178,16 @@ if [ ! -f "$INVENTORY" ]; then
   echo "ERROR: inventory not found: $INVENTORY" >&2
   exit 1
 fi
-# A D6 path is <vaultBinary>/<vaultCategory>/<vaultKey>.
+# A D6 path is <vaultBinary>/<vaultCategory>/<vaultKey>, where the binary is a
+# data entry's vaultBinaryOverride when it has one: the tenant operator's
+# ExternalSecret reads the api's gitea and minio keys that way, so a rotation
+# of those paths must refresh it and restart the operator too.
 PATH_BINARY="${PATH_REL%%/*}"
 PATH_REST="${PATH_REL#*/}"
 PATH_CATEGORY="${PATH_REST%%/*}"
 PATH_KEY="${PATH_REST#*/}"
 if ! EXTERNALSECRETS=$(B="$PATH_BINARY" C="$PATH_CATEGORY" K="$PATH_KEY" yq -r \
-    '.externalSecrets[] | select(.vaultBinary == strenv(B) and .vaultCategory == strenv(C)) | select(.data | any_c(.vaultKey == strenv(K))) | .targetSecret' \
+    '.externalSecrets[] | . as $es | select($es.vaultCategory == strenv(C)) | select($es.data | any_c((.vaultBinaryOverride // $es.vaultBinary) == strenv(B) and .vaultKey == strenv(K))) | .targetSecret' \
     "$INVENTORY" | sort -u | paste -sd, -); then
   echo "ERROR: could not read $INVENTORY" >&2
   exit 1
@@ -193,7 +196,7 @@ fi
 if [ -z "$EXTERNALSECRETS" ]; then
   echo "ERROR: no ExternalSecret in $INVENTORY reads '$PATH_REL'" >&2
   echo "Known paths:" >&2
-  yq -r '.externalSecrets[] | .vaultBinary + "/" + .vaultCategory + "/" + .data[].vaultKey' "$INVENTORY" \
+  yq -r '.externalSecrets[] | . as $es | .data[] | (.vaultBinaryOverride // $es.vaultBinary) + "/" + $es.vaultCategory + "/" + .vaultKey' "$INVENTORY" \
     | sort -u | sed 's/^/  /' >&2
   exit 1
 fi

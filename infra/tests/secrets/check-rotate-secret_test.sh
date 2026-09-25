@@ -5,7 +5,7 @@
 # Validates infra/scripts/openbao/rotate-secret.sh:
 #   1. Pre-flight: missing --env / --path / --value (non-dry-run) → error
 #   2. Pre-flight: missing BAO_ADDR / BAO_TOKEN (non-dry-run) → error
-#   3. Unknown path NOT in rotation table → fail-fast (EC-22 typo guard)
+#   3. Unknown path no inventory ExternalSecret reads → fail-fast (EC-22 typo guard)
 #   4. Dry-run: prints planned actions for all 4 steps, no bao/kubectl writes
 #   5. Path lookup: gitea/token resolves to BOTH loopzero-api + loopzero-tenant-operator
 #      restart (cross-binary EC-22 atomic)
@@ -114,11 +114,11 @@ else
 fi
 rm -f "$out" "$err"
 
-# --- Test 4: unknown path NOT in rotation table → fail-fast (EC-22 guard) ---
+# --- Test 4: unknown path no ExternalSecret reads → fail-fast (EC-22 guard) ---
 out=$(mktemp); err=$(mktemp)
 BAO_ADDR=mock BAO_TOKEN=mock PATH="$MOCK_BIN:$PATH" \
   bash "$TARGET_SCRIPT" --env vault-local --path api/secrets/typo/typoed --value secret >"$out" 2>"$err"; rc=$?
-if [[ "$rc" == "1" ]] && grep -q "not in rotation table" "$err"; then
+if [[ "$rc" == "1" ]] && grep -q "no ExternalSecret in .* reads 'api/secrets/typo/typoed'" "$err"; then
   printf '  PASS: test_unknown_path_fail_fast_ec22_guard\n'; PASS=$((PASS+1))
 else
   printf '  FAIL: test_unknown_path_fail_fast_ec22_guard (rc=%d)\n' "$rc"

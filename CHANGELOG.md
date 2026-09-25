@@ -265,6 +265,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Rotating a secret the tenant operator reads through another component's path (the Gitea token, the MinIO keys) refreshes the operator's copy and restarts the operator again, instead of restarting only the API and leaving the operator on the old value (principle_violations#237)
+
 - loopzero-ops quality billing-layers and routes-acyclic recognise the cost gate's new location and the shared plan-tier policy package instead of failing on them
 
 - loopzero-ops quality error-vocabulary checks every user-facing error message again, including messages built with an error constructor before being written; 37 messages had left its scan, and error codes are no longer counted as messages
