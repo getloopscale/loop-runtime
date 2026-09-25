@@ -24,8 +24,11 @@ import (
 //
 //  1. Ensure Kratos identity via admin API (create if absent).
 //  2. Ensure auxiliary PG state (users / accounts / tenants /
-//     tenant_members / user_identity_map / subscriptions) — SERIALIZABLE
-//     transaction for atomicity.
+//     tenant_members / user_identity_map / subscriptions) as idempotent
+//     autocommit upserts, not a transaction — see adminEnsurePGState.
+//     This writes the engine's tenancy schema directly, placing the tenant
+//     on cell-0 without the placement engine; it is a dev fixture, and
+//     any schema or placement change must be mirrored here by hand.
 //  3. Reset identity password via PUT (Kratos v26 quirk: PUT hashes,
 //     JSON Patch stores cleartext) + mint session via browser login
 //     flow + persist session cookie at mode 0600.
