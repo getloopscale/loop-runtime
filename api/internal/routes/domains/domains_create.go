@@ -33,15 +33,6 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// SEC-002 fix: only owners and admins can manage custom domains
-	if uc.Role != "owner" && uc.Role != "admin" {
-		httpio.WriteJSON(w, http.StatusForbidden, map[string]string{
-			"code":    "FORBIDDEN",
-			"message": "Only team owners and admins can manage custom domains.",
-		})
-		return
-	}
-
 	var req domainCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{"code": "INTERNAL_ERROR", "message": "invalid request body"})

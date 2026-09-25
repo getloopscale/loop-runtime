@@ -124,21 +124,6 @@ func TestDomains_Create_HappyPath_V1(t *testing.T) {
 	}
 }
 
-func TestDomains_Create_MemberForbidden(t *testing.T) {
-	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
-
-	body := `{"domain":"example.com","project":"my-api","app":"web","environment":"production"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body))
-	req = routestest.WithAuth(req, routestest.MemberUserContext())
-	w := httptest.NewRecorder()
-
-	h.Create(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("want 403, got %d body=%s", w.Code, w.Body.String())
-	}
-}
-
 func TestDomains_Create_MissingFields(t *testing.T) {
 	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
@@ -413,12 +398,6 @@ func TestDomains_Delete_AuthorizationAndStateMatrix(t *testing.T) {
 				return routestest.WithAuth(req, routestest.DefaultUserContext())
 			},
 			wantCode: http.StatusNotFound,
-		},
-		{
-			name:      "MemberForbidden",
-			store:     &fakeDomainStore{domain: &CustomDomain{Domain: "example.com", Status: "active"}},
-			setupAuth: func(req *http.Request) *http.Request { return routestest.WithAuth(req, routestest.MemberUserContext()) },
-			wantCode:  http.StatusForbidden,
 		},
 		{
 			name: "ConcurrentModification",

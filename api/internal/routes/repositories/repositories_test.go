@@ -183,22 +183,6 @@ func TestRepositories_Connect_AlreadyLinkedToOtherProject(t *testing.T) {
 	}
 }
 
-func TestRepositories_Connect_MemberForbidden(t *testing.T) {
-	h := NewRepositoryHandler(&fakeRepoStore{})
-
-	body := `{"repo":"owner/my-repo","installation_id":12345}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/connect", bytes.NewBufferString(body))
-	req = routestest.WithAuth(req, routestest.MemberUserContext())
-	req = routestest.WithChiParam(req, "name", "my-api")
-	w := httptest.NewRecorder()
-
-	h.Connect(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("want 403, got %d body=%s", w.Code, w.Body.String())
-	}
-}
-
 func TestRepositories_Connect_Unauthenticated(t *testing.T) {
 	h := NewRepositoryHandler(&fakeRepoStore{})
 
@@ -255,21 +239,6 @@ func TestRepositories_Disconnect_NotLinked_Returns404(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &body)
 	if body["code"] != "REPOSITORY_NOT_LINKED" {
 		t.Errorf("want code=REPOSITORY_NOT_LINKED, got %v", body["code"])
-	}
-}
-
-func TestRepositories_Disconnect_MemberForbidden(t *testing.T) {
-	h := NewRepositoryHandler(&fakeRepoStore{})
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/projects/my-api/connect", nil)
-	req = routestest.WithAuth(req, routestest.MemberUserContext())
-	req = routestest.WithChiParam(req, "name", "my-api")
-	w := httptest.NewRecorder()
-
-	h.Disconnect(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("want 403, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 

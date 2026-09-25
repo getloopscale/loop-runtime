@@ -27,15 +27,6 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// SEC-002 fix: only owners and admins can manage custom domains
-	if uc.Role != "owner" && uc.Role != "admin" {
-		httpio.WriteJSON(w, http.StatusForbidden, map[string]string{
-			"code":    "FORBIDDEN",
-			"message": "Only team owners and admins can manage custom domains.",
-		})
-		return
-	}
-
 	domainName := chi.URLParam(r, "domain")
 
 	d, err := h.store.GetByDomainAndTenant(ctx, domainName, uc.TenantID)

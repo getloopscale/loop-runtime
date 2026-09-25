@@ -54,6 +54,14 @@ func (c routeChains) idempotentWith(extra ...middleware) []middleware {
 	return concatMiddleware(c.idempotent, extra)
 }
 
+// gatedBy puts the role gate (auth.RequireRole) in front of a chain: a caller
+// below minRole is refused before it spends a rate-limit token or leaves an
+// idempotency record, and every role-gated route answers with the same
+// INSUFFICIENT_ROLE shape.
+func gatedBy(minRole string, chain []middleware) []middleware {
+	return concatMiddleware([]middleware{mwauth.RequireRole(minRole)}, chain)
+}
+
 // audited declares a route's audit identity (see audit.Declare): the action
 // name and resource type its audit row records.
 func audited(action, resourceType string) middleware {
@@ -364,9 +372,9 @@ func registerTeamRoutes(r chi.Router, cfg Config, ch routeChains) {
 		return
 	}
 	r.Get("/api/v1/teams/members", cfg.TeamHandler.List)
-	r.With(ch.limited(audited("member.added", "member"), ch.seatQuota)...).Post("/api/v1/teams/members", cfg.TeamHandler.Add)
-	r.With(ch.limited(audited("member.removed", "member"))...).Delete("/api/v1/teams/members/{username}", cfg.TeamHandler.Remove)
-	r.With(ch.limited(audited("member.role_changed", "member"))...).Patch("/api/v1/teams/members/{username}", cfg.TeamHandler.UpdateRole)
+	r.With(gatedBy("admin", ch.limited(audited("member.added", "member"), ch.seatQuota))...).Post("/api/v1/teams/members", cfg.TeamHandler.Add)
+	r.With(gatedBy("admin", ch.limited(audited("member.removed", "member")))...).Delete("/api/v1/teams/members/{username}", cfg.TeamHandler.Remove)
+	r.With(gatedBy("owner", ch.limited(audited("member.role_changed", "member")))...).Patch("/api/v1/teams/members/{username}", cfg.TeamHandler.UpdateRole)
 }
 
 // registerTenantRoutes: the soft-deletion cycle (MEET-052).
@@ -391,7 +399,7 @@ func registerBillingRoutes(r chi.Router, cfg Config, ch routeChains) {
 	// `owner`, as loopzero-cloud requires for the same capability: any member
 	// opening the billing portal is horizontal escalation to invoices,
 	// payment method and history.
-	r.With(ch.limited(audited("billing.portal_opened", "billing"), mwauth.RequireRole("owner"))...).Post("/api/v1/billing/portal", cfg.BillingHandler.Portal)
+	r.With(gatedBy("owner", ch.limited(audited("billing.portal_opened", "billing")))...).Post("/api/v1/billing/portal", cfg.BillingHandler.Portal)
 }
 
 func registerEnvironmentRoutes(r chi.Router, cfg Config, ch routeChains) {
@@ -415,7 +423,7 @@ func registerDomainRoutes(r chi.Router, cfg Config, ch routeChains) {
 	r.Get("/api/v1/domains", cfg.DomainHandler.List)
 	r.Get("/api/v1/domains/{domain}", cfg.DomainHandler.Get)
 	r.Get("/api/v1/domains/{domain}/dns-records", cfg.DomainHandler.ListDNSRecords)
-	r.With(ch.idempotentWith(audited("domain.added", "domain"))...).Post("/api/v1/domains", cfg.DomainHandler.Create)
+	r.With(gatedBy("admin", ch.idempotentWith(audited("domain.added", "domain")))...).Post("/api/v1/domains", cfg.DomainHandler.Create)
 	// J11D7 LOCKED ADR: /verify uses the per-(tenant, domain) limiter in front
 	// of the tenant-wide one; without it, the tenant limiter alone (ADR D3).
 	verify := ch.limited(audited("domain.verified", "domain"))
@@ -423,7 +431,7 @@ func registerDomainRoutes(r chi.Router, cfg Config, ch routeChains) {
 		verify = concatMiddleware([]middleware{cfg.VerifyRateLimiter.Middleware()}, verify)
 	}
 	r.With(verify...).Post("/api/v1/domains/{domain}/verify", cfg.DomainHandler.Verify)
-	r.With(ch.limited(audited("domain.removed", "domain"))...).Delete("/api/v1/domains/{domain}", cfg.DomainHandler.Delete)
+	r.With(gatedBy("admin", ch.limited(audited("domain.removed", "domain")))...).Delete("/api/v1/domains/{domain}", cfg.DomainHandler.Delete)
 }
 
 // registerRepositoryRoutes: GitHub App connection (auto-deploy) and the
@@ -431,8 +439,8 @@ func registerDomainRoutes(r chi.Router, cfg Config, ch routeChains) {
 func registerRepositoryRoutes(r chi.Router, cfg Config, ch routeChains) {
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Repositories, cfg.RepositoryHandler != nil,
 		"no GitHub dependencies — comes from `ghDeps` (setup_server.go), which needs GitHub App credentials and, before them, the database") {
-		r.With(ch.limited(audited("repository.connected", "repository"))...).Post("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Connect)
-		r.With(ch.limited(audited("repository.disconnected", "repository"))...).Delete("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Disconnect)
+		r.With(gatedBy("admin", ch.limited(audited("repository.connected", "repository")))...).Post("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Connect)
+		r.With(gatedBy("admin", ch.limited(audited("repository.disconnected", "repository")))...).Delete("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.Disconnect)
 		r.Get("/api/v1/projects/{name}/connect", cfg.RepositoryHandler.GetConnection)
 	}
 	if surfaces.Recorded(cfg.Surfaces, surfaces.IntegrationsGitHub, cfg.IntegrationsGitHubHandler != nil,
@@ -457,6 +465,6 @@ func registerPreviewRoutes(r chi.Router, cfg Config, ch routeChains) {
 func registerAuditRoutes(r chi.Router, cfg Config, _ routeChains) {
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Audit, cfg.AuditHandler != nil,
 		"no database — built on `PostgresAuditStore` (setup_server.go). Without it the audit log can no longer be queried") {
-		r.Get("/api/v1/audit", cfg.AuditHandler.List)
+		r.With(mwauth.RequireRole("admin")).Get("/api/v1/audit", cfg.AuditHandler.List)
 	}
 }

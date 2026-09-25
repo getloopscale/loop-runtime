@@ -56,12 +56,6 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Require admin or owner role
-	if uc.Role != "owner" && uc.Role != "admin" {
-		httpio.WriteCodeErrorJSON(w, http.StatusForbidden, "INSUFFICIENT_ROLE", "Audit log requires admin or owner role.")
-		return
-	}
-
 	filter := AuditFilter{
 		Action:       r.URL.Query().Get("action"),
 		ResourceType: r.URL.Query().Get("resource_type"),

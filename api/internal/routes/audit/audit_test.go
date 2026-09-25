@@ -115,20 +115,6 @@ func TestAudit_List_Unauthenticated(t *testing.T) {
 	}
 }
 
-func TestAudit_List_MemberForbidden(t *testing.T) {
-	h := NewAuditHandler(&fakeAuditStore{})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/audit", nil)
-	req = routestest.WithAuth(req, routestest.MemberUserContext()) // member role, not owner/admin
-	w := httptest.NewRecorder()
-
-	h.List(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("want 403, got %d body=%s", w.Code, w.Body.String())
-	}
-}
-
 func TestAudit_List_WithFilters(t *testing.T) {
 	store := &fakeAuditStore{
 		entries: []AuditEntryResult{

@@ -231,7 +231,7 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// v1: expose verification token to owner/admin for pending domains
-	if d.Status == "pending_verification" && (uc.Role == "owner" || uc.Role == "admin") {
+	if d.Status == "pending_verification" && auth.HasMinRole(uc.Role, "admin") {
 		resp.Verification = &domainVerificationInfo{
 			TXTName:  "_loopzero-verify." + d.Domain,
 			TXTValue: d.VerificationToken,

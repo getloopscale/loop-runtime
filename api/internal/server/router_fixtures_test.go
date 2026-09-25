@@ -24,10 +24,12 @@ func (fixedTokenValidator) ValidateToken(context.Context, string) (*auth.TokenVa
 	return &auth.TokenValidationResult{UserID: "u-fixed", Email: "u@example.test"}, nil
 }
 
+// fixedMembership makes the fixture user the owner of the fixture tenant, so
+// guard tests reach past the role gates to the guard they are about.
 type fixedMembership struct{}
 
 func (fixedMembership) GetMemberships(context.Context, string) ([]auth.TenantMembership, error) {
-	return []auth.TenantMembership{{TenantID: "tn-fixed"}}, nil
+	return []auth.TenantMembership{{TenantID: "tn-fixed", Role: "owner"}}, nil
 }
 
 // withFixedUser attaches an authenticated user to a request that bypasses the

@@ -286,23 +286,6 @@ func TestTeamAdd(t *testing.T) {
 		}
 	})
 
-	t.Run("POST /api/v1/teams/members → 403 when member tries to add", func(t *testing.T) {
-		store := storeWithOwnerAndMember("acme", "github-lucas", "github-bob")
-		handler := teams.NewTeamHandler(store)
-
-		body := `{"username":"newuser","role":"member"}`
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/teams/members", bytes.NewBufferString(body)).
-			WithContext(makeAuthCtx("github-bob", "acme", "member"))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-
-		handler.Add(rec, req)
-
-		if rec.Code != http.StatusForbidden {
-			t.Fatalf("expected 403, got %d: %s", rec.Code, rec.Body.String())
-		}
-	})
-
 	t.Run("POST /api/v1/teams/members → 401 without auth", func(t *testing.T) {
 		store := newFakeTeamStore()
 		handler := teams.NewTeamHandler(store)
@@ -507,33 +490,6 @@ func TestTeamUpdateRole(t *testing.T) {
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
-		}
-	})
-
-	t.Run("PATCH /api/v1/teams/members/{username} → 403 when admin tries to change role", func(t *testing.T) {
-		store := storeWithOwnerAndAdmin("acme", "github-lucas", "github-admin")
-		store.members["acme"] = append(store.members["acme"], ports.TeamMemberInfo{
-			Username: "bob",
-			Email:    "bob@test.com",
-			Role:     "member",
-			JoinedAt: time.Now().UTC().Format(time.RFC3339),
-		})
-		handler := teams.NewTeamHandler(store)
-
-		body := `{"role":"admin"}`
-		req := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/members/bob", bytes.NewBufferString(body))
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("username", "bob")
-		ctx := makeAuthCtx("github-admin", "acme", "admin")
-		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
-		req = req.WithContext(ctx)
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-
-		handler.UpdateRole(rec, req)
-
-		if rec.Code != http.StatusForbidden {
-			t.Fatalf("expected 403, got %d: %s", rec.Code, rec.Body.String())
 		}
 	})
 

@@ -33,13 +33,6 @@ import (
 
 // ports.ErrMemberNotFound is an alias for ports.ErrMemberNotFound (backward compatibility).
 
-// validRoles defines the allowed team member roles.
-var validRoles = map[string]bool{
-	"owner":  true,
-	"admin":  true,
-	"member": true,
-}
-
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
 type (
 	TeamMemberInfo = ports.TeamMemberInfo
@@ -92,7 +85,8 @@ type addMemberRequest struct {
 }
 
 // Add handles POST /api/v1/teams/members.
-// Adds a user to the team. Only owner or admin can add members.
+// Adds a user to the team. Only owner or admin can add members — enforced at
+// registration by auth.RequireRole("admin").
 func (h *TeamHandler) Add(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
@@ -100,18 +94,6 @@ func (h *TeamHandler) Add(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
-		return
-	}
-
-	// Authorization: only owner or admin can add members
-	callerMember, err := h.store.GetMember(ctx, uc.TenantID, uc.UserID)
-	if err != nil {
-		slog.Error("failed to get caller member", "error", err.Error())
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
-		return
-	}
-	if callerMember == nil || (callerMember.Role != "owner" && callerMember.Role != "admin") {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("only owners and admins can add team members"))
 		return
 	}
 
@@ -138,7 +120,7 @@ func (h *TeamHandler) Add(w http.ResponseWriter, r *http.Request) {
 
 	// Validate role — SECURITY: "owner" cannot be assigned via API (privilege escalation).
 	// Ownership is set only during bootstrap. R-01 fix.
-	if !validRoles[req.Role] || req.Role == "owner" {
+	if !auth.IsKnownRole(req.Role) || req.Role == "owner" {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidRequest.Wrap("role must be one of: admin, member"))
 		return
 	}
@@ -192,18 +174,6 @@ func (h *TeamHandler) Remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Authorization: only owner or admin can remove members
-	callerMember, err := h.store.GetMember(ctx, uc.TenantID, uc.UserID)
-	if err != nil {
-		slog.Error("failed to get caller member", "error", err.Error())
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
-		return
-	}
-	if callerMember == nil || (callerMember.Role != "owner" && callerMember.Role != "admin") {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("only owners and admins can remove team members"))
-		return
-	}
-
 	// Look up target user (AUDIT-7: provider-agnostic — no "github-" assumption)
 	targetUser, err := h.store.GetUserByUsername(ctx, username)
 	if err != nil {
@@ -241,7 +211,7 @@ func (h *TeamHandler) Remove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Admin cannot remove another admin (only owner can)
-	if callerMember.Role == "admin" && targetMember.Role == "admin" {
+	if uc.Role == "admin" && targetMember.Role == "admin" {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("admins cannot remove other admins — only the owner can"))
 		return
 	}
@@ -267,11 +237,8 @@ type updateRoleRequest struct {
 }
 
 // UpdateRole handles PATCH /api/v1/teams/members/{username}.
-// Changes a member's role. Only the owner can change roles.
-//
-// Plan 2026-06-15-code-review-49-findings-remediation T5.4 (R2-F3 HIGH):
-// CC 16 → ≤ 12 via 3-helper split (authorizeOwnerOnly + parseRoleRequest +
-// resolveAndValidateTarget). Behavior preserved verbatim.
+// Changes a member's role. Only the owner can change roles — enforced at
+// registration by auth.RequireRole("owner"), the one role gate.
 func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
@@ -285,11 +252,6 @@ func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	username := chi.URLParam(r, "username")
 	if username == "" {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("username is required"))
-		return
-	}
-
-	if err := h.authorizeOwnerOnly(ctx, uc.TenantID, uc.UserID); err != nil {
-		httpio.WriteLoopZeroError(w, err)
 		return
 	}
 
@@ -328,20 +290,6 @@ func (h *TeamHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// authorizeOwnerOnly returns a LoopZeroError when the caller is not the team
-// owner. Used by UpdateRole to gate role-change permission.
-func (h *TeamHandler) authorizeOwnerOnly(ctx context.Context, tenantID, userID string) *loopzeroerrors.LoopZeroError {
-	callerMember, err := h.store.GetMember(ctx, tenantID, userID)
-	if err != nil {
-		slog.Error("failed to get caller member", "error", err.Error())
-		return loopzeroerrors.ErrInternalError
-	}
-	if callerMember == nil || callerMember.Role != "owner" {
-		return loopzeroerrors.ErrForbidden.Wrap("only the team owner can change member roles")
-	}
-	return nil
-}
-
 // parseRoleRequest decodes the JSON body and validates the role enum.
 // SECURITY: "owner" cannot be assigned via API (privilege escalation, R-01).
 func parseRoleRequest(r *http.Request) (string, *loopzeroerrors.LoopZeroError) {
@@ -349,7 +297,7 @@ func parseRoleRequest(r *http.Request) (string, *loopzeroerrors.LoopZeroError) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return "", loopzeroerrors.ErrInvalidRequest
 	}
-	if !validRoles[req.Role] || req.Role == "owner" {
+	if !auth.IsKnownRole(req.Role) || req.Role == "owner" {
 		return "", loopzeroerrors.ErrInvalidRequest.Wrap("role must be one of: admin, member")
 	}
 	return req.Role, nil

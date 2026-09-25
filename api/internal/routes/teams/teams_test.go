@@ -126,25 +126,6 @@ func TestTeams_Add_HappyPath(t *testing.T) {
 	}
 }
 
-func TestTeams_Add_MemberCantAdd(t *testing.T) {
-	store := &fakeTeamStore{
-		member: &TeamMemberInfo{Username: "caller", Role: "member"}, // not owner/admin
-		user:   &TeamUserInfo{ID: "github-newuser"},
-	}
-	h := NewTeamHandler(store)
-
-	body := `{"username":"newuser","role":"member"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/teams/members", bytes.NewBufferString(body))
-	req = routestest.WithAuth(req, routestest.MemberUserContext())
-	w := httptest.NewRecorder()
-
-	h.Add(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("want 403, got %d body=%s", w.Code, w.Body.String())
-	}
-}
-
 func TestTeams_Add_CannotAssignOwnerRole(t *testing.T) {
 	store := &fakeTeamStore{
 		member: &TeamMemberInfo{Username: "caller", Role: "owner"},
@@ -304,25 +285,6 @@ func TestTeams_UpdateRole_HappyPath(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
-	}
-}
-
-func TestTeams_UpdateRole_OnlyOwnerCanChange(t *testing.T) {
-	store := &fakeTeamStore{
-		member: &TeamMemberInfo{Username: "admin-user", Role: "admin"}, // not owner
-	}
-	h := NewTeamHandler(store)
-
-	body := `{"role":"admin"}`
-	req := httptest.NewRequest(http.MethodPatch, "/api/v1/teams/members/bob", bytes.NewBufferString(body))
-	req = routestest.WithAuth(req, routestest.MemberUserContext())
-	req = routestest.WithChiParam(req, "username", "bob")
-	w := httptest.NewRecorder()
-
-	h.UpdateRole(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("want 403, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 

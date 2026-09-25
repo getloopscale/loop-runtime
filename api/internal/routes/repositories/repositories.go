@@ -135,14 +135,6 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if uc.Role != "owner" && uc.Role != "admin" {
-		httpio.WriteJSON(w, http.StatusForbidden, map[string]string{
-			"code":    "FORBIDDEN",
-			"message": "Only team owners and admins can connect repositories.",
-		})
-		return
-	}
-
 	projectName := chi.URLParam(r, "name")
 
 	req, branch, ok := parseConnectRequest(w, r)
@@ -271,14 +263,6 @@ func (h *RepositoryHandler) Disconnect(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
-		return
-	}
-
-	if uc.Role != "owner" && uc.Role != "admin" {
-		httpio.WriteJSON(w, http.StatusForbidden, map[string]string{
-			"code":    "FORBIDDEN",
-			"message": "Only team owners and admins can disconnect repositories.",
-		})
 		return
 	}
 

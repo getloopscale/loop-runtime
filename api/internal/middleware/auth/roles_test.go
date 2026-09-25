@@ -85,3 +85,11 @@ func TestHasMinRole(t *testing.T) {
 		}
 	}
 }
+
+func TestIsKnownRole(t *testing.T) {
+	for role, want := range map[string]bool{"owner": true, "admin": true, "member": true, "": false, "superuser": false} {
+		if got := IsKnownRole(role); got != want {
+			t.Errorf("IsKnownRole(%q) = %v, want %v", role, got, want)
+		}
+	}
+}
