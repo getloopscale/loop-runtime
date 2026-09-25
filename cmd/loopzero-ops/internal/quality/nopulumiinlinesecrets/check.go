@@ -12,11 +12,11 @@
 package nopulumiinlinesecrets
 
 import (
-	"bufio"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
 )
 
 // Config tells Check which repo to scan + allows operator override.
@@ -56,60 +56,45 @@ func Check(cfg Config) (Outcome, error) {
 		allowSet[filepath.Clean(p)] = true
 	}
 
-	var out Outcome
-	abs := filepath.Join(cfg.RepoRoot, scanDir)
-	if _, statErr := os.Stat(abs); os.IsNotExist(statErr) {
-		return Outcome{Pass: true}, nil // scan dir absent — nothing to scan
-	}
 	// Fail-CLOSED (ADR-M24-3): a walk error and a stack file that cannot be read
 	// are both returned, so Check errors instead of computing Pass over a file it
 	// never read. A gate that cannot read the files it scans must not report clean.
-	walkErr := filepath.Walk(abs, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		base := filepath.Base(path)
+	var out Outcome
+	keep := func(rel string) bool {
+		base := filepath.Base(rel)
 		// Only scan Pulumi stack files (Pulumi.<stack>.yaml or Pulumi.yaml).
 		if !strings.HasPrefix(base, "Pulumi.") || (!strings.HasSuffix(base, ".yaml") && !strings.HasSuffix(base, ".yml")) {
-			return nil
+			return false
 		}
-		rel, _ := filepath.Rel(cfg.RepoRoot, path)
-		if allowSet[filepath.Clean(rel)] {
-			return nil
-		}
-		hits, err := scanFile(path, rel)
+		return !allowSet[filepath.Clean(rel)]
+	}
+	walked, err := linescan.Walk(cfg.RepoRoot, []string{scanDir}, keep, func(rel string, data []byte) error {
+		hits, err := scanFile(data, rel)
 		if err != nil {
 			return fmt.Errorf("%s: %w", rel, err)
 		}
 		out.Hits = append(out.Hits, hits...)
 		return nil
 	})
-	if walkErr != nil {
-		return out, fmt.Errorf("scan %s: %w", scanDir, walkErr)
+	if err != nil {
+		return out, err
+	}
+	if walked.Dirs == 0 {
+		return Outcome{Pass: true}, nil // scan dir absent — nothing to scan
 	}
 	out.Pass = len(out.Hits) == 0
 	return out, nil
 }
 
-func scanFile(absPath, relPath string) ([]Hit, error) {
-	f, err := os.Open(absPath)
+func scanFile(data []byte, relPath string) ([]Hit, error) {
+	lines, err := linescan.Lines(data)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-
 	var hits []Hit
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
-
-	lineNum := 0
 	currentKey := ""
-	for scanner.Scan() {
-		lineNum++
-		line := scanner.Text()
+	for i, line := range lines {
+		lineNum := i + 1
 		// Track the most recent top-level key.
 		trimmed := strings.TrimSpace(line)
 		// A key line under config: looks like "key: value" with consistent indent.
@@ -133,9 +118,6 @@ func scanFile(absPath, relPath string) ([]Hit, error) {
 				Suggestion: "replace with Vault data source: `value: ${vault_generic.X.data[\"key\"]}` and configure the @pulumi/vault provider per docs/runbooks.md",
 			})
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
 	}
 	return hits, nil
 }

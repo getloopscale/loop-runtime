@@ -41,8 +41,9 @@ func TestCheck_ForbiddenPassword_FAIL(t *testing.T) {
 	}
 }
 
-func TestCheck_MissingDirs_PASS(t *testing.T) {
-	if _, err := Check(Config{RepoRoot: t.TempDir()}); err != nil {
-		t.Fatalf("expected missing dirs to PASS, got %v", err)
+// Every scan dir absent means nothing was read, which is not a clean result.
+func TestCheck_AllDirsMissing_IsNothingScanned(t *testing.T) {
+	if _, err := Check(Config{RepoRoot: t.TempDir()}); !errors.Is(err, ErrNothingScanned) {
+		t.Fatalf("expected ErrNothingScanned when no scan dir exists, got %v", err)
 	}
 }

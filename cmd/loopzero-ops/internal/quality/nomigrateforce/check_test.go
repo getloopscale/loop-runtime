@@ -180,3 +180,30 @@ func TestMatchCountReported(t *testing.T) {
 		t.Errorf("expected pass (all within marker lookback), got %v", o.Blocked)
 	}
 }
+
+// A file the walk reaches and cannot read used to be skipped "for parity with
+// grep", so the one unreadable file holding the command reported clean.
+func TestUnreadableFileFailsTheScan(t *testing.T) {
+	root := t.TempDir()
+	w(t, root, "ok.sh", "echo ok\n")
+	if err := os.Symlink(filepath.Join(root, "nowhere"), filepath.Join(root, "dangling.sh")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Check(Config{Root: root}); err == nil {
+		t.Fatal("an unreadable file was skipped and the scan reported a verdict")
+	}
+}
+
+// A line longer than the scanner buffer used to stop the scan silently, so a
+// forbidden line after it was never read.
+func TestOverlongLineFailsTheScan(t *testing.T) {
+	root := t.TempDir()
+	long := make([]byte, 5*1024*1024)
+	for i := range long {
+		long[i] = 'x'
+	}
+	w(t, root, "big.sh", string(long)+"\n"+"echo \""+forbidden+" 5\"\n")
+	if _, err := Check(Config{Root: root}); err == nil {
+		t.Fatal("an over-long line ended the scan and the file behind it went unread")
+	}
+}

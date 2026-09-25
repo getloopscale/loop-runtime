@@ -130,6 +130,10 @@ func runNoCloudDevDefault(args []string) int {
 	}
 	resolveDotRoot(root)
 	outcome, err := nocloud.Check(nocloud.Config{RepoRoot: *root})
+	if err != nil && !errors.Is(err, nocloud.ErrViolations) {
+		fmt.Fprintf(os.Stderr, "no-cloud-dev-default: ERROR — could not complete scan: %v\n", err)
+		return 1
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "no-cloud-dev-default: FAIL — %d cloud-dev default(s):\n", len(outcome.Failures))
 		for _, f := range outcome.Failures {

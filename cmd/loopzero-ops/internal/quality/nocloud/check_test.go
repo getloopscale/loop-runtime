@@ -103,15 +103,10 @@ func TestCheck_MixedFile_OnlyReportsViolation(t *testing.T) {
 	}
 }
 
-func TestCheck_MissingScanRoots_PASS(t *testing.T) {
-	root := t.TempDir()
-	// No scan dirs created.
-	outcome, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("expected nil err for missing scan dirs, got %v", err)
-	}
-	if len(outcome.Failures) != 0 {
-		t.Fatalf("expected 0 failures for missing scan dirs, got %v", outcome.Failures)
+// Every scan root absent means nothing was read, which is not a clean result.
+func TestCheck_AllScanRootsMissing_IsNothingScanned(t *testing.T) {
+	if _, err := Check(Config{RepoRoot: t.TempDir()}); !errors.Is(err, ErrNothingScanned) {
+		t.Fatalf("expected ErrNothingScanned when no scan root exists, got %v", err)
 	}
 }
 

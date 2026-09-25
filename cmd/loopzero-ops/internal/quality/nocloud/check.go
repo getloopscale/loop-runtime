@@ -22,11 +22,12 @@ package nocloud
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
 )
 
 var scanRoots = []string{
@@ -58,6 +59,9 @@ type Outcome struct {
 	Failures []string
 }
 
+// ErrNothingScanned means no scan root exists, so nothing was read.
+var ErrNothingScanned = errors.New("no scan root exists — the gate read nothing")
+
 // ErrViolations signals ≥ 1 cloud-dev default env-var was found (excluding
 // the webhook handler exception).
 var ErrViolations = errors.New("cloud-dev default env-var trap detected")
@@ -74,48 +78,33 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	var failures []string
-	for _, sub := range scanRoots {
-		target := filepath.Join(root, sub)
-		if _, err := os.Stat(target); errors.Is(err, fs.ErrNotExist) {
-			// Directory absent — parity with bash `2>/dev/null || true`.
-			continue
-		} else if err != nil {
-			return Outcome{}, fmt.Errorf("stat %s: %w", target, err)
+	walked, err := linescan.Walk(root, scanRoots, isTextCandidate, func(rel string, data []byte) error {
+		lines, err := linescan.Lines(data)
+		if err != nil {
+			return fmt.Errorf("%s: %w", rel, err)
 		}
-
-		walkErr := filepath.WalkDir(target, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
+		for i, line := range lines {
+			if !forbiddenRE.MatchString(line) {
+				continue
 			}
-			if d.IsDir() {
-				return nil
+			// Stage 2 filter — webhook handler exception (EC-1 absorption).
+			if webhookExceptionRE.MatchString(line) {
+				continue
 			}
-			if !isTextCandidate(path) {
-				return nil
-			}
-			content, readErr := os.ReadFile(path)
-			if readErr != nil {
-				return fmt.Errorf("read %s: %w", path, readErr)
-			}
-			for lineNum, line := range strings.Split(string(content), "\n") {
-				if !forbiddenRE.MatchString(line) {
-					continue
-				}
-				// Stage 2 filter — webhook handler exception (EC-1 absorption).
-				if webhookExceptionRE.MatchString(line) {
-					continue
-				}
-				rel, _ := filepath.Rel(root, path)
-				failures = append(failures,
-					fmt.Sprintf("%s:%d: cloud-dev default env-var (host removido em 2026-08-10; antes era armadilha de 301, agora nao resolve) — %s",
-						rel, lineNum+1, strings.TrimSpace(line)),
-				)
-			}
-			return nil
-		})
-		if walkErr != nil {
-			return Outcome{}, fmt.Errorf("walk %s: %w", target, walkErr)
+			failures = append(failures,
+				fmt.Sprintf("%s:%d: cloud-dev default env-var (host removed on 2026-08-10; it used to be a 301 trap, now it does not resolve) — %s",
+					rel, i+1, strings.TrimSpace(line)),
+			)
 		}
+		return nil
+	})
+	if err != nil {
+		return Outcome{}, err
+	}
+	// One root may be gone (strangler waves deleted some); all of them gone
+	// means nothing was read, which is not a clean result.
+	if walked.Dirs == 0 {
+		return Outcome{}, fmt.Errorf("%w: none of %s exists under %s", ErrNothingScanned, strings.Join(scanRoots, ", "), root)
 	}
 
 	if len(failures) > 0 {

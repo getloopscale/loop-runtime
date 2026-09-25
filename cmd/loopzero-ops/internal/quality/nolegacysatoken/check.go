@@ -11,11 +11,11 @@
 package nolegacysatoken
 
 import (
-	"bufio"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
 )
 
 // Config tells Check which repo to scan + allows operator override.
@@ -52,76 +52,49 @@ func Check(cfg Config) (Outcome, error) {
 		allowSet[filepath.Clean(p)] = true
 	}
 
+	// Fail-CLOSED (ADR-M24-3): a walk error and a file that cannot be read are
+	// both returned, so Check errors instead of computing Pass over a file it
+	// never read. A security gate that cannot read what it scans must not
+	// report clean.
 	var out Outcome
-	for _, dir := range scanDirs {
-		abs := filepath.Join(cfg.RepoRoot, dir)
-		if _, statErr := os.Stat(abs); os.IsNotExist(statErr) {
-			continue // scan dir legitimately absent — nothing to scan
+	keep := func(rel string) bool {
+		ext := filepath.Ext(rel)
+		return (ext == ".yaml" || ext == ".yml") && !allowSet[filepath.Clean(rel)]
+	}
+	_, err := linescan.Walk(cfg.RepoRoot, scanDirs, keep, func(rel string, data []byte) error {
+		hits, err := scanFile(data, rel)
+		if err != nil {
+			return fmt.Errorf("%s: %w", rel, err)
 		}
-		// Fail-CLOSED (ADR-M24-3): a walk error and a file that cannot be read are
-		// both returned, so Check errors instead of computing Pass over a file it
-		// never read. A security gate that cannot read what it scans must not
-		// report clean.
-		walkErr := filepath.Walk(abs, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if info.IsDir() {
-				return nil
-			}
-			ext := filepath.Ext(path)
-			if ext != ".yaml" && ext != ".yml" {
-				return nil
-			}
-			rel, _ := filepath.Rel(cfg.RepoRoot, path)
-			if allowSet[filepath.Clean(rel)] {
-				return nil
-			}
-			hits, err := scanFile(path, rel)
-			if err != nil {
-				return fmt.Errorf("%s: %w", rel, err)
-			}
-			out.Hits = append(out.Hits, hits...)
-			return nil
-		})
-		if walkErr != nil {
-			return out, fmt.Errorf("scan %s: %w", dir, walkErr)
-		}
+		out.Hits = append(out.Hits, hits...)
+		return nil
+	})
+	if err != nil {
+		return out, err
 	}
 	out.Pass = len(out.Hits) == 0
 	return out, nil
 }
 
-func scanFile(absPath, relPath string) ([]Hit, error) {
-	f, err := os.Open(absPath)
+func scanFile(data []byte, relPath string) ([]Hit, error) {
+	lines, err := linescan.Lines(data)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-
 	var hits []Hit
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
-
-	lineNum := 0
-	for scanner.Scan() {
-		lineNum++
-		line := scanner.Text()
+	for i, line := range lines {
 		// Strip comments — comment mentioning the type is not a violation.
-		if i := strings.Index(line, "#"); i >= 0 {
-			line = line[:i]
+		if j := strings.Index(line, "#"); j >= 0 {
+			line = line[:j]
 		}
 		if strings.Contains(line, forbiddenType) {
 			hits = append(hits, Hit{
 				File:       relPath,
-				Line:       lineNum,
+				Line:       i + 1,
 				Reason:     "legacy SA-token Secret type — static long-lived token forbidden after T7 Vault kubernetes engine migration",
 				Suggestion: "remove the Secret; fetch dynamic SA token via Vault kubernetes engine (kubernetes/creds/<role>) with TTL bounded by Vault role policy; see openbao-adoption v1.3 T7",
 			})
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
 	}
 	return hits, nil
 }

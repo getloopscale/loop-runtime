@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 package webhookcanonicalpath
 
 import (
@@ -47,11 +50,20 @@ func TestCheck_AllowlistedComment_PASS(t *testing.T) {
 	}
 }
 
-func TestCheck_MissingDirs_PASS(t *testing.T) {
+// One scan dir may be removed by a strangler wave; both gone means the gate read
+// nothing, and a scan over nothing is not a pass.
+func TestCheck_AllDirsMissing_IsNothingScanned(t *testing.T) {
 	root := t.TempDir()
-	// No dirs — should be tolerant (strangler waves may have removed them).
-	if _, err := Check(Config{RepoRoot: root}); err != nil {
-		t.Fatalf("expected missing dirs to PASS, got %v", err)
+	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrNothingScanned) {
+		t.Fatalf("expected ErrNothingScanned when no scan dir exists, got %v", err)
+	}
+}
+
+func TestCheck_OneDirMissing_StillScansTheOther(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "infra/scripts/local/b.sh"), "curl /engine/api/v1/webhooks/github\n")
+	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrViolations) {
+		t.Fatalf("expected the remaining dir to be scanned, got %v", err)
 	}
 }
 
