@@ -10,13 +10,11 @@
 package argocd
 
 import (
-	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -73,9 +71,6 @@ func (h *ArgoCallbackHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	_, cancel := context.WithTimeout(r.Context(), 60*time.Second)
-	defer cancel()
-
 	var payload ArgoCallbackPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		h.logger.Warn("argocd callback: invalid payload", "error", err)
@@ -106,9 +101,11 @@ func (h *ArgoCallbackHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	if h.activator != nil {
 		if err := h.activator.OnSyncCompleted(payload.AppName, payload.Revision); err != nil {
 			h.logger.Error("argocd callback: activation failed",
-				"app", payload.AppName, "error", err)
-			// Return 200 anyway — don't retry on activation errors
-			// The convergence loop will pick up the release
+				"app", payload.AppName, "revision", payload.Revision, "error", err)
+			// 200 on purpose: the callback is a fast path, not the only one.
+			// ReleaseConvergenceLoop (services/release) polls every PENDING
+			// release and activates it once its app is Synced + Healthy, so a
+			// failed activation here is retried by the loop, not by the sender.
 		}
 	}
 
