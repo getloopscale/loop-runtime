@@ -10,6 +10,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+
+	"github.com/getloopscale/loopzero/api/internal/services/release"
 )
 
 // argoApplicationGVR is the GroupVersionResource for ArgoCD Application CRs.
@@ -38,6 +40,8 @@ type DynamicArgoAppLabelReader struct {
 	client    dynamic.Interface
 	namespace string
 }
+
+var _ release.ArgoAppLabelReader = (*DynamicArgoAppLabelReader)(nil)
 
 // NewDynamicArgoAppLabelReader constructs a production ArgoAppLabelReader.
 // namespace is typically "argocd" — the namespace where ArgoCD Application

@@ -32,6 +32,8 @@ type K8sWorkflowNodeSource struct {
 	onWatchError func(int, string)
 }
 
+var _ stepwatch.WorkflowNodeSource = (*K8sWorkflowNodeSource)(nil)
+
 // NewK8sWorkflowNodeSource constructs a poll-based source. Namespace
 // empty = all namespaces. pollInterval default 2s if zero.
 func NewK8sWorkflowNodeSource(client dynamic.Interface, namespace string, pollInterval time.Duration, logger *slog.Logger) *K8sWorkflowNodeSource {

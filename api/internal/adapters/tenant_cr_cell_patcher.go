@@ -12,6 +12,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+
+	"github.com/getloopscale/loopzero/api/internal/services/placement"
 )
 
 // tenantGVR is the GroupVersionResource for the Tenant CR. Hardcoded here
@@ -29,6 +31,8 @@ type TenantCRCellPatcher struct {
 	client    dynamic.Interface
 	namespace string
 }
+
+var _ placement.TenantCRPatcher = (*TenantCRCellPatcher)(nil)
 
 // NewTenantCRCellPatcher patches Tenant CRs in namespace (default
 // "loopzero-system", where the tenant operator keeps them).
