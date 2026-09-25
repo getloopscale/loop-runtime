@@ -38,8 +38,10 @@ package deploycontracts
 // below).
 //
 // Defaults applied here (matching the prior push-path behavior):
-//   - Type defaults to "server" when absent.
-//   - Type=="frontend" with empty Rendering auto-infers "static".
+//   - Type defaults to "server" when absent (or not a string).
+//
+// The type is carried verbatim: whether it is allowed is decided once, by
+// NormalizeApp (server|worker only). No rendering is inferred from it.
 //
 // Defaults NOT applied here (caller responsibility):
 //   - app.Name is always the map key — never extracted from the value.
@@ -49,63 +51,49 @@ package deploycontracts
 func ConvertLoopZeroYamlApps(rawApps map[string]map[string]interface{}) []AppSpec {
 	out := make([]AppSpec, 0, len(rawApps))
 	for name, cfg := range rawApps {
-		app := AppSpec{Name: name}
-
-		if v, ok := cfg["type"].(string); ok {
-			app.Type = v
-		} else {
+		app := AppSpec{
+			Name:      name,
+			Type:      stringField(cfg, "type"),
+			Runtime:   stringField(cfg, "runtime"),
+			Path:      stringField(cfg, "path"),
+			Port:      numberField(cfg, "port"),
+			Build:     stringField(cfg, "build"),
+			Rendering: stringField(cfg, "render"),
+			// Canonical 2026-06-16: required by canonical_dockerfile.go.
+			Start:    stringField(cfg, "start"),
+			Replicas: numberField(cfg, "replicas"),
+		}
+		if app.Type == "" {
 			app.Type = "server"
 		}
-		if v, ok := cfg["runtime"].(string); ok {
-			app.Runtime = v
-		}
-		if v, ok := cfg["path"].(string); ok {
-			app.Path = v
-		}
-		if v, ok := cfg["port"].(int); ok {
-			app.Port = v
-		} else if v, ok := cfg["port"].(float64); ok {
-			app.Port = int(v)
-		}
-		if v, ok := cfg["build"].(string); ok {
-			app.Build = v
-		}
-		if v, ok := cfg["render"].(string); ok {
-			app.Rendering = v
-		}
-		// Canonical 2026-06-16: required by canonical_dockerfile.go.
-		if v, ok := cfg["start"].(string); ok {
-			app.Start = v
-		}
-		if app.Type == "frontend" && app.Rendering == "" {
-			app.Rendering = "static"
-		}
-		if v, ok := cfg["replicas"].(int); ok {
-			app.Replicas = v
-		} else if v, ok := cfg["replicas"].(float64); ok {
-			app.Replicas = int(v)
-		}
 		if asRaw, ok := cfg["autoscaling"].(map[string]interface{}); ok {
-			as := &AppAutoscalingSpec{}
-			if v, ok := asRaw["min"].(int); ok {
-				as.MinReplicas = v
-			} else if v, ok := asRaw["min"].(float64); ok {
-				as.MinReplicas = int(v)
+			app.Autoscaling = &AppAutoscalingSpec{
+				MinReplicas: numberField(asRaw, "min"),
+				MaxReplicas: numberField(asRaw, "max"),
+				TargetCPU:   numberField(asRaw, "targetCPU"),
 			}
-			if v, ok := asRaw["max"].(int); ok {
-				as.MaxReplicas = v
-			} else if v, ok := asRaw["max"].(float64); ok {
-				as.MaxReplicas = int(v)
-			}
-			if v, ok := asRaw["targetCPU"].(int); ok {
-				as.TargetCPU = v
-			} else if v, ok := asRaw["targetCPU"].(float64); ok {
-				as.TargetCPU = int(v)
-			}
-			app.Autoscaling = as
 		}
-
 		out = append(out, app)
 	}
 	return out
+}
+
+// stringField returns cfg[key] when it is a string, "" otherwise.
+func stringField(cfg map[string]interface{}, key string) string {
+	v, _ := cfg[key].(string)
+	return v
+}
+
+// numberField returns cfg[key] as an int. YAML decodes small integers as int
+// and a JSON round-trip yields float64, so both are accepted; any other type
+// yields 0 and is left for upstream schema validation to reject.
+func numberField(cfg map[string]interface{}, key string) int {
+	switch v := cfg[key].(type) {
+	case int:
+		return v
+	case float64:
+		return int(v)
+	default:
+		return 0
+	}
 }

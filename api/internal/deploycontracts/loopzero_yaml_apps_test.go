@@ -87,18 +87,63 @@ func TestConvertLoopZeroYamlApps_DefaultTypeIsServer(t *testing.T) {
 	}
 }
 
-// TestConvertLoopZeroYamlApps_FrontendInfersStaticRendering locks the
-// auto-infer behavior the push path had and the preview path silently
-// dropped via a misapplied T3.3 comment. Centralizing the converter
-// also centralizes this default — both webhook flows now behave
-// identically against a `type: frontend` app without explicit `render`.
-func TestConvertLoopZeroYamlApps_FrontendInfersStaticRendering(t *testing.T) {
-	raw := map[string]map[string]interface{}{
+// The converter carries the declared type verbatim and never invents a
+// rendering. Type rules live in one place — NormalizeApp — which accepts
+// server|worker only; inferring "static" for "frontend" here encoded a
+// second, contradicting rule for a delivery model that no longer exists.
+func TestConvertLoopZeroYamlApps_FrontendTypeCarriedWithoutInventedRendering(t *testing.T) {
+	got := ConvertLoopZeroYamlApps(map[string]map[string]interface{}{
 		"app": {"type": "frontend"},
+	})
+
+	if len(got) != 1 || got[0].Type != "frontend" || got[0].Rendering != "" {
+		t.Errorf("want type frontend with empty rendering, got %+v", got)
 	}
-	got := ConvertLoopZeroYamlApps(raw)
-	if len(got) != 1 || got[0].Rendering != "static" {
-		t.Errorf("frontend infer wrong: got %+v", got)
+}
+
+func TestConvertLoopZeroYamlApps_ReplicasFloat64(t *testing.T) {
+	got := ConvertLoopZeroYamlApps(map[string]map[string]interface{}{
+		"app": {"replicas": float64(3)},
+	})
+
+	if len(got) != 1 || got[0].Replicas != 3 {
+		t.Errorf("want replicas 3, got %+v", got)
+	}
+}
+
+func TestConvertLoopZeroYamlApps_AutoscalingIntAndFloatMirror(t *testing.T) {
+	got := ConvertLoopZeroYamlApps(map[string]map[string]interface{}{
+		"app": {"autoscaling": map[string]interface{}{"min": 1, "max": float64(4), "targetCPU": 60}},
+	})
+
+	want := &AppAutoscalingSpec{MinReplicas: 1, MaxReplicas: 4, TargetCPU: 60}
+	if len(got) != 1 || !reflect.DeepEqual(got[0].Autoscaling, want) {
+		t.Errorf("want %+v, got %+v", want, got)
+	}
+}
+
+// Values of the wrong YAML type are left at the zero value rather than
+// coerced; schema validation upstream is what rejects them.
+func TestConvertLoopZeroYamlApps_WrongTypedValuesLeftZero(t *testing.T) {
+	got := ConvertLoopZeroYamlApps(map[string]map[string]interface{}{
+		"app": {"type": 7, "runtime": 1, "port": "3000", "replicas": "2", "start": true, "autoscaling": "on"},
+	})
+
+	want := AppSpec{Name: "app", Type: "server"}
+	if len(got) != 1 || !reflect.DeepEqual(got[0], want) {
+		t.Errorf("want %+v, got %+v", want, got)
+	}
+}
+
+// An autoscaling block with no numeric keys still yields an (empty)
+// autoscaling spec: its presence is what the caller reads.
+func TestConvertLoopZeroYamlApps_EmptyAutoscalingBlockIsPresent(t *testing.T) {
+	got := ConvertLoopZeroYamlApps(map[string]map[string]interface{}{
+		"app": {"autoscaling": map[string]interface{}{}},
+	})
+
+	if len(got) != 1 || got[0].Autoscaling == nil || *got[0].Autoscaling != (AppAutoscalingSpec{}) {
+		t.Errorf("want empty non-nil autoscaling, got %+v", got)
 	}
 }
 
