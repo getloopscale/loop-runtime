@@ -58,7 +58,7 @@ the repo — run per module, or use the Taskfile.
 
 | Path | What |
 |---|---|
-| `api/internal/` | 38 subpackages: `routes`, `services`, `lock`, `placement`, `gitops`, `argo`, `manifests`, `metering`, `sse`, `source` |
+| `api/internal/` | Organized by feature (`docs/decisions.md`, 2026-09-25): 25 features, each a root package with `<name>http` handlers and a `<feature>adapter` package, over a shared kernel (`db`, `ports`, `deploycontracts`, `middleware`, `sse`, `lock`, `k8s`, …) and two composition roots (`server`, `backgroundloops`); `loopzero-ops quality feature-fence` enforces the registry |
 | `operators/` | 4 split binaries (`cmd/{tenant,app,preview,platform}-operator`), kubebuilder + controller-runtime |
 | `operators/api/` | CRD Go types (own module) |
 | `pkg/` | Shared libs: `statemachine`, `errors`, `naming`, `conditions`, `enforcement`, `circuitbreaker`, `healthcheck`, `id`, `logging`, `domain`, `events`, `vault`, `shellrun`, `pulumi`, `correlation`. The only module with no in-repo dependencies; a change here reaches four modules. |

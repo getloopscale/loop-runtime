@@ -136,7 +136,7 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 
 | Path | What |
 |---|---|
-| `api/internal/` | **38** subpackages. Notable: `routes` (**112** files — this said 43), `services`, `lock`, `placement`, `gitops`, `argo`, `manifests`, `metering`, `sse`, `source` |
+| `api/internal/` | Organized **by feature** (`docs/decisions.md`, 2026-09-25): **25** features (`builds`, `release`, `placement`, `domains`, `source`, …), each a root package (service + its own ports) with `<name>http` handlers and a `<feature>adapter` package; a shared kernel (`db`, `ports`, `deploycontracts`, `middleware`, `sse`, `lock`, `k8s`, …); composition roots `server` and `backgroundloops`. The registry and the allowed dependencies are `cmd/loopzero-ops/internal/quality/featurefence/registry.go` — `loopzero-ops quality feature-fence` enforces them |
 | `operators/` | 4 split binaries (`operators/cmd/{tenant,app,preview,platform}-operator`) — kubebuilder + controller-runtime |
 | `operators/api/` | CRD Go types (own module) |
 | `pkg/` | Shared libs: `statemachine`, `errors`, `naming`, `conditions`, `enforcement`, `circuitbreaker`, `healthcheck`, `id`, `logging`, `domain`, `events`, `vault`, `shellrun`, `pulumi`, `correlation` |

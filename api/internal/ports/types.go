@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package ports provides shared domain types used across layers (routes, db, services).
-// These types live here to avoid DIP violations where infrastructure (db/) would import
-// presentation (routes/).
+// Package ports holds the contracts that cross the persistence ↔ feature seam —
+// the value types db/store builds and the features read, and the interfaces the
+// store asserts it implements — plus the interfaces more than one feature
+// consumes. A port only one feature consumes lives in that feature's ports.go
+// (api/internal organized by feature, 2026-09-25). They live here so the
+// persistence kernel never imports a feature.
 package ports
 
 import (
