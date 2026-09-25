@@ -14,7 +14,6 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -24,7 +23,11 @@ import (
 // route-level types and service-level types.
 type BuildOrchestratorAdapter struct {
 	Orch       *build.BuildOrchestrator
-	BuildStore db.BuildStore
+	BuildStore interface {
+		buildByID
+		tenantBuildByID
+		buildApps
+	}
 }
 
 func (a *BuildOrchestratorAdapter) SubmitBuild(ctx context.Context, req builds.SubmitBuildInput) (*builds.SubmitBuildResult, error) {

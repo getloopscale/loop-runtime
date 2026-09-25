@@ -9,13 +9,12 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // StatusReleaseStoreAdapter implements routes.StatusReleaseStore using db.ReleaseStore.
 type StatusReleaseStoreAdapter struct {
-	Store db.ReleaseStore
+	Store activeReleaseByEnv
 }
 
 func (a *StatusReleaseStoreAdapter) GetActiveByEnv(ctx context.Context, tenantID, projectID, env string) (*status.StatusRelease, error) {

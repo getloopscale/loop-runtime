@@ -7,7 +7,6 @@ import (
 	"context"
 
 	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
-	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // BuildStoreAdmissionQuerier bridges the db.BuildStore interface to the
@@ -19,7 +18,7 @@ import (
 // Only FindActiveBuilds is consumed here — interface stays minimal at
 // the seam.
 type BuildStoreAdmissionQuerier struct {
-	Store db.BuildStore
+	Store activeBuilds
 }
 
 func (q *BuildStoreAdmissionQuerier) ActiveBuilds(ctx context.Context, cellID string) (admission.ActiveBuildsSnapshot, error) {

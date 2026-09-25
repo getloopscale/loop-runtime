@@ -23,7 +23,7 @@ import (
 // The SSE stream handler needs only GetByID returning sse.BuildInfo,
 // while db.BuildStore returns the full db.Build struct.
 type BuildStoreReaderAdapter struct {
-	Store db.BuildStore
+	Store buildByID
 }
 
 func (a *BuildStoreReaderAdapter) GetByID(ctx context.Context, id string) (*sse.BuildInfo, error) {
@@ -57,7 +57,10 @@ func (a *BuildStoreReaderAdapter) GetTenantForBuild(ctx context.Context, buildID
 // The logs handler needs only build ID, tenant, and status for authorization
 // and response metadata.
 type LogBuildStoreAdapter struct {
-	Store db.BuildStore
+	Store interface {
+		buildByID
+		tenantBuildByID
+	}
 }
 
 func (a *LogBuildStoreAdapter) GetByID(ctx context.Context, id string) (*logs.LogBuild, error) {
@@ -95,7 +98,7 @@ func (a *LogBuildStoreAdapter) GetByIDForTenant(ctx context.Context, tenantID, i
 // StatusBuildStoreAdapter implements routes.StatusBuildStore using db.BuildStore.
 // The status handler needs only a subset of build fields for the project status response.
 type StatusBuildStoreAdapter struct {
-	Store db.BuildStore
+	Store projectBuilds
 }
 
 func (a *StatusBuildStoreAdapter) ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]status.StatusBuild, error) {
@@ -150,7 +153,7 @@ func extractScalingFromAppsSpec(appsSpec json.RawMessage) (*status.StatusBuildSc
 
 // BuildListStoreAdapter implements routes.BuildListStore using db.BuildStore.
 type BuildListStoreAdapter struct {
-	Store db.BuildStore
+	Store envBuilds
 }
 
 func (a *BuildListStoreAdapter) ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]buildroutes.BuildListItem, int, error) {

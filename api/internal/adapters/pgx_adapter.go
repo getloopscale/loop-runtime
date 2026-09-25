@@ -5,6 +5,7 @@ package adapters
 
 import (
 	"context"
+
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
 	"github.com/jackc/pgx/v5/pgxpool"

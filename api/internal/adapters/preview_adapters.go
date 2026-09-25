@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
 	"github.com/getloopscale/loopzero/api/internal/services/preview"
@@ -19,7 +18,10 @@ import (
 // "WorkflowSpec.Plan must be non-nil" because PR webhooks don't ship
 // parsed loopzero.yaml (only push webhooks do via WebhookBuildRequest).
 type PreviewAppsLookupAdapter struct {
-	Builds db.BuildStore
+	Builds interface {
+		projectBuilds
+		buildApps
+	}
 }
 
 func (a *PreviewAppsLookupAdapter) LatestSucceededApps(ctx context.Context, tenantID, projectID string) ([]deploycontracts.AppSpec, error) {

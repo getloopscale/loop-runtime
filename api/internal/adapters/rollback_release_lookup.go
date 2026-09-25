@@ -8,8 +8,6 @@ import (
 	"fmt"
 
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
-
-	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
 // RollbackReleaseLookupAdapter satisfies routes.RollbackReleaseLookup
@@ -22,7 +20,7 @@ import (
 // for the build + asserts the release belongs to the requesting tenant
 // (defense-in-depth — GetLatestByBuildID is cross-tenant by design).
 type RollbackReleaseLookupAdapter struct {
-	Store db.ReleaseStore
+	Store latestReleaseByBuild
 }
 
 // GetLatestReleaseForBuild returns the release ID for the most-recent

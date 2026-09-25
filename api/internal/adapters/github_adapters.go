@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/github"
@@ -17,7 +16,7 @@ import (
 
 // BuildLookupAdapter bridges db.BuildStore → github.BuildLookup.
 type BuildLookupAdapter struct {
-	Store db.BuildStore
+	Store buildByID
 }
 
 func (a *BuildLookupAdapter) GetCommitSHA(ctx context.Context, buildID string) (string, error) {
