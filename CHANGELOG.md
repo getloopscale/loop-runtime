@@ -14,6 +14,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Release inspection reports whether its audit trail was complete, unavailable or truncated, instead of showing an unreadable trail as empty (#23)
+
 - Quality gate `values-duplicate-keys` fails any Helm values file under charts/ or infra/helm/ that declares the same key twice.
 
 - task dogfood:v2:journey JOURNEY=<label> runs one live dogfood journey (e.g. JOURNEY=j04).
@@ -60,6 +62,8 @@ to [Semantic Versioning](https://semver.org/).
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
 ### Changed
+
+- Build timeouts reported by the stuck-build reaper now name the phase budget that was exceeded, from the same values the build lifecycle uses (dp#9)
 
 - Routes restricted to team owners or admins (repository connect/disconnect, domain create/delete, audit log, team membership) now all refuse other roles the same way: 403 with code INSUFFICIENT_ROLE
 
@@ -230,6 +234,32 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- Pinning a team to a cell that is full now answers 409 "cell at capacity" instead of an internal error (#26)
+
+- Opening or re-pushing a pull request now records its preview under the same lock as the preview build, so concurrent webhooks for one pull request can no longer race (#33)
+
+- Environment provisioning and secret re-sync no longer treat unrelated errors as "already exists" or "namespace terminating" based on their wording; closing a pull request no longer hides a preview lookup failure (#35)
+
+- A failed deploy sync caused by a network error (such as a DNS lookup failure) now fails the release immediately instead of leaving it pending until it times out (#35)
+
+- A misconfigured environment provisioner, secret re-sync or scaling resolver now fails loudly at startup or on use instead of silently doing nothing (#36)
+
+- Every build success and failure path now records its outcome the same way, so no path can skip the failure event or leave a build half-finalized (dp#11)
+
+- Custom domain status changes all follow the domain lifecycle rules, and concurrent health checks can no longer overwrite each other's status (#18)
+
+- Deploy activation identifies a synced application by its labels only, so an application whose name cannot be parsed is reported instead of attributed to the wrong team (#15)
+
+- Refused cell pins (unknown cell, cell at capacity) now return a client error instead of an internal error (#26)
+
+- Pinning a team to a cell is now all-or-nothing: a failure applying the pin reverts it and reports an actionable error instead of claiming success (#25)
+
+- Every user-facing app URL (deploy result and rollback) is now composed the same way, including the public domain (#19)
+
+- Rolling back to a release that was removed mid-rollback now fails with a clear "release not found" error instead of crashing (#22)
+
+- Deleting a project now prunes and syncs the project's own deploy application instead of a mis-named one (#14)
 
 - Bulk secret uploads and scale requests are refused with 503 when the account's plan cannot be read, instead of being checked against an unknown limit.
 
