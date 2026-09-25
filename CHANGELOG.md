@@ -14,6 +14,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `loopzero-ops quality english-only` gate, wired into `task quality:gates`: every git-tracked text file must be English, and a line keeps Portuguese only with an inline `english-only` exemption stating a reason of at least five words (#380)
+
 - `loopzero-ops seed cluster-kubeconfigs` mints loopzero-api's build and cell-0 kubeconfigs with the scoped build identity, a 30-day token and each cluster's live CA (principle_violations#236)
 
 - `loopzero-ops sql bootstrap-user` renders the seed that leaves the bootstrap user in exactly one tenant, shared by the local, drill and E2E seeds (principle_violations#236)
@@ -74,6 +76,10 @@ to [Semantic Versioning](https://semver.org/).
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
 ### Changed
+
+- Comments, log and error messages, test names and chart descriptions across the engine, charts, Helmfile, Taskfiles and scripts are now English (#380)
+
+- The database trigger that refuses a build, release or preview whose cell cannot be resolved now reports the error in English, and the descriptions of cells cell-0 and cell-1 are English; migration 000067 rewrites both on existing databases and leaves notes an operator has edited untouched (#380)
 
 - `provision-api-tokens.sh` and the drill bootstrap provision the Gitea and ArgoCD tokens with `loopzero-ops seed gitea-token`, `argocd-token` and `argocd-gitea-creds`, and stop when a token cannot be minted instead of storing an empty one (principle_violations#236)
 
