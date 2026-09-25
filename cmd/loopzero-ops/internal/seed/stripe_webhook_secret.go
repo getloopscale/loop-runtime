@@ -55,7 +55,7 @@ func (s *StripeWebhookSecretSeed) Run(d Deps) Result {
 	// garanta o namespace, e a falha e' silenciosa do nosso lado: o seed para, a
 	// cadeia segue, e o efeito aparece noutro sistema. Idempotente — um Get quando
 	// o namespace ja existe, que e' o caminho canonico.
-	if err := ensureNamespace(d, d.Kube, stripeSecretNamespace); err != nil {
+	if err := d.Kube.EnsureNamespace(d.Ctx, stripeSecretNamespace); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("ensure namespace %s: %v", stripeSecretNamespace, err)}
 	}
 	value := []byte(strings.TrimRight(d.Creds.Stripe.WebhookSecret, "\n"))

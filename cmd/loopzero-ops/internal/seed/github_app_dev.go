@@ -65,7 +65,7 @@ func (s *GitHubAppDevSeed) Run(d Deps) Result {
 	// Idempotent, and a no-op against the fake client the unit tests use, which is
 	// why the guard for this is the structural assertion in
 	// namespace_precondition_test.go rather than a behavioural one here.
-	if err := ensureNamespace(d, d.Kube, githubAppNamespace); err != nil {
+	if err := d.Kube.EnsureNamespace(d.Ctx, githubAppNamespace); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("ensure namespace %s: %v", githubAppNamespace, err)}
 	}
 

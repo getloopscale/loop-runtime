@@ -8,13 +8,9 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // LokiCrossClusterSeed is the Go port of
@@ -78,13 +74,13 @@ func (s *LokiCrossClusterSeed) Run(d Deps) Result {
 			map[string][]byte{lokiPromtailKey: []byte(updated)}); err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 1 patch Promtail: %v", err)}
 		}
-		if err := rolloutDaemonSet(d.Ctx, buildRawClient(buildCli), lokiMonitoringNS, "promtail"); err != nil {
+		if err := buildCli.RolloutRestartDaemonSet(d.Ctx, lokiMonitoringNS, "promtail"); err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 1 rollout DS: %v", err)}
 		}
 	}
 
 	// Layer 2 — Loki Service → NodePort.
-	nodePort, err := lokiEnsureNodePort(d.Ctx, buildRawClient(buildCli), lokiDefaultNodePort)
+	nodePort, err := lokiEnsureNodePort(d.Ctx, buildCli, lokiDefaultNodePort)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 2 loki NodePort: %v", err)}
 	}
@@ -156,35 +152,12 @@ func (s *LokiCrossClusterSeed) Verify(d Deps) Result {
 	return Result{Verdict: PASS, Reason: "canonical Loki chain: Promtail + LOKI_URL wired"}
 }
 
-// buildRawClient returns the underlying ctrl.Client from a KubeClient. This
-// is a small shim so seeds that need arbitrary List/Get on non-KubeClient
-// resources can reach through — production impl only; tests bypass.
-func buildRawClient(k KubeClient) ctrlclient.Client {
-	if kc, ok := k.(*kubeClient); ok {
-		return kc.c
-	}
-	return nil
-}
-
-// rolloutDaemonSet mirrors RolloutRestartDeployment for a DaemonSet
-// (annotates the pod template's restartedAt).
-func rolloutDaemonSet(ctx context.Context, cli ctrlclient.Client, namespace, name string) error {
-	if cli == nil {
-		return nil // fake client in tests — skip
-	}
-	// DaemonSet import wired inline to avoid churn on the seed.go top-level types.
-	return rolloutDaemonSetImpl(ctx, cli, namespace, name)
-}
-
 // lokiEnsureNodePort ensures the loki Service is of type NodePort. Returns
 // the assigned NodePort. If already NodePort, returns the existing value.
 // If ClusterIP, patches to NodePort with the given desired NodePort.
-func lokiEnsureNodePort(ctx context.Context, cli ctrlclient.Client, desired int32) (int32, error) {
-	if cli == nil {
-		return desired, nil
-	}
-	var svc corev1.Service
-	if err := cli.Get(ctx, ctrlclient.ObjectKey{Namespace: lokiMonitoringNS, Name: lokiSvcName}, &svc); err != nil {
+func lokiEnsureNodePort(ctx context.Context, services Services, desired int32) (int32, error) {
+	svc, err := services.GetService(ctx, lokiMonitoringNS, lokiSvcName)
+	if err != nil {
 		return 0, err
 	}
 	if svc.Spec.Type == corev1.ServiceTypeNodePort {
@@ -206,26 +179,8 @@ func lokiEnsureNodePort(ctx context.Context, cli ctrlclient.Client, desired int3
 			{Port: lokiSvcPort, TargetPort: intstr.FromInt(int(lokiSvcPort)), NodePort: desired},
 		}
 	}
-	if err := cli.Update(ctx, &svc); err != nil {
+	if err := services.UpdateService(ctx, svc); err != nil {
 		return 0, err
 	}
 	return desired, nil
-}
-
-// rolloutDaemonSetImpl annotates the DaemonSet pod template's
-// `restartedAt` (the same trigger `kubectl rollout restart daemonset`
-// uses). Idempotent — a second call same-second no-ops.
-func rolloutDaemonSetImpl(ctx context.Context, cli ctrlclient.Client, namespace, name string) error {
-	var ds appsv1.DaemonSet
-	if err := cli.Get(ctx, ctrlclient.ObjectKey{Namespace: namespace, Name: name}, &ds); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil // DS absent = nothing to roll out (test/dry-run parity).
-		}
-		return err
-	}
-	if ds.Spec.Template.Annotations == nil {
-		ds.Spec.Template.Annotations = map[string]string{}
-	}
-	ds.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().UTC().Format(time.RFC3339)
-	return cli.Update(ctx, &ds)
 }

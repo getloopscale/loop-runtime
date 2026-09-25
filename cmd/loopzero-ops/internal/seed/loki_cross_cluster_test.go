@@ -199,7 +199,7 @@ func TestLokiEnsureNodePort_PreservesExisting(t *testing.T) {
 		},
 	}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(svc).Build()
-	got, err := lokiEnsureNodePort(context.Background(), c, lokiDefaultNodePort)
+	got, err := lokiEnsureNodePort(context.Background(), NewKubeClient(c), lokiDefaultNodePort)
 	if err != nil {
 		t.Fatalf("lokiEnsureNodePort: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestLokiEnsureNodePort_ConvertsClusterIP(t *testing.T) {
 		},
 	}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(svc).Build()
-	got, err := lokiEnsureNodePort(context.Background(), c, lokiDefaultNodePort)
+	got, err := lokiEnsureNodePort(context.Background(), NewKubeClient(c), lokiDefaultNodePort)
 	if err != nil {
 		t.Fatalf("lokiEnsureNodePort: %v", err)
 	}

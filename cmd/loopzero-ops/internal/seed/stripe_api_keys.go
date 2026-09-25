@@ -61,7 +61,7 @@ func (s *StripeAPIKeysSeed) Run(d Deps) Result {
 	// garanta o namespace, e a falha e' silenciosa do nosso lado: o seed para, a
 	// cadeia segue, e o efeito aparece noutro sistema. Idempotente — um Get quando
 	// o namespace ja existe, que e' o caminho canonico.
-	if err := ensureNamespace(d, d.Kube, stripeAPIKeysNamespace); err != nil {
+	if err := d.Kube.EnsureNamespace(d.Ctx, stripeAPIKeysNamespace); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("ensure namespace %s: %v", stripeAPIKeysNamespace, err)}
 	}
 	data := map[string][]byte{

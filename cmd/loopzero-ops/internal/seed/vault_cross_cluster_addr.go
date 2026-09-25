@@ -118,15 +118,9 @@ func (s *VaultCrossClusterAddrSeed) Verify(d Deps) Result {
 
 // vaultServiceHTTPSNodePort returns the openbao Service's https NodePort in the
 // secrets-system namespace of the vault cluster.
-func vaultServiceHTTPSNodePort(ctx context.Context, k KubeClient) (int32, error) {
-	// KubeClient has no Get-Service today; use the underlying ctrl.Client via a
-	// tiny helper. We shim through the interface by asking for the raw client.
-	rawCli, ok := k.(*kubeClient)
-	if !ok {
-		return 0, fmt.Errorf("KubeClient impl does not expose ctrl.Client")
-	}
-	var svc corev1.Service
-	if err := rawCli.c.Get(ctx, ctrlclient.ObjectKey{Namespace: vaultNamespace, Name: openbaoServiceName}, &svc); err != nil {
+func vaultServiceHTTPSNodePort(ctx context.Context, services Services) (int32, error) {
+	svc, err := services.GetService(ctx, vaultNamespace, openbaoServiceName)
+	if err != nil {
 		return 0, err
 	}
 	for _, p := range svc.Spec.Ports {

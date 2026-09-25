@@ -30,34 +30,27 @@ var seedsRequiringTheirNamespace = map[string]string{
 		"secret was never written, and the endpoint 404'd with no error anywhere in our logs",
 	"broker.go": "ensured its namespace since it was written",
 
-	// B-108, medido em 2026-08-16. Os cinco gravam no MESMO namespace,
-	// `loopzero-system`, e a cadeia canônica realmente o garante:
-	// `core.helmfile.yaml.gotmpl` declara `createNamespace: true` e tem 16
-	// releases ali, e `task setup` roda antes do `seed-post-cleanroom-all.sh`.
-	//
-	// A garantia é da CADEIA, não do seed — e essa diferença é o defeito. Cada um
-	// destes é um subcomando invocável sozinho (`loopzero-ops seed gitea-token`), que
-	// é como um operador conserta uma peça sem repetir os dezesseis passos. Foi
-	// exatamente assim que o B-021 falhou.
-	//
-	// Resposta à pergunta do item: a posição garante, e isso não basta.
-	"gitea_token.go": "B-108 — passo 6; garantido pela cadeia, não pela invocação avulsa",
-	// Este grava em `argocd`, nao em loopzero-system — a constante que o arquivo
-	// DECLARA no topo (giteaAdminNamespace) e a que ele USA na escrita
-	// (argocdNamespace, via repoCredsSecretOf) nao sao a mesma pergunta, e
-	// ler a primeira foi o atalho que me deu a resposta errada.
-	"argocd_gitea_creds.go":    "B-108 — passo 6b; grava em `argocd`, cujo ciclo de vida e do release do ArgoCD",
-	"argocd_token.go":          "B-108 — passo 13; grava em loopzero-system via minioNamespace",
-	"stripe_webhook_secret.go": "B-108 — passo 15",
-	"stripe_api_keys.go":       "B-108 — passo 16",
+	// B-108, measured 2026-08-16. These write into namespaces the canonical
+	// chain does create (core.helmfile.yaml.gotmpl declares createNamespace, and
+	// `task setup` runs before seed-post-cleanroom-all.sh). The guarantee belongs
+	// to the CHAIN, not to the seed: each is also a subcommand an operator runs on
+	// its own to repair one piece, which is exactly how B-021 failed.
+	"gitea_token.go": "B-108 — step 6; guaranteed by the chain, not by a standalone run",
+	// This one writes into `argocd`, not loopzero-system: the constant the file
+	// declares at the top (giteaAdminNamespace) is not the one it writes with
+	// (argocdNamespace, via repoCredsSecretOf).
+	"argocd_gitea_creds.go":    "B-108 — step 6b; writes into `argocd`, whose lifecycle is the ArgoCD release's",
+	"argocd_token.go":          "B-108 — step 13; writes into loopzero-system via minioNamespace",
+	"stripe_webhook_secret.go": "B-108 — step 15",
+	"stripe_api_keys.go":       "B-108 — step 16",
 }
 
-// TestSeedsEnsureTheirNamespaceBeforeWriting is a structural assertion, and it is
-// structural for a measured reason: ensureNamespace returns nil against the fake
-// client the unit tests use (see broker_helpers.go), so no in-package behavioural
-// test can observe whether it was called. Asserting the call site is what is
-// actually available — and it still catches the failure mode, which is somebody
-// deleting the line.
+// TestSeedsEnsureTheirNamespaceBeforeWriting asserts the call site: every seed
+// in the contract calls EnsureNamespace in the same file that writes its
+// Secret. EnsureNamespace itself is covered behaviourally in kube_roles_test.go;
+// what a behavioural seed test cannot show without building each seed's whole
+// fixture is that the call was not deleted, which is the failure that produced
+// B-021.
 func TestSeedsEnsureTheirNamespaceBeforeWriting(t *testing.T) {
 	for file, why := range seedsRequiringTheirNamespace {
 		t.Run(file, func(t *testing.T) {
@@ -78,13 +71,11 @@ func TestSeedsEnsureTheirNamespaceBeforeWriting(t *testing.T) {
 					return true
 				}
 				line := fset.Position(call.Pos()).Line
-				switch fn := call.Fun.(type) {
-				case *ast.Ident:
-					if fn.Name == "ensureNamespace" {
+				if fn, ok := call.Fun.(*ast.SelectorExpr); ok {
+					switch fn.Sel.Name {
+					case "EnsureNamespace":
 						ensures = append(ensures, line)
-					}
-				case *ast.SelectorExpr:
-					if fn.Sel.Name == "CreateOrUpdateSecret" {
+					case "CreateOrUpdateSecret":
 						writes = append(writes, line)
 					}
 				}

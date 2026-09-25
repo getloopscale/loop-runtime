@@ -12,48 +12,77 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // KubeClient is the domain-facing abstraction over the k8s operations the
 // seeds need (architecture.md § Dependency Inversion). Seeds depend on this
-// interface; the composition root injects either the real controller-runtime
-// client (kubeClient) or a fake client in tests. This is what makes every
-// seed hermetically testable without a live cluster.
+// interface; the composition root injects the controller-runtime client
+// (kubeClient), and tests inject the same type over a fake client. This is
+// what makes every seed hermetically testable without a live cluster.
+//
+// It is composed of roles so a helper can depend on the one it uses. Every
+// operation a seed performs is on the port: there is no reach-through to the
+// concrete client, which used to make a substitute KubeClient silently skip
+// namespace creation and rollouts.
 type KubeClient interface {
+	SecretStore
+	ConfigStore
+	Rollouts
+	Namespaces
+	Services
+}
+
+// SecretStore reads and writes Secrets.
+type SecretStore interface {
 	// CreateOrUpdateSecret applies s idempotently: create if absent, else
-	// update preserving resourceVersion (sealos Idempotency pattern, blueprint T3).
-	// Returns created=true when the Secret did not exist before.
+	// update preserving resourceVersion. Returns created=true when the Secret
+	// did not exist before.
 	CreateOrUpdateSecret(ctx context.Context, s *corev1.Secret) (created bool, err error)
 	// GetSecret fetches a Secret (used by Verify probes).
 	GetSecret(ctx context.Context, namespace, name string) (*corev1.Secret, error)
-	// WaitDeploymentReady blocks until the Deployment's readyReplicas ==
-	// spec.replicas or the timeout elapses (apimachinery wait, blueprint T4).
-	WaitDeploymentReady(ctx context.Context, namespace, name string, timeout time.Duration) error
-	// RolloutRestartDeployment triggers a pod rollout by bumping the
-	// `kubectl.kubernetes.io/restartedAt` annotation on the Deployment template
-	// — same mechanism as `kubectl rollout restart`. Idempotent: two calls in
-	// rapid succession produce distinct annotation values.
-	//
-	// SKIP-friendly: NotFound → nil (returning error) so callers can decide
-	// whether a missing Deployment is a hard failure (bash returned exit 1
-	// in that case; the sibling seed's rollout is post-apply and non-fatal).
-	RolloutRestartDeployment(ctx context.Context, namespace, name string) error
 	// SecretExists reports whether a Secret is present. Returns (false, nil)
 	// on NotFound so callers can branch without inspecting a typed error.
-	// Used by seeds that patch an optional sibling Secret only when present
-	// (e.g. minio-credentials legacy alias).
 	SecretExists(ctx context.Context, namespace, name string) (bool, error)
 	// PatchSecretData replaces the given keys' values on the target Secret
-	// (Get+Update — preserves resourceVersion + other keys). Returns
-	// NotFound-shaped errors verbatim so callers can decide skip vs fail.
+	// (Get+Update — preserves resourceVersion and other keys). NotFound-shaped
+	// errors are returned verbatim so callers can decide skip vs fail.
 	PatchSecretData(ctx context.Context, namespace, name string, patch map[string][]byte) error
+}
+
+// ConfigStore reads and patches ConfigMaps.
+type ConfigStore interface {
 	// GetConfigMap fetches a ConfigMap. NotFound-shaped errors bubble up.
 	GetConfigMap(ctx context.Context, namespace, name string) (*corev1.ConfigMap, error)
 	// PatchConfigMapData replaces the given data keys on the target ConfigMap
-	// (Get+Update — preserves resourceVersion + other keys).
+	// (Get+Update — preserves resourceVersion and other keys).
 	PatchConfigMapData(ctx context.Context, namespace, name string, patch map[string]string) error
+}
+
+// Rollouts restarts workloads the way `kubectl rollout restart` does: by
+// stamping `kubectl.kubernetes.io/restartedAt` on the pod template.
+type Rollouts interface {
+	// RolloutRestartDeployment restarts a Deployment. A missing Deployment is
+	// an error; the caller decides whether that is fatal.
+	RolloutRestartDeployment(ctx context.Context, namespace, name string) error
+	// RolloutRestartDaemonSet restarts a DaemonSet. A missing DaemonSet is
+	// nothing to roll out and returns nil.
+	RolloutRestartDaemonSet(ctx context.Context, namespace, name string) error
+}
+
+// Namespaces ensures a namespace exists before a seed writes into it.
+type Namespaces interface {
+	// EnsureNamespace creates the namespace when absent; an existing one is
+	// left as it is.
+	EnsureNamespace(ctx context.Context, name string) error
+}
+
+// Services reads and updates Services.
+type Services interface {
+	// GetService fetches a Service; NotFound-shaped errors bubble up.
+	GetService(ctx context.Context, namespace, name string) (*corev1.Service, error)
+	// UpdateService writes s back (resourceVersion taken from the read).
+	UpdateService(ctx context.Context, s *corev1.Service) error
 }
 
 // kubeClient is the production KubeClient backed by a controller-runtime client.
@@ -200,22 +229,53 @@ func (k *kubeClient) RolloutRestartDeployment(ctx context.Context, namespace, na
 	return nil
 }
 
-func (k *kubeClient) WaitDeploymentReady(ctx context.Context, namespace, name string, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true,
-		func(ctx context.Context) (bool, error) {
-			var d appsv1.Deployment
-			if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &d); err != nil {
-				if apierrors.IsNotFound(err) {
-					return false, nil // not created yet — keep polling
-				}
-				return false, err
-			}
-			want := int32(1)
-			if d.Spec.Replicas != nil {
-				want = *d.Spec.Replicas
-			}
-			return d.Status.ReadyReplicas == want, nil
-		})
+func (k *kubeClient) RolloutRestartDaemonSet(ctx context.Context, namespace, name string) error {
+	var ds appsv1.DaemonSet
+	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &ds); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil // no DaemonSet, nothing to roll out
+		}
+		return fmt.Errorf("get daemonset %s: %w", k.resourceAt(namespace, name), err)
+	}
+	if ds.Spec.Template.Annotations == nil {
+		ds.Spec.Template.Annotations = map[string]string{}
+	}
+	ds.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().UTC().Format(time.RFC3339)
+	if err := k.c.Update(ctx, &ds); err != nil {
+		return fmt.Errorf("update daemonset %s: %w", k.resourceAt(namespace, name), err)
+	}
+	return nil
+}
+
+func (k *kubeClient) EnsureNamespace(ctx context.Context, name string) error {
+	var ns corev1.Namespace
+	err := k.c.Get(ctx, client.ObjectKey{Name: name}, &ns)
+	if err == nil {
+		return nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("get namespace %s: %w", name, err)
+	}
+	created := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name}}
+	if err := k.c.Create(ctx, created); err != nil && !apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("create namespace %s: %w", name, err)
+	}
+	return nil
+}
+
+func (k *kubeClient) GetService(ctx context.Context, namespace, name string) (*corev1.Service, error) {
+	var svc corev1.Service
+	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &svc); err != nil {
+		return nil, fmt.Errorf("get service %s: %w", k.resourceAt(namespace, name), err)
+	}
+	return &svc, nil
+}
+
+func (k *kubeClient) UpdateService(ctx context.Context, s *corev1.Service) error {
+	if err := k.c.Update(ctx, s); err != nil {
+		return fmt.Errorf("update service %s: %w", k.resourceAt(s.Namespace, s.Name), err)
+	}
+	return nil
 }
 
 // secretOf is a small helper for seeds to build a typed Secret with the

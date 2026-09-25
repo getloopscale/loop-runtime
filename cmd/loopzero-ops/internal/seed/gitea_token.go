@@ -94,7 +94,7 @@ func (s *GiteaTokenSeed) Run(d Deps) Result {
 	// garanta o namespace, e a falha e' silenciosa do nosso lado: o seed para, a
 	// cadeia segue, e o efeito aparece noutro sistema. Idempotente — um Get quando
 	// o namespace ja existe, que e' o caminho canonico.
-	if err := ensureNamespace(d, d.Kube, giteaAdminNamespace); err != nil {
+	if err := d.Kube.EnsureNamespace(d.Ctx, giteaAdminNamespace); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("ensure namespace %s: %v", giteaAdminNamespace, err)}
 	}
 	if err := d.Kube.PatchSecretData(d.Ctx, giteaAdminNamespace, giteaAdminSecretName,

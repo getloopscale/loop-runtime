@@ -8,10 +8,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -77,7 +78,7 @@ func (s *BrokerSeed) Run(d Deps) Result {
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 2 resolve workload: %v", err)}
 	}
-	if err := ensureNamespace(d, workloadCli, brokerESONamespace); err != nil {
+	if err := workloadCli.EnsureNamespace(d.Ctx, brokerESONamespace); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 2 ensure ns: %v", err)}
 	}
 	workloadSec := brokerWorkloadSecret(tokenB)
@@ -96,7 +97,7 @@ func (s *BrokerSeed) Run(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 chart path: %v", err)}
 	}
 	// Ensure loopzero-build ns exists on workload (chart post-render expects it).
-	if err := ensureNamespace(d, workloadCli, "loopzero-build"); err != nil {
+	if err := workloadCli.EnsureNamespace(d.Ctx, "loopzero-build"); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 ensure ns loopzero-build: %v", err)}
 	}
 

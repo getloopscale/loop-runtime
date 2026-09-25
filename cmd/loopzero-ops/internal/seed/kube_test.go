@@ -6,11 +6,9 @@ package seed
 import (
 	"context"
 	"testing"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -63,34 +61,5 @@ func TestCreateOrUpdateSecret_UpdatesWhenExists(t *testing.T) {
 	got, _ := k.GetSecret(context.Background(), "loopzero-system", "s1")
 	if string(got.Data["k"]) != "new" {
 		t.Errorf("Data[k] = %q, want new (update applied)", got.Data["k"])
-	}
-}
-
-func TestWaitDeploymentReady_ReturnsWhenReady(t *testing.T) {
-	replicas := int32(2)
-	d := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: "loopzero-api"},
-		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
-		Status:     appsv1.DeploymentStatus{ReadyReplicas: 2},
-	}
-	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(d).Build()
-	k := NewKubeClient(c)
-	if err := k.WaitDeploymentReady(context.Background(), "loopzero-system", "loopzero-api", 3*time.Second); err != nil {
-		t.Errorf("ready deployment: unexpected err %v", err)
-	}
-}
-
-func TestWaitDeploymentReady_TimesOutWhenNeverReady(t *testing.T) {
-	replicas := int32(2)
-	d := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: "loopzero-api"},
-		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
-		Status:     appsv1.DeploymentStatus{ReadyReplicas: 0}, // never ready
-	}
-	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(d).Build()
-	k := NewKubeClient(c)
-	err := k.WaitDeploymentReady(context.Background(), "loopzero-system", "loopzero-api", 1*time.Second)
-	if err == nil {
-		t.Error("never-ready deployment: want timeout error, got nil")
 	}
 }
