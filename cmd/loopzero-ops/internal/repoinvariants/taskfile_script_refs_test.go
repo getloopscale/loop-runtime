@@ -14,7 +14,7 @@
 // built from a template variable is resolved at run time and is not judged here.
 // Paths are resolved against the task's `dir:` (or the repo root) and, when the
 // command `cd`s into a literal directory first, against that directory too.
-package main
+package repoinvariants
 
 import (
 	"os"
@@ -23,6 +23,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -74,10 +75,10 @@ func scriptResolves(repoRoot, taskDir, cmd, ref string) bool {
 }
 
 func TestTaskfileCommandsRunScriptsThatExist(t *testing.T) {
-	const repoRoot = "../.."
+	repoRoot := qtestutil.MustRepoRoot()
 	var checked int
 	for _, tf := range taskfilesToScan {
-		body, err := os.ReadFile(tf)
+		body, err := os.ReadFile(filepath.Join(repoRoot, tf))
 		if err != nil {
 			t.Fatalf("read %s: %v", tf, err)
 		}

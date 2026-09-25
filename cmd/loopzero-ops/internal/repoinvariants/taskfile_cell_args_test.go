@@ -14,17 +14,20 @@
 // The accepted set is READ from the script's own `case "$CELL" in` arm rather
 // than restated here: a second copy of the list would drift exactly the way the
 // callers did.
-package main
+package repoinvariants
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
-const bootstrapCellScript = "../../infra/helmfile/scripts/bootstrap-cell-cc.sh"
+const bootstrapCellScript = "infra/helmfile/scripts/bootstrap-cell-cc.sh"
 
 // reCellCaseArm matches the first arm of `case "$CELL" in`, e.g. `  0|1) ;;`.
 var reCellCaseArm = regexp.MustCompile(`case "\$CELL" in\s*\n\s*([A-Za-z0-9_|-]+)\)`)
@@ -34,7 +37,7 @@ var reCellInvocation = regexp.MustCompile(`bootstrap-cell-cc\.sh\b[^\n]*?--cell\
 
 func acceptedBootstrapCells(t *testing.T) map[string]bool {
 	t.Helper()
-	body, err := os.ReadFile(bootstrapCellScript)
+	body, err := os.ReadFile(filepath.Join(qtestutil.MustRepoRoot(), bootstrapCellScript))
 	if err != nil {
 		t.Fatalf("read %s: %v", bootstrapCellScript, err)
 	}
@@ -54,7 +57,7 @@ func TestTaskfileBootstrapCellCallsUseCellsTheScriptAccepts(t *testing.T) {
 
 	var calls int
 	for _, tf := range taskfilesToScan {
-		body, err := os.ReadFile(tf)
+		body, err := os.ReadFile(filepath.Join(qtestutil.MustRepoRoot(), tf))
 		if err != nil {
 			t.Fatalf("read %s: %v", tf, err)
 		}

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package main
+package repoinvariants
 
 import (
 	"os"
@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // PREMISE 0 of .github/scripts/assert_delivery_gate_armed.py decides which
@@ -22,11 +24,7 @@ import (
 
 func deliveryGateScript(t *testing.T) string {
 	t.Helper()
-	p, err := filepath.Abs("../../.github/scripts/assert_delivery_gate_armed.py")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return p
+	return filepath.Join(qtestutil.MustRepoRoot(), ".github/scripts/assert_delivery_gate_armed.py")
 }
 
 func runDeliveryGateCheck(t *testing.T, root string) (int, string) {
@@ -53,10 +51,7 @@ func writeFixtureFile(t *testing.T, path, body string) {
 }
 
 func TestPremiseZeroNamesTheGatesCIRunsOnThisRepository(t *testing.T) {
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatal(err)
-	}
+	root := qtestutil.MustRepoRoot()
 	code, out := runDeliveryGateCheck(t, root)
 	if code != 0 {
 		t.Fatalf("anchor: the check must pass on this repository as it stands; exit %d\n%s", code, out)

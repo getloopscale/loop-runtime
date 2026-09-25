@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package main
+package repoinvariants
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -35,7 +36,7 @@ type workflowJobs struct {
 // `name:` when set, the job key otherwise.
 func workflowCheckNames(t *testing.T) map[string]bool {
 	t.Helper()
-	files, err := filepath.Glob("../../.github/workflows/*.yml")
+	files, err := filepath.Glob(filepath.Join(qtestutil.MustRepoRoot(), ".github/workflows/*.yml"))
 	if err != nil || len(files) == 0 {
 		t.Fatalf("no workflows found: %v", err)
 	}
@@ -61,7 +62,7 @@ func workflowCheckNames(t *testing.T) map[string]bool {
 }
 
 func TestBranchProtectionRequiresOnlyChecksAWorkflowReports(t *testing.T) {
-	body, err := os.ReadFile("../../.github/branch-protection-config.yml")
+	body, err := os.ReadFile(filepath.Join(qtestutil.MustRepoRoot(), ".github/branch-protection-config.yml"))
 	if err != nil {
 		t.Fatalf("read branch-protection-config.yml: %v", err)
 	}
