@@ -4,6 +4,7 @@
 package health
 
 import (
+	"fmt"
 	"context"
 	"encoding/json"
 	"errors"
@@ -121,7 +122,7 @@ func TestHealth_Deep_DBDown(t *testing.T) {
 
 func TestHealth_Deep_ServiceAuthFailed(t *testing.T) {
 	db := &fakeDBHealthChecker{}
-	svc := &fakeServiceChecker{name: "argocd", err: errors.New("argocd: auth_failed")}
+	svc := &fakeServiceChecker{name: "argocd", err: fmt.Errorf("argocd: %w", ErrServiceAuthFailed)}
 	h := NewHealthHandler(db, svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/health/deep", nil)

@@ -165,7 +165,7 @@ func TestDeepHealthHandler(t *testing.T) {
 	t.Run("returns auth_failed for 401 errors", func(t *testing.T) {
 		checker := &fakeHealthChecker{err: nil}
 		handler := health.NewHealthHandler(checker,
-			&fakeServiceChecker{name: "argocd", err: fmt.Errorf("argocd: auth_failed")},
+			&fakeServiceChecker{name: "argocd", err: fmt.Errorf("argocd: %w", health.ErrServiceAuthFailed)},
 		)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/health/deep", nil)
 		rec := httptest.NewRecorder()

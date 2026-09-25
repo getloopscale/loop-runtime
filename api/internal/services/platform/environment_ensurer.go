@@ -8,9 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -138,8 +138,9 @@ func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, pr
 	// spec.environments entry carries the project field used by the
 	// operator to compute the canonical 3-segment namespace.
 	if err := e.Adder.AddEnvironment(ctx, tenantID, project, envName); err != nil {
-		// AddEnvironment may return a "already exists" sentinel; treat as success.
-		if isAlreadyExistsError(err) {
+		// A concurrent ensure (or a stale existence check) added it first:
+		// the environment exists, which is all this call wants.
+		if errors.Is(err, ports.ErrEnvironmentExists) {
 			return nil
 		}
 		return loopzeroerrors.NewLoopZeroError(
@@ -208,18 +209,6 @@ func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, pr
 			// Not ready yet — keep polling.
 		}
 	}
-}
-
-// isAlreadyExistsError detects whether an AddEnvironment error indicates the
-// env already existed (race between concurrent EnsureEnvironment calls).
-// EnvironmentManager.AddEnvironment returns plain errors with "already" in
-// the message when the env exists.
-func isAlreadyExistsError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "already") && strings.Contains(msg, "exist")
 }
 
 // Compile-time guard that EnvironmentEnsurer satisfies the routes.EnvironmentEnsurer

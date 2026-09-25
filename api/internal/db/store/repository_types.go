@@ -12,7 +12,7 @@ package store
 // here.
 
 import (
-	"errors"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -23,7 +23,7 @@ import (
 // CHG-2026-04-23-AUDIT-21 — mirrors the sentinel pattern in
 // tenancy.ErrEnvironmentNotFound (AUDIT-12), replacing the silent-success
 // behaviour where DELETE returned nil regardless of rows affected.
-var ErrRepositoryNotLinked = errors.New("repository store: no repository linked to project")
+var ErrRepositoryNotLinked = ports.ErrRepositoryNotLinked
 
 // ProjectRepository links a LoopZero project to a GitHub repository.
 // Distinct from generated.ProjectRepository (sqlc-emitted row type

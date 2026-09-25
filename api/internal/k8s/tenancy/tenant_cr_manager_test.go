@@ -169,7 +169,7 @@ func TestTenantCRManager_AddEnvironment(t *testing.T) {
 	}
 }
 
-func TestTenantCRManager_AddEnvironment_Idempotent(t *testing.T) {
+func TestTenantCRManager_AddEnvironment_ReportsAnExistingTupleAndKeepsOneEntry(t *testing.T) {
 	mgr := newTenantMgr(t)
 	tenantID := "test-add-env-idem"
 
@@ -179,8 +179,8 @@ func TestTenantCRManager_AddEnvironment_Idempotent(t *testing.T) {
 	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "staging"); err != nil {
 		t.Fatalf("first AddEnvironment failed: %v", err)
 	}
-	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "staging"); err != nil {
-		t.Fatalf("second AddEnvironment (idempotent) failed: %v", err)
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "staging"); !errors.Is(err, ports.ErrEnvironmentExists) {
+		t.Fatalf("second AddEnvironment = %v, want ports.ErrEnvironmentExists", err)
 	}
 
 	envs, _ := mgr.ListEnvironments(context.Background(), tenantID)

@@ -6,6 +6,8 @@ package platform
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -131,7 +133,7 @@ func TestEnsureEnvironment_TimeoutWhenOperatorSlow(t *testing.T) {
 // Plan T2.2 RED #4.
 func TestEnsureEnvironment_AlreadyExistsErrorIsSuccess(t *testing.T) {
 	lister := &stubLister{} // exists=false, so we'll call Add
-	adder := &stubAdder{err: errors.New("environment already exists for tenant")}
+	adder := &stubAdder{err: fmt.Errorf("k8s: %w", ports.ErrEnvironmentExists)}
 	e := &EnvironmentEnsurer{
 		Lister:       lister,
 		Adder:        adder,

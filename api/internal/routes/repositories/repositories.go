@@ -14,6 +14,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -284,10 +286,7 @@ func (h *RepositoryHandler) Disconnect(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.store.UnlinkRepository(ctx, uc.TenantID, projectName); err != nil {
 		// AUDIT-21: map "not linked" to 404 instead of silent success.
-		// RepositoryStore returns a sentinel we match by message suffix
-		// to keep routes free of a direct db package dependency (same
-		// pattern used in AUDIT-12 for environments).
-		if strings.Contains(err.Error(), "no repository linked to project") {
+		if errors.Is(err, ports.ErrRepositoryNotLinked) {
 			httpio.WriteLoopZeroError(w, loopzeroerrors.NewRepositoryNotLinked(projectName))
 			return
 		}

@@ -14,7 +14,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/validation"
 	"log/slog"
 	"net/http"
@@ -28,7 +30,6 @@ import (
 
 	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/ports"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -455,7 +456,7 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		// surface as 409 CONFLICT, not 201 silent. The user needs to
 		// know whether they actually created the env or it already
 		// existed (concurrent dev clients, retry on 5xx flake, etc).
-		if isAlreadyExistsErrorMsg(err) {
+		if errors.Is(err, ports.ErrEnvironmentExists) {
 			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
 				"ENV_ALREADY_EXISTS",
 				fmt.Sprintf("environment %q already exists in project %q", req.Name, req.Project)))
@@ -476,24 +477,6 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		"project": req.Project,
 		"status":  "active",
 	})
-}
-
-// isAlreadyExistsErrorMsg detects the AddEnvironment "already exists"
-// sentinel from underlying implementations (TenantCRManager returns
-// either nil for idempotent same-tuple ops OR an error containing
-// "already" depending on race path). EC-5: callers MUST map this to
-// 409 CONFLICT instead of silent 201.
-func isAlreadyExistsErrorMsg(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	for _, hint := range []string{"already exists", "already", "duplicate"} {
-		if strings.Contains(strings.ToLower(msg), hint) {
-			return true
-		}
-	}
-	return false
 }
 
 // Get handles GET /api/v1/environments/{name}.
@@ -605,9 +588,7 @@ func (h *EnvironmentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.envMgr.RemoveEnvironment(ctx, uc.TenantID, project, name); err != nil {
 		// AUDIT-12: map "not found" to 404 instead of silent success.
-		// EnvironmentManager returns a sentinel that we match by message suffix
-		// — keeping routes package free of direct k8s import dependencies.
-		if strings.Contains(err.Error(), "environment not found in tenant CR") {
+		if errors.Is(err, ports.ErrEnvironmentNotFound) {
 			httpio.WriteLoopZeroError(w, loopzeroerrors.NewEnvironmentNotFound(name))
 			return
 		}

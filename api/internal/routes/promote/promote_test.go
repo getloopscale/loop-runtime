@@ -231,23 +231,15 @@ func TestPromote_LockTimeout(t *testing.T) {
 		t.Fatalf("want 409, got %d body=%s", w.Code, w.Body.String())
 	}
 
-	// Body surfaces LOCK_TIMEOUT, not DEPLOY_IN_PROGRESS, because the
-	// handler's typed-error path (`errors.As(err, &loopzeroErr)`) runs BEFORE
-	// the `isPromoteLockTimeout` fallback at promote.go:148-160. The
-	// fallback's `DEPLOY_IN_PROGRESS` map is reachable ONLY when the
-	// service wraps the timeout without preserving the typed LoopZeroError —
-	// which is currently dead code. The dashboard's PromoteDialog mutation
-	// hook (J-10 v1.1) treats any 409 as DEPLOY_IN_PROGRESS via status
-	// code, so contract is preserved at the HTTP layer even though the
-	// body code differs. This test PINS the current truth so a future
-	// handler refactor doesn't silently break it.
+	// The lock's typed ErrLockTimeout reaches the client as LOCK_TIMEOUT
+	// through errors.As; there is no string-matching fallback.
 	var errBody map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &errBody); err != nil {
 		t.Fatalf("decode lock-timeout body: %v", err)
 	}
 	got, _ := errBody["code"].(string)
 	if got != "LOCK_TIMEOUT" {
-		t.Errorf("want code LOCK_TIMEOUT (current truth), got %q body=%s", got, w.Body.String())
+		t.Errorf("want code LOCK_TIMEOUT, got %q body=%s", got, w.Body.String())
 	}
 }
 

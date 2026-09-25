@@ -10,7 +10,7 @@
 package health
 
 import (
-	"bytes"
+	"errors"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -48,8 +48,8 @@ func TestHTTPServiceChecker_AuthFailed(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for 401")
 	}
-	if !bytes.Contains([]byte(err.Error()), []byte("auth_failed")) {
-		t.Errorf("expected 'auth_failed' in error, got: %v", err)
+	if !errors.Is(err, ErrServiceAuthFailed) {
+		t.Errorf("expected ErrServiceAuthFailed, got: %v", err)
 	}
 }
 
@@ -84,7 +84,7 @@ func TestHTTPServiceChecker_ForbiddenIsAuthFailed(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for 403")
 	}
-	if !bytes.Contains([]byte(err.Error()), []byte("auth_failed")) {
-		t.Errorf("expected 'auth_failed' in error for 403, got: %v", err)
+	if !errors.Is(err, ErrServiceAuthFailed) {
+		t.Errorf("expected ErrServiceAuthFailed for 403, got: %v", err)
 	}
 }

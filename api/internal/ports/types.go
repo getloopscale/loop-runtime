@@ -19,6 +19,20 @@ import (
 // ErrDomainExists is returned when a domain is already registered (unique constraint violation).
 var ErrDomainExists = errors.New("domain already exists")
 
+// ErrEnvironmentExists is returned by EnvironmentManager.AddEnvironment when
+// the (project, environment) tuple is already present. Callers that only want
+// the environment to exist (the first-deploy ensurer) treat it as success; the
+// create route answers 409.
+var ErrEnvironmentExists = errors.New("environment already exists")
+
+// ErrEnvironmentNotFound is returned by EnvironmentManager.RemoveEnvironment
+// when the (project, environment) tuple is not present (AUDIT-12).
+var ErrEnvironmentNotFound = errors.New("environment not found")
+
+// ErrRepositoryNotLinked is returned by RepositoryStore.UnlinkRepository when
+// no repository is linked to the (tenant, project) pair (AUDIT-21).
+var ErrRepositoryNotLinked = errors.New("no repository linked to project")
+
 // GenerateDomainID generates a domain ID in the format "dom-{8 hex chars}".
 func GenerateDomainID() string {
 	b := make([]byte, 4)

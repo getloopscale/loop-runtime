@@ -2,11 +2,6 @@
 // previous release.
 //
 // Twentieth family to leave the flat `routes` package (B-080, slice-38).
-//
-// Its `isLockTimeout` predicate had exactly one reader outside this code — a
-// block in the parent's shared coverage file — which is what the compiler said
-// the moment the family left. A helper reached only by one test of the parent
-// belongs with the code it guards.
 package rollback
 
 import (
@@ -16,7 +11,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/ports"
@@ -206,14 +200,6 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 			httpio.WriteLoopZeroError(w, loopzeroErr)
 			return
 		}
-		// Lock timeout → 409
-		if isLockTimeout(err) {
-			httpio.WriteJSON(w, http.StatusConflict, map[string]string{
-				"code":    "DEPLOY_IN_PROGRESS",
-				"message": "Another operation is in progress. Try again in a moment.",
-			})
-			return
-		}
 		// Mirror mapBuildError at builds.go:402 — log unexpected errors for diagnosis.
 		slog.Error("unexpected error in rollback handler",
 			"error", err.Error(),
@@ -236,12 +222,4 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpio.WriteJSON(w, http.StatusOK, resp)
-}
-
-// isLockTimeout checks if the error is a lock timeout (advisory lock busy).
-func isLockTimeout(err error) bool {
-	if err == nil {
-		return false
-	}
-	return errors.Is(err, loopzeroerrors.ErrLockTimeout) || strings.Contains(err.Error(), "lock timeout")
 }

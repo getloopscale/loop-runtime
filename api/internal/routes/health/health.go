@@ -15,10 +15,10 @@ package health
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -108,7 +108,7 @@ func (h *HealthHandler) DeepHealth(w http.ResponseWriter, r *http.Request) {
 	// Service dependency checks
 	for _, svc := range h.services {
 		if err := svc.Check(ctx); err != nil {
-			if strings.Contains(err.Error(), "auth_failed") {
+			if errors.Is(err, ErrServiceAuthFailed) {
 				result[svc.Name()] = "auth_failed"
 			} else {
 				result[svc.Name()] = "unreachable"
@@ -168,6 +168,11 @@ func NewHTTPServiceChecker(name, url, token string, client *http.Client) *HTTPSe
 
 func (c *HTTPServiceChecker) Name() string { return c.name }
 
+// ErrServiceAuthFailed is returned by a ServiceChecker whose dependency
+// rejected its credentials (401/403) — reported as "auth_failed" rather than
+// "unreachable", because the fix is a credential, not the network.
+var ErrServiceAuthFailed = errors.New("auth_failed")
+
 func (c *HTTPServiceChecker) Check(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
 	if err != nil {
@@ -183,7 +188,7 @@ func (c *HTTPServiceChecker) Check(ctx context.Context) error {
 	defer func() { _, _ = io.Copy(io.Discard, resp.Body); _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return fmt.Errorf("%s: auth_failed", c.name)
+		return fmt.Errorf("%s: %w", c.name, ErrServiceAuthFailed)
 	}
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("%s: status %d", c.name, resp.StatusCode)

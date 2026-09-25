@@ -4,10 +4,11 @@
 package repositories
 
 import (
+	"github.com/getloopscale/loopzero/api/internal/ports"
+	"fmt"
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -236,7 +237,7 @@ func TestRepositories_Disconnect_HappyPath(t *testing.T) {
 // delete).
 func TestRepositories_Disconnect_NotLinked_Returns404(t *testing.T) {
 	store := &fakeRepoStore{
-		unlinkErr: errors.New("repository store: no repository linked to project"),
+		unlinkErr: fmt.Errorf("store: %w", ports.ErrRepositoryNotLinked),
 	}
 	h := NewRepositoryHandler(store)
 

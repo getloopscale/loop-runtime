@@ -11,7 +11,6 @@ package tenancy
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -110,8 +109,9 @@ func isEnvMatch(entry apiv1.TenantEnvironmentEntry, envName, project string) boo
 }
 
 // AddEnvironment adds an environment entry to the Tenant CR spec.environments[].
-// Idempotent on (name, project) tuple: if the same (envName, project) pair
-// already exists, it returns nil without changes.
+// When the same (envName, project) pair is already present it changes nothing
+// and returns ports.ErrEnvironmentExists, so a caller can tell a create from a
+// no-op: the create route answers 409, the first-deploy ensurer carries on.
 //
 // M2 v1.2 (2026-06-07): writes the canonical `project` field so the operator
 // can compute the 3-segment namespace `loopzero-<tenant>-<project>-<env>` via
@@ -146,7 +146,7 @@ func (m *TenantCRManager) AddEnvironment(ctx context.Context, tenantID, project,
 		// projects is intentional in M2 (each lands in its own namespace).
 		for _, e := range t.Spec.Environments {
 			if isEnvMatch(e, envName, project) {
-				return nil // tuple already present
+				return ports.ErrEnvironmentExists
 			}
 		}
 
@@ -163,7 +163,7 @@ func (m *TenantCRManager) AddEnvironment(ctx context.Context, tenantID, project,
 // environment is not present in the Tenant CR. Callers can map to HTTP 404.
 // AUDIT-12 (CHG-2026-04-23-AUDIT-12): previously this was silently idempotent,
 // causing `loopzero env delete nonexistent` to return "deleted" misleadingly.
-var ErrEnvironmentNotFound = errors.New("k8s: environment not found in tenant CR")
+var ErrEnvironmentNotFound = ports.ErrEnvironmentNotFound
 
 // RemoveEnvironment removes an environment entry from the Tenant CR spec.environments[].
 // Returns ErrEnvironmentNotFound if the (envName, project) tuple is not present —

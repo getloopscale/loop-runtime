@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/ports"
@@ -219,14 +218,6 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 			httpio.WriteLoopZeroError(w, loopzeroErr)
 			return
 		}
-		// Lock timeout -> 409
-		if isPromoteLockTimeout(err) {
-			httpio.WriteJSON(w, http.StatusConflict, map[string]string{
-				"code":    "DEPLOY_IN_PROGRESS",
-				"message": "Another operation is in progress. Try again in a moment.",
-			})
-			return
-		}
 		// Mirror mapBuildError at builds.go:402 — log unexpected errors for diagnosis.
 		// Without this, 500 responses are opaque and E2E validation is impossible.
 		slog.Error("unexpected error in promote handler",
@@ -252,12 +243,4 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpio.WriteJSON(w, http.StatusAccepted, resp)
-}
-
-// isPromoteLockTimeout checks if the error is a lock timeout.
-func isPromoteLockTimeout(err error) bool {
-	if err == nil {
-		return false
-	}
-	return errors.Is(err, loopzeroerrors.ErrLockTimeout) || strings.Contains(err.Error(), "lock timeout")
 }

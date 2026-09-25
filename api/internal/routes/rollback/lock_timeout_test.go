@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/ports"
@@ -22,27 +23,41 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
 )
 
-func TestIsLockTimeout_NilError(t *testing.T) {
-	if isLockTimeout(nil) {
-		t.Error("nil error should not be lock timeout")
+// The lock returns the typed ErrLockTimeout, and services wrap it; the handler
+// must still answer the typed 409 through errors.As, with no string matching.
+func TestRollback_WrappedLockTimeoutIs409LockTimeout(t *testing.T) {
+	projects := &fakeRollbackProjectStore{project: &ports.ProjectResult{ID: "p1", Name: "my-api"}}
+	svc := &fakeRollbackService{err: fmt.Errorf("rollback: %w", loopzeroerrors.ErrLockTimeout)}
+	h := NewRollbackHandler(projects, svc, "dev.loopzero.example")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/rollback", bytes.NewBufferString(`{"environment":"production"}`))
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
+	w := httptest.NewRecorder()
+
+	h.Create(w, req)
+
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "LOCK_TIMEOUT") {
+		t.Fatalf("want 409 LOCK_TIMEOUT, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 
-func TestIsLockTimeout_LockTimeoutError(t *testing.T) {
-	if !isLockTimeout(loopzeroerrors.ErrLockTimeout) {
-		t.Error("ErrLockTimeout should be detected as lock timeout")
-	}
-}
+// An error that merely mentions "lock timeout" is not one: it is unexpected,
+// and answers 500 rather than being guessed into a retryable 409.
+func TestRollback_ErrorMentioningLockTimeoutIsNotOne(t *testing.T) {
+	projects := &fakeRollbackProjectStore{project: &ports.ProjectResult{ID: "p1", Name: "my-api"}}
+	svc := &fakeRollbackService{err: errors.New("upstream said: lock timeout")}
+	h := NewRollbackHandler(projects, svc, "dev.loopzero.example")
 
-func TestIsLockTimeout_StringContains(t *testing.T) {
-	if !isLockTimeout(fmt.Errorf("some lock timeout occurred")) {
-		t.Error("error containing 'lock timeout' should be detected")
-	}
-}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/rollback", bytes.NewBufferString(`{"environment":"production"}`))
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
+	w := httptest.NewRecorder()
 
-func TestIsLockTimeout_OtherError(t *testing.T) {
-	if isLockTimeout(errors.New("something else")) {
-		t.Error("unrelated error should not be lock timeout")
+	h.Create(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500 for an untyped error, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 

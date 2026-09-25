@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -364,6 +366,48 @@ func (f *fakeProjectLookup) ProjectExistsForTenant(_ context.Context, tenantID, 
 	return f.exists[tenantID+"::"+projectName], nil
 }
 
+func TestEnvs_Create_ExistingTupleIs409(t *testing.T) {
+	h := NewEnvironmentHandler(&fakeEnvMgr{addErr: fmt.Errorf("k8s: %w", ports.ErrEnvironmentExists)})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(`{"name":"staging","project":"web"}`))
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Create(w, req)
+
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "ENV_ALREADY_EXISTS") {
+		t.Fatalf("want 409 ENV_ALREADY_EXISTS, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// An error whose text happens to contain "already" is not a duplicate: it is
+// an unexpected failure and must not be reported as a conflict.
+func TestEnvs_Create_ErrorMentioningAlreadyIsNotAConflict(t *testing.T) {
+	h := NewEnvironmentHandler(&fakeEnvMgr{addErr: errors.New("context already cancelled")})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(`{"name":"staging","project":"web"}`))
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Create(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestEnvs_Delete_MissingTupleIs404(t *testing.T) {
+	h := NewEnvironmentHandler(&fakeEnvMgr{removeErr: fmt.Errorf("k8s: %w", ports.ErrEnvironmentNotFound)})
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/environments/staging?project=web", nil)
+	req = routestest.WithChiParam(req, "name", "staging")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Delete(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("want 404, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
 // fakeActiveReleaseLookup — minimal stub for EC-7 warning emission.
 type fakeActiveReleaseLookup struct {
 	active bool
@@ -467,7 +511,7 @@ func TestEnvs_Create_ResponseIncludesProject_M2(t *testing.T) {
 
 func TestEnvs_Create_DuplicateReturns409_M2(t *testing.T) {
 	pl := &fakeProjectLookup{exists: map[string]bool{"tn-test-123::web": true}}
-	mgr := &fakeEnvMgr{addErr: errors.New("environment already exists for tenant")}
+	mgr := &fakeEnvMgr{addErr: ports.ErrEnvironmentExists}
 	h := NewEnvironmentHandler(mgr).WithProjectLookup(pl)
 
 	body := `{"name":"staging","project":"web"}`
