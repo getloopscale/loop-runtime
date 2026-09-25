@@ -122,7 +122,7 @@ func main() {
 	defer secretAgeCollector.Stop()
 
 	// ---- Services + orchestrator ----
-	deps, err := setupServices(cfg, dbAdapter, logger)
+	loops, err := setupServices(cfg, dbAdapter, logger)
 	if err != nil {
 		logger.Error("controller setup failed", "error", err)
 		os.Exit(1)
@@ -151,7 +151,7 @@ func main() {
 	var bgWg sync.WaitGroup
 	bgWg.Add(1)
 	go runHeartbeat(shutdownCtx, &bgWg, acquirer, lease, logger, cancel)
-	startBackgroundLoops(shutdownCtx, &bgWg, deps, cfg, logger)
+	startBackgroundLoops(shutdownCtx, &bgWg, loops, logger)
 	// Compute-metering producer (plan metering-compute-loop T3.2 S5b). Leader-gated
 	// via the lease above; observe-only + non-fatal (a wiring failure logs + skips
 	// metering, never crashes the controller).
@@ -167,7 +167,7 @@ func main() {
 		}
 	}()
 
-	logger.Info("loopzero-controller ready — background loops running (6 core + compute-metering, observe-only)")
+	logger.Info("loopzero-controller ready — background loops running", "loops", len(loops))
 
 	// Block until SIGTERM / SIGINT or a fatal heartbeat failure.
 	<-shutdownCtx.Done()

@@ -251,7 +251,7 @@ func main() {
 		cellRouter = setupCellRouter(cfg, shutdownCtx, &bgWg, logger)
 		cellStore = &store.PostgresCellStore{DB: dbAdapter}
 
-		dh, domainProvisioner, domainHealthChecker, cfZoneClient := setupDomains(stores, workflows, cfg, logger)
+		dh, cfZoneClient := setupDomains(stores, cfg, logger)
 		domainHandler = dh
 
 		// The election runs in a goroutine so the HTTP server starts at once;
@@ -281,7 +281,7 @@ func main() {
 				election.run(shutdownCtx, func(loopsCtx context.Context) {
 					startLeaderLoops(loopsCtx, &bgWg,
 						bgAdapter, bgStores, workflows, orchDeps, k8sDeps, cellRouter,
-						domainProvisioner, domainHealthChecker, cfZoneClient, cfg, logger)
+						cfZoneClient, cfg, logger)
 				})
 			}()
 		}

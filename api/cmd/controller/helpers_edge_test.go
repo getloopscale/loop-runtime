@@ -65,32 +65,6 @@ func TestPodName_EmptyHostname_ReturnsFallback(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// controllerDeps — struct is valid with zero values
-// ---------------------------------------------------------------------------
-
-func TestControllerDeps_ZeroValue(t *testing.T) {
-	d := controllerDeps{}
-	if d.reconcileLoop != nil {
-		t.Error("zero-value reconcileLoop should be nil")
-	}
-	if d.buildReaper != nil {
-		t.Error("zero-value buildReaper should be nil")
-	}
-	if d.releaseReaper != nil {
-		t.Error("zero-value releaseReaper should be nil")
-	}
-	if d.releaseConvergenceLoop != nil {
-		t.Error("zero-value releaseConvergenceLoop should be nil")
-	}
-	if d.idempotencyCleaner != nil {
-		t.Error("zero-value idempotencyCleaner should be nil")
-	}
-	if d.eventPruner != nil {
-		t.Error("zero-value eventPruner should be nil")
-	}
-}
-
-// ---------------------------------------------------------------------------
 // newHealthServer — additional coverage
 // ---------------------------------------------------------------------------
 
@@ -377,18 +351,6 @@ func TestStubConfig_ReturnsZeroValue(t *testing.T) {
 		t.Errorf("stubConfig().BaseDomain = %q, want empty", cfg.BaseDomain)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// startBackgroundLoops — verify it does not panic with nil deps
-// (When loops are nil, calling .Start() would panic — but with a cancelled
-// context, goroutines may not reach the Start call. This tests that the
-// function wires WaitGroup correctly.)
-// ---------------------------------------------------------------------------
-
-// We cannot easily test startBackgroundLoops without real service instances,
-// but we can verify the function signature matches the expected pattern by
-// calling it indirectly. The main_test.go already exercises the health
-// server which is the other half of the main() function.
 
 // ---------------------------------------------------------------------------
 // Env var isolation — verify t.Setenv cleanup works
