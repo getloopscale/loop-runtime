@@ -54,8 +54,11 @@ var reservedEnvKeys = map[string]struct{}{
 // rule on an empty road is the appearance of protection, not protection.
 //
 // THIS list is reachable and actually runs: it guards `ServiceEntry.Env` from
-// services.json, which reaches the workload container env
-// (validator_services.go → services_input_mapping.go → renderer_deployment.go).
+// services.json on every upload (validator_services.go), refusing the value at
+// the boundary. Note that no production renderer sets AppManifestInput.Env
+// today — the build path builds its render input from the build record, not
+// from services.json — so the declared env does not yet reach the container.
+// The guard is what must hold the day it does.
 // It stops a tenant from HIJACKING THE PROCESS — see the
 // categories above: LD_PRELOAD and DYLD_* load an attacker's library before the
 // real one; PATH/SHELL redirect what gets executed.

@@ -120,6 +120,13 @@ type AutoscalingConfig struct {
 	CooldownPeriod int // Seconds before scale-to-zero (default: 300, only when MinReplicas = 0)
 }
 
+// Service type values mirror services.schema.json (server | worker). An empty
+// or unknown type renders as a server.
+const (
+	ServiceTypeServer = "server"
+	ServiceTypeWorker = "worker"
+)
+
 // AppManifestInput contains everything needed to generate manifests for a single app.
 type AppManifestInput struct {
 	Name      string            // e.g., "api", "worker", "dashboard"
@@ -214,7 +221,7 @@ func RenderDocs(input RenderInput) ([]K8sDoc, error) {
 		// removed — the fixed stack is server|worker only (D5). Unknown/empty
 		// types default to server.
 		switch app.Type {
-		case "worker":
+		case ServiceTypeWorker:
 			raw = append(raw, renderWorkerApp(input, app)...)
 		default:
 			raw = append(raw, renderServerApp(input, app)...)

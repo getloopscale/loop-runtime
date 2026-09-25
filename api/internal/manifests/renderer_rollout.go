@@ -82,7 +82,7 @@ func buildRollout(ri RenderInput, app AppManifestInput, port int) k8sRollout {
 	// Worker apps: simple pause-only steps (no traffic to weight).
 	// Server/frontend: full canary with TraefikService + AnalysisTemplate.
 	var canary *k8sCanaryStrategy
-	if app.Type == "worker" {
+	if app.Type == ServiceTypeWorker {
 		canary = &k8sCanaryStrategy{
 			Steps:                 workerCanarySteps(),
 			ScaleDownDelaySeconds: &scaleDownDelay,

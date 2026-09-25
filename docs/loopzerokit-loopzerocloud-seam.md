@@ -95,10 +95,6 @@ Any future change that breaks one of these is a regression.
 
 - **`manifests.Render()` MUST return `(string, error)` — never panic.** All production
   callers treat the error as a recoverable build failure.
-- **`RenderOpts.ImageRefFor()` returns an error when there is no ref and no default**,
-  unless `AllowMissingImage=true` (fixture-only escape hatch).
-- **`runtimeToStrategyTable` is an immutable array** (`[...]runtimeToStrategyEntry{...}`),
-  never a `map` — Go maps are not safe for concurrent write+read.
 
 ### CLI (in `../loopzero-cli`)
 

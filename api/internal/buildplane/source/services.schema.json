@@ -57,7 +57,7 @@
         "runtime": {
           "type": "string",
           "enum": ["python", "node"],
-          "description": "Runtime that owns the service process. Maps to LanguageStrategy via Plan B v3.1 T-B.4 runtimeToStrategy table."
+          "description": "Runtime that owns the service process. Resolved to the build's LanguageStrategy by buildplane/argo ResolveStrategy."
         },
         "type": {
           "type": "string",
