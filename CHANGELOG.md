@@ -65,6 +65,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- loopzero-ops quality helmfile-context-parity reports a missing environment variable in English (principle_violations#159)
+
 - `loopzero-ops quality spotcheck-dimension` rejects a non-integer `SPOTCHECK_SEED` as a usage error instead of silently picking a random sample (principle_violations#75)
 
 - `loopzero-ops` quality gates and seeds now print their messages in English; Kubernetes errors from seeds name the cluster as `(context <name>)` (principle_violations#77)
@@ -260,6 +262,10 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- loopzero-ops quality billing-layers and routes-acyclic recognise the cost gate's new location and the shared plan-tier policy package instead of failing on them
+
+- loopzero-ops quality error-vocabulary checks every user-facing error message again, including messages built with an error constructor before being written; 37 messages had left its scan, and error codes are no longer counted as messages
 
 - Seeds that restart the Promtail DaemonSet, convert the Loki Service to NodePort or create their namespace no longer skip those steps silently when given a non-default Kubernetes client (principle_violations#60, principle_violations#88)
 
