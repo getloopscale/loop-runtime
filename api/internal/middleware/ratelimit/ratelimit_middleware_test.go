@@ -18,7 +18,6 @@ import (
 
 func TestRateLimiter_AllowsUnderLimit(t *testing.T) {
 	rl := NewRateLimiter(5, time.Minute)
-	defer rl.Stop()
 
 	for i := 0; i < 5; i++ {
 		if !rl.Allow("tenant-1") {
@@ -29,7 +28,6 @@ func TestRateLimiter_AllowsUnderLimit(t *testing.T) {
 
 func TestRateLimiter_RejectsOverLimit(t *testing.T) {
 	rl := NewRateLimiter(3, time.Minute)
-	defer rl.Stop()
 
 	for i := 0; i < 3; i++ {
 		rl.Allow("tenant-1")
@@ -42,7 +40,6 @@ func TestRateLimiter_RejectsOverLimit(t *testing.T) {
 
 func TestRateLimiter_Middleware_Returns429(t *testing.T) {
 	rl := NewRateLimiter(1, time.Minute)
-	defer rl.Stop()
 
 	handler := rl.Middleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -70,7 +67,6 @@ func TestRateLimiter_Middleware_Returns429(t *testing.T) {
 
 func TestRateLimiter_DifferentTenants_IndependentLimits(t *testing.T) {
 	rl := NewRateLimiter(1, time.Minute)
-	defer rl.Stop()
 
 	if !rl.Allow("tenant-a") {
 		t.Error("tenant-a first request should pass")
@@ -80,5 +76,20 @@ func TestRateLimiter_DifferentTenants_IndependentLimits(t *testing.T) {
 	}
 	if !rl.Allow("tenant-b") {
 		t.Error("tenant-b should have independent limit")
+	}
+}
+
+// Retry-After comes from the limiter's own window, not a constant: a limiter
+// configured for 10s must not tell clients to wait 60s.
+func TestRateLimiter_Middleware_RetryAfterFollowsTheConfiguredWindow(t *testing.T) {
+	rl := NewRateLimiter(1, 10*time.Second)
+	handler := rl.Middleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/test", nil))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/test", nil))
+
+	if got := rec.Header().Get("Retry-After"); got != "10" {
+		t.Errorf("Retry-After = %q, want \"10\" for a 10s window", got)
 	}
 }

@@ -6,10 +6,11 @@ package auth
 import (
 	"context"
 	"log/slog"
-	"net"
 	"net/http"
-	"sync"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
+	"github.com/getloopscale/loopzero/api/internal/middleware/slidingwindow"
 )
 
 // T1.3 — Auth failure persistence in audit_log.
@@ -46,9 +47,10 @@ type AuthAuditWriter func(ctx context.Context, tenantID, action, actor, resource
 // AuthFailureAuditor persists auth-rejection events to audit_log + slog.
 // Constructed once at API startup with the writer function.
 type AuthFailureAuditor struct {
-	Write       AuthAuditWriter
-	Logger      *slog.Logger
-	rateLimiter *ipTokenBucket
+	Write    AuthAuditWriter
+	Logger   *slog.Logger
+	throttle *slidingwindow.Counter
+	clientIP clientip.Resolver
 }
 
 // DefaultAuthAuditor is the package-level singleton wired by the boot
@@ -77,13 +79,17 @@ func emitAuthFailure(r *http.Request, action AuthFailureAction, reason string, m
 	auditor.Emit(r.Context(), r, action, reason, metadata)
 }
 
-// NewAuthFailureAuditor returns an auditor with default 100/min/IP rate limit.
-// Per EC-NEW v1.1: prevents bot-scanning floods from filling audit_log.
-func NewAuthFailureAuditor(writer AuthAuditWriter, logger *slog.Logger) *AuthFailureAuditor {
+// NewAuthFailureAuditor returns an auditor throttled to 100 rows/min per client
+// IP. Per EC-NEW v1.1: prevents bot-scanning floods from filling audit_log.
+// clientIP decides which address a request is throttled (and recorded) under;
+// it must carry the same trusted-proxy policy as the edge IP rate limiter, or a
+// client picks its own bucket by writing X-Forwarded-For.
+func NewAuthFailureAuditor(writer AuthAuditWriter, logger *slog.Logger, clientIP clientip.Resolver) *AuthFailureAuditor {
 	return &AuthFailureAuditor{
-		Write:       writer,
-		Logger:      logger,
-		rateLimiter: newIPTokenBucket(100, time.Minute),
+		Write:    writer,
+		Logger:   logger,
+		throttle: slidingwindow.New(100, time.Minute, nil),
+		clientIP: clientIP,
 	}
 }
 
@@ -104,8 +110,12 @@ func (a *AuthFailureAuditor) Emit(
 		return
 	}
 
-	ip := clientIP(r)
-	if !a.rateLimiter.allow(ip) {
+	clientAddr := a.clientIP.IP(r)
+	ip := r.RemoteAddr // unparseable peer: record it verbatim for forensics
+	if clientAddr != nil {
+		ip = clientAddr.String()
+	}
+	if allowed, _ := a.throttle.Allow(clientip.BucketKey(clientAddr)); !allowed {
 		// Rate limited: log debug, skip DB write
 		a.Logger.Debug("auth audit emission rate limited", "ip", ip, "action", string(action))
 		return
@@ -154,70 +164,4 @@ func (a *AuthFailureAuditor) Emit(
 		"ip", ip,
 		"reason", reason,
 	)
-}
-
-// clientIP extracts the best-effort client IP from request, honoring
-// X-Forwarded-For when running behind a load balancer.
-func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		for i := 0; i < len(xff); i++ {
-			if xff[i] == ',' {
-				return xff[:i]
-			}
-		}
-		return xff
-	}
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return xri
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
-}
-
-// ipTokenBucket is a simple per-IP rate limiter: N tokens per window, refills
-// at end of window. Sufficient for audit emission throttling — not for
-// general request rate-limiting (use iprate.go for that).
-type ipTokenBucket struct {
-	mu        sync.Mutex
-	buckets   map[string]*bucketState
-	maxTokens int
-	window    time.Duration
-}
-
-type bucketState struct {
-	tokens      int
-	windowStart time.Time
-}
-
-func newIPTokenBucket(maxTokens int, window time.Duration) *ipTokenBucket {
-	return &ipTokenBucket{
-		buckets:   make(map[string]*bucketState),
-		maxTokens: maxTokens,
-		window:    window,
-	}
-}
-
-func (b *ipTokenBucket) allow(ip string) bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	now := time.Now()
-	state, exists := b.buckets[ip]
-	if !exists || now.Sub(state.windowStart) >= b.window {
-		// New window: reset
-		b.buckets[ip] = &bucketState{
-			tokens:      b.maxTokens - 1,
-			windowStart: now,
-		}
-		return true
-	}
-
-	if state.tokens > 0 {
-		state.tokens--
-		return true
-	}
-	return false
 }

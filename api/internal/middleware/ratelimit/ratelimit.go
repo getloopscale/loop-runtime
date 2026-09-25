@@ -15,126 +15,35 @@
 // exception, and deliberately so: it has to answer before anyone is
 // authenticated.
 //
-// This file implements the fixed-window limiter keyed by tenant.
+// The tenant, IP and domain limiters count through package slidingwindow
+// ("N per window"); the broker limiter is a token bucket from
+// golang.org/x/time/rate, where a configured burst is the point. This file is
+// the one keyed by tenant and user.
 package ratelimit
 
 import (
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loopzero/api/internal/middleware/slidingwindow"
 )
 
-// RateLimiter implements a fixed-window rate limiter keyed by tenant ID.
-// It uses a simple counter per window, resetting when the window expires.
-// Stale buckets are cleaned up periodically to prevent unbounded memory growth.
+// RateLimiter is a sliding-window rate limiter keyed by an arbitrary string.
+// Idle keys are evicted by the underlying counter, so it owns no goroutine.
 type RateLimiter struct {
-	mu      sync.Mutex
-	buckets map[string]*bucket
-	rate    int
-	window  time.Duration
-	stop    chan struct{} // signals cleanupLoop to exit on shutdown
+	counter *slidingwindow.Counter
 }
 
-type bucket struct {
-	count       int
-	windowStart time.Time
-	// prevCount is the count of the window immediately before windowStart. It is
-	// what turns a fixed window into a sliding one (SD-04.3, audit 2026-09-07):
-	// a fixed window resets to zero at the boundary, so a client could spend its
-	// whole allowance at the end of one window and again at the start of the
-	// next — twice the limit inside a span shorter than one window, and 4x across
-	// two replicas, which is the burst case a limiter exists to stop.
-	prevCount int
-}
-
-// NewRateLimiter creates a rate limiter that allows `rate` requests per `window`
-// duration. A background goroutine cleans up stale entries every 5 minutes.
-// Call Stop() during graceful shutdown to release the goroutine.
+// NewRateLimiter creates a rate limiter that allows `rate` requests per `window`.
 func NewRateLimiter(rate int, window time.Duration) *RateLimiter {
-	rl := &RateLimiter{
-		buckets: make(map[string]*bucket),
-		rate:    rate,
-		window:  window,
-		stop:    make(chan struct{}),
-	}
-	go rl.cleanupLoop()
-	return rl
-}
-
-// Stop signals the cleanup goroutine to exit. Safe to call multiple times.
-func (rl *RateLimiter) Stop() {
-	select {
-	case <-rl.stop:
-		// already stopped
-	default:
-		close(rl.stop)
-	}
-}
-
-func (rl *RateLimiter) cleanupLoop() {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-rl.stop:
-			return
-		case <-ticker.C:
-			rl.mu.Lock()
-			now := time.Now()
-			for key, b := range rl.buckets {
-				if now.Sub(b.windowStart) > rl.window*2 {
-					delete(rl.buckets, key)
-				}
-			}
-			rl.mu.Unlock()
-		}
-	}
+	return &RateLimiter{counter: slidingwindow.New(rate, window, nil)}
 }
 
 // Allow returns true if the request is within the rate limit for the given key.
 func (rl *RateLimiter) Allow(key string) bool {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	now := time.Now()
-	b, exists := rl.buckets[key]
-	if !exists {
-		rl.buckets[key] = &bucket{count: 1, windowStart: now}
-		return true
-	}
-
-	// Roll the window forward. One window elapsed keeps the previous count as the
-	// overlapping tail; two or more elapsed means nothing overlaps any more.
-	switch elapsed := now.Sub(b.windowStart); {
-	case elapsed >= 2*rl.window:
-		b.prevCount = 0
-		b.count = 0
-		b.windowStart = now
-	case elapsed >= rl.window:
-		b.prevCount = b.count
-		b.count = 0
-		b.windowStart = b.windowStart.Add(rl.window)
-	}
-
-	// Weight the previous window by how much of it still falls inside the
-	// trailing window. Immediately after a boundary the overlap is ~1, so the
-	// client carries almost its whole previous spend; a full window later the
-	// overlap is 0 and the allowance has recovered. This is the standard sliding
-	// window counter — no shared store, so it fixes the boundary burst without
-	// adding a dependency.
-	overlap := 1 - (now.Sub(b.windowStart).Seconds() / rl.window.Seconds())
-	if overlap < 0 {
-		overlap = 0
-	}
-	weighted := float64(b.prevCount)*overlap + float64(b.count)
-
-	if weighted >= float64(rl.rate) {
-		return false
-	}
-	b.count++
-	return true
+	ok, _ := rl.counter.Allow(key)
+	return ok
 }
 
 // Middleware returns HTTP middleware that rate-limits by tenant:user composite key.
@@ -156,9 +65,9 @@ func (rl *RateLimiter) Middleware() func(http.Handler) http.Handler {
 			if uc != nil {
 				key = uc.TenantID + ":" + uc.UserID
 			}
-			if !rl.Allow(key) {
+			if ok, retryAfter := rl.counter.Allow(key); !ok {
 				w.Header().Set("Content-Type", "application/json")
-				w.Header().Set("Retry-After", "60")
+				slidingwindow.SetRetryAfter(w, retryAfter)
 				w.WriteHeader(http.StatusTooManyRequests)
 				_, _ = w.Write([]byte(`{"code":"RATE_LIMITED","message":"Too many requests. Try again later."}`))
 				return

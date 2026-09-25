@@ -6,6 +6,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -47,7 +48,7 @@ func newCapturingDefault() *captureAuditor {
 		})
 		return nil
 	}
-	auditor := NewAuthFailureAuditor(writer, slog.Default())
+	auditor := NewAuthFailureAuditor(writer, slog.Default(), clientip.Resolver{})
 	DefaultAuthAuditor = auditor
 	return c
 }

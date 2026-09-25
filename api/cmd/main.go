@@ -29,6 +29,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
@@ -147,10 +148,17 @@ func main() {
 	secretAgeCollector.Start(context.Background())
 	defer secretAgeCollector.Stop()
 
+	// Trusted-proxy CIDRs from env (Cloudflare egress in production; empty
+	// in dev so X-Forwarded-For is never honored). One policy for every
+	// consumer of the client IP: the edge rate limit and the auth audit
+	// throttle key on the same address.
+	trustedProxyCIDRs := clientip.ParseTrustedProxyCIDRs(os.Getenv("LOOPZERO_TRUSTED_PROXY_CIDRS"))
+	logger.Info("trusted proxy CIDRs loaded", "count", len(trustedProxyCIDRs))
+
 	// T1.3 (Wave 1 Phase A.4): wire auth failure auditor to persist
 	// auth rejections to audit_log. Must run AFTER setupDatabase so the
 	// writer has a real DB; nil-safe when dbAdapter is unavailable.
-	WireAuthFailureAuditor(dbAdapter, logger)
+	WireAuthFailureAuditor(dbAdapter, logger, clientip.NewResolver(trustedProxyCIDRs))
 
 	var stores *StoreDeps
 
@@ -387,17 +395,14 @@ func main() {
 	healthServices := setupHealthServices(cfg)
 
 	rateLimiter := ratelimit.NewRateLimiter(60, 1*time.Minute)
-	defer rateLimiter.Stop()
 
 	// T2.4 of deep-review-remediation-plan + ADR D4 — pre-auth IP rate limit.
-	// Trusted-proxy CIDRs from env (Cloudflare egress in production; empty
-	// in dev so X-Forwarded-For is never honored). Limit defaults to
 	// 120/min/IP — enough headroom for legitimate batch CLIs, stings on
 	// brute-force.
 	ipRateLimiter := ratelimit.NewIPRateLimiter(ratelimit.IPRateLimitConfig{
 		Limit:             120,
 		Window:            1 * time.Minute,
-		TrustedProxyCIDRs: ratelimit.ParseTrustedProxyCIDRs(os.Getenv("LOOPZERO_TRUSTED_PROXY_CIDRS")),
+		TrustedProxyCIDRs: trustedProxyCIDRs,
 	})
 
 	srvCfg := buildServerConfig(cfg, dbAdapter, dbDeps, stores, orchDeps, ghDeps,
@@ -412,7 +417,6 @@ func main() {
 	// wraps RateLimiter internally — see plan m3-verify-rate-limit-middleware
 	// ADR D1.
 	verifyRateLimiter := ratelimit.NewVerifyRateLimiter(1, 30*time.Second)
-	defer verifyRateLimiter.Stop()
 	srvCfg.VerifyRateLimiter = verifyRateLimiter
 
 	// T2.3+T2.5 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): thread

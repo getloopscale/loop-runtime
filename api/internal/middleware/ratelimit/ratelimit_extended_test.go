@@ -20,7 +20,6 @@ import (
 
 func TestRateLimiter_Middleware_UsesAuthenticatedTenantID(t *testing.T) {
 	rl := NewRateLimiter(1, time.Minute)
-	defer rl.Stop()
 
 	handlerCalls := 0
 	handler := rl.Middleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +60,6 @@ func TestRateLimiter_Middleware_UsesAuthenticatedTenantID(t *testing.T) {
 
 func TestRateLimiter_429Response_HasJSON(t *testing.T) {
 	rl := NewRateLimiter(1, time.Minute)
-	defer rl.Stop()
 
 	// Exhaust the single allowed request
 	handler := rl.Middleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
 	"log/slog"
 	"os"
 	"strings"
@@ -33,7 +34,7 @@ type AuthDeps struct {
 // emission silently.
 //
 // EC-NEW-12: emission failures are fail-open — never block auth response.
-func WireAuthFailureAuditor(dbAdapter *db.PgxAdapter, logger *slog.Logger) {
+func WireAuthFailureAuditor(dbAdapter *db.PgxAdapter, logger *slog.Logger, clientIP clientip.Resolver) {
 	if dbAdapter == nil {
 		logger.Warn("auth failure auditor: dbAdapter nil; failure emissions disabled")
 		return
@@ -49,7 +50,7 @@ func WireAuthFailureAuditor(dbAdapter *db.PgxAdapter, logger *slog.Logger) {
 			Metadata:      metadata,
 		})
 	}
-	auth.DefaultAuthAuditor = auth.NewAuthFailureAuditor(writer, logger)
+	auth.DefaultAuthAuditor = auth.NewAuthFailureAuditor(writer, logger, clientIP)
 	logger.Info("auth failure auditor wired", "component", "audit_log")
 }
 

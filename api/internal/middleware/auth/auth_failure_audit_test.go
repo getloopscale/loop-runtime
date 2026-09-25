@@ -6,6 +6,8 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
 	"io"
 	"log/slog"
 	"net/http"
@@ -53,13 +55,13 @@ func discardLogger() *slog.Logger {
 
 func makeReq(ip string) *http.Request {
 	r := httptest.NewRequest("POST", "/api/v1/deploys", nil)
-	r.Header.Set("X-Forwarded-For", ip)
+	r.RemoteAddr = ip + ":54321"
 	return r
 }
 
 func TestAuthFailureAuditor_EmitsTokenInvalidEntry(t *testing.T) {
 	cap := &captureWriter{}
-	auditor := NewAuthFailureAuditor(cap.write, discardLogger())
+	auditor := NewAuthFailureAuditor(cap.write, discardLogger(), clientip.Resolver{})
 
 	auditor.Emit(context.Background(), makeReq("203.0.113.1"), AuthFailureTokenInvalid, "bad signature", nil)
 
@@ -77,7 +79,7 @@ func TestAuthFailureAuditor_EmitsTokenInvalidEntry(t *testing.T) {
 
 func TestAuthFailureAuditor_FailOpenOnDBError(t *testing.T) {
 	cap := &captureWriter{failNext: true}
-	auditor := NewAuthFailureAuditor(cap.write, discardLogger())
+	auditor := NewAuthFailureAuditor(cap.write, discardLogger(), clientip.Resolver{})
 
 	// Should NOT panic, should NOT block, even if DB fails (EC-NEW-12)
 	auditor.Emit(context.Background(), makeReq("203.0.113.1"), AuthFailureTokenInvalid, "test", nil)
@@ -87,7 +89,7 @@ func TestAuthFailureAuditor_FailOpenOnDBError(t *testing.T) {
 
 func TestAuthFailureAuditor_RateLimitsPerIP(t *testing.T) {
 	cap := &captureWriter{}
-	auditor := NewAuthFailureAuditor(cap.write, discardLogger())
+	auditor := NewAuthFailureAuditor(cap.write, discardLogger(), clientip.Resolver{})
 
 	req := makeReq("203.0.113.1")
 	for i := 0; i < 150; i++ {
@@ -105,7 +107,7 @@ func TestAuthFailureAuditor_RateLimitsPerIP(t *testing.T) {
 
 func TestAuthFailureAuditor_DoesNotRateLimitAcrossIPs(t *testing.T) {
 	cap := &captureWriter{}
-	auditor := NewAuthFailureAuditor(cap.write, discardLogger())
+	auditor := NewAuthFailureAuditor(cap.write, discardLogger(), clientip.Resolver{})
 
 	for ipSuffix := 1; ipSuffix <= 5; ipSuffix++ {
 		req := makeReq("203.0.113." + string(rune('0'+ipSuffix)))
@@ -124,25 +126,9 @@ func TestAuthFailureAuditor_NilSafe(t *testing.T) {
 	a.Emit(context.Background(), makeReq("1.1.1.1"), AuthFailureTokenInvalid, "test", nil)
 }
 
-func TestClientIP_PrefersXForwardedFor(t *testing.T) {
-	r := httptest.NewRequest("GET", "/", nil)
-	r.Header.Set("X-Forwarded-For", "203.0.113.99, 10.0.0.1")
-	if got := clientIP(r); got != "203.0.113.99" {
-		t.Errorf("expected first X-Forwarded-For entry, got %s", got)
-	}
-}
-
-func TestClientIP_FallsBackToRemoteAddr(t *testing.T) {
-	r := httptest.NewRequest("GET", "/", nil)
-	r.RemoteAddr = "192.0.2.50:54321"
-	if got := clientIP(r); got != "192.0.2.50" {
-		t.Errorf("expected stripped host, got %s", got)
-	}
-}
-
 func TestAuthFailureAuditor_EnrichesMetadata(t *testing.T) {
 	cap := &captureWriter{}
-	auditor := NewAuthFailureAuditor(cap.write, discardLogger())
+	auditor := NewAuthFailureAuditor(cap.write, discardLogger(), clientip.Resolver{})
 
 	req := makeReq("203.0.113.42")
 	req.Header.Set("Correlation-ID", "req-12345")
@@ -168,5 +154,24 @@ func TestAuthFailureAuditor_EnrichesMetadata(t *testing.T) {
 	}
 	if m["reason"] != "shared secret mismatch" {
 		t.Errorf("expected reason in metadata, got %v", m["reason"])
+	}
+}
+
+// A client that rotates X-Forwarded-For must not get a fresh audit bucket per
+// value: the header is only believed from a trusted proxy, so an untrusted
+// peer is throttled on its own address whatever it claims to be.
+func TestAuthFailureAuditor_ThrottlesAnUntrustedPeerThatRotatesXForwardedFor(t *testing.T) {
+	cap := &captureWriter{}
+	auditor := NewAuthFailureAuditor(cap.write, discardLogger(), clientip.Resolver{})
+
+	for i := 0; i < 150; i++ {
+		req := httptest.NewRequest("POST", "/api/v1/deploys", nil)
+		req.RemoteAddr = "198.51.100.7:4321"
+		req.Header.Set("X-Forwarded-For", fmt.Sprintf("10.0.%d.%d", i/250, i%250))
+		auditor.Emit(context.Background(), req, AuthFailureTokenInvalid, "test", nil)
+	}
+
+	if got := cap.count(); got > 100 {
+		t.Errorf("wrote %d audit rows for one peer; a spoofed X-Forwarded-For bypassed the 100/min throttle", got)
 	}
 }
