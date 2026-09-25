@@ -251,7 +251,7 @@ The `task pkg:usage-matrix:check` gate fails when the table is out of date (gate
 
 | Package | Total imports | api/internal | operators/internal | cloud | cli | Other |
 |---|---:|---:|---:|---:|---:|---:|
-| `pkg/circuitbreaker` | 11 | 2 | 7 | 0 | 0 | 2 |
+| `pkg/circuitbreaker` | 10 | 2 | 6 | 0 | 0 | 2 |
 | `pkg/conditions` | 3 | 0 | 2 | 0 | 0 | 1 |
 | `pkg/correlation` | 13 | 3 | 8 | 0 | 0 | 2 |
 | `pkg/domain` | 44 | 28 | 3 | 0 | 0 | 13 |
@@ -261,7 +261,7 @@ The `task pkg:usage-matrix:check` gate fails when the table is out of date (gate
 | `pkg/healthcheck` | 5 | 0 | 0 | 0 | 0 | 5 |
 | `pkg/id` | 7 | 6 | 0 | 0 | 0 | 1 |
 | `pkg/logging` | 12 | 7 | 0 | 0 | 0 | 5 |
-| `pkg/naming` | 60 | 40 | 15 | 0 | 0 | 5 |
+| `pkg/naming` | 58 | 40 | 13 | 0 | 0 | 5 |
 | `pkg/statemachine` | 88 | 72 | 11 | 0 | 0 | 5 |
 | `pkg/vault` | 7 | 2 | 0 | 0 | 0 | 5 |
 

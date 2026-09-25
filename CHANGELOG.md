@@ -267,6 +267,16 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- The legacy Pulumi stack drops the Harbor-only resources and outputs — the container-images bucket, the `harbor_db` database, the Harbor managed Valkey cluster and the `harborRedis*` outputs; the next `pulumi up` plans their deletion and prod needs the cluster unprotected first (design_pattern_findings#30)
+
+- The Harbor alert rules, the "Registry (Harbor)" dashboard and the Harbor panels of the home and alerts-overview dashboards are removed, as is the Harbor mirror PrometheusRule of loopzero-admission-policies (design_pattern_findings#30)
+
+- The tenant-operator no longer provisions Harbor projects or robot accounts; the `harborUrl`, `harborAdminUsername`, `harborRegistryHost` and `harborAdminPassword` settings are removed from its chart and refused at install, and the per-plan registry storage quota that only Harbor enforced goes with them (design_pattern_findings#30)
+
+- The build pipeline's Harbor dual-push mirror and the `harborRegistryUrl` setting of the loopzero-api chart are removed; images are pushed to `REGISTRY_URL` only, and a values file still setting the key is refused at install (design_pattern_findings#30)
+
+- Harbor is no longer installed: the `harbor` and `harbor-redis` Helmfile releases, the `infra/helm/harbor` chart and the `harbor-init` image are gone, and every environment drops `profile.harbor`, `replicas.harbor`, `registries.harborPrefix` and the `harbor.loopzero.local` prefixes. Existing clusters must uninstall the releases by hand (docs/decisions.md, "Retire Harbor") (design_pattern_findings#30)
+
 - The `AUDIT_ENFORCE_DOMAIN_ENUM` setting: it was never read on the audit-log write path, so setting it never rejected anything (principle_violations#300)
 
 - `infra/scripts/local/regen_build_runtime_kubeconfigs.py`, replaced by `loopzero-ops seed cluster-kubeconfigs` (principle_violations#236)
@@ -820,6 +830,10 @@ to [Semantic Versioning](https://semver.org/).
   explanation (#B-069)
 
 ### Security
+
+- The admission policies no longer admit images from a Harbor host: `registries.harborPrefix` and the Harbor image globs are removed, and the registries block now refuses unknown keys (design_pattern_findings#30)
+
+- Harbor ran in every environment, prod included, with the vendor's default admin password, an in-cluster database and Redis, and an Ingress, because its values were nested under the wrong key; it is removed, and the admin credential must be treated as exposed wherever Harbor was reachable (design_pattern_findings#30, #381)
 
 - The bootstrap `loopzero-api` no longer holds cluster-wide `secrets` delete or `pods/exec`: deleting Secrets is granted only in its own namespace, and patching or deleting ArgoCD Applications sits behind a value that is off for ArgoCD installs (design_pattern_findings#29)
 
