@@ -27,6 +27,7 @@ package store
 import (
 	"context"
 	"fmt"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -46,7 +47,7 @@ type TenantStoreSqlc struct {
 
 // NewTenantStoreSqlc constructs a sqlc-backed admin tenant store.
 // `pool` MUST implement SqlcBridge (PgxAdapter does); test fakes that
-// don't will panic at query time — by design (T0.6 reshape matrix).
+// don't fail each query with db.ErrNotSqlcBridge.
 func NewTenantStoreSqlc(pool db.DBTX) *TenantStoreSqlc {
 	return &TenantStoreSqlc{
 		q:    generated.New(),
@@ -59,14 +60,7 @@ func (s *TenantStoreSqlc) gen(tx db.DBTX) generated.DBTX {
 	if target == nil {
 		target = s.pool
 	}
-	bridge, ok := target.(db.SqlcBridge)
-	if !ok {
-		panic(fmt.Sprintf(
-			"tenant_wrapper: DBTX %T does not implement SqlcBridge — sqlc-backed stores require PgxAdapter / PgxTxAdapter or pgxmock per T0.6 reshape matrix",
-			target,
-		))
-	}
-	return bridge.GeneratedDB()
+	return db.Generated(target)
 }
 
 // ListTenantIDsByPattern returns tenant IDs matching the LIKE pattern.

@@ -36,13 +36,10 @@ import (
 
 // ListMembers returns all members of a tenant with their roles.
 func (s *PostgresTeamStore) ListMembers(ctx context.Context, tenantID string) ([]ports.TeamMemberInfo, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	rows, err := q.ListTenantMembers(ctx, bridge.GeneratedDB(), tenantID)
+	rows, err := q.ListTenantMembers(ctx, gdb, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("team store: list members failed: %w", err)
 	}
@@ -63,13 +60,10 @@ func (s *PostgresTeamStore) ListMembers(ctx context.Context, tenantID string) ([
 
 // AddMember adds a user to a tenant with the given role. Idempotent.
 func (s *PostgresTeamStore) AddMember(ctx context.Context, tenantID, userID, role string) error {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	if err := q.AddTenantMember(ctx, bridge.GeneratedDB(), generated.AddTenantMemberParams{
+	if err := q.AddTenantMember(ctx, gdb, generated.AddTenantMemberParams{
 		TenantID: tenantID,
 		UserID:   userID,
 		Role:     role,
@@ -81,13 +75,10 @@ func (s *PostgresTeamStore) AddMember(ctx context.Context, tenantID, userID, rol
 
 // RemoveMember removes a user from a tenant. Idempotent.
 func (s *PostgresTeamStore) RemoveMember(ctx context.Context, tenantID, userID string) error {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	if err := q.RemoveTenantMember(ctx, bridge.GeneratedDB(), generated.RemoveTenantMemberParams{
+	if err := q.RemoveTenantMember(ctx, gdb, generated.RemoveTenantMemberParams{
 		TenantID: tenantID,
 		UserID:   userID,
 	}); err != nil {
@@ -99,13 +90,10 @@ func (s *PostgresTeamStore) RemoveMember(ctx context.Context, tenantID, userID s
 // UpdateMemberRole changes a member's role. Returns ports.
 // ErrMemberNotFound when the row doesn't exist.
 func (s *PostgresTeamStore) UpdateMemberRole(ctx context.Context, tenantID, userID, newRole string) error {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	rows, err := q.UpdateTenantMemberRole(ctx, bridge.GeneratedDB(), generated.UpdateTenantMemberRoleParams{
+	rows, err := q.UpdateTenantMemberRole(ctx, gdb, generated.UpdateTenantMemberRoleParams{
 		Role:     newRole,
 		TenantID: tenantID,
 		UserID:   userID,
@@ -121,13 +109,10 @@ func (s *PostgresTeamStore) UpdateMemberRole(ctx context.Context, tenantID, user
 
 // GetMember returns a single member's info. NoRows → (nil, nil).
 func (s *PostgresTeamStore) GetMember(ctx context.Context, tenantID, userID string) (*ports.TeamMemberInfo, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	row, err := q.GetTenantMember(ctx, bridge.GeneratedDB(), generated.GetTenantMemberParams{
+	row, err := q.GetTenantMember(ctx, gdb, generated.GetTenantMemberParams{
 		TenantID: tenantID,
 		UserID:   userID,
 	})
@@ -151,13 +136,10 @@ func (s *PostgresTeamStore) GetMember(ctx context.Context, tenantID, userID stri
 // GetUsernameByID returns the display-friendly username for an
 // opaque user_id. Returns "" (no error) if user not found.
 func (s *PostgresTeamStore) GetUsernameByID(ctx context.Context, userID string) (string, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return "", fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	username, err := q.GetUsernameByUserID(ctx, bridge.GeneratedDB(), userID)
+	username, err := q.GetUsernameByUserID(ctx, gdb, userID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
@@ -170,13 +152,10 @@ func (s *PostgresTeamStore) GetUsernameByID(ctx context.Context, userID string) 
 // GetUserByUsername finds a user by their username. NoRows → (nil,
 // nil).
 func (s *PostgresTeamStore) GetUserByUsername(ctx context.Context, username string) (*ports.TeamUserInfo, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("team store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	row, err := q.GetUserByUsername(ctx, bridge.GeneratedDB(), username)
+	row, err := q.GetUserByUsername(ctx, gdb, username)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

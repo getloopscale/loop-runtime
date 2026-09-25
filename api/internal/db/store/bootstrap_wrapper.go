@@ -64,12 +64,8 @@ func (s *PostgresBootstrapStore) Bootstrap(ctx context.Context, req ports.Bootst
 		conn = tx
 	}
 
-	bridge, ok := conn.(db.SqlcBridge)
-	if !ok {
-		return "", "", false, fmt.Errorf("bootstrap store: DBTX %T does not implement SqlcBridge", conn)
-	}
+	gdb := db.Generated(conn)
 	q := generated.New()
-	gdb := bridge.GeneratedDB()
 
 	anyCreated := false
 

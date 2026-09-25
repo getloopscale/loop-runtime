@@ -63,15 +63,7 @@ func NewTenantDeletionStoreSqlc(pool db.DBTX) *TenantDeletionStoreSqlc {
 var _ ports.TenantDeletionStore = (*TenantDeletionStoreSqlc)(nil)
 
 func (s *TenantDeletionStoreSqlc) gen() generated.DBTX {
-	bridge, ok := s.pool.(db.SqlcBridge)
-	if !ok {
-		panic(fmt.Sprintf(
-			"tenant_deletion_wrapper: DBTX %T does not implement SqlcBridge — sqlc-backed "+
-				"stores require PgxAdapter / PgxTxAdapter or pgxmock per T0.6 reshape matrix",
-			s.pool,
-		))
-	}
-	return bridge.GeneratedDB()
+	return db.Generated(s.pool)
 }
 
 // RequestDeletion inserts a pending deletion record.

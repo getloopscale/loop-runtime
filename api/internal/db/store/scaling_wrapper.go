@@ -55,13 +55,10 @@ func pgtypeUUIDToString(u pgtype.UUID) string {
 
 // GetByApp implements ScalingStore.
 func (s *PostgresScalingStore) GetByApp(ctx context.Context, tenantID, projectID, environment, appName string) (*ScalingConfig, error) {
-	bridge, ok := s.db.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("scaling_store: DBTX %T does not implement SqlcBridge", s.db)
-	}
+	gdb := db.Generated(s.db)
 	q := generated.New()
 
-	row, err := q.GetScalingConfigByApp(ctx, bridge.GeneratedDB(), generated.GetScalingConfigByAppParams{
+	row, err := q.GetScalingConfigByApp(ctx, gdb, generated.GetScalingConfigByAppParams{
 		TenantID:    tenantID,
 		ProjectID:   projectID,
 		Environment: environment,
@@ -93,13 +90,10 @@ func (s *PostgresScalingStore) Upsert(ctx context.Context, tx db.DBTX, incoming 
 		return existing, false, nil
 	}
 
-	bridge, ok := tx.(db.SqlcBridge)
-	if !ok {
-		return nil, false, fmt.Errorf("scaling_store: Upsert tx %T does not implement SqlcBridge", tx)
-	}
+	gdb := db.Generated(tx)
 	q := generated.New()
 
-	out, err := q.UpsertScalingConfig(ctx, bridge.GeneratedDB(), generated.UpsertScalingConfigParams{
+	out, err := q.UpsertScalingConfig(ctx, gdb, generated.UpsertScalingConfigParams{
 		TenantID:     incoming.TenantID,
 		ProjectID:    incoming.ProjectID,
 		Environment:  incoming.Environment,
@@ -123,13 +117,10 @@ func (s *PostgresScalingStore) Upsert(ctx context.Context, tx db.DBTX, incoming 
 
 // ListByEnv implements ScalingStore.
 func (s *PostgresScalingStore) ListByEnv(ctx context.Context, tenantID, projectID, environment string) ([]ScalingConfig, error) {
-	bridge, ok := s.db.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("scaling_store: DBTX %T does not implement SqlcBridge", s.db)
-	}
+	gdb := db.Generated(s.db)
 	q := generated.New()
 
-	rows, err := q.ListScalingConfigsByEnv(ctx, bridge.GeneratedDB(), generated.ListScalingConfigsByEnvParams{
+	rows, err := q.ListScalingConfigsByEnv(ctx, gdb, generated.ListScalingConfigsByEnvParams{
 		TenantID:    tenantID,
 		ProjectID:   projectID,
 		Environment: environment,
@@ -146,13 +137,10 @@ func (s *PostgresScalingStore) ListByEnv(ctx context.Context, tenantID, projectI
 
 // Delete implements ScalingStore. Idempotent.
 func (s *PostgresScalingStore) Delete(ctx context.Context, tx db.DBTX, tenantID, projectID, environment, appName string) error {
-	bridge, ok := tx.(db.SqlcBridge)
-	if !ok {
-		return fmt.Errorf("scaling_store: Delete tx %T does not implement SqlcBridge", tx)
-	}
+	gdb := db.Generated(tx)
 	q := generated.New()
 
-	if err := q.DeleteScalingConfig(ctx, bridge.GeneratedDB(), generated.DeleteScalingConfigParams{
+	if err := q.DeleteScalingConfig(ctx, gdb, generated.DeleteScalingConfigParams{
 		TenantID:    tenantID,
 		ProjectID:   projectID,
 		Environment: environment,
@@ -171,13 +159,10 @@ func (s *PostgresScalingStore) DeleteByProject(ctx context.Context, tx db.DBTX, 
 	if target == nil {
 		target = s.db
 	}
-	bridge, ok := target.(db.SqlcBridge)
-	if !ok {
-		return fmt.Errorf("scaling_store: DeleteByProject target %T does not implement SqlcBridge", target)
-	}
+	gdb := db.Generated(target)
 	q := generated.New()
 
-	if err := q.DeleteScalingConfigsByProject(ctx, bridge.GeneratedDB(), generated.DeleteScalingConfigsByProjectParams{
+	if err := q.DeleteScalingConfigsByProject(ctx, gdb, generated.DeleteScalingConfigsByProjectParams{
 		TenantID:  tenantID,
 		ProjectID: projectID,
 	}); err != nil {
@@ -189,13 +174,10 @@ func (s *PostgresScalingStore) DeleteByProject(ctx context.Context, tx db.DBTX, 
 // CountByTenant implements ScalingStore. Cast int64 → int (legacy
 // signature).
 func (s *PostgresScalingStore) CountByTenant(ctx context.Context, tenantID string) (int, error) {
-	bridge, ok := s.db.(db.SqlcBridge)
-	if !ok {
-		return 0, fmt.Errorf("scaling_store: DBTX %T does not implement SqlcBridge", s.db)
-	}
+	gdb := db.Generated(s.db)
 	q := generated.New()
 
-	n, err := q.CountScalingConfigsByTenant(ctx, bridge.GeneratedDB(), tenantID)
+	n, err := q.CountScalingConfigsByTenant(ctx, gdb, tenantID)
 	if err != nil {
 		return 0, fmt.Errorf("scaling_store: CountByTenant: %w", err)
 	}

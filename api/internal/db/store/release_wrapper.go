@@ -144,22 +144,14 @@ func NewReleaseStoreSqlc(pool db.DBTX, eventStore sseEventStore) *ReleaseStoreSq
 	}
 }
 
-// gen bridges db.DBTX → generated.DBTX. tx wins over pool. Panics if the
-// concrete type does not implement SqlcBridge — by design (test fakes
-// that don't hold a real pgx handle should use pgxmock for sqlc paths).
+// gen resolves the sqlc handle (db.Generated): tx wins over pool. A handle
+// that is not a SqlcBridge makes the query fail with db.ErrNotSqlcBridge.
 func (s *ReleaseStoreSqlc) gen(tx db.DBTX) generated.DBTX {
 	target := tx
 	if target == nil {
 		target = s.pool
 	}
-	bridge, ok := target.(db.SqlcBridge)
-	if !ok {
-		panic(fmt.Sprintf(
-			"release_wrapper: DBTX %T does not implement SqlcBridge — sqlc-backed stores require PgxAdapter / PgxTxAdapter or pgxmock per T0.6 reshape matrix",
-			target,
-		))
-	}
-	return bridge.GeneratedDB()
+	return db.Generated(target)
 }
 
 // Create inserts a Release row. Caller MUST provide a tx when this is

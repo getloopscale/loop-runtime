@@ -76,14 +76,11 @@ func (s *PostgresProjectStore) CreateProject(ctx context.Context, input ports.Cr
 // insertProject is the non-enforced insert (nil checker / unlimited plan), via
 // the sqlc bridge. 23505 → ports.ErrProjectExists.
 func (s *PostgresProjectStore) insertProject(ctx context.Context, input ports.CreateProjectInput) (ports.ProjectResult, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return ports.ProjectResult{}, fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
 	id := GenerateProjectID()
-	if err := q.InsertProject(ctx, bridge.GeneratedDB(), generated.InsertProjectParams{
+	if err := q.InsertProject(ctx, gdb, generated.InsertProjectParams{
 		ID:        id,
 		TenantID:  input.TenantID,
 		Name:      input.Name,
@@ -263,13 +260,10 @@ func (s *PostgresProjectStore) ensureProjectInsert(ctx context.Context, tx db.DB
 	if target == nil {
 		target = s.DB
 	}
-	bridge, ok := target.(db.SqlcBridge)
-	if !ok {
-		return fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", target)
-	}
+	gdb := db.Generated(target)
 	q := generated.New()
 
-	if err := q.EnsureProject(ctx, bridge.GeneratedDB(), generated.EnsureProjectParams{
+	if err := q.EnsureProject(ctx, gdb, generated.EnsureProjectParams{
 		ID:        GenerateProjectID(),
 		TenantID:  tenantID,
 		Name:      name,
@@ -353,13 +347,10 @@ func (s *PostgresProjectStore) ensureProjectCapped(ctx context.Context, tx db.DB
 // ListByTenant returns all projects for a tenant, ordered by name.
 // Empty slice (not nil) when the tenant has no projects.
 func (s *PostgresProjectStore) ListByTenant(ctx context.Context, tenantID string) ([]ports.ProjectResult, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	rows, err := q.ListProjectsByTenant(ctx, bridge.GeneratedDB(), tenantID)
+	rows, err := q.ListProjectsByTenant(ctx, gdb, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("project store: list by tenant: %w", err)
 	}
@@ -388,13 +379,10 @@ func (s *PostgresProjectStore) ListByTenant(ctx context.Context, tenantID string
 // api/internal/projectstatus.MapBuildStatusToProjectStatus (exhaustive 7-state
 // switch per EC-1 absorption).
 func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tenantID string) ([]ports.ProjectSummary, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	rows, err := q.ListProjectsWithSummaryByTenant(ctx, bridge.GeneratedDB(), tenantID)
+	rows, err := q.ListProjectsWithSummaryByTenant(ctx, gdb, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("project store: list by tenant with summary: %w", err)
 	}
@@ -467,13 +455,10 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 // GetByName retrieves a project by tenant and name. Returns (nil,
 // nil) when not found (legacy contract).
 func (s *PostgresProjectStore) GetByName(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	row, err := q.GetProjectByName(ctx, bridge.GeneratedDB(), generated.GetProjectByNameParams{
+	row, err := q.GetProjectByName(ctx, gdb, generated.GetProjectByNameParams{
 		TenantID: tenantID,
 		Name:     name,
 	})
@@ -498,13 +483,10 @@ func (s *PostgresProjectStore) GetByName(ctx context.Context, tenantID, name str
 // DeleteProject removes a project from the database. 0 rows affected
 // → "project not found" error (legacy contract).
 func (s *PostgresProjectStore) DeleteProject(ctx context.Context, tenantID, projectID string) error {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	rows, err := q.DeleteProjectByID(ctx, bridge.GeneratedDB(), generated.DeleteProjectByIDParams{
+	rows, err := q.DeleteProjectByID(ctx, gdb, generated.DeleteProjectByIDParams{
 		TenantID: tenantID,
 		ID:       projectID,
 	})

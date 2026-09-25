@@ -44,10 +44,7 @@ import (
 // CellTenantCounts returns the number of tenants per cell_id.
 // Used by CellMetricsCollector to emit loopzero_cell_tenant_count gauge.
 func (s *PostgresCellStore) CellTenantCounts(ctx context.Context) (map[string]int, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.CountTenantsByCellID(ctx, bridge)
 	if err != nil {
@@ -71,10 +68,7 @@ func (s *PostgresCellStore) CountByCell(ctx context.Context) (map[string]int, er
 // Returns error if the tenant does not exist (no transparent nil to
 // distinguish missing tenant from cross-cluster fault).
 func (s *PostgresCellStore) GetTenantCellID(ctx context.Context, tenantID string) (string, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return "", err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	cellID, err := q.GetCellIDByTenantID(ctx, bridge, tenantID)
 	if err != nil {
@@ -171,13 +165,6 @@ func pinTenantToCellTx(ctx context.Context, tx generated.DBTX, tenantID, cellID 
 }
 
 // bridge returns the sqlc-compatible DBTX from s.DB.
-func (s *PostgresCellStore) bridge() (generated.DBTX, error) {
-	if s.DB == nil {
-		return nil, fmt.Errorf("cell store: nil DB")
-	}
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("cell store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
-	return bridge.GeneratedDB(), nil
+func (s *PostgresCellStore) bridge() generated.DBTX {
+	return db.Generated(s.DB)
 }

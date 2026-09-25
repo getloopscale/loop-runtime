@@ -27,6 +27,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"fmt"
+
 	"github.com/jackc/pgx/v5"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -323,10 +324,7 @@ func (s *PostgresSecretStore) Set(ctx context.Context, tenantID, projectID, env,
 		return false, fmt.Errorf("secret_store: encrypt: %w", err)
 	}
 
-	bridge, err := s.bridge()
-	if err != nil {
-		return false, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 
 	// V9 L19 fix: include environment in the deterministic PK. The unique
@@ -367,10 +365,7 @@ func (s *PostgresSecretStore) Set(ctx context.Context, tenantID, projectID, env,
 // Delete removes a secret by name within tenant/project/env/app scope.
 // Returns true if a secret was deleted, false if it didn't exist.
 func (s *PostgresSecretStore) Delete(ctx context.Context, tenantID, projectID, env, app, name string) (deleted bool, err error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return false, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	n, err := q.DeleteSecret(ctx, bridge, generated.DeleteSecretParams{
 		TenantID:    tenantID,
@@ -407,10 +402,7 @@ type SecretResyncEntry struct {
 // MUST scope use to the resync path. Other read paths (CLI list, audit)
 // MUST use ListNames which never returns the value column.
 func (s *PostgresSecretStore) ListForResync(ctx context.Context, tenantID, projectID, env string) ([]SecretResyncEntry, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.ListSecretsForResync(ctx, bridge, generated.ListSecretsForResyncParams{
 		TenantID:    tenantID,
@@ -444,10 +436,7 @@ func (s *PostgresSecretStore) ListForResync(ctx context.Context, tenantID, proje
 // Results are ordered alphabetically by name.
 // SEC-001 defense-in-depth: never returns the value column.
 func (s *PostgresSecretStore) ListNames(ctx context.Context, tenantID, projectID, env string) ([]ports.SecretMetadata, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.ListSecretNames(ctx, bridge, generated.ListSecretNamesParams{
 		TenantID:    tenantID,
@@ -471,15 +460,8 @@ func (s *PostgresSecretStore) ListNames(ctx context.Context, tenantID, projectID
 }
 
 // bridge returns the sqlc-compatible DBTX from s.DB.
-func (s *PostgresSecretStore) bridge() (generated.DBTX, error) {
-	if s.DB == nil {
-		return nil, fmt.Errorf("secret_store: nil DB")
-	}
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("secret_store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
-	return bridge.GeneratedDB(), nil
+func (s *PostgresSecretStore) bridge() generated.DBTX {
+	return db.Generated(s.DB)
 }
 
 // ErrSecretNotFound is returned by ReadValue when no secret matches.
@@ -492,10 +474,7 @@ var ErrSecretNotFound = errors.New("secret_store: secret not found")
 // and SecretDecryptFailedTotal reasons as every other secret read. An absent
 // row is ErrSecretNotFound, which is not a decrypt failure and is not counted.
 func (s *PostgresSecretStore) ReadValue(ctx context.Context, tenantID, projectID, env, name string) ([]byte, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+	bridge := s.bridge()
 	encrypted, err := generated.New().GetSecretEncryptedValue(ctx, bridge, generated.GetSecretEncryptedValueParams{
 		TenantID:    tenantID,
 		ProjectID:   projectID,

@@ -16,9 +16,9 @@ package store
 //
 // Bridge pattern (identical to ReleaseStoreSqlc T1.1):
 //   - Constructor accepts db.DBTX (matches BuildStore interface)
-//   - gen(tx) DBTX → generated.DBTX via SqlcBridge (PgxAdapter +
-//     PgxTxAdapter implement; test fakes deliberately don't — they
-//     panic loudly to surface mis-wired tests early)
+//   - gen(tx) DBTX → generated.DBTX via db.Generated (PgxAdapter +
+//     PgxTxAdapter implement SqlcBridge; any other handle fails the
+//     query with db.ErrNotSqlcBridge)
 //   - State-machine SafeTransition runs at store layer (D4) — UpdateStatus
 //     fetches via GetByIDTx (tenant-isolated), invokes buildMachine,
 //     dispatches to 3 sqlc UPDATE queries based on newPhase (timing fields)
@@ -59,8 +59,7 @@ type BuildStoreSqlc struct {
 // connection pool used for read-only paths outside withEnvironmentLock.
 // Mutations always carry a tx per Rule 6 + Rule 7; the pool fallback is
 // for reapers + admin paths. Pool MUST implement SqlcBridge (PgxAdapter
-// does); test fakes that don't will panic at query time — deliberate
-// fail-fast to surface mis-wired tests early.
+// does); any other handle fails each query with db.ErrNotSqlcBridge.
 func NewBuildStoreSqlc(pool db.DBTX) *BuildStoreSqlc {
 	return &BuildStoreSqlc{
 		q:    generated.New(),
@@ -68,21 +67,14 @@ func NewBuildStoreSqlc(pool db.DBTX) *BuildStoreSqlc {
 	}
 }
 
-// gen bridges db.DBTX → generated.DBTX. tx wins over pool. Panics if
-// concrete type does not implement SqlcBridge.
+// gen resolves the sqlc handle (db.Generated): tx wins over pool. A handle
+// that is not a SqlcBridge makes the query fail with db.ErrNotSqlcBridge.
 func (s *BuildStoreSqlc) gen(tx db.DBTX) generated.DBTX {
 	target := tx
 	if target == nil {
 		target = s.pool
 	}
-	bridge, ok := target.(db.SqlcBridge)
-	if !ok {
-		panic(fmt.Sprintf(
-			"build_wrapper: DBTX %T does not implement SqlcBridge — sqlc-backed stores require PgxAdapter / PgxTxAdapter or pgxmock per T0.6 reshape matrix",
-			target,
-		))
-	}
-	return bridge.GeneratedDB()
+	return db.Generated(target)
 }
 
 // Create inserts a new build with status QUEUED. ID generated via pkg/id

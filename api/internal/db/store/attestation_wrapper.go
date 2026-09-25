@@ -45,13 +45,10 @@ func (s *PostgresAttestationStore) GetBuildAttestationForTenant(ctx context.Cont
 	if buildID == "" || tenantID == "" {
 		return nil, loopzeroerrors.ErrBuildNotFound
 	}
-	bridge, ok := s.db.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("attestation store: DBTX %T does not implement SqlcBridge", s.db)
-	}
+	gdb := db.Generated(s.db)
 	q := generated.New()
 
-	row, err := q.GetLatestReleaseAttestationByBuildForTenant(ctx, bridge.GeneratedDB(), generated.GetLatestReleaseAttestationByBuildForTenantParams{
+	row, err := q.GetLatestReleaseAttestationByBuildForTenant(ctx, gdb, generated.GetLatestReleaseAttestationByBuildForTenantParams{
 		BuildID:  buildID,
 		TenantID: tenantID,
 	})

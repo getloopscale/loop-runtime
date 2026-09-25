@@ -114,12 +114,9 @@ func (s *PostgresBuildGCStore) DeleteOldBuilds(ctx context.Context, maxAge time.
 func (s *PostgresBuildGCStore) DeleteOldWebhookDeliveries(ctx context.Context, maxAge time.Duration) (int64, error) {
 	cutoff := time.Now().UTC().Add(-maxAge)
 
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return 0, fmt.Errorf("build gc: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
-	n, err := q.DeleteOldWebhookDeliveries(ctx, bridge.GeneratedDB(), pgtype.Timestamptz{Time: cutoff, Valid: true})
+	n, err := q.DeleteOldWebhookDeliveries(ctx, gdb, pgtype.Timestamptz{Time: cutoff, Valid: true})
 	if err != nil {
 		return 0, fmt.Errorf("build gc: delete old webhook deliveries: %w", err)
 	}

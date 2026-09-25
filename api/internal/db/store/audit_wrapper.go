@@ -69,11 +69,8 @@ func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID stri
 		return nil, 0, nil
 	}
 
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, 0, fmt.Errorf("audit: ListAuditEntries: DBTX %T does not implement SqlcBridge — caller must pass *PgxAdapter / *PgxTxAdapter (per T0.6 reshape matrix)", s.DB)
-	}
-	dbtx := bridge.GeneratedDB()
+	gdb := db.Generated(s.DB)
+	dbtx := gdb
 	q := generated.New()
 
 	// Nullable args via sqlc.narg form: nil/Valid=false → predicate
@@ -154,13 +151,10 @@ func WriteAuditLog(ctx context.Context, dbtx db.DBTX, entry AuditEntry) error {
 		}
 	}
 
-	bridge, ok := dbtx.(db.SqlcBridge)
-	if !ok {
-		return fmt.Errorf("audit: WriteAuditLog: DBTX %T does not implement SqlcBridge — caller must pass *PgxAdapter / *PgxTxAdapter (per T0.6 reshape matrix)", dbtx)
-	}
+	gdb := db.Generated(dbtx)
 
 	q := generated.New()
-	if err := q.InsertAuditLog(ctx, bridge.GeneratedDB(), generated.InsertAuditLogParams{
+	if err := q.InsertAuditLog(ctx, gdb, generated.InsertAuditLogParams{
 		TenantID:      entry.TenantID,
 		Action:        entry.Action,
 		Actor:         entry.Actor,

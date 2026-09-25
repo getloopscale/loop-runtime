@@ -44,13 +44,10 @@ func generateRepoID() string {
 
 // SaveInstallation upserts a GitHub App installation.
 func (s *PostgresRepositoryStore) SaveInstallation(ctx context.Context, id int64, accountLogin, accountType string, tenantID *string) error {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return fmt.Errorf("repository store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	if err := q.UpsertGitHubInstallation(ctx, bridge.GeneratedDB(), generated.UpsertGitHubInstallationParams{
+	if err := q.UpsertGitHubInstallation(ctx, gdb, generated.UpsertGitHubInstallationParams{
 		ID:           id,
 		AccountLogin: accountLogin,
 		AccountType:  accountType,
@@ -64,13 +61,10 @@ func (s *PostgresRepositoryStore) SaveInstallation(ctx context.Context, id int64
 // GetInstallation retrieves a GitHub installation by ID. Returns
 // (nil, nil) when not found (legacy contract).
 func (s *PostgresRepositoryStore) GetInstallation(ctx context.Context, installationID int64) (*GitHubInstallation, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("repository store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	row, err := q.GetGitHubInstallation(ctx, bridge.GeneratedDB(), installationID)
+	row, err := q.GetGitHubInstallation(ctx, gdb, installationID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -91,13 +85,10 @@ func (s *PostgresRepositoryStore) GetInstallation(ctx context.Context, installat
 // DeleteInstallation removes an installation; FK cascade purges
 // project_repositories rows owned by it.
 func (s *PostgresRepositoryStore) DeleteInstallation(ctx context.Context, installationID int64) error {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return fmt.Errorf("repository store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	if err := q.DeleteGitHubInstallation(ctx, bridge.GeneratedDB(), installationID); err != nil {
+	if err := q.DeleteGitHubInstallation(ctx, gdb, installationID); err != nil {
 		return fmt.Errorf("repository store: delete installation: %w", err)
 	}
 	return nil
@@ -110,13 +101,10 @@ func (s *PostgresRepositoryStore) DeleteInstallation(ctx context.Context, instal
 // in the SQL). Caller passes the user's choice; default true at the route
 // handler boundary, not here.
 func (s *PostgresRepositoryStore) LinkRepository(ctx context.Context, tenantID, projectName, repoFullName string, installationID int64, defaultBranch string, autoDeploy bool) error {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return fmt.Errorf("repository store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	if err := q.LinkProjectRepository(ctx, bridge.GeneratedDB(), generated.LinkProjectRepositoryParams{
+	if err := q.LinkProjectRepository(ctx, gdb, generated.LinkProjectRepositoryParams{
 		ID:             generateRepoID(),
 		TenantID:       tenantID,
 		ProjectName:    projectName,
@@ -134,13 +122,10 @@ func (s *PostgresRepositoryStore) LinkRepository(ctx context.Context, tenantID, 
 // Returns ErrRepositoryNotLinked if no row was affected
 // (CHG-2026-04-23-AUDIT-21).
 func (s *PostgresRepositoryStore) UnlinkRepository(ctx context.Context, tenantID, projectName string) error {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return fmt.Errorf("repository store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	rows, err := q.UnlinkProjectRepository(ctx, bridge.GeneratedDB(), generated.UnlinkProjectRepositoryParams{
+	rows, err := q.UnlinkProjectRepository(ctx, gdb, generated.UnlinkProjectRepositoryParams{
 		TenantID:    tenantID,
 		ProjectName: projectName,
 	})
@@ -156,13 +141,10 @@ func (s *PostgresRepositoryStore) UnlinkRepository(ctx context.Context, tenantID
 // GetByRepo finds the project linked to a GitHub repository
 // (webhook path — cross-tenant). Returns (nil, nil) when not linked.
 func (s *PostgresRepositoryStore) GetByRepo(ctx context.Context, repoFullName string) (*ProjectRepository, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("repository store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	row, err := q.GetProjectRepositoryByRepo(ctx, bridge.GeneratedDB(), repoFullName)
+	row, err := q.GetProjectRepositoryByRepo(ctx, gdb, repoFullName)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -175,13 +157,10 @@ func (s *PostgresRepositoryStore) GetByRepo(ctx context.Context, repoFullName st
 // GetByProject finds the repository linked to a LoopZero project
 // (tenant-scoped API path). Returns (nil, nil) when not linked.
 func (s *PostgresRepositoryStore) GetByProject(ctx context.Context, tenantID, projectName string) (*ProjectRepository, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("repository store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	row, err := q.GetProjectRepositoryByProject(ctx, bridge.GeneratedDB(), generated.GetProjectRepositoryByProjectParams{
+	row, err := q.GetProjectRepositoryByProject(ctx, gdb, generated.GetProjectRepositoryByProjectParams{
 		TenantID:    tenantID,
 		ProjectName: projectName,
 	})

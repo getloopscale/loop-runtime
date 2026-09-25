@@ -33,35 +33,24 @@ import (
 
 // resolveSqlcDBTX selects the right DBTX (caller tx → fallback Exec)
 // and bridges to generated.DBTX.
-func (s *PostgresPreviewSlotStore) resolveSqlcDBTX(tx db.DBTX) (generated.DBTX, error) {
+func (s *PostgresPreviewSlotStore) resolveSqlcDBTX(tx db.DBTX) generated.DBTX {
 	var target db.DBTX
 	if tx != nil {
 		target = tx
 	} else {
 		target = s.Exec
 	}
-	bridge, ok := target.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("preview slot store: DBTX %T does not implement SqlcBridge", target)
-	}
-	return bridge.GeneratedDB(), nil
+	return db.Generated(target)
 }
 
-func (s *PostgresPreviewSlotStore) queryBridge() (generated.DBTX, error) {
-	bridge, ok := s.Query.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("preview slot store: Query %T does not implement SqlcBridge", s.Query)
-	}
-	return bridge.GeneratedDB(), nil
+func (s *PostgresPreviewSlotStore) queryBridge() generated.DBTX {
+	return db.Generated(s.Query)
 }
 
 // Get retrieves the preview slot for a (tenant, project). (nil, nil)
 // on NoRows.
 func (s *PostgresPreviewSlotStore) Get(ctx context.Context, tenantID, projectID string) (*PreviewSlot, error) {
-	dbtx, err := s.queryBridge()
-	if err != nil {
-		return nil, err
-	}
+	dbtx := s.queryBridge()
 	q := generated.New()
 	row, err := q.GetPreviewSlot(ctx, dbtx, generated.GetPreviewSlotParams{
 		TenantID:  tenantID,
@@ -79,10 +68,7 @@ func (s *PostgresPreviewSlotStore) Get(ctx context.Context, tenantID, projectID 
 // ListByTenant returns all preview slots for a tenant, one per
 // project. Empty result → empty slice (not nil) per legacy contract.
 func (s *PostgresPreviewSlotStore) ListByTenant(ctx context.Context, tenantID string) ([]PreviewSlot, error) {
-	dbtx, err := s.queryBridge()
-	if err != nil {
-		return nil, err
-	}
+	dbtx := s.queryBridge()
 	q := generated.New()
 	rows, err := q.ListPreviewSlotsByTenant(ctx, dbtx, tenantID)
 	if err != nil {
@@ -117,10 +103,7 @@ func generatedPreviewSlotToSlot(row generated.PreviewSlot) *PreviewSlot {
 // behavior: ON CONFLICT (tenant_id) DO UPDATE replaces the previous
 // active PR with the new one.
 func (s *PostgresPreviewSlotStore) Upsert(ctx context.Context, tx db.DBTX, tenantID, projectID string, activePRNumber int32, activeBranch, activeReleaseID, url string) error {
-	dbtx, err := s.resolveSqlcDBTX(tx)
-	if err != nil {
-		return err
-	}
+	dbtx := s.resolveSqlcDBTX(tx)
 	prNum := activePRNumber
 	q := generated.New()
 	if err := q.UpsertPreviewSlot(ctx, dbtx, generated.UpsertPreviewSlotParams{
@@ -139,10 +122,7 @@ func (s *PostgresPreviewSlotStore) Upsert(ctx context.Context, tx db.DBTX, tenan
 // Clear NULLs the active_* fields of a (tenant, project) slot.
 // Idempotent.
 func (s *PostgresPreviewSlotStore) Clear(ctx context.Context, tx db.DBTX, tenantID, projectID string) error {
-	dbtx, err := s.resolveSqlcDBTX(tx)
-	if err != nil {
-		return err
-	}
+	dbtx := s.resolveSqlcDBTX(tx)
 	q := generated.New()
 	if err := q.ClearPreviewSlot(ctx, dbtx, generated.ClearPreviewSlotParams{
 		TenantID:  tenantID,
@@ -156,10 +136,7 @@ func (s *PostgresPreviewSlotStore) Clear(ctx context.Context, tx db.DBTX, tenant
 // EnsureEmpty inserts an empty slot if absent, else clears active_*.
 // Used by tenant provision (D1 — preview category always present).
 func (s *PostgresPreviewSlotStore) EnsureEmpty(ctx context.Context, tx db.DBTX, tenantID, projectID string) error {
-	dbtx, err := s.resolveSqlcDBTX(tx)
-	if err != nil {
-		return err
-	}
+	dbtx := s.resolveSqlcDBTX(tx)
 	q := generated.New()
 	if err := q.EnsurePreviewSlotEmpty(ctx, dbtx, generated.EnsurePreviewSlotEmptyParams{
 		TenantID:  tenantID,
