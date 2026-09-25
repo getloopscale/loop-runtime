@@ -41,8 +41,8 @@ func (r *TenantReconciler) ensureHarborProject(ctx context.Context, tenant *loop
 	quota := planentitlements.For(tenant.Spec.Plan).HarborQuotaBytes
 
 	if err := r.HarborClient.EnsureProject(ctx, tenant.Name, harbor.ProjectOpts{
-		StorageQuota: quota,
-		Immutable:    true,
+		StorageQuota:        quota,
+		RequireContentTrust: true,
 	}); err != nil {
 		reconcileloop.RecordError(span, err)
 		conditions.SetCondition(&tenant.Status.Conditions, conditions.TypeHarborProjectReady,

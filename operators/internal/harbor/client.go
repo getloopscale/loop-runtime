@@ -38,7 +38,9 @@ type Client struct {
 // ProjectOpts controls project creation settings.
 type ProjectOpts struct {
 	StorageQuota int64 // bytes, -1 for unlimited
-	Immutable    bool  // enable immutable tags
+	// RequireContentTrust turns on Harbor content trust: only signed images
+	// may be pulled from the project. It does not configure tag immutability.
+	RequireContentTrust bool
 }
 
 // RobotAccountOpts controls robot account creation.
@@ -284,7 +286,7 @@ func (c *Client) createProject(ctx context.Context, name string, opts ProjectOpt
 	if opts.StorageQuota != 0 {
 		payload["storage_limit"] = opts.StorageQuota
 	}
-	if opts.Immutable {
+	if opts.RequireContentTrust {
 		payload["metadata"].(map[string]string)["enable_content_trust"] = "true"
 	}
 
@@ -325,7 +327,7 @@ func (c *Client) updateProject(ctx context.Context, projectID int, name string, 
 	if opts.StorageQuota != 0 {
 		payload["storage_limit"] = opts.StorageQuota
 	}
-	if opts.Immutable {
+	if opts.RequireContentTrust {
 		payload["metadata"].(map[string]string)["enable_content_trust"] = "true"
 	}
 

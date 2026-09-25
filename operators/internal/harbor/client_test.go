@@ -565,3 +565,34 @@ func TestEnsureRobotAccount_PullOnlyPermissions(t *testing.T) {
 		t.Errorf("expected username robot$pull-acme, got %s", creds.Username)
 	}
 }
+
+// RequireContentTrust maps to Harbor's content-trust switch (only signed
+// images may be pulled) — the setting the option name promises.
+func TestEnsureProject_RequireContentTrustEnablesContentTrust(t *testing.T) {
+	var metadata map[string]string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			_, _ = w.Write([]byte(`[]`))
+		case http.MethodPost:
+			var body struct {
+				Metadata map[string]string `json:"metadata"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("decode: %v", err)
+			}
+			metadata = body.Metadata
+			w.WriteHeader(http.StatusCreated)
+		}
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "admin", "secret")
+	if err := c.EnsureProject(context.Background(), "acme", ProjectOpts{RequireContentTrust: true}); err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	if metadata["enable_content_trust"] != "true" {
+		t.Fatalf("metadata = %v, want enable_content_trust=true", metadata)
+	}
+}
