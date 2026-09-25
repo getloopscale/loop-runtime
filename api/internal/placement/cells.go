@@ -18,10 +18,9 @@
 package placement
 
 // DefaultCellID names the canonical single-cluster cell used by
-// dev-public and the standalone tilt-up environment. Production
-// multi-cluster paths derive cell identity from
-// CrossClusterTokenReviewer (api/internal/middleware/cross_cluster_token_review.go),
-// NOT this constant.
+// dev-public and the standalone tilt-up environment. A multi-cluster
+// broker must derive cell identity from a per-cell TokenReview, NOT this
+// constant; that path does not exist yet.
 //
 // Callers MUST NOT use this constant to authorize cross-cell access
 // in production — it is exclusively for the dev-public synthetic

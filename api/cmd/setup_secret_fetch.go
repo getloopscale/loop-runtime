@@ -37,9 +37,9 @@ import (
 // cluster. It references `placement.DefaultCellID` as the canonical
 // single source of truth (T1.1 of plan 2026-06-10-j22-layer2-code-review-fixes
 // ADR D1 + EC-3 absorption — closes consensus-CRITICAL #13 X-Cell-ID
-// forgery + the magic-literal `"cell-0"` sub-finding). Production
-// multi-cluster path will replace this constant with
-// CrossClusterTokenReviewer.Review(cellID, token) per ADR D1 follow-up.
+// forgery + the magic-literal `"cell-0"` sub-finding). There is no
+// multi-cluster broker authentication yet: the broker serves this one cell,
+// and serving another needs a per-cell TokenReview (ADR D1 follow-up).
 const brokerSingleClusterCellID = placement.DefaultCellID
 
 // pgxQuerier is the narrow surface rawSecretReader uses on pgxpool.Pool.
@@ -234,8 +234,8 @@ func setupSecretFetchDeps(pool *pgxpool.Pool, transit vault.Transit, cellStore *
 // `placement.DefaultCellID` constant — the caller-supplied X-Cell-ID
 // header is intentionally ignored (T1.1 of plan
 // 2026-06-10-j22-layer2-code-review-fixes / ADR D1 / closes consensus-CRITICAL
-// #13 X-Cell-ID forgery). Production multi-cluster path will replace this
-// with CrossClusterTokenReviewer.Review against the cell's K8s API.
+// #13 X-Cell-ID forgery). A multi-cluster path would replace this with a
+// per-cell TokenReview against the cell's K8s API; none exists yet.
 func brokerBearerMiddleware(expectedToken string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if expectedToken == "" {
@@ -259,10 +259,8 @@ func brokerBearerMiddleware(expectedToken string, next http.HandlerFunc) http.Ha
 		// holder of LOOPZERO_BROKER_TOKEN spoof any cell and read every
 		// tenant's secrets (consensus-CRITICAL of /loop-code-review).
 		// The cellID is derived server-side from the package-canonical
-		// `placement.DefaultCellID` constant. Production multi-cluster
-		// path will land in a follow-up plan via
-		// CrossClusterTokenReviewer (already exists at
-		// api/internal/middleware/cross_cluster_token_review.go).
+		// `placement.DefaultCellID` constant. A multi-cluster path
+		// (per-cell TokenReview) is a follow-up that does not exist yet.
 		_ = r.Header.Get("X-Cell-ID")
 		cellID := brokerSingleClusterCellID
 		// Inject synthetic TokenReviewResult so the handler's

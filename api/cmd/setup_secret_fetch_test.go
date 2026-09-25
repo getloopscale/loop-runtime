@@ -132,9 +132,8 @@ func (c *fakeCellQuerier) GetTenantCellID(_ context.Context, tenantID string) (s
 // `identity.CellID`. If the middleware trusted X-Cell-ID, any holder of
 // LOOPZERO_BROKER_TOKEN could spoof any cell and read every tenant's secrets.
 // Server-side derivation makes the spoof structurally impossible for the
-// dev-public single-cluster path. Prod multi-cluster path will use
-// CrossClusterTokenReviewer.Review against the cell's K8s API (separate
-// follow-up plan).
+// dev-public single-cluster path. A multi-cluster path would use a per-cell
+// TokenReview against the cell's K8s API (separate follow-up plan).
 func TestBrokerBearerMiddleware_RejectsClientSuppliedXCellID(t *testing.T) {
 	const expected = "secret"
 	handler := brokerBearerMiddleware(expected, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

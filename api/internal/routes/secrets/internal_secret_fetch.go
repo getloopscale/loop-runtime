@@ -7,16 +7,17 @@ package secrets
 //
 // POST /internal/v1/secret-fetch/{tenant_id}/{secret_name}
 //
-// Endpoint chamado pelo ESO em cell runtime clusters para resolver
-// ExternalSecret CRs via the broker pattern. loopzero-api autoriza via
-// cross-cluster TokenReview (middleware/cross_cluster_token_review.go),
-// valida cell↔tenant binding (EC-07 MUST FIX P0), valida secret_name
-// regex (EC-08 MUST FIX P1), e retorna plaintext base64-encoded.
+// Endpoint ESO calls from a cell runtime cluster to resolve ExternalSecret
+// resources through the broker. The caller's identity is established by the
+// broker bearer middleware (api/cmd/setup_secret_fetch.go), which injects it
+// via auth.InjectCrossClusterResultForBroker; this handler checks the
+// cell↔tenant binding (EC-07 MUST FIX P0) and the secret_name regex (EC-08
+// MUST FIX P1), and returns the plaintext base64-encoded.
 //
 // Contract:
 //   Headers:
-//     Authorization: Bearer <SA-token-from-cell>     (validated by middleware)
-//     X-Cell-ID: cell-0                        (validated by middleware)
+//     Authorization: Bearer <broker token>     (validated by middleware)
+//     X-Cell-ID: ignored — the cell is derived server-side (closes #13)
 //   Path:
 //     tenant_id (UUID-like; arbitrary opaque string accepted by router)
 //     secret_name (UPPER_SNAKE_CASE per EC-08)

@@ -81,25 +81,20 @@ func (m *mockAuditWriter) eventTypes() []string {
 
 // --- test helper ---
 
-// mockReviewer is a programmable CrossClusterTokenReviewer that satisfies the
-// real middleware interface.
-type mockReviewer struct {
-	identity *auth.TokenReviewResult
-}
-
-func (m *mockReviewer) Review(_ context.Context, _ /*cellID*/, _ /*token*/ string) (*auth.TokenReviewResult, error) {
-	return m.identity, nil
-}
-func (m *mockReviewer) ClientVersion(_ string) string { return "v1" }
-
-// newTestServerWithCrossCluster runs the route behind the real cross-cluster
-// middleware so the handler sees a proper context injection.
+// newTestServerWithCrossCluster runs the route behind a middleware that
+// authenticates every request as identity, for the cell the request names in
+// X-Cell-ID — the shape a per-cell TokenReview would give the handler, which is
+// what lets these tests exercise the handler's own cell-binding check.
 func newTestServerWithCrossCluster(t *testing.T, deps SecretFetchHandlerDeps, identity *auth.TokenReviewResult) *httptest.Server {
 	t.Helper()
 	r := chi.NewRouter()
-	r.Use(auth.NewCrossClusterMiddleware(auth.CrossClusterMiddlewareConfig{
-		Reviewer: &mockReviewer{identity: identity},
-	}))
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			reviewed := *identity
+			reviewed.CellID = req.Header.Get("X-Cell-ID")
+			next.ServeHTTP(w, req.WithContext(auth.InjectCrossClusterResultForBroker(req.Context(), &reviewed)))
+		})
+	})
 	r.Post("/internal/v1/secret-fetch/{tenant_id}/{secret_name}", NewSecretFetchHandler(deps))
 	return httptest.NewServer(r)
 }
