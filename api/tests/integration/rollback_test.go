@@ -19,13 +19,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/lock"
 	"github.com/getloopscale/loopzero/api/internal/release"
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -162,7 +162,7 @@ func TestRollback_SupersedesPreviousActiveRelease(t *testing.T) {
 	// Create real stores
 	releaseStore := store.NewReleaseStoreSqlc(adapter, store.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	envTargetStore := store.NewPostgresEnvironmentTargetStore(adapter, adapter)
-	locker := &adapters.PoolEnvironmentLocker{Pool: pool}
+	locker := &lock.PoolEnvironmentLocker{Pool: pool}
 
 	// Create rollback orchestrator with fake external services
 	orch := release.NewRollbackOrchestrator(release.RollbackOrchestratorDeps{
@@ -273,7 +273,7 @@ func TestConcurrentRollbacks_ExactlyOneSucceeds(t *testing.T) {
 	// Create shared stores
 	releaseStore := store.NewReleaseStoreSqlc(adapter, store.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	envTargetStore := store.NewPostgresEnvironmentTargetStore(adapter, adapter)
-	locker := &adapters.PoolEnvironmentLocker{Pool: pool}
+	locker := &lock.PoolEnvironmentLocker{Pool: pool}
 
 	// Launch concurrent rollbacks
 	type rollbackResult struct {

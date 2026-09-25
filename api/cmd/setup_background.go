@@ -10,12 +10,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/backgroundloops"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
+	"github.com/getloopscale/loopzero/api/internal/domains/domainsadapter"
 	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/ports"
@@ -68,13 +68,13 @@ func setupCellRouter(
 // client. The provisioner and health checker are background loops and are
 // built by backgroundloops.Build with the rest of the loop graph.
 func setupDomains(stores *StoreDeps, cfg config.Config, logger *slog.Logger) (*domainshttp.DomainHandler, *cfzone.Client) {
-	domainHandler := domainshttp.NewDomainHandler(stores.DomainStore, &adapters.DNSTXTVerifier{},
+	domainHandler := domainshttp.NewDomainHandler(stores.DomainStore, &domainsadapter.DNSTXTVerifier{},
 		ports.NewValidator(cfg.BaseDomain, nil), backgroundloops.CNAMETarget(cfg))
 
 	cfZoneClient := cfzone.NewClient(cfg.CFAccountID, cfg.CFAPIToken)
 	if cfg.CFZoneManagement && cfZoneClient != nil {
 		logger.Info("custom domains: CF Zone Management enabled (v2)")
-		domainHandler.WithCFZone(&adapters.CFZoneAdapter{Client: cfZoneClient})
+		domainHandler.WithCFZone(&domainsadapter.CFZoneAdapter{Client: cfZoneClient})
 	} else {
 		logger.Info("custom domains: TXT verification mode (v1)")
 	}

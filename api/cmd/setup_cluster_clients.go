@@ -11,7 +11,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
 	"github.com/getloopscale/loopzero/api/internal/builds/stepwatch"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
@@ -90,7 +90,7 @@ func startArgoStepWatcher(ctx context.Context, cfg config.Config, eventStore sse
 	// client-go already refreshes the projected SA token natively — wrapping
 	// there would replace a working mechanism with a weaker one.
 	if cfg.BuildKubeconfig != "" {
-		restCfg.WrapTransport = adapters.NewReloadingTransportWrapper(cfg.BuildKubeconfig, cfg.BuildKubeContext)
+		restCfg.WrapTransport = k8s.NewReloadingTransportWrapper(cfg.BuildKubeconfig, cfg.BuildKubeContext)
 		// The wrapper owns the Authorization header. Left set, client-go also
 		// installs its own bearer round-tripper carrying the STARTUP token, and
 		// whichever writes the header last wins — reintroducing exactly the
@@ -118,7 +118,7 @@ func startArgoStepWatcher(ctx context.Context, cfg config.Config, eventStore sse
 	// orchestrator (workflow_submitter.go); the pre-Sprint-8 comment about
 	// per-tenant namespaces was incorrect — workflows have ALWAYS lived in
 	// argo, only the build PODS run per-tenant. KISS + least privilege.
-	source := adapters.NewK8sWorkflowNodeSource(dyn, "argo", 2*time.Second, logger)
+	source := buildsadapter.NewK8sWorkflowNodeSource(dyn, "argo", 2*time.Second, logger)
 	// terminalIDs is nil — first-tick startup may emit duplicate step events
 	// for already-running workflows; the watcher's internal lastPhase dedup
 	// catches duplicates from tick 2 onwards. A future enhancement can wire

@@ -6,13 +6,13 @@ package main
 import (
 	"log/slog"
 
+	"github.com/getloopscale/loopzero/api/internal/placement/placementadapter"
 	"github.com/getloopscale/loopzero/api/internal/placement/placementhttp"
 
 	"github.com/getloopscale/loopzero/api/internal/placement"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
@@ -35,7 +35,7 @@ func buildAdminEvictor(cfg config.Config, dbAdapter *db.PgxAdapter) placementhtt
 	// eviction cascade preserved verbatim; all queries are
 	// tenantpredicate:exempt per the admin path (LOOPZERO_ADMIN_API gate).
 	store := store.NewTenantStoreSqlc(dbAdapter)
-	dbDeleter := &adapters.TenantDBDeleterAdapter{Store: store}
+	dbDeleter := &placementadapter.TenantDBDeleterAdapter{Store: store}
 
 	k8sEv, err := tenancy.NewTenantK8sEvictor(tenancy.EvictorConfig{
 		Mgmt:    tenancy.ClusterAccess{Kubeconfig: cfg.MgmtKubeconfig, Context: cfg.MgmtKubeContext},
@@ -48,11 +48,11 @@ func buildAdminEvictor(cfg config.Config, dbAdapter *db.PgxAdapter) placementhtt
 			"error", err.Error(),
 			"consequence", "operators must run tools/admin-evict-tenants.sh for K8s cleanup",
 		)
-		return &adapters.TenantEvictorRouteAdapter{Inner: placement.NewTenantEvictorWithDB(store, dbDeleter)}
+		return &placementadapter.TenantEvictorRouteAdapter{Inner: placement.NewTenantEvictorWithDB(store, dbDeleter)}
 	}
-	return &adapters.TenantEvictorRouteAdapter{Inner: placement.NewTenantEvictorFull(
+	return &placementadapter.TenantEvictorRouteAdapter{Inner: placement.NewTenantEvictorFull(
 		store,
 		dbDeleter,
-		&adapters.TenantK8sEvictorAdapter{Evictor: k8sEv},
+		&placementadapter.TenantK8sEvictorAdapter{Evictor: k8sEv},
 	)}
 }

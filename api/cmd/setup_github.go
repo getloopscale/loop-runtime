@@ -10,7 +10,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
+	"github.com/getloopscale/loopzero/api/internal/preview/previewadapter"
 
 	"github.com/getloopscale/loopzero/api/internal/builds"
 
@@ -24,7 +25,9 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/github"
 	ghwebhook "github.com/getloopscale/loopzero/api/internal/github/webhook"
+	"github.com/getloopscale/loopzero/api/internal/integrations/integrationsadapter"
 	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
+	"github.com/getloopscale/loopzero/api/internal/repositories/repositoriesadapter"
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
 )
 
@@ -60,7 +63,7 @@ func setupGitHub(
 	// Repository store for webhook lookups and CRUD. Required for the
 	// RepositoryHandler — always created when the DB is reachable.
 	repoStore := &store.PostgresRepositoryStore{DB: dbAdapter}
-	repoHandler := repositorieshttp.NewRepositoryHandler(&adapters.RepoStoreAdapter{Store: repoStore})
+	repoHandler := repositorieshttp.NewRepositoryHandler(&repositoriesadapter.RepoStoreAdapter{Store: repoStore})
 
 	// GitHub App client for API calls (source download, commit status, PR comments).
 	// Optional — only needed when GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY are set.
@@ -92,15 +95,15 @@ func setupGitHub(
 	// installation-token mint.
 	var integrationsHandler *integrationshttp.IntegrationsGitHubHandler
 	if ghAppClient != nil {
-		statusNotifier := github.NewStatusNotifier(ghAppClient, &adapters.RepoLookupAdapter{Store: repoStore}, &adapters.BuildLookupAdapter{Store: stores.BuildStore}, cfg.BaseDomain, logger)
+		statusNotifier := github.NewStatusNotifier(ghAppClient, &repositoriesadapter.RepoLookupAdapter{Store: repoStore}, &buildsadapter.BuildLookupAdapter{Store: stores.BuildStore}, cfg.BaseDomain, logger)
 		if statusNotifier != nil {
 			release.RegisterReleaseActivatedCallback(statusNotifier.OnBuildSucceeded)
 			release.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
 			logger.Info("github: commit status callbacks registered (global)")
 		}
 		integrationsHandler = integrationshttp.NewIntegrationsGitHubHandler(
-			&adapters.InstallationRepoListerAdapter{Client: ghAppClient},
-			&adapters.InstallationLookupAdapter{Store: repoStore},
+			&integrationsadapter.InstallationRepoListerAdapter{Client: ghAppClient},
+			&integrationsadapter.InstallationLookupAdapter{Store: repoStore},
 		)
 		logger.Info("github: integrations handler registered", "endpoint", "/api/v1/integrations/github/installations/{id}/repositories")
 	}
@@ -114,7 +117,7 @@ func setupGitHub(
 	// (sponsor walkthrough catch 2026-06-09).
 	var buildSub github.BuildSubmitter
 	if orch != nil {
-		buildSub = &adapters.BuildSubmitterAdapter{
+		buildSub = &buildsadapter.BuildSubmitterAdapter{
 			Orchestrator: orch,
 			Logger:       logger,
 		}
@@ -180,12 +183,12 @@ func setupGitHub(
 	previewSvc, psErr := newPreviewLifecycle(preview.PreviewServiceDeps{
 		Store:     previewStore,
 		Builds:    orch,
-		BuildApps: &adapters.PreviewAppsLookupAdapter{Builds: stores.BuildStore},
+		BuildApps: &previewadapter.PreviewAppsLookupAdapter{Builds: stores.BuildStore},
 		// LIVE catch 2026-06-07 J-23 bug #4: PreviewCRCreator interface
 		// had no production wiring. Canonical manager lives in
 		// internal/k8s next to TenantCRManager, sharing the namespace
 		// constant + dynamic client.
-		CRCreator:           &adapters.PreviewCRCreatorAdapter{Mgr: k8sDeps.PreviewCRMgr},
+		CRCreator:           &previewadapter.PreviewCRCreatorAdapter{Mgr: k8sDeps.PreviewCRMgr},
 		BaseDomain:          cfg.BaseDomain,
 		PreviewPublicDomain: cfg.PreviewPublicDomain,
 		Logger:              logger,
@@ -198,7 +201,7 @@ func setupGitHub(
 		// does not exist would accept the delivery and fail on the first call.
 		logger.Error("preview service init failed — PR webhooks disabled", "error", psErr)
 	} else {
-		previewDeployer := github.NewPreviewDeployer(previewSvc, &adapters.ConnectedRepoAdapter{Store: repoStore}, logger).
+		previewDeployer := github.NewPreviewDeployer(previewSvc, &repositoriesadapter.ConnectedRepoAdapter{Store: repoStore}, logger).
 			WithBundlePreparer(autoDeployer) // shares the same bundle-prep logic
 		wh.OnPullRequest(previewDeployer.HandlePR)
 	}

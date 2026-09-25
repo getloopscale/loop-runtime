@@ -16,7 +16,7 @@ func adaptersTree(t *testing.T, files map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
 	for name, body := range files {
-		p := filepath.Join(root, "api", "internal", "adapters", name)
+		p := filepath.Join(root, "api", "internal", "x", "xadapter", name)
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -37,7 +37,7 @@ func adaptersTree(t *testing.T, files map[string]string) string {
 // satisfies does not belong here.
 func TestAdapterWithAssertionPasses(t *testing.T) {
 	root := adaptersTree(t, map[string]string{
-		"x_adapter.go": "package adapters\n\ntype XAdapter struct{}\n\nvar _ foo.Port = (*XAdapter)(nil)\n",
+		"x_adapter.go": "package xadapter\n\ntype XAdapter struct{}\n\nvar _ foo.Port = (*XAdapter)(nil)\n",
 	})
 	out, err := adapterports.Check(adapterports.Config{RepoRoot: root})
 	if err != nil {
@@ -51,13 +51,13 @@ func TestAdapterWithAssertionPasses(t *testing.T) {
 // An adapter without an assertion is the case the old criterion did not refuse.
 func TestAdapterWithoutAssertionIsRefused(t *testing.T) {
 	root := adaptersTree(t, map[string]string{
-		"y_adapter.go": "package adapters\n\n// YAdapter adapts something.\ntype YAdapter struct{}\n",
+		"y_adapter.go": "package xadapter\n\n// YAdapter adapts something.\ntype YAdapter struct{}\n",
 	})
 	out, err := adapterports.Check(adapterports.Config{RepoRoot: root})
 	if !errors.Is(err, adapterports.ErrNoPortDeclared) {
 		t.Fatalf("expected ErrNoPortDeclared, got %v", err)
 	}
-	if len(out.Missing) != 1 || out.Missing[0] != "y_adapter.go" {
+	if len(out.Missing) != 1 || out.Missing[0] != "api/internal/x/xadapter/y_adapter.go" {
 		t.Errorf("the finding must name the file: %v", out.Missing)
 	}
 }
@@ -66,7 +66,7 @@ func TestAdapterWithoutAssertionIsRefused(t *testing.T) {
 // the adapter satisfies any interface. Confusing the two would let the defect through.
 func TestUsageAssertionIsNotAPortDeclaration(t *testing.T) {
 	root := adaptersTree(t, map[string]string{
-		"z_adapter.go": "package adapters\n\ntype ZAdapter struct{}\n\nvar _ = db.SomeType{}\n",
+		"z_adapter.go": "package xadapter\n\ntype ZAdapter struct{}\n\nvar _ = db.SomeType{}\n",
 	})
 	if _, err := adapterports.Check(adapterports.Config{RepoRoot: root}); !errors.Is(err, adapterports.ErrNoPortDeclared) {
 		t.Fatalf("a usage assertion does not declare a port; expected refusal, got %v", err)
@@ -85,7 +85,7 @@ func TestUsageAssertionIsNotAPortDeclaration(t *testing.T) {
 func TestFileWithoutExportedTypeIsNotRequiredToDeclare(t *testing.T) {
 	root := adaptersTree(t, map[string]string{
 		"adapters.go":  "// Package adapters ...\npackage adapters\n",
-		"w_adapter.go": "package adapters\n\ntype WAdapter struct{}\n\nvar _ foo.Port = (*WAdapter)(nil)\n",
+		"w_adapter.go": "package xadapter\n\ntype WAdapter struct{}\n\nvar _ foo.Port = (*WAdapter)(nil)\n",
 	})
 	out, err := adapterports.Check(adapterports.Config{RepoRoot: root})
 	if err != nil {

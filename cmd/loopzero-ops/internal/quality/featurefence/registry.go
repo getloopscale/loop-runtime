@@ -47,7 +47,7 @@ var registry = map[string]Entry{
 	"httpio":               {Kind: Kernel},
 	"k8s":                  {Kind: Kernel, Deps: []string{"metrics", "ports"}},
 	"leader":               {Kind: Kernel, Deps: []string{"db"}},
-	"lock":                 {Kind: Kernel, Deps: []string{"metrics"}},
+	"lock":                 {Kind: Kernel, Deps: []string{"db", "deploycontracts", "metrics"}},
 	"manifests":            {Kind: Kernel},
 	"metrics":              {Kind: Kernel, Deps: []string{"surfaces"}},
 	"middleware":           {Kind: Kernel, Deps: []string{"metrics", "ports"}},
@@ -64,10 +64,6 @@ var registry = map[string]Entry{
 	"surfaces":             {Kind: Kernel},
 	"tracing":              {Kind: Kernel},
 	"validation":           {Kind: Kernel},
-
-	// ── layer folders being dissolved into features ─────────────────────────
-	// Each entry below disappears when its code reaches the feature that owns it.
-	"adapters": {Kind: Layer, Deps: []string{"builds", "db", "deploycontracts", "domains", "environments", "github", "integrations", "k8s", "lock", "logs", "placement", "ports", "preview", "release", "repositories", "sse", "status", "timeline"}},
 
 	// ── composition roots ───────────────────────────────────────────────────
 	"server":          {Kind: Composition},

@@ -26,8 +26,7 @@ import (
 //   - the HTTP package's own subtree (e.g. a test-helper package nested in it),
 //   - the feature's adapter package (`<feature>/<feature>adapter`), which
 //     satisfies the handler's ports,
-//   - the composition roots, server and backgroundloops, and the adapters layer
-//     folder until it is dissolved.
+//   - the composition roots, server and backgroundloops.
 //
 // If you want to add such an import, the type you need belongs in the feature
 // root or in ports, not in the handler package. feature-fence enforces the same
@@ -88,7 +87,7 @@ func mayImportHTTP(importer, target string) bool {
 	}
 	segs := strings.Split(importer, "/")
 	switch segs[0] {
-	case "server", "backgroundloops", "adapters":
+	case "server", "backgroundloops":
 		return true
 	}
 	feature := strings.Split(target, "/")[0]

@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/audit"
 	"github.com/getloopscale/loopzero/api/internal/builds"
 	"github.com/getloopscale/loopzero/api/internal/config"
@@ -17,7 +16,9 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/domains"
 	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
+	"github.com/getloopscale/loopzero/api/internal/domains/domainsadapter"
 	"github.com/getloopscale/loopzero/api/internal/gitops"
+	"github.com/getloopscale/loopzero/api/internal/lock"
 	"github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	"github.com/getloopscale/loopzero/api/internal/orchestrationbreaker"
 	"github.com/getloopscale/loopzero/api/internal/placement"
@@ -41,7 +42,7 @@ type Deps struct {
 	ReleaseStore   db.ReleaseStore
 	EnvTargetStore *store.PostgresEnvironmentTargetStore
 	EventStore     *store.PostgresEventStore
-	Locker         *adapters.PoolEnvironmentLocker
+	Locker         *lock.PoolEnvironmentLocker
 	DomainStore    *store.PostgresDomainStore
 	CellStore      *store.PostgresCellStore
 	AppCR          builds.ApplicationCREnsurer
@@ -167,7 +168,7 @@ func newDomainProvisioner(cfg config.Config, d Deps, logger *slog.Logger) *domai
 			PrometheusAddress: cfg.PrometheusAddress,
 		})
 	if cfg.CFZoneManagement && d.CFZone != nil {
-		p.WithCFZone(&adapters.CFZoneStatusAdapter{Client: d.CFZone})
+		p.WithCFZone(&domainsadapter.CFZoneStatusAdapter{Client: d.CFZone})
 	}
 	return p
 }

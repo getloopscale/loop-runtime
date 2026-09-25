@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
 
 	"github.com/getloopscale/loopzero/api/internal/builds"
 	"github.com/getloopscale/loopzero/api/internal/placement"
@@ -39,7 +39,7 @@ func setupK8s(cfg config.Config, logger *slog.Logger) (*K8sDeps, error) {
 	}
 
 	// Application CR manager — creates LoopZeroApplication CRs on mgmt cluster.
-	appCRMgr := &adapters.ApplicationCRAdapter{Mgr: workload.NewApplicationCRManager(tenantCRMgr.Client, "")}
+	appCRMgr := &buildsadapter.ApplicationCRAdapter{Mgr: workload.NewApplicationCRManager(tenantCRMgr.Client, "")}
 
 	// Preview CR manager — creates/queries PreviewEnvironment CRs on
 	// mgmt cluster. Shares the same typed client + namespace as

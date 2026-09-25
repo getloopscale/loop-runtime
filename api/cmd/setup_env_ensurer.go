@@ -7,9 +7,9 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/environments"
+	"github.com/getloopscale/loopzero/api/internal/environments/environmentsadapter"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
@@ -36,7 +36,7 @@ func newEnvironmentEnsurer(cfg config.Config, k8sDeps *K8sDeps, logger *slog.Log
 	// per deploy, so it is opt-in.
 	if cfg.EnvReadinessChecker {
 		if mgmtDynamic := buildMgmtDynamicClient(cfg, logger); mgmtDynamic != nil {
-			ensurer.ReadinessChecker = adapters.NewEnvironmentCRReader(mgmtDynamic, "loopzero-system")
+			ensurer.ReadinessChecker = environmentsadapter.NewEnvironmentCRReader(mgmtDynamic, "loopzero-system")
 			logger.Info("env readiness checker wired: EnsureEnvironment polls Environment CR status.phase")
 		}
 	}

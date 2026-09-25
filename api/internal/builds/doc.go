@@ -15,6 +15,6 @@
 // to keep in a single place.
 //
 // What changes for other reasons lives elsewhere: step reporting in
-// services/build/stepwatch, and the Kubernetes and SQL adapters in
-// api/internal/adapters and api/internal/db/store.
+// builds/stepwatch, and the Kubernetes and SQL adapters in
+// builds/buildsadapter and api/internal/db/store.
 package builds

@@ -8,8 +8,11 @@ import (
 	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/builds/admission"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
 	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loopzero/api/internal/environments/environmentsadapter"
 	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
+	"github.com/getloopscale/loopzero/api/internal/placement/placementadapter"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 
 	"github.com/getloopscale/loopzero/api/internal/release"
@@ -18,7 +21,6 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
 	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
 	"github.com/getloopscale/loopzero/api/internal/config"
@@ -30,9 +32,11 @@ import (
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loopzero/api/internal/preview/previewadapter"
 	previewroutes "github.com/getloopscale/loopzero/api/internal/preview/previewhttp"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/timeline/aggregator"
+	"github.com/getloopscale/loopzero/api/internal/timeline/timelineadapter"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 	pkglogging "github.com/getloopscale/loopzero/pkg/logging"
 )
@@ -115,7 +119,7 @@ func baseServerConfig(w serverWiring) server.Config {
 		// no object uploader (no S3 in dev) it serves metadata without a
 		// download_url.
 		BuildSBOMHandler: buildshttp.NewBuildSBOMHandler(
-			&adapters.AppSBOMStore{Inner: store.NewAppAttestationStoreSqlc(w.dbAdapter)},
+			&buildsadapter.AppSBOMStore{Inner: store.NewAppAttestationStoreSqlc(w.dbAdapter)},
 			toSBOMURLGenerator(w.stores),
 			cfg.SourceBucket,
 			w.logger,
@@ -152,13 +156,13 @@ func baseServerConfig(w serverWiring) server.Config {
 func newEnvironmentHandler(w serverWiring) *environmentshttp.EnvironmentHandler {
 	h := environmentshttp.NewEnvironmentHandler(w.k8sDeps.TenantCRMgr)
 	if w.dbAdapter != nil {
-		h = h.WithKPILookup(&adapters.EnvKPILookup{DB: w.dbAdapter})
+		h = h.WithKPILookup(&environmentsadapter.EnvKPILookup{DB: w.dbAdapter})
 	}
 	if w.stores != nil {
-		h = h.WithPreviewSlotLookup(&adapters.PreviewSlotLookup{Store: w.stores.PreviewSlotStore})
+		h = h.WithPreviewSlotLookup(&environmentsadapter.PreviewSlotLookup{Store: w.stores.PreviewSlotStore})
 	}
 	if w.dbDeps != nil {
-		h = h.WithProjectLookup(&adapters.EnvProjectLookupAdapter{Store: w.dbDeps.ProjectStore})
+		h = h.WithProjectLookup(&environmentsadapter.EnvProjectLookupAdapter{Store: w.dbDeps.ProjectStore})
 	}
 	return h
 }
@@ -224,7 +228,7 @@ func wireStores(sc *server.Config, w serverWiring) {
 	// the build lookup or the event store is missing.
 	if blu, ok := stores.BuildStoreReader.(aggregator.BuildLookup); ok && stores.EventStore != nil {
 		sc.DeployTimelineStore = aggregator.NewPostgresDeployTimelineStore(
-			blu, adapters.NewDeployTimelineSSEReader(stores.EventStore))
+			blu, timelineadapter.NewDeployTimelineSSEReader(stores.EventStore))
 	}
 	sc.Secrets.Store = stores.SecretStore
 	sc.BootstrapStore = stores.BootstrapStore
@@ -315,7 +319,7 @@ func wireAdmin(sc *server.Config, w serverWiring) {
 	sc.Admin.Evictor = buildAdminEvictor(w.cfg, d)
 	pinner := placement.NewCellPinner(&store.PostgresCellStore{DB: d})
 	if mgmt := buildMgmtDynamicClient(w.cfg, w.logger); mgmt != nil {
-		pinner = pinner.WithTenantCRPatcher(adapters.NewTenantCRCellPatcher(mgmt, "loopzero-system"))
+		pinner = pinner.WithTenantCRPatcher(placementadapter.NewTenantCRCellPatcher(mgmt, "loopzero-system"))
 	}
 	sc.Admin.Pinner = pinner
 	// The inspector's build store is nil on purpose: workflow_id degrades to
@@ -373,7 +377,7 @@ func newPreviewService(w serverWiring, previewStore *store.PostgresPreviewStore)
 	ps, err := previewsvc.NewPreviewService(previewsvc.PreviewServiceDeps{
 		Store:               previewStore,
 		Builds:              w.orchDeps.Orchestrator,
-		BuildApps:           &adapters.PreviewAppsLookupAdapter{Builds: w.stores.BuildStore},
+		BuildApps:           &previewadapter.PreviewAppsLookupAdapter{Builds: w.stores.BuildStore},
 		BaseDomain:          w.cfg.BaseDomain,
 		PreviewPublicDomain: w.cfg.PreviewPublicDomain,
 		Logger:              w.logger,

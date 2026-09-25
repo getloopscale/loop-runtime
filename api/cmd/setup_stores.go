@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/getloopscale/loopzero/api/internal/lock"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/objectstore"
@@ -48,7 +48,7 @@ type StoreDeps struct {
 	CellStore      *store.PostgresCellStore
 	SourceStore    source.SourceStore
 	ObjUploader    sourceroutes.ObjectUploader
-	Locker         *adapters.PoolEnvironmentLocker
+	Locker         *lock.PoolEnvironmentLocker
 
 	// SSE adapter
 	BuildStoreReader sse.BuildStoreReader
@@ -130,8 +130,8 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 		CellStore:        &store.PostgresCellStore{DB: dbAdapter},
 		SourceStore:      giteaSourceStore,
 		ObjUploader:      objUploader,
-		Locker:           &adapters.PoolEnvironmentLocker{Pool: dbAdapter.Pool},
-		BuildStoreReader: &adapters.BuildStoreReaderAdapter{Store: buildStore},
+		Locker:           &lock.PoolEnvironmentLocker{Pool: dbAdapter.Pool},
+		BuildStoreReader: &sse.BuildStoreReaderAdapter{Store: buildStore},
 	}, nil
 }
 

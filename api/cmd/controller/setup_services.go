@@ -9,15 +9,16 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/backgroundloops"
 	"github.com/getloopscale/loopzero/api/internal/builds"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
 	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
 	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
+	"github.com/getloopscale/loopzero/api/internal/lock"
 	"github.com/getloopscale/loopzero/api/internal/release"
 )
 
@@ -34,7 +35,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	releaseStore := store.NewReleaseStoreSqlc(dbAdapter, pgEventStore)
 	envTargetStore := store.NewPostgresEnvironmentTargetStore(dbAdapter, dbAdapter)
 	domainStore := &store.PostgresDomainStore{DB: dbAdapter}
-	locker := &adapters.PoolEnvironmentLocker{Pool: dbAdapter.Pool}
+	locker := &lock.PoolEnvironmentLocker{Pool: dbAdapter.Pool}
 
 	workflowSubmitter, err := backgroundloops.NewWorkflowSubmitter(cfg, logger)
 	if err != nil {
@@ -50,7 +51,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	if err != nil {
 		return nil, fmt.Errorf("tenant CR manager: %w", err)
 	}
-	appCRMgr := &adapters.ApplicationCRAdapter{Mgr: workload.NewApplicationCRManager(tenantCRMgr.Client, "")}
+	appCRMgr := &buildsadapter.ApplicationCRAdapter{Mgr: workload.NewApplicationCRManager(tenantCRMgr.Client, "")}
 
 	// This orchestrator's project store is DELIBERATELY left without a
 	// ProjectCapChecker (M5, #106): the controller's orchestrator is used only

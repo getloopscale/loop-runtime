@@ -12,7 +12,7 @@ package store
 //   - TenantDeletionCounts struct (per-table tally returned by the
 //     admin bulk-eviction cascade)
 //   - AdminTenantStore interface (minimal contract consumed by
-//     api/internal/adapters/tenant_adapter.go — widened from concrete
+//     api/internal/placement/placementadapter/tenant_adapter.go — widened from concrete
 //     in T1.4 so the sqlc-backed wrapper drops in without churn)
 //
 // The sqlc-backed implementations live in tenant_wrapper.go:
@@ -39,7 +39,7 @@ type TenantDeletionCounts struct {
 }
 
 // AdminTenantStore is the minimal contract consumed by the admin
-// eviction adapter (api/internal/adapters.TenantDBDeleterAdapter) +
+// eviction adapter (placementadapter.TenantDBDeleterAdapter) +
 // the LOOPZERO_ADMIN_API handler. Queries here intentionally bypass tenant
 // scoping — the caller is authenticated as an operator and needs to
 // read/write across tenants.

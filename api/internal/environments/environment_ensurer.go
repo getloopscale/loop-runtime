@@ -66,7 +66,7 @@ type EnvironmentAdder interface {
 // API → AddEnvironment → poll (returns true on Tenant CR spec match) →
 // Submit build → ArgoCD App stuck InvalidSpecError because AppProject
 // destinations hadn't been updated by tenant-controller yet. See
-// adapters.EnvironmentCRReader (api/internal/adapters) for the Kubernetes implementation.
+// environmentsadapter.EnvironmentCRReader for the Kubernetes implementation.
 type EnvironmentReadinessChecker interface {
 	// M2 v1.2: `project` selects the canonical 3-segment namespace
 	// `loopzero-<tenant>-<project>-<env>` whose Environment CR

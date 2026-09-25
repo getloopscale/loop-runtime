@@ -10,14 +10,18 @@ import (
 	"os"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
 	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"github.com/getloopscale/loopzero/api/internal/environments"
+	"github.com/getloopscale/loopzero/api/internal/logs/logsadapter"
 	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
 	"github.com/getloopscale/loopzero/api/internal/projects"
 	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
 	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
+	"github.com/getloopscale/loopzero/api/internal/release/releaseadapter"
 	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
+	"github.com/getloopscale/loopzero/api/internal/status/statusadapter"
 	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 
 	"github.com/getloopscale/loopzero/api/internal/builds"
@@ -28,7 +32,6 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/logs/loki"
@@ -222,7 +225,7 @@ func setupOrchestrator(
 		DeployEventStore: store.NewDeployEventStoreSqlc(),
 	})
 
-	buildOrchestrator := &adapters.BuildOrchestratorAdapter{
+	buildOrchestrator := &buildsadapter.BuildOrchestratorAdapter{
 		Orch:       orch,
 		BuildStore: stores.BuildStore,
 	}
@@ -236,7 +239,7 @@ func setupOrchestrator(
 		Transport: httpTransport,
 	}
 	lokiClient := loki.NewClient(cfg.LokiURL, lokiHTTPClient, logger)
-	logBuildStore := &adapters.LogBuildStoreAdapter{Store: stores.BuildStore}
+	logBuildStore := &logsadapter.LogBuildStoreAdapter{Store: stores.BuildStore}
 	logsHandler := logshttp.NewLogsHandler(logBuildStore, lokiClient)
 	logStreamHandler := logshttp.NewLogStreamHandler(logBuildStore, lokiClient, logshttp.LogStreamHandlerOpts{
 		Logger: logger,
@@ -254,10 +257,10 @@ func setupOrchestrator(
 		PublicDomain: cfg.PublicDomain,
 		Logger:       logger,
 	})
-	rollbackService := &adapters.RollbackServiceAdapter{Orchestrator: rollbackOrch}
+	rollbackService := &releaseadapter.RollbackServiceAdapter{Orchestrator: rollbackOrch}
 	projectStore := &store.PostgresProjectStore{DB: dbAdapter}
 	rollbackHandler := rollbackhttp.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain).
-		WithReleaseLookup(&adapters.RollbackReleaseLookupAdapter{Store: stores.ReleaseStore})
+		WithReleaseLookup(&releaseadapter.RollbackReleaseLookupAdapter{Store: stores.ReleaseStore})
 
 	// Promotion orchestrator — coordinates release promotion across environments
 	promotionOrch := release.NewPromotionOrchestrator(release.PromotionOrchestratorDeps{
@@ -278,7 +281,7 @@ func setupOrchestrator(
 		PublicDomain: cfg.PublicDomain,
 		Logger:       logger,
 	})
-	promoteService := &adapters.PromoteServiceAdapter{Orchestrator: promotionOrch}
+	promoteService := &releaseadapter.PromoteServiceAdapter{Orchestrator: promotionOrch}
 	promoteHandler := promotehttp.NewPromoteHandler(projectStore, promoteService, cfg.BaseDomain)
 	if envEnsurer != nil {
 		// promote --to <new env> creates the target env like deploy does (#158).
@@ -286,8 +289,8 @@ func setupOrchestrator(
 	}
 
 	// Status handler — wires project, build, and release stores (H6 status endpoint)
-	statusBuildStore := &adapters.StatusBuildStoreAdapter{Store: stores.BuildStore}
-	statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
+	statusBuildStore := &statusadapter.StatusBuildStoreAdapter{Store: stores.BuildStore}
+	statusReleaseStore := &statusadapter.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
 	statusHandler := statushttp.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
 
 	// T1.2 J-18 — Prometheus query_range proxy for the Status page KPI strip +
@@ -369,7 +372,7 @@ func setupOrchestrator(
 	// 404 PROJECT_NOT_FOUND (existence-leak prevention) BEFORE the
 	// underlying ListEnvsForProject query runs.
 	buildListHandler := buildshttp.NewBuildListHandlerWithGate(
-		&adapters.BuildListStoreAdapter{Store: stores.BuildStore},
+		&buildsadapter.BuildListStoreAdapter{Store: stores.BuildStore},
 		projectStore,
 	)
 
@@ -377,7 +380,7 @@ func setupOrchestrator(
 	// (BuildStatsByDay is not on the db.BuildStore interface — ISP). A fresh
 	// BuildStoreSqlc off the same dbAdapter mirrors main.go's admission-querier.
 	buildStatsHandler := buildshttp.NewBuildStatsHandler(
-		&adapters.BuildStatsStoreAdapter{Store: store.NewBuildStoreSqlc(dbAdapter)},
+		&buildsadapter.BuildStatsStoreAdapter{Store: store.NewBuildStoreSqlc(dbAdapter)},
 	)
 
 	// Project deleter — orchestrates project removal across DB, GitOps, and builds.
@@ -411,7 +414,7 @@ func setupOrchestrator(
 	// falls to the convergence loop.
 	if mgmtDynamic := buildMgmtDynamicClient(cfg, logger); mgmtDynamic != nil {
 		syncCallbackActivator = syncCallbackActivator.WithAppLabelReader(
-			adapters.NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd"),
+			releaseadapter.NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd"),
 		)
 		logger.Info("sync callback activator: label-based lookup wired")
 	} else {

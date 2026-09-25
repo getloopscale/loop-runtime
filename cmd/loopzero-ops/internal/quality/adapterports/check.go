@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package adapterports gives the `adapters` package an admission criterion that can refuse.
+// Package adapterports gives the adapter packages an admission criterion that can refuse.
 //
 // # The defect, measured
 //
@@ -15,8 +15,9 @@
 //
 // # The criterion
 //
-// Every file with an exported type in this package declares, with `var _ Port = (*Type)(nil)`,
-// which port it satisfies. Whoever cannot name the port does not belong here — and that is
+// Every file with an exported type in an adapter package (`api/internal/<feature>/<feature>adapter`,
+// where the adapters package's members went when api/internal was organized by feature)
+// declares, with `var _ Port = (*Type)(nil)`, which port it satisfies. Whoever cannot name the port does not belong here — and that is
 // exactly the sentence the old criterion could not say.
 //
 // The distinction that matters: `var _ = pkg.Type{}` is a **usage** assertion, not a port
@@ -46,13 +47,19 @@ import (
 // ErrNoPortDeclared means an adapter file declares an exported type without naming its port.
 var ErrNoPortDeclared = errors.New("adapter does not declare the port it satisfies")
 
-// ErrNothingScanned means the package is absent — silence, not cleanliness.
+// ErrNothingScanned means no adapter package exists — silence, not cleanliness.
 //
-// The other alternative in B-058's DoD is to DISSOLVE this package. If that happens, this
-// guard must fail instead of staying green over a directory that disappeared.
-var ErrNothingScanned = fmt.Errorf("%w: adapters package absent", scanresult.ErrNothingScanned)
+// The other alternative in B-058's DoD was to DISSOLVE the adapters package. That
+// happened when api/internal was organized by feature (docs/decisions.md,
+// 2026-09-25): each adapter moved to `<feature>/<feature>adapter`. This guard
+// followed them, and fails instead of staying green over directories that
+// disappeared.
+var ErrNothingScanned = fmt.Errorf("%w: no adapter package", scanresult.ErrNothingScanned)
 
-const adaptersPackage = "api/internal/adapters"
+// adapterPackagesGlob matches every feature's adapter package: a direct child of
+// a top-level api/internal directory whose name ends in "adapter" (feature-fence
+// keeps them there and named `<feature>adapter`).
+const adapterPackagesGlob = "api/internal/*/*adapter"
 
 // Config drives the check.
 type Config struct {
@@ -112,36 +119,44 @@ func Check(cfg Config) (Outcome, error) {
 	if root == "" {
 		root = "."
 	}
-	dir := filepath.Join(root, filepath.FromSlash(adaptersPackage))
-
-	entries, err := os.ReadDir(dir)
+	dirs, err := filepath.Glob(filepath.Join(root, filepath.FromSlash(adapterPackagesGlob)))
 	if err != nil {
-		return out, fmt.Errorf("%w: %s", ErrNothingScanned, adaptersPackage)
+		return out, fmt.Errorf("adapter-ports: %w", err)
 	}
 
 	fset := token.NewFileSet()
-	for _, e := range entries {
-		name := e.Name()
-		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		file, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, 0)
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
 		if err != nil {
-			return out, fmt.Errorf("parse %s: %w", name, err)
+			continue // a file matching the glob, not a package directory
 		}
-		if !hasExportedType(file) {
-			continue // not an adapter; there is no port to require
+		rel, err := filepath.Rel(root, dir)
+		if err != nil {
+			return out, err
 		}
-		out.Scanned++
-		if !declaresPort(file) {
-			out.Missing = append(out.Missing, name)
+		for _, e := range entries {
+			name := e.Name()
+			if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+				continue
+			}
+			file, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, 0)
+			if err != nil {
+				return out, fmt.Errorf("parse %s: %w", filepath.Join(rel, name), err)
+			}
+			if !hasExportedType(file) {
+				continue // not an adapter; there is no port to require
+			}
+			out.Scanned++
+			if !declaresPort(file) {
+				out.Missing = append(out.Missing, filepath.ToSlash(filepath.Join(rel, name)))
+			}
 		}
 	}
 
 	if out.Scanned == 0 && len(out.Missing) == 0 {
 		// No file with an exported type: either the package was dissolved, or the scan
 		// reached nothing. Both deserve someone's eyes.
-		return out, fmt.Errorf("%w: %s has no adapter at all", ErrNothingScanned, adaptersPackage)
+		return out, fmt.Errorf("%w: %s holds no adapter at all", ErrNothingScanned, adapterPackagesGlob)
 	}
 	if len(out.Missing) > 0 {
 		return out, fmt.Errorf("%w: %s — declare `var _ <Port> = (*<Type>)(nil)`",

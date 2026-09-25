@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loopzero/api/internal/lock"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -38,7 +39,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/server"
@@ -120,7 +120,7 @@ func (a *buildOrchestratorAdapter) GetBuildTenantID(ctx context.Context, buildID
 
 // GetRedeploySource — Plan J-17 T6.4. Stub for integration tests; not
 // exercised by concurrent-builds scenarios. The production adapter
-// (api/internal/adapters/build_adapter.go) carries the real impl.
+// (api/internal/builds/buildsadapter/build_adapter.go) carries the real impl.
 func (a *buildOrchestratorAdapter) GetRedeploySource(_ context.Context, _, _ string) (*buildshttp.RedeploySource, error) {
 	return nil, nil
 }
@@ -234,7 +234,7 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 	idempotencyStore := &store.PostgresIdempotencyStore{DB: adapter}
 
 	// Create real locker backed by the pool (reusing adapters package — no duplication)
-	locker := &adapters.PoolEnvironmentLocker{Pool: pool}
+	locker := &lock.PoolEnvironmentLocker{Pool: pool}
 
 	// Create real orchestrator with fake external services
 	orch := builds.NewBuildOrchestrator(builds.BuildOrchestratorDeps{

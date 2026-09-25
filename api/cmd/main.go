@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/secrets"
 
+	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
 	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
 
@@ -300,7 +300,7 @@ func setupBuildHandler(
 	}
 	// T1.2b (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper
 	// satisfies db.BuildStore 1:1 — admission querier seam unchanged.
-	querier := &adapters.BuildStoreAdmissionQuerier{Store: store.NewBuildStoreSqlc(dbAdapter)}
+	querier := &buildsadapter.BuildStoreAdmissionQuerier{Store: store.NewBuildStoreSqlc(dbAdapter)}
 	admissionCfg := admission.DefaultConfig()
 	if cfg.MaxConcurrentBuildsPerCell > 0 {
 		admissionCfg.MaxConcurrentPerCell = cfg.MaxConcurrentBuildsPerCell

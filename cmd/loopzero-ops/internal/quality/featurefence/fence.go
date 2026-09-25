@@ -65,11 +65,6 @@ const (
 	// TestOnly holds tests about the tree. It imports what its entry names and
 	// nothing imports it.
 	TestOnly
-	// Layer is a layer folder (routes, services, adapters, ...) still being
-	// dissolved into the features that own its code. It imports what its entry
-	// names — HTTP and adapter packages included, as the old adapters package
-	// must — and the kind exists only while the reorganization is in flight.
-	Layer
 )
 
 // Entry registers one top-level directory.
@@ -122,7 +117,7 @@ func (c Config) Fence() (subpackagefence.Fence, error) {
 			for _, d := range e.Deps {
 				set[d] = true
 			}
-		case Kernel, TestOnly, Layer:
+		case Kernel, TestOnly:
 			for _, d := range e.Deps {
 				set[d] = true
 			}
@@ -356,7 +351,7 @@ func misplaced(relDir string, r role) bool {
 
 // violation returns the rule an import from `from` into `to` breaks, or nil.
 func violation(from, to role) error {
-	composing := from.kind == Composition || from.kind == TestOnly || from.kind == Layer
+	composing := from.kind == Composition || from.kind == TestOnly
 	switch {
 	case to.http:
 		sameFeatureAdapter := from.adapter && from.top == to.top

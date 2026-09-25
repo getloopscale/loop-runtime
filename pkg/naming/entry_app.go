@@ -36,10 +36,10 @@ type entryAppSpec struct {
 // gracefully into "URL pending".
 //
 // Canonical SoT — call sites:
-//   - api/internal/routes/status.go (dashboard "Visit" URL)
-//   - api/internal/adapters/release_adapter.go (delegates here — was the
+//   - api/internal/status/statushttp/status.go (dashboard "Visit" URL)
+//   - api/internal/status/statusadapter/status_release_store_adapter.go (delegates here — was the
 //     original home; moved 2026-07-01 to make it reusable by promote)
-//   - api/internal/services/promotion_orchestrator.go (promote-emitted URL —
+//   - api/internal/release/promotion_orchestrator.go (promote-emitted URL —
 //     Red Team #159 closure)
 func ResolveEntryAppFromApps(appsRaw []byte) string {
 	if len(appsRaw) == 0 {
