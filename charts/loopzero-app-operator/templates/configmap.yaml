@@ -8,7 +8,6 @@ data:
   BASE_DOMAIN: {{ .Values.config.baseDomain | quote }}
   OPERATOR_INSECURE_SKIP_TLS: {{ .Values.config.operatorInsecureSkipTls | quote }}
   LOOPZERO_REQUIRE_CELL_0_KUBECONFIG: {{ .Values.config.loopzeroRequireRuntimeKubeconfig | quote }}
-  LOOPZERO_REAPER_GRACE_PERIOD_SECONDS: {{ .Values.config.loopzeroReaperGracePeriodSeconds | quote }}
   LOOPZERO_PPROF_ADDR: {{ .Values.config.loopzeroPprofAddr | quote }}
   LOOPZERO_PPROF_ENABLED: {{ .Values.config.loopzeroPprofEnabled | quote }}
   OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.config.otelExporterOtlpEndpoint | quote }}

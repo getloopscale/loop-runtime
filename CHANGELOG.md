@@ -209,6 +209,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- The loopzero-preview-operator chart no longer accepts config.baseDomain and the loopzero-app-operator chart no longer accepts config.loopzeroReaperGracePeriodSeconds: nothing read them since the preview URL comes from the API and the unused reaper was deleted; remove them from your values, which now fail schema validation (principle_violations#74)
+
 - PlatformBootstrap spec.timeouts and spec.argocd.tokenTTLSeconds, which the platform operator never applied (principle_violations#83)
 
 - Operator metrics that were registered but never recorded: loopzero_operator_provisioner_duration_seconds, loopzero_operator_crd_count, loopzero_finalizer_blocked_seconds, loopzero_reconcile_queue_depth, loopzero_self_heal_total, loopzero_orphan_cr_total (principle_violations#72)

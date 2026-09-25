@@ -27,7 +27,6 @@ config:
   baseDomain: ""
   operatorInsecureSkipTls: "false"
   loopzeroRequireRuntimeKubeconfig: "false"
-  loopzeroReaperGracePeriodSeconds: "300"
   loopzeroPprofAddr: ""
   loopzeroPprofEnabled: "false"
   otelExporterOtlpEndpoint: ""

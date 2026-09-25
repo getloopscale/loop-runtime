@@ -2,7 +2,7 @@
 # DO NOT EDIT BY HAND. Regenerate when master table changes.
 # Source: .claude/knowledge-base/audits/2026-06-18-env-master-table.md (umbrella)
 # Format: VAR|plane|req|chart-section
-# Row count: 200
+# Row count: 199
 #
 API_CROSS_CLUSTER_URL|CONFIG|N|loopzero-api
 APP_PUBLIC_URL|CONFIG|N|loopzero-cloud
@@ -181,7 +181,6 @@ LOOPZERO_PROGRESSIVE_DELIVERY|CONFIG|N|loopzero-api
 LOOPZERO_PROMETHEUS_ADDRESS|CONFIG|N|loopzero-api
 LOOPZERO_PROMETHEUS_URL|CONFIG|N|loopzero-cloud
 LOOPZERO_PUBLIC_DOMAIN|CONFIG|N|loopzero-api
-LOOPZERO_REAPER_GRACE_PERIOD_SECONDS|CONFIG|N|loopzero-{app,platform,preview,tenant}-operator
 LOOPZERO_REKOR_URL|CONFIG|N|loopzero-api
 LOOPZERO_REQUIRE_CELL_0_KUBECONFIG|CONFIG|N|loopzero-{app,platform,preview,tenant}-operator
 LOOPZERO_SECRET_ENCRYPTION_KEY|SECRET|Y|loopzero-api

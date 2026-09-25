@@ -180,9 +180,6 @@
         "loopzeroRequireRuntimeKubeconfig": {
           "type": "string"
         },
-        "loopzeroReaperGracePeriodSeconds": {
-          "type": "string"
-        },
         "loopzeroPprofAddr": {
           "type": "string"
         },

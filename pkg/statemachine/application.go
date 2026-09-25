@@ -44,7 +44,7 @@ const (
 	ApplicationRouteOK        Event = "RouteOK"        // ExposedRoute is Reachable
 	ApplicationRouteFail      Event = "RouteFail"      // ExposedRoute probe failed
 	ApplicationUpdate         Event = "Update"         // Spec changed, rolling update
-	ApplicationOrphaned       Event = "Orphaned"       // Reaper detected: GitOps source removed manifest + grace period elapsed
+	ApplicationOrphaned       Event = "Orphaned"       // The manifest left the GitOps source; no code emits it since the reaper was deleted
 )
 
 // NewApplicationMachine returns the LoopZeroApplication state machine.
@@ -60,9 +60,10 @@ const (
 //	Down → Progressing (recovery via reconcile)
 //	Reachable/Degraded → Progressing (Update event, rolling deploy)
 //
-// Terminal: Cleaned — reached on ApplicationOrphaned, when the reaper finds
-// the manifest removed from the GitOps source past the grace period; nothing
-// transitions out of it.
+// Terminal: Cleaned — reached on ApplicationOrphaned; nothing transitions out
+// of it. The reaper that emitted Orphaned was deleted because nothing ever
+// started it, so today no code reaches Cleaned; the edges stay declared until
+// deciding who owns orphan cleanup replaces or removes them.
 func NewApplicationMachine() *Machine {
 	return NewMachine(MachineConfig{
 		Name: "LoopZeroApplication",
@@ -93,12 +94,10 @@ func NewApplicationMachine() *Machine {
 			{From: ApplicationDown, Event: ApplicationEndpointsReady, To: ApplicationProgressing},
 			{From: ApplicationDown, Event: ApplicationUpdate, To: ApplicationProgressing},
 
-			// Reaper-driven orphan cleanup (fix-all-platform-issues-plan T2.2).
-			// Triggered when GitOps source removed the manifest AND grace period
-			// (default 1h, configurable via LOOPZERO_REAPER_GRACE_PERIOD_SECONDS)
-			// elapsed. Allowed from EVERY non-terminal state because an app can
-			// be orphaned at any point in its lifecycle (e.g., user removed it
-			// from the gitops repo while Reachable).
+			// Orphan cleanup (fix-all-platform-issues-plan T2.2): allowed from
+			// EVERY non-terminal state because an app can be orphaned at any
+			// point in its lifecycle (e.g., removed from the gitops repo while
+			// Reachable). No emitter today — see the Terminal note above.
 			{From: ApplicationProgressing, Event: ApplicationOrphaned, To: ApplicationCleaned},
 			{From: ApplicationServing, Event: ApplicationOrphaned, To: ApplicationCleaned},
 			{From: ApplicationReachable, Event: ApplicationOrphaned, To: ApplicationCleaned},

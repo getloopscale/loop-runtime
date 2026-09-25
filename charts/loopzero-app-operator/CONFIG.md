@@ -10,7 +10,6 @@ Set-equal to the rendered ConfigMap keys (hermetic Go guard).
 | `BASE_DOMAIN` | (empty) | operator runtime config |
 | `OPERATOR_INSECURE_SKIP_TLS` | `false` | operator runtime config |
 | `LOOPZERO_REQUIRE_CELL_0_KUBECONFIG` | `false` | operator runtime config |
-| `LOOPZERO_REAPER_GRACE_PERIOD_SECONDS` | `300` | operator runtime config |
 | `LOOPZERO_PPROF_ADDR` | (empty) | operator runtime config |
 | `LOOPZERO_PPROF_ENABLED` | `false` | operator runtime config |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | (empty) | operator runtime config |

@@ -212,12 +212,18 @@ func binaryReadDirs(t *testing.T, opsRoot, cmdPath string) []string {
 	return dirs
 }
 
-// grepEnvReads returns the env-var names read via os.Getenv/LookupEnv/envOr under dir
-// (recursive, production .go only — test files excluded so test-only env names don't widen the set).
+// grepEnvReads returns the env-var names read under dir (recursive, production
+// .go only — test files excluded so test-only env names don't widen the set).
+// The readers are os.Getenv/LookupEnv, the envOr helper, and the tenant
+// operator's loadConfig, which reads through an injected getenv and its
+// required/orDefault closures so the config can be tested without the process
+// environment, and operatorboot.PositiveInt/PositiveDuration, which take the
+// getenv and the key and refuse a malformed value. A reader missing here makes every variable it reads look
+// over-injected.
 func grepEnvReads(t *testing.T, dir string) []string {
 	t.Helper()
 	out, _ := exec.Command("bash", "-c",
-		`grep -rhoE --include='*.go' --exclude='*_test.go' '(Getenv|LookupEnv|envOr)\("[A-Z][A-Z0-9_]*"' `+dir+` 2>/dev/null | grep -oE '"[A-Z][A-Z0-9_]*"' | tr -d '"' | sort -u`).Output()
+		`grep -rhoE --include='*.go' --exclude='*_test.go' '((Getenv|getenv|LookupEnv|envOr|required|orDefault)\(|Positive(Int|Duration)\([A-Za-z.]+, )"[A-Z][A-Z0-9_]*"' `+dir+` 2>/dev/null | grep -oE '"[A-Z][A-Z0-9_]*"' | tr -d '"' | sort -u`).Output()
 	var keys []string
 	for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		if l != "" {

@@ -171,9 +171,6 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "baseDomain": {
-          "type": "string"
-        },
         "ingressNamespace": {
           "type": "string"
         },

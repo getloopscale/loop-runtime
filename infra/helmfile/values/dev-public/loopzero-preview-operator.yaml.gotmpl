@@ -14,9 +14,6 @@ image:
   tag: develop
   pullPolicy: Always
 
-config:
-  baseDomain: "{{ .Values.domain }}"
-
 # dev-public NetworkPolicy override: gitea is in loopzero-system ns (not the
 # chart-default `gitea` ns). Same fix as loopzero-tenant-operator.
 networkPolicy:

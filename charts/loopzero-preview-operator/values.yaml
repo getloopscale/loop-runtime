@@ -24,7 +24,6 @@ service:
 
 # Operator configuration (environment variables via ConfigMap)
 config:
-  baseDomain: ""
   ingressNamespace: "traefik"
   loopzeroPprofAddr: ""
   loopzeroPprofEnabled: "false"

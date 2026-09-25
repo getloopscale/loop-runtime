@@ -7,7 +7,6 @@ Set-equal to the rendered ConfigMap keys (hermetic Go guard).
 
 | Key | Default | Description |
 |---|---|---|
-| `BASE_DOMAIN` | (empty) | operator runtime config |
 | `INGRESS_NAMESPACE` | `traefik` | operator runtime config |
 | `LOOPZERO_PPROF_ADDR` | (empty) | operator runtime config |
 | `LOOPZERO_PPROF_ENABLED` | `false` | operator runtime config |

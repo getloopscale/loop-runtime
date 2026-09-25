@@ -4,5 +4,5 @@ reloader:
   enabled: false   # rotation-aware restart (operator-installed Reloader)
 
 config:
-  baseDomain: "!!changeme!!"
+  ingressNamespace: "traefik"
   # ... see CONFIG.md for the full key list
