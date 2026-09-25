@@ -16,7 +16,7 @@ to [Semantic Versioning](https://semver.org/).
 
 - Environment status records `cellID`, the cell its namespace was provisioned in, so deletion targets that cell even after the tenant is re-pinned (principle_violations#59)
 
-- Release inspection reports whether its audit trail was complete, unavailable or truncated, instead of showing an unreadable trail as empty (#23)
+- Release inspection reports whether its audit trail was complete, unavailable or truncated, instead of showing an unreadable trail as empty (principle_violations#23)
 
 - Quality gate `values-duplicate-keys` fails any Helm values file under charts/ or infra/helm/ that declares the same key twice.
 
@@ -64,6 +64,14 @@ to [Semantic Versioning](https://semver.org/).
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
 ### Changed
+
+- `loopzero-ops quality spotcheck-dimension` rejects a non-integer `SPOTCHECK_SEED` as a usage error instead of silently picking a random sample (principle_violations#75)
+
+- `loopzero-ops` quality gates and seeds now print their messages in English; Kubernetes errors from seeds name the cluster as `(context <name>)` (principle_violations#77)
+
+- Every `loopzero-ops` subcommand uses one exit table: 0 success, 1 usage error or a failed check/seed, 5 the check could not reach a verdict; quality gates, seeds and chaos SLO checks no longer exit 2 (principle_violations#75)
+
+- `loopzero-ops quality helm-drift --format json` adds a `render_errors` field, and an unknown `--format` is rejected as a usage error (principle_violations#51)
 
 - The tenant and app operators refuse to start on a malformed LOOPZERO_TENANT_MAX_CONCURRENT or LOOPZERO_DATA_PLANE_POLLER_INTERVAL instead of silently using the default (principle_violations#91)
 
@@ -253,6 +261,22 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Seeds that restart the Promtail DaemonSet, convert the Loki Service to NodePort or create their namespace no longer skip those steps silently when given a non-default Kubernetes client (principle_violations#60, principle_violations#88)
+
+- `loopzero-ops seed` no longer looks for `dev-credentials.json` under a relative path when the home directory cannot be resolved; it asks for `LOOPZERO_DEV_CREDENTIALS` instead (principle_violations#62)
+
+- A quality gate that cannot read its input now reports that it could not complete (exit 5) instead of reporting a violation (principle_violations#75)
+
+- `loopzero-ops leak ports --json` adds English field names beside the existing ones, which are kept for compatibility (principle_violations#50)
+
+- Seeds no longer report PASS after a rollout that did not settle, a namespace that could not be created, or a token or secret they failed to read; the Stripe API client now times out after 30s (principle_violations#65)
+
+- The `tenant-fixture` seed refuses an unknown `LOOPZERO_PLAN_TIER` instead of silently seeding the starter plan (principle_violations#56)
+
+- `loopzero-ops pulumi archive` fails closed: a stack whose resources could not be counted, or a directory it could not list, holds the archive instead of being reported as empty, and plaintext secret hits need an explicit `--accept-plaintext-hits` (principle_violations#52)
+
+- The Stripe seeds and the webhook-endpoint seed refuse a placeholder or wrongly prefixed Stripe key instead of writing it into the cluster (principle_violations#54, principle_violations#55)
+
 - Cancelled or timed-out reconciles no longer trip the ArgoCD circuit breaker and pause tenant deploy setup (principle_violations#106)
 
 - A transient MinIO error no longer rotates a tenant's build storage credentials while builds are running (principle_violations#109)
@@ -363,31 +387,31 @@ to [Semantic Versioning](https://semver.org/).
 
 - Deploy webhooks (deploy.failed, deploy.succeeded) now fire whichever process runs the background loops, and the controller runs the same audit-log retention, build cleanup and custom-domain loops as the API (principle_violations#182)
 
-- Pinning a team to a cell that is full now answers 409 "cell at capacity" instead of an internal error (#26)
+- Pinning a team to a cell that is full now answers 409 "cell at capacity" instead of an internal error (principle_violations#26)
 
-- Opening or re-pushing a pull request now records its preview under the same lock as the preview build, so concurrent webhooks for one pull request can no longer race (#33)
+- Opening or re-pushing a pull request now records its preview under the same lock as the preview build, so concurrent webhooks for one pull request can no longer race (principle_violations#33)
 
-- Environment provisioning and secret re-sync no longer treat unrelated errors as "already exists" or "namespace terminating" based on their wording; closing a pull request no longer hides a preview lookup failure (#35)
+- Environment provisioning and secret re-sync no longer treat unrelated errors as "already exists" or "namespace terminating" based on their wording; closing a pull request no longer hides a preview lookup failure (principle_violations#35)
 
-- A failed deploy sync caused by a network error (such as a DNS lookup failure) now fails the release immediately instead of leaving it pending until it times out (#35)
+- A failed deploy sync caused by a network error (such as a DNS lookup failure) now fails the release immediately instead of leaving it pending until it times out (principle_violations#35)
 
-- A misconfigured environment provisioner, secret re-sync or scaling resolver now fails loudly at startup or on use instead of silently doing nothing (#36)
+- A misconfigured environment provisioner, secret re-sync or scaling resolver now fails loudly at startup or on use instead of silently doing nothing (principle_violations#36)
 
 - Every build success and failure path now records its outcome the same way, so no path can skip the failure event or leave a build half-finalized (dp#11)
 
-- Custom domain status changes all follow the domain lifecycle rules, and concurrent health checks can no longer overwrite each other's status (#18)
+- Custom domain status changes all follow the domain lifecycle rules, and concurrent health checks can no longer overwrite each other's status (principle_violations#18)
 
-- Deploy activation identifies a synced application by its labels only, so an application whose name cannot be parsed is reported instead of attributed to the wrong team (#15)
+- Deploy activation identifies a synced application by its labels only, so an application whose name cannot be parsed is reported instead of attributed to the wrong team (principle_violations#15)
 
-- Refused cell pins (unknown cell, cell at capacity) now return a client error instead of an internal error (#26)
+- Refused cell pins (unknown cell, cell at capacity) now return a client error instead of an internal error (principle_violations#26)
 
-- Pinning a team to a cell is now all-or-nothing: a failure applying the pin reverts it and reports an actionable error instead of claiming success (#25)
+- Pinning a team to a cell is now all-or-nothing: a failure applying the pin reverts it and reports an actionable error instead of claiming success (principle_violations#25)
 
-- Every user-facing app URL (deploy result and rollback) is now composed the same way, including the public domain (#19)
+- Every user-facing app URL (deploy result and rollback) is now composed the same way, including the public domain (principle_violations#19)
 
-- Rolling back to a release that was removed mid-rollback now fails with a clear "release not found" error instead of crashing (#22)
+- Rolling back to a release that was removed mid-rollback now fails with a clear "release not found" error instead of crashing (principle_violations#22)
 
-- Deleting a project now prunes and syncs the project's own deploy application instead of a mis-named one (#14)
+- Deleting a project now prunes and syncs the project's own deploy application instead of a mis-named one (principle_violations#14)
 
 - Bulk secret uploads and scale requests are refused with 503 when the account's plan cannot be read, instead of being checked against an unknown limit.
 
@@ -698,6 +722,8 @@ to [Semantic Versioning](https://semver.org/).
   explanation (#B-069)
 
 ### Security
+
+- The `github-webhook-fixture` seed no longer puts the webhook HMAC secret on the `gh` command line or in its error and status messages; the request body is sent on stdin (principle_violations#53)
 
 - The API refuses to start in production when reserved-key protection for service environment variables is set to warn-only (principle_violations#300)
 
