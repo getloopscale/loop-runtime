@@ -1,0 +1,27 @@
+# Short Portuguese connectives. Each is also an English word, a single letter,
+# a language code or an abbreviation, so none of them decides alone: they only
+# count beside a word from strong.txt, and only in a line with no English
+# function word.
+e
+o
+a
+os
+as
+um
+de
+da
+do
+dos
+das
+em
+com
+por
+para
+na
+no
+nas
+nos
+se
+ou
+la
+ha

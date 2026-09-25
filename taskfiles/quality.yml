@@ -275,6 +275,7 @@ tasks:
       - /tmp/loopzero-ops quality db-generated-boundary  # M9 5a MA-7 Gate A: no outer-layer imports of db/generated (ADR 2026-07-03-m9-db-store-subpackage-topology)
       - /tmp/loopzero-ops quality ma7-status-locality  # M9 5b MA-7 Gates B+C (ADR 2026-07-03-m9-db-store-subpackage-topology)
       - /tmp/loopzero-ops quality feature-fence        # api/internal is organized by feature (docs/decisions.md, 2026-09-25)
+      - /tmp/loopzero-ops quality english-only         # everything git tracks is English; exemptions state their reason (#380)
       - /tmp/loopzero-ops quality tenant-predicate    # T0.5: multi-tenant isolation predicate (security veto-backed)
       # Bash security/governance gates re-homed 2026-05-24 (were unwired since
       # GitHub Actions removal). TODO: migrate these to loopzero-ops quality Go gates

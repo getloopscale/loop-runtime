@@ -48,6 +48,7 @@ domain-sink-purity	gates	Ratchet: the services DAG sink must not grow its persis
 drill-creds-isolation	-	Ensures DR-drill credentials are isolated from production.
 drill-outputs-consumers	gates	Verifies drill Pulumi-output consumers use the canonical schema.
 ecosystem-validators	gates	Runs `check_xrefs.py` and `test_e2e_smoke.py`, which the golden-rule change protocol requires green and which no gate ran (B-129). Reports FAIL and WARN SEPARATELY: adding them would let the warning erase the failure.
+english-only	gates	Everything git tracks is written in English; a line keeps Portuguese only with an inline exemption that states its reason.
 error-vocabulary	gates	An authored error message must not carry an internal term forbidden by Rule 3.
 feature-fence	gates	Deny-by-default fence over api/internal by feature: registered features, kernel and composition roots; HTTP and adapter packages stay inside their feature.
 git-diff-to-lines	-	Utility: converts a git diff into a changed-line set for other gates.
