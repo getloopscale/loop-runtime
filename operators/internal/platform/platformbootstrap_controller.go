@@ -101,31 +101,8 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// correlation-id from CR annotation into reconcile context (no-op se ausente).
 	ctx = correlation.WithID(ctx, pb.GetAnnotations()["loopzero.io/correlation-id"])
 
-	// Handle deletion -- clean up platform-tokens secret if present.
 	if !pb.DeletionTimestamp.IsZero() {
-		if controllerutil.ContainsFinalizer(&pb, constants.FinalizerPlatformBootstrap) {
-			logger := log.FromContext(ctx)
-			logger.Info("cleaning up PlatformBootstrap resources")
-			// Delete the platform-tokens secret if managed by this controller.
-			tokenSecret := &corev1.Secret{}
-			tokenSecretKey := client.ObjectKey{Name: "platform-tokens", Namespace: pb.Namespace}
-			if getErr := r.Get(ctx, tokenSecretKey, tokenSecret); getErr != nil {
-				if !errors.IsNotFound(getErr) {
-					logger.Error(getErr, "failed to get platform-tokens secret during cleanup")
-				}
-			} else if tokenSecret.Labels[constants.LabelManagedBy] == "platformbootstrap-controller" {
-				if err := r.Delete(ctx, tokenSecret); err != nil && !errors.IsNotFound(err) {
-					logger.Error(err, "failed to delete platform-tokens secret during cleanup")
-				}
-			} else {
-				logger.Info("skipping platform-tokens delete -- not managed by this controller")
-			}
-			controllerutil.RemoveFinalizer(&pb, constants.FinalizerPlatformBootstrap)
-			if err := r.Update(ctx, &pb); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, r.reconcileDelete(ctx, &pb)
 	}
 
 	// Add finalizer if not present
@@ -153,31 +130,10 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{}, nil
 	}
 
-	// Initialize phase via state machine if empty.
-	if pb.Status.Phase == "" {
-		pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(
-			platformBootstrapSM.Transition(statemachine.PBPhEmpty, statemachine.PBPEventStart),
-		)
-		now := metav1.Now()
-		pb.Status.LastTransitionTime = &now
-		if err := r.patchStatus(ctx, &pb, base); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true}, nil
-	}
-
-	// Transition from Pending to ConfiguringGitea.
-	if pb.Status.Phase == loopzerov1.PlatformBootstrapPhasePending {
-		pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(
-			platformBootstrapSM.Transition(statemachine.PBPhPending, statemachine.PBPEventStart),
-		)
-		pb.Status.RetryCount = 0
-		now := metav1.Now()
-		pb.Status.LastTransitionTime = &now
-		if err := r.patchStatus(ctx, &pb, base); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true}, nil
+	// Empty -> Pending, then Pending -> ConfiguringGitea: one Start event per
+	// reconcile, each persisted before the next.
+	if pb.Status.Phase == "" || pb.Status.Phase == loopzerov1.PlatformBootstrapPhasePending {
+		return r.startPhase(ctx, &pb, base)
 	}
 
 	// Resolve max retries with default.
@@ -202,14 +158,71 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 }
 
-// transitionToFailed transitions the CR to Failed phase via the state machine.
-// Uses TryTransition because pb.Status.Phase comes from CRD status (external source).
+// reconcileDelete removes the platform token Secret this controller manages and
+// only then releases the finalizer. A Secret it did not create is left alone.
+// Any failure other than NotFound keeps the finalizer, so the delete is retried
+// rather than leaving the Gitea admin token and ArgoCD apiKey behind.
+func (r *PlatformBootstrapReconciler) reconcileDelete(ctx context.Context, pb *loopzerov1.PlatformBootstrap) error {
+	if !controllerutil.ContainsFinalizer(pb, constants.FinalizerPlatformBootstrap) {
+		return nil
+	}
+	if err := r.deleteManagedTokenSecret(ctx, pb.Namespace); err != nil {
+		return err
+	}
+	controllerutil.RemoveFinalizer(pb, constants.FinalizerPlatformBootstrap)
+	return r.Update(ctx, pb)
+}
+
+// deleteManagedTokenSecret deletes constants.SecretPlatformTokens when this
+// controller manages it.
+func (r *PlatformBootstrapReconciler) deleteManagedTokenSecret(ctx context.Context, namespace string) error {
+	secret := &corev1.Secret{}
+	key := client.ObjectKey{Name: constants.SecretPlatformTokens, Namespace: namespace}
+	if err := r.Get(ctx, key, secret); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("get %s during cleanup: %w", key, err)
+	}
+	if secret.Labels[constants.LabelManagedBy] != constants.ManagedByPlatformBootstrapController {
+		log.FromContext(ctx).Info("leaving platform token Secret in place: not managed by this controller",
+			"secret", key.String())
+		return nil
+	}
+	if err := r.Delete(ctx, secret); err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("delete %s during cleanup: %w", key, err)
+	}
+	return nil
+}
+
+// startPhase applies one Start event (Empty -> Pending, Pending ->
+// ConfiguringGitea), persists it and requeues.
+func (r *PlatformBootstrapReconciler) startPhase(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap) (ctrl.Result, error) {
+	next, err := platformBootstrapSM.TryTransition(statemachine.PlatformBootstrapPhase(pb.Status.Phase), statemachine.PBPEventStart)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("start bootstrap: %w", err)
+	}
+	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(next)
+	pb.Status.RetryCount = 0
+	now := metav1.Now()
+	pb.Status.LastTransitionTime = &now
+	if err := r.patchStatus(ctx, pb, base); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{Requeue: true}, nil
+}
+
+// transitionToFailed transitions the CR to Failed phase via the state machine
+// and records message on BootstrapComplete=False (Reason=Failed), which the
+// readiness summary classifies as Stalled. Uses TryTransition because
+// pb.Status.Phase comes from CRD status (external source).
 func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap, message string) (ctrl.Result, error) {
 	next, err := platformBootstrapSM.TryTransition(statemachine.PlatformBootstrapPhase(pb.Status.Phase), statemachine.PBPEventRetryExhaust)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("transition to failed: %w", err)
 	}
 	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(next)
+	r.setCondition(pb, conditions.TypeBootstrapComplete, metav1.ConditionFalse, conditions.ReasonFailed, message)
 	now := metav1.Now()
 	pb.Status.LastTransitionTime = &now
 	if err := r.patchStatus(ctx, pb, base); err != nil {
@@ -220,7 +233,7 @@ func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb
 
 // transitionToNextPhase transitions the CR to the next phase via the state machine.
 // Uses TryTransition because pb.Status.Phase comes from CRD status (external source).
-func (r *PlatformBootstrapReconciler) transitionToNextPhase(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap, event statemachine.PlatformBootstrapPhaseEvent, message string) (ctrl.Result, error) {
+func (r *PlatformBootstrapReconciler) transitionToNextPhase(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap, event statemachine.PlatformBootstrapPhaseEvent) (ctrl.Result, error) {
 	next, err := platformBootstrapSM.TryTransition(statemachine.PlatformBootstrapPhase(pb.Status.Phase), event)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("transition to next phase: %w", err)

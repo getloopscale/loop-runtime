@@ -48,7 +48,7 @@ func (r *PlatformBootstrapReconciler) reconcileAPIPhase(ctx context.Context, pb,
 
 	r.setCondition(pb, conditions.TypeDatabaseSeeded, metav1.ConditionTrue, conditions.ReasonReady, "Database seeded via API bootstrap")
 	r.setCondition(pb, conditions.TypeBootstrapComplete, metav1.ConditionTrue, conditions.ReasonReady, "Platform bootstrap complete")
-	return r.transitionToNextPhase(ctx, pb, base, statemachine.PBPEventAPISeeded, "Bootstrap complete")
+	return r.transitionToNextPhase(ctx, pb, base, statemachine.PBPEventAPISeeded)
 }
 
 // checkAPIHealth checks if the API is healthy by calling GET on the health endpoint.
