@@ -33,7 +33,7 @@ type K8sDeps struct {
 // manager creation fails.
 func setupK8s(cfg config.Config, logger *slog.Logger) (*K8sDeps, error) {
 	// Tenant CR manager — real Kubernetes client for Tenant CRs.
-	tenantCRMgr, err := tenancy.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
+	tenantCRMgr, err := tenancy.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext, cfg.MaxConcurrentBuildsPerTenant)
 	if err != nil {
 		return nil, fmt.Errorf("tenant CR manager: %w", err)
 	}

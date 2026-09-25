@@ -96,7 +96,7 @@ func newReconcileLoop(cfg config.Config, d Deps, logger *slog.Logger) *build.Bui
 		BaseDomain:         cfg.BaseDomain,
 		ClusterIssuer:      cfg.ClusterIssuer,
 		PrometheusAddress:  cfg.PrometheusAddress,
-		MaxBuildsPerTenant: cfg.MaxBuildsPerTenant,
+		MaxBuildsPerTenant: cfg.MaxConcurrentBuildsPerTenant,
 		CellID:             d.CellID,
 	}
 	if d.CellID != "" {

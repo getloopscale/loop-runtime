@@ -323,7 +323,7 @@ spec:
           annotations:
             summary: "Tenant hitting build concurrency limit"
             description: "Tenant {{ $labels.tenant }} has builds deferred due to per-tenant concurrency limit for 5+ minutes."
-            runbook: "This means the tenant is submitting builds faster than they complete. Check if builds are stuck. Consider increasing MAX_BUILDS_PER_TENANT if the tenant has a legitimate burst workload."
+            runbook: "This means the tenant is submitting builds faster than they complete. Check if builds are stuck. Consider increasing MAX_CONCURRENT_BUILDS_PER_TENANT if the tenant has a legitimate burst workload."
 
         - alert: LoopZeroCFKVDriftDetected
           expr: loopzero_cfkv_drift_detected == 1

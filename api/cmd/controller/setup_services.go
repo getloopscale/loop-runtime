@@ -46,7 +46,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	}
 	gitopsPusher := backgroundloops.NewGitOpsPusher(cfg)
 
-	tenantCRMgr, err := tenancy.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
+	tenantCRMgr, err := tenancy.NewTenantCRManager(cfg.MgmtKubeconfig, cfg.MgmtKubeContext, cfg.MaxConcurrentBuildsPerTenant)
 	if err != nil {
 		return nil, fmt.Errorf("tenant CR manager: %w", err)
 	}

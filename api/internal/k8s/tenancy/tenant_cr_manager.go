@@ -46,12 +46,19 @@ var tenantsGroupResource = schema.GroupResource{Group: "loopzero.io", Resource: 
 // contract module, so the compiler checks every CR field at build time.
 type TenantCRManager struct {
 	Client client.Client
+	// BuildConcurrency is written to every Tenant CR's
+	// spec.limits.maxBuildConcurrency: the same per-tenant limit the API
+	// enforces (config.MaxConcurrentBuildsPerTenant).
+	BuildConcurrency int
 }
 
 // NewTenantCRManager creates a TenantCRManager connected to the management cluster.
 // It tries in-cluster config first (for when the API runs inside the cluster),
 // then falls back to kubeconfig with the specified context.
-func NewTenantCRManager(kubeconfig, kubeContext string) (*TenantCRManager, error) {
+func NewTenantCRManager(kubeconfig, kubeContext string, buildConcurrency int) (*TenantCRManager, error) {
+	if buildConcurrency <= 0 {
+		return nil, fmt.Errorf("k8s: tenant CR manager: build concurrency must be positive, got %d", buildConcurrency)
+	}
 	cfg, err := k8s.RestConfig(kubeconfig, kubeContext)
 	if err != nil {
 		return nil, fmt.Errorf("k8s: tenant CR manager config: %w", err)
@@ -60,7 +67,7 @@ func NewTenantCRManager(kubeconfig, kubeContext string) (*TenantCRManager, error
 	if err != nil {
 		return nil, fmt.Errorf("k8s: tenant CR manager typed client: %w", err)
 	}
-	return &TenantCRManager{Client: c}, nil
+	return &TenantCRManager{Client: c, BuildConcurrency: buildConcurrency}, nil
 }
 
 func tenantKey(tenantID string) client.ObjectKey {
@@ -76,7 +83,7 @@ func (m *TenantCRManager) EnsureTenant(ctx context.Context, tenantID string, spe
 		var existing apiv1.Tenant
 		err := m.Client.Get(ctx, tenantKey(tenantID), &existing)
 		if k8serrors.IsNotFound(err) {
-			desired := buildTenant(tenantID, spec)
+			desired := buildTenant(tenantID, spec, m.BuildConcurrency)
 			createErr := m.Client.Create(ctx, desired)
 			if k8serrors.IsAlreadyExists(createErr) {
 				// Another caller created it between our Get and Create — retry as update.
@@ -93,7 +100,7 @@ func (m *TenantCRManager) EnsureTenant(ctx context.Context, tenantID string, spe
 
 		// CR exists — apply desired spec onto the fetched object, preserving its
 		// resourceVersion (carried by `existing`) for optimistic concurrency.
-		applyTenantSpec(&existing, spec)
+		applyTenantSpec(&existing, spec, m.BuildConcurrency)
 		if err := m.Client.Update(ctx, &existing); err != nil {
 			return err // RetryOnConflict handles Conflict errors automatically
 		}
@@ -280,14 +287,14 @@ func (m *TenantCRManager) GetEnvironmentDetail(ctx context.Context, tenantID, pr
 
 // buildTenant constructs a typed Tenant CR matching the CRD schema defined in
 // operators/api/v1/tenant_types.go. The compiler now enforces the spec shape.
-func buildTenant(tenantID string, spec ports.TenantCRSpec) *apiv1.Tenant {
+func buildTenant(tenantID string, spec ports.TenantCRSpec, buildConcurrency int) *apiv1.Tenant {
 	t := &apiv1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tenantID,
 			Namespace: tenantNamespace,
 		},
 	}
-	applyTenantSpec(t, spec)
+	applyTenantSpec(t, spec, buildConcurrency)
 	return t
 }
 
@@ -297,7 +304,7 @@ func buildTenant(tenantID string, spec ports.TenantCRSpec) *apiv1.Tenant {
 // routes/projects.go appends the production env via EnvironmentEnsurer right
 // after EnsureTenant (CRD allows MinItems=0). Pre-populating an env without a
 // project caused the LIVE admission rejection 2026-06-09.
-func applyTenantSpec(t *apiv1.Tenant, spec ports.TenantCRSpec) {
+func applyTenantSpec(t *apiv1.Tenant, spec ports.TenantCRSpec, buildConcurrency int) {
 	plan := spec.Plan
 	if plan == "" {
 		plan = "starter"
@@ -316,7 +323,7 @@ func applyTenantSpec(t *apiv1.Tenant, spec ports.TenantCRSpec) {
 		MaxCPU:              resource.MustParse("4"),
 		MaxMemory:           resource.MustParse("8Gi"),
 		MaxStorage:          resource.MustParse("20Gi"),
-		MaxBuildConcurrency: 2,
+		MaxBuildConcurrency: buildConcurrency,
 	}
 	// Environments: the CRD declares `environments` in spec.required with MinItems=0.
 	// A nil slice without omitempty serialises as "environments":null and admission

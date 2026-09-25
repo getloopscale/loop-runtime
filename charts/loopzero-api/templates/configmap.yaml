@@ -85,7 +85,6 @@ data:
   RELEASE_PENDING_TIMEOUT: {{ .Values.config.releasePendingTimeout | quote }}
   RELEASE_REAPER_INTERVAL: {{ .Values.config.releaseReaperInterval | quote }}
   BUILD_RECONCILE_INTERVAL: {{ .Values.config.buildReconcileInterval | quote }}
-  MAX_BUILDS_PER_TENANT: {{ .Values.config.maxBuildsPerTenant | quote }}
   SSE_HEARTBEAT_INTERVAL: {{ .Values.config.sseHeartbeatInterval | quote }}
   SSE_POLL_INTERVAL: {{ .Values.config.ssePollInterval | quote }}
   SSE_SAFETY_TIMEOUT: {{ .Values.config.sseSafetyTimeout | quote }}

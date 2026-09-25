@@ -87,7 +87,6 @@ This table is **set-equal** to the rendered ConfigMap keys (hermetic Go guard `T
 | `RELEASE_PENDING_TIMEOUT` | `6m` | N | - | release pending timeout |
 | `RELEASE_REAPER_INTERVAL` | `30s` | N | - | release reaper interval |
 | `BUILD_RECONCILE_INTERVAL` | `5s` | N | - | build reconcile interval |
-| `MAX_BUILDS_PER_TENANT` | `3` | N | - | max builds per tenant |
 | `SSE_HEARTBEAT_INTERVAL` | `15s` | N | - | SSE heartbeat interval |
 | `SSE_POLL_INTERVAL` | `1s` | N | - | SSE poll interval |
 | `SSE_SAFETY_TIMEOUT` | `5m` | N | - | SSE safety timeout |
@@ -99,7 +98,7 @@ This table is **set-equal** to the rendered ConfigMap keys (hermetic Go guard `T
 | `LOOPZERO_ADMISSION_CONTROL` | `false` | N | - | backpressure admission control |
 | `MAX_CONCURRENT_BUILDS_PER_CELL` | `20` | N | - | cell concurrent build limit |
 | `MAX_TENANTS_PER_CELL` | `5000` | N | - | max tenants per cell |
-| `MAX_CONCURRENT_BUILDS_PER_TENANT` | `3` | N | - | per-tenant concurrent build limit |
+| `MAX_CONCURRENT_BUILDS_PER_TENANT` | `3` | N | - | the per-tenant concurrent build limit: reconcile backpressure, admission cap and the Tenant CR limit |
 | `PG_CIRCUIT_BREAKER_THRESHOLD_PCT` | `90` | N | - | PG pool CB threshold % |
 | `LOOPZERO_USE_PG_CLAIMS` | `false` | N | - | PG-backed processing claims |
 | `LOOPZERO_KEDA_ENABLED` | `false` | N | - | KEDA scale-to-zero gate |

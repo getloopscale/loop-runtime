@@ -124,9 +124,9 @@ type Config struct {
 	// line in cell-budget (20 by default).
 	MaxConcurrentPerCell int
 	// MaxConcurrentPerTenant is the per-tenant fairness cap within a
-	// cell. Matches the MaxBuildsPerTenant knob already in the
-	// BuildReconcileLoop (3 by default), so a rejection here mirrors the
-	// backpressure the loop would apply anyway.
+	// cell. Set from the same config.MaxConcurrentBuildsPerTenant as the
+	// BuildReconcileLoop's per-tenant backpressure, so a rejection here
+	// mirrors the backpressure the loop would apply anyway.
 	MaxConcurrentPerTenant int
 	// BaseRetryAfter is the minimum Retry-After hint returned on 429.
 	// Default 5s.

@@ -54,7 +54,7 @@ type BuildReconcileLoopConfig struct {
 	MaxConcurrent int
 	// MaxBuildsPerTenant limits how many builds a single tenant can have
 	// processing simultaneously. Prevents one busy tenant from starving others.
-	// Default: 3. Override via MAX_BUILDS_PER_TENANT env var.
+	// Set from config.MaxConcurrentBuildsPerTenant, the one per-tenant limit.
 	MaxBuildsPerTenant int
 	// CellID scopes the loop to a single cell (roadmap 03). Empty or
 	// "cell-0" means single-cell / backward-compatible behavior.

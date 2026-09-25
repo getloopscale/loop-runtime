@@ -2,7 +2,7 @@
 # DO NOT EDIT BY HAND. Regenerate when master table changes.
 # Source: .claude/knowledge-base/audits/2026-06-18-env-master-table.md (umbrella)
 # Format: VAR|plane|req|chart-section
-# Row count: 199
+# Row count: 198
 #
 API_CROSS_CLUSTER_URL|CONFIG|N|loopzero-api
 APP_PUBLIC_URL|CONFIG|N|loopzero-cloud
@@ -82,7 +82,6 @@ KRATOS_INTERNAL_URL|CONFIG|N|loopzero-cloud
 KRATOS_PUBLIC_URL|CONFIG|Y(prod)|loopzero-cloud
 LOG_LEVEL|CONFIG|N|loopzero-api
 LOKI_URL|CONFIG|N|loopzero-api
-MAX_BUILDS_PER_TENANT|CONFIG|N|loopzero-api
 MAX_CONCURRENT_BUILDS_PER_CELL|CONFIG|N|loopzero-api
 MAX_CONCURRENT_BUILDS_PER_TENANT|CONFIG|N|loopzero-api
 MAX_TENANTS_PER_CELL|CONFIG|N|loopzero-api

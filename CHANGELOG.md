@@ -67,6 +67,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The per-tenant concurrent build limit is one setting, MAX_CONCURRENT_BUILDS_PER_TENANT (default 3): it drives build backpressure, the admission cap and the team's recorded limit; MAX_BUILDS_PER_TENANT is still accepted when it matches and refused at startup when it does not (principle_violations#49)
+
 - loopzero-ops quality helmfile-context-parity reports a missing environment variable in English (principle_violations#159)
 
 - `loopzero-ops quality spotcheck-dimension` rejects a non-integer `SPOTCHECK_SEED` as a usage error instead of silently picking a random sample (principle_violations#75)
@@ -220,6 +222,8 @@ to [Semantic Versioning](https://semver.org/).
   correct. Names present in exactly one tree are unaffected (#B-002)
 
 ### Removed
+
+- The loopzero-api chart no longer accepts config.maxBuildsPerTenant; set config.maxConcurrentBuildsPerTenant (principle_violations#49)
 
 - The loopzero-preview-operator chart no longer accepts config.baseDomain and the loopzero-app-operator chart no longer accepts config.loopzeroReaperGracePeriodSeconds: nothing read them since the preview URL comes from the API and the unused reaper was deleted; remove them from your values, which now fail schema validation (principle_violations#74)
 

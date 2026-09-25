@@ -107,7 +107,6 @@ config:
   releasePendingTimeout: "6m"
   releaseReaperInterval: "30s"
   buildReconcileInterval: "5s"
-  maxBuildsPerTenant: "3"
   sseHeartbeatInterval: "15s"
   ssePollInterval: "1s"
   sseSafetyTimeout: "5m"

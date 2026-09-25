@@ -410,9 +410,6 @@
         "buildReconcileInterval": {
           "type": "string"
         },
-        "maxBuildsPerTenant": {
-          "type": "string"
-        },
         "sseHeartbeatInterval": {
           "type": "string"
         },

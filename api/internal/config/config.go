@@ -272,8 +272,7 @@ type Config struct {
 	ReleaseReaperInterval time.Duration
 
 	// Build Reconcile Loop (C-01 fix)
-	ReconcileInterval  time.Duration
-	MaxBuildsPerTenant int
+	ReconcileInterval time.Duration
 
 	// Loki (build log aggregation)
 	LokiURL string
@@ -351,8 +350,13 @@ type Config struct {
 	// Env: MAX_TENANTS_PER_CELL (default: 5000)
 	MaxTenantsPerCell int
 
-	// MaxConcurrentBuildsPerTenant: per-tenant concurrent build limit.
-	// Env: MAX_CONCURRENT_BUILDS_PER_TENANT (default: 3)
+	// MaxConcurrentBuildsPerTenant is THE per-tenant concurrent build limit:
+	// the reconcile loop's backpressure, the admission gate's cap and the
+	// Tenant CR's maxBuildConcurrency all read it (principle_violations#49).
+	// Env: MAX_CONCURRENT_BUILDS_PER_TENANT (default: 3, the value the
+	// reconcile loop enforced in production before the three copies were
+	// merged). MAX_BUILDS_PER_TENANT, the loop's former copy, is accepted
+	// when it agrees and refused at boot when it does not.
 	MaxConcurrentBuildsPerTenant int
 
 	// PGCircuitBreakerThresholdPct: pool utilization % above which mutations are rejected.
@@ -534,8 +538,7 @@ func Load() Config {
 		ReleaseReaperInterval: l.duration("RELEASE_REAPER_INTERVAL", 30*time.Second),
 
 		// Build Reconcile Loop (C-01 fix): polls Argo Workflow CRDs every 5s
-		ReconcileInterval:  l.duration("BUILD_RECONCILE_INTERVAL", 5*time.Second),
-		MaxBuildsPerTenant: l.int("MAX_BUILDS_PER_TENANT", 3),
+		ReconcileInterval: l.duration("BUILD_RECONCILE_INTERVAL", 5*time.Second),
 
 		// Loki (build log aggregation)
 		LokiURL: envOr("LOKI_URL", "http://loki.monitoring:3100"),
@@ -580,6 +583,13 @@ func Load() Config {
 
 		// KEDA scale-to-zero feature gate.
 		KEDAEnabled: os.Getenv("LOOPZERO_KEDA_ENABLED") == "true",
+	}
+	if legacy := os.Getenv("MAX_BUILDS_PER_TENANT"); legacy != "" {
+		if n := l.int("MAX_BUILDS_PER_TENANT", 0); n != 0 && n != cfg.MaxConcurrentBuildsPerTenant {
+			l.errs = append(l.errs, fmt.Errorf(
+				"MAX_BUILDS_PER_TENANT=%d disagrees with MAX_CONCURRENT_BUILDS_PER_TENANT=%d: they are one limit; "+
+					"set MAX_CONCURRENT_BUILDS_PER_TENANT and remove MAX_BUILDS_PER_TENANT", n, cfg.MaxConcurrentBuildsPerTenant))
+		}
 	}
 	cfg.loadErrors = l.errs
 	return cfg
