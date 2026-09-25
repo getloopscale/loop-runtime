@@ -195,6 +195,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The services-acyclic quality gate governs the shared deploycontracts package at its new home, api/internal/deploycontracts, and refuses to run when its own allow-list permits an import cycle or names an undeclared context, instead of passing the cycle it exists to forbid.
+
 - The DR drill declares each cell once (cell-0, cell-1); it declared cell-0 twice after the cell renumbering.
 
 - .github/branch-protection-config.yml requires the CI gate check that ci.yml actually reports instead of 13 checks from deleted workflows.
