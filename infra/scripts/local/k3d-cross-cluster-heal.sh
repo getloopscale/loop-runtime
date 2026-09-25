@@ -562,7 +562,7 @@ fi
 # H12 — ClusterCredential cell-0 bootstrap (regression matrix entry 153).
 # wire-clusters.sh has cell-0 logic but `|| log WARN: continuing` masks
 # silent failures. Codify the recovery here so every `task k3d:heal`
-# converges to {cell-0, cell-0, cell-1} ClusterCredentials.
+# converges to {cell-0, cell-1} ClusterCredentials.
 # ---------------------------------------------------------------------------
 log "H12: ensuring ClusterCredential cell-0 exists for loopzero-cell-0"
 # Note: K8sCellStore uses spec.cellID (not CR name) per
@@ -571,28 +571,28 @@ log "H12: ensuring ClusterCredential cell-0 exists for loopzero-cell-0"
 # can resolve k3d-loopzero-cell-0-server-0 docker container IP. Using
 # cluster-name="runtime" would fail B82 docker-resolution (container
 # k3d-loopzero-cell-0-server-0 doesn't exist locally).
-CELL1_CONNECTED=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
+CELL0_CONNECTED=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
   get clustercredentials -o jsonpath='{.items[?(@.spec.cellID=="cell-0")].status.connected}' \
   2>/dev/null || echo "")
 # cell-1-activation-plan T1.3 / ADR C7: ensure ingress-domain label exists
 # on cell-0 CR even when already connected. Idempotent label patch.
-CELL1_CR_NAME=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
+CELL0_CR_NAME=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
   get clustercredentials -o jsonpath='{.items[?(@.spec.cellID=="cell-0")].metadata.name}' \
   2>/dev/null || echo "")
-if [[ -n "$CELL1_CR_NAME" ]]; then
-  CELL1_DOMAIN=$(kubectl --context "$MGMT_CTX" -n loopzero-system get clustercredential "$CELL1_CR_NAME" \
+if [[ -n "$CELL0_CR_NAME" ]]; then
+  CELL0_DOMAIN=$(kubectl --context "$MGMT_CTX" -n loopzero-system get clustercredential "$CELL0_CR_NAME" \
     -o jsonpath='{.metadata.labels.loopzero\.io/ingress-domain}' 2>/dev/null || echo "")
-  if [[ "$CELL1_DOMAIN" != "loopzero.local" ]]; then
-    kubectl --context "$MGMT_CTX" -n loopzero-system label clustercredential "$CELL1_CR_NAME" \
+  if [[ "$CELL0_DOMAIN" != "loopzero.local" ]]; then
+    kubectl --context "$MGMT_CTX" -n loopzero-system label clustercredential "$CELL0_CR_NAME" \
       loopzero.io/ingress-domain=loopzero.local --overwrite >/dev/null 2>&1 \
-      && log "  cell-0 CR=$CELL1_CR_NAME labeled with ingress-domain=loopzero.local (C7)"
+      && log "  cell-0 CR=$CELL0_CR_NAME labeled with ingress-domain=loopzero.local (C7)"
   fi
 fi
-if [[ "$CELL1_CONNECTED" == "true" ]]; then
+if [[ "$CELL0_CONNECTED" == "true" ]]; then
   log "  ClusterCredential with spec.cellID=cell-0 already connected — skip"
 else
   # V9-CLEANROOM-FRESH-FAANG-FIX 2026-05-31: invoke the ADR-0008 canonical
-  # bootstrap-cell-cc.sh (CR name = cell-1) instead of the legacy
+  # bootstrap-cell-cc.sh (CR name = cell-0) instead of the legacy
   # clustercredential-create.sh that named the CR after CLUSTER_NAME=workload.
   # Legacy path produced duplicate ArgoCD cluster Secrets pointing at the
   # same apiServer URL, triggering controller informer thrash and L22-class
@@ -602,10 +602,10 @@ else
   if [[ -x "$BOOTSTRAP" ]]; then
     if KUBECONFIG="$(k3d kubeconfig write loopzero-core 2>/dev/null)" \
       INGRESS_DOMAIN="loopzero.local" \
-      bash "$BOOTSTRAP" --cell 1 --env standalone-multi >/dev/null 2>&1; then
+      bash "$BOOTSTRAP" --cell 0 --env standalone-multi >/dev/null 2>&1; then
       log "  ClusterCredential cell-0 (CR name = cellID) created/refreshed via bootstrap-cell-cc.sh"
     else
-      warn "bootstrap-cell-cc.sh --cell 1 failed — see matrix entry 153 fix path (b)"
+      warn "bootstrap-cell-cc.sh --cell 0 failed — see matrix entry 153 fix path (b)"
     fi
   else
     warn "bootstrap-cell-cc.sh missing — cannot heal H12"
@@ -809,10 +809,10 @@ EOF
     if [[ -x "$BOOTSTRAP_H14" ]]; then
       if KUBECONFIG="$(k3d kubeconfig write loopzero-core 2>/dev/null)" \
         INGRESS_DOMAIN="loopzero.local" \
-        bash "$BOOTSTRAP_H14" --cell 2 --env standalone-multi >/dev/null 2>&1; then
+        bash "$BOOTSTRAP_H14" --cell 1 --env standalone-multi >/dev/null 2>&1; then
         log "  ClusterCredential cell-1 (CR name = cellID) created/refreshed via bootstrap-cell-cc.sh"
       else
-        warn "  bootstrap-cell-cc.sh --cell 2 failed — see matrix entry 155 fix path (b)"
+        warn "  bootstrap-cell-cc.sh --cell 1 failed — see matrix entry 155 fix path (b)"
       fi
     else
       warn "  bootstrap-cell-cc.sh missing — cannot heal H14 mode B (runtime-2 cluster running?)"
