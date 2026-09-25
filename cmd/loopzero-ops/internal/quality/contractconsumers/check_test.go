@@ -142,7 +142,7 @@ func TestFormatFindings_StableOrder(t *testing.T) {
 	a1 := strings.Index(out, "a.tsx:1 ")
 	a5 := strings.Index(out, "a.tsx:5 ")
 	b10 := strings.Index(out, "b.tsx:10 ")
-	if !(a1 < a5 && a5 < b10) {
+	if a1 >= a5 || a5 >= b10 {
 		t.Errorf("expected within-group order a.tsx:1 < a.tsx:5 < b.tsx:10, got:\n%s", out)
 	}
 }

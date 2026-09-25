@@ -188,10 +188,10 @@ func setDeploymentContainerEnv(ctx context.Context, cli ctrlclient.Client,
 	}
 	// Bumping restartedAt ensures the pod restarts if only env changed
 	// (`kubectl set env` behavior). Idempotent.
-	if d.Spec.Template.ObjectMeta.Annotations == nil {
-		d.Spec.Template.ObjectMeta.Annotations = map[string]string{}
+	if d.Spec.Template.Annotations == nil {
+		d.Spec.Template.Annotations = map[string]string{}
 	}
-	d.Spec.Template.ObjectMeta.Annotations["kubectl.kubernetes.io/restartedAt"] =
+	d.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] =
 		time.Now().UTC().Format(time.RFC3339)
 	return cli.Update(ctx, &d)
 }

@@ -120,17 +120,17 @@ func Check(cfg Config) (_ Outcome, err error) {
 	defer func() { err = errors.Join(err, os.RemoveAll(tmpDir)) }()
 
 	// Mirror the canonical layout into tmpDir so sqlc.yaml's relative paths resolve.
-	tmpDb := filepath.Join(tmpDir, "db")
-	if err := os.MkdirAll(tmpDb, 0o755); err != nil {
-		return Outcome{}, fmt.Errorf("sqlc-sync: mkdir tmpDb: %w", err)
+	tmpDB := filepath.Join(tmpDir, "db")
+	if err := os.MkdirAll(tmpDB, 0o755); err != nil {
+		return Outcome{}, fmt.Errorf("sqlc-sync: mkdir tmpDB: %w", err)
 	}
-	if err := copyFile(sqlcYAML, filepath.Join(tmpDb, "sqlc.yaml")); err != nil {
+	if err := copyFile(sqlcYAML, filepath.Join(tmpDB, "sqlc.yaml")); err != nil {
 		return Outcome{}, fmt.Errorf("sqlc-sync: copy sqlc.yaml: %w", err)
 	}
-	if err := copyFile(schemaFile, filepath.Join(tmpDb, "schema.gen.sql")); err != nil {
+	if err := copyFile(schemaFile, filepath.Join(tmpDB, "schema.gen.sql")); err != nil {
 		return Outcome{}, fmt.Errorf("sqlc-sync: copy schema.gen.sql: %w", err)
 	}
-	if err := copyDir(queriesDir, filepath.Join(tmpDb, "queries")); err != nil {
+	if err := copyDir(queriesDir, filepath.Join(tmpDB, "queries")); err != nil {
 		return Outcome{}, fmt.Errorf("sqlc-sync: copy queries/: %w", err)
 	}
 
@@ -139,15 +139,15 @@ func Check(cfg Config) (_ Outcome, err error) {
 		return Outcome{}, err
 	}
 
-	// Run sqlc generate inside tmpDb.
+	// Run sqlc generate inside tmpDB.
 	genCmd := exec.Command(cfg.SqlcBinary, "generate")
-	genCmd.Dir = tmpDb
+	genCmd.Dir = tmpDB
 	if out, err := genCmd.CombinedOutput(); err != nil {
 		return Outcome{}, fmt.Errorf("sqlc-sync: sqlc generate failed in tempdir: %w\nstdout/stderr:\n%s", err, string(out))
 	}
 
 	// Compare freshly-generated output against committed.
-	freshDir := filepath.Join(tmpDb, "generated")
+	freshDir := filepath.Join(tmpDB, "generated")
 	violations, err := diffDirs(committedDir, freshDir)
 	if err != nil {
 		return Outcome{}, fmt.Errorf("sqlc-sync: diff failed: %w", err)

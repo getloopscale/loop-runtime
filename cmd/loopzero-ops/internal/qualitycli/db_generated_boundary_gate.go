@@ -13,14 +13,14 @@ func init() {
 	register(Gate{
 		Name:    "db-generated-boundary",
 		Summary: "MA-7 Gate A: no services/routes/server imports internal/db/generated.",
-		Setup:   setupDbGeneratedBoundary,
+		Setup:   setupDBGeneratedBoundary,
 	})
 }
 
-// setupDbGeneratedBoundary enforces MA-7 Gate A of the M9 db-split: no file under
+// setupDBGeneratedBoundary enforces MA-7 Gate A of the M9 db-split: no file under
 // api/internal/{services,routes,server} imports api/internal/db/generated.
 // ADR 2026-07-03 m9-db-store-subpackage-topology, decision D3.
-func setupDbGeneratedBoundary(_ *flag.FlagSet) Check {
+func setupDBGeneratedBoundary(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (Outcome, error) {
 		outcome, err := dbgeneratedboundary.Check(dbgeneratedboundary.Config{RepoRoot: inv.Root})
 		if err != nil {

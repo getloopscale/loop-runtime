@@ -155,7 +155,7 @@ func TestMustHexSecret_LengthAndHex(t *testing.T) {
 		t.Errorf("hex len = %d, want 64", len(got))
 	}
 	for _, r := range got {
-		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
 			t.Errorf("non-hex rune %q", r)
 			break
 		}

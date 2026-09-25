@@ -14,8 +14,8 @@ import (
 // DeleteMarker as a mutation value removes the file in CommitOn.
 const DeleteMarker = "<DELETE>"
 
-// RenamePrefix, followed by a destination path, as a mutation value git-mv's
-// the file in CommitOn.
+// RenamePrefix is the mutation-value prefix that git-mv's the file in
+// CommitOn to the destination path that follows it.
 const RenamePrefix = "<RENAME>:"
 
 // InitRepo builds a hermetic git repository in a temp dir with files

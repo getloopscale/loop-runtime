@@ -68,7 +68,7 @@ func (s *AdminHydraClientSeed) Run(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("PG lookup: %v (run seed admin-loopzero-dev first)", err)}
 	}
 	if userID == "" {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("admin@loopzero.example not in users table (run seed admin-loopzero-dev first)")}
+		return Result{Verdict: FAIL, Reason: "admin@loopzero.example not in users table (run seed admin-loopzero-dev first)"}
 	}
 
 	// Step 2 — port-forward Hydra admin API.

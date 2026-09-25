@@ -220,10 +220,10 @@ func (k *kubeClient) RolloutRestartDeployment(ctx context.Context, namespace, na
 	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &d); err != nil {
 		return fmt.Errorf("get deployment %s: %w", k.resourceAt(namespace, name), err)
 	}
-	if d.Spec.Template.ObjectMeta.Annotations == nil {
-		d.Spec.Template.ObjectMeta.Annotations = map[string]string{}
+	if d.Spec.Template.Annotations == nil {
+		d.Spec.Template.Annotations = map[string]string{}
 	}
-	d.Spec.Template.ObjectMeta.Annotations["kubectl.kubernetes.io/restartedAt"] =
+	d.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] =
 		time.Now().UTC().Format(time.RFC3339)
 	if err := k.c.Update(ctx, &d); err != nil {
 		return fmt.Errorf("update deployment %s: %w", k.resourceAt(namespace, name), err)

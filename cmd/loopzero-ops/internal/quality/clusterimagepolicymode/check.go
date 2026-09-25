@@ -67,12 +67,12 @@ func Check(cfg Config) *Outcome {
 	}
 
 	mode := extractMode(string(data))
-	switch {
-	case mode == "":
+	switch mode {
+	case "":
 		return &Outcome{Pass: true, Reason: "clusterImagePolicy.mode field not present (chart upgrade in progress)"}
-	case mode == "warn":
+	case "warn":
 		return &Outcome{Pass: true, Mode: mode, Reason: "mode is 'warn' (Sprint 6 default; Sprint 9 cutover pending)"}
-	case mode == "enforce":
+	case "enforce":
 		if fileMatches(filepath.Join(root, decisionsDoc), signOffRe) {
 			return &Outcome{Pass: true, Mode: mode, Reason: "mode 'enforce' with sign-off in " + decisionsDoc}
 		}

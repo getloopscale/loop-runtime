@@ -125,7 +125,7 @@ func TestCommitSHAsCitedInWorkflowsAreReachable(t *testing.T) {
 
 	checked := 0
 	for _, e := range ents {
-		if e.IsDir() || !(strings.HasSuffix(e.Name(), ".yml") || strings.HasSuffix(e.Name(), ".yaml")) {
+		if e.IsDir() || (!strings.HasSuffix(e.Name(), ".yml") && !strings.HasSuffix(e.Name(), ".yaml")) {
 			continue
 		}
 		p := filepath.Join(dir, e.Name())
