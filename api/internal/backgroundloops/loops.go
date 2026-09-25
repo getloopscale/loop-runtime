@@ -9,15 +9,15 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
-	"github.com/getloopscale/loopzero/api/internal/cfzone"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/domains"
+	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
 	"github.com/getloopscale/loopzero/api/internal/gitops"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/services/build"
-	"github.com/getloopscale/loopzero/api/internal/services/domain"
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 	"github.com/getloopscale/loopzero/api/internal/sse"
@@ -155,9 +155,9 @@ func newConvergenceLoop(cfg config.Config, d Deps, logger *slog.Logger) *release
 	return loop
 }
 
-func newDomainProvisioner(cfg config.Config, d Deps, logger *slog.Logger) *domain.DomainProvisioner {
-	p := domain.NewDomainProvisioner(d.DomainStore, d.ReleaseStore, d.BuildStore, d.GitOps, d.Locker, logger,
-		domain.DomainProvisionerConfig{
+func newDomainProvisioner(cfg config.Config, d Deps, logger *slog.Logger) *domains.DomainProvisioner {
+	p := domains.NewDomainProvisioner(d.DomainStore, d.ReleaseStore, d.BuildStore, d.GitOps, d.Locker, logger,
+		domains.DomainProvisionerConfig{
 			Interval:          30 * time.Second,
 			BaseDomain:        cfg.BaseDomain,
 			RegistryURL:       cfg.RegistryURL,
@@ -170,8 +170,8 @@ func newDomainProvisioner(cfg config.Config, d Deps, logger *slog.Logger) *domai
 	return p
 }
 
-func newDomainHealthChecker(cfg config.Config, d Deps, logger *slog.Logger) *domain.DomainHealthChecker {
-	return domain.NewDomainHealthChecker(d.DomainStore, logger, domain.DomainHealthCheckerConfig{
+func newDomainHealthChecker(cfg config.Config, d Deps, logger *slog.Logger) *domains.DomainHealthChecker {
+	return domains.NewDomainHealthChecker(d.DomainStore, logger, domains.DomainHealthCheckerConfig{
 		CNAMETarget: CNAMETarget(cfg),
 		GraceDays:   14,
 		StaleDays:   7,

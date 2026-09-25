@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package domain is the custom-domain bounded context (CF zone/DNS/TLS). Name avoids collision with internal/domain. M9 Step 6.
-package domain
+// Package domains is the custom-domain feature (CF zone/DNS/TLS): provisioning, health checking
+// and Cloudflare reconciliation. Its handlers live in domainshttp and its Cloudflare zone client
+// in domains/cfzone.
+package domains
 
 import (
 	"context"

@@ -9,14 +9,13 @@
 //
 //	build     → release
 //	release   → (no sibling)
-//	domain    → (no sibling)
 //	platform  → (no sibling)
 //	placement → (no sibling)
 //
 // The shared types every context needs live in api/internal/deploycontracts,
 // OUTSIDE this package, which is why no context needs a sibling to reach them.
 //
-// scaling and preview left for their feature directories when api/internal was
+// scaling, preview and domain left for their feature directories when api/internal was
 // organized by feature (2026-09-25); feature-fence governs them there.
 //
 // Any edge not in the allow-list fails: a reverse edge (release → build) would
@@ -60,7 +59,6 @@ const (
 var allowed = map[string]map[string]bool{
 	"build":     {"release": true},
 	"release":   {},
-	"domain":    {},
 	"platform":  {},
 	"placement": {},
 }

@@ -28,13 +28,13 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
 	"github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/tracing"
 
@@ -198,7 +198,7 @@ func main() {
 	var bgWg sync.WaitGroup
 	var cellRouter placement.Router
 	var cellStore *store.PostgresCellStore
-	var domainHandler *domains.DomainHandler
+	var domainHandler *domainshttp.DomainHandler
 
 	if dbAdapter != nil && stores != nil && workflows != nil {
 		cellRouter = setupCellRouter(cfg, shutdownCtx, &bgWg, logger)

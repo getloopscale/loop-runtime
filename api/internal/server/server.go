@@ -37,6 +37,7 @@ import (
 	// `routes/source` vs `internal/source`, resolved the same way.
 	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
 	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
+	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
 	"github.com/getloopscale/loopzero/api/internal/health/healthhttp"
 	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
 	appmetrics "github.com/getloopscale/loopzero/api/internal/metrics"
@@ -46,7 +47,6 @@ import (
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/preview/previewhttp"
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
 	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 	"github.com/getloopscale/loopzero/api/internal/source"
@@ -142,7 +142,7 @@ type Config struct {
 	// Plan T2.5 D8 full: persistent active-team selection. Nil is legal
 	// (handler degrades to JWT middleware heuristic; /team/switch returns 501).
 	ActiveTeamStore      authhttp.ActiveTeamStore
-	DomainHandler        *domains.DomainHandler
+	DomainHandler        *domainshttp.DomainHandler
 	GitHubWebhookHandler http.Handler
 	// Surfaces collects the router's registration decisions so a surface that
 	// was skipped for a missing dependency can be SEEN — via

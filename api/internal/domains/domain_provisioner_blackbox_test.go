@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package domain_test
+package domains_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/domain"
+	"github.com/getloopscale/loopzero/api/internal/domains"
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
@@ -168,11 +168,11 @@ func newTestProvisioner(
 	buildStore *fakeDomainBuildReader,
 	gitops *fakeGitOpsPusher,
 	locker *fakeEnvironmentLocker,
-) *domain.DomainProvisioner {
-	return domain.NewDomainProvisioner(
+) *domains.DomainProvisioner {
+	return domains.NewDomainProvisioner(
 		store, releaseStore, buildStore, gitops, locker,
 		logging.NewLogger("test"),
-		domain.DomainProvisionerConfig{
+		domains.DomainProvisionerConfig{
 			Interval:    1 * time.Second,
 			BaseDomain:  "dev.loopzero.example",
 			RegistryURL: "registry.example.com",

@@ -12,13 +12,13 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/backgroundloops"
-	"github.com/getloopscale/loopzero/api/internal/cfzone"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
+	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 )
 
 // setupCellRouter creates the DynamicRouter — the ONE router used in
@@ -67,8 +67,8 @@ func setupCellRouter(
 // setupDomains creates the custom-domain HTTP handler and the Cloudflare zone
 // client. The provisioner and health checker are background loops and are
 // built by backgroundloops.Build with the rest of the loop graph.
-func setupDomains(stores *StoreDeps, cfg config.Config, logger *slog.Logger) (*domains.DomainHandler, *cfzone.Client) {
-	domainHandler := domains.NewDomainHandler(stores.DomainStore, &adapters.DNSTXTVerifier{},
+func setupDomains(stores *StoreDeps, cfg config.Config, logger *slog.Logger) (*domainshttp.DomainHandler, *cfzone.Client) {
+	domainHandler := domainshttp.NewDomainHandler(stores.DomainStore, &adapters.DNSTXTVerifier{},
 		ports.NewValidator(cfg.BaseDomain, nil), backgroundloops.CNAMETarget(cfg))
 
 	cfZoneClient := cfzone.NewClient(cfg.CFAccountID, cfg.CFAPIToken)

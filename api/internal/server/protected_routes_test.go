@@ -13,6 +13,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
 	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
+	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
 	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
 	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
@@ -23,7 +24,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
@@ -85,7 +85,7 @@ func fullProtectedConfig() Config {
 		TenantDeletionStore:       stubTenantDeletion{},
 		BillingHandler:            &billinghttp.BillingHandler{},
 		EnvironmentHandler:        &environmentshttp.EnvironmentHandler{},
-		DomainHandler:             &domains.DomainHandler{},
+		DomainHandler:             &domainshttp.DomainHandler{},
 		RepositoryHandler:         &repositorieshttp.RepositoryHandler{},
 		IntegrationsGitHubHandler: &integrationshttp.IntegrationsGitHubHandler{},
 		PreviewHandler:            &previewhttp.PreviewHandler{},

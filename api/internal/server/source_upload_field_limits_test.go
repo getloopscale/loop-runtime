@@ -26,8 +26,8 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
+	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/server"
 )
 
@@ -77,7 +77,7 @@ func t61BaseCfg(logger *slog.Logger) server.Config {
 		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environmentshttp.NewEnvironmentHandler(nil),
 		TeamHandler:          teamshttp.NewTeamHandler(nil),
-		DomainHandler:        domains.NewDomainHandler(nil, nil, nil, "test.local"),
+		DomainHandler:        domainshttp.NewDomainHandler(nil, nil, nil, "test.local"),
 		RepositoryHandler:    repositorieshttp.NewRepositoryHandler(nil),
 		AuditHandler:         audithttp.NewAuditHandler(nil),
 		ArgoCallbackHandler:  argocd.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),

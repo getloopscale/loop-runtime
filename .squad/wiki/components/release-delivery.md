@@ -22,7 +22,7 @@ sources:
     resource: "api/internal/manifests/renderer.go#L3"
     note: "manifests"
   - id: rd-dom
-    resource: "api/internal/services/domain/domain_cf_reconciler.go#L1"
+    resource: "api/internal/domains/domain_cf_reconciler.go#L1"
     note: "services/domain"
   - id: rd-prev
     resource: "api/internal/preview/preview_service.go#L1"
@@ -65,7 +65,7 @@ the lock again.
 | `api.argocd` | `api/internal/argocd` | package | infrastructure | `api/internal/argocd/sync_client.go:1` | ArgoCD HTTP sync client plus a serializer and a token provider that mints a Kubernetes SA token rather than holding a static one. |
 | `api.gitclient` | `api/internal/gitclient` | package | infrastructure | `api/internal/gitclient/runner.go:3` | The single place exec.CommandContext runs git, with credential sanitisation. Three consumers: buildplane/source, gitops, github. |
 | `api.manifests` | `api/internal/manifests` | package | application | `api/internal/manifests/renderer.go:3` | Renders Rollout/Deployment, Services, IngressRoute/TraefikService and AnalysisTemplate from typed Go structs. Its only third-party import is sigs.k8s.io/yaml — no client-go, no cluster access. |
-| `api.services.domain` | `api/internal/services/domain` | package | application | `api/internal/services/domain/domain_cf_reconciler.go:1` | Custom-domain services; imports db, manifests, metrics, ports, deploycontracts. |
+| `api.services.domain` | `api/internal/domains` | package | application | `api/internal/domains/domain_cf_reconciler.go:1` | Custom-domain services; imports db, manifests, metrics, ports, deploycontracts. |
 | `api.services.preview` | `api/internal/preview` | package | application | `api/internal/preview/preview_service.go:1` | Preview environment services. |
 | `api.services.platform` | `api/internal/services/platform` | package | application | `api/internal/services/platform/audit_log_pruner.go:1` | Platform-level services; imports cfkv, db, db/store, metrics, ports, deploycontracts. |
 | `api.services.placement` | `api/internal/services/placement` | package | application | `api/internal/services/placement/cell_pinner.go:1` | Placement service. Distinct from api/internal/placement, and the name collision is real enough that api/cmd/setup_server.go aliases it as placementsvc in the one file that imports both. |
@@ -119,7 +119,7 @@ incident where rollback returned success while pods still served the rolled-back
 [^rd-gitops]: `api/internal/gitops/gitea_pusher.go:3`
 [^rd-argocd]: `api/internal/argocd/sync_client.go:1`
 [^rd-man]: `api/internal/manifests/renderer.go:3`
-[^rd-dom]: `api/internal/services/domain/domain_cf_reconciler.go:1`
+[^rd-dom]: `api/internal/domains/domain_cf_reconciler.go:1`
 [^rd-prev]: `api/internal/preview/preview_service.go:1`
 [^rd-push]: `api/internal/gitops/gitea_pusher.go:174`
 [^rd-clone]: `api/internal/gitops/gitea_pusher.go:116`

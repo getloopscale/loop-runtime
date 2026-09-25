@@ -11,10 +11,10 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/backgroundloops"
-	"github.com/getloopscale/loopzero/api/internal/cfzone"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
 	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
 	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
 	"github.com/getloopscale/loopzero/api/internal/services/build"

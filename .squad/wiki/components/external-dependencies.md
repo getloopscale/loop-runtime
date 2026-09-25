@@ -15,7 +15,7 @@ sources:
     resource: "api/internal/cfkv/client.go#L63"
     note: "Cloudflare Workers KV"
   - id: xd-zone
-    resource: "api/internal/cfzone/client.go#L19"
+    resource: "api/internal/domains/cfzone/client.go#L19"
     note: "Cloudflare Zone Management API"
   - id: xd-do
     resource: "api/internal/s3/uploader.go#L29"
@@ -58,7 +58,7 @@ which is what makes the boundary auditable.
 |---|---|---|---|---|---|
 | `ext.cloudflare` | `infra/cloudflare/worker.mjs` | external | external | `infra/cloudflare/worker.mjs:1-2` | Edge in front of tenant static content. infra/cloudflare/worker.mjs is a Worker that proxies from a DigitalOcean Spaces origin and stamps the security headers; infra/helm/cloudflared holds an outbound tunnel into the cells. |
 | `ext.cloudflare.kv` | `api/internal/cfkv/client.go` | external | external | `api/internal/cfkv/client.go:63` | Routing entries for the static-site path; a CF Worker reads them to serve assets from DO Spaces. Three call sites in client.go build this same URL (lines 63, 118, 150) for put/get/delete. |
-| `ext.cloudflare.zone` | `api/internal/cfzone/client.go` | external | external | `api/internal/cfzone/client.go:19` | Per-domain DNS zone creation for custom apex domains. The cfzone package doc records the flow: loopzero domain add -> CF API creates zone -> user changes nameservers at registrar -> CF activates -> CNAME apex flattened. |
+| `ext.cloudflare.zone` | `api/internal/domains/cfzone/client.go` | external | external | `api/internal/domains/cfzone/client.go:19` | Per-domain DNS zone creation for custom apex domains. The cfzone package doc records the flow: loopzero domain add -> CF API creates zone -> user changes nameservers at registrar -> CF activates -> CNAME apex flattened. |
 | `ext.dospaces` | `api/internal/s3/uploader.go` | external | external | `api/internal/s3/uploader.go:29` | S3-compatible object storage for static assets. uploader.go:85 pins region us-east-1 because DO Spaces uses it for SigV4. |
 | `ext.github` | `api/internal/github/appclient.go` | external | external | `api/internal/github/appclient.go:32` | GitHub App: JWT + installation-token auth, source tarball download, commit status, PR comments. Base URL is overridable via GITHUB_API_BASE_URL so GitHub Enterprise Server works. |
 | `ext.k8sapi` | `api/internal/k8s` | external | external | `api/internal/k8s/doc.go:3-6` | Every cell's kube-apiserver. Reached from the api module (k8s, k8s/tenancy, k8s/workload, k8s/secretsync, cellmgr, placement, metering) and from all four operator binaries. A network hop into another cluster in the multi-cell case. |
@@ -72,7 +72,7 @@ which is what makes the boundary auditable.
 | External system | Reached from | Relationship |
 |---|---|---|
 | Cloudflare KV | `api/internal/cfkv` | HTTP PUT of static routing entries, written **before** container activation |
-| Cloudflare Zone API | `api/internal/cfzone` | zone create/scan; v2 domains work by nameserver delegation |
+| Cloudflare Zone API | `api/internal/domains/cfzone` | zone create/scan; v2 domains work by nameserver delegation |
 | Cloudflare Worker | `infra/cloudflare/worker.mjs` | serves static content, reading from DO Spaces[^xd-worker] |
 | DigitalOcean Spaces | `api/internal/s3` | S3 `PutObject` for source bundles and static assets |
 | GitHub | `api/internal/github` | App API, base URL overridable |
@@ -99,7 +99,7 @@ dead end by design.
 
 [^xd-cf]: `infra/cloudflare/worker.mjs:1-2`
 [^xd-kv]: `api/internal/cfkv/client.go:63`
-[^xd-zone]: `api/internal/cfzone/client.go:19`
+[^xd-zone]: `api/internal/domains/cfzone/client.go:19`
 [^xd-do]: `api/internal/s3/uploader.go:29`
 [^xd-gh]: `api/internal/github/appclient.go:32`
 [^xd-k8s]: `api/internal/k8s/doc.go:3-6`

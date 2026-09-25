@@ -81,23 +81,6 @@ type DomainListFilter struct {
 	Offset      int
 }
 
-// CFZoneResult contains the result of creating a CF zone.
-type CFZoneResult struct {
-	ZoneID      string
-	Nameservers []string
-}
-
-// CFDNSRecord mirrors cfzone.DNSRecord for DIP.
-type CFDNSRecord struct {
-	ID       string `json:"id,omitempty"`
-	Type     string `json:"type"`
-	Name     string `json:"name"`
-	Content  string `json:"content"`
-	TTL      int    `json:"ttl,omitempty"`
-	Priority *int   `json:"priority,omitempty"`
-	Proxied  *bool  `json:"proxied,omitempty"`
-}
-
 // DomainStore is the custom-domain persistence the HTTP request path needs:
 // create, read, list, count, and the two writes a user action makes (a
 // compare-and-set status move and marking a domain verified). The
@@ -113,26 +96,6 @@ type DomainStore interface {
 	CountByTenant(ctx context.Context, tenantID string) (int, error)
 	TransitionStatus(ctx context.Context, domain, expectedStatus, newStatus string) error
 	UpdateVerified(ctx context.Context, domain string, verifiedAt time.Time) error
-}
-
-// DomainVerifier checks DNS TXT records for domain ownership.
-type DomainVerifier interface {
-	VerifyTXT(ctx context.Context, domain, expectedToken string) (bool, error)
-}
-
-// DomainValidator validates domain names against platform rules.
-type DomainValidator interface {
-	Validate(domain string) error
-}
-
-// CFZoneManager abstracts CF Zone API operations (DIP -- testable without real CF).
-type CFZoneManager interface {
-	CreateZone(ctx context.Context, domain string) (*CFZoneResult, error)
-	ScanDNSRecords(ctx context.Context, zoneID string) error
-	ListDNSRecords(ctx context.Context, zoneID string) ([]CFDNSRecord, error)
-	CreateDNSRecord(ctx context.Context, zoneID string, record CFDNSRecord) (*CFDNSRecord, error)
-	DeleteDNSRecord(ctx context.Context, zoneID, recordID string) error
-	DeleteZone(ctx context.Context, zoneID string) error
 }
 
 // --- Teams ---

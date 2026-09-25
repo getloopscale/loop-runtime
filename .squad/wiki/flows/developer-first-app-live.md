@@ -29,7 +29,7 @@ sources:
   - id: step-9
     resource: "api/internal/routes/rollback/rollback.go#L126"
   - id: step-10
-    resource: "api/internal/routes/domains/domains_cfzone.go#L82"
+    resource: "api/internal/domains/domainshttp/domains_cfzone.go#L82"
 generated:
   by: loop-system-cartography/0.1.0
   at: 2026-09-11T20:08:10-03:00
@@ -85,8 +85,8 @@ The steps, in order. Every row is anchored to the line that performs it.
 | 7 | watches the stream and waits | `GET /api/v1/builds/{id}/stream`<br/>`api/internal/sse/stream_handler.go:49` | THE SECOND TRAP, and it is a waiting problem. The POST returns 202 in seconds; everything real happens afterwards across a reconcile loop that ticks on an interval, a gitops push, an ArgoCD sync and a convergence loop polling every 10s with a 10-minute reaper behind it. The developer's only view of all that is one SSE channel, and deploy.completed is retried three times precisely because if it is dropped the CLI hangs until timeout. |
 | 8 | the deploy is slow or stuck and they want to know why | `GET /api/v1/deploys/{deployID}/timeline`<br/>`api/cmd/deploy_timeline_spawn.go:38` | the timeline exists and is the right idea, but only ONE of its five planned source adapters is wired in production (release_db), and that one walks a synthetic wall-clock ladder rather than reading real release state — so the phases are approximately right rather than observed. |
 | 9 | the new version is bad and they revert | `POST /api/v1/projects/{name}/rollback`<br/>`api/internal/routes/rollback/rollback.go:126` | the best-designed path in the journey. The old manifests are read back out of Gitea history and re-pushed rather than rebuilt, and the call waits for ArgoCD to confirm the sync before reporting success — a rule added after a LIVE incident where rollback returned success while pods still served the rolled-back code. |
-| 10 | attaches their own domain | `POST /api/v1/domains`<br/>`api/internal/routes/domains/domains_cfzone.go:82` | THE THIRD TRAP, and it is not the platform's fault but it is the developer's problem. The call succeeds and returns status pending_ns plus a list of Cloudflare nameservers. Nothing else can happen until the developer goes to their registrar, changes the nameservers for the whole zone, and waits for propagation. It is the one step in the journey the API cannot do for them, and the domain sits in pending_ns until they do it. |
-| 11 | tries the documented verify endpoint they remember from before | `POST /api/v1/domains/{domain}/verify`<br/>`api/internal/routes/domains/domains_verify.go:27` | THE FOURTH TRAP, and this one is honest about itself: the endpoint still exists and returns a message saying TXT verification is deprecated and to use nameserver delegation instead. A dead route kept alive to explain itself is better than a 404, but it means the surface teaches two different mental models at once. |
+| 10 | attaches their own domain | `POST /api/v1/domains`<br/>`api/internal/domains/domainshttp/domains_cfzone.go:82` | THE THIRD TRAP, and it is not the platform's fault but it is the developer's problem. The call succeeds and returns status pending_ns plus a list of Cloudflare nameservers. Nothing else can happen until the developer goes to their registrar, changes the nameservers for the whole zone, and waits for propagation. It is the one step in the journey the API cannot do for them, and the domain sits in pending_ns until they do it. |
+| 11 | tries the documented verify endpoint they remember from before | `POST /api/v1/domains/{domain}/verify`<br/>`api/internal/domains/domainshttp/domains_verify.go:27` | THE FOURTH TRAP, and this one is honest about itself: the endpoint still exists and returns a message saying TXT verification is deprecated and to use nameserver delegation instead. A dead route kept alive to explain itself is better than a 404, but it means the surface teaches two different mental models at once. |
 | 12 | scales the app for real traffic | `POST /api/v1/projects/{name}/scale`<br/>`api/internal/services/build/build_orchestrator_submit.go:88` | two sharp edges, both refusing loudly rather than guessing: setting replicas and autoscaling together is a typed error, and asking for scale-to-zero on a cluster without KEDA is SCALE_TO_ZERO_UNAVAILABLE with the remedy in the message. The cap that bites silently is the plan replica limit, enforced deep inside SubmitBuild rather than at this endpoint. |
 
 # Relationships
@@ -118,4 +118,4 @@ Every step in the table above carries the `file:line` that performs it. The `sou
 [^step-7]: `api/internal/sse/stream_handler.go:49`
 [^step-8]: `api/cmd/deploy_timeline_spawn.go:38`
 [^step-9]: `api/internal/routes/rollback/rollback.go:126`
-[^step-10]: `api/internal/routes/domains/domains_cfzone.go:82`
+[^step-10]: `api/internal/domains/domainshttp/domains_cfzone.go:82`

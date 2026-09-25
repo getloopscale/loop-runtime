@@ -30,6 +30,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
 	"github.com/getloopscale/loopzero/api/internal/health/healthhttp"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/middleware/observability"
@@ -37,7 +38,6 @@ import (
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	previewroutes "github.com/getloopscale/loopzero/api/internal/preview/previewhttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/timeline/aggregator"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
@@ -72,7 +72,7 @@ type serverWiring struct {
 	k8sDeps        *K8sDeps
 	cellRouter     placement.Router
 	cellStore      *store.PostgresCellStore
-	domainHandler  *domains.DomainHandler
+	domainHandler  *domainshttp.DomainHandler
 	buildHandler   *builds.BuildHandler
 	healthServices []healthhttp.ServiceHealthChecker
 	tokenValidator auth.TokenValidator

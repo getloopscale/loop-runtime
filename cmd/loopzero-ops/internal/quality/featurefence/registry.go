@@ -12,6 +12,7 @@ var registry = map[string]Entry{
 	"auth":           {Kind: Feature},
 	"billing":        {Kind: Feature},
 	"bootstrap":      {Kind: Feature},
+	"domains":        {Kind: Feature},
 	"environments":   {Kind: Feature},
 	"health":         {Kind: Feature},
 	"integrations":   {Kind: Feature},
@@ -63,11 +64,10 @@ var registry = map[string]Entry{
 
 	// ── layer folders being dissolved into features ─────────────────────────
 	// Each entry below disappears when its code reaches the feature that owns it.
-	"adapters":   {Kind: Layer, Deps: []string{"buildplane", "cfzone", "db", "deploycontracts", "github", "environments", "integrations", "k8s", "lock", "logs", "ports", "preview", "repositories", "routes", "services", "sse", "status", "timeline"}},
+	"adapters":   {Kind: Layer, Deps: []string{"buildplane", "db", "deploycontracts", "domains", "environments", "github", "integrations", "k8s", "lock", "logs", "ports", "preview", "repositories", "routes", "services", "sse", "status", "timeline"}},
 	"argocd":     {Kind: Layer, Deps: []string{"deploycontracts", "k8s", "metrics", "placement"}},
 	"buildplane": {Kind: Layer, Deps: []string{"archive", "deploycontracts", "events", "gitclient", "k8s", "metrics", "scrub"}},
 	"cfkv":       {Kind: Layer, Deps: []string{"metrics"}},
-	"cfzone":     {Kind: Layer},
 	"routes":     {Kind: Layer, Deps: []string{"buildplane", "correlation", "db", "github", "httpio", "k8s", "metrics", "middleware", "pagination", "plantier", "ports", "routestest", "services", "sse", "validation"}},
 	"services":   {Kind: Layer, Deps: []string{"cfkv", "db", "deploycontracts", "events", "manifests", "metrics", "placement", "ports", "processing", "scaling", "scrub", "sse"}},
 

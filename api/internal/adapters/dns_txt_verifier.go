@@ -10,7 +10,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/domains"
+	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
 )
 
 // txtResolver is the one DNS call DNSTXTVerifier makes; *net.Resolver has it.
@@ -57,4 +57,4 @@ func isDNSNotFound(err error) bool {
 	return strings.Contains(err.Error(), "no such host")
 }
 
-var _ domains.DomainVerifier = (*DNSTXTVerifier)(nil)
+var _ domainshttp.DomainVerifier = (*DNSTXTVerifier)(nil)

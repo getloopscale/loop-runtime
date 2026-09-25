@@ -6,9 +6,9 @@ package adapters
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/cfzone"
-	"github.com/getloopscale/loopzero/api/internal/routes/domains"
-	domainsvc "github.com/getloopscale/loopzero/api/internal/services/domain"
+	domainsvc "github.com/getloopscale/loopzero/api/internal/domains"
+	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
+	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
 )
 
 // CFZoneAdapter bridges cfzone.Client → domains.CFZoneManager.
@@ -16,12 +16,12 @@ type CFZoneAdapter struct {
 	Client *cfzone.Client
 }
 
-func (a *CFZoneAdapter) CreateZone(ctx context.Context, domain string) (*domains.CFZoneResult, error) {
+func (a *CFZoneAdapter) CreateZone(ctx context.Context, domain string) (*domainshttp.CFZoneResult, error) {
 	zone, err := a.Client.CreateZone(ctx, domain)
 	if err != nil {
 		return nil, err
 	}
-	return &domains.CFZoneResult{
+	return &domainshttp.CFZoneResult{
 		ZoneID:      zone.ID,
 		Nameservers: zone.Nameservers,
 	}, nil
@@ -31,14 +31,14 @@ func (a *CFZoneAdapter) ScanDNSRecords(ctx context.Context, zoneID string) error
 	return a.Client.ScanDNSRecords(ctx, zoneID)
 }
 
-func (a *CFZoneAdapter) ListDNSRecords(ctx context.Context, zoneID string) ([]domains.CFDNSRecord, error) {
+func (a *CFZoneAdapter) ListDNSRecords(ctx context.Context, zoneID string) ([]domainshttp.CFDNSRecord, error) {
 	records, err := a.Client.ListDNSRecords(ctx, zoneID)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]domains.CFDNSRecord, len(records))
+	result := make([]domainshttp.CFDNSRecord, len(records))
 	for i, r := range records {
-		result[i] = domains.CFDNSRecord{
+		result[i] = domainshttp.CFDNSRecord{
 			ID:       r.ID,
 			Type:     r.Type,
 			Name:     r.Name,
@@ -51,7 +51,7 @@ func (a *CFZoneAdapter) ListDNSRecords(ctx context.Context, zoneID string) ([]do
 	return result, nil
 }
 
-func (a *CFZoneAdapter) CreateDNSRecord(ctx context.Context, zoneID string, record domains.CFDNSRecord) (*domains.CFDNSRecord, error) {
+func (a *CFZoneAdapter) CreateDNSRecord(ctx context.Context, zoneID string, record domainshttp.CFDNSRecord) (*domainshttp.CFDNSRecord, error) {
 	rec, err := a.Client.CreateDNSRecord(ctx, zoneID, cfzone.DNSRecord{
 		Type:     record.Type,
 		Name:     record.Name,
@@ -63,7 +63,7 @@ func (a *CFZoneAdapter) CreateDNSRecord(ctx context.Context, zoneID string, reco
 	if err != nil {
 		return nil, err
 	}
-	return &domains.CFDNSRecord{
+	return &domainshttp.CFDNSRecord{
 		ID:       rec.ID,
 		Type:     rec.Type,
 		Name:     rec.Name,
@@ -101,6 +101,6 @@ func (a *CFZoneStatusAdapter) DeleteZone(ctx context.Context, zoneID string) err
 
 // The ports these adapters satisfy, asserted at compile time.
 var (
-	_ domains.CFZoneManager         = (*CFZoneAdapter)(nil)
+	_ domainshttp.CFZoneManager     = (*CFZoneAdapter)(nil)
 	_ domainsvc.CFZoneStatusChecker = (*CFZoneStatusAdapter)(nil)
 )

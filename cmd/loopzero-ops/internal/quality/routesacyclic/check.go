@@ -42,7 +42,6 @@ var testOnlyLeaves = map[string]bool{}
 // a declaration rather than a discovery.
 var allowed = map[string]map[string]bool{
 	// families
-	"domains":  {},
 	"admin":    {},
 	"builds":   {},
 	"promote":  {},

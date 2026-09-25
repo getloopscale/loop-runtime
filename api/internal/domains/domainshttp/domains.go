@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package domains serves the custom-domain surface: claiming a domain, verifying
+// Package domainshttp serves the custom-domain surface: claiming a domain, verifying
 // ownership, and driving it to a state where traffic actually reaches the tenant.
 //
 // The whole family is a state machine (pkg/statemachine, not an ad-hoc map) because
@@ -9,7 +9,7 @@
 // propagation, the Cloudflare zone, certificate issuance — and each of them can fail
 // or stall independently. The types here are aliases over domain/; the canonical
 // definitions live there.
-package domains
+package domainshttp
 
 import (
 	"context"
@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/domains"
 	"github.com/getloopscale/loopzero/api/internal/httpio"
 
 	"github.com/go-chi/chi/v5"
@@ -45,12 +46,12 @@ func generateVerificationToken() string {
 type (
 	CustomDomain     = ports.CustomDomain
 	DomainListFilter = ports.DomainListFilter
-	CFZoneResult     = ports.CFZoneResult
-	CFDNSRecord      = ports.CFDNSRecord
+	CFZoneResult     = domains.CFZoneResult
+	CFDNSRecord      = domains.CFDNSRecord
 	DomainStore      = ports.DomainStore
-	DomainVerifier   = ports.DomainVerifier
-	DomainValidator  = ports.DomainValidator
-	CFZoneManager    = ports.CFZoneManager
+	DomainVerifier   = domains.DomainVerifier
+	DomainValidator  = domains.DomainValidator
+	CFZoneManager    = domains.CFZoneManager
 )
 
 // domainMachine is the formal domain state machine (CRIT-02 fix).
