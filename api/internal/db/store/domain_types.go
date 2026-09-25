@@ -25,10 +25,11 @@ import (
 	"regexp"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
-// PostgresDomainStore implements domain.DomainStore using PostgreSQL
-// via sqlc.
+// PostgresDomainStore implements ports.DomainStore (the request path) and
+// the services/domain background ports using PostgreSQL via sqlc.
 //
 // T2.1 Batch A #9 (plan 2026-05-29-sqlc-migration v1.3): DB field
 // type preserved (db.DBTX); 22+ methods (domain_wrapper.go)
@@ -36,6 +37,8 @@ import (
 type PostgresDomainStore struct {
 	DB db.DBTX
 }
+
+var _ ports.DomainStore = (*PostgresDomainStore)(nil)
 
 // isParameterizedCondition validates that a SQL WHERE condition
 // follows the `<column> = $N` pattern (where N is one or more

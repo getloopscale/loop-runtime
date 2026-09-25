@@ -98,24 +98,21 @@ type CFDNSRecord struct {
 	Proxied  *bool  `json:"proxied,omitempty"`
 }
 
-// DomainStore abstracts custom domain persistence (DIP).
+// DomainStore is the custom-domain persistence the HTTP request path needs:
+// create, read, list, count, and the two writes a user action makes (a
+// compare-and-set status move and marking a domain verified). The
+// background provisioner and health checker declare their own ports in
+// services/domain for the lifecycle writes (TLS, failure, CF zone status,
+// deletion, the NS sweeps); carrying those here forced every request-path
+// consumer and fake to implement methods it never calls.
 type DomainStore interface {
 	Create(ctx context.Context, d *CustomDomain) error
+	CreateWithCFZone(ctx context.Context, d *CustomDomain) error
 	GetByDomainAndTenant(ctx context.Context, domain, tenantID string) (*CustomDomain, error)
 	ListByTenant(ctx context.Context, tenantID string, filter DomainListFilter) ([]CustomDomain, int, error)
 	CountByTenant(ctx context.Context, tenantID string) (int, error)
-	UpdateStatus(ctx context.Context, domain, status string) error
 	TransitionStatus(ctx context.Context, domain, expectedStatus, newStatus string) error
 	UpdateVerified(ctx context.Context, domain string, verifiedAt time.Time) error
-	UpdateTLS(ctx context.Context, domain, tlsStatus string, expiresAt *time.Time) error
-	UpdateFailure(ctx context.Context, domain, status, reason string) error
-	Delete(ctx context.Context, domain string) error
-
-	// v2: CF Zone Management
-	CreateWithCFZone(ctx context.Context, d *CustomDomain) error
-	UpdateCFZoneStatus(ctx context.Context, domain, cfZoneStatus string) error
-	FindPendingNS(ctx context.Context) ([]CustomDomain, error)
-	FindNSActive(ctx context.Context) ([]CustomDomain, error)
 }
 
 // DomainVerifier checks DNS TXT records for domain ownership.
