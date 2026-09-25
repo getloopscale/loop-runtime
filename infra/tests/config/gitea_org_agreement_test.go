@@ -48,12 +48,9 @@ import (
 //     mechanism by which "the control plane owns its own org" -- there is no such
 //     mechanism on this knob.
 //
-// loopzero-platform IS a real organisation in this platform: it owns the control
-// plane's own repositories (loopzero-platform/charts.git), and
-// infra/scripts/production/bootstrap-platform.sh creates it next to loopzero.
-// Nothing routes it through GITEA_ORG, and the token-provisioning scripts
-// (infra/scripts/production/provision-api-tokens.sh,
-// infra/scripts/drill/drill-helmfile-bootstrap.sh) ensure only loopzero.
+// loopzero-platform is NOT created by anything in this tree. The only creator was the
+// production bootstrap-platform script, deleted as dead (no caller, #240); nothing
+// routes it through GITEA_ORG, and every token-provisioning path ensures only loopzero.
 //
 // WHY THE GO DEFAULTS ARE IN THE COMPARED SET, not just the YAML. There is no
 // operator overlay under infra/helm at all, so on that install path the operator

@@ -111,7 +111,6 @@ skill-script-paths	gates	Every script invocation in a SKILL.md resolves in BOTH 
 skill-suites	gates	Runs the pytest suites under .claude/skills/*/tests/, which no task ran. Advisory when pytest is absent; FAILS when discovery finds no suite, because finding nothing is not the same as finding nothing wrong; NOT VERIFIED (exit 5) where the gitignored kit is not installed (B-124).
 skip-link	gates	Every t.Skip/it.skip carries an issue URL (or lives in *_skip_test.go).
 spotcheck-dimension	-	Spot-checks a maturity-audit dimension against evidence.
-sprint-syntax	gates	Hermetic contract test for infra/scripts/local/check-sprint.sh + its homed helper check_sprint.py: script exists + bash -n clean + helper compiles (python3 -m py_compile) + no python3 heredoc (T3.2 de-costume gate) + JSON report shape (pass count + spaced-detail preservation + [id,status,detail] tuple layout) + allowlist entry present. Requires bash + python3 on PATH. M-Migrate2 2026-07-10 M16 T2.1 Wave 1 replaces infra/tests/check-sprint-syntax_test.sh.
 sqlc-sync	gates	Committed sqlc generated/ is in sync with the schema codegen.
 sqlc-tx-prop	gates	Enforces pool-bound vs tx-bound query propagation inside withEnvironmentLock.
 stack-coverage	gates	Verifies the tool-inventory stack-coverage claims via grep.

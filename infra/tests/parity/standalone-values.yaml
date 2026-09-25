@@ -1,7 +1,0 @@
-# CHG-2026-04-30-INFRA-PARITY / T5.1
-# Customer values file for k3d virgin install validation.
-# Used by infra/tests/parity/k3d-virgin-install.sh.
-
-domain: loopzero.local
-profile: minimal
-# No `provider` — standalone mode (uses existing/just-created k3d cluster).

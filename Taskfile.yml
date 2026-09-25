@@ -87,21 +87,6 @@ vars:
 
 tasks:
   # ===========================================================================
-  # QA Tooling — Environment verification and diagnostics
-  # ===========================================================================
-
-  check:
-    desc: >
-      Sprint canonical post-cleanroom check — aggregates the 8 category probes
-      (helmfile · configmaps · networking · auth · webhook · observability ·
-      integrity · cleanroom-guards) into a PASS/WARN/FAIL report. COMPLEMENTAR
-      a `task doctor` (per ADR D3 of cleanroom-canonical-5-defense-layers).
-      Wired in the Cleanroom skill Phase 4.5. Flags: --json --category=<id>
-      --hermetic --fail-fast.
-    cmds:
-      - bash infra/scripts/local/check-sprint.sh {{.CLI_ARGS}}
-
-  # ===========================================================================
   # QA Tooling — E2E test preparation
   # ===========================================================================
 

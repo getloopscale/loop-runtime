@@ -115,7 +115,6 @@ KEEP-OPERATOR (truly justified per D4) or candidate for downstream phase action.
 | infra/helmfile/scripts/test_helpers/test-idempotency.sh | 202 | grandfathered 2026-05-22 — REVIEW-NEEDED |
 | infra/helmfile/scripts/wire-clusters.sh | 84 | grandfathered 2026-05-22 — REVIEW-NEEDED |
 | infra/kubeconform-schemas/validate-helmfile-templates.sh | 74 | KEEP-CI-ORCHESTRATOR 2026-05-22 — pipes `helmfile template` into `kubeconform` (two external CLIs). NOT pure-logic; Go would be a shell-wrap (D5). Shell deliberately avoids Taskfile Go-template vs kubeconform {{.ResourceKind}} collision. Reclassified iter 27 (iter-25 heuristic false-negative: \bhelm\b missed "helmfile"). |
-| infra/scripts/production/bootstrap-platform.sh | 276 | grandfathered 2026-05-22 — REVIEW-NEEDED |
 | infra/scripts/local/bootstrap-seed-tenant-cr.sh | 58 | grandfathered 2026-05-22 — REVIEW-NEEDED |
 | infra/scripts/production/break-glass.sh | 145 | KEEP-OPERATOR 2026-05-23 — live-cluster operator tool, sponsor-ratified Phase-5 ledger |
 | infra/scripts/test/baseline.sh | 212 | grandfathered 2026-05-22 — REVIEW-NEEDED |
@@ -125,7 +124,6 @@ KEEP-OPERATOR (truly justified per D4) or candidate for downstream phase action.
 | infra/scripts/test/run-scenario.sh | 289 | grandfathered 2026-05-22 — DELEGATE-HELMFILE |
 | infra/scripts/production/check-prod-vap-readiness.sh | 129 | KEEP-OPERATOR 2026-05-22 — live prod kubectl+cosign+argocd VAP-flip pre-flight (D4 operator-time + Anti-Pattern 8). NOT pure-logic; reclassified iter 25 after read-verification. |
 | infra/scripts/security/check-cosign-cutover-deadline.sh | 158 | KEEP-OPERATOR 2026-05-27 — T3.3 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap. Enforces ADR 2026-05-12 cosign keyed→keyless hard deadline (T0+90d). Reads ConfigMap loopzero-system/loopzero-cosign-config; exit 1 if past deadline + mode==keyed; --emergency-override flag writes audit_log (EC-7 of edge-case-review). Live-cluster kubectl + psql, irreducible. |
-| infra/scripts/security/rekor-archive-old-entries.sh | 95 | KEEP-OPERATOR 2026-05-27 — T1.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure. Daily cron archives Rekor entries >365d to S3 + deletes via Trillian admin API (preserves transparency via Merkle root retention). DRY_RUN flag skips pre-flight. Stub — operator completes Trillian API post-Sigstore activation. Live-cluster rekor-cli + aws/mc + jq, irreducible. |
 | infra/scripts/local/clean-incremental.sh | 61 | KEEP-OPERATOR 2026-05-23 — live-cluster operator tool, sponsor-ratified Phase-5 ledger |
 | infra/scripts/drill/dr-drill.sh | 297 | grandfathered 2026-05-22 — DELEGATE-ARGOCD |
 | infra/scripts/drill/cancel-refresh.sh | 142 | grandfathered 2026-05-22 — REVIEW-NEEDED |
@@ -147,7 +145,6 @@ KEEP-OPERATOR (truly justified per D4) or candidate for downstream phase action.
 | infra/scripts/lib/dry-run.sh | 86 | KEEP-OPERATOR 2026-05-23 — live-cluster operator tool, sponsor-ratified Phase-5 ledger |
 | infra/scripts/lib/sops.sh | 126 | KEEP-OPERATOR 2026-05-23 — live-cluster operator tool, sponsor-ratified Phase-5 ledger |
 | infra/scripts/production/migrate-tenant-namespace.sh | 229 | grandfathered 2026-05-22 — REVIEW-NEEDED |
-| infra/scripts/production/operator-cutover-execute.sh | 286 | KEEP-OPERATOR 2026-05-23 — live-cluster operator tool, sponsor-ratified Phase-5 ledger |
 | infra/scripts/test/pkg-soak-smoke.sh | 161 | KEEP-OPERATOR 2026-05-23 — live-cluster operator tool, sponsor-ratified Phase-5 ledger |
 | infra/scripts/production/provision-api-tokens.sh | 357 | KEEP-OPERATOR 2026-05-23 — live-cluster operator tool, sponsor-ratified Phase-5 ledger |
 | infra/scripts/ci/branch-protection-update.sh | 84 | KEEP-CI-ORCHESTRATOR 2026-05-23 — wraps gh/npm/go (anti-pattern-8), sponsor-ratified Phase-5 ledger |
@@ -294,7 +291,6 @@ KEEP-OPERATOR (truly justified per D4) or candidate for downstream phase action.
 
 
 
-| infra/scripts/local/check-sprint.sh | ~135 | KEEP-OPERATOR 2026-06-11 — T4.1 of plan 2026-06-11-cleanroom-canonical-5-defense-layers v1.2. Master orchestrator for `task check` sprint canonical. Aggregates 8 check categorias (c1 helmfile + c2 configmaps + c3 networking + c4 auth + c5 webhook + c6 observability + c7 integrity + c8 cleanroom-guards) into structured PASS/WARN/FAIL report. Per ADR D3 COMPLEMENTAR a `task doctor`. EC-11 kubectl reachability gate per category, EC-12 backoff. Wired in Cleanroom skill Phase 4.5 (T4.2). |
 
 
 

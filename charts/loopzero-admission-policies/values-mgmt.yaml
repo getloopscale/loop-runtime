@@ -66,9 +66,9 @@ vaps:
   #
   # THE WRITER MEASUREMENT WAS DONE (2026-08-19, B-095) and the policy gained the
   # `exclude-system-actors` condition mirrored from its sibling. The versioned seeds were
-  # measured too, and one was outside: `infra/scripts/production/bootstrap-platform.sh`
-  # applied the Tenant in `default` — fixed the same day, and now watched by the
-  # `platform-cr-namespace` gate.
+  # measured too, and one was outside: the production bootstrap-platform script applied
+  # the Tenant in `default` — fixed the same day, and the script was later deleted as dead
+  # (no caller, #240). The `platform-cr-namespace` gate watches every seed that remains.
   #
   # WHAT IS STILL MISSING, and it is the only thing: confirming that no Tenant/Environment
   # lives outside `loopzero-system` in a LIVE cluster. Fixing the script does not remove a CR

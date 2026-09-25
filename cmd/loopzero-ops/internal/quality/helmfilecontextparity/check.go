@@ -144,9 +144,10 @@ var defaultGlobs = []string{
 	// SCRIPT invokers are left OUT, for a reason measured on 2026-08-18
 	// (B-078), not assumed:
 	//
-	//  1. They would buy no comparison. The four script invocations
-	//     (`vault-bootstrap-dev.sh:267`, `operator-cutover-execute.sh:142,:204`,
-	//     `enable-vault-backup.sh:205`) parameterise BOTH the context
+	//  1. They would buy no comparison. The four script invocations measured
+	//     then (`vault-bootstrap-dev.sh:267`, two in the operator cutover script
+	//     since deleted as dead in #240, `enable-vault-backup.sh:205`)
+	//     parameterise BOTH the context
 	//     (`$CTX`, `$SECRETS_CONTEXT`, `$OPENBAO_CONTEXT`) AND the path
 	//     (`-f "$HELMFILE_PATH"`, `-f "${REPO_ROOT}/..."`). All of them would
 	//     land in "out of static reach".

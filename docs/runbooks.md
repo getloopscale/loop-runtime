@@ -234,6 +234,17 @@ and the database disagree about where a customer lives.
 | `BuildFailureRateHigh` (5m) | >10% of builds FAILED over 5m | recent Argo Workflow failures; check whether one step (clone, sign, push) dominates |
 | `LoopZeroBuildQueueSlow` (5m) | `loopzero_build_queue_depth > 5` | `maxConcurrentBuildsPerCell` is 20 — a depth of 5 is early, not saturated |
 
+## Sigstore storage
+
+`LoopZeroSigstorePVUsageHigh` (>80% for 30m) · `LoopZeroSigstorePVUsageCritical` (>95% for 5m).
+
+Rekor and its Trillian backend only ever grow: the transparency log is append-only and
+nothing in this repository archives or prunes it. The one remedy is more volume —
+`kubectl -n sigstore-system get pvc`, then raise `spec.resources.requests.storage` on the
+claim the alert names. That works only when its StorageClass has
+`allowVolumeExpansion: true`; otherwise the data has to move to a larger volume (§ PV
+rebind). At 100% Rekor stops accepting entries and every signed build stalls.
+
 ## Velero backup alerts
 
 `LoopZeroVeleroServerDown` (`up{job="velero"} == 0` for 2m) · `LoopZeroVeleroBackupStale` (no

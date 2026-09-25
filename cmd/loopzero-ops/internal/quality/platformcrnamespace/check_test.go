@@ -87,18 +87,23 @@ func TestEmptyScanIsAnError(t *testing.T) {
 // THE REAL POPULATION (`rules/testing.md` § 4.2). The mutant above proves the detector fires;
 // only this says what it finds in the tree that exists.
 //
-// SCAN RESULT, measured on 2026-08-19: **one** violation —
-// `infra/scripts/production/bootstrap-platform.sh:199`, a Tenant in `default`. This test
-// failed because of it before the same-day fix. Recording the number here is what
-// distinguishes "found nothing" from "did not look".
+// SCAN RESULT, measured on 2026-08-19: **one** violation — the production
+// bootstrap-platform script at line 199, a Tenant in `default`. This test failed because of
+// it before the same-day fix. Recording the number here is what distinguishes "found
+// nothing" from "did not look".
+//
+// The floor below is 2, not 3, since that script was deleted as dead (it had no caller,
+// #240). The tree carries two seeds now, both under infra/scripts —
+// drill/velero-dr-drill.sh and local/bootstrap-seed-tenant-cr.sh — and a scan that finds
+// fewer is measuring less than the tree.
 func TestRealTreeHasNoCROutsideNamespace(t *testing.T) {
 	root := qtestutil.Root(t)
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
-	if len(out.Checked) < 3 {
-		t.Errorf("checked = %d (%+v); the tree carried three seeds on 2026-08-19 — a "+
+	if len(out.Checked) < 2 {
+		t.Errorf("checked = %d (%+v); the tree carries two seeds — a "+
 			"scan that finds fewer is measuring less than the tree", len(out.Checked), out.Checked)
 	}
 }

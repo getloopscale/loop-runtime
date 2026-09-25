@@ -7,13 +7,12 @@
 // Wraps the 6 canonical fases that previously lived in the v1 bash script
 // `archive/canonical-tests-v1/scripts/local/cleanroom-canonical-chain-runner.sh`:
 //
-//   Phase 0 — Baseline pre-rebuild capture
-//   Phase 1 — task clean:all (destroy 4 k3d clusters)
-//   Phase 2 — task setup (recreate infra)
-//   Phase 3 — tilt up (dev loop in background)
-//   Phase 4 — task doctor (gate PASS=38+ FAIL=0)
-//   Phase 4.5 — check-sprint.sh (T4.1 of cleanroom-canonical-5-defense-layers)
-//   Phase 5 — Baseline post-rebuild diff
+//	Phase 0 — Baseline pre-rebuild capture
+//	Phase 1 — task clean:all (destroy 4 k3d clusters)
+//	Phase 2 — task setup (recreate infra)
+//	Phase 3 — tilt up (dev loop in background)
+//	Phase 4 — task doctor (gate PASS=38+ FAIL=0)
+//	Phase 5 — Baseline post-rebuild diff
 //
 // Each phase is a function in this package that exec's the underlying tooling.
 // Tests live in cleanroom_test.go with Ginkgo BDD layout.
@@ -39,16 +38,16 @@ import (
 // Options configures the cleanroom orchestrator's behavior. Mirrors the v1
 // script's flags: --skip-cleanroom, --skip-sponsor, --skip-baseline.
 type Options struct {
-	RepoRoot       string        // absolute path to loopzero repo root
-	SkipBaseline   bool          // skip Phase 0 + Phase 5 (back-compat escape hatch)
-	SkipCleanroom  bool          // skip Phases 1-3 (when env is already up; debug iteration)
-	SkipDoctor     bool          // skip Phase 4 doctor gate (NOT recommended)
-	TaskCmd        string        // path to task binary (default: "task" via PATH)
-	TiltCmd        string        // path to tilt binary (default: "tilt" via PATH)
-	BaselineCmd    string        // path to baseline-capture.sh (default: infra/scripts/local/baseline-capture.sh)
-	BaselineDiff   string        // path to baseline-diff.sh (default: infra/scripts/local/baseline-diff.sh)
-	DoctorTimeout  time.Duration // max time to wait for task doctor PASS=38+ FAIL=0 (default 10min)
-	TiltBootWait   time.Duration // time to wait after tilt up before Phase 4 (default 240s — per T6.2 fix)
+	RepoRoot      string        // absolute path to loopzero repo root
+	SkipBaseline  bool          // skip Phase 0 + Phase 5 (back-compat escape hatch)
+	SkipCleanroom bool          // skip Phases 1-3 (when env is already up; debug iteration)
+	SkipDoctor    bool          // skip Phase 4 doctor gate (NOT recommended)
+	TaskCmd       string        // path to task binary (default: "task" via PATH)
+	TiltCmd       string        // path to tilt binary (default: "tilt" via PATH)
+	BaselineCmd   string        // path to baseline-capture.sh (default: infra/scripts/local/baseline-capture.sh)
+	BaselineDiff  string        // path to baseline-diff.sh (default: infra/scripts/local/baseline-diff.sh)
+	DoctorTimeout time.Duration // max time to wait for task doctor PASS=38+ FAIL=0 (default 10min)
+	TiltBootWait  time.Duration // time to wait after tilt up before Phase 4 (default 240s — per T6.2 fix)
 
 	// Streams for human-readable progress. If nil, fall back to os.Stdout / os.Stderr.
 	Out io.Writer
