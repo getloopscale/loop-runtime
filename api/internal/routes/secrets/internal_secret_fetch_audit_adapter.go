@@ -7,8 +7,9 @@ package secrets
 // 2026-06-02-openbao-adoption v1.3.
 //
 // SecretReadAuditAdapter implements SecretReadAuditWriter (T4.1 interface)
-// by wrapping the existing store.AuditLogger / WriteAuditLog infrastructure.
-// Maps T4.1's SecretReadAuditEvent into the canonical store.AuditEntry shape:
+// over the AuditLogger port (ports.AuditLogger — store.AuditLogger in
+// production, injected by cmd). It maps T4.1's SecretReadAuditEvent onto the
+// canonical audit row:
 //
 //   secret.read.broker    → Action=ActionSecretReadBroker
 //   cross_tenant_attempt  → Action=ActionCrossTenantAttempt
@@ -26,8 +27,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
@@ -37,14 +36,14 @@ const (
 	ActionCrossTenantAttempt = "security.cross_tenant_attempt"
 )
 
-// SecretReadAuditAdapter wraps a store.AuditLogger so that broker endpoint
-// events flow into audit_log with canonical shape.
+// SecretReadAuditAdapter writes broker endpoint events to the audit log in
+// canonical shape, through the AuditLogger port.
 type SecretReadAuditAdapter struct {
-	Logger *store.AuditLogger
+	Logger AuditLogger
 }
 
 // NewSecretReadAuditAdapter constructs the adapter.
-func NewSecretReadAuditAdapter(logger *store.AuditLogger) *SecretReadAuditAdapter {
+func NewSecretReadAuditAdapter(logger AuditLogger) *SecretReadAuditAdapter {
 	return &SecretReadAuditAdapter{Logger: logger}
 }
 
@@ -127,10 +126,6 @@ func metricEventLabel(eventType string) string {
 		return "unknown"
 	}
 }
-
-// _ = store.AuditEntry{} // type-keep no-op (LogAudit takes flat args; we still
-// reference store.AuditLogger so the import remains canonical).
-var _ = (*store.AuditLogger)(nil)
 
 // Static interface check — fails compile if the adapter drifts from
 // the SecretReadAuditWriter contract.
