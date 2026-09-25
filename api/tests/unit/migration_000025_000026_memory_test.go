@@ -187,7 +187,7 @@ func TestMigration026_ExportsListingIndex(t *testing.T) {
 // Forward-only invariant — no .down.sql shipped for either
 // =============================================================================
 
-func TestMigrations_P3_NoDownFiles(t *testing.T) {
+func TestMemoryMigrations_HaveNoDownFiles(t *testing.T) {
 	for _, rel := range []string{
 		"../../internal/db/migrations/000025_memory_webhooks.down.sql",
 		"../../internal/db/migrations/000026_memory_exports.down.sql",

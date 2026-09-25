@@ -3,7 +3,7 @@
 
 package store
 
-// secret_wrapper_t103_write_path_test.go — T10.3 of plan
+// secret_wrapper_write_path_test.go — T10.3 of plan
 // 2026-06-02-openbao-adoption v1.3; closes B-162 DoD bullet 2
 // ("a test that proves the write path produces ONLY the Transit prefix").
 //

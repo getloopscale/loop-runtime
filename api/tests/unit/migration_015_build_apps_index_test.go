@@ -48,13 +48,3 @@ func TestMigration015_CreatesBtreeIndexOnBuildID(t *testing.T) {
 		t.Error("migration must use canonical index name idx_build_apps_build_id")
 	}
 }
-
-func TestMigration015_DocumentsRationale(t *testing.T) {
-	sql := readMigration015(t)
-	if !strings.Contains(sql, "T3.2") {
-		t.Error("migration must reference T3.2 of deep-review-2026-05-10-remediation-plan")
-	}
-	if !strings.Contains(sql, "find_data_missing_fk_index") {
-		t.Error("migration must reference the closing finding")
-	}
-}

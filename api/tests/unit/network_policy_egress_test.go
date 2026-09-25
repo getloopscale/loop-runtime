@@ -87,16 +87,3 @@ func TestNetworkPolicy_AllowsDNSAndKubeAPI(t *testing.T) {
 		t.Error("template must allow egress to default namespace (kube-apiserver)")
 	}
 }
-
-func TestNetworkPolicy_DocumentsT85b(t *testing.T) {
-	tmpl := readEgressTemplate(t)
-	if !strings.Contains(tmpl, "T8.5b") {
-		t.Error("template must reference T8.5b of deep-review-remediation-plan")
-	}
-	if !strings.Contains(tmpl, "find_infra_007") {
-		t.Error("template must reference find_infra_007")
-	}
-	if !strings.Contains(tmpl, "network-policy-egress-inventory.md") {
-		t.Error("template must reference the egress inventory runbook (T8.5a)")
-	}
-}

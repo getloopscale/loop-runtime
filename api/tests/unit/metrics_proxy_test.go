@@ -63,10 +63,10 @@ func newMetricsRequest(projectName, query string, authenticated bool) *http.Requ
 	return req
 }
 
-func TestMetricsProxy_T12(t *testing.T) {
+func TestMetricsProxy_Get(t *testing.T) {
 	t.Parallel()
 
-	t.Run("EC-2: cross-tenant project returns 404 NOT_FOUND (existence-leak-prevention)", func(t *testing.T) {
+	t.Run("cross-tenant project returns 404 NOT_FOUND (existence-leak-prevention)", func(t *testing.T) {
 		// Arrange: project store returns nil (project doesn't belong to tenant
 		// "acme") simulating cross-tenant lookup. Per existence-leak-prevention,
 		// handler must return 404 NOT 403.
@@ -89,7 +89,7 @@ func TestMetricsProxy_T12(t *testing.T) {
 		}
 	})
 
-	t.Run("EC-2: PromQL injects tenant_id and project labels server-side", func(t *testing.T) {
+	t.Run("PromQL injects tenant_id and project labels server-side", func(t *testing.T) {
 		// Arrange: project owned by acme tenant; handler must build PromQL
 		// with `tenant_id="acme"` and `project="my-app"` labels — derived from
 		// session ctx (makeAuthCtx tenant=acme), NOT from URL.
@@ -118,7 +118,7 @@ func TestMetricsProxy_T12(t *testing.T) {
 		}
 	})
 
-	t.Run("EC-5: Prometheus timeout returns 504 prometheus_unreachable honest", func(t *testing.T) {
+	t.Run("Prometheus timeout returns 504 prometheus_unreachable honest", func(t *testing.T) {
 		// Arrange: Prometheus client returns context.DeadlineExceeded
 		// simulating 5s timeout. Handler must return HTTP 504 NOT silent 0.
 		projects := &fakeStatusProjectStore{
@@ -148,7 +148,7 @@ func TestMetricsProxy_T12(t *testing.T) {
 		}
 	})
 
-	t.Run("EC-8: empty histogram returns 200 with collecting status", func(t *testing.T) {
+	t.Run("empty histogram returns 200 with collecting status", func(t *testing.T) {
 		// Arrange: project < 24h old simulated by Prometheus returning empty
 		// result. Handler must return 200 OK with status=collecting + hint —
 		// UI consumer renders "Coletando dados..." NOT empty chart.

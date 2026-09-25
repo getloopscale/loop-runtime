@@ -73,12 +73,9 @@ func TestMigration014_BypassDefaultIsDeny(t *testing.T) {
 
 func TestMigration014_HasComment(t *testing.T) {
 	sql := readMigration014(t)
-	// Per Principle 6 + T7.3 governance, the trigger function gets a
-	// COMMENT pointer to the plan + ADR for future readers.
+	// The trigger function carries a COMMENT ON FUNCTION so a reader of the
+	// schema finds the rationale without opening the migration.
 	if !strings.Contains(sql, "COMMENT ON FUNCTION audit_log_prevent_mutation()") {
 		t.Error("migration must include COMMENT ON FUNCTION for governance")
-	}
-	if !strings.Contains(sql, "T7.3") {
-		t.Error("comment must reference T7.3 of deep-review-remediation-plan")
 	}
 }

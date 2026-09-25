@@ -74,7 +74,7 @@
     {
       "id": "a7f0a2be2e2315e4",
       "detector": "Postgres",
-      "first_seen_in": "api/tests/integration/project_cap_hermetic_m5_test.go"
+      "first_seen_in": "api/tests/integration/project_cap_deploy_path_test.go"
     },
     {
       "id": "4df01e360d804595",

@@ -103,7 +103,7 @@ log "user ensured"
 # Canonical 1:1 user->account per migration 000034 UNIQUE(owner_id) — same
 # constraint that enables ON CONFLICT idempotency in EnsureAccount itself.
 # Re-runs after Cleanroom are a no-op (owner_id already has an account row).
-# Pattern matches api/tests/integration/project_cap_m4_test.go canonical seed.
+# Pattern matches api/tests/integration/project_cap_per_account_test.go canonical seed.
 ACCOUNT_ID="${SEED_ACCOUNT_ID:-acct-bootstrap}"
 run_psql -c "
 INSERT INTO accounts (id, display_name, plan, owner_id)

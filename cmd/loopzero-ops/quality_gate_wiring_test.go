@@ -260,7 +260,7 @@ var gateWiringExemptions = map[string]wiringReason{
 	// da migration num comentario passaria a contar como teste).
 	//
 	// Residual conhecido: 000026_memory_exports segue acusada e E' testada — um arquivo
-	// so' pode carregar um prefixo numerico. Ver a nota em migration_000025_memory_p3_test.go.
+	// so' pode carregar um prefixo numerico. Ver a nota em migration_000025_000026_memory_test.go.
 	"migration-test-coverage": failingGate,
 	// Virou ENFORCED em 2026-08-01 (prazo T+60d) com o branch AES legado ainda no
 	// dispatcher — 4 achados em api/internal/db/store/secret_wrapper.go:{148,152,188,192}.

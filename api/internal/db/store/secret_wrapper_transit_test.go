@@ -84,7 +84,7 @@ func TestEncryptForStore_RoutesToVaultWhenSet(t *testing.T) {
 // T10.5: the AES write fallback this used to assert was deleted by T10.3.
 // Its replacement is
 // TestEncryptForStore_ProducesOnlyTransitCiphertextOrRefuses in
-// secret_wrapper_t103_write_path_test.go, which asserts the refusal that
+// secret_wrapper_write_path_test.go, which asserts the refusal that
 // took its place — including the crypto_mode=plaintext case this test
 // never covered, where the write path returned the secret unchanged.
 

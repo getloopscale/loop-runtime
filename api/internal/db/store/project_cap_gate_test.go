@@ -3,11 +3,11 @@
 
 package store
 
-// project_wrapper_m5_test.go — M5 (hermetic project-cap, #106) unit coverage for
+// project_cap_gate_test.go — M5 (hermetic project-cap, #106) unit coverage for
 // the per-Account cap gate shared by createProjectCapped (API) and EnsureProject
 // (deploy). The atomic advisory-lock behavior + the full EnsureProject deploy
 // path are proven against real Postgres in
-// api/tests/integration/project_cap_hermetic_m5_test.go (sqlmock cannot prove
+// api/tests/integration/project_cap_deploy_path_test.go (sqlmock cannot prove
 // pg_advisory_xact_lock semantics — same rationale as M4 XVAL-3). These unit
 // tests assert the decision logic + the fail-closed branch.
 
@@ -28,10 +28,10 @@ import (
 
 // --- test doubles ---
 
-// m5ValRow scans preset values (int/string) into the destinations in order.
-type m5ValRow struct{ vals []any }
+// capValRow scans preset values (int/string) into the destinations in order.
+type capValRow struct{ vals []any }
 
-func (r m5ValRow) Scan(dest ...any) error {
+func (r capValRow) Scan(dest ...any) error {
 	for i := range dest {
 		if i >= len(r.vals) {
 			break
@@ -46,20 +46,20 @@ func (r m5ValRow) Scan(dest ...any) error {
 	return nil
 }
 
-// m5ErrRow returns a fixed error from Scan.
-type m5ErrRow struct{ err error }
+// capErrRow returns a fixed error from Scan.
+type capErrRow struct{ err error }
 
-func (r m5ErrRow) Scan(_ ...any) error { return r.err }
+func (r capErrRow) Scan(_ ...any) error { return r.err }
 
-// m5CapChecker is a fake ProjectCapChecker.
-type m5CapChecker struct {
+// fakeCapChecker is a fake ProjectCapChecker.
+type fakeCapChecker struct {
 	allowed bool
 	plan    string
 	cap     int
 	err     error
 }
 
-func (f m5CapChecker) CheckProjectsValue(_ context.Context, _ string, _ int) (bool, string, int, error) {
+func (f fakeCapChecker) CheckProjectsValue(_ context.Context, _ string, _ int) (bool, string, int, error) {
 	return f.allowed, f.plan, f.cap, f.err
 }
 
@@ -67,7 +67,7 @@ func (f m5CapChecker) CheckProjectsValue(_ context.Context, _ string, _ int) (bo
 
 func TestEnforceProjectCapTx_BlocksWhenAtCap(t *testing.T) {
 	// Arrange: the account already has 1 project; cap is 1 → one more would exceed.
-	fake := &dbtest.FakeDBTX{QueryRowResult: m5ValRow{vals: []any{1}}} // count(*) = 1
+	fake := &dbtest.FakeDBTX{QueryRowResult: capValRow{vals: []any{1}}} // count(*) = 1
 	before := testutil.ToFloat64(metrics.PlanLimitViolations.WithLabelValues("max_projects_per_account", "starter"))
 
 	// Act
@@ -85,7 +85,7 @@ func TestEnforceProjectCapTx_BlocksWhenAtCap(t *testing.T) {
 }
 
 func TestEnforceProjectCapTx_AllowsUnderCap(t *testing.T) {
-	fake := &dbtest.FakeDBTX{QueryRowResult: m5ValRow{vals: []any{0}}} // count(*) = 0
+	fake := &dbtest.FakeDBTX{QueryRowResult: capValRow{vals: []any{0}}} // count(*) = 0
 	before := testutil.ToFloat64(metrics.PlanLimitViolations.WithLabelValues("max_projects_per_account", "pro"))
 
 	err := enforceProjectCapTx(context.Background(), fake, nil, "acct-2", "pro", 3)
@@ -101,7 +101,7 @@ func TestEnforceProjectCapTx_AllowsUnderCap(t *testing.T) {
 
 func TestEnforceProjectCapTx_CapZeroFailsClosed(t *testing.T) {
 	// cap == 0 (misconfigured) → count(0) >= 0 → reject (never insert unbounded).
-	fake := &dbtest.FakeDBTX{QueryRowResult: m5ValRow{vals: []any{0}}}
+	fake := &dbtest.FakeDBTX{QueryRowResult: capValRow{vals: []any{0}}}
 
 	err := enforceProjectCapTx(context.Background(), fake, nil, "acct-3", "starter", 0)
 
@@ -113,7 +113,7 @@ func TestEnforceProjectCapTx_CapZeroFailsClosed(t *testing.T) {
 
 func TestEnforceProjectCapTx_CountErrorPropagates(t *testing.T) {
 	// A DB error on the count must propagate (never silently allow).
-	fake := &dbtest.FakeDBTX{QueryRowResult: m5ErrRow{err: errors.New("boom")}}
+	fake := &dbtest.FakeDBTX{QueryRowResult: capErrRow{err: errors.New("boom")}}
 
 	err := enforceProjectCapTx(context.Background(), fake, nil, "acct-4", "starter", 1)
 
@@ -125,7 +125,7 @@ func TestEnforceProjectCapTx_CountErrorPropagates(t *testing.T) {
 // --- resolveAccountAndLock (resolve + advisory lock, shared) ---
 
 func TestResolveAccountAndLock_TakesAdvisoryLockForAccount(t *testing.T) {
-	fake := &dbtest.FakeDBTX{QueryRowResult: m5ValRow{vals: []any{"acct-9"}}} // account_id
+	fake := &dbtest.FakeDBTX{QueryRowResult: capValRow{vals: []any{"acct-9"}}} // account_id
 
 	accountID, err := resolveAccountAndLock(context.Background(), fake, "tenant-9")
 
@@ -144,7 +144,7 @@ func TestResolveAccountAndLock_TakesAdvisoryLockForAccount(t *testing.T) {
 }
 
 func TestResolveAccountAndLock_AccountResolveErrorPropagates(t *testing.T) {
-	fake := &dbtest.FakeDBTX{QueryRowResult: m5ErrRow{err: errors.New("no tenant")}}
+	fake := &dbtest.FakeDBTX{QueryRowResult: capErrRow{err: errors.New("no tenant")}}
 
 	_, err := resolveAccountAndLock(context.Background(), fake, "tenant-x")
 
@@ -159,7 +159,7 @@ func TestEnsureProject_FailsClosedWhenBoundedCapNeedsPgxPoolButNoneAvailable(t *
 	// capChecker present + bounded plan, tx == nil, and s.DB is NOT a pgx pool →
 	// atomic enforcement is impossible → fail closed (error), never insert.
 	store := &PostgresProjectStore{DB: &dbtest.FakeDBTX{}}
-	store.SetProjectCapChecker(m5CapChecker{allowed: false, plan: "starter", cap: 1})
+	store.SetProjectCapChecker(fakeCapChecker{allowed: false, plan: "starter", cap: 1})
 
 	err := store.EnsureProject(context.Background(), nil, "tenant-1", "newproj", "user-1")
 
@@ -172,7 +172,7 @@ func TestEnsureProject_FailsClosedWhenBoundedCapNeedsPgxPoolButNoneAvailable(t *
 func TestEnsureProject_CapCheckErrorPropagates(t *testing.T) {
 	boom := errors.New("limits store down")
 	store := &PostgresProjectStore{DB: &dbtest.FakeDBTX{}}
-	store.SetProjectCapChecker(m5CapChecker{err: boom})
+	store.SetProjectCapChecker(fakeCapChecker{err: boom})
 
 	err := store.EnsureProject(context.Background(), nil, "tenant-1", "newproj", "user-1")
 
@@ -184,7 +184,7 @@ func TestEnsureProject_CapCheckErrorPropagates(t *testing.T) {
 func TestCreateProject_CapCheckErrorPropagates(t *testing.T) {
 	boom := errors.New("limits store down")
 	store := &PostgresProjectStore{DB: &dbtest.FakeDBTX{}}
-	store.SetProjectCapChecker(m5CapChecker{err: boom})
+	store.SetProjectCapChecker(fakeCapChecker{err: boom})
 
 	_, err := store.CreateProject(context.Background(), ports.CreateProjectInput{TenantID: "tenant-1", Name: "newproj"})
 

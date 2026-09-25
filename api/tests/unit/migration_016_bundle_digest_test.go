@@ -58,13 +58,3 @@ func TestMigration016_ColumnIsNullableForBackwardCompat(t *testing.T) {
 		}
 	}
 }
-
-func TestMigration016_ReferencesPlan(t *testing.T) {
-	sql := readMigration016(t)
-	if !strings.Contains(sql, "T2.2") {
-		t.Error("migration must reference T2.2 of deep-review-2026-05-10-remediation-plan")
-	}
-	if !strings.Contains(sql, "find_sec_no_bundle_integrity") {
-		t.Error("migration must reference the closing finding")
-	}
-}

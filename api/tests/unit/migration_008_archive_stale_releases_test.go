@@ -102,13 +102,3 @@ func TestMigration008NoDestructiveOps(t *testing.T) {
 		}
 	}
 }
-
-func TestMigration008ReferencesPlanAndAudit(t *testing.T) {
-	sql := readMigration008(t)
-	if !strings.Contains(sql, "fix-all-platform-issues-plan") {
-		t.Fatal("expected plan reference in migration comments")
-	}
-	if !strings.Contains(sql, "T2.3") {
-		t.Fatal("expected task ID T2.3 in migration comments")
-	}
-}

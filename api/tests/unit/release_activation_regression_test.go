@@ -23,7 +23,7 @@ import (
 // inside the lock. If SetGitCommit fails, the release must NOT reach PENDING.
 // This prevents wrong-version activation via SyncCallbackActivator.
 
-// TestBUG03_SetGitCommitFailureBlocksActivation verifies that when
+// TestSetGitCommitFailurePreventsWrongVersionActivation verifies that when
 // SetGitCommit fails, the release stays in READY state (doesn't transition
 // to PENDING) and the error propagates up.
 //
@@ -32,7 +32,7 @@ import (
 //
 // This test proves the bug is fixed by verifying the delivery activator
 // interface contract: SetGitCommit failure = delivery failure.
-func TestBUG03_SetGitCommitFailurePreventsWrongVersionActivation(t *testing.T) {
+func TestSetGitCommitFailurePreventsWrongVersionActivation(t *testing.T) {
 	// The bug was: if SetGitCommit fails silently, release.GitCommit stays empty.
 	// Then SyncCallbackActivator's revision guard is bypassed:
 	//   if revision != "" && release.GitCommit != "" && release.GitCommit != revision
@@ -79,7 +79,7 @@ func TestBUG03_SetGitCommitFailurePreventsWrongVersionActivation(t *testing.T) {
 
 // --- BUG-04: syncRetriggers memory leak ---
 
-func TestBUG04_SyncRetriggersCleanedUpOnActivation(t *testing.T) {
+func TestSyncRetriggers_CleanedUpOnActivation(t *testing.T) {
 	// Arrange: PENDING release that was retriggered (sync stalled, then recovered)
 	releaseStore := newFakeConvergenceReleaseStore()
 	releaseStore.pending = []db.Release{{
@@ -143,7 +143,7 @@ func TestBUG04_SyncRetriggersCleanedUpOnActivation(t *testing.T) {
 	// This test proves the activation path works correctly after retriggering.
 }
 
-func TestBUG04_SyncRetriggersCleanedUpOnFailure(t *testing.T) {
+func TestSyncRetriggers_CleanedUpOnFailure(t *testing.T) {
 	// Arrange: PENDING release that times out (triggers retrigger, then fails)
 	releaseStore := newFakeConvergenceReleaseStore()
 	releaseStore.pending = []db.Release{{

@@ -356,12 +356,12 @@ func TestStatusRoute(t *testing.T) {
 	})
 }
 
-// TestStatusRoute_T11_MetricsRangeURLAndPromQueryKeys verifies T1.1 of plan
+// TestStatusRoute_MetricsRangeURLAndPromQueryKeys verifies T1.1 of plan
 // 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1:
 //   - statusResponse.metrics_range_url is templated when grafanaBaseURL set
 //   - statusResponse.metrics_range_url is empty (honest disabled) when grafanaBaseURL empty
 //   - statusResponse.prom_query_keys always present with 8 canonical names in order
-func TestStatusRoute_T11_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
+func TestStatusRoute_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 	t.Parallel()
 
 	projects := &fakeStatusProjectStore{

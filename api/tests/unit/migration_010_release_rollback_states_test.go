@@ -76,13 +76,3 @@ func TestMigration010_TargetsCorrectTable(t *testing.T) {
 		t.Fatal("migration 000010 must use auto-generated constraint name 'releases_status_check', not 'chk_releases_status'")
 	}
 }
-
-// TestMigration010_DocumentsB37 — preserves the audit trail. The migration's
-// header comment must reference B37 / CHG so the reason is discoverable
-// during future incident response.
-func TestMigration010_DocumentsB37(t *testing.T) {
-	sql := readMigration010(t)
-	if !strings.Contains(sql, "B37") {
-		t.Fatal("migration 000010 must reference CHG-2026-05-05-DOGFOOD-B37 in comments — preserves audit trail")
-	}
-}

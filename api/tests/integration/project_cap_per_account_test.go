@@ -35,7 +35,7 @@ func violationCount(plan string) float64 {
 // unlimited, blocks-new-only for grandfathered accounts, and never exceeds the
 // cap under concurrency (the advisory-lock atomic guard).
 //
-//	DATABASE_URL=postgres://loopzero:loopzero@host/db?sslmode=disable go test ./tests/integration/ -run ProjectCapM4 -race -v
+//	DATABASE_URL=postgres://loopzero:loopzero@host/db?sslmode=disable go test ./tests/integration/ -run ProjectCapPerAccount -race -v
 
 // realProjectCapChecker adapts a real PlanLimiter to store.ProjectCapChecker.
 type realProjectCapChecker struct{ l *enforcement.PlanLimiter }
@@ -48,7 +48,7 @@ func (c realProjectCapChecker) CheckProjectsValue(ctx context.Context, tenantID 
 	return r.Allowed, r.Plan, r.Limit, nil
 }
 
-func m4Store(t *testing.T) (*store.PostgresProjectStore, *sql.DB) {
+func projectCapStore(t *testing.T) (*store.PostgresProjectStore, *sql.DB) {
 	t.Helper()
 	pool := testPool(t) // skips if pg unreachable
 	stdDB, err := sql.Open("pgx", seedDBURL())
@@ -62,7 +62,7 @@ func m4Store(t *testing.T) (*store.PostgresProjectStore, *sql.DB) {
 	return store, stdDB
 }
 
-func m4Cleanup(t *testing.T, std *sql.DB, owner string) {
+func projectCapCleanup(t *testing.T, std *sql.DB, owner string) {
 	t.Helper()
 	for _, s := range []string{
 		`DELETE FROM projects WHERE tenant_id IN (SELECT id FROM tenants WHERE owner_id=$1)`,
@@ -78,11 +78,11 @@ func m4Cleanup(t *testing.T, std *sql.DB, owner string) {
 	}
 }
 
-// m4Seed seeds an Account (with `plan`) owning two tenants + one account-scoped
+// projectCapSeed seeds an Account (with `plan`) owning two tenants + one account-scoped
 // subscription. Returns nothing; ids are derived from owner.
-func m4Seed(t *testing.T, std *sql.DB, owner, acct, tn1, tn2, plan string) {
+func projectCapSeed(t *testing.T, std *sql.DB, owner, acct, tn1, tn2, plan string) {
 	t.Helper()
-	m4Cleanup(t, std, owner)
+	projectCapCleanup(t, std, owner)
 	exec := func(q string, a ...any) {
 		if _, err := std.Exec(q, a...); err != nil {
 			t.Fatalf("seed %q: %v", q, err)
@@ -109,11 +109,11 @@ func isCapError(err error) bool {
 // Scenario 1 — the cap is per-ACCOUNT: a Starter account (cap=1) is blocked at
 // the 2nd project EVEN when the 2nd is created under a DIFFERENT tenant of the
 // same account.
-func TestProjectCapM4_PerAccount_BlocksAcrossTenants(t *testing.T) {
-	store, std := m4Store(t)
+func TestProjectCapPerAccount_PerAccount_BlocksAcrossTenants(t *testing.T) {
+	store, std := projectCapStore(t)
 	const owner, acct, tn1, tn2 = "m4-uid", "acct-m4", "tn-m4-a", "tn-m4-b"
-	m4Seed(t, std, owner, acct, tn1, tn2, "starter") // starter cap = 1
-	t.Cleanup(func() { m4Cleanup(t, std, owner) })
+	projectCapSeed(t, std, owner, acct, tn1, tn2, "starter") // starter cap = 1
+	t.Cleanup(func() { projectCapCleanup(t, std, owner) })
 
 	if err := mustCreate(t, store, tn1, "first", owner); err != nil {
 		t.Fatalf("1st project (under cap) must succeed: %v", err)
@@ -132,11 +132,11 @@ func TestProjectCapM4_PerAccount_BlocksAcrossTenants(t *testing.T) {
 }
 
 // Scenario 2 — enterprise (cap=NULL) is never blocked.
-func TestProjectCapM4_Enterprise_Unlimited(t *testing.T) {
-	store, std := m4Store(t)
+func TestProjectCapPerAccount_Enterprise_Unlimited(t *testing.T) {
+	store, std := projectCapStore(t)
 	const owner, acct, tn1, tn2 = "m4-ent-uid", "acct-m4ent", "tn-m4ent-a", "tn-m4ent-b"
-	m4Seed(t, std, owner, acct, tn1, tn2, "enterprise")
-	t.Cleanup(func() { m4Cleanup(t, std, owner) })
+	projectCapSeed(t, std, owner, acct, tn1, tn2, "enterprise")
+	t.Cleanup(func() { projectCapCleanup(t, std, owner) })
 
 	before := violationCount("enterprise")
 	for i := 0; i < 5; i++ {
@@ -153,11 +153,11 @@ func TestProjectCapM4_Enterprise_Unlimited(t *testing.T) {
 
 // Scenario 3 — grandfathered/over-cap account: existing projects survive; only
 // NEW creation is blocked (block-new-only).
-func TestProjectCapM4_Grandfathered_BlockNewOnly(t *testing.T) {
-	store, std := m4Store(t)
+func TestProjectCapPerAccount_Grandfathered_BlockNewOnly(t *testing.T) {
+	store, std := projectCapStore(t)
 	const owner, acct, tn1, tn2 = "m4-gf-uid", "acct-m4gf", "tn-m4gf-a", "tn-m4gf-b"
-	m4Seed(t, std, owner, acct, tn1, tn2, "starter") // cap=1
-	t.Cleanup(func() { m4Cleanup(t, std, owner) })
+	projectCapSeed(t, std, owner, acct, tn1, tn2, "starter") // cap=1
+	t.Cleanup(func() { projectCapCleanup(t, std, owner) })
 
 	// Seed 2 pre-existing projects directly (grandfathered above the cap of 1).
 	for _, p := range []string{"old-1", "old-2"} {
@@ -181,11 +181,11 @@ func TestProjectCapM4_Grandfathered_BlockNewOnly(t *testing.T) {
 
 // Scenario 4 — concurrency: N goroutines create projects for one at-boundary
 // Account; the advisory-lock atomic guard means the count never exceeds the cap.
-func TestProjectCapM4_ConcurrentAtBoundary_NeverExceedsCap(t *testing.T) {
-	store, std := m4Store(t)
+func TestProjectCapPerAccount_ConcurrentAtBoundary_NeverExceedsCap(t *testing.T) {
+	store, std := projectCapStore(t)
 	const owner, acct, tn1, tn2 = "m4-cc-uid", "acct-m4cc", "tn-m4cc-a", "tn-m4cc-b"
-	m4Seed(t, std, owner, acct, tn1, tn2, "pro") // pro cap = 10
-	t.Cleanup(func() { m4Cleanup(t, std, owner) })
+	projectCapSeed(t, std, owner, acct, tn1, tn2, "pro") // pro cap = 10
+	t.Cleanup(func() { projectCapCleanup(t, std, owner) })
 
 	const cap = 10
 	// Pre-fill to cap-1 so exactly ONE more creation may succeed.

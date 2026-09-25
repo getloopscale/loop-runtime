@@ -10,12 +10,12 @@
 // not by test (would require complex async coordination).
 //
 // 6 RED tests for v1.1 TDD:
-//   1. TestSprintA_SecretHandler_Set_AcquiresEnvLock_WhenLockerWired
+//   1. TestSecretEnvLock_SecretHandler_Set_AcquiresEnvLock_WhenLockerWired
 //   2. (retired) the nil-locker path no longer exists — NewSecretHandler requires one
-//   3. TestSprintA_SecretHandler_Delete_AcquiresEnvLock_WhenLockerWired
-//   4. TestSprintA_ServerConfig_SecretEnvLocker_Field_Exists
-//   5. TestSprintA_SecretHandler_DeleteSecret_RejectsEmptyEnvParam (EC-1)
-//   6. TestSprintA_SecretSet_LockKeyMatchesEnvironmentLock (EC-2)
+//   3. TestSecretEnvLock_SecretHandler_Delete_AcquiresEnvLock_WhenLockerWired
+//   4. TestSecretEnvLock_ServerConfig_SecretEnvLocker_Field_Exists
+//   5. TestSecretEnvLock_SecretHandler_DeleteSecret_RejectsEmptyEnvParam (EC-1)
+//   6. TestSecretEnvLock_SecretSet_LockKeyMatchesEnvironmentLock (EC-2)
 
 package unit
 
@@ -67,7 +67,7 @@ func (r *recordingLocker) Calls() []lockCall {
 // Test 1 — Set acquires env lock when locker wired
 // =============================================================================
 
-func TestSprintA_SecretHandler_Set_AcquiresEnvLock_WhenLockerWired(t *testing.T) {
+func TestSecretEnvLock_SecretHandler_Set_AcquiresEnvLock_WhenLockerWired(t *testing.T) {
 	store := &fakeSecretStore{}
 	locker := &recordingLocker{}
 
@@ -99,7 +99,7 @@ func TestSprintA_SecretHandler_Set_AcquiresEnvLock_WhenLockerWired(t *testing.T)
 // Test 3 — Delete acquires env lock when locker wired
 // =============================================================================
 
-func TestSprintA_SecretHandler_Delete_AcquiresEnvLock_WhenLockerWired(t *testing.T) {
+func TestSecretEnvLock_SecretHandler_Delete_AcquiresEnvLock_WhenLockerWired(t *testing.T) {
 	store := &fakeSecretStore{}
 	locker := &recordingLocker{}
 
@@ -134,7 +134,7 @@ func TestSprintA_SecretHandler_Delete_AcquiresEnvLock_WhenLockerWired(t *testing
 // Test 4 — server.Config has SecretEnvLocker field (struct-level assertion)
 // =============================================================================
 
-func TestSprintA_ServerConfig_SecretEnvLocker_Field_Exists(t *testing.T) {
+func TestSecretEnvLock_ServerConfig_SecretEnvLocker_Field_Exists(t *testing.T) {
 	// Compile-time: this MUST compile after T1.1.
 	cfg := server.Config{}
 	// The explicit type IS the assertion: it pins the NAME and the TYPE of the field in
@@ -153,7 +153,7 @@ func TestSprintA_ServerConfig_SecretEnvLocker_Field_Exists(t *testing.T) {
 // Test 5 — EC-1: DeleteSecret rejects empty environment query param
 // =============================================================================
 
-func TestSprintA_SecretHandler_DeleteSecret_RejectsEmptyEnvParam(t *testing.T) {
+func TestSecretEnvLock_SecretHandler_DeleteSecret_RejectsEmptyEnvParam(t *testing.T) {
 	store := &fakeSecretStore{}
 	locker := &recordingLocker{}
 
@@ -197,7 +197,7 @@ func TestSprintA_SecretHandler_DeleteSecret_RejectsEmptyEnvParam(t *testing.T) {
 // recordingLocker observes both calls with identical key args).
 // =============================================================================
 
-func TestSprintA_SecretSet_LockKeyMatchesEnvironmentLock(t *testing.T) {
+func TestSecretEnvLock_SecretSet_LockKeyMatchesEnvironmentLock(t *testing.T) {
 	// Shared locker across two handlers — represents the same production
 	// *adapters.PoolEnvironmentLocker injected into both build orchestrator
 	// AND secret handler. If both acquire the same key string, the

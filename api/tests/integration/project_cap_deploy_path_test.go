@@ -19,10 +19,10 @@ import (
 // M5 T2.1 — the HERMETIC per-Account project cap on the DEPLOY path
 // (EnsureProject), proven against real PostgreSQL. Closes the #106 bypass where
 // `loopzero deploy <new-name>` created a project past the cap that M4 only enforced
-// on POST /api/v1/projects. Reuses the M4 integration harness (m4Store / m4Seed /
-// m4Cleanup / violationCount / isCapError) from project_cap_m4_test.go.
+// on POST /api/v1/projects. Reuses the M4 integration harness (projectCapStore / projectCapSeed /
+// projectCapCleanup / violationCount / isCapError) from project_cap_per_account_test.go.
 //
-//	DATABASE_URL=postgres://loopzero:loopzero@host/db?sslmode=disable go test ./tests/integration/ -run HermeticM5 -race -v
+//	DATABASE_URL=postgres://loopzero:loopzero@host/db?sslmode=disable go test ./tests/integration/ -run ProjectCapOnDeploy -race -v
 
 // mustEnsure drives the deploy-time auto-create (nil tx → EnsureProject opens its
 // own tx and account-lock, the EC-1 own-tx branch). Mirrors what the build-submit
@@ -35,11 +35,11 @@ func mustEnsure(t *testing.T, store *store.PostgresProjectStore, tenant, name, o
 // Scenario 1 — a deploy of the FIRST new project (count→cap) is allowed
 // (EC-2 boundary-inclusive); a deploy of a SECOND new project (under the other
 // tenant of the same account) is rejected with PROJECTS_EXCEED_PLAN + metric++.
-func TestProjectCapHermeticM5_DeployBlocksNewBeyondCap(t *testing.T) {
-	store, std := m4Store(t)
+func TestProjectCapOnDeploy_DeployBlocksNewBeyondCap(t *testing.T) {
+	store, std := projectCapStore(t)
 	const owner, acct, tn1, tn2 = "m5-uid", "acct-m5", "tn-m5-a", "tn-m5-b"
-	m4Seed(t, std, owner, acct, tn1, tn2, "starter") // cap = 1
-	t.Cleanup(func() { m4Cleanup(t, std, owner) })
+	projectCapSeed(t, std, owner, acct, tn1, tn2, "starter") // cap = 1
+	t.Cleanup(func() { projectCapCleanup(t, std, owner) })
 
 	// EC-2: the FIRST new project brings count to exactly cap → allowed.
 	if err := mustEnsure(t, store, tn1, "first", owner); err != nil {
@@ -67,11 +67,11 @@ func TestProjectCapHermeticM5_DeployBlocksNewBeyondCap(t *testing.T) {
 
 // Scenario 2 — a re-deploy to an ALREADY-EXISTING project is never blocked, even
 // when the account is grandfathered OVER the cap (block-new-only, ADR-M5-2).
-func TestProjectCapHermeticM5_ExistingProjectRedeployNeverBlocked(t *testing.T) {
-	store, std := m4Store(t)
+func TestProjectCapOnDeploy_ExistingProjectRedeployNeverBlocked(t *testing.T) {
+	store, std := projectCapStore(t)
 	const owner, acct, tn1, tn2 = "m5-ex-uid", "acct-m5ex", "tn-m5ex-a", "tn-m5ex-b"
-	m4Seed(t, std, owner, acct, tn1, tn2, "starter") // cap = 1
-	t.Cleanup(func() { m4Cleanup(t, std, owner) })
+	projectCapSeed(t, std, owner, acct, tn1, tn2, "starter") // cap = 1
+	t.Cleanup(func() { projectCapCleanup(t, std, owner) })
 
 	// Grandfather TWO projects (over the cap of 1) directly.
 	for _, p := range []string{"keep-1", "keep-2"} {
@@ -105,11 +105,11 @@ func TestProjectCapHermeticM5_ExistingProjectRedeployNeverBlocked(t *testing.T) 
 }
 
 // Scenario 3 — enterprise (cap=NULL/unlimited): deploys never blocked, metric flat (EC-6).
-func TestProjectCapHermeticM5_EnterpriseUnlimited(t *testing.T) {
-	store, std := m4Store(t)
+func TestProjectCapOnDeploy_EnterpriseUnlimited(t *testing.T) {
+	store, std := projectCapStore(t)
 	const owner, acct, tn1, tn2 = "m5-ent-uid", "acct-m5ent", "tn-m5ent-a", "tn-m5ent-b"
-	m4Seed(t, std, owner, acct, tn1, tn2, "enterprise")
-	t.Cleanup(func() { m4Cleanup(t, std, owner) })
+	projectCapSeed(t, std, owner, acct, tn1, tn2, "enterprise")
+	t.Cleanup(func() { projectCapCleanup(t, std, owner) })
 
 	before := violationCount("enterprise")
 	for i := 0; i < 5; i++ {
@@ -125,11 +125,11 @@ func TestProjectCapHermeticM5_EnterpriseUnlimited(t *testing.T) {
 // Scenario 4 — a deploy (EnsureProject) of a NEW project and an API CreateProject
 // of ANOTHER new project for the SAME account at the boundary cannot both
 // succeed: they serialize on the SAME hashtext(accountID) advisory lock.
-func TestProjectCapHermeticM5_DeployAndApiCreateShareTheCap(t *testing.T) {
-	store, std := m4Store(t)
+func TestProjectCapOnDeploy_DeployAndApiCreateShareTheCap(t *testing.T) {
+	store, std := projectCapStore(t)
 	const owner, acct, tn1, tn2 = "m5-sh-uid", "acct-m5sh", "tn-m5sh-a", "tn-m5sh-b"
-	m4Seed(t, std, owner, acct, tn1, tn2, "starter") // cap = 1, account empty → exactly one slot
-	t.Cleanup(func() { m4Cleanup(t, std, owner) })
+	projectCapSeed(t, std, owner, acct, tn1, tn2, "starter") // cap = 1, account empty → exactly one slot
+	t.Cleanup(func() { projectCapCleanup(t, std, owner) })
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -163,11 +163,11 @@ func TestProjectCapHermeticM5_DeployAndApiCreateShareTheCap(t *testing.T) {
 // Scenario 5 — concurrency: 8 simultaneous NEW-project deploys for one
 // at-boundary account; the advisory-lock atomic guard means exactly one wins,
 // the rest are cap-rejected, and the final count never exceeds the cap.
-func TestProjectCapHermeticM5_ConcurrentDeploysNeverExceedCap(t *testing.T) {
-	store, std := m4Store(t)
+func TestProjectCapOnDeploy_ConcurrentDeploysNeverExceedCap(t *testing.T) {
+	store, std := projectCapStore(t)
 	const owner, acct, tn1, tn2 = "m5-cc-uid", "acct-m5cc", "tn-m5cc-a", "tn-m5cc-b"
-	m4Seed(t, std, owner, acct, tn1, tn2, "pro") // pro cap = 10
-	t.Cleanup(func() { m4Cleanup(t, std, owner) })
+	projectCapSeed(t, std, owner, acct, tn1, tn2, "pro") // pro cap = 10
+	t.Cleanup(func() { projectCapCleanup(t, std, owner) })
 
 	const capLimit = 10
 	for i := 0; i < capLimit-1; i++ { // pre-fill to cap-1 → exactly one slot left
@@ -220,12 +220,12 @@ func TestProjectCapHermeticM5_ConcurrentDeploysNeverExceedCap(t *testing.T) {
 // Scenario 6 — the DEPLOY path with the env-lock ALREADY held on the caller's tx
 // (the real build-submit shape): EnsureProject takes the account-lock on the SAME
 // tx (env→account order, no nested lock) and still enforces the cap — no deadlock.
-func TestProjectCapHermeticM5_DeployWithHeldEnvLock_EnforcesCapNoDeadlock(t *testing.T) {
-	store, std := m4Store(t)
+func TestProjectCapOnDeploy_DeployWithHeldEnvLock_EnforcesCapNoDeadlock(t *testing.T) {
+	store, std := projectCapStore(t)
 	pool := testPool(t)
 	const owner, acct, tn1, tn2 = "m5-el-uid", "acct-m5el", "tn-m5el-a", "tn-m5el-b"
-	m4Seed(t, std, owner, acct, tn1, tn2, "starter") // cap = 1
-	t.Cleanup(func() { m4Cleanup(t, std, owner) })
+	projectCapSeed(t, std, owner, acct, tn1, tn2, "starter") // cap = 1
+	t.Cleanup(func() { projectCapCleanup(t, std, owner) })
 
 	// Fill the single slot so the next NEW deploy is over cap.
 	if err := mustEnsure(t, store, tn1, "only", owner); err != nil {
@@ -256,12 +256,12 @@ func TestProjectCapHermeticM5_DeployWithHeldEnvLock_EnforcesCapNoDeadlock(t *tes
 // (set app.tenant_id to the deploying tenant, then drive the deploy on the same
 // tx) and asserts the cap still binds across tenants — pinning the documented
 // BYPASSRLS/owner invariant for the count (see enforceProjectCapTx).
-func TestProjectCapHermeticM5_CrossTenantCountUnaffectedByRLSContext(t *testing.T) {
-	store, std := m4Store(t)
+func TestProjectCapOnDeploy_CrossTenantCountUnaffectedByRLSContext(t *testing.T) {
+	store, std := projectCapStore(t)
 	pool := testPool(t)
 	const owner, acct, tn1, tn2 = "m5-rls-uid", "acct-m5rls", "tn-m5rls-a", "tn-m5rls-b"
-	m4Seed(t, std, owner, acct, tn1, tn2, "starter") // cap = 1
-	t.Cleanup(func() { m4Cleanup(t, std, owner) })
+	projectCapSeed(t, std, owner, acct, tn1, tn2, "starter") // cap = 1
+	t.Cleanup(func() { projectCapCleanup(t, std, owner) })
 
 	// Fill the single slot under tn1, so the account is AT cap via a DIFFERENT
 	// tenant than the one that will deploy.

@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// TestSecret_D3_CrossTenantTransplantFails is the primary closure proof for
+// TestSecretTenantAAD_CrossTenantTransplantFails is the primary closure proof for
 // sec-001 (Deep Review Sprint D D3). Pre-fix, encryptForStore used nil AAD
 // so ciphertext written for Tenant A could be lifted out of the DB and
 // dropped into a row labeled as Tenant B and decryptFromStore would happily
@@ -18,7 +18,7 @@ import (
 // transplant fails the dual-decrypt window (AAD-tag mismatch on the v1
 // path AND the nil-fallback path also fails because the tag was
 // computed with AAD).
-func TestSecret_D3_CrossTenantTransplantFails(t *testing.T) {
+func TestSecretTenantAAD_CrossTenantTransplantFails(t *testing.T) {
 	key := make([]byte, 32)
 	for i := range key {
 		key[i] = byte(i)
@@ -55,11 +55,11 @@ func TestSecret_D3_CrossTenantTransplantFails(t *testing.T) {
 	}
 }
 
-// TestSecret_D3_DualDecryptWindowAcceptsLegacy verifies the backward-compat
+// TestSecretTenantAAD_DualDecryptWindowAcceptsLegacy verifies the backward-compat
 // path: ciphertexts written BEFORE D3 (with nil AAD) must still be
 // decryptable via the nil-fallback path so existing production data
 // continues to be readable. This is what makes D3 non-breaking.
-func TestSecret_D3_DualDecryptWindowAcceptsLegacy(t *testing.T) {
+func TestSecretTenantAAD_DualDecryptWindowAcceptsLegacy(t *testing.T) {
 	key := make([]byte, 32)
 	for i := range key {
 		key[i] = byte(i)
@@ -87,11 +87,11 @@ func TestSecret_D3_DualDecryptWindowAcceptsLegacy(t *testing.T) {
 	}
 }
 
-// TestSecret_D3_AADFormatIsStable freezes the canonical AAD bytes so a
+// TestSecretTenantAAD_AADFormatIsStable freezes the canonical AAD bytes so a
 // future commit that changes the format silently breaks dual-decrypt
 // rather than passing CI quietly. The format is part of the data-at-rest
 // contract until D3 Phase 2 drops the nil-fallback.
-func TestSecret_D3_AADFormatIsStable(t *testing.T) {
+func TestSecretTenantAAD_AADFormatIsStable(t *testing.T) {
 	const tenantID = "tn-acme-12345"
 	got := tenantAAD(tenantID)
 	want := "loopzero-secret-v1|tenant=" + tenantID
@@ -100,16 +100,16 @@ func TestSecret_D3_AADFormatIsStable(t *testing.T) {
 	}
 }
 
-// TestSecret_D3_AADBoundRowsRejectTheNilAAD verifies that decrypt(_, nil)
+// TestSecretTenantAAD_AADBoundRowsRejectTheNilAAD verifies that decrypt(_, nil)
 // on an AAD-bound ciphertext fails because the tag was computed with AAD.
-// This is the inverse of TestSecret_D3_DualDecryptWindowAcceptsLegacy and
+// This is the inverse of TestSecretTenantAAD_DualDecryptWindowAcceptsLegacy and
 // proves the binding is actually enforced (not just decorative).
 //
-// Renamed from TestSecret_D3_NewWritesAreAADBound by T10.3: there are no
+// Renamed from TestSecretTenantAAD_NewWritesAreAADBound by T10.3: there are no
 // new AES writes any more. What the assertion covers is unchanged — the
 // post-D3 rows already on disk — and the guarantee about new writes now
 // lives in TestEncryptForStore_ProducesOnlyTransitCiphertextOrRefuses.
-func TestSecret_D3_AADBoundRowsRejectTheNilAAD(t *testing.T) {
+func TestSecretTenantAAD_AADBoundRowsRejectTheNilAAD(t *testing.T) {
 	key := make([]byte, 32)
 	for i := range key {
 		key[i] = byte(i)
