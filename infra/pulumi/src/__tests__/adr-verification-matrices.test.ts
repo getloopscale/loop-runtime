@@ -41,7 +41,7 @@ describe("ADR-0020 (infra-parity) verification matrix D1-D7", () => {
   });
 
   it("D3 — VAP no-runtime-image-mutations + drift detection", () => {
-    expect(fileExists("infra/helm/admission-policies/templates/vap-no-runtime-image-mutations.yaml")).toBe(true);
+    expect(fileExists("charts/loopzero-admission-policies/templates/vap-no-runtime-image-mutations.yaml")).toBe(true);
     expect(fileExists("cli/tests/unit/platform-status-drift.test.ts")).toBe(true);
   });
 

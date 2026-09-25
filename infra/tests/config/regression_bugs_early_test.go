@@ -31,11 +31,11 @@ func TestB18RuntimeMaxNodesConfig(t *testing.T) {
 }
 
 func TestB16ClusterImagePolicyChartExists(t *testing.T) {
-	chartFile := "../../helm/admission-policies/Chart.yaml"
+	chartFile := "../../../charts/loopzero-admission-policies/Chart.yaml"
 	if _, err := os.Stat(chartFile); err != nil {
 		t.Fatalf("B16 regression: %s missing — was T0.1 reverted? %v", chartFile, err)
 	}
-	tplFile := "../../helm/admission-policies/templates/cluster-image-policy.yaml"
+	tplFile := "../../../charts/loopzero-admission-policies/templates/cluster-image-policy.yaml"
 	if _, err := os.Stat(tplFile); err != nil {
 		t.Fatalf("B16 regression: ClusterImagePolicy template missing: %v", err)
 	}

@@ -32,7 +32,6 @@ import (
 // parityCharts are the charts whose per-env render is intentionally identical
 // to defaults (no env stub). One entry per former per-chart directory.
 var parityCharts = []string{
-	"admission-policies",
 	"chaos-mesh",
 	"cloudflared",
 	"cluster-issuer",

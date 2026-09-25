@@ -43,18 +43,19 @@ import (
 )
 
 const (
-	// chartPath is the bootstrap chart (Helmfile L2). parityChartPath is the published
-	// OCI copy. Both must carry the policy — CLAUDE.md § Helm chart dual system lists
-	// loopzero-admission-policies among the 3 functionally overlapping charts.
-	chartPath       = "infra/helm/admission-policies"
-	parityChartPath = "charts/loopzero-admission-policies"
+	// chartPath is the one admission-policies chart: Helmfile installs it on core (with
+	// mgmtValues) and on every cell, and ArgoCD consumes it as the published OCI chart.
+	// There was a bootstrap copy under infra/helm, and this gate checked that both carried
+	// the policy; the copy was deleted when the pair became one chart (docs/decisions.md,
+	// "One chart per bootstrap/published pair"), and the parity check went with it.
+	chartPath = "charts/loopzero-admission-policies"
 
 	templateName = "vap-protect-platform-deletes.yaml"
 	policyName   = "loopzero-protect-platform-deletes"
 	toggleKey    = "protectPlatformDeletes"
 
 	mgmtHelmfile = "infra/helmfile/core.helmfile.yaml.gotmpl"
-	mgmtValues   = "infra/helm/admission-policies/values-mgmt.yaml"
+	mgmtValues   = "charts/loopzero-admission-policies/values-mgmt.yaml"
 
 	// minExemptIdentities is the EC-2 floor. Two is not arbitrary: exactly two
 	// components have a proven production Delete caller against the guarded resources —
@@ -131,7 +132,6 @@ func Check(repoRoot string, render Renderer) Report {
 	}
 
 	rep.checkTemplatePresent(repoRoot)
-	rep.checkParity(repoRoot)
 	rep.checkToggleDefaultOff(repoRoot)
 	rep.checkInstalledOnMgmt(repoRoot)
 
@@ -164,36 +164,25 @@ func (r *Report) checkTemplatePresent(root string) {
 	}
 }
 
-// checkParity enforces CLAUDE.md § Helm chart dual system: patch one, patch the other.
-func (r *Report) checkParity(root string) {
-	p := filepath.Join(root, parityChartPath, "templates", templateName)
-	if _, err := os.Stat(p); err != nil {
-		r.fail("dual-chart-parity",
-			"%s missing — published chart diverges from the bootstrap chart (plan T1.4)", p)
-	}
-}
-
-// checkToggleDefaultOff mirrors the tenantNamespace convention (values.yaml:84-89):
+// checkToggleDefaultOff mirrors the tenantNamespace convention of the chart values.yaml:
 // a VAP that can self-inflict a DoS ships OFF and is enabled by overlay.
 func (r *Report) checkToggleDefaultOff(root string) {
-	for _, chart := range []string{chartPath, parityChartPath} {
-		p := filepath.Join(root, chart, "values.yaml")
-		b, err := os.ReadFile(p)
-		if err != nil {
-			r.fail("toggle-default-off", "%s unreadable: %v", p, err)
-			continue
-		}
-		re := regexp.MustCompile(`(?m)^\s*` + toggleKey + `:\s*(\S+)`)
-		m := re.FindSubmatch(b)
-		if m == nil {
-			r.fail("toggle-default-off", "%s does not declare vaps.%s", p, toggleKey)
-			continue
-		}
-		if strings.TrimSpace(string(m[1])) != "false" {
-			r.fail("toggle-default-off",
-				"%s sets vaps.%s=%s; must default to false (enable via overlay after the Warn window)",
-				p, toggleKey, m[1])
-		}
+	p := filepath.Join(root, chartPath, "values.yaml")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		r.fail("toggle-default-off", "%s unreadable: %v", p, err)
+		return
+	}
+	re := regexp.MustCompile(`(?m)^\s*` + toggleKey + `:\s*(\S+)`)
+	m := re.FindSubmatch(b)
+	if m == nil {
+		r.fail("toggle-default-off", "%s does not declare vaps.%s", p, toggleKey)
+		return
+	}
+	if strings.TrimSpace(string(m[1])) != "false" {
+		r.fail("toggle-default-off",
+			"%s sets vaps.%s=%s; must default to false (enable via overlay after the Warn window)",
+			p, toggleKey, m[1])
 	}
 }
 

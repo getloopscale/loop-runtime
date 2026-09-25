@@ -621,7 +621,10 @@ tasks:
       - helm template cloudflared infra/helm/cloudflared/ | kubeconform --strict --summary
       - helm template smoke-test infra/helm/smoke-test/ | kubeconform --strict --summary
       - helm template cluster-issuer infra/helm/cluster-issuer/ | kubeconform --strict --skip ClusterIssuer --summary
-      - helm template admission-policies infra/helm/admission-policies/ | kubeconform --strict --skip ClusterImagePolicy,ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding,PrometheusRule --summary
+      # The one admission-policies chart (charts/), installed by Helmfile on core and every
+      # cell; rendered with the core overlay too, because that is a second install shape.
+      - helm template admission-policies charts/loopzero-admission-policies/ | kubeconform --strict --skip ClusterImagePolicy,ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding,PrometheusRule --summary
+      - helm template admission-policies-mgmt charts/loopzero-admission-policies/ -f charts/loopzero-admission-policies/values-mgmt.yaml | kubeconform --strict --skip ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding --summary
       # velero-backup-dr-plan v1.0 / Validate — wrapper chart + schedules.
       # Skip Velero CRD kinds (BackupStorageLocation, Schedule, etc.) which
       # are not in default kubeconform schemas.
@@ -661,7 +664,7 @@ tasks:
     cmds:
       - |
         FAIL=0
-        for d in admission-policies cloudflared cluster-issuer network-policies smoke-test loopzero-api loopzero-cloud; do
+        for d in cloudflared cluster-issuer network-policies smoke-test loopzero-api loopzero-cloud; do
           if ! helm lint infra/helm/$d/ >/dev/null 2>&1; then
             echo "FAIL  $d (helm lint)"; FAIL=$((FAIL+1)); continue
           fi
@@ -675,7 +678,7 @@ tasks:
           echo "Internal-chart validation FAILED ($FAIL chart(s))"
           exit 1
         fi
-        echo "✓ All 9 internal Helm charts lint and render correctly"
+        echo "✓ All internal Helm charts lint and render correctly"
 
   validate:helmfile-templates:
     desc: |

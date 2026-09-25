@@ -19,7 +19,7 @@ import (
 // Two things made that worse than an ordinary stale path. `.claude/` is gitignored, so a
 // sign-off written there reaches nobody who clones — the same defect
 // `cycle-rule-schema.md` corrected in its own change protocol on 2026-09-07. And the
-// comment in `infra/helm/admission-policies/values.yaml` that names this path exists
+// comment in the admission-policies values.yaml that named this path existed
 // SPECIFICALLY to record that two earlier references were phantom; the replacement was
 // phantom of the same kind, because the fix replaced the instance and not the class.
 //
@@ -65,7 +65,7 @@ func TestEnforceFailsWhenTheDecisionsDocDoesNotMentionTheCutover(t *testing.T) {
 
 func writeValues(t *testing.T, root, mode string) {
 	t.Helper()
-	dir := filepath.Join(root, "infra", "helm", "admission-policies")
+	dir := filepath.Join(root, filepath.Dir(DefaultValuesFile))
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		t.Fatalf("mkdir values: %v", err)
 	}

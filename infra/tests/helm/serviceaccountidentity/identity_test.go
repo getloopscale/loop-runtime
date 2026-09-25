@@ -39,9 +39,8 @@ const controlRelease = "zzqq"
 // they are `systemActorExemptions.platformServiceAccounts`, expanded by the
 // loopzero-admission.systemActorExemptions helper, so only a render sees them — and
 // rendering with the overlay the guard is actually installed with reads the list that
-// is really enforced. Read-only: the chart edits this test guards must not touch
-// infra/helm/ (NFR-006).
-const mgmtOverlay = "infra/helm/admission-policies/values-mgmt.yaml"
+// is really enforced.
+const mgmtOverlay = "charts/loopzero-admission-policies/values-mgmt.yaml"
 
 // expectedAllowlistSize is the number of identities the policy carries today. It is a
 // derivation guard, not an assertion about the policy's contents: if the parse breaks,
@@ -54,7 +53,7 @@ const expectedAllowlistSize = 6
 func allowlistedIdentities(t *testing.T) map[string]bool {
 	t.Helper()
 
-	chartPath, err := chartrender.BootstrapChartPath("admission-policies")
+	chartPath, err := chartrender.PublishedChartPath("loopzero-admission-policies")
 	require.NoError(t, err)
 	opts, err := chartrender.NewOptions(chartPath, mgmtOverlay)
 	require.NoError(t, err)
@@ -92,10 +91,8 @@ func TestServiceAccountIsAllowlistedAtAnyReleaseName(t *testing.T) {
 		t.Run(chart, func(t *testing.T) {
 			t.Parallel()
 
-			// PublishedChartPath, never ChartPath: loopzero-api names a chart in BOTH trees
-			// and ChartPath resolves infra/helm/ first, so ChartPath would render the
-			// bootstrap chart — which already writes a literal — and report a pass for a
-			// chart this item does not pin.
+			// PublishedChartPath: every chart in this list is a charts/ chart, and the
+			// call says so instead of relying on a name resolving to one tree.
 			chartPath, err := chartrender.PublishedChartPath(chart)
 			require.NoError(t, err)
 

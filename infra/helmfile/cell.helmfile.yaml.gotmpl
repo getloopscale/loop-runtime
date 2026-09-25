@@ -180,13 +180,16 @@ releases:
       - ../helm/policy-controller/values.yaml
 
   # B16 — ClusterImagePolicy (loopzero-images-warn) shipped as Helm chart per T0.1.
+  #
+  # The published chart, installed directly: there is one admission-policies chart
+  # (docs/decisions.md, "One chart per bootstrap/published pair").
   - name: admission-policies
     namespace: cosign-system
-    chart: ../helm/admission-policies
+    chart: ../../charts/loopzero-admission-policies
     needs:
       - cosign-system/policy-controller
     values:
-      - ../helm/admission-policies/values.yaml
+      - ../../charts/loopzero-admission-policies/values.yaml
 {{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
       # B64 (end-to-end-deploy-validation-plan T2.3) — standalone-multi uses
       # prometheus-community/prometheus (no Operator CRDs). Disable PrometheusRule.
@@ -196,8 +199,6 @@ releases:
     set:
       - name: clusterImagePolicy.mode
         value: "{{ .Values.policyMode }}"
-      - name: domain
-        value: "{{ .Values.domain }}"
 {{- if .Values.profile.localRegistry }}
       # Plan 2026-06-04 dev-public-domain-canonicalization — local envs run
       # BuildKit pipelines that push to k3d-loopzero-registry:5000. Without this

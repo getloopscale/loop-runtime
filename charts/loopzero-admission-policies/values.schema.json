@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "loopzero-admission-policies values",
-  "description": "Schema for loopzero-admission-policies chart. Defines ValidatingAdmissionPolicies (VAP) + ClusterImagePolicy + alerts for LoopZero platform constraints. Per INF-G17 + ADR-0040 (charts SOTA T1.2 \u2014 alignment with infra/helm/admission-policies).",
+  "description": "Schema for loopzero-admission-policies — the ValidatingAdmissionPolicies, the sigstore ClusterImagePolicy and their alerts. One chart for every install: ArgoCD consumes it as the published OCI chart, and Helmfile L2 installs it on the core cluster (admission-policies-mgmt) and on every cell (admission-policies). A B16-class misconfiguration (policy-controller deny-by-default with no matching ClusterImagePolicy) rejects every tenant pod cluster-wide, so the shapes below fail fast.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -12,13 +12,13 @@
           "type": "string",
           "minLength": 5,
           "pattern": "^[^\\s]+/$",
-          "description": "DOCR prefix MUST end with '/' and contain no whitespace (B16 + anchored pattern bug class, symmetric with infra/helm/admission-policies fix 2026-05-20)."
+          "description": "DOCR registry prefix. MUST end with '/' and contain no whitespace: the anchored pattern catches 'registry with space/', which an unanchored '/$' accepted (2026-05-20). Used as a string-prefix match in the restrict-registries VAP, so an empty or malformed prefix is the B16 bug class."
         },
         "harborPrefix": {
           "type": "string",
           "minLength": 5,
           "pattern": "^[^\\s]+/$",
-          "description": "Harbor prefix. Same constraint as docrPrefix."
+          "description": "Harbor registry prefix. Same B16 risk and the same anchored pattern as docrPrefix."
         },
         "additionalPrefixes": {
           "type": "array",
@@ -26,13 +26,18 @@
             "type": "string",
             "minLength": 1,
             "pattern": "^[^\\s]+/$"
-          }
+          },
+          "description": "Opt-in additional registry prefixes accepted by the restrict-registries VAP. Empty by default (production allows only DOCR and Harbor); local installs add k3d-loopzero-registry:5000/ for locally built images."
         }
-      }
+      },
+      "required": [
+        "docrPrefix",
+        "harborPrefix"
+      ]
     },
     "vaps": {
       "type": "object",
-      "description": "VAP toggles \u2014 unified schema, matches infra/helm/admission-policies bootstrap",
+      "description": "Per-policy toggles. Each is an explicit boolean — no defaulting through Helm null coalescing.",
       "properties": {
         "disallowLatestTag": {
           "type": "boolean"
@@ -90,7 +95,8 @@
           "enum": [
             "enforce",
             "warn"
-          ]
+          ],
+          "description": "warn = log and admit; enforce = reject unsigned images. An install flips it per environment (Helmfile sets it from the environment's policyMode); the `clusterimagepolicy-mode` gate requires a recorded sign-off for the chart default to be enforce."
         },
         "staticAction": {
           "type": "string",
@@ -104,13 +110,19 @@
           "items": {
             "type": "string",
             "minLength": 1
-          }
+          },
+          "minItems": 1,
+          "description": "At least one image glob: a policy that matches nothing guards nothing."
         }
-      }
+      },
+      "required": [
+        "enabled",
+        "name"
+      ]
     },
     "clusterImagePolicyKeyless": {
       "type": "object",
-      "description": "INF-G16 + MEET-2026-05-03-063 \u2014 keyless cosign via Fulcio + Rekor",
+      "description": "INF-G16 + MEET-2026-05-03-063 — keyless cosign via Fulcio + Rekor",
       "properties": {
         "enabled": {
           "type": "boolean"
@@ -131,32 +143,55 @@
           "items": {
             "type": "string",
             "minLength": 1
-          }
+          },
+          "minItems": 1
         },
         "fulcioURL": {
           "type": "string",
           "pattern": "^https?://[^\\s/$.?#].[^\\s]*$",
-          "description": "Fulcio URL. Pattern enforced (format:uri silently permissive \u2014 see infra/helm/admission-policies/values.schema.json 2026-05-20 finding)."
+          "description": "Fulcio certificate authority URL. A pattern, not format:uri, which default JSON-schema validators accept silently (2026-05-20)."
         },
         "rekorURL": {
           "type": "string",
           "pattern": "^https?://[^\\s/$.?#].[^\\s]*$",
-          "description": "Rekor URL. Pattern-based per format:uri bug class."
+          "description": "Rekor transparency log URL. Pattern-based for the same reason as fulcioURL."
         },
         "oidcIssuer": {
           "type": "string",
           "pattern": "^$|^https?://[^\\s/$.?#].[^\\s]*$",
-          "description": "OIDC issuer URL \u2014 MUST be BUILD cluster's external OIDC URL. T1.4 v1.1 EC-NEW-4. Empty default + chart fail-fast."
+          "description": "OIDC issuer URL — the BUILD cluster's external OIDC URL, never the intra-cluster one, which breaks cross-cluster verification. Empty by default; the template fails the render when the keyless policy is enabled without it."
         },
         "identityRegexp": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "Identity regex. MUST narrowly scope to the expected OIDC subjects and be anchored ^...$ (a prefix match admits system:serviceaccount:argo:loopzero-build-sa-malicious)."
         }
+      },
+      "if": {
+        "properties": {
+          "enabled": {
+            "const": true
+          }
+        },
+        "required": [
+          "enabled"
+        ]
+      },
+      "then": {
+        "required": [
+          "name",
+          "mode",
+          "imageGlobs",
+          "fulcioURL",
+          "rekorURL",
+          "oidcIssuer",
+          "identityRegexp"
+        ]
       }
     },
     "alerts": {
       "type": "object",
-      "description": "PrometheusRule toggle for policy-controller + tenant-namespace alerts",
+      "description": "PrometheusRule toggles for policy-controller, tenant-namespace and (behind sigstoreEnabled) the sigstore alerts.",
       "properties": {
         "enabled": {
           "type": "boolean"
@@ -168,6 +203,10 @@
         "prometheusReleaseLabel": {
           "type": "string",
           "minLength": 1
+        },
+        "sigstoreEnabled": {
+          "type": "boolean",
+          "description": "Renders the sigstore and sigstore-storage PrometheusRules and the TUF-expiry CronJob. Off until the sigstore stack runs in the target cluster."
         }
       }
     },
@@ -193,5 +232,9 @@
         }
       }
     }
-  }
+  },
+  "required": [
+    "registries",
+    "clusterImagePolicy"
+  ]
 }

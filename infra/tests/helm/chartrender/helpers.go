@@ -136,10 +136,6 @@ var ErrAmbiguousChart = errors.New("chart name resolves to two charts")
 // Use it for the two names declared in BOTH chart trees - loopzero-api and
 // loopzero-cloud (infra/quality/chart-pairs.txt) - which ChartPath refuses.
 // For a name present in exactly one tree, ChartPath suffices.
-//
-// admission-policies / loopzero-admission-policies is an overlapping PAIR for
-// the parity gate but NOT a name collision: the two names differ, so
-// ChartPath resolves each of them unambiguously (see B-066).
 func BootstrapChartPath(chartName string) (string, error) {
 	if chartName == "" {
 		return "", fmt.Errorf("chart name cannot be empty")
@@ -187,9 +183,6 @@ func PublishedChartPath(chartName string) (string, error) {
 // (infra/quality/chart-pairs.txt). Reach those through BootstrapChartPath
 // or PublishedChartPath, which carry the tree in the call instead of
 // relying on a precedence rule.
-//
-// admission-policies / loopzero-admission-policies is an overlapping PAIR for
-// the parity gate but NOT a name collision, and resolves here normally.
 func ChartPath(chartName string) (string, error) {
 	if chartName == "" {
 		return "", fmt.Errorf("chart name cannot be empty")

@@ -38,7 +38,7 @@ type vapDoc struct {
 	} `yaml:"spec"`
 }
 
-// loadTenantVAP renders the bootstrap admission-policies chart and returns the
+// loadTenantVAP renders the admission-policies chart and returns the
 // shape-validation and immutability CEL expressions of loopzero-tenant-cr-shape,
 // plus its system-exclusion matchCondition. It reads the RENDER, not the
 // template: the exclusion is produced by the loopzero-admission.systemActorExemptions
@@ -48,7 +48,7 @@ func loadTenantVAP(t *testing.T) (shapeExpr, cellImmutableExpr, systemExcludeExp
 	// The policy is off in the base values (the cells hold no Tenants) and on
 	// in values-mgmt.yaml, where the Tenants live — render the install that
 	// enforces it, so turning it off there fails these tests too.
-	chart := uniqueChart(t, "admission-policies")
+	chart := publishedChart(t, "loopzero-admission-policies")
 	rendered := renderChart(t, chart, "ap", nil, filepath.Join(chart, "values-mgmt.yaml"))
 	for _, doc := range strings.Split(rendered, "\n---") {
 		var v vapDoc

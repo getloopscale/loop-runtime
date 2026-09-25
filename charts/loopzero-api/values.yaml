@@ -191,7 +191,7 @@ serviceAccount:
   #
   # As politicas de admissao isentam UMA identidade —
   # `system:serviceaccount:loopzero-system:loopzero-api` (`systemActorExemptions.platformServiceAccounts`
-  # em infra/helm/admission-policies/values.yaml). Com `name: ""` este chart rendia
+  # em charts/loopzero-admission-policies/values.yaml). Com `name: ""` este chart rendia
   # `<release>-loopzero-api`, entao um deploy por ele subia o loopzero-api com identidade que as
   # proprias cercas da plataforma tratam como estranha — e a falha aparece como
   # `Forbidden` na reconciliacao, nao como erro de instalacao.

@@ -175,7 +175,7 @@ func TestGuardrail_RendersViaHelmNotRawYAML(t *testing.T) {
 
 // --- Repo-state checks: these are the RED tests for T1.1/T1.2/T1.4 -----------------
 
-func TestGuardrail_TemplateExistsInBootstrapChart(t *testing.T) {
+func TestGuardrail_TemplateExistsInChart(t *testing.T) {
 	root := qtestutil.Root(t)
 	rep := Report{}
 	rep.checkTemplatePresent(root)
@@ -184,21 +184,12 @@ func TestGuardrail_TemplateExistsInBootstrapChart(t *testing.T) {
 	}
 }
 
-func TestGuardrail_DualChartParity(t *testing.T) {
-	root := qtestutil.Root(t)
-	rep := Report{}
-	rep.checkParity(root)
-	if !rep.OK() {
-		t.Fatalf("T1.4 not implemented: %+v", rep.Findings)
-	}
-}
-
 func TestGuardrail_ToggleDefaultsOff(t *testing.T) {
 	root := qtestutil.Root(t)
 	rep := Report{}
 	rep.checkToggleDefaultOff(root)
 	if !rep.OK() {
-		t.Fatalf("toggle must exist and default to false in both charts: %+v", rep.Findings)
+		t.Fatalf("toggle must exist and default to false in the chart: %+v", rep.Findings)
 	}
 }
 

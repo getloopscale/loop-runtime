@@ -154,7 +154,6 @@ which fails both ways — an undeclared pair, or a declaration that outlived its
 <!-- BEGIN GENERATED TABLE -->
 | Chart | Cluster(s) | Nature | Version | Conditional |
 |---|---|---|---|---|
-| `admission-policies` | cell, core | ours | — | `always` |
 | `argo-ci-namespace` | build | ours | — | `always` |
 | `argo-events` | build | ours | — | `always` |
 | `argo-events-bus` | build | ours | — | `always` |

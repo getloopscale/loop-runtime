@@ -54,7 +54,7 @@ func TestPublishedChartServiceAccountMatchesTheVAPExemption(t *testing.T) {
 // its toggle defaults off.
 func serviceAccountsExemptedByVAPs(t *testing.T) map[string]bool {
 	t.Helper()
-	out := renderChart(t, bootstrapChart(t, "admission-policies"), "exemptions", map[string]string{
+	out := renderChart(t, publishedChart(t, "loopzero-admission-policies"), "exemptions", map[string]string{
 		"vaps.protectPlatformDeletes":         "true",
 		"vaps.protectPlatformNetworkpolicies": "true",
 		"vaps.tenantCrShape":                  "true",

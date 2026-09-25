@@ -166,10 +166,9 @@ func TestK3d_AdmissionPoliciesChartInstalls(t *testing.T) {
 
 	// Install chart
 	out, exit := runCommand(t, "helm", "--kube-context", ctx,
-		"install", "ap-int", "../../../helm/admission-policies/",
+		"install", "ap-int", "../../../../charts/loopzero-admission-policies/",
 		"--namespace", ns,
-		"--set", "domain=test.local",
-		"--set", "policyMode=warn",
+		"--set", "clusterImagePolicy.mode=warn",
 		"--set", "alerts.enabled=false",
 		"--set", "clusterImagePolicy.enabled=false",
 	)

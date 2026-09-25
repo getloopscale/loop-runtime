@@ -105,7 +105,7 @@ all CRDs as a slice. Assert:
 - All have scope + exactly one storage version
 - Names follow `<plural>.<group>` convention
 
-### Pattern 4 — Policy collection (loopzero-admission-policies, admission-policies)
+### Pattern 4 — Policy collection (loopzero-admission-policies)
 
 For N-VAP + N-Binding charts:
 - VAP count == Binding count (1:1 pairing)
@@ -165,8 +165,8 @@ For per-env tests (only when helmfile env values differ meaningfully):
   values file containing `{{` directives; redirects operator to plain-YAML stub
 - **D11 — dependency resolution:** auto-invoked + cached per chart path
 - **D12 — library exemption:** documented in helper + per-chart tests
-- **B33 — VAP namespace deletion deadlock:** asserted across both
-  admission-policies variants
+- **B33 — VAP namespace deletion deadlock:** asserted on the one
+  admission-policies chart (charts/loopzero-admission-policies)
 
 ## Helper API
 

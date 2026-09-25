@@ -34,12 +34,13 @@ const DefaultRulesDir = "infra/helm/monitoring/manifests"
 // precisely where 22 of the 23 `runbook_url` annotations live, so the unscanned half held
 // almost all the evidence this gate exists to check.
 //
-// `charts/` is not a bootstrap artifact: these are the published OCI charts that ArgoCD
-// delivers to tenants.
+// `charts/` is not only what ArgoCD delivers: charts/loopzero-admission-policies is also the
+// chart Helmfile installs on core and every cell. Its bootstrap copy under
+// infra/helm/admission-policies was listed here too until it was deleted — scanning two
+// identical copies scanned every admission alert twice.
 var DefaultRulesDirs = []string{
 	"infra/helm/monitoring/manifests",
 	"charts/loopzero-monitoring/templates",
-	"infra/helm/admission-policies/templates",
 	"charts/loopzero-admission-policies/templates",
 }
 

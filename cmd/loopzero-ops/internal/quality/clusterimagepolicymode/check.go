@@ -21,7 +21,13 @@ import (
 
 // Default locations relative to repo root.
 const (
-	DefaultValuesFile = "infra/helm/admission-policies/values.yaml"
+	// DefaultValuesFile is the default of the one admission-policies chart. Every
+	// Helmfile cell install overrides the mode from the environment's policyMode and the
+	// core install disables the policy, so this default decides only an install that
+	// names no mode — which is exactly what an ArgoCD install of the published chart is.
+	// It pointed at infra/helm/admission-policies/values.yaml until that copy of the
+	// chart was deleted (docs/decisions.md, "One chart per bootstrap/published pair").
+	DefaultValuesFile = "charts/loopzero-admission-policies/values.yaml"
 	// DefaultDecisionsDoc is where a decision in THIS repository is written: one of the
 	// six living documents the 2026-09-11 consolidation left, and versioned, so it reaches
 	// whoever clones. It is the only place a sign-off is accepted: the directories the

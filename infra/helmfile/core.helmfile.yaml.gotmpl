@@ -724,7 +724,7 @@ releases:
   # this cluster and would block the sync.
   - name: admission-policies-mgmt
     namespace: loopzero-system
-    chart: ../helm/admission-policies
+    chart: ../../charts/loopzero-admission-policies
     values:
-      - ../helm/admission-policies/values.yaml
-      - ../helm/admission-policies/values-mgmt.yaml
+      - ../../charts/loopzero-admission-policies/values.yaml
+      - ../../charts/loopzero-admission-policies/values-mgmt.yaml

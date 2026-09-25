@@ -98,7 +98,7 @@ func TestADR0018C5_MisplacedTenantMetricDeclared(t *testing.T) {
 }
 
 func TestADR0018T32_VAPTemplateExists(t *testing.T) {
-	const path = "../../helm/admission-policies/templates/vap-tenant-namespace.yaml"
+	const path = "../../../charts/loopzero-admission-policies/templates/vap-tenant-namespace.yaml"
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("ADR-0018 T3.2 regression: VAP template missing: %v", err)
@@ -119,7 +119,7 @@ func TestADR0018T32_VAPTemplateExists(t *testing.T) {
 		t.Error("ADR-0018 T3.2 regression: validation expression must enforce namespace=loopzero-system")
 	}
 	// Default values.yaml: opt-out.
-	values, err := os.ReadFile("../../helm/admission-policies/values.yaml")
+	values, err := os.ReadFile("../../../charts/loopzero-admission-policies/values.yaml")
 	if err != nil {
 		t.Fatalf("read values: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestADR0018T32_VAPTemplateExists(t *testing.T) {
 // The exemption is rendered by the loopzero-admission.systemActorExemptions helper from
 // `systemActorExemptions.platformServiceAccounts`, so only the RENDERED policy carries the names.
 func TestVAPTenantNamespaceExemptsItsOwnControllers(t *testing.T) {
-	out, err := exec.Command("helm", "template", "ap", "../../helm/admission-policies",
+	out, err := exec.Command("helm", "template", "ap", "../../../charts/loopzero-admission-policies",
 		"--set", "vaps.tenantNamespace=true",
 		"--show-only", "templates/vap-tenant-namespace.yaml").CombinedOutput()
 	if err != nil {
