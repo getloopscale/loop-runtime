@@ -30,7 +30,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/middleware/auth/authtest"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/api/internal/server"
@@ -50,7 +50,7 @@ type lockCall struct {
 	Env     string
 }
 
-func (r *recordingLocker) WithLock(ctx context.Context, tenant, project, env string, fn func(tx db.DBTX) error) error {
+func (r *recordingLocker) WithLock(ctx context.Context, tenant, project, env string, fn func(tx dbtx.DBTX) error) error {
 	r.mu.Lock()
 	r.calls = append(r.calls, lockCall{Tenant: tenant, Project: project, Env: env})
 	r.mu.Unlock()
@@ -225,7 +225,7 @@ func TestSecretEnvLock_SecretSet_LockKeyMatchesEnvironmentLock(t *testing.T) {
 	// *adapters.PoolEnvironmentLocker via lock.WithEnvironmentLock —
 	// asserting the locker instance is the same proves lock-domain parity.
 	_ = sharedLocker.WithLock(context.Background(), "tenant-x", "acme-proj", "production",
-		func(tx db.DBTX) error { return nil })
+		func(tx dbtx.DBTX) error { return nil })
 
 	calls := sharedLocker.Calls()
 	if len(calls) != 2 {

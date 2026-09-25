@@ -129,6 +129,7 @@ apply_migrations_with_psql() {
   [[ -z "$current" ]] && current=0
   if [[ "$dirty" == "t" ]]; then
     log "ERROR: schema_migrations is dirty at version $current — a previous migration failed half-way."
+    # allowlist: migrate force (printed advice only — the operator runs it after repairing the half-applied file by hand; this script never forces)
     log "       Inspect the database, repair it, then clear the flag with"
     log "       'migrate force $current' before running migrations again."
     exit 1

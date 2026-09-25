@@ -24,10 +24,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -139,26 +136,16 @@ func TestTransitClientSatisfiesTheStoreContractWithoutAnAdapter(t *testing.T) {
 // errUnreachableDB is what every statement on unreachableDB returns.
 var errUnreachableDB = errors.New("test database: unreachable")
 
-// unreachableGenerated is a generated.DBTX whose every statement fails, so a
-// store can be driven up to its first database call without a database.
-type unreachableGenerated struct{}
-
-func (unreachableGenerated) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
-	return pgconn.CommandTag{}, errUnreachableDB
-}
-func (unreachableGenerated) Query(context.Context, string, ...any) (pgx.Rows, error) {
-	return nil, errUnreachableDB
-}
-func (unreachableGenerated) QueryRow(context.Context, string, ...any) pgx.Row {
-	return unreachableRow{}
-}
+// unreachableDBTX is a db.DBTX whose every statement fails, so a store can be
+// driven up to its first database call without a database. It is deliberately
+// not a db.SqlcBridge: a sqlc-backed store then gets db.Generated's handle,
+// which fails every call too, and this composition-root test never has to
+// reach into the generated package (db-generated-boundary).
+type unreachableDBTX struct{}
 
 type unreachableRow struct{}
 
 func (unreachableRow) Scan(...any) error { return errUnreachableDB }
-
-// unreachableDBTX satisfies db.DBTX and db.SqlcBridge over unreachableGenerated.
-type unreachableDBTX struct{ unreachableGenerated }
 
 func (unreachableDBTX) QueryRow(context.Context, string, ...any) db.Row { return unreachableRow{} }
 func (unreachableDBTX) Query(context.Context, string, ...any) (db.Rows, error) {
@@ -167,6 +154,5 @@ func (unreachableDBTX) Query(context.Context, string, ...any) (db.Rows, error) {
 func (unreachableDBTX) Exec(context.Context, string, ...any) (db.ExecResult, error) {
 	return db.ExecResult{}, errUnreachableDB
 }
-func (unreachableDBTX) GeneratedDB() generated.DBTX { return unreachableGenerated{} }
 
 func unreachableDB() db.DBTX { return unreachableDBTX{} }

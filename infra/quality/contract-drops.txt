@@ -1,0 +1,38 @@
+# Drops the contract-consumers gate must not judge by their readers, because
+# the field never reached the wire. Read by `loopzero-ops quality contract-consumers`.
+#
+# Format: tag | file the declaration left | why no response ever carried it
+#
+# Every line is scoped to one (tag, file). A drop from any other file still
+# goes to the consumer check, and a line that matches no drop between the base
+# and HEAD fails the gate: once develop carries these removals, delete them.
+
+# routes/builds: the build-callback payload types. The HTTP callback route was
+# removed earlier (C-01); the adapter method was their only user and nothing
+# called it (44a2e1a78). No request decoded them and no response wrote them.
+url | api/internal/routes/builds/builds.go | BuildCallbackApp was the payload of a callback route that no longer existed; no handler decoded or wrote it
+type | api/internal/routes/builds/builds.go | BuildCallbackApp was the payload of a callback route that no longer existed; no handler decoded or wrote it
+image_digest | api/internal/routes/builds/builds.go | BuildCallbackApp was the payload of a callback route that no longer existed; no handler decoded or wrote it
+status | api/internal/routes/builds/builds.go | BuildCallbackInput was the payload of a callback route that no longer existed; no handler decoded or wrote it
+error | api/internal/routes/builds/builds.go | BuildCallbackInput was the payload of a callback route that no longer existed; no handler decoded or wrote it
+apps | api/internal/routes/builds/builds.go | BuildCallbackInput was the payload of a callback route that no longer existed; no handler decoded or wrote it
+
+# routes/status: statusResponse.Rollout was a *rolloutStatusResponse with
+# omitempty that no code ever assigned (c53da571d), so `rollout` and its
+# fields never appeared in a status response. The CLI's reader of
+# analysis_status reads a field the engine never sent.
+rollout | api/internal/routes/status/status.go | a nil pointer with omitempty that no handler ever set, so the key never reached a response
+phase | api/internal/routes/status/status.go | a field of the never-set rollout object, so it never reached a response
+current_step | api/internal/routes/status/status.go | a field of the never-set rollout object, so it never reached a response
+total_steps | api/internal/routes/status/status.go | a field of the never-set rollout object, so it never reached a response
+canary_weight | api/internal/routes/status/status.go | a field of the never-set rollout object, so it never reached a response
+analysis_status | api/internal/routes/status/status.go | a field of the never-set rollout object, so it never reached a response
+
+# routes/domains: the request body of AddDNSRecords, a handler with no route
+# and no client (c53da571d).
+records | api/internal/routes/domains/domains_dns.go | the request body of AddDNSRecords, which had no route, so no client ever sent it
+
+# db/generated: the sqlc row of GetLatestReleaseAttestationByBuild, whose only
+# caller was the tenant-unscoped attestation read deleted in cb38a25c5.
+image_digest | api/internal/db/generated/attestation.sql.go | the sqlc row of a query whose only caller, the tenant-unscoped attestation read, was deleted; it is a database row, never a response
+image_signature | api/internal/db/generated/attestation.sql.go | the sqlc row of a query whose only caller, the tenant-unscoped attestation read, was deleted; it is a database row, never a response

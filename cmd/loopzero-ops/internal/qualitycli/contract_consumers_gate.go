@@ -65,6 +65,18 @@ func setupContractConsumers(fs *flag.FlagSet) Check {
 		if outcome.CommandError != "" {
 			return Fail, fmt.Errorf("git/grep: %s", outcome.CommandError)
 		}
+		// Acknowledged drops are printed on every run: a decision recorded in
+		// the registry is still a contract change a reviewer must see.
+		if len(outcome.Acknowledged) > 0 {
+			fmt.Fprintf(inv.Stderr, "contract-consumers: %d dropped tag(s) acknowledged in %s (not judged by consumers): %v\n",
+				len(outcome.Acknowledged), contractconsumers.DefaultAcknowledgementsFile, outcome.Acknowledged)
+		}
+		if len(outcome.StaleAcknowledgements) > 0 {
+			fmt.Fprintf(inv.Stderr, "contract-consumers: FAIL — %d acknowledgement(s) match no drop between %s and %s: %v\n"+
+				"  Remove them: an acknowledgement that outlived its drop pre-approves the next removal of that tag from that file.\n",
+				len(outcome.StaleAcknowledgements), *baseRef, *headRef, outcome.StaleAcknowledgements)
+			return Fail, nil
+		}
 		if !outcome.Pass {
 			fmt.Fprintf(inv.Stderr, "contract-consumers: FAIL — %d consumer reference(s) to dropped JSON tag(s) (between %s and %s):\n",
 				len(outcome.Findings), *baseRef, *headRef)

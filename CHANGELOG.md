@@ -14,6 +14,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- loopzero-ops quality contract-consumers reads infra/quality/contract-drops.txt: a JSON field removed on purpose is recorded per tag and file with its reason, stays listed on every run, and a recorded removal that no longer matches the diff fails the gate
+
 - Environment status records `cellID`, the cell its namespace was provisioned in, so deletion targets that cell even after the tenant is re-pinned (principle_violations#59)
 
 - Release inspection reports whether its audit trail was complete, unavailable or truncated, instead of showing an unreadable trail as empty (principle_violations#23)

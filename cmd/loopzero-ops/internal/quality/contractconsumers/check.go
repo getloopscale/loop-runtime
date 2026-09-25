@@ -66,6 +66,10 @@ type Config struct {
 	BaseRef string
 	// HeadRef is the git ref of the PR HEAD. When empty, defaults to "HEAD".
 	HeadRef string
+	// AcknowledgementsFile lists drops decided on purpose (tag | file | reason).
+	// Relative paths resolve against RepoRoot. Empty uses
+	// DefaultAcknowledgementsFile; an absent file acknowledges nothing.
+	AcknowledgementsFile string
 }
 
 // Finding represents one consumer that still reads a dropped field.
@@ -101,7 +105,15 @@ type Outcome struct {
 	// for the reader — it makes the field drop never visible at all, and the verdict
 	// becomes PASS over an empty population.
 	MissingTracked []string
-	CommandError   string // populated if git or grep failed
+	// Acknowledged are dropped tags whose every removed declaration is recorded
+	// in the acknowledgements file. They do not fail the gate and are always
+	// reported, so an acknowledged drop is never a silent one.
+	Acknowledged []string
+	// StaleAcknowledgements are acknowledgements that match no current drop.
+	// They fail the gate: left in place, one would pre-approve the next
+	// removal of that tag from that file.
+	StaleAcknowledgements []string
+	CommandError          string // populated if git or grep failed
 }
 
 // trackedFiles enumerates source files whose struct field drops trigger the gate.
@@ -190,14 +202,25 @@ func Check(cfg Config) (*Outcome, error) {
 		}, nil
 	}
 
+	acks, err := loadAcknowledgements(root, cfg.AcknowledgementsFile)
+	if err != nil {
+		return nil, err
+	}
+	droppedTags, acknowledged, stale, err := applyAcknowledgements(root, base, head, droppedTags, acks)
+	if err != nil {
+		return nil, err
+	}
+
 	out := &Outcome{
-		DroppedTags:    droppedTags,
-		ScanRoots:      scanRootNames(),
-		TrackedFiles:   trackedFiles,
-		MissingRoots:   missingRoots,
-		Partial:        len(missingRoots) > 0,
-		MissingTracked: missingTracked,
-		Pass:           true,
+		DroppedTags:           droppedTags,
+		Acknowledged:          acknowledged,
+		StaleAcknowledgements: stale,
+		ScanRoots:             scanRootNames(),
+		TrackedFiles:          trackedFiles,
+		MissingRoots:          missingRoots,
+		Partial:               len(missingRoots) > 0,
+		MissingTracked:        missingTracked,
+		Pass:                  len(stale) == 0,
 	}
 	// A missing consumer root is lost coverage and must surface even when no
 	// tag dropped — that PASS is exactly where it would vanish. It does not fail
@@ -306,6 +329,17 @@ func collectDroppedJSONTags(root, base, head string) ([]string, error) {
 // ADDS it to another, the count does not move and the swap passes. That is narrower
 // than the previous hole and has no cure without type information on both sides.
 func structsDeclaringTagAt(root, rev, tag string) (int, error) {
+	perFile, err := declarationsPerFileAt(root, rev, tag)
+	total := 0
+	for _, n := range perFile {
+		total += n
+	}
+	return total, err
+}
+
+// declarationsPerFileAt is structsDeclaringTagAt broken down by file, which is
+// what an acknowledgement is scoped to.
+func declarationsPerFileAt(root, rev, tag string) (map[string]int, error) {
 	pattern := `json:"` + regexp.QuoteMeta(tag) + `[",]`
 
 	args := []string{"-C", root, "grep", "-cE", pattern, rev, "--"}
@@ -319,10 +353,10 @@ func structsDeclaringTagAt(root, rev, tag string) (int, error) {
 	// `git grep -c` exits 1 with no match at all, which is the answer and not a failure.
 	var exitErr *exec.ExitError
 	if err != nil && (!errors.As(err, &exitErr) || exitErr.ExitCode() != 1) {
-		return 0, fmt.Errorf("git grep for %q at %s failed: %v (stderr: %s)", tag, rev, err, stderr.String())
+		return nil, fmt.Errorf("git grep for %q at %s failed: %v (stderr: %s)", tag, rev, err, stderr.String())
 	}
 
-	total := 0
+	perFile := map[string]int{}
 	for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
 		if line == "" {
 			continue
@@ -336,9 +370,9 @@ func structsDeclaringTagAt(root, rev, tag string) (int, error) {
 		if cerr != nil {
 			continue
 		}
-		total += n
+		perFile[strings.TrimPrefix(line[:idx], rev+":")] += n
 	}
-	return total, nil
+	return perFile, nil
 }
 
 // missingConsumerRoots returns the declared consumer roots absent under root.
