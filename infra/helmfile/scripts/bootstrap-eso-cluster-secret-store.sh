@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 # CHG-2026-04-29-DOGFOOD-REAL-E2E — Phase 5 follow-up
 #
-# Provisiona ESO ClusterSecretStore `loopzero-core-store` no cluster runtime
-# (paridade com Pulumi runtime-bootstrap.ts). Sem isso, qualquer pod com
-# secret declarado em loopzero.yaml fica em CreateContainerConfigError porque
-# ESO não consegue sync de Secrets do mgmt para tenant ns.
+# Provisions the ESO ClusterSecretStore `loopzero-core-store` on the runtime cluster
+# (parity with Pulumi runtime-bootstrap.ts). Without it, any pod with a
+# secret declared in loopzero.yaml stays in CreateContainerConfigError because
+# ESO cannot sync Secrets from mgmt into the tenant ns.
 #
-# Recursos criados:
-#   1. ServiceAccount `eso-secret-reader` em mgmt cluster (ns loopzero-system)
-#   2. Role + RoleBinding scoped a [secrets get/list/watch] em loopzero-system
-#   3. SA Token Secret (long-lived) — fonte de verdade do bearer
-#   4. Secret `core-cluster-token` em runtime cluster ns external-secrets
-#      contendo {token, ca} extraídos do SA Token (via base64 round-trip)
-#   5. ClusterSecretStore `loopzero-core-store` em runtime apontando para
-#      mgmt API server com bearer + CA
+# Resources created:
+#   1. ServiceAccount `eso-secret-reader` in the mgmt cluster (ns loopzero-system)
+#   2. Role + RoleBinding scoped to [secrets get/list/watch] in loopzero-system
+#   3. SA Token Secret (long-lived) — the source of truth for the bearer
+#   4. Secret `core-cluster-token` in the runtime cluster, ns external-secrets,
+#      holding {token, ca} extracted from the SA Token (via base64 round-trip)
+#   5. ClusterSecretStore `loopzero-core-store` on runtime, pointing at the
+#      mgmt API server with bearer + CA
 #
-# Idempotente — re-rodar não muda o estado (SA Token é estável).
+# Idempotent — re-running does not change the state (the SA Token is stable).
 #
-# Uso:
+# Usage:
 #   bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh \
 #     [<mgmt-context>] [<runtime-context>]
 #

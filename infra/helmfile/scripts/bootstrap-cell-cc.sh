@@ -5,31 +5,31 @@
 # Canonical bootstrap-cell-cc — consolidates 6 prior scripts into 1
 # parameterized by --cell <id> --env <name>.
 #
-# Plan v1.2 T4.2 / D3 (scripts-param-by-env): consolidates os scripts por-cell que
-# existiam antes (`bootstrap-cell-{default,1,2}-cc.sh` e as variantes `-drill`), hoje
-# todos deletados.
+# Plan v1.2 T4.2 / D3 (scripts-param-by-env): consolidates the per-cell scripts that
+# existed before (`bootstrap-cell-{default,1,2}-cc.sh` and the `-drill` variants), all
+# deleted today.
 #
-# ## Cell ↔ cluster: 1:1, e cada cluster se chama pela cell que hospeda
+# ## Cell ↔ cluster: 1:1, and each cluster is named after the cell it hosts
 #
 #   | Cell ID  | k3d local           | drill DOKS                   |
 #   |----------|---------------------|------------------------------|
 #   | cell-0   | k3d-loopzero-cell-0     | runtimeCluster (pulumi key)  |
 #   | cell-1   | k3d-loopzero-cell-1     | runtimeCluster2 (pulumi key) |
 #
-# ESTE CABEÇALHO ESTAVA MENTINDO, e o modo como mentia é o registro mais claro do risco
-# que o `B-001` nomeia (*"substituição global cega destrói o repositório"*). Uma
-# substituição de `cell-default` → `cell-0` sobre o texto anterior produziu:
+# THIS HEADER WAS LYING, and the way it lied is the clearest record of the risk
+# that `B-001` names (*"blind global substitution destroys the repository"*). A
+# substitution of `cell-default` → `cell-0` over the previous text produced:
 #
-#   - duas linhas da tabela com o MESMO id (`cell-0` e `cell-0`), porque `cell-default`
-#     e `cell-0` eram linhas distintas que colapsaram numa só;
-#   - dois nomes de arquivo repetidos na lista de substituídos, pela mesma razão;
-#   - a frase *"cell-0 reuses cell-0's cluster"*, que não afirma nada;
-#   - `Cell-2` e `runtime-2` citados na prosa — nenhum dos dois existe;
-#   - e o pior: `--cell <default|1|2>` no Usage, mandando o operador passar valores que
-#     o código **rejeita** (`case "$CELL"` aceita `0` e `1`, e mais nada).
+#   - two table rows with the SAME id (`cell-0` and `cell-0`), because `cell-default`
+#     and `cell-0` were distinct rows that collapsed into one;
+#   - two file names repeated in the list of replaced scripts, for the same reason;
+#   - the sentence *"cell-0 reuses cell-0's cluster"*, which asserts nothing;
+#   - `Cell-2` and `runtime-2` cited in the prose — neither of the two exists;
+#   - and worst of all: `--cell <default|1|2>` in the Usage, telling the operator to pass
+#     values the code **rejects** (`case "$CELL"` accepts `0` and `1`, and nothing else).
 #
-# O texto acima agora descreve o que o código faz. A relação 2:1 (`cell-default` + `cell-1`
-# no mesmo cluster) foi eliminada pelo `B-005`, e `DefaultCellID` vale `cell-0`
+# The text above now describes what the code does. The 2:1 relation (`cell-default` + `cell-1`
+# on the same cluster) was eliminated by `B-005`, and `DefaultCellID` is `cell-0`
 # (`api/internal/placement/cells.go:30`).
 #
 # Usage:
@@ -40,9 +40,10 @@
 #   bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 0 --env standalone-multi
 #
 #   # Drill DOKS, cell-1 → runtimeCluster2:
-#   # `mgmt.yaml` aqui NÃO é resíduo do rename: é o nome do arquivo que o drill escreve
-#   # hoje (`drill-helmfile-bootstrap.sh:143`, `evidence-capture.sh:221`). A metade drill
-#   # não foi renomeada, e trocar o nome AQUI sem trocar lá quebraria o exemplo.
+#   # `mgmt.yaml` here is NOT a leftover of the rename: it is the file name the drill
+#   # writes today (`drill-helmfile-bootstrap.sh:143`, `evidence-capture.sh:221`). The drill
+#   # half was not renamed, and changing the name HERE without changing it there would
+#   # break the example.
 #   DRILL_KUBECONFIG=/tmp/drill-kc/mgmt.yaml \
 #     bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 1 --env drill
 #
@@ -98,10 +99,10 @@ if [[ -z "$CELL" ]] || [[ -z "$ENV" ]]; then
   usage
 fi
 
-# Uma cell por cluster. O conjunto era `default, 1, 2` — tres nomes para duas maquinas,
-# porque `default` e `1` mapeavam ambos para o mesmo cluster. A unificacao 1:1 de
-# 2026-08-09 (ADR docs/decisions.md) eliminou a
-# duplicata; `default` nao existe mais como cell.
+# One cell per cluster. The set used to be `default, 1, 2` — three names for two machines,
+# because `default` and `1` both mapped to the same cluster. The 1:1 unification of
+# 2026-08-09 (ADR docs/decisions.md) eliminated the
+# duplicate; `default` no longer exists as a cell.
 case "$CELL" in
   0|1) ;;
   *)
@@ -135,8 +136,8 @@ case "$ENV" in
     source "$LIB"
 
     # Resolve Pulumi output key per EC-4 mapping
-    # As chaves de output do Pulumi NAO mudam: sao contrato externo de codigo legado,
-    # vivo ate o corte AWS. So o lado da cell foi renumerado.
+    # The Pulumi output keys do NOT change: they are an external contract of legacy code,
+    # alive until the AWS cutover. Only the cell side was renumbered.
     case "$CELL" in
       0) PULUMI_KEY="runtimeCluster" ;;
       1) PULUMI_KEY="runtimeCluster2" ;;
@@ -157,7 +158,7 @@ case "$ENV" in
     source "$LIB"
 
     # Resolve k3d cluster name per EC-4 mapping (verified against B82)
-    # O nome do cluster E o da cell — era aqui que a relacao 2:1 vivia em shell.
+    # The cluster name IS the cell's — this is where the 2:1 relation lived in shell.
     case "$CELL" in
       0) K3D_CLUSTER="cell-0" ;;
       1) K3D_CLUSTER="cell-1" ;;

@@ -12,16 +12,16 @@ bases:
 
 ---
 helmDefaults:
-  # O cluster deste plano, declarado onde o plano vive.
+  # This plane's cluster, declared where the plane lives.
   #
-  # Sem esta linha, um `helmfile sync` SEM --kube-context nao herda nada do
-  # arquivo: ele usa o contexto ATIVO do kubectl. Medido contra helmfile 1.1.6.
-  # Foi esse o defeito que o B-024 pagou noutro lugar — um seed operou o cluster
-  # errado e a mensagem de erro culpou o recurso ausente, nao o cluster.
+  # Without this line, a `helmfile sync` WITHOUT --kube-context inherits nothing
+  # from the file: it uses the ACTIVE kubectl context. Measured against helmfile
+  # 1.1.6. That was the defect B-024 paid for elsewhere — a seed operated on the
+  # wrong cluster and the error message blamed the missing resource, not the cluster.
   #
-  # A flag CONTINUA vencendo quando passada (medido: sobrescreve em silencio,
-  # sem erro). Quem transforma uma divergencia em reprovacao e o gate
-  # `helmfile-context-parity`, nao o helmfile. Ver ADR D1 da fatia slice-3.
+  # The flag STILL wins when passed (measured: it overrides silently, with no
+  # error). What turns a divergence into a failure is the
+  # `helmfile-context-parity` gate, not helmfile. See ADR D1 of slice slice-3.
   kubeContext: {{ env "LOOPZERO_BUILD_CONTEXT" | default "k3d-loopzero-build" }}
   wait: true
   waitForJobs: true
@@ -80,7 +80,7 @@ releases:
       - name: workflow.serviceAccount.create
         value: "false"
 
-  # T0.2 Cenário B POC — CI infrastructure releases (post-MEET-2026-05-27).
+  # T0.2 Scenario B POC — CI infrastructure releases (post-MEET-2026-05-27).
   # Per ADR-2026-05-27-T0.2-RATIFIED: Argo Workflows + Argo Events provide
   # PR-time enforcement of `task quality:gates` via Gitea webhook → Sensor
   # → quality-gate WorkflowTemplate. Boundary mitigation per D3: CI workflows
@@ -116,27 +116,27 @@ releases:
     values:
       - ../helm/argo-events-bus/values.yaml
 
-  # loopzero-ci-workflows APOSENTADO em 2026-08-18 (B-019).
+  # loopzero-ci-workflows RETIRED on 2026-08-18 (B-019).
   #
-  # O chart inteiro era nao-funcional, nao parte dele: `eventsource-gitea` -> `sensor-pr-trigger`
-  # -> `workflowTemplateRef` -> o WorkflowTemplate de quality gate, mais os quatro CronWorkflows,
-  # TODOS executando `registry.digitalocean.com/loopzero-system/loopzero-ops`. Medido em 2026-08-18:
+  # The whole chart was non-functional, not part of it: `eventsource-gitea` -> `sensor-pr-trigger`
+  # -> `workflowTemplateRef` -> the quality-gate WorkflowTemplate, plus the four CronWorkflows,
+  # ALL running `registry.digitalocean.com/loopzero-system/loopzero-ops`. Measured on 2026-08-18:
   #
-  #   o registro             `doctl registry get` -> 404 registry does not exist
-  #   o Dockerfile           nao existe nenhum para loopzero-ops na arvore
-  #   a task de build        nao existe — a unica mencao a ela era um comentario a declarando
-  #   a matriz               release-artifacts.yml publica 5 imagens; loopzero-ops fora
-  #   infra/images/ (3)      tambem fora da matriz — nao ha imagem alcancavel para hospedar
+  #   the registry           `doctl registry get` -> 404 registry does not exist
+  #   the Dockerfile         there is none for loopzero-ops in the tree
+  #   the build task         does not exist — the only mention of it was a comment declaring it
+  #   the matrix             release-artifacts.yml publishes 5 images; loopzero-ops is not among them
+  #   infra/images/ (3)      also outside the matrix — there is no reachable image to host it
   #
-  # E os workloads nao executavam o binario loopzero-ops: rodavam `task ...` e um script bash, sem
-  # clone do repositorio e sem volume. O que faltava era um RUNNER DE CI com a arvore e o
-  # toolchain dentro — artefato publicado novo, para rodar verificacoes que
-  # `hooks/delivery-gate.sh` ja roda em TODO push via `task quality:all`, sem cluster nenhum.
+  # And the workloads did not run the loopzero-ops binary: they ran `task ...` and a bash script, with
+  # no clone of the repository and no volume. What was missing was a CI RUNNER with the tree and
+  # the toolchain inside — a new published artifact, to run checks that
+  # `hooks/delivery-gate.sh` already runs on EVERY push via `task quality:all`, with no cluster at all.
   #
-  # Construir esse runner seria erguer infraestrutura para duplicar uma trava que funciona.
-  # `pre-release-governance.md`: legado e erro, deleta-se. A intencao dos quatro agendamentos
-  # (watchdog 6h, soak semanal, cobertura semanal, prazo do cosign diario) esta registrada em
-  # B-147; o git preserva o chart para quem reconstruir com um runner de verdade.
+  # Building that runner would mean standing up infrastructure to duplicate a lock that works.
+  # `pre-release-governance.md`: legacy is an error, it gets deleted. The intent of the four schedules
+  # (watchdog every 6h, weekly soak, weekly coverage, daily cosign deadline) is recorded in
+  # B-147; git preserves the chart for whoever rebuilds it with a real runner.
   - name: loki
     namespace: monitoring
     chart: grafana/loki

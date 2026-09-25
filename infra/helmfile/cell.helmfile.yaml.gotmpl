@@ -16,28 +16,28 @@ bases:
 
 ---
 helmDefaults:
-  # O cluster deste plano, declarado onde o plano vive.
+  # This plane's cluster, declared where the plane lives.
   #
-  # Sem esta linha, um `helmfile sync` SEM --kube-context nao herda nada do
-  # arquivo: ele usa o contexto ATIVO do kubectl. Medido contra helmfile 1.1.6.
-  # Foi esse o defeito que o B-024 pagou noutro lugar — um seed operou o cluster
-  # errado e a mensagem de erro culpou o recurso ausente, nao o cluster.
+  # Without this line, a `helmfile sync` WITHOUT --kube-context inherits nothing
+  # from the file: it uses the ACTIVE kubectl context. Measured against helmfile
+  # 1.1.6. That was the defect B-024 paid for elsewhere — a seed operated on the
+  # wrong cluster and the error message blamed the missing resource, not the cluster.
   #
-  # A flag CONTINUA vencendo quando passada (medido: sobrescreve em silencio,
-  # sem erro). Quem transforma uma divergencia em reprovacao e o gate
-  # `helmfile-context-parity`, nao o helmfile. Ver ADR D1 da fatia slice-3.
+  # The flag STILL wins when passed (measured: it overrides silently, with no
+  # error). What turns a divergence into a failure is the
+  # `helmfile-context-parity` gate, not helmfile. See ADR D1 of slice slice-3.
   #
-  # AQUI o contexto e PARAMETRO, e nao literal como nos outros tres planos: este
-  # helmfile serve N celulas. Amarrar `k3d-loopzero-cell-0` recriaria exatamente o
-  # defeito que os comentarios de taskfiles/infra.yml descrevem — a task
-  # instalando as 28 releases SEMPRE na primeira celula, medido em 2026-08-10.
-  # `requiredEnv` falha ALTO quando ninguem exporta; um `env ... | default`
-  # escolheria uma celula em silencio, que e a forma do defeito, nao a correcao.
+  # HERE the context is a PARAMETER, not a literal as in the other three planes: this
+  # helmfile serves N cells. Pinning `k3d-loopzero-cell-0` would recreate exactly the
+  # defect the comments in taskfiles/infra.yml describe — the task
+  # installing the 28 releases ALWAYS on the first cell, measured on 2026-08-10.
+  # `requiredEnv` fails LOUD when nobody exports it; an `env ... | default`
+  # would pick a cell silently, which is the shape of the defect, not the fix.
   #
-  # Quem invoca DEVE exportar LOOPZERO_CELL_CONTEXT. Uma var do Task NAO e var de
-  # ambiente: `taskfiles/infra.yml` passava o contexto so como flag, e amarrar
-  # aqui quebrou `task infra:install:cell` ate a task exportar a variavel a
-  # partir do mesmo CELL_CTX. O gate reprova essa omissao (ErrRequiredEnvNotSet).
+  # The caller MUST export LOOPZERO_CELL_CONTEXT. A Task var is NOT an environment
+  # variable: `taskfiles/infra.yml` passed the context only as a flag, and pinning
+  # it here broke `task infra:install:cell` until the task exported the variable
+  # from the same CELL_CTX. The gate fails that omission (ErrRequiredEnvNotSet).
   kubeContext: {{ requiredEnv "LOOPZERO_CELL_CONTEXT" }}
   wait: true
   waitForJobs: true

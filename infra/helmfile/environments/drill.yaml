@@ -35,9 +35,9 @@ dnsZone: loopzero-drill.example
 # Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
 # Opt-in flag: when true, core.helmfile installs ESO operator +
 # loopzero-external-secrets CRs (pulls secrets from loopzero-secrets cluster).
-# Default false → drill uses ephemeral env-var secrets (consistent com
-# drill ephemeral lifecycle); flip to true APENAS quando drill scenario
-# explicitly testar Vault integration prod-identical (T9.2 Dogfood QA).
+# Default false → drill uses ephemeral env-var secrets (consistent with the
+# drill ephemeral lifecycle); flip to true ONLY when a drill scenario
+# explicitly tests Vault integration prod-identical (T9.2 Dogfood QA).
 # Requires: loopzero-secrets drill cluster up (separate ephemeral DOKS) +
 # ClusterSecretStore + seed-loopzero-secrets.sh ran for env=drill.
 vaultEnabled: false
@@ -113,7 +113,7 @@ underlyingStorageClass: do-block-storage
 #   cell-1 → runtimeCluster2 (pulumi-drill output key)
 # One cell per cluster since the 2026-08-09 1:1 unification.
 # Single-cell `cell0Id: cell-drill` removed per CTO directive
-# 2026-05-16 ("sistema NUNCA vai trabalhar com single cell").
+# 2026-05-16 ("the system will NEVER work with a single cell").
 cells:
   - id: cell-0
     pulumiOutputKey: runtimeCluster

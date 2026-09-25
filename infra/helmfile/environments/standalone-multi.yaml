@@ -142,23 +142,23 @@ dashboardRoute:
   settings: /settings
   error: /login
 
-# Os CronWorkflows de CI/drill NAO sao agendados aqui.
+# The CI/drill CronWorkflows are NOT scheduled here.
 #
-# MEDIDO em 2026-08-10, na reconstrucao total do app-dev: o pod `drill-watchdog-*` ficava
-# em ImagePullBackOff, e a causa nao era credencial — `doctl registry get` responde
-# **404 registry does not exist**. A imagem que os quatro crons executam,
-# `registry.digitalocean.com/loopzero-system/loopzero-ops:v0.1.0`, mora num registro DELETADO.
-# Ninguem consegue puxa-la, com ou sem token.
+# MEASURED on 2026-08-10, during the full rebuild of app-dev: the `drill-watchdog-*` pod sat
+# in ImagePullBackOff, and the cause was not a credential — `doctl registry get` answers
+# **404 registry does not exist**. The image the four crons run,
+# `registry.digitalocean.com/loopzero-system/loopzero-ops:v0.1.0`, lives in a DELETED registry.
+# Nobody can pull it, with or without a token.
 #
-# Eles tambem nao tem alvo aqui: `drill:watchdog` e `drill:l2-scale` exercitam o ambiente
-# DRILL (DOKS), que nao existe num k3d local. Desligar nao remove cobertura deste
-# ambiente — ela nunca existiu.
+# They also have no target here: `drill:watchdog` and `drill:l2-scale` exercise the DRILL
+# environment (DOKS), which does not exist in a local k3d. Turning them off removes no
+# coverage from this environment — that coverage never existed.
 #
-# Pod vermelho recorrente e pior que ausencia de automacao: treina quem olha o cluster a
-# ignorar vermelho. Foi esse ruido que fez o watchdog ser o ULTIMO item investigado nesta
-# reconstrucao. Isto nao e o conserto — o conserto e republicar `loopzero-ops` num registro
-# alcancavel (BACKLOG.md B-019). O ambiente `drill`, que tem alvo de verdade, segue
-# agendando os quatro.
+# A recurring red pod is worse than no automation at all: it trains whoever looks at the
+# cluster to ignore red. That noise is what made the watchdog the LAST item investigated in
+# this rebuild. This is not the fix — the fix is to republish `loopzero-ops` to a reachable
+# registry (BACKLOG.md B-019). The `drill` environment, which has a real target, keeps
+# scheduling all four.
 ciCronsEnabled: false
 
 # Environment profile — the behaviour that differs between environments, as named

@@ -7,7 +7,7 @@ domain: loopzero.example
 dnsZone: loopzero.example
 
 # Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
-# Prod placeholder per T8.2 acceptance criteria: enable ONLY após
+# Prod placeholder per T8.2 acceptance criteria: enable ONLY after
 # (a) DOKS loopzero-secrets-prod cluster up (separate cluster, Shamir 5/3 + Raft +
 #     HTTPS + Kubernetes auth via cross-cluster CA chain);
 # (b) openbao-init Job ran (engines + auth + policies bootstrapped);

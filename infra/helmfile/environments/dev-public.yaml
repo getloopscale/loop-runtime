@@ -100,17 +100,18 @@ velero:
   s3Url: http://minio.loopzero-system.svc:9000
 
 # D1 of plan 2026-06-04: *-dev.loopzero.example hostnames
-# uiBaseUrl controla 4 URLs em Hydra: login, consent, logout,
+# uiBaseUrl controls 4 URLs in Hydra: login, consent, logout,
 # post_device_done_url (device flow). Plan J-05 T2.2 D1.
-# Um painel, um nome. `cloud-dev` foi removido em 2026-08-10: ele declarava a MESMA
-# coisa que `app-dev` — dashboardOrigin e publicCloudUrl — e so funcionava porque
-# respondia 301 para ca. Era o mesmo defeito "duas palavras, mesma coisa" que motivou a
-# renomeacao dos clusters e a unificacao das cells, agora na camada de identidade, com o
-# agravante de autorizar em CORS e em URL de retorno um host que existia so para redirecionar.
+# One dashboard, one name. `cloud-dev` was removed on 2026-08-10: it declared the SAME
+# thing as `app-dev` — dashboardOrigin and publicCloudUrl — and only worked because it
+# answered 301 to here. It was the same "two words, same thing" defect that motivated
+# renaming the clusters and unifying the cells, now in the identity layer, with the
+# aggravating factor of authorizing, in CORS and as a return URL, a host that existed only
+# to redirect.
 #
-# Verificado antes de remover que nada dependia dele: o webhook do GitHub e registrado
-# contra `app-dev` (cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44), e o
-# `app-dev` ja tem o mesmo desvio direto para o loopzero-api que o `cloud-dev` tinha.
+# Verified before removing that nothing depended on it: the GitHub webhook is registered
+# against `app-dev` (cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44), and
+# `app-dev` already has the same direct bypass to loopzero-api that `cloud-dev` had.
 uiBaseUrl: "https://app-dev.loopzero.example"
 dashboardOrigin: "https://app-dev.loopzero.example"
 publicAuthUrl: "https://auth-dev.loopzero.example"

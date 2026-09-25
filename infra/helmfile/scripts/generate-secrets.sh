@@ -153,9 +153,9 @@ if [[ "$BACKUP_ONLY" == "true" ]]; then
   exit 0
 fi
 
-# O cluster central chama-se `core` desde o rename de 2026-08-09 (ADR
-# docs/decisions.md). Chamador e guarda mudaram
-# juntos: enquanto os dois diziam `mgmt` nada quebrava, mas o vocabulario ficava preso.
+# The central cluster has been called `core` since the 2026-08-09 rename (ADR
+# docs/decisions.md). Caller and guard changed
+# together: while both said `mgmt` nothing broke, but the vocabulary stayed stuck.
 if [[ "$CLUSTER" != "core" ]]; then
   log "noop: cluster=$CLUSTER (only core handled by this script)"
   exit 0
@@ -324,27 +324,27 @@ stringData:
 EOF
 
 # F-12 (CHG-2026-04-29-DOGFOOD T5.4) — loopzero-api `/api/v1/health/deep` probe
-# de ArgoCD requer um JWT válido. Pré-fix: ARGOCD_TOKEN nunca era setado em
-# standalone-multi → API responde `{"argocd":"auth_failed","status":"degraded"}`
-# HTTP 503 mesmo com ArgoCD saudável. Fix idempotente: login admin via REST,
-# capturar JWT, persistir em Secret `loopzero-api-tokens` (loopzero-system) com chave
-# `argocd-token` — exatamente o key esperado pelo Tilt manifest e pelo
+# of ArgoCD requires a valid JWT. Pre-fix: ARGOCD_TOKEN was never set in
+# standalone-multi → the API answers `{"argocd":"auth_failed","status":"degraded"}`
+# HTTP 503 even with a healthy ArgoCD. Idempotent fix: admin login via REST,
+# capture the JWT, persist it in Secret `loopzero-api-tokens` (loopzero-system) under the key
+# `argocd-token` — exactly the key expected by the Tilt manifest and by the
 # helmfile loopzero-api Deployment template.
 #
-# Login pattern: argocd-server expõe HTTP plain em port 80 (server.insecure:
-# true via Helm overlay). Token JWT default validade ~24h — refresh é
-# responsabilidade de iter 2 (fora do escopo deste fix). Falha silenciosa
-# se ArgoCD não estiver Ready (ex: bootstrap mid-flight): loopzero-api volta a
-# reportar degraded até o próximo sync, comportamento aceitável (não bloqueia
-# install).
+# Login pattern: argocd-server exposes plain HTTP on port 80 (server.insecure:
+# true via Helm overlay). Default JWT token validity ~24h — refresh is
+# the responsibility of iter 2 (out of scope for this fix). Fails silently
+# if ArgoCD is not Ready (e.g. bootstrap mid-flight): loopzero-api goes back to
+# reporting degraded until the next sync, acceptable behaviour (does not block
+# the install).
 if kubectl get namespace argocd >/dev/null 2>&1 && \
    kubectl get secret -n argocd argocd-initial-admin-secret >/dev/null 2>&1; then
   ADMIN_PW=$(kubectl get secret -n argocd argocd-initial-admin-secret -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
   ARGOCD_HOST="argocd-server.argocd.svc.cluster.local"
   if [[ -n "$ADMIN_PW" ]]; then
-    # Run login via short-lived debug Pod (kubectl run + curl). Idempotente:
-    # mesmo password produz tokens novos a cada call — preserva existing
-    # Secret se login falhar (mantém valor anterior em vez de zerar).
+    # Run login via short-lived debug Pod (kubectl run + curl). Idempotent:
+    # the same password produces new tokens on every call — preserves the existing
+    # Secret if login fails (keeps the previous value instead of zeroing it).
     ARGOCD_TOKEN=$(kubectl run argocd-token-bootstrap-$$ \
       --rm -i --restart=Never --image=curlimages/curl:8.5.0 \
       --command -- curl -s --max-time 5 \

@@ -1,37 +1,37 @@
 #!/usr/bin/env bash
 # CHG-2026-04-29-DOGFOOD F-NEW (Rule 10 — Local equals production)
 #
-# Registra os OAuth2 clients no Ory Hydra que a plataforma exige para
-# auth funcionar end-to-end. Em produção (DOKS), esse passo é o "Step 6"
-# do install procedure — referenciado em
-# `infra/tests/e2e/local-install-deploy.sh:222` como fail-loud check
-# ("loopzero-cli OAuth2 client not registered (Step 6 of install)"). Em
-# standalone-multi o passo NÃO existia, deixando Hydra vazio e quebrando
+# Registers in Ory Hydra the OAuth2 clients the platform requires for
+# auth to work end-to-end. In production (DOKS), this step is "Step 6"
+# of the install procedure — referenced in
+# `infra/tests/e2e/local-install-deploy.sh:222` as a fail-loud check
+# ("loopzero-cli OAuth2 client not registered (Step 6 of install)"). In
+# standalone-multi the step did NOT exist, leaving Hydra empty and breaking
 # `loopzero login` (device flow → 502 AUTH_SERVICE_ERROR).
 #
-# Idempotente: usa GET primeiro, POST se ausente, PUT se presente. Sem
-# tocar em código de produto — todo o fluxo via Hydra admin REST API,
-# alinhado com o pattern dos outros scripts L2 (generate-secrets.sh,
+# Idempotent: GET first, POST if absent, PUT if present. Without
+# touching product code — the whole flow goes through the Hydra admin REST API,
+# aligned with the pattern of the other L2 scripts (generate-secrets.sh,
 # wire-clusters.sh).
 #
-# Clients registrados:
-#   1. loopzero-cli — public client (token_endpoint_auth_method=none) com
+# Clients registered:
+#   1. loopzero-cli — public client (token_endpoint_auth_method=none) with
 #      grant_types: device_code + refresh_token + authorization_code.
-#      Usado por `loopzero login` device flow + dashboard PKCE.
-#   2. loopzero-bootstrap — confidential client com client_credentials
-#      grant. Usado por automation/CI/dogfood loops para obter token
-#      machine-to-machine sem browser.
+#      Used by the `loopzero login` device flow + dashboard PKCE.
+#   2. loopzero-bootstrap — confidential client with the client_credentials
+#      grant. Used by automation/CI/dogfood loops to obtain a
+#      machine-to-machine token without a browser.
 #
 # Usage (standalone):
 #   KUBECONFIG=$(k3d kubeconfig write loopzero-core) \
 #     bash infra/helmfile/scripts/bootstrap-oauth-clients.sh
 #
 # Usage (helmfile hook):
-#   chamado pelo core.helmfile.yaml.gotmpl post-sync hook após Ory Hydra ready.
+#   called by the core.helmfile.yaml.gotmpl post-sync hook after Ory Hydra is ready.
 #
-# Outputs (somente quando bootstrap-oauth-clients é executado pela primeira
-# vez ou após delete): client_secret do loopzero-bootstrap em
-# Secret loopzero-system/loopzero-bootstrap-credentials para uso por jobs/CI/CLI.
+# Outputs (only when bootstrap-oauth-clients runs for the first
+# time or after a delete): the loopzero-bootstrap client_secret in
+# Secret loopzero-system/loopzero-bootstrap-credentials for use by jobs/CI/CLI.
 set -euo pipefail
 
 NS_HYDRA="${HYDRA_NAMESPACE:-loopzero-auth}"
@@ -41,13 +41,13 @@ HYDRA_ADMIN_PORT="${HYDRA_ADMIN_PORT:-4445}"
 
 log() { printf '[bootstrap-oauth-clients] %s\n' "$*" >&2; }
 
-# Wait for Hydra admin to be reachable. Em fresh install Hydra leva até
-# ~60s para terminar migrate + ficar Ready. Sem este wait, RegisterClient
-# em loopzero-cloud (que dispara no startup) corre antes e gera 404 silencioso.
+# Wait for Hydra admin to be reachable. On a fresh install Hydra takes up to
+# ~60s to finish migrate + become Ready. Without this wait, RegisterClient
+# in loopzero-cloud (which fires at startup) runs first and produces a silent 404.
 #
-# Port-forward é mantido aberto pelo caller (main()) para evitar
-# race-condition de duas conexões TCP sobrepostas (problema observado:
-# trap RETURN fecha o forward antes do próximo curl).
+# The port-forward is kept open by the caller (main()) to avoid a
+# race condition between two overlapping TCP connections (observed problem:
+# trap RETURN closed the forward before the next curl).
 wait_for_hydra() {
   local i
   for i in $(seq 1 60); do
@@ -61,15 +61,15 @@ wait_for_hydra() {
   return 1
 }
 
-# upsert_client(name, payload_json) — idempotente. GET, POST se ausente,
-# PUT se presente. Stdin: payload completo do client.
+# upsert_client(name, payload_json) — idempotent. GET, POST if absent,
+# PUT if present. Stdin: the client's complete payload.
 upsert_client() {
   local name="$1" payload="$2"
   local code
 
-  # Probe direto por client_id (chave estável). client_name pode variar
-  # ("loopzero-cli" vs "LoopZero CLI") entre paths de criação — não usar como
-  # discriminador. GET /admin/clients/{id} retorna 404 se não existe.
+  # Probe directly by client_id (a stable key). client_name may vary
+  # ("loopzero-cli" vs "LoopZero CLI") across creation paths — do not use it as a
+  # discriminator. GET /admin/clients/{id} returns 404 if it does not exist.
   local existing=""
   if curl -sf --max-time 5 "http://localhost:14445/admin/clients/$name" -o /dev/null 2>/dev/null; then
     existing="$name"
@@ -111,11 +111,11 @@ upsert_client() {
 main() {
   log "bootstrap OAuth2 clients in Hydra ($NS_HYDRA/$HYDRA_ADMIN_SVC)"
 
-  # Limpeza preventiva de port-forwards anteriores antes de abrir um novo.
+  # Preventive cleanup of previous port-forwards before opening a new one.
   pkill -f "kubectl.*port-forward.*ory-hydra-admin" 2>/dev/null || true
   sleep 1
 
-  # Port-forward único, mantido por toda a execução do main.
+  # A single port-forward, kept open for the whole execution of main.
   kubectl --context "${CORE_CONTEXT:-k3d-loopzero-core}" -n "$NS_HYDRA" port-forward "svc/$HYDRA_ADMIN_SVC" "14445:$HYDRA_ADMIN_PORT" >/dev/null 2>&1 &
   local pf_pid=$!
   trap "kill $pf_pid 2>/dev/null || true" EXIT
@@ -139,7 +139,7 @@ main() {
   upsert_client "loopzero-cli" "$loopzero_cli_payload" >/dev/null || exit 1
 
   # 2) loopzero-bootstrap — confidential client (client_credentials).
-  # Usado por dogfood loops, CI automation, script de manutenção.
+  # Used by dogfood loops, CI automation, maintenance scripts.
   local loopzero_bootstrap_payload='{
     "client_id": "loopzero-bootstrap",
     "client_name": "loopzero-bootstrap",
@@ -152,8 +152,8 @@ main() {
   local resp
   resp=$(upsert_client "loopzero-bootstrap" "$loopzero_bootstrap_payload") || exit 1
 
-  # Persistir client_secret se foi criado novo. PUT em Hydra retorna 200
-  # mas NÃO retorna o secret existente — para rotacionar use rotate-secret.
+  # Persist client_secret if the client was newly created. PUT in Hydra returns 200
+  # but does NOT return the existing secret — to rotate, use rotate-secret.
   local secret
   secret=$(printf '%s' "$resp" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("client_secret",""))' 2>/dev/null || true)
   if [[ -n "$secret" ]]; then
