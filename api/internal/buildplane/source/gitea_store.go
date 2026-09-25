@@ -171,7 +171,7 @@ func wrapDownstreamPushError(err error) error {
 
 	// 1. Network class (Sprint 4 — unchanged): backend unreachable (DNS / TCP
 	//    refused / TLS / timeout). Detail is intentionally FIXED to avoid
-	//    leaking internal DNS / addresses to the operator UI (scrubInternalTerms
+	//    leaking internal DNS / addresses to the operator UI (scrub.Text
 	//    would partially redact them anyway). The verbatim cause remains
 	//    available via errors.Unwrap for operator logs (see source.go handler).
 	//    Sprint 5 ADR D3 composition (verbatim cause in Detail) applies to the

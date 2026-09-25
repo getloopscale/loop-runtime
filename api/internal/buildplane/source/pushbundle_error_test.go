@@ -44,7 +44,7 @@ func TestPushBundleErrorReason_StringerRoundTrip(t *testing.T) {
 	}
 }
 
-// Sprint 5 plan qa-sprint5-cleanup-2026-06-25 T2.3 — scrubInternalTerms.
+// Detail scrubbing — scrub.Text, the shared Rule 3 table.
 // Detail is composed into the user-facing LoopZeroError message per ADR D3;
 // without scrubbing, Rule 3 (no internal terms — Gitea / MinIO / SVC DNS)
 // would be violated. Scrub runs at NewPushBundleError construction time.

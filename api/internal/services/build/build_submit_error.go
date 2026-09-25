@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
+	"github.com/getloopscale/loopzero/api/internal/scrub"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -146,16 +146,15 @@ func (e *SubmitBuildError) Error() string {
 func (e *SubmitBuildError) Unwrap() error { return e.Cause }
 
 // NewSubmitBuildError constructs a typed SubmitBuildError. Detail is scrubbed
-// for internal terms (Rule 3) via the canonical source.ScrubInternalTerms
-// helper introduced in Sprint 5 T2.3 (closes loopzero-cloud#33 F-code-1 +
-// F-sec-1 + F-sec-2 hardening). Cause is preserved unscrubbed so internal
+// for internal terms (Rule 3) by scrub.Text, the one table every
+// user-facing path shares. Cause is preserved unscrubbed so internal
 // observability tools (slog, audit_log) see the raw error.
 func NewSubmitBuildError(reason SubmitBuildErrorReason, stage SubmitBuildStage, cause error, detail string) *SubmitBuildError {
 	return &SubmitBuildError{
 		Reason: reason,
 		Stage:  stage,
 		Cause:  cause,
-		Detail: source.ScrubInternalTerms(detail),
+		Detail: scrub.Text(detail),
 	}
 }
 

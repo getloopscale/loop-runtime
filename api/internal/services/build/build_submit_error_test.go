@@ -50,7 +50,7 @@ func TestSubmitBuildError_UnwrapsThroughFmtErrorf(t *testing.T) {
 }
 
 // Sprint 6 plan T1.1 — Detail is scrubbed via the canonical
-// source.ScrubInternalTerms helper (Sprint 5 T2.3 hardened version).
+// scrub.Text table, shared with every user-facing path.
 // Sprint 6 /review S6-4 added explicit assertions for the Sprint 5
 // hardened patterns (literal Gitea word, 172.16/12 + 192.168/16 RFC1918,
 // Sprint 6 CODE-001 catch-all pq driver scrub) so Sprint 6 has its own

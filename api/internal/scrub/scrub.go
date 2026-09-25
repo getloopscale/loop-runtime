@@ -30,36 +30,69 @@ type scrubRule struct {
 	replacement string
 }
 
-// canonicalScrubRules is the authoritative denylist→product-language map.
-// Each entry maps one or more case-insensitive variants of an internal
-// term to the canonical product-language equivalent the user sees.
+// canonicalScrubRules is the ONE Rule 3 table: every path that turns an
+// internal message into user-facing text (the timeline event, a build failure
+// reason, a push or build-submit error detail) reads it, so a term fixed here
+// is fixed for all of them.
 //
-// Source: blueprint § Q5 (12 mappings, 4 platforms — Vercel + Render +
-// the deployment system + LoopZero in-repo). See plan ADR D3.
+// Order matters and runs most-specific first: credentials before anything can
+// rewrite part of them, whole cluster hostnames before the product words they
+// contain, and multi-word forms before single words.
 var canonicalScrubRules = []scrubRule{
-	// Cell topology — operator-defined cell-N + cell-runtime-N + cell-mgmt.
-	{regexp.MustCompile(`(?i)\bcell-[\w-]+\b`), "your team's runtime"},
-	// ArgoCD canonical variants — Pascal + lower + kebab + spaced.
+	// Credentials. [^\r\n]+ takes the whole header value, so a two-token
+	// scheme (Bearer <token>, Basic <b64>) cannot leave its second token.
+	{regexp.MustCompile(`(?i)Authorization:\s*[^\r\n]+`), "Authorization: <redacted>"},
+	{regexp.MustCompile(`(?i)(?:Bearer|Basic)\s+[A-Za-z0-9+/=_\-.]{16,}`), "<redacted>"},
+	{regexp.MustCompile(`(?i)token\s+[A-Za-z0-9_\-.]{16,}`), "token <redacted>"},
+	// Cluster DNS: the named stores first, then any <host>.<ns>.svc.cluster.local,
+	// then a bare suffix.
+	{regexp.MustCompile(`(?i)\bgitea(?:-http)?\.[a-z0-9-]+\.svc\.cluster\.local`), "source backend"},
+	{regexp.MustCompile(`(?i)\bminio(?:-[a-z0-9-]+)?\.[a-z0-9-]+\.svc\.cluster\.local`), "object store"},
+	{regexp.MustCompile(`(?i)\b[a-z0-9-]+\.[a-z0-9-]+\.svc\.cluster\.local`), "<internal service>"},
+	{regexp.MustCompile(`(?i)\.svc\.cluster\.local`), ""},
+	// Internal RFC1918 addresses (10/8, 172.16/12, 192.168/16).
+	{regexp.MustCompile(`dial tcp (?:10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+):\d+`), "dial tcp <internal>"},
+	// Kubernetes identity and scope.
+	{regexp.MustCompile(`(?i)system:serviceaccount:[a-z0-9-]+:[a-z0-9-]+`), "<service identity>"},
+	{regexp.MustCompile(`(?i)\bserviceaccount\b/?`), "<service identity>"},
+	{regexp.MustCompile(`(?i)\bnamespace\b\s+"[^"]*"`), "<scope>"},
+	{regexp.MustCompile(`(?i)\bnamespace\b`), "<scope>"},
+	{regexp.MustCompile(`(?i)\bCRDs?\b`), "platform resource"},
+	{regexp.MustCompile(`(?i)\bkubebuilder\b`), "the platform"},
+	{regexp.MustCompile(`(?i)\benvtest\b`), "the platform"},
+	// Server paths and source archives.
+	{regexp.MustCompile(`/tmp/loopzero-[a-zA-Z0-9_-]+/[^\s'"` + "`" + `]*`), "<server tmp>"},
+	{regexp.MustCompile(`/tmp/loopzero-[a-zA-Z0-9_-]+`), "<server tmp>"},
+	{regexp.MustCompile(`(?i)\bgit\s+bundle\b`), "<source archive>"},
+	{regexp.MustCompile(`(?i)\bbundle\b`), "<source archive>"},
+	// Stores and delivery.
+	{regexp.MustCompile(`(?i)\bgitea\b`), "source backend"},
+	{regexp.MustCompile(`(?i)\bminio\b`), "object store"},
+	{regexp.MustCompile(`(?i)\bgitops[\s-]push\b`), "deployment update"},
+	{regexp.MustCompile(`(?i)\bgitops\b`), "deployment configuration"},
+	// The orchestrator. A bare "argo" is deliberately NOT matched: \b treats
+	// "-" as a boundary, so it would rewrite a user's "my-argo-test".
+	{regexp.MustCompile(`(?i)argoproj\.io`), "<orchestrator>"},
+	{regexp.MustCompile(`(?i)argo:\s*create\s+\w+`), "<orchestrator>: <op>"},
 	{regexp.MustCompile(`(?i)\bargo[\s-]?cd\b`), "the deployment system"},
-	// Argo Rollouts canonical variants.
 	{regexp.MustCompile(`(?i)\bargo[\s-]?rollouts?\b`), "the rollout controller"},
-	// Argo Workflows.
 	{regexp.MustCompile(`(?i)\bargo[\s-]?workflows?\b`), "the build pipeline"},
-	// Sigstore cosign — image signing.
+	{regexp.MustCompile(`(?i)\bargo\s+server\b`), "<orchestrator>"},
+	// Cell topology: cell-N, cell-runtime-N, cell-mgmt.
+	{regexp.MustCompile(`(?i)\bcell-[\w-]+\b`), "your team's runtime"},
+	// Build and supply chain.
 	{regexp.MustCompile(`(?i)\bcosign\b`), "image signing"},
-	// SBOM / syft — supply-chain manifest.
 	{regexp.MustCompile(`(?i)\b(?:syft|sbom)\b`), "supply-chain manifest"},
-	// Build engines.
 	{regexp.MustCompile(`(?i)\bbuild[\s-]?kit\b`), "the build engine"},
 	{regexp.MustCompile(`(?i)\bkaniko\b`), "the build engine"},
-	// Gitea — never mention (per CR-9 + memory feedback_secret_canonical_no_hardcode).
-	{regexp.MustCompile(`(?i)\bgitea\b`), ""},
-	// Frontend bundlers — Vercel/Render hide these.
 	{regexp.MustCompile(`(?i)\bwebpack\b`), "the bundler"},
 	{regexp.MustCompile(`(?i)\bturbopack\b`), "the bundler"},
 	{regexp.MustCompile(`(?i)\besbuild\b`), "the bundler"},
-	// AWS Lambda — Vercel calls it "Function".
 	{regexp.MustCompile(`(?i)\blambda\b`), "Function"},
+	// Data plane internals.
+	{regexp.MustCompile(`(?i)\bpg_advisory\w*`), "deploy lock"},
+	{regexp.MustCompile(`(?i)\badvisory\s+lock\b`), "deploy lock"},
+	{regexp.MustCompile(`(?i)\btenant_id\b`), "team ID"},
 }
 
 // ScrubEvent returns a copy of in with every internal-term field replaced
