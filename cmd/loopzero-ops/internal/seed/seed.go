@@ -18,6 +18,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
 	"k8s.io/client-go/rest"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -54,13 +55,13 @@ func (v Verdict) String() string {
 	}
 }
 
-// ExitCode maps a verdict to the loopzero-ops exit-code contract (CLAUDE.md Rule 4):
-// PASS/SKIP are success (0); FAIL is a failure of the build/exec class (2).
+// ExitCode maps a verdict onto loopzero-ops' exit table (internal/exitcode):
+// PASS/SKIP are success; FAIL is the same failure status a gate returns.
 func (v Verdict) ExitCode() int {
 	if v == FAIL {
-		return 2
+		return exitcode.Failure
 	}
-	return 0
+	return exitcode.OK
 }
 
 // Result is a verdict plus a human-readable reason. Reason is REQUIRED for

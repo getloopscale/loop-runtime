@@ -37,9 +37,10 @@ SUBCOMMANDS:
   chaos <subcommand> [flags]           Chaos runner pure-logic helpers (see chaos --help)
   seed <name> [flags]                  Canonical post-Cleanroom seeds (see seed --help)
 
-EXIT CODES (PERMANENT — CLAUDE.md Rule 4):
+EXIT CODES (every subcommand):
   0  success
-  1  usage error
+  1  usage error, or it ran and the subject is wrong (a violation, a failed seed)
+  5  it could not reach a verdict (an unreadable input, an unreachable target)
 `
 
 func main() {

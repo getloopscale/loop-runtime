@@ -39,10 +39,9 @@ SEMANTICS:
   --dry-run  print intended actions without mutating the cluster.
   --json     emit one machine-readable line per seed: {"seed":..,"verdict":..,"reason":..}.
 
-EXIT CODES (PERMANENT — CLAUDE.md Rule 4):
+EXIT CODES:
   0  all seeds PASS or SKIP
-  1  usage error (unknown seed, bad flags)
-  2  at least one seed FAIL
+  1  usage error (unknown seed, bad flags), or at least one seed FAIL
 `
 
 // seedRegistry is the process-wide registry the wave files populate via init().

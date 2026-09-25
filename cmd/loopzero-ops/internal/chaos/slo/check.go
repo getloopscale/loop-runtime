@@ -26,6 +26,8 @@ package slo
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
 )
 
 // Thresholds mirror run-scenario.sh:231-233 + the post-drift 100ms (line 250).
@@ -96,16 +98,16 @@ func (r Result) String() string {
 	}
 }
 
-// ExitCode maps the verdict to a loopzero-ops exit code (run-full.sh:110-112 reads
-// 0=PASS, 2=FAIL, anything-else=INCONCLUSIVE).
+// ExitCode maps the verdict onto loopzero-ops' exit table (internal/exitcode): a
+// breached SLO is a failure, and an inconclusive run is incomplete.
 func (r Result) ExitCode() int {
 	switch r {
 	case Pass:
-		return 0
+		return exitcode.OK
 	case Fail:
-		return 2
+		return exitcode.Failure
 	default:
-		return 5
+		return exitcode.Incomplete
 	}
 }
 
