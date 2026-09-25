@@ -100,6 +100,7 @@ func main() {
 	}
 
 	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
+	defer shutdownCancel()
 
 	if cfg.IsProduction() {
 		required := map[string]string{
@@ -408,10 +409,15 @@ func main() {
 		TrustedProxyCIDRs: trustedProxyCIDRs,
 	})
 
-	srvCfg := buildServerConfig(cfg, dbAdapter, dbDeps, stores, orchDeps, ghDeps,
-		k8sDeps, cellRouter, cellStore, domainHandler, buildHandler,
-		healthServices, authDeps.TokenValidator, rateLimiter,
-		shutdownCtx, shutdownCancel, logger)
+	srvCfg := buildServerConfig(serverWiring{
+		cfg: cfg, dbAdapter: dbAdapter, dbDeps: dbDeps, stores: stores,
+		orchDeps: orchDeps, ghDeps: ghDeps, k8sDeps: k8sDeps,
+		cellRouter: cellRouter, cellStore: cellStore,
+		domainHandler: domainHandler, buildHandler: buildHandler,
+		healthServices: healthServices, tokenValidator: authDeps.TokenValidator,
+		rateLimiter: rateLimiter, shutdownCtx: shutdownCtx, shutdownCancel: shutdownCancel,
+		logger: logger,
+	})
 	srvCfg.Guards.IPRateLimit = ipRateLimiter
 	srvCfg.Auth = authenticator
 	srvCfg.Admin.APIEnabled = os.Getenv("LOOPZERO_ADMIN_API") == "true"

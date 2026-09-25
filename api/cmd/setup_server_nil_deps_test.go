@@ -1,12 +1,7 @@
 package main
 
 import (
-	"context"
-	"io"
-	"log/slog"
 	"testing"
-
-	"github.com/getloopscale/loopzero/api/internal/config"
 )
 
 // buildServerConfig is called from main.go with values that main.go itself treats
@@ -71,26 +66,8 @@ func assertNoPanic(t *testing.T, what string, call func()) {
 // invents a contract fails for a reason unrelated to the defect.
 func buildServerConfigWithNils(t *testing.T, dbDeps *DatabaseDeps, stores *StoreDeps) {
 	t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	buildServerConfig(
-		config.Config{},
-		nil, // dbAdapter
-		dbDeps,
-		stores,
-		nil,        // orchDeps
-		nil,        // ghDeps
-		&K8sDeps{}, // k8sDeps — never nil at the call site
-		nil,        // cellRouter
-		nil,        // cellStore
-		nil,        // domainHandler
-		nil,        // buildHandler
-		nil,        // healthServices
-		nil,        // tokenValidator
-		nil,        // rateLimiter
-		ctx,
-		cancel,
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-	)
+	w := quietWiring(t)
+	w.dbDeps = dbDeps
+	w.stores = stores
+	buildServerConfig(w)
 }
