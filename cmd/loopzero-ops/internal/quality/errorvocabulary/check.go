@@ -13,7 +13,9 @@
 //
 // The gate IS BORN GREEN: measured 2026-08-19, no message in `routes/` or
 // `services/` carries a banned term. It fixes nothing today — it prevents the
-// next message from breaking the rule without anyone noticing.
+// next message from breaking the rule without anyone noticing. Since api/internal
+// was organized by feature (2026-09-25) the scope is every feature directory,
+// which holds what routes/ and services/ held.
 package errorvocabulary
 
 import (
@@ -26,6 +28,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/featurefence"
 )
 
 // errorWriters are the functions whose argument reaches the response BODY.
@@ -118,6 +122,20 @@ type Outcome struct {
 	Violations []Violation
 }
 
+// defaultRoots are the directories whose messages reach a user: every feature
+// of api/internal (its handlers and its services), read from the registry
+// feature-fence enforces, plus the layer folders not yet dissolved into them.
+func defaultRoots() []string {
+	roots := []string{
+		filepath.Join("api", "internal", "routes"),
+		filepath.Join("api", "internal", "services"),
+	}
+	for _, f := range featurefence.Features() {
+		roots = append(roots, filepath.Join("api", "internal", f))
+	}
+	return roots
+}
+
 // Check runs the gate.
 func Check(cfg Config) (Outcome, error) {
 	var out Outcome
@@ -126,10 +144,7 @@ func Check(cfg Config) (Outcome, error) {
 	}
 	roots := cfg.Roots
 	if len(roots) == 0 {
-		roots = []string{
-			filepath.Join("api", "internal", "routes"),
-			filepath.Join("api", "internal", "services"),
-		}
+		roots = defaultRoots()
 	}
 
 	for _, r := range roots {

@@ -78,7 +78,7 @@ ARG LOOPZERO_BUILD_DATE=unknown
 
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    # B-053 — o caminho e copiado de `api/internal/routes/version/version.go`, que
+    # B-053 — o caminho e copiado de `api/internal/version/versionhttp/version.go`, que
     # e a referencia unica e se MOVE JUNTO com o codigo. Estas tres linhas tinham
     # dois erros compostos: a org era `getloopscale` (o modulo e `getloopscale`) e o
     # pacote era o `internal/routes` plano, que a decomposicao esvaziou.
@@ -92,9 +92,9 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
     # O gate `ldflag-symbols` resolve estes caminhos contra os go.mod e o AST, entao
     # a proxima mudanca de pacote reprova em vez de quebrar em silencio.
     LDFLAGS="-s -w \
-      -X github.com/getloopscale/loopzero/api/internal/routes/version.versionTag=${LOOPZERO_VERSION} \
-      -X github.com/getloopscale/loopzero/api/internal/routes/version.versionCommit=${LOOPZERO_COMMIT} \
-      -X github.com/getloopscale/loopzero/api/internal/routes/version.versionBuildDate=${LOOPZERO_BUILD_DATE}" \
+      -X github.com/getloopscale/loopzero/api/internal/version/versionhttp.versionTag=${LOOPZERO_VERSION} \
+      -X github.com/getloopscale/loopzero/api/internal/version/versionhttp.versionCommit=${LOOPZERO_COMMIT} \
+      -X github.com/getloopscale/loopzero/api/internal/version/versionhttp.versionBuildDate=${LOOPZERO_BUILD_DATE}" \
     && cd api && CGO_ENABLED=0 go build -trimpath -ldflags="$LDFLAGS" -o /loopzero-api ./cmd/ \
     && CGO_ENABLED=0 go build -trimpath -ldflags="$LDFLAGS" -o /loopzero-controller ./cmd/controller/
 

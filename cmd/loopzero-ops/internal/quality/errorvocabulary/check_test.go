@@ -12,6 +12,11 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
+// fixtureRoots are the two feature directories the fixtures write: a handler
+// package and a service. The default roots come from the real registry, which a
+// fixture tree does not reproduce.
+var fixtureRoots = []string{"api/internal/x", "api/internal/y"}
+
 func writeFile(t *testing.T, root, rel, body string) {
 	t.Helper()
 	p := filepath.Join(root, rel)
@@ -28,7 +33,7 @@ func writeFile(t *testing.T, root, rel, body string) {
 // defect.
 func TestFailsMessageWithBannedTerm(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "api/internal/routes/x/x.go", `package x
+	writeFile(t, root, "api/internal/x/xhttp/x.go", `package x
 
 type e struct{}
 
@@ -42,9 +47,9 @@ func h() {
 	httpio.WriteLoopZeroError(nil, e{}.Wrap("ArgoCD sync failed for tenant_id tn-1; check Gitea and MinIO"))
 }
 `)
-	writeFile(t, root, "api/internal/services/y/y.go", "package y\n")
+	writeFile(t, root, "api/internal/y/y.go", "package y\n")
 
-	out, err := Check(Config{RepoRoot: root})
+	out, err := Check(Config{RepoRoot: root, Roots: fixtureRoots})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -65,7 +70,7 @@ func h() {
 // would be switched off on the first Friday.
 func TestDoesNotFailTermOutsideErrorWriter(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "api/internal/routes/x/x.go", `package x
+	writeFile(t, root, "api/internal/x/xhttp/x.go", `package x
 
 import "log/slog"
 
@@ -73,9 +78,9 @@ func h() {
 	slog.Warn("ArgoCD sync failed for tenant_id tn-1")
 }
 `)
-	writeFile(t, root, "api/internal/services/y/y.go", "package y\n")
+	writeFile(t, root, "api/internal/y/y.go", "package y\n")
 
-	out, err := Check(Config{RepoRoot: root})
+	out, err := Check(Config{RepoRoot: root, Roots: fixtureRoots})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}

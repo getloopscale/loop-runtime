@@ -2,16 +2,16 @@
 type: Flow
 title: "A developer gets their first app live, and then keeps it running"
 description: "Journey flow, 12 steps, traced through real call sites."
-resource: "api/internal/routes/auth/auth.go"
+resource: "api/internal/auth/authhttp/auth.go"
 tags:
   - flow
   - journey
   - developer-first-app-live
 sources:
   - id: flow-root
-    resource: "api/internal/routes/auth/auth.go#L173"
+    resource: "api/internal/auth/authhttp/auth.go#L173"
   - id: step-1
-    resource: "api/internal/routes/auth/auth.go#L173"
+    resource: "api/internal/auth/authhttp/auth.go#L173"
   - id: step-2
     resource: "api/internal/routes/projects/projects.go#L208"
   - id: step-3
@@ -76,7 +76,7 @@ The steps, in order. Every row is anchored to the line that performs it.
 
 | # | The developer… | Against | How it goes |
 |---|---|---|---|
-| 1 | confirms who they are and which team they are acting as | `GET /api/v1/auth/whoami`<br/>`api/internal/routes/auth/auth.go:173` | reassuring — one call answers identity, membership and active team together |
+| 1 | confirms who they are and which team they are acting as | `GET /api/v1/auth/whoami`<br/>`api/internal/auth/authhttp/auth.go:173` | reassuring — one call answers identity, membership and active team together |
 | 2 | creates a project | `POST /api/v1/projects`<br/>`api/internal/routes/projects/projects.go:208` | fine, and also optional — the first deploy creates the project anyway via EnsureProject, so a developer who skips this step never learns it existed |
 | 3 | sets the secrets the app needs | `POST /api/v1/secrets`<br/>`api/internal/routes/secrets/secrets.go:835` | THE FIRST TRAP. The call returns success once Postgres has the row. The Kubernetes ExternalSecret write happens on the same request and its failure is logged, not returned — 'Log but don't fail — PG is source of truth, K8s sync is eventual'. Before the first deploy the target namespace does not exist yet, so this sync cannot succeed, and the developer is told nothing. The symptom arrives much later as a pod in CreateContainerConfigError. |
 | 4 | uploads the source bundle | `POST /api/v1/source/upload`<br/>`api/internal/routes/source/source.go:142` | a hard 500MB ceiling with a clean typed 413; the 32MB in-memory threshold means larger bundles spool to disk rather than failing. This step behaves. |
@@ -108,8 +108,8 @@ The steps, in order. Every row is anchored to the line that performs it.
 
 Every step in the table above carries the `file:line` that performs it. The `sources` block below lists the flow's own anchor and the first ten steps; steps 11 to 12 are anchored in the table only.
 
-[^flow-root]: `api/internal/routes/auth/auth.go:173`
-[^step-1]: `api/internal/routes/auth/auth.go:173`
+[^flow-root]: `api/internal/auth/authhttp/auth.go:173`
+[^step-1]: `api/internal/auth/authhttp/auth.go:173`
 [^step-2]: `api/internal/routes/projects/projects.go:208`
 [^step-3]: `api/internal/routes/secrets/secrets.go:835`
 [^step-4]: `api/internal/routes/source/source.go:142`

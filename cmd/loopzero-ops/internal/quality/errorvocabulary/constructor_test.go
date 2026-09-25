@@ -32,15 +32,15 @@ var httpio struct {
 
 func TestFailsBannedTermInAMessageAuthoredByTheConstructor(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "api/internal/routes/x/x.go", `package x
+	writeFile(t, root, "api/internal/x/xhttp/x.go", `package x
 `+constructorStubs+`
 func reject() *LoopZeroError {
 	return loopzeroerrors.NewLoopZeroError("SYNC_FAILED", "ArgoCD could not sync the release")
 }
 `)
-	writeFile(t, root, "api/internal/services/y/y.go", "package y\n")
+	writeFile(t, root, "api/internal/y/y.go", "package y\n")
 
-	out, err := Check(Config{RepoRoot: root})
+	out, err := Check(Config{RepoRoot: root, Roots: fixtureRoots})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -51,15 +51,15 @@ func reject() *LoopZeroError {
 
 func TestFailsBannedTermInAMessageFieldOfALoopZeroErrorLiteral(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "api/internal/routes/x/x.go", `package x
+	writeFile(t, root, "api/internal/x/xhttp/x.go", `package x
 `+constructorStubs+`
 func reject() *LoopZeroError {
 	return &LoopZeroError{Code: "PUSH_FAILED", Message: "the Gitea push was refused"}
 }
 `)
-	writeFile(t, root, "api/internal/services/y/y.go", "package y\n")
+	writeFile(t, root, "api/internal/y/y.go", "package y\n")
 
-	out, err := Check(Config{RepoRoot: root})
+	out, err := Check(Config{RepoRoot: root, Roots: fixtureRoots})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -72,15 +72,15 @@ func reject() *LoopZeroError {
 // prose a person reads; a code like GITOPS_PUSH_FAILED is not a Rule 3 leak.
 func TestIgnoresTheErrorCodeOfAConstructor(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "api/internal/routes/x/x.go", `package x
+	writeFile(t, root, "api/internal/x/xhttp/x.go", `package x
 `+constructorStubs+`
 func reject() *LoopZeroError {
 	return loopzeroerrors.NewLoopZeroError("GITOPS_PUSH_FAILED", "The deploy could not be recorded")
 }
 `)
-	writeFile(t, root, "api/internal/services/y/y.go", "package y\n")
+	writeFile(t, root, "api/internal/y/y.go", "package y\n")
 
-	out, err := Check(Config{RepoRoot: root})
+	out, err := Check(Config{RepoRoot: root, Roots: fixtureRoots})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -95,15 +95,15 @@ func reject() *LoopZeroError {
 // A constructor inside a writer's argument is one message, counted once.
 func TestCountsAConstructorInsideAWriterOnce(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "api/internal/routes/x/x.go", `package x
+	writeFile(t, root, "api/internal/x/xhttp/x.go", `package x
 `+constructorStubs+`
 func h() {
 	httpio.WriteLoopZeroError(nil, loopzeroerrors.NewLoopZeroError("SYNC_FAILED", "ArgoCD could not sync"))
 }
 `)
-	writeFile(t, root, "api/internal/services/y/y.go", "package y\n")
+	writeFile(t, root, "api/internal/y/y.go", "package y\n")
 
-	out, err := Check(Config{RepoRoot: root})
+	out, err := Check(Config{RepoRoot: root, Roots: fixtureRoots})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -116,15 +116,15 @@ func h() {
 // would inflate the population the floor is measured against.
 func TestIgnoresTheCodeOfAConstructorInsideAWriter(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "api/internal/routes/x/x.go", `package x
+	writeFile(t, root, "api/internal/x/xhttp/x.go", `package x
 `+constructorStubs+`
 func h() {
 	httpio.WriteLoopZeroError(nil, loopzeroerrors.NewLoopZeroError("GITOPS_PUSH_FAILED", "The deploy could not be recorded"))
 }
 `)
-	writeFile(t, root, "api/internal/services/y/y.go", "package y\n")
+	writeFile(t, root, "api/internal/y/y.go", "package y\n")
 
-	out, err := Check(Config{RepoRoot: root})
+	out, err := Check(Config{RepoRoot: root, Roots: fixtureRoots})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}

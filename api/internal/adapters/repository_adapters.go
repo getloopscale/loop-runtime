@@ -10,8 +10,8 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	gh "github.com/getloopscale/loopzero/api/internal/github"
-	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
-	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
+	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
+	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
 )
 
 // RepoStoreAdapter bridges store.PostgresRepositoryStore → repositories.RepositoryStore.
@@ -27,12 +27,12 @@ func (a *RepoStoreAdapter) UnlinkRepository(ctx context.Context, tenantID, proje
 	return a.Store.UnlinkRepository(ctx, tenantID, projectName)
 }
 
-func (a *RepoStoreAdapter) GetByProject(ctx context.Context, tenantID, projectName string) (*repositories.ProjectRepository, error) {
+func (a *RepoStoreAdapter) GetByProject(ctx context.Context, tenantID, projectName string) (*repositorieshttp.ProjectRepository, error) {
 	r, err := a.Store.GetByProject(ctx, tenantID, projectName)
 	if err != nil || r == nil {
 		return nil, err
 	}
-	return &repositories.ProjectRepository{
+	return &repositorieshttp.ProjectRepository{
 		ID:             r.ID,
 		TenantID:       r.TenantID,
 		ProjectName:    r.ProjectName,
@@ -45,12 +45,12 @@ func (a *RepoStoreAdapter) GetByProject(ctx context.Context, tenantID, projectNa
 	}, nil
 }
 
-func (a *RepoStoreAdapter) GetByRepo(ctx context.Context, repoFullName string) (*repositories.ProjectRepository, error) {
+func (a *RepoStoreAdapter) GetByRepo(ctx context.Context, repoFullName string) (*repositorieshttp.ProjectRepository, error) {
 	r, err := a.Store.GetByRepo(ctx, repoFullName)
 	if err != nil || r == nil {
 		return nil, err
 	}
-	return &repositories.ProjectRepository{
+	return &repositorieshttp.ProjectRepository{
 		ID:             r.ID,
 		TenantID:       r.TenantID,
 		ProjectName:    r.ProjectName,
@@ -89,12 +89,12 @@ type InstallationLookupAdapter struct {
 	Store *store.PostgresRepositoryStore
 }
 
-func (a *InstallationLookupAdapter) GetInstallation(ctx context.Context, installationID int64) (*integrations.InstallationRecord, error) {
+func (a *InstallationLookupAdapter) GetInstallation(ctx context.Context, installationID int64) (*integrationshttp.InstallationRecord, error) {
 	inst, err := a.Store.GetInstallation(ctx, installationID)
 	if err != nil || inst == nil {
 		return nil, err
 	}
-	return &integrations.InstallationRecord{
+	return &integrationshttp.InstallationRecord{
 		ID:       inst.ID,
 		TenantID: inst.TenantID,
 	}, nil
@@ -110,18 +110,18 @@ type InstallationRepoListerAdapter struct {
 	Client *gh.AppClient
 }
 
-func (a *InstallationRepoListerAdapter) ListInstallationRepositories(ctx context.Context, installationID int64, page int) ([]integrations.InstallationRepository, error) {
+func (a *InstallationRepoListerAdapter) ListInstallationRepositories(ctx context.Context, installationID int64, page int) ([]integrationshttp.InstallationRepository, error) {
 	repos, err := a.Client.ListInstallationRepositories(ctx, installationID, page)
 	if err != nil {
 		var revoked *gh.InstallationRevokedError
 		if errors.As(err, &revoked) {
-			return nil, fmt.Errorf("github installation %d revoked: %w", installationID, integrations.ErrInstallationRevoked)
+			return nil, fmt.Errorf("github installation %d revoked: %w", installationID, integrationshttp.ErrInstallationRevoked)
 		}
 		return nil, err
 	}
-	out := make([]integrations.InstallationRepository, 0, len(repos))
+	out := make([]integrationshttp.InstallationRepository, 0, len(repos))
 	for _, r := range repos {
-		out = append(out, integrations.InstallationRepository{
+		out = append(out, integrationshttp.InstallationRepository{
 			FullName:      r.FullName,
 			DefaultBranch: r.DefaultBranch,
 			Private:       r.Private,
@@ -133,7 +133,7 @@ func (a *InstallationRepoListerAdapter) ListInstallationRepositories(ctx context
 
 // The ports these adapters satisfy, asserted at compile time.
 var (
-	_ repositories.RepositoryStore        = (*RepoStoreAdapter)(nil)
-	_ integrations.InstallationLookup     = (*InstallationLookupAdapter)(nil)
-	_ integrations.InstallationRepoLister = (*InstallationRepoListerAdapter)(nil)
+	_ repositorieshttp.RepositoryStore        = (*RepoStoreAdapter)(nil)
+	_ integrationshttp.InstallationLookup     = (*InstallationLookupAdapter)(nil)
+	_ integrationshttp.InstallationRepoLister = (*InstallationRepoListerAdapter)(nil)
 )

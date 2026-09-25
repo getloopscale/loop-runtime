@@ -32,12 +32,16 @@
 package dbgeneratedboundary
 
 import (
+	"errors"
 	"fmt"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/featurefence"
 )
 
 // Config controls the gate.
@@ -67,7 +71,9 @@ type Outcome struct {
 const generatedImportPath = "github.com/getloopscale/loopzero/api/internal/db/generated"
 
 // forbiddenDirs are the outer layers that must NOT import the generated
-// package. Relative to RepoRoot. `api/cmd` is the composition root that wires
+// package. Every HTTP package of the feature layout (docs/decisions.md,
+// 2026-09-25) is added to them at scan time, fenced from the hand-written db as
+// well, exactly as routes/ was. Relative to RepoRoot. `api/cmd` is the composition root that wires
 // the stores — the single highest-leverage place a bypass would be authored,
 // so it is fenced alongside the request-handling layers.
 var forbiddenDirs = []string{
@@ -133,7 +139,16 @@ func Check(cfg Config) (Outcome, error) {
 		handWritten[d] = true
 	}
 
-	for _, sub := range forbiddenDirs {
+	httpDirs, err := featurefence.HTTPPackageDirs(cfg.RepoRoot)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return Outcome{}, err
+	}
+	dirs := append(append([]string{}, forbiddenDirs...), httpDirs...)
+	for _, d := range httpDirs {
+		handWritten[d] = true
+	}
+
+	for _, sub := range dirs {
 		dir := filepath.Join(cfg.RepoRoot, sub)
 		if _, err := os.Stat(dir); err != nil {
 			// Absent dir is tolerated (partial checkouts / early phases) but

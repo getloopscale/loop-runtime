@@ -289,3 +289,29 @@ func TestCheck_ImportingTheDbtxLeafIsAllowed(t *testing.T) {
 		t.Errorf("the SQL access port is not the entity package; forbidding it by prefix would forbid the correction itself; got %+v", out.Violations)
 	}
 }
+
+// A feature's HTTP package inherits the fences routes/ carried: it is found by
+// its `<name>http` suffix, so a handler family that left routes/ keeps both.
+func TestCheck_FeatureHTTPPackageImportingHandWrittenDBFails(t *testing.T) {
+	root := t.TempDir()
+	mkGo(t, root, "api/internal/build/buildhttp", handWritten)
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass {
+		t.Errorf("an HTTP package must not import the hand-written persistence package; got %+v", out.Violations)
+	}
+}
+
+func TestCheck_FeatureHTTPPackageImportingGeneratedFails(t *testing.T) {
+	root := t.TempDir()
+	mkGo(t, root, "api/internal/build/buildhttp", handWritten+"/generated")
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass {
+		t.Errorf("an HTTP package must not import the generated package; got %+v", out.Violations)
+	}
+}

@@ -6,11 +6,11 @@ package server_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
-	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
 	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
@@ -28,9 +28,9 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
+	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
-	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
@@ -195,11 +195,11 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	environmentHandler := environments.NewEnvironmentHandler(nil)
 	teamHandler := teams.NewTeamHandler(nil)
 	domainHandler := domains.NewDomainHandler(nil, nil, nil, "test.local")
-	repositoryHandler := repositories.NewRepositoryHandler(nil)
+	repositoryHandler := repositorieshttp.NewRepositoryHandler(nil)
 	// Plan J-09 T2.1: dashboard repo picker -- wired with nil lister/store
 	// because router-level test only verifies route registration, never
 	// invokes the handler body (handler unit tests own that contract).
-	integrationsGitHubHandler := integrations.NewIntegrationsGitHubHandler(nil, nil)
+	integrationsGitHubHandler := integrationshttp.NewIntegrationsGitHubHandler(nil, nil)
 	auditHandler := audit.NewAuditHandler(nil)
 	argoCallbackHandler := argocd.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret")
 

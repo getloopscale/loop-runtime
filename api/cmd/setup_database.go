@@ -22,9 +22,9 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/health/healthhttp"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/routes/health"
 )
 
 // DatabaseDeps holds everything produced by setupDatabase.
@@ -36,7 +36,7 @@ type DatabaseDeps struct {
 	// so the per-Account project cap can be wired onto it without a type
 	// assertion in main.
 	PostgresProjects *store.PostgresProjectStore
-	DBHealth         health.DBHealthChecker
+	DBHealth         healthhttp.DBHealthChecker
 	PlanLimiter      *enforcement.PlanLimiter
 
 	// StdDB is the stdlib sql.DB used for plan enforcement (caller must defer Close).

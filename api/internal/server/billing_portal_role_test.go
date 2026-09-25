@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
-	"github.com/getloopscale/loopzero/api/internal/routes/billing"
 )
 
 type roleMember struct{ role string }
@@ -33,7 +33,7 @@ func TestBillingPortalRequiresTheOwnerRole(t *testing.T) {
 		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
 		TokenValidator: fixedTokenValidator{},
 		MemberStore:    roleMember{role: "member"},
-		BillingHandler: &billing.BillingHandler{},
+		BillingHandler: &billinghttp.BillingHandler{},
 		Guards: RouteGuards{
 			RateLimiter:       ratelimit.NewRateLimiter(1000, time.Minute),
 			IPRateLimit:       ratelimit.NewIPRateLimiter(ratelimit.IPRateLimitConfig{}),

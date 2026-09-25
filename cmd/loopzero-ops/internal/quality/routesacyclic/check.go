@@ -42,19 +42,13 @@ var testOnlyLeaves = map[string]bool{}
 // a declaration rather than a discovery.
 var allowed = map[string]map[string]bool{
 	// families
-	"version":      {},
 	"tenants":      {},
-	"repositories": {},
 	"domains":      {},
 	"secrets":      {},
 	"preview":      {},
-	"billing":      {},
 	"scale":        {},
 	"audit":        {},
-	"health":       {},
-	"integrations": {},
 	"bootstrap":    {},
-	"auth":         {},
 	"teams":        {},
 	"admin":        {},
 	"projects":     {},
@@ -64,7 +58,6 @@ var allowed = map[string]map[string]bool{
 	"rollback":     {},
 	"status":       {},
 	"logs":         {},
-	"metrics":      {},
 	"timeline":     {},
 	"argocd":       {},
 	"source":       {},

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/version"
+	"github.com/getloopscale/loopzero/api/internal/version/versionhttp"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -42,12 +42,6 @@ const (
 	// (protected_routes.go) it delegates to. Every non-test file is scanned,
 	// so moving a registration between router files cannot hide it.
 	serverDir = "../server"
-	// routesDir holds helper-registered routes (e.g. RegisterDeployTimelineRoute
-	// mounts GET /api/v1/deploys/{deployID}/timeline) that router.go calls but does
-	// not spell out as a literal `.Get("...")`. Scanning it too keeps the
-	// spec⟺router contract honest for helper-registered routes. Monotonic: it only
-	// adds to the registered set, so it can never introduce a new phantom-spec fail.
-	routesDir = "../routes"
 )
 
 // registeredRouteRE matches chi registrations in either form:
@@ -73,14 +67,17 @@ func registeredRoutes(t *testing.T) map[string]bool {
 	t.Helper()
 	set := map[string]bool{}
 	scanTree(t, serverDir, set)
-	// The routes tree too, for helper-registered routes (RegisterDeployTimelineRoute
-	// mounts GET /api/v1/deploys/{deployID}/timeline without router.go spelling it).
+	// The handler packages too, for helper-registered routes
+	// (RegisterDeployTimelineRoute mounts GET /api/v1/deploys/{deployID}/timeline
+	// without router.go spelling it).
 	//
 	// WALKED, not listed: when the families were split into subpackages (B-080) a
 	// top-level-only listing stopped reaching the helper and reported a registered
 	// route as phantom. Scanning more files only ADDS to the registered set, so it
 	// can never introduce a new phantom-spec failure.
-	scanTree(t, routesDir, set)
+	for _, dir := range handlerDirs(t) {
+		scanTree(t, dir, set)
+	}
 	return set
 }
 
@@ -141,7 +138,7 @@ func TestEngineConformance_VersionResponseConformsToSpec(t *testing.T) {
 		t.Fatalf("build router from spec: %v", err)
 	}
 
-	srv := httptest.NewServer(version.VersionHandler())
+	srv := httptest.NewServer(versionhttp.VersionHandler())
 	defer srv.Close()
 
 	req, err := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/version", nil)

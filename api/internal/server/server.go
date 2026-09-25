@@ -13,14 +13,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/auth/authhttp"
 	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/admin"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
-	"github.com/getloopscale/loopzero/api/internal/routes/auth"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/logs"
-	"github.com/getloopscale/loopzero/api/internal/routes/metrics"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
@@ -33,19 +33,19 @@ import (
 	// Aliased because `routes/metrics` (the proxy route family, imported above)
 	// already takes the name `metrics` in this file. Same collision as
 	// `routes/source` vs `internal/source`, resolved the same way.
+	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
 	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
+	"github.com/getloopscale/loopzero/api/internal/health/healthhttp"
+	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
 	appmetrics "github.com/getloopscale/loopzero/api/internal/metrics"
 	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
+	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/audit"
-	"github.com/getloopscale/loopzero/api/internal/routes/billing"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
-	"github.com/getloopscale/loopzero/api/internal/routes/health"
-	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
 	"github.com/getloopscale/loopzero/api/internal/routes/preview"
-	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 	"github.com/getloopscale/loopzero/api/internal/routes/scale"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	sourceroutes "github.com/getloopscale/loopzero/api/internal/routes/source"
@@ -70,8 +70,8 @@ type Config struct {
 	// fall back to slog.Default. Production wiring in api/cmd/main.go
 	// SHOULD set this (Beta Logs Gate requirement).
 	ContextLogger  *pkglogging.ContextLogger
-	DB             health.DBHealthChecker
-	HealthServices []health.ServiceHealthChecker
+	DB             healthhttp.DBHealthChecker
+	HealthServices []healthhttp.ServiceHealthChecker
 	TokenValidator mwauth.TokenValidator
 	MemberStore    mwauth.MembershipStore
 	ProjectStore   ports.ProjectStore
@@ -100,9 +100,9 @@ type Config struct {
 	EventStore        sse.EventStore
 	BuildStoreReader  sse.BuildStoreReader
 	BootstrapStore    ports.BootstrapStore
-	BootstrapSecret   string                      // SEC-003: shared secret for /internal/bootstrap auth
-	CellPlacement     ports.CellPlacementEngine   // ADR-0008: Cell assignment for new tenants
-	CellDiscovery     health.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
+	BootstrapSecret   string                          // SEC-003: shared secret for /internal/bootstrap auth
+	CellPlacement     ports.CellPlacementEngine       // ADR-0008: Cell assignment for new tenants
+	CellDiscovery     healthhttp.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
 	ShutdownCtx       context.Context
 	ShutdownCancel    context.CancelFunc
 	BuildHandler      *builds.BuildHandler
@@ -119,8 +119,8 @@ type Config struct {
 	RollbackHandler     *rollback.RollbackHandler
 	PromoteHandler      *promote.PromoteHandler
 	StatusHandler       *status.StatusHandler
-	MetricsProxyHandler *metrics.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy
-	StatusSSEHandler    *status.StatusSSEHandler     // T2.1 J-18 T1.3.b — SSE signal.changed stream
+	MetricsProxyHandler *projectmetricshttp.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy
+	StatusSSEHandler    *status.StatusSSEHandler                // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	// DeployTimelineStore wires GET /api/v1/deploys/{deployID}/timeline
 	// per plan deploy-timeline-canonical-5-phases T5.1. nil-safe: when
 	// nil, the route is omitted (legacy / test paths). Production wires
@@ -136,10 +136,10 @@ type Config struct {
 	TeamHandler        *teams.TeamHandler
 	// AUDIT-10: narrow store for /whoami username lookup. Nil is legal (handler
 	// omits username field). Implemented by store.PostgresTeamStore.
-	AuthUserLookup auth.UsernameLookup
+	AuthUserLookup authhttp.UsernameLookup
 	// Plan T2.5 D8 full: persistent active-team selection. Nil is legal
 	// (handler degrades to JWT middleware heuristic; /team/switch returns 501).
-	ActiveTeamStore      auth.ActiveTeamStore
+	ActiveTeamStore      authhttp.ActiveTeamStore
 	DomainHandler        *domains.DomainHandler
 	GitHubWebhookHandler http.Handler
 	// Surfaces collects the router's registration decisions so a surface that
@@ -148,9 +148,9 @@ type Config struct {
 	// hits the 404. Nil is legal and means "nobody is observing", which is what
 	// a focused unit test wants; the production path wires it. B-104.
 	Surfaces          *surfaces.Registry
-	RepositoryHandler *repositories.RepositoryHandler
+	RepositoryHandler *repositorieshttp.RepositoryHandler
 	// Plan J-09 T2.1 (2026-06-05): dashboard repo picker source.
-	IntegrationsGitHubHandler *integrations.IntegrationsGitHubHandler
+	IntegrationsGitHubHandler *integrationshttp.IntegrationsGitHubHandler
 	PreviewHandler            *preview.PreviewHandler // Sprint 5 / T2.3 — preview environments
 	IsProduction              bool
 	AuditWriter               mwaudit.AuditWriter
@@ -160,7 +160,7 @@ type Config struct {
 	// find_billing_route_not_wired HIGH). Wires GET /api/v1/billing and
 	// POST /api/v1/billing/portal. Nil-safe: when nil, the routes are
 	// skipped and CLI returns its own error rather than 404.
-	BillingHandler    *billing.BillingHandler
+	BillingHandler    *billinghttp.BillingHandler
 	CORSAllowedOrigin string // CORS_ALLOWED_ORIGIN — empty in production blocks all cross-origin requests
 	// Timeouts are the HTTP server's timeouts.
 	Timeouts HTTPTimeouts

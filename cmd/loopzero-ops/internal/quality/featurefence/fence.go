@@ -31,6 +31,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -66,8 +67,8 @@ const (
 	TestOnly
 	// Layer is a layer folder (routes, services, adapters, ...) still being
 	// dissolved into the features that own its code. It imports what its entry
-	// names; composition roots, other layer folders and test harnesses may
-	// import it. The kind exists only while the reorganization is in flight.
+	// names — HTTP and adapter packages included, as the old adapters package
+	// must — and the kind exists only while the reorganization is in flight.
 	Layer
 )
 
@@ -146,6 +147,49 @@ func (c Config) Fence() (subpackagefence.Fence, error) {
 		Leaves:         map[string]bool{},
 		TestOnlyLeaves: testOnly,
 	}, nil
+}
+
+// Features returns the registered feature names, sorted. Gates that scan what
+// the features hold read it instead of keeping their own list of directories.
+func Features() []string {
+	var out []string
+	for name, e := range registry {
+		if e.Kind == Feature {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// HTTPPackageDirs returns, relative to repoRoot, the directory of every HTTP
+// package under api/internal: each `<top>/<name>http` child. Gates that scan the
+// handler layer read it instead of naming directories; feature-fence is what
+// guarantees an HTTP package sits nowhere else. An absent api/internal is an
+// error, never an empty result.
+func HTTPPackageDirs(repoRoot string) ([]string, error) {
+	base := filepath.Join(repoRoot, internalDir)
+	tops, err := os.ReadDir(base)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", internalDir, err)
+	}
+	var out []string
+	for _, top := range tops {
+		if !top.IsDir() || skipped(top.Name()) {
+			continue
+		}
+		children, err := os.ReadDir(filepath.Join(base, top.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("reading %s/%s: %w", internalDir, top.Name(), err)
+		}
+		for _, c := range children {
+			if c.IsDir() && strings.HasSuffix(c.Name(), httpSuffix) {
+				out = append(out, filepath.Join(internalDir, top.Name(), c.Name()))
+			}
+		}
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 func (c Config) registry() map[string]Entry {
@@ -312,7 +356,7 @@ func misplaced(relDir string, r role) bool {
 
 // violation returns the rule an import from `from` into `to` breaks, or nil.
 func violation(from, to role) error {
-	composing := from.kind == Composition || from.kind == TestOnly
+	composing := from.kind == Composition || from.kind == TestOnly || from.kind == Layer
 	switch {
 	case to.http:
 		sameFeatureAdapter := from.adapter && from.top == to.top

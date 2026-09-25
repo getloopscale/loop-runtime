@@ -54,9 +54,11 @@ func TestMissingTrackedPathSurfacesInsteadOfVanishing(t *testing.T) {
 			"%d declared (%v) — the gate carried on as though it had swept the whole "+
 			"contract surface", len(trackedFiles), trackedFiles)
 	}
-	if len(out.MissingTracked) != len(trackedFiles) {
+	// Every declared path, plus the handler surface, which an empty tree does not
+	// hold either: discovered paths that discover nothing are reported, not dropped.
+	if want := len(trackedFiles) + 1; len(out.MissingTracked) != want {
 		t.Errorf("an empty tree should report all %d tracked paths missing, reported %d: %v",
-			len(trackedFiles), len(out.MissingTracked), out.MissingTracked)
+			want, len(out.MissingTracked), out.MissingTracked)
 	}
 }
 

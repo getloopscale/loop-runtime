@@ -117,3 +117,49 @@ func TestAnAcknowledgementWithoutAReasonIsRefused(t *testing.T) {
 		t.Fatalf("an acknowledgement nobody justified must be refused, got %v", err)
 	}
 }
+
+// A file that moved still declares what it declared. Counting per path, the old
+// path "lost" every declaration and the new path gained them, so an
+// acknowledged drop elsewhere turned unacknowledged the moment any file
+// declaring the same tag changed directory. Measured on the feature split: the
+// status tag, acknowledged for routes/builds/builds.go, failed the gate once
+// routes/metrics/metrics_proxy.go moved to projectmetrics/projectmetricshttp.
+func TestAMovedFileKeepsItsDeclarationsForTheAcknowledgement(t *testing.T) {
+	root := gitTree(t)
+	write := func(rel, body string) {
+		p := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	withGoneB := strings.Replace(withGone, "package a", "package b", 1)
+	write("api/internal/routes/a/a.go", withGone)
+	write("api/internal/routes/b/b.go", withGoneB)
+	write("api/internal/reader/reader.go", "package reader\n\nfunc r(x struct{ gone int }) int { return x.gone }\n")
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-qm", "base")
+	git(t, root, "mv", "api/internal/routes/a", "api/internal/x")
+	if err := os.MkdirAll(filepath.Join(root, "api/internal/x/xhttp"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "mv", "api/internal/x/a.go", "api/internal/x/xhttp/a.go")
+	write("api/internal/routes/b/b.go", strings.Replace(withoutGone, "package a", "package b", 1))
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-qm", "head")
+	acks := writeAcks(t, root, "gone | api/internal/routes/b/b.go | a nil pointer with omitempty that no handler ever set\n")
+
+	out, err := Check(Config{RepoRoot: root, BaseRef: "HEAD~1", AcknowledgementsFile: acks})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !out.Pass || len(out.Findings) != 0 {
+		t.Fatalf("the only declaration that left is acknowledged; the moved file kept its own. got pass=%v findings=%+v stale=%v",
+			out.Pass, out.Findings, out.StaleAcknowledgements)
+	}
+	if len(out.Acknowledged) != 1 || out.Acknowledged[0] != "gone" {
+		t.Errorf("the acknowledged drop must still be reported, got %v", out.Acknowledged)
+	}
+}

@@ -5,7 +5,7 @@
 // gate (T6.1 of plan 2026-06-01-p3-infra-observability-test-debt v1.1,
 // ADR D5 — closes finding val-002).
 //
-// The gate scans `api/internal/routes/*.go` for direct
+// The gate scans every HTTP package of api/internal for direct
 // `r.Header.Get("X-Correlation-ID")` (or `"Correlation-ID"`) literal
 // usage and flags each as a violation. Routes MUST go through
 // `api/internal/correlation.Read(r)` instead, which:
@@ -22,8 +22,8 @@
 //   - Future migration to drop the legacy header touches ONE file.
 //
 // Scope:
-//   - `api/internal/routes/*.go` (recursive) — routes are the
-//     correlation-ID-reading surface.
+//   - every `<feature>/<name>http` package (recursive) — the handlers are
+//     the correlation-ID-reading surface.
 //   - `*_test.go` files are excluded (fixtures may reference the
 //     literals for negative-path coverage).
 package correlationheader
@@ -39,6 +39,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/featurefence"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
 )
 
@@ -47,11 +48,30 @@ type Config struct {
 	RepoRoot string
 }
 
-// scanDir is the production tree scanned for header literals. The gate
-// is intentionally narrow: middleware/, services/, db/, etc. operate
-// on the in-context correlation ID; only HTTP handlers (routes/) read
-// headers off the *http.Request.
-const scanDir = "api/internal/routes"
+// legacyRoutesDir held every handler before api/internal was organized by
+// feature (2026-09-25). It is scanned while it still holds a family. The gate is
+// intentionally narrow: middleware/, services, db/, etc. operate on the
+// in-context correlation ID; only HTTP handlers read headers off the
+// *http.Request.
+const legacyRoutesDir = "api/internal/routes"
+
+// scanDirs are the handler trees: every feature's HTTP packages, plus the legacy
+// routes tree while it exists.
+func scanDirs(repoRoot string) ([]string, error) {
+	dirs, err := featurefence.HTTPPackageDirs(repoRoot)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil // no tree at all: Check reports that as nothing scanned
+	}
+	if err != nil {
+		return nil, fmt.Errorf("correlation-header: %w", err)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, legacyRoutesDir)); err == nil {
+		dirs = append(dirs, legacyRoutesDir)
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("correlation-header: stat %s: %w", legacyRoutesDir, err)
+	}
+	return dirs, nil
+}
 
 // targetMethod is the method we look for: r.Header.Get("...").
 // We match by method name + arg-count rather than receiver-type
@@ -70,20 +90,29 @@ var gatedLiterals = map[string]bool{
 	`"X-Correlation-ID"`: true,
 }
 
-// Check walks the scan directory and reports every route source file that
-// contains r.Header.Get("(X-)?Correlation-ID"). A missing routes tree, or one
-// holding no production file, is scanresult.ErrNothingScanned: the gate cannot
-// pass over code it never read.
+// Check walks the handler trees and reports every source file that contains
+// r.Header.Get("(X-)?Correlation-ID"). No handler tree, or trees holding no
+// production file, is scanresult.ErrNothingScanned: the gate cannot pass over
+// code it never read.
 func Check(cfg Config) (scanresult.Result, error) {
 	var res scanresult.Result
-	root := filepath.Join(cfg.RepoRoot, scanDir)
-	if _, err := os.Stat(root); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return res, fmt.Errorf("%w: %s is absent", scanresult.ErrNothingScanned, scanDir)
-		}
-		return res, fmt.Errorf("correlation-header: stat %s: %w", scanDir, err)
+	dirs, err := scanDirs(cfg.RepoRoot)
+	if err != nil {
+		return res, err
 	}
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+	if len(dirs) == 0 {
+		return res, fmt.Errorf("%w: no HTTP package under api/internal", scanresult.ErrNothingScanned)
+	}
+	for _, d := range dirs {
+		if err := scanTree(cfg.RepoRoot, d, &res); err != nil {
+			return res, err
+		}
+	}
+	return res, res.Err()
+}
+
+func scanTree(repoRoot, dir string, res *scanresult.Result) error {
+	return filepath.Walk(filepath.Join(repoRoot, dir), func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -93,7 +122,7 @@ func Check(cfg Config) (scanresult.Result, error) {
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		rel, err := filepath.Rel(cfg.RepoRoot, path)
+		rel, err := filepath.Rel(repoRoot, path)
 		if err != nil {
 			return err
 		}
@@ -105,10 +134,6 @@ func Check(cfg Config) (scanresult.Result, error) {
 		res.Findings = append(res.Findings, hits...)
 		return nil
 	})
-	if err != nil {
-		return res, err
-	}
-	return res, res.Err()
 }
 
 // scanFile parses the .go file via go/parser and walks the AST for
@@ -119,7 +144,7 @@ func Check(cfg Config) (scanresult.Result, error) {
 //   - Matching variable-named args (e.g. `r.Header.Get(headerName)`).
 //   - Matching comment-strings (go/parser ignores comments).
 func scanFile(absPath, relPath string) ([]string, error) {
-	// #nosec G304 -- absPath comes from filepath.Walk of api/internal/routes.
+	// #nosec G304 -- absPath comes from filepath.Walk of a handler tree.
 	src, err := os.ReadFile(absPath)
 	if err != nil {
 		return nil, err

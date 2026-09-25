@@ -29,7 +29,8 @@ var constructedCodeRE = regexp.MustCompile(`(?:NewLoopZeroError\(\s*|Code:\s*)"(
 
 func TestEveryErrorCodeTheHTTPLayerConstructsHasARegisteredStatus(t *testing.T) {
 	unregistered := map[string][]string{}
-	for _, dir := range []string{"../routes", "../server", "../middleware", "../sse"} {
+	dirs := append(handlerDirs(t), "../httpio", "../pagination", "../plantier", "../routestest", "../server", "../middleware", "../sse")
+	for _, dir := range dirs {
 		err := filepath.Walk(dir, func(path string, info os.FileInfo, werr error) error {
 			if werr != nil {
 				return werr

@@ -27,17 +27,17 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/aggregator"
+	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/health/healthhttp"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/middleware/observability"
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes/audit"
-	"github.com/getloopscale/loopzero/api/internal/routes/billing"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
-	"github.com/getloopscale/loopzero/api/internal/routes/health"
 	previewroutes "github.com/getloopscale/loopzero/api/internal/routes/preview"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
@@ -45,14 +45,14 @@ import (
 )
 
 // setupHealthServices creates deep health checkers for critical dependencies.
-func setupHealthServices(cfg config.Config) []health.ServiceHealthChecker {
-	var healthServices []health.ServiceHealthChecker
+func setupHealthServices(cfg config.Config) []healthhttp.ServiceHealthChecker {
+	var healthServices []healthhttp.ServiceHealthChecker
 	if cfg.ArgocdURL != "" {
-		healthServices = append(healthServices, health.NewHTTPServiceChecker(
+		healthServices = append(healthServices, healthhttp.NewHTTPServiceChecker(
 			"argocd", cfg.ArgocdURL+"/api/v1/applications", cfg.ArgocdToken, nil))
 	}
 	if cfg.GiteaURL != "" {
-		healthServices = append(healthServices, health.NewHTTPServiceChecker(
+		healthServices = append(healthServices, healthhttp.NewHTTPServiceChecker(
 			"gitea", cfg.GiteaURL+"/api/v1/repos/search?limit=1", cfg.GiteaToken, nil))
 	}
 	return healthServices
@@ -74,7 +74,7 @@ type serverWiring struct {
 	cellStore      *store.PostgresCellStore
 	domainHandler  *domains.DomainHandler
 	buildHandler   *builds.BuildHandler
-	healthServices []health.ServiceHealthChecker
+	healthServices []healthhttp.ServiceHealthChecker
 	tokenValidator auth.TokenValidator
 	rateLimiter    *ratelimit.RateLimiter
 	shutdownCtx    context.Context
@@ -281,7 +281,7 @@ func wireDatabaseHandlers(sc *server.Config, w serverWiring) {
 	// The plan shown is the plan enforced: billing reads it through the same
 	// store every plan gate uses (sc.PlanTierStore, set by
 	// wireCostEnforcement when the database is up), not through its own query.
-	billingHandler := billing.NewBillingHandler(sc.PlanTierStore, store.NewSubscriptionStore(d))
+	billingHandler := billinghttp.NewBillingHandler(sc.PlanTierStore, store.NewSubscriptionStore(d))
 	if w.dbDeps != nil && w.dbDeps.StdDB != nil {
 		billingHandler.WithCostSource(store.NewSQLCostStore(d))
 	}
@@ -402,7 +402,7 @@ func wirePlacement(sc *server.Config, w serverWiring) {
 	}
 	engine := placement.NewRoundRobinEngine(w.cellRouter, w.cellStore, w.cfg.MaxTenantsPerCell)
 	sc.CellPlacement = engine.WithSerializer(placement.NewAdvisoryLockSerializer(w.dbAdapter.Pool))
-	if checker, ok := w.cellRouter.(health.CellDiscoveryChecker); ok {
+	if checker, ok := w.cellRouter.(healthhttp.CellDiscoveryChecker); ok {
 		sc.CellDiscovery = checker
 	}
 }

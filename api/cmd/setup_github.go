@@ -24,18 +24,18 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/github"
 	ghwebhook "github.com/getloopscale/loopzero/api/internal/github/webhook"
-	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
-	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
+	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
+	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
 )
 
 // GitHubDeps holds GitHub App integration components.
 type GitHubDeps struct {
 	WebhookHandler http.Handler
-	RepoHandler    *repositories.RepositoryHandler
+	RepoHandler    *repositorieshttp.RepositoryHandler
 	AppClient      *github.AppClient
 	// Plan J-09 T2.1 (2026-06-05): dashboard repo picker source.
 	// Nil when the GitHub App client is not configured -- router guards.
-	IntegrationsHandler *integrations.IntegrationsGitHubHandler
+	IntegrationsHandler *integrationshttp.IntegrationsGitHubHandler
 }
 
 // setupGitHub configures the GitHub App webhook handler, auto-deployer,
@@ -60,7 +60,7 @@ func setupGitHub(
 	// Repository store for webhook lookups and CRUD. Required for the
 	// RepositoryHandler — always created when the DB is reachable.
 	repoStore := &store.PostgresRepositoryStore{DB: dbAdapter}
-	repoHandler := repositories.NewRepositoryHandler(&adapters.RepoStoreAdapter{Store: repoStore})
+	repoHandler := repositorieshttp.NewRepositoryHandler(&adapters.RepoStoreAdapter{Store: repoStore})
 
 	// GitHub App client for API calls (source download, commit status, PR comments).
 	// Optional — only needed when GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY are set.
@@ -90,7 +90,7 @@ func setupGitHub(
 	// for the dashboard repo picker. Lives behind the ghAppClient nil
 	// guard because there is no way to list installation repos without an
 	// installation-token mint.
-	var integrationsHandler *integrations.IntegrationsGitHubHandler
+	var integrationsHandler *integrationshttp.IntegrationsGitHubHandler
 	if ghAppClient != nil {
 		statusNotifier := github.NewStatusNotifier(ghAppClient, &adapters.RepoLookupAdapter{Store: repoStore}, &adapters.BuildLookupAdapter{Store: stores.BuildStore}, cfg.BaseDomain, logger)
 		if statusNotifier != nil {
@@ -98,7 +98,7 @@ func setupGitHub(
 			release.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
 			logger.Info("github: commit status callbacks registered (global)")
 		}
-		integrationsHandler = integrations.NewIntegrationsGitHubHandler(
+		integrationsHandler = integrationshttp.NewIntegrationsGitHubHandler(
 			&adapters.InstallationRepoListerAdapter{Client: ghAppClient},
 			&adapters.InstallationLookupAdapter{Store: repoStore},
 		)

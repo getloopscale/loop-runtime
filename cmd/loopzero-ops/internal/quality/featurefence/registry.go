@@ -8,9 +8,16 @@ package featurefence
 // discovery.
 var registry = map[string]Entry{
 	// ── features ────────────────────────────────────────────────────────────
-	"audit":     {Kind: Feature},
-	"metering":  {Kind: Feature, Deps: []string{"placement"}},
-	"placement": {Kind: Feature},
+	"auth":           {Kind: Feature},
+	"billing":        {Kind: Feature},
+	"health":         {Kind: Feature},
+	"integrations":   {Kind: Feature},
+	"projectmetrics": {Kind: Feature},
+	"repositories":   {Kind: Feature},
+	"version":        {Kind: Feature},
+	"audit":          {Kind: Feature},
+	"metering":       {Kind: Feature, Deps: []string{"placement"}},
+	"placement":      {Kind: Feature},
 
 	// ── shared kernel ───────────────────────────────────────────────────────
 	"archive":         {Kind: Kernel},
@@ -44,7 +51,7 @@ var registry = map[string]Entry{
 
 	// ── layer folders being dissolved into features ─────────────────────────
 	// Each entry below disappears when its code reaches the feature that owns it.
-	"adapters":   {Kind: Layer, Deps: []string{"aggregator", "buildplane", "cfzone", "db", "deploycontracts", "github", "k8s", "lock", "ports", "routes", "services", "sse"}},
+	"adapters":   {Kind: Layer, Deps: []string{"aggregator", "buildplane", "cfzone", "db", "deploycontracts", "github", "integrations", "k8s", "lock", "ports", "repositories", "routes", "services", "sse"}},
 	"aggregator": {Kind: Layer, Deps: []string{"metrics", "ports", "scrub"}},
 	"argocd":     {Kind: Layer, Deps: []string{"deploycontracts", "k8s", "metrics", "placement"}},
 	"buildplane": {Kind: Layer, Deps: []string{"archive", "deploycontracts", "events", "gitclient", "k8s", "metrics", "scrub"}},
@@ -60,5 +67,5 @@ var registry = map[string]Entry{
 
 	// ── tests about the tree ────────────────────────────────────────────────
 	"archtest": {Kind: TestOnly},
-	"contract": {Kind: TestOnly, Deps: []string{"httpio", "routes"}},
+	"contract": {Kind: TestOnly, Deps: []string{"httpio", "routes", "version"}},
 }

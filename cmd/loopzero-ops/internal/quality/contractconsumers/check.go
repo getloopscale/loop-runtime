@@ -18,8 +18,8 @@
 //
 // What this gate detects:
 //   - Removed `<Field> <Type> `json:"<tag>"“ lines in tracked Go files under:
-//     api/internal/domain/types.go
-//     api/internal/routes/*.go
+//     api/internal/ports/*.go
+//     api/internal/<feature>/<name>http/*.go (every HTTP package)
 //     api/internal/db/generated/*.go
 //   - For each removed field, greps consumers in:
 //     ../loopzero-cloud/dashboard/src/  (TS/TSX, sibling checkout)
@@ -55,6 +55,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/featurefence"
 )
 
 // Config controls the gate behavior.
@@ -132,7 +134,49 @@ var trackedFiles = []string{
 	"api/internal/ports/types.go", // the sink file the 2026-06-08 regression struct lives in
 	"api/internal/ports/",
 	"api/internal/db/generated/", // any *.go under this dir
-	"api/internal/routes/",       // any *.go under this dir
+}
+
+// handlerSurface names the handler half of the contract surface in reports. The
+// handlers used to live under one directory, api/internal/routes/; since
+// api/internal was organized by feature (2026-09-25) they are every
+// `<feature>/<name>http` package, so the paths are discovered rather than
+// declared, and an empty discovery is reported under this name.
+const handlerSurface = "api/internal/<feature>/<name>http/"
+
+// legacyRoutesDir is the handler tree before the feature layout. It stays in the
+// pathspec handed to git even where it no longer exists in the checkout: the
+// comparison base may predate the move, and without it a declaration removed
+// from a file under routes/ would vanish from the diff instead of showing up as
+// a drop — or as the rename it is. It is never reported missing; git ignores a
+// pathspec that matches nothing, which is exactly the behaviour wanted here.
+const legacyRoutesDir = "api/internal/routes/"
+
+// handlerPaths returns the discovered handler directories, each with a trailing
+// slash so git reads it as a directory pathspec.
+func handlerPaths(root string) []string {
+	var out []string
+	dirs, err := featurefence.HTTPPackageDirs(root)
+	if err == nil {
+		for _, d := range dirs {
+			out = append(out, filepath.ToSlash(d)+"/")
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, legacyRoutesDir)); err == nil {
+		out = append(out, legacyRoutesDir)
+	}
+	return out
+}
+
+// trackedPaths is every pathspec handed to git: the declared files plus the
+// discovered handler directories.
+func trackedPaths(root string) []string {
+	paths := append(append([]string{}, trackedFiles...), handlerPaths(root)...)
+	for _, p := range paths {
+		if p == legacyRoutesDir {
+			return paths
+		}
+	}
+	return append(paths, legacyRoutesDir)
 }
 
 // consumerRoot is one directory grepped for dropped-field references. Repo is
@@ -190,12 +234,16 @@ func Check(cfg Config) (*Outcome, error) {
 	missingRoots := missingConsumerRoots(root)
 	missingTracked := missingTrackedPaths(root)
 
-	droppedTags, err := collectDroppedJSONTags(root, base, head)
+	diff, err := diffTracked(root, base, head)
+	var droppedTags []string
+	if err == nil {
+		droppedTags, err = droppedTagsIn(root, base, head, diff)
+	}
 	if err != nil {
 		return &Outcome{
 			CommandError:   err.Error(),
 			ScanRoots:      scanRootNames(),
-			TrackedFiles:   trackedFiles,
+			TrackedFiles:   trackedPaths(root),
 			MissingRoots:   missingRoots,
 			Partial:        len(missingRoots) > 0,
 			MissingTracked: missingTracked,
@@ -206,7 +254,7 @@ func Check(cfg Config) (*Outcome, error) {
 	if err != nil {
 		return nil, err
 	}
-	droppedTags, acknowledged, stale, err := applyAcknowledgements(root, base, head, droppedTags, acks)
+	droppedTags, acknowledged, stale, err := applyAcknowledgements(root, base, head, droppedTags, acks, renamesIn(diff))
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +264,7 @@ func Check(cfg Config) (*Outcome, error) {
 		Acknowledged:          acknowledged,
 		StaleAcknowledgements: stale,
 		ScanRoots:             scanRootNames(),
-		TrackedFiles:          trackedFiles,
+		TrackedFiles:          trackedPaths(root),
 		MissingRoots:          missingRoots,
 		Partial:               len(missingRoots) > 0,
 		MissingTracked:        missingTracked,
@@ -249,18 +297,51 @@ func Check(cfg Config) (*Outcome, error) {
 // files and extracts JSON tags from REMOVED lines (lines starting with "-"
 // in unified diff) that match `json:"<tag>"`. Returns the unique sorted list.
 func collectDroppedJSONTags(root, base, head string) ([]string, error) {
+	diff, err := diffTracked(root, base, head)
+	if err != nil {
+		return nil, err
+	}
+	return droppedTagsIn(root, base, head, diff)
+}
+
+// diffTracked runs `git diff <base>..<head>` over the tracked paths once; the
+// dropped tags and the renames are both read from its output.
+func diffTracked(root, base, head string) (string, error) {
 	args := []string{"-C", root, "diff", "--unified=0", base + ".." + head, "--"}
-	args = append(args, trackedFiles...)
+	args = append(args, trackedPaths(root)...)
 	cmd := exec.Command("git", args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("git diff failed: %w (stderr: %s)", err, stderr.String())
+		return "", fmt.Errorf("git diff failed: %w (stderr: %s)", err, stderr.String())
 	}
+	return stdout.String(), nil
+}
 
+// renamesIn maps each file the diff reports as renamed to its new path, from
+// the `rename from` / `rename to` header pairs git writes with rename detection
+// on (its default).
+func renamesIn(diff string) map[string]string {
+	renamed := map[string]string{}
+	from := ""
+	for _, line := range strings.Split(diff, "\n") {
+		switch {
+		case strings.HasPrefix(line, "rename from "):
+			from = strings.TrimPrefix(line, "rename from ")
+		case strings.HasPrefix(line, "rename to ") && from != "":
+			renamed[from] = strings.TrimPrefix(line, "rename to ")
+			from = ""
+		}
+	}
+	return renamed
+}
+
+// droppedTagsIn extracts the JSON tags from the REMOVED lines of diff and keeps
+// those declared fewer times at head than at base.
+func droppedTagsIn(root, base, head, diff string) ([]string, error) {
 	seen := map[string]struct{}{}
-	for _, line := range strings.Split(stdout.String(), "\n") {
+	for _, line := range strings.Split(diff, "\n") {
 		// Removed line in unified diff starts with "-" (but skip "---" header).
 		if !strings.HasPrefix(line, "-") || strings.HasPrefix(line, "---") {
 			continue
@@ -343,7 +424,7 @@ func declarationsPerFileAt(root, rev, tag string) (map[string]int, error) {
 	pattern := `json:"` + regexp.QuoteMeta(tag) + `[",]`
 
 	args := []string{"-C", root, "grep", "-cE", pattern, rev, "--"}
-	args = append(args, trackedFiles...)
+	args = append(args, trackedPaths(root)...)
 	cmd := exec.Command("git", args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -405,6 +486,9 @@ func missingTrackedPaths(root string) []string {
 		if _, err := os.Stat(filepath.Join(root, f)); err != nil {
 			missing = append(missing, f)
 		}
+	}
+	if len(handlerPaths(root)) == 0 {
+		missing = append(missing, handlerSurface)
 	}
 	return missing
 }

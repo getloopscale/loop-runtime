@@ -17,20 +17,20 @@ package server
 import (
 	"net/http"
 
+	"github.com/getloopscale/loopzero/api/internal/auth/authhttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/admin"
-	"github.com/getloopscale/loopzero/api/internal/routes/auth"
-	"github.com/getloopscale/loopzero/api/internal/routes/version"
+	"github.com/getloopscale/loopzero/api/internal/version/versionhttp"
 
 	"github.com/go-chi/chi/v5"
 
 	planpkg "github.com/getloopscale/loopzero-contracts/plan"
+	"github.com/getloopscale/loopzero/api/internal/health/healthhttp"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	audit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	observability "github.com/getloopscale/loopzero/api/internal/middleware/observability"
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	"github.com/getloopscale/loopzero/api/internal/routes/bootstrap"
-	"github.com/getloopscale/loopzero/api/internal/routes/health"
 	"github.com/getloopscale/loopzero/api/internal/surfaces"
 )
 
@@ -99,7 +99,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	})
 
 	// Public routes (no auth required)
-	health := health.NewHealthHandler(cfg.DB, cfg.HealthServices...)
+	health := healthhttp.NewHealthHandler(cfg.DB, cfg.HealthServices...)
 	if cfg.CellDiscovery != nil {
 		health.WithCellDiscovery(cfg.CellDiscovery)
 	}
@@ -121,13 +121,13 @@ func NewRouter(cfg Config) *chi.Mux {
 	// F-07 (CHG-2026-04-29-DOGFOOD T5.2) — public endpoint, no auth.
 	// Returns binary metadata (version, commit, build_date, go_version, platform).
 	// Stable schema per Rule 5 (loopzero CLI --json contract analogue).
-	r.Get("/api/v1/version", version.VersionHandler())
+	r.Get("/api/v1/version", versionhttp.VersionHandler())
 	// The status FLEET contract: the dashboard collector probes `/v1/version`
 	// and reads `{version, built_at}`. Same truth as the endpoint above, in the
 	// shape the other platform services already speak — without it the engine
 	// does not appear on the /status panel. Public for the same reason: build
 	// metadata is not a secret and the collector probes without a session.
-	r.Get("/v1/version", version.FleetVersionHandler())
+	r.Get("/v1/version", versionhttp.FleetVersionHandler())
 
 	// Internal-only routes (no auth — called by platform controllers, not users)
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Bootstrap, cfg.BootstrapStore != nil,
@@ -248,7 +248,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			// Plan T2.5 D8 full: pass ActiveTeamStore so /whoami reads the
 			// persistent users.active_tenant_id (migration 000018) and
 			// /team/switch can update it. EC-4 self-heal lives in Whoami.
-			auth := auth.NewAuthHandler(cfg.AuthUserLookup).
+			auth := authhttp.NewAuthHandler(cfg.AuthUserLookup).
 				WithMembershipLookup(cfg.MemberStore)
 			if cfg.ActiveTeamStore != nil {
 				auth = auth.WithActiveTeamStore(cfg.ActiveTeamStore)

@@ -75,14 +75,14 @@ func loadAcknowledgements(root, path string) ([]acknowledgement, error) {
 // applyAcknowledgements splits the dropped tags into those still to be judged
 // by their consumers and those whose every removed declaration is acknowledged,
 // and returns the acknowledgements no current drop matches.
-func applyAcknowledgements(root, base, head string, dropped []string, acks []acknowledgement) (remaining, acknowledged, stale []string, err error) {
+func applyAcknowledgements(root, base, head string, dropped []string, acks []acknowledgement, renamed map[string]string) (remaining, acknowledged, stale []string, err error) {
 	declared := map[string]bool{}
 	for _, a := range acks {
 		declared[a.ident()] = true
 	}
 	used := map[string]bool{}
 	for _, tag := range dropped {
-		files, ferr := filesThatLostTheTag(root, base, head, tag)
+		files, ferr := filesThatLostTheTag(root, base, head, tag, renamed)
 		if ferr != nil {
 			return nil, nil, nil, ferr
 		}
@@ -111,8 +111,10 @@ func applyAcknowledgements(root, base, head string, dropped []string, acks []ack
 }
 
 // filesThatLostTheTag returns the files declaring the tag fewer times at head
-// than at base.
-func filesThatLostTheTag(root, base, head, tag string) ([]string, error) {
+// than at base. A file git reports as renamed is compared with its new path: a
+// move carries its declarations with it, and only what left the file counts. The
+// loss is reported under the base path, which is what an acknowledgement names.
+func filesThatLostTheTag(root, base, head, tag string, renamed map[string]string) ([]string, error) {
 	before, err := declarationsPerFileAt(root, base, tag)
 	if err != nil {
 		return nil, err
@@ -123,7 +125,11 @@ func filesThatLostTheTag(root, base, head, tag string) ([]string, error) {
 	}
 	var files []string
 	for file, n := range before {
-		if after[file] < n {
+		now := file
+		if to, ok := renamed[file]; ok {
+			now = to
+		}
+		if after[now] < n {
 			files = append(files, file)
 		}
 	}

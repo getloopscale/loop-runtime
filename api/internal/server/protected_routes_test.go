@@ -11,21 +11,21 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
 	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
+	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
+	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/audit"
-	"github.com/getloopscale/loopzero/api/internal/routes/billing"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
-	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
 	"github.com/getloopscale/loopzero/api/internal/routes/logs"
-	"github.com/getloopscale/loopzero/api/internal/routes/metrics"
 	"github.com/getloopscale/loopzero/api/internal/routes/preview"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
-	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/scale"
 	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
@@ -71,7 +71,7 @@ func fullProtectedConfig() Config {
 		LogsHandler:               &logs.LogsHandler{},
 		LogStreamHandler:          &logs.LogStreamHandler{},
 		StatusHandler:             &status.StatusHandler{},
-		MetricsProxyHandler:       &metrics.MetricsProxyHandler{},
+		MetricsProxyHandler:       &projectmetricshttp.MetricsProxyHandler{},
 		StatusSSEHandler:          &status.StatusSSEHandler{},
 		DeployTimelineStore:       stubTimelineStore{},
 		ScaleHandler:              &scale.ScaleHandler{},
@@ -81,11 +81,11 @@ func fullProtectedConfig() Config {
 		PromoteHandler:            &promote.PromoteHandler{},
 		TeamHandler:               &teams.TeamHandler{},
 		TenantDeletionStore:       stubTenantDeletion{},
-		BillingHandler:            &billing.BillingHandler{},
+		BillingHandler:            &billinghttp.BillingHandler{},
 		EnvironmentHandler:        &environments.EnvironmentHandler{},
 		DomainHandler:             &domains.DomainHandler{},
-		RepositoryHandler:         &repositories.RepositoryHandler{},
-		IntegrationsGitHubHandler: &integrations.IntegrationsGitHubHandler{},
+		RepositoryHandler:         &repositorieshttp.RepositoryHandler{},
+		IntegrationsGitHubHandler: &integrationshttp.IntegrationsGitHubHandler{},
 		PreviewHandler:            &preview.PreviewHandler{},
 		AuditHandler:              &audit.AuditHandler{},
 		Guards:                    RouteGuards{RateLimiter: &ratelimit.RateLimiter{}, VerifyRateLimiter: &ratelimit.VerifyRateLimiter{}, IdempotencyStore: stubIdempotencyStore{}, PlanLimiter: &enforcement.PlanLimiter{}, CostEnforcer: &policy.CostEnforcer{}},

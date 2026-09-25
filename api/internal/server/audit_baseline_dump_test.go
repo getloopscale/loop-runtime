@@ -15,19 +15,19 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
+	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
 	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
+	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/audit"
-	"github.com/getloopscale/loopzero/api/internal/routes/billing"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
-	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
 	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
-	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/scale"
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
@@ -106,10 +106,10 @@ func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 		EnvironmentHandler:        &environments.EnvironmentHandler{},
 		TeamHandler:               &teams.TeamHandler{},
 		DomainHandler:             &domains.DomainHandler{},
-		RepositoryHandler:         &repositories.RepositoryHandler{},
-		IntegrationsGitHubHandler: &integrations.IntegrationsGitHubHandler{},
+		RepositoryHandler:         &repositorieshttp.RepositoryHandler{},
+		IntegrationsGitHubHandler: &integrationshttp.IntegrationsGitHubHandler{},
 		AuditHandler:              &audit.AuditHandler{},
-		BillingHandler:            &billing.BillingHandler{},
+		BillingHandler:            &billinghttp.BillingHandler{},
 		Guards:                    RouteGuards{RateLimiter: &ratelimit.RateLimiter{}, IPRateLimit: &ratelimit.IPRateLimiter{}, VerifyRateLimiter: &ratelimit.VerifyRateLimiter{}, PlanLimiter: &enforcement.PlanLimiter{}, CostEnforcer: &policy.CostEnforcer{}},
 	}
 	r := NewRouter(cfg)

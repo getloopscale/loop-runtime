@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/logs"
-	"github.com/getloopscale/loopzero/api/internal/routes/metrics"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
@@ -123,8 +123,8 @@ type OrchestratorDeps struct {
 	RollbackHandler     *rollback.RollbackHandler
 	PromoteHandler      *promote.PromoteHandler
 	StatusHandler       *status.StatusHandler
-	MetricsProxyHandler *metrics.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
-	StatusSSEHandler    *status.StatusSSEHandler     // T2.1 J-18 T1.3.b — SSE signal.changed stream
+	MetricsProxyHandler *projectmetricshttp.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
+	StatusSSEHandler    *status.StatusSSEHandler                // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	ScaleHandler        *scale.ScaleHandler
 	BuildListHandler    *builds.BuildListHandler
 	BuildStatsHandler   *builds.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
@@ -297,11 +297,11 @@ func setupOrchestrator(
 	// ship nil so the handler returns 503 prometheus_not_configured honestly
 	// (plan v1.1 ADR D2 — degraded UI is the canonical disabled state). Hermetic
 	// Go tests inject httptest-backed fakes.
-	var promClient metrics.PrometheusQueryClient
+	var promClient projectmetricshttp.PrometheusQueryClient
 	if cfg.PrometheusAddress != "" {
-		promClient = metrics.NewPrometheusClient(cfg.PrometheusAddress, nil)
+		promClient = projectmetricshttp.NewPrometheusClient(cfg.PrometheusAddress, nil)
 	}
-	metricsProxyHandler := metrics.NewMetricsProxyHandler(projectStore, promClient)
+	metricsProxyHandler := projectmetricshttp.NewMetricsProxyHandler(projectStore, promClient)
 
 	// T2.1 J-18 T1.3.b — SSE signal.changed stream handler, on the concrete
 	// PostgresEventStore (constructed in setup_stores.go): only it reads the
