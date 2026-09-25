@@ -83,8 +83,6 @@ KEEP-OPERATOR (truly justified per D4) or candidate for downstream phase action.
 | infra/helmfile/scripts/bootstrap-cell-cc.sh | 234 | grandfathered 2026-05-22 — Phase 2 candidate (delegate to helmfile) |
 | infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh | 73 | grandfathered 2026-05-22 — Phase 2 candidate |
 | infra/helmfile/scripts/bootstrap-oauth-clients.sh | 233 | grandfathered 2026-05-22 — Phase 2 candidate |
-| infra/helmfile/scripts/bootstrap-patch-admission-policies.sh | 41 | grandfathered 2026-05-22 — DELEGATE-HELMFILE (Phase 2) |
-| infra/helmfile/scripts/bootstrap-patch-sigstore-policy-controller.sh | 36 | grandfathered 2026-05-22 — DELEGATE-HELMFILE (Phase 2) |
 
 ### Baseline (auto-imported)
 

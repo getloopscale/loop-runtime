@@ -293,8 +293,13 @@ tasks:
       # run. generate-build-secrets.sh now pins its own context by construction
       # (KUBECTL_CONTEXT + a kubectl() wrapper), so no global mutation is needed.
       - bash infra/helmfile/scripts/generate-build-secrets.sh standalone
-      - bash infra/helmfile/scripts/bootstrap-patch-sigstore-policy-controller.sh
-      - bash infra/helmfile/scripts/bootstrap-patch-admission-policies.sh
+      # policy-controller + admission-policies on cell-0, from the cell helmfile — the one
+      # owner of both releases, so the environment's policyMode, domain and registry
+      # allow-list apply. Two scripts used to `helm upgrade` the same releases here with
+      # only a registry --set, which rebuilt values from chart defaults and silently
+      # flipped clusterImagePolicy.mode back to enforce.
+      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=policy-controller sync
+      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=admission-policies sync
       # M07 LIVE keyless GREEN (Ralph iter 5 2026-05-28): Sigstore local stack
       # for cosign keyless signing (Fulcio + Rekor + CTLog + sigstore-extras
       # NetworkPolicies + dynamic K3s CACert config). Opt-out via env
