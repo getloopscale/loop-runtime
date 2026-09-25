@@ -19,7 +19,7 @@
 // without changing the generator, the Secret and the chart mount together.
 // This does the equivalent in the one place that can change safely: re-read the
 // kubeconfig from disk and pick up the current token.
-package build
+package adapters
 
 import (
 	"os"

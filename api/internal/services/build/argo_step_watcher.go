@@ -6,7 +6,6 @@ package build
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"regexp"
 	"sync"
@@ -15,11 +14,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/events"
 	cloudmetrics "github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/sse"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
 )
 
 // ArgoNodePhase enumerates the Argo Workflow node phases we react to.
@@ -413,149 +407,9 @@ func truncate(s string, max int) string {
 	return s[:max] + "..."
 }
 
-// ExtractBuildIDForTest exposes extractBuildID to other packages used
-// only in tests.
-func ExtractBuildIDForTest(workflowName string) string {
+// BuildIDFromWorkflowName returns the build id encoded in an Argo Workflow
+// name (`loopzero-build-<buildID>-<random>`), or "" when the workflow is not a
+// build. adapters.K8sWorkflowNodeSource uses it to tag node events.
+func BuildIDFromWorkflowName(workflowName string) string {
 	return extractBuildID(workflowName)
-}
-
-// Compile-time check that fmt is consumed (kept for future expansion).
-var _ = fmt.Sprintf
-
-// =============================================================================
-// K8sWorkflowNodeSource — production WorkflowNodeSource adapter (T1.3 wire)
-// =============================================================================
-
-// argoWorkflowGVR is the canonical GroupVersionResource for Argo Workflows.
-// Duplicated here to avoid importing api/internal/buildplane/argo from services (cycle).
-var argoWorkflowGVR = schema.GroupVersionResource{
-	Group:    "argoproj.io",
-	Version:  "v1alpha1",
-	Resource: "workflows",
-}
-
-// K8sWorkflowNodeSource polls Argo Workflows from the build cluster and
-// emits ArgoNodeEvent for every Pod node phase observed. Polling (rather
-// than informer/watch) keeps the adapter small and resilient to
-// reconnects — the watcher dedups duplicate events by (buildID, nodeName)
-// + lastPhase so a per-tick re-sweep is safe.
-type K8sWorkflowNodeSource struct {
-	client       dynamic.Interface
-	namespace    string
-	pollInterval time.Duration
-	logger       *slog.Logger
-	// onWatchError is called with HTTP status code + message when the
-	// cluster reports auth failures. Wire to ArgoStepWatcher.ReportWatchError.
-	onWatchError func(int, string)
-}
-
-// NewK8sWorkflowNodeSource constructs a poll-based source. Namespace
-// empty = all namespaces. pollInterval default 2s if zero.
-func NewK8sWorkflowNodeSource(client dynamic.Interface, namespace string, pollInterval time.Duration, logger *slog.Logger) *K8sWorkflowNodeSource {
-	if pollInterval <= 0 {
-		pollInterval = 2 * time.Second
-	}
-	return &K8sWorkflowNodeSource{
-		client:       client,
-		namespace:    namespace,
-		pollInterval: pollInterval,
-		logger:       logger,
-	}
-}
-
-// WithWatchErrorHandler wires the EC-1 watcher error reporter. Optional.
-func (s *K8sWorkflowNodeSource) WithWatchErrorHandler(fn func(int, string)) *K8sWorkflowNodeSource {
-	s.onWatchError = fn
-	return s
-}
-
-// Run polls Workflows on the configured interval and emits handler calls.
-// Returns when ctx is cancelled. Transient list errors are logged and
-// retried on the next tick. Per-Workflow parse errors are skipped.
-func (s *K8sWorkflowNodeSource) Run(ctx context.Context, handler func(ArgoNodeEvent)) error {
-	ticker := time.NewTicker(s.pollInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			s.sweep(ctx, handler)
-		}
-	}
-}
-
-func (s *K8sWorkflowNodeSource) sweep(ctx context.Context, handler func(ArgoNodeEvent)) {
-	list, err := s.client.Resource(argoWorkflowGVR).Namespace(s.namespace).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		// EC-1: surface 401/403 to the watcher's dedicated counter so a
-		// silent token expiry triggers an alert before events dry up.
-		if s.onWatchError != nil {
-			switch {
-			case k8serrors.IsUnauthorized(err):
-				s.onWatchError(401, err.Error())
-			case k8serrors.IsForbidden(err):
-				s.onWatchError(403, err.Error())
-			}
-		}
-		s.logger.Warn("argo step source: list failed", "error", err)
-		return
-	}
-	for _, wf := range list.Items {
-		buildID := extractBuildID(wf.GetName())
-		if buildID == "" {
-			continue
-		}
-		s.emitNodes(&wf, buildID, handler)
-	}
-}
-
-// emitNodes walks status.nodes and emits one event per Pod node.
-func (s *K8sWorkflowNodeSource) emitNodes(wf *unstructured.Unstructured, buildID string, handler func(ArgoNodeEvent)) {
-	nodes, found, err := unstructured.NestedMap(wf.Object, "status", "nodes")
-	if err != nil || !found {
-		return
-	}
-	for nodeID, nodeAny := range nodes {
-		nodeMap, ok := nodeAny.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		nodeType, _, _ := unstructured.NestedString(nodeMap, "type")
-		if nodeType != "Pod" {
-			continue
-		}
-		phase, _, _ := unstructured.NestedString(nodeMap, "phase")
-		displayName, _, _ := unstructured.NestedString(nodeMap, "displayName")
-		if displayName == "" {
-			displayName = nodeID
-		}
-		message, _, _ := unstructured.NestedString(nodeMap, "message")
-
-		startedAt := parseK8sTime(nodeMap, "startedAt")
-		finishedAt := parseK8sTime(nodeMap, "finishedAt")
-
-		handler(ArgoNodeEvent{
-			BuildID:     buildID,
-			NodeName:    nodeID,
-			DisplayName: displayName,
-			NodeType:    nodeType,
-			Phase:       ArgoNodePhase(phase),
-			StartedAt:   startedAt,
-			FinishedAt:  finishedAt,
-			Message:     message,
-		})
-	}
-}
-
-func parseK8sTime(m map[string]interface{}, key string) time.Time {
-	s, _, _ := unstructured.NestedString(m, key)
-	if s == "" {
-		return time.Time{}
-	}
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return time.Time{}
-	}
-	return t
 }

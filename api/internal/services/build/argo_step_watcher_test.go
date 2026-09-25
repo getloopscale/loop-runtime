@@ -303,9 +303,9 @@ func TestArgoStepWatcher_BuildIDExtractedFromWorkflowName(t *testing.T) {
 		"":               "",
 	}
 	for input, want := range cases {
-		got := ExtractBuildIDForTest(input)
+		got := BuildIDFromWorkflowName(input)
 		if got != want {
-			t.Errorf("ExtractBuildIDForTest(%q) = %q, want %q", input, got, want)
+			t.Errorf("BuildIDFromWorkflowName(%q) = %q, want %q", input, got, want)
 		}
 	}
 }
