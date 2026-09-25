@@ -42,6 +42,7 @@ package skillsuites
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,6 +53,11 @@ import (
 
 // ErrSuitesFailed means at least one skill suite is red.
 var ErrSuitesFailed = errors.New("a skill test suite is red — these suites guard the gates that guard everything else, and nothing else runs them")
+
+// ErrSkillsRootMissing means the skills tree is absent. It is the installed kit,
+// which .gitignore excludes, so this is the state of every fresh clone: nothing
+// was verified, and that is named apart from a tree that holds no suite.
+var ErrSkillsRootMissing = errors.New("the skills tree is absent — it is the installed, gitignored kit, so nothing was verified on this machine")
 
 // ErrNoSuitesFound means discovery found no suite to run.
 var ErrNoSuitesFound = errors.New("no skill suite found — discovery is broken or the skills tree moved, and a green verdict over a scan that found nothing is worth less than no verdict")
@@ -114,8 +120,11 @@ func Discover(cfg Config) ([]SuiteDir, error) {
 	root := filepath.Join(cfg.RepoRoot, cfg.SkillsRel)
 
 	entries, err := os.ReadDir(root)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("%w: %s", ErrSkillsRootMissing, root)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrNoSuitesFound, root)
+		return nil, fmt.Errorf("reading %s: %w", root, err)
 	}
 
 	var found []SuiteDir
@@ -124,7 +133,14 @@ func Discover(cfg Config) ([]SuiteDir, error) {
 			continue
 		}
 		dir := filepath.Join(root, e.Name())
-		if fi, statErr := os.Stat(filepath.Join(dir, "tests")); statErr != nil || !fi.IsDir() {
+		fi, statErr := os.Stat(filepath.Join(dir, "tests"))
+		if errors.Is(statErr, fs.ErrNotExist) {
+			continue // a skill without tests/ carries no suite
+		}
+		if statErr != nil {
+			return nil, fmt.Errorf("reading %s: %w", filepath.Join(dir, "tests"), statErr)
+		}
+		if !fi.IsDir() {
 			continue
 		}
 		found = append(found, SuiteDir{Skill: e.Name(), Dir: dir})

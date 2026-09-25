@@ -365,11 +365,17 @@ func runSkillPaths(args []string) int {
 	}
 	resolveDotRoot(root)
 	outcome, err := skillpaths.Check(skillpaths.Config{RepoRoot: *root})
-	if err != nil {
+	switch {
+	case errors.Is(err, skillpaths.ErrSkillsRootMissing):
+		return reportKitNotInstalled("skill-paths", err)
+	case errors.Is(err, skillpaths.ErrViolations):
 		fmt.Fprintf(os.Stderr, "skill-paths: FAIL — %d broken reference(s) across SKILL.md files\n", len(outcome.Failures))
 		for _, f := range outcome.Failures {
 			fmt.Fprintf(os.Stderr, "  %s\n", f)
 		}
+		return 1
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "skill-paths: FAIL — %v\n", err)
 		return 1
 	}
 	fmt.Printf("skill-paths: PASS — %d skills, %d paths, %d task invocations resolve\n",

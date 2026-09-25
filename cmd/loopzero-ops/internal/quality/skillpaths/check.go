@@ -13,6 +13,7 @@ package skillpaths
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -43,6 +44,11 @@ type Outcome struct {
 	Failures      []string
 }
 
+// ErrSkillsRootMissing means .claude/skills is absent. That directory is the
+// installed kit, which .gitignore excludes, so a fresh clone never has it: the
+// gate verified nothing, and says so instead of reporting a count of zero.
+var ErrSkillsRootMissing = errors.New("the skills root " + skillsDir + " is absent — it is the installed, gitignored kit, so nothing was verified on this machine")
+
 // ErrViolations means at least one skill reference resolves to a missing file
 // / non-existent task.
 var ErrViolations = errors.New("SKILL.md file references at least one missing infra/scripts path OR non-existent task")
@@ -72,6 +78,9 @@ func Check(cfg Config) (Outcome, error) {
 
 	skillsRoot := filepath.Join(root, skillsDir)
 	entries, err := os.ReadDir(skillsRoot)
+	if errors.Is(err, fs.ErrNotExist) {
+		return Outcome{}, ErrSkillsRootMissing
+	}
 	if err != nil {
 		return Outcome{}, fmt.Errorf("read skills dir %s: %w", skillsDir, err)
 	}
@@ -84,8 +93,11 @@ func Check(cfg Config) (Outcome, error) {
 		skillName := e.Name()
 		skillMD := filepath.Join(skillsRoot, skillName, "SKILL.md")
 		bodyBytes, err := os.ReadFile(skillMD)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue // a directory with no SKILL.md is not a skill
+		}
 		if err != nil {
-			continue // no SKILL.md → skip
+			return out, fmt.Errorf("read %s: %w", skillMD, err)
 		}
 		body := string(bodyBytes)
 		out.CheckedSkills++

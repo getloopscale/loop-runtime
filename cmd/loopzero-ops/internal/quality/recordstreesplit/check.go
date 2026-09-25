@@ -48,16 +48,14 @@ import (
 
 // DefaultLiveDir is the canonical records tree, per rules/records-location.md.
 //
-// Era `.claude/records` ate' 2026-09-09, quando aquela regra moveu a raiz de escrita
-// para `<project>/.squad/` — e a razao dela e' a mesma que esta constante serve: um
-// projeto nao deve partilhar diretorio com uma dependencia instalada, porque `.claude/`
-// e' gitignored e substituido inteiro pelo proximo install, entao um registro escrito
-// la' nao alcanca quem clona e morre na proxima atualizacao.
+// It was `.claude/records` until 2026-09-09, when that rule moved the write root to
+// `<project>/.squad/`: a project must not share a directory with an installed
+// dependency, because `.claude/` is gitignored and replaced whole by the next
+// install.
 //
-// A constante ficou apontando para a raiz aposentada. Medido 2026-09-16, depois de o
-// ultimo arquivo sair de `.claude/records/`: o diretorio deixou de existir e este gate
-// passou a falhar por nao encontrar a arvore que ele governa — que e' exatamente o que
-// o comentario do teste diz que deve acontecer, so' que apontado para o lugar errado.
+// `.squad/records/` is gitignored too (`.squad/*`), so a fresh clone has no live
+// tree. The gate reports that as LiveMissing — unverified — never as a pass over
+// a tree it did not find.
 const DefaultLiveDir = ".squad/records"
 
 // DefaultArchiveDir is the tree retired on 2026-09-03 and frozen by this gate.
@@ -106,12 +104,18 @@ func (c Config) resolve() (root, live, archive, manifest string) {
 // Violations carries the configuration-level failures that are not about one
 // specific record.
 type Outcome struct {
-	Pass       bool
-	LiveCount  int      // `.md` files in the live tree — reported, never bounded
-	FrozenSize int      // records the manifest declares
-	Added      []string // in the archive, absent from the manifest
-	Removed    []string // in the manifest, absent from the archive
-	Violations []string
+	Pass bool
+	// LiveMissing means the live tree does not exist on this machine, so nothing
+	// was verified. Pass is false; it is not a violation either.
+	LiveMissing bool
+	// ArchiveAbsent means neither the retired archive nor its manifest exists:
+	// nothing is frozen, and FrozenSize is zero because there is no freeze.
+	ArchiveAbsent bool
+	LiveCount     int      // `.md` files in the live tree — reported, never bounded
+	FrozenSize    int      // records the manifest declares
+	Added         []string // in the archive, absent from the manifest
+	Removed       []string // in the manifest, absent from the archive
+	Violations    []string
 }
 
 // Check runs the gate.
@@ -119,6 +123,11 @@ func Check(cfg Config) *Outcome {
 	root, liveRel, archiveRel, manifestRel := cfg.resolve()
 	out := &Outcome{Pass: true}
 
+	if !dirExists(filepath.Join(root, liveRel)) {
+		out.Pass = false
+		out.LiveMissing = true
+		return out
+	}
 	live, err := markdownSet(filepath.Join(root, liveRel))
 	if err != nil {
 		out.Pass = false
@@ -136,6 +145,7 @@ func Check(cfg Config) *Outcome {
 	// The losing tree removed outright is the DoD's other allowed disposition:
 	// one tree, nothing to freeze, nothing to guard.
 	if !archiveExists && !manifestExists {
+		out.ArchiveAbsent = true
 		return out
 	}
 

@@ -142,9 +142,12 @@ func TestNoSuitesFoundIsAFailureNotASilentPass(t *testing.T) {
 	}
 }
 
+// A missing skills tree is the installed kit being absent, which .gitignore makes
+// the state of every fresh clone. It must fail, and by a name distinct from a
+// tree that is present and holds no suite.
 func TestMissingSkillsTreeIsAFailure(t *testing.T) {
-	if _, err := Check(Config{RepoRoot: t.TempDir()}); !errors.Is(err, ErrNoSuitesFound) {
-		t.Fatalf("a missing skills tree must fail loudly: %v", err)
+	if _, err := Discover(Config{RepoRoot: t.TempDir()}); !errors.Is(err, ErrSkillsRootMissing) {
+		t.Fatalf("a missing skills tree must be reported as such: %v", err)
 	}
 }
 
@@ -183,7 +186,7 @@ func TestRealTreeDiscoveryReachesTheSuites(t *testing.T) {
 	// No ecosystem installed: the contract is a LOUD refusal, and asserting it beats
 	// vanishing — it proves the gate cannot report green over a tree it never found.
 	if _, statErr := os.Stat(filepath.Join(root, ".claude", "skills")); statErr != nil {
-		if !errors.Is(discErr, ErrNoSuitesFound) {
+		if !errors.Is(discErr, ErrSkillsRootMissing) {
 			t.Fatalf("without a skills tree discovery must fail loudly: %v", discErr)
 		}
 		return

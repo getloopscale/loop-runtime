@@ -38,6 +38,8 @@ func runSkillSuites(args []string) int {
 	case out.Advisory:
 		fmt.Println("skill-suites: ADVISORY — python3/pytest absent; nothing was concluded")
 		return 0
+	case errors.Is(err, skillsuites.ErrSkillsRootMissing):
+		return reportKitNotInstalled("skill-suites", err)
 	case errors.Is(err, skillsuites.ErrNoSuitesFound):
 		fmt.Fprintf(os.Stderr, "skill-suites: FAIL — %v\n", err)
 		return 1
@@ -56,6 +58,17 @@ func runSkillSuites(args []string) int {
 	return 0
 }
 
+// reportKitNotInstalled is the one verdict a gate over the installed kit gives
+// on a machine that does not have it. `.claude/` is gitignored, so this is every
+// fresh clone: the gate verified nothing, and exit 5 keeps that apart from both
+// a pass and a violation found in the kit.
+func reportKitNotInstalled(gate string, err error) int {
+	fmt.Fprintf(os.Stderr, "%s: NOT VERIFIED — %v\n", gate, err)
+	fmt.Fprintf(os.Stderr, "  %s checks the installed kit under .claude/, which .gitignore excludes;\n"+
+		"  it can only be verified on a machine where the kit is installed.\n", gate)
+	return 5
+}
+
 func runSkillScriptPaths(args []string) int {
 	fs := flag.NewFlagSet("skill-script-paths", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
@@ -67,8 +80,7 @@ func runSkillScriptPaths(args []string) int {
 	out, err := skillscriptpaths.Check(skillscriptpaths.Config{RepoRoot: *root, SkillsRel: *skills})
 	switch {
 	case errors.Is(err, skillscriptpaths.ErrSkillsRootMissing):
-		fmt.Fprintf(os.Stderr, "skill-script-paths: FAIL — %v\n", err)
-		return 1
+		return reportKitNotInstalled("skill-script-paths", err)
 	case errors.Is(err, skillscriptpaths.ErrUnreachableInvocation):
 		fmt.Fprintf(os.Stderr, "skill-script-paths: FAIL — %d invocation(s) resolve in only one layout:\n", len(out.Findings))
 		for _, f := range out.Findings {

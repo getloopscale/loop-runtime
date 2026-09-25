@@ -133,10 +133,49 @@ func TestCheck_ToPlanTearDownAntiPatternFails(t *testing.T) {
 	}
 }
 
-func TestCheck_RealRepoPasses(t *testing.T) {
-	root := qtestutil.RootFile(t, skillsDir)
+// The skills tree is the installed kit, which .gitignore excludes, so a fresh
+// clone has none. On such a machine the gate must refuse by name; where the kit
+// is installed it must pass. Either way the assertion runs.
+func TestCheck_RealRepoPassesOrRefusesWithoutTheKit(t *testing.T) {
+	root := qtestutil.Root(t)
 	outcome, checkErr := Check(Config{RepoRoot: root})
+	if _, statErr := os.Stat(filepath.Join(root, skillsDir)); statErr != nil {
+		if !errors.Is(checkErr, ErrSkillsRootMissing) {
+			t.Fatalf("without the kit installed the gate must refuse by name, got %v", checkErr)
+		}
+		return
+	}
 	if checkErr != nil {
 		t.Fatalf("real repo must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
+	}
+}
+
+func TestCheck_MissingSkillsRootIsNamed(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "Taskfile.yml"), []byte("version: '3'\ntasks:\n  a: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrSkillsRootMissing) {
+		t.Fatalf("a missing skills root must be reported as such, got %v", err)
+	}
+}
+
+// A SKILL.md that exists and cannot be read is not a skill without a SKILL.md.
+func TestCheck_UnreadableSkillDocIsAnError(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "Taskfile.yml"), []byte("version: '3'\ntasks:\n  a: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, skillsDir, "broken")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A directory where the file should be: present, and unreadable as a file.
+	if err := os.Mkdir(filepath.Join(dir, "SKILL.md"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Check(Config{RepoRoot: root})
+	if err == nil || errors.Is(err, ErrViolations) {
+		t.Fatalf("an unreadable SKILL.md was skipped, got %v", err)
 	}
 }

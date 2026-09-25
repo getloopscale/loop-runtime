@@ -188,3 +188,32 @@ func TestIgnoraArquivoLocalDeSessaoNaRaiz(t *testing.T) {
 		t.Fatalf("err = %v; um .local.md nao pode reprovar o repositorio: %+v", err, out.Findings)
 	}
 }
+
+// A SKILL.md that exists and cannot be read is not a skill without a SKILL.md:
+// skipping it reports PASS over a document nobody read.
+func TestUnreadableSkillDocIsAnError(t *testing.T) {
+	root := tree(t, map[string]string{"ok": "fine\n"})
+	dir := filepath.Join(root, ".claude", "skills", "broken")
+	if err := os.MkdirAll(filepath.Join(dir, "SKILL.md"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Check(Config{RepoRoot: root})
+	if err == nil || errors.Is(err, ErrUnreachableInvocation) {
+		t.Fatalf("an unreadable SKILL.md was skipped, got %v", err)
+	}
+}
+
+func TestUnreadableRuleDocIsAnError(t *testing.T) {
+	root := tree(t, map[string]string{"ok": "fine\n"})
+	rules := filepath.Join(root, ".claude", "rules")
+	if err := os.MkdirAll(filepath.Join(rules, "real"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(rules, "real"), filepath.Join(rules, "linked.md")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Check(Config{RepoRoot: root})
+	if err == nil || errors.Is(err, ErrUnreachableInvocation) {
+		t.Fatalf("an unreadable rule document was skipped, got %v", err)
+	}
+}

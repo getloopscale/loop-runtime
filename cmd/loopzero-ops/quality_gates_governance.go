@@ -500,6 +500,17 @@ func runRecordsTreeSplit(args []string) int {
 		return 1
 	}
 	o := recordstreesplit.Check(recordstreesplit.Config{RepoRoot: *root})
+	if o.LiveMissing {
+		fmt.Fprintf(os.Stderr, "records-tree-split: NOT VERIFIED — %s is absent on this machine.\n"+
+			"  It is gitignored, so a fresh clone has none; there is no records tree here to check.\n",
+			recordstreesplit.DefaultLiveDir)
+		return 5
+	}
+	if o.Pass && o.ArchiveAbsent {
+		fmt.Printf("OK one live records tree (%s, %d records); no retired archive at %s, so nothing is frozen\n",
+			recordstreesplit.DefaultLiveDir, o.LiveCount, recordstreesplit.DefaultArchiveDir)
+		return 0
+	}
 	if o.Pass {
 		fmt.Printf("OK one live records tree (%s, %d records); %s frozen at %d\n",
 			recordstreesplit.DefaultLiveDir, o.LiveCount,

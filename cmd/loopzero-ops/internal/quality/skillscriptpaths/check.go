@@ -48,6 +48,7 @@ package skillscriptpaths
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -62,7 +63,7 @@ var ErrUnreachableInvocation = errors.New("a skill invokes a script by a path th
 // ErrSkillsRootMissing means the skills directory is absent, so nothing was checked.
 // Absence is a FAILURE and not a skip: a gate that reports green over a tree it never
 // found is the shape of defect this whole gate exists to refuse.
-var ErrSkillsRootMissing = errors.New("the skills root is absent — nothing was scanned, and a green verdict over an unscanned tree is worthless")
+var ErrSkillsRootMissing = errors.New("the skills root is absent — it is the installed, gitignored kit, so nothing was verified on this machine")
 
 // invocationRE matches an interpreter followed by a bare `skills/...` path.
 //
@@ -142,8 +143,11 @@ func Check(cfg Config) (Outcome, error) {
 	root := filepath.Join(cfg.RepoRoot, cfg.SkillsRel)
 
 	entries, err := os.ReadDir(root)
-	if err != nil {
+	if errors.Is(err, fs.ErrNotExist) {
 		return Outcome{}, fmt.Errorf("%w: %s", ErrSkillsRootMissing, root)
+	}
+	if err != nil {
+		return Outcome{}, fmt.Errorf("reading %s: %w", root, err)
 	}
 
 	var out Outcome
@@ -154,8 +158,11 @@ func Check(cfg Config) (Outcome, error) {
 		out.SkillsScanned++
 		skillDoc := filepath.Join(root, e.Name(), "SKILL.md")
 		body, readErr := os.ReadFile(skillDoc)
-		if readErr != nil {
+		if errors.Is(readErr, fs.ErrNotExist) {
 			continue // a skill without a SKILL.md has no instruction to check
+		}
+		if readErr != nil {
+			return out, fmt.Errorf("reading %s: %w", skillDoc, readErr)
 		}
 		out.FilesScanned++
 		rel := filepath.Join(cfg.SkillsRel, e.Name(), "SKILL.md")
@@ -178,8 +185,11 @@ func Check(cfg Config) (Outcome, error) {
 	for _, sub := range []string{"rules", "commands", "."} {
 		dir := filepath.Join(eco, sub)
 		items, derr := os.ReadDir(dir)
+		if errors.Is(derr, fs.ErrNotExist) {
+			continue // an ecosystem without rules/ or commands/ has nothing there to check
+		}
 		if derr != nil {
-			continue
+			return out, fmt.Errorf("reading %s: %w", dir, derr)
 		}
 		for _, it := range items {
 			if it.IsDir() || !strings.HasSuffix(it.Name(), ".md") {
@@ -195,10 +205,13 @@ func Check(cfg Config) (Outcome, error) {
 			doc := filepath.Join(dir, it.Name())
 			body, rerr := os.ReadFile(doc) // #nosec G304 -- path built from the ecosystem root
 			if rerr != nil {
-				continue
+				return out, fmt.Errorf("reading %s: %w", doc, rerr)
 			}
 			out.FilesScanned++
-			rel, _ := filepath.Rel(cfg.RepoRoot, doc)
+			rel, relErr := filepath.Rel(cfg.RepoRoot, doc)
+			if relErr != nil {
+				return out, fmt.Errorf("locating %s under %s: %w", doc, cfg.RepoRoot, relErr)
+			}
 			for i, line := range strings.Split(string(body), "\n") {
 				for _, pth := range scanLine(line) {
 					out.Findings = append(out.Findings, Finding{
