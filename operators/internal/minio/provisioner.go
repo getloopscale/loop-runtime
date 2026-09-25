@@ -19,7 +19,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/minio/madmin-go/v3"
@@ -60,20 +62,46 @@ type AdminConfig struct {
 // NewAdminProvisioner creates a provisioner that uses the MinIO Admin SDK.
 // COMP-002: Uses madmin-go which handles AWS SigV4 authentication correctly,
 // replacing the previous HTTP Basic Auth implementation that returned 403.
+//
+// cfg.Endpoint may carry a scheme: https:// enables TLS, http:// or a bare
+// host:port (the in-cluster ClusterIP service, SEC-003) does not. The admin
+// credentials therefore travel in clear text only when the endpoint says so.
 func NewAdminProvisioner(cfg AdminConfig) (*AdminProvisioner, error) {
-	client, err := madmin.NewWithOptions(cfg.Endpoint, &madmin.Options{
-		Creds: credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
-		// SEC-003: Secure=false is intentional for in-cluster MinIO (no TLS).
-		// MinIO runs as a ClusterIP service on the mgmt cluster — traffic stays
-		// within the pod network, never traverses external networks.
-		// For production with external MinIO/Spaces, this is disabled entirely
-		// (DigitalOcean uses SPACES_ACCESS_KEY_ID, not MinIO admin API).
-		Secure: false,
+	host, secure, err := adminEndpoint(cfg.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+	client, err := madmin.NewWithOptions(host, &madmin.Options{
+		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+		Secure: secure,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("minio: create admin client: %w", err)
 	}
 	return &AdminProvisioner{client: client}, nil
+}
+
+// adminEndpoint splits an endpoint into the host madmin expects and whether
+// to use TLS, taken from the scheme. A bare host:port is plain HTTP.
+func adminEndpoint(endpoint string) (host string, secure bool, err error) {
+	if endpoint == "" {
+		return "", false, errors.New("minio: admin endpoint is empty")
+	}
+	if !strings.Contains(endpoint, "://") {
+		return endpoint, false, nil
+	}
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return "", false, fmt.Errorf("minio: parse admin endpoint %q: %w", endpoint, err)
+	}
+	switch u.Scheme {
+	case "https":
+		return u.Host, true, nil
+	case "http":
+		return u.Host, false, nil
+	default:
+		return "", false, fmt.Errorf("minio: admin endpoint %q: scheme must be http or https", endpoint)
+	}
 }
 
 // EnsureTenantCredentials creates a MinIO user for the tenant with a policy
@@ -106,7 +134,10 @@ func (p *AdminProvisioner) EnsureTenantCredentials(ctx context.Context, tenantID
 
 	// Check if user already exists — avoid rotating credentials on every reconcile,
 	// which would break in-flight build workflows using the previous secret key.
-	exists := p.userExists(ctx, accessKey)
+	exists, err := p.userExists(ctx, accessKey)
+	if err != nil {
+		return "", "", err
+	}
 	if exists {
 		// User and policy already provisioned. Ensure policy is up-to-date (idempotent).
 		if err := p.ensurePolicy(ctx, policyName, tenantID); err != nil {
@@ -168,10 +199,19 @@ func (p *AdminProvisioner) DeleteTenantCredentials(ctx context.Context, tenantID
 	return nil
 }
 
-// userExists checks if a MinIO user already exists.
-func (p *AdminProvisioner) userExists(ctx context.Context, accessKey string) bool {
+// userExists reports whether a MinIO user already exists. Only MinIO's
+// no-such-user answer means absent; any other failure is returned, because
+// reading it as absent would re-add the user with a new secret.
+func (p *AdminProvisioner) userExists(ctx context.Context, accessKey string) (bool, error) {
 	_, err := p.client.GetUserInfo(ctx, accessKey)
-	return err == nil
+	switch {
+	case err == nil:
+		return true, nil
+	case isNotFoundError(err):
+		return false, nil
+	default:
+		return false, fmt.Errorf("minio: look up user %s: %w", accessKey, err)
+	}
 }
 
 // ensurePolicy creates or updates a MinIO canned policy scoped to the tenant prefix.
@@ -230,28 +270,20 @@ func (p *AdminProvisioner) attachPolicy(ctx context.Context, policyName, accessK
 	return nil
 }
 
-// isNotFoundError checks if an error indicates a resource was not found.
-// madmin-go errors don't have a typed not-found; we check the message.
-//
-// FRAGILITY CONTRACT (T3.4 / CODE-004):
-//   - The version of madmin-go is pinned in go.mod (currently v3.0.110).
-//   - TestIsNotFoundError_MatchesKnownMessages in provisioner_test.go is
-//     the regression test that protects this matcher.
-//   - When bumping madmin-go, run the regression test FIRST against the
-//     new version. If it fails, the new version's error messages have
-//     drifted; either update the substrings here or open an upstream
-//     issue to add typed not-found errors to madmin-go.
-//   - If a typed error path becomes available upstream, replace this
-//     string-matching with type assertions.
+// isNotFoundError reports whether err is MinIO's answer that the user or
+// canned policy does not exist, read from the admin API's error code rather
+// than from message text.
 func isNotFoundError(err error) bool {
-	if err == nil {
+	var resp madmin.ErrorResponse
+	if !errors.As(err, &resp) {
 		return false
 	}
-	msg := err.Error()
-	return strings.Contains(msg, "does not exist") ||
-		strings.Contains(msg, "not found") ||
-		strings.Contains(msg, "The specified user does not exist") ||
-		strings.Contains(msg, "The canned policy does not exist")
+	switch resp.Code {
+	case "XMinioAdminNoSuchUser", "XMinioAdminNoSuchPolicy":
+		return true
+	default:
+		return false
+	}
 }
 
 // generateSecretKey creates a cryptographically secure random secret key.
