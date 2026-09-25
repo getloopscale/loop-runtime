@@ -261,7 +261,7 @@ The `task pkg:usage-matrix:check` gate fails when the table is out of date (gate
 | `pkg/healthcheck` | 5 | 0 | 0 | 0 | 0 | 5 |
 | `pkg/id` | 7 | 6 | 0 | 0 | 0 | 1 |
 | `pkg/logging` | 12 | 7 | 0 | 0 | 0 | 5 |
-| `pkg/naming` | 55 | 38 | 12 | 0 | 0 | 5 |
+| `pkg/naming` | 60 | 40 | 15 | 0 | 0 | 5 |
 | `pkg/statemachine` | 88 | 72 | 11 | 0 | 0 | 5 |
 | `pkg/vault` | 7 | 2 | 0 | 0 | 0 | 5 |
 

@@ -15,6 +15,7 @@ import (
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/operatortest"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 func newLoopZeroApplicationCR(name, tenantRef, project, env, serviceName string) *loopzerov1.LoopZeroApplication {
@@ -28,6 +29,7 @@ func newLoopZeroApplicationCR(name, tenantRef, project, env, serviceName string)
 			Project:     project,
 			Environment: env,
 			ServiceName: serviceName,
+			AppName:     serviceName,
 			Replicas:    1,
 			ServicePort: 80,
 		},
@@ -43,6 +45,8 @@ var _ = Describe("ApplicationController", Ordered, func() {
 			project     = "myapi"
 			env         = "production"
 			serviceName = "myapi-svc"
+
+			routedHostname = "tn-acme-myapi-myapi-svc-production.dev.loopzero.example"
 		)
 
 		BeforeAll(func() {
@@ -50,16 +54,17 @@ var _ = Describe("ApplicationController", Ordered, func() {
 			Expect(k8sClient.Create(ctx, app)).To(Succeed())
 		})
 
-		It("should set hostname via naming.Hostname", func() {
-			// naming.Hostname("myapi", "production", "dev.loopzero.example") => "myapi-production.dev.loopzero.example"
+		It("should set the routed hostname via naming.AppHostname", func() {
+			// naming.AppHostname("tn-acme", "myapi", "myapi-svc", "production", "dev.loopzero.example"),
+			// the Host rule the IngressRoute renderer emits for this app.
 			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
-				g.Expect(app.Spec.Hostname).To(Equal("myapi-production.dev.loopzero.example"))
+				g.Expect(app.Spec.Hostname).To(Equal(routedHostname))
 			})
 		})
 
 		It("should set status.url", func() {
 			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
-				g.Expect(app.Status.URL).To(Equal("https://myapi-production.dev.loopzero.example"))
+				g.Expect(app.Status.URL).To(Equal("https://" + routedHostname))
 			})
 		})
 
@@ -70,7 +75,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 					Name: appName + "-route", Namespace: "default",
 				}, &route)).To(Succeed())
 				g.Expect(route.Spec.ApplicationRef).To(Equal(appName))
-				g.Expect(route.Spec.Hostname).To(Equal("myapi-production.dev.loopzero.example"))
+				g.Expect(route.Spec.Hostname).To(Equal(routedHostname))
 				g.Expect(route.Spec.ServiceRef.Name).To(Equal(serviceName))
 				g.Expect(route.Spec.ServiceRef.Port).To(Equal(int32(80)))
 
@@ -142,6 +147,45 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		AfterAll(func() {
 			deleteAppWithFinalizer(appName)
 			// Also clean up the ExposedRoute (which now has a finalizer too)
+			route := &loopzerov1.ExposedRoute{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName + "-route", Namespace: "default"}, route); err == nil {
+				_ = operatortest.UpdateWithRetry(ctx, k8sClient, route, func() {
+					route.Finalizers = nil
+				})
+				_ = k8sClient.Delete(ctx, route)
+			}
+		})
+	})
+
+	Context("when a CR written before spec.appName still holds the old default hostname", func() {
+		const (
+			appName     = "app-legacy-host"
+			tenantRef   = "tn-legacy"
+			project     = "shop"
+			env         = "production"
+			serviceName = "web"
+
+			legacyHostname = "shop-production.dev.loopzero.example"
+			routedHostname = "tn-legacy-shop-web-production.dev.loopzero.example"
+		)
+
+		BeforeAll(func() {
+			app := newLoopZeroApplicationCR(appName, tenantRef, project, env, serviceName)
+			app.Spec.AppName = ""
+			app.Spec.Hostname = legacyHostname
+			app.Labels = map[string]string{naming.LabelApp: serviceName}
+			Expect(k8sClient.Create(ctx, app)).To(Succeed())
+		})
+
+		It("should replace the old default with the routed hostname, reading the app from its label", func() {
+			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
+				g.Expect(app.Spec.Hostname).To(Equal(routedHostname))
+				g.Expect(app.Status.URL).To(Equal("https://" + routedHostname))
+			})
+		})
+
+		AfterAll(func() {
+			deleteAppWithFinalizer(appName)
 			route := &loopzerov1.ExposedRoute{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName + "-route", Namespace: "default"}, route); err == nil {
 				_ = operatortest.UpdateWithRetry(ctx, k8sClient, route, func() {

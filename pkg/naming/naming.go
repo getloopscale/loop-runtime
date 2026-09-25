@@ -161,23 +161,6 @@ func GitOpsRepoName(teamSlug, projectSlug, envName string) (string, error) {
 	return composeName("gitops repo name", "%s-%s-%s", namePart{"team slug", teamSlug}, namePart{"project slug", projectSlug}, namePart{"env name", envName})
 }
 
-// Hostname returns "{projectSlug}-{envName}.{baseDomain}".
-//
-// This is NOT the hostname the platform routes: the IngressRoute renderer and
-// the status URL both use AppHostname ("{tenant}-{project}-{app}-{env}"),
-// and a host built here does not match that Host rule (the J-25 defect).
-// Its one remaining caller is the operator's default for an unset
-// LoopZeroApplication.spec.hostname; new callers should use AppHostname.
-// The subdomain part is sanitized to ensure RFC 1123 compliance.
-// Returns an error if the sanitized subdomain is empty (all-special-char inputs).
-func Hostname(projectSlug, envName, baseDomain string) (string, error) {
-	subdomain := Sanitize(fmt.Sprintf("%s-%s", projectSlug, envName))
-	if subdomain == "" {
-		return "", fmt.Errorf("hostname subdomain is empty after sanitizing project %q and env %q", projectSlug, envName)
-	}
-	return fmt.Sprintf("%s.%s", subdomain, baseDomain), nil
-}
-
 // ArgoAppName returns the ArgoCD Application resource name.
 // Format: "{teamSlug}-{projectSlug}-{envName}"
 func ArgoAppName(teamSlug, projectSlug, envName string) (string, error) {
@@ -250,6 +233,12 @@ const (
 	LabelProject     = "loopzero.io/project"
 	LabelEnvironment = "loopzero.io/environment"
 	LabelManagedBy   = "loopzero.io/managed-by"
+
+	// LabelApp names the application a resource belongs to (the service
+	// name in loopzero.yaml). The api sets it on every LoopZeroApplication CR it
+	// writes, and the app-operator reads it back for CRs that predate
+	// LoopZeroApplication.spec.appName.
+	LabelApp = "loopzero.io/app"
 
 	// ManagedByValue is the canonical value for the LabelManagedBy key,
 	// stable across all LoopZero-owned resources.

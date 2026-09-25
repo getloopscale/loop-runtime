@@ -144,6 +144,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 					Project:     "certproj",
 					Environment: "production",
 					ServiceName: serviceName,
+					AppName:     serviceName,
 				},
 			}
 			Expect(k8sClient.Create(ctx, loopzeroApp)).To(Succeed())

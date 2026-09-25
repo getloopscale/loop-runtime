@@ -275,37 +275,6 @@ func TestGitOpsRepoName_empty_env(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Hostname
-// ---------------------------------------------------------------------------
-
-func TestHostname_format(t *testing.T) {
-	got, err := Hostname("backend", "production", "example.com")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got != "backend-production.example.com" {
-		t.Errorf("got %q, want %q", got, "backend-production.example.com")
-	}
-}
-
-func TestHostname_sanitizes_parts(t *testing.T) {
-	got, err := Hostname("My_App", "PROD", "example.com")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got != "my-app-prod.example.com" {
-		t.Errorf("got %q, want %q", got, "my-app-prod.example.com")
-	}
-}
-
-func TestHostname_empty_subdomain_returns_error(t *testing.T) {
-	_, err := Hostname("@#$", "!!!", "example.com")
-	if err == nil {
-		t.Error("Hostname with all-special-char inputs should return error")
-	}
-}
-
-// ---------------------------------------------------------------------------
 // ArgoAppName
 // ---------------------------------------------------------------------------
 
@@ -538,11 +507,6 @@ func TestDeterminism_all_functions(t *testing.T) {
 		gn, _ := GitOpsRepoName("acme", "api", "prod")
 		if gn != "acme-api-prod" {
 			t.Fatalf("GitOpsRepoName not deterministic on iteration %d", i)
-		}
-
-		h, _ := Hostname("api", "prod", "example.com")
-		if h != "api-prod.example.com" {
-			t.Fatalf("Hostname not deterministic on iteration %d", i)
 		}
 
 		an, _ := ArgoAppName("acme", "api", "prod")

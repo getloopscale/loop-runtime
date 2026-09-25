@@ -219,14 +219,15 @@ func (r *ApplicationReconciler) patchStatus(ctx context.Context, app, base *loop
 	return r.Status().Patch(ctx, app, client.MergeFrom(base))
 }
 
-// reconcileHostname computes and persists the hostname if not yet assigned.
+// reconcileHostname persists the routed hostname when spec.hostname is unset or
+// still holds the controller's old default (see hostnameToAssign).
 func (r *ApplicationReconciler) reconcileHostname(ctx context.Context, req ctrl.Request, app *loopzerov1.LoopZeroApplication) error {
-	if app.Spec.Hostname != "" {
-		return nil
-	}
-	hostname, err := naming.Hostname(app.Spec.Project, app.Spec.Environment, r.BaseDomain)
+	hostname, assign, err := hostnameToAssign(app, r.BaseDomain)
 	if err != nil {
 		return fmt.Errorf("computing hostname: %w", err)
+	}
+	if !assign {
+		return nil
 	}
 	app.Spec.Hostname = hostname
 	if err := r.Update(ctx, app); err != nil {

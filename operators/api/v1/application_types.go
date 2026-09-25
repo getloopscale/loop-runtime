@@ -62,8 +62,17 @@ type LoopZeroApplicationSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	ServiceName string `json:"serviceName"`
 
+	// AppName is the application's name inside its project (the service name
+	// in loopzero.yaml). Together with TenantRef, Project and Environment it
+	// composes the routed hostname through pkg/naming.AppHostname, the formula
+	// the IngressRoute renderer uses. Optional so CRs written before the field
+	// existed stay valid: for those the controller reads the loopzero.io/app label
+	// the api has always set on the CR.
+	// +optional
+	AppName string `json:"appName,omitempty"`
+
 	// Hostname is the external hostname for this application.
-	// If empty, the controller computes it via naming.Hostname().
+	// If empty, the controller computes it via naming.AppHostname.
 	// +optional
 	Hostname string `json:"hostname,omitempty"`
 

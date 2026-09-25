@@ -24,6 +24,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/k8s"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // loopzeroApplicationsGroupResource synthesizes Conflict errors for RetryOnConflict.
@@ -149,10 +150,10 @@ func buildLoopZeroApplicationCR(namespace string, input LoopZeroApplicationInput
 			Name:      loopzeroApplicationCRName(input.TenantID, input.Project, input.AppName, input.Environment),
 			Namespace: namespace,
 			Labels: map[string]string{
-				"loopzero.io/tenant":      input.TenantID,
-				"loopzero.io/project":     input.Project,
-				"loopzero.io/environment": input.Environment,
-				"loopzero.io/app":         input.AppName,
+				naming.LabelTenant:      input.TenantID,
+				naming.LabelProject:     input.Project,
+				naming.LabelEnvironment: input.Environment,
+				naming.LabelApp:         input.AppName,
 			},
 		},
 	}
@@ -179,6 +180,8 @@ func applyLoopZeroApplicationSpec(app *apiv1.LoopZeroApplication, input LoopZero
 	app.Spec.TenantRef = input.TenantID
 	app.Spec.Project = input.Project
 	app.Spec.Environment = input.Environment
+	// The operator composes the routed hostname from it (naming.AppHostname).
+	app.Spec.AppName = input.AppName
 	app.Spec.ServiceName = input.ServiceName
 	app.Spec.ServicePort = port
 	app.Spec.Replicas = 1
