@@ -9,7 +9,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 type fakeBuildLookup struct {
@@ -55,14 +57,14 @@ func TestPostgresStore_DeployTenantID_UnknownReturnsNotFound(t *testing.T) {
 		name string
 		l    *fakeBuildLookup
 	}{
-		{"lookup error", &fakeBuildLookup{err: errors.New("not found")}},
+		{"build not found", &fakeBuildLookup{err: loopzeroerrors.ErrBuildNotFound}},
 		{"empty tenant", &fakeBuildLookup{tenant: ""}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := NewPostgresDeployTimelineStore(tt.l, &fakeReader{})
 			_, err := s.DeployTenantID(context.Background(), "dep-x")
-			if !errors.Is(err, timeline.ErrDeployNotFound) {
+			if !errors.Is(err, ports.ErrDeployNotFound) {
 				t.Errorf("expected ErrDeployNotFound; got %v", err)
 			}
 		})
@@ -78,7 +80,7 @@ func TestPostgresStore_GetAfterForDeploy_TenantMismatch(t *testing.T) {
 		&fakeReader{rows: []SSEEventRow{{ID: 1, EventType: "x", Data: json.RawMessage(`{}`)}}},
 	)
 	_, err := s.GetAfterForDeploy(context.Background(), "tn-attacker", "dep-1", 0)
-	if !errors.Is(err, timeline.ErrDeployNotFound) {
+	if !errors.Is(err, ports.ErrDeployNotFound) {
 		t.Errorf("expected ErrDeployNotFound; got %v", err)
 	}
 }
@@ -103,5 +105,19 @@ func TestPostgresStore_GetAfterForDeploy_TenantMatchReturnsRows(t *testing.T) {
 			}
 			return 0
 		}())
+	}
+}
+
+// An outage is not a missing deploy: a lookup that fails for any other
+// reason must surface as that failure (the handler answers 500), not as
+// "not found".
+func TestPostgresStore_DeployTenantID_LookupOutageIsNotNotFound(t *testing.T) {
+	outage := errors.New("connection refused")
+	s := NewPostgresDeployTimelineStore(&fakeBuildLookup{err: outage}, &fakeReader{})
+
+	_, err := s.DeployTenantID(context.Background(), "dep-x")
+
+	if errors.Is(err, ports.ErrDeployNotFound) || !errors.Is(err, outage) {
+		t.Fatalf("err = %v, want the outage, not ErrDeployNotFound", err)
 	}
 }

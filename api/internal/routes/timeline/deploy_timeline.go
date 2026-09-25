@@ -25,7 +25,6 @@ package timeline
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -36,6 +35,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
@@ -50,12 +50,7 @@ const deployTimelineEventTypePrefix = "deploy_timeline."
 // DeployTimelineEvent is the canonical SSE-event row consumed by the
 // timeline handler. ID is monotonic per (tenant, deploy). EventType
 // follows convention "deploy_timeline.<phase>.<status>".
-type DeployTimelineEvent struct {
-	ID        int64           `json:"id"`
-	EventType string          `json:"event_type"`
-	Data      json.RawMessage `json:"data"`
-	CreatedAt time.Time       `json:"created_at"`
-}
+type DeployTimelineEvent = ports.DeployTimelineEvent
 
 // DeployTimelineEventStore is the read-side contract the handler uses.
 // Write side (Aggregator.AppendDeployTimelineEvent) lives in the
@@ -75,7 +70,7 @@ type DeployTimelineEventStore interface {
 // ErrDeployNotFound is the sentinel for unknown deploy_id OR
 // tenant-mismatched deploy_id. Handler renders 404 in both cases to
 // avoid leaking deploy existence to non-owners.
-var ErrDeployNotFound = errors.New("deploy timeline: not found")
+var ErrDeployNotFound = ports.ErrDeployNotFound
 
 // Terminal event-type set per ADR D1 — stream closes after observing one.
 var deployTimelineTerminalEvents = map[string]bool{

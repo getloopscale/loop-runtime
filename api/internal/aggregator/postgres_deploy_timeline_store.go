@@ -6,8 +6,12 @@ package aggregator
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 // SSEReader is the minimal read surface from sse.EventStore the deploy
@@ -47,14 +51,10 @@ func NewPostgresDeployTimelineStore(b BuildLookup, r SSEReader) *PostgresDeployT
 }
 
 // DeployTenantID returns the tenant_id owning the given deploy_id.
-// Returns routes.ErrDeployNotFound when the deploy is unknown OR the
-// build-lookup errors (defense vs existence leak).
+// Returns ports.ErrDeployNotFound when the deploy is unknown; any other
+// lookup failure is returned as such.
 func (s *PostgresDeployTimelineStore) DeployTenantID(ctx context.Context, deployID string) (string, error) {
-	tenant, err := s.BuildLookup.GetTenantForBuild(ctx, deployID)
-	if err != nil || tenant == "" {
-		return "", timeline.ErrDeployNotFound
-	}
-	return tenant, nil
+	return s.ownerOf(ctx, deployID)
 }
 
 // GetAfterForDeploy returns timeline events for the (tenant, deploy)
@@ -62,23 +62,40 @@ func (s *PostgresDeployTimelineStore) DeployTenantID(ctx context.Context, deploy
 // BEFORE invoking this method, so the tenant arg is the resolved-owner
 // — this method honors ADR D8 by re-validating ownership at the read
 // boundary (defense-in-depth).
-func (s *PostgresDeployTimelineStore) GetAfterForDeploy(ctx context.Context, tenantID, deployID string, afterID int64) ([]timeline.DeployTimelineEvent, error) {
+func (s *PostgresDeployTimelineStore) GetAfterForDeploy(ctx context.Context, tenantID, deployID string, afterID int64) ([]ports.DeployTimelineEvent, error) {
 	// Defense-in-depth re-check (ADR D8).
-	owner, err := s.BuildLookup.GetTenantForBuild(ctx, deployID)
-	if err != nil || owner == "" || owner != tenantID {
-		return nil, timeline.ErrDeployNotFound
+	owner, err := s.ownerOf(ctx, deployID)
+	if err != nil {
+		return nil, err
+	}
+	if owner != tenantID {
+		return nil, ports.ErrDeployNotFound
 	}
 	rows, err := s.Reader.GetAfter(ctx, deployID, afterID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]timeline.DeployTimelineEvent, 0, len(rows))
+	out := make([]ports.DeployTimelineEvent, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, timeline.DeployTimelineEvent{
+		out = append(out, ports.DeployTimelineEvent{
 			ID:        row.ID,
 			EventType: row.EventType,
 			Data:      row.Data,
 		})
 	}
 	return out, nil
+}
+
+// ownerOf resolves the tenant owning deployID. A missing build is
+// ports.ErrDeployNotFound; any other lookup failure is returned as itself,
+// so an outage answers 500 instead of reading as "not found".
+func (s *PostgresDeployTimelineStore) ownerOf(ctx context.Context, deployID string) (string, error) {
+	tenant, err := s.BuildLookup.GetTenantForBuild(ctx, deployID)
+	if errors.Is(err, loopzeroerrors.ErrBuildNotFound) || (err == nil && tenant == "") {
+		return "", ports.ErrDeployNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("deploy timeline: resolve owner of %s: %w", deployID, err)
+	}
+	return tenant, nil
 }
