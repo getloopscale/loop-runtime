@@ -79,16 +79,10 @@ spec:
             - secretRef:
                 name: loopzero-service-auth
                 optional: true
-          {{- if or .Values.kubeconfig.build.existingConfigMap .Values.kubeconfig.cell0.existingConfigMap }}
+            {{- include "loopzero-common.additionalSecretSources" . | nindent 12 }}
+          {{- with (include "loopzero-api.env" . | trim) }}
           env:
-            {{- if .Values.kubeconfig.build.existingConfigMap }}
-            - name: BUILD_KUBECONFIG
-              value: /etc/loopzero/build-kubeconfig
-            {{- end }}
-            {{- if .Values.kubeconfig.cell0.existingConfigMap }}
-            - name: CELL_0_KUBECONFIG
-              value: /etc/loopzero/cell-0-kubeconfig
-            {{- end }}
+            {{- . | nindent 12 }}
           {{- end }}
           {{- include "loopzero-common.startupProbe" . | nindent 10 }}
           {{- with .Values.livenessProbe }}
@@ -102,8 +96,12 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
-            - name: tmp
-              mountPath: /tmp
+            {{- include "loopzero-common.tmpVolumeMount" . | nindent 12 }}
+            {{- with .Values.kubeconfig.clusterSecret.name }}
+            - name: cluster-kubeconfigs
+              mountPath: /etc/loopzero/kubeconfigs
+              readOnly: true
+            {{- end }}
             {{- if .Values.kubeconfig.build.existingConfigMap }}
             - name: build-kubeconfig
               mountPath: /etc/loopzero/build-kubeconfig
@@ -127,9 +125,13 @@ spec:
               readOnly: true
             {{- end }}
       volumes:
-        - name: tmp
-          emptyDir:
-            sizeLimit: 512Mi
+        {{- include "loopzero-common.tmpVolume" . | nindent 8 }}
+        {{- with .Values.kubeconfig.clusterSecret.name }}
+        - name: cluster-kubeconfigs
+          secret:
+            secretName: {{ . | quote }}
+            optional: {{ $.Values.kubeconfig.clusterSecret.optional }}
+        {{- end }}
         {{- if .Values.kubeconfig.build.existingConfigMap }}
         - name: build-kubeconfig
           configMap:

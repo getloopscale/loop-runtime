@@ -6,7 +6,7 @@
 # LB IPs are used for HTTP traffic (Traefik on workload).
 #
 # Components patched:
-#   - K8s ConfigMap loopzero-api-runtime-config@loopzero-system on mgmt cluster:
+#   - K8s ConfigMap loopzero-api@loopzero-system on mgmt cluster (Tilt-rendered from charts/loopzero-api):
 #       MINIO_CROSS_CLUSTER_ENDPOINT, GITEA_CROSS_CLUSTER_URL,
 #       API_CROSS_CLUSTER_URL, WORKLOAD_INGRESS_URL
 #       (post-T1.1.b commit 3fbde9a13: api-deployment.yaml uses envFrom now)
@@ -64,13 +64,15 @@ BUILD_LB=$(get_ip k3d-loopzero-build-serverlb)
 echo "  Build LB: $BUILD_LB (Argo metrics:30090)"
 
 # ---------------------------------------------------------------------------
-# Patch API runtime ConfigMap (loopzero-api-runtime-config)
+# Patch API ConfigMap (loopzero-api)
 #
 # Pre-T1.1.b (commit 3fbde9a13): these 4 envs were inline in
 # infra/tilt/api-deployment.yaml; this script sed-patched the file.
 #
 # Post-T1.1.b: the 4 envs migrated to envFrom: configMapRef:
-# loopzero-api-runtime-config (per code-review-remediation-147-findings
+# loopzero-api — rendered by the Tiltfile from charts/loopzero-api with
+# infra/tilt/loopzero-api-values.yaml (it was loopzero-api-runtime-config until the
+# bootstrap chart infra/helm/loopzero-api was deleted) (per code-review-remediation-147-findings
 # no-hardcode mandate). This script now patches the LIVE ConfigMap on
 # the mgmt cluster post-helmfile-sync, then triggers a rollout restart
 # so the API pod's envFrom re-reads.
@@ -80,11 +82,11 @@ echo "  Build LB: $BUILD_LB (Argo metrics:30090)"
 # may differ run-to-run).
 # ---------------------------------------------------------------------------
 echo ""
-echo "=== Patching loopzero-api-runtime-config ConfigMap (mgmt cluster) ==="
+echo "=== Patching loopzero-api ConfigMap (mgmt cluster) ==="
 
 MGMT_CTX="k3d-loopzero-core"
 API_CM_NS="loopzero-system"
-API_CM_NAME="loopzero-api-runtime-config"
+API_CM_NAME="loopzero-api"
 
 # Helper: patch ConfigMap key idempotently (no-op when value unchanged).
 patch_cm_key() {
@@ -120,7 +122,7 @@ if kubectl --context "$MGMT_CTX" get configmap "$API_CM_NAME" -n "$API_CM_NS" >/
 else
   echo "WARNING: ConfigMap ${API_CM_NAME} not found in ${API_CM_NS} on ${MGMT_CTX}"
   echo "  Skipping API runtime URL patches — Tilt apply will create the ConfigMap separately"
-  echo "  (T1.1.b drift: ConfigMap source is now infra/helm/loopzero-api/templates/configmap-runtime.yaml)"
+  echo "  (the ConfigMap source is charts/loopzero-api/templates/configmap.yaml, rendered by the Tiltfile)"
 fi
 
 # ---------------------------------------------------------------------------

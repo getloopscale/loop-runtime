@@ -97,7 +97,7 @@ spec:
                 optional: {{ not $.Values.billing.required }}
             {{- end }}
             {{- include "loopzero-common.additionalSecretSources" . | nindent 12 }}
-          {{- with (include "loopzero-common.secretKeyRefs" .) }}
+          {{- with (include "loopzero-common.secretKeyRefs" . | trim) }}
           env:
             {{- . | nindent 12 }}
           {{- end }}

@@ -10,7 +10,7 @@ import (
 )
 
 // A Chart.yaml the gate cannot read hides a chart name, and with it possibly a
-// pair; that is a gate error, not a chart that does not exist.
+// duplicate; that is a gate error, not a chart that does not exist.
 func TestUnreadableChartYamlIsAnError(t *testing.T) {
 	base := t.TempDir()
 	dir := filepath.Join(base, "x")
@@ -21,7 +21,7 @@ func TestUnreadableChartYamlIsAnError(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "Chart.yaml"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := chartNames(base); err == nil {
+	if _, err := scanTree(base); err == nil {
 		t.Fatal("want an error for an unreadable Chart.yaml, got nil")
 	}
 }
@@ -33,11 +33,11 @@ func TestAbsentTreeAndNonChartDirectoryAreNotErrors(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(base, "not-a-chart"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	names, err := chartNames(base)
-	if err != nil || len(names) != 0 {
-		t.Fatalf("want no names and no error, got %v %v", names, err)
+	charts, err := scanTree(base)
+	if err != nil || len(charts) != 0 {
+		t.Fatalf("want no charts and no error, got %v %v", charts, err)
 	}
-	if names, err := chartNames(filepath.Join(base, "missing")); err != nil || len(names) != 0 {
-		t.Fatalf("an absent tree holds no charts, got %v %v", names, err)
+	if charts, err := scanTree(filepath.Join(base, "missing")); err != nil || len(charts) != 0 {
+		t.Fatalf("an absent tree holds no charts, got %v %v", charts, err)
 	}
 }

@@ -615,7 +615,7 @@ auth-dev.loopzero.example {
 # URL convention: <project>-<env>.prod-dev.loopzero.example
 # Per ADR D1 of plan 2026-06-12-dashboard-journey-j25-live-url-discoverability,
 # loopzero-api status.go:252 emits this format when BASE_DOMAIN=prod-dev.loopzero.example
-# (configured in infra/helm/loopzero-api/values-dev.yaml — Tilt-canonical for
+# (configured in infra/tilt/loopzero-api-values.yaml — Tilt-canonical for
 # dev-public per memory `feedback_tilt_owned_deployment_yaml_drift`).
 #
 # Pattern parallel to *.preview-dev.loopzero.example (J-23 delivered 2026-06-07):

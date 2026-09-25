@@ -13,9 +13,11 @@
 // guard. Behavior is byte-identical to the deleted files; only the file
 // count changed (60 -> 1).
 //
-// Charts WITH real per-env assertions keep their own dev/drill/prod files —
-// currently only loopzero-api (infra/tests/helm/loopzero-api/), which has stubs at
-// values/{dev,drill,prod}/loopzero-api.yaml and asserts registry/replicas/domain.
+// No chart has env stubs today. The last ones were values/{dev,drill,prod}/loopzero-api.yaml,
+// consumed by the render suite of the bootstrap chart infra/helm/loopzero-api; both went
+// with that chart. The environment overlays are helmfile templates, which a plain
+// helm render cannot read, so per-environment behaviour of an install is checked by
+// rendering it through helmfile, not by stubs that are synced by hand.
 //
 // The "-published" entries pass their DIRECTORY name (loopzero-api-published,
 // loopzero-cloud-published) as a distinct stub namespace, matching the original

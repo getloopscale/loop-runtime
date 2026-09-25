@@ -10,11 +10,11 @@
 //   - 2 PrometheusRule (policy-controller-alerts + tenant-namespace-alerts)
 //
 // Critical structural invariants:
-//   * Every VAP has exactly one matching VAPBinding
-//   * VAP names referenced by bindings actually exist
-//   * VAPs use admissionregistration.k8s.io/v1 (NOT v1beta1)
-//   * VAPs failurePolicy is explicit
-//   * Bug #33 protection: pod-targeting VAPs MUST exempt system actors
+//   - Every VAP has exactly one matching VAPBinding
+//   - VAP names referenced by bindings actually exist
+//   - VAPs use admissionregistration.k8s.io/v1 (NOT v1beta1)
+//   - VAPs failurePolicy is explicit
+//   - Bug #33 protection: pod-targeting VAPs MUST exempt system actors
 //     via matchConditions (else namespace-controller deadlocks on delete)
 package loopzeroadmissionpolicies_test
 
@@ -49,7 +49,7 @@ type vapDoc struct {
 		Name string `json:"name"`
 	} `json:"metadata"`
 	Spec struct {
-		FailurePolicy   string `json:"failurePolicy"`
+		FailurePolicy    string `json:"failurePolicy"`
 		MatchConstraints struct {
 			ResourceRules []struct {
 				APIGroups   []string `json:"apiGroups"`

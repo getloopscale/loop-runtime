@@ -191,16 +191,22 @@ docker_build(
 # Render loopzero-api ConfigMap+Secret from helm chart BEFORE applying Deployment.
 # Without this, the Deployment's envFrom: configMapRef/secretRef references resolve to
 # missing resources and Pod fails CrashLoopBackOff. Output written to .tilt-rendered/
-# (gitignored) — re-rendered on every values-dev.yaml or template edit.
-_API_RUNTIME_RENDER = "mkdir -p .tilt-rendered && helm template loopzero-api infra/helm/loopzero-api -f infra/helm/loopzero-api/values-dev.yaml -s templates/configmap-runtime.yaml -s templates/secret-runtime.yaml -n loopzero-system > .tilt-rendered/loopzero-api-runtime.yaml"
+# (gitignored) — re-rendered on every values or template edit.
+#
+# The chart is charts/loopzero-api — the one loopzero-api chart Helmfile and ArgoCD install —
+# rendered with infra/tilt/loopzero-api-values.yaml, and only its ConfigMap and Secret
+# (both named loopzero-api). `helm dependency build` resolves the local loopzero-common
+# library, which the chart's templates include; it needs no network.
+_API_RUNTIME_RENDER = "mkdir -p .tilt-rendered && helm dependency build charts/loopzero-api >/dev/null && helm template loopzero-api charts/loopzero-api -f infra/tilt/loopzero-api-values.yaml -s templates/configmap.yaml -s templates/secret.yaml -n loopzero-system > .tilt-rendered/loopzero-api-runtime.yaml"
 
 local_resource(
     "loopzero-api-runtime",
     cmd=_API_RUNTIME_RENDER,
     deps=[
-        "infra/helm/loopzero-api/values-dev.yaml",
-        "infra/helm/loopzero-api/templates/configmap-runtime.yaml",
-        "infra/helm/loopzero-api/templates/secret-runtime.yaml",
+        "infra/tilt/loopzero-api-values.yaml",
+        "charts/loopzero-api/values.yaml",
+        "charts/loopzero-api/templates/configmap.yaml",
+        "charts/loopzero-api/templates/secret.yaml",
     ],
     labels=["loopzero"],
 )

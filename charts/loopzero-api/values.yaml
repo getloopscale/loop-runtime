@@ -25,6 +25,10 @@ service:
   type: ClusterIP
   port: 3001
   metricsPort: 9090
+  # Fixed node port of the http port when type is NodePort; null lets the cluster
+  # pick one. The Helmfile dev-public install pins 30001, the port the k3d serverlb
+  # publishes as host 13001 — the CLI's default endpoint on that host.
+  nodePort: null
 
 config:
   port: "3001"
@@ -167,12 +171,47 @@ secrets:
   loopzeroServiceAuthSecret: ""
   loopzeroServiceAuthSecretPrevious: ""
   loopzeroServiceAuthNonceRedisPassword: ""
+  # Secrets this chart does not create — provisioned by ESO, a bootstrap task or an
+  # operator — mounted after the chart's own secret source: {name, optional, reason}.
+  # `optional: true` lets the pod start without the Secret, which is how a dependency
+  # disappears without the startup saying anything (B-104), so the schema requires a
+  # `reason` on every optional entry.
+  additionalSources: []
+  # One key of an external Secret mapped onto a variable the API reads:
+  # {name, secretName, key, optional, reason}. An explicit variable outranks every
+  # envFrom source, the ConfigMap included.
+  keyRefs: []
 
 kubeconfig:
   build:
     existingConfigMap: ""
   cell0:
     existingConfigMap: ""
+  # One Secret holding the three cluster kubeconfigs under the keys core.kubeconfig,
+  # build.kubeconfig and cell-0.kubeconfig, mounted at /etc/loopzero/kubeconfigs, with
+  # CORE_KUBECONFIG / BUILD_KUBECONFIG / CELL_0_KUBECONFIG pointing into it. Exclusive
+  # with the per-cluster ConfigMaps above. `reason` is required when optional is true.
+  clusterSecret:
+    name: ""
+    optional: false
+    reason: ""
+
+# writable /tmp for a read-only root filesystem — the GitOps pusher clones into
+# temporary directories there.
+tmpVolume:
+  sizeLimit: 512Mi
+
+# Traefik IngressRoute to the Service (loopzero-common.ingressRoute). Off: a published
+# chart does not assume an ingress controller. The Helmfile bootstrap turns it on.
+ingressRoute:
+  enabled: false
+  host: ""
+  entryPoints:
+    - websecure
+  middlewares: []
+  # A ClusterIssuer name (a cert-manager Certificate <fullname>-tls is emitted for
+  # the host), or CFManaged when TLS terminates at the Cloudflare edge.
+  certIssuer: CFManaged
 
 reloader:
   enabled: false
@@ -187,19 +226,19 @@ resources:
 
 serviceAccount:
   create: true
-  # FIXO de proposito, contra a convencao do Helm de derivar do release (B-096).
+  # FIXED on purpose, against the Helm convention of deriving it from the release (B-096).
   #
-  # As politicas de admissao isentam UMA identidade —
+  # The admission policies exempt ONE identity —
   # `system:serviceaccount:loopzero-system:loopzero-api` (`systemActorExemptions.platformServiceAccounts`
-  # em charts/loopzero-admission-policies/values.yaml). Com `name: ""` este chart rendia
-  # `<release>-loopzero-api`, entao um deploy por ele subia o loopzero-api com identidade que as
-  # proprias cercas da plataforma tratam como estranha — e a falha aparece como
-  # `Forbidden` na reconciliacao, nao como erro de instalacao.
+  # in charts/loopzero-admission-policies/values.yaml). With `name: ""` this chart rendered
+  # `<release>-loopzero-api`, so a deploy through it brought loopzero-api up with an identity the
+  # platform's own fences treat as foreign — and the failure shows up as `Forbidden` during
+  # reconciliation, not as an install error.
   #
-  # Duas instalacoes no mesmo namespace nao sao topologia suportada: e' a API da propria
-  # plataforma, uma por cluster, e a isencao das VAPs pressupoe identidade unica. Ampliar
-  # a isencao para um padrao (`*-loopzero-api`) foi a alternativa rejeitada, e e' a perigosa:
-  # transformaria nome de release em credencial.
+  # Two installs in the same namespace are not a supported topology: this is the platform's
+  # own API, one per cluster, and the VAP exemption assumes a single identity. Widening the
+  # exemption to a pattern (`*-loopzero-api`) was the rejected alternative, and it is the
+  # dangerous one: it would turn a release name into a credential.
   #
   # MEET-ASYNC-AMENDMENT-2026-08-19-published-loopzero-api-sa-name (pending ratification).
   name: "loopzero-api"
@@ -239,6 +278,18 @@ rbac:
   # tenant-controller reconcile (see operators/internal/tenant/tenant_rbac.go).
   # Phased cutover: Day 0 deploy keeps current behavior; Day N flip to false.
   legacyClusterWideSecrets: true
+  # ArgoCD Applications: get/list/watch/patch/delete, cluster-wide. The API reads an
+  # Application's labels to attribute a sync notification to its release, and the
+  # administrative tenant eviction lists, de-finalizes and deletes a tenant's
+  # Applications. Off by default, so an install that never granted it keeps its RBAC;
+  # without it both paths answer Forbidden. The Helmfile bootstrap turns it on.
+  argocdApplications: false
+  # A Role in the release namespace: secrets get/create/update/delete. The secret-sync
+  # broker writes and deletes one Secret per tenant secret there, and the ArgoCD token
+  # provider persists the token it mints. Namespaced, so a delete reaches one namespace;
+  # it keeps both paths working once legacyClusterWideSecrets is off. Off by default for
+  # the same reason as above; the Helmfile bootstrap turns it on.
+  controlPlaneSecrets: false
 
 startupProbe:
   enabled: true
@@ -256,24 +307,24 @@ livenessProbe:
   timeoutSeconds: 5
 
 readinessProbe:
-  # DEEP de proposito, e diferente da liveness acima (B-135).
+  # DEEP on purpose, and different from the liveness above (B-135).
   #
-  # As duas apontavam para `/api/v1/health`, que responde 200 INCONDICIONALMENTE. Isso
-  # deixa o pod `Ready` mesmo com o banco fora — recebendo trafego e devolvendo erro em 27
-  # das 36 superficies. Nao existia estado observavel em que a instancia estivesse viva e
-  # FORA do Service, que e' a unica coisa que prontidao serve para fazer.
+  # Both used to point at `/api/v1/health`, which answers 200 UNCONDITIONALLY. That leaves
+  # the pod `Ready` with the database down — receiving traffic and returning errors on 27 of
+  # the 36 surfaces. There was no observable state in which the instance was alive and OUT
+  # of the Service, which is the one thing readiness is for.
   #
-  # `/api/v1/health/ready` ja' existia (`server/router.go:120` -> `DeepHealth`) e devolve
-  # 503 quando o banco nao responde, quando um servico declarado esta' inalcancavel, ou
-  # quando a descoberta encontra ZERO cells — com zero cells o roteador nao resolve destino
-  # nenhum e a instancia nao serve NENHUMA operacao de deploy.
+  # `/api/v1/health/ready` already existed (`server/router.go` -> `DeepHealth`) and returns
+  # 503 when the database does not answer, when a declared service is unreachable, or when
+  # discovery finds ZERO cells — with zero cells the router resolves no destination and the
+  # instance serves NO deploy operation.
   #
-  # `periodSeconds` subiu de 10 para 15 (igual a liveness): o deep faz I/O de rede, e a
-  # objecao de custo esta' registrada como risco aceito no amendment.
+  # `periodSeconds` went from 10 to 15 (same as liveness): the deep probe does network I/O,
+  # and the cost objection is recorded as an accepted risk in the amendment.
   #
-  # A LIVENESS NAO MUDA, e isso e' deliberado: apontar liveness para o deep faria o banco
-  # fora MATAR o pod, e o pod novo tambem nao teria banco — laco de reinicio sem
-  # convergencia. Liveness responde "o processo esta' vivo".
+  # LIVENESS DOES NOT CHANGE, deliberately: pointing liveness at the deep probe would make a
+  # database outage KILL the pod, and the new pod would have no database either — a restart
+  # loop that never converges. Liveness answers "the process is alive".
   #
   # MEET-ASYNC-AMENDMENT-2026-08-19-readiness-deep-probe (pending ratification).
   httpGet:
@@ -293,6 +344,9 @@ metrics:
     port: metrics
     interval: 30s
     scrapeTimeout: 10s
+    # true keeps the canonical loopzero_* labels the API exposes when they clash with the
+    # target labels Prometheus attaches; false renames the clash to exported_<label>.
+    honorLabels: false
 
 networkPolicy:
   enabled: true

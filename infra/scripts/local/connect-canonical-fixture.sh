@@ -123,23 +123,27 @@ mint_app_jwt() {
   # via `kubectl exec`. The earlier `jsonpath=spec.containers[0].env[GITHUB_APP_ID]`
   # query only sees STATIC env declarations — it misses envFrom sources
   # (configMapRef/secretRef), which is how GITHUB_APP_ID is wired canonical
-  # (via loopzero-api-runtime-config ConfigMap). The running env is authoritative.
+  # (the loopzero-api ConfigMap). The running env is authoritative.
   #
-  # Canonical 2026-06-20: container selector is `-c loopzero-api`, NOT `-c api`.
-  # The canonical container name (and chart name + Service name) is `loopzero-api`
-  # per infra/helm/loopzero-api/templates/deployment.yaml. The previous `-c api`
-  # silently selected no matching container; kubectl errors to stderr, the
-  # `2>/dev/null` suppresses the error message, and `|| true` swallows the
-  # non-zero exit, so `$app_id` ended up empty and the script reported
-  # "cannot resolve GITHUB_APP_ID" even though the env var IS present in
-  # the pod (caught LIVE during dev-public Cleanroom-fresh seed --verify,
-  # Step 11 was the only FAIL out of 17). Regression-locked by
-  # infra/tests/charts/connect_canonical_fixture_container_name_test.go.
-  # Aspas simples sao o ponto: a expansao de $GITHUB_APP_ID tem de acontecer
-  # DENTRO do pod, no ambiente do loopzero-api. Expandi-la aqui leria a variavel da
-  # maquina do operador, que nao a tem.
+  # Canonical 2026-06-20: the container selector must name the container the
+  # Deployment actually runs. A wrong `-c` selects no container; kubectl errors
+  # to stderr, the `2>/dev/null` suppresses the error message, and `|| true`
+  # swallows the non-zero exit, so `$app_id` ended up empty and the script
+  # reported "cannot resolve GITHUB_APP_ID" even though the env var IS present
+  # in the pod (caught LIVE during dev-public Cleanroom-fresh seed --verify,
+  # Step 11 was the only FAIL out of 17).
+  #
+  # The container name is `api` — in charts/loopzero-api, which Helmfile installs,
+  # and in the Tilt-owned infra/tilt/api-deployment.yaml. It was `loopzero-api` in the
+  # bootstrap chart infra/helm/loopzero-api until that copy was deleted (one chart per
+  # pair, docs/decisions.md). Regression-locked by
+  # infra/tests/charts/connect_canonical_fixture_container_name_test.go, which reads
+  # the name from the rendered chart rather than from a literal.
+  # The single quotes are the point: $GITHUB_APP_ID must expand INSIDE the pod, in
+  # the loopzero-api environment. Expanding it here would read the operator's machine,
+  # which does not have it.
   # shellcheck disable=SC2016
-  app_id="$(kubectl --context="$CONTEXT" -n "$PG_NAMESPACE" exec deployment/loopzero-api -c loopzero-api -- \
+  app_id="$(kubectl --context="$CONTEXT" -n "$PG_NAMESPACE" exec deployment/loopzero-api -c api -- \
     sh -c 'echo "$GITHUB_APP_ID"' 2>/dev/null | tr -d '\r\n' || true)"
   if [ -z "$app_id" ]; then
     log "ERROR mint_app_jwt: cannot resolve GITHUB_APP_ID from loopzero-api pod running env"

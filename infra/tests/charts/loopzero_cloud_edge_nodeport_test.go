@@ -48,7 +48,7 @@ func TestLoopZeroCloudServiceIsNodePortForTheEdge(t *testing.T) {
 // only dev-public needs. The template must stay ClusterIP-capable, and emit the
 // nodePort line only when one is configured.
 func TestLoopZeroCloudNodePortIsOptional(t *testing.T) {
-	out := renderChart(t, bootstrapChart(t, "loopzero-cloud"), "loopzero-cloud",
+	out := renderChart(t, publishedChart(t, "loopzero-cloud"), "loopzero-cloud",
 		map[string]string{"service.type": "ClusterIP", "service.nodePort": "null"})
 	svc := extractServiceBlock(out, "loopzero-cloud")
 	if strings.Contains(svc, "nodePort:") {

@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// ciSentinel is the immutable placeholder `infra/helm/loopzero-api/values.yaml`
+// ciSentinel is the immutable placeholder `charts/loopzero-api/values-bootstrap.yaml`
 // ships as its default tag, decided under issue #232. It is schema-valid (the
 // chart's own `values.schema.json` requires minLength 1), it renders, and if it
 // ever reaches a cluster the pod fails with `ImagePullBackOff` naming it — which
@@ -63,7 +63,7 @@ func imageTagVerdict(tag string) (bool, string) {
 // # What the old assertion said, and why it was wrong
 //
 // `TestB31ImageTagsPinned` accepted `semver | sha-* | latest` and rejected
-// branch names. The real value in `infra/helm/loopzero-api/values.yaml` is the
+// branch names. The real value in `charts/loopzero-api/values-bootstrap.yaml` is the
 // sentinel `SET-BY-CI`, chosen under issue #232 with the reasoning written into
 // the file itself (`values.yaml:17-33`): three candidates were weighed, and
 // `latest` was rejected BY NAME because it produced the quietest failure — a

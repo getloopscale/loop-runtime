@@ -23,7 +23,7 @@ import (
 // Container ports — these must match the Deployment spec exactly. Drift
 // here caused the iter-19 "Connection refused" symptom: helpers were
 // probing 8080 but the api container binds 3001 (http) and 9090 (metrics).
-// Single source of truth: infra/helm/loopzero-api/templates/deployment.yaml.
+// Single source of truth: charts/loopzero-api/values.yaml (service.port, service.metricsPort).
 const (
 	apiHTTPPort    = 3001
 	apiMetricsPort = 9090

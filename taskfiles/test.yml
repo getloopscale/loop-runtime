@@ -614,8 +614,10 @@ tasks:
       - helm template network-policies infra/helm/network-policies/ | kubeconform --strict --summary
       # Internal LoopZero charts (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5+).
       # Skip Traefik IngressRoute and ClusterImagePolicy CRDs (not in default schema).
-      - helm template loopzero-api infra/helm/loopzero-api/ | kubeconform --strict --skip IngressRoute,Certificate --summary
-      # loopzero-cloud is one chart (charts/), installed by Helmfile with its bootstrap values.
+      # loopzero-api and loopzero-cloud are one chart each (charts/), installed by Helmfile with
+      # their bootstrap values. ServiceMonitor is a CRD kind the default schema lacks.
+      - helm dependency build charts/loopzero-api/ >/dev/null
+      - helm template loopzero-api charts/loopzero-api/ -f charts/loopzero-api/values-bootstrap.yaml | kubeconform --strict --skip IngressRoute,Certificate,ServiceMonitor --summary
       - helm dependency build charts/loopzero-cloud/ >/dev/null
       - helm template loopzero-cloud charts/loopzero-cloud/ -f charts/loopzero-cloud/values-bootstrap.yaml | kubeconform --strict --skip IngressRoute,Certificate,ExternalSecret --summary
       # ADR-0023 / plan v1.1 T1.5: monolith charts deleted. The 4 split
@@ -666,7 +668,7 @@ tasks:
     cmds:
       - |
         FAIL=0
-        for d in cloudflared cluster-issuer network-policies smoke-test loopzero-api; do
+        for d in cloudflared cluster-issuer network-policies smoke-test; do
           if ! helm lint infra/helm/$d/ >/dev/null 2>&1; then
             echo "FAIL  $d (helm lint)"; FAIL=$((FAIL+1)); continue
           fi
@@ -1069,7 +1071,7 @@ tasks:
   helm:render:test:chart:
     desc: |
       Run render-time tests for a SINGLE chart (alias for `task helm:test:chart`).
-      Usage: task helm:render:test:chart -- loopzero-api
+      Usage: task helm:render:test:chart -- loopzero-api-published
     cmds:
       - task: helm:test:chart
 

@@ -7,8 +7,8 @@
 //
 // WHY THE EXISTING GATE CANNOT SEE THIS. `prod-image-tags` scans
 // `infra/helmfile/environments/prod.yaml` + `infra/helmfile/values/prod` —
-// the values actually deployed — and reports `✓ Scanned 394 file(s)` while
-// `infra/helm/loopzero-api/values.yaml` says `tag: latest`. That scope is correct
+// the values actually deployed — and reported `✓ Scanned 394 file(s)` while
+// the bootstrap chart's `values.yaml` said `tag: latest`. That scope is correct
 // for its name; the gap is that nothing looks at chart defaults. Widening the
 // existing gate would blur what a failure there means, so this is a sibling.
 //
@@ -40,6 +40,13 @@ import (
 
 // DefaultChartGlob is the loopzero-owned bootstrap chart family.
 const DefaultChartGlob = "infra/helm/loopzero-*"
+
+// BootstrapValuesGlob matches the bootstrap defaults of a chart Helmfile installs
+// from charts/. When a bootstrap/published pair became one chart, the bootstrap
+// defaults moved from infra/helm/<name>/values.yaml to this file, and they are
+// still what a forgotten override ships (docs/decisions.md, "One chart per
+// bootstrap/published pair").
+const BootstrapValuesGlob = "charts/*/values-bootstrap.yaml"
 
 // mutableTags are refs whose content can change under a fixed name.
 var mutableTags = map[string]bool{
@@ -89,23 +96,32 @@ func Check(cfg Config) (*Outcome, error) {
 	if err != nil {
 		return nil, fmt.Errorf("glob %s: %w", glob, err)
 	}
-	if len(dirs) == 0 {
+	files := make([]string, 0, len(dirs))
+	for _, d := range dirs {
+		files = append(files, filepath.Join(d, "values.yaml"))
+	}
+	bootstrap, err := filepath.Glob(filepath.Join(cfg.RepoRoot, BootstrapValuesGlob))
+	if err != nil {
+		return nil, fmt.Errorf("glob %s: %w", BootstrapValuesGlob, err)
+	}
+	files = append(files, bootstrap...)
+	if len(files) == 0 {
 		// Not a pass: say the charts were not found, so the green is not read
 		// as proof that the defaults are sound.
 		return &Outcome{
 			Skipped: true,
-			Reason:  fmt.Sprintf("no charts matched %s — defaults NOT verified", glob),
+			Reason:  fmt.Sprintf("no charts matched %s or %s — defaults NOT verified", glob, BootstrapValuesGlob),
 		}, nil
 	}
-	sort.Strings(dirs)
+	sort.Strings(files)
 
 	out := &Outcome{Pass: true}
-	for _, d := range dirs {
-		vf := filepath.Join(d, "values.yaml")
+	for _, vf := range files {
 		body, readErr := os.ReadFile(vf) //nolint:gosec // operator-controlled repo path
 		if readErr != nil {
 			continue // a chart without values.yaml has no default to assert
 		}
+		d := filepath.Dir(vf)
 		out.Scanned++
 		rel, _ := filepath.Rel(cfg.RepoRoot, vf)
 		for _, loc := range tagRe.FindAllStringSubmatchIndex(string(body), -1) {

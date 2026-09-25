@@ -299,6 +299,11 @@ spec:
     - port: {{ .Values.metrics.serviceMonitor.port | default "metrics" }}
       interval: {{ .Values.metrics.serviceMonitor.interval | default "30s" }}
       scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout | default "10s" }}
+      {{- if .Values.metrics.serviceMonitor.honorLabels }}
+      # Keep the labels the target exposes instead of renaming a clash to
+      # exported_<label> — for a binary that emits canonical labels of its own.
+      honorLabels: true
+      {{- end }}
 {{- end }}
 {{- end }}
 

@@ -454,7 +454,9 @@ releases:
     labels:
       profile: dashboard-only
     namespace: loopzero-system
-    chart: ../helm/loopzero-api
+    # The published chart, installed with charts/loopzero-api/values-bootstrap.yaml: there is
+    # one loopzero-api chart (docs/decisions.md, "One chart per bootstrap/published pair").
+    chart: ../../charts/loopzero-api
     # STANDALONE (local k3d): loopzero-api is owned by `tilt up` (self-contained
     # infra/tilt/api-deployment.yaml + docker_build hash-tagged image). The
     # helmfile chart uses image :latest which is NEVER built locally (only the
@@ -483,16 +485,9 @@ releases:
       - loopzero-system/minio
       - loopzero-auth/ory-kratos
     values:
-      - ../helm/loopzero-api/values.yaml
-      # B77 (end-to-end-deploy-validation-plan iter 11) — overlay only in
-      # standalone-multi to use locally-built image with GITEA_ORG support.
-{{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
-      - ../helm/loopzero-api/values-standalone-multi.yaml
-{{- end }}
-      # Bug #16 LIVE fix (caught 2026-05-17 iter 7-8): drill env override
-      # for loopzero-api image tag (DOCR :latest doesn't exist — pinned to
-      # REDACTED_SECRET_061). MUST be LAST in values list to win merge precedence.
-      # Layered values per env (T2.2). Drill env JWT_ISSUER + cross-namespace JWKS URL.
+      - ../../charts/loopzero-api/values-bootstrap.yaml
+      # Layered values per env (T2.2): image channel, pull secret, per-environment
+      # config. MUST be LAST in the values list to win merge precedence.
       - values/{{ .Environment.Name }}/loopzero-api.yaml.gotmpl
     set:
       # Finding 2026-05-12 — wire env-file `replicas.api` to chart

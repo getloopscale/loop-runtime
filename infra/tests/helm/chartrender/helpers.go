@@ -33,7 +33,7 @@
 //	)
 //
 //	func TestLoopZeroAPI_Defaults(t *testing.T) {
-//	    chartPath, _ := chartrender.BootstrapChartPath("loopzero-api")
+//	    chartPath, _ := chartrender.PublishedChartPath("loopzero-api")
 //	    opts, _ := chartrender.NewOptions(chartPath, "")
 //	    output := chartrender.RenderTemplate(t, opts, chartPath, "loopzero-api-test",
 //	        []string{"templates/deployment.yaml"})
@@ -133,9 +133,9 @@ var ErrAmbiguousChart = errors.New("chart name resolves to two charts")
 
 // BootstrapChartPath resolves to infra/helm/<name>/ ONLY.
 //
-// Use it for a name declared in BOTH chart trees (infra/quality/chart-pairs.txt),
-// which ChartPath refuses.
-// For a name present in exactly one tree, ChartPath suffices.
+// It carries the tree in the call. No name is declared in both trees today — the
+// chart-pairs gate refuses one — so ChartPath suffices for every chart; this is
+// for a test that means the bootstrap tree specifically.
 func BootstrapChartPath(chartName string) (string, error) {
 	if chartName == "" {
 		return "", fmt.Errorf("chart name cannot be empty")
@@ -179,10 +179,8 @@ func PublishedChartPath(chartName string) (string, error) {
 // a name that means two charts has no single right answer. Present in
 // neither, it fails with "not found in infra/helm/ or charts/".
 //
-// The names declared in both trees are listed in infra/quality/chart-pairs.txt.
-// Reach those through BootstrapChartPath
-// or PublishedChartPath, which carry the tree in the call instead of
-// relying on a precedence rule.
+// The chart-pairs gate refuses a name declared in both trees, so the ambiguous
+// branch is a guard for a checkout that slipped past it, not a supported state.
 func ChartPath(chartName string) (string, error) {
 	if chartName == "" {
 		return "", fmt.Errorf("chart name cannot be empty")
@@ -191,6 +189,12 @@ func ChartPath(chartName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return chartPathIn(root, chartName)
+}
+
+// chartPathIn is ChartPath against an explicit repository root, so the refusal of
+// a colliding name can be exercised on a fixture tree.
+func chartPathIn(root, chartName string) (string, error) {
 	bootstrap := filepath.Join(root, "infra", "helm", chartName)
 	published := filepath.Join(root, "charts", chartName)
 

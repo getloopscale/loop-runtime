@@ -164,7 +164,7 @@ tasks:
       - /tmp/loopzero-ops quality runbook-parity    # B-140: mensagem de erro nao manda fazer o que o runbook proibe
       - /tmp/loopzero-ops quality caddy-host-parity # B-150: hostname exigido pela verificacao precisa de bloco que termine o TLS
       - /tmp/loopzero-ops quality dashboard-root-parity # B-039: o runbook nomeia o caminho que a borda serve
-      - /tmp/loopzero-ops quality chart-pairs          # B-056: par de chart nas duas arvores precisa ser declarado
+      - /tmp/loopzero-ops quality chart-pairs          # B-056, 2026-09-25: no chart exists twice across infra/helm and charts/ (one chart per pair)
       - /tmp/loopzero-ops quality stdlib-only          # B-057: o vocabulario compartilhado nao arrasta dependencia
       - /tmp/loopzero-ops quality adapter-ports        # B-058: adaptador declara a porta que satisfaz
       - /tmp/loopzero-ops quality package-admission    # B-058: o plumbing k8s nao admite dominio, e as tres casas do split seguem povoadas
@@ -178,7 +178,6 @@ tasks:
       - python3 .claude/skills/backlog-review/scripts/check_backlog_structure.py BACKLOG.md
       - /tmp/loopzero-ops quality module-selfcontained  # B-140: todo modulo compila sem go.work (o CI usa GOWORK=off)
       - /tmp/loopzero-ops quality correlation-header   # T6.1 of plan 2026-06-01-p3-infra-observability-test-debt
-      - /tmp/loopzero-ops quality helm-overlap-parity
       - /tmp/loopzero-ops quality prod-image-digests
       - /tmp/loopzero-ops quality prod-image-tags   # #232 — wire the mutable-tag gate (extended to prod overlays infra/helmfile/values/prod); was registered-but-unrun (review NEEDS_FIXES 2026-07-12)
       - /tmp/loopzero-ops quality trivy-scan
@@ -367,7 +366,6 @@ tasks:
       - /tmp/loopzero-ops quality silent-surface                                   # B-104: catraca contra superficie de rota que some sem dizer. Medida 2026-08-16: 34 mudas em 35 guardas. So pode descer.
       - /tmp/loopzero-ops quality status-writer-contract                            # B-085 bala 4 (2026-08-12, B-041): a cerca nasce ANTES do fatiamento de routes, por exigencia do item — uma cerca escrita depois e escrita para caber no que ja foi feito.
       - /tmp/loopzero-ops quality domain-sink-purity                                 # slice-4 T1.1 (2026-08-12, B-049): catraca sobre os tipos de persistencia que atravessam o sink do DAG de services. Nao fecha o vazamento (custa 57 call sites, B-079) — impede que cresca, que e o que atinge os 35 dependentes.
-      - /tmp/loopzero-ops quality helm-drift                                          # slice-3 T1.2+T1.4 (2026-08-12, B-046): charts/ vs infra/helm/ template-set drift. Green after the two missing admission-policy templates were copied to the published chart; allowlist re-keyed PAIR -> PAIR:FILE so a blessed pair no longer blesses files nobody has seen.
       - /tmp/loopzero-ops quality skill-suites                                     # B-124 (2026-08-16): as suites pytest do ecossistema; tres de quinze estavam vermelhas e nenhuma task as rodava.
       - /tmp/loopzero-ops quality ecosystem-validators                            # B-129 (2026-08-17): check_xrefs.py + test_e2e_smoke.py, exigidos verdes pelo protocolo de mudanca de golden rule e rodados por nada ate hoje.
       - /tmp/loopzero-ops quality publish-hygiene                                 # B-130 (2026-08-17): caminho de workstation em arquivo versionado vivo; historia publicada e publica RETROATIVAMENTE.

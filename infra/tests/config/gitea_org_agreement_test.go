@@ -57,8 +57,9 @@ import (
 //
 // WHY THE GO DEFAULTS ARE IN THE COMPARED SET, not just the YAML. There is no
 // operator overlay under infra/helm at all, so on that install path the operator
-// takes constants.DefaultGiteaOrg while the API takes whatever
-// infra/helm/loopzero-api declares. A non-declaring side still contributes an
+// takes constants.DefaultGiteaOrg while the API takes whatever charts/loopzero-api
+// declares (the bootstrap chart infra/helm/loopzero-api, which declared its own, was
+// deleted when the pair became one chart). A non-declaring side still contributes an
 // effective organisation, and that is the value its fallback names. Comparing
 // declared values alone would let the API overlay drift away from the operator's
 // fallback without a single test going red -- which is the state this item was
@@ -78,7 +79,6 @@ import (
 var b191PinnedOrgSites = []string{
 	"charts/loopzero-api/values.yaml",
 	"charts/loopzero-tenant-operator/values.yaml",
-	"infra/helm/loopzero-api/values.yaml",
 }
 
 // b191OrgLineRE matches a Gitea-organisation declaration in a Helm values file,

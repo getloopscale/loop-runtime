@@ -108,8 +108,8 @@ tasks:
   helm:test:chart:
     desc: |
       Run render-time tests for a SINGLE chart.
-      Usage: task helm:test:chart -- loopzero-api
-             task helm:test:chart -- loopzero-cloud
+      Usage: task helm:test:chart -- loopzero-api-published
+             task helm:test:chart -- loopzero-cloud-published
              task helm:test:chart -- harbor
       Faster than full suite (~1-30s per chart). Useful while iterating
       on a chart change.
@@ -146,20 +146,6 @@ tasks:
       is the build-gate over all chart packages.
     cmds:
       - task: helm:test:vet
-
-  helm:test:env:
-    desc: |
-      Run render-time tests filtered by environment (dev/drill/prod).
-      Tests for per-env stubs catch env drift bugs (image registry mismatch,
-      wrong replicas, cluster-local DNS in prod, etc.).
-      Usage: task helm:test:env -- dev
-             task helm:test:env -- drill
-             task helm:test:env -- prod
-      Note: only loopzero-api has per-env tests today (T2.2); other charts
-      have defaults-only tests (image tags injected externally).
-    dir: infra/tests
-    cmds:
-      - go test -tags helm_render -count=1 -timeout 60s -p 1 -run "_{{.CLI_ARGS | replace "-" ""}}_" ./helm/...
 
   helm:ct-lint:
     desc: |

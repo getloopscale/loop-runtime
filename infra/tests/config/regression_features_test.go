@@ -15,61 +15,58 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // runRegressionScript invokes regression-checks.sh and returns combined output.
-func TestF01LoopZeroApiNodePortInStandaloneMulti(t *testing.T) {
-	data, err := os.ReadFile("../../helm/loopzero-api/values-standalone-multi.yaml")
+// F-01 publishes the API to the user without `tilt up`: NodePort 30001 is what the
+// k3d serverlb maps to host port 13001 (infra/k3d/core-cluster.yaml). It lived in
+// infra/helm/loopzero-api/values-standalone-multi.yaml, whose helmfile guard applied it
+// only when clusterRole was "standalone" — the one case the release was NOT
+// installed — so the overlay reached no install. The environment that does publish
+// the port is dev-public, and that overlay is what this pins now.
+func TestF01LoopZeroApiNodePortInDevPublic(t *testing.T) {
+	data, err := os.ReadFile("../../helmfile/values/dev-public/loopzero-api.yaml.gotmpl")
 	if err != nil {
-		t.Fatalf("read standalone-multi overlay: %v", err)
+		t.Fatalf("read dev-public overlay: %v", err)
 	}
 	s := string(data)
 	if !strings.Contains(s, "type: NodePort") {
-		t.Error("F-01 regression: values-standalone-multi.yaml must set service.type=NodePort")
+		t.Error("F-01 regression: the dev-public overlay must set service.type=NodePort")
 	}
 	if !strings.Contains(s, "nodePort: 30001") {
 		t.Error("F-01 regression: nodePort must be 30001 (k3d host:13001 mapping)")
 	}
-	if !strings.Contains(s, "localhost: true") {
-		t.Error("F-01 regression: ingress.localhost must be true so IngressRoute matches `localhost`")
-	}
 }
 
-func TestF01LoopZeroApiHasLocalhostIngressRoute(t *testing.T) {
-	data, err := os.ReadFile("../../helm/loopzero-api/templates/ingressroute.yaml")
-	if err != nil {
-		t.Fatalf("read ingressroute template: %v", err)
-	}
-	s := string(data)
-	if !strings.Contains(s, "{{- if .Values.ingress.localhost }}") {
-		t.Error("F-01 regression: ingressroute template must gate localhost route on .Values.ingress.localhost")
-	}
-	for _, host := range []string{"localhost", "127.0.0.1", "api.loopzero.local"} {
-		if !strings.Contains(s, host) {
-			t.Errorf("F-01 regression: localhost IngressRoute must match Host(`%s`)", host)
-		}
-	}
-	// Em entry point web (HTTP) — TLS não funciona com localhost sem cert custom.
-	if !strings.Contains(s, "name: loopzero-api-localhost") {
-		t.Error("F-01 regression: localhost IngressRoute must be named loopzero-api-localhost (separate from prod)")
-	}
-}
+// The localhost IngressRoute F-01 also added (Host localhost / 127.0.0.1 /
+// api.loopzero.local on the `web` entry point) was enabled by the same unreachable
+// overlay, so no install ever rendered it; it was not carried into charts/loopzero-api
+// and its test went with it (docs/decisions.md, "One chart per bootstrap/published
+// pair").
 
 func TestF01DefaultProfileKeepsClusterIP(t *testing.T) {
-	data, err := os.ReadFile("../../helm/loopzero-api/values.yaml")
+	data, err := os.ReadFile("../../../charts/loopzero-api/values.yaml")
 	if err != nil {
 		t.Fatalf("read default values: %v", err)
 	}
-	s := string(data)
-	if !strings.Contains(s, "type: ClusterIP") {
-		t.Error("F-01 regression: default values.yaml must keep service.type=ClusterIP for dev/prod")
+	var doc struct {
+		Service struct {
+			Type     string `yaml:"type"`
+			NodePort *int   `yaml:"nodePort"`
+		} `yaml:"service"`
 	}
-	// nodePort default null → não renderiza nodePort field (cluster aloca random ou skip).
-	if !strings.Contains(s, "nodePort: null") {
-		t.Error("F-01 regression: default values.yaml must set service.nodePort=null (NodePort field absent in dev/prod)")
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("parse default values: %v", err)
 	}
-	if !strings.Contains(s, "localhost: false") {
-		t.Error("F-01 regression: default values.yaml must set ingress.localhost=false (only standalone-multi opts in)")
+	if doc.Service.Type != "ClusterIP" {
+		t.Errorf("F-01 regression: charts/loopzero-api/values.yaml must keep service.type=ClusterIP, got %q", doc.Service.Type)
+	}
+	// A null nodePort renders no nodePort field, so the cluster picks one only when an
+	// install asks for NodePort without pinning it.
+	if doc.Service.NodePort != nil {
+		t.Errorf("F-01 regression: service.nodePort must default to null, got %d", *doc.Service.NodePort)
 	}
 }
 
@@ -130,44 +127,33 @@ func TestF07VersionEndpointRegistered(t *testing.T) {
 }
 
 func TestF08LoopZeroApiServiceMonitorOptIn(t *testing.T) {
-	dep, err := os.ReadFile("../../helm/loopzero-api/templates/deployment.yaml")
-	if err != nil {
-		t.Fatalf("read deployment.yaml: %v", err)
+	read := func(rel string) string {
+		t.Helper()
+		data, err := os.ReadFile("../../../charts/loopzero-api/" + rel)
+		if err != nil {
+			t.Fatalf("read charts/loopzero-api/%s: %v", rel, err)
+		}
+		return string(data)
 	}
-	depStr := string(dep)
-	// Container expõe :9090.
-	if !strings.Contains(depStr, "containerPort: 9090") {
-		t.Error("F-08 regression: deployment template must declare containerPort 9090 for metrics scraping")
+	dep := read("templates/deployment.yaml")
+	if !strings.Contains(dep, "containerPort: {{ .Values.service.metricsPort }}") {
+		t.Error("F-08 regression: the container must declare the metrics port for scraping")
 	}
-	if !strings.Contains(depStr, "name: metrics") {
-		t.Error("F-08 regression: container port must be named `metrics` (referenced by Service.targetPort)")
+	if !strings.Contains(dep, "- name: metrics") {
+		t.Error("F-08 regression: the container port must be named `metrics` (referenced by Service.targetPort)")
 	}
-	// Service expõe metrics port.
-	if !strings.Contains(depStr, "targetPort: metrics") {
-		t.Error("F-08 regression: Service must include port targetPort=metrics so ServiceMonitor scrape works")
+	if !strings.Contains(read("templates/service.yaml"), "targetPort: metrics") {
+		t.Error("F-08 regression: the Service must expose targetPort=metrics so the ServiceMonitor scrape works")
 	}
-	// ServiceMonitor template existe + condicional.
-	sm, err := os.ReadFile("../../helm/loopzero-api/templates/servicemonitor.yaml")
-	if err != nil {
-		t.Fatalf("F-08 regression: servicemonitor.yaml missing: %v", err)
+	if !strings.Contains(read("templates/servicemonitor.yaml"), `include "loopzero-common.servicemonitor"`) {
+		t.Error("F-08 regression: the ServiceMonitor must come from loopzero-common.servicemonitor, which is gated on metrics.serviceMonitor.enabled")
 	}
-	smStr := string(sm)
-	if !strings.Contains(smStr, "{{- if .Values.serviceMonitor.enabled }}") {
-		t.Error("F-08 regression: ServiceMonitor must be opt-in via .Values.serviceMonitor.enabled")
+	values := read("values.yaml")
+	if !strings.Contains(values, "serviceMonitor:") || !strings.Contains(values, "port: metrics") {
+		t.Error("F-08 regression: values.yaml must declare metrics.serviceMonitor scraping port=metrics")
 	}
-	if !strings.Contains(smStr, "port: metrics") {
-		t.Error("F-08 regression: ServiceMonitor endpoints must reference port name=metrics")
-	}
-	// Default values.yaml: opt-out (standalone-multi sem prom-operator).
-	values, err := os.ReadFile("../../helm/loopzero-api/values.yaml")
-	if err != nil {
-		t.Fatalf("read values.yaml: %v", err)
-	}
-	if !strings.Contains(string(values), "serviceMonitor:") {
-		t.Error("F-08 regression: values.yaml must declare serviceMonitor block (default enabled=false)")
-	}
-	if !strings.Contains(string(values), "enabled: false") {
-		t.Error("F-08 regression: serviceMonitor.enabled default must be false (opt-in via overlay)")
+	if !strings.Contains(values, "metricsPort: 9090") {
+		t.Error("F-08 regression: service.metricsPort must default to 9090, where the binary serves /metrics")
 	}
 }
 
@@ -221,16 +207,17 @@ func TestF12LoopZeroApiTokensSecretGenerated(t *testing.T) {
 	if !strings.Contains(s, "preserving existing argocd-token") {
 		t.Error("F-12 regression: script must log preservation of existing argocd-token on login failure")
 	}
-	// loopzero-api template DEVE referenciar o Secret.
-	dep, err := os.ReadFile("../../helm/loopzero-api/templates/deployment.yaml")
+	// The loopzero-api install MUST reference the Secret. It is declared as a typed
+	// secrets.keyRefs entry of the values Helmfile installs the chart with.
+	dep, err := os.ReadFile("../../../charts/loopzero-api/values-bootstrap.yaml")
 	if err != nil {
-		t.Fatalf("read loopzero-api deployment: %v", err)
+		t.Fatalf("read loopzero-api bootstrap values: %v", err)
 	}
 	depStr := string(dep)
 	if !strings.Contains(depStr, "name: ARGOCD_TOKEN") {
-		t.Error("F-12 regression: loopzero-api Deployment must export env ARGOCD_TOKEN")
+		t.Error("F-12 regression: the loopzero-api install must export env ARGOCD_TOKEN")
 	}
-	if !strings.Contains(depStr, "name: loopzero-api-tokens") {
+	if !strings.Contains(depStr, "secretName: loopzero-api-tokens") {
 		t.Error("F-12 regression: ARGOCD_TOKEN must come from secretKeyRef loopzero-api-tokens")
 	}
 }

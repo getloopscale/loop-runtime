@@ -1,61 +1,45 @@
-# Drill environment override for loopzero-api chart.
+# drill overlay for charts/loopzero-api, layered on charts/loopzero-api/values-bootstrap.yaml.
 # Plan: 2026-05-16-drill-l2-unlock-phase2 — Bug #16 + #18 LIVE fix.
 #
-# Default values.yaml uses tag=latest which doesn't exist in DOCR
-# (only immutable tags like REDACTED_SECRET_061, dev, commit-sha). Drill
-# pulls from same prod DOCR namespace (`registry.digitalocean.com/loopzero-system`)
-# using DIGITALOCEAN_TOKEN-based pull secret (loopzero-registry-pull),
-# created by drill-helmfile-bootstrap.sh via `kubectl create secret
-# docker-registry` (canonical DOCR pattern, mirrors prod posture).
+# Drill pulls from the prod DOCR namespace (`registry.digitalocean.com/loopzero-system`) with
+# the DIGITALOCEAN_TOKEN-based pull secret (loopzero-registry-pull) that
+# drill-helmfile-bootstrap.sh creates with `kubectl create secret docker-registry`
+# (the canonical DOCR pattern, mirroring prod).
 #
 # Tag selection rationale:
-# - REDACTED_SECRET_061 (2026-04-28) was PRE iter-19 leader fix (commit b32e87b5
-#   on 2026-05-12). Drill iter 11 caught Bug #18: secondary pod
-#   CrashLoopBackOff because the pre-fix code blocked main() synchronously
-#   during leader election (60s startup probe failure).
-# - drill-phase2-9ad223a5 (2026-05-17) includes the iter-19 fix
-#   (goroutine-wrapped setupLeaderElection + standby HTTP server serves
-#   /api/v1/health while waiting). LIVE multi-replica (replicaCount=2)
-#   validated in iter 12 (Bug #18 closure evidence).
+# - REDACTED_SECRET_061 (2026-04-28) predates the iter-19 leader fix (2026-05-12): drill
+#   iter 11 caught Bug #18 — the secondary pod crash-looped because the pre-fix code blocked
+#   main() synchronously during leader election (60s startup probe failure).
+# - drill-phase2-9ad223a5 (2026-05-17) includes the fix (goroutine-wrapped leader election;
+#   the standby serves /api/v1/health while waiting). LIVE multi-replica validated in iter 12.
 #
-# Override via LOOPZERO_API_IMAGE_TAG env var when testing a newer build.
+# Override through LOOPZERO_API_IMAGE_TAG to test a newer build.
+global:
+  registry: registry.digitalocean.com/loopzero-system
 
 image:
-  repository: registry.digitalocean.com/loopzero-system/loopzero-api
+  repository: loopzero-api
   tag: '{{ env "LOOPZERO_API_IMAGE_TAG" | default "drill-phase2-9ad223a5" }}'
   pullPolicy: IfNotPresent
 
 imagePullSecrets:
   - name: loopzero-registry-pull
 
-# Bug #40 LIVE fix (2026-05-18 iter 34): drill overlay was missing `domain`
-# override → IngressRoute Host(api.dev.loopzero.example) (default) did not match
-# the drill API URL `api.loopzero-drill.example`, causing Traefik 404 on /health.
-# Drill domain comes from pulumi-drill CF Zone (loopzero-drill.example).
-domain: loopzero-drill.example
+# Bug #40 LIVE fix (2026-05-18 iter 34): the route host must be the drill API host
+# (api.loopzero-drill.example, from the pulumi-drill Cloudflare zone), or Traefik answers 404
+# on /health.
+ingressRoute:
+  host: api.loopzero-drill.example
 
-# Plan 2026-05-19-drill-skills-rigor-restoration T2.1 LIVE fix (Bug #24 root cause):
-# Canonical values.yaml does NOT set JWT_ISSUER / JWKS_URL. api/cmd/setup_auth.go:58-60
-# reads os.Getenv() which returns empty string when env vars absent → validator
-# constructed with empty URLs → ALL JWT validation fails 401.
-# Affected envs: drill (this file) + values-prod.yaml (PROD HAS SAME BUG — separate
-# commit). Local k3d standalone-multi works "by accident" — uses Hydra default
-# issuer http://localhost:4444/ which matches hardcoded standalone-multi JWT_ISSUER.
-# Drill exposed this via dogfood-drill 11/12 journeys 401 — Bug #24 workaround
-# (now reverted in commit 82835ad8) was masking, not fixing.
-#
-# Issuer string MUST exactly match what Hydra emits (per Hydra
-# values-hydra-drill.yaml.gotmpl urls.self.issuer setting in this same commit).
-# JWKS URL is fetched from inside loopzero-api pod cross-namespace.
-env:
-  JWT_ISSUER: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
-  JWKS_URL: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json"
-
-# Plan 2026-05-19-drill-skills-rigor-restoration T2.1 — DOKS contexts.
-# Bootstrap script (drill-helmfile-bootstrap.sh:782-784) exports these env
-# vars from downloaded kubeconfig current-context line. Replaces the
-# kubectl set env workaround (lines 785-788) that was T2-deferred.
-kubeContexts:
-  core: {{ requiredEnv "CORE_KUBE_CONTEXT" | quote }}
-  build: {{ requiredEnv "BUILD_KUBE_CONTEXT" | quote }}
-  cell0: {{ requiredEnv "CELL_0_KUBE_CONTEXT" | quote }}
+config:
+  # Plan 2026-05-19-drill-skills-rigor-restoration T2.1 LIVE fix (Bug #24 root cause):
+  # without an issuer and a JWKS URL every JWT validation fails 401. The issuer MUST match
+  # what Hydra emits exactly (values-hydra-drill urls.self.issuer); the JWKS is fetched
+  # cross-namespace from inside the pod.
+  jwtIssuer: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
+  jwksUrl: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json"
+  # Plan 2026-05-19-drill-skills-rigor-restoration T2.1 — DOKS context names, exported by
+  # drill-helmfile-bootstrap.sh from the downloaded kubeconfig.
+  mgmtKubeContext: {{ requiredEnv "CORE_KUBE_CONTEXT" | quote }}
+  buildKubeContext: {{ requiredEnv "BUILD_KUBE_CONTEXT" | quote }}
+  runtimeKubeContext: {{ requiredEnv "CELL_0_KUBE_CONTEXT" | quote }}

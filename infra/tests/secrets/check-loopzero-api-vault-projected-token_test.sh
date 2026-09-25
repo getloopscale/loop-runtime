@@ -2,19 +2,21 @@
 # SPDX-License-Identifier: Apache-2.0
 # T5.11 of plan 2026-06-02-openbao-adoption v1.3.
 #
-# Hermetic test for loopzero-api projected SA token + Vault env vars across
-# BOTH chart systems (dual chart system per CLAUDE.md):
-#   - charts/loopzero-api (ArgoCD L3, OCI registry)
-#   - infra/helm/loopzero-api (Helmfile L2, bootstrap)
+# Hermetic test for the loopzero-api projected SA token, on the one loopzero-api chart
+# (charts/loopzero-api), in both of its installs: ArgoCD with the chart defaults and
+# the Helmfile bootstrap with charts/loopzero-api/values-bootstrap.yaml.
 #
-# Asserts that when .Values.vault.enabled=true, BOTH charts render:
-#   (a) projected serviceAccountToken volume with audience=vault.loopzero.io
-#   (b) REDACTED_SECRET_043
-#   (c) volumeMount at /var/run/secrets/vault.loopzero.io
-#   (d) Env vars LOOPZERO_VAULT_ADDR + LOOPZERO_VAULT_K8S_AUTH_PATH + LOOPZERO_VAULT_ROLE +
-#       LOOPZERO_VAULT_SA_JWT_PATH (infra chart only — charts/loopzero-api uses
-#       envFrom configmap pattern for config wiring)
-# When vault.enabled=false (default), neither volume nor env vars are rendered.
+# Asserts that when .Values.vault.enabled=true the chart renders:
+#   (a) a projected serviceAccountToken volume with audience=vault.loopzero.io
+#   (b) expirationSeconds: 3600
+#   (c) a volumeMount at /var/run/secrets/vault.loopzero.io
+# When vault.enabled=false (the default of both installs), neither is rendered.
+#
+# This test covered a second chart, infra/helm/loopzero-api, until it was deleted when
+# the pair became one chart (docs/decisions.md, "One chart per bootstrap/published
+# pair"). That chart also rendered LOOPZERO_VAULT_ADDR, LOOPZERO_VAULT_K8S_AUTH_PATH,
+# LOOPZERO_VAULT_ROLE and LOOPZERO_VAULT_SA_JWT_PATH when vault was enabled; no binary reads
+# any of the four and no install enabled vault, so they were not carried over.
 
 set -euo pipefail
 
@@ -41,20 +43,16 @@ fail() {
 # Helper: ensure helm deps built (loopzero-common subchart)
 ensure_deps() {
   local chart_dir="$1"
-  # B-082 — a causa da intermitencia, medida em 2026-08-19.
+  # B-082 — the cause of the intermittency, measured 2026-08-19.
   #
-  # A condicao abaixo pergunta se existe a pasta `charts/`. Um chart SEM dependencias
-  # nunca vai ter uma, entao ele caia direto no `helm dependency build` — que nao tem o
-  # que construir e mesmo assim mexe no cache COMPARTILHADO do helm. Sob execucao
-  # concorrente dos gates, essa mutacao e' a contencao: este teste reprovou apos 123,89s
-  # cercado de `Adding repo`, e passou em 7,4s rodando isolado no mesmo checkout.
+  # Asking whether a `charts/` directory exists sent a chart WITHOUT dependencies
+  # straight to `helm dependency build`, which has nothing to build and still
+  # mutates helm's SHARED cache. Under concurrent gates that mutation is the
+  # contention: this test failed after 123.89s surrounded by `Adding repo`, and
+  # passed in 7.4s run alone on the same checkout.
   #
-  # Medido: `infra/helm/loopzero-api/Chart.yaml` declara ZERO dependencias, e
-  # `charts/loopzero-api` ja' tem o `loopzero-common-0.3.0.tgz` vendorizado — `helm template`
-  # nos dois funciona sem construir nada (0s, exit 0).
-  #
-  # Perguntar pelo bloco `dependencies:` e' a pergunta certa; perguntar pela pasta era a
-  # pergunta que nunca se satisfaz.
+  # Asking for a `dependencies:` block is the right question; asking for the
+  # directory was the question that is never satisfied.
   grep -q '^dependencies:' "${chart_dir}/Chart.yaml" 2>/dev/null || return 0
   if [ ! -d "${chart_dir}/charts" ] || [ -z "$(ls -A "${chart_dir}/charts" 2>/dev/null)" ]; then
     ( cd "${chart_dir}" && helm dependency build >/dev/null 2>&1 ) || true
@@ -62,32 +60,29 @@ ensure_deps() {
 }
 
 ensure_deps charts/loopzero-api
-ensure_deps infra/helm/loopzero-api
 
-# render_or_die — captura o `helm template` DISTINGUINDO falha de render de
-# campo ausente.
+# render_or_die — captures `helm template` telling a render failure apart from a
+# missing field.
 #
-# O DEFEITO QUE ISTO CONSERTA: as quatro capturas abaixo usavam
+# THE DEFECT THIS FIXES: the captures used to be
 #
 #     RENDER_X=$(helm template ... 2>&1 || true)
 #
-# O `2>&1` joga o erro do helm DENTRO da variavel e o `|| true` descarta o exit
-# code. Quando o render falha — e ele falha de forma transitoria, por contencao
-# de `helm dependency` quando varios gates rodam juntos — a variavel passa a
-# conter a mensagem de erro em vez de YAML, e TODO `grep` seguinte reporta
-# `MISSING`. O gate acusa "env LOOPZERO_VAULT_K8S_AUTH_PATH MISSING" quando o campo
-# esta la' e o que quebrou foi o helm.
+# `2>&1` puts helm's error INSIDE the variable and `|| true` drops the exit code.
+# When the render fails — and it fails transiently, from `helm dependency`
+# contention when several gates run together — the variable holds the error
+# message instead of YAML, and EVERY following `grep` reports `MISSING`. The gate
+# then blames a field that is present for what was a broken helm run.
 #
-# Medido: este teste barrou um push cujo diff continha SO' arquivos de workflow,
-# e passou verde no mesmo commit ao ser rodado de novo. Teste intermitente e'
-# bug (rules/testing.md), e aqui a intermitencia ainda MENTIA sobre a causa —
-# manda o proximo a debugar um chart que nunca esteve quebrado.
+# Measured: this test blocked a push whose diff held ONLY workflow files, and
+# passed on the same commit when run again. A flaky test is a bug
+# (rules/testing.md), and this one also lied about the cause.
 render_or_die() {
   local label="$1"; shift
   local out rc
   out="$("$@" 2>&1)"; rc=$?
   if [ "$rc" -ne 0 ]; then
-    fail "${label}: helm template FALHOU (exit ${rc}) — isto NAO e' campo ausente, e' render quebrado:"
+    fail "${label}: helm template FAILED (exit ${rc}) — this is a broken render, not a missing field:"
     printf '%s\n' "$out" | sed 's/^/      /' >&2
     exit 1
   fi
@@ -139,63 +134,31 @@ else
 fi
 
 # ----------------------------------------------------------------
-# Chart system 2: infra/helm/loopzero-api (Helmfile L2)
+# The Helmfile bootstrap install: charts/loopzero-api + values-bootstrap.yaml
 # ----------------------------------------------------------------
-blue "== infra/helm/loopzero-api: vault.enabled=true =="
+blue "== charts/loopzero-api bootstrap install: vault.enabled=false (its default) =="
 
-RENDER_INFRA_ON=$(render_or_die "infra/helm/loopzero-api vault=on" helm template loopzero-api ./infra/helm/loopzero-api \
+RENDER_BOOTSTRAP_OFF=$(render_or_die "charts/loopzero-api bootstrap vault=off" helm template loopzero-api ./charts/loopzero-api \
+  -f ./charts/loopzero-api/values-bootstrap.yaml \
+  --show-only templates/deployment.yaml )
+
+if echo "${RENDER_BOOTSTRAP_OFF}" | grep -qE 'name: vault-sa-token'; then
+  fail "bootstrap install: vault-sa-token RENDERED while vault is off"
+else
+  pass "bootstrap install: vault-sa-token absent while vault is off"
+fi
+
+blue "== charts/loopzero-api bootstrap install: vault.enabled=true =="
+
+RENDER_BOOTSTRAP_ON=$(render_or_die "charts/loopzero-api bootstrap vault=on" helm template loopzero-api ./charts/loopzero-api \
+  -f ./charts/loopzero-api/values-bootstrap.yaml \
   --set vault.enabled=true \
   --show-only templates/deployment.yaml )
 
-if echo "${RENDER_INFRA_ON}" | grep -qE 'name: vault-sa-token'; then
-  pass "infra/helm/loopzero-api: vault-sa-token volume + volumeMount rendered"
+if echo "${RENDER_BOOTSTRAP_ON}" | grep -qE 'audience: vault.loopzero.io'; then
+  pass "bootstrap install: audience=vault.loopzero.io rendered"
 else
-  fail "infra/helm/loopzero-api: vault-sa-token MISSING when vault.enabled=true"
-fi
-
-if echo "${RENDER_INFRA_ON}" | grep -qE 'audience: vault.loopzero.io'; then
-  pass "infra/helm/loopzero-api: audience=vault.loopzero.io rendered"
-else
-  fail "infra/helm/loopzero-api: audience=vault.loopzero.io MISSING"
-fi
-
-if echo "${RENDER_INFRA_ON}" | grep -qE 'expirationSeconds: 3600'; then
-  pass "infra/helm/loopzero-api: REDACTED_SECRET_043 rendered"
-else
-  fail "infra/helm/loopzero-api: REDACTED_SECRET_043 MISSING"
-fi
-
-# Env vars wiring (T5.12 SDK reads these — only in infra chart per env block layout)
-for var in LOOPZERO_VAULT_ADDR LOOPZERO_VAULT_K8S_AUTH_PATH LOOPZERO_VAULT_ROLE LOOPZERO_VAULT_SA_JWT_PATH; do
-  if echo "${RENDER_INFRA_ON}" | grep -qE "name: ${var}"; then
-    pass "infra/helm/loopzero-api: env ${var} rendered"
-  else
-    fail "infra/helm/loopzero-api: env ${var} MISSING"
-  fi
-done
-
-# Specific value assertions
-if echo "${RENDER_INFRA_ON}" | grep -qE '"k8s-core"'; then
-  pass "infra/helm/loopzero-api: LOOPZERO_VAULT_K8S_AUTH_PATH = k8s-core (T5.1 mount)"
-else
-  fail "infra/helm/loopzero-api: LOOPZERO_VAULT_K8S_AUTH_PATH != k8s-core"
-fi
-
-blue "== infra/helm/loopzero-api: vault.enabled=false (default) =="
-
-RENDER_INFRA_OFF=$(render_or_die "infra/helm/loopzero-api vault=off" helm template loopzero-api ./infra/helm/loopzero-api \
-  --show-only templates/deployment.yaml )
-
-if echo "${RENDER_INFRA_OFF}" | grep -qE 'name: vault-sa-token'; then
-  fail "infra/helm/loopzero-api: vault-sa-token RENDERED when vault.enabled=false (gate broken)"
-else
-  pass "infra/helm/loopzero-api: vault-sa-token absent when vault.enabled=false"
-fi
-
-if echo "${RENDER_INFRA_OFF}" | grep -qE 'name: LOOPZERO_VAULT_ADDR'; then
-  fail "infra/helm/loopzero-api: LOOPZERO_VAULT_ADDR RENDERED when vault.enabled=false"
-else
-  pass "infra/helm/loopzero-api: LOOPZERO_VAULT_ADDR absent when vault.enabled=false"
+  fail "bootstrap install: audience=vault.loopzero.io MISSING"
 fi
 
 echo

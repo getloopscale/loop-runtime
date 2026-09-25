@@ -252,10 +252,11 @@ func TestB31ImageTagsPinned(t *testing.T) {
 	// 27cfe6cd, ADR-0023 operator-split). The same tag-pinning invariant
 	// is now enforced for the 4 split-binary charts via the OCI-published
 	// `charts/loopzero-*-operator/values.yaml` files. Re-targeted to loopzero-api
-	// only (the surviving infra/helm chart of the original 3); split-
-	// operator tag-pinning is covered by the Helm CI per chart.
+	// only; split-operator tag-pinning is covered by the Helm CI per chart.
+	// The loopzero-api bootstrap defaults moved from infra/helm/loopzero-api/values.yaml
+	// to the values Helmfile installs the one chart with.
 	files := []string{
-		"../../helm/loopzero-api/values.yaml",
+		"../../../charts/loopzero-api/values-bootstrap.yaml",
 	}
 	// The shape rules used to live here as four whole-file regexes. They moved
 	// into `imageTagVerdict`, which judges the tag VALUE and states its reason —
@@ -307,10 +308,10 @@ func TestB35DatabaseUrlMapping(t *testing.T) {
 	// API's data-access layer); only loopzero-api and loopzero-cloud carry
 	// the env. See finding `concepts/operations/finding-2026-05-15-
 	// infra-tests-load-regression-obsolete.md`.
+	// Both map the key through a typed secrets.keyRefs entry of the values
+	// Helmfile installs the chart with.
 	files := []string{
-		"../../helm/loopzero-api/templates/deployment.yaml",
-		// loopzero-cloud maps the key through a typed secrets.keyRefs entry of the
-		// values Helmfile installs the chart with.
+		"../../../charts/loopzero-api/values-bootstrap.yaml",
 		"../../../charts/loopzero-cloud/values-bootstrap.yaml",
 	}
 	for _, f := range files {
@@ -329,7 +330,7 @@ func TestB35DatabaseUrlMapping(t *testing.T) {
 }
 
 func TestB40LoopZeroApiServicePort3001(t *testing.T) {
-	data, err := os.ReadFile("../../helm/loopzero-api/values.yaml")
+	data, err := os.ReadFile("../../../charts/loopzero-api/values.yaml")
 	if err != nil {
 		t.Fatalf("read loopzero-api values.yaml: %v", err)
 	}

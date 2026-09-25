@@ -4,6 +4,7 @@
 package charts
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -20,15 +21,19 @@ import (
 // readiness must point at a deep-check path. Pinning the literal would fail any
 // route rename while nothing got worse.
 func TestReadinessAndLivenessDoNotShareTheSameHandler(t *testing.T) {
-	for _, chart := range []struct {
-		name string
-		path string
+	api := publishedChart(t, "loopzero-api")
+	// The chart is installed two ways: by ArgoCD with its defaults, and by the
+	// Helmfile bootstrap with values-bootstrap.yaml. Both renders are checked,
+	// because a values file can override a probe as easily as a template can.
+	for _, install := range []struct {
+		name   string
+		values []string
 	}{
-		{"charts/loopzero-api", publishedChart(t, "loopzero-api")},
-		{"infra/helm/loopzero-api", bootstrapChart(t, "loopzero-api")},
+		{"charts/loopzero-api", nil},
+		{"charts/loopzero-api with values-bootstrap.yaml", []string{filepath.Join(api, "values-bootstrap.yaml")}},
 	} {
-		t.Run(chart.name, func(t *testing.T) {
-			out := renderChart(t, chart.path, "t", nil)
+		t.Run(install.name, func(t *testing.T) {
+			out := renderChart(t, api, "t", nil, install.values...)
 			liveness := probePath(out, "livenessProbe:")
 			readiness := probePath(out, "readinessProbe:")
 			// This was a Skip, and the `skip-link` gate was right to refuse it. A chart

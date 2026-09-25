@@ -12,7 +12,7 @@ import (
 
 // GitHubAppDevSeed is the Go port of infra/scripts/local/seed-github-app-dev.sh.
 // It materializes two K8s Secrets in loopzero-system that loopzero-api consumes via
-// envFrom (see infra/helm/loopzero-api/templates/deployment.yaml):
+// secrets.additionalSources and secrets.keyRefs (see charts/loopzero-api/values-bootstrap.yaml):
 //
 //	loopzero-api-github     key=GITHUB_APP_PRIVATE_KEY   (PKCS1 RSA PEM)
 //	loopzero-github-webhook key=value                    (HMAC-SHA256 shared secret)

@@ -176,7 +176,7 @@ bootstrap_database() {
   log "=== Database Seed ==="
 
   # Check if seed already applied (loopzero DB has tenants table with data)
-  TENANT_COUNT=$(kubectl exec deploy/loopzero-api -n "$NAMESPACE" -c loopzero-api -- \
+  TENANT_COUNT=$(kubectl exec deploy/loopzero-api -n "$NAMESPACE" -c api -- \
     wget -qO- "http://localhost:8080/healthz" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
 
   if [ "$TENANT_COUNT" = "pass" ]; then

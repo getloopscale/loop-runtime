@@ -1,35 +1,44 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package chartpairs keeps the registry of charts that exist in BOTH trees
-// honest, and is the single reader of that registry for every gate that audits
-// a pair.
+// Package chartpairs refuses a chart that exists twice: once under infra/helm/
+// (bootstrap, Helmfile L2) and once under charts/ (published OCI, ArgoCD L3).
 //
-// # The defect, measured
+// # The decision it enforces
 //
-// B-056, 2026-08-18. `infra/helm/` (bootstrap, Helmfile L2) and `charts/`
-// (published OCI, ArgoCD L3) coexist by design, and CLAUDE.md requires a chart
-// present in both to be kept in parity. CLAUDE.md itself had drifted: it claimed
-// three same-name pairs, one of which (`infra/helm/loopzero-admission-policies`)
-// never existed. A parity contract naming a pair with one side dilutes the pairs
-// that are real.
+// docs/decisions.md, "One chart per bootstrap/published pair" (2026-09-25). The
+// three pairs this repository carried — loopzero-api, loopzero-cloud, and
+// admission-policies↔loopzero-admission-policies — were not two renderings of one
+// design but two charts that drifted: a free-form env map on one side and typed
+// config on the other, RBAC one side granted and the other withheld, 8 of 20
+// admission templates diverged before a parity test pinned them. Each pair became
+// its charts/ chart, installed by Helmfile with bootstrap values, and the
+// infra/helm copy was deleted.
 //
-// # One registry, three readers
+// # What it checks, and why both ways
 //
-// infra/quality/chart-pairs.txt declares every pair — same-name ones and the
-// conceptual ones whose charts carry different names. This gate compares it
-// with disk; helm-drift and helm-overlap-parity load it through LoadRegistry.
-// Until 2026-09-23 those two kept their own lists (a disk scan plus a
-// hard-coded map, and a hard-coded slice), so the three disagreed on how many
-// pairs exist.
+// By NAME: a Chart.yaml name present in both trees. That is how loopzero-api and
+// loopzero-cloud were paired.
 //
-// # The limit, stated
+// By CONTENT: an infra/helm chart whose templates/ is byte-identical, file for
+// file, to a charts/ chart's. A copy renamed on the way in — which is what
+// admission-policies was — cannot be found by name, and a registry that had to
+// DECLARE such a pair to see it saw only what someone remembered to write down.
+// Whole template sets are compared, so two charts that merely share a file are not
+// flagged, and a chart with no templates (a library, a values-only wrapper) is not
+// compared at all.
 //
-// This gate verifies that each pair EXISTS, not that the two sides agree; the
-// content comparison is helm-drift's and helm-overlap-parity's job.
+// # History
+//
+// Until 2026-09-25 this gate kept a registry of declared pairs
+// (infra/quality/chart-pairs.txt) that helm-drift and helm-overlap-parity audited
+// for parity. With no pair left, those two gates had nothing to measure and were
+// retired; this one now refuses the state they used to tolerate.
 package chartpairs
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -37,44 +46,19 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
 )
 
-// ErrUndeclared means a same-name pair exists on disk and the registry does not
-// declare it.
-var ErrUndeclared = errors.New("a chart pair exists on disk and is not declared")
-
-// ErrStale means the registry declares a pair one of whose charts is gone.
-var ErrStale = errors.New("a declared chart pair no longer exists")
+// ErrDuplicated means a chart exists in both trees, by name or as a template-identical copy.
+var ErrDuplicated = errors.New("a chart exists in both infra/helm and charts/")
 
 // ErrNothingScanned means no chart was found at all — silence, not cleanliness.
 var ErrNothingScanned = fmt.Errorf("%w: no chart", scanresult.ErrNothingScanned)
 
-// ErrRegistryMissing means the declared registry is absent or malformed.
-var ErrRegistryMissing = errors.New("chart pair registry missing or malformed")
-
-// RegistryRelPath is the pair registry, relative to the repository root.
-const RegistryRelPath = "infra/quality/chart-pairs.txt"
-
 var nameRE = regexp.MustCompile(`(?m)^name:\s*(\S+)`)
-
-// Pair is one declared bootstrap↔published chart pair.
-type Pair struct {
-	Bootstrap string // directory under infra/helm
-	Published string // directory under charts
-	Reason    string
-}
-
-// Label names the pair: the shared name, or bootstrap↔published when the two
-// charts carry different names.
-func (p Pair) Label() string {
-	if p.Bootstrap == p.Published {
-		return p.Bootstrap
-	}
-	return p.Bootstrap + "↔" + p.Published
-}
 
 // Config drives the check.
 type Config struct {
@@ -85,81 +69,103 @@ type Config struct {
 type Outcome struct {
 	InfraHelm  int
 	Charts     int
-	Pairs      []string // declared pairs present on disk, by Label
-	Undeclared []string
-	Stale      []string
+	Duplicates []string // "infra/helm/<dir> ↔ charts/<dir> (<how>)", sorted
 }
 
-// LoadRegistry reads the declared pairs, sorted by label.
-func LoadRegistry(repoRoot string) ([]Pair, error) {
-	b, err := os.ReadFile(filepath.Join(repoRoot, RegistryRelPath)) // #nosec G304 -- fixed path under the repo root
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s: %w", ErrRegistryMissing, RegistryRelPath, err)
-	}
-	var pairs []Pair
-	for n, line := range strings.Split(string(b), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		f := strings.SplitN(line, "|", 3)
-		if len(f) != 3 {
-			return nil, fmt.Errorf("%w: %s:%d wants `<infra/helm dir> | <charts dir> | <reason>`, got %q",
-				ErrRegistryMissing, RegistryRelPath, n+1, line)
-		}
-		p := Pair{Bootstrap: strings.TrimSpace(f[0]), Published: strings.TrimSpace(f[1]), Reason: strings.TrimSpace(f[2])}
-		if p.Bootstrap == "" || p.Published == "" || p.Reason == "" {
-			return nil, fmt.Errorf("%w: %s:%d has an empty field", ErrRegistryMissing, RegistryRelPath, n+1)
-		}
-		pairs = append(pairs, p)
-	}
-	sort.Slice(pairs, func(i, j int) bool { return pairs[i].Label() < pairs[j].Label() })
-	return pairs, nil
+// chartInfo is what the check needs of one chart directory.
+type chartInfo struct {
+	dir       string
+	name      string
+	templates string // digest of the template set; "" when the chart has none
 }
 
-// chartNames maps the `name:` of every Chart.yaml directly under base to its
-// directory. An absent tree holds no charts and a directory without
-// Chart.yaml is not a chart; any other read failure is an error, because it
-// hides a name.
-func chartNames(base string) (map[string]string, error) {
-	out := map[string]string{}
+// scanTree reads every chart directly under base. An absent tree holds no charts
+// and a directory without Chart.yaml is not a chart; any other read failure is an
+// error, because it hides a chart.
+func scanTree(base string) ([]chartInfo, error) {
 	entries, err := os.ReadDir(base)
 	if errors.Is(err, fs.ErrNotExist) {
-		return out, nil
+		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("chart-pairs: read %s: %w", base, err)
 	}
+	var out []chartInfo
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
-		b, err := os.ReadFile(filepath.Clean(filepath.Join(base, e.Name(), "Chart.yaml")))
+		dir := filepath.Join(base, e.Name())
+		b, err := os.ReadFile(filepath.Clean(filepath.Join(dir, "Chart.yaml")))
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
 		if err != nil {
 			return nil, fmt.Errorf("chart-pairs: read %s/Chart.yaml: %w", e.Name(), err)
 		}
+		info := chartInfo{dir: e.Name()}
 		if m := nameRE.FindSubmatch(b); m != nil {
-			out[string(m[1])] = e.Name()
+			info.name = string(m[1])
 		}
+		if info.templates, err = templateDigest(filepath.Join(dir, "templates")); err != nil {
+			return nil, err
+		}
+		out = append(out, info)
 	}
 	return out, nil
 }
 
-// Check compares the pairs on disk with the declared registry.
+// templateDigest hashes every file under a templates/ directory, path and content,
+// in a stable order. An absent or empty templates/ yields "".
+func templateDigest(dir string) (string, error) {
+	var files []string
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			files = append(files, p)
+		}
+		return nil
+	})
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("chart-pairs: walk %s: %w", dir, err)
+	}
+	if len(files) == 0 {
+		return "", nil
+	}
+	sort.Strings(files)
+	h := sha256.New()
+	for _, p := range files {
+		rel, err := filepath.Rel(dir, p)
+		if err != nil {
+			return "", fmt.Errorf("chart-pairs: relativise %s: %w", p, err)
+		}
+		b, err := os.ReadFile(filepath.Clean(p))
+		if err != nil {
+			return "", fmt.Errorf("chart-pairs: read %s: %w", p, err)
+		}
+		h.Write([]byte(filepath.ToSlash(rel) + "\x00" + strconv.Itoa(len(b)) + "\x00"))
+		h.Write(b)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// Check refuses a chart that exists in both trees.
 func Check(cfg Config) (Outcome, error) {
 	var out Outcome
 	root := cfg.RepoRoot
 	if root == "" {
 		root = "."
 	}
-	infra, err := chartNames(filepath.Join(root, "infra", "helm"))
+	infra, err := scanTree(filepath.Join(root, "infra", "helm"))
 	if err != nil {
 		return out, err
 	}
-	pub, err := chartNames(filepath.Join(root, "charts"))
+	pub, err := scanTree(filepath.Join(root, "charts"))
 	if err != nil {
 		return out, err
 	}
@@ -168,37 +174,29 @@ func Check(cfg Config) (Outcome, error) {
 		return out, fmt.Errorf("%w: neither infra/helm nor charts/", ErrNothingScanned)
 	}
 
-	declared, err := LoadRegistry(root)
-	if err != nil {
-		return out, err
-	}
-	isDeclared := map[[2]string]bool{}
-	for _, p := range declared {
-		isDeclared[[2]string{p.Bootstrap, p.Published}] = true
-		if dirHasChart(root, "infra/helm", p.Bootstrap) && dirHasChart(root, "charts", p.Published) {
-			out.Pairs = append(out.Pairs, p.Label())
-		} else {
-			out.Stale = append(out.Stale, p.Label())
+	byName := map[string]chartInfo{}
+	byTemplates := map[string]chartInfo{}
+	for _, c := range pub {
+		if c.name != "" {
+			byName[c.name] = c
+		}
+		if c.templates != "" {
+			byTemplates[c.templates] = c
 		}
 	}
-	for name, infraDir := range infra {
-		if pubDir, ok := pub[name]; ok && !isDeclared[[2]string{infraDir, pubDir}] {
-			out.Undeclared = append(out.Undeclared, Pair{Bootstrap: infraDir, Published: pubDir}.Label())
+	for _, c := range infra {
+		if p, ok := byName[c.name]; ok && c.name != "" {
+			out.Duplicates = append(out.Duplicates, fmt.Sprintf("infra/helm/%s ↔ charts/%s (same name)", c.dir, p.dir))
+			continue
+		}
+		if p, ok := byTemplates[c.templates]; ok && c.templates != "" {
+			out.Duplicates = append(out.Duplicates, fmt.Sprintf("infra/helm/%s ↔ charts/%s (identical templates)", c.dir, p.dir))
 		}
 	}
-	sort.Strings(out.Undeclared)
-	sort.Strings(out.Stale)
-
-	if len(out.Undeclared) > 0 {
-		return out, fmt.Errorf("%w: %s — declare it in %s", ErrUndeclared, strings.Join(out.Undeclared, ", "), RegistryRelPath)
-	}
-	if len(out.Stale) > 0 {
-		return out, fmt.Errorf("%w: %s — remove it from %s", ErrStale, strings.Join(out.Stale, ", "), RegistryRelPath)
+	sort.Strings(out.Duplicates)
+	if len(out.Duplicates) > 0 {
+		return out, fmt.Errorf("%w: %s — install the charts/ chart from Helmfile with bootstrap values and delete the infra/helm copy (docs/decisions.md, \"One chart per bootstrap/published pair\")",
+			ErrDuplicated, strings.Join(out.Duplicates, "; "))
 	}
 	return out, nil
-}
-
-func dirHasChart(root, tree, dir string) bool {
-	_, err := os.Stat(filepath.Join(root, tree, dir, "Chart.yaml"))
-	return err == nil
 }

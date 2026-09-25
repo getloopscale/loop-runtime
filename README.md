@@ -658,7 +658,7 @@ Build it first with `task quality:build`, then `/tmp/loopzero-ops quality --list
 | **kubeconform** | `task validate:manifests` | K8s manifest schema validation (`--strict`) |
 | **golangci-lint v2.11+** | `task lint` (all 9 workspace modules, with a per-module ratchet) | Go static analysis |
 | **helmfile template + kubeconform** | `task validate:helmfile-templates` · `task validate:matrix` | Renders every release and schema-checks the output |
-| **helm-diff / helm-drift** | `loopzero-ops quality helm-diff-structural` · `helm-drift` — **registered but not wired** into any task (`--list` shows `-`) | Structural pre-sync diff; rendered-vs-deployed drift |
+| **helm-diff** | `loopzero-ops quality helm-diff-structural` — **registered but not wired** into any task (`--list` shows `-`) | Structural pre-sync diff |
 | **chart-testing (ct) / helm-chartsnap** | `ct.yaml` + `.chart-testing/` config retained; **no runner wired** | Chart lint / install test / output-drift snapshots |
 | **Polaris (Fairwinds)** | `.polaris.yaml` retained; **no runner wired** (`run-polaris.sh` no longer exists) | K8s best-practices linter |
 | **Renovate** | `.github/renovate.json` | Dependency mgmt with `pinDigests: true` (INF-G18 SHA pinning), weekly grouped PRs |

@@ -725,10 +725,12 @@ LOOPZERO_MGMT_INGRESS_IP="$LOOPZERO_MGMT_INGRESS_IP" \
   bash "$HELMFILE_DIR/scripts/create-wiring-configmap.sh" drill 2>&1 | tail -5 | sed 's/^/  /'
 log "  ✓ wiring ConfigMap applied"
 
-# Bug #52 LIVE FIX (caught 2026-05-18 iter 41): infra/helm/loopzero-api/values.yaml
-# has GITEA_URL/GITEA_ORG/LOOPZERO_DYNAMIC_ROUTER indented under tracing: section
-# (yaml indent bug) — env vars never propagate to deployment. Override via
-# kubectl set env until chart values is fixed (T2 follow-up).
+# Bug #52 LIVE FIX (caught 2026-05-18 iter 41): the bootstrap loopzero-api chart
+# carried GITEA_URL/GITEA_ORG/LOOPZERO_DYNAMIC_ROUTER under a `tracing:` block no
+# template read (issue #354), so they never reached the Deployment. That chart
+# is gone; drill installs charts/loopzero-api, whose drill overlay does not set
+# config.giteaUrl either, so this patch is still what points drill at the
+# loopzero-system Gitea. LOOPZERO_DYNAMIC_ROUTER has no reader in the API.
 # Bug #46 LIVE FIX: inject LOOPZERO_SERVICE_AUTH_SECRET into loopzero-db-credentials
 # Secret (loopzero-api loads via envFrom) so harness X-Service-Auth path works.
 log "Bug #46+#52 fix: patching loopzero-api env (GITEA_URL/LOOPZERO_DYNAMIC_ROUTER/SERVICE_AUTH)..."

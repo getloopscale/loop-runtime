@@ -23,14 +23,25 @@ func TestCheck_MissingChartFails(t *testing.T) {
 	}
 }
 
-// TestCheck_MissingHelmWarns asserts advisory-only fallthrough when helm absent.
-func TestCheck_MissingHelmWarns(t *testing.T) {
+// A chart without the bootstrap values has no install to check: the contract
+// lives in those values, so their absence is the chart missing its install.
+func TestCheck_MissingBootstrapValuesFails(t *testing.T) {
 	root := t.TempDir()
-	// Create the chart dir so we get past ErrChartMissing.
 	if err := os.MkdirAll(filepath.Join(root, chartPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, chartPath, "values.yaml"), []byte("stub: true\n"), 0o644); err != nil {
+	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrChartMissing) {
+		t.Fatalf("expected ErrChartMissing for a chart without %s, got %v", valuesPath, err)
+	}
+}
+
+// TestCheck_MissingHelmWarns asserts advisory-only fallthrough when helm absent.
+func TestCheck_MissingHelmWarns(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, chartPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, valuesPath), []byte("stub: true\n"), 0o644); err != nil {
 		t.Fatalf("write values: %v", err)
 	}
 	t.Setenv("PATH", "/nonexistent")
@@ -52,18 +63,16 @@ func TestCheck_RealRepoPassesOrAdvisoryFallthrough(t *testing.T) {
 	if checkErr != nil {
 		// RootFile asserted the chart exists, so every error here — including
 		// ErrChartMissing — is a real disagreement, never a reason to pass.
-		// When helm renders and fails, the diagnostic must be a real contract violation
-		// (a false-PASS regression the gate should catch). Surface it clearly.
-		t.Fatalf("real chart failed rendered-envFrom contract. err=%v failures=%v", checkErr, outcome.Failures)
+		t.Fatalf("real chart failed the envFrom contract. err=%v failures=%v", checkErr, outcome.Failures)
 	}
 	if outcome.Warn {
 		t.Log("helm not installed — advisory-only fallthrough (matches operator-time gate posture)")
 	}
 }
 
-// TestCheck_HelmAbsentIsAdvisoryWhenChartExists deliberately re-asserts the
-// two-arm behavior once more to lock the contract: when helm is not on PATH
-// but the chart exists, the check MUST NOT return ErrViolations.
+// TestCheck_HelmAbsentIsAdvisoryWhenChartExists re-asserts the two-arm
+// behaviour: when helm is not on PATH but the chart exists, the check MUST NOT
+// return ErrViolations.
 func TestCheck_HelmAbsentIsAdvisoryWhenChartExists(t *testing.T) {
 	if _, err := exec.LookPath("helm"); err == nil {
 		t.Skip("helm is installed; this test simulates the missing-helm branch and is redundant here")
@@ -78,14 +87,20 @@ func TestCheck_HelmAbsentIsAdvisoryWhenChartExists(t *testing.T) {
 	}
 }
 
-// renderedContract is the smallest render that satisfies every assertion.
-const renderedContract = `# plan 2026-06-10-j22-openbao-transit-eso-sync, see docs/runbooks.md
-envFrom:
+// renderedContract is the smallest render that satisfies every render assertion.
+const renderedContract = `envFrom:
   - secretRef:
       name: loopzero-service-auth
   - secretRef:
       name: loopzero-openbao-approle
       optional: true
+`
+
+// sourceContract is the smallest values source that satisfies the traceability
+// assertions: the plan and the runbook a reader follows.
+const sourceContract = `# plan 2026-06-10-j22-openbao-transit-eso-sync, see docs/runbooks.md
+secrets:
+  additionalSources: []
 `
 
 // The chart is read by people who clone the repository. A citation of an
@@ -108,5 +123,17 @@ func TestCheckRendered_ApproleNotOptionalFails(t *testing.T) {
 	rendered := strings.Replace(renderedContract, "optional: true", "optional: false", 1)
 	if failures := checkRendered(rendered); len(failures) != 1 {
 		t.Fatalf("want exactly the optional=true failure, got %v", failures)
+	}
+}
+
+// Helm does not render values comments, so the traceability the old template
+// carried in its comments is checked on the values source that now declares
+// the mount.
+func TestCheckSource_CitesPlanAndRunbook(t *testing.T) {
+	if failures := checkSource(sourceContract); len(failures) != 0 {
+		t.Fatalf("a source citing the plan and the runbook was refused: %v", failures)
+	}
+	if failures := checkSource("secrets: {}\n"); len(failures) != 2 {
+		t.Fatalf("a source citing neither must fail both assertions, got %v", failures)
 	}
 }

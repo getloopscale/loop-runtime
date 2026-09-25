@@ -43,9 +43,9 @@ set -euo pipefail
 #   H8 — loopzero-api Deployment env: LOOPZERO_PACKS_IMAGE, LOOPZERO_CLONE_IMAGE,
 #        LOOPZERO_SYFT_IMAGE, LOOPZERO_COSIGN_IMAGE need to override the
 #        registry.digitalocean.com defaults to point at k3d-loopzero-registry
-#        (the local Docker registry). Permanent fix is helmfile values
-#        in `infra/helm/loopzero-api/values-standalone-multi.yaml`; this
-#        script applies as runtime patch in case helmfile sync is stale.
+#        (the local Docker registry). The Tilt-owned install takes them from
+#        `infra/tilt/loopzero-api-values.yaml`; this script applies them as a
+#        runtime patch in case that render is stale.
 #
 #   H9 — loopzero-build-cwts release: chart values default `images.cloneRunner`
 #        to DOCR. Override at helm-upgrade time when env != "prod".

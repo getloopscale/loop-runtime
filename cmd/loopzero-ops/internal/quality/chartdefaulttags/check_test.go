@@ -144,3 +144,24 @@ func TestCheck_AgainstLiveRepo(t *testing.T) {
 		t.Logf("KNOWN (#232) %s:%d — chart %s defaults to mutable tag %q", f.File, f.Line, f.Chart, f.Tag)
 	}
 }
+
+// A chart Helmfile installs from charts/ takes its bootstrap defaults from
+// charts/<name>/values-bootstrap.yaml, not from a copy under infra/helm. Those
+// defaults are what a forgotten override ships, so they are held to the same bar.
+func TestCheck_BootstrapValuesOfAPublishedChartAreChecked(t *testing.T) {
+	root := t.TempDir()
+	d := filepath.Join(root, "charts", "loopzero-subject")
+	if err := os.MkdirAll(d, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(d, "values-bootstrap.yaml"), []byte("image:\n  tag: latest\n"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass || len(out.Findings) != 1 || out.Findings[0].File != "charts/loopzero-subject/values-bootstrap.yaml" {
+		t.Fatalf("a mutable tag in bootstrap values must be one finding naming the file, got %+v (skipped=%v)", out.Findings, out.Skipped)
+	}
+}

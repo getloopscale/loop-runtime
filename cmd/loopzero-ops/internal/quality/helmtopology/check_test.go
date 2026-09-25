@@ -317,3 +317,35 @@ releases:
 		}
 	}
 }
+
+// A chart Helmfile installs straight from charts/ is ours and runs on that cluster.
+// When a bootstrap/published pair became one chart, the release moved from
+// `chart: ../helm/<name>` to `chart: ../../charts/<name>`; reading only the first
+// form dropped the release from the index while it kept running.
+func TestIndexesAChartInstalledFromTheChartsTree(t *testing.T) {
+	root := fixture(t, map[string]string{
+		"core": `
+releases:
+  - name: loopzero-api
+    installed: {{ .Values.apiEnabled }}
+    chart: ../../charts/loopzero-api
+    values:
+      - ../../charts/loopzero-api/values-bootstrap.yaml
+`,
+	}, map[string]bool{"cloudflared": true})
+
+	rep, err := Check(root, ModeCheck, "doc.md")
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	e := entryFor(t, rep, "loopzero-api")
+	if e.Nature != NatureOwn {
+		t.Errorf("loopzero-api nature = %q, want ours", e.Nature)
+	}
+	if len(e.Clusters) != 1 || e.Clusters[0] != "core" {
+		t.Errorf("loopzero-api clusters = %v, want [core]", e.Clusters)
+	}
+	if e.Conditional != "{{ .Values.apiEnabled }}" {
+		t.Errorf("loopzero-api conditional = %q, want the literal predicate", e.Conditional)
+	}
+}

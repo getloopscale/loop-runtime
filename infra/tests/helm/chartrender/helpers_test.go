@@ -22,8 +22,8 @@ func TestChartPath_resolves_known_charts(t *testing.T) {
 	t.Parallel()
 
 	// Every name below exists in exactly ONE tree, which is the only case
-	// ChartPath resolves. loopzero-api is declared in BOTH and is
-	// therefore refused, not preferred — see TestChartPath_refuses_a_colliding_name.
+	// ChartPath resolves. A name declared in BOTH is refused, not preferred —
+	// see TestChartPath_refuses_a_colliding_name.
 	// postgresql + cert-manager are upstream-wrappers (no Chart.yaml) —
 	// they would be auto-exempt per coverage gate, not testable here.
 	cases := []struct {
@@ -35,6 +35,7 @@ func TestChartPath_resolves_known_charts(t *testing.T) {
 		{"loopzero-app-operator lives in charts/", "loopzero-app-operator", "charts/loopzero-app-operator"},
 		{"loopzero-common (library) lives in charts/", "loopzero-common", "charts/loopzero-common"},
 		{"loopzero-cloud lives in charts/ only since its bootstrap copy was deleted", "loopzero-cloud", "charts/loopzero-cloud"},
+		{"loopzero-api lives in charts/ only since its bootstrap copy was deleted", "loopzero-api", "charts/loopzero-api"},
 	}
 
 	for _, tc := range cases {
@@ -80,39 +81,48 @@ func TestChartPath_rejects_empty_name(t *testing.T) {
 
 // TestIsLibraryChart_detects_loopzero_common confirms library chart detection
 // per ADR D12 (EC-3 fix).
-// TestChartPath_refuses_a_colliding_name asserts the contract this package used to
-// invert: a name declared in BOTH chart trees resolves to no chart at all.
+// TestChartPath_refuses_a_colliding_name asserts that a name declared in BOTH
+// chart trees resolves to no chart at all.
 //
-// Before B-002, ChartPath returned infra/helm/<name> for these two names because
+// Before B-002, ChartPath returned infra/helm/<name> for a colliding name because
 // that candidate sat at index 0 of the candidate slice — the identity of the chart
-// was decided by slice order, and charts/loopzero-api and charts/loopzero-cloud were
-// unreachable through this function. The error must do more than fail: it names
-// both paths and both explicit resolvers, so the caller is told what to call instead.
+// was decided by slice order, and the published chart was unreachable through this
+// function. The error must do more than fail: it names both paths and both explicit
+// resolvers, so the caller is told what to call instead.
+//
+// No name collides in the repository any more (the last pair, loopzero-api, became one
+// chart), so the collision is built in a fixture tree.
 func TestChartPath_refuses_a_colliding_name(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"loopzero-api"} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
+	const name = "colliding-chart"
+	root := t.TempDir()
+	for _, tree := range []string{filepath.Join("infra", "helm"), "charts"} {
+		dir := filepath.Join(root, tree, name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "Chart.yaml"), []byte("name: "+name+"\n"), 0o600); err != nil {
+			t.Fatalf("write Chart.yaml: %v", err)
+		}
+	}
 
-			got, err := ChartPath(name)
-			if !errors.Is(err, ErrAmbiguousChart) {
-				t.Fatalf("ChartPath(%q) err = %v; want ErrAmbiguousChart", name, err)
-			}
-			if got != "" {
-				t.Errorf("ChartPath(%q) = %q; want empty path on refusal", name, got)
-			}
-			for _, want := range []string{
-				"infra/helm/" + name,
-				"charts/" + name,
-				"BootstrapChartPath",
-				"PublishedChartPath",
-			} {
-				if !strings.Contains(err.Error(), want) {
-					t.Errorf("ChartPath(%q) error %q does not name %q", name, err, want)
-				}
-			}
-		})
+	got, err := chartPathIn(root, name)
+	if !errors.Is(err, ErrAmbiguousChart) {
+		t.Fatalf("chartPathIn(%q) err = %v; want ErrAmbiguousChart", name, err)
+	}
+	if got != "" {
+		t.Errorf("chartPathIn(%q) = %q; want empty path on refusal", name, got)
+	}
+	for _, want := range []string{
+		filepath.Join("infra", "helm", name),
+		filepath.Join("charts", name),
+		"BootstrapChartPath",
+		"PublishedChartPath",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("chartPathIn(%q) error %q does not name %q", name, err, want)
+		}
 	}
 }
 
@@ -138,7 +148,7 @@ func TestIsLibraryChart_detects_loopzero_common(t *testing.T) {
 func TestIsLibraryChart_rejects_application_chart(t *testing.T) {
 	t.Parallel()
 
-	chartPath, err := BootstrapChartPath("loopzero-api")
+	chartPath, err := PublishedChartPath("loopzero-api")
 	if err != nil {
 		t.Fatalf("resolve loopzero-api: %v", err)
 	}
@@ -182,7 +192,7 @@ func TestNewOptions_no_env_values(t *testing.T) {
 func TestNewOptions_rejects_gotmpl_values(t *testing.T) {
 	t.Parallel()
 
-	chartPath, err := BootstrapChartPath("loopzero-api")
+	chartPath, err := PublishedChartPath("loopzero-api")
 	if err != nil {
 		t.Fatalf("resolve loopzero-api: %v", err)
 	}
@@ -210,7 +220,7 @@ func TestNewOptions_rejects_gotmpl_values(t *testing.T) {
 func TestNewOptions_rejects_missing_env_file(t *testing.T) {
 	t.Parallel()
 
-	chartPath, err := BootstrapChartPath("loopzero-api")
+	chartPath, err := PublishedChartPath("loopzero-api")
 	if err != nil {
 		t.Fatalf("resolve loopzero-api: %v", err)
 	}
@@ -224,35 +234,23 @@ func TestNewOptions_rejects_missing_env_file(t *testing.T) {
 	}
 }
 
-// TestBootstrapChartPath_resolves_overlapping_charts confirms explicit
-// bootstrap-only resolution for the charts that still exist in infra/helm/ as
-// a copy of a charts/ chart (loopzero-api). Closes the variant-ambiguity gap
-// surfaced during T3.1 — `feat(infra): T3.1 (1/10) loopzero-cloud bootstrap render
-// tests (10/10 GREEN)`, 2026-05-20. The SHA that stood here (05cecb64) does not
-// resolve after the 2026-09-16 history rewrite and has no equivalent in the new
-// lineage, so the subject and date carry the citation instead: they survive a
-// rewrite, and a SHA does not.
-func TestBootstrapChartPath_resolves_overlapping_charts(t *testing.T) {
+// TestBootstrapChartPath_resolves_a_bootstrap_chart confirms explicit
+// bootstrap-only resolution. chaos-mesh exists ONLY in infra/helm/.
+func TestBootstrapChartPath_resolves_a_bootstrap_chart(t *testing.T) {
 	t.Parallel()
 
-	cases := []string{"loopzero-api"}
-	for _, name := range cases {
-		t.Run(name, func(t *testing.T) {
-			got, err := BootstrapChartPath(name)
-			if err != nil {
-				t.Fatalf("BootstrapChartPath(%q): %v", name, err)
-			}
-			if !strings.Contains(got, filepath.Join("infra", "helm", name)) {
-				t.Errorf("BootstrapChartPath(%q)=%q must contain infra/helm/%s",
-					name, got, name)
-			}
-		})
+	got, err := BootstrapChartPath("chaos-mesh")
+	if err != nil {
+		t.Fatalf("BootstrapChartPath(chaos-mesh): %v", err)
+	}
+	if !strings.Contains(got, filepath.Join("infra", "helm", "chaos-mesh")) {
+		t.Errorf("BootstrapChartPath(chaos-mesh)=%q must contain infra/helm/chaos-mesh", got)
 	}
 }
 
 // TestPublishedChartPath_resolves_overlapping_charts confirms explicit
 // published-variant resolution for the charts that had a bootstrap copy in
-// infra/helm/ (loopzero-api, loopzero-cloud).
+// infra/helm/ (loopzero-api, loopzero-cloud) until each pair became one chart.
 func TestPublishedChartPath_resolves_overlapping_charts(t *testing.T) {
 	t.Parallel()
 

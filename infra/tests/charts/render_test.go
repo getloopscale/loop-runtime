@@ -40,12 +40,6 @@ func publishedChart(t *testing.T, name string) string {
 	return mustResolve(t, name, chartrender.PublishedChartPath)
 }
 
-// bootstrapChart resolves infra/helm/<name>/ only.
-func bootstrapChart(t *testing.T, name string) string {
-	t.Helper()
-	return mustResolve(t, name, chartrender.BootstrapChartPath)
-}
-
 // uniqueChart resolves a name declared in exactly one tree, and fails on a name
 // declared in both (ErrAmbiguousChart) instead of picking one.
 func uniqueChart(t *testing.T, name string) string {

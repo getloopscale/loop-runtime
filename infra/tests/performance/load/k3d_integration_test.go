@@ -67,16 +67,21 @@ func TestK3d_InternalChartsAllInstall(t *testing.T) {
 	ctx := k3dContext()
 
 	type chartCase struct {
-		dir      string
+		dir       string   // release and namespace stem
+		path      string   // chart path relative to this package; "" means infra/helm/<dir>
 		extraArgs []string // e.g., --no-hooks for smoke-test
 	}
 	// Note: loopzero-controller and tenant-controller monolith charts removed
 	// pre-GA per ADR-0023 (operator split) + ADR-0042 (ghost chart deletion).
 	// Operator workloads now ship via 4 split charts: loopzero-tenant-operator,
 	// loopzero-app-operator, loopzero-preview-operator, loopzero-platform-operator.
+	// loopzero-api and loopzero-cloud are one chart each under charts/, installed by Helmfile
+	// with their bootstrap values; that install is what this exercises.
 	charts := []chartCase{
-		{dir: "loopzero-api"},
-		{dir: "loopzero-cloud"},
+		{dir: "loopzero-api", path: "../../../../charts/loopzero-api",
+			extraArgs: []string{"-f", "../../../../charts/loopzero-api/values-bootstrap.yaml"}},
+		{dir: "loopzero-cloud", path: "../../../../charts/loopzero-cloud",
+			extraArgs: []string{"-f", "../../../../charts/loopzero-cloud/values-bootstrap.yaml"}},
 		{dir: "cloudflared"},
 		{dir: "cluster-issuer"},
 		{dir: "network-policies"},
@@ -124,10 +129,20 @@ func TestK3d_InternalChartsAllInstall(t *testing.T) {
 			}
 
 			// Install
+			chartPath := c.path
+			if chartPath == "" {
+				chartPath = "../../../helm/" + c.dir
+			} else {
+				// The charts/ charts include loopzero-common, which a clone does not carry
+				// built; Helmfile builds it before installing, and so does this.
+				if out, exit := runCommand(t, "helm", "dependency", "build", chartPath); exit != 0 {
+					t.Fatalf("helm dependency build %s failed (exit %d): %s", chartPath, exit, out)
+				}
+			}
 			args := []string{
 				"--kube-context", ctx,
 				"install", release,
-				"../../../helm/" + c.dir,
+				chartPath,
 				"--namespace", ns,
 				"--wait=false",
 				"--timeout", "30s",

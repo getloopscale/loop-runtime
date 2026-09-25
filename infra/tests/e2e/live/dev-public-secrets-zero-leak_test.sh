@@ -200,9 +200,10 @@ do_rehearsal() {
   rehearsal_check "R4 Secret loopzero-openbao-approle in loopzero-system ns" \
     "kubectl --context='$KUBE_CONTEXT' -n loopzero-system get secret loopzero-openbao-approle -o jsonpath='{.data.OPENBAO_VAULT_SECRET_ID}' | head -c 1 | grep -q ."
 
-  # R5: loopzero-api pods Running with OPENBAO_TRANSIT_ENABLED=true in env
-  rehearsal_check "R5 loopzero-api OPENBAO_TRANSIT_ENABLED=true env present" \
-    "kubectl --context='$KUBE_CONTEXT' -n loopzero-system get deploy loopzero-api -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name==\"OPENBAO_TRANSIT_ENABLED\")].value}' | grep -q '^true$'"
+  # R5: loopzero-api runs with OPENBAO_TRANSIT_ENABLED=true. charts/loopzero-api carries it in
+  # its ConfigMap (config.openbaoTransitEnabled), mounted through envFrom.
+  rehearsal_check "R5 loopzero-api OPENBAO_TRANSIT_ENABLED=true in its ConfigMap" \
+    "kubectl --context='$KUBE_CONTEXT' -n loopzero-system get configmap loopzero-api -o jsonpath='{.data.OPENBAO_TRANSIT_ENABLED}' | grep -q '^true$'"
 
   # Emit results
   if [ $JSON_MODE -eq 1 ]; then

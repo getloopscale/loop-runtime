@@ -62,9 +62,12 @@ func TestEdgeBodyLimit_IsNotBelowWhatTheAppAccepts(t *testing.T) {
 // cap to be correct, because attaching it at 10 MiB would have been worse than
 // leaving it off.
 func TestEdgeBodyLimit_IsAttachedToTheAPIRoute(t *testing.T) {
-	route, err := os.ReadFile("../../helm/loopzero-api/templates/ingressroute.yaml")
+	// The route is rendered by the loopzero-common ingressRoute helper from the
+	// middlewares the bootstrap install declares, so that declaration is what
+	// attaches them (charts/loopzero-api/values-bootstrap.yaml).
+	route, err := os.ReadFile("../../../charts/loopzero-api/values-bootstrap.yaml")
 	if err != nil {
-		t.Fatalf("read ingressroute: %v", err)
+		t.Fatalf("read the bootstrap values: %v", err)
 	}
 	content := string(route)
 

@@ -255,13 +255,39 @@ check_minio_credentials() {
 # -----------------------------------------------------------------------------
 # T0.4 — loopzero-api deploy env vars
 # -----------------------------------------------------------------------------
+# loopzero_api_config_value prints the value loopzero-api runs with for a non-secret
+# variable: an explicit container variable wins, then the ConfigMaps mounted
+# through envFrom, last one first (a later envFrom source wins a key both define).
+# Both install paths put these variables in a ConfigMap — Tilt renders it from
+# charts/loopzero-api, and Helmfile installs charts/loopzero-api — so reading only the
+# explicit variables would report every one of them as unset.
+loopzero_api_config_value() {
+  local name="$1" value cms
+  value=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api \
+    -o jsonpath="{range .spec.template.spec.containers[0].env[?(@.name==\"${name}\")]}{.value}{end}" 2>/dev/null || true)
+  if [[ -n "$value" ]]; then
+    printf '%s' "$value"
+    return
+  fi
+  cms=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api \
+    -o jsonpath='{.spec.template.spec.containers[0].envFrom[*].configMapRef.name}' 2>/dev/null || true)
+  local reversed=() cname
+  for cname in $cms; do reversed=("$cname" "${reversed[@]}"); done
+  for cname in "${reversed[@]}"; do
+    value=$(kubectl --context "$MGMT_CTX" -n loopzero-system get cm "$cname" \
+      -o jsonpath="{.data.${name}}" 2>/dev/null || true)
+    if [[ -n "$value" ]]; then
+      printf '%s' "$value"
+      return
+    fi
+  done
+}
+
 check_deploy_env() {
   local id="T0.4"
   local registry_insecure minio_endpoint
-  registry_insecure=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api \
-    -o jsonpath='{range .spec.template.spec.containers[0].env[?(@.name=="REGISTRY_INSECURE")]}{.value}{end}' 2>/dev/null || true)
-  minio_endpoint=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api \
-    -o jsonpath='{range .spec.template.spec.containers[0].env[?(@.name=="MINIO_ENDPOINT")]}{.value}{end}' 2>/dev/null || true)
+  registry_insecure=$(loopzero_api_config_value REGISTRY_INSECURE)
+  minio_endpoint=$(loopzero_api_config_value MINIO_ENDPOINT)
 
   local issues=()
   [[ "$registry_insecure" != "true" ]] && issues+=("REGISTRY_INSECURE=$registry_insecure (expected true)")

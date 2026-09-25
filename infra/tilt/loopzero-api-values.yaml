@@ -1,0 +1,52 @@
+# Values for the ConfigMap and Secret the Tilt-owned loopzero-api Deployment
+# (infra/tilt/api-deployment.yaml) mounts through envFrom. The Tiltfile renders ONLY
+# charts/loopzero-api/templates/{configmap,secret}.yaml with this file — the same chart
+# Helmfile and ArgoCD install, so a key the API reads has one spelling everywhere
+# (ADR D1, decisions/2026-06-11-tilt-yaml-configmap-mount.md).
+#
+# These were runtimeConfig/runtimeSecrets of infra/helm/loopzero-api/values-dev.yaml until
+# that bootstrap copy of the chart was deleted (docs/decisions.md, "One chart per
+# bootstrap/published pair"). Dev-only credentials: every value is a local default,
+# none of them works against anything but the local k3d topology.
+#
+# The kubeconfig paths are not here: they name mounts of the Tilt Deployment, so they
+# live in that manifest next to the mounts they point into.
+
+config:
+  logLevel: "debug"
+  loopzeroTracingEnabled: "false"
+  loopzeroDisableLegacyLoops: "false"
+  # The binary's default is false; this chart's default is true.
+  argocdInsecure: "false"
+  minioEndpoint: "http://minio.loopzero-system.svc.cluster.local:9000"
+  minioCrossClusterEndpoint: "http://172.18.0.3:32000"
+  giteaUrl: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+  giteaCrossClusterUrl: "http://172.18.0.3:30000"
+  apiCrossClusterUrl: "http://172.18.0.3:30001"
+  argocdUrl: "http://argocd-server.argocd.svc.cluster.local:80"
+  buildKubeContext: "build"
+  runtimeKubeContext: "in-cluster"
+  lokiUrl: "http://k3d-loopzero-build-serverlb:30094"
+  registryUrl: "k3d-loopzero-registry:5000"
+  registryInsecure: "true"
+  loopzeroSyftImage: "k3d-loopzero-registry:5000/loopzero-syft-scanner:v0.1.0"
+  loopzeroCosignImage: "k3d-loopzero-registry:5000/loopzero-cosign-signer:v0.1.0"
+  loopzeroAdminApi: "true"
+  githubAppId: "3319955"
+  workloadIngressUrl: "http://172.18.0.12:80"
+  baseDomain: "loopzero.local"
+  loopzeroPublicDomain: "prod-dev.loopzero.example"
+  jwksUrl: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json"
+  jwtIssuer: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
+  loopzeroClusterIssuer: "loopzero-ca-issuer"
+  openbaoTransitEnabled: "true"
+  openbaoVaultAddr: "https://openbao.secrets-system.svc.cluster.local:8200"
+
+secrets:
+  create: true
+  openbaoVaultRoleId: "b805a39a-2b8c-afdd-1b7a-95073b1c1be6"
+  minioAccessKey: "loopzero-admin"
+  databaseUrl: "postgres://loopzero:loopzero-dev-password@postgresql.loopzero-system.svc.cluster.local:5432/loopzero?sslmode=disable"
+  loopzeroArgoCallbackSecret: "dev-callback-secret"
+  minioSecretKey: "loopzero-dev-password"
+  loopzeroServiceAuthSecret: "cleanroom-service-auth-secret-do-not-use-in-prod"

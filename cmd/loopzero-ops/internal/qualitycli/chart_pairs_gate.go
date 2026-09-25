@@ -12,7 +12,7 @@ import (
 func init() {
 	register(Gate{
 		Name:    "chart-pairs",
-		Summary: "A chart that exists in both trees under the same name must be declared.",
+		Summary: "No chart exists twice across infra/helm and charts/ — by name, or as a template-identical copy under another name.",
 		Setup:   setupChartPairs,
 	})
 }
@@ -21,14 +21,14 @@ func setupChartPairs(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (Outcome, error) {
 		out, err := chartpairs.Check(chartpairs.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, chartpairs.ErrUndeclared, chartpairs.ErrStale) {
+			if !isViolation(err, chartpairs.ErrDuplicated) {
 				return Fail, err
 			}
 			inv.Stderr.Printf("chart-pairs: FAIL — %v\n", err)
 			return Fail, nil
 		}
-		inv.Stdout.Printf("chart-pairs: PASS — %d in infra/helm, %d in charts/, %d declared pair(s): %v\n",
-			out.InfraHelm, out.Charts, len(out.Pairs), out.Pairs)
+		inv.Stdout.Printf("chart-pairs: PASS — %d chart(s) in infra/helm, %d in charts/, none of them twice\n",
+			out.InfraHelm, out.Charts)
 		return Pass, nil
 	}
 }

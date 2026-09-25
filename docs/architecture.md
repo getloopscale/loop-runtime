@@ -144,10 +144,12 @@ guard instead of the config once inflated a capacity simulation tenfold and inve
 ## Helm chart dual system
 
 `infra/helm/` (bootstrap, Helmfile L2) and `charts/` (published OCI, ArgoCD L3) coexist by
-design. **2 charts exist in BOTH trees under the same name** — `loopzero-api` and `loopzero-cloud`:
-patch one, apply the same fix to the other. Refer to each by its **path**, never the bare
-name. The pair list is `infra/quality/chart-pairs.txt`, enforced by the `chart-pairs` gate,
-which fails both ways — an undeclared pair, or a declaration that outlived its pair.
+design, and **no chart exists in both trees**. `loopzero-api`, `loopzero-cloud` and the admission
+policies are one chart each under `charts/`; Helmfile installs them with
+`charts/<name>/values-bootstrap.yaml` (`values-mgmt.yaml` for the admission policies on
+core), and ArgoCD consumes the same chart with its defaults (`decisions.md`, "One chart
+per bootstrap/published pair"). The `chart-pairs` gate refuses a chart present in both
+trees, by name or as a template-identical copy under another name.
 
 `monitoring` / `loopzero-monitoring` are complementary (infra vs config), not overlapping.
 
@@ -191,8 +193,16 @@ which fails both ways — an undeclared pair, or a declaration that outlived its
 | `smoke-test` | core | ours | — | `{{ and .Values.profile.smokeTest (ne (.Values \| get "clusterRole" "dev") "standalone") }}` |
 | `static-assets` | cell | ours | — | `{{ .Values.profile.staticAssets }}` |
 | `tempo` | core | upstream | 1.14.0 | `always` |
+| `loopzero-admission-policies` | cell, core | ours | — | `always` |
 | `loopzero-api` | core | ours | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |
+| `loopzero-app-operator` | core | ours | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |
+| `loopzero-build-cwts` | build | ours | — | `always` |
+| `loopzero-cloud` | core | ours | — | `{{ and .Values.profile.loopzeroCloud (ne (.Values \| get "clusterRole" "dev") "standalone") }}` |
+| `loopzero-crds` | core | ours | — | `always` |
 | `loopzero-external-secrets` | — | undeclared | — | `always` |
+| `loopzero-platform-operator` | core | ours | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |
+| `loopzero-preview-operator` | core | ours | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |
+| `loopzero-tenant-operator` | core | ours | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |
 | `traefik` | cell, core | upstream | 28.3.0 | `always` |
 | `velero` | core | ours | — | `always` |
 <!-- END GENERATED TABLE -->

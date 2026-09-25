@@ -22,8 +22,12 @@
 //
 // TWO DECLARATION FORMS — reading only one covers 19 of 44 (EC-1)
 //
-//	own:      chart: ../helm/<name>
+//	own:      chart: ../helm/<name>  or  chart: ../../charts/<name>
 //	upstream: chart: <repo>/<name>  +  values: - ../helm/<name>/values.yaml
+//
+// The second own form is a chart Helmfile installs straight from charts/ — every
+// former bootstrap/published pair since it became one chart (docs/decisions.md,
+// "One chart per bootstrap/published pair"), and the operator charts.
 //
 // The form itself classifies own vs upstream, which is a stronger signal than probing for
 // Chart.yaml: it describes how the release is INSTALLED rather than inferring from directory
@@ -106,7 +110,7 @@ type Report struct {
 // Regexes over the helmfile TEXT. The files are `.gotmpl` and carry Go template syntax, so any
 // YAML parser fails on them — the same trap the vap-delete-guardrail gate documents.
 var (
-	reOwnChart  = regexp.MustCompile(`(?m)^\s*chart:\s*\.\./helm/([A-Za-z0-9_.-]+)\s*$`)
+	reOwnChart  = regexp.MustCompile(`(?m)^\s*chart:\s*(?:\.\./helm|\.\./\.\./charts)/([A-Za-z0-9_.-]+)\s*$`)
 	reValuesRef = regexp.MustCompile(`(?m)^\s*-\s*\.\./helm/([A-Za-z0-9_.-]+)/[^\s]*values[^\s]*$`)
 	reRelease   = regexp.MustCompile(`(?m)^\s*-\s*name:\s*(\S+)`)
 	reVersion   = regexp.MustCompile(`(?m)^\s*version:\s*"?([0-9][^"\s]*)"?\s*$`)
@@ -409,8 +413,9 @@ comes from the release declaration, not from a folder convention.
   environments and not others: ` + "`postgresql`" + ` runs on core in standalone and not in
   production.
 
-**Scope:** ` + "`infra/helm/`" + ` only (bootstrap via Helmfile L2). The charts published in
-` + "`charts/`" + `, consumed by ArgoCD (L3), are not here.
+**Scope:** what Helmfile (L2) installs — charts of ` + "`infra/helm/`" + ` and the charts of
+` + "`charts/`" + ` it installs directly. What ArgoCD (L3) deploys from ` + "`charts/`" + ` into
+tenant environments is not here.
 
 `
 }

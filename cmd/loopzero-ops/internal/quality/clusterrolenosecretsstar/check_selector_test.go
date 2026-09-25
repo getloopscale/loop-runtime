@@ -91,7 +91,8 @@ func TestCheck_ClusterRoleInNonCanonicalFilename_FAIL(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	// Byte-for-byte the shape of infra/helm/loopzero-api/templates/serviceaccount.yaml:
+	// Byte-for-byte the shape the deleted bootstrap chart infra/helm/loopzero-api carried in
+	// templates/serviceaccount.yaml:
 	// a ServiceAccount, then a ClusterRole with an unconditional core-group
 	// secrets+configmaps grant including delete. No helm guard anywhere.
 	content := `apiVersion: v1
@@ -179,31 +180,4 @@ func runOne(t *testing.T, basename string, body []byte) bool {
 		t.Fatalf("check: %v", err)
 	}
 	return out.Pass
-}
-
-// RED 3 — the specific live exposure. The bootstrap chart's ClusterRole grants
-// cluster-wide secrets+configmaps with delete, unconditionally, and the gate
-// reports PASS over the whole repository.
-func TestCheck_LIVE_FlagsLoopZeroApiBootstrapSecretsGrant(t *testing.T) {
-	skipUnlessSelectorAuditArmed(t)
-	root := qtestutil.Root(t)
-	const target = "infra/helm/loopzero-api/templates/serviceaccount.yaml"
-	if _, err := os.Stat(filepath.Join(root, target)); err != nil {
-		// The target is tracked, so absence is a broken checkout, not a missing input.
-		t.Fatalf("%s is tracked but absent: %v", target, err)
-	}
-
-	out, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	for _, h := range out.Hits {
-		if filepath.ToSlash(h.File) == target {
-			return // the gate sees it — this test would then be GREEN
-		}
-	}
-	t.Fatalf("B-048: %s declares a ClusterRole granting apiGroups [\"\"] "+
-		"resources [namespaces configmaps secrets services pods events] with delete, "+
-		"under no helm guard — and the gate does not flag it. Gate verdict: pass=%v, "+
-		"%d hit(s) across the repository.", target, out.Pass, len(out.Hits))
 }

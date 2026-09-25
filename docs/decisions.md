@@ -16,7 +16,6 @@ meeting date is not the meeting.
 
 | Date | Decision | Tier | What it turns on |
 |---|---|---|---|
-| 2026-09-15 | **Whether the bootstrap loopzero-api ClusterRole keeps cluster-wide secrets delete and pods/exec create** | — | `infra/helm/loopzero-api` grants both cluster-wide; the published `charts/loopzero-api` withholds `secrets` delete under every value of `rbac.legacyClusterWideSecrets` and omits `pods/exec` entirely. No caller for either grant has been measured. `helm-drift` records both cells as `undecided` in `infra/quality/helm-drift-registry.yaml` and names them on every run until this is decided. Record: `.squad/wiki/decisions/B-001-bootstrap-grant-disposition.md`. |
 | 2026-09-09 | **The secrets cluster is separate, and conditional** | T3 | Supersedes § Q2 of a RATIFIED ADR that placed OpenBao in a `vault-system` namespace on the core cluster. Three artifacts disagreed about where OpenBao runs and the disagreement was load-bearing. Because it supersedes a ratified decision, ratification is sponsor-direct — it is not implied by the file existing. |
 | 2026-09-07 | **Source bundles keep going through the API**, and the edge bound is made real | T2 | `POST /api/v1/source/upload` is served by `loopzero-api` itself; every deploy pushes up to 500 MB (`SOURCE_MAX_BUNDLE_SIZE`) through a pod limited to 500m CPU / 256Mi across 2 replicas. The decision keeps the path and makes the edge limit real rather than nominal. |
 | 2026-09-07 | **Fixed replicas for the control plane, autoscaling for tenant workloads** | T2 | The renderer emits an HPA — or a KEDA `ScaledObject` when `minReplicas` is 0 — for every tenant application. The platform that runs them does not get the same treatment. |
@@ -53,11 +52,17 @@ meeting date is not the meeting.
 
 **Admission runs in deny-flip mode where we own the cluster, and warns where the consumer does** (2026-09-16).
 
-`clusterImagePolicy.mode: enforce` in `infra/helm/admission-policies/values.yaml:40` —
-the bootstrap chart, Helmfile L2, our own local and dev clusters. `mode: warn` in
-`charts/loopzero-admission-policies/values.yaml` — the published OCI chart a self-hoster
-installs. `infra/helmfile/environments/drill.yaml:85` runs enforce for drills, which is
-what validates the deny path against something shaped like production.
+`mode: warn` in `charts/loopzero-admission-policies/values.yaml` — the chart a self-hoster
+installs. Our own clusters take the mode from the environment's `policyMode`, which the
+cell release sets as `clusterImagePolicy.mode` (`infra/helmfile/cell.helmfile.yaml.gotmpl`):
+`enforce` in `prod.yaml` and `drill.yaml` — drills are what validate the deny path against
+something shaped like production — and `warn` in the dev and standalone environments.
+
+*Corrected 2026-09-25.* This paragraph cited `mode: enforce` in
+`infra/helm/admission-policies/values.yaml` as what our local and dev clusters run. That
+default was overridden by the environment's `policyMode` on every cell install, so dev
+already ran `warn`; the bootstrap chart was then deleted ("One chart per
+bootstrap/published pair"), and the rendered policy of every environment is unchanged.
 
 The asymmetry IS the decision: an unsigned image is rejected at admission in a cluster
 where breaking it costs us an afternoon, and is logged but admitted in a cluster that
@@ -102,7 +107,7 @@ requires it to name who is affected, what breaks and what was rejected — above
 
 | Date | Decision |
 |---|---|
-| 2026-09-25 | **One chart per bootstrap/published pair** — every chart that existed twice (a bootstrap copy under `infra/helm/`, installed by Helmfile L2, and a published chart under `charts/`, consumed by ArgoCD L3) becomes the `charts/` chart alone. Helmfile installs it with bootstrap values; the `infra/helm` copy is deleted. The pairs were not two renderings of one design but two charts: the bootstrap `loopzero-api` and `loopzero-cloud` took a free-form env map, owned RBAC the published side withheld, and mounted objects their own Deployments never read. Supersedes the row below for every pair it closes: a divergence between two copies stops being recordable once there is one copy. Pairs closed: `admission-policies`↔`loopzero-admission-policies` (templates were already byte-identical; rendered output of every environment unchanged); `loopzero-cloud` (Helmfile installs `charts/loopzero-cloud` with `values-bootstrap.yaml`; the Deployment selector changes, so an existing Deployment is recreated once). |
+| 2026-09-25 | **One chart per bootstrap/published pair** — every chart that existed twice (a bootstrap copy under `infra/helm/`, installed by Helmfile L2, and a published chart under `charts/`, consumed by ArgoCD L3) becomes the `charts/` chart alone. Helmfile installs it with bootstrap values; the `infra/helm` copy is deleted. The pairs were not two renderings of one design but two charts: the bootstrap `loopzero-api` and `loopzero-cloud` took a free-form env map, owned RBAC the published side withheld, and mounted objects their own Deployments never read. Supersedes the row below for every pair it closes: a divergence between two copies stops being recordable once there is one copy. Pairs closed: `admission-policies`↔`loopzero-admission-policies` (templates were already byte-identical; rendered output of every environment unchanged); `loopzero-cloud` (Helmfile installs `charts/loopzero-cloud` with `values-bootstrap.yaml`; the Deployment selector changes, so an existing Deployment is recreated once); `loopzero-api` (Helmfile installs `charts/loopzero-api` with `values-bootstrap.yaml`; the Deployment selector changes the same way). With no pair left, `helm-drift` and `helm-overlap-parity` lost their subject and were retired with `infra/quality/helm-drift-registry.yaml` and `infra/quality/chart-pairs.txt`; `chart-pairs` now refuses any chart present in both trees, by name or as a template-identical copy. **This also decides the open question of 2026-09-15** — whether the bootstrap loopzero-api ClusterRole keeps cluster-wide `secrets` delete and `pods/exec` create: neither is kept. No code path execs into a pod, so `pods/exec` is gone; `secrets` delete is granted only in the API's own namespace, through a Role behind `rbac.controlPlaneSecrets`, and ArgoCD `applications` patch/delete behind `rbac.argocdApplications`. Both values default off, so an ArgoCD install keeps the published chart's grant; the bootstrap values turn them on. |
 | 2026-09-25 | **Chart-pair drift is recorded, never blessed per pair** — every resource kind and every RBAC (apiGroup, resource, verb) cell on which a bootstrap chart and its published twin differ is an entry in `infra/quality/helm-drift-registry.yaml` saying what was observed; `helm-drift` fails on any divergence without one. An entry is `declared` (intended and reviewed) or `undecided` (live, waiting on an open decision). Kinds were measured 2026-08-16, cells 2026-09-15. |
 | 2026-09-06 | **Test-pyramid e2e band — ratify the ratchet**, amending ADR D7. |
 | 2026-06-11 | **Wiring-triad pillar-(b) test contract** (D5). |

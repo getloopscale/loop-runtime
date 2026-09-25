@@ -196,23 +196,36 @@ func TestB77LoopZeroApiGiteaOrgConfigurable(t *testing.T) {
 }
 
 func TestB78LoopZeroApiHasGiteaTokenEnv(t *testing.T) {
-	data, err := os.ReadFile("../../helm/loopzero-api/templates/deployment.yaml")
+	// Declared as a typed secrets.keyRefs entry of the values Helmfile installs
+	// the one loopzero-api chart with.
+	data, err := os.ReadFile("../../../charts/loopzero-api/values-bootstrap.yaml")
 	if err != nil {
-		t.Fatalf("read loopzero-api deployment.yaml: %v", err)
+		t.Fatalf("read loopzero-api bootstrap values: %v", err)
 	}
 	s := string(data)
 	if !strings.Contains(s, "name: GITEA_TOKEN") {
 		t.Error("B78 regression: loopzero-api Deployment must export env GITEA_TOKEN")
 	}
-	if !strings.Contains(s, "name: gitea-admin") {
+	if !strings.Contains(s, "secretName: gitea-admin") {
 		t.Error("B78 regression: GITEA_TOKEN must come from gitea-admin Secret")
 	}
 }
 
 func TestB79LoopZeroApiHasTmpVolume(t *testing.T) {
-	data, err := os.ReadFile("../../helm/loopzero-api/templates/deployment.yaml")
+	// The chart mounts the volume through the loopzero-common tmp helpers, so the
+	// deployment template names them and the helpers carry the shape.
+	dep, err := os.ReadFile("../../../charts/loopzero-api/templates/deployment.yaml")
 	if err != nil {
 		t.Fatalf("read loopzero-api deployment.yaml: %v", err)
+	}
+	for _, helper := range []string{`include "loopzero-common.tmpVolumeMount"`, `include "loopzero-common.tmpVolume"`} {
+		if !strings.Contains(string(dep), helper) {
+			t.Errorf("B79 regression: loopzero-api Deployment must %s", helper)
+		}
+	}
+	data, err := os.ReadFile("../../../charts/loopzero-common/templates/_helpers.tpl")
+	if err != nil {
+		t.Fatalf("read loopzero-common helpers: %v", err)
 	}
 	s := string(data)
 	// Must have a `name: tmp` volume with emptyDir

@@ -268,7 +268,8 @@ fi
 
 # dogfood-2026-05-08-fixes T2.2 (F-2 root cause):
 # Context name MUST be "in-cluster" to match CELL_0_KUBE_CONTEXT in
-# infra/tilt/api-deployment.yaml + infra/helm/loopzero-api Deployment env.
+# infra/tilt/api-deployment.yaml + the charts/loopzero-api Helmfile install
+# (config.runtimeKubeContext in charts/loopzero-api/values-bootstrap.yaml).
 # B34 fix doc says the kubeconfig "ships with a single context named
 # in-cluster", but F-11 (2026-05-07) regenerated it with name=runtime —
 # silent drift that broke `loopzero secret set` (SecretK8sManager construct
@@ -303,7 +304,7 @@ kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create configmap loopzero-cell-0-k
 
 # F-11 fix (2026-05-07 cleanroom dogfood): loopzero-cluster-kubeconfigs Secret
 # is mounted by loopzero-api Deployment at /etc/loopzero/runtime/kubeconfig (per
-# infra/tilt/api-deployment.yaml + helm/loopzero-api). generate-secrets.sh
+# infra/tilt/api-deployment.yaml + charts/loopzero-api kubeconfig.clusterSecret). generate-secrets.sh
 # creates this Secret with a synthetic in-cluster kubeconfig that points
 # all 3 cluster keys (mgmt/build/cell-0.kubeconfig) at kubernetes.default.svc
 # (the SAME mgmt cluster). That assumption is wrong for k3d multi-cluster

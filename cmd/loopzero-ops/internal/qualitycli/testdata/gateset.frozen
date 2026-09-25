@@ -16,7 +16,7 @@ caddyfile-dev-server-deny	gates	Defense-in-depth: app-dev block MUST 404 dev-ser
 caddyfile-no-docker-ip	gates	Blocks hardcoded 172.18.x.x Docker network IPs in infra/local/Caddyfile + enforces canonical https://127.0.0.1:8443 upstream in both wildcard blocks (M-Migrate2 2026-07-07 replaces infra/tests/check-caddyfile-no-docker-network-ip_test.sh — closes Red Team loopzero-cloud#127 guard).
 canonical-fixture-repo	gates	Rejects legacy loopzero-repotest fixture in LIVE test/seed scripts; canonical is getloopscale/loopzerokit-example (M-Migrate2 2026-07-07 replaces infra/tests/check-canonical-fixture-repo_test.sh).
 chart-default-tags	gates	loopzero-owned charts must not default their image tag to a mutable ref (#232).
-chart-pairs	gates	A chart that exists in both trees under the same name must be declared.
+chart-pairs	gates	No chart exists twice across infra/helm and charts/ — by name, or as a template-identical copy under another name.
 check-allowlist-sunsets	gates	Every exemption in rules/code-review-allowlist.txt carries a sunset, and on that date it stops exempting anything
 cli-exit-codes	gates	Enforces the permanent CLI exit-code contract (0/1/2/3/4/5 only).
 cluster-rename-guard	gates	Proves the cluster rename (B-001: mgmt->core, vault->secrets) touched only cluster identifiers. Asserts every line a pre-rename baseline classified GENERIC still exists byte-for-byte — `vault` carries 74 such lines naming OpenBao, `mgmt` carries zero. Refuses to run when the baseline cannot be proven an ancestor of HEAD, because a baseline captured after the first edit compares the new state with itself and passes forever. T0.1 of plans/cluster-rename-core-secrets-plan.md.
@@ -52,8 +52,6 @@ error-vocabulary	gates	An authored error message must not carry an internal term
 git-diff-to-lines	-	Utility: converts a git diff into a changed-line set for other gates.
 gomod-auth-org	gates	The org build files authenticate to matches the org go.mod requires (a drift makes git fetch unauthenticated and GitHub answer 'not found').
 helm-diff-structural	-	Structural pre-sync Helm diff to catch drift before apply.
-helm-drift	gates	Compares the two sides of each declared chart pair: the resource KINDS each installs, and the (apiGroup, resource, verb) RBAC cells each grants (B-001).
-helm-overlap-parity	gates	Keeps the dual Helm chart systems (infra/helm vs charts) in parity.
 helm-topology-index	gates	Index of which chart runs on which cluster, derived from the helmfiles (never a hand-written second copy).
 helmfile-context-parity	gates	A task that invokes a helmfile targets the cluster that helmfile declares (B-044).
 install-git-hooks	gates	Validates the M8 1.5 pre-push hook + installer canonical shape + idempotency (M-Migrate2 2026-07-07 replaces infra/tests/check-install-git-hooks_test.sh).
