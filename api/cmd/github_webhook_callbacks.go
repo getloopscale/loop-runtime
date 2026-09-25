@@ -9,9 +9,11 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/github"
 	ghwebhook "github.com/getloopscale/loopzero/api/internal/github/webhook"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/preview"
 )
 
@@ -127,5 +129,23 @@ func newPreviewLifecycle(deps preview.PreviewServiceDeps) (github.PreviewLifecyc
 	if err != nil {
 		return nil, err
 	}
-	return svc, nil
+	return tenantScopedPreviews{inner: svc}, nil
+}
+
+// tenantScopedPreviews runs each preview operation the PR webhook asks for in
+// the scope of the tenant the preview belongs to. GitHub delivers the event
+// with no user and no tenant scope; the tenant is the one the repository is
+// linked to, resolved server-side. The preview service's stores run on the
+// request pool, whose tenant tables are fail-closed under Row Level Security —
+// unscoped, a preview was neither created nor torn down.
+type tenantScopedPreviews struct {
+	inner github.PreviewLifecycleService
+}
+
+func (p tenantScopedPreviews) CreatePreview(ctx context.Context, req ports.CreatePreviewRequest) (*ports.Preview, error) {
+	return p.inner.CreatePreview(dbtx.WithTenantScope(ctx, req.TenantID()), req)
+}
+
+func (p tenantScopedPreviews) DeletePreviewByPR(ctx context.Context, tenantID, projectID string, prNumber int) error {
+	return p.inner.DeletePreviewByPR(dbtx.WithTenantScope(ctx, tenantID), tenantID, projectID, prNumber)
 }

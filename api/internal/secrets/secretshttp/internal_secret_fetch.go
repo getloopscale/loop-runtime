@@ -38,6 +38,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
@@ -184,6 +186,13 @@ func NewSecretFetchHandler(deps SecretFetchHandlerDeps) http.HandlerFunc {
 				"internal", "INTERNAL", err.Error())
 			return
 		}
+		// From here on the handler acts for tenantID: the secret read on
+		// success, the audit record either way. Both stores run on the request
+		// pool, whose tenant tables are fail-closed under Row Level Security,
+		// and this system caller carries no scope of its own. The binding
+		// lookup above deliberately ran without one — it reads the placement
+		// through the cross-tenant pool, before anything is authorized.
+		ctx = dbtx.WithTenantScope(ctx, tenantID)
 		if ownerCellID != identity.CellID {
 			// EC-07 violation: write audit event "cross_tenant_attempt".
 			// Per T2.3 the audit adapter handles failure telemetry

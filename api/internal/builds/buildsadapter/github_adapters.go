@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/builds"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/github"
 )
@@ -45,9 +45,15 @@ func (a *BuildLookupAdapter) GetServedAppNames(ctx context.Context, buildID stri
 	return served, nil
 }
 
+// buildSubmission is the orchestrator operation a push submits through.
+// builds.BuildOrchestrator satisfies it.
+type buildSubmission interface {
+	SubmitBuild(ctx context.Context, req deploycontracts.SubmitBuildRequest) (*deploycontracts.SubmitBuildResponse, error)
+}
+
 // BuildSubmitterAdapter bridges github.BuildSubmitter → build.BuildOrchestrator.
 type BuildSubmitterAdapter struct {
-	Orchestrator *builds.BuildOrchestrator
+	Orchestrator buildSubmission
 	Logger       *slog.Logger
 }
 
@@ -81,6 +87,11 @@ func (a *BuildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req 
 		"apps", len(apps),
 	)
 
+	// GitHub delivers the push with no user and no tenant scope; the tenant
+	// is the one the repository is linked to, resolved server-side. The
+	// orchestrator's stores run on the request pool, whose tenant tables are
+	// fail-closed under Row Level Security, so the submission acts in it.
+	ctx = dbtx.WithTenantScope(ctx, req.TenantID)
 	_, err := a.Orchestrator.SubmitBuild(ctx, deploycontracts.SubmitBuildRequest{
 		TenantID:      req.TenantID,
 		ProjectID:     req.ProjectName,

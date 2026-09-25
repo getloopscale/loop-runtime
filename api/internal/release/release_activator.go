@@ -17,6 +17,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/events"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/pkg/naming"
@@ -63,12 +64,22 @@ func NotifyBuildFailed(ctx context.Context, tenantID, projectName, commitSHA, bu
 	if onBuildFailed == nil {
 		return
 	}
-	parentCtx := context.WithoutCancel(ctx)
+	parentCtx := callbackContext(ctx, tenantID)
 	go func() {
 		cbCtx, cancel := context.WithTimeout(parentCtx, 30*time.Second)
 		defer cancel()
 		onBuildFailed(cbCtx, tenantID, projectName, commitSHA, buildID)
 	}()
+}
+
+// callbackContext is the context a detached callback runs under: the caller's
+// values (trace, correlation ID) without its cancellation, scoped to the tenant
+// the event belongs to. The callbacks read that tenant's build through the
+// request pool, whose tenant tables are fail-closed under Row Level Security,
+// and their callers — background loops, the sync callback — carry no scope of
+// their own.
+func callbackContext(ctx context.Context, tenantID string) context.Context {
+	return dbtx.WithTenantScope(context.WithoutCancel(ctx), tenantID)
 }
 
 // ReleaseActivationStore defines the minimal store interface needed by the
@@ -184,7 +195,7 @@ func (k ActivationKernel) Activate(
 	// context.WithoutCancel preserves trace + correlation ID values but
 	// detaches cancellation so the callback survives request close.
 	if onReleaseActivated != nil {
-		parentCtx := context.WithoutCancel(ctx)
+		parentCtx := callbackContext(ctx, release.TenantID)
 		go func() {
 			cbCtx, cancel := context.WithTimeout(parentCtx, 30*time.Second)
 			defer cancel()

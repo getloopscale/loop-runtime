@@ -14,6 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/naming"
@@ -158,6 +159,11 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 	if err != nil {
 		return err
 	}
+	// The callback is authenticated as the GitOps controller, which acts for
+	// every tenant, and carries no tenant scope. It acts here for the tenant
+	// the platform labelled the Application with; the release stores run on
+	// the request pool, whose tenant tables are fail-closed under RLS.
+	ctx = dbtx.WithTenantScope(ctx, tenantID)
 
 	// CODE-SCAN-001 fix: Use tenant+env-filtered query when available,
 	// avoiding full table scan of all PENDING releases.

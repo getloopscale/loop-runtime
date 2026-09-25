@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"go.opentelemetry.io/otel"
@@ -23,7 +24,14 @@ import (
 // where Phase 1 (image build) completed but Phase 2 (release activation) was
 // interrupted (pod crash, rollout, Gitea/ArgoCD failure). The reconcile loop
 // retries Phase 2 automatically.
+//
+// The loop lists builds of every tenant through the cross-tenant pool, but the
+// orchestrator and the callbacks it reaches work through the request pool,
+// whose connections see only the tenant their context is scoped to (migration
+// 000062). The build's own tenant is that scope: the loop acts for the tenant
+// that submitted the build, and for no other.
 func (r *BuildReconcileLoop) reconcileBuild(ctx context.Context, build *db.Build) {
+	ctx = dbtx.WithTenantScope(ctx, build.TenantID)
 	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.build.reconcile",
 		trace.WithAttributes(
 			attribute.String("loopzero.build_id", build.ID),

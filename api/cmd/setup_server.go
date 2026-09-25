@@ -26,6 +26,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
 	"github.com/getloopscale/loopzero/api/internal/health/healthhttp"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
@@ -297,18 +298,26 @@ func wireDatabaseHandlers(sc *server.Config, w serverWiring) {
 	// The soft-deletion cycle (DELETE /tenants/{id}, restore):
 	// the router registers those routes only when this store is set (B-117).
 	sc.TenantDeletionStore = store.NewTenantDeletionStoreSqlc(d)
-	sc.AuditWriter = newAuditWriter(d, w.logger)
+	sc.AuditWriter = newAuditWriter(func(ctx context.Context, e store.AuditEntry) error {
+		return store.WriteAuditLog(ctx, d, e)
+	}, w.logger)
 }
 
-func newAuditWriter(d *db.PgxAdapter, logger *slog.Logger) func(tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) {
+// newAuditWriter persists the audit records the audit middleware and the admin
+// cell pin emit. It runs detached from the request (the record is written after
+// the response), so it builds its own context — scoped to the tenant the record
+// is attributed to: audit_log is fail-closed under Row Level Security, and an
+// unscoped write is refused. Both callers attribute the record to a tenant they
+// authorized: the caller's own, or the one an admin-authenticated pin moved.
+func newAuditWriter(write func(context.Context, store.AuditEntry) error, logger *slog.Logger) func(tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) {
 	return func(tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) {
 		entry := store.AuditEntry{
 			TenantID: tenantID, Action: action, Actor: actor,
 			ResourceType: resourceType, ResourceID: resourceID,
 			CorrelationID: correlationID, Metadata: metadata,
 		}
-		if err := store.WriteAuditLog(context.Background(), d, entry); err != nil {
-			logger.Warn("audit write failed", "error", err)
+		if err := write(dbtx.WithTenantScope(context.Background(), tenantID), entry); err != nil {
+			logger.Warn("audit write failed", "error", err, "tenant_id", tenantID, "action", action)
 		}
 	}
 }

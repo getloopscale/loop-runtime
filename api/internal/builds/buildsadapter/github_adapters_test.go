@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/github"
 )
 
@@ -25,5 +27,36 @@ func TestBuildSubmitterAdapter_RefusesACommitSHAShorterThanTheCorrelationPrefix(
 		if err == nil {
 			t.Errorf("commit SHA %q must be refused", sha)
 		}
+	}
+}
+
+// scopeRecordingSubmitter records the database scope a submission ran under.
+type scopeRecordingSubmitter struct{ scope string }
+
+func (s *scopeRecordingSubmitter) SubmitBuild(ctx context.Context, _ deploycontracts.SubmitBuildRequest) (*deploycontracts.SubmitBuildResponse, error) {
+	s.scope, _ = dbtx.TenantScope(ctx)
+	return &deploycontracts.SubmitBuildResponse{}, nil
+}
+
+// A push is delivered by GitHub with no user and no tenant scope; the tenant is
+// the one the repository is linked to, resolved server-side. The orchestrator's
+// stores run on the request pool, whose tenant tables are fail-closed under Row
+// Level Security, so the submission must run scoped to that tenant — unscoped,
+// the scaling config read empty and the workflow id and status writes that
+// follow the lock matched no row.
+func TestBuildSubmitterAdapter_SubmitsScopedToTheLinkedTenant(t *testing.T) {
+	orch := &scopeRecordingSubmitter{}
+	a := &BuildSubmitterAdapter{Orchestrator: orch, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+
+	err := a.SubmitBuildFromWebhook(context.Background(), github.WebhookBuildRequest{
+		TenantID: "tn-linked", ProjectName: "web", Environment: "production",
+		CommitSHA: "0123456789abcdef", RepoFullName: "acme/web", LoopZeroYaml: &github.LoopZeroYamlMinimal{},
+	})
+
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	if orch.scope != "tn-linked" {
+		t.Fatalf("submission scope = %q; want tn-linked", orch.scope)
 	}
 }

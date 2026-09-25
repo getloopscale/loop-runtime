@@ -21,6 +21,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/ports"
@@ -105,6 +106,7 @@ func (h *TenantHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
 		return
 	}
+	ctx = actOnTenant(ctx, tenantID)
 
 	force := r.URL.Query().Get("force") == "true"
 	if force && !isAdmin {
@@ -191,6 +193,7 @@ func (h *TenantHandler) Restore(w http.ResponseWriter, r *http.Request) {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
 		return
 	}
+	ctx = actOnTenant(ctx, tenantID)
 
 	// Check if pending deletion exists
 	record, err := h.deletionStore.GetPendingDeletion(ctx, tenantID)
@@ -226,4 +229,14 @@ func (h *TenantHandler) Restore(w http.ResponseWriter, r *http.Request) {
 		"status":  "active",
 		"message": "Team deletion cancelled. Your team is active again.",
 	})
+}
+
+// actOnTenant scopes the deletion store's work to the tenant the caller was
+// just authorized to act on. For an owner that is the caller's own tenant; an
+// operator holding the admin key acts on another one. The store runs on the
+// request pool, whose tenant tables are fail-closed under Row Level Security
+// and scoped to the caller — so without this the admin's write was refused and
+// the pending deletion it meant to restore was never found.
+func actOnTenant(ctx context.Context, tenantID string) context.Context {
+	return dbtx.WithTenantScope(ctx, tenantID)
 }

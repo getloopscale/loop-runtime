@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -220,6 +221,8 @@ type fakeCompletionHandlerRL struct {
 	retryCalls            int
 	findReleaseResult     *db.Release
 	findReleaseErr        error
+	// findReleaseScope is the database scope the loop handed the orchestrator.
+	findReleaseScope string
 }
 
 func (f *fakeCompletionHandlerRL) OnBuildCompleted(_ context.Context, _ string, _ deploycontracts.BuildCallbackRequest) error {
@@ -236,9 +239,10 @@ func (f *fakeCompletionHandlerRL) RetryReleaseActivation(_ context.Context, _ *d
 	return f.retryErr
 }
 
-func (f *fakeCompletionHandlerRL) FindReleaseForBuild(_ context.Context, _ string) (*db.Release, error) {
+func (f *fakeCompletionHandlerRL) FindReleaseForBuild(ctx context.Context, _ string) (*db.Release, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.findReleaseScope, _ = dbtx.TenantScope(ctx)
 	return f.findReleaseResult, f.findReleaseErr
 }
 
@@ -1216,5 +1220,22 @@ func TestRetryReleaseActivation_LookupFailsEveryTick_FailsBuildAtCap(t *testing.
 	if got := fakes.buildStore.builds[b.ID].Status; got != string(statemachine.BuildFailed) {
 		t.Errorf("a lookup failing on every tick must still terminate the build through "+
 			"the existing cap: expected FAILED, got %q", got)
+	}
+}
+
+// The loop reads builds of every tenant through the cross-tenant pool, but the
+// orchestrator it hands a build to works through the request pool, where every
+// tenant table is fail-closed under Row Level Security. Each build's work must
+// therefore run scoped to that build's tenant; unscoped, the orchestrator found
+// no build and no release, and no build ever completed.
+func TestReconcileHandsTheOrchestratorABuildScopedToItsTenant(t *testing.T) {
+	f := newReconcileLoopFakes()
+	loop := f.buildLoop(BuildReconcileLoopConfig{})
+	build := defaultBuild("b-scope", "RELEASING")
+
+	loop.reconcileBuild(context.Background(), build)
+
+	if f.orch.findReleaseScope != build.TenantID {
+		t.Fatalf("orchestrator scope = %q; want the build's tenant %q", f.orch.findReleaseScope, build.TenantID)
 	}
 }

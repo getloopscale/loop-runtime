@@ -10,9 +10,11 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/github"
 	ghwebhook "github.com/getloopscale/loopzero/api/internal/github/webhook"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/preview"
 )
 
@@ -79,5 +81,45 @@ func TestNewPreviewLifecycle_FailureIsAnUntypedNil(t *testing.T) {
 	}
 	if svc != nil {
 		t.Fatalf("want a nil interface on failure, got %#v", svc)
+	}
+}
+
+// scopeRecordingPreviews records the database scope each preview call ran under.
+type scopeRecordingPreviews struct{ scopes []string }
+
+func (p *scopeRecordingPreviews) record(ctx context.Context) {
+	scope, _ := dbtx.TenantScope(ctx)
+	p.scopes = append(p.scopes, scope)
+}
+
+func (p *scopeRecordingPreviews) CreatePreview(ctx context.Context, _ ports.CreatePreviewRequest) (*ports.Preview, error) {
+	p.record(ctx)
+	return &ports.Preview{}, nil
+}
+
+func (p *scopeRecordingPreviews) DeletePreviewByPR(ctx context.Context, _, _ string, _ int) error {
+	p.record(ctx)
+	return nil
+}
+
+// A pull request is delivered by GitHub with no user and no tenant scope; the
+// tenant is the one the repository is linked to. The preview service's stores
+// run on the request pool, whose tenant tables are fail-closed under Row Level
+// Security, so creating and tearing down a preview must act in that tenant.
+func TestPreviewLifecycleActsScopedToThePreviewsTenant(t *testing.T) {
+	inner := &scopeRecordingPreviews{}
+	previews := tenantScopedPreviews{inner: inner}
+	var req ports.CreatePreviewRequest
+	req.SetTenantID("tn-linked")
+
+	if _, err := previews.CreatePreview(context.Background(), req); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := previews.DeletePreviewByPR(context.Background(), "tn-linked", "api", 42); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	if len(inner.scopes) != 2 || inner.scopes[0] != "tn-linked" || inner.scopes[1] != "tn-linked" {
+		t.Fatalf("preview calls ran under scopes %q; want tn-linked for both", inner.scopes)
 	}
 }
