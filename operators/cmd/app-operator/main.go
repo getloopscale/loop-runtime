@@ -186,7 +186,7 @@ func main() {
 			setupLog.Error(err, "data-plane-poller: prom client init failed — refusing to start")
 			os.Exit(1)
 		}
-		poller := app.NewDataPlanePoller(&app.PromV1Adapter{API: promv1.NewAPI(promClient)}, db, interval, nil)
+		poller := app.NewDataPlanePoller(&app.PromV1Adapter{API: promv1.NewAPI(promClient)}, app.NewPostgresReadinessSink(db), interval, nil)
 		if err := mgr.Add(poller); err != nil {
 			setupLog.Error(err, "data-plane-poller: mgr.Add failed — refusing to start")
 			os.Exit(1)

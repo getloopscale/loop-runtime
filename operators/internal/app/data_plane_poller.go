@@ -31,7 +31,7 @@ package app
 
 import (
 	"context"
-	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -84,26 +84,49 @@ type PrometheusInstantClient interface {
 	Query(ctx context.Context, promQL string, t time.Time) (model.Vector, error)
 }
 
+// EnvironmentTarget identifies the (tenant, project, environment) a readiness
+// sample belongs to, read from the loopzero.io labels on the ReplicaSet.
+type EnvironmentTarget struct {
+	Tenant      string
+	Project     string
+	Environment string
+}
+
+func (t EnvironmentTarget) String() string {
+	return t.Tenant + "/" + t.Project + "/" + t.Environment
+}
+
+// ErrEnvironmentTargetNotFound is returned by a ReadinessSnapshotSink when no
+// stored environment target matches the sample, so nothing was recorded.
+var ErrEnvironmentTargetNotFound = errors.New("no environment target matches the sample")
+
+// ReadinessSnapshotSink is the port through which the poller records a
+// data-plane readiness snapshot. The poller depends on this contract, not on
+// where the snapshot is stored; PostgresReadinessSink is the one adapter.
+type ReadinessSnapshotSink interface {
+	RecordReplicasReady(ctx context.Context, target EnvironmentTarget, replicasReady int64, at time.Time) error
+}
+
 // DataPlanePoller is a controller-runtime manager.Runnable that scrapes
-// data-plane readiness signals from Prometheus and persists snapshots
-// to env_targets.
+// data-plane readiness signals from Prometheus and records one snapshot per
+// environment target through a ReadinessSnapshotSink.
 type DataPlanePoller struct {
 	prom     PrometheusInstantClient
-	db       *sql.DB
+	sink     ReadinessSnapshotSink
 	interval time.Duration
 	logger   *slog.Logger
 }
 
 // NewDataPlanePoller constructs a poller with the given dependencies.
 // interval controls the scrape cadence; 30 s is the canonical default.
-func NewDataPlanePoller(prom PrometheusInstantClient, db *sql.DB, interval time.Duration, logger *slog.Logger) *DataPlanePoller {
+func NewDataPlanePoller(prom PrometheusInstantClient, sink ReadinessSnapshotSink, interval time.Duration, logger *slog.Logger) *DataPlanePoller {
 	if interval <= 0 {
 		interval = 30 * time.Second
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &DataPlanePoller{prom: prom, db: db, interval: interval, logger: logger}
+	return &DataPlanePoller{prom: prom, sink: sink, interval: interval, logger: logger}
 }
 
 // NeedLeaderElection implements manager.LeaderElectionRunnable. Returning
@@ -121,7 +144,7 @@ func (p *DataPlanePoller) Start(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 			if err := p.Tick(ctx); err != nil {
-				p.logger.Warn("data-plane-poller: tick failed, preserving last-known-good", "err", err)
+				p.logger.Warn("data-plane-poller: tick failed; targets not written keep their last snapshot", "err", err)
 			}
 		}
 	}
@@ -129,31 +152,37 @@ func (p *DataPlanePoller) Start(ctx context.Context) error {
 
 // Tick executes one scrape-and-persist cycle. Exposed so tests can
 // exercise a single iteration deterministically without goroutines.
+//
+// Every sample is attempted; the returned error joins the write failures,
+// each naming its target. A sample whose target has no stored row is not a
+// write failure — it is logged, so a snapshot that stops moving is visible.
 func (p *DataPlanePoller) Tick(ctx context.Context) error {
 	vec, err := p.prom.Query(ctx, PollQuery, time.Now())
 	if err != nil {
 		return err
 	}
 	now := time.Now()
+	var failures []error
 	for _, sample := range vec {
-		tenant := string(sample.Metric["label_loopzero_io_tenant"])
-		project := string(sample.Metric["label_loopzero_io_project"])
-		env := string(sample.Metric["label_loopzero_io_environment"])
-		if tenant == "" || project == "" || env == "" {
-			// Deployment missing canonical labels — skip. Legitimate
-			// non-LoopZero Deployments in loopzero-* namespaces (unlikely but
-			// defensive) don't have these labels and shouldn't corrupt
-			// any snapshot row.
+		target := EnvironmentTarget{
+			Tenant:      string(sample.Metric["label_loopzero_io_tenant"]),
+			Project:     string(sample.Metric["label_loopzero_io_project"]),
+			Environment: string(sample.Metric["label_loopzero_io_environment"]),
+		}
+		if target.Tenant == "" || target.Project == "" || target.Environment == "" {
+			// ReplicaSet missing canonical labels — skip. Non-LoopZero
+			// workloads in loopzero-* namespaces must not corrupt a snapshot.
 			continue
 		}
-		value := int64(sample.Value)
-		if _, err := p.db.ExecContext(ctx, `
-			UPDATE environment_targets
-			SET last_replicas_ready_value = $1, last_replicas_ready_at = $2
-			WHERE tenant_id = $3 AND project_id = $4 AND environment = $5
-		`, value, now, tenant, project, env); err != nil {
-			p.logger.Warn("data-plane-poller: update failed", "tenant", tenant, "project", project, "env", env, "err", err)
+		err := p.sink.RecordReplicasReady(ctx, target, int64(sample.Value), now)
+		switch {
+		case err == nil:
+		case errors.Is(err, ErrEnvironmentTargetNotFound):
+			p.logger.Warn("data-plane-poller: no environment target for sample; its snapshot is not recorded",
+				"target", target.String())
+		default:
+			failures = append(failures, fmt.Errorf("record readiness for %s: %w", target, err))
 		}
 	}
-	return nil
+	return errors.Join(failures...)
 }
