@@ -109,7 +109,7 @@ func TestTriggerFailsLoudlyWhenTenantHasNoCell(t *testing.T) {
 		t.Fatal("the INSERT with a nonexistent tenant was accepted — the trigger should have raised " +
 			"an exception instead of writing the row with an unresolved cell")
 	}
-	if !strings.Contains(err.Error(), "cell_id nao resolvido") && // english-only: verbatim RAISE message of the migration 000061 trigger
+	if !strings.Contains(err.Error(), "cell_id not resolved") &&
 		!strings.Contains(err.Error(), "foreign key") {
 		t.Logf("observed error (acceptable if it is the FK, which blocks first): %v", err)
 	}

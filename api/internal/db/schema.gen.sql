@@ -140,7 +140,7 @@ BEGIN
         SELECT cell_id INTO NEW.cell_id FROM tenants WHERE id = NEW.tenant_id;
         IF NEW.cell_id IS NULL THEN
             RAISE EXCEPTION
-                'cell_id nao resolvido para tenant % na tabela %: o tenant nao existe ou nao tem cell',
+                'cell_id not resolved for tenant % in table %: the tenant does not exist or has no cell',
                 NEW.tenant_id, TG_TABLE_NAME;
         END IF;
     END IF;
