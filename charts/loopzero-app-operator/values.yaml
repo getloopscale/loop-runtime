@@ -55,7 +55,7 @@ serviceAccount:
   # (B-096, B-047). Two literal allowlists name this identity as a string, and neither
   # moves when the release name does:
   #   - the admission policies' system-actor exemption, at
-  #     infra/helm/admission-policies/values.yaml (systemActorExemptions.platformServiceAccounts)
+  #     charts/loopzero-admission-policies/values.yaml (systemActorExemptions.platformServiceAccounts)
   #   - OpenBao's boundServiceAccountNames, on mount k8s-core, in
   #     infra/helm/openbao-init/values.yaml
   # With name: "" this chart rendered <release>-loopzero-app-operator, so an install under any release
