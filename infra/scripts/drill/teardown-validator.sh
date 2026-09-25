@@ -31,6 +31,8 @@
 #   1 — DIGITALOCEAN_TOKEN missing or doctl not installed
 #   2 — Lock acquisition failed (another teardown in progress)
 #   3 — Force-delete failed (manual intervention required)
+#   4 — A resource list could not be read (auth, network): the account's
+#       state is unknown, so the teardown is NOT reported clean
 #
 # Environment:
 #   DIGITALOCEAN_TOKEN — required, scoped to drill account per D7
@@ -69,6 +71,19 @@ AUDIT_DIR="${DRILL_AUDIT_DIR:-/tmp}"
 AUDIT_FILE="$AUDIT_DIR/drill-teardown-audit-$(date +%Y%m%dT%H%M%SZ).md"
 
 log() { printf '[drill-teardown-validator] %s\n' "$*" >&2; }
+
+# list_or_fail runs a doctl list and prints its output. A failing list is fatal:
+# an empty answer from a call that did not succeed would read as "no
+# residuals", and this script is the net that catches a drill left billing.
+list_or_fail() {
+  local what="$1" out
+  shift
+  if ! out=$("$@" 2>&1); then
+    log "ERROR: could not list $what — the teardown state is unknown: $out"
+    exit 4
+  fi
+  printf '%s\n' "$out"
+}
 
 # --- flock to serialize concurrent destroy + validate ---
 # Open FD 200 to lockfile; flock blocks for up to 30s waiting.
@@ -112,7 +127,7 @@ RESIDUAL_FAILED=0
 
 # Kubernetes clusters
 log "  - Listing DOKS clusters..."
-DOKS_LIST=$(doctl kubernetes cluster list --format ID,Name,Tag --no-header 2>/dev/null || true)
+DOKS_LIST=$(list_or_fail "Kubernetes clusters" doctl kubernetes cluster list --format ID,Name,Tag --no-header)
 DOKS_DRILL=$(echo "$DOKS_LIST" | grep -E "loopzero-drill" || true)
 if [[ -n "$DOKS_DRILL" ]]; then
   COUNT=$(echo "$DOKS_DRILL" | wc -l)
@@ -143,7 +158,7 @@ fi
 
 # Managed databases
 log "  - Listing managed databases..."
-DB_LIST=$(doctl databases list --format ID,Name,Tags --no-header 2>/dev/null || true)
+DB_LIST=$(list_or_fail "databases" doctl databases list --format ID,Name,Tags --no-header)
 DB_DRILL=$(echo "$DB_LIST" | grep -E "loopzero-drill" || true)
 if [[ -n "$DB_DRILL" ]]; then
   COUNT=$(echo "$DB_DRILL" | wc -l)
@@ -173,7 +188,7 @@ fi
 
 # VPCs (only delete after clusters + DBs gone — VPCs require empty deps)
 log "  - Listing VPCs..."
-VPC_LIST=$(doctl vpcs list --format ID,Name --no-header 2>/dev/null || true)
+VPC_LIST=$(list_or_fail "VPCs" doctl vpcs list --format ID,Name --no-header)
 VPC_DRILL=$(echo "$VPC_LIST" | grep -E "loopzero-drill" || true)
 if [[ -n "$VPC_DRILL" ]]; then
   COUNT=$(echo "$VPC_DRILL" | wc -l)
