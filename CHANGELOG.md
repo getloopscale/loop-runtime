@@ -14,6 +14,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Operator charts accept `rbac.legacyClusterWideSecrets` (default `false`), a cutover escape hatch that restores cluster-wide Secret read for an operator image built before the scoped Secret cache (principle_violations#149, principle_violations#150)
+
 - loopzero-ops quality contract-consumers reads infra/quality/contract-drops.txt: a JSON field removed on purpose is recorded per tag and file with its reason, stays listed on every run, and a recorded removal that no longer matches the diff fails the gate
 
 - Environment status records `cellID`, the cell its namespace was provisioned in, so deletion targets that cell even after the tenant is re-pinned (principle_violations#59)
@@ -66,6 +68,10 @@ to [Semantic Versioning](https://semver.org/).
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
 ### Changed
+
+- The platform operator chart refuses an empty `config.argocdNamespace` at render time (principle_violations#149, principle_violations#150)
+
+- A ClusterCredential whose kubeconfig Secret lives outside `loopzero-system` is now refused by name when a tenant, app or preview operator resolves its cell, instead of being read on the operator's behalf (principle_violations#149, principle_violations#150)
 
 - The per-tenant concurrent build limit is one setting, MAX_CONCURRENT_BUILDS_PER_TENANT (default 3): it drives build backpressure, the admission cap and the team's recorded limit; MAX_BUILDS_PER_TENANT is still accepted when it matches and refused at startup when it does not (principle_violations#49)
 
@@ -268,6 +274,10 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- The platform operator's `loopzero-system` and ArgoCD Roles now bind the chart's ServiceAccount; under any release name other than the chart's they bound a ServiceAccount that does not exist (principle_violations#149, principle_violations#150)
+
+- The app operator can now read ClusterCredentials, so a placed tenant's application reports Healthy and its TLS certificate is checked in the tenant's cell instead of the lookup being forbidden (principle_violations#149, principle_violations#150)
 
 - loopzero-ops quality acyclic-graph no longer stops on files inside directories the Go toolchain never compiles (names starting with . or _), such as an installed editor kit
 
@@ -740,6 +750,14 @@ to [Semantic Versioning](https://semver.org/).
   explanation (#B-069)
 
 ### Security
+
+- The platform operator no longer holds cluster-wide Secret access: it reads and updates Secrets only in `loopzero-system` and writes ArgoCD's Secrets only in `config.argocdNamespace`, each through a namespaced Role, and caches Secrets in those two namespaces alone (principle_violations#149, principle_violations#150)
+
+- The preview operator no longer holds cluster-wide Secret read: it reads cell kubeconfig Secrets only in `loopzero-system`, through a namespaced Role, and caches Secrets in that namespace alone (principle_violations#149, principle_violations#150)
+
+- The app operator no longer holds cluster-wide Secret read: it reads cell kubeconfig Secrets only in `loopzero-system`, through a namespaced Role, and caches Secrets in that namespace alone (principle_violations#149, principle_violations#150)
+
+- The tenant operator no longer holds cluster-wide read/write on Secrets or ConfigMaps: it reads Secrets only in `loopzero-system`, through a namespaced Role, and caches Secrets in that namespace alone (principle_violations#149, principle_violations#150)
 
 - The `github-webhook-fixture` seed no longer puts the webhook HMAC secret on the `gh` command line or in its error and status messages; the request body is sent on stdin (principle_violations#53)
 
