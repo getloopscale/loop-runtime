@@ -15,13 +15,13 @@ package status
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"sort"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	"github.com/getloopscale/loopzero/api/internal/routes/plantier"
 
 	"github.com/go-chi/chi/v5"
 
@@ -440,16 +440,14 @@ func buildActiveReleaseResponse(release *StatusRelease, builds []StatusBuild) *a
 // ErrUnknown (matching the fallback contract elsewhere in this package).
 // #142 / #123 canonical of qa-dogfood-cleanup-2026-06-21.
 func (h *StatusHandler) resolveTier(ctx context.Context, tenantID string) string {
-	if h.planTierStore == nil {
+	tier, terr := plantier.Resolve(ctx, h.planTierStore, tenantID)
+	if terr != nil {
+		// A display hint, not a decision: the status page still renders, and
+		// every mutation that depends on the tier resolves it again and fails
+		// on its own (plantier.Resolve), so Starter here gates nothing.
 		return string(pkgdomain.PlanTierStarter)
 	}
-	resolved, perr := pkgdomain.ResolvePlanTier(ctx, h.planTierStore, tenantID)
-	if perr != nil {
-		slog.Warn("status: plan tier resolution failed — falling back to starter (UX hint only; engine enforcement still server-authoritative via /scale)",
-			"tenant_id", tenantID, "error", perr)
-		return string(pkgdomain.PlanTierStarter)
-	}
-	return string(resolved)
+	return string(tier)
 }
 
 // findScalingForEnv extracts scaling info from the last build's app spec

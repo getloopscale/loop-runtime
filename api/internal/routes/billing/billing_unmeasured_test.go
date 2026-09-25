@@ -54,7 +54,7 @@ func getBillingBody(t *testing.T, h *BillingHandler) []byte {
 func TestBilling_MissingCounterIsNotServedAsMeasuredZero(t *testing.T) {
 	// Empty store = exactly the state measured on app-dev.
 	cost := &fakeCostSource{counters: map[planpkg.CostMetric]planpkg.CostCounter{}}
-	body := getBillingBody(t, NewBillingHandler(&fakeBillingPool{plan: "starter"}).WithCostSource(cost))
+	body := getBillingBody(t, NewBillingHandler(fakePlanStore{plan: "starter"}, fakeCustomerStore{}).WithCostSource(cost))
 
 	var resp BillingResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
@@ -98,7 +98,7 @@ func TestBilling_PresentCounterDeclaresItselfMeasured(t *testing.T) {
 			planpkg.MetricBuildMinutes: {Value: 7},
 		},
 	}
-	body := getBillingBody(t, NewBillingHandler(&fakeBillingPool{plan: "starter"}).WithCostSource(cost))
+	body := getBillingBody(t, NewBillingHandler(fakePlanStore{plan: "starter"}, fakeCustomerStore{}).WithCostSource(cost))
 
 	var resp BillingResponse
 	if err := json.Unmarshal(body, &resp); err != nil {

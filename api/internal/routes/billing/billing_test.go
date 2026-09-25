@@ -6,70 +6,35 @@ package billing
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
-
-	"github.com/jackc/pgx/v5"
 )
 
-// fakeBillingPool implements BillingPool for unit tests.
-type fakeBillingPool struct {
-	plan       string
-	customerID *string
-	planErr    error
-	custErr    error
+// fakePlanStore is the plan read the handler shares with every plan gate.
+type fakePlanStore struct {
+	plan string
+	err  error
 }
 
-type fakeRow struct {
-	target any
-	err    error
+func (f fakePlanStore) GetTenantPlan(context.Context, string) (string, error) { return f.plan, f.err }
+
+// fakeCustomerStore answers the billing customer lookup.
+type fakeCustomerStore struct {
+	id  string
+	err error
 }
 
-func (r *fakeRow) Scan(dest ...any) error {
-	if r.err != nil {
-		return r.err
-	}
-	if r.target == nil {
-		return pgx.ErrNoRows
-	}
-	switch v := dest[0].(type) {
-	case *string:
-		*v = r.target.(string)
-	case **string:
-		s := r.target.(string)
-		*v = &s
-	}
-	return nil
-}
-
-func (p *fakeBillingPool) QueryRow(_ context.Context, sql string, _ ...any) BillingRow {
-	if sql == `SELECT plan FROM subscriptions WHERE tenant_id = $1 LIMIT 1` {
-		if p.planErr != nil {
-			return &fakeRow{err: p.planErr}
-		}
-		if p.plan == "" {
-			return &fakeRow{err: pgx.ErrNoRows}
-		}
-		return &fakeRow{target: p.plan}
-	}
-	if sql == `SELECT stripe_customer_id FROM subscriptions WHERE tenant_id = $1 LIMIT 1` {
-		if p.custErr != nil {
-			return &fakeRow{err: p.custErr}
-		}
-		if p.customerID == nil {
-			return &fakeRow{err: pgx.ErrNoRows}
-		}
-		return &fakeRow{target: *p.customerID}
-	}
-	return &fakeRow{err: pgx.ErrNoRows}
+func (f fakeCustomerStore) StripeCustomerID(context.Context, string) (string, error) {
+	return f.id, f.err
 }
 
 func TestBilling_Get_HappyPath(t *testing.T) {
-	h := NewBillingHandler(&fakeBillingPool{plan: "pro"})
+	h := NewBillingHandler(fakePlanStore{plan: "pro"}, fakeCustomerStore{})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/billing", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
@@ -89,7 +54,7 @@ func TestBilling_Get_HappyPath(t *testing.T) {
 }
 
 func TestBilling_Get_NoSubscription_DefaultsToStarter(t *testing.T) {
-	h := NewBillingHandler(&fakeBillingPool{}) // no plan set → ErrNoRows
+	h := NewBillingHandler(fakePlanStore{}, fakeCustomerStore{}) // no plan set → ErrNoRows
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/billing", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
@@ -107,7 +72,7 @@ func TestBilling_Get_NoSubscription_DefaultsToStarter(t *testing.T) {
 }
 
 func TestBilling_Get_Unauthenticated(t *testing.T) {
-	h := NewBillingHandler(&fakeBillingPool{})
+	h := NewBillingHandler(fakePlanStore{}, fakeCustomerStore{})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/billing", nil)
 	w := httptest.NewRecorder()
 
@@ -121,7 +86,7 @@ func TestBilling_Get_Unauthenticated(t *testing.T) {
 // EC-8 of edge-case review: tenant without stripe_customer_id (Starter
 // free tier) MUST get 400 NO_STRIPE_CUSTOMER, NOT 500.
 func TestBilling_Portal_NoStripeCustomer_Returns400(t *testing.T) {
-	h := NewBillingHandler(&fakeBillingPool{}) // customerID nil → ErrNoRows
+	h := NewBillingHandler(fakePlanStore{}, fakeCustomerStore{}) // customerID nil → ErrNoRows
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
@@ -138,44 +103,45 @@ func TestBilling_Portal_NoStripeCustomer_Returns400(t *testing.T) {
 	}
 }
 
-// TestBilling_Portal_ComEmissor_DevolveSessaoEmitida — o caminho correto.
+// TestBilling_Portal_WithIssuer_ReturnsTheIssuedSession — the correct path.
 //
-// Este teste afirmava que uma URL montada com o customerID era resposta valida (o
-// "legacy fallback"). Por ADR 2026-08-11 ela deixou de ser: sem emissor o engine falha,
-// e com emissor devolve o que o emissor deu. A distincao importa porque a URL construida
-// PARECE funcionar — e foi assim que ela sobreviveu no app-dev sem ninguem notar.
-func TestBilling_Portal_ComEmissor_DevolveSessaoEmitida(t *testing.T) {
+// This test used to assert that a URL assembled from the customer id was a valid
+// answer (the "legacy fallback"). Since ADR 2026-08-11 it is not: without an issuer
+// the engine fails, and with one it returns what the issuer gave. The distinction
+// matters because an assembled URL LOOKS like it works — which is how it survived
+// on app-dev without anyone noticing.
+func TestBilling_Portal_WithIssuer_ReturnsTheIssuedSession(t *testing.T) {
 	custID := "cus_TestCustomerID"
-	const sessaoEmitida = "https://billing.stripe.com/p/session/live_YWNjdF8xTes"
+	const issuedSession = "https://billing.stripe.com/p/session/live_YWNjdF8xTes"
 
-	h := NewBillingHandler(&fakeBillingPool{customerID: &custID}).
-		WithPortalSessionCreator(emissorFalso{url: sessaoEmitida}, "https://app.example/billing")
+	h := NewBillingHandler(fakePlanStore{}, fakeCustomerStore{id: custID}).
+		WithPortalSessionCreator(fakeIssuer{url: issuedSession}, "https://app.example/billing")
 
 	req := routestest.WithAuth(httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil), routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.Portal(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("com emissor configurado, queria 200; veio %d body=%s", w.Code, w.Body.String())
+		t.Fatalf("with an issuer configured, want 200; got %d body=%s", w.Code, w.Body.String())
 	}
 	var resp PortalResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatalf("decodificar resposta: %v", err)
+		t.Fatalf("decode response: %v", err)
 	}
-	if resp.URL != sessaoEmitida {
-		t.Errorf("a URL tem de ser a que o emissor devolveu, e nao uma montada aqui.\n  queria %q\n  veio   %q",
-			sessaoEmitida, resp.URL)
+	if resp.URL != issuedSession {
+		t.Errorf("the URL must be the one the issuer returned, not one assembled here.\n  want %q\n  got  %q",
+			issuedSession, resp.URL)
 	}
 	if strings.Contains(resp.URL, custID) {
-		t.Errorf("a sessao emitida nao deve carregar o id de cobranca do cliente: %q", resp.URL)
+		t.Errorf("the issued session must not carry the customer's billing id: %q", resp.URL)
 	}
 }
 
-// emissorFalso substitui o SDK do Stripe nos testes: o que importa aqui e que o handler
-// devolva o que o emissor deu, nao que ele saiba falar com o Stripe.
-type emissorFalso struct{ url string }
+// fakeIssuer replaces the provider SDK in tests: what matters here is that the
+// handler returns what the issuer gave, not that it can talk to the provider.
+type fakeIssuer struct{ url string }
 
-func (e emissorFalso) CreateSession(_ context.Context, _, _ string) (string, error) {
+func (e fakeIssuer) CreateSession(_ context.Context, _, _ string) (string, error) {
 	return e.url, nil
 }
 
@@ -206,7 +172,7 @@ func (f *fakePortalCreator) CreateSession(ctx context.Context, customerID, retur
 func TestBilling_Portal_WithSDK_HappyPath(t *testing.T) {
 	custID := "cus_TestSDKPath"
 	creator := &fakePortalCreator{url: "https://billing.stripe.com/p/session/test_xxx"}
-	h := NewBillingHandler(&fakeBillingPool{customerID: &custID}).
+	h := NewBillingHandler(fakePlanStore{}, fakeCustomerStore{id: custID}).
 		WithPortalSessionCreator(creator, "https://app.loopzero.cloud/billing")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil)
@@ -237,7 +203,7 @@ func TestBilling_Portal_WithSDK_HappyPath(t *testing.T) {
 func TestBilling_Portal_WithSDK_StripeError_Returns502(t *testing.T) {
 	custID := "cus_TestSDKError"
 	creator := &fakePortalCreator{err: errSDKFailure}
-	h := NewBillingHandler(&fakeBillingPool{customerID: &custID}).
+	h := NewBillingHandler(fakePlanStore{}, fakeCustomerStore{id: custID}).
 		WithPortalSessionCreator(creator, "https://app.loopzero.cloud/billing")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil)
@@ -266,8 +232,8 @@ func TestBilling_Portal_WithSDK_StripeError_Returns502(t *testing.T) {
 // front-of-handler check that does NOT call the SDK.
 func TestBilling_Portal_NoCustomer_DoesNotCallSDK(t *testing.T) {
 	creator := &fakePortalCreator{url: "should-never-be-returned"}
-	h := NewBillingHandler(&fakeBillingPool{}). // no customer ID
-							WithPortalSessionCreator(creator, "https://app.loopzero.cloud/billing")
+	h := NewBillingHandler(fakePlanStore{}, fakeCustomerStore{}). // no customer ID
+									WithPortalSessionCreator(creator, "https://app.loopzero.cloud/billing")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -291,35 +257,90 @@ type stripeErr string
 
 func (e stripeErr) Error() string { return string(e) }
 
-// TestBilling_Portal_SemEmissorNaoConstroiURL fecha o B-032.
+// TestBilling_Portal_WithoutIssuer_DoesNotAssembleAURL closes B-032.
 //
-// MEDIDO em 2026-08-11: sem `STRIPE_SECRET_KEY`, o handler caía num caminho que montava
-// `https://billing.stripe.com/p/login/` + `customerID` e devolvia isso como se fosse a
-// sessão do portal. Não é sessão emitida pelo Stripe — é uma URL construída com o
-// identificador de cobrança do cliente dentro, que trafega em histórico de navegador, log
-// de proxy e barra de endereços.
+// MEASURED 2026-08-11: without a provider key, the handler fell into a path that
+// assembled `https://billing.stripe.com/p/login/` + the customer id and returned it
+// as if it were the portal session. It is not a session the provider issued — it is a
+// URL carrying the customer's billing identifier, which travels through browser
+// history, proxy logs and the address bar.
 //
-// E não era hipótese: no app-dev o Secret `loopzero-api-stripe` é `optional: true` e não
-// existe, então esse era o caminho ATIVO. O comentário original dizia que o fallback
-// servia para "local dev + tests"; a intenção era local, o efeito era público.
+// Nor was it hypothetical: on app-dev the provider Secret is `optional: true` and
+// absent, so this was the ACTIVE path. The original comment said the fallback served
+// "local dev + tests"; the intent was local, the effect was public.
 //
-// A decisão (ADR 2026-08-11) é que o `loopzero-cloud` é o único emissor. Quando o engine não
-// pode emitir, ele FALHA dizendo onde ir — uma URL que parece funcionar esconde o problema
-// até alguém investigar por que o portal não abriu.
-func TestBilling_Portal_SemEmissorNaoConstroiURL(t *testing.T) {
+// The decision (ADR 2026-08-11) is that loopzero-cloud is the only issuer. When the
+// engine cannot issue, it FAILS saying where to go — a URL that looks like it works
+// hides the problem until someone investigates why the portal did not open.
+func TestBilling_Portal_WithoutIssuer_DoesNotAssembleAURL(t *testing.T) {
 	custID := "cus_TestCustomerID"
-	h := NewBillingHandler(&fakeBillingPool{customerID: &custID}) // sem WithPortalSessionCreator
+	h := NewBillingHandler(fakePlanStore{}, fakeCustomerStore{id: custID}) // no WithPortalSessionCreator
 
 	req := routestest.WithAuth(httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil), routestest.DefaultUserContext())
 	w := httptest.NewRecorder()
 	h.Portal(w, req)
 
 	if w.Code == http.StatusOK {
-		t.Fatalf("sem emissor configurado o engine NÃO pode devolver 200 com uma URL montada — "+
-			"ela leva o id de cobrança do cliente no endereço e não é sessão emitida. "+
-			"Veio %d body=%s", w.Code, w.Body.String())
+		t.Fatalf("with no issuer configured the engine must NOT answer 200 with an assembled URL — "+
+			"it carries the customer's billing id and is not an issued session. "+
+			"Got %d body=%s", w.Code, w.Body.String())
 	}
 	if strings.Contains(w.Body.String(), custID) {
-		t.Errorf("a resposta carrega o id de cobrança do cliente (%s): %s", custID, w.Body.String())
+		t.Errorf("the response carries the customer's billing id (%s): %s", custID, w.Body.String())
+	}
+}
+
+// A canceled subscription is not a plan: the plan read is the one every plan
+// gate shares, which counts active and trialing subscriptions only, so a store
+// with no current subscription answers "" and billing shows Starter — the same
+// tier enforcement applies. Billing used to read the table itself, unfiltered,
+// and showed a canceled Pro tenant as "pro".
+func TestBilling_Get_ShowsTheTierEnforcementApplies(t *testing.T) {
+	h := NewBillingHandler(fakePlanStore{plan: ""}, fakeCustomerStore{id: "cus_old"})
+	req := routestest.WithAuth(httptest.NewRequest(http.MethodGet, "/api/v1/billing", nil), routestest.DefaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Get(w, req)
+
+	var resp BillingResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Plan != "starter" {
+		t.Errorf("plan = %q, want starter", resp.Plan)
+	}
+}
+
+// A plan value the platform does not know is not shown as-is, and a failed
+// read is not a 500 with nothing to act on: both are PLATFORM_DEGRADED, the
+// answer every other plan read gives.
+func TestBilling_Get_UnresolvablePlanIsDegraded(t *testing.T) {
+	for name, store := range map[string]fakePlanStore{
+		"unknown plan value": {plan: "platinum"},
+		"store failure":      {err: errors.New("connection refused")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := NewBillingHandler(store, fakeCustomerStore{})
+			req := routestest.WithAuth(httptest.NewRequest(http.MethodGet, "/api/v1/billing", nil), routestest.DefaultUserContext())
+			w := httptest.NewRecorder()
+
+			h.Get(w, req)
+
+			if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "PLATFORM_DEGRADED") {
+				t.Fatalf("want 503 PLATFORM_DEGRADED, got %d body=%s", w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestBilling_Portal_CustomerLookupFailureIs500(t *testing.T) {
+	h := NewBillingHandler(fakePlanStore{}, fakeCustomerStore{err: errors.New("connection refused")})
+	req := routestest.WithAuth(httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil), routestest.DefaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Portal(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500, got %d body=%s", w.Code, w.Body.String())
 	}
 }

@@ -24,6 +24,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	"github.com/getloopscale/loopzero/api/internal/routes/pagination"
+	"github.com/getloopscale/loopzero/api/internal/routes/plantier"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 
 	"github.com/go-chi/chi/v5"
@@ -273,21 +274,12 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	//   - ResolvePlanTier ErrUnknown → 503 PLATFORM_DEGRADED
 	//                                  (NEVER silent downgrade)
 	//   - any other store error      → 503 PLATFORM_DEGRADED
-	planValue := string(pkgdomain.PlanTierStarter)
-	if h.planTierStore != nil {
-		resolved, perr := pkgdomain.ResolvePlanTier(ctx, h.planTierStore, uc.TenantID)
-		if perr != nil {
-			slog.Error("failed to resolve canonical plan tier — refusing to silent-downgrade",
-				"tenant_id", uc.TenantID,
-				"error", perr.Error(),
-			)
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrPlatformDegraded.Wrap(
-				fmt.Sprintf("plan tier resolution failed for %s — retry or contact support", uc.TenantID),
-			))
-			return
-		}
-		planValue = resolved.String()
+	planTier, terr := plantier.Resolve(ctx, h.planTierStore, uc.TenantID)
+	if terr != nil {
+		httpio.WriteLoopZeroError(w, terr)
+		return
 	}
+	planValue := planTier.String()
 	if err := h.crMgr.EnsureTenant(ctx, uc.TenantID, TenantCRSpec{Plan: planValue}); err != nil {
 		slog.Error("failed to ensure tenant CR",
 			"tenant_id", uc.TenantID,

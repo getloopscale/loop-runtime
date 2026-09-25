@@ -297,7 +297,10 @@ func buildServerConfig(
 		// docr_pulls, build_minutes) with their current values + caps.
 		// pre-migration-000017 the costSource returns no rows and
 		// usage map stays empty (graceful degradation).
-		billingHandler := billing.NewBillingHandler(billingPoolAdapter{pool: dbAdapter.Pool})
+		// The plan shown is the plan enforced: billing reads it through the same
+		// store every plan gate uses (sc.PlanTierStore, set above when the
+		// database is up), not through its own query.
+		billingHandler := billing.NewBillingHandler(sc.PlanTierStore, store.NewSubscriptionStore(dbAdapter))
 		if dbDeps != nil && dbDeps.StdDB != nil {
 			// T2.2 #5 of sqlc-migration: dispatches via SqlcBridge (DBTX).
 			billingHandler.WithCostSource(store.NewSQLCostStore(dbAdapter))
@@ -512,21 +515,6 @@ func buildMgmtDynamicClient(logger *slog.Logger) dynamic.Interface {
 		return nil
 	}
 	return dyn
-}
-
-// billingPoolAdapter bridges *pgxpool.Pool to routes.BillingPool. The
-// routes package defines its own narrow Row/Pool interfaces to avoid
-// the routes ↔ db import cycle (find_arch_001). pgx.Row satisfies the
-// billing.BillingRow contract (single Scan method) — this adapter just
-// re-types the QueryRow signature.
-type billingPoolAdapter struct {
-	pool interface {
-		QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-	}
-}
-
-func (a billingPoolAdapter) QueryRow(ctx context.Context, sql string, args ...any) billing.BillingRow {
-	return a.pool.QueryRow(ctx, sql, args...)
 }
 
 // validateStripeKeyForEnv is the 6th test condition of T2.7 conditional

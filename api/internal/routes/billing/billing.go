@@ -15,7 +15,7 @@
 //       * 400 NO_STRIPE_CUSTOMER for free tenants (no stripe_customer_id)
 //       * 200 with real one-time-use Stripe Portal URL when SDK is wired
 //         (production with STRIPE_SECRET_KEY env present)
-//       * 200 with legacy placeholder URL when SDK is unwired (local dev)
+//       * 503 BILLING_PORTAL_UNAVAILABLE when no portal issuer is wired
 //       * 502 BILLING_PROVIDER_UNAVAILABLE if Stripe API returns error
 
 // Package billing serves the billing endpoints under /api/v1/billing: the
@@ -36,31 +36,23 @@ package billing
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
-
-	"github.com/jackc/pgx/v5"
+	"github.com/getloopscale/loopzero/api/internal/routes/plantier"
 
 	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
-// BillingRow is the minimal interface to read scalar values from a query.
-// Local to routes/ to avoid the routes↔services↔db import cycle blocked
-// by find_arch_001 / T1.3. After T1.3, this can be replaced with db.Row.
-type BillingRow interface {
-	Scan(dest ...any) error
-}
-
-// BillingPool is the minimal interface to query plan + customer ID.
-// Local to routes/ for the same reason as BillingRow.
-type BillingPool interface {
-	QueryRow(ctx context.Context, sql string, args ...any) BillingRow
+// StripeCustomerStore is the port for the tenant's billing customer id.
+// ("", nil) means the tenant has no subscription carrying one.
+type StripeCustomerStore interface {
+	StripeCustomerID(ctx context.Context, tenantID string) (string, error)
 }
 
 // PortalSessionCreator is the port that BillingHandler.Portal depends
@@ -81,17 +73,19 @@ type PortalSessionCreator interface {
 
 // BillingHandler responds to GET /api/v1/billing + POST /api/v1/billing/portal.
 type BillingHandler struct {
-	pool            BillingPool
+	plans           pkgdomain.PlanTierStore
+	customers       StripeCustomerStore
 	costSource      enforcement.CostStore // optional — T1.9 cost cap usage display
 	portalCreator   PortalSessionCreator  // optional — T2.7 Stripe SDK; nil falls back to placeholder
 	portalReturnURL string                // optional — where Stripe sends customer post-portal-close
 	logger          *slog.Logger
 }
 
-// NewBillingHandler constructs a billing handler that reads plan + usage
-// from the subscriptions + usage_records tables.
-func NewBillingHandler(pool BillingPool) *BillingHandler {
-	return &BillingHandler{pool: pool, logger: slog.Default()}
+// NewBillingHandler constructs a billing handler. plans is the plan read every
+// plan gate shares (the tier shown is the tier enforced); customers resolves
+// the billing customer the portal is opened for.
+func NewBillingHandler(plans pkgdomain.PlanTierStore, customers StripeCustomerStore) *BillingHandler {
+	return &BillingHandler{plans: plans, customers: customers, logger: slog.Default()}
 }
 
 // WithCostSource wires the cost cap counter source so GET /api/v1/billing
@@ -171,15 +165,12 @@ func (h *BillingHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plan, err := h.fetchPlan(r.Context(), uc.TenantID)
-	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+	tier, terr := plantier.Resolve(r.Context(), h.plans, uc.TenantID)
+	if terr != nil {
+		httpio.WriteLoopZeroError(w, terr)
 		return
 	}
-	if plan == "" {
-		// No subscription row — default to starter (free tier).
-		plan = "starter"
-	}
+	plan := tier.String()
 
 	resp := BillingResponse{
 		Plan:  plan,
@@ -263,8 +254,9 @@ func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	customerID, err := h.fetchStripeCustomerID(r.Context(), uc.TenantID)
+	customerID, err := h.customers.StripeCustomerID(r.Context(), uc.TenantID)
 	if err != nil {
+		h.logger.ErrorContext(r.Context(), "billing: customer lookup failed", "tenant", uc.TenantID, "error", err)
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
@@ -274,20 +266,19 @@ func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// SEM EMISSOR, NAO HA URL. O caminho anterior montava
-	// `https://billing.stripe.com/p/login/` + customerID e devolvia isso como se fosse a
-	// sessao do portal. Nao e sessao emitida pelo Stripe: e uma URL construida com o
-	// identificador de cobranca do cliente dentro, que trafega em historico de navegador,
-	// log de proxy e barra de enderecos.
+	// NO ISSUER, NO URL. The previous path assembled
+	// `https://billing.stripe.com/p/login/` + customerID and returned it as the
+	// portal session. It is not a session the provider issued: it is a URL with
+	// the customer's billing identifier inside, travelling through browser
+	// history, proxy logs and the address bar.
 	//
-	// E nao era hipotese. Medido no app-dev em 2026-08-11: o Secret `loopzero-api-stripe` e
-	// `optional: true` e NAO EXISTE, entao este era o caminho ATIVO — todo
-	// `loopzero billing portal` devolvia a URL construida. O comentario original dizia que o
-	// fallback servia para "local dev + tests"; a intencao era local, o efeito era publico.
+	// Not hypothetical. Measured on app-dev 2026-08-11: the provider Secret is
+	// `optional: true` and absent, so this was the ACTIVE path — every
+	// `loopzero billing portal` returned the assembled URL.
 	//
-	// Por ADR 2026-08-11, o loopzero-cloud e o unico emissor de sessao de portal. Quando o
-	// engine nao pode emitir, ele FALHA dizendo onde ir — uma URL que PARECE funcionar
-	// esconde o problema ate alguem investigar por que o portal nao abriu.
+	// Per ADR 2026-08-11, loopzero-cloud is the only portal-session issuer. When the
+	// engine cannot issue, it FAILS saying where to go — a URL that looks like it
+	// works hides the problem until someone investigates why the portal did not open.
 	if h.portalCreator == nil {
 		httpio.WriteErrorJSON(w, http.StatusServiceUnavailable, "BILLING_PORTAL_UNAVAILABLE",
 			"Billing is managed from the dashboard. Open it at "+h.portalReturnURL+"/billing")
@@ -311,42 +302,4 @@ func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
 	resp := PortalResponse{URL: url}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
-}
-
-// fetchPlan reads the active subscription's plan column for a tenant.
-// Returns empty string if no subscription row exists (caller defaults to
-// starter).
-func (h *BillingHandler) fetchPlan(ctx context.Context, tenantID string) (string, error) {
-	var plan string
-	err := h.pool.QueryRow(ctx,
-		`SELECT plan FROM subscriptions WHERE tenant_id = $1 LIMIT 1`,
-		tenantID,
-	).Scan(&plan)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", nil
-		}
-		return "", err
-	}
-	return plan, nil
-}
-
-// fetchStripeCustomerID returns the tenant's stripe_customer_id or empty
-// string if missing. Used by Portal handler to enforce EC-8.
-func (h *BillingHandler) fetchStripeCustomerID(ctx context.Context, tenantID string) (string, error) {
-	var id *string
-	err := h.pool.QueryRow(ctx,
-		`SELECT stripe_customer_id FROM subscriptions WHERE tenant_id = $1 LIMIT 1`,
-		tenantID,
-	).Scan(&id)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", nil
-		}
-		return "", err
-	}
-	if id == nil {
-		return "", nil
-	}
-	return *id, nil
 }

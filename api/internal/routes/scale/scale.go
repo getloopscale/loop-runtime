@@ -25,6 +25,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	"github.com/getloopscale/loopzero/api/internal/routes/plantier"
 
 	"github.com/go-chi/chi/v5"
 
@@ -251,7 +252,7 @@ func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	planTier, terr := h.resolveTier(r.Context(), uc.TenantID)
+	planTier, terr := plantier.Resolve(r.Context(), h.planTierStore, uc.TenantID)
 	if terr != nil {
 		httpio.WriteLoopZeroError(w, terr)
 		return
@@ -342,24 +343,6 @@ func parseScaleRequest(r *http.Request) (req scaleRequest, hasFixed, hasAuto boo
 		return
 	}
 	return
-}
-
-// resolveTier returns the canonical plan tier per ADR D4. Fail-closed
-// when the store call errors so a transient DB hiccup does NOT silently
-// grant a Free user the KEDA path.
-func (h *ScaleHandler) resolveTier(ctx context.Context, tenantID string) (pkgdomain.PlanTier, *loopzeroerrors.LoopZeroError) {
-	planTier := pkgdomain.PlanTierStarter
-	if h.planTierStore == nil {
-		return planTier, nil
-	}
-	resolved, perr := pkgdomain.ResolvePlanTier(ctx, h.planTierStore, tenantID)
-	if perr != nil {
-		slog.Error("scale: failed to resolve canonical plan tier",
-			"tenant_id", tenantID, "error", perr.Error())
-		return planTier, loopzeroerrors.ErrPlatformDegraded.Wrap(
-			"plan tier resolution failed — retry or contact support")
-	}
-	return resolved, nil
 }
 
 // enforceLimits applies the EC-3 KEDA tier gate + EC-4 HPA bounds. Server-

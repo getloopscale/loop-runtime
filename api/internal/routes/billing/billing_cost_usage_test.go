@@ -44,7 +44,7 @@ func TestBilling_Get_WithCostSource_PopulatesUsage(t *testing.T) {
 			// the zero is displayed, but it is no longer CLAIMED as a measurement)
 		},
 	}
-	h := NewBillingHandler(&fakeBillingPool{plan: "starter"}).WithCostSource(cost)
+	h := NewBillingHandler(fakePlanStore{plan: "starter"}, fakeCustomerStore{}).WithCostSource(cost)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/billing", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -93,7 +93,7 @@ func TestBilling_Get_EnterprisePlan_ShowsUnlimitedSentinel(t *testing.T) {
 			planpkg.MetricBuildMinutes: {Value: 999999},
 		},
 	}
-	h := NewBillingHandler(&fakeBillingPool{plan: "enterprise"}).WithCostSource(cost)
+	h := NewBillingHandler(fakePlanStore{plan: "enterprise"}, fakeCustomerStore{}).WithCostSource(cost)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/billing", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -115,7 +115,7 @@ func TestBilling_Get_EnterprisePlan_ShowsUnlimitedSentinel(t *testing.T) {
 // when no CostStore is wired, the usage map is empty (CLI shows "no
 // usage data" gracefully).
 func TestBilling_Get_NoCostSource_EmptyUsage(t *testing.T) {
-	h := NewBillingHandler(&fakeBillingPool{plan: "pro"})
+	h := NewBillingHandler(fakePlanStore{plan: "pro"}, fakeCustomerStore{})
 	// No WithCostSource call
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/billing", nil)
@@ -135,7 +135,7 @@ func TestBilling_Get_NoCostSource_EmptyUsage(t *testing.T) {
 // response still returns plan + team + any successfully read metrics.
 func TestBilling_Get_CostStoreError_SkipsMetric_Continues(t *testing.T) {
 	cost := &fakeCostSource{err: errors.New("connection refused")}
-	h := NewBillingHandler(&fakeBillingPool{plan: "pro"}).WithCostSource(cost)
+	h := NewBillingHandler(fakePlanStore{plan: "pro"}, fakeCustomerStore{}).WithCostSource(cost)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/billing", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
