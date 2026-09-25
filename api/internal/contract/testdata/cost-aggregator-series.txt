@@ -39,4 +39,4 @@
 
 loopzero_egress_bytes_total          ABSENT B-181
 loopzero_docr_pulls_total            ABSENT B-181
-loopzero_build_duration_seconds_sum  PRODUCER api/internal/metrics/metrics.go
+loopzero_build_duration_seconds_sum  PRODUCER api/internal/metrics/build_metrics.go

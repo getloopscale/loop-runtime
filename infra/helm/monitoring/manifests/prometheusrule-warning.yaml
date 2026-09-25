@@ -71,7 +71,7 @@ spec:
             runbook: "Check ArgoCD controller resources and application count. May indicate capacity issues."
 
         # MEET-2026-03-31-023 T0-3: Build stuck in RELEASING state.
-        # The metric loopzero_releasing_builds exists in api/internal/metrics/metrics.go.
+        # The metric loopzero_releasing_builds exists in api/internal/metrics/release_metrics.go.
         # This alert was designed but never created as a PrometheusRule.
         - alert: LoopZeroOrphanBuild
           expr: loopzero_releasing_builds > 0

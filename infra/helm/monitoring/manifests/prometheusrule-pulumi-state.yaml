@@ -2,7 +2,7 @@
 # Source: docs/decisions.md
 #
 # Pulumi state observability — pairs with loopzero_pulumi_archives_total +
-# loopzero_pulumi_stacks_total metrics in api/internal/metrics/metrics.go.
+# loopzero_pulumi_stacks_total metrics in api/internal/metrics/cell_metrics.go.
 #
 # Alerts:
 #   • PulumiArchiveStaleness — no Pulumi archive in 90d (rotation gap).
