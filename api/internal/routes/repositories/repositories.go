@@ -82,6 +82,7 @@ type RepositoryHandler struct {
 	store        RepositoryStore
 	introspector RepoIntrospector // optional — nil disables loopzero.yaml validation
 	autoDeployer Autodeployer     // optional — nil disables connect-then-deploy
+	serverCtx    context.Context  // lifetime of the deploys Connect starts; set with autoDeployer
 }
 
 // NewRepositoryHandler creates a new RepositoryHandler.
@@ -100,8 +101,16 @@ func (h *RepositoryHandler) WithIntrospector(i RepoIntrospector) *RepositoryHand
 // HEAD deploy after a successful link (Vercel-canonical UX). When nil,
 // Connect behaves as pre-2026-06-09 (link only — first deploy waits for
 // the next push event). Sponsor walkthrough 2026-06-09 catch.
-func (h *RepositoryHandler) WithAutoDeployer(d Autodeployer) *RepositoryHandler {
+//
+// serverCtx is the server's lifetime (the shutdown context): the deploy runs
+// after the response, and binding it there lets a graceful stop cancel it —
+// the same bound the push webhook's deploys have.
+func (h *RepositoryHandler) WithAutoDeployer(d Autodeployer, serverCtx context.Context) *RepositoryHandler {
+	if serverCtx == nil {
+		panic("repositories: WithAutoDeployer requires the server context")
+	}
 	h.autoDeployer = d
+	h.serverCtx = serverCtx
 	return h
 }
 
@@ -453,12 +462,10 @@ func (h *RepositoryHandler) triggerConnectThenDeploy(ctx context.Context, tenant
 	repoFull := req.Repo
 	instID := req.InstallationID
 	deployer := h.autoDeployer
-	//nolint:gosec // G118: o contexto destacado e o proposito, nao descuido — ver abaixo
 	go func() {
-		// Detached background context (HTTP request ctx may be
-		// cancelled the moment Connect returns 200 to client).
-		// The webhook autodeploy path uses the same pattern.
-		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		// Outlives the request (Connect answers before the source download)
+		// but not the server: cancelled on graceful stop.
+		bgCtx, cancel := context.WithTimeout(h.serverCtx, 5*time.Minute)
 		defer cancel()
 		if depErr := deployer.HandlePush(bgCtx, repoFull, branch, head.SHA,
 			instID, tenantID, projectName,

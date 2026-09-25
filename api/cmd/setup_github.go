@@ -136,7 +136,7 @@ func setupGitHub(
 		// Wire connect-then-deploy onto the RepositoryHandler so POST
 		// /api/v1/projects/{name}/connect dispatches an immediate HEAD
 		// deploy after a successful link.
-		repoHandler = repoHandler.WithAutoDeployer(autoDeployer)
+		repoHandler = repoHandler.WithAutoDeployer(autoDeployer, shutdownCtx)
 	}
 
 	// Wire the GitHub App client as the RepositoryHandler's introspector

@@ -7,11 +7,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/github"
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
@@ -450,5 +452,39 @@ func TestRepositories_Connect_AutoDeployOmitted_DefaultsTrue(t *testing.T) {
 	}
 	if store.lastLinkAutoDeploy == nil || *store.lastLinkAutoDeploy != true {
 		t.Fatalf("expected store.LinkRepository called with autoDeploy=true (default); got %v", store.lastLinkAutoDeploy)
+	}
+}
+
+// recordingDeployer reports the context the connect-then-deploy ran under.
+type recordingDeployer struct{ ctxErr chan error }
+
+func (d recordingDeployer) HandlePush(ctx context.Context, _, _, _ string, _ int64, _, _, _, _ string) error {
+	d.ctxErr <- ctx.Err()
+	return nil
+}
+
+// The deploy a connect triggers runs after the response, so it must be bound
+// to the server's lifetime: when the server shuts down, the deploy is
+// cancelled rather than cut mid-way by process exit with nothing recorded.
+func TestRepositories_Connect_DeployIsBoundToTheServerLifetime(t *testing.T) {
+	serverCtx, stopServer := context.WithCancel(context.Background())
+	stopServer() // the server is already shutting down
+	deployer := recordingDeployer{ctxErr: make(chan error, 1)}
+	intro := &fakeIntrospector{fileBytes: []byte("name: my-api\n"), head: &github.HeadCommitInfo{SHA: "abc123"}}
+	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro).WithAutoDeployer(deployer, serverCtx)
+
+	body := `{"repo":"owner/r","installation_id":42}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/connect", bytes.NewBufferString(body))
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "my-api")
+	h.Connect(httptest.NewRecorder(), req)
+
+	select {
+	case err := <-deployer.ctxErr:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("deploy context error = %v, want context.Canceled from the stopped server", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("connect did not trigger the deploy")
 	}
 }
