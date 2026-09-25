@@ -10,8 +10,8 @@
 package health
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
