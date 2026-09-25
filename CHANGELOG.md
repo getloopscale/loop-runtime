@@ -61,6 +61,14 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Routes restricted to team owners or admins (repository connect/disconnect, domain create/delete, audit log, team membership) now all refuse other roles the same way: 403 with code INSUFFICIENT_ROLE
+
+- Environment names are validated the same way when deploying and when creating an environment: lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen
+
+- Every live stream (build, project, signals, logs, deploy timeline) now sends heartbeats, caps concurrent connections, and ends with an error event after repeated upstream failures instead of hanging silent
+
+- POST and DELETE /api/v1/projects/{name}/connect are now rate limited like every other mutation
+
 - `webhook-canonical-path` now fails when none of its scan directories exists, instead of passing over nothing (principle_violations#257)
 
 - `loopzero-api-openbao-approle-envfrom` and `option-b-eso-deploy-doc` no longer require citations of private assistant memory in the chart and the runbook (principle_violations#270)
@@ -185,6 +193,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- POST /api/v1/tenants/bulk-delete, which could never succeed (it always answered 400)
+
 - The unused secret-store client, cache and database/Kubernetes credential engines were removed from the shared library.
 
 - The unused ArgoCD app-of-apps manifests under infra/argocd-bootstrap and task validate:argocd-sync-waves; the platform is installed and managed by Helmfile.
@@ -220,6 +230,46 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- Bulk secret uploads and scale requests are refused with 503 when the account's plan cannot be read, instead of being checked against an unknown limit.
+
+- The API no longer rejects every write with 503 MAINTENANCE_MODE when installed with the chart's default LOOPZERO_MAINTENANCE_MODE="false"; "false", "0", "off" and "no" now mean maintenance is off
+
+- GET /api/v1/billing shows the plan that limits are actually enforced against (a canceled subscription no longer shows as its old plan), and answers 503 PLATFORM_DEGRADED instead of 500 when the plan cannot be read
+
+- POST /api/v1/environments answers 409 ENV_ALREADY_EXISTS when the environment already exists in the project (it answered 201), and no longer reports unrelated failures as conflicts
+
+- POST /api/v1/admin/tenants/evict returns the job id the eviction actually ran under, and no longer echoes internal errors when tenant matching fails
+
+- GET /api/v1/builds/{id}/logs answers 503 LOGS_UNAVAILABLE when logs cannot be read right now, instead of an empty list that looked like the logs were gone
+
+- `loopzero domain dns` works: GET /api/v1/domains/{domain}/dns-records is now served (it answered 404), and a server-side failure answers 500 instead of "domain not found"
+
+- API request logs now include the trace_id and span_id of the request, so a log line can be joined to its trace
+
+- Rate-limited responses (429) now carry Retry-After as whole seconds computed from the actual limit window, instead of values like "45.3s" or a fixed 60
+
+- Requests sent with an Idempotency-Key are refused with 413 when too large instead of being processed truncated, a failed (5xx) attempt is no longer replayed to retries, and a key reused on a different endpoint is rejected
+
+- POST /api/v1/builds answers 400 (not 500) for an invalid app name or path, and environment lookups that match several projects answer 400
+
+- POST /api/v1/builds validates app names and paths before creating a new environment, so a rejected deploy no longer provisions one
+
+- Scaling a project (POST /api/v1/projects/{name}/scale) is now recorded in the audit log as project.scaled instead of project.created
+
+- GET /api/v1/projects/{name}/signals/stream now delivers status signals, and only those of the environment requested with ?env=
+
+- Cross-origin PATCH requests (changing a team member's role) now pass the CORS preflight
+
+- POST /api/v1/domains and POST /api/v1/projects/{project}/previews no longer count each request twice against the rate limit
+
+- POST /api/v1/secrets/bulk now enforces the plan's per-environment secret limit and answers 402 PLAN_LIMIT_EXCEEDED when an upload would exceed it
+
+- Creating, updating and deleting secrets now records SECRET_CREATED / SECRET_UPDATED / SECRET_DELETED entries in the team audit log
+
+- POST /api/v1/secrets/bulk now serializes with deploys per environment, so a deploy never captures a half-applied bulk upload; a busy environment fails only its own rows
+
+- POST /api/v1/source/upload now actually rejects a multipart body whose first field is not services_json (400 MULTIPART_FIELD_ORDER), validating services.json before reading the bundle
 
 - `no-migrate-force` now fails on a file it cannot read or a line too long to scan, instead of skipping it (principle_violations#257)
 
@@ -490,6 +540,14 @@ to [Semantic Versioning](https://semver.org/).
   explanation (#B-069)
 
 ### Security
+
+- The auth-failure audit throttle no longer trusts X-Forwarded-For from clients that are not a trusted proxy, so a client cannot bypass the 100/min limit by rewriting the header
+
+- Connecting a repository can no longer take over a GitHub App installation that belongs to another team
+
+- GET /api/v1/admin/releases/{id}/inspect no longer accepts the proxy service secret; it requires the admin service secret like every other admin endpoint
+
+- GET /api/v1/builds/{id}/attestation no longer returns another team's build signing data; builds you do not own answer 404, and a server-side failure answers 500 instead of 'build not found'
 
 - cluster-role-no-secrets-star no longer treats a chart-wide `if .Values.rbac.create` wrapper as a cutover guard; it now reports the cluster-wide secrets grants in the operator charts and fails when a ClusterRole template cannot be read
 
