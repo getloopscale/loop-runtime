@@ -7,8 +7,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -185,19 +187,15 @@ func (r *SecretResyncer) syncOneWithTerminatingRetry(ctx context.Context, tenant
 	}
 }
 
-// isNamespaceTerminatingError detects the specific Kubernetes admission
-// error returned when a request creates a resource in a namespace whose
+// isNamespaceTerminatingError detects the Kubernetes admission error
+// returned when a request creates a resource in a namespace whose
 // `metadata.deletionTimestamp` is set (NS in Terminating phase).
 //
-// The error message format is stable across modern K8s versions
-// (verified PG 1.27+): the literal "is being terminated" appears in the
-// .status.message of the StatusError. We string-match because the K8s
-// API doesn't expose a typed sentinel for this specific case — the
-// generic k8serrors.IsForbidden is too broad (also matches RBAC + PSA
-// violations which should NOT trigger our terminating-retry logic).
+// The NamespaceLifecycle admission plugin attaches the typed
+// NamespaceTerminating status cause to that Forbidden error (documented on
+// corev1.NamespaceTerminatingCause). Matching the cause, not the message
+// text, keeps RBAC and PSA Forbidden errors — and any unrelated error whose
+// text says "is being terminated" — out of the retry window.
 func isNamespaceTerminatingError(err error) bool {
-	if err == nil {
-		return false
-	}
-	return strings.Contains(err.Error(), "is being terminated")
+	return apierrors.HasStatusCause(err, corev1.NamespaceTerminatingCause)
 }

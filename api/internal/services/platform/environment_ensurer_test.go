@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 type stubLister struct {
@@ -128,10 +130,9 @@ func TestEnsureEnvironment_TimeoutWhenOperatorSlow(t *testing.T) {
 	}
 }
 
-// TestEnsureEnvironment_AlreadyExistsErrorIsSuccess asserts that an
-// "already exists" error from AddEnvironment (race) is treated as success.
-// Plan T2.2 RED #4.
-func TestEnsureEnvironment_AlreadyExistsErrorIsSuccess(t *testing.T) {
+// A concurrent ensure that added the entry first reports the typed
+// ErrEnvironmentExists; the environment exists, which is all the call wants.
+func TestEnsureEnvironment_TypedAlreadyExistsIsSuccess(t *testing.T) {
 	lister := &stubLister{} // exists=false, so we'll call Add
 	adder := &stubAdder{err: fmt.Errorf("k8s: %w", ports.ErrEnvironmentExists)}
 	e := &EnvironmentEnsurer{
@@ -143,7 +144,28 @@ func TestEnsureEnvironment_AlreadyExistsErrorIsSuccess(t *testing.T) {
 
 	err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview")
 	if err != nil {
-		t.Errorf("expected nil for already-exists error, got %v", err)
+		t.Errorf("expected nil for the typed already-exists error, got %v", err)
+	}
+}
+
+// Only the typed sentinel means "already present". Any other error is a
+// failure, whatever its message says — the text "already exists" used to turn
+// such an error into success.
+func TestEnsureEnvironment_AddErrorMentioningAlreadyExistsFails(t *testing.T) {
+	lister := &stubLister{}
+	adder := &stubAdder{err: errors.New("admission webhook: object already exists in cache")}
+	e := &EnvironmentEnsurer{
+		Lister:       lister,
+		Adder:        adder,
+		WaitTimeout:  100 * time.Millisecond,
+		PollInterval: 10 * time.Millisecond,
+	}
+
+	err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview")
+
+	var te *loopzeroerrors.LoopZeroError
+	if !errors.As(err, &te) || te.Code != "ENV_PROVISION_FAILED" {
+		t.Fatalf("expected ENV_PROVISION_FAILED, got %v", err)
 	}
 }
 

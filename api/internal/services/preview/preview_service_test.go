@@ -352,6 +352,22 @@ func TestPreviewService_DeletePreviewByPR_NoOpWhenNotFound(t *testing.T) {
 	}
 }
 
+// A lookup failure is not "no preview", even when its text reads like one.
+// Only the typed ErrPreviewNotFound may turn a PR close into a no-op;
+// matching the message swallowed a store failure and left the preview live.
+func TestPreviewService_DeletePreviewByPR_UntypedNotFoundTextPropagates(t *testing.T) {
+	store := &previewFakeStore{getByPRFn: func(context.Context, string, string, int) (*ports.Preview, error) {
+		return nil, errors.New("scan row: preview environment not found in replica cache")
+	}}
+	svc, _ := NewPreviewService(PreviewServiceDeps{Store: store})
+
+	err := svc.DeletePreviewByPR(context.Background(), "tn-test-123", "api", 999)
+
+	if err == nil {
+		t.Fatal("expected the untyped lookup error to propagate, got nil")
+	}
+}
+
 // =============================================================================
 // Compile-time interface assertion
 // =============================================================================

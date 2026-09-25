@@ -5,7 +5,6 @@ package platform
 
 import (
 	"context"
-	"strings"
 )
 
 // envManagerAdapter wraps EnvironmentManager (add + detail-getter) to satisfy
@@ -52,25 +51,10 @@ func (a *envManagerAdapter) HasEnvironment(ctx context.Context, tenantID, projec
 		// (nil, nil) → absent; (non-nil, nil) → present.
 		return detail != nil, nil
 	}
-	// Defensive: legacy implementations may surface "not found" as error.
-	if isNotFoundError(err) {
-		return false, nil
-	}
 	return false, err
 }
 
 // AddEnvironment — straight delegation. M2 v1.2 propagates project.
 func (a *envManagerAdapter) AddEnvironment(ctx context.Context, tenantID, project, envName string) error {
 	return a.Add(ctx, tenantID, project, envName)
-}
-
-// isNotFoundError matches "not found" anywhere in the error message,
-// case-insensitive. Aligned with the existing pattern in routes/environments.go
-// which uses message-suffix matching.
-func isNotFoundError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "not found")
 }

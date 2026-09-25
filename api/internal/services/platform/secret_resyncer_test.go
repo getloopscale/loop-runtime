@@ -33,10 +33,16 @@ package platform
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 )
@@ -252,7 +258,7 @@ func TestSecretResyncer_NamespaceTerminating_Retries(t *testing.T) {
 			defer mu.Unlock()
 			callsByName[c.Name]++
 			if callsByName[c.Name] == 1 {
-				return errors.New(`externalsecrets.external-secrets.io "es-api-secret-ping" is forbidden: unable to create new content in namespace loopzero-e2e-tenant-j-secrets because it is being terminated`)
+				return fmt.Errorf("create external secret on runtime: %w", namespaceTerminatingErr("loopzero-e2e-tenant-j-secrets"))
 			}
 			return nil // succeed on retry
 		},
@@ -282,7 +288,7 @@ func TestSecretResyncer_NamespaceTerminating_TimeoutFailsExplicit(t *testing.T) 
 	// K8s mock that ALWAYS returns terminating error.
 	k8s := &fakeSecretK8sCreator{
 		errFor: func(c secretCall) error {
-			return errors.New(`is being terminated`)
+			return namespaceTerminatingErr("loopzero-e2e-tenant-j-secrets")
 		},
 	}
 	store := &fakeSecretResyncStore{
@@ -358,5 +364,43 @@ func TestSecretResyncer_ReportsHowManySecretsFailed(t *testing.T) {
 
 	if err == nil || !strings.Contains(err.Error(), "2/3 secrets failed") {
 		t.Errorf("want the real failure count 2/3, got %v", err)
+	}
+}
+
+// namespaceTerminatingErr builds the error the NamespaceLifecycle admission
+// plugin returns: a Forbidden status carrying the NamespaceTerminating cause.
+func namespaceTerminatingErr(ns string) error {
+	err := apierrors.NewForbidden(
+		schema.GroupResource{Group: "external-secrets.io", Resource: "externalsecrets"}, "es-api-secret-ping",
+		fmt.Errorf("unable to create new content in namespace %s because it is being terminated", ns))
+	err.ErrStatus.Details.Causes = append(err.ErrStatus.Details.Causes, metav1.StatusCause{
+		Type:    corev1.NamespaceTerminatingCause,
+		Message: fmt.Sprintf("namespace %s is being terminated", ns),
+		Field:   "metadata.namespace",
+	})
+	return err
+}
+
+// A plain error whose text happens to say "is being terminated" is not the
+// admission rejection: only the typed NamespaceTerminating cause may trigger
+// the retry window. Matching the text retried unrelated failures for 60s.
+func TestSecretResyncer_TerminatingTextWithoutCause_FailsFast(t *testing.T) {
+	calls := 0
+	k8s := &fakeSecretK8sCreator{errFor: func(secretCall) error {
+		calls++
+		return errors.New("proxy: upstream connection is being terminated")
+	}}
+	r := &SecretResyncer{
+		Store: &fakeSecretResyncStore{entries: []store.SecretResyncEntry{{Name: "SECRET", App: "api", Value: "v"}}},
+		K8s:   k8s,
+	}
+
+	err := r.ResyncEnv(context.Background(), "tn-a", "proj-x", "j-secrets")
+
+	if err == nil {
+		t.Fatal("expected the untyped error to fail the resync, got nil")
+	}
+	if calls != 1 {
+		t.Errorf("expected exactly 1 attempt, got %d", calls)
 	}
 }

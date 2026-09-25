@@ -45,21 +45,24 @@ func TestEnvManagerAdapter_HasEnvironment_AbsentOnNilNilSemantic(t *testing.T) {
 	}
 }
 
-// TestEnvManagerAdapter_HasEnvironment_AbsentOnNotFoundError asserts the
-// defensive legacy semantic: error containing "not found" → absent (not error).
-func TestEnvManagerAdapter_HasEnvironment_AbsentOnNotFoundError(t *testing.T) {
+// The lookup reports absence as (nil, nil). An error is never absence, even
+// when its message says "not found" — a missing Tenant CR is a real failure,
+// and reading it as "the environment is absent" hid it behind a create call.
+func TestEnvManagerAdapter_HasEnvironment_PropagatesNotFoundMessageAsError(t *testing.T) {
 	lister, _ := NewEnvManagerAdapter(
-		func(_ context.Context, _, _, _ string) error { return nil }, // M2 v1.2: project arg added
+		func(_ context.Context, _, _, _ string) error { return nil },
 		func(_ context.Context, _, _, _ string) (any, error) {
-			return nil, errors.New("environment not found")
+			return nil, errors.New(`k8s: get tenant CR "tn-1": tenants.loopzero.dev "tn-1" not found`)
 		},
 	)
+
 	exists, err := lister.HasEnvironment(context.Background(), "tn-1", "", "preview")
-	if err != nil {
-		t.Fatalf("expected nil err for not-found message, got %v", err)
+
+	if err == nil {
+		t.Fatal("expected the lookup error to propagate, got nil")
 	}
 	if exists {
-		t.Errorf("expected exists=false for not-found error, got true")
+		t.Errorf("expected exists=false on error, got true")
 	}
 }
 

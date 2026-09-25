@@ -139,7 +139,8 @@ func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, pr
 			"tenant_id", tenantID, "project", project, "env", envName, "error", err)
 	}
 
-	// 2. Create — idempotent at the Tenant CR layer (server-side merge).
+	// 2. Create — idempotent at the Tenant CR layer (server-side merge): an
+	// entry already present returns nil, so any error here is a failure.
 	// M2 v1.2: project is propagated so the Tenant CR
 	// spec.environments entry carries the project field used by the
 	// operator to compute the canonical 3-segment namespace.
@@ -227,6 +228,3 @@ var _ environmentEnsurerContract = (*EnvironmentEnsurer)(nil)
 type environmentEnsurerContract interface {
 	EnsureEnvironment(ctx context.Context, tenantID, project, envName string) error
 }
-
-// ErrEnvAlreadyExists is a sentinel error for tests + callers that want explicit detection.
-var ErrEnvAlreadyExists = errors.New("environment already exists")

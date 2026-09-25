@@ -455,10 +455,10 @@ func previewEnvName(prNumber int) string {
 	return naming.PreviewEnvName(prNumber)
 }
 
-// isPreviewNotFound centralizes the typed-error check so callers don't
-// import errors directly.
+// isPreviewNotFound matches only the typed store sentinel. A message that
+// merely reads like it is a different failure and must propagate.
 func isPreviewNotFound(err error) bool {
-	return err != nil && (errors.Is(err, loopzeroerrors.ErrPreviewNotFound) || strings.Contains(err.Error(), "preview environment not found"))
+	return errors.Is(err, loopzeroerrors.ErrPreviewNotFound)
 }
 
 // Compile-time assertion: PreviewService satisfies the route handler's
