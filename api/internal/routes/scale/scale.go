@@ -84,7 +84,7 @@ type ScaleApplyFunc func(ctx context.Context, cfg ScaleConfigInput) (changed boo
 // build path enforced via this same checker, but the LIVE scale path
 // bypassed it entirely). Wiring this checker here closes the bypass.
 type ScaleReplicasChecker interface {
-	CheckReplicasValue(tenantID string, requested int) (allowed bool, plan string, limit int)
+	CheckReplicasValue(ctx context.Context, tenantID string, requested int) (allowed bool, plan string, limit int, err error)
 }
 
 // ScaleHandler provides the HTTP handler for scaling operations.
@@ -249,7 +249,7 @@ func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if lerr := h.enforceLimits(&req, planTier, hasAuto, uc.TenantID); lerr != nil {
+	if lerr := h.enforceLimits(r.Context(), &req, planTier, hasAuto, uc.TenantID); lerr != nil {
 		httpio.WriteLoopZeroError(w, lerr)
 		return
 	}
@@ -346,6 +346,7 @@ func invalidReplicas(message string) *loopzeroerrors.LoopZeroError {
 // side enforcement at the handler boundary; client UI mirrors for UX.
 // Returns the first LoopZeroError to write, or nil when both gates pass.
 func (h *ScaleHandler) enforceLimits(
+	ctx context.Context,
 	req *scaleRequest,
 	planTier pkgdomain.PlanTier,
 	hasAuto bool,
@@ -361,7 +362,7 @@ func (h *ScaleHandler) enforceLimits(
 	// + the dashboard scale form + any direct API client. Without
 	// this, Starter tier could set replicas:999 and the apply path
 	// honored it.
-	if err := h.enforceReplicaCap(req, tenantID); err != nil {
+	if err := h.enforceReplicaCap(ctx, req, tenantID); err != nil {
 		return err
 	}
 	if !hasAuto {
@@ -374,8 +375,10 @@ func (h *ScaleHandler) enforceLimits(
 // count exceeds the tenant's plan cap. For fixed scaling, the cap
 // gates `replicas`. For autoscaling, the cap gates `max` (the
 // ceiling — what the cluster would actually scale TO under load).
-// A nil checker disables enforcement (tests + legacy callsites).
-func (h *ScaleHandler) enforceReplicaCap(req *scaleRequest, tenantID string) *loopzeroerrors.LoopZeroError {
+// A nil checker disables enforcement (tests + legacy callsites). A cap that
+// cannot be read refuses the request: the checker fails closed, and an
+// unknown cap is never treated as no cap.
+func (h *ScaleHandler) enforceReplicaCap(ctx context.Context, req *scaleRequest, tenantID string) *loopzeroerrors.LoopZeroError {
 	if h.replicasChecker == nil {
 		return nil
 	}
@@ -388,7 +391,16 @@ func (h *ScaleHandler) enforceReplicaCap(req *scaleRequest, tenantID string) *lo
 	default:
 		return nil
 	}
-	allowed, plan, cap := h.replicasChecker.CheckReplicasValue(tenantID, requested)
+	allowed, plan, cap, err := h.replicasChecker.CheckReplicasValue(ctx, tenantID, requested)
+	if err != nil {
+		slog.Error("scale: replica cap cannot be read; refusing the request",
+			"tenant_id", tenantID, "app", req.App, "requested", requested, "error", err)
+		var te *loopzeroerrors.LoopZeroError
+		if !errors.As(err, &te) {
+			te = loopzeroerrors.ErrPlatformDegraded
+		}
+		return te
+	}
 	if allowed {
 		return nil
 	}

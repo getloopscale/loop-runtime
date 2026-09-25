@@ -30,13 +30,15 @@ func (m roleMember) GetMemberships(_ context.Context, _ string) ([]auth.TenantMe
 // before the handler runs.
 func TestBillingPortalRequiresTheOwnerRole(t *testing.T) {
 	r := NewRouter(Config{
-		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
-		TokenValidator:    validadorFixo{},
-		MemberStore:       roleMember{role: "member"},
-		BillingHandler:    &billing.BillingHandler{},
-		RateLimiter:       ratelimit.NewRateLimiter(1000, time.Minute),
-		IPRateLimit:       ratelimit.NewIPRateLimiter(ratelimit.IPRateLimitConfig{}),
-		VerifyRateLimiter: ratelimit.NewVerifyRateLimiter(1000, time.Minute),
+		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
+		TokenValidator: fixedTokenValidator{},
+		MemberStore:    roleMember{role: "member"},
+		BillingHandler: &billing.BillingHandler{},
+		Guards: RouteGuards{
+			RateLimiter:       ratelimit.NewRateLimiter(1000, time.Minute),
+			IPRateLimit:       ratelimit.NewIPRateLimiter(ratelimit.IPRateLimitConfig{}),
+			VerifyRateLimiter: ratelimit.NewVerifyRateLimiter(1000, time.Minute),
+		},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil)
 	req.Header.Set("Authorization", "Bearer any")

@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +14,8 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+	"github.com/getloopscale/loopzero/pkg/enforcement"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // fakePlanTierStore satisfies ports.PlanTierStore so the handler's
@@ -530,8 +531,38 @@ type fakeScaleReplicasChecker struct {
 	plan string
 }
 
-func (f *fakeScaleReplicasChecker) CheckReplicasValue(_ string, requested int) (bool, string, int) {
-	return requested <= f.cap, f.plan, f.cap
+func (f *fakeScaleReplicasChecker) CheckReplicasValue(_ context.Context, _ string, requested int) (bool, string, int, error) {
+	return requested <= f.cap, f.plan, f.cap, nil
+}
+
+// unreadableReplicasChecker cannot read the plan, as the limiter reports when
+// its store is down.
+type unreadableReplicasChecker struct{}
+
+func (unreadableReplicasChecker) CheckReplicasValue(context.Context, string, int) (bool, string, int, error) {
+	return false, "", 0, loopzeroerrors.ErrPlatformDegraded
+}
+
+func TestScaleHandler_RefusesWhenTheReplicaCapCannotBeRead(t *testing.T) {
+	h := NewScaleHandler(&fakeScaleProjectStore{
+		project: &ports.ProjectResult{ID: "p1", Name: "p", TeamID: "tn-test-123"},
+	}, func(_ context.Context, _ ScaleConfigInput) (bool, error) {
+		t.Fatal("a scale whose plan cap is unreadable must not be applied")
+		return true, nil
+	}, true)
+	h.SetReplicasChecker(unreadableReplicasChecker{})
+	h.SetPlanTierStore(fakePlanTierStore{plan: "starter"})
+
+	body, _ := json.Marshal(map[string]any{"app": "web", "environment": "production", "replicas": 2})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/p/scale", bytes.NewReader(body))
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	req = routestest.WithChiParam(req, "name", "p")
+	w := httptest.NewRecorder()
+	h.Scale(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("an unreadable plan cap must refuse, never allow: got %d body=%s", w.Code, w.Body.String())
+	}
 }
 
 func TestScaleHandler_FixedReplicasOverCap_Returns422(t *testing.T) {

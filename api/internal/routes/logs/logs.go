@@ -112,7 +112,7 @@ type logsResponse struct {
 
 // errLogsUnavailable answers a read whose log backend could not be reached.
 var errLogsUnavailable = loopzeroerrors.NewLoopZeroError("LOGS_UNAVAILABLE",
-	"Build logs are temporarily unavailable. Try again in a moment.", http.StatusServiceUnavailable)
+	"Build logs are temporarily unavailable. Try again in a moment.")
 
 // LogsHandler provides HTTP handlers for build log operations.
 type LogsHandler struct {

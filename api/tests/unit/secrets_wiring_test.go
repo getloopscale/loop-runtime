@@ -79,7 +79,7 @@ func TestRouter_SecretSetWritesADomainAuditRow(t *testing.T) {
 }
 
 func TestRouter_SecretBulkIsGatedByThePlanLimit(t *testing.T) {
-	limiter := enforcement.NewPlanLimiterWithStore(fixedLimitsStore{plan: "starter", hard: 1}, slog.Default())
+	limiter := enforcement.NewPlanLimiter(fixedLimitsStore{plan: "starter", hard: 1}, slog.Default())
 	h := secretsRouter(t, func(c *server.Config) { c.Guards.PlanLimiter = limiter })
 
 	rec := postAuthed(h, "/api/v1/secrets/bulk",
