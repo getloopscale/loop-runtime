@@ -13,6 +13,7 @@ package dashboardpromtool
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -150,12 +151,12 @@ func extractPromQLQueries(file string) ([]string, error) {
 // validateWithPromtool writes a synthetic rules file with the query as a
 // recording rule and runs `promtool check rules` against it. Returns nil
 // if the query parses cleanly; error otherwise.
-func validateWithPromtool(ctx context.Context, query string) error {
+func validateWithPromtool(ctx context.Context, query string) (err error) {
 	tmp, err := os.CreateTemp("", "promtool-query-*.yaml")
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmp.Name())
+	defer func() { err = errors.Join(err, os.Remove(tmp.Name())) }()
 
 	// Synthesize minimal rules group with this query.
 	rulesYAML := fmt.Sprintf(`groups:
@@ -168,12 +169,14 @@ func validateWithPromtool(ctx context.Context, query string) error {
 	if _, err := tmp.WriteString(rulesYAML); err != nil {
 		return err
 	}
-	tmp.Close()
+	if err := tmp.Close(); err != nil {
+		return err
+	}
 
 	cmd := exec.CommandContext(ctx, "promtool", "check", "rules", tmp.Name())
 	out, runErr := cmd.CombinedOutput()
 	if runErr != nil {
-		return fmt.Errorf("promtool: %v: %s", runErr, strings.TrimSpace(string(out)))
+		return fmt.Errorf("promtool: %w: %s", runErr, strings.TrimSpace(string(out)))
 	}
 	return nil
 }

@@ -74,7 +74,7 @@ const (
 // Check is the gate entry point. Returns Outcome + nil error on successful
 // evaluation (regardless of Pass/Fail); returns non-nil error only when the
 // gate itself cannot run (sqlc absent, sqlc.yaml missing, etc.).
-func Check(cfg Config) (Outcome, error) {
+func Check(cfg Config) (_ Outcome, err error) {
 	if cfg.RepoRoot == "" {
 		cfg.RepoRoot = "."
 	}
@@ -117,7 +117,7 @@ func Check(cfg Config) (Outcome, error) {
 	if err != nil {
 		return Outcome{}, fmt.Errorf("sqlc-sync: mkdtemp: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { err = errors.Join(err, os.RemoveAll(tmpDir)) }()
 
 	// Mirror the canonical layout into tmpDir so sqlc.yaml's relative paths resolve.
 	tmpDb := filepath.Join(tmpDir, "db")

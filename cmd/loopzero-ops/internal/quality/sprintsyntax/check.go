@@ -152,12 +152,12 @@ func Check(cfg Config) (Outcome, error) {
 //
 //	printf 'c1:PASS:OK\nc3:WARN:kubectl context unreachable\n' > T
 //	CS_RESULTS_FILE=T CS_PASS=6 CS_WARN=1 CS_FAIL=0 CS_SKIP=1 CS_ELAPSED=12 python3 HELPER
-func runHelperJSON(helper string) ([]byte, error) {
+func runHelperJSON(helper string) (_ []byte, err error) {
 	tmp, err := os.CreateTemp("", "check-sprint-syntax-*.txt")
 	if err != nil {
 		return nil, fmt.Errorf("mktemp: %w", err)
 	}
-	defer os.Remove(tmp.Name())
+	defer func() { err = errors.Join(err, os.Remove(tmp.Name())) }()
 	if _, err := tmp.WriteString("c1:PASS:OK\nc3:WARN:kubectl context unreachable\n"); err != nil {
 		return nil, fmt.Errorf("write tmp: %w", err)
 	}
