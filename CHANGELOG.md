@@ -161,6 +161,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- The unused secret-store client, cache and database/Kubernetes credential engines were removed from the shared library.
+
 - The unused ArgoCD app-of-apps manifests under infra/argocd-bootstrap and task validate:argocd-sync-waves; the platform is installed and managed by Helmfile.
 
 - Tasks that could only fail because their script was deleted: audit:action-pinning, dev-public:live-proof, validate:matrix:quick, parity:preflight, parity:k3d-virgin, parity:droplet, parity:doks, test:pre-release-rigor:scenario-3 and scenario-4, ops:build, and the 16 test:dogfood:* wrappers.
@@ -194,6 +196,36 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- Secret rotation now refreshes exactly the ExternalSecrets that read the rotated path, and the operator's own Gitea and MinIO credentials can be rotated.
+
+- The drill cost watchdog and teardown validator now fail when DigitalOcean cannot be queried, instead of reporting that no drill resources are left, and the watchdog runs the validator again.
+
+- The drill bootstrap creates both cells again and, when clearing a stale leader lock, no longer terminates database sessions holding deploy locks.
+
+- The local cluster heal now repairs cell-0 and cell-1 under their current ids (it previously targeted the wrong cell and an id the bootstrap refuses), and the infrastructure check reports each cell once.
+
+- The e2e seed no longer strips environments added by earlier journeys when their list cannot be read, keeps each environment's project, and waits for the namespaces the platform actually creates.
+
+- The Harbor post-install job no longer treats a truncated or non-200 health response as a health report.
+
+- The registry mirror tool now fails when it cannot list a repository's tags, instead of reporting success for a partial mirror.
+
+- Secret-store responses that fail to read are reported as errors instead of being parsed as empty.
+
+- The circuit breaker lets a single trial request through while recovering, instead of letting every waiting request hit a dependency that may still be down.
+
+- Build submission failures now return 500 with their own error code instead of an unmapped status.
+
+- Validation errors for an invalid app name or path, an environment name shared by several projects, and scale-to-zero where it is unavailable now return 400, and an environment that does not become ready in time returns 504, instead of 500.
+
+- A project's status now reflects every release state (including rolling back, rolled back and superseded) instead of falling back to a generic state.
+
+- Legacy "growth" subscriptions get Pro limits instead of being denied everything, and an unrecognised plan is reported rather than downgraded to Starter.
+
+- Plan limits (projects, builds per month, permanent environments, seats) now refuse the operation when usage or the plan cannot be read, instead of silently allowing it or treating the account as Starter.
+
+- The production migration fallback no longer records a failed or partial migration as applied: it stops at the first failing file, leaves the schema marked dirty, and refuses to run over a dirty schema.
 
 - The services-acyclic quality gate governs the shared deploycontracts package at its new home, api/internal/deploycontracts, and refuses to run when its own allow-list permits an import cycle or names an undeclared context, instead of passing the cycle it exists to forbid.
 
@@ -352,6 +384,10 @@ to [Semantic Versioning](https://semver.org/).
   explanation (#B-069)
 
 ### Security
+
+- The tenant eviction tool no longer places the database password in a pod spec, rejects tenant patterns that are not a tenant-id prefix, and fails when the database cleanup fails.
+
+- The cosign cutover emergency override is refused when its audit record cannot be written, and the override reason can no longer alter the audit SQL.
 
 - Credentials the legacy Pulumi stack reads from LOOPZERO_* environment variables are now stored encrypted in stack state, like values set with pulumi config set --secret.
 
