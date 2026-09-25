@@ -102,9 +102,9 @@ var watchedImportPaths = map[string]string{
 	// Application-layer packages. ADR D2 of slice-4 promised the manifests import
 	// was frozen and the first implementation did not watch them at all — three
 	// public references crossed with the gate green.
-	"github.com/getloopscale/loopzero/api/internal/manifests":       "manifests",
-	"github.com/getloopscale/loopzero/api/internal/buildplane/argo": "argo",
-	"github.com/getloopscale/loopzero/api/internal/gitops":          "gitops",
+	"github.com/getloopscale/loopzero/api/internal/manifests":   "manifests",
+	"github.com/getloopscale/loopzero/api/internal/builds/argo": "argo",
+	"github.com/getloopscale/loopzero/api/internal/gitops":      "gitops",
 }
 
 // ErrUnqualifiedImport means a watched package is dot-imported, which makes every

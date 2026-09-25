@@ -5,8 +5,9 @@
 // (docs/decisions.md Decision D3; ADR
 // .claude/knowledge-base/decisions/2026-07-03-m9-db-store-subpackage-topology.md).
 //
-// Invariant (Gate A): NO file under api/internal/{services,routes,server}
-// imports the sqlc-generated package api/internal/db/generated — and, in the
+// Invariant (Gate A): NO file under api/internal/{services,server}, an HTTP
+// package or a feature's own code imports the sqlc-generated package
+// api/internal/db/generated — and, in the
 // layers measured free of it, the hand-written api/internal/db as well.
 //
 // Why this gate exists:
@@ -78,7 +79,6 @@ const generatedImportPath = "github.com/getloopscale/loopzero/api/internal/db/ge
 // so it is fenced alongside the request-handling layers.
 var forbiddenDirs = []string{
 	"api/internal/services",
-	"api/internal/routes",
 	"api/internal/server",
 	"api/cmd",
 }
@@ -118,10 +118,10 @@ const handWrittenDBPath = "github.com/getloopscale/loopzero/api/internal/db"
 // exemption nobody can read.
 var dirsForbiddenFromHandWrittenDB = []string{
 	"api/internal/server",
-	// Added by slice-6: routes reached ZERO importers when db.DBTX — the only
-	// symbol it used, in two files — moved to the api/internal/db/dbtx leaf.
-	// The interface layer no longer names a persistence type at all.
-	"api/internal/routes",
+	// routes/ was added by slice-6, when it reached ZERO importers after db.DBTX
+	// — the only symbol it used, in two files — moved to the api/internal/db/dbtx
+	// leaf. Since api/internal was organized by feature (2026-09-25) the same
+	// fence covers every HTTP package, discovered at scan time.
 }
 
 // Check is the gate entry point.
@@ -188,12 +188,13 @@ func Check(cfg Config) (Outcome, error) {
 // ActionableFix returns the operator-facing message for FAIL output.
 func ActionableFix() string {
 	return "An outer layer imports a persistence package it must not.\n" +
-		"  · " + generatedImportPath + " — forbidden in services/routes/server/cmd. It\n" +
+		"  · " + generatedImportPath + " — forbidden in services/server/cmd, the HTTP\n" +
+		"    packages and every feature's own code. It\n" +
 		"    bypasses the db-store adapter's read-modify-write + advisory-lock scope\n" +
 		"    (MA-7 Gate A). Route the access through the entity's Store adapter in\n" +
 		"    api/internal/db/store/ instead.\n" +
 		"  · " + handWrittenDBPath + " — forbidden in " + strings.Join(dirsForbiddenFromHandWrittenDB, ", ") +
-		" only.\n    That fence is deliberately narrower than the generated one: the other\n" +
+		" and every HTTP package only.\n    That fence is deliberately narrower than the generated one: the other\n" +
 		"    layers — services and cmd — carry 73 importers (re-measured 2026-09-04:\n" +
 		"    services 54, cmd 19), and a gate that fails on arrival is an exemption at\n" +
 		"    birth. Widening it is B-079."

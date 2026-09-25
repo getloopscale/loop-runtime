@@ -13,6 +13,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
 	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
 	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
@@ -25,7 +26,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
 	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
 	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 	"github.com/getloopscale/loopzero/api/internal/source"
@@ -67,9 +67,9 @@ func fullProtectedConfig() Config {
 		TenantCRMgr:               stubTenantCRManager{},
 		EventStore:                stubEventStore{},
 		BuildStoreReader:          stubBuildStoreReader{},
-		BuildHandler:              &builds.BuildHandler{},
-		BuildAttestationHandler:   &builds.BuildAttestationHandler{},
-		BuildSBOMHandler:          &builds.BuildSBOMHandler{},
+		BuildHandler:              &buildshttp.BuildHandler{},
+		BuildAttestationHandler:   &buildshttp.BuildAttestationHandler{},
+		BuildSBOMHandler:          &buildshttp.BuildSBOMHandler{},
 		LogsHandler:               &logshttp.LogsHandler{},
 		LogStreamHandler:          &logshttp.LogStreamHandler{},
 		StatusHandler:             &statushttp.StatusHandler{},
@@ -77,8 +77,8 @@ func fullProtectedConfig() Config {
 		StatusSSEHandler:          &statushttp.StatusSSEHandler{},
 		DeployTimelineStore:       stubTimelineStore{},
 		ScaleHandler:              &scalinghttp.ScaleHandler{},
-		BuildListHandler:          &builds.BuildListHandler{},
-		BuildStatsHandler:         &builds.BuildStatsHandler{},
+		BuildListHandler:          &buildshttp.BuildListHandler{},
+		BuildStatsHandler:         &buildshttp.BuildStatsHandler{},
 		RollbackHandler:           &rollbackhttp.RollbackHandler{},
 		PromoteHandler:            &promotehttp.PromoteHandler{},
 		TeamHandler:               &teamshttp.TeamHandler{},

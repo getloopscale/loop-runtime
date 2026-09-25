@@ -633,7 +633,7 @@ var ErrBuildSubmitFailed = &LoopZeroError{
 // names) uses base.Message and never the detail.
 //
 // The reason → summary catalogs live next to the reason enums that own them
-// (api/internal/source PushBundleErrorReason, api/internal/services/build
+// (api/internal/source PushBundleErrorReason, api/internal/builds
 // SubmitBuildErrorReason), so an enum and its copy change together; this
 // function is only the composition rule.
 func NewComposed(base *LoopZeroError, summary, detail, traceID string) *LoopZeroError {

@@ -15,7 +15,8 @@
 // canonical header.
 //
 // Why a helper instead of inlining: the gate
-// `cmd/loopzero-ops/internal/quality/correlationheader` SCANS `api/internal/routes/*.go` for
+// `cmd/loopzero-ops/internal/quality/correlationheader` SCANS every HTTP package
+// (`api/internal/<feature>/<name>http`) for
 // any `r.Header.Get("X-?Correlation-ID")` literal. The reader lives
 // here (`api/internal/correlation/`), OUTSIDE the gate's scan scope,
 // so the backward-compat fallback is allowed exactly once at the

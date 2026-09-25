@@ -13,23 +13,23 @@ sources:
   - id: step-1
     resource: "api/internal/server/router.go#L487"
   - id: step-2
-    resource: "api/internal/routes/builds/builds.go#L280"
+    resource: "api/internal/builds/buildshttp/builds.go#L280"
   - id: step-3
-    resource: "api/internal/routes/builds/builds.go#L302"
+    resource: "api/internal/builds/buildshttp/builds.go#L302"
   - id: step-4
-    resource: "api/internal/routes/builds/builds.go#L345"
+    resource: "api/internal/builds/buildshttp/builds.go#L345"
   - id: step-5
-    resource: "api/internal/routes/builds/builds.go#L392"
+    resource: "api/internal/builds/buildshttp/builds.go#L392"
   - id: step-6
-    resource: "api/internal/routes/builds/builds.go#L422"
+    resource: "api/internal/builds/buildshttp/builds.go#L422"
   - id: step-7
-    resource: "api/internal/routes/builds/builds.go#L437"
+    resource: "api/internal/builds/buildshttp/builds.go#L437"
   - id: step-8
-    resource: "api/internal/routes/builds/builds.go#L471"
+    resource: "api/internal/builds/buildshttp/builds.go#L471"
   - id: step-9
-    resource: "api/internal/routes/builds/builds.go#L494"
+    resource: "api/internal/builds/buildshttp/builds.go#L494"
   - id: step-10
-    resource: "api/internal/services/build/build_orchestrator_submit.go#L56"
+    resource: "api/internal/builds/build_orchestrator_submit.go#L56"
 generated:
   by: loop-system-cartography/0.1.0
   at: 2026-09-11T20:08:10-03:00
@@ -74,33 +74,33 @@ The steps, in order. Every row is anchored to the line that performs it.
 | # | Actor | Step | Hands to | Condition | Data | Anchor |
 |---|---|---|---|---|---|---|
 | 1 | `api.server` | chi router dispatches the request through idempotency, builds-per-month rate cap and build-cost cap middleware to the handler | `api.routes` | — | `*http.Request with UserContext, Idempotency-Key` | `api/internal/server/router.go:487` |
-| 2 | `api.routes` | BuildHandler.Create sets a 150s request deadline and decodes createBuildRequest from the body | `api.routes` | — | `createBuildRequest{ProjectID, Environment, CommitSHA, Apps, RedeployOf, NoCache}` | `api/internal/routes/builds/builds.go:280` |
-| 3 | `api.routes` | GetRedeploySource copies project/env/commit/apps from a prior build | `api.services.build` | req.RedeployOf != "" | `the source build's ProjectID, Environment, CommitSHA, Apps` | `api/internal/routes/builds/builds.go:302` |
-| 4 | `api.routes` | rejects the request at the boundary when project_id, environment or apps[] is missing or the environment is not lowercase | `api.routes` | req.ProjectID == "" \|\| req.Environment == "" \|\| len(req.Apps) == 0 \|\| !environmentRegex.Match | `400 MISSING_FIELD / INVALID_ENVIRONMENT LoopZeroError` | `api/internal/routes/builds/builds.go:345` |
-| 5 | `api.routes` | EnsureEnvironment provisions the Environment CR, namespace and ArgoCD App on first deploy to a new env (no-op for existing) | `operators.environment` | h.envEnsurer != nil | `tenantID, projectID, environment` | `api/internal/routes/builds/builds.go:392` |
-| 6 | `api.routes` | ResyncEnv re-pushes Postgres-held secrets into the workload namespace as ExternalSecrets (best-effort, logged not fatal) | `api.k8s.secretsync` | h.secretResync != nil | `tenantID, projectID, environment` | `api/internal/routes/builds/builds.go:422` |
-| 7 | `api.routes` | ValidateAppName / ValidateAppPath reject path traversal and shell injection before app values reach build scripts | `api.validation` | — | `app.Name, app.Path` | `api/internal/routes/builds/builds.go:437` |
-| 8 | `api.routes` | admission gate Check asks whether the resolved cell can take another build; fails open on query error | `api.buildplane.admission` | h.admission != nil | `cellID (from cellResolver.GetTenantCellID), tenantID -> admitted, retryAfter` | `api/internal/routes/builds/builds.go:471` |
-| 9 | `api.routes` | calls SubmitBuild on the orchestrator | `api.services.build` | — | `SubmitBuildInput{TenantID, ProjectID, Environment, CommitSHA, Apps, CreatedBy, CorrelationID}` | `api/internal/routes/builds/builds.go:494` |
-| 10 | `api.services.build` | SubmitBuild takes the (tenant, project, environment) advisory lock — everything below step 14 runs inside it | `api.lock` | — | `db.DBTX bound to the locked transaction` | `api/internal/services/build/build_orchestrator_submit.go:56` |
-| 11 | `api.services.build` | HasActiveBuild — the concurrent-build check, INSIDE the lock (Unbreakable Rule 6) | `api.db.store` | hasActive -> return ErrDeployInProgress | `bool hasActive` | `api/internal/services/build/build_orchestrator_submit.go:58` |
-| 12 | `api.services.build` | resolveScaling reads app_scaling_config rows, then enforceScaling applies the plan replica cap and the KEDA scale-to-zero gate | `api.services.scaling` | replicas and autoscaling both set -> ErrScalingAmbiguous | `resolved []AppSpec` | `api/internal/services/build/build_orchestrator_submit.go:73` |
-| 13 | `api.services.build` | INSERT the build row in status QUEUED and persist the per-app spec | `api.db.store` | — | `db.Build{...} -> buildID; []db.BuildAppSpec` | `api/internal/services/build/build_orchestrator_submit.go:122` |
-| 14 | `api.services.build` | the locked transaction commits and the advisory lock is released — the build exists as QUEUED and Argo latency no longer blocks other deploys | `api.lock` | — | `buildID` | `api/internal/services/build/build_orchestrator_submit.go:152` |
-| 15 | `api.services.build` | NormalizeApp + CreateBuildPlan resolve every path, image tag and language strategy before the pipeline sees them | `api.services.deploycontracts` | normalization fails -> failQueuedBuild immediately so the environment is unblocked | `deploycontracts.BuildPlan + WorkflowSpec{Namespace: "argo"}` | `api/internal/services/build/build_orchestrator_submit.go:165` |
-| 16 | `api.services.build` | workflow.Submit — OUTSIDE the lock | `api.buildplane.argo` | — | `WorkflowSpec` | `api/internal/services/build/build_orchestrator_submit.go:197` |
-| 17 | `api.buildplane.argo` | builder.Build renders the Argo Workflow DAG and stamps loopzero.io/trace-id + span-id annotations on it | `api.buildplane.argo` | — | `unstructured Workflow object` | `api/internal/buildplane/argo/workflow_submitter.go:150` |
-| 18 | `api.buildplane.argo` | CREATE the Workflow CR in namespace argo on the build cluster, retrying only on 5xx-class k8s errors | `orch.argo_workflows` | IsServerTimeout \|\| IsServiceUnavailable \|\| IsTooManyRequests \|\| IsInternalError -> retry | `workflow name` | `api/internal/buildplane/argo/workflow_submitter.go:186` |
-| 19 | `api.services.build` | persist the workflow id and flip QUEUED -> RUNNING with a conditional UPDATE (lock-free CAS) | `api.db.store` | UpdateStatusIfCurrent returns nil -> another writer already advanced the build; reconcile owns it | `workflowID, BPEventStarted` | `api/internal/services/build/build_orchestrator_submit.go:219` |
-| 20 | `api.services.build` | append the build.started SSE event with the app names | `api.events` | — | `{"build_id","status":"running","apps":[...]}` | `api/internal/services/build/build_orchestrator_submit.go:240` |
-| 21 | `api.routes` | responds 202 Accepted with the build id and /api/v1/builds/{id}/stream | `api.server` | — | `SubmitBuildResponse{BuildID, StreamURL}` | `api/internal/routes/builds/builds.go:509` |
-| 22 | `api.services.build` | the build reconcile loop ticks, claims the build across replicas via a PG claim, and polls the workflow's phase in the build cluster | `orch.argo_workflows` | — | `WorkflowStatus{Phase, FinishedAt, Nodes}` | `api/internal/services/build/build_reconcile_single.go:55` |
-| 23 | `api.services.build` | onWorkflowSucceeded reads the persisted app specs and enriches each AppRelease with the cosign digest the sign-image-{app} step produced | `api.db.store` | status.Phase == "Succeeded" | `[]AppRelease with ImageDigestSHA256` | `api/internal/services/build/build_reconcile_complete.go:30` |
-| 24 | `api.manifests` | Render produces the Rollout/Deployment, Services, TraefikService and AnalysisTemplate YAML, pinning images by digest rather than tag | `api.manifests` | ProgressiveDeliveryEnabled() -> Rollout + canary steps; else a plain Deployment | `rendered manifest YAML (string)` | `api/internal/services/build/build_reconcile_complete.go:101` |
-| 25 | `api.services.build` | ensureApplicationCRs creates the LoopZeroApplication CRs on the control plane (non-fatal) | `operators.app` | — | `LoopZeroApplication CRs` | `api/internal/services/build/build_reconcile_complete.go:126` |
-| 26 | `api.services.build` | OnBuildCompleted transitions the build to its terminal state under the lock, emits build.succeeded, then re-fetches outside it | `api.db.store` | result.Status == "failed" -> emit build.failed and stop here | `BuildCallbackRequest{Status, Apps, Manifests}` | `api/internal/services/build/build_orchestrator_complete.go:32` |
-| 27 | `api.services.build` | writeStaticRoutingEntries writes the Cloudflare KV routing entries for static apps BEFORE container activation, so the Worker serves the new version immediately | `ext.cloudflare.kv` | app is a static/rendering app | `KV keys per static app` | `api/internal/services/build/build_orchestrator_complete.go:169` |
-| 28 | `api.services.build` | delivery.Activate hands the release to the container delivery activator | `api.services.release` | — | `ActivationBuild + BuildCallbackRequest` | `api/internal/services/build/build_orchestrator_complete.go:171` |
+| 2 | `api.routes` | BuildHandler.Create sets a 150s request deadline and decodes createBuildRequest from the body | `api.routes` | — | `createBuildRequest{ProjectID, Environment, CommitSHA, Apps, RedeployOf, NoCache}` | `api/internal/builds/buildshttp/builds.go:280` |
+| 3 | `api.routes` | GetRedeploySource copies project/env/commit/apps from a prior build | `api.services.build` | req.RedeployOf != "" | `the source build's ProjectID, Environment, CommitSHA, Apps` | `api/internal/builds/buildshttp/builds.go:302` |
+| 4 | `api.routes` | rejects the request at the boundary when project_id, environment or apps[] is missing or the environment is not lowercase | `api.routes` | req.ProjectID == "" \|\| req.Environment == "" \|\| len(req.Apps) == 0 \|\| !environmentRegex.Match | `400 MISSING_FIELD / INVALID_ENVIRONMENT LoopZeroError` | `api/internal/builds/buildshttp/builds.go:345` |
+| 5 | `api.routes` | EnsureEnvironment provisions the Environment CR, namespace and ArgoCD App on first deploy to a new env (no-op for existing) | `operators.environment` | h.envEnsurer != nil | `tenantID, projectID, environment` | `api/internal/builds/buildshttp/builds.go:392` |
+| 6 | `api.routes` | ResyncEnv re-pushes Postgres-held secrets into the workload namespace as ExternalSecrets (best-effort, logged not fatal) | `api.k8s.secretsync` | h.secretResync != nil | `tenantID, projectID, environment` | `api/internal/builds/buildshttp/builds.go:422` |
+| 7 | `api.routes` | ValidateAppName / ValidateAppPath reject path traversal and shell injection before app values reach build scripts | `api.validation` | — | `app.Name, app.Path` | `api/internal/builds/buildshttp/builds.go:437` |
+| 8 | `api.routes` | admission gate Check asks whether the resolved cell can take another build; fails open on query error | `api.buildplane.admission` | h.admission != nil | `cellID (from cellResolver.GetTenantCellID), tenantID -> admitted, retryAfter` | `api/internal/builds/buildshttp/builds.go:471` |
+| 9 | `api.routes` | calls SubmitBuild on the orchestrator | `api.services.build` | — | `SubmitBuildInput{TenantID, ProjectID, Environment, CommitSHA, Apps, CreatedBy, CorrelationID}` | `api/internal/builds/buildshttp/builds.go:494` |
+| 10 | `api.services.build` | SubmitBuild takes the (tenant, project, environment) advisory lock — everything below step 14 runs inside it | `api.lock` | — | `db.DBTX bound to the locked transaction` | `api/internal/builds/build_orchestrator_submit.go:56` |
+| 11 | `api.services.build` | HasActiveBuild — the concurrent-build check, INSIDE the lock (Unbreakable Rule 6) | `api.db.store` | hasActive -> return ErrDeployInProgress | `bool hasActive` | `api/internal/builds/build_orchestrator_submit.go:58` |
+| 12 | `api.services.build` | resolveScaling reads app_scaling_config rows, then enforceScaling applies the plan replica cap and the KEDA scale-to-zero gate | `api.services.scaling` | replicas and autoscaling both set -> ErrScalingAmbiguous | `resolved []AppSpec` | `api/internal/builds/build_orchestrator_submit.go:73` |
+| 13 | `api.services.build` | INSERT the build row in status QUEUED and persist the per-app spec | `api.db.store` | — | `db.Build{...} -> buildID; []db.BuildAppSpec` | `api/internal/builds/build_orchestrator_submit.go:122` |
+| 14 | `api.services.build` | the locked transaction commits and the advisory lock is released — the build exists as QUEUED and Argo latency no longer blocks other deploys | `api.lock` | — | `buildID` | `api/internal/builds/build_orchestrator_submit.go:152` |
+| 15 | `api.services.build` | NormalizeApp + CreateBuildPlan resolve every path, image tag and language strategy before the pipeline sees them | `api.services.deploycontracts` | normalization fails -> failQueuedBuild immediately so the environment is unblocked | `deploycontracts.BuildPlan + WorkflowSpec{Namespace: "argo"}` | `api/internal/builds/build_orchestrator_submit.go:165` |
+| 16 | `api.services.build` | workflow.Submit — OUTSIDE the lock | `api.buildplane.argo` | — | `WorkflowSpec` | `api/internal/builds/build_orchestrator_submit.go:197` |
+| 17 | `api.buildplane.argo` | builder.Build renders the Argo Workflow DAG and stamps loopzero.io/trace-id + span-id annotations on it | `api.buildplane.argo` | — | `unstructured Workflow object` | `api/internal/builds/argo/workflow_submitter.go:150` |
+| 18 | `api.buildplane.argo` | CREATE the Workflow CR in namespace argo on the build cluster, retrying only on 5xx-class k8s errors | `orch.argo_workflows` | IsServerTimeout \|\| IsServiceUnavailable \|\| IsTooManyRequests \|\| IsInternalError -> retry | `workflow name` | `api/internal/builds/argo/workflow_submitter.go:186` |
+| 19 | `api.services.build` | persist the workflow id and flip QUEUED -> RUNNING with a conditional UPDATE (lock-free CAS) | `api.db.store` | UpdateStatusIfCurrent returns nil -> another writer already advanced the build; reconcile owns it | `workflowID, BPEventStarted` | `api/internal/builds/build_orchestrator_submit.go:219` |
+| 20 | `api.services.build` | append the build.started SSE event with the app names | `api.events` | — | `{"build_id","status":"running","apps":[...]}` | `api/internal/builds/build_orchestrator_submit.go:240` |
+| 21 | `api.routes` | responds 202 Accepted with the build id and /api/v1/builds/{id}/stream | `api.server` | — | `SubmitBuildResponse{BuildID, StreamURL}` | `api/internal/builds/buildshttp/builds.go:509` |
+| 22 | `api.services.build` | the build reconcile loop ticks, claims the build across replicas via a PG claim, and polls the workflow's phase in the build cluster | `orch.argo_workflows` | — | `WorkflowStatus{Phase, FinishedAt, Nodes}` | `api/internal/builds/build_reconcile_single.go:55` |
+| 23 | `api.services.build` | onWorkflowSucceeded reads the persisted app specs and enriches each AppRelease with the cosign digest the sign-image-{app} step produced | `api.db.store` | status.Phase == "Succeeded" | `[]AppRelease with ImageDigestSHA256` | `api/internal/builds/build_reconcile_complete.go:30` |
+| 24 | `api.manifests` | Render produces the Rollout/Deployment, Services, TraefikService and AnalysisTemplate YAML, pinning images by digest rather than tag | `api.manifests` | ProgressiveDeliveryEnabled() -> Rollout + canary steps; else a plain Deployment | `rendered manifest YAML (string)` | `api/internal/builds/build_reconcile_complete.go:101` |
+| 25 | `api.services.build` | ensureApplicationCRs creates the LoopZeroApplication CRs on the control plane (non-fatal) | `operators.app` | — | `LoopZeroApplication CRs` | `api/internal/builds/build_reconcile_complete.go:126` |
+| 26 | `api.services.build` | OnBuildCompleted transitions the build to its terminal state under the lock, emits build.succeeded, then re-fetches outside it | `api.db.store` | result.Status == "failed" -> emit build.failed and stop here | `BuildCallbackRequest{Status, Apps, Manifests}` | `api/internal/builds/build_orchestrator_complete.go:32` |
+| 27 | `api.services.build` | writeStaticRoutingEntries writes the Cloudflare KV routing entries for static apps BEFORE container activation, so the Worker serves the new version immediately | `ext.cloudflare.kv` | app is a static/rendering app | `KV keys per static app` | `api/internal/builds/build_orchestrator_complete.go:169` |
+| 28 | `api.services.build` | delivery.Activate hands the release to the container delivery activator | `api.services.release` | — | `ActivationBuild + BuildCallbackRequest` | `api/internal/builds/build_orchestrator_complete.go:171` |
 | 29 | `api.services.release` | phase A, under the lock: INSERT the release row in status READY | `api.db.store` | — | `db.Release{Apps, Artifacts{manifests}}` | `api/internal/release/container_delivery.go:103` |
 | 30 | `api.services.release` | phase B, no lock, 60s budget: push the rendered manifests to the tenant GitOps repo | `api.gitops` | — | `GitOpsPushOpts{TenantID, ProjectID, Environment, Manifests, BuildID, ReleaseID}` | `api/internal/release/container_delivery.go:109` |
 | 31 | `api.gitops` | validateManifests rejects resource kinds known to wedge an ArgoCD sync (Certificate CRs caused a 50-minute production stall) | `api.gitops` | a forbidden kind is present -> push aborts before any git work | `manifest YAML` | `api/internal/gitops/gitea_pusher.go:75` |
@@ -175,12 +175,12 @@ Every step in the table above carries the `file:line` that performs it. The `sou
 
 [^flow-root]: `api/internal/server/router.go:487`
 [^step-1]: `api/internal/server/router.go:487`
-[^step-2]: `api/internal/routes/builds/builds.go:280`
-[^step-3]: `api/internal/routes/builds/builds.go:302`
-[^step-4]: `api/internal/routes/builds/builds.go:345`
-[^step-5]: `api/internal/routes/builds/builds.go:392`
-[^step-6]: `api/internal/routes/builds/builds.go:422`
-[^step-7]: `api/internal/routes/builds/builds.go:437`
-[^step-8]: `api/internal/routes/builds/builds.go:471`
-[^step-9]: `api/internal/routes/builds/builds.go:494`
-[^step-10]: `api/internal/services/build/build_orchestrator_submit.go:56`
+[^step-2]: `api/internal/builds/buildshttp/builds.go:280`
+[^step-3]: `api/internal/builds/buildshttp/builds.go:302`
+[^step-4]: `api/internal/builds/buildshttp/builds.go:345`
+[^step-5]: `api/internal/builds/buildshttp/builds.go:392`
+[^step-6]: `api/internal/builds/buildshttp/builds.go:422`
+[^step-7]: `api/internal/builds/buildshttp/builds.go:437`
+[^step-8]: `api/internal/builds/buildshttp/builds.go:471`
+[^step-9]: `api/internal/builds/buildshttp/builds.go:494`
+[^step-10]: `api/internal/builds/build_orchestrator_submit.go:56`

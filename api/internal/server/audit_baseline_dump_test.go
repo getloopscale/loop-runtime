@@ -17,6 +17,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
 	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
 	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
@@ -28,7 +29,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
 	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
 	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
@@ -91,9 +91,9 @@ func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 		TokenValidator:            fixedTokenValidator{},
 		MemberStore:               fixedMembership{},
 		AuditWriter:               writer,
-		BuildHandler:              &builds.BuildHandler{},
-		BuildAttestationHandler:   &builds.BuildAttestationHandler{},
-		BuildSBOMHandler:          &builds.BuildSBOMHandler{},
+		BuildHandler:              &buildshttp.BuildHandler{},
+		BuildAttestationHandler:   &buildshttp.BuildAttestationHandler{},
+		BuildSBOMHandler:          &buildshttp.BuildSBOMHandler{},
 		ArgoCallbackHandler:       &argocdhttp.ArgoCallbackHandler{},
 		LogsHandler:               &logshttp.LogsHandler{},
 		LogStreamHandler:          &logshttp.LogStreamHandler{},
@@ -101,8 +101,8 @@ func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 		PromoteHandler:            &promotehttp.PromoteHandler{},
 		StatusHandler:             &statushttp.StatusHandler{},
 		ScaleHandler:              &scalinghttp.ScaleHandler{},
-		BuildListHandler:          &builds.BuildListHandler{},
-		BuildStatsHandler:         &builds.BuildStatsHandler{},
+		BuildListHandler:          &buildshttp.BuildListHandler{},
+		BuildStatsHandler:         &buildshttp.BuildStatsHandler{},
 		EnvironmentHandler:        &environmentshttp.EnvironmentHandler{},
 		TeamHandler:               &teamshttp.TeamHandler{},
 		DomainHandler:             &domainshttp.DomainHandler{},

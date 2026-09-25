@@ -17,7 +17,7 @@ import (
 )
 
 // BuildAPI is the one client of the LoopZero build contract the load scenarios
-// speak — api/internal/routes/builds:
+// speak — api/internal/builds/buildshttp:
 //
 //	POST /api/v1/builds       202 {"build_id": ..., "stream_url": ...}
 //	GET  /api/v1/builds/{id}  200 {"build_id": ..., "status": ...}

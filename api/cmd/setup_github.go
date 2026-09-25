@@ -12,7 +12,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 
-	"github.com/getloopscale/loopzero/api/internal/services/build"
+	"github.com/getloopscale/loopzero/api/internal/builds"
 
 	"github.com/getloopscale/loopzero/api/internal/release"
 
@@ -51,7 +51,7 @@ type GitHubDeps struct {
 func setupGitHub(
 	dbAdapter *db.PgxAdapter,
 	stores *StoreDeps,
-	orch *build.BuildOrchestrator,
+	orch *builds.BuildOrchestrator,
 	k8sDeps *K8sDeps,
 	cfg config.Config,
 	shutdownCtx context.Context,

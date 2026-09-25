@@ -10,8 +10,8 @@ import (
 	"log/slog"
 	"time"
 
+	buildroutes "github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
-	buildroutes "github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 
 	"github.com/getloopscale/loopzero/api/internal/db"

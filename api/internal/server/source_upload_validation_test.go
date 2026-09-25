@@ -14,11 +14,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
 	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 	"io"
@@ -107,11 +107,11 @@ func TestSourceUpload_PathTraversalTenant_Returns400(t *testing.T) {
 		BuildStoreReader:     &stubBuildReader{},
 		BootstrapStore:       &stubBootstrapStore{},
 		BootstrapSecret:      "test-bootstrap-secret",
-		BuildHandler:         builds.NewBuildHandler(nil, logger),
+		BuildHandler:         buildshttp.NewBuildHandler(nil, logger),
 		LogsHandler:          logshttp.NewLogsHandler(nil, nil),
 		RollbackHandler:      rollbackhttp.NewRollbackHandler(nil, nil, "test.local"),
 		StatusHandler:        statushttp.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
-		BuildListHandler:     builds.NewBuildListHandler(nil),
+		BuildListHandler:     buildshttp.NewBuildListHandler(nil),
 		EnvironmentHandler:   environmentshttp.NewEnvironmentHandler(nil),
 		TeamHandler:          teamshttp.NewTeamHandler(nil),
 		DomainHandler:        domainshttp.NewDomainHandler(nil, nil, nil, "test.local"),

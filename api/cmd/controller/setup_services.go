@@ -11,6 +11,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/backgroundloops"
+	"github.com/getloopscale/loopzero/api/internal/builds"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -18,7 +19,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
 	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
 	"github.com/getloopscale/loopzero/api/internal/release"
-	"github.com/getloopscale/loopzero/api/internal/services/build"
 )
 
 // setupServices builds the stores and cluster clients the controller needs and
@@ -74,7 +74,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		DeployEventStore:  store.NewDeployEventStoreSqlc(), // J-16 slice 3: deploy.succeeded outbox
 	})
 
-	orch := build.NewBuildOrchestrator(build.BuildOrchestratorDeps{
+	orch := builds.NewBuildOrchestrator(builds.BuildOrchestratorDeps{
 		BuildStore:        buildStore,
 		ReleaseStore:      releaseStore,
 		EnvTargetStore:    envTargetStore,

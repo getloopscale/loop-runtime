@@ -10,16 +10,16 @@ import (
 	"os"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
 	"github.com/getloopscale/loopzero/api/internal/projects"
 	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
 	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
 	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 
-	"github.com/getloopscale/loopzero/api/internal/services/build"
+	"github.com/getloopscale/loopzero/api/internal/builds"
 
 	"github.com/getloopscale/loopzero/api/internal/release"
 
@@ -84,7 +84,7 @@ func (a *planLimiterCapAdapter) CheckProjectsValue(ctx context.Context, tenantID
 type projectCapEnforcement struct {
 	checker     store.ProjectCapChecker
 	crossTenant db.DBTX
-	planCap     build.PlanCapChecker
+	planCap     builds.PlanCapChecker
 }
 
 // newProjectCapEnforcement builds the enforcement from the plan limiter and the
@@ -116,8 +116,8 @@ func wireProjectCap(s *store.PostgresProjectStore, e projectCapEnforcement) {
 
 // OrchestratorDeps holds the build orchestrator and related handlers.
 type OrchestratorDeps struct {
-	Orchestrator        *build.BuildOrchestrator
-	BuildOrchestrator   builds.BuildOrchestratorService
+	Orchestrator        *builds.BuildOrchestrator
+	BuildOrchestrator   buildshttp.BuildOrchestratorService
 	LogsHandler         *logshttp.LogsHandler
 	LogStreamHandler    *logshttp.LogStreamHandler
 	RollbackHandler     *rollbackhttp.RollbackHandler
@@ -126,8 +126,8 @@ type OrchestratorDeps struct {
 	MetricsProxyHandler *projectmetricshttp.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
 	StatusSSEHandler    *statushttp.StatusSSEHandler            // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	ScaleHandler        *scalinghttp.ScaleHandler
-	BuildListHandler    *builds.BuildListHandler
-	BuildStatsHandler   *builds.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
+	BuildListHandler    *buildshttp.BuildListHandler
+	BuildStatsHandler   *buildshttp.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
 	ProjectDeleter      projects.Deleter
 	ArgoCallbackHandler *argocdhttp.ArgoCallbackHandler
 }
@@ -191,7 +191,7 @@ func setupOrchestrator(
 		DeployEventStore: store.NewDeployEventStoreSqlc(),
 	})
 
-	orch := build.NewBuildOrchestrator(build.BuildOrchestratorDeps{
+	orch := builds.NewBuildOrchestrator(builds.BuildOrchestratorDeps{
 		BuildStore:        stores.BuildStore,
 		ReleaseStore:      stores.ReleaseStore,
 		EnvTargetStore:    stores.EnvTargetStore,
@@ -369,7 +369,7 @@ func setupOrchestrator(
 	// so the /build-envs endpoint can reject cross-tenant probes with
 	// 404 PROJECT_NOT_FOUND (existence-leak prevention) BEFORE the
 	// underlying ListEnvsForProject query runs.
-	buildListHandler := builds.NewBuildListHandlerWithGate(
+	buildListHandler := buildshttp.NewBuildListHandlerWithGate(
 		&adapters.BuildListStoreAdapter{Store: stores.BuildStore},
 		projectStore,
 	)
@@ -377,7 +377,7 @@ func setupOrchestrator(
 	// J-06 D2: the Overview deploys-aggregate needs the concrete sqlc store
 	// (BuildStatsByDay is not on the db.BuildStore interface — ISP). A fresh
 	// BuildStoreSqlc off the same dbAdapter mirrors main.go's admission-querier.
-	buildStatsHandler := builds.NewBuildStatsHandler(
+	buildStatsHandler := buildshttp.NewBuildStatsHandler(
 		&adapters.BuildStatsStoreAdapter{Store: store.NewBuildStoreSqlc(dbAdapter)},
 	)
 

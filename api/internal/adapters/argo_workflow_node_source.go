@@ -13,8 +13,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 
-	"github.com/getloopscale/loopzero/api/internal/buildplane/argo"
-	"github.com/getloopscale/loopzero/api/internal/services/build/stepwatch"
+	"github.com/getloopscale/loopzero/api/internal/builds/argo"
+	"github.com/getloopscale/loopzero/api/internal/builds/stepwatch"
 )
 
 // K8sWorkflowNodeSource implements stepwatch.WorkflowNodeSource: it polls Argo Workflows from the build cluster and

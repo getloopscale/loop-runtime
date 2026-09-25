@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -447,7 +447,7 @@ func (f *fakeBuildListStore) ListByProjectAndEnv(_ context.Context, _, _, _ stri
 
 // --- Verify adapter types satisfy interfaces ---
 
-var _ builds.BuildOrchestratorService = (*BuildOrchestratorAdapter)(nil)
+var _ buildshttp.BuildOrchestratorService = (*BuildOrchestratorAdapter)(nil)
 var _ logshttp.LogBuildStore = (*LogBuildStoreAdapter)(nil)
 var _ statushttp.StatusBuildStore = (*StatusBuildStoreAdapter)(nil)
 var _ statushttp.StatusReleaseStore = (*StatusReleaseStoreAdapter)(nil)

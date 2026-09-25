@@ -17,9 +17,10 @@
 // did, which is the argument for moving one family at a time — the requirement
 // for the remaining fourteen surfaced from a real move rather than from guessing.
 //
-// It is the test-side sibling of `httpio`: a leaf every family may import, and
-// that imports no family. `routes-acyclic` registers it with an empty allowed
-// set for exactly that reason.
+// It is the test-side sibling of `httpio`: a kernel package every HTTP package
+// may import from its tests, and that imports no feature. `feature-fence`
+// registers it as a test-only leaf, so production code cannot reach the
+// owner-role identity its helpers mint.
 package routestest
 
 import (

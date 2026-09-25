@@ -9,8 +9,8 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 
+	"github.com/getloopscale/loopzero/api/internal/builds"
 	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/services/build"
 
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/k8s/secretsync"
@@ -23,7 +23,7 @@ import (
 type K8sDeps struct {
 	TenantCRMgr   *tenancy.TenantCRManager
 	PreviewCRMgr  *workload.PreviewCRManager
-	AppCRMgr      build.ApplicationCREnsurer
+	AppCRMgr      builds.ApplicationCREnsurer
 	SecretK8sSync secretshttp.SecretK8sSync
 }
 

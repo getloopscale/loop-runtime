@@ -939,7 +939,7 @@ tasks:
       - |
         echo "=== Building loopzero-clone-runner ==="
         # Pinned Tilt env vars to :v0.1.0; the build must publish BOTH
-        # :latest AND :v0.1.0 so api/internal/buildplane/argo/cosign.go can resolve
+        # :latest AND :v0.1.0 so api/internal/builds/argo/cosign.go can resolve
         # via LOOPZERO_CLONE_IMAGE env var.
         docker build -t localhost:5000/loopzero-clone-runner:latest infra/images/clone-runner/
         docker tag  localhost:5000/loopzero-clone-runner:latest localhost:5000/loopzero-clone-runner:v0.1.0

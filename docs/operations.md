@@ -315,9 +315,9 @@ marker and set its row to `RESOLVED` in the same commit.
 
 | LP-NNN | Status | Code site(s) | What diverges | Why local needs it | Production behaviour |
 |---|---|---|---|---|---|
-| LP-001 | OPEN | `api/internal/buildplane/argo/syft.go`, `infra/helm/cert-manager/templates/self-signed-issuer.yaml` | TLS — the local registry is HTTP-only, and cert-manager `letsencrypt-prod` cannot issue for `*.loopzero.local` (no public DNS for the ACME challenge) | k3d uses private IPs and no public hostname; a self-signed CA issuer fills the in-cluster TLS gap | CF-managed TLS at the edge; the registry is HTTPS and pulls are cosign-verified |
+| LP-001 | OPEN | `api/internal/builds/argo/syft.go`, `infra/helm/cert-manager/templates/self-signed-issuer.yaml` | TLS — the local registry is HTTP-only, and cert-manager `letsencrypt-prod` cannot issue for `*.loopzero.local` (no public DNS for the ACME challenge) | k3d uses private IPs and no public hostname; a self-signed CA issuer fills the in-cluster TLS gap | CF-managed TLS at the edge; the registry is HTTPS and pulls are cosign-verified |
 | LP-002 | OPEN | `infra/k3d/cell-1-cluster.yaml` | Port mapping — each k3d cluster publishes its ingress on a distinct local port | every k3d cluster shares the host loopback and cannot bind the same port | each cell has its own DNS name and serves HTTPS on 443 with no port translation |
-| LP-003 | OPEN | `api/internal/buildplane/argo/cosign.go` | Cosign keyless signing — k3d service-account tokens are not accepted by the public Fulcio OIDC validator, so local builds sign with a keyed dev key | a local cluster has no public CI OIDC token | keyless signing with the CI workflow's OIDC identity, verified against Fulcio and Rekor |
+| LP-003 | OPEN | `api/internal/builds/argo/cosign.go` | Cosign keyless signing — k3d service-account tokens are not accepted by the public Fulcio OIDC validator, so local builds sign with a keyed dev key | a local cluster has no public CI OIDC token | keyless signing with the CI workflow's OIDC identity, verified against Fulcio and Rekor |
 
 ## Blocked commands
 

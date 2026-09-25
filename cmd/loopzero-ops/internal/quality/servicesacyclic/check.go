@@ -4,7 +4,7 @@
 // Package servicesacyclic fences the bounded contexts of api/internal/services.
 //
 // It is a registry over subpackagefence, the engine it shares with
-// routesacyclic. The inter-context import graph must stay the acyclic DAG the M9
+// featurefence. The inter-context import graph must stay the acyclic DAG the M9
 // split produced, deny-by-default:
 //
 //	build     → (no sibling)

@@ -16,8 +16,8 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 
+	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
 
@@ -25,7 +25,7 @@ import (
 
 	"github.com/getloopscale/loopzero/pkg/logging"
 
-	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
+	"github.com/getloopscale/loopzero/api/internal/builds/admission"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
@@ -291,11 +291,11 @@ func silenceKlog() {
 func setupBuildHandler(
 	dbAdapter *db.PgxAdapter, orchDeps *OrchestratorDeps, cellStore *store.PostgresCellStore,
 	cfg config.Config, shutdownCtx context.Context, logger *slog.Logger,
-) *builds.BuildHandler {
+) *buildshttp.BuildHandler {
 	if orchDeps == nil {
 		return nil
 	}
-	buildHandler := builds.NewBuildHandler(orchDeps.BuildOrchestrator, logger)
+	buildHandler := buildshttp.NewBuildHandler(orchDeps.BuildOrchestrator, logger)
 	if dbAdapter == nil {
 		return buildHandler
 	}
@@ -363,7 +363,7 @@ func logDatabaseSetupFailure(err error, logger *slog.Logger) {
 // after the env ensurer, closing the set-secret-before-first-deploy race. It
 // needs a value-returning secret store and the workload secret syncer used by
 // POST /api/v1/secrets.
-func withSecretResyncer(h *builds.BuildHandler, stores *StoreDeps, k8sDeps *K8sDeps, logger *slog.Logger) *builds.BuildHandler {
+func withSecretResyncer(h *buildshttp.BuildHandler, stores *StoreDeps, k8sDeps *K8sDeps, logger *slog.Logger) *buildshttp.BuildHandler {
 	if h == nil || stores == nil || k8sDeps == nil || k8sDeps.SecretK8sSync == nil {
 		return h
 	}

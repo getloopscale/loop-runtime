@@ -96,7 +96,6 @@ regression-matrix	gates	Verifies the regression-test matrix covers required scen
 regression-test	-	Asserts a regression test exists for tracked fixed bugs.
 render-schema-gen-sql	gates	T0.2 sqlc schema render pipeline: ephemeral PG16 + golang-migrate replay + pg_dump inside container + post-process (drop ALTER OWNER TO, banners, SET, restrict, orphan --, collapse blanks, trim trailing WS) + sqlc compile pre-flight with throwaway probe. Default check-only mode validates toolchain + migrations dir. Pass --render for destructive pipeline. M-Migrate2 2026-07-07 replaces infra/scripts/ci/render-schema-gen-sql.sh.
 route-auth-coverage	gates	Enforces R2-F8 (HIGH) — every api/internal/server/router.go route MUST be inside middleware.Auth group OR registerProtectedRoutes OR explicit public-allowlist. Locates group ranges via brace-counter, enumerates r.{Get,Post,Put,Patch,Delete,Method}( calls. M-Migrate2 2026-07-07 replaces infra/tests/check-route-auth-coverage_test.sh.
-routes-acyclic	gates	Deny-by-default fence over api/internal/routes subpackages: registered families only, no sibling edges (B-041).
 runbook-parity	gates	A token-rotation message must not name the ServiceAccount the runbook forbids.
 runtime-slo	-	Validates runtime SLO definitions and thresholds.
 scheduled-image	gates	Autonomous execution (scheduled or event-driven) must not use an image of ours that has no publication path in this tree.

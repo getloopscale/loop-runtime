@@ -20,14 +20,14 @@
 # without an issue link; it does not attempt to tell the two apart.
 api/internal/archive/tar_test.go	t.Skip("zip-bomb test streams ~1 GB of zeros; skipped in -short mode")
 api/internal/archive/tar_test.go	t.Skip("file-count test writes 100k+ tar headers; skipped in -short mode")
-api/internal/buildplane/argo/cosign_attest_extract_test.go	t.Skip("sed pipeline requires POSIX shell")
-api/internal/buildplane/argo/cosign_attest_test.go	t.Skip("DAG composition test deferred to integration test in workflow_builder_test.go " +
-api/internal/buildplane/argo/workflow_submitter_test.go	t.Skip("BUILD_KUBECONFIG not set and ~/.kube/config not found")
-api/internal/buildplane/argo/workflow_submitter_test.go	t.Skipf("build cluster not configured: %v", err)
-api/internal/buildplane/argo/workflow_submitter_test.go	t.Skipf("build cluster client failed: %v", err)
-api/internal/buildplane/argo/workflow_submitter_test.go	t.Skipf("build cluster not reachable: %v", err)
-api/internal/buildplane/argo/workflow_submitter_test.go	t.Skipf("apiext client failed: %v", err)
-api/internal/buildplane/argo/workflow_submitter_test.go	t.Skipf("Argo Workflows CRD not installed in build cluster: %v", err)
+api/internal/builds/argo/cosign_attest_extract_test.go	t.Skip("sed pipeline requires POSIX shell")
+api/internal/builds/argo/cosign_attest_test.go	t.Skip("DAG composition test deferred to integration test in workflow_builder_test.go " +
+api/internal/builds/argo/workflow_submitter_test.go	t.Skip("BUILD_KUBECONFIG not set and ~/.kube/config not found")
+api/internal/builds/argo/workflow_submitter_test.go	t.Skipf("build cluster not configured: %v", err)
+api/internal/builds/argo/workflow_submitter_test.go	t.Skipf("build cluster client failed: %v", err)
+api/internal/builds/argo/workflow_submitter_test.go	t.Skipf("build cluster not reachable: %v", err)
+api/internal/builds/argo/workflow_submitter_test.go	t.Skipf("apiext client failed: %v", err)
+api/internal/builds/argo/workflow_submitter_test.go	t.Skipf("Argo Workflows CRD not installed in build cluster: %v", err)
 api/internal/release/argocd/sync_client_test.go	t.Skip("ARGOCD_TEST_URL not set — skipping ArgoCD integration test")
 api/internal/release/argocd/sync_client_test.go	t.Skip("ARGOCD_TEST_TOKEN not set — skipping ArgoCD integration test")
 api/internal/contract/cli_consumer_test.go	t.Skip("cli/ extracted — live known-gap check moved to loopzero-cli (M2 D4)")

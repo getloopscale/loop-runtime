@@ -48,15 +48,10 @@ type Config struct {
 	RepoRoot string
 }
 
-// legacyRoutesDir held every handler before api/internal was organized by
-// feature (2026-09-25). It is scanned while it still holds a family. The gate is
-// intentionally narrow: middleware/, services, db/, etc. operate on the
-// in-context correlation ID; only HTTP handlers read headers off the
-// *http.Request.
-const legacyRoutesDir = "api/internal/routes"
-
-// scanDirs are the handler trees: every feature's HTTP packages, plus the legacy
-// routes tree while it exists.
+// scanDirs are the handler trees: every HTTP package of api/internal. The gate
+// is intentionally narrow: middleware/, the feature services, db/, etc.
+// operate on the in-context correlation ID; only HTTP handlers read headers off
+// the *http.Request.
 func scanDirs(repoRoot string) ([]string, error) {
 	dirs, err := featurefence.HTTPPackageDirs(repoRoot)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -64,11 +59,6 @@ func scanDirs(repoRoot string) ([]string, error) {
 	}
 	if err != nil {
 		return nil, fmt.Errorf("correlation-header: %w", err)
-	}
-	if _, err := os.Stat(filepath.Join(repoRoot, legacyRoutesDir)); err == nil {
-		dirs = append(dirs, legacyRoutesDir)
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("correlation-header: stat %s: %w", legacyRoutesDir, err)
 	}
 	return dirs, nil
 }

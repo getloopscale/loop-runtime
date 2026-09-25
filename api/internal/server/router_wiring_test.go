@@ -6,13 +6,13 @@ package server_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
 	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
 	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
@@ -187,11 +187,11 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	// The auth middleware returns 401 for requests without tokens, which is fine.
 	// For routes behind auth, we provide a valid Bearer token so auth passes.
 
-	buildHandler := builds.NewBuildHandler(nil, logger)
+	buildHandler := buildshttp.NewBuildHandler(nil, logger)
 	logsHandler := logshttp.NewLogsHandler(nil, nil)
 	rollbackHandler := rollbackhttp.NewRollbackHandler(nil, nil, "test.local")
 	statusHandler := statushttp.NewStatusHandler(nil, nil, nil, "test.local", "", "")
-	buildListHandler := builds.NewBuildListHandler(nil)
+	buildListHandler := buildshttp.NewBuildListHandler(nil)
 	environmentHandler := environmentshttp.NewEnvironmentHandler(nil)
 	teamHandler := teamshttp.NewTeamHandler(nil)
 	domainHandler := domainshttp.NewDomainHandler(nil, nil, nil, "test.local")

@@ -10,7 +10,7 @@ tags:
   - tracing
 sources:
   - id: ei-cfkv
-    resource: "api/internal/cfkv/client.go#L3"
+    resource: "api/internal/builds/cfkv/client.go#L3"
     note: "cfkv"
   - id: ei-cfzone
     resource: "api/internal/domains/cfzone/types.go#L1"
@@ -28,7 +28,7 @@ sources:
     resource: "api/internal/tracing/tracing.go#L3"
     note: "tracing"
   - id: ei-kv-write
-    resource: "api/internal/cfkv/client.go#L67"
+    resource: "api/internal/builds/cfkv/client.go#L67"
     note: "HTTP PUT into a Cloudflare KV namespace. This is what lets the CF Worker serve a static app straight from DO Spaces with no cluster involvement, and it is writt"
   - id: ei-zone
     resource: "api/internal/domains/cfzone/client.go#L19"
@@ -51,7 +51,7 @@ module that speak a third-party protocol.
 
 | Component | Path | Kind | Layer | Anchor | What it is |
 |---|---|---|---|---|---|
-| `api.cfkv` | `api/internal/cfkv` | package | infrastructure | `api/internal/cfkv/client.go:3` | Cloudflare Workers KV client for the static-site delivery path. |
+| `api.cfkv` | `api/internal/builds/cfkv` | package | infrastructure | `api/internal/builds/cfkv/client.go:3` | Cloudflare Workers KV client for the static-site delivery path. |
 | `api.cfzone` | `api/internal/domains/cfzone` | package | infrastructure | `api/internal/domains/cfzone/types.go:1` | Cloudflare Zone API client for custom apex domains. |
 | `api.github` | `api/internal/github` | package | infrastructure | `api/internal/github/appclient.go:3` | GitHub App client: source tarball download, commit status, PR comments, auto-deploy and preview-deploy drivers. |
 | `api.github.webhook` | `api/internal/github/webhook` | package | interface | `api/internal/github/webhook/handler.go:3` | Inbound webhook receiver — an entry point into the system from outside, HMAC-verified. |
@@ -89,12 +89,12 @@ module that speak a third-party protocol.
 
 # Evidence
 
-[^ei-cfkv]: `api/internal/cfkv/client.go:3`
+[^ei-cfkv]: `api/internal/builds/cfkv/client.go:3`
 [^ei-cfzone]: `api/internal/domains/cfzone/types.go:1`
 [^ei-gh]: `api/internal/github/appclient.go:3`
 [^ei-ghwh]: `api/internal/github/webhook/handler.go:3`
 [^ei-loki]: `api/internal/logs/loki/client.go:3`
 [^ei-trace]: `api/internal/tracing/tracing.go:3`
-[^ei-kv-write]: `api/internal/cfkv/client.go:67`
+[^ei-kv-write]: `api/internal/builds/cfkv/client.go:67`
 [^ei-zone]: `api/internal/domains/cfzone/client.go:19`
 [^ei-gh-call]: `api/internal/github/appclient.go:32`

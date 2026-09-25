@@ -15,7 +15,7 @@ import (
 )
 
 // These tests pin the load clients to the API's real build contract
-// (api/internal/routes/builds: SubmitBuildResult{build_id} on 202,
+// (api/internal/builds/buildshttp: SubmitBuildResult{build_id} on 202,
 // BuildStatusResponse{status}). DeploySimulator used to read `id` and poll
 // `state`, so it got an empty build id and could never observe a finished
 // build — every scenario built on it reported a timeout.

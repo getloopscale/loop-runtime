@@ -12,9 +12,9 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
+	"github.com/getloopscale/loopzero/api/internal/builds/stepwatch"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/api/internal/services/build/stepwatch"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 

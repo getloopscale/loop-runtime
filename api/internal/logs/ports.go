@@ -33,7 +33,7 @@ type LogQueryOpts struct {
 	// Debug toggles the LogQL filter that hides non-user-facing log
 	// lines. Plan J-17 Layer 3 (2026-06-06): user view (Debug=false)
 	// shows only lines emitted with the `::loopzero::` marker via the
-	// pipeline's wrapper (see api/internal/buildplane/argo/loopzero_log.go) — those
+	// pipeline's wrapper (see api/internal/builds/argo/loopzero_log.go) — those
 	// are tagged in Loki with the `loopzero_phase` label. Debug=true
 	// bypasses the filter and returns every container line including
 	// main-container raw stdout. Reserved for operator troubleshooting;

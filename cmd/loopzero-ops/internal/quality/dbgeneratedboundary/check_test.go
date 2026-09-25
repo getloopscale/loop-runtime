@@ -42,7 +42,7 @@ func Do(ctx context.Context) { _ = gen.Queries{} }
 func TestCheck_CleanBoundaryPasses(t *testing.T) {
 	root := t.TempDir()
 	writeGo(t, root, "api/internal/services/svc.go", cleanServiceFile)
-	writeGo(t, root, "api/internal/routes/route.go", cleanServiceFile)
+	writeGo(t, root, "api/internal/x/xhttp/route.go", cleanServiceFile)
 	writeGo(t, root, "api/internal/server/srv.go", cleanServiceFile)
 
 	out, err := Check(Config{RepoRoot: root})
@@ -146,16 +146,16 @@ func TestCheck_MissingDirsRecorded(t *testing.T) {
 	if !out.Pass {
 		t.Fatalf("clean single-dir tree must PASS, got: %+v", out.Violations)
 	}
-	// routes, server, cmd are absent → recorded.
-	if len(out.MissingDirs) != 3 {
-		t.Errorf("MissingDirs = %v, want 3 absent (routes, server, cmd)", out.MissingDirs)
+	// server, cmd are absent → recorded.
+	if len(out.MissingDirs) != 2 {
+		t.Errorf("MissingDirs = %v, want 2 absent (server, cmd)", out.MissingDirs)
 	}
 }
 
 func TestCheck_TestFileIncludedInScan(t *testing.T) {
 	// A *_test.go under an outer layer that imports generated is still a breach.
 	root := t.TempDir()
-	writeGo(t, root, "api/internal/routes/route_test.go", violatingServiceFile)
+	writeGo(t, root, "api/internal/x/xhttp/route_test.go", violatingServiceFile)
 
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
@@ -261,10 +261,11 @@ func TestCheck_ServicesImportingGeneratedStillFails(t *testing.T) {
 }
 
 // slice-6 T1.3: routes reached zero importers of the hand-written package when
-// db.DBTX moved to the dbtx leaf, so the fence lands there green.
-func TestCheck_RoutesImportingHandWrittenDBFails(t *testing.T) {
+// db.DBTX moved to the dbtx leaf, so the fence landed there green; every HTTP
+// package inherits it.
+func TestCheck_HTTPPackageImportingHandWrittenDBFails(t *testing.T) {
 	root := t.TempDir()
-	mkGo(t, root, "api/internal/routes", handWritten)
+	mkGo(t, root, "api/internal/x/xhttp", handWritten)
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -280,7 +281,7 @@ func TestCheck_RoutesImportingHandWrittenDBFails(t *testing.T) {
 // have failed the gate it enables.
 func TestCheck_ImportingTheDbtxLeafIsAllowed(t *testing.T) {
 	root := t.TempDir()
-	mkGo(t, root, "api/internal/routes", handWritten+"/dbtx")
+	mkGo(t, root, "api/internal/x/xhttp", handWritten+"/dbtx")
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("Check: %v", err)

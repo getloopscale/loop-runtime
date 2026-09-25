@@ -61,7 +61,7 @@ func (f *fakeRaceySourceStore) PushBundle(_ context.Context, _, _ string, bundle
 //   - All others see DEPLOY_IN_PROGRESS (409 with code, NOT generic 500)
 //   - No data race detected (-race flag stays clean)
 //
-// Run via: go test -race ./internal/routes/ -run "TestSourceHandler_Upload_ConcurrentRaceResolvesAsDeployInProgress"
+// Run via: go test -race ./internal/source/sourcehttp/ -run "TestSourceHandler_Upload_ConcurrentRaceResolvesAsDeployInProgress"
 func TestSourceHandler_Upload_ConcurrentRaceResolvesAsDeployInProgress(t *testing.T) {
 	const N = 10
 

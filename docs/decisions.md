@@ -125,14 +125,14 @@ live in `<feature>/<feature>adapter`. A single-consumer integration moves under 
 | `auth` | — | `authhttp` | — | — |
 | `billing` | — | `billinghttp` | — | — |
 | `bootstrap` | `CellPlacementEngine` | `bootstraphttp` | — | — |
-| `build` | orchestrator, reconcile, reaper, GC, KV reconciler, `AttestationStore` | `buildhttp` | `buildadapter` | `admission`, `argo`, `shellgen`, `stepwatch`, `cfkv` |
+| `builds` | orchestrator, reconcile, reaper, GC, KV reconciler, `AttestationStore` | `buildshttp` | `buildsadapter` | `admission`, `argo`, `shellgen`, `stepwatch`, `cfkv` |
 | `domains` | provisioner, health checker, CF reconciler, domain ports | `domainshttp` | `domainsadapter` | `cfzone` |
 | `environments` | environment ensurer | `environmentshttp` | `environmentsadapter` | — |
 | `health` | — | `healthhttp` | — | — |
 | `integrations` | — | `integrationshttp` | `integrationsadapter` | — |
 | `logs` | log query ports | `logshttp` | `logsadapter` | `loki` |
 | `metering` | usage metering (unchanged) | — | — | — |
-| `placement` | engine, router, cell pinner, tenant evictor (`placement/` + `services/placement/` merged) | `placementhttp` | `placementadapter` | — |
+| `placement` | engine, router, cell pinner, tenant evictor, orphan detector (`placement/` + `services/placement/` merged) | `placementhttp` | `placementadapter` | — |
 | `preview` | preview service, `PreviewService` | `previewhttp` | `previewadapter` | — |
 | `projectmetrics` | — | `projectmetricshttp` | — | — |
 | `projects` | project deleter and its ports | `projectshttp` | — | — |
@@ -143,19 +143,22 @@ live in `<feature>/<feature>adapter`. A single-consumer integration moves under 
 | `source` | bundle intake (was `buildplane/source`) | `sourcehttp` | — | — |
 | `status` | — | `statushttp` | `statusadapter` | — |
 | `teams` | `TeamStore` | `teamshttp` | — | — |
-| `tenants` | orphan detector | `tenantshttp` | — | — |
+| `tenants` | — | `tenantshttp` | — | — |
 | `timeline` | `DeployTimelineEvent` | `timelinehttp` | `timelineadapter` | `aggregator` |
 | `version` | — | `versionhttp` | — | — |
 
 `routes/admin` was not a feature: its three endpoints are operator surfaces of two features, so
 eviction and pinning moved to `placementhttp` and the release inspection to `releasehttp`.
-`routes/metrics` became `projectmetrics` because `metrics` is the instrumentation kernel.
+`routes/metrics` became `projectmetrics` because `metrics` is the instrumentation kernel. The build
+feature is `builds`, not `build`: this repository treats a directory named `build/` as an artifact
+directory — `.dockerignore` excludes `**/build/`, and ten quality gates prune it by name, which is
+how `services/build` stayed invisible to them — and a Go package must not share that name.
 
 *Shared kernel* — horizontal by nature, each consumed by more than one feature or by the router:
 
 | Package | Why it is shared |
 |---|---|
-| `db` (+ `store`, `generated`, `dbtx`, `dbconv`, `dbtest`, `raw`) | one schema, and sqlc generates ONE package that only persistence may import; a build row is read by build, release, status, logs and preview, so per-feature stores would turn every cross-table read into a feature edge |
+| `db` (+ `store`, `generated`, `dbtx`, `dbconv`, `dbtest`, `raw`) | one schema, and sqlc generates ONE package that only persistence may import; a build row is read by builds, release, status, logs and preview, so per-feature stores would turn every cross-table read into a feature edge |
 | `ports` | value types that cross the persistence ↔ feature seam (db/store implements them), and interfaces consumed by more than one feature |
 | `deploycontracts`, `manifests` | the deploy contract every deploying feature and `gitops` share; the manifests it renders |
 | `events`, `processing`, `sse` | event payloads, dedup claims and the event stream that build and release write and three HTTP families read |
@@ -165,7 +168,7 @@ eviction and pinning moved to `placementhttp` and the release inspection to `rel
 | `metrics`, `surfaces`, `tracing`, `config` | instrumentation and configuration |
 | `k8s` (+ `tenancy`, `workload`, `secretsync`) | Kubernetes plumbing and resource managers used by placement, environments, build and preview; the homes are fixed by `package-admission` |
 | `gitops`, `gitclient`, `github`, `archive`, `objectstore` | integrations consumed by more than one feature |
-| `orchestrationbreaker` | circuit breakers around the Argo Workflows submitter (build) and the ArgoCD sync client (release), which share one breaker policy |
+| `orchestrationbreaker` | circuit breakers around the Argo Workflows submitter (builds) and the ArgoCD sync client (release), which share one breaker policy |
 | `projectstatus` | the project-status mapping the persistence layer applies |
 
 *Composition roots:* `server` (the router) and `backgroundloops` may import any feature and are
@@ -174,7 +177,7 @@ imported by nothing inside `api/internal`. `archtest` and `contract` hold tests 
 *The dependency graph is a DAG*, enforced by `loopzero-ops quality feature-fence`:
 
 ```
-build    → release, scaling
+builds   → release, scaling
 release  → placement
 metering → placement
 every other feature → kernel only
@@ -208,7 +211,7 @@ logic changed. Out-of-tree tooling that hard-codes an old path breaks at build t
   instead would put response DTOs such as `BuildStatusResponse` in the service package.
 - *Stores per feature* — see the `db` row above.
 - *A `platform` feature* — `services/platform` held nine concerns serving six features (audit,
-  environments, projects, secrets, tenants, build) plus two breakers and an idempotency cleaner;
+  environments, projects, secrets, placement, builds) plus two breakers and an idempotency cleaner;
   they shared nothing but the directory.
 
 ### Testing and tooling

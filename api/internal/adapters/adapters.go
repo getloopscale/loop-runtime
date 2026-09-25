@@ -17,7 +17,7 @@
 //
 // NOTE: All Fake* types have been REMOVED from production code.
 // Real implementations are required:
-//   - WorkflowSubmitter → api/internal/buildplane/argo/workflow_submitter.go
+//   - WorkflowSubmitter → api/internal/builds/argo/workflow_submitter.go
 //   - GitOpsPusher      → api/internal/gitops/gitea_pusher.go
 //   - SyncClient        → api/internal/release/argocd/sync_client.go
 //   - SourceStore       → api/internal/source/gitea_store.go

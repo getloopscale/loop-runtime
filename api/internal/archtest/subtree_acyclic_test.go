@@ -39,8 +39,8 @@ func internalRoot(t *testing.T) string {
 	return filepath.Dir(wd)
 }
 
-// subtreeOf maps "github.com/getloopscale/loopzero/api/internal/services/build" to
-// "services". It returns "" for anything outside api/internal.
+// subtreeOf maps "github.com/getloopscale/loopzero/api/internal/builds/argo" to
+// "builds". It returns "" for anything outside api/internal.
 func subtreeOf(importPath string) string {
 	prefix := modulePath + "/internal/"
 	if !strings.HasPrefix(importPath, prefix) {

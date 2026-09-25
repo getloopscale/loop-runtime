@@ -6,11 +6,11 @@ package adapters
 import (
 	"context"
 
+	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 )
 
-var _ builds.AppSBOMStore = (*AppSBOMStore)(nil)
+var _ buildshttp.AppSBOMStore = (*AppSBOMStore)(nil)
 
 // AppSBOMStore maps the per-app attestation rows onto the route's
 // AppSBOMInfo, keeping the builds route decoupled from db types.
@@ -19,14 +19,14 @@ type AppSBOMStore struct {
 }
 
 // GetBuildAppSBOMs returns the SBOM metadata of each app of a tenant's build.
-func (a *AppSBOMStore) GetBuildAppSBOMs(ctx context.Context, tenantID, buildID string) ([]builds.AppSBOMInfo, error) {
+func (a *AppSBOMStore) GetBuildAppSBOMs(ctx context.Context, tenantID, buildID string) ([]buildshttp.AppSBOMInfo, error) {
 	infos, err := a.Inner.GetBuildAppAttestations(ctx, tenantID, buildID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]builds.AppSBOMInfo, 0, len(infos))
+	out := make([]buildshttp.AppSBOMInfo, 0, len(infos))
 	for _, in := range infos {
-		out = append(out, builds.AppSBOMInfo{
+		out = append(out, buildshttp.AppSBOMInfo{
 			AppName:            in.AppName,
 			SBOMS3Key:          in.SBOMS3Key,
 			SBOMFormat:         in.SBOMFormat,

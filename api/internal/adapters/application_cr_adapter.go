@@ -6,8 +6,8 @@ package adapters
 import (
 	"context"
 
+	"github.com/getloopscale/loopzero/api/internal/builds"
 	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
-	"github.com/getloopscale/loopzero/api/internal/services/build"
 	"github.com/getloopscale/loopzero/pkg/correlation"
 )
 
@@ -16,7 +16,7 @@ type ApplicationCRAdapter struct {
 	Mgr *workload.ApplicationCRManager
 }
 
-func (a *ApplicationCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input build.ApplicationCRInput) error {
+func (a *ApplicationCRAdapter) EnsureLoopZeroApplication(ctx context.Context, input builds.ApplicationCRInput) error {
 	// Audit gap M08 #10 / §6.C.1: propagate the originating correlation_id
 	// from ctx into the CR annotation so the operator reconcile can attach
 	// it back into audit_log rows + structured logs.
@@ -32,4 +32,4 @@ func (a *ApplicationCRAdapter) EnsureLoopZeroApplication(ctx context.Context, in
 }
 
 // The port this adapter satisfies, asserted at compile time.
-var _ build.ApplicationCREnsurer = (*ApplicationCRAdapter)(nil)
+var _ builds.ApplicationCREnsurer = (*ApplicationCRAdapter)(nil)

@@ -18,7 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -30,7 +30,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/build"
+	"github.com/getloopscale/loopzero/api/internal/builds"
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
@@ -51,11 +51,11 @@ import (
 // buildOrchestratorAdapter adapts the real build.BuildOrchestrator to the
 // routes.BuildOrchestratorService interface used by the HTTP handler.
 type buildOrchestratorAdapter struct {
-	orch       *build.BuildOrchestrator
+	orch       *builds.BuildOrchestrator
 	buildStore db.BuildStore
 }
 
-func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req builds.SubmitBuildInput) (*builds.SubmitBuildResult, error) {
+func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req buildshttp.SubmitBuildInput) (*buildshttp.SubmitBuildResult, error) {
 	var apps []deploycontracts.AppSpec
 	for _, app := range req.Apps {
 		appType := app.Type
@@ -85,18 +85,18 @@ func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req builds.S
 		return nil, err
 	}
 
-	return &builds.SubmitBuildResult{
+	return &buildshttp.SubmitBuildResult{
 		BuildID:   resp.BuildID,
 		StreamURL: resp.StreamURL,
 	}, nil
 }
 
-func (a *buildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID string) (*builds.BuildStatusResponse, error) {
+func (a *buildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID string) (*buildshttp.BuildStatusResponse, error) {
 	build, err := a.buildStore.GetByID(ctx, buildID)
 	if err != nil {
 		return nil, err
 	}
-	return &builds.BuildStatusResponse{
+	return &buildshttp.BuildStatusResponse{
 		BuildID:     build.ID,
 		ProjectID:   build.ProjectID,
 		Environment: build.Environment,
@@ -121,7 +121,7 @@ func (a *buildOrchestratorAdapter) GetBuildTenantID(ctx context.Context, buildID
 // GetRedeploySource — Plan J-17 T6.4. Stub for integration tests; not
 // exercised by concurrent-builds scenarios. The production adapter
 // (api/internal/adapters/build_adapter.go) carries the real impl.
-func (a *buildOrchestratorAdapter) GetRedeploySource(_ context.Context, _, _ string) (*builds.RedeploySource, error) {
+func (a *buildOrchestratorAdapter) GetRedeploySource(_ context.Context, _, _ string) (*buildshttp.RedeploySource, error) {
 	return nil, nil
 }
 
@@ -237,7 +237,7 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 	locker := &adapters.PoolEnvironmentLocker{Pool: pool}
 
 	// Create real orchestrator with fake external services
-	orch := build.NewBuildOrchestrator(build.BuildOrchestratorDeps{
+	orch := builds.NewBuildOrchestrator(builds.BuildOrchestratorDeps{
 		BuildStore:     buildStore,
 		ReleaseStore:   releaseStore,
 		EnvTargetStore: envTargetStore,
@@ -257,7 +257,7 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 	// Create real server with real middleware
 	logger := logging.NewLogger("test")
 
-	buildHandler := builds.NewBuildHandler(orchAdapter, logger)
+	buildHandler := buildshttp.NewBuildHandler(orchAdapter, logger)
 	router := server.NewRouter(server.Config{
 		Port:           "0",
 		Logger:         logger,

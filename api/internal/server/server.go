@@ -15,6 +15,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/auth/authhttp"
 	"github.com/getloopscale/loopzero/api/internal/bootstrap"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	"github.com/getloopscale/loopzero/api/internal/placement/placementhttp"
@@ -24,7 +25,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
 	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
 	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
@@ -107,14 +107,14 @@ type Config struct {
 	CellDiscovery     healthhttp.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
 	ShutdownCtx       context.Context
 	ShutdownCancel    context.CancelFunc
-	BuildHandler      *builds.BuildHandler
+	BuildHandler      *buildshttp.BuildHandler
 	// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: handler for
 	// GET /api/v1/builds/{id}/attestation. Wired in api/cmd/setup_routes.go
 	// against PostgresAttestationStore.
-	BuildAttestationHandler *builds.BuildAttestationHandler
+	BuildAttestationHandler *buildshttp.BuildAttestationHandler
 	// Sprint 6 / T1.2: handler for GET /api/v1/builds/{id}/sbom. Returns
 	// per-app SBOM metadata + presigned download URLs from S3.
-	BuildSBOMHandler    *builds.BuildSBOMHandler
+	BuildSBOMHandler    *buildshttp.BuildSBOMHandler
 	ArgoCallbackHandler *argocdhttp.ArgoCallbackHandler
 	LogsHandler         *logshttp.LogsHandler
 	LogStreamHandler    *logshttp.LogStreamHandler
@@ -130,10 +130,10 @@ type Config struct {
 	// the DeployTimelineEventStore contract.
 	DeployTimelineStore timelinehttp.DeployTimelineEventStore
 	ScaleHandler        *scalinghttp.ScaleHandler
-	BuildListHandler    *builds.BuildListHandler
+	BuildListHandler    *buildshttp.BuildListHandler
 	// BuildStatsHandler serves GET /api/v1/builds/stats — the tenant-scoped
 	// deploys aggregate for the Overview sparkline (J-06 D2). Nil disables the route.
-	BuildStatsHandler  *builds.BuildStatsHandler
+	BuildStatsHandler  *buildshttp.BuildStatsHandler
 	EnvironmentHandler *environmentshttp.EnvironmentHandler
 	TeamHandler        *teamshttp.TeamHandler
 	// AUDIT-10: narrow store for /whoami username lookup. Nil is legal (handler

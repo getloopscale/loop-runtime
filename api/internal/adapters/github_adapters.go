@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/getloopscale/loopzero/api/internal/builds"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/github"
-	"github.com/getloopscale/loopzero/api/internal/services/build"
 )
 
 // BuildLookupAdapter bridges db.BuildStore → github.BuildLookup.
@@ -65,7 +65,7 @@ const correlationSHAPrefixLen = 8
 
 // BuildSubmitterAdapter bridges github.BuildSubmitter → build.BuildOrchestrator.
 type BuildSubmitterAdapter struct {
-	Orchestrator *build.BuildOrchestrator
+	Orchestrator *builds.BuildOrchestrator
 	Logger       *slog.Logger
 }
 

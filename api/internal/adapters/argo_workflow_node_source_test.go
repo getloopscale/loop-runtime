@@ -17,8 +17,8 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/getloopscale/loopzero/api/internal/buildplane/argo"
-	"github.com/getloopscale/loopzero/api/internal/services/build/stepwatch"
+	"github.com/getloopscale/loopzero/api/internal/builds/argo"
+	"github.com/getloopscale/loopzero/api/internal/builds/stepwatch"
 )
 
 func workflow(name string, nodes map[string]interface{}) *unstructured.Unstructured {

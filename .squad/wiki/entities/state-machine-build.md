@@ -30,7 +30,7 @@ sources:
     resource: "pkg/statemachine/build.go#L16"
     note: "RUNNING"
   - id: sm-note
-    resource: "api/internal/services/build/build_orchestrator_submit.go#L58"
+    resource: "api/internal/builds/build_orchestrator_submit.go#L58"
     note: "HasActiveBuild is the concurrent-deploy guard and it runs INSIDE the lock — moving it outside is the documented mistake this invariant exists to prevent."
 generated:
   by: loop-system-cartography/0.1.0
@@ -127,4 +127,4 @@ stateDiagram-v2
 [^s-queued]: `pkg/statemachine/build.go:15`
 [^s-releasing]: `pkg/statemachine/build.go:17`
 [^s-running]: `pkg/statemachine/build.go:16`
-[^sm-note]: `api/internal/services/build/build_orchestrator_submit.go:58`
+[^sm-note]: `api/internal/builds/build_orchestrator_submit.go:58`

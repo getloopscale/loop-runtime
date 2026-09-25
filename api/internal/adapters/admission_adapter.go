@@ -6,7 +6,7 @@ package adapters
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
+	"github.com/getloopscale/loopzero/api/internal/builds/admission"
 )
 
 // BuildStoreAdmissionQuerier bridges the db.BuildStore interface to the

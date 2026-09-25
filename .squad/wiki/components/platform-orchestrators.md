@@ -35,7 +35,7 @@ sources:
     resource: "api/internal/release/argocd/sync_client.go#L190"
     note: "POST /api/v1/applications/{app}/sync with {\"prune\": true} against the ArgoCD API, bearer-authenticated, preceded by a best-effort hard refresh to drop the repo-"
   - id: po-submit
-    resource: "api/internal/buildplane/argo/buildkit.go#L43"
+    resource: "api/internal/builds/argo/buildkit.go#L43"
     note: "submits Workflow CRs through the dynamic client using the argoproj.io workflows GVR"
 generated:
   by: loop-system-cartography/0.1.0
@@ -61,7 +61,7 @@ Six orchestrating controllers, each on the plane where its work happens.
 | Component | Path | Kind | Layer | Anchor | What it is |
 |---|---|---|---|---|---|
 | `orch.argocd` | `infra/helmfile/core.helmfile.yaml.gotmpl` | orchestrator | l2-platform | `infra/helmfile/core.helmfile.yaml.gotmpl:356-361` | Helmfile release 'argocd', chart argo/argo-cd 7.3.11, namespace argocd. Syncs tenant manifests out of Gitea into the workload cells. needs: cert-manager, traefik.  [merged from duplicate infra.argocd: argo/argo-cd 7.3.11. Layer L3 of the declared layering: tenant Day-2 GitOps syncing from Gitea. Driven by api/internal/release/argocd and operators/internal/argocd.] |
-| `orch.argo_workflows` | `infra/helmfile/build.helmfile.yaml.gotmpl` | orchestrator | l2-platform | `infra/helmfile/build.helmfile.yaml.gotmpl:68-71` | Helmfile release 'argo-workflows', chart argo/argo-workflows 1.0.5, namespace argo. Runs the build DAG (clone, generate dockerfile, BuildKit, cosign sign, push).  [merged from duplicate infra.argoworkflows: argo/argo-workflows 1.0.5. Executes the build DAG that api/internal/buildplane/argo generates.] |
+| `orch.argo_workflows` | `infra/helmfile/build.helmfile.yaml.gotmpl` | orchestrator | l2-platform | `infra/helmfile/build.helmfile.yaml.gotmpl:68-71` | Helmfile release 'argo-workflows', chart argo/argo-workflows 1.0.5, namespace argo. Runs the build DAG (clone, generate dockerfile, BuildKit, cosign sign, push).  [merged from duplicate infra.argoworkflows: argo/argo-workflows 1.0.5. Executes the build DAG that api/internal/builds/argo generates.] |
 | `orch.argo_events` | `infra/helmfile/build.helmfile.yaml.gotmpl` | orchestrator | l2-platform | `infra/helmfile/build.helmfile.yaml.gotmpl:113-115` | Helmfile releases 'argo-events' + 'argo-events-bus' (in-repo wrapper charts) in the argo-events namespace on the build cluster.  [merged from duplicate infra.argoevents: Argo Events controller plus a JetStream NATS EventBus, declared as separate releases so CRDs register before the CR applies.] |
 | `orch.argo_rollouts` | `infra/helmfile/cell.helmfile.yaml.gotmpl` | orchestrator | l2-platform | `infra/helmfile/cell.helmfile.yaml.gotmpl:171-173` | Helmfile release 'argo-rollouts', in-repo wrapper chart ../helm/argo-rollouts, installed on every workload cell. Orchestrates the per-plan canary step sequence.  [merged from duplicate infra.argorollouts: Runs on every cell. Orchestrates the canary steps that api/internal/manifests renders as Rollout + AnalysisTemplate.] |
 | `orch.keda` | `infra/helmfile/cell.helmfile.yaml.gotmpl` | orchestrator | l2-platform | `infra/helmfile/cell.helmfile.yaml.gotmpl:146-149` | Helmfile releases 'keda' (kedacore/keda 2.16.1) and 'keda-http-addon' (kedacore/keda-add-ons-http 0.8.0) on each workload cell.  [merged from duplicate infra.keda: Event-driven autoscaling on the workload plane; pkg/enforcement gates the scale-to-zero path behind plan tier >= Pro.] |
@@ -74,7 +74,7 @@ Six orchestrating controllers, each on the plane where its work happens.
   of the loop, neither calling the other.[^po-read]
 - The API **publishes** a sync request to ArgoCD's HTTP API, preceded by a hard refresh to drop
   the repo-server's cached comparison error.[^po-sync]
-- `api/internal/buildplane/argo` **writes** a Workflow CR into namespace `argo` on the build
+- `api/internal/builds/argo` **writes** a Workflow CR into namespace `argo` on the build
   cluster and polls its phase — see
   [`/components/build-orchestration.md`](/components/build-orchestration.md).[^po-submit]
 - Argo Rollouts runs the per-plan canary ladder: Starter 50→100, Pro 20→Analysis→50→100,
@@ -105,4 +105,4 @@ On ArgoCD's Helm chart v7.x the notification configuration key is `notifications
 [^po-cwts]: `infra/helmfile/build.helmfile.yaml.gotmpl:81-83`
 [^po-read]: `infra/helmfile/core.helmfile.yaml.gotmpl:356`
 [^po-sync]: `api/internal/release/argocd/sync_client.go:190`
-[^po-submit]: `api/internal/buildplane/argo/buildkit.go:43`
+[^po-submit]: `api/internal/builds/argo/buildkit.go:43`

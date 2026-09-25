@@ -88,7 +88,7 @@ type WorkflowSpec struct {
 	// NoCache carries the user's INTENT — rebuild from scratch, reusing no earlier
 	// work — not the mechanism that realises it. The previous comment said "Skip
 	// BuildKit layer cache", naming in the domain contract a tool that exists only
-	// in the builder (`api/internal/buildplane/argo/buildkit.go`, the one reader
+	// in the builder (`api/internal/builds/argo/buildkit.go`, the one reader
 	// that decides anything with this field). Changing the builder does not change
 	// what the user asked for; it changed this comment, and that is how one plane's
 	// vocabulary leaks to where it has no address (B-062).

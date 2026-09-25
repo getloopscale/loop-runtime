@@ -6,9 +6,10 @@
 // These came out of the parent package's cross_tenant_test.go when the family
 // was extracted (B-080). The isolation suite is genuinely cross-cutting — it
 // covers builds, secrets and scale — and splitting it was not free. What decided
-// it is the fence: routes-acyclic refuses a PARENT → family edge even from a
+// it was the fence: the routes fence refused a PARENT → family edge even from a
 // _test.go, because a parent that depends on a family can never be emptied, and
-// emptying it is the whole point of the decomposition.
+// emptying it was the whole point of the decomposition. feature-fence keeps the
+// same rule between features: one HTTP package never imports another.
 //
 // So each fragment lives with the family it guards. Same principle that moved
 // the coverage tests: a test belongs with the code it exercises.

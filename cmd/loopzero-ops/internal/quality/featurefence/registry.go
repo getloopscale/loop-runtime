@@ -12,6 +12,7 @@ var registry = map[string]Entry{
 	"auth":           {Kind: Feature},
 	"billing":        {Kind: Feature},
 	"bootstrap":      {Kind: Feature},
+	"builds":         {Kind: Feature, Deps: []string{"release", "scaling"}},
 	"domains":        {Kind: Feature},
 	"environments":   {Kind: Feature},
 	"health":         {Kind: Feature},
@@ -65,11 +66,8 @@ var registry = map[string]Entry{
 
 	// ── layer folders being dissolved into features ─────────────────────────
 	// Each entry below disappears when its code reaches the feature that owns it.
-	"adapters":   {Kind: Layer, Deps: []string{"buildplane", "db", "deploycontracts", "domains", "environments", "github", "integrations", "k8s", "lock", "logs", "placement", "ports", "preview", "release", "repositories", "routes", "services", "sse", "status", "timeline"}},
-	"buildplane": {Kind: Layer, Deps: []string{"archive", "deploycontracts", "events", "gitclient", "k8s", "metrics", "scrub"}},
-	"cfkv":       {Kind: Layer, Deps: []string{"metrics"}},
-	"routes":     {Kind: Layer, Deps: []string{"buildplane", "correlation", "db", "github", "httpio", "k8s", "metrics", "middleware", "pagination", "plantier", "ports", "release", "routestest", "services", "sse", "validation"}},
-	"services":   {Kind: Layer, Deps: []string{"cfkv", "db", "deploycontracts", "events", "manifests", "metrics", "placement", "ports", "processing", "release", "scaling", "scrub", "sse"}},
+	"adapters": {Kind: Layer, Deps: []string{"builds", "db", "deploycontracts", "domains", "environments", "github", "integrations", "k8s", "lock", "logs", "placement", "ports", "preview", "release", "repositories", "services", "sse", "status", "timeline"}},
+	"services": {Kind: Layer, Deps: []string{"db", "deploycontracts", "events", "manifests", "metrics", "ports", "processing", "scrub", "sse"}},
 
 	// ── composition roots ───────────────────────────────────────────────────
 	"server":          {Kind: Composition},
@@ -77,5 +75,5 @@ var registry = map[string]Entry{
 
 	// ── tests about the tree ────────────────────────────────────────────────
 	"archtest": {Kind: TestOnly},
-	"contract": {Kind: TestOnly, Deps: []string{"httpio", "routes", "version"}},
+	"contract": {Kind: TestOnly, Deps: []string{"httpio", "version"}},
 }

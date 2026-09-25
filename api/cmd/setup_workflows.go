@@ -8,10 +8,10 @@ import (
 	"net/http"
 
 	"github.com/getloopscale/loopzero/api/internal/backgroundloops"
-	"github.com/getloopscale/loopzero/api/internal/cfkv"
+	"github.com/getloopscale/loopzero/api/internal/builds"
+	"github.com/getloopscale/loopzero/api/internal/builds/cfkv"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/gitops"
-	"github.com/getloopscale/loopzero/api/internal/services/build"
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
 )
 
@@ -21,7 +21,7 @@ type WorkflowDeps struct {
 	WorkflowSubmitter *platform.CircuitBreakerWorkflowSubmitter
 	SyncClient        *platform.CircuitBreakerSyncClient
 	GitOpsPusher      *gitops.GiteaGitOpsPusher
-	KVClient          build.StaticRoutingClient
+	KVClient          builds.StaticRoutingClient
 }
 
 // setupWorkflows creates the Argo workflow submitter, the ArgoCD sync client
@@ -37,7 +37,7 @@ func setupWorkflows(cfg config.Config, httpTransport *http.Transport, logger *sl
 	// credentials are not configured (local dev). Assigned to the interface
 	// only when non-nil: a typed nil *cfkv.Client in a StaticRoutingClient is
 	// not nil and panics on first use.
-	var kvClient build.StaticRoutingClient
+	var kvClient builds.StaticRoutingClient
 	if c := cfkv.NewClient(cfg.CFAccountID, cfg.CFKVNamespaceID, cfg.CFAPIToken); c != nil {
 		kvClient = c
 		logger.Info("cloudflare KV client configured for static frontend routing")

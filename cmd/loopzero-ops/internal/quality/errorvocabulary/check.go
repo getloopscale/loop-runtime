@@ -124,10 +124,10 @@ type Outcome struct {
 
 // defaultRoots are the directories whose messages reach a user: every feature
 // of api/internal (its handlers and its services), read from the registry
-// feature-fence enforces, plus the layer folders not yet dissolved into them.
+// feature-fence enforces, plus the services layer folder not yet dissolved into
+// them.
 func defaultRoots() []string {
 	roots := []string{
-		filepath.Join("api", "internal", "routes"),
 		filepath.Join("api", "internal", "services"),
 	}
 	for _, f := range featurefence.Features() {

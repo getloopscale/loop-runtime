@@ -9,35 +9,35 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 )
 
 func TestAppSpecsFromInput_AnUntypedAppIsAServerOn8080(t *testing.T) {
-	apps := appSpecsFromInput([]builds.AppInput{{Name: "web", Runtime: "node"}})
+	apps := appSpecsFromInput([]buildshttp.AppInput{{Name: "web", Runtime: "node"}})
 	if apps[0].Type != "server" || apps[0].Port != 8080 {
 		t.Errorf("untyped app became type=%q port=%d, want server/8080", apps[0].Type, apps[0].Port)
 	}
 }
 
 func TestAppSpecsFromInput_ADeclaredPortIsKept(t *testing.T) {
-	apps := appSpecsFromInput([]builds.AppInput{{Name: "api", Type: "server", Port: 3000}})
+	apps := appSpecsFromInput([]buildshttp.AppInput{{Name: "api", Type: "server", Port: 3000}})
 	if apps[0].Port != 3000 {
 		t.Errorf("port = %d, want 3000", apps[0].Port)
 	}
 }
 
 func TestAppSpecsFromInput_AWorkerGetsNoDefaultPort(t *testing.T) {
-	apps := appSpecsFromInput([]builds.AppInput{{Name: "bg", Type: "worker"}})
+	apps := appSpecsFromInput([]buildshttp.AppInput{{Name: "bg", Type: "worker"}})
 	if apps[0].Port != 0 {
 		t.Errorf("worker port = %d, want 0", apps[0].Port)
 	}
 }
 
 func TestAppSpecsFromInput_CarriesBuildInstructionsAndAutoscaling(t *testing.T) {
-	apps := appSpecsFromInput([]builds.AppInput{{
+	apps := appSpecsFromInput([]buildshttp.AppInput{{
 		Name: "api", Path: "apps/api", Runtime: "python", Build: "dockerfile", Start: "python app.py",
-		Autoscaling: &builds.AppAutoscalingInput{Min: 1, Max: 4, TargetCPU: 60},
+		Autoscaling: &buildshttp.AppAutoscalingInput{Min: 1, Max: 4, TargetCPU: 60},
 	}})
 	a := apps[0]
 	if a.Path != "apps/api" || a.Runtime != "python" || a.Build != "dockerfile" || a.Start != "python app.py" {

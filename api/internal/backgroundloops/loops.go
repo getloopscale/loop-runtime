@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
+	"github.com/getloopscale/loopzero/api/internal/builds"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -18,7 +19,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/gitops"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/release"
-	"github.com/getloopscale/loopzero/api/internal/services/build"
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
@@ -42,11 +42,11 @@ type Deps struct {
 	Locker         *adapters.PoolEnvironmentLocker
 	DomainStore    *store.PostgresDomainStore
 	CellStore      *store.PostgresCellStore
-	AppCR          build.ApplicationCREnsurer
+	AppCR          builds.ApplicationCREnsurer
 	Workflow       *platform.CircuitBreakerWorkflowSubmitter
 	Sync           *platform.CircuitBreakerSyncClient
 	GitOps         *gitops.GiteaGitOpsPusher
-	Orchestrator   *build.BuildOrchestrator
+	Orchestrator   *builds.BuildOrchestrator
 
 	// Optional. A nil CellLister leaves the reconcile loop unfiltered by
 	// cell and skips the orphan detector; a nil CFZone leaves the domain
@@ -77,7 +77,7 @@ func Build(cfg config.Config, d Deps, logger *slog.Logger) []Loop {
 		{"idempotency-cleaner", platform.NewIdempotencyCleaner(&store.PostgresIdempotencyStore{DB: d.WorkerPool}, logger, time.Hour).Start},
 		{"event-pruner", sse.NewEventPruner(d.EventStore, logger, 24*time.Hour, time.Hour).Start},
 		{"cell-metrics", placement.NewCellMetricsCollector(d.CellStore, logger, 60*time.Second).Start},
-		{"build-gc", build.NewBuildGC(&store.PostgresBuildGCStore{DB: d.WorkerPool}, logger, time.Hour, 30*24*time.Hour, 10).Start},
+		{"build-gc", builds.NewBuildGC(&store.PostgresBuildGCStore{DB: d.WorkerPool}, logger, time.Hour, 30*24*time.Hour, 10).Start},
 		// ADR-0047 audit_log retention (1 year); prunes nightly at 02:00.
 		{"audit-log-pruner", platform.NewAuditLogPruner(&store.PostgresAuditLogPruneStore{Pool: d.WorkerPool.Pool}, platform.AuditLogPrunerOpts{Logger: logger}).Start},
 		{"domain-provisioner", newDomainProvisioner(cfg, d, logger).Start},
@@ -89,8 +89,8 @@ func Build(cfg config.Config, d Deps, logger *slog.Logger) []Loop {
 	return loops
 }
 
-func newReconcileLoop(cfg config.Config, d Deps, logger *slog.Logger) *build.BuildReconcileLoop {
-	loopCfg := build.BuildReconcileLoopConfig{
+func newReconcileLoop(cfg config.Config, d Deps, logger *slog.Logger) *builds.BuildReconcileLoop {
+	loopCfg := builds.BuildReconcileLoopConfig{
 		Interval:           cfg.ReconcileInterval,
 		RegistryURL:        cfg.RegistryURL,
 		BaseDomain:         cfg.BaseDomain,
@@ -102,7 +102,7 @@ func newReconcileLoop(cfg config.Config, d Deps, logger *slog.Logger) *build.Bui
 	if d.CellID != "" {
 		loopCfg.MaxConcurrent = cfg.MaxConcurrentBuildsPerCell
 	}
-	loop := build.NewBuildReconcileLoop(d.BuildStore, d.Workflow, d.Orchestrator, d.Locker,
+	loop := builds.NewBuildReconcileLoop(d.BuildStore, d.Workflow, d.Orchestrator, d.Locker,
 		d.DomainStore, d.AppCR, d.EventStore, logger, loopCfg)
 	if d.CellLister != nil {
 		loop.WithCellLister(d.CellLister)
@@ -112,10 +112,10 @@ func newReconcileLoop(cfg config.Config, d Deps, logger *slog.Logger) *build.Bui
 	return loop
 }
 
-func newBuildReaper(cfg config.Config, d Deps, reconcile *build.BuildReconcileLoop, logger *slog.Logger) *build.BuildReaper {
-	reaper := build.NewBuildReaper(d.BuildStore, build.NewStaleBuildChecker(&store.PostgresStaleScanner{DB: d.WorkerPool}),
+func newBuildReaper(cfg config.Config, d Deps, reconcile *builds.BuildReconcileLoop, logger *slog.Logger) *builds.BuildReaper {
+	reaper := builds.NewBuildReaper(d.BuildStore, builds.NewStaleBuildChecker(&store.PostgresStaleScanner{DB: d.WorkerPool}),
 		d.Locker, d.Workflow, d.EventStore, logger,
-		build.BuildReaperConfig{
+		builds.BuildReaperConfig{
 			QueueTimeout:     cfg.BuildQueueTimeout,
 			RunningTimeout:   cfg.BuildRunningTimeout,
 			ReleasingTimeout: cfg.BuildReleasingTimeout,

@@ -7,9 +7,9 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
+	"github.com/getloopscale/loopzero/api/internal/builds/admission"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 
 	"github.com/getloopscale/loopzero/api/internal/release"
@@ -66,7 +66,7 @@ type serverWiring struct {
 	cellRouter     placement.Router
 	cellStore      *store.PostgresCellStore
 	domainHandler  *domainshttp.DomainHandler
-	buildHandler   *builds.BuildHandler
+	buildHandler   *buildshttp.BuildHandler
 	healthServices []healthhttp.ServiceHealthChecker
 	tokenValidator auth.TokenValidator
 	rateLimiter    *ratelimit.RateLimiter
@@ -108,13 +108,13 @@ func baseServerConfig(w serverWiring) server.Config {
 		TenantCRMgr:    w.k8sDeps.TenantCRMgr,
 		DomainHandler:  w.domainHandler,
 		BuildHandler:   w.buildHandler,
-		BuildAttestationHandler: builds.NewBuildAttestationHandler(
+		BuildAttestationHandler: buildshttp.NewBuildAttestationHandler(
 			store.NewPostgresAttestationStore(w.dbAdapter), w.logger,
 		),
 		// Per-app SBOM endpoint over the release_app_attestations sidecar. With
 		// no object uploader (no S3 in dev) it serves metadata without a
 		// download_url.
-		BuildSBOMHandler: builds.NewBuildSBOMHandler(
+		BuildSBOMHandler: buildshttp.NewBuildSBOMHandler(
 			&adapters.AppSBOMStore{Inner: store.NewAppAttestationStoreSqlc(w.dbAdapter)},
 			toSBOMURLGenerator(w.stores),
 			cfg.SourceBucket,
@@ -403,11 +403,11 @@ func wirePlacement(sc *server.Config, w serverWiring) {
 // toSBOMURLGenerator returns a SBOMURLGenerator if the configured
 // uploader supports presigning, else nil. When nil, the SBOM endpoint
 // returns metadata-only (no download_url).
-func toSBOMURLGenerator(stores *StoreDeps) builds.SBOMURLGenerator {
+func toSBOMURLGenerator(stores *StoreDeps) buildshttp.SBOMURLGenerator {
 	if stores == nil {
 		return nil
 	}
-	if g, ok := stores.ObjUploader.(builds.SBOMURLGenerator); ok {
+	if g, ok := stores.ObjUploader.(buildshttp.SBOMURLGenerator); ok {
 		return g
 	}
 	return nil

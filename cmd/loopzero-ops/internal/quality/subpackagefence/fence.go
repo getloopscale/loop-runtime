@@ -3,7 +3,7 @@
 
 // Package subpackagefence is the one import-fence engine behind the gates that
 // freeze how the subpackages of a Go package may import each other
-// (services-acyclic, routes-acyclic).
+// (services-acyclic, feature-fence).
 //
 // A fence is deny-by-default. Every subpackage must be registered; a registered
 // subpackage may import only the siblings its allow-list names; nobody imports the

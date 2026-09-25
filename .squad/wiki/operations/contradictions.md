@@ -87,7 +87,7 @@ trusted more than it has earned.
 | 19 | 🟠 medium | `contradiction` | The only in-tree AWS path is a Pulumi provider stub, on neither the live nor the declared-target path | `infra/pulumi/src/providers/aws/index.ts:14` |
 | 20 | 🔴 high | `stale_declaration` | ADR-001 is still PROPOSED while its migration is half-executed on disk | `infra/pulumi/docs/ADR-001-project-boundaries.md:3` |
 | 21 | 🟠 medium | `orphan_component` | infra/pulumi-control-plane/ survives on disk as a node_modules-only directory with no tracked files | `infra/pulumi/docs/ADR-001-project-boundaries.md:298` |
-| 22 | ⚪ info | `other` | Cartography note: collapsing buildplane/* and services/* into one node each manufactured a cycle that does not exist | `api/internal/buildplane/argo/buildkit.go:19` |
+| 22 | ⚪ info | `other` | Cartography note: collapsing buildplane/* and services/* into one node each manufactured a cycle that does not exist | `api/internal/builds/argo/buildkit.go:19` |
 | 23 | 🔴 high | `other` | 17 infrastructure components are recorded twice under two key schemes by two concurrent agents | `infra/helmfile/core.helmfile.yaml.gotmpl:220` |
 | 24 | 🟠 medium | `other` | 17 infrastructure components were mapped twice by concurrent agents, and have been reconciled | `infra/helmfile/core.helmfile.yaml.gotmpl:245` |
 | 25 | 🟡 low | `dynamic_only_region` | Five declared ClusterRoles have no readable name: metadata.name is a Helm template expression | `charts/loopzero-api/templates/clusterrole.yaml:5` |
@@ -385,7 +385,7 @@ _What would close it:_ Either finish the English-only migration for comments, wh
 
 ### 22. Cartography note: collapsing buildplane/* and services/* into one node each manufactured a cycle that does not exist
 
-**⚪ info**, confidence high. `api/internal/buildplane/argo/buildkit.go:19`
+**⚪ info**, confidence high. `api/internal/builds/argo/buildkit.go:19`
 
 My first pass modelled api/internal/buildplane and api/internal/services as single components. Tarjan then reported a 2-node strongly-connected component between them. Expanding to real packages shows four distinct participants and no cycle: buildplane/argo imports services/deploycontracts (buildkit.go:19, delivery.go:9) while services/build imports buildplane/source (build_submit_error.go:11). The substrate was corrected - the two grouping edges were deleted and twelve real sub-packages (4 buildplane, 8 services) added with their actual edges - and Tarjan now returns zero SCCs of size > 1. Recorded because the failure mode generalises: a component map whose nodes are coarser than the import graph invents coupling, and invented coupling is indistinguishable from real coupling in every diagram drawn from it.
 
