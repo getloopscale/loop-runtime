@@ -63,6 +63,12 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The API now refuses to start when a numeric or duration setting cannot be parsed (for example a timeout without a unit), naming the setting, instead of silently using the default (#292)
+
+- The build error for a loopzero.yaml that does not declare a runtime is now in English, like every other build message (#11)
+
+- Automatic placement of new accounts now respects the per-cell capacity an operator sets, not only the platform-wide limit (#4)
+
 - Build timeouts reported by the stuck-build reaper now name the phase budget that was exceeded, from the same values the build lifecycle uses (dp#9)
 
 - Routes restricted to team owners or admins (repository connect/disconnect, domain create/delete, audit log, team membership) now all refuse other roles the same way: 403 with code INSUFFICIENT_ROLE
@@ -234,6 +240,50 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- Source upload failures are no longer mislabelled as network or permission problems when an unrelated number or word in the error happened to match (#301)
+
+- Custom domain setup no longer risks duplicate DNS records after a slow Cloudflare response, and conflict detection now sees every record in large zones (#293)
+
+- Build and runtime log lines written within the same second are now shown in the order they were produced (#295)
+
+- Usage metering recovers on its own after a region credential is rotated, instead of failing until the controller restarts (#291)
+
+- The deploy timeline now reports a temporary server problem as an error instead of "deploy not found" (#288)
+
+- The deploy timeline now shows a release whose sync, mirror or rollback failed as failed or degraded instead of "in progress" forever (#286)
+
+- Image-signing latency metrics no longer report fabricated zero-second samples, so the signing latency alert reflects real measurements only (#285)
+
+- Pull request previews and GitHub app installations no longer fail silently when the account lookup or save fails; in-flight webhook processing stops cleanly on shutdown (#280)
+
+- Setting or deleting a secret for an account hosted on a region this API cannot reach now reports the sync as failed instead of silently writing it to the wrong cluster (#46)
+
+- A deploy with an app or account name that cannot form valid resource names now fails with an error instead of crashing the request (#44)
+
+- GitHub commit statuses and deployment-sync logins no longer fail when a description or password contains control characters (#282)
+
+- The commit status on GitHub now links the deployed app's real URL instead of a guessed "api" host (#279)
+
+- Deploying the same commit twice at once (for example a push and a pull request preview) no longer risks one deploy uploading or deleting the other's source (#278)
+
+- The metering freshness signal now keeps growing when usage could not be measured (database unreachable, every tenant failed), so billing gaps can be alerted on (#290)
+
+- Database connection pool metrics (acquire totals, saturation count, acquire wait) now report real values; they previously grew as a running sum of totals, making the related alerts meaningless (#284)
+
+- An expired credential for the deployment sync service is now refreshed whichever status check first sees it, instead of only after a sync attempt (#276)
+
+- The build timeline and build logs now group every build step into its real phase (clone, install, build, sign, deliver) instead of showing most steps as "other" (#289)
+
+- In projects with several services, each service's release now records that service's own image digest instead of possibly another service's (#302)
+
+- Source uploads and signed download links now work for object names containing spaces or non-ASCII characters (#8)
+
+- Services deployed without progressive delivery now get the same graceful-shutdown drain as canary deploys, so in-flight connections are no longer cut during a rollout (#41)
+
+- Deleting a project now fails when the platform cannot reach the deployment repository, instead of reporting success while the service keeps running (#2)
+
+- Evicting a tenant no longer deletes resources of other tenants whose ID starts with the same characters, and an eviction that could not delete every resource now fails instead of reporting success (#45)
 
 - Only one API replica runs the background loops at a time, and a replica that loses the lease stops them
 
@@ -604,6 +654,18 @@ to [Semantic Versioning](https://semver.org/).
   explanation (#B-069)
 
 ### Security
+
+- The API refuses to start in production when reserved-key protection for service environment variables is set to warn-only (#300)
+
+- Error messages from source uploads, build submission and the build timeline now hide the same internal infrastructure terms, including ones previously shown on some paths (#10)
+
+- The Git hosting token used for source pushes is no longer visible in process listings (#294)
+
+- A configured certificate authority for the deployment sync service that cannot be loaded now stops startup instead of silently disabling TLS verification (#275)
+
+- Image signing no longer falls back to a shared signing identity when the environment name is not recognised; the build fails instead (#303)
+
+- Python builds now stop when a dependency has a known vulnerability, or when the dependency scan cannot run, instead of passing silently (#9)
 
 - The auth-failure audit throttle no longer trusts X-Forwarded-For from clients that are not a trusted proxy, so a client cannot bypass the 100/min limit by rewriting the header
 
