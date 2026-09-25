@@ -44,7 +44,7 @@ func setupNoNewBash(fs *flag.FlagSet) Check {
 				inv.Stderr.Printf("  - %s\n", v)
 			}
 			inv.Stderr.Println("")
-			inv.Stderr.Printf("To fix: add the script to %s with justificativa per D4 criteria,\n", *allowlist)
+			inv.Stderr.Printf("To fix: add the script to %s with a justification per D4 criteria,\n", *allowlist)
 			inv.Stderr.Println("OR migrate the function to: helmfile (D2), cmd/loopzero-ops/internal/quality/X Go gate (D5),")
 			inv.Stderr.Println("Ginkgo (T4), go:generate (T5.2). See 2026-05-22-shell-script-strategic-plan")
 			return Fail, nil

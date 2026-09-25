@@ -37,10 +37,10 @@ const (
 
 // Camada represents one layer of the 8-layer verification.
 type Camada struct {
-	N      int    // 1..8
-	Name   string // "chaos summary byte-grep" etc.
-	OK     bool
-	Detail string
+	N       int    // 1..8
+	Name    string // "chaos summary byte-grep" etc.
+	OK      bool
+	Detail  string
 	Skipped bool
 }
 
@@ -177,11 +177,11 @@ func Camada8_LiveProofByteGrep(ctx context.Context, repoRoot string) Camada {
 	return c
 }
 
-// RunContraProva chains camadas 1..8 with fail-fast semantics.
-// Returns Outcome with Verdict per v1 Regra Suprema.
+// RunContraProva chains layers 1..8 with fail-fast semantics.
+// Returns Outcome with Verdict per the v1 Supreme Rule.
 //
-// LIVE camadas 4-7 (deploy, prova-de-vida, prova-de-morte, hygiene) are
-// gated por build tag `live` in contraprova_live_test.go; this orchestrator
+// LIVE layers 4-7 (deploy, proof-of-life, proof-of-death, hygiene) are
+// gated by build tag `live` in contraprova_live_test.go; this orchestrator
 // assumes upstream contraprova_test.go feeds pre-captured artifact paths.
 func RunContraProva(ctx context.Context, repoRoot, chaosSummary, junitXML string) *Outcome {
 	o := &Outcome{Started: time.Now()}

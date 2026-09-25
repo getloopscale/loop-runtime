@@ -32,7 +32,7 @@ func setupNoShellWrap(_ *flag.FlagSet) Check {
 			inv.Stderr.Println("")
 			inv.Stderr.Println("To fix: use the Go SDK (pulumi-go-sdk, helm.sh/helm/v3, client-go,")
 			inv.Stderr.Println("aws-sdk-go-v2, go-github) OR add //nolint:shell-wrap on the call line")
-			inv.Stderr.Println("with justificativa per plan D5 + Anti-Pattern #8.")
+			inv.Stderr.Println("with a justification per plan D5 + Anti-Pattern #8.")
 			return Fail, nil
 		}
 		inv.Stdout.Println("no-shell-wrap: PASS — no forbidden shell wraps detected")

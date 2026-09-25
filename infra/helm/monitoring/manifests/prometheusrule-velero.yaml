@@ -21,9 +21,9 @@ spec:
   groups:
     - name: loopzero.velero
       rules:
-        # Substitui o ORPHAN LoopZeroGiteaBackupStale: cobre TODOS os schedules
-        # do LoopZero (loopzero-*-backup) com janela de 12 horas — RPO conservador
-        # para schedules de 6h e safety net para o full backup semanal.
+        # Replaces the ORPHAN LoopZeroGiteaBackupStale: covers ALL of LoopZero's
+        # schedules (loopzero-*-backup) with a 12-hour window — a conservative RPO
+        # for the 6h schedules and a safety net for the weekly full backup.
         - alert: LoopZeroVeleroBackupStale
           expr: time() - velero_backup_last_successful_timestamp{schedule=~"loopzero-.*"} > 43200
           for: 5m

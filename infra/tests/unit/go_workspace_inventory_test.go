@@ -33,8 +33,8 @@
 // deliberately not audited from here.
 //
 // KNOWN TENSION, recorded rather than silently settled. Two taskfile comments
-// (`taskfiles/quality.yml` "tools/ esta FORA do go.work por desenho",
-// `taskfiles/test.yml` "Fora do go.work por desenho") say tools/ modules are
+// (`taskfiles/quality.yml` "tools/ is OUTSIDE go.work by design",
+// `taskfiles/test.yml` "Outside go.work by design") said tools/ modules are
 // deliberately OUTSIDE the workspace and therefore invoked with `GOWORK=off`.
 // Since 0f8a2e5f9 (B-170) `./tools/gen-service-auth-ed25519` IS in go.work, so
 // those comments no longer describe the file — they are corrected in the same

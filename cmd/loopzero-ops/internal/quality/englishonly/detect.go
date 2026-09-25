@@ -51,8 +51,9 @@ func mustLoadWords(name string) map[string]bool {
 const portugueseDiacritics = "çãõáéíóúâêôàÇÃÕÁÉÍÓÚÂÊÔÀ"
 
 // apostropheStandIns are words written with a trailing apostrophe in place of
-// the accent a keyboard could not type ("e'" for "é", "so'" for "só"). No
-// English word takes that shape.
+// the accent a keyboard could not type. No English word takes that shape:
+//
+//	"e'" for "é", "so'" for "só" // english-only: the gate documents the Portuguese spellings it detects
 var apostropheStandIns = map[string]bool{"so": true, "le": true, "ve": true}
 
 // minWordsForOneStrongWord is the shortest line in which one strong word plus a

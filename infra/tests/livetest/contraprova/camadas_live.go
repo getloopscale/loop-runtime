@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// LIVE Camadas 4-7 of contra-prova v2 per T3.4 of plan canonical-tests-rewrite-v2 v1.0.
+// LIVE layers (camadas) 4-7 of counter-proof (contra-prova) v2 per T3.4 of plan canonical-tests-rewrite-v2 v1.0.
 // These wrap exec calls to $LOOPZERO CLI + kubectl + HTTP probes that exercise a
 // real deploy/delete cycle on dev-public. Per ADR D5: chain antiga remains
 // executable; this is the new path's equivalent.
@@ -18,17 +18,17 @@ import (
 	"time"
 )
 
-// LiveConfig captures everything needed to execute Camadas 4-7.
+// LiveConfig captures everything needed to execute layers 4-7.
 type LiveConfig struct {
-	LoopZeroCLI       string        // path to compiled $LOOPZERO binary
-	ProjectName   string        // contra-prova-{ts}
-	FixtureDir    string        // /tmp/contra-prova-deploy-{ts}/
-	EnvName       string        // production
-	PollInterval  time.Duration // default 5s
-	BuildTimeout  time.Duration // default 15m (Buildkit cold cache)
-	HTTPProbeURL  string        // assigned after deploy success
-	KubeContext   string        // k3d-loopzero-cell-0 (for verification)
-	TenantNs      string        // loopzero-{tenant-slug}-{project}-{env} per canonical formula
+	LoopZeroCLI      string        // path to compiled $LOOPZERO binary
+	ProjectName  string        // contra-prova-{ts}
+	FixtureDir   string        // /tmp/contra-prova-deploy-{ts}/
+	EnvName      string        // production
+	PollInterval time.Duration // default 5s
+	BuildTimeout time.Duration // default 15m (Buildkit cold cache)
+	HTTPProbeURL string        // assigned after deploy success
+	KubeContext  string        // k3d-loopzero-cell-0 (for verification)
+	TenantNs     string        // loopzero-{tenant-slug}-{project}-{env} per canonical formula
 }
 
 // DefaultLiveConfig with conventional values.

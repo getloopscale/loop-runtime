@@ -75,7 +75,7 @@ func TestParseAllowlist_ParsesMarkdownTable(t *testing.T) {
 
 ## infra/scripts/
 
-| Script | LOC | Justificativa |
+| Script | LOC | Justification |
 |---|---:|---|
 | infra/scripts/break-glass.sh | 145 | Operator-time emergency |
 | infra/scripts/drill-jwt-gate.sh | 50 | Drill JWT validation |

@@ -81,7 +81,7 @@ var shellsExternalRe = regexp.MustCompile(`\b(gh|npm|go|node|curl|psql)\b`)
 // legitimate CI-wired guards).
 var homedMarkers = []string{"KEEP-OPERATOR", "KEEP-CI-ORCHESTRATOR", "KEEP-CI-WIRED"}
 
-// classify decides homed-ness from the script path + its allowlist justificativa.
+// classify decides homed-ness from the script path + its allowlist justification.
 // Harness hooks (.claude/) and runtime container entrypoints are homed; an
 // explicit KEEP-* disposition is homed; everything else is un-homed.
 func classify(path, justif string) Disposition {
@@ -229,7 +229,7 @@ func proposeDisposition(e Entry) (shellscript.Disposition, string) {
 	}
 }
 
-// isKeepLabel reports whether the justificativa carries a KEEP-* disposition
+// isKeepLabel reports whether the justification carries a KEEP-* disposition
 // (as opposed to homed-by-path: hooks / container entrypoints).
 func isKeepLabel(justif string) bool {
 	for _, m := range homedMarkers {

@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// T3.4 Camadas 4-7 hermetic tests. The Camadas themselves exec out to $LOOPZERO
+// T3.4 layers 4-7 hermetic tests. The layers themselves exec out to $LOOPZERO
 // CLI + kubectl + HTTP, so hermetic tests focus on input validation +
 // fixture creation. LIVE behavior is exercised by sponsor JUNTOS Phase 5.
 
