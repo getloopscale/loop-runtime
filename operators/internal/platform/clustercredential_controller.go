@@ -56,11 +56,16 @@ type ClusterCredentialReconciler struct {
 }
 
 // clusterCredentialDetailTypes are the per-step conditions that
-// SetReadinessSummary classifies for kstatus. ClusterCredential only
-// surfaces TypeConnected — TypeSecretNotFound has inverted polarity
-// (True = bad) per ADR-0025 condition #3 (k8s-controller-engineer
-// review). Adding TypeSecretNotFound here would flip summary semantics.
-var clusterCredentialDetailTypes = []string{conditions.TypeConnected}
+// SetReadinessSummary classifies for kstatus: TypeConnected, plus
+// TypeArgoCDSecretSynced when the credential feeds ArgoCD — a cell ArgoCD
+// cannot deploy to is not Ready. TypeSecretNotFound has inverted polarity
+// (True = bad) per ADR-0025 condition #3 and is deliberately excluded.
+func clusterCredentialDetailTypes(cr *loopzerov1.ClusterCredential) []string {
+	if cr.Spec.Scope.ArgoCD {
+		return []string{conditions.TypeConnected, conditions.TypeArgoCDSecretSynced}
+	}
+	return []string{conditions.TypeConnected}
+}
 
 // Reconcile handles the reconciliation loop for ClusterCredential resources.
 func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
@@ -131,16 +136,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// reconcile (event-driven via the Secret watcher in
 	// SetupClusterCredentialController), independent of whether the
 	// destination cluster is currently reachable.
-	if cr.Spec.Scope.ArgoCD {
-		if err := r.reconcileArgoCDClusterSecret(ctx, &cr, kubeconfigData); err != nil {
-			// Non-fatal: log and continue to connectivity check. The
-			// ArgoCD secret may be malformed (missing fields), but
-			// connectivity probe is independent — surface its status
-			// in CR.status.conditions for operator triage.
-			log.FromContext(ctx).Error(err, "argocd cluster secret sync failed (non-fatal)",
-				"cluster", cr.Spec.ClusterName)
-		}
-	}
+	syncErr := r.syncArgoCDClusterSecret(ctx, &cr, kubeconfigData)
 
 	// Step 3: Validate cluster connectivity.
 	connected, result, err := r.checkConnectivity(ctx, &cr, base, kubeconfigData)
@@ -154,6 +150,11 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if statusErr := r.patchStatus(ctx, &cr, base); statusErr != nil {
 		return ctrl.Result{}, statusErr
 	}
+	if syncErr != nil {
+		// Connected, but ArgoCD cannot deploy to this cell: requeue with
+		// backoff until the cluster Secret syncs.
+		return ctrl.Result{}, syncErr
+	}
 
 	logger.Info("reconciled cluster credential", "cluster", cr.Spec.ClusterName, "connected", cr.Status.Connected)
 	// AP-4 fix per ADR-0023 plan T5.3: drop the periodic-check requeue on
@@ -166,6 +167,27 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// background load; failure paths below still requeue (RequeueSecretNotFound,
 	// RequeuePeriodicCheck) as healing fallback.
 	return ctrl.Result{}, nil
+}
+
+// syncArgoCDClusterSecret mirrors the credential into the ArgoCD cluster
+// Secret when the credential feeds ArgoCD, and records the outcome on the
+// ArgoCDSecretSynced condition. It runs before the connectivity check so a
+// rotated token reaches ArgoCD even while the cell is unreachable
+// (fix-all-platform-issues-plan T1.2). The error is returned so the caller
+// can requeue; the connectivity check still runs, because it is independent.
+func (r *ClusterCredentialReconciler) syncArgoCDClusterSecret(ctx context.Context, cr *loopzerov1.ClusterCredential, kubeconfigData []byte) error {
+	if !cr.Spec.Scope.ArgoCD {
+		return nil
+	}
+	if err := r.reconcileArgoCDClusterSecret(ctx, cr, kubeconfigData); err != nil {
+		log.FromContext(ctx).Error(err, "argocd cluster secret sync failed", "cluster", cr.Spec.ClusterName)
+		conditions.SetCondition(&cr.Status.Conditions, conditions.TypeArgoCDSecretSynced,
+			metav1.ConditionFalse, "SyncFailed", err.Error(), cr.Generation)
+		return fmt.Errorf("argocd cluster secret for %s: %w", cr.Spec.ClusterName, err)
+	}
+	conditions.SetCondition(&cr.Status.Conditions, conditions.TypeArgoCDSecretSynced,
+		metav1.ConditionTrue, "Synced", "ArgoCD cluster Secret mirrors this credential", cr.Generation)
+	return nil
 }
 
 // resolveKubeconfig reads and parses the kubeconfig from the referenced Secret.
@@ -345,7 +367,8 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 	// per CHG-002b 2026-04-27 — encoding happens HERE after we have either
 	// the live PEM or the snapshot bytes.
 	caData, caSource := r.resolveCAData(ctx, cr, restConfig)
-	_ = caSource // referenced in observability log below
+	log.FromContext(ctx).V(1).Info("argocd cluster secret CA resolved",
+		"cluster", cr.Spec.ClusterName, "ca_source", caSource)
 
 	argoConfig := argoCDClusterConfig{
 		BearerToken: token,
@@ -529,6 +552,10 @@ func (r *ClusterCredentialReconciler) findCredentialsForSecret(ctx context.Conte
 	// List all ClusterCredentials and find those referencing this Secret.
 	var credList loopzerov1.ClusterCredentialList
 	if err := r.List(ctx, &credList); err != nil {
+		// A mapper cannot return an error; the lost enqueue is recovered by the
+		// next event or resync, and this log is the only trace of it.
+		log.FromContext(ctx).Error(err, "list ClusterCredentials to map a Secret event; enqueue dropped",
+			"secret", client.ObjectKeyFromObject(secret).String())
 		return nil
 	}
 
@@ -549,6 +576,6 @@ func (r *ClusterCredentialReconciler) findCredentialsForSecret(ctx context.Conte
 // with a merge patch off base, so every write carries a Ready condition that
 // agrees with the conditions written beside it.
 func (r *ClusterCredentialReconciler) patchStatus(ctx context.Context, cr, base *loopzerov1.ClusterCredential) error {
-	conditions.SetReadinessSummaryViaPkg(&cr.Status.Conditions, cr.Generation, clusterCredentialDetailTypes)
+	conditions.SetReadinessSummaryViaPkg(&cr.Status.Conditions, cr.Generation, clusterCredentialDetailTypes(cr))
 	return r.Status().Patch(ctx, cr, client.MergeFrom(base))
 }

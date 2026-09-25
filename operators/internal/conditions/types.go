@@ -60,8 +60,9 @@ const (
 	TypeApplicationHealthy = apiv1.TypeApplicationHealthy
 
 	// ClusterCredential conditions
-	TypeSecretNotFound = apiv1.TypeSecretNotFound
-	TypeConnected      = apiv1.TypeConnected
+	TypeSecretNotFound     = apiv1.TypeSecretNotFound
+	TypeConnected          = apiv1.TypeConnected
+	TypeArgoCDSecretSynced = apiv1.TypeArgoCDSecretSynced
 
 	// Preview conditions
 	TypePreviewNamespaceReady      = apiv1.TypePreviewNamespaceReady
