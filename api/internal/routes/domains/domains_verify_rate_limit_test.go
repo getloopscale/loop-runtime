@@ -57,7 +57,6 @@ func TestVerifyRateLimit_IntegrationFirstAllowedSecondDenied(t *testing.T) {
 	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	vrl := ratelimit.NewVerifyRateLimiter(1, 30*time.Second)
-	defer vrl.Stop()
 
 	router := mountVerifyRoute(t, vrl, h)
 	ctx := context.WithValue(context.Background(),
@@ -107,7 +106,6 @@ func TestVerifyRateLimit_IntegrationPerDomainIsolation(t *testing.T) {
 	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.loopzero.example")
 
 	vrl := ratelimit.NewVerifyRateLimiter(1, 30*time.Second)
-	defer vrl.Stop()
 
 	router := mountVerifyRoute(t, vrl, h)
 	ctx := context.WithValue(context.Background(),
