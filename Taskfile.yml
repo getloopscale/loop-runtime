@@ -395,7 +395,7 @@ tasks:
       after `k3d cluster stop/start` cycles. Codifies the 9 manual workarounds
       (H1-H9) discovered LIVE during dogfood E2E unblock 2026-04-30:
         H1 — reattach build/runtime nodes to shared k3d-loopzero network
-        H2 — refresh loopzero-cluster-kubeconfigs Secret with current IPs (insecure-skip-tls)
+        H2 — refresh loopzero-api's peer kubeconfigs (loopzero-ops seed cluster-kubeconfigs)
         H3 — recreate ArgoCD cluster Secrets (force discovery cache invalidate)
         H4 — add k3d-loopzero-registry hostAlias to /etc/hosts on build + runtime nodes
         H5 — bind kube-system:default SA to cluster-admin in build + runtime (LOCAL-ONLY)

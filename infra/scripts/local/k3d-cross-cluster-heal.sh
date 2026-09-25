@@ -11,11 +11,11 @@ set -euo pipefail
 #        `k3d-loopzero` docker network. Reattach all server/agent/serverlb
 #        containers via `docker network connect`.
 #
-#   H2 — `loopzero-cluster-kubeconfigs` Secret stores in-cluster kubeconfigs
-#        with a fixed CA cert + apiServer IP. After restart, k3s rotates
-#        the CA AND the IP changes — Secret references stale data.
-#        Regenerate kubeconfigs with current IPs + insecure-skip-tls-verify
-#        (local-only — production keeps strict TLS via cert-manager).
+#   H2 — `loopzero-cluster-kubeconfigs` Secret stores the peer kubeconfigs
+#        loopzero-api uses (build, cell-0) with a CA cert + apiServer IP. After
+#        restart, k3s rotates the CA AND the IP changes — Secret references
+#        stale data. `loopzero-ops seed cluster-kubeconfigs` re-mints them with
+#        the current IPs and each peer's live CA.
 #
 #   H3 — ArgoCD `runtime-argocd-cluster` and `build-argocd-cluster` cluster
 #        secrets carry the same stale apiServer URL. Recreate from scratch
@@ -133,6 +133,10 @@ REGISTRY_HOST="${REGISTRY_HOST:-k3d-loopzero-registry}"
 log() { printf '[k3d-heal] %s\n' "$*" >&2; }
 warn() { printf '[k3d-heal] WARN: %s\n' "$*" >&2; }
 
+# Steps whose failure leaves the platform broken. The heal keeps going so the
+# other steps still run, then exits non-zero naming them.
+HEAL_FAILED=()
+
 # ---------------------------------------------------------------------------
 # Pre-flight
 # ---------------------------------------------------------------------------
@@ -243,51 +247,31 @@ ensure_admin "$BUILD_CTX" loopzero-api-build-admin
 ensure_admin "$RT_CTX" loopzero-api-runtime-admin
 
 # ---------------------------------------------------------------------------
-# H2 — Refresh loopzero-cluster-kubeconfigs Secret with current IPs.
-# Uses insecure-skip-tls-verify in local k3d (cert SAN drift is expected).
+# H2 — Refresh the peer-cluster kubeconfigs in loopzero-cluster-kubeconfigs with
+# current IPs, a fresh token and the peer's live CA.
+#
+# The minting lives in `loopzero-ops seed cluster-kubeconfigs` (#236), the one
+# writer of those keys. This block used to mint kube-system/default tokens for
+# 24h with TLS verification off, which on every heal reverted two fixes: the
+# scoped build identity (argo/loopzero-workflow-submitter, Sprint 7 #36) and the
+# 720h lifetime (#242). It also overwrote the core key with an expiring token,
+# where loopzero-api reaches its own cluster in-cluster anyway. The live CA is read
+# on every run, so a k3s CA rotation no longer needs TLS turned off.
 # ---------------------------------------------------------------------------
-log "H2: refreshing loopzero-cluster-kubeconfigs with current IPs"
-mk_kcfg() {
-  local server="$1" tok="$2"
-  cat <<EOF
-apiVersion: v1
-kind: Config
-clusters:
-- name: in-cluster
-  cluster:
-    server: $server
-    insecure-skip-tls-verify: true
-contexts:
-- name: in-cluster
-  context: {cluster: in-cluster, user: in-cluster}
-current-context: in-cluster
-users:
-- name: in-cluster
-  user: {token: $tok}
-EOF
+log "H2: refreshing the peer kubeconfigs in loopzero-cluster-kubeconfigs (loopzero-ops seed cluster-kubeconfigs)"
+HEAL_REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+loopzero_ops() {
+  if command -v loopzero-ops >/dev/null 2>&1; then
+    loopzero-ops "$@"
+  else
+    (cd "$HEAL_REPO_ROOT/cmd/loopzero-ops" && go run . "$@")
+  fi
 }
-
-mint_token() {
-  local ctx="$1" ns="$2" sa="$3"
-  kubectl --context "$ctx" -n "$ns" create token "$sa" --duration=24h 2>/dev/null
-}
-
-MGMT_TOK=$(mint_token "$MGMT_CTX" loopzero-system default)
-BUILD_TOK=$(mint_token "$BUILD_CTX" kube-system default)
-RT_TOK=$(mint_token "$RT_CTX" kube-system default)
-
-if [[ -n "$MGMT_TOK" && -n "$BUILD_TOK" && -n "$RT_TOK" ]]; then
-  MK=$(mk_kcfg "https://${MGMT_IP}:6443" "$MGMT_TOK")
-  BK=$(mk_kcfg "https://${BUILD_IP}:6443" "$BUILD_TOK")
-  RK=$(mk_kcfg "https://${RT_IP}:6443" "$RT_TOK")
-  kubectl --context "$MGMT_CTX" -n loopzero-system create secret generic loopzero-cluster-kubeconfigs \
-    --from-literal=core.kubeconfig="$MK" \
-    --from-literal=build.kubeconfig="$BK" \
-    --from-literal=cell-0.kubeconfig="$RK" \
-    --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" apply -f - >/dev/null
-  log "  loopzero-cluster-kubeconfigs Secret refreshed"
+if CORE_CONTEXT="$MGMT_CTX" loopzero_ops seed cluster-kubeconfigs; then
+  log "  loopzero-cluster-kubeconfigs peer keys refreshed"
 else
-  warn "could not mint SA tokens — skipping H2"
+  warn "H2 failed — loopzero-api cannot reach the build or cell-0 cluster until it succeeds"
+  HEAL_FAILED+=("H2")
 fi
 
 # ---------------------------------------------------------------------------
@@ -1031,4 +1015,8 @@ if [[ "$H18_REMOVED" == "true" ]]; then
   log "  argocd-repo-server: restarted to invalidate cred cache"
 fi
 
+if (( ${#HEAL_FAILED[@]} > 0 )); then
+  warn "FAILED steps: ${HEAL_FAILED[*]} — cross-cluster connectivity is NOT healed"
+  exit 1
+fi
 log "DONE — cross-cluster connectivity healed (H1-H18 codified)"

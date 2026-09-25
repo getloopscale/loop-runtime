@@ -6,6 +6,7 @@
 #   - loopzero-api-tokens Secret keys     (gitea-token + argocd-token, via loopzero-ops seed)
 #   - loopzero-build-kubeconfig ConfigMap  (build cluster access for API + operator)
 #   - loopzero-cell-0-kubeconfig ConfigMap (workload cluster access for operator)
+#   - loopzero-cluster-kubeconfigs keys    (build + cell-0 for loopzero-api, via loopzero-ops seed)
 #
 # ArgoCD auth: Uses a dedicated 'loopzero-api' account with apiKey capability.
 # Tokens from apiKey accounts do NOT expire (unlike admin session tokens which expire in 24h).
@@ -219,30 +220,21 @@ kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create configmap loopzero-cell-0-k
   --from-file=config=/tmp/runtime-kubeconfig.yaml \
   --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" apply -f -
 
-# F-11 fix (2026-05-07 cleanroom dogfood): loopzero-cluster-kubeconfigs Secret
-# is mounted by loopzero-api Deployment at /etc/loopzero/runtime/kubeconfig (per
-# infra/tilt/api-deployment.yaml + charts/loopzero-api kubeconfig.clusterSecret). generate-secrets.sh
-# creates this Secret with a synthetic in-cluster kubeconfig that points
-# all 3 cluster keys (mgmt/build/cell-0.kubeconfig) at kubernetes.default.svc
-# (the SAME mgmt cluster). That assumption is wrong for k3d multi-cluster
-# setups where workload is a separate cluster. Symptom: loopzero-api creates
-# ExternalSecret CRs in mgmt instead of workload, hits forbidden RBAC,
-# and silently fails — Journey 03 Secrets pod hits CreateContainerConfigError.
-#
-# Fix: overwrite the cell-0.kubeconfig key in loopzero-cluster-kubeconfigs
-# Secret with the REAL workload kubeconfig (IP-based, admin certs)
-# AFTER generate-secrets.sh has run. Idempotent kubectl apply.
-echo "Patching loopzero-cluster-kubeconfigs cell-0.kubeconfig with real workload kubeconfig..."
-kubectl --context "$MGMT_CTX" -n "$NAMESPACE" get secret loopzero-cluster-kubeconfigs >/dev/null 2>&1 && {
-  RUNTIME_KC_B64=$(base64 -w0 /tmp/runtime-kubeconfig.yaml)
-  kubectl --context "$MGMT_CTX" -n "$NAMESPACE" patch secret loopzero-cluster-kubeconfigs \
-    --type='json' \
-    -p="[{\"op\":\"replace\",\"path\":\"/data/cell-0.kubeconfig\",\"value\":\"${RUNTIME_KC_B64}\"}]" 2>&1 | tail -1
-  echo "loopzero-cluster-kubeconfigs cell-0.kubeconfig: patched with real workload IP"
-} || echo "loopzero-cluster-kubeconfigs Secret not present yet — generate-secrets.sh will create later"
-
 rm -f /tmp/runtime-kubeconfig.yaml
 echo "Runtime cluster kubeconfig: created (admin certs, insecure TLS)"
+
+# ---------------------------------------------------------------------------
+# 7b. loopzero-api's peer kubeconfigs (loopzero-cluster-kubeconfigs: build + cell-0)
+# ---------------------------------------------------------------------------
+# F-11 (2026-05-07): generate-secrets.sh installs an in-cluster placeholder
+# that points loopzero-api at the core cluster, so ExternalSecret creation landed
+# in the wrong cluster. This step used to patch the cell-0 key with the admin
+# client certificates above; the heal's H2 then rewrote it with a 24h
+# default-SA token, and a Python regen with a 720h one — three writers, three
+# credential models. The keys have one minter now (#236), which needs the
+# loopzero-workflow-submitter SA created in section 6.
+export CORE_CONTEXT="$MGMT_CTX"
+loopzero_ops seed cluster-kubeconfigs
 
 # ---------------------------------------------------------------------------
 # 8. MinIO buckets (idempotent — mc mb --ignore-existing)
@@ -268,5 +260,6 @@ echo "=== Done ==="
 echo "Secret 'loopzero-api-tokens' keys written in loopzero-system (loopzero-api and the tenant operator restarted by the seeds)"
 echo "ConfigMap 'loopzero-build-kubeconfig' created in $NAMESPACE"
 echo "ConfigMap 'loopzero-cell-0-kubeconfig' created in $NAMESPACE"
+echo "loopzero-cluster-kubeconfigs build + cell-0 keys written"
 echo "ArgoCD repo + cluster secrets configured"
 echo "MinIO buckets ensured"

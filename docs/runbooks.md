@@ -108,8 +108,25 @@ Manual operator actions: force a refresh, or force-revoke **all** sessions for a
 
 ## Build cluster SA token rotation (manual)
 
-**Symptom:** a cached SA token in a `ClusterCredential` Secret stops working *before* its
-`exp` claim — the SA UID changed because it was recreated during a rollout.
+**Symptom:** loopzero-api logs `argo step watcher: build cluster auth failed — rotate
+loopzero-workflow-submitter token` — a 401/403 from the build cluster.
+
+loopzero-api reaches the build cluster through `loopzero-cluster-kubeconfigs` (key
+`build.kubeconfig`), with a token for `loopzero-workflow-submitter` in `argo`. Re-mint it, with
+the cell-0 key, through the one minter those keys have:
+
+```bash
+CORE_CONTEXT=k3d-loopzero-core loopzero-ops seed cluster-kubeconfigs   # task k3d:heal runs the same
+```
+
+That is `kubectl -n argo create token loopzero-workflow-submitter --duration=720h`, rendered with
+the build cluster's live CA. Do **NOT** mint `loopzero-build-sa` here: it is the workflow
+executor, bound only to `workflowtaskresults`, so its token authenticates and is then
+Forbidden to list workflows — a readable 401 traded for a silent 403. loopzero-api re-reads the
+token on its next rejected call; no restart is needed.
+
+**A `ClusterCredential` Secret** is a separate path. Symptom: a cached SA token stops working
+*before* its `exp` claim — the SA UID changed because it was recreated during a rollout.
 
 ```bash
 kubectl create token loopzero-system/default --duration=24h

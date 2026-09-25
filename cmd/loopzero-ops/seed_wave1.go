@@ -26,6 +26,7 @@ func init() {
 	// Wave 3 — complex + multi-cluster
 	seedRegistry.Register(seed.NewVaultRoleIDSyncSeed())
 	seedRegistry.Register(seed.NewNetworkingCrossClusterCorednsSeed())
+	seedRegistry.Register(seed.NewClusterKubeconfigsSeed())
 	seedRegistry.Register(seed.NewSecretsSeedDevSeed())
 	seedRegistry.Register(seed.NewBrokerSeed())
 	seedRegistry.Register(seed.NewStripeWebhookEndpointSeed())

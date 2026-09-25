@@ -9,6 +9,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,6 +32,15 @@ type KubeClient interface {
 	Rollouts
 	Namespaces
 	Services
+	ServiceAccountTokens
+}
+
+// ServiceAccountTokens mints bound ServiceAccount tokens through the
+// TokenRequest API — what `kubectl create token` calls.
+type ServiceAccountTokens interface {
+	// MintServiceAccountToken returns a token for namespace/name valid for ttl.
+	// A missing ServiceAccount is an error.
+	MintServiceAccountToken(ctx context.Context, namespace, name string, ttl time.Duration) (string, error)
 }
 
 // SecretStore reads and writes Secrets.
@@ -211,6 +221,19 @@ func (k *kubeClient) MergeSecretData(ctx context.Context, namespace, name string
 		return fmt.Errorf("create secret %s: %w", k.resourceAt(namespace, name), err)
 	}
 	return k.PatchSecretData(ctx, namespace, name, data)
+}
+
+func (k *kubeClient) MintServiceAccountToken(ctx context.Context, namespace, name string, ttl time.Duration) (string, error) {
+	seconds := int64(ttl.Seconds())
+	sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name}}
+	req := &authenticationv1.TokenRequest{Spec: authenticationv1.TokenRequestSpec{ExpirationSeconds: &seconds}}
+	if err := k.c.SubResource("token").Create(ctx, sa, req); err != nil {
+		return "", fmt.Errorf("mint token for serviceaccount %s: %w", k.resourceAt(namespace, name), err)
+	}
+	if req.Status.Token == "" {
+		return "", fmt.Errorf("mint token for serviceaccount %s: the API returned an empty token", k.resourceAt(namespace, name))
+	}
+	return req.Status.Token, nil
 }
 
 func (k *kubeClient) GetConfigMap(ctx context.Context, namespace, name string) (*corev1.ConfigMap, error) {

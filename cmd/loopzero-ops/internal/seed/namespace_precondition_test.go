@@ -43,6 +43,7 @@ var seedsRequiringTheirNamespace = map[string]string{
 	"argocd_token.go":          "B-108 — step 13; writes into loopzero-system via minioNamespace",
 	"stripe_webhook_secret.go": "B-108 — step 15",
 	"stripe_api_keys.go":       "B-108 — step 16",
+	"cluster_kubeconfigs.go":   "#236 — run by k3d:heal and provision-api-tokens.sh, and on its own as a repair",
 }
 
 // TestSeedsEnsureTheirNamespaceBeforeWriting asserts the call site: every seed
