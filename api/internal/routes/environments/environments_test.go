@@ -365,10 +365,13 @@ func (f *fakeProjectLookup) ProjectExistsForTenant(_ context.Context, tenantID, 
 }
 
 // fakeActiveReleaseLookup — minimal stub for EC-7 warning emission.
-type fakeActiveReleaseLookup struct{ active bool }
+type fakeActiveReleaseLookup struct {
+	active bool
+	err    error
+}
 
 func (f *fakeActiveReleaseLookup) HasActiveRelease(_ context.Context, _, _, _ string) (bool, error) {
-	return f.active, nil
+	return f.active, f.err
 }
 
 func TestEnvs_Create_Returns400WhenProjectMissing_M2(t *testing.T) {
@@ -539,6 +542,27 @@ func TestEnvs_Delete_WarnsOnActiveRelease_M2(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), `loopzero platform status`) {
 		t.Errorf("EC-7 warning should suggest 'loopzero platform status' check, got %s", w.Body.String())
+	}
+}
+
+// When the release lookup fails, "no active release" is not known: the
+// cleanup warning must still be given rather than silently dropped.
+func TestEnvs_Delete_WarnsWhenTheActiveReleaseLookupFails(t *testing.T) {
+	rl := &fakeActiveReleaseLookup{err: errors.New("connection refused")}
+	h := NewEnvironmentHandler(&fakeEnvMgr{}).WithActiveReleaseLookup(rl)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/environments/staging?project=web", nil)
+	req = routestest.WithChiParam(req, "name", "staging")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Delete(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 (the delete itself succeeded), got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "loopzero platform status") {
+		t.Errorf("a failed release lookup dropped the cleanup warning: %s", w.Body.String())
 	}
 }
 

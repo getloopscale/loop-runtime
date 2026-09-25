@@ -589,10 +589,16 @@ func (h *EnvironmentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// M2 v1.2 T4.2 EC-7 — surface an orphan-App warning when the env
 	// being removed still has an active release. The actual reaping is
 	// async (operator side); the response payload tells the user what
-	// to expect. Nil relLookup → no warning emitted (test / legacy).
+	// to expect. Nil relLookup → no warning emitted (test / legacy). A failed
+	// lookup cannot rule an active release out, so it warns too.
 	var warnings []string
 	if h.relLookup != nil {
-		if hasRel, _ := h.relLookup.HasActiveRelease(ctx, uc.TenantID, project, name); hasRel {
+		hasRel, err := h.relLookup.HasActiveRelease(ctx, uc.TenantID, project, name)
+		if err != nil {
+			slog.WarnContext(ctx, "active release lookup failed; warning about cleanup conservatively",
+				"tenant_id", uc.TenantID, "project", project, "environment", name, "error", err)
+		}
+		if hasRel || err != nil {
 			warnings = append(warnings, envDeleteCleanupWarning)
 		}
 	}
