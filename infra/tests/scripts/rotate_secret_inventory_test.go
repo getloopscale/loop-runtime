@@ -12,13 +12,14 @@ import (
 	"testing"
 )
 
-// rotate-secret.sh decided which ExternalSecrets to refresh from its own
-// hard-coded table, which had drifted from the chart inventory
-// (infra/helm/loopzero-external-secrets/values.yaml) that seeds the secrets:
-// rotating api/secrets/gitea/token also refreshed the operator's
-// ExternalSecret, which reads operators/secrets/gitea/token and so never saw
-// the new value, while operators/secrets/gitea/token itself was refused as an
-// unknown path.
+// rotate-secret.sh resolves which ExternalSecrets to refresh from the chart
+// inventory (infra/helm/loopzero-external-secrets/values.yaml), honouring each
+// key's vaultBinaryOverride. The tenant operator's GITEA_TOKEN carries
+// `vaultBinaryOverride: api`, so it reads api/secrets/gitea/token — the same
+// path as the api's gitea-admin Secret. Rotating that path must refresh BOTH,
+// or the operator keeps a revoked token. No entry reads
+// operators/secrets/gitea/token (the eso-chart-sanity gate treats rendering it
+// as a leak), so a rotation of that path has nothing to refresh and is refused.
 
 func runRotateDryRun(t *testing.T, vaultPath string) (int, string) {
 	t.Helper()
@@ -59,31 +60,23 @@ func infoLine(out, prefix string) string {
 	return ""
 }
 
-func TestRotateSecret_RefreshesOnlyTheExternalSecretsThatReadThePath(t *testing.T) {
+func TestRotateSecret_RefreshesEveryExternalSecretThatReadsThePath(t *testing.T) {
 	code, out := runRotateDryRun(t, "api/secrets/gitea/token")
 
 	if code != 0 {
 		t.Fatalf("exit = %d\n%s", code, out)
 	}
-	if got := infoLine(out, "[INFO] ExternalSecrets to force-refresh:"); got != "gitea-admin" {
-		t.Errorf("ExternalSecrets = %q, want gitea-admin", got)
+	if got := infoLine(out, "[INFO] ExternalSecrets to force-refresh:"); got != "gitea-admin,loopzero-tenant-operator" {
+		t.Errorf("ExternalSecrets = %q, want gitea-admin,loopzero-tenant-operator", got)
 	}
-	if got := infoLine(out, "[INFO] binaries to restart:"); got != "loopzero-api" {
-		t.Errorf("binaries = %q, want loopzero-api", got)
+	if got := infoLine(out, "[INFO] binaries to restart:"); got != "loopzero-api,loopzero-tenant-operator" {
+		t.Errorf("binaries = %q, want loopzero-api,loopzero-tenant-operator", got)
 	}
 }
 
-func TestRotateSecret_RotatesEveryPathTheInventorySeeds(t *testing.T) {
-	code, out := runRotateDryRun(t, "operators/secrets/gitea/token")
-
-	if code != 0 {
-		t.Fatalf("exit = %d, want the operator's gitea token to be rotatable\n%s", code, out)
-	}
-	if got := infoLine(out, "[INFO] ExternalSecrets to force-refresh:"); got != "loopzero-tenant-operator" {
-		t.Errorf("ExternalSecrets = %q, want loopzero-tenant-operator", got)
-	}
-	if got := infoLine(out, "[INFO] binaries to restart:"); got != "loopzero-tenant-operator" {
-		t.Errorf("binaries = %q, want loopzero-tenant-operator", got)
+func TestRotateSecret_RefusesTheOperatorGiteaPathNoKeyReads(t *testing.T) {
+	if code, out := runRotateDryRun(t, "operators/secrets/gitea/token"); code != 1 {
+		t.Fatalf("exit = %d, want 1: every gitea token key overrides to api/secrets\n%s", code, out)
 	}
 }
 

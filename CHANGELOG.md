@@ -587,7 +587,7 @@ to [Semantic Versioning](https://semver.org/).
 
 - Gitea HA (dev/prod) now actually applies its Redis global lock, LFS server and console logging, and Tempo now keeps traces for 7 days with its resource limits and hardened container security context — both values files declared their main key twice and Helm silently dropped the first block.
 
-- Secret rotation now refreshes exactly the ExternalSecrets that read the rotated path, and the operator's own Gitea and MinIO credentials can be rotated.
+- Secret rotation now refreshes exactly the ExternalSecrets that read the rotated path, including a key another binary reads through an override: rotating the Gitea token refreshes and restarts both the API and the tenant operator, which read the same path.
 
 - The drill cost watchdog and teardown validator now fail when DigitalOcean cannot be queried, instead of reporting that no drill resources are left, and the watchdog runs the validator again.
 
