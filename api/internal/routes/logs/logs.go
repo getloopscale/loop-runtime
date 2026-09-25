@@ -11,6 +11,7 @@ package logs
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"os"
 	"regexp"
@@ -118,6 +119,10 @@ type logsResponse struct {
 	TotalLines int        `json:"total_lines"`
 }
 
+// errLogsUnavailable answers a read whose log backend could not be reached.
+var errLogsUnavailable = loopzeroerrors.NewLoopZeroError("LOGS_UNAVAILABLE",
+	"Build logs are temporarily unavailable. Try again in a moment.", http.StatusServiceUnavailable)
+
 // LogsHandler provides HTTP handlers for build log operations.
 type LogsHandler struct {
 	builds  LogBuildStore
@@ -197,14 +202,10 @@ func (h *LogsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// Query logs from Loki
 	entries, err := h.querier.QueryBuildLogs(r.Context(), buildID, opts)
 	if err != nil {
-		// Loki unavailable — return empty entries with warning instead of 500.
-		// The build may have completed but logs are not yet available.
-		httpio.WriteJSON(w, http.StatusOK, logsResponse{
-			BuildID:    build.ID,
-			Status:     build.Status,
-			Entries:    []LogEntry{},
-			TotalLines: 0,
-		})
+		// The log backend is unreachable. That is not "no logs": answering
+		// 200 with no entries would tell the caller the logs are gone.
+		slog.ErrorContext(r.Context(), "build logs query failed", "build_id", buildID, "error", err)
+		httpio.WriteLoopZeroError(w, errLogsUnavailable)
 		return
 	}
 

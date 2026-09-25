@@ -465,6 +465,7 @@ paths:
           content:
             application/json:
               schema: {type: object, additionalProperties: true}
+        "503": {description: the log backend is unreachable (LOGS_UNAVAILABLE)}
 
   /api/v1/secrets/{name}:
     parameters: [$ref: "#/components/parameters/SecretName"]

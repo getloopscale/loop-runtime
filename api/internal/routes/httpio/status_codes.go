@@ -40,6 +40,9 @@ var apiStatusByCode = map[string]int{
 	// A first-deploy environment could not be provisioned: a server-side
 	// failure, registered so it is an explicit 500 rather than a default one.
 	"ENV_PROVISION_FAILED": http.StatusInternalServerError, // services/platform
+	// GET /builds/{id}/logs — the log backend could not be reached. 503, not
+	// 200-with-no-entries: an outage must not read as "this build has no logs".
+	"LOGS_UNAVAILABLE": http.StatusServiceUnavailable, // routes/logs
 }
 
 func init() {

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
@@ -146,13 +147,14 @@ func TestLogs_Get_Unauthenticated(t *testing.T) {
 	}
 }
 
-func TestLogs_Get_LokiUnavailable_ReturnsEmptyEntries(t *testing.T) {
+// A log backend outage is not "this build has no logs": answering 200 with no
+// entries made the CLI tell users their logs "were not captured or have been
+// pruned" while the logs were intact and only unreachable.
+func TestLogs_Get_LogBackendUnavailableIs503(t *testing.T) {
 	builds := &fakeLogBuildStore{
-		build: &LogBuild{ID: "bld-abc123", TenantID: "tn-test-123", Status: "RUNNING"},
+		build: &LogBuild{ID: "bld-abc123", TenantID: "tn-test-123", Status: "SUCCEEDED"},
 	}
-	querier := &fakeLogQuerier{
-		err: errors.New("loki connection refused"),
-	}
+	querier := &fakeLogQuerier{err: errors.New("loki connection refused")}
 	h := NewLogsHandler(builds, querier)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/bld-abc123/logs", nil)
@@ -162,17 +164,18 @@ func TestLogs_Get_LokiUnavailable_ReturnsEmptyEntries(t *testing.T) {
 
 	h.Get(w, req)
 
-	// Loki down returns 200 with empty entries (graceful degradation)
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200 even when loki unavailable, got %d body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503 when the log backend is unreachable, got %d body=%s", w.Code, w.Body.String())
 	}
-
-	var resp logsResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.TotalLines != 0 {
-		t.Fatalf("want 0 entries when loki down, got %d", resp.TotalLines)
+	if body["code"] != "LOGS_UNAVAILABLE" {
+		t.Errorf("code = %v, want LOGS_UNAVAILABLE", body["code"])
+	}
+	if strings.Contains(strings.ToLower(w.Body.String()), "loki") {
+		t.Errorf("response names an internal component: %s", w.Body.String())
 	}
 }
 
