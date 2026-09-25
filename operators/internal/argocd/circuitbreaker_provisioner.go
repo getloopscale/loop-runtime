@@ -30,80 +30,66 @@ func NewCircuitBreakerProvisioner(inner Provisioner, cb *circuitbreaker.Breaker,
 	}
 }
 
-// EnsureAppProject delegates with circuit breaker protection.
-//
-// Migrated to circuitbreaker.Execute (ADR-0031 + PKG-G16): context
-// cancellation no longer falsely advances the failure counter; the
-// inner provisioner observes ctx.Err on entry and aborts cleanly.
-func (p *CircuitBreakerProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectSpec) error {
-	_, err := circuitbreaker.Execute(ctx, p.cb, func(ctx context.Context) (struct{}, error) {
-		return struct{}{}, p.inner.EnsureAppProject(ctx, spec)
-	})
+// guarded runs fn through circuitbreaker.Execute, so a cancelled or timed-out
+// call does not advance the failure counter (ADR-0031), and logs when the
+// open breaker skipped the call. subject names what the call acts on.
+func guarded[T any](ctx context.Context, p *CircuitBreakerProvisioner, op string, subject []any, fn func(context.Context) (T, error)) (T, error) {
+	result, err := circuitbreaker.Execute(ctx, p.cb, fn)
 	if err != nil && p.cb.State() == circuitbreaker.Open {
-		p.logger.WarnContext(ctx, "argocd circuit breaker open, skipping EnsureAppProject",
-			"tenant", spec.TenantID, "cb_state", p.cb.State().String())
+		args := append(subject, "cb_state", p.cb.State().String())
+		p.logger.WarnContext(ctx, "argocd circuit breaker open, skipping "+op, args...)
 	}
+	return result, err
+}
+
+// noResult adapts an error-only call to guarded.
+func noResult(fn func(context.Context) error) func(context.Context) (struct{}, error) {
+	return func(ctx context.Context) (struct{}, error) { return struct{}{}, fn(ctx) }
+}
+
+// EnsureAppProject delegates with circuit breaker protection.
+func (p *CircuitBreakerProvisioner) EnsureAppProject(ctx context.Context, spec AppProjectSpec) error {
+	_, err := guarded(ctx, p, "EnsureAppProject", []any{"tenant", spec.TenantID}, noResult(func(ctx context.Context) error {
+		return p.inner.EnsureAppProject(ctx, spec)
+	}))
 	return err
 }
 
 // EnsureApplication delegates with circuit breaker protection.
 func (p *CircuitBreakerProvisioner) EnsureApplication(ctx context.Context, spec ApplicationSpec) error {
-	if err := p.cb.PreCheck(); err != nil {
-		p.logger.WarnContext(ctx, "argocd circuit breaker open, skipping EnsureApplication",
-			"tenant", spec.TenantID, "cb_state", p.cb.State().String())
-		return err
-	}
-	err := p.inner.EnsureApplication(ctx, spec)
-	p.cb.RecordResult(err)
+	_, err := guarded(ctx, p, "EnsureApplication", []any{"tenant", spec.TenantID}, noResult(func(ctx context.Context) error {
+		return p.inner.EnsureApplication(ctx, spec)
+	}))
 	return err
 }
 
 // DeleteApplications delegates with circuit breaker protection.
 func (p *CircuitBreakerProvisioner) DeleteApplications(ctx context.Context, tenantID string) error {
-	if err := p.cb.PreCheck(); err != nil {
-		p.logger.WarnContext(ctx, "argocd circuit breaker open, skipping DeleteApplications",
-			"tenant", tenantID, "cb_state", p.cb.State().String())
-		return err
-	}
-	err := p.inner.DeleteApplications(ctx, tenantID)
-	p.cb.RecordResult(err)
+	_, err := guarded(ctx, p, "DeleteApplications", []any{"tenant", tenantID}, noResult(func(ctx context.Context) error {
+		return p.inner.DeleteApplications(ctx, tenantID)
+	}))
 	return err
 }
 
 // DeleteAppProject delegates with circuit breaker protection.
 func (p *CircuitBreakerProvisioner) DeleteAppProject(ctx context.Context, tenantID string) error {
-	if err := p.cb.PreCheck(); err != nil {
-		p.logger.WarnContext(ctx, "argocd circuit breaker open, skipping DeleteAppProject",
-			"tenant", tenantID, "cb_state", p.cb.State().String())
-		return err
-	}
-	err := p.inner.DeleteAppProject(ctx, tenantID)
-	p.cb.RecordResult(err)
+	_, err := guarded(ctx, p, "DeleteAppProject", []any{"tenant", tenantID}, noResult(func(ctx context.Context) error {
+		return p.inner.DeleteAppProject(ctx, tenantID)
+	}))
 	return err
 }
 
 // ListApplicationNames delegates with circuit breaker protection.
-// #71 LIVE catch 2026-06-07.
 func (p *CircuitBreakerProvisioner) ListApplicationNames(ctx context.Context, tenantID string) ([]string, error) {
-	if err := p.cb.PreCheck(); err != nil {
-		p.logger.WarnContext(ctx, "argocd circuit breaker open, skipping ListApplicationNames",
-			"tenant", tenantID, "cb_state", p.cb.State().String())
-		return nil, err
-	}
-	names, err := p.inner.ListApplicationNames(ctx, tenantID)
-	p.cb.RecordResult(err)
-	return names, err
+	return guarded(ctx, p, "ListApplicationNames", []any{"tenant", tenantID}, func(ctx context.Context) ([]string, error) {
+		return p.inner.ListApplicationNames(ctx, tenantID)
+	})
 }
 
 // DeleteApplication delegates with circuit breaker protection.
-// #71 LIVE catch 2026-06-07.
 func (p *CircuitBreakerProvisioner) DeleteApplication(ctx context.Context, appName string) error {
-	if err := p.cb.PreCheck(); err != nil {
-		p.logger.WarnContext(ctx, "argocd circuit breaker open, skipping DeleteApplication",
-			"app", appName, "cb_state", p.cb.State().String())
-		return err
-	}
-	err := p.inner.DeleteApplication(ctx, appName)
-	p.cb.RecordResult(err)
+	_, err := guarded(ctx, p, "DeleteApplication", []any{"app", appName}, noResult(func(ctx context.Context) error {
+		return p.inner.DeleteApplication(ctx, appName)
+	}))
 	return err
 }
