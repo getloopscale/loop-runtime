@@ -5,7 +5,6 @@ go 1.26.1
 require github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 
 require (
-	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/openbao/openbao/api/v2 v2.5.1

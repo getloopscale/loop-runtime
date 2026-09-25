@@ -95,9 +95,6 @@ func main() {
 		dbAdapter = dbDeps.DBAdapter
 		defer dbAdapter.Close()
 		defer dbDeps.PoolCollector.Stop()
-		if dbDeps.StdDB != nil {
-			defer func() { _ = dbDeps.StdDB.Close() }()
-		}
 	}
 
 	// WS.1: Track service auth secret age for rotation alerting.
@@ -169,6 +166,7 @@ func main() {
 		// store) count through the background pool. Measured: an account with 2
 		// tenants and 1 project each read 1 through the request pool and 2
 		// through loopzero_worker. See internal/db/store/project_wrapper.go.
+		wirePlanEnforcement(dbDeps, bgAdapter, logger)
 		projectCap := newProjectCapEnforcement(dbDeps.PlanLimiter, bgAdapter)
 		wireProjectCap(dbDeps.PostgresProjects, projectCap)
 		workflows, err = setupWorkflows(cfg, httpTransport, logger)

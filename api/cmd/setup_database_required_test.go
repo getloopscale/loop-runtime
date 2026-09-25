@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtest"
 )
 
 // A missing `DATABASE_URL` is a CONFIGURATION error, not degradation — decided
@@ -69,16 +70,20 @@ func TestSetupDatabase_PresentURLIsNotRejectedAsMissing(t *testing.T) {
 	}
 }
 
-// Plan enforcement (project cap, replica cap, plan limits) runs on its own
-// stdlib connection. If that connection cannot be opened, the API must not boot
-// with every quota silently off: an unreachable database is a boot failure here
-// exactly as it is for the request pool.
-func TestOpenPlanEnforcementDB_UnreachableDatabaseIsAnError(t *testing.T) {
-	stdDB, err := openPlanEnforcementDB("postgres://nobody:nothing@127.0.0.1:1/none?sslmode=disable&connect_timeout=1")
-	if err == nil {
-		t.Fatal("an unreachable plan-enforcement database must be reported, not disable the limits")
+// Plan enforcement (project cap, replica cap, plan limits) reads the plan
+// through the cross-tenant connection main hands it — never through the request
+// pool, where fail-closed RLS hides every subscription and each tenant would be
+// capped as Starter. The store must sit on exactly the handle it was given.
+func TestWirePlanEnforcementReadsThroughTheCrossTenantConnection(t *testing.T) {
+	crossTenant := &dbtest.FakeDBTX{}
+	deps := &DatabaseDeps{}
+
+	wirePlanEnforcement(deps, crossTenant, quietLogger())
+
+	if deps.PlanLimiter == nil || deps.PlanLimits == nil {
+		t.Fatalf("plan enforcement not wired: limiter=%v store=%v", deps.PlanLimiter, deps.PlanLimits)
 	}
-	if stdDB != nil {
-		t.Fatalf("no connection may be returned alongside the error: %v", stdDB)
+	if deps.PlanLimits.DB != crossTenant {
+		t.Fatalf("plan-limits store reads through %T, want the cross-tenant connection", deps.PlanLimits.DB)
 	}
 }

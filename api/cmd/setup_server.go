@@ -191,12 +191,12 @@ func wireDatabaseDeps(sc *server.Config, w serverWiring) {
 // through; before migration 000017 the cost store has no rows and the cap
 // checker fails open (no usage counted).
 func wireCostEnforcement(sc *server.Config, w serverWiring) {
-	if w.dbDeps == nil || w.dbDeps.StdDB == nil || w.dbDeps.PlanLimiter == nil {
+	if w.dbDeps == nil || w.dbDeps.PlanLimits == nil || w.dbDeps.PlanLimiter == nil {
 		return
 	}
-	// The same subscriptions.plan lookup PlanLimiter uses; PlanLimiter does
-	// not expose its store, so one is built on the same handle.
-	limitsStore := enforcement.NewSQLLimitsStore(w.dbDeps.StdDB)
+	// The same store PlanLimiter reads the plan through, so every tier gate
+	// and the limiter agree on a tenant's plan.
+	limitsStore := w.dbDeps.PlanLimits
 	sc.Guards.CostEnforcer = policy.NewCostEnforcer(
 		enforcement.NewCapChecker(store.NewSQLCostStore(w.dbAdapter)),
 		store.NewPlanReader(limitsStore), w.logger)
@@ -281,7 +281,7 @@ func wireDatabaseHandlers(sc *server.Config, w serverWiring) {
 	// store every plan gate uses (sc.PlanTierStore, set by
 	// wireCostEnforcement when the database is up), not through its own query.
 	billingHandler := billinghttp.NewBillingHandler(sc.PlanTierStore, store.NewSubscriptionStore(d))
-	if w.dbDeps != nil && w.dbDeps.StdDB != nil {
+	if w.dbDeps != nil && w.dbDeps.PlanLimiter != nil {
 		billingHandler.WithCostSource(store.NewSQLCostStore(d))
 	}
 	sc.BillingHandler = billingHandler

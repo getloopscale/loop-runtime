@@ -5,9 +5,7 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -37,10 +35,11 @@ type DatabaseDeps struct {
 	// assertion in main.
 	PostgresProjects *store.PostgresProjectStore
 	DBHealth         healthhttp.DBHealthChecker
-	PlanLimiter      *enforcement.PlanLimiter
-
-	// StdDB is the stdlib sql.DB used for plan enforcement (caller must defer Close).
-	StdDB *sql.DB
+	// PlanLimits and PlanLimiter are set by wirePlanEnforcement once the
+	// cross-tenant background pool exists — not by setupDatabase: the plan
+	// lookups cannot run on the request pool (see store.PlanLimitsStore).
+	PlanLimits  *store.PlanLimitsStore
+	PlanLimiter *enforcement.PlanLimiter
 	// PoolCollector exports PG pool metrics (caller must defer Stop).
 	PoolCollector *metrics.PoolStatsCollector
 }
@@ -127,38 +126,20 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 		PoolCollector:    poolCollector,
 	}
 
-	// Plan enforcement limiter (stdlib sql.DB for simple queries). Quotas are
-	// not optional: if their connection cannot be opened, the boot fails like
-	// it does for the request pool, instead of serving with every limit off.
-	stdDB, err := openPlanEnforcementDB(dbURL)
-	if err != nil {
-		poolCollector.Stop()
-		poolCfg.Close()
-		return nil, err
-	}
-	deps.StdDB = stdDB
-	deps.PlanLimiter = enforcement.NewPlanLimiter(enforcement.NewSQLLimitsStore(stdDB), logger)
-	// The per-Account project cap is wired onto this store in main, once the
-	// cross-tenant (loopzero_worker) connection it counts through exists — see
-	// projectCapEnforcement.
-	logger.Info("plan enforcement enabled")
-
+	// Plan enforcement and the per-Account project cap are wired in main, once
+	// the cross-tenant (loopzero_worker) connection they read through exists — see
+	// wirePlanEnforcement and projectCapEnforcement.
 	return deps, nil
 }
 
-// openPlanEnforcementDB opens and pings the stdlib connection plan enforcement
-// runs on. A failure is returned with nothing left open.
-func openPlanEnforcementDB(dbURL string) (*sql.DB, error) {
-	stdDB, err := sql.Open("pgx", dbURL)
-	if err != nil {
-		return nil, fmt.Errorf("plan enforcement: open database: %w", err)
-	}
-	stdDB.SetMaxOpenConns(2)
-	if err := stdDB.Ping(); err != nil {
-		if cerr := stdDB.Close(); cerr != nil {
-			return nil, fmt.Errorf("plan enforcement: ping database: %w", errors.Join(err, fmt.Errorf("close: %w", cerr)))
-		}
-		return nil, fmt.Errorf("plan enforcement: ping database: %w", err)
-	}
-	return stdDB, nil
+// wirePlanEnforcement builds the plan-limits store and the limiter every plan
+// gate uses on the cross-tenant background pool. Over the request pool the
+// plan lookups see no subscription under fail-closed RLS and every tenant
+// would be capped as Starter (store.PlanLimitsStore records the measurement).
+// Quotas are not optional: main reaches this only with the background pool up,
+// and exits when that pool cannot be opened.
+func wirePlanEnforcement(deps *DatabaseDeps, crossTenant db.DBTX, logger *slog.Logger) {
+	deps.PlanLimits = store.NewPlanLimitsStore(crossTenant)
+	deps.PlanLimiter = enforcement.NewPlanLimiter(deps.PlanLimits, logger)
+	logger.Info("plan enforcement enabled")
 }

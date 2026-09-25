@@ -56,7 +56,9 @@ func projectCapStore(t *testing.T) (*store.PostgresProjectStore, *sql.DB) {
 		t.Fatalf("open stdlib DB: %v", err)
 	}
 	t.Cleanup(func() { _ = stdDB.Close() })
-	limiter := enforcement.NewPlanLimiter(enforcement.NewSQLLimitsStore(stdDB), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	// The plan is read through the cross-tenant worker role, as main wires it
+	// (wirePlanEnforcement): seedDBURL is LOOPZERO_WORKER_DATABASE_URL.
+	limiter := enforcement.NewPlanLimiter(store.NewPlanLimitsStore(&db.PgxAdapter{Pool: workerPool(t)}), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	store := &store.PostgresProjectStore{DB: &db.PgxAdapter{Pool: pool}}
 	store.SetProjectCapChecker(realProjectCapChecker{l: limiter})
 	return store, stdDB

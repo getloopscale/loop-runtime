@@ -5,11 +5,8 @@ package enforcement
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"testing"
-
-	"github.com/DATA-DOG/go-sqlmock"
 
 	"github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -121,18 +118,14 @@ func TestCheckLimit_PassesTheCallerContextToTheStore(t *testing.T) {
 }
 
 // M4 EC-2: an Account with no active subscription is capped as starter. The
-// SQL store used to return sql.ErrNoRows for it, which a fail-closed limiter
-// would turn into an outage for every new Account.
+// store answers "" for it (LimitsStore contract); a fail-closed limiter must
+// not turn that into an outage for every new Account.
 func TestCheckProjectsValue_AccountWithoutSubscriptionIsStarter(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock: %v", err)
+	store := &fakeLimitsStore{
+		accountPlans: map[string]string{},
+		limits:       map[[2]string][2]int{{"starter", "projects"}: {1, 0}},
 	}
-	defer func() { _ = db.Close() }()
-	mock.ExpectQuery("SELECT plan FROM subscriptions").WithArgs("tn-new").WillReturnError(sql.ErrNoRows)
-	mock.ExpectQuery("SELECT hard_limit, soft_limit FROM plan_limits").WithArgs("starter", "projects").
-		WillReturnRows(sqlmock.NewRows([]string{"hard_limit", "soft_limit"}).AddRow(1, nil))
-	limiter := NewPlanLimiter(NewSQLLimitsStore(db), testLogger())
+	limiter := NewPlanLimiter(store, testLogger())
 
 	got, err := limiter.CheckProjectsValue(context.Background(), "tn-new", 0)
 

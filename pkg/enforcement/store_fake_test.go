@@ -5,15 +5,12 @@ package enforcement
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"testing"
 )
 
-// fakeLimitsStore is an in-memory LimitsStore for tests, demonstrating
-// the DIP refactor introduced by ADR-0033. Compare this with the
-// 991-LOC sqlmock setup in limiter_test.go — same coverage, no SQL
-// driver involved.
+// fakeLimitsStore is an in-memory LimitsStore for tests (ADR-0033). The SQL
+// adapter and its tests live in the api module, next to the schema.
 type fakeLimitsStore struct {
 	plans        map[string]string    // tenantID -> tenant-scoped plan
 	accountPlans map[string]string    // tenantID -> account-scoped plan (M4)
@@ -89,7 +86,7 @@ func (f *fakeLimitsStore) GetLimits(_ context.Context, plan, metric string) (int
 	}
 	v, ok := f.limits[[2]string{plan, metric}]
 	if !ok {
-		return 0, 0, sql.ErrNoRows
+		return 0, 0, nil // missing row: the (0, 0) deny sentinel (LimitsStore contract)
 	}
 	return v[0], v[1], nil
 }

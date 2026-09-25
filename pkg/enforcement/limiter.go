@@ -10,8 +10,6 @@ package enforcement
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -261,12 +259,10 @@ func (l *PlanLimiter) accountPlan(ctx context.Context, tenantID string) (domain.
 }
 
 // limits reads the (hard, soft) pair for a plan and metric. A missing row is
-// the (0, 0) sentinel the checks deny on; any other store error is returned.
+// the (0, 0) sentinel the store returns and the checks deny on; any store
+// error is returned as PLATFORM_DEGRADED.
 func (l *PlanLimiter) limits(ctx context.Context, tenantID string, plan domain.PlanTier, metric string) (hardLimit, softLimit int, err error) {
 	hard, soft, err := l.store.GetLimits(ctx, plan.String(), metric)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, 0, nil
-	}
 	if err != nil {
 		return 0, 0, errLimitsUnavailable(tenantID, "read "+metric+" limit", err)
 	}
