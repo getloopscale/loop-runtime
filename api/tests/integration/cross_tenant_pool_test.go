@@ -26,8 +26,8 @@ func setupCrossTenantTestDB(t *testing.T) *pgxpool.Pool {
 	pool, err := pgxpool.New(ctx, seedDBURL())
 	if err != nil {
 		cancel()
-		// Máquina sem banco. No CI o job de integração provisiona um, então este
-		// caminho não roda lá; a tensão "pular por padrão" está em:
+		// Machine without a database. In CI the integration job provisions one, so this
+		// path does not run there; the "skip by default" tension is in:
 		// https://github.com/getloopscale/loopzero/issues/289
 		t.Skipf("skipping: cannot connect to PostgreSQL: %v", err)
 	}
@@ -37,7 +37,7 @@ func setupCrossTenantTestDB(t *testing.T) *pgxpool.Pool {
 		"SELECT relrowsecurity FROM pg_class WHERE relname = 'builds'").Scan(&rlsEnabled); err != nil || !rlsEnabled {
 		cancel()
 		pool.Close()
-		// Banco sem as migrations de isolamento — a fixture não tem o que exercitar.
+		// Database without the isolation migrations — the fixture has nothing to exercise.
 		// https://github.com/getloopscale/loopzero/issues/289
 		t.Skipf("skipping: isolation migrations not applied (RLS off on builds)")
 	}
@@ -51,8 +51,9 @@ func setupCrossTenantTestDB(t *testing.T) *pgxpool.Pool {
 // Migration 000061 added a trigger that resolves `builds.cell_id` from
 // `tenants.cell_id` and raises when the tenant is absent. Fixtures written
 // before it inserted a build for a tenant that never existed and passed; they
-// now fail with "o tenant nao existe ou nao tem cell". Seeding the parent rows
-// is what the trigger asks for — the honest fix, rather than disabling it.
+// now fail with the trigger's RAISE message, which says the tenant does not
+// exist or has no cell. Seeding the parent rows is what the trigger asks for —
+// the honest fix, rather than disabling it.
 func seedTenantForBuild(t *testing.T, pool *pgxpool.Pool, tenantID string) {
 	t.Helper()
 

@@ -193,11 +193,11 @@ func main() {
 			logger.Error("failed to setup stores", "error", err)
 			os.Exit(1)
 		}
-		// Os loops de background NÃO usam o pool das requisições. Ele é
-		// deliberadamente incapaz de ver outro tenant (AssertRequestPoolIsolated
-		// recusa subir se conseguir), e varredura entre tenants é exatamente o
-		// trabalho deles — sobre aquele pool, cada varredura leria e apagaria
-		// NADA, sem erro e sem log. Ver setup_background_database.go.
+		// The background loops do NOT use the request pool. That pool is
+		// deliberately unable to see another tenant (AssertRequestPoolIsolated
+		// refuses to boot if it can), and sweeping across tenants is exactly
+		// their job — over that pool, every sweep would read and delete
+		// NOTHING, with no error and no log. See setup_background_database.go.
 		bgAdapter, err = setupBackgroundDatabase(cfg, logger)
 		if err != nil {
 			logger.Error("failed to connect the background database pool", "error", err)
@@ -310,7 +310,7 @@ func main() {
 		// tenant already used the env name → AddEnvironment was skipped →
 		// Tenant CR spec.environments[] never gained the new tuple →
 		// AppProject destinations never extended → ArgoCD sync failed:
-		// "namespace not permitted in project". Closes #37 cenário 4.
+		// "namespace not permitted in project". Closes #37 scenario 4.
 		//
 		// History (preserved for traceability):
 		//   - M2 v1.2 T3.3 (2026-06-07): AddEnvironment gained the project arg.
@@ -342,10 +342,10 @@ func main() {
 		//
 		// 2026-06-02 H1 validation: TEMPORARILY DISABLED via LOOPZERO_ENV_READINESS_CHECKER
 		// gate (default false). Hypothesis: the readiness poll adds 2-30s per
-		// deploy × 11 journeys = +5min total, esgotando o budget 1h30m do
+		// deploy × 11 journeys = +5min total, exhausting the 1h30m budget of the
 		// suite timeout. Pre-Sprint-A baseline (commit 098b6846, 2026-05-31)
-		// passou 112/0/20 em 1h11m SEM esse gate. Re-enable após confirmar
-		// hypothesis OR re-tune PollInterval/WaitTimeout para minimizar custo.
+		// passed 112/0/20 in 1h11m WITHOUT this gate. Re-enable after confirming
+		// the hypothesis OR re-tune PollInterval/WaitTimeout to minimise the cost.
 		ensurer := &platform.EnvironmentEnsurer{
 			Lister: lister,
 			Adder:  adder,
@@ -506,10 +506,10 @@ func setupBuildHandler(
 			"max_per_cell", admissionCfg.MaxConcurrentPerCell,
 			"max_per_tenant", admissionCfg.MaxConcurrentPerTenant)
 	}
-	// B-054: o breaker do pool Postgres era construido AQUI e nunca consultado — ele protege a
-	// API inteira, nao o handler de builds, e construi-lo neste ponto o deixava preso numa
-	// funcao que devolve so' o handler. Passou para `setup_server.go`, onde a config do servidor
-	// e' montada e onde ele pode ser entregue ao middleware que decide.
+	// B-054: the Postgres pool breaker used to be built HERE and never consulted — it protects
+	// the whole API, not the builds handler, and building it at this point left it trapped in a
+	// function that returns only the handler. It moved to `setup_server.go`, where the server
+	// config is assembled and where it can be handed to the middleware that decides.
 	return buildHandler
 }
 

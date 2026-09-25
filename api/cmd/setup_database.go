@@ -54,7 +54,7 @@ type DatabaseDeps struct {
 //     warning and died three functions later on a nil dereference (B-104,
 //     reproduced by `setup_server_nil_deps_test.go` before any change).
 //   - Its blast radius is not one surface: 27 of the router's 36 register "sem
-//     banco" as their disable reason. A missing secret does not degrade the
+//     banco" (no database) as their disable reason. A missing secret does not degrade the
 //     product, it erases three quarters of it — while `/api/v1/health` keeps
 //     answering 200, because that probe is the shallow one.
 //   - It has happened, and this repository records the damage: B35, 2026-04-28
@@ -69,7 +69,7 @@ type DatabaseDeps struct {
 //
 // Returning `nil, nil` for "it did not work, but carry on" is the magic value
 // `rules/error-handling.md` exists to forbid.
-var ErrDatabaseURLNotSet = errors.New("DATABASE_URL não está definida — a API não pode servir sem banco (27 das 36 superfícies dependem dele)")
+var ErrDatabaseURLNotSet = errors.New("DATABASE_URL is not set — the API cannot serve without a database (27 of the 36 surfaces depend on it)")
 
 // setupDatabase creates the pgx connection pool, pool metrics collector,
 // stdlib DB for plan enforcement, and Sprint 1 stores.

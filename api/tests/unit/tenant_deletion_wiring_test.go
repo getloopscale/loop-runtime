@@ -16,7 +16,7 @@ import (
 	"testing"
 )
 
-// TestTenantDeletionStore_EhAtribuidoNaMontagemDeProducao is the assertion whose
+// TestTenantDeletionStore_IsAssignedInTheProductionAssembly is the assertion whose
 // absence let account deletion be broken for months (B-117).
 //
 // # Why the existing tests did not catch it
@@ -37,20 +37,20 @@ import (
 //
 // A test that stubs the dependency can only ever prove the guard. Proving the
 // guard is SATISFIED requires looking at the assembly, which is what this does.
-func TestTenantDeletionStore_EhAtribuidoNaMontagemDeProducao(t *testing.T) {
+func TestTenantDeletionStore_IsAssignedInTheProductionAssembly(t *testing.T) {
 	const cmdDir = "../../cmd"
 
 	found, where := assignmentSites(t, cmdDir, "TenantDeletionStore")
 	if !found {
-		t.Fatalf("nenhuma atribuição a `TenantDeletionStore` em %s — as três rotas de "+
-			"exclusão de tenant existem no roteador, o handler existe, e o painel chama "+
-			"`DELETE /api/v1/tenants/{id}` de verdade, mas o campo fica nil e a rota "+
-			"nunca é registrada (B-117)", cmdDir)
+		t.Fatalf("no assignment to `TenantDeletionStore` in %s — the three tenant "+
+			"deletion routes exist in the router, the handler exists, and the dashboard really "+
+			"calls `DELETE /api/v1/tenants/{id}`, but the field stays nil and the route "+
+			"is never registered (B-117)", cmdDir)
 	}
-	t.Logf("atribuído em: %s", strings.Join(where, ", "))
+	t.Logf("assigned at: %s", strings.Join(where, ", "))
 }
 
-// TestTodoCampoGuardadoNoRoteadorEhAtribuidoAlgumaVez generalises the assertion
+// TestEveryFieldGuardedInTheRouterIsAssignedSomewhere generalises the assertion
 // above to the whole population, which is the step B-109 exists to demand:
 // proving a guard SEES a shape is not the same as measuring how many instances
 // of that shape already exist.
@@ -65,7 +65,7 @@ func TestTenantDeletionStore_EhAtribuidoNaMontagemDeProducao(t *testing.T) {
 // `false` forever while nothing is broken about the reporting. This one answers
 // whether the condition can ever be true at all. Same file, same suite, no new
 // registration to wire or oracle to re-freeze.
-func TestTodoCampoGuardadoNoRoteadorEhAtribuidoAlgumaVez(t *testing.T) {
+func TestEveryFieldGuardedInTheRouterIsAssignedSomewhere(t *testing.T) {
 	const (
 		routerPath = "../../internal/server/router.go"
 		cmdDir     = "../../cmd"
@@ -75,23 +75,23 @@ func TestTodoCampoGuardadoNoRoteadorEhAtribuidoAlgumaVez(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read router: %v", err)
 	}
-	campos := guardedConfigFields(string(src))
-	if len(campos) == 0 {
-		t.Fatal("nenhum campo guardado encontrado no roteador — ou ele mudou de forma, " +
-			"ou este teste parou de o reconhecer. Um teste que não mede nada não verifica nada")
+	fields := guardedConfigFields(string(src))
+	if len(fields) == 0 {
+		t.Fatal("no guarded field found in the router — either it changed shape, " +
+			"or this test stopped recognising it. A test that measures nothing verifies nothing")
 	}
 
-	var orfaos []string
-	for _, c := range campos {
+	var orphans []string
+	for _, c := range fields {
 		if ok, _ := assignmentSites(t, cmdDir, c); !ok {
-			orfaos = append(orfaos, c)
+			orphans = append(orphans, c)
 		}
 	}
-	if len(orfaos) > 0 {
-		t.Errorf("%d de %d campos guardados no roteador NUNCA são atribuídos em %s: %v.\n"+
-			"Cada um é uma rota que existe no código e não existe em deployment nenhum — "+
-			"um teste que injeta um stub prova o `if`, não a condição (B-117)",
-			len(orfaos), len(campos), cmdDir, orfaos)
+	if len(orphans) > 0 {
+		t.Errorf("%d of %d fields guarded in the router are NEVER assigned in %s: %v.\n"+
+			"Each one is a route that exists in the code and exists in no deployment — "+
+			"a test that injects a stub proves the `if`, not the condition (B-117)",
+			len(orphans), len(fields), cmdDir, orphans)
 	}
 }
 
@@ -157,7 +157,7 @@ func assignmentSites(t *testing.T, dir, field string) (bool, []string) {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("percorrendo %s: %v", dir, err)
+		t.Fatalf("walking %s: %v", dir, err)
 	}
 	return len(sites) > 0, sites
 }

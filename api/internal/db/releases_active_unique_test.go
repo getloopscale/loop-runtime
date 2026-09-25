@@ -361,8 +361,9 @@ func TestReleases_PreFlightCheck_DetectsExistingViolations(t *testing.T) {
 // Migration 000061 added a trigger that resolves `builds.cell_id` from
 // `tenants.cell_id` and raises when the tenant is absent. Fixtures written
 // before it inserted a build for a tenant that never existed; they now fail
-// with "o tenant nao existe ou nao tem cell". Seeding the parents is what the
-// trigger asks for — the honest fix rather than disabling it.
+// with the trigger's RAISE message, which says the tenant does not exist or has
+// no cell. Seeding the parents is what the trigger asks for — the honest fix
+// rather than disabling it.
 func seedTenantRow(t *testing.T, pool *pgxpool.Pool, tenantID string) {
 	t.Helper()
 

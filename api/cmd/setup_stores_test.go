@@ -119,18 +119,18 @@ func TestSetupSecretStore_BadAESKeyReturnsError(t *testing.T) {
 	}
 }
 
-// O adapter que ligava os dois lados era cerimônia, não tradução. `pkg/vault.Transit` e
-// `store.VaultTransitClient` declaravam a MESMA forma — o doc do próprio adapter dizia
-// que *"signatures match byte-for-byte; only the method names differ"* — e a ponte
-// existia só para reconciliar `Encrypt` com `EncryptForTenant`.
+// The adapter that joined the two sides was ceremony, not translation. `pkg/vault.Transit` and
+// `store.VaultTransitClient` declared the SAME shape — the adapter's own doc said
+// *"signatures match byte-for-byte; only the method names differ"* — and the bridge
+// existed only to reconcile `Encrypt` with `EncryptForTenant`.
 //
-// Em Go isso não precisa de ponte: a interface é estrutural, e a raiz de composição
-// entrega um valor que satisfaz o que o consumidor pede. **Nenhum dos dois pacotes passa
-// a importar o outro** — que era a razão declarada para o adapter existir, e continua
-// verdadeira sem ele. Esta asserção mora aqui, na raiz de composição, que é o único lugar
-// que legitimamente conhece os dois lados.
+// In Go this needs no bridge: the interface is structural, and the composition root
+// hands over a value that satisfies what the consumer asks for. **Neither package starts
+// importing the other** — which was the stated reason for the adapter to exist, and stays
+// true without it. This assertion lives here, in the composition root, which is the only
+// place that legitimately knows both sides.
 //
-// `B-043`, bala 4: o adapter é **deletado**, não movido.
+// `B-043`, bullet 4: the adapter is **deleted**, not moved.
 func TestTransitClientSatisfiesTheStoreContractWithoutAnAdapter(t *testing.T) {
 	var _ store.VaultTransitClient = (vault.Transit)(nil)
 }

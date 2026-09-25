@@ -19,17 +19,17 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/surfaces"
 )
 
-// TestControlSurfaces_DesligadasSaoObservaveisComRazao is B-115 slice 1: the
+// TestControlSurfaces_DisabledOnesAreObservableWithAReason is B-115 slice 1: the
 // platform's own control paths report whether they were registered.
 //
 // They were converted first because their absence is invisible from the product
 // side. Nobody files a ticket when the ESO broker stops answering — the fleet
 // just stops converging — and `secret_fetch` is measured OFF in dev-public right
 // now, because the Secret it needs does not exist.
-func TestControlSurfaces_DesligadasSaoObservaveisComRazao(t *testing.T) {
-	// Rotas que cada superfície publica, para parear métrica com alcançabilidade.
-	// Uma métrica que discordasse do roteador seria pior que a ausência dela.
-	rotas := map[string]struct{ method, path string }{
+func TestControlSurfaces_DisabledOnesAreObservableWithAReason(t *testing.T) {
+	// Routes each surface publishes, to pair the metric with reachability.
+	// A metric that disagreed with the router would be worse than no metric.
+	routes := map[string]struct{ method, path string }{
 		surfaces.Bootstrap:      {http.MethodPost, "/internal/bootstrap"},
 		surfaces.ArgoCallback:   {http.MethodPost, "/internal/argocd-callback"},
 		surfaces.SecretFetch:    {http.MethodPost, "/internal/v1/secret-fetch/tn-x/SECRET"},
@@ -42,57 +42,57 @@ func TestControlSurfaces_DesligadasSaoObservaveisComRazao(t *testing.T) {
 	router := server.NewRouter(server.Config{Surfaces: reg})
 	metrics.PublishSurfaces(reg.All())
 
-	// As sete de topo. `ActiveTeam` fica de fora POR SER ANINHADA: a guarda dela
-	// vive dentro do grupo autenticado, que num Config vazio está desligado, então
-	// ela nem é avaliada. A série fica ausente em vez de zero — tolerável só
-	// porque o zero da mãe (`auth_protected`) domina a pergunta. Ver o doc da
-	// constante. Afirmar aqui que ela é gravada seria afirmar o contrário do que
-	// o código faz.
-	esperadas := []string{
+	// The seven top-level ones. `ActiveTeam` is left out BECAUSE IT IS NESTED: its
+	// guard lives inside the authenticated group, which is off in an empty Config, so
+	// it is not even evaluated. The series is absent instead of zero — tolerable only
+	// because the parent's zero (`auth_protected`) settles the question. See the
+	// constant's doc. Asserting here that it is recorded would assert the opposite of
+	// what the code does.
+	expected := []string{
 		surfaces.Bootstrap, surfaces.ArgoCallback, surfaces.SecretFetch,
 		surfaces.AdminEvict, surfaces.AdminPin, surfaces.ReleaseInspect,
 		surfaces.AuthProtected,
 	}
 
-	if _, gravada := gravadasPorNome(reg)[surfaces.ActiveTeam]; gravada {
-		t.Error("`active_team` foi gravada com o grupo autenticado desligado — " +
-			"a semântica de aninhamento mudou e o doc da constante ficou falso")
+	if _, recorded := recordedByName(reg)[surfaces.ActiveTeam]; recorded {
+		t.Error("`active_team` was recorded with the authenticated group switched off — " +
+			"the nesting semantics changed and the constant's doc became false")
 	}
 
-	gravadas := gravadasPorNome(reg)
+	recorded := recordedByName(reg)
 
-	for _, name := range esperadas {
-		s, ok := gravadas[name]
+	for _, name := range expected {
+		s, ok := recorded[name]
 		if !ok {
-			t.Errorf("superfície %q não foi gravada — o roteador decidiu e descartou a decisão", name)
+			t.Errorf("surface %q was not recorded — the router decided and discarded the decision", name)
 			continue
 		}
 		if s.Enabled {
-			t.Errorf("superfície %q reporta LIGADA num Config vazio", name)
+			t.Errorf("surface %q reports ENABLED in an empty Config", name)
 			continue
 		}
 		if s.Reason == "" {
-			t.Errorf("superfície %q está desligada sem razão — quem vê o zero não sabe o que provisionar", name)
+			t.Errorf("surface %q is disabled with no reason — whoever sees the zero does not know what to provision", name)
 		}
 		if got := testutil.ToFloat64(metrics.SurfaceEnabled.WithLabelValues(name)); got != 0 {
-			t.Errorf("métrica de %q = %v, esperado 0", name, got)
+			t.Errorf("metric for %q = %v, want 0", name, got)
 		}
 
-		// A rota tem de estar mesmo ausente. Sem isto a métrica poderia mentir
-		// nos dois sentidos: reportar desligada uma rota que responde, ou o
-		// contrário.
-		if r, temRota := rotas[name]; temRota {
+		// The route must really be absent. Without this the metric could lie
+		// in both directions: report a route that answers as disabled, or the
+		// opposite.
+		if r, hasRoute := routes[name]; hasRoute {
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, httptest.NewRequest(r.method, r.path, nil))
 			if rec.Code != http.StatusNotFound {
-				t.Errorf("superfície %q reporta desligada mas %s %s devolveu %d, esperado 404",
+				t.Errorf("surface %q reports disabled but %s %s returned %d, want 404",
 					name, r.method, r.path, rec.Code)
 			}
 		}
 	}
 }
 
-func gravadasPorNome(reg *surfaces.Registry) map[string]surfaces.Surface {
+func recordedByName(reg *surfaces.Registry) map[string]surfaces.Surface {
 	out := map[string]surfaces.Surface{}
 	for _, s := range reg.All() {
 		out[s.Name] = s
@@ -100,13 +100,13 @@ func gravadasPorNome(reg *surfaces.Registry) map[string]surfaces.Surface {
 	return out
 }
 
-// TestSecretFetchSurface_LigadaQuandoOHandlerExiste proves the enabled half.
+// TestSecretFetchSurface_EnabledWhenTheHandlerExists proves the enabled half.
 //
 // `secret_fetch` is the representative because it is the one measured absent in
 // dev-public (the `loopzero-broker-token` Secret does not exist), and because its
 // dependency is a plain http.Handler — provable without stubbing five interfaces
 // to assert the same property.
-func TestSecretFetchSurface_LigadaQuandoOHandlerExiste(t *testing.T) {
+func TestSecretFetchSurface_EnabledWhenTheHandlerExists(t *testing.T) {
 	reg := surfaces.NewRegistry()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
@@ -115,17 +115,17 @@ func TestSecretFetchSurface_LigadaQuandoOHandlerExiste(t *testing.T) {
 	metrics.PublishSurfaces(reg.All())
 
 	if got := testutil.ToFloat64(metrics.SurfaceEnabled.WithLabelValues(surfaces.SecretFetch)); got != 1 {
-		t.Errorf("métrica = %v com o handler presente, esperado 1", got)
+		t.Errorf("metric = %v with the handler present, want 1", got)
 	}
 
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/internal/v1/secret-fetch/tn-x/SECRET", nil))
 	if rec.Code == http.StatusNotFound {
-		t.Error("a rota devolveu 404 com o handler presente — a métrica estaria mentindo")
+		t.Error("the route returned 404 with the handler present — the metric would be lying")
 	}
 }
 
-// TestRouter_CadaSuperficieUsaUmNomeDistinto is structural, and it guards the one
+// TestRouter_EachSurfaceUsesADistinctName is structural, and it guards the one
 // failure mode the behavioural tests above cannot see.
 //
 // `Registry.Record` refuses a duplicate name at RUNTIME, and `Recorded` swallows
@@ -133,14 +133,14 @@ func TestSecretFetchSurface_LigadaQuandoOHandlerExiste(t *testing.T) {
 // router that works, a series that silently reports one surface's state for two,
 // and no test failure anywhere. Reading the source is the only place that catch
 // can live.
-func TestRouter_CadaSuperficieUsaUmNomeDistinto(t *testing.T) {
+func TestRouter_EachSurfaceUsesADistinctName(t *testing.T) {
 	fset := token.NewFileSet()
 	parsed, err := parser.ParseFile(fset, "../../internal/server/router.go", nil, 0)
 	if err != nil {
 		t.Fatalf("parse router.go: %v", err)
 	}
 
-	vistos := map[string]int{}
+	seen := map[string]int{}
 	ast.Inspect(parsed, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
@@ -150,29 +150,29 @@ func TestRouter_CadaSuperficieUsaUmNomeDistinto(t *testing.T) {
 		if !ok || (sel.Sel.Name != "Recorded" && sel.Sel.Name != "Record") {
 			return true
 		}
-		// O nome é o argumento imediatamente após o registro em `Recorded`, e o
-		// primeiro em `Record`. Pegar por posição é frágil; procurar o argumento
-		// que referencia o pacote `surfaces` é o que identifica a constante.
+		// The name is the argument right after the registry in `Recorded`, and the
+		// first one in `Record`. Picking by position is fragile; looking for the
+		// argument that references the `surfaces` package is what identifies the constant.
 		for _, arg := range call.Args {
 			src := gotypes.ExprString(arg)
 			if len(src) > 9 && src[:9] == "surfaces." {
-				vistos[src]++
+				seen[src]++
 			}
 		}
 		return true
 	})
 
-	if len(vistos) == 0 {
-		t.Fatal("nenhuma constante de superfície encontrada em router.go — ou o roteador " +
-			"mudou de forma, ou este teste parou de o reconhecer")
+	if len(seen) == 0 {
+		t.Fatal("no surface constant found in router.go — either the router " +
+			"changed shape, or this test stopped recognising it")
 	}
-	for nome, n := range vistos {
-		// Duas ocorrências são a forma explícita if/else (uma por ramo). Três ou
-		// mais significam reuso de constante entre superfícies distintas.
+	for constName, n := range seen {
+		// Two occurrences are the explicit if/else form (one per branch). Three or
+		// more mean a constant reused across distinct surfaces.
 		if n > 2 {
-			t.Errorf("a constante %s aparece %d vezes — duas superfícies compartilhando "+
-				"nome tornam a série ambígua, e Recorded engole o erro que Record devolveria",
-				nome, n)
+			t.Errorf("the constant %s appears %d times — two surfaces sharing a "+
+				"name make the series ambiguous, and Recorded swallows the error Record would return",
+				constName, n)
 		}
 	}
 }

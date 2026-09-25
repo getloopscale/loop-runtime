@@ -95,15 +95,15 @@ func TestMigration006CellsAuditColumns(t *testing.T) {
 	}
 }
 
-// Lê HISTÓRIA: a `000006` semeia as células com os nomes que elas tinham —
-// `cell-default`, `cell-1`, `cell-2`. A `000061` depois fundiu `cell-default` +
-// `cell-1` em `cell-0`, mas renomear no presente não muda o que esta migração
-// executou em todo banco onde já rodou, e `docs/README.md` proíbe reescrever um
-// registro datado para parecer atual.
+// Reads HISTORY: `000006` seeds the cells with the names they had back then —
+// `cell-default`, `cell-1`, `cell-2`. `000061` later merged `cell-default` +
+// `cell-1` into `cell-0`, but renaming in the present does not change what this
+// migration executed on every database where it already ran, and `docs/README.md`
+// forbids rewriting a dated record to look current.
 //
-// A versão anterior deste teste procurava a identidade NOVA no arquivo ANTIGO —
-// e listava `'cell-0'` DUAS vezes, o que fazia a mesma falha ser reportada em
-// duplicata e escondia que a terceira entrada nunca fora verificada (B-071).
+// The previous version of this test looked for the NEW identity in the OLD file —
+// and listed `'cell-0'` TWICE, which made the same failure be reported in
+// duplicate and hid that the third entry was never verified (B-071).
 func TestMigration006CellsSeedRows(t *testing.T) {
 	sql := readMigration006Cells(t)
 	for _, want := range []string{"'cell-default'", "'cell-1'", "'cell-2'"} {
@@ -111,11 +111,11 @@ func TestMigration006CellsSeedRows(t *testing.T) {
 			t.Errorf("seed row missing %q", want)
 		}
 	}
-	// A terceira célula semeia em 'maintenance' para que o placement recuse fixar
-	// nela até o estágio 1 do canário virá-la 'active'. Este é o portão de
-	// segurança, e ele vale sob qualquer nome que a célula venha a ter.
+	// The third cell is seeded in 'maintenance' so that placement refuses to pin
+	// to it until canary stage 1 flips it to 'active'. This is the safety gate,
+	// and it holds under whatever name the cell ends up having.
 	if !strings.Contains(sql, "'cell-2', 'Cell 2 (runtime-2)',\n                     'maintenance'") {
-		// tolera variante em linha única se a formatação mudar
+		// tolerate a single-line variant if the formatting changes
 		if !strings.Contains(sql, "cell-2") || !strings.Contains(sql, "'maintenance'") {
 			t.Fatal("expected cell-1 seeded in 'maintenance' status (safety gate)")
 		}

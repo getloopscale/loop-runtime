@@ -113,8 +113,8 @@ func NewPostgresSecretStore(db db.DBTX, key []byte) (*PostgresSecretStore, error
 // legacyAESKey is OPTIONAL legacy AES key for reading pre-T3.5 ciphertexts;
 // it is never used to write. Pass nil once no AES-written row remains.
 //
-// T3.5 of openbao-adoption v1.3 (FAANG dual-path per user "Siga o que for
-// mais FAANG" decision iter 27).
+// T3.5 of openbao-adoption v1.3 (FAANG dual-path, per the user's "go with
+// whatever is most FAANG" decision, iter 27).
 func NewPostgresSecretStoreWithVault(db db.DBTX, vaultClient VaultTransitClient, legacyAESKey []byte) (*PostgresSecretStore, error) {
 	if vaultClient == nil {
 		return nil, fmt.Errorf("secret_store: vault client required for Vault-canonical mode")

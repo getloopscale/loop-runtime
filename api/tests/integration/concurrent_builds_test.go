@@ -401,9 +401,9 @@ func cleanupTestData(t *testing.T, pool *pgxpool.Pool) {
 
 	ctx := context.Background()
 
-	// Clean up in reverse dependency order. Mesmo motivo do seed: DELETE também
-	// é filtrado pela RLS, então sem contexto ele apaga zero linhas em silêncio —
-	// e o teste seguinte herda o estado do anterior.
+	// Clean up in reverse dependency order. Same reason as the seed: DELETE is also
+	// filtered by RLS, so without a context it deletes zero rows in silence —
+	// and the next test inherits the previous one's state.
 	tables := []string{
 		"DELETE FROM sse_events WHERE build_id IN (SELECT id FROM builds WHERE tenant_id = 'tenant-test')",
 		"DELETE FROM idempotency_keys WHERE tenant_id = 'tenant-test'",
@@ -484,11 +484,11 @@ func readBody(t *testing.T, resp *http.Response) []byte {
 
 // --- Tests ---
 
-// POST /api/v1/builds passou a EXIGIR `Idempotency-Key` (middleware
-// MISSING_IDEMPOTENCY_KEY). Estas fixtures mandavam `nil` e recebiam 400 antes
-// de exercitar o lock — outra fixture congelada num contrato anterior. Cada
-// submissão leva a SUA chave: uma chave compartilhada transformaria a segunda
-// chamada num replay idempotente, que é o oposto do que estes testes medem.
+// POST /api/v1/builds now REQUIRES `Idempotency-Key` (middleware
+// MISSING_IDEMPOTENCY_KEY). These fixtures sent `nil` and got 400 before
+// exercising the lock — another fixture frozen on an earlier contract. Each
+// submission carries ITS OWN key: a shared key would turn the second call into
+// an idempotent replay, which is the opposite of what these tests measure.
 func TestConcurrentBuildSubmission(t *testing.T) {
 	// Two goroutines both call POST /builds simultaneously for the same
 	// (tenant, project, environment). Exactly one should get 202, the other 409.
@@ -562,10 +562,10 @@ func TestConcurrentBuildSubmission(t *testing.T) {
 	// Assert: 409 response contains DEPLOY_IN_PROGRESS error code
 	for i, r := range results {
 		if r.status == http.StatusConflict {
-			// map[string]any, não map[string]string: o corpo de erro é RFC 7807 e
-			// carrega `status` numérico. Com map[string]string o Unmarshal falha
-			// inteiro e o teste morre ANTES de olhar o código do erro — outra
-			// fixture congelada num formato de resposta anterior.
+			// map[string]any, not map[string]string: the error body is RFC 7807 and
+			// carries a numeric `status`. With map[string]string the Unmarshal fails
+			// entirely and the test dies BEFORE looking at the error code — another
+			// fixture frozen on an earlier response format.
 			var errResp map[string]any
 			if err := json.Unmarshal(r.body, &errResp); err != nil {
 				t.Fatalf("failed to parse 409 response body: %v — body: %s", err, string(r.body))
@@ -592,12 +592,12 @@ func TestConcurrentBuildSubmission(t *testing.T) {
 	}
 }
 
-// O corpo de POST /api/v1/builds declara `apps` como uma lista de OBJETOS
-// (`[]AppInput`, com `name` obrigatório), não de strings. Estas fixtures ficaram
-// na forma antiga e o handler as rejeitava com 400 INVALID_REQUEST antes de
-// tocar em qualquer regra — os testes mediam o parser, não o comportamento.
-// Mesma família de deriva do gatilho cell_id: fixture congelada num contrato
-// anterior.
+// The POST /api/v1/builds body declares `apps` as a list of OBJECTS
+// (`[]AppInput`, with a required `name`), not of strings. These fixtures stayed
+// in the old shape and the handler rejected them with 400 INVALID_REQUEST before
+// touching any rule — the tests measured the parser, not the behaviour.
+// Same family of drift as the cell_id trigger: a fixture frozen on an earlier
+// contract.
 func TestIdempotencyReplay(t *testing.T) {
 	// First call with Idempotency-Key gets 202.
 	// Second call with SAME key + SAME payload gets 202 (replay).

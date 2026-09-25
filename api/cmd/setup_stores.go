@@ -156,9 +156,9 @@ func setupSecretStore(dbAdapter db.DBTX, encKeyHex string, transit vault.Transit
 		}
 	}
 	if transit != nil {
-		// `transit` entra direto: `vault.Transit` satisfaz `store.VaultTransitClient`
-		// estruturalmente, e nenhum dos dois pacotes conhece o outro. A ponte que ficava
-		// aqui só renomeava métodos (B-043, bala 4).
+		// `transit` goes in directly: `vault.Transit` satisfies `store.VaultTransitClient`
+		// structurally, and neither package knows the other. The bridge that used to sit
+		// here only renamed methods (B-043, bullet 4).
 		store, err := store.NewPostgresSecretStoreWithVault(dbAdapter, transit, encKey)
 		if err != nil {
 			return nil, err

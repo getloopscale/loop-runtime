@@ -442,8 +442,8 @@ func TestReleaseConvergenceLoop_TerminatesStuckOperationOnTimeout(t *testing.T) 
 	if terminatingSyncClient.getTerminateCalls() == 0 {
 		t.Error("expected TerminateOperation to be called on timeout")
 	}
-	// #271: a identidade do Application é {tenant}-{project}-{env}; omitir o projeto
-	// fazia dois projetos do mesmo tenant colidirem num único objeto.
+	// #271: the Application's identity is {tenant}-{project}-{env}; omitting the project
+	// made two projects of the same tenant collide into a single object.
 	if terminatingSyncClient.getTerminatedApp() != "acme-my-app-production" {
 		t.Errorf("expected TerminateOperation for 'acme-my-app-production', got %q", terminatingSyncClient.getTerminatedApp())
 	}

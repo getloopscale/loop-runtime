@@ -1,12 +1,12 @@
--- Volta a chave primária para `(key)` — global, como era.
+-- Returns the primary key to `(key)` — global, as it was.
 --
--- Rollback real, não no-op: nada depende da chave nova, e deixar meia decisão
--- para trás é pior do que devolver o estado que a migração de subida encontrou.
+-- A real rollback, not a no-op: nothing depends on the new key, and leaving half a
+-- decision behind is worse than returning the state the up migration found.
 --
--- ATENÇÃO ao rodar: se dois inquilinos já gravaram a MESMA chave sob a chave
--- ampliada, este `ADD CONSTRAINT` falha — e falhar é o comportamento correto.
--- Estreitar uma chave única pode colidir; o erro nomeia exatamente as linhas
--- que a versão antiga não conseguia representar.
+-- CAUTION when running: if two tenants have already written the SAME key under the
+-- widened key, this `ADD CONSTRAINT` fails — and failing is the correct behaviour.
+-- Narrowing a unique key can collide; the error names exactly the rows the old
+-- version could not represent.
 BEGIN;
 
 ALTER TABLE idempotency_keys

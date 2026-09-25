@@ -137,10 +137,10 @@ func TestSprintA_SecretHandler_Delete_AcquiresEnvLock_WhenLockerWired(t *testing
 func TestSprintA_ServerConfig_SecretEnvLocker_Field_Exists(t *testing.T) {
 	// Compile-time: this MUST compile after T1.1.
 	cfg := server.Config{}
-	// O tipo explicito E a assercao: ele trava o NOME e o TIPO do campo em
-	// server.Config contra uma renomeacao silenciosa. Omiti-lo (QF1011) manteria a
-	// linha e perderia a garantia, que e a unica coisa que ela existe para dar.
-	//nolint:staticcheck // QF1011: o tipo explicito e o proposito, nao redundancia
+	// The explicit type IS the assertion: it pins the NAME and the TYPE of the field in
+	// server.Config against a silent rename. Omitting it (QF1011) would keep the
+	// line and lose the guarantee, which is the only thing it exists to give.
+	//nolint:staticcheck // QF1011: the explicit type is the purpose, not redundancy
 	var _ secrets.SecretEnvLocker = cfg.Secrets.EnvLocker
 
 	// Runtime: zero-value is nil (nil-safe legacy default).

@@ -11,8 +11,8 @@
 -- conflict renumbers between branches). golang-migrate rejected the
 -- directory with `duplicate migration file` errors.
 --
--- Per sponsor verbatim 2026-06-15:
---   "Corrija as migrations (se quiser pode consolidar em uma somente)"
+-- Per sponsor request 2026-06-15 (translated):
+--   "Fix the migrations (you may consolidate them into a single one if you want)"
 --
 -- This single migration replaces the following 6 duplicate copies that
 -- are deleted in the same commit:

@@ -1,13 +1,13 @@
 -- SPDX-License-Identifier: Apache-2.0
 -- Copyright 2025-2026 The LoopZero Authors
 
--- Reverte 000060. A ordem importa: as regras escopadas a prompt precisam SAIR
--- antes de o CHECK estreitar, senão o próprio ALTER falha validando linhas que
--- o novo CHECK rejeita.
+-- Reverts 000060. The order matters: the prompt-scoped rules must GO before
+-- the CHECK narrows, otherwise the ALTER itself fails validating rows the new
+-- CHECK rejects.
 --
--- O histórico em lens_fired_alerts é apagado junto, e isso é deliberado: um
--- incidente de uma métrica que deixou de existir não tem como ser lido depois.
--- Mesma escolha que 000059 fez ao reescrever 'guard_breach' → 'monitor_breach'.
+-- The history in lens_fired_alerts is deleted along with them, and that is
+-- deliberate: an incident for a metric that no longer exists cannot be read later.
+-- Same choice 000059 made when rewriting 'guard_breach' → 'monitor_breach'.
 
 SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '60s';

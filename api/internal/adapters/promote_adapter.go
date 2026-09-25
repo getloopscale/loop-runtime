@@ -42,9 +42,9 @@ func (a *PromoteServiceAdapter) Promote(ctx context.Context, req promote.Promote
 	}, nil
 }
 
-// A porta que este adaptador satisfaz, afirmada em tempo de compilacao.
+// The port this adapter satisfies, asserted at compile time.
 //
-// B-058: este arquivo NAO declarava, nem em prosa, o que adaptava — e o criterio de admissao
-// do pacote era "e um adapter", que nao recusa nada. A porta foi descoberta pelo consumidor,
-// e agora esta escrita onde o compilador a verifica.
+// B-058: this file did NOT declare, not even in prose, what it adapted — and the package's
+// admission criterion was "it is an adapter", which refuses nothing. The port was discovered
+// from the consumer, and is now written where the compiler checks it.
 var _ promote.PromoteService = (*PromoteServiceAdapter)(nil)

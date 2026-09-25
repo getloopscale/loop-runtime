@@ -45,8 +45,8 @@ func TestWebhookRoute_IsAbsentWhenTheHandlerIsNil(t *testing.T) {
 }
 
 // TestWebhookRoute_IsRegisteredWhenTheHandlerIsPresent is the half that FAILS if
-// the route is removed — which is what the B-021 DoD asks for: "existe
-// verificação que reprova quando a rota do webhook não está registrada".
+// the route is removed — which is what the B-021 DoD asks for: "a check exists
+// that fails when the webhook route is not registered".
 //
 // Paired with the test above, the two pin the whole chain: the endpoint exists
 // if and only if the handler was built, and the handler is built if and only if

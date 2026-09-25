@@ -60,11 +60,11 @@ func seedReleaseRow(t *testing.T, pool *pgxpool.Pool, rekorURL *string) (release
 	releaseID = "rel-rekor-" + suffix
 	correlationID = "corr-rekor-" + suffix
 
-	// O tenant precisa EXISTIR antes do build: a migration 000061 pôs um gatilho
-	// que resolve `builds.cell_id` a partir de `tenants.cell_id` e falha alto
-	// quando o tenant não está lá. Esta fixture é anterior a esse gatilho e vinha
-	// inserindo o build direto — a dívida que o comentário do job de isolamento
-	// no CI descreve como "fixtures that predate the cell_id trigger".
+	// The tenant must EXIST before the build: migration 000061 added a trigger
+	// that resolves `builds.cell_id` from `tenants.cell_id` and fails loudly
+	// when the tenant is not there. This fixture predates that trigger and was
+	// inserting the build directly — the debt the isolation job's comment in CI
+	// describes as "fixtures that predate the cell_id trigger".
 	_, err := pool.Exec(ctx,
 		`INSERT INTO users (id,email,display_name,username) VALUES ($1,$1||'@rekor.test','R',$1)
 		 ON CONFLICT (id) DO NOTHING`, "u-"+suffix)
@@ -315,7 +315,7 @@ func TestReleaseStore_InsertRolledBack_AuditLogNotPersisted(t *testing.T) {
 	correlationID := "corr-rekor-rb-" + suffix
 	rekorURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=666"
 
-	// Mesma dívida do gatilho 000061: o tenant precisa existir antes do build.
+	// Same debt as the 000061 trigger: the tenant must exist before the build.
 	seedTenantForBuild(t, pool, tenantID)
 
 	// Pre-seed the build OUTSIDE the rolled-back tx so the FK can resolve.

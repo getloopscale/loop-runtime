@@ -24,11 +24,11 @@ import (
 
 	previewsvc "github.com/getloopscale/loopzero/api/internal/services/preview"
 
-	// Alias porque este arquivo importa TAMBEM `api/internal/placement`, e os
-	// dois pacotes se chamam `placement`. A desambiguacao vive aqui, no unico
-	// arquivo que precisa dela, em vez de ficar assada no nome do pacote para
-	// todo mundo (B-057). Medido: dos 21 arquivos que importam um dos dois,
-	// so este importa os dois.
+	// Aliased because this file ALSO imports `api/internal/placement`, and both
+	// packages are named `placement`. The disambiguation lives here, in the only
+	// file that needs it, instead of being baked into the package name for
+	// everyone (B-057). Measured: of the 21 files that import one of the two,
+	// only this one imports both.
 	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -311,15 +311,16 @@ func buildServerConfig(
 			// T2.2 #5 of sqlc-migration: dispatches via SqlcBridge (DBTX).
 			billingHandler.WithCostSource(store.NewSQLCostStore(dbAdapter))
 		}
-		// O ENGINE NAO EMITE SESSAO DE PORTAL. Por ADR 2026-08-11
-		// (docs/decisions.md), o loopzero-cloud e o unico
-		// emissor: ele e quem CRIA o cliente Stripe quando falta (EnsureStripeCustomer), e o
-		// engine so exigia que ja existisse. Manter a capacidade aqui significava a chave do
-		// Stripe poder existir no processo que atende o CLI e o caminho critico de deploy —
-		// superficie sem contrapartida, ja que o passo anterior mora no outro lado.
+		// THE ENGINE DOES NOT ISSUE PORTAL SESSIONS. Per ADR 2026-08-11
+		// (docs/decisions.md), loopzero-cloud is the only
+		// issuer: it is the one that CREATES the Stripe customer when it is missing
+		// (EnsureStripeCustomer), and the engine only required that it already existed. Keeping
+		// the capability here meant the Stripe key could live in the process that serves the CLI
+		// and the critical deploy path — surface with nothing in return, since the preceding step
+		// lives on the other side.
 		//
-		// O `BillingHandler` mantem o injetor `WithPortalSessionCreator` de proposito: ele e a
-		// costura testavel do handler. O que saiu foi a IMPLEMENTACAO que fala com o Stripe.
+		// `BillingHandler` keeps the `WithPortalSessionCreator` injector on purpose: it is the
+		// handler's testable seam. What left was the IMPLEMENTATION that talks to Stripe.
 
 		sc.BillingHandler = billingHandler
 		// AUDIT-10: single PostgresTeamStore instance serves both team admin
@@ -332,15 +333,14 @@ func buildServerConfig(
 		sc.ActiveTeamStore = store.NewPostgresActiveTeamStore(dbAdapter)
 		sc.AuditHandler = audit.NewAuditHandler(&store.PostgresAuditStore{DB: dbAdapter})
 		// B-117 — the soft-deletion cycle (MEET-052). Without this assignment the
-		// router's `cfg.TenantDeletionStore != nil` guard is never true, and
-		// DELETE /tenants/{id} and POST /tenants/{id}/restore exist in no
-		// deployment — while the dashboard's account-deletion screen calls the
-		// first one for real.
+		// router's `if cfg.TenantDeletionStore != nil` guard is never true, and
+		// DELETE /tenants/{id}, POST /tenants/{id}/restore and
+		// POST /tenants/bulk-delete exist in no deployment at all — while the
+		// dashboard's account-deletion screen really calls the first of them.
 		//
-		// It was that way for months: the sqlc pilot created the store and deleted
-		// the legacy one in the same commit without wiring the new one, so it was
-		// born unreachable, and a quality pass removed it as dead code three weeks
-		// later.
+		// It stayed that way for months: the sqlc pilot created the store and deleted
+		// the legacy one in the same commit without wiring the new one, so it was born
+		// unreachable and a quality pass removed it as dead code three weeks later.
 		sc.TenantDeletionStore = store.NewTenantDeletionStoreSqlc(dbAdapter)
 		sc.Admin.Evictor = buildAdminEvictor(cfg, dbAdapter)
 		// CHG-2026-04-30-DELETE-SINGLE-CELL: wire the CellPinner so the
@@ -385,11 +385,11 @@ func buildServerConfig(
 				logger.Warn("audit write failed", "error", err)
 			}
 		}
-		// B-054: o portao do pool. Ate' 2026-08-19 este ponto entregava uma funcao de estatistica
-		// e o router calculava um percentual instantaneo a cada requisicao — que oscila perto da
-		// linha de corte. O `PGPoolBreaker` ja' existia, com histerese, construido e iniciado no
-		// `setupBuildHandler`, e NUNCA era consultado: o instrumento que resolvia a oscilacao
-		// estava desligado e o que decidia tinha o problema.
+		// B-054: the pool gate. Until 2026-08-19 this point handed over a statistics function
+		// and the router computed an instantaneous percentage on every request — which oscillates
+		// around the cut-off line. The `PGPoolBreaker` already existed, with hysteresis, built and
+		// started in `setupBuildHandler`, and was NEVER consulted: the instrument that solved the
+		// oscillation was switched off and the one that decided had the problem.
 		pgGate := admission.NewPGPoolBreaker(dbAdapter.Pool, admission.DefaultBreakerConfig(cfg.DBMaxConns), logger)
 		pgGate.Start(shutdownCtx)
 		go func() {

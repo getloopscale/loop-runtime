@@ -1635,7 +1635,7 @@ func TestStep6_BuildDoesNotCallGitOpsPush_WhenFailed(t *testing.T) {
 
 // TestStep6_RetryRelease_WithoutRebuild tests that a release in GIT_MIRROR_FAILED
 // state can be retried by reading manifests from release.Artifacts and re-pushing
-// to GitOps — WITHOUT triggering a new build. This is the core "retry sem rebuild"
+// to GitOps — WITHOUT triggering a new build. This is the core "retry without rebuild"
 // gate for Step 6.
 func TestStep6_RetryRelease_WithoutRebuild(t *testing.T) {
 	// Arrange — create a build that succeeds but gitops push fails

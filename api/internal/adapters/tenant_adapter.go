@@ -65,10 +65,10 @@ func (a *TenantK8sEvictorAdapter) EvictTenantsFromClusters(ctx context.Context, 
 	}, nil
 }
 
-// A porta que este adaptador satisfaz, afirmada em tempo de compilacao.
+// The port this adapter satisfies, asserted at compile time.
 //
-// B-058: o pacote se chama `adapters` e o criterio de admissao dele era "e um adapter" —
-// que nao recusa nada. Medido em 2026-08-18: dos nove adaptadores, cinco NOMEAVAM a porta em
-// prosa e apenas UM a verificava. Prosa nao compila; esta linha sim, e e ela que faz o
-// criterio conseguir dizer nao.
+// B-058: the package is called `adapters` and its admission criterion was "it is an adapter" —
+// which refuses nothing. Measured on 2026-08-18: of the nine adapters, five NAMED their port in
+// prose and only ONE verified it. Prose does not compile; this line does, and it is what lets
+// the criterion say no.
 var _ placement.TenantDBDeleter = (*TenantDBDeleterAdapter)(nil)

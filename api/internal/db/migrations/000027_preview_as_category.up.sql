@@ -1,9 +1,9 @@
 -- Migration 000027: preview-as-category single-slot model (Netlify-style)
 --
 -- Plan: .claude/knowledge-base/plans/2026-06-07-preview-as-category-single-slot-plan.md
--- ADRs D1-D8 — Sponsor verbatim 2026-06-07: "Implemente assim: 'Preview' (1 entry).
--- Somente um Preview ativo nao por branch. crie um plano para implemnetar e corrigir,
--- level FAANG sem workarounds sem atalhos."
+-- ADRs D1-D8 — Sponsor request 2026-06-07 (translated): "Implement it like this: 'Preview'
+-- (1 entry). Only one active Preview, not one per branch. Write a plan to implement and fix it,
+-- FAANG level, no workarounds, no shortcuts."
 --
 -- This migration is forward-only per CLAUDE.md Rule 11. The companion down migration
 -- (000027_preview_as_category.down.sql) is provided for dev only and MUST NOT run

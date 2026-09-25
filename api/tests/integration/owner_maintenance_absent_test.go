@@ -76,10 +76,10 @@ func openAnyRole(t *testing.T) (context.Context, *sql.DB) {
 		t.Fatal("no reachable database DSN, and LOOPZERO_RLS_AUDIT_REQUIRE=1 forbids skipping " +
 			"— a green run here would assert nothing about the owner bypass")
 	}
-	// Pular aqui é a decisão certa numa máquina sem banco, e é a decisão ERRADA no CI:
-	// um controle de isolamento que reporta verde sem ter sido exercido é a própria falha
-	// que este teste existe para detectar. O CI passa LOOPZERO_RLS_AUDIT_REQUIRE=1, então lá
-	// ela vira falha. A tensão está rastreada em:
+	// Skipping here is the right decision on a machine without a database, and the WRONG
+	// decision in CI: an isolation control that reports green without being exercised is the
+	// very failure this test exists to detect. CI sets LOOPZERO_RLS_AUDIT_REQUIRE=1, so there it
+	// becomes a failure. The tension is tracked in:
 	// https://github.com/getloopscale/loopzero/issues/289
 	t.Skip("no reachable database DSN (set LOOPZERO_RLS_AUDIT_REQUIRE=1 to make this a failure)")
 	return nil, nil

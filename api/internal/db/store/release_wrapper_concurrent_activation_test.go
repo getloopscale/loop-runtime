@@ -170,8 +170,8 @@ func TestUpdateStatus_ConcurrentActivation_ReturnsTypedError(t *testing.T) {
 			"DELETE FROM builds WHERE tenant_id = $1", tenantID)
 	})
 
-	// O gatilho da migration 000061 resolve builds.cell_id a partir do tenant e
-	// falha alto se ele não existir; esta fixture é anterior ao gatilho.
+	// The migration 000061 trigger resolves builds.cell_id from the tenant and
+	// fails loudly if it does not exist; this fixture predates the trigger.
 	seedTenantRowForStore(t, pool, tenantID)
 
 	// Seed two builds + R1 ACTIVE + R2 PENDING for same env.

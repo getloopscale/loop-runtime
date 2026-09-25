@@ -231,13 +231,13 @@ func TestAuditLogAppendOnly(t *testing.T) {
 	pool := setupHardeningTestDB(t)
 	ctx := context.Background()
 
-	// A fixture escreve como produção escreve: DENTRO do contexto do tenant.
+	// The fixture writes the way production writes: INSIDE the tenant context.
 	//
-	// Antes de 000064 esta linha entrava porque o dono carregava a policy
-	// audit_log_owner_maintenance (USING true) — o bypass que aquela migration
-	// removeu. Sem contexto, a RLS fail-closed recusa o INSERT, e é isso que
-	// deve acontecer: o teste é sobre o gatilho append-only, e semear a fixture
-	// por fora da barreira testava o gatilho num caminho que produção não tem.
+	// Before 000064 this row got in because the owner carried the
+	// audit_log_owner_maintenance policy (USING true) — the bypass that migration
+	// removed. Without a context, fail-closed RLS rejects the INSERT, and that is
+	// what must happen: the test is about the append-only trigger, and seeding the
+	// fixture outside the barrier tested the trigger on a path production does not have.
 	if _, err := pool.Exec(ctx, `SELECT set_config('app.tenant_id', 'test-audit', false)`); err != nil {
 		t.Fatalf("set tenant context: %v", err)
 	}

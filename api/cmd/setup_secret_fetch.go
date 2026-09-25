@@ -4,9 +4,9 @@
 // setup_secret_fetch.go — wires the Phase 4 broker endpoint
 // `/internal/v1/secret-fetch/{tenant_id}/{secret_name}` to its three
 // runtime dependencies (TenantCellBindingLookup, InternalSecretReader,
-// SecretReadAuditWriter). Built 2026-06-10 J-22 walkthrough per sponsor
-// verbatim "Voce deve terminar de implementar, precisamos fechar nosso
-// sistema de Scrects". Plan 2026-06-02-openbao-adoption v1.3 § T4.1
+// SecretReadAuditWriter). Built in the 2026-06-10 J-22 walkthrough at the
+// sponsor's request to finish implementing and close out the secrets
+// system. Plan 2026-06-02-openbao-adoption v1.3 § T4.1
 // declares the handler; this file completes Phase 4 by composing the
 // production deps that the LIVE walkthrough surfaced as un-wired.
 
