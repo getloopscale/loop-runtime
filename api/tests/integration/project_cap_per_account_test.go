@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
@@ -50,7 +51,7 @@ func (c realProjectCapChecker) CheckProjectsValue(ctx context.Context, tenantID 
 
 func projectCapStore(t *testing.T) (*store.PostgresProjectStore, *sql.DB) {
 	t.Helper()
-	pool := testPool(t) // skips if pg unreachable
+	_ = testPool(t) // skips if pg unreachable
 	stdDB, err := sql.Open("pgx", seedDBURL())
 	if err != nil {
 		t.Fatalf("open stdlib DB: %v", err)
@@ -59,9 +60,19 @@ func projectCapStore(t *testing.T) (*store.PostgresProjectStore, *sql.DB) {
 	// The plan is read through the cross-tenant worker role, as main wires it
 	// (wirePlanEnforcement): seedDBURL is LOOPZERO_WORKER_DATABASE_URL.
 	limiter := enforcement.NewPlanLimiter(store.NewPlanLimitsStore(&db.PgxAdapter{Pool: workerPool(t)}), slog.New(slog.NewTextHandler(io.Discard, nil)))
-	store := &store.PostgresProjectStore{DB: &db.PgxAdapter{Pool: pool}}
+	// The store runs as main wires it: on the request pool, whose connections
+	// carry the caller's tenant scope, and counting the Account's projects
+	// through the cross-tenant pool (wireProjectCap).
+	store := &store.PostgresProjectStore{DB: scopedRequestPool(t)}
 	store.SetProjectCapChecker(realProjectCapChecker{l: limiter})
+	store.SetCrossTenantCounter(&db.PgxAdapter{Pool: workerPool(t)})
 	return store, stdDB
+}
+
+// asTenant is the context an authenticated request of tenantID reaches the
+// store with.
+func asTenant(tenantID string) context.Context {
+	return dbtx.WithTenantScope(context.Background(), tenantID)
 }
 
 func projectCapCleanup(t *testing.T, std *sql.DB, owner string) {
@@ -99,7 +110,7 @@ func projectCapSeed(t *testing.T, std *sql.DB, owner, acct, tn1, tn2, plan strin
 
 func mustCreate(t *testing.T, store *store.PostgresProjectStore, tenant, name, owner string) error {
 	t.Helper()
-	_, err := store.CreateProject(context.Background(), ports.CreateProjectInput{TenantID: tenant, Name: name, CreatedBy: owner})
+	_, err := store.CreateProject(asTenant(tenant), ports.CreateProjectInput{TenantID: tenant, Name: name, CreatedBy: owner})
 	return err
 }
 

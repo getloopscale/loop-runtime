@@ -35,15 +35,7 @@ import (
 // it is a silent no-op — so the guard turns it into a boot failure naming the
 // variable to set.
 func setupBackgroundDatabase(cfg config.Config, logger *slog.Logger) (*db.PgxAdapter, error) {
-	adapter, err := db.NewPool(context.Background(), cfg.EffectiveWorkerDatabaseURL(), db.PoolConfig{
-		MaxConns:          cfg.DBMaxConns,
-		MinConns:          cfg.DBMinConns,
-		MaxConnIdleTime:   cfg.DBMaxConnIdleTime,
-		MaxConnLifetime:   cfg.DBMaxConnLifetime,
-		HealthCheckPeriod: cfg.DBHealthCheckTime,
-		ConnectTimeout:    cfg.DBConnectTimeout,
-		StatementTimeout:  cfg.DBStatementTimeout,
-	})
+	adapter, err := db.NewPool(context.Background(), cfg.EffectiveWorkerDatabaseURL(), backgroundPoolConfig(cfg))
 	if err != nil {
 		return nil, err
 	}

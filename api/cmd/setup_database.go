@@ -83,15 +83,7 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 		return nil, ErrDatabaseURLNotSet
 	}
 
-	poolCfg, err := db.NewPool(context.Background(), dbURL, db.PoolConfig{
-		MaxConns:          cfg.DBMaxConns,
-		MinConns:          cfg.DBMinConns,
-		MaxConnIdleTime:   cfg.DBMaxConnIdleTime,
-		MaxConnLifetime:   cfg.DBMaxConnLifetime,
-		HealthCheckPeriod: cfg.DBHealthCheckTime,
-		ConnectTimeout:    cfg.DBConnectTimeout,
-		StatementTimeout:  cfg.DBStatementTimeout,
-	})
+	poolCfg, err := db.NewPool(context.Background(), dbURL, requestPoolConfig(cfg))
 	if err != nil {
 		return nil, err
 	}
@@ -130,6 +122,30 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 	// the cross-tenant (loopzero_worker) connection they read through exists — see
 	// wirePlanEnforcement and projectCapEnforcement.
 	return deps, nil
+}
+
+// requestPoolConfig is the pool that serves HTTP requests. It scopes every
+// connection to the tenant the request was authenticated for
+// (dbtx.WithTenantScope): the request role is RLS-bound, and a connection with
+// no scope reads no tenant's rows.
+func requestPoolConfig(cfg config.Config) db.PoolConfig {
+	pc := backgroundPoolConfig(cfg)
+	pc.TenantScoped = true
+	return pc
+}
+
+// backgroundPoolConfig is the sizing both pools share. The background pool
+// uses it as is: its role crosses tenants through named policies.
+func backgroundPoolConfig(cfg config.Config) db.PoolConfig {
+	return db.PoolConfig{
+		MaxConns:          cfg.DBMaxConns,
+		MinConns:          cfg.DBMinConns,
+		MaxConnIdleTime:   cfg.DBMaxConnIdleTime,
+		MaxConnLifetime:   cfg.DBMaxConnLifetime,
+		HealthCheckPeriod: cfg.DBHealthCheckTime,
+		ConnectTimeout:    cfg.DBConnectTimeout,
+		StatementTimeout:  cfg.DBStatementTimeout,
+	}
 }
 
 // wirePlanEnforcement builds the plan-limits store and the limiter every plan

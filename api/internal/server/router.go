@@ -238,6 +238,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			"MemberStore is missing — which depends on the database") {
 		r.Group(func(r chi.Router) {
 			r.Use(mwauth.Auth(authn, cfg.TokenValidator, cfg.MemberStore))
+			r.Use(scopeDatabaseToCaller)
 			r.Use(audit.AuditLog(cfg.Logger, cfg.AuditWriter))
 
 			// Auth routes

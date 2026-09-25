@@ -23,6 +23,10 @@ type PoolConfig struct {
 	HealthCheckPeriod time.Duration
 	ConnectTimeout    time.Duration
 	StatementTimeout  string // milliseconds as string for PostgreSQL runtime param
+	// TenantScoped makes every connection the pool hands out carry the Row
+	// Level Security scope of the caller's context (dbtx.WithTenantScope).
+	// Set on the request pool only; see tenantScoper.
+	TenantScoped bool
 }
 
 // NewPool creates a PgxAdapter wrapping a new pgxpool.Pool connected to the given URL.
@@ -69,6 +73,12 @@ func NewPool(ctx context.Context, databaseURL string, poolCfg PoolConfig) (*PgxA
 			KeepAlive: 15 * time.Second, // OS sends keepalive probes every 15s
 		}
 		return d.DialContext(ctx, network, addr)
+	}
+
+	if poolCfg.TenantScoped {
+		scoper := newTenantScoper()
+		cfg.PrepareConn = scoper.prepare
+		cfg.BeforeClose = scoper.forget
 	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)

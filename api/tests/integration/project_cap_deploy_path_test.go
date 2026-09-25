@@ -4,7 +4,6 @@
 package integration
 
 import (
-	"context"
 	"sync"
 	"testing"
 
@@ -29,7 +28,7 @@ import (
 // path does, minus the env-lock (covered separately by the held-env-lock test).
 func mustEnsure(t *testing.T, store *store.PostgresProjectStore, tenant, name, owner string) error {
 	t.Helper()
-	return store.EnsureProject(context.Background(), nil, tenant, name, owner)
+	return store.EnsureProject(asTenant(tenant), nil, tenant, name, owner)
 }
 
 // Scenario 1 — a deploy of the FIRST new project (count→cap) is allowed
@@ -150,7 +149,7 @@ func TestProjectCapOnDeploy_DeployAndApiCreateShareTheCap(t *testing.T) {
 	go func() { defer wg.Done(); record(mustEnsure(t, store, tn1, "via-deploy", owner)) }()
 	go func() {
 		defer wg.Done()
-		_, err := store.CreateProject(context.Background(), ports.CreateProjectInput{TenantID: tn2, Name: "via-api", CreatedBy: owner})
+		_, err := store.CreateProject(asTenant(tn2), ports.CreateProjectInput{TenantID: tn2, Name: "via-api", CreatedBy: owner})
 		record(err)
 	}()
 	wg.Wait()
@@ -222,7 +221,7 @@ func TestProjectCapOnDeploy_ConcurrentDeploysNeverExceedCap(t *testing.T) {
 // tx (env→account order, no nested lock) and still enforces the cap — no deadlock.
 func TestProjectCapOnDeploy_DeployWithHeldEnvLock_EnforcesCapNoDeadlock(t *testing.T) {
 	store, std := projectCapStore(t)
-	pool := testPool(t)
+	pool := scopedRequestPool(t).Pool
 	const owner, acct, tn1, tn2 = "m5-el-uid", "acct-m5el", "tn-m5el-a", "tn-m5el-b"
 	projectCapSeed(t, std, owner, acct, tn1, tn2, "starter") // cap = 1
 	t.Cleanup(func() { projectCapCleanup(t, std, owner) })
@@ -232,7 +231,7 @@ func TestProjectCapOnDeploy_DeployWithHeldEnvLock_EnforcesCapNoDeadlock(t *testi
 		t.Fatalf("seed first project: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := asTenant(tn2)
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
@@ -258,7 +257,7 @@ func TestProjectCapOnDeploy_DeployWithHeldEnvLock_EnforcesCapNoDeadlock(t *testi
 // BYPASSRLS/owner invariant for the count (see enforceProjectCapTx).
 func TestProjectCapOnDeploy_CrossTenantCountUnaffectedByRLSContext(t *testing.T) {
 	store, std := projectCapStore(t)
-	pool := testPool(t)
+	pool := scopedRequestPool(t).Pool
 	const owner, acct, tn1, tn2 = "m5-rls-uid", "acct-m5rls", "tn-m5rls-a", "tn-m5rls-b"
 	projectCapSeed(t, std, owner, acct, tn1, tn2, "starter") // cap = 1
 	t.Cleanup(func() { projectCapCleanup(t, std, owner) })
@@ -269,7 +268,7 @@ func TestProjectCapOnDeploy_CrossTenantCountUnaffectedByRLSContext(t *testing.T)
 		t.Fatalf("seed: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := asTenant(tn2)
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
