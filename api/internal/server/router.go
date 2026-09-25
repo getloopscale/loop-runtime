@@ -118,23 +118,23 @@ func NewRouter(cfg Config) *chi.Mux {
 	// Returns binary metadata (version, commit, build_date, go_version, platform).
 	// Stable schema per Rule 5 (loopzero CLI --json contract analogue).
 	r.Get("/api/v1/version", version.VersionHandler())
-	// Contrato da FROTA de status: o coletor do dashboard sonda `/v1/version` e
-	// le' `{version, built_at}`. Mesma verdade do endpoint acima, no formato que
-	// os outros servicos da plataforma ja' falam — sem o qual o engine nao
-	// aparece no painel /status. Publico pelo mesmo motivo: metadado de build nao
-	// e' segredo e o coletor sonda sem sessao.
+	// The status FLEET contract: the dashboard collector probes `/v1/version`
+	// and reads `{version, built_at}`. Same truth as the endpoint above, in the
+	// shape the other platform services already speak — without it the engine
+	// does not appear on the /status panel. Public for the same reason: build
+	// metadata is not a secret and the collector probes without a session.
 	r.Get("/v1/version", version.FleetVersionHandler())
 
 	// Internal-only routes (no auth — called by platform controllers, not users)
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Bootstrap, cfg.BootstrapStore != nil,
-		"sem banco — o BootstrapStore é `PostgresBootstrapStore` (setup_stores.go:117) "+
-			"e só é construído dentro do bloco que exige `dbAdapter`") {
+		"no database — the BootstrapStore is `PostgresBootstrapStore` (setup_stores.go:117) "+
+			"and is only built inside the block that requires `dbAdapter`") {
 		bootstrap := bootstrap.NewBootstrapHandler(cfg.BootstrapStore, cfg.BootstrapSecret, cfg.CellPlacement)
 		r.Post("/internal/bootstrap", bootstrap.Bootstrap)
 	}
 	if surfaces.Recorded(cfg.Surfaces, surfaces.ArgoCallback, cfg.ArgoCallbackHandler != nil,
-		"as dependências do orquestrador não subiram — o handler vem de `orchDeps` "+
-			"(setup_server.go:236), que é nil quando a orquestração de build não foi montada") {
+		"the orchestrator dependencies did not come up — the handler comes from `orchDeps` "+
+			"(setup_server.go:236), which is nil when build orchestration was not assembled") {
 		r.Post("/internal/argocd-callback", cfg.ArgoCallbackHandler.Handle)
 	}
 	// Layer 2 ESO sync broker (plan 2026-06-10-j22-openbao-transit-eso-sync
@@ -150,10 +150,10 @@ func NewRouter(cfg Config) *chi.Mux {
 	// handler stays nil and the route is not registered — ESO sees 404
 	// and retries with backoff (safer than registering a broken handler).
 	if surfaces.Recorded(cfg.Surfaces, surfaces.SecretFetch, cfg.SecretFetchHandler != nil,
-		"falta uma de quatro dependências, e main.go:429-441 exige as quatro: transit "+
-			"do OpenBao, banco, cellStore e `LOOPZERO_BROKER_TOKEN`. Medido em dev-public "+
-			"2026-08-16: o Secret `loopzero-broker-token` NÃO EXISTE, então esta é a "+
-			"superfície que já está desligada agora") {
+		"one of four dependencies is missing, and main.go:429-441 requires all four: the "+
+			"secrets backend transit client, the database, cellStore and `LOOPZERO_BROKER_TOKEN`. "+
+			"Measured on dev-public 2026-08-16: the `loopzero-broker-token` Secret DOES NOT EXIST, "+
+			"so this surface is already off there") {
 		// T2.1 + ADR D2 of plan 2026-06-10-j22-layer2-code-review-fixes
 		// (revised 2026-06-11 LIVE catch — ESO v1beta1 CRD rejects
 		// `remoteRef.metadata` as unknown field): 2-segment URL where
@@ -177,7 +177,7 @@ func NewRouter(cfg Config) *chi.Mux {
 		_ = cfg.Surfaces.Record(surfaces.GitHubWebhook, true, "")
 	} else {
 		_ = cfg.Surfaces.Record(surfaces.GitHubWebhook, false,
-			"GITHUB_WEBHOOK_SECRET ausente — o segredo HMAC que valida as entregas do GitHub")
+			"GITHUB_WEBHOOK_SECRET missing — the HMAC secret that validates GitHub deliveries")
 	}
 
 	// Admin endpoints — operator primitives, X-Service-Auth only (no user
@@ -191,10 +191,10 @@ func NewRouter(cfg Config) *chi.Mux {
 	// the cloud /engine/* proxy carries on user-JWT requests. The handler
 	// still enforces LOOPZERO_ADMIN_API=true as a separate defense-in-depth gate.
 	if surfaces.Recorded(cfg.Surfaces, surfaces.AdminEvict, cfg.AdminEvictor != nil,
-		"sem banco — `buildAdminEvictor` (setup_server.go:290) roda dentro do bloco "+
-			"que exige `dbAdapter`. A ausência do Secret `loopzero-api-admin` NÃO desliga "+
-			"esta rota: ele alimenta a chave que o middleware confere, e sem ela o "+
-			"acesso é NEGADO (falha fechada), não aberto") {
+		"no database — `buildAdminEvictor` (setup_server.go:290) runs inside the block "+
+			"that requires `dbAdapter`. A missing `loopzero-api-admin` Secret does NOT turn "+
+			"this route off: it feeds the key the middleware checks, and without it "+
+			"access is DENIED (fail closed), not opened") {
 		r.With(mwauth.RequireAdminService).Post(
 			"/api/v1/admin/tenants/evict",
 			admin.AdminEvictHandler(cfg.AdminEvictor),
@@ -202,9 +202,9 @@ func NewRouter(cfg Config) *chi.Mux {
 	}
 	// CHG-2026-04-30-DELETE-SINGLE-CELL: pin tenants to specific cell.
 	if surfaces.Recorded(cfg.Surfaces, surfaces.AdminPin, cfg.AdminPinner != nil,
-		"sem banco — o CellPinner é construído sobre `PostgresCellStore` "+
-			"(setup_server.go:299). Esta é a ÚNICA rota que move um tenant de célula, "+
-			"então desligada ela não degrada: ela remove a operação") {
+		"no database — the CellPinner is built on `PostgresCellStore` "+
+			"(setup_server.go:299). This is the ONLY route that moves a tenant between cells, "+
+			"so turning it off does not degrade anything: it removes the operation") {
 		r.With(mwauth.RequireAdminService).Post("/api/v1/admin/tenants/pin", admin.AdminPinCellHandler(cfg.AdminPinner, cfg.AuditWriter))
 	}
 	// T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md:
@@ -213,24 +213,24 @@ func NewRouter(cfg Config) *chi.Mux {
 	// route it sits behind mwauth.RequireAdminService; the handler keeps only
 	// the LOOPZERO_ADMIN_API feature gate.
 	if surfaces.Recorded(cfg.Surfaces, surfaces.ReleaseInspect, cfg.ReleaseInspector != nil,
-		"sem banco — construído em setup_server.go:315, dentro do bloco que exige "+
-			"`dbAdapter`. É a visão de plantão sobre a cadeia de assinatura de uma "+
-			"release; desligada, o plantão perde o diagnóstico exatamente quando precisa") {
+		"no database — built in setup_server.go:315, inside the block that requires "+
+			"`dbAdapter`. It is on-call's view of a release's signing chain; turned off, "+
+			"on-call loses the diagnosis exactly when it is needed") {
 		r.With(mwauth.RequireAdminService).Get("/api/v1/admin/releases/{id}/inspect", admin.AdminReleaseInspectHandler(cfg.ReleaseInspector))
 	}
 
 	// Protected routes (auth required)
 	//
-	// A superfície de maior alcance do roteador: desligada, TODA rota de cliente
-	// desaparece de uma vez. Medido: `TokenValidator` é construído
-	// incondicionalmente (setup_auth.go:75), entao em producao a guarda depende
-	// so' do `MemberStore` — a condicao existe para os testes poderem montar um
-	// roteador sem auth.
+	// The router's widest surface: turned off, EVERY client route disappears at
+	// once. Measured: `TokenValidator` is built unconditionally
+	// (setup_auth.go:75), so in production the guard depends only on
+	// `MemberStore` — the condition exists so tests can mount a router without
+	// auth.
 	if surfaces.Recorded(cfg.Surfaces, surfaces.AuthProtected,
 		cfg.TokenValidator != nil && cfg.MemberStore != nil,
-		"sem validador de token ou sem MemberStore. Em producao o validador e' "+
-			"sempre construido (setup_auth.go:75), logo na pratica isto significa "+
-			"MemberStore ausente — que depende do banco") {
+		"no token validator or no MemberStore. In production the validator is "+
+			"always built (setup_auth.go:75), so in practice this means "+
+			"MemberStore is missing — which depends on the database") {
 		r.Group(func(r chi.Router) {
 			r.Use(mwauth.Auth(cfg.TokenValidator, cfg.MemberStore))
 			r.Use(audit.AuditLog(cfg.Logger, cfg.AuditWriter))

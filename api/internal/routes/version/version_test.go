@@ -70,7 +70,7 @@ func TestVersionHandler_HandlesUnsetBuildFlags(t *testing.T) {
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
-	// GoVersion + Platform sempre vêm do runtime, então DEVEM existir.
+	// GoVersion + Platform always come from the runtime, so they MUST be present.
 	if resp.GoVersion == "" || resp.Platform == "" {
 		t.Error("runtime-derived fields must be populated")
 	}

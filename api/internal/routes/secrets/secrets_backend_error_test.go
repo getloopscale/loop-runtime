@@ -13,8 +13,8 @@
 // "Something went wrong" that a database outage produces.
 //
 // That is why the issue author had to GUESS at the cause. Their note reads
-// "isso sugere que o backend de secrets (OpenBao Transit / ESO) não está
-// provisionado" — a hypothesis, because the API told them nothing. An operator
+// "isso sugere que o backend de secrets (OpenBao Transit / ESO) não está  // english-only: verbatim quote of the issue #138 report
+// provisionado" ("this suggests the secrets backend is not provisioned") — a hypothesis, because the API told them nothing. An operator
 // should not have to infer the failing subsystem from which project happens to
 // work.
 //
@@ -84,7 +84,7 @@ func TestSecretSet_BackendUnavailableIsTyped(t *testing.T) {
 			"    status=%d body=%s\n\n"+
 			"    A Transit encrypt that cannot reach its backend is indistinguishable from a database\n"+
 			"    outage or any other 5xx. The issue author had to GUESS the cause — their report says\n"+
-			"    \"isso sugere que o backend de secrets ... não está provisionado\", a hypothesis, because\n"+
+			"    \"isso sugere que o backend de secrets ... não está provisionado\", a hypothesis, because\n"+ // english-only: verbatim quote of the issue #138 report
 			"    the API said nothing. Emit a typed code naming the subsystem that refused.",
 			w.Code, w.Body.String())
 	}

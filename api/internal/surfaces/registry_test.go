@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-func TestRegistry_SuperficieDesligadaCarregaARazao(t *testing.T) {
+func TestRegistry_DisabledSurfaceCarriesItsReason(t *testing.T) {
 	r := NewRegistry()
-	if err := r.Record("github_webhook", false, "GITHUB_WEBHOOK_SECRET ausente"); err != nil {
+	if err := r.Record("github_webhook", false, "GITHUB_WEBHOOK_SECRET missing"); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
 	if err := r.Record("billing", true, ""); err != nil {
@@ -19,116 +19,116 @@ func TestRegistry_SuperficieDesligadaCarregaARazao(t *testing.T) {
 
 	off := r.Disabled()
 	if len(off) != 1 {
-		t.Fatalf("Disabled() = %d superfícies, esperado 1: %+v", len(off), off)
+		t.Fatalf("Disabled() = %d surfaces, want 1: %+v", len(off), off)
 	}
 	if off[0].Name != "github_webhook" {
-		t.Errorf("nome = %q, esperado github_webhook", off[0].Name)
+		t.Errorf("name = %q, want github_webhook", off[0].Name)
 	}
-	// A razão é o que torna a métrica acionável: quem vê o zero precisa saber
-	// o que provisionar, sem abrir o log do arranque.
+	// The reason is what makes the metric actionable: whoever sees the zero
+	// must know what to provision without opening the startup log.
 	if !strings.Contains(off[0].Reason, "GITHUB_WEBHOOK_SECRET") {
-		t.Errorf("razão = %q, esperado nomear a variável ausente", off[0].Reason)
+		t.Errorf("reason = %q, want it to name the missing variable", off[0].Reason)
 	}
 }
 
-func TestRegistry_RecusaDesligadaSemRazao(t *testing.T) {
+func TestRegistry_RefusesDisablingWithoutAReason(t *testing.T) {
 	r := NewRegistry()
 	err := r.Record("github_webhook", false, "   ")
 	if err == nil {
-		t.Fatal("desligar sem razão foi aceito — uma superfície desligada sem razão " +
-			"produz um zero que ninguém sabe consertar")
+		t.Fatal("disabling without a reason was accepted — a surface off with no reason " +
+			"is a zero nobody knows how to fix")
 	}
 	if !strings.Contains(err.Error(), "github_webhook") {
-		t.Errorf("erro não nomeia a superfície: %v", err)
+		t.Errorf("error does not name the surface: %v", err)
 	}
 }
 
-func TestRegistry_RecusaNomeDuplicado(t *testing.T) {
+func TestRegistry_RefusesADuplicateName(t *testing.T) {
 	r := NewRegistry()
 	if err := r.Record("github_webhook", true, ""); err != nil {
-		t.Fatalf("primeiro Record: %v", err)
+		t.Fatalf("first Record: %v", err)
 	}
-	err := r.Record("github_webhook", false, "outra coisa")
+	err := r.Record("github_webhook", false, "something else")
 	if err == nil {
-		t.Fatal("nome duplicado foi aceito — duas superfícies com o mesmo nome tornam " +
-			"a série ambígua e o operador não consegue saber qual está zerada")
+		t.Fatal("a duplicate name was accepted — two surfaces with one name make " +
+			"the series ambiguous and the operator cannot tell which one is at zero")
 	}
 }
 
-func TestRegistry_OrdemDeterministica(t *testing.T) {
-	// Sem ordem estável o resumo de arranque muda a cada boot e vira ruído no
-	// diff de log — o oposto do que a observabilidade deveria comprar.
+func TestRegistry_OrderIsDeterministic(t *testing.T) {
+	// Without a stable order the startup summary changes on every boot and
+	// becomes noise in a log diff — the opposite of what observability buys.
 	r := NewRegistry()
-	for _, n := range []string{"zeta", "alpha", "meio"} {
-		if err := r.Record(n, false, "razão"); err != nil {
+	for _, n := range []string{"zeta", "alpha", "middle"} {
+		if err := r.Record(n, false, "reason"); err != nil {
 			t.Fatalf("Record(%s): %v", n, err)
 		}
 	}
 	got := r.Disabled()
-	want := []string{"alpha", "meio", "zeta"}
+	want := []string{"alpha", "middle", "zeta"}
 	if len(got) != len(want) {
-		t.Fatalf("Disabled() = %d, esperado %d", len(got), len(want))
+		t.Fatalf("Disabled() = %d, want %d", len(got), len(want))
 	}
 	for i := range want {
 		if got[i].Name != want[i] {
-			t.Errorf("posição %d = %q, esperado %q", i, got[i].Name, want[i])
+			t.Errorf("position %d = %q, want %q", i, got[i].Name, want[i])
 		}
 	}
 }
 
-func TestRegistry_AllDevolveLigadasEDesligadas(t *testing.T) {
-	// O publicador precisa das duas: uma superfície LIGADA tem de emitir 1, e
-	// não simplesmente ausência de série. Ausência e zero são indistinguíveis
-	// para quem alerta, e essa ambiguidade é o defeito que este item ataca.
+func TestRegistry_AllReturnsEnabledAndDisabled(t *testing.T) {
+	// The publisher needs both: an ENABLED surface must emit 1, not merely no
+	// series. Absence and zero look the same to whoever alerts, and that
+	// ambiguity is the defect this registry exists to remove.
 	r := NewRegistry()
-	_ = r.Record("ligada", true, "")
-	_ = r.Record("desligada", false, "razão")
+	_ = r.Record("enabled", true, "")
+	_ = r.Record("disabled", false, "reason")
 
 	all := r.All()
 	if len(all) != 2 {
-		t.Fatalf("All() = %d, esperado 2", len(all))
+		t.Fatalf("All() = %d, want 2", len(all))
 	}
 	byName := map[string]bool{}
 	for _, s := range all {
 		byName[s.Name] = s.Enabled
 	}
-	if !byName["ligada"] || byName["desligada"] {
-		t.Errorf("estados invertidos ou ausentes: %+v", byName)
+	if !byName["enabled"] || byName["disabled"] {
+		t.Errorf("states inverted or missing: %+v", byName)
 	}
 }
 
-func TestRecorded_DevolveADecisaoEAGrava(t *testing.T) {
+func TestRecorded_ReturnsTheDecisionAndRecordsIt(t *testing.T) {
 	r := NewRegistry()
 
-	if Recorded(r, "ligada", true, "") != true {
-		t.Error("Recorded devolveu false para uma superfície ligada — o valor de " +
-			"retorno É a condição do guard, então inverter isto muda o roteamento")
+	if Recorded(r, "enabled", true, "") != true {
+		t.Error("Recorded returned false for an enabled surface — the return value " +
+			"IS the guard's condition, so inverting it changes routing")
 	}
-	if Recorded(r, "desligada", false, "razão medida") != false {
-		t.Error("Recorded devolveu true para uma superfície desligada")
+	if Recorded(r, "disabled", false, "measured reason") != false {
+		t.Error("Recorded returned true for a disabled surface")
 	}
 
 	all := r.All()
 	if len(all) != 2 {
-		t.Fatalf("All() = %d, esperado 2 — a decisão tem de ficar gravada, não só devolvida", len(all))
+		t.Fatalf("All() = %d, want 2 — the decision must be recorded, not only returned", len(all))
 	}
 	if len(r.Disabled()) != 1 {
-		t.Errorf("Disabled() = %d, esperado 1", len(r.Disabled()))
+		t.Errorf("Disabled() = %d, want 1", len(r.Disabled()))
 	}
 }
 
-func TestRecorded_RegistroNuloNaoEntraEmPanico(t *testing.T) {
-	// Centenas de testes constroem o roteador sem registro. Se Recorded
-	// entrasse em pânico com receptor nulo, o encapsulamento teria trocado uma
-	// convenção frágil por uma quebra dura.
-	if Recorded(nil, "qualquer", true, "") != true {
-		t.Error("Recorded com registro nulo não devolveu a decisão")
+func TestRecorded_NilRegistryDoesNotPanic(t *testing.T) {
+	// Hundreds of tests build the router without a registry. If Recorded
+	// panicked on a nil receiver, encapsulating it would have traded a
+	// fragile convention for a hard break.
+	if Recorded(nil, "any", true, "") != true {
+		t.Error("Recorded with a nil registry did not return the decision")
 	}
 }
 
-func TestRegistry_NomeVazioERecusado(t *testing.T) {
+func TestRegistry_RefusesAnEmptyName(t *testing.T) {
 	r := NewRegistry()
 	if err := r.Record("  ", true, ""); err == nil {
-		t.Fatal("nome vazio foi aceito — viraria uma série sem rótulo utilizável")
+		t.Fatal("an empty name was accepted — it would become a series with no usable label")
 	}
 }

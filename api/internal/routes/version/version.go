@@ -16,21 +16,20 @@ import (
 	"runtime"
 )
 
-// F-07 (CHG-2026-04-29-DOGFOOD T5.2) — /api/v1/version é endpoint público
-// (sem auth) que retorna metadata do binário. Usado pelo skill de dogfood +
-// smoke checks externos. Os 4 build flags são injetados via ldflags em
-// `cmd/main.go`; quando ausentes (ex: `go run`), retornam strings vazias /
-// "dev" — comportamento documentado pra que o /version sempre responda 200
-// independente do build environment.
+// F-07 (CHG-2026-04-29-DOGFOOD T5.2) — /api/v1/version is a public endpoint
+// (no auth) that returns the binary's metadata, used by dogfood runs and
+// external smoke checks. The build flags are injected via ldflags; when absent
+// (e.g. `go run`) they fall back to "dev" / "unknown", documented so /version
+// always answers 200 whatever the build environment.
 
-// Version metadata — populados via ldflags em build (ver api/Dockerfile).
+// Version metadata — set via ldflags at build time (see api/Dockerfile).
 //
-// O caminho do -X é o do PACOTE, e mudou quando a família saiu de
-// `api/internal/routes` para cá (B-041 slice-8). Um -X com caminho errado é
-// DESCARTADO EM SILÊNCIO pelo linker — medido: com o caminho antigo o binário
-// reporta `versionTag="dev"`, sem aviso nenhum. Este bloco é a única referência
-// correta no repositório, e é o que o issue #284 deve copiar ao consertar o
-// Dockerfile (que erra a org, não o caminho).
+// The -X path is the PACKAGE path, and it changed when the family moved out of
+// `api/internal/routes` (B-041 slice-8). A -X with the wrong path is DROPPED
+// SILENTLY by the linker — measured: with the old path the binary reports
+// `versionTag="dev"` with no warning. This block is the one correct reference
+// in the repository, and what issue #284 should copy when fixing the
+// Dockerfile (which gets the org wrong, not the path).
 //
 //	go build -ldflags "\
 //	  -X github.com/getloopscale/loopzero/api/internal/routes/version.versionTag=$(git describe --tags) \
@@ -51,33 +50,33 @@ type VersionResponse struct {
 	Platform  string `json:"platform"`
 }
 
-// fleetVersionResponse e' o schema que o painel de status do dashboard consome.
+// fleetVersionResponse is the schema the dashboard's status panel consumes.
 //
-// Os nomes dos campos NAO sao escolha nossa: sao o contrato que
-// loopzero-cloud/internal/serviceversions/probe.go ja' fala com cinco servicos
-// (`version` + `built_at`). O engine ficava fora do painel por divergir dele em
-// path E em nome de campo.
+// The field names are NOT ours to choose: they are the contract
+// loopzero-cloud/internal/serviceversions/probe.go already speaks with five services
+// (`version` + `built_at`). The engine was left off the panel for diverging from
+// it in both path AND field name.
 type fleetVersionResponse struct {
 	Version string `json:"version"`
 	BuiltAt string `json:"built_at"`
 }
 
-// FleetVersionHandler serve GET /v1/version — o contrato da frota de status.
+// FleetVersionHandler serves GET /v1/version — the status fleet contract.
 //
-// Coexiste com VersionHandler de proposito. `/api/v1/version` e' contrato publico
-// estavel do CLI (Rule 5): renomear `build_date` para `built_at` ali quebraria
-// consumidores sem bump maior. Os dois leem os MESMOS globais, entao servem a
-// mesma verdade — um teste trava essa igualdade, porque duas fontes que PODEM
-// divergir acabam divergindo.
+// It coexists with VersionHandler on purpose. `/api/v1/version` is the CLI's
+// stable public contract (Rule 5): renaming `build_date` to `built_at` there
+// would break consumers without a major bump. Both read the SAME globals, so
+// they serve the same truth — a test pins that equality, because two sources
+// that CAN diverge end up diverging.
 //
-// Sem autenticacao, como o /api/v1/version: metadado de build nao e' segredo, e o
-// coletor sonda o alvo sem qualquer sessao.
+// No authentication, like /api/v1/version: build metadata is not a secret, and
+// the collector probes the target without any session.
 func FleetVersionHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		// Fallback explicito: celula vazia no painel sobre um servico que respondeu
-		// `ok` sugere ausencia de dado, quando o que houve foi build sem ldflags.
+		// Explicit fallback: an empty panel cell over a service that answered `ok`
+		// suggests missing data, when what happened was a build without ldflags.
 		_ = json.NewEncoder(w).Encode(fleetVersionResponse{
 			Version: orUnknown(versionTag),
 			BuiltAt: orUnknown(versionBuildDate),

@@ -182,11 +182,13 @@ func (h *MetricsProxyHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// EC-8 absorption: empty histogram → collecting state with hint.
-	// Dashboard consumer (T2.2 useMetricsRange + T3.3 SignalDetailSheet)
-	// renders "Coletando dados..." not an empty chart.
+	// The hint is product copy, not an API message: the dashboard
+	// (useMetricsRange + SignalDetailSheet) renders it verbatim in place of an
+	// empty chart, in the dashboard's own UI language, and falls back to the
+	// same text when the field is absent. Clients key on Status, never on it.
 	if len(data) == 0 {
 		resp.Status = "collecting"
-		resp.CollectingHint = "Coletando dados..."
+		resp.CollectingHint = "Coletando dados..." // english-only: dashboard UI copy, rendered verbatim in the product's Portuguese UI
 	} else {
 		resp.Status = "ok"
 	}

@@ -86,7 +86,7 @@ func TestWriteLoopZeroError_IsFaithfulPassThrough_AndDoesNotFilter(t *testing.T)
 		t.Errorf("the writer must transmit the message it was given, unchanged — a writer that quietly rewrote it would make every error message a lie: %s", rec.Body.String())
 	}
 
-	clean := "não foi possível aplicar a configuração"
+	clean := "could not apply the configuration — café, naïve, 設定"
 	rec2 := httptest.NewRecorder()
 	WriteLoopZeroError(rec2, &loopzeroerrors.LoopZeroError{Code: "INTERNAL_ERROR", Message: clean})
 	if !strings.Contains(rec2.Body.String(), clean) {

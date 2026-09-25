@@ -10,12 +10,13 @@ import (
 	"testing"
 )
 
-// Wiring: a rota existe no router REAL, nao apenas o handler isolado.
+// Wiring: the route exists on the REAL router, not only the handler in isolation.
 //
-// O defeito que isto previne e' o classico "implementado mas nao ligado": os
-// testes de handler em internal/routes passariam identicos com a rota nunca
-// montada, e o painel /status mostraria o engine como `unreachable` — indistinguivel
-// de servico fora do ar. Um handler sem caller nao esta' entregue.
+// The defect this prevents is the classic "implemented but not wired": the
+// handler tests in internal/routes would pass identically with the route never
+// mounted, and the /status panel would show the engine as `unreachable` —
+// indistinguishable from a service that is down. A handler with no caller is
+// not delivered.
 func TestRouter_MountsFleetVersionRoute(t *testing.T) {
 	r := NewRouter(Config{})
 
@@ -23,7 +24,7 @@ func TestRouter_MountsFleetVersionRoute(t *testing.T) {
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/version", nil))
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /v1/version = %d, want 200 (rota montada?)", rec.Code)
+		t.Fatalf("GET /v1/version = %d, want 200 (is the route mounted?)", rec.Code)
 	}
 	var got struct {
 		Version string `json:"version"`
@@ -33,20 +34,20 @@ func TestRouter_MountsFleetVersionRoute(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	if got.Version == "" || got.BuiltAt == "" {
-		t.Errorf("payload incompleto pelo router: version=%q built_at=%q", got.Version, got.BuiltAt)
+		t.Errorf("incomplete payload through the router: version=%q built_at=%q", got.Version, got.BuiltAt)
 	}
 }
 
-// A rota e' PUBLICA: o coletor sonda sem sessao. Se cair atras do requireJWT, o
-// painel leria 401 como servico indisponivel.
+// The route is PUBLIC: the collector probes without a session. Behind the JWT
+// check, the panel would read the 401 as a service that is unavailable.
 func TestRouter_FleetVersionNeedsNoAuth(t *testing.T) {
 	r := NewRouter(Config{})
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/v1/version", nil) // sem Authorization
+	req := httptest.NewRequest(http.MethodGet, "/v1/version", nil) // no Authorization
 	r.ServeHTTP(rec, req)
 
 	if rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden {
-		t.Fatalf("GET /v1/version exigiu auth (%d) — o coletor sonda sem sessao", rec.Code)
+		t.Fatalf("GET /v1/version required auth (%d) — the collector probes without a session", rec.Code)
 	}
 }

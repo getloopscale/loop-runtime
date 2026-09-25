@@ -10,28 +10,30 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
-// PoolGate decide se uma mutacao pode prosseguir dado o estado do pool.
+// PoolGate decides whether a mutation may proceed given the pool's state.
 //
-// A interface e' declarada AQUI, pelo consumidor, e nao no pacote que a implementa
-// (`rules/architecture.md` § DIP): o middleware nao importa `buildplane/admission`, e o
-// breaker de la' a satisfaz sem saber que ela existe.
+// The interface is declared HERE, by the consumer, not in the package that
+// implements it (`rules/architecture.md` § DIP): the middleware does not import
+// `buildplane/admission`, and the breaker there satisfies it without knowing it exists.
 type PoolGate interface {
-	// Allow devolve false quando o portao esta' disparado.
+	// Allow returns false when the gate is tripped.
 	Allow() bool
 }
 
 // PGCircuitBreakerConfig controls the PG pool circuit breaker.
 type PGCircuitBreakerConfig struct {
-	// Gate decide. Ate' 2026-08-19 este middleware calculava um percentual instantaneo aqui
-	// mesmo, enquanto o portao COM histerese (`buildplane/admission.PGPoolBreaker`) era
-	// construido, iniciado, parado no shutdown — e nunca consultado (B-054).
+	// Gate decides. Until 2026-08-19 this middleware computed an instantaneous
+	// percentage right here, while the gate WITH hysteresis
+	// (`buildplane/admission.PGPoolBreaker`) was built, started, stopped at
+	// shutdown — and never consulted (B-054).
 	//
-	// O efeito era o pior dos dois: o instrumento que resolveu a oscilacao estava desligado, e
-	// o que decidia oscilava. Perto da linha de corte o pool sobe e desce a cada conexao
-	// devolvida, e o cliente via 503 alternando com 200.
+	// The effect was the worst of both: the instrument that solved the flapping
+	// was off, and the one deciding flapped. Near the cut-off the pool rises and
+	// falls with every returned connection, and the client saw 503 alternating
+	// with 200.
 	//
-	// Nil desabilita o portao — e' o que mantem valido o caminho em que a stack de admissao
-	// nao esta' montada.
+	// Nil disables the gate — which keeps valid the path where the admission
+	// stack is not assembled.
 	Gate PoolGate
 }
 

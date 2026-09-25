@@ -30,9 +30,9 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
-	// Apelidado porque `routes/metrics` (a familia de rotas do proxy, importada
-	// acima) ja ocupa o nome `metrics` neste arquivo. Mesma colisao que
-	// `routes/source` x `internal/source`, resolvida do mesmo jeito.
+	// Aliased because `routes/metrics` (the proxy route family, imported above)
+	// already takes the name `metrics` in this file. Same collision as
+	// `routes/source` vs `internal/source`, resolved the same way.
 	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
 	appmetrics "github.com/getloopscale/loopzero/api/internal/metrics"
 	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
@@ -241,9 +241,10 @@ type Config struct {
 	// Wired by api/cmd/setup_server.go::setupCostEnforcer (T1.9 production wiring).
 	CostEnforcer *policy.CostEnforcer
 	UpgradeURL   string
-	// PGPoolGate decide se uma mutacao passa dado o estado do pool. B-054: eram dois campos
-	// (`PGPoolStatsFunc` + `PGCircuitBreakerThresholdPct`) que faziam o router calcular um
-	// percentual instantaneo, enquanto o portao COM histerese existia e nunca era consultado.
+	// PGPoolGate decides whether a mutation passes given the pool's state. B-054: these
+	// were two fields (`PGPoolStatsFunc` + `PGCircuitBreakerThresholdPct`) that made the
+	// router compute an instantaneous percentage while the gate WITH hysteresis existed
+	// and was never consulted.
 	PGPoolGate        policy.PoolGate
 	CORSAllowedOrigin string // CORS_ALLOWED_ORIGIN — empty in production blocks all cross-origin requests
 }

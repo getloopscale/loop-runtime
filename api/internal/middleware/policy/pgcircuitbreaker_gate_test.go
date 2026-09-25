@@ -13,13 +13,14 @@ import (
 	"testing"
 )
 
-// --- PG Circuit Breaker: sem portao configurado ---
+// --- PG Circuit Breaker: no gate configured ---
 
-// Era `ZeroTotal_PassesThrough`, e guardava a divisao por zero do calculo de percentual que este
-// middleware fazia. Desde o B-054 quem mede saturacao e' o portao com histerese, e a degenerescencia
-// que sobra aqui e' outra: nenhum portao configurado. A propriedade e' a mesma — estado degenerado
-// nao pode barrar trafego — no lugar onde ela agora vive.
-func TestPGCircuitBreaker_SemPortao_DeixaPassar(t *testing.T) {
+// This was `ZeroTotal_PassesThrough`, guarding the division by zero of the
+// percentage this middleware used to compute. Since B-054 the gate with
+// hysteresis measures saturation, and the degenerate case left here is another:
+// no gate configured. The property is the same — a degenerate state must not
+// block traffic — in the place where it now lives.
+func TestPGCircuitBreaker_NoGate_LetsRequestsThrough(t *testing.T) {
 	cb := NewPGCircuitBreaker(PGCircuitBreakerConfig{})
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

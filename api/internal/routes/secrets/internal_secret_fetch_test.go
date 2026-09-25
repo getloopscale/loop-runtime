@@ -212,7 +212,7 @@ func TestSecretFetch_EC08_InvalidSecretName_400(t *testing.T) {
 
 // EC-07 MUST FIX P0
 func TestSecretFetch_EC07_CellTenantBindingMismatch_403(t *testing.T) {
-	// Tenant colocado em cell-0, mas o ESO alega X-Cell-ID=cell-1 (outra cell).
+	// Tenant placed in cell-0, but the caller claims X-Cell-ID=cell-1 (another cell).
 	deps := SecretFetchHandlerDeps{
 		TenantBinding: &mockTenantBinding{cellByTenant: map[string]string{"tenant-a": "cell-0"}},
 		SecretReader:  &mockSecretReader{plaintextByKey: map[string][]byte{"tenant-a:testproj:production:S": []byte("x")}},
@@ -221,10 +221,10 @@ func TestSecretFetch_EC07_CellTenantBindingMismatch_403(t *testing.T) {
 	identity := &auth.TokenReviewResult{
 		Authenticated: true,
 		Username:      "system:serviceaccount:external-secrets:eso",
-		// A cell do atacante tem de ser OUTRA cell. Antes da unificacao 1:1 este par
-		// era `cell-1` x `cell-default` — dois nomes do MESMO cluster, entao o teste
-		// nunca chegou a exercer travessia de cell de verdade (ADR 2026-08-09).
-		CellID: "cell-1", // attacker cell — distinta da cell do tenant
+		// The attacker's cell must be ANOTHER cell. Before the 1:1 unification this
+		// pair was `cell-1` vs `cell-default` — two names for the SAME cluster, so
+		// the test never exercised a real cross-cell attempt (ADR 2026-08-09).
+		CellID: "cell-1", // attacker cell — distinct from the tenant's cell
 	}
 	srv := newTestServerWithCrossCluster(t, deps, identity)
 	defer srv.Close()

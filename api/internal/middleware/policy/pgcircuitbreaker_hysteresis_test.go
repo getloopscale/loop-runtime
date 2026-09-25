@@ -9,59 +9,62 @@ import (
 	"testing"
 )
 
-// B-054: o `api` roda DOIS portoes sobre o mesmo pool. O que de fato barra requisicao e' este
-// middleware, e ele decide por percentual instantaneo, sem histerese. O outro —
-// `buildplane/admission.PGPoolBreaker` — tem histerese (high/low water), documenta a oscilacao
-// como a razao de existir... e nunca e' consultado: `Allow()` nao tem chamador de producao.
+// B-054: the `api` ran TWO gates over the same pool. The one that actually
+// blocked requests was this middleware, deciding by an instantaneous
+// percentage with no hysteresis. The other — `buildplane/admission.PGPoolBreaker`
+// — has hysteresis (high/low water), documents flapping as its reason to
+// exist... and was never consulted: `Allow()` had no production caller.
 //
-// Ou seja: o instrumento que resolveu a oscilacao esta desligado, e o que esta ligado tem o
-// problema. Este teste mede o problema no caminho LIGADO.
+// That is: the instrument that solved the flapping was off, and the one that was
+// on had the problem. This test measures the behaviour on the path that is ON.
 //
-// Por que oscilar importa: perto da linha de corte, o pool sobe e desce a cada requisicao que
-// devolve conexao. Sem histerese o portao abre e fecha junto, e o cliente ve 503 alternando com
-// 200 — o pior dos dois mundos, porque nem protege de forma estavel nem serve de forma estavel.
-func TestBreakerNaoOscilaEmTornoDaLinhaDeCorte(t *testing.T) {
-	// O pool oscila um ponto em torno do limite: 90, 89, 90, 89...
-	amostras := []int32{90, 89, 90, 89, 90, 89}
+// Why flapping matters: near the cut-off, the pool rises and falls with every
+// request that returns a connection. Without hysteresis the gate opens and
+// closes with it, and the client sees 503 alternating with 200 — the worst of
+// both worlds, neither protecting nor serving stably.
+func TestBreakerDoesNotFlapAroundTheCutOff(t *testing.T) {
+	// The pool oscillates one point around the limit: 90, 89, 90, 89...
+	samples := []int32{90, 89, 90, 89, 90, 89}
 	var i int
-	gate := &fakeGate{tripped: false, amostras: amostras, idx: &i}
+	gate := &fakeGate{tripped: false, samples: samples, idx: &i}
 
 	cb := NewPGCircuitBreaker(PGCircuitBreakerConfig{Gate: gate})
 	h := cb.Middleware()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	var transicoes int
-	anterior := -1
-	for range amostras {
+	var transitions int
+	previous := -1
+	for range samples {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/x", nil))
-		atual := rec.Code
-		if anterior != -1 && atual != anterior {
-			transicoes++
+		current := rec.Code
+		if previous != -1 && current != previous {
+			transitions++
 		}
-		anterior = atual
+		previous = current
 	}
 
-	// Com histerese, o portao dispara em 90 e so' rearma abaixo de 75: UMA transicao no maximo.
-	// Sem ela, ele alterna a cada amostra — cinco.
-	if transicoes > 1 {
-		t.Errorf("o portao alternou %d vez(es) sobre um pool que oscila UM ponto na linha de corte; "+
-			"com histerese seria no maximo 1. O cliente ve 503 e 200 alternando, o que nao protege "+
-			"nem serve de forma estavel (B-054)", transicoes)
+	// With hysteresis the gate trips at 90 and only re-arms below 75: ONE
+	// transition at most. Without it, it alternates on every sample — five.
+	if transitions > 1 {
+		t.Errorf("the gate flipped %d time(s) over a pool oscillating ONE point at the cut-off; "+
+			"with hysteresis it would be at most 1. The client sees 503 and 200 alternating, which "+
+			"neither protects nor serves stably (B-054)", transitions)
 	}
 }
 
-// fakeGate reproduz a histerese high/low water do `admission.PGPoolBreaker` sobre uma sequencia
-// de amostras, para que este teste meça o COMPORTAMENTO do portao e nao a implementacao dele.
+// fakeGate reproduces the high/low water hysteresis of `admission.PGPoolBreaker`
+// over a sequence of samples, so this test measures the gate's BEHAVIOUR and not
+// its implementation.
 type fakeGate struct {
-	tripped  bool
-	amostras []int32
-	idx      *int
+	tripped bool
+	samples []int32
+	idx     *int
 }
 
 func (g *fakeGate) Allow() bool {
-	pct := g.amostras[*g.idx%len(g.amostras)]
+	pct := g.samples[*g.idx%len(g.samples)]
 	*g.idx++
 	if g.tripped {
 		if pct < 75 {

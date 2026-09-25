@@ -10,19 +10,19 @@ import (
 	"testing"
 )
 
-// Contrato da FROTA de status — o que o painel /status do dashboard consome.
+// The status FLEET contract — what the dashboard's /status panel consumes.
 //
-// POR QUE UM SEGUNDO ENDPOINT, e nao um ajuste no /api/v1/version:
+// WHY A SECOND ENDPOINT, rather than a change to /api/v1/version:
 //
-// O coletor do loopzero-cloud (internal/serviceversions/probe.go) chama
-// `GET {base}/v1/version` e le' `{version, built_at}`. Cinco servicos ja' falam
-// esse contrato. O engine falava outro — `/api/v1/version` com `build_date` —
-// entao ficava de fora do painel por divergencia de path E de campo.
+// The loopzero-cloud collector (internal/serviceversions/probe.go) calls
+// `GET {base}/v1/version` and reads `{version, built_at}`. Five services already
+// speak that contract. The engine spoke another — `/api/v1/version` with
+// `build_date` — so it was left off the panel for diverging in path AND field.
 //
-// Renomear `build_date` para `built_at` no endpoint existente quebraria a Rule 5
-// (o schema do --json e' contrato estavel e nao muda sem bump maior). Os dois
-// endpoints coexistem servindo a MESMA verdade em dois formatos: um e' o contrato
-// publico do CLI, o outro e' o contrato da frota.
+// Renaming `build_date` to `built_at` on the existing endpoint would break Rule 5
+// (the --json schema is a stable contract and does not change without a major
+// bump). The two endpoints coexist serving the SAME truth in two shapes: one is
+// the CLI's public contract, the other the fleet's.
 func TestFleetVersionHandler_SpeaksTheFleetContract(t *testing.T) {
 	rr := httptest.NewRecorder()
 	FleetVersionHandler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/v1/version", nil))
@@ -34,8 +34,8 @@ func TestFleetVersionHandler_SpeaksTheFleetContract(t *testing.T) {
 		t.Errorf("Content-Type = %q, want application/json", got)
 	}
 
-	// Decodifica no formato exato que o coletor espera. Um campo com outro nome
-	// chega como zero-value aqui, que e' precisamente a falha a travar.
+	// Decode in the exact shape the collector expects. A field with another name
+	// arrives here as the zero value, which is precisely the failure to pin.
 	var got struct {
 		Version string `json:"version"`
 		BuiltAt string `json:"built_at"`
@@ -44,15 +44,15 @@ func TestFleetVersionHandler_SpeaksTheFleetContract(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	if got.Version == "" {
-		t.Error("version vazio — o painel mostraria uma celula em branco para um servico `ok`")
+		t.Error("empty version — the panel would show a blank cell for an `ok` service")
 	}
 	if got.BuiltAt == "" {
-		t.Error("built_at vazio — a coluna `Built` do painel ficaria em branco")
+		t.Error("empty built_at — the panel's `Built` column would be blank")
 	}
 }
 
-// A mesma verdade nos dois endpoints. Se divergirem, um dos dois esta' mentindo, e
-// o painel e o CLI passariam a discordar sobre qual binario esta' rodando.
+// The same truth on both endpoints. If they diverge, one of them is lying, and
+// the panel and the CLI would disagree about which binary is running.
 func TestFleetVersionHandler_AgreesWithTheCLIContract(t *testing.T) {
 	fleetRec := httptest.NewRecorder()
 	FleetVersionHandler().ServeHTTP(fleetRec, httptest.NewRequest(http.MethodGet, "/v1/version", nil))
@@ -71,15 +71,15 @@ func TestFleetVersionHandler_AgreesWithTheCLIContract(t *testing.T) {
 		t.Fatalf("decode cli: %v", err)
 	}
 	if fleet.Version != cli.Version {
-		t.Errorf("version diverge: frota=%q cli=%q", fleet.Version, cli.Version)
+		t.Errorf("version diverges: fleet=%q cli=%q", fleet.Version, cli.Version)
 	}
 	if fleet.BuiltAt != cli.BuildDate {
-		t.Errorf("data de build diverge: frota=%q cli=%q", fleet.BuiltAt, cli.BuildDate)
+		t.Errorf("build date diverges: fleet=%q cli=%q", fleet.BuiltAt, cli.BuildDate)
 	}
 }
 
-// Sem ldflags os globais caem nos defaults declarados. O painel precisa de um
-// valor legivel — nunca de uma celula vazia sobre um servico que respondeu `ok`.
+// Without ldflags the globals fall back to their declared defaults. The panel
+// needs a readable value — never an empty cell over a service that answered `ok`.
 func TestFleetVersionHandler_NeverEmptyWithoutLdflags(t *testing.T) {
 	origTag, origBuild := versionTag, versionBuildDate
 	versionTag, versionBuildDate = "", ""
@@ -96,6 +96,6 @@ func TestFleetVersionHandler_NeverEmptyWithoutLdflags(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	if got.Version == "" || got.BuiltAt == "" {
-		t.Errorf("campos vazios sem ldflags: version=%q built_at=%q", got.Version, got.BuiltAt)
+		t.Errorf("empty fields without ldflags: version=%q built_at=%q", got.Version, got.BuiltAt)
 	}
 }
