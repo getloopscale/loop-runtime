@@ -295,7 +295,7 @@ func TestTaskfilesDeadCd_SeesTheDeadPackagePattern(t *testing.T) {
 	// And it must NOT fire on the healthy forms, or it gets disabled.
 	for _, healthy := range []string{
 		"    - cd api && go test ./...\n",
-		"    - cd api && go test ./internal/routes/... -count=1\n",
+		"    - cd api && go test ./internal/builds/... -count=1\n",
 		"    - cd cmd/loopzero-ops && go build ./...\n",
 		"    - cd api && go test ./internal/... -run TestFoo -v\n",
 		"    - cd pkg && go test {{.PATTERN}}\n",
