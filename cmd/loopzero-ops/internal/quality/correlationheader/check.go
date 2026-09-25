@@ -29,24 +29,22 @@
 package correlationheader
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
 )
 
 // Config tells Check which repo to scan.
 type Config struct {
 	RepoRoot string
-}
-
-// Outcome is the gate result.
-type Outcome struct {
-	Pass       bool
-	Violations []string
 }
 
 // scanDir is the production tree scanned for header literals. The gate
@@ -72,13 +70,18 @@ var gatedLiterals = map[string]bool{
 	`"X-Correlation-ID"`: true,
 }
 
-// Check walks the scan directory and returns Outcome.Pass=false if any
-// route source file contains r.Header.Get("(X-)?Correlation-ID").
-func Check(cfg Config) (*Outcome, error) {
-	out := &Outcome{Pass: true}
+// Check walks the scan directory and reports every route source file that
+// contains r.Header.Get("(X-)?Correlation-ID"). A missing routes tree, or one
+// holding no production file, is scanresult.ErrNothingScanned: the gate cannot
+// pass over code it never read.
+func Check(cfg Config) (scanresult.Result, error) {
+	var res scanresult.Result
 	root := filepath.Join(cfg.RepoRoot, scanDir)
 	if _, err := os.Stat(root); err != nil {
-		return out, nil // routes dir absent → nothing to scan
+		if errors.Is(err, fs.ErrNotExist) {
+			return res, fmt.Errorf("%w: %s is absent", scanresult.ErrNothingScanned, scanDir)
+		}
+		return res, fmt.Errorf("correlation-header: stat %s: %w", scanDir, err)
 	}
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -90,19 +93,22 @@ func Check(cfg Config) (*Outcome, error) {
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		rel, _ := filepath.Rel(cfg.RepoRoot, path)
-		hits, scanErr := scanFile(path, rel)
-		if scanErr != nil {
-			return scanErr
+		rel, err := filepath.Rel(cfg.RepoRoot, path)
+		if err != nil {
+			return err
 		}
-		out.Violations = append(out.Violations, hits...)
+		hits, err := scanFile(path, rel)
+		if err != nil {
+			return err
+		}
+		res.Scanned++
+		res.Findings = append(res.Findings, hits...)
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return res, err
 	}
-	out.Pass = len(out.Violations) == 0
-	return out, nil
+	return res, res.Err()
 }
 
 // scanFile parses the .go file via go/parser and walks the AST for

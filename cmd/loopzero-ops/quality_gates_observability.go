@@ -160,9 +160,9 @@ func runCorrelationHeader(args []string) int {
 		fmt.Fprintf(os.Stderr, "correlation-header: %v\n", err)
 		return 5
 	}
-	if !outcome.Pass {
-		fmt.Fprintf(os.Stderr, "correlation-header: FAIL — %d direct r.Header.Get(\"(X-)?Correlation-ID\") call(s) in routes/:\n", len(outcome.Violations))
-		for _, v := range outcome.Violations {
+	if !outcome.Pass() {
+		fmt.Fprintf(os.Stderr, "correlation-header: FAIL — %d direct r.Header.Get(\"(X-)?Correlation-ID\") call(s) in routes/:\n", len(outcome.Findings))
+		for _, v := range outcome.Findings {
 			fmt.Fprintf(os.Stderr, "  %s\n", v)
 		}
 		fmt.Fprintln(os.Stderr, "")
@@ -170,7 +170,7 @@ func runCorrelationHeader(args []string) int {
 		fmt.Fprintln(os.Stderr, "The helper handles backward-compat (X-Correlation-ID fallback) + deprecation WARN.")
 		return 1
 	}
-	fmt.Println("correlation-header: PASS — no direct r.Header.Get((X-)?Correlation-ID) in api/internal/routes/")
+	fmt.Printf("correlation-header: PASS — no direct r.Header.Get((X-)?Correlation-ID) in api/internal/routes/ (%s)\n", outcome.Summary())
 	return 0
 }
 

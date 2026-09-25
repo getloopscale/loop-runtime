@@ -39,6 +39,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
 )
 
 // ErrNoPortDeclared means an adapter file declares an exported type without naming its port.
@@ -48,7 +50,7 @@ var ErrNoPortDeclared = errors.New("adapter does not declare the port it satisfi
 //
 // The other alternative in B-058's DoD is to DISSOLVE this package. If that happens, this
 // guard must fail instead of staying green over a directory that disappeared.
-var ErrNothingScanned = errors.New("adapters package absent — finding nothing is not the same as finding nothing wrong")
+var ErrNothingScanned = fmt.Errorf("%w: adapters package absent", scanresult.ErrNothingScanned)
 
 const adaptersPackage = "api/internal/adapters"
 

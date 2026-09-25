@@ -16,13 +16,16 @@
 package crdsemanticdiff
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmrender"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -108,12 +111,9 @@ func parseHelmRender(raw string) (map[string]*rawCRD, error) {
 	for {
 		var crd rawCRD
 		if err := dec.Decode(&crd); err != nil {
-			if err.Error() == "EOF" {
-				return out, nil
-			}
-			// yaml.v3 returns io.EOF from the io package; match string above
-			// covers both wrapping flavors. If not EOF, surface the error.
-			if strings.Contains(err.Error(), "EOF") {
+			// Only io.EOF ends the stream. Matching "EOF" in the message would
+			// also swallow "unexpected EOF", a document cut in half.
+			if errors.Is(err, io.EOF) {
 				return out, nil
 			}
 			return nil, fmt.Errorf("yaml decode: %w", err)
@@ -236,11 +236,7 @@ func Check(cfg Config) (*Outcome, error) {
 	sourceFiles, err := listSourceFiles(resolvedSource)
 	if err != nil {
 		if os.IsNotExist(err) {
-			out.Pass = true
-			out.Messages = []string{
-				fmt.Sprintf("PASS — source dir %s not found.", resolvedSource),
-			}
-			return out, nil
+			return nil, fmt.Errorf("%w: CRD source dir %s not found", scanresult.ErrNothingScanned, resolvedSource)
 		}
 		return nil, &loopzeroerrors.LoopZeroError{
 			Code:    "OPS_DEPLOY_FAILURE",
@@ -323,6 +319,9 @@ func Check(cfg Config) (*Outcome, error) {
 		}
 	}
 
+	if err := (scanresult.Result{Scanned: out.Scanned}).Err(); err != nil {
+		return nil, fmt.Errorf("%w: no source CRD in %s matched (filter %q)", err, resolvedSource, cfg.CRDFilter)
+	}
 	out.Messages = append(out.Messages, "", fmt.Sprintf("Scanned: %d CRDs", out.Scanned))
 	if len(out.Drifts) == 0 {
 		out.Pass = true

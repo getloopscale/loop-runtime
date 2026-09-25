@@ -4,10 +4,13 @@
 package correlationheader
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
 )
 
 func writeFile(t *testing.T, root, rel, content string) {
@@ -39,13 +42,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		t.Fatalf("Check error: %v", err)
 	}
-	if out.Pass {
+	if out.Pass() {
 		t.Fatal("X-Correlation-ID in routes/ MUST fail the gate")
 	}
-	if len(out.Violations) != 1 {
-		t.Fatalf("expected exactly 1 violation, got %d: %v", len(out.Violations), out.Violations)
+	if len(out.Findings) != 1 {
+		t.Fatalf("expected exactly 1 violation, got %d: %v", len(out.Findings), out.Findings)
 	}
-	v := out.Violations[0]
+	v := out.Findings[0]
 	if !strings.Contains(v, "promote.go") || !strings.Contains(v, `"X-Correlation-ID"`) {
 		t.Errorf("violation must name file + literal; got %q", v)
 	}
@@ -73,11 +76,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		t.Fatalf("Check error: %v", err)
 	}
-	if out.Pass {
+	if out.Pass() {
 		t.Fatal(`r.Header.Get("Correlation-ID") in routes/ MUST fail (use helper)`)
 	}
-	if !strings.Contains(out.Violations[0], `"Correlation-ID"`) {
-		t.Errorf("violation must name the literal; got %v", out.Violations)
+	if !strings.Contains(out.Findings[0], `"Correlation-ID"`) {
+		t.Errorf("violation must name the literal; got %v", out.Findings)
 	}
 }
 
@@ -102,8 +105,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		t.Fatalf("Check error: %v", err)
 	}
-	if !out.Pass {
-		t.Fatalf("correlation.Read(r) MUST pass; got %v", out.Violations)
+	if !out.Pass() {
+		t.Fatalf("correlation.Read(r) MUST pass; got %v", out.Findings)
 	}
 }
 
@@ -111,6 +114,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 // literals (e.g., httptest request fixtures); not gate-flagged.
 func TestCheck_IgnoresTestFiles(t *testing.T) {
 	root := t.TempDir()
+	writeFile(t, root, "api/internal/routes/promote.go", "package routes\n")
 	writeFile(t, root, "api/internal/routes/promote_test.go",
 		`package routes
 
@@ -133,8 +137,8 @@ func TestPromote_Header(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Check error: %v", err)
 	}
-	if !out.Pass {
-		t.Errorf("_test.go reference MUST NOT trip gate; got %v", out.Violations)
+	if !out.Pass() {
+		t.Errorf("_test.go reference MUST NOT trip gate; got %v", out.Findings)
 	}
 }
 
@@ -156,8 +160,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		t.Fatalf("Check error: %v", err)
 	}
-	if !out.Pass {
-		t.Errorf("X-Forwarded-For MUST be ignored; got %v", out.Violations)
+	if !out.Pass() {
+		t.Errorf("X-Forwarded-For MUST be ignored; got %v", out.Findings)
 	}
 }
 
@@ -182,8 +186,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		t.Fatalf("Check error: %v", err)
 	}
-	if !out.Pass {
-		t.Errorf("variable arg MUST NOT trip gate; got %v", out.Violations)
+	if !out.Pass() {
+		t.Errorf("variable arg MUST NOT trip gate; got %v", out.Findings)
 	}
 }
 
@@ -193,6 +197,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 // READ from context after middleware ran.
 func TestCheck_IgnoresOutsideRoutes(t *testing.T) {
 	root := t.TempDir()
+	writeFile(t, root, "api/internal/routes/handler.go", "package routes\n")
 	writeFile(t, root, "api/internal/middleware/correlation.go",
 		`package middleware
 
@@ -210,7 +215,25 @@ func Middleware(next http.Handler) http.Handler {
 	if err != nil {
 		t.Fatalf("Check error: %v", err)
 	}
-	if !out.Pass {
-		t.Errorf("middleware/ MUST be out of scope; got %v", out.Violations)
+	if !out.Pass() {
+		t.Errorf("middleware/ MUST be out of scope; got %v", out.Findings)
+	}
+}
+
+// A root with no routes tree is a misconfigured run, not a clean one.
+func TestCheck_MissingRoutesTreeIsAnError(t *testing.T) {
+	_, err := Check(Config{RepoRoot: t.TempDir()})
+	if !errors.Is(err, scanresult.ErrNothingScanned) {
+		t.Fatalf("want ErrNothingScanned, got %v", err)
+	}
+}
+
+// A routes tree holding only tests scanned no production file.
+func TestCheck_RoutesTreeWithOnlyTestsIsAnError(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "api/internal/routes/a_test.go", "package routes\n")
+	_, err := Check(Config{RepoRoot: root})
+	if !errors.Is(err, scanresult.ErrNothingScanned) {
+		t.Fatalf("want ErrNothingScanned, got %v", err)
 	}
 }

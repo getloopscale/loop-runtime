@@ -38,6 +38,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
 )
 
 // ErrUndeclared means a same-name pair exists on disk and the registry does not
@@ -48,7 +50,7 @@ var ErrUndeclared = errors.New("a chart pair exists on disk and is not declared"
 var ErrStale = errors.New("a declared chart pair no longer exists")
 
 // ErrNothingScanned means no chart was found at all — silence, not cleanliness.
-var ErrNothingScanned = errors.New("no chart scanned — finding nothing is not finding nothing wrong")
+var ErrNothingScanned = fmt.Errorf("%w: no chart", scanresult.ErrNothingScanned)
 
 // ErrRegistryMissing means the declared registry is absent or malformed.
 var ErrRegistryMissing = errors.New("chart pair registry missing or malformed")

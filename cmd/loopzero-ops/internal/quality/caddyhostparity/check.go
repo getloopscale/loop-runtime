@@ -45,6 +45,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
 )
 
 // ErrUnserved means a demanded hostname has no site block to terminate its TLS.
@@ -68,7 +70,7 @@ var ErrPartialView = errors.New("the Caddyfile imports another file — parity i
 //
 // Zero demanded is indistinguishable from a broken parse, and it is exactly the
 // `PASS — 0 hostnames` shape this ecosystem has already paid to learn.
-var ErrNothingScanned = errors.New("no demanded hostname scanned — finding nothing is not the same as finding nothing wrong")
+var ErrNothingScanned = fmt.Errorf("%w: no demanded hostname", scanresult.ErrNothingScanned)
 
 const (
 	verifierRel  = "infra/scripts/local/caddy-up-dev-public.sh"

@@ -41,16 +41,16 @@ func runAdvisoryLockScope(args []string) int {
 		fmt.Fprintf(os.Stderr, "advisory-lock-scope: %v\n", err)
 		return 5
 	}
-	if !outcome.Pass {
-		fmt.Fprintf(os.Stderr, "advisory-lock-scope: FAIL — %d session-scoped pg_advisory_lock( call(s):\n", len(outcome.Violations))
-		for _, v := range outcome.Violations {
+	if !outcome.Pass() {
+		fmt.Fprintf(os.Stderr, "advisory-lock-scope: FAIL — %d session-scoped pg_advisory_lock( call(s):\n", len(outcome.Findings))
+		for _, v := range outcome.Findings {
 			fmt.Fprintf(os.Stderr, "  %s\n", v)
 		}
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Fix: replace with pg_advisory_xact_lock( — transaction-scoped, pool-safe (Rule 7).")
 		return 1
 	}
-	fmt.Println("advisory-lock-scope: PASS — no session-scoped pg_advisory_lock( in production code")
+	fmt.Printf("advisory-lock-scope: PASS — no session-scoped pg_advisory_lock( in production code (%s)\n", outcome.Summary())
 	return 0
 }
 
