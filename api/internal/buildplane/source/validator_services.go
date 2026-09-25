@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 
@@ -158,7 +159,7 @@ func ValidateServicesJSONNative(content string) (*ServicesManifest, error) {
 		)
 	}
 
-	if envErr := validateReservedEnvKeys(&manifest, nil); envErr != nil {
+	if envErr := validateReservedEnvKeys(&manifest, slog.Default()); envErr != nil {
 		return nil, envErr
 	}
 

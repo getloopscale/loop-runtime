@@ -9,6 +9,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
 // Plan v1.2 T1.3 (cutover-deep-review-hardening): reserved environment
@@ -148,15 +150,13 @@ func validateReservedEnvKeys(manifest *ServicesManifest, logger *slog.Logger) *V
 	)
 
 	if mode == "warn" {
-		// Warn mode: log every violation but allow the payload through so
-		// platform operators can observe blast radius before flipping to
-		// enforce. NOTE: per CLAUDE.md Honesty §3, the upload IS accepted
-		// here — telemetry MUST be captured upstream to drive the cutover.
-		if logger != nil {
-			for _, v := range violations {
-				logger.Warn("services.json reserved env key (warn-only mode)",
-					"service", v.service, "key", v.key, "mode", mode)
-			}
+		// Warn mode: the upload IS accepted, so every violation is logged and
+		// counted — the blast radius operators observe before flipping to
+		// enforce.
+		for _, v := range violations {
+			logger.Warn("services.json reserved env key (warn-only mode)",
+				"service", v.service, "key", v.key, "mode", mode)
+			metrics.ServicesReservedEnvKeyAccepted.Inc()
 		}
 		return nil
 	}
