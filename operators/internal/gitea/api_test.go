@@ -7,7 +7,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 )
@@ -127,59 +126,6 @@ func TestEnsureOrg_NoOpWhenExists(t *testing.T) {
 	}
 	if createCalled {
 		t.Error("EnsureOrg should NOT POST when org exists; create was invoked")
-	}
-}
-
-func TestGetRepo_Found(t *testing.T) {
-	c, _ := newClient(t, func(w http.ResponseWriter, r *http.Request) {
-		want := "/api/v1/repos/acme/myrepo"
-		if r.URL.Path != want {
-			t.Errorf("path = %q, want %q", r.URL.Path, want)
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"name":"myrepo","full_name":"acme/myrepo","clone_url":"http://gitea/acme/myrepo.git"}`))
-	})
-
-	repo, err := c.GetRepo(context.Background(), "tok", "acme", "myrepo")
-	if err != nil {
-		t.Fatalf("GetRepo() error = %v", err)
-	}
-	if repo == nil {
-		t.Fatal("GetRepo() repo = nil, want non-nil")
-	}
-	if !strings.HasSuffix(repo.CloneURL, "/acme/myrepo.git") {
-		t.Errorf("repo.CloneURL = %q, want suffix /acme/myrepo.git", repo.CloneURL)
-	}
-}
-
-func TestGetRepo_NotFoundReturnsNilRepo(t *testing.T) {
-	c, _ := newClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	})
-
-	repo, err := c.GetRepo(context.Background(), "tok", "acme", "missing")
-	if err != nil {
-		t.Fatalf("GetRepo() not-found should return (nil, nil), got error = %v", err)
-	}
-	if repo != nil {
-		t.Errorf("GetRepo() repo = %+v, want nil", repo)
-	}
-}
-
-func TestArchiveRepo_PatchSent(t *testing.T) {
-	c, _ := newClient(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPatch {
-			t.Errorf("method = %q, want PATCH", r.Method)
-		}
-		if r.URL.Path != "/api/v1/repos/acme/myrepo" {
-			t.Errorf("path = %q", r.URL.Path)
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"name":"myrepo","archived":true}`))
-	})
-
-	if err := c.ArchiveRepo(context.Background(), "tok", "acme", "myrepo"); err != nil {
-		t.Fatalf("ArchiveRepo() error = %v", err)
 	}
 }
 

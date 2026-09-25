@@ -25,6 +25,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/gitclient"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/pkg/gitearepo"
 )
 
 // GiteaGitOpsPusherConfig holds configuration for connecting to Gitea GitOps repos.
@@ -56,9 +57,9 @@ type gitRunner interface {
 	RunWithAuth(ctx context.Context, dir string, args ...string) error
 }
 
-// gitRepoManager is the subset of gitclient.GiteaRepoManager the pusher needs.
+// gitRepoManager is the subset of gitearepo.Client the pusher needs.
 type gitRepoManager interface {
-	EnsureRepo(ctx context.Context, repoName string, autoInit bool) error
+	EnsureRepo(ctx context.Context, repoName string, opts gitearepo.EnsureOptions) error
 	RepoURL(repoName string) string
 }
 
@@ -70,7 +71,7 @@ func NewGiteaGitOpsPusher(cfg GiteaGitOpsPusherConfig) *GiteaGitOpsPusher {
 	}
 	return &GiteaGitOpsPusher{
 		git:     gitclient.NewGitRunner(cfg.Token),
-		repo:    gitclient.NewGiteaRepoManager(cfg.BaseURL, cfg.Token, cfg.OrgName, httpClient),
+		repo:    gitearepo.New(cfg.BaseURL, cfg.Token, cfg.OrgName, httpClient),
 		token:   cfg.Token,
 		baseURL: cfg.BaseURL,
 		orgName: cfg.OrgName,

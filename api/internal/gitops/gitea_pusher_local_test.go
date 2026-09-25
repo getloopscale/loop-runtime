@@ -12,6 +12,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/gitclient"
+	"github.com/getloopscale/loopzero/pkg/gitearepo"
 )
 
 // These tests run the pusher against a local bare repository with the real git
@@ -21,9 +22,16 @@ import (
 type localRepoManager struct {
 	root      string
 	ensureErr error
+	// ensured records the options of every EnsureRepo call, when non-nil.
+	ensured *[]gitearepo.EnsureOptions
 }
 
-func (m localRepoManager) EnsureRepo(_ context.Context, _ string, _ bool) error { return m.ensureErr }
+func (m localRepoManager) EnsureRepo(_ context.Context, _ string, opts gitearepo.EnsureOptions) error {
+	if m.ensured != nil {
+		*m.ensured = append(*m.ensured, opts)
+	}
+	return m.ensureErr
+}
 func (m localRepoManager) RepoURL(repoName string) string {
 	return filepath.Join(m.root, repoName+".git")
 }
@@ -225,5 +233,27 @@ func TestPushRebasesOverAConcurrentCommit(t *testing.T) {
 	files := remoteFiles(t, root, "acme")
 	if !contains(files, "production/web/manifests.yaml") || !contains(files, "staging/api/manifests.yaml") {
 		t.Errorf("rebase lost a commit: %v", files)
+	}
+}
+
+// The tenant GitOps repository must be auto-initialised on the branch every
+// push targets: the workspace clones it before anything is pushed.
+func TestOpenWorkspaceEnsuresAnAutoInitialisedRepoOnThePushBranch(t *testing.T) {
+	// Arrange
+	root := newLocalRemote(t, "acme", nil)
+	var ensured []gitearepo.EnsureOptions
+	pusher := newLocalPusher(localRepoManager{root: root, ensured: &ensured}, nil)
+
+	// Act
+	_, cleanup, err := pusher.openWorkspace(context.Background(), "acme", "push")
+	if err != nil {
+		t.Fatalf("openWorkspace: %v", err)
+	}
+	cleanup()
+
+	// Assert
+	want := gitearepo.EnsureOptions{AutoInit: true, DefaultBranch: gitopsBranch}
+	if len(ensured) != 1 || ensured[0] != want {
+		t.Errorf("EnsureRepo options = %+v, want exactly one call with %+v", ensured, want)
 	}
 }

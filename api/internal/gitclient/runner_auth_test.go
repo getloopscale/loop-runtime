@@ -5,7 +5,6 @@ package gitclient
 
 import (
 	"context"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,12 +47,5 @@ func TestRunWithAuthKeepsTheTokenOffTheCommandLine(t *testing.T) {
 		if !strings.Contains(string(env), want) {
 			t.Errorf("git environment lacks %q:\n%s", want, env)
 		}
-	}
-}
-
-func TestNewGiteaRepoManagerDefaultsToAClientWithATimeout(t *testing.T) {
-	m := NewGiteaRepoManager("http://gitea", "t", "loopzero", nil)
-	if m.client == http.DefaultClient || m.client.Timeout <= 0 {
-		t.Fatalf("default client has no timeout (%v): a hung Gitea would block the upload path forever", m.client.Timeout)
 	}
 }

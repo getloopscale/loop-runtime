@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/gitclient"
+	"github.com/getloopscale/loopzero/pkg/gitearepo"
 )
 
 func reasonOf(t *testing.T, err error) PushBundleErrorReason {
@@ -36,7 +37,7 @@ func TestPushErrorTextContainingEofInsideAWordIsNotNetwork(t *testing.T) {
 }
 
 func TestPushErrorClassifiesATypedGiteaStatus(t *testing.T) {
-	err := fmt.Errorf("ensure repo: %w", &gitclient.HTTPStatusError{Op: "create repo", StatusCode: 403})
+	err := fmt.Errorf("ensure repo: %w", &gitearepo.StatusError{Op: "create", Repo: "loopzero/acme-api-source", StatusCode: 403})
 	if got := reasonOf(t, err); got != ReasonSourceBackendAuthFailure {
 		t.Errorf("reason = %v, want auth failure", got)
 	}

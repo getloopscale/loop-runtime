@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/getloopscale/loopzero/pkg/gitearepo"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
@@ -29,13 +30,18 @@ type gitopsWorkspace struct {
 	op  string // "push" | "remove" — prefixes every error
 }
 
+// tenantGitOpsRepoOptions auto-initialises the tenant GitOps repository on
+// gitopsBranch: the workspace clones it before the first push, and every push
+// targets that branch.
+var tenantGitOpsRepoOptions = gitearepo.EnsureOptions{AutoInit: true, DefaultBranch: gitopsBranch}
+
 // openWorkspace ensures the tenant repo exists and clones it. A clone failure
 // is always returned: the repo is created before the clone, and cloning an
 // EMPTY repo succeeds, so a failing clone means the repo could not be reached
 // (network, auth, server error) — never "nothing there".
 func (p *GiteaGitOpsPusher) openWorkspace(ctx context.Context, tenantID, op string) (*gitopsWorkspace, func(), error) {
 	repoName := naming.TenantGitOpsRepoName(tenantID)
-	if err := p.repo.EnsureRepo(ctx, repoName, true); err != nil {
+	if err := p.repo.EnsureRepo(ctx, repoName, tenantGitOpsRepoOptions); err != nil {
 		return nil, nil, fmt.Errorf("gitops %s: ensure repo: %w", op, err)
 	}
 	tmpDir, err := os.MkdirTemp("", "loopzero-gitops-"+op+"-*")

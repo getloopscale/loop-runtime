@@ -23,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/getloopscale/loopzero/api/internal/gitclient"
+	"github.com/getloopscale/loopzero/pkg/gitearepo"
 )
 
 // Plan v1.2 T1.2 (cutover-deep-review-hardening): DNS-1123 validation for
@@ -57,8 +58,13 @@ type GiteaSourceStoreConfig struct {
 // Workflow can clone it (spec §7.1, Mode B).
 type GiteaSourceStore struct {
 	git  *gitclient.GitRunner
-	repo *gitclient.GiteaRepoManager
+	repo *gitearepo.Client
 }
+
+// sourceRepoOptions creates a source repository empty: the pushed bundle
+// brings its own history and branch, and an auto-initialised commit would
+// be an unrelated root the first push has to reconcile.
+var sourceRepoOptions = gitearepo.EnsureOptions{AutoInit: false}
 
 // NewGiteaSourceStore creates a new Gitea-backed SourceStore.
 func NewGiteaSourceStore(cfg GiteaSourceStoreConfig) (*GiteaSourceStore, error) {
@@ -67,7 +73,7 @@ func NewGiteaSourceStore(cfg GiteaSourceStoreConfig) (*GiteaSourceStore, error) 
 	}
 	return &GiteaSourceStore{
 		git:  gitclient.NewGitRunner(cfg.Token),
-		repo: gitclient.NewGiteaRepoManager(cfg.BaseURL, cfg.Token, cfg.OrgName, nil),
+		repo: gitearepo.New(cfg.BaseURL, cfg.Token, cfg.OrgName, nil),
 	}, nil
 }
 
@@ -233,7 +239,7 @@ func classifyPushError(err error) pushErrClass {
 		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 		return pushErrNetwork
 	}
-	var status *gitclient.HTTPStatusError
+	var status *gitearepo.StatusError
 	if errors.As(err, &status) {
 		switch status.StatusCode {
 		case http.StatusUnauthorized, http.StatusForbidden:
@@ -308,7 +314,7 @@ func (s *GiteaSourceStore) pushGitBundle(ctx context.Context, tenantID, projectI
 	}
 	remoteURL := s.repo.RepoURL(repoName)
 
-	if err := s.repo.EnsureRepo(ctx, repoName, false); err != nil {
+	if err := s.repo.EnsureRepo(ctx, repoName, sourceRepoOptions); err != nil {
 		return "", fmt.Errorf("gitea source: ensure repo: %w", err)
 	}
 
@@ -401,7 +407,7 @@ func (s *GiteaSourceStore) pushTarBundle(ctx context.Context, tenantID, projectI
 	}
 	remoteURL := s.repo.RepoURL(repoName)
 
-	if err := s.repo.EnsureRepo(ctx, repoName, false); err != nil {
+	if err := s.repo.EnsureRepo(ctx, repoName, sourceRepoOptions); err != nil {
 		_ = os.RemoveAll(tmpDir)
 		return PushResult{}, fmt.Errorf("gitea source: ensure repo: %w", err)
 	}
