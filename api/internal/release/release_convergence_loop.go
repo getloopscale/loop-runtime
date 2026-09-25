@@ -626,7 +626,7 @@ func (r *ReleaseConvergenceLoop) healthCheckActiveReleases(ctx context.Context) 
 		// GetAppStatus returns synced=false, healthy=false (no workload resources
 		// visible yet). That is a STILL-CONVERGING state, not a post-activation
 		// health regression. The pre-fix code flagged it as a false-success,
-		// making a live, healthy promotion look failed ("sem sucesso") in the dashboard  // english-only: verbatim dashboard label
+		// making a live, healthy promotion look failed ("sem sucesso") in the dashboard  // english-only: verbatim dashboard label, meaning without success
 		// and firing spurious FalseSuccess/divergence Prometheus signals. A
 		// non-Synced app is converging or drifting — neither is a "healthy
 		// workload degraded" verdict — so skip and let a later synced poll

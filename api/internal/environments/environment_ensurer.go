@@ -28,7 +28,7 @@ import (
 // deploys against tenants that already had the same env name on a
 // different project — Tenant CR never gained the new tuple,
 // AppProject destinations never updated, ArgoCD sync failed with
-// "namespace not permitted in project". Closes #37 cenário 4.
+// "namespace not permitted in project". Closes #37 scenario 4.
 //
 // Legacy production tuples (pre-M2) have empty Project field; calling
 // HasEnvironment with `project=""` matches only those legacy entries
@@ -129,7 +129,7 @@ func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, pr
 	// skipped → Tenant CR spec.environments[] never gained the new
 	// tuple → AppProject destinations never extended → ArgoCD sync
 	// failed with "namespace not permitted in project". Closes #37
-	// cenário 4 (BUILD → RELEASE → URL chain). The downstream
+	// scenario 4 (BUILD → RELEASE → URL chain). The downstream
 	// AddEnvironment retains its server-side merge idempotency as
 	// defense in depth.
 	exists, err := e.Lister.HasEnvironment(ctx, tenantID, project, envName)

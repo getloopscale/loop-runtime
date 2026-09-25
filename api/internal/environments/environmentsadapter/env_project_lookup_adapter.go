@@ -25,7 +25,7 @@ import (
 //     for "exists".
 //
 // Plan: 2026-06-07-runtime-envs-per-project-m2 v1.2 T4.1 wiring.
-// Sponsor verbatim 2026-06-08: "vamos fazer o teste LIVE, bora?" —
+// Sponsor 2026-06-08: "let's run the LIVE test, shall we?" —
 // the LIVE bash test caught that the gate was unwired in setup_server.go
 // (handler shipped with the EnvProjectLookup interface, no production
 // implementation injected). This adapter closes that gap.

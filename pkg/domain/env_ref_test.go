@@ -117,11 +117,11 @@ func TestEnvRef_Equal_ByValue(t *testing.T) {
 	if !a.Equal(b) {
 		t.Error("EnvRef.Equal should return true for value-identical refs")
 	}
-	// A outra cell tem de ser uma cell REALMENTE distinta. Enquanto a primeira se
-	// chamou `cell-default` e a segunda `cell-1`, os dois nomes aqui eram diferentes
-	// por acidente de vocabulario: eles nomeavam a MESMA maquina (ADR 2026-08-09).
-	// Com a unificacao 1:1, `cell-0` e `cell-1` sao duas cells de verdade, e e isso
-	// que faz este caso provar algo.
+	// The other cell has to be a GENUINELY distinct cell. While the first one was
+	// called `cell-default` and the second `cell-1`, the two names here differed
+	// by an accident of vocabulary: they named the SAME machine (ADR 2026-08-09).
+	// With the 1:1 unification, `cell-0` and `cell-1` are two real cells, and that
+	// is what makes this case prove something.
 	c, _ := NewEnvRef("tn-x", "api", "production", "cell-1")
 	if a.Equal(c) {
 		t.Error("EnvRef.Equal should return false when CellID differs")

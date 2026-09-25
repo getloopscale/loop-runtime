@@ -11,8 +11,9 @@ import (
 // TestBuildRuntimeLogQL_M2CanonicalAndLegacyMatched — T2.2 of plan
 // 2026-06-11-code-review-remediation. Post-M2 (2026-06-09) the canonical
 // namespace formula is `loopzero-{tenant}-{project}-{env}` per
-// pkg/naming.Namespace (sponsor verbatim "TUDO DEVERIA esta separado // english-only: verbatim sponsor quote
-// por projeto" 2026-06-07). // english-only: verbatim sponsor quote The Loki client was emitting the legacy
+// pkg/naming.Namespace (sponsor verbatim 2026-06-07, meaning "EVERYTHING
+// SHOULD be separated by project": "TUDO DEVERIA esta separado por projeto"). // english-only: verbatim sponsor quote, kept as evidence
+// The Loki client was emitting the legacy
 // 3-segment form `loopzero-{tenant}-{env}`, so logs for any M2-shaped
 // namespace silently disappeared from /logs queries.
 //

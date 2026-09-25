@@ -378,8 +378,8 @@ func TestPreviewService_Implements_RoutesInterface(t *testing.T) {
 }
 
 // =============================================================================
-// J-23 wildcard URL convention (sponsor verbatim 2026-06-07
-// "Continuar com wildcard CF + Caddy wildcard block agora")
+// J-23 wildcard URL convention (sponsor directive 2026-06-07:
+// "Continue with the CF wildcard + Caddy wildcard block now")
 // =============================================================================
 
 func TestPreviewURL_CanonicalWildcardConvention(t *testing.T) {

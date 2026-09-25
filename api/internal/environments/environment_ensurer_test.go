@@ -431,7 +431,7 @@ func TestEnsureEnvironment_EmptyProjectPreservesLegacyPath_M2(t *testing.T) {
 // =============================================================================
 // m37 — Tenant CR per-(project, env) shallow check canonical fix
 // Plan: m37-tenant-cr-project-sync-canonical-fix v1.0
-// Closes #37 cenário 4 (BUILD → RELEASE → URL)
+// Closes #37 scenario 4 (BUILD → RELEASE → URL)
 // =============================================================================
 
 // TestEnsureEnvironment_DifferentProjectSameEnvName_TriggersAddEnvironment
