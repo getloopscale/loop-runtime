@@ -14,6 +14,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Quality gate `values-duplicate-keys` fails any Helm values file under charts/ or infra/helm/ that declares the same key twice.
+
 - task dogfood:v2:journey JOURNEY=<label> runs one live dogfood journey (e.g. JOURNEY=j04).
 
 - **api:** backlog B-119 — the build cache is keyed by name, so two tenants on the same
@@ -58,6 +60,14 @@ to [Semantic Versioning](https://semver.org/).
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
 ### Changed
+
+- The published charts now reject values that have no effect (for example `ingress`, `autoscaling`, `podSecurityContext`, unknown `config` keys on loopzero-cloud) instead of accepting and ignoring them; loopzero-cloud's example values no longer set inert keys.
+
+- The published loopzero-api, loopzero-cloud, loopzero-dashboard and operator charts now merge a chart-local `imagePullSecrets` with `global.imagePullSecrets`.
+
+- The published monitoring chart (0.3.0) now ships exactly the dashboards and alert rules the platform installs: six more dashboards, runbook links on its alerts, a corrected operator-error alert, and sixteen alerts on metrics nothing emits removed.
+
+- Admission policies that guard deletes and updates now exempt every kube-system controller account and the same list of platform service accounts (configurable as `systemActorExemptions.platformServiceAccounts`); rendering fails if fewer than two are listed.
 
 - The per-cell bootstrap tasks k3d:bootstrap-cell-0 and k3d:bootstrap-cell-1 are replaced by one task, k3d:bootstrap-cell CELL_CTX=<context>; cells and their bootstrap releases are declared once (CELL_CONTEXTS, CELL_BOOTSTRAP_RELEASES).
 
@@ -196,6 +206,24 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- Secret backups written by the build-cluster and runtime-cluster secret generators can now be restored with `kubectl apply`; they used to keep server fields that made the apply fail once the Secret had changed.
+
+- Drill cells' credentials now carry the `loopzero.io/cell` label the multi-cell runbook selects on.
+
+- `LOOPZERO_HELMFILE_ENV=dev-public task setup` (and standalone-public) now installs the build and cell clusters; those environments were unknown to the build and cell helmfiles, which stopped the setup with exit 3.
+
+- A fresh local setup now installs the cell's image admission policy in the environment's configured mode (warn locally) instead of silently switching it to enforce.
+
+- The published loopzero-cloud chart's ServiceMonitor now targets the port the Service actually exposes (`http`) when enabled.
+
+- Setting `serviceAccount.automountServiceAccountToken: false` on the published operator and API charts now takes effect; it was silently forced to true.
+
+- The published admission-policies chart no longer lets the tenant-namespace policy block the platform's own controllers, which could leave a Tenant impossible to delete; it also gains the image-digest warn-rate alert the bootstrap chart already had.
+
+- KEDA and the KEDA HTTP add-on on workload cells now run with their configured resource limits, non-root user and interceptor replica bounds; dev and prod cells get two KEDA replicas with disruption budgets. The values had been nested under a key the installed charts never read.
+
+- Gitea HA (dev/prod) now actually applies its Redis global lock, LFS server and console logging, and Tempo now keeps traces for 7 days with its resource limits and hardened container security context — both values files declared their main key twice and Helm silently dropped the first block.
 
 - Secret rotation now refreshes exactly the ExternalSecrets that read the rotated path, and the operator's own Gitea and MinIO credentials can be rotated.
 
@@ -384,6 +412,8 @@ to [Semantic Versioning](https://semver.org/).
   explanation (#B-069)
 
 ### Security
+
+- The bootstrap loopzero-api role no longer grants every verb (including deletecollection) on the platform's own resources; it grants the same explicit verbs as the published chart.
 
 - The tenant eviction tool no longer places the database password in a pod spec, rejects tenant patterns that are not a tenant-id prefix, and fails when the database cleanup fails.
 
