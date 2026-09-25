@@ -17,10 +17,10 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/bootstrap"
 	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
+	"github.com/getloopscale/loopzero/api/internal/placement/placementhttp"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
 	"github.com/getloopscale/loopzero/api/internal/projects"
-	"github.com/getloopscale/loopzero/api/internal/routes/admin"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
@@ -261,8 +261,8 @@ type AdminConfig struct {
 	// APIEnabled is the LOOPZERO_ADMIN_API feature flag: off, the admin routes
 	// answer 404 even to an authorized operator.
 	APIEnabled       bool
-	Evictor          admin.TenantEvictor
-	Pinner           admin.CellPinner
+	Evictor          placementhttp.TenantEvictor
+	Pinner           placementhttp.CellPinner
 	ReleaseInspector release.ReleaseInspector
 }
 

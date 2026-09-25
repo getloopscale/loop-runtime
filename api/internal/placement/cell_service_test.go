@@ -8,8 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"testing"
-
-	"github.com/getloopscale/loopzero/api/internal/placement"
 )
 
 type fakeCellQuerier struct {
@@ -21,7 +19,7 @@ func (f *fakeCellQuerier) CountByCell(_ context.Context) (map[string]int, error)
 }
 
 func TestCellService_ListCells(t *testing.T) {
-	router, _ := placement.NewStaticRouter([]placement.CellConfig{
+	router, _ := NewStaticRouter([]CellConfig{
 		{CellID: "cell-0"},
 		{CellID: "cell-sfo3-02"},
 	})
@@ -52,7 +50,7 @@ func TestCellService_ListCells(t *testing.T) {
 }
 
 func TestCellService_ListCellsEmptyRouter(t *testing.T) {
-	router := placement.NewPassthroughRouter(placement.CellConfig{CellID: "cell-0"})
+	router := NewPassthroughRouter(CellConfig{CellID: "cell-0"})
 	querier := &fakeCellQuerier{counts: map[string]int{"cell-0": 5}}
 	svc := NewCellService(router, querier, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 
@@ -80,7 +78,7 @@ func TestExtractRegion(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.cellID, func(t *testing.T) {
-			got := placement.ExtractRegion(tt.cellID)
+			got := ExtractRegion(tt.cellID)
 			if got != tt.want {
 				t.Errorf("placement.ExtractRegion(%q) = %q, want %q", tt.cellID, got, tt.want)
 			}
@@ -107,7 +105,7 @@ func TestCellStatus_NoInternalTerms(t *testing.T) {
 // No provider measures cluster or deploy health per cell, so the service must
 // say so ("Unknown") rather than report a fabricated "Ready"/"Healthy".
 func TestCellService_ReportsUnmeasuredHealthAsUnknown(t *testing.T) {
-	router, _ := placement.NewStaticRouter([]placement.CellConfig{{CellID: "cell-0"}})
+	router, _ := NewStaticRouter([]CellConfig{{CellID: "cell-0"}})
 	svc := NewCellService(router, &fakeCellQuerier{counts: map[string]int{}}, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 
 	cells, err := svc.ListCells(context.Background())

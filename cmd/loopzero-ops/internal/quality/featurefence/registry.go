@@ -64,7 +64,7 @@ var registry = map[string]Entry{
 
 	// ── layer folders being dissolved into features ─────────────────────────
 	// Each entry below disappears when its code reaches the feature that owns it.
-	"adapters":   {Kind: Layer, Deps: []string{"buildplane", "db", "deploycontracts", "domains", "environments", "github", "integrations", "k8s", "lock", "logs", "ports", "preview", "repositories", "routes", "services", "sse", "status", "timeline"}},
+	"adapters":   {Kind: Layer, Deps: []string{"buildplane", "db", "deploycontracts", "domains", "environments", "github", "integrations", "k8s", "lock", "logs", "placement", "ports", "preview", "repositories", "routes", "services", "sse", "status", "timeline"}},
 	"argocd":     {Kind: Layer, Deps: []string{"deploycontracts", "k8s", "metrics", "placement"}},
 	"buildplane": {Kind: Layer, Deps: []string{"archive", "deploycontracts", "events", "gitclient", "k8s", "metrics", "scrub"}},
 	"cfkv":       {Kind: Layer, Deps: []string{"metrics"}},

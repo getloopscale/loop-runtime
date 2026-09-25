@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package routes — admin_evict.go implements T-02 bulk tenant eviction
-// endpoint from 50k-immediate-focus.
+// admin_evict.go implements T-02 bulk tenant eviction endpoint from
+// 50k-immediate-focus.
 //
 // Gated behind LOOPZERO_ADMIN_API=true. Requires X-Service-Auth header
 // (not user auth) since eviction is an operator primitive, not a tenant
@@ -12,10 +12,13 @@
 // returns a job ID. Actual eviction is done by placement.TenantEvictor
 // (separate file) which handles FK ordering + finalizer removal.
 
-// Package admin serves the operator endpoints under /api/v1/admin: evicting a
-// tenant from a cell, pinning one to a specific cell, and inspecting a release.
+// Package placementhttp serves the placement feature's operator endpoints under
+// /api/v1/admin: evicting a tenant from a cell and pinning one to a specific
+// cell. Until api/internal was organized by feature (2026-09-25) they shared the
+// `admin` family with the release inspection, which now lives in the release
+// feature.
 //
-// Fifteenth family to leave the flat `routes` package (B-080, slice-35), and the
+// History of the admin family: fifteenth family to leave the flat `routes` package (B-080, slice-35), and the
 // first with three production files — the three admin_* files are one family by
 // audience rather than by subject: every route here is X-Service-Auth only, with
 // no user context, which is why the router registers them as a sibling of the
@@ -24,7 +27,7 @@
 // It is also the family that pulled `WriteCodeErrorJSON` into the `httpio` leaf
 // two slices ago: two of these three files reached a response writer that lived
 // in the audit family, and the extraction of THAT family is what surfaced it.
-package admin
+package placementhttp
 
 import (
 	"context"

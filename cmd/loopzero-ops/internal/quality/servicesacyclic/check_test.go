@@ -41,7 +41,7 @@ func legalTree(t *testing.T) string {
 	root := t.TempDir()
 	writeGo(t, root, "api/internal/services/build/b.go", importing("build", "release"))
 	writeGo(t, root, "api/internal/services/release/r.go", importing("release"))
-	writeGo(t, root, "api/internal/services/placement/p.go", importing("placement"))
+	writeGo(t, root, "api/internal/services/platform/p.go", importing("platform"))
 	return root
 }
 
@@ -69,10 +69,10 @@ func TestCheck_ReverseEdgeFails(t *testing.T) {
 
 func TestCheck_CrossEdgeBetweenSelfContainedContextsFails(t *testing.T) {
 	root := legalTree(t)
-	writeGo(t, root, "api/internal/services/placement/x.go", importing("placement", "release"))
+	writeGo(t, root, "api/internal/services/platform/x.go", importing("platform", "release"))
 
 	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
-		t.Fatalf("placement → release is not in the allow-list; err = %v", err)
+		t.Fatalf("platform → release is not in the allow-list; err = %v", err)
 	}
 }
 

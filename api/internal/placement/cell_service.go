@@ -7,8 +7,6 @@ import (
 	"context"
 	"log/slog"
 	"time"
-
-	"github.com/getloopscale/loopzero/api/internal/placement"
 )
 
 // CellStatus represents the status of a single Cell for operator visibility.
@@ -32,13 +30,13 @@ type CellCountQuerier interface {
 
 // CellService aggregates Cell status data from multiple sources.
 type CellService struct {
-	router  placement.Router
+	router  Router
 	querier CellCountQuerier
 	logger  *slog.Logger
 }
 
 // NewCellService creates a CellService for operator visibility.
-func NewCellService(router placement.Router, querier CellCountQuerier, logger *slog.Logger) *CellService {
+func NewCellService(router Router, querier CellCountQuerier, logger *slog.Logger) *CellService {
 	return &CellService{
 		router:  router,
 		querier: querier,
@@ -71,7 +69,7 @@ func (s *CellService) ListCells(ctx context.Context) ([]CellStatus, error) {
 	for _, cell := range cells {
 		result = append(result, CellStatus{
 			CellID:        cell.CellID,
-			Region:        placement.ExtractRegion(cell.CellID),
+			Region:        ExtractRegion(cell.CellID),
 			TenantCount:   counts[cell.CellID],
 			ClusterHealth: healthUnknown,
 			DeployHealth:  healthUnknown,

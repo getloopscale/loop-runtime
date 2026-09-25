@@ -6,7 +6,7 @@ package adapters
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/services/placement"
+	"github.com/getloopscale/loopzero/api/internal/placement"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 

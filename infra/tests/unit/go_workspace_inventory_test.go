@@ -51,7 +51,7 @@
 // an isolated GOCACHE: prime the suite green, delete a module line from go.work,
 // re-run `go test ./unit/...` — it reports "ok (cached)" and never observes the
 // change. The same hole hides T-10's subject: deleting
-// api/internal/routes/admin/admin_pin_cell.go outright still yields a cached
+// api/internal/placement/placementhttp/admin_pin_cell.go outright still yields a cached
 // "ok". The repo already learned this for cross-module fixture reads
 // (taskfiles/quality.yml, "-count=1: these read fixtures from ANOTHER module"),
 // and the infra/tests unit invocations now carry the same flag.

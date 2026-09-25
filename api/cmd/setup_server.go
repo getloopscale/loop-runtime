@@ -16,13 +16,6 @@ import (
 
 	previewsvc "github.com/getloopscale/loopzero/api/internal/preview"
 
-	// Aliased because this file ALSO imports `api/internal/placement`, and both
-	// packages are named `placement`. The disambiguation lives here, in the only
-	// file that needs it, instead of being baked into the package name for
-	// everyone (B-057). Measured: of the 21 files that import one of the two,
-	// only this one imports both.
-	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
-
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
@@ -320,7 +313,7 @@ func wireAdmin(sc *server.Config, w serverWiring) {
 		return
 	}
 	sc.Admin.Evictor = buildAdminEvictor(w.cfg, d)
-	pinner := placementsvc.NewCellPinner(&store.PostgresCellStore{DB: d})
+	pinner := placement.NewCellPinner(&store.PostgresCellStore{DB: d})
 	if mgmt := buildMgmtDynamicClient(w.cfg, w.logger); mgmt != nil {
 		pinner = pinner.WithTenantCRPatcher(adapters.NewTenantCRCellPatcher(mgmt, "loopzero-system"))
 	}

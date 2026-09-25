@@ -6,9 +6,9 @@ package main
 import (
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/admin"
+	"github.com/getloopscale/loopzero/api/internal/placement/placementhttp"
 
-	"github.com/getloopscale/loopzero/api/internal/services/placement"
+	"github.com/getloopscale/loopzero/api/internal/placement"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
@@ -29,7 +29,7 @@ import (
 // available, but partial-cluster breakage (e.g. runtime kubeconfig mis-set)
 // shouldn't prevent the API from starting. A startup log line makes the
 // degraded mode explicit.
-func buildAdminEvictor(cfg config.Config, dbAdapter *db.PgxAdapter) admin.TenantEvictor {
+func buildAdminEvictor(cfg config.Config, dbAdapter *db.PgxAdapter) placementhttp.TenantEvictor {
 	// T1.4 (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed admin
 	// tenant store. ListTenantIDsByPattern + 8-step FK-ordered
 	// eviction cascade preserved verbatim; all queries are

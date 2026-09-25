@@ -105,7 +105,7 @@ tasks:
       # api/**, infra/helm/**, go.work). Go's test cache keys on THIS module's
       # inputs, so none of those reads invalidate it. Measured 2026-09-05 with an
       # isolated GOCACHE: prime green, then DELETE
-      # api/internal/routes/admin/admin_pin_cell.go — the file T-10 exists to guard —
+      # api/internal/placement/placementhttp/admin_pin_cell.go — the file T-10 exists to guard —
       # and the suite still reports `ok (cached)`. Same for dropping a module from
       # go.work. Without the flag these guards report on a tree they never read.
       # Cost measured on this target: 1.31s -> 2.31s. B-169/B-170.

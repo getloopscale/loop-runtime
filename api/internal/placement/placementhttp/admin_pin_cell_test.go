@@ -4,7 +4,7 @@
 // Phase 5 T5.5 — admin_pin_cell handler tests.
 // Mirror admin_evict_test.go structure for consistency.
 
-package admin
+package placementhttp
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services/placement"
+	"github.com/getloopscale/loopzero/api/internal/placement"
 )
 
 // osReadFileC11 — local alias avoiding clash with any other test helper named

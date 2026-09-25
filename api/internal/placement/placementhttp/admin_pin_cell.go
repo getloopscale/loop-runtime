@@ -18,7 +18,7 @@
 // Gated behind LOOPZERO_ADMIN_API=true (same flag as admin_evict). Requires
 // X-Service-Auth header. Fails 403 without either.
 
-package admin
+package placementhttp
 
 import (
 	"context"
@@ -31,7 +31,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/correlation"
 	audit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 
-	"github.com/getloopscale/loopzero/api/internal/services/placement"
+	"github.com/getloopscale/loopzero/api/internal/placement"
 )
 
 // AdminPinCellInput is the body for POST /api/v1/admin/tenants/pin.

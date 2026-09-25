@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package services — tenant_evictor.go implements T-02 bulk tenant
+// tenant_evictor.go implements T-02 bulk tenant
 // teardown service (50k-immediate-focus).
 //
 // This replaces the ad-hoc bash tool (tools/admin-evict-tenants.sh)

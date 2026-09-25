@@ -6,8 +6,8 @@ package adapters
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/admin"
-	"github.com/getloopscale/loopzero/api/internal/services/placement"
+	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loopzero/api/internal/placement/placementhttp"
 )
 
 // TenantEvictorRouteAdapter exposes *placement.TenantEvictor via the
@@ -33,4 +33,4 @@ func (a *TenantEvictorRouteAdapter) EnqueueEviction(ctx context.Context, tenantI
 }
 
 // The port this adapter satisfies, asserted at compile time.
-var _ admin.TenantEvictor = (*TenantEvictorRouteAdapter)(nil)
+var _ placementhttp.TenantEvictor = (*TenantEvictorRouteAdapter)(nil)

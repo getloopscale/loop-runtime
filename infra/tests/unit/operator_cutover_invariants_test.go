@@ -245,7 +245,9 @@ func TestT09_TilftileSplitOperatorMigrationStatus(t *testing.T) {
 //     subdirectory during a routes refactor (siblings: admin_evict.go,
 //     admin_release_inspect.go). The assertion still named the pre-move path and
 //     announced "T5.5 incomplete" for an endpoint that had shipped and never
-//     left. Path corrected in eb4ae31b1; the message below no longer draws that
+//     left. Path corrected in eb4ae31b1, and again when api/internal was
+//     organized by feature (2026-09-25) and the handler moved to the placement
+//     feature's placementhttp; the message below no longer draws that
 //     conclusion from a failed lookup.
 //
 //  2. The CLI half asserted a file in ANOTHER REPOSITORY. `cli/` was extracted
@@ -265,11 +267,11 @@ func TestT09_TilftileSplitOperatorMigrationStatus(t *testing.T) {
 // guarantee is pinned where it can actually be executed:
 //   - api/internal/server/control_surfaces_observable_test.go builds the router and
 //     asserts the AdminPin surface is recorded with its route.
-//   - api/internal/routes/admin/admin_pin_cell_test.go covers the handler and
+//   - api/internal/placement/placementhttp/admin_pin_cell_test.go covers the handler and
 //     its 403 without X-Service-Auth.
 //   - the cli<->engine seam has its own target: `task quality:contract:cross-repo`.
 func TestT10_AdminPinEndpointShipped(t *testing.T) {
-	path := filepath.Join(repoRoot(), "api", "internal", "routes", "admin", "admin_pin_cell.go")
+	path := filepath.Join(repoRoot(), "api", "internal", "placement", "placementhttp", "admin_pin_cell.go")
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("this guard could not find its subject at %s: %v\n"+
 			"Read that as: the GUARD is stale or the handler moved. It does not by "+

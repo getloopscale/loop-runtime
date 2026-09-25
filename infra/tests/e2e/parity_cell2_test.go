@@ -134,7 +134,7 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 		Expect(err).NotTo(HaveOccurred())
 		cmd := exec.Command("go", "test", "-count=1",
 			"-run", "Test.*CellPinner",
-			"./internal/services/...")
+			"./internal/placement/...")
 		cmd.Dir = strings.TrimSpace(string(repoRoot)) + "/api"
 		out, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(),
@@ -190,7 +190,7 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 		Expect(err).NotTo(HaveOccurred())
 		cmd := exec.Command("go", "test", "-count=1",
 			"-run", "TestAdminPinCell_AuthzInvariantC11",
-			"./internal/routes/...")
+			"./internal/placement/...")
 		cmd.Dir = strings.TrimSpace(string(repoRoot)) + "/api"
 		out, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(),

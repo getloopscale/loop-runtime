@@ -18,6 +18,7 @@ import (
 	"net/http"
 
 	"github.com/getloopscale/loopzero/api/internal/auth/authhttp"
+	"github.com/getloopscale/loopzero/api/internal/placement/placementhttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/admin"
 	"github.com/getloopscale/loopzero/api/internal/version/versionhttp"
 
@@ -201,7 +202,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			"access is DENIED (fail closed), not opened") {
 		r.With(authn.RequireAdminService).Post(
 			"/api/v1/admin/tenants/evict",
-			admin.AdminEvictHandler(cfg.Admin.Evictor, cfg.Admin.APIEnabled),
+			placementhttp.AdminEvictHandler(cfg.Admin.Evictor, cfg.Admin.APIEnabled),
 		)
 	}
 	// CHG-2026-04-30-DELETE-SINGLE-CELL: pin tenants to specific cell.
@@ -209,7 +210,7 @@ func NewRouter(cfg Config) *chi.Mux {
 		"no database — the CellPinner is built on `PostgresCellStore` "+
 			"(setup_server.go:299). This is the ONLY route that moves a tenant between cells, "+
 			"so turning it off does not degrade anything: it removes the operation") {
-		r.With(authn.RequireAdminService).Post("/api/v1/admin/tenants/pin", admin.AdminPinCellHandler(cfg.Admin.Pinner, cfg.AuditWriter, cfg.Admin.APIEnabled))
+		r.With(authn.RequireAdminService).Post("/api/v1/admin/tenants/pin", placementhttp.AdminPinCellHandler(cfg.Admin.Pinner, cfg.AuditWriter, cfg.Admin.APIEnabled))
 	}
 	// T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md:
 	// diagnostic read-only endpoint for on-call to inspect a release's

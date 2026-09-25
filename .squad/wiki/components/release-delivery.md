@@ -68,7 +68,7 @@ the lock again.
 | `api.services.domain` | `api/internal/domains` | package | application | `api/internal/domains/domain_cf_reconciler.go:1` | Custom-domain services; imports db, manifests, metrics, ports, deploycontracts. |
 | `api.services.preview` | `api/internal/preview` | package | application | `api/internal/preview/preview_service.go:1` | Preview environment services. |
 | `api.services.platform` | `api/internal/services/platform` | package | application | `api/internal/services/platform/audit_log_pruner.go:1` | Platform-level services; imports cfkv, db, db/store, metrics, ports, deploycontracts. |
-| `api.services.placement` | `api/internal/services/placement` | package | application | `api/internal/services/placement/cell_pinner.go:1` | Placement service. Distinct from api/internal/placement, and the name collision is real enough that api/cmd/setup_server.go aliases it as placementsvc in the one file that imports both. |
+| `api.services.placement` | `api/internal/placement` | package | application | `api/internal/placement/cell_pinner.go:1` | Placement service. Distinct from api/internal/placement, and the name collision is real enough that api/cmd/setup_server.go aliases it as placementsvc in the one file that imports both. |
 
 ## Measured size
 
