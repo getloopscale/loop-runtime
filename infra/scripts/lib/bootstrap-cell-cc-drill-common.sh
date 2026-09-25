@@ -43,7 +43,7 @@ set -euo pipefail
 #   - ClusterCredential <cell_id> (spec.cellID=<cell_id>,
 #     spec.apiServer=https://<uuid>.k8s.ondigitalocean.com)
 #
-# Idempotent: kubectl apply --server-side. Safe to re-run.
+# Idempotent: kubectl apply through clustercredential-create.sh. Safe to re-run.
 # Exit: 0 on success, 1 if pulumi output missing, 2 if mgmt unreachable.
 # ---------------------------------------------------------------------------
 
@@ -101,65 +101,27 @@ bootstrap_cell_cc_drill() {
 
   log_drill "Resolved target: $TARGET_ENDPOINT"
 
-  # 2. Create kubeconfig Secret in mgmt cluster.
-  local SECRET_NAME="${CELL_ID}-kubeconfig"
-  local KUBECONFIG_B64
-  KUBECONFIG_B64=$(printf '%s' "$TARGET_KUBECONFIG" | base64 -w0)
+  # 2. Secret + ClusterCredential in the drill mgmt cluster — through the one
+  #    ClusterCredential constructor, so a drill cell carries the same canonical
+  #    labels (loopzero.io/cell, which the multi-cell runbook selects on) as a local
+  #    one. This used to be a heredoc copy labelled loopzero.dev/cell-id +
+  #    loopzero.dev/drill, invisible to that selector.
+  local CC_CREATE TARGET_KC_FILE
+  CC_CREATE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../helmfile/scripts/lib/clustercredential-create.sh"
+  TARGET_KC_FILE="$(mktemp)"
+  # shellcheck disable=SC2064
+  trap "rm -f '$TARGET_KC_FILE'" RETURN
+  printf '%s' "$TARGET_KUBECONFIG" >"$TARGET_KC_FILE"
 
-  local SECRET_MANIFEST
-  SECRET_MANIFEST=$(cat <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ${SECRET_NAME}
-  namespace: ${NS}
-  labels:
-    loopzero.dev/cell-id: ${CELL_ID}
-    loopzero.dev/drill: "true"
-type: Opaque
-data:
-  kubeconfig: ${KUBECONFIG_B64}
-EOF
-)
-
-  # 3. Create ClusterCredential CR in mgmt cluster.
-  local CC_MANIFEST
-  CC_MANIFEST=$(cat <<EOF
-apiVersion: loopzero.io/v1
-kind: ClusterCredential
-metadata:
-  name: ${CELL_ID}
-  namespace: ${NS}
-  labels:
-    loopzero.dev/cell-id: ${CELL_ID}
-    loopzero.dev/drill: "true"
-spec:
-  cellID: ${CELL_ID}
-  clusterName: ${CELL_ID}
-  apiServer: ${TARGET_ENDPOINT}
-  scope:
-    argocd: true
-    operators: true
-  secretRef:
-    name: ${SECRET_NAME}
-    namespace: ${NS}
-EOF
-)
-
+  local DRY="false"
   if [[ "$DRY_RUN" == "--dry-run" ]]; then
     log_drill "DRY-RUN — manifests would be applied:"
-    printf '%s\n---\n%s\n' "$SECRET_MANIFEST" "$CC_MANIFEST"
-    return 0
+    DRY="true"
   fi
-
-  # 4. Apply Secret + CC via mgmt kubeconfig.
-  log_drill "Applying Secret ${NS}/${SECRET_NAME}..."
-  printf '%s\n' "$SECRET_MANIFEST" | \
-    kubectl --kubeconfig "$DRILL_KUBECONFIG" apply --server-side -f - > /dev/null
-
-  log_drill "Applying ClusterCredential ${NS}/${CELL_ID}..."
-  printf '%s\n' "$CC_MANIFEST" | \
-    kubectl --kubeconfig "$DRILL_KUBECONFIG" apply --server-side -f - > /dev/null
+  MGMT_KUBECONFIG="$DRILL_KUBECONFIG" LOOPZERO_NS="$NS" API_SERVER="$TARGET_ENDPOINT" \
+    MANAGED_BY="bootstrap-cell-cc-drill" DRY_RUN="$DRY" \
+    bash "$CC_CREATE" "$CELL_ID" "$CELL_ID" "$TARGET_KC_FILE" || return 2
+  [[ "$DRY" == "true" ]] && return 0
 
   log_drill "✓ Cell $CELL_ID wired to $PULUMI_KEY ($TARGET_ENDPOINT)"
   return 0
