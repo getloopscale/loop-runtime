@@ -71,7 +71,7 @@ func TestReleaseDBReader_PendingThenActive(t *testing.T) {
 }
 
 func TestReleaseDBReader_FailedTerminal(t *testing.T) {
-	q := &fakeReleaseQ{rows: []*ReleaseStatusRow{{State: "FAILED", UpdatedAt: time.Now()}}}
+	q := &fakeReleaseQ{rows: []*ReleaseStatusRow{{State: "ROLLED_BACK", UpdatedAt: time.Now()}}}
 	r := NewReleaseDBReader(q)
 	r.PollInterval = 10 * time.Millisecond
 	out := make(chan PhaseEvent, 4)

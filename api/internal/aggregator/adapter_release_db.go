@@ -7,6 +7,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // ReleaseStatusRow is the source-side projection of api/internal/db
@@ -56,16 +58,15 @@ func (r *ReleaseDBReader) Stream(ctx context.Context, deployID string, out chan<
 		if row == nil {
 			return false, nil
 		}
-		// Release state → (phase, status) projection:
-		//   PENDING  → release / in_progress
-		//   ACTIVE   → release / completed (then deploy phase begins)
-		//   ROLLING_BACK → release / degraded (non-terminal in this source)
-		//   FAILED, ROLLED_BACK → release / failed
 		phase, status, terminal := releaseStateProjection(row.State)
+		reason := row.Reason
+		if _, known := lookupStateProjection(row.State); !known && reason == "" {
+			reason = fmt.Sprintf("unrecognised release state %q", row.State)
+		}
 		ev := PhaseEvent{
 			Phase:          phase,
 			Status:         status,
-			DegradedReason: row.Reason,
+			DegradedReason: reason,
 			Timestamp:      row.UpdatedAt,
 		}
 		select {
@@ -97,57 +98,65 @@ func (r *ReleaseDBReader) Stream(ctx context.Context, deployID string, out chan<
 	}
 }
 
-func releaseStateProjection(state string) (phase, status string, terminal bool) {
-	switch state {
-	// Canonical 5-phase ladder synthetic states emitted by the v1
-	// spawn-site querier (api/cmd/deploy_timeline_spawn.go). Maps
-	// the wall-clock ladder onto the FSM-strict in-order phases so
-	// the aggregator emits the full Build → Sign → Release → Deploy
-	// → Live progression without out-of-order panics.
-	case "BUILD_IN_PROGRESS":
-		return "build", "in_progress", false
-	case "BUILD_COMPLETED":
-		return "build", "completed", false
-	case "SIGN_IN_PROGRESS":
-		return "sign", "in_progress", false
-	case "SIGN_COMPLETED":
-		return "sign", "completed", false
-	case "DEPLOY_IN_PROGRESS":
-		return "deploy", "in_progress", false
-	case "DEPLOY_COMPLETED":
-		return "deploy", "completed", false
-	case "LIVE_IN_PROGRESS":
-		return "live", "in_progress", false
-	case "LIVE_COMPLETED":
-		return "live", "completed", true
-	// Canonical build-phase terminal failures emitted by the v1
-	// spawn-site querier when build.failed / build.cancelled SSE
-	// events arrive. Phase=build (NOT release — the failure is upstream
-	// of release) so the deploy timeline hero renders the failed step
-	// at the correct position in the 5-phase ladder. Sponsor LIVE-caught
-	// 2026-06-18: without these, build.failed mapped to [] and the hero
-	// froze in BUILD_IN_PROGRESS forever.
-	case "BUILD_FAILED":
-		return "build", "failed", true
-	case "BUILD_CANCELLED":
-		return "build", "canceled", true
-	// Canonical release-row states (used by real FindReleaseForBuild
-	// in v1.1 — kept for backward-compat + the existing
-	// TestReleaseDBReader hermetic tests).
-	case "PENDING", "READY":
-		return "release", "in_progress", false
-	case "ACTIVE":
-		return "release", "completed", false
-	case "ROLLING_BACK":
-		return "release", "degraded", false
-	case "FAILED":
-		return "release", "failed", true
-	case "ROLLED_BACK":
-		return "release", "failed", true
-	case "SUPERSEDED":
-		return "release", "completed", false
-	case "CANCELLED":
-		return "release", "canceled", true
+// stateProjection is where one row state lands on the deploy timeline.
+type stateProjection struct {
+	phase, status string
+	terminal      bool
+}
+
+// ladderProjections are the synthetic states the deploy-timeline spawn site
+// (api/cmd/deploy_timeline_spawn.go) emits to walk the 5-phase ladder in
+// order, plus the build-phase failures it emits on build.failed and
+// build.cancelled — phase=build, because the failure is upstream of release.
+var ladderProjections = map[string]stateProjection{
+	"BUILD_IN_PROGRESS":  {"build", "in_progress", false},
+	"BUILD_COMPLETED":    {"build", "completed", false},
+	"SIGN_IN_PROGRESS":   {"sign", "in_progress", false},
+	"SIGN_COMPLETED":     {"sign", "completed", false},
+	"DEPLOY_IN_PROGRESS": {"deploy", "in_progress", false},
+	"DEPLOY_COMPLETED":   {"deploy", "completed", false},
+	"LIVE_IN_PROGRESS":   {"live", "in_progress", false},
+	"LIVE_COMPLETED":     {"live", "completed", true},
+	"BUILD_FAILED":       {"build", "failed", true},
+	"BUILD_CANCELLED":    {"build", "canceled", true},
+}
+
+// releaseProjections covers every state of the release state machine, keyed
+// by its constant so a renamed or added state cannot silently fall through.
+// A failure the machine can retry (mirror, sync) is degraded and keeps the
+// stream open; one that needs a person (drift alert, failed rollback) or
+// cannot move again is terminal.
+var releaseProjections = map[statemachine.State]stateProjection{
+	statemachine.ReleaseReady:           {"release", "in_progress", false},
+	statemachine.ReleasePending:         {"release", "in_progress", false},
+	statemachine.ReleaseActive:          {"release", "completed", false},
+	statemachine.ReleaseGitMirrorFailed: {"release", "degraded", false},
+	statemachine.ReleaseSyncFailed:      {"release", "degraded", false},
+	statemachine.ReleaseDriftAlert:      {"release", "failed", true},
+	statemachine.ReleaseSuperseded:      {"release", "completed", false},
+	statemachine.ReleaseRollingBack:     {"release", "degraded", false},
+	statemachine.ReleaseRolledBack:      {"release", "failed", true},
+	statemachine.ReleaseRollbackFailed:  {"release", "failed", true},
+	statemachine.ReleaseCancelled:       {"release", "canceled", true},
+	statemachine.ReleaseArchived:        {"release", "completed", true},
+}
+
+// lookupStateProjection reports whether state is one this reader knows.
+func lookupStateProjection(state string) (stateProjection, bool) {
+	if p, ok := ladderProjections[state]; ok {
+		return p, true
 	}
-	return "release", "in_progress", false
+	p, ok := releaseProjections[statemachine.State(state)]
+	return p, ok
+}
+
+// releaseStateProjection maps a row state onto the timeline. An unknown state
+// is shown as degraded — never as progress — so it is visible, and the stream
+// stays open for the next state.
+func releaseStateProjection(state string) (phase, status string, terminal bool) {
+	p, ok := lookupStateProjection(state)
+	if !ok {
+		return "release", "degraded", false
+	}
+	return p.phase, p.status, p.terminal
 }
