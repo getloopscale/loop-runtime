@@ -29,12 +29,29 @@
 package servicesacyclic
 
 import (
+	"errors"
+	"fmt"
+	"go/parser"
+	"go/token"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/subpackagefence"
 )
 
 const (
 	servicesRoot    = "api/internal/services"
 	servicesPkgPath = "github.com/getloopscale/loopzero/api/internal/services"
+
+	// sinkRoot is the shared contracts package every context depends on. It
+	// sits outside servicesRoot, so the subpackage fence never reads it, and
+	// it may import no context: every context imports it, so one edge back
+	// would close a cycle through it.
+	sinkRoot = "api/internal/deploycontracts"
 )
 
 // allowed is the deny-by-default registry: allowed[A] is the set of contexts A
@@ -58,9 +75,60 @@ func fence() subpackagefence.Fence {
 	return subpackagefence.Fence{Dir: servicesRoot, PkgPath: servicesPkgPath, Allowed: allowed}
 }
 
-// Check scans api/internal/services against the registry.
+// Check scans api/internal/services against the registry, then checks that the
+// deploycontracts sink imports no context.
 func Check(cfg Config) (subpackagefence.Outcome, error) {
-	return subpackagefence.Check(cfg.RepoRoot, fence())
+	out, err := subpackagefence.Check(cfg.RepoRoot, fence())
+	return out, errors.Join(err, checkSink(cfg.RepoRoot))
+}
+
+// checkSink reports every import of a services context from the sink, test
+// files included: a test that imports a context still couples the two trees.
+// An absent sink is not this gate's finding — domain-sink-purity fails closed
+// on it — and a missing sink imports nothing.
+func checkSink(repoRoot string) error {
+	dir := filepath.Join(repoRoot, sinkRoot)
+	if _, err := os.Stat(dir); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("stat %s: %w", dir, err)
+	}
+	var edges []string
+	fset := token.NewFileSet()
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		file, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
+		if err != nil {
+			return fmt.Errorf("parse %s: %w", path, err)
+		}
+		for _, imp := range file.Imports {
+			target, err := strconv.Unquote(imp.Path.Value)
+			if err != nil {
+				return fmt.Errorf("%s: import path %s: %w", path, imp.Path.Value, err)
+			}
+			if target == servicesPkgPath || strings.HasPrefix(target, servicesPkgPath+"/") {
+				pos := fset.Position(imp.Pos())
+				edges = append(edges, fmt.Sprintf("deploycontracts → %s (%s:%d)",
+					strings.TrimPrefix(strings.TrimPrefix(target, servicesPkgPath), "/"), pos.Filename, pos.Line))
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if len(edges) == 0 {
+		return nil
+	}
+	sort.Strings(edges)
+	return fmt.Errorf("%s: %w: the shared sink must import no services context: %s",
+		sinkRoot, subpackagefence.ErrForbiddenEdge, strings.Join(edges, "; "))
 }
 
 // ActionableFix returns the operator-facing message for FAIL output.
