@@ -24,7 +24,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
-	"github.com/getloopscale/loopzero/api/internal/routes/teams"
+	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 	"log/slog"
 	"mime/multipart"
 	"net/http"
@@ -32,9 +32,9 @@ import (
 	"os"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/server"
 )
@@ -92,10 +92,10 @@ func TestSourceUpload_Unauthenticated_Returns401(t *testing.T) {
 		StatusHandler:        status.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environments.NewEnvironmentHandler(nil),
-		TeamHandler:          teams.NewTeamHandler(nil),
+		TeamHandler:          teamshttp.NewTeamHandler(nil),
 		DomainHandler:        domains.NewDomainHandler(nil, nil, nil, "test.local"),
 		RepositoryHandler:    repositorieshttp.NewRepositoryHandler(nil),
-		AuditHandler:         audit.NewAuditHandler(nil),
+		AuditHandler:         audithttp.NewAuditHandler(nil),
 		ArgoCallbackHandler:  argocd.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
 		LogStreamHandler:     logs.NewLogStreamHandler(nil, nil, logs.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
@@ -142,10 +142,10 @@ func TestSourceUpload_InvalidBearerToken_Returns401(t *testing.T) {
 		StatusHandler:        status.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environments.NewEnvironmentHandler(nil),
-		TeamHandler:          teams.NewTeamHandler(nil),
+		TeamHandler:          teamshttp.NewTeamHandler(nil),
 		DomainHandler:        domains.NewDomainHandler(nil, nil, nil, "test.local"),
 		RepositoryHandler:    repositorieshttp.NewRepositoryHandler(nil),
-		AuditHandler:         audit.NewAuditHandler(nil),
+		AuditHandler:         audithttp.NewAuditHandler(nil),
 		ArgoCallbackHandler:  argocd.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
 		LogStreamHandler:     logs.NewLogStreamHandler(nil, nil, logs.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
@@ -195,10 +195,10 @@ func TestSourceUpload_XServiceAuthHeader_DoesNotBypass(t *testing.T) {
 		StatusHandler:        status.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     builds.NewBuildListHandler(nil),
 		EnvironmentHandler:   environments.NewEnvironmentHandler(nil),
-		TeamHandler:          teams.NewTeamHandler(nil),
+		TeamHandler:          teamshttp.NewTeamHandler(nil),
 		DomainHandler:        domains.NewDomainHandler(nil, nil, nil, "test.local"),
 		RepositoryHandler:    repositorieshttp.NewRepositoryHandler(nil),
-		AuditHandler:         audit.NewAuditHandler(nil),
+		AuditHandler:         audithttp.NewAuditHandler(nil),
 		ArgoCallbackHandler:  argocd.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
 		LogStreamHandler:     logs.NewLogStreamHandler(nil, nil, logs.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},

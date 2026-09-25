@@ -74,7 +74,7 @@ trusted more than it has earned.
 | 6 | 🟡 low | `stale_declaration` | adapters.go cites api/internal/gitea/gitops_pusher.go, a path that does not exist | `api/internal/adapters/adapters.go:20` |
 | 7 | 🟡 low | `stale_declaration` | api/internal/correlation cites pkg/quality/correlationheader; pkg/quality does not exist, and the regression-lock that forbids the citation only scans cmd/loopzero-ops | `api/internal/correlation/reader.go:18` |
 | 8 | 🟠 medium | `undocumented_boundary` | The persistence layer imports HTTP middleware: db/store -> middleware/auth and middleware/policy | `api/internal/db/store/membership_wrapper.go:27` |
-| 9 | 🟠 medium | `undocumented_boundary` | routes/secrets and routes/billing reach persistence directly, unlike the other 27 route packages | `api/internal/routes/secrets/secrets.go:41` |
+| 9 | 🟠 medium | `undocumented_boundary` | routes/secrets and routes/billing reach persistence directly, unlike the other 27 route packages | `api/internal/secrets/secretshttp/secrets.go:41` |
 | 10 | 🟡 low | `undocumented_boundary` | pkg/enforcement is the one shared library that spans three layers | `pkg/enforcement/limiter.go:5` |
 | 11 | 🟠 medium | `contradiction` | 331 tracked files carry Portuguese, including runtime error strings, against the repository's English-only rule | `api/cmd/setup_database.go:29` |
 | 12 | 🟡 low | `stale_declaration` | CLAUDE.md reports 145 registered / 126 wired gates; the oracle it names reports 146 registered, 127 task-attached | `cmd/loopzero-ops/quality_registry.go:36` |
@@ -294,7 +294,7 @@ _What would close it:_ Move the shared types these two wrappers need into api/in
 
 ### 9. routes/secrets and routes/billing reach persistence directly, unlike the other 27 route packages
 
-**🟠 medium**, confidence high. `api/internal/routes/secrets/secrets.go:41`
+**🟠 medium**, confidence high. `api/internal/secrets/secretshttp/secrets.go:41`
 
 The HTTP surface is otherwise a clean interface layer: 18 of the 29 routes/ sub-packages depend on api/internal/ports and none on db/. Two do not. routes/secrets imports db/dbtx (secrets.go:41) and db/store (internal_secret_fetch_audit_adapter.go:29); routes/billing imports the pgx driver directly (billing.go:45). Derived from go list over all 318 packages.
 

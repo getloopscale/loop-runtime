@@ -14,8 +14,8 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
-	"github.com/getloopscale/loopzero/api/internal/routes/teams"
-	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
+	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
+	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
 	"io"
 	"log/slog"
 	"net/http"
@@ -25,11 +25,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
 	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/sse"
@@ -131,14 +131,14 @@ func (s *stubGitHubWebhookHandler) ServeHTTP(w http.ResponseWriter, _ *http.Requ
 // stubTenantDeletionStore implements tenants.TenantDeletionStore.
 type stubTenantDeletionStore struct{}
 
-func (s *stubTenantDeletionStore) RequestDeletion(_ context.Context, _ tenants.DeletionRequest) (*tenants.DeletionRecord, error) {
-	return &tenants.DeletionRecord{}, nil
+func (s *stubTenantDeletionStore) RequestDeletion(_ context.Context, _ tenantshttp.DeletionRequest) (*tenantshttp.DeletionRecord, error) {
+	return &tenantshttp.DeletionRecord{}, nil
 }
 func (s *stubTenantDeletionStore) CancelDeletion(_ context.Context, _ string) error { return nil }
-func (s *stubTenantDeletionStore) GetPendingDeletion(_ context.Context, _ string) (*tenants.DeletionRecord, error) {
+func (s *stubTenantDeletionStore) GetPendingDeletion(_ context.Context, _ string) (*tenantshttp.DeletionRecord, error) {
 	return nil, nil
 }
-func (s *stubTenantDeletionStore) WriteTombstone(_ context.Context, _ tenants.TombstoneRecord) error {
+func (s *stubTenantDeletionStore) WriteTombstone(_ context.Context, _ tenantshttp.TombstoneRecord) error {
 	return nil
 }
 
@@ -193,14 +193,14 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	statusHandler := status.NewStatusHandler(nil, nil, nil, "test.local", "", "")
 	buildListHandler := builds.NewBuildListHandler(nil)
 	environmentHandler := environments.NewEnvironmentHandler(nil)
-	teamHandler := teams.NewTeamHandler(nil)
+	teamHandler := teamshttp.NewTeamHandler(nil)
 	domainHandler := domains.NewDomainHandler(nil, nil, nil, "test.local")
 	repositoryHandler := repositorieshttp.NewRepositoryHandler(nil)
 	// Plan J-09 T2.1: dashboard repo picker -- wired with nil lister/store
 	// because router-level test only verifies route registration, never
 	// invokes the handler body (handler unit tests own that contract).
 	integrationsGitHubHandler := integrationshttp.NewIntegrationsGitHubHandler(nil, nil)
-	auditHandler := audit.NewAuditHandler(nil)
+	auditHandler := audithttp.NewAuditHandler(nil)
 	argoCallbackHandler := argocd.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret")
 
 	cfg := server.Config{

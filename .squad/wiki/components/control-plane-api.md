@@ -34,7 +34,7 @@ sources:
     resource: "api/internal/correlation/reader.go#L18"
     note: "api/internal/correlation cites pkg/quality/correlationheader; pkg/quality does not exist, and the regression-lock that forbids the citation only scans cmd/loopzero-"
   - id: api-routes-bypass
-    resource: "api/internal/routes/secrets/secrets.go#L41"
+    resource: "api/internal/secrets/secretshttp/secrets.go#L41"
     note: "routes/secrets and routes/billing reach persistence directly, unlike the other 27 route packages"
 generated:
   by: loop-system-cartography/0.1.0
@@ -121,4 +121,4 @@ says so.
 [^api-val]: `api/internal/validation/path.go:3`
 [^api-corr]: `api/internal/correlation/reader.go:3`
 [^api-stale-corr]: `api/internal/correlation/reader.go:18`
-[^api-routes-bypass]: `api/internal/routes/secrets/secrets.go:41`
+[^api-routes-bypass]: `api/internal/secrets/secretshttp/secrets.go:41`

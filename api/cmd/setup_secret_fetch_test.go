@@ -54,7 +54,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
+	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 )
 
 // --- fakes ---
@@ -219,7 +219,7 @@ func Test_brokerSecretReader_ReadsTheCompositeKeyThroughTheStore(t *testing.T) {
 func Test_brokerSecretReader_AbsentSecretIsNotFound(t *testing.T) {
 	r := &brokerSecretReader{store: &fakeSecretValues{err: fmt.Errorf("wrapped: %w", store.ErrSecretNotFound)}}
 	_, err := r.ReadSecret(context.Background(), "tn-1", "proj", "prod", "X")
-	require.ErrorIs(t, err, secrets.ErrSecretNotFound)
+	require.ErrorIs(t, err, secretshttp.ErrSecretNotFound)
 }
 
 func Test_brokerSecretReader_DecryptFailurePropagates(t *testing.T) {
@@ -227,7 +227,7 @@ func Test_brokerSecretReader_DecryptFailurePropagates(t *testing.T) {
 	r := &brokerSecretReader{store: &fakeSecretValues{err: boom}}
 	_, err := r.ReadSecret(context.Background(), "tn-1", "proj", "prod", "X")
 	require.ErrorIs(t, err, boom)
-	require.NotErrorIs(t, err, secrets.ErrSecretNotFound)
+	require.NotErrorIs(t, err, secretshttp.ErrSecretNotFound)
 }
 
 // --- inlineTenantBinding T3.1 tests ---
@@ -250,7 +250,7 @@ func Test_inlineTenantBinding_GetTenantCellID_TenantNotFound_TranslatesToErrTena
 		err: fmt.Errorf("cell store: get tenant cell_id: %w", pgx.ErrNoRows),
 	}}
 	_, err := b.GetTenantCellID(context.Background(), "tn-x")
-	require.ErrorIs(t, err, secrets.ErrTenantNotFound)
+	require.ErrorIs(t, err, secretshttp.ErrTenantNotFound)
 }
 
 func Test_inlineTenantBinding_GetTenantCellID_OtherErrorPropagatesWrapped(t *testing.T) {
@@ -262,7 +262,7 @@ func Test_inlineTenantBinding_GetTenantCellID_OtherErrorPropagatesWrapped(t *tes
 	}}
 	_, err := b.GetTenantCellID(context.Background(), "tn-1")
 	require.Error(t, err)
-	require.NotErrorIs(t, err, secrets.ErrTenantNotFound)
+	require.NotErrorIs(t, err, secretshttp.ErrTenantNotFound)
 	require.Contains(t, err.Error(), "tenant binding")
 	require.Contains(t, err.Error(), "pg connection refused")
 }

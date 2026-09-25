@@ -30,7 +30,7 @@ import (
 
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
+	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 )
 
 // brokerSingleClusterCellID names the cell the broker bearer middleware
@@ -75,7 +75,7 @@ type brokerSecretReader struct {
 func (r *brokerSecretReader) ReadSecret(ctx context.Context, tenantID, project, env, secretName string) ([]byte, error) {
 	plain, err := r.store.ReadValue(ctx, tenantID, project, env, secretName)
 	if errors.Is(err, store.ErrSecretNotFound) {
-		return nil, secrets.ErrSecretNotFound
+		return nil, secretshttp.ErrSecretNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("secret_fetch: %w", err)
@@ -84,7 +84,7 @@ func (r *brokerSecretReader) ReadSecret(ctx context.Context, tenantID, project, 
 }
 
 // Compile-time interface assertion.
-var _ secrets.InternalSecretReader = (*brokerSecretReader)(nil)
+var _ secretshttp.InternalSecretReader = (*brokerSecretReader)(nil)
 
 // inlineTenantBinding satisfies secrets.TenantCellBindingLookup using the
 // existing PostgresCellStore.GetTenantCellID.
@@ -110,7 +110,7 @@ func (b *inlineTenantBinding) GetTenantCellID(ctx context.Context, tenantID stri
 	cell, err := b.cellStore.GetTenantCellID(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return "", secrets.ErrTenantNotFound
+			return "", secretshttp.ErrTenantNotFound
 		}
 		return "", fmt.Errorf("secret_fetch: tenant binding: %w", err)
 	}
@@ -118,19 +118,19 @@ func (b *inlineTenantBinding) GetTenantCellID(ctx context.Context, tenantID stri
 }
 
 // Compile-time interface assertion.
-var _ secrets.TenantCellBindingLookup = (*inlineTenantBinding)(nil)
+var _ secretshttp.TenantCellBindingLookup = (*inlineTenantBinding)(nil)
 
 // setupSecretFetchDeps composes the three runtime dependencies for the
 // broker handler. Returns nil when any prerequisite is missing so the
 // caller can skip route registration cleanly (LIVE 404 → ESO retries).
-func setupSecretFetchDeps(secretStore secretValueReader, cellStore tenantCellQuerier, auditLogger *store.AuditLogger) *secrets.SecretFetchHandlerDeps {
+func setupSecretFetchDeps(secretStore secretValueReader, cellStore tenantCellQuerier, auditLogger *store.AuditLogger) *secretshttp.SecretFetchHandlerDeps {
 	if secretStore == nil || cellStore == nil || auditLogger == nil {
 		return nil
 	}
-	return &secrets.SecretFetchHandlerDeps{
+	return &secretshttp.SecretFetchHandlerDeps{
 		TenantBinding: &inlineTenantBinding{cellStore: cellStore},
 		SecretReader:  &brokerSecretReader{store: secretStore},
-		AuditWriter:   secrets.NewSecretReadAuditAdapter(auditLogger),
+		AuditWriter:   secretshttp.NewSecretReadAuditAdapter(auditLogger),
 	}
 }
 
@@ -211,5 +211,5 @@ func newSecretFetchBroker(cfg config.Config, transit vault.Transit, dbAdapter *d
 		logger.Warn("secret-fetch broker disabled: LOOPZERO_BROKER_TOKEN not set", "component", "broker")
 		return nil
 	}
-	return brokerBearerMiddleware(cfg.BrokerToken, secrets.NewSecretFetchHandler(*fetchDeps))
+	return brokerBearerMiddleware(cfg.BrokerToken, secretshttp.NewSecretFetchHandler(*fetchDeps))
 }

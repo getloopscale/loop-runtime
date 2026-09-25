@@ -10,7 +10,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
-	"github.com/getloopscale/loopzero/api/internal/routes/teams"
+	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
@@ -27,6 +27,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/aggregator"
+	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
 	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -36,7 +37,6 @@ import (
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	previewroutes "github.com/getloopscale/loopzero/api/internal/routes/preview"
 	"github.com/getloopscale/loopzero/api/internal/server"
@@ -288,10 +288,10 @@ func wireDatabaseHandlers(sc *server.Config, w serverWiring) {
 	sc.BillingHandler = billingHandler
 	// One team store serves the team admin endpoints and the /whoami lookup.
 	teamStore := &store.PostgresTeamStore{DB: d}
-	sc.TeamHandler = teams.NewTeamHandler(teamStore)
+	sc.TeamHandler = teamshttp.NewTeamHandler(teamStore)
 	sc.AuthUserLookup = teamStore
 	sc.ActiveTeamStore = store.NewPostgresActiveTeamStore(d)
-	sc.AuditHandler = audit.NewAuditHandler(&store.PostgresAuditStore{DB: d})
+	sc.AuditHandler = audithttp.NewAuditHandler(&store.PostgresAuditStore{DB: d})
 	// The soft-deletion cycle (DELETE /tenants/{id}, restore):
 	// the router registers those routes only when this store is set (B-117).
 	sc.TenantDeletionStore = store.NewTenantDeletionStoreSqlc(d)

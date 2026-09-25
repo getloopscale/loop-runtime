@@ -32,7 +32,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/middleware/auth/authtest"
-	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
+	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 	"github.com/getloopscale/loopzero/api/internal/server"
 )
 
@@ -73,7 +73,7 @@ func TestSecretEnvLock_SecretHandler_Set_AcquiresEnvLock_WhenLockerWired(t *test
 	store := &fakeSecretStore{}
 	locker := &recordingLocker{}
 
-	handler := secrets.NewSecretHandler(store, locker)
+	handler := secretshttp.NewSecretHandler(store, locker)
 
 	body := bytes.NewBufferString(`{"name":"DB_URL","value":"postgres://x","environment":"production","app":"api"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets?project=acme-proj", body).
@@ -105,7 +105,7 @@ func TestSecretEnvLock_SecretHandler_Delete_AcquiresEnvLock_WhenLockerWired(t *t
 	store := &fakeSecretStore{}
 	locker := &recordingLocker{}
 
-	handler := secrets.NewSecretHandler(store, locker)
+	handler := secretshttp.NewSecretHandler(store, locker)
 
 	// chi.URLParam needs router context.
 	req := httptest.NewRequest(http.MethodDelete,
@@ -143,7 +143,7 @@ func TestSecretEnvLock_ServerConfig_SecretEnvLocker_Field_Exists(t *testing.T) {
 	// server.Config against a silent rename. Omitting it (QF1011) would keep the
 	// line and lose the guarantee, which is the only thing it exists to give.
 	//nolint:staticcheck // QF1011: the explicit type is the purpose, not redundancy
-	var _ secrets.SecretEnvLocker = cfg.Secrets.EnvLocker
+	var _ secretshttp.SecretEnvLocker = cfg.Secrets.EnvLocker
 
 	// Runtime: zero-value is nil (nil-safe legacy default).
 	if cfg.Secrets.EnvLocker != nil {
@@ -159,7 +159,7 @@ func TestSecretEnvLock_SecretHandler_DeleteSecret_RejectsEmptyEnvParam(t *testin
 	store := &fakeSecretStore{}
 	locker := &recordingLocker{}
 
-	handler := secrets.NewSecretHandler(store, locker)
+	handler := secretshttp.NewSecretHandler(store, locker)
 
 	// NO environment query param — should be rejected BEFORE locker is called.
 	req := httptest.NewRequest(http.MethodDelete,
@@ -208,7 +208,7 @@ func TestSecretEnvLock_SecretSet_LockKeyMatchesEnvironmentLock(t *testing.T) {
 	sharedLocker := &recordingLocker{}
 
 	// Secret handler.
-	secretsHandler := secrets.NewSecretHandler(&fakeSecretStore{}, sharedLocker)
+	secretsHandler := secretshttp.NewSecretHandler(&fakeSecretStore{}, sharedLocker)
 
 	body := bytes.NewBufferString(`{"name":"DB_URL","value":"x","environment":"production","app":"api"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets?project=acme-proj", body).

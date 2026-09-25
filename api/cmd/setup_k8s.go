@@ -16,7 +16,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/k8s/secretsync"
 	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
 	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
-	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
+	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 )
 
 // K8sDeps holds Kubernetes client managers used by the API server.
@@ -24,7 +24,7 @@ type K8sDeps struct {
 	TenantCRMgr   *tenancy.TenantCRManager
 	PreviewCRMgr  *workload.PreviewCRManager
 	AppCRMgr      build.ApplicationCREnsurer
-	SecretK8sSync secrets.SecretK8sSync
+	SecretK8sSync secretshttp.SecretK8sSync
 }
 
 // setupK8s creates the Kubernetes client managers for Tenant CRs and
@@ -58,7 +58,7 @@ func setupK8s(cfg config.Config, logger *slog.Logger) (*K8sDeps, error) {
 // placement.DefaultCellID only and refuses tenants placed elsewhere instead
 // of writing their ExternalSecret into a cluster that does not host them.
 // F-01: returns the interface as nil (not a typed nil) when unavailable.
-func setupSecretK8sSync(cfg config.Config, tenantCells secretsync.TenantCellLookup, logger *slog.Logger) secrets.SecretK8sSync {
+func setupSecretK8sSync(cfg config.Config, tenantCells secretsync.TenantCellLookup, logger *slog.Logger) secretshttp.SecretK8sSync {
 	mgr, err := secretsync.NewSecretK8sManager(
 		cfg.MgmtKubeconfig, cfg.MgmtKubeContext,
 		cfg.RuntimeKubeconfig, cfg.RuntimeKubeContext,

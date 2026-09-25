@@ -3,11 +3,6 @@
 
 package store_test
 
-import (
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-)
-
 // =============================================================================
 // PostgresSecretStore tests — DELETED in T2.2 #4 of plan
 // 2026-05-29-sqlc-migration v1.3
@@ -39,8 +34,6 @@ import (
 // real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
 // is wired.
 
-// TestPostgresSecretStore_Implements_RoutesInterface verifies the
-// PostgresSecretStore still satisfies the ports.SecretStore contract
-// after the T2.2 #4 migration. Pure compile-time assertion — no
-// DBTX dependency.
-var _ ports.SecretStore = (*store.PostgresSecretStore)(nil)
+// The compile-time assertion that PostgresSecretStore satisfies the secret
+// port lives with the port, in api/internal/secrets: the persistence kernel
+// does not import the feature that declares the contract.

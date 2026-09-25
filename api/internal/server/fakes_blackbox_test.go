@@ -6,16 +6,16 @@ package server_test
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
+	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 )
 
 // fakeSecretStore implements secrets.SecretStore for testing.
 type fakeSecretStore struct {
-	secrets []secrets.SecretMetadata
+	secrets []secretshttp.SecretMetadata
 	err     error
 }
 
-func (f *fakeSecretStore) ListNames(ctx context.Context, tenantID, projectID, env string) ([]secrets.SecretMetadata, error) {
+func (f *fakeSecretStore) ListNames(ctx context.Context, tenantID, projectID, env string) ([]secretshttp.SecretMetadata, error) {
 	if f.err != nil {
 		return nil, f.err
 	}

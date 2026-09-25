@@ -155,21 +155,6 @@ type TeamUserInfo struct {
 	DisplayName string
 }
 
-// TeamStore abstracts team member persistence (DIP).
-type TeamStore interface {
-	ListMembers(ctx context.Context, tenantID string) ([]TeamMemberInfo, error)
-	AddMember(ctx context.Context, tenantID, userID, role string) error
-	RemoveMember(ctx context.Context, tenantID, userID string) error
-	UpdateMemberRole(ctx context.Context, tenantID, userID, newRole string) error
-	GetMember(ctx context.Context, tenantID, userID string) (*TeamMemberInfo, error)
-	GetUserByUsername(ctx context.Context, username string) (*TeamUserInfo, error)
-	// GetUsernameByID returns the user's display-friendly username for the given
-	// opaque user_id. AUDIT-10: lets `loopzero whoami` show a meaningful identity
-	// even when the token has no email claim (OAuth2 client_credentials).
-	// Returns empty string if user not found.
-	GetUsernameByID(ctx context.Context, userID string) (string, error)
-}
-
 // --- Audit ---
 
 // AuditFilter defines query parameters for audit log listing.
@@ -192,11 +177,6 @@ type AuditEntryResult struct {
 	CreatedAt     time.Time      `json:"timestamp"`
 }
 
-// AuditStore abstracts audit log persistence.
-type AuditStore interface {
-	ListAuditEntries(ctx context.Context, tenantID string, filter AuditFilter) ([]AuditEntryResult, int, error)
-}
-
 // AuditLogger abstracts audit log writing (DIP).
 // MEET-2026-03-31-024: Application-level audit for sensitive operations.
 type AuditLogger interface {
@@ -210,22 +190,6 @@ type SecretMetadata struct {
 	Name        string `json:"name"`
 	Environment string `json:"environment"`
 	App         string `json:"app"`
-}
-
-// SecretStore abstracts secret persistence (DIP).
-// Implementations MUST NOT expose secret values in list operations.
-type SecretStore interface {
-	ListNames(ctx context.Context, tenantID, projectID, env string) ([]SecretMetadata, error)
-	Set(ctx context.Context, tenantID, projectID, env, app, name string, value []byte) (created bool, err error)
-	Delete(ctx context.Context, tenantID, projectID, env, app, name string) (deleted bool, err error)
-}
-
-// SecretK8sSync abstracts K8s Secret + ExternalSecret CR creation (DIP).
-// projectID is the canonical M2 namespace segment (per pkg/naming.Namespace);
-// the runtime ExternalSecret CR lives at loopzero-{tenantID}-{projectID}-{env}.
-type SecretK8sSync interface {
-	CreateSecret(ctx context.Context, tenantID, projectID, env, app, name, value string) error
-	DeleteSecret(ctx context.Context, tenantID, projectID, env, app, name string) error
 }
 
 // --- Projects ---
@@ -411,15 +375,6 @@ type BootstrapStore interface {
 	// created is true if any record was actually inserted (not already existing).
 	// Must be idempotent -- duplicate calls with the same data must not fail.
 	Bootstrap(ctx context.Context, req BootstrapRequest) (userID, tenantID string, created bool, err error)
-}
-
-// CellPlacementEngine assigns tenants to Cells.
-// ADR-0008: Phase 0 = DefaultEngine (always "cell-0").
-type CellPlacementEngine interface {
-	AssignCell(ctx context.Context) (cellID string, err error)
-	// AssignAndExecute picks a cell AND runs the callback in the same serialized
-	// transaction. MEET-053 D-01: fixes TOCTOU between AssignCell and INSERT.
-	AssignAndExecute(ctx context.Context, fn func(ctx context.Context, cellID string) error) error
 }
 
 // --- Tenant Deletion ---

@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
 	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
 	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
 	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
@@ -19,7 +20,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
@@ -28,13 +28,13 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/scale"
-	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
-	"github.com/getloopscale/loopzero/api/internal/routes/teams"
-	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
+	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/api/internal/surfaces"
+	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
+	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
@@ -46,10 +46,12 @@ type (
 	stubTenantCRManager  struct{ ports.TenantCRManager }
 	stubEventStore       struct{ sse.EventStore }
 	stubBuildStoreReader struct{ sse.BuildStoreReader }
-	stubSecretStore      struct{ secrets.SecretStore }
-	stubSecretLocker     struct{ secrets.SecretEnvLocker }
-	stubTenantDeletion   struct{ tenants.TenantDeletionStore }
-	stubTimelineStore    struct {
+	stubSecretStore      struct{ secretshttp.SecretStore }
+	stubSecretLocker     struct{ secretshttp.SecretEnvLocker }
+	stubTenantDeletion   struct {
+		tenantshttp.TenantDeletionStore
+	}
+	stubTimelineStore struct {
 		timeline.DeployTimelineEventStore
 	}
 	stubIdempotencyStore struct{ policy.IdempotencyStore }
@@ -79,7 +81,7 @@ func fullProtectedConfig() Config {
 		BuildStatsHandler:         &builds.BuildStatsHandler{},
 		RollbackHandler:           &rollback.RollbackHandler{},
 		PromoteHandler:            &promote.PromoteHandler{},
-		TeamHandler:               &teams.TeamHandler{},
+		TeamHandler:               &teamshttp.TeamHandler{},
 		TenantDeletionStore:       stubTenantDeletion{},
 		BillingHandler:            &billinghttp.BillingHandler{},
 		EnvironmentHandler:        &environments.EnvironmentHandler{},
@@ -87,7 +89,7 @@ func fullProtectedConfig() Config {
 		RepositoryHandler:         &repositorieshttp.RepositoryHandler{},
 		IntegrationsGitHubHandler: &integrationshttp.IntegrationsGitHubHandler{},
 		PreviewHandler:            &preview.PreviewHandler{},
-		AuditHandler:              &audit.AuditHandler{},
+		AuditHandler:              &audithttp.AuditHandler{},
 		Guards:                    RouteGuards{RateLimiter: &ratelimit.RateLimiter{}, VerifyRateLimiter: &ratelimit.VerifyRateLimiter{}, IdempotencyStore: stubIdempotencyStore{}, PlanLimiter: &enforcement.PlanLimiter{}, CostEnforcer: &policy.CostEnforcer{}},
 		Secrets:                   SecretsConfig{Store: stubSecretStore{}, EnvLocker: stubSecretLocker{}},
 	}

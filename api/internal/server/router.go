@@ -24,13 +24,13 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	planpkg "github.com/getloopscale/loopzero-contracts/plan"
+	"github.com/getloopscale/loopzero/api/internal/bootstrap/bootstraphttp"
 	"github.com/getloopscale/loopzero/api/internal/health/healthhttp"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	audit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	observability "github.com/getloopscale/loopzero/api/internal/middleware/observability"
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
-	"github.com/getloopscale/loopzero/api/internal/routes/bootstrap"
 	"github.com/getloopscale/loopzero/api/internal/surfaces"
 )
 
@@ -133,7 +133,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Bootstrap, cfg.BootstrapStore != nil,
 		"no database — the BootstrapStore is `PostgresBootstrapStore` (setup_stores.go:117) "+
 			"and is only built inside the block that requires `dbAdapter`") {
-		bootstrap := bootstrap.NewBootstrapHandler(cfg.BootstrapStore, cfg.BootstrapSecret, cfg.CellPlacement)
+		bootstrap := bootstraphttp.NewBootstrapHandler(cfg.BootstrapStore, cfg.BootstrapSecret, cfg.CellPlacement)
 		r.Post("/internal/bootstrap", bootstrap.Bootstrap)
 	}
 	if surfaces.Recorded(cfg.Surfaces, surfaces.ArgoCallback, cfg.ArgoCallbackHandler != nil,

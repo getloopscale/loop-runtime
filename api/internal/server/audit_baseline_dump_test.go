@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
 	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
 	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
 	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
@@ -22,7 +23,6 @@ import (
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
-	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
@@ -31,7 +31,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/scale"
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
-	"github.com/getloopscale/loopzero/api/internal/routes/teams"
+	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
@@ -104,11 +104,11 @@ func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 		BuildListHandler:          &builds.BuildListHandler{},
 		BuildStatsHandler:         &builds.BuildStatsHandler{},
 		EnvironmentHandler:        &environments.EnvironmentHandler{},
-		TeamHandler:               &teams.TeamHandler{},
+		TeamHandler:               &teamshttp.TeamHandler{},
 		DomainHandler:             &domains.DomainHandler{},
 		RepositoryHandler:         &repositorieshttp.RepositoryHandler{},
 		IntegrationsGitHubHandler: &integrationshttp.IntegrationsGitHubHandler{},
-		AuditHandler:              &audit.AuditHandler{},
+		AuditHandler:              &audithttp.AuditHandler{},
 		BillingHandler:            &billinghttp.BillingHandler{},
 		Guards:                    RouteGuards{RateLimiter: &ratelimit.RateLimiter{}, IPRateLimit: &ratelimit.IPRateLimiter{}, VerifyRateLimiter: &ratelimit.VerifyRateLimiter{}, PlanLimiter: &enforcement.PlanLimiter{}, CostEnforcer: &policy.CostEnforcer{}},
 	}

@@ -17,8 +17,8 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/objectstore"
-	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	sourceroutes "github.com/getloopscale/loopzero/api/internal/routes/source"
+	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/vault"
 )
@@ -38,7 +38,7 @@ type StoreDeps struct {
 	PreviewSlotStore *store.PostgresPreviewSlotStore // 2026-06-07 D2 — single-slot preview
 	EventStore       sse.EventStore
 	PgEventStore     *store.PostgresEventStore
-	SecretStore      secrets.SecretStore
+	SecretStore      secretshttp.SecretStore
 	// PgSecretStore is the same store as SecretStore, typed concretely for the
 	// two consumers that need more than the route port: the deploy-time
 	// resyncer (ListForResync) and the ESO broker (ReadValue).

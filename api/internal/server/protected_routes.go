@@ -13,12 +13,12 @@ import (
 	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	"github.com/getloopscale/loopzero/api/internal/routes/projects"
-	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/api/internal/routes/source"
-	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
+	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/api/internal/surfaces"
+	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
@@ -246,7 +246,7 @@ func registerSecretRoutes(r chi.Router, cfg Config, ch routeChains) {
 			"(setup_server.go), and a secret mutation outside the lock races a deploy") {
 		return
 	}
-	h := secrets.NewSecretHandler(cfg.Secrets.Store, cfg.Secrets.EnvLocker)
+	h := secretshttp.NewSecretHandler(cfg.Secrets.Store, cfg.Secrets.EnvLocker)
 	if cfg.Secrets.K8sSync != nil {
 		h.SetK8sSync(cfg.Secrets.K8sSync)
 	}
@@ -385,7 +385,7 @@ func registerTenantRoutes(r chi.Router, cfg Config, ch routeChains) {
 		"no database — the TenantDeletionStore is built inside the `dbAdapter` block (setup_server.go)") {
 		return
 	}
-	h := tenants.NewTenantHandler(cfg.TenantDeletionStore, cfg.Logger, cfg.Auth.ValidateAdminAPIKey)
+	h := tenantshttp.NewTenantHandler(cfg.TenantDeletionStore, cfg.Logger, cfg.Auth.ValidateAdminAPIKey)
 	r.With(ch.limited(audited("tenant.deleted", "tenant"))...).Delete("/api/v1/tenants/{id}", h.Delete)
 	r.With(ch.limited(audited("tenant.restored", "tenant"))...).Post("/api/v1/tenants/{id}/restore", h.Restore)
 }

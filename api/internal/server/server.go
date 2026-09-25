@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/auth/authhttp"
+	"github.com/getloopscale/loopzero/api/internal/bootstrap"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/admin"
@@ -24,15 +25,16 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/status"
-	"github.com/getloopscale/loopzero/api/internal/routes/teams"
-	"github.com/getloopscale/loopzero/api/internal/routes/tenants"
 	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
+	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
+	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
 	// Aliased because `routes/metrics` (the proxy route family, imported above)
 	// already takes the name `metrics` in this file. Same collision as
 	// `routes/source` vs `internal/source`, resolved the same way.
+	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
 	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
 	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
 	"github.com/getloopscale/loopzero/api/internal/health/healthhttp"
@@ -43,12 +45,11 @@ import (
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
-	"github.com/getloopscale/loopzero/api/internal/routes/audit"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/preview"
 	"github.com/getloopscale/loopzero/api/internal/routes/scale"
-	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	sourceroutes "github.com/getloopscale/loopzero/api/internal/routes/source"
+	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/api/internal/surfaces"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
@@ -101,7 +102,7 @@ type Config struct {
 	BuildStoreReader  sse.BuildStoreReader
 	BootstrapStore    ports.BootstrapStore
 	BootstrapSecret   string                          // SEC-003: shared secret for /internal/bootstrap auth
-	CellPlacement     ports.CellPlacementEngine       // ADR-0008: Cell assignment for new tenants
+	CellPlacement     bootstrap.CellPlacementEngine   // ADR-0008: Cell assignment for new tenants
 	CellDiscovery     healthhttp.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
 	ShutdownCtx       context.Context
 	ShutdownCancel    context.CancelFunc
@@ -133,7 +134,7 @@ type Config struct {
 	// deploys aggregate for the Overview sparkline (J-06 D2). Nil disables the route.
 	BuildStatsHandler  *builds.BuildStatsHandler
 	EnvironmentHandler *environments.EnvironmentHandler
-	TeamHandler        *teams.TeamHandler
+	TeamHandler        *teamshttp.TeamHandler
 	// AUDIT-10: narrow store for /whoami username lookup. Nil is legal (handler
 	// omits username field). Implemented by store.PostgresTeamStore.
 	AuthUserLookup authhttp.UsernameLookup
@@ -154,8 +155,8 @@ type Config struct {
 	PreviewHandler            *preview.PreviewHandler // Sprint 5 / T2.3 — preview environments
 	IsProduction              bool
 	AuditWriter               mwaudit.AuditWriter
-	AuditHandler              *audit.AuditHandler
-	TenantDeletionStore       tenants.TenantDeletionStore
+	AuditHandler              *audithttp.AuditHandler
+	TenantDeletionStore       tenantshttp.TenantDeletionStore
 	// BillingHandler — T1.6 of deep-review-remediation-plan (closes
 	// find_billing_route_not_wired HIGH). Wires GET /api/v1/billing and
 	// POST /api/v1/billing/portal. Nil-safe: when nil, the routes are
@@ -233,20 +234,20 @@ type RouteGuards struct {
 // SecretsConfig carries what the secret routes and the secret broker need.
 type SecretsConfig struct {
 	// Store persists secrets. Required for the secret routes.
-	Store secrets.SecretStore
+	Store secretshttp.SecretStore
 	// EnvLocker is the environment lock every secret mutation takes, so a
 	// write serializes with a deploy capturing config. Required: without it
 	// the secret routes are not mounted (a recorded disabled surface), never
 	// mounted unlocked.
-	EnvLocker secrets.SecretEnvLocker
+	EnvLocker secretshttp.SecretEnvLocker
 	// K8sSync mirrors secrets to the runtime cluster. Optional.
-	K8sSync secrets.SecretK8sSync
+	K8sSync secretshttp.SecretK8sSync
 	// AuditLogger writes the SECRET_* audit rows. Nil only without a database.
-	AuditLogger secrets.AuditLogger
+	AuditLogger secretshttp.AuditLogger
 	// ProjectChecker makes bulk writes answer an identical 404 for a
 	// project of another tenant and a missing one (existence-leak
 	// prevention). Nil skips the check.
-	ProjectChecker secrets.SecretProjectChecker
+	ProjectChecker secretshttp.SecretProjectChecker
 	// FetchHandler serves /internal/v1/secret-fetch/{tenant_id}/{name}, the
 	// broker the runtime cluster resolves secrets through. Nil leaves the
 	// route unregistered (the caller retries on 404).
