@@ -46,7 +46,7 @@ package deploycontracts
 // Defaults NOT applied here (caller responsibility):
 //   - app.Name is always the map key — never extracted from the value.
 //   - Schema validation (required fields, allowed values) lives upstream
-//     in api/internal/buildplane/source/validator_*.go for both the v1 loopzero.yaml
+//     in api/internal/source/validator_*.go for both the v1 loopzero.yaml
 //     legacy path and the v2 services.json native path.
 func ConvertLoopZeroYamlApps(rawApps map[string]map[string]interface{}) []AppSpec {
 	out := make([]AppSpec, 0, len(rawApps))

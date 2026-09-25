@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
-	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
+	"github.com/getloopscale/loopzero/api/internal/projects"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
@@ -25,7 +25,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
 
-	"github.com/getloopscale/loopzero/api/internal/services/scaling"
+	"github.com/getloopscale/loopzero/api/internal/scaling"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
@@ -33,7 +33,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/logs/loki"
-	"github.com/getloopscale/loopzero/api/internal/routes/scale"
+	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
@@ -125,10 +125,10 @@ type OrchestratorDeps struct {
 	StatusHandler       *statushttp.StatusHandler
 	MetricsProxyHandler *projectmetricshttp.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
 	StatusSSEHandler    *statushttp.StatusSSEHandler            // T2.1 J-18 T1.3.b — SSE signal.changed stream
-	ScaleHandler        *scale.ScaleHandler
+	ScaleHandler        *scalinghttp.ScaleHandler
 	BuildListHandler    *builds.BuildListHandler
 	BuildStatsHandler   *builds.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
-	ProjectDeleter      ports.ProjectDeleter
+	ProjectDeleter      projects.Deleter
 	ArgoCallbackHandler *argocd.ArgoCallbackHandler
 }
 
@@ -320,7 +320,7 @@ func setupOrchestrator(
 	// Two concurrent `loopzero scale` calls on the same env could TOCTOU-race the
 	// read-current/write-new sequence inside Upsert. Now wrapped in WithLock
 	// so concurrent attempts serialize via pg_advisory_xact_lock.
-	scaleApply := func(ctx context.Context, in scale.ScaleConfigInput) (bool, error) {
+	scaleApply := func(ctx context.Context, in scalinghttp.ScaleConfigInput) (bool, error) {
 		var changed bool
 		err := stores.Locker.WithLock(ctx, in.TenantID, in.ProjectID, in.Environment, func(tx db.DBTX) error {
 			c := &store.ScalingConfig{
@@ -343,7 +343,7 @@ func setupOrchestrator(
 		})
 		return changed, err
 	}
-	scaleHandler := scale.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
+	scaleHandler := scalinghttp.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
 	// Red Team loopzero-cloud#101 absorption (2026-06-27): wire the same
 	// plan-cap checker the build path uses so the scale endpoint can
 	// reject Starter:replicas:999 (and equivalent per-tier overshoots).
@@ -383,7 +383,7 @@ func setupOrchestrator(
 
 	// Project deleter — orchestrates project removal across DB, GitOps, and builds.
 	// WorkflowCanceller stops running Argo Workflows during deletion (DF-2.1).
-	projectDeleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
+	projectDeleter := projects.NewProjectDeleter(projects.ProjectDeleterDeps{
 		BuildStore:        stores.BuildStore,
 		EnvTargetStore:    stores.EnvTargetStore,
 		ReleaseStore:      stores.ReleaseStore,

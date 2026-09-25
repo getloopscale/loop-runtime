@@ -330,28 +330,6 @@ type TenantCRManager interface {
 	EnsureTenant(ctx context.Context, tenantID string, spec TenantCRSpec) error
 }
 
-// ProjectDeleteInput is the input for deleting a project.
-type ProjectDeleteInput struct {
-	TenantID      string
-	ProjectID     string
-	ProjectName   string
-	Environment   string // empty = all environments
-	DeletedBy     string
-	CorrelationID string
-}
-
-// ProjectDeleteOutput is the result of project deletion.
-type ProjectDeleteOutput struct {
-	ProjectName         string   `json:"project"`
-	DeletedEnvironments []string `json:"deleted_environments"`
-	CancelledBuilds     int      `json:"cancelled_builds"`
-}
-
-// ProjectDeleter abstracts project deletion orchestration (DIP).
-type ProjectDeleter interface {
-	Delete(ctx context.Context, req ProjectDeleteInput) (*ProjectDeleteOutput, error)
-}
-
 // --- Bootstrap ---
 
 // BootstrapRequest is the JSON body for POST /internal/bootstrap.

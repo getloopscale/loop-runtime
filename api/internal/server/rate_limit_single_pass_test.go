@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
-	"github.com/getloopscale/loopzero/api/internal/routes/preview"
+	"github.com/getloopscale/loopzero/api/internal/preview/previewhttp"
 	"github.com/getloopscale/loopzero/api/internal/server"
 )
 
@@ -27,7 +27,7 @@ func TestRouter_MutatingRoutesSpendOneRateLimitTokenPerRequest(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			cfg := t61BaseCfg(logger)
 			cfg.Guards.RateLimiter = ratelimit.NewRateLimiter(1, time.Hour)
-			cfg.PreviewHandler = preview.NewPreviewHandler(nil, nil, logger)
+			cfg.PreviewHandler = previewhttp.NewPreviewHandler(nil, nil, logger)
 			h := server.NewRouter(cfg)
 
 			req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(`{}`))

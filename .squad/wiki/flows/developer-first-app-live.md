@@ -13,11 +13,11 @@ sources:
   - id: step-1
     resource: "api/internal/auth/authhttp/auth.go#L173"
   - id: step-2
-    resource: "api/internal/routes/projects/projects.go#L208"
+    resource: "api/internal/projects/projectshttp/projects.go#L208"
   - id: step-3
     resource: "api/internal/secrets/secretshttp/secrets.go#L835"
   - id: step-4
-    resource: "api/internal/routes/source/source.go#L142"
+    resource: "api/internal/source/sourcehttp/source.go#L142"
   - id: step-5
     resource: "api/internal/routes/builds/builds.go#L494"
   - id: step-6
@@ -77,9 +77,9 @@ The steps, in order. Every row is anchored to the line that performs it.
 | # | The developer… | Against | How it goes |
 |---|---|---|---|
 | 1 | confirms who they are and which team they are acting as | `GET /api/v1/auth/whoami`<br/>`api/internal/auth/authhttp/auth.go:173` | reassuring — one call answers identity, membership and active team together |
-| 2 | creates a project | `POST /api/v1/projects`<br/>`api/internal/routes/projects/projects.go:208` | fine, and also optional — the first deploy creates the project anyway via EnsureProject, so a developer who skips this step never learns it existed |
+| 2 | creates a project | `POST /api/v1/projects`<br/>`api/internal/projects/projectshttp/projects.go:208` | fine, and also optional — the first deploy creates the project anyway via EnsureProject, so a developer who skips this step never learns it existed |
 | 3 | sets the secrets the app needs | `POST /api/v1/secrets`<br/>`api/internal/secrets/secretshttp/secrets.go:835` | THE FIRST TRAP. The call returns success once Postgres has the row. The Kubernetes ExternalSecret write happens on the same request and its failure is logged, not returned — 'Log but don't fail — PG is source of truth, K8s sync is eventual'. Before the first deploy the target namespace does not exist yet, so this sync cannot succeed, and the developer is told nothing. The symptom arrives much later as a pod in CreateContainerConfigError. |
-| 4 | uploads the source bundle | `POST /api/v1/source/upload`<br/>`api/internal/routes/source/source.go:142` | a hard 500MB ceiling with a clean typed 413; the 32MB in-memory threshold means larger bundles spool to disk rather than failing. This step behaves. |
+| 4 | uploads the source bundle | `POST /api/v1/source/upload`<br/>`api/internal/source/sourcehttp/source.go:142` | a hard 500MB ceiling with a clean typed 413; the 32MB in-memory threshold means larger bundles spool to disk rather than failing. This step behaves. |
 | 5 | deploys | `POST /api/v1/builds`<br/>`api/internal/routes/builds/builds.go:494` | the request can be refused four different ways before any build starts — 400 for a missing field, 402 from the builds-per-month cap, 402 again from the build-minutes cost cap, 429 from the cell admission gate with Retry-After. Each says something different and only the 429 tells them when to come back. |
 | 6 | deploying to an environment name they have never used before | `EnsureEnvironment`<br/>`api/internal/routes/builds/builds.go:392` | genuinely good: the environment, its namespace and its ArgoCD App are created on the fly. Before this existed the deploy produced an eternal SYNC_FAILED with no explanation. |
 | 7 | watches the stream and waits | `GET /api/v1/builds/{id}/stream`<br/>`api/internal/sse/stream_handler.go:49` | THE SECOND TRAP, and it is a waiting problem. The POST returns 202 in seconds; everything real happens afterwards across a reconcile loop that ticks on an interval, a gitops push, an ArgoCD sync and a convergence loop polling every 10s with a 10-minute reaper behind it. The developer's only view of all that is one SSE channel, and deploy.completed is retried three times precisely because if it is dropped the CLI hangs until timeout. |
@@ -110,9 +110,9 @@ Every step in the table above carries the `file:line` that performs it. The `sou
 
 [^flow-root]: `api/internal/auth/authhttp/auth.go:173`
 [^step-1]: `api/internal/auth/authhttp/auth.go:173`
-[^step-2]: `api/internal/routes/projects/projects.go:208`
+[^step-2]: `api/internal/projects/projectshttp/projects.go:208`
 [^step-3]: `api/internal/secrets/secretshttp/secrets.go:835`
-[^step-4]: `api/internal/routes/source/source.go:142`
+[^step-4]: `api/internal/source/sourcehttp/source.go:142`
 [^step-5]: `api/internal/routes/builds/builds.go:494`
 [^step-6]: `api/internal/routes/builds/builds.go:392`
 [^step-7]: `api/internal/sse/stream_handler.go:49`

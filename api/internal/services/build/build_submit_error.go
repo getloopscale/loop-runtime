@@ -15,7 +15,7 @@ import (
 // SubmitBuildErrorReason discriminates failure modes returned by
 // BuildOrchestrator.SubmitBuild. Sprint 6 plan qa-sprint6-cleanup-2026-06-25
 // T1.1 (closes loopzero-cloud#34) — mirrors the Sprint 5 canonical typed-error
-// pattern (api/internal/buildplane/source/pushbundle_error.go) applied to the build
+// pattern (api/internal/source/pushbundle_error.go) applied to the build
 // trigger surface. Before Sprint 6 every untyped error fell through
 // routes/builds.go::mapBuildError to the generic ErrInternalError catchall;
 // the new discriminator names the actual stage that failed + composes the

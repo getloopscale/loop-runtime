@@ -19,6 +19,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
+	"github.com/getloopscale/loopzero/api/internal/projects"
 	"github.com/getloopscale/loopzero/api/internal/routes/admin"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
@@ -36,7 +37,6 @@ import (
 	// `routes/source` vs `internal/source`, resolved the same way.
 	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
 	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
-	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
 	"github.com/getloopscale/loopzero/api/internal/health/healthhttp"
 	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
 	appmetrics "github.com/getloopscale/loopzero/api/internal/metrics"
@@ -44,12 +44,13 @@ import (
 	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
+	"github.com/getloopscale/loopzero/api/internal/preview/previewhttp"
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
-	"github.com/getloopscale/loopzero/api/internal/routes/preview"
-	"github.com/getloopscale/loopzero/api/internal/routes/scale"
-	sourceroutes "github.com/getloopscale/loopzero/api/internal/routes/source"
+	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
 	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
+	"github.com/getloopscale/loopzero/api/internal/source"
+	sourceroutes "github.com/getloopscale/loopzero/api/internal/source/sourcehttp"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/api/internal/surfaces"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
@@ -77,7 +78,7 @@ type Config struct {
 	MemberStore    mwauth.MembershipStore
 	ProjectStore   ports.ProjectStore
 	TenantCRMgr    ports.TenantCRManager
-	ProjectDeleter ports.ProjectDeleter
+	ProjectDeleter projects.Deleter
 	// PlanTierStore wires the canonical tier resolver (subscriptions.plan
 	// active row → PlanTier enum per ADR D4 of plan
 	// 2026-06-15-code-review-49-findings-remediation). nil-safe — when
@@ -128,7 +129,7 @@ type Config struct {
 	// aggregator.SSEEventSink-backed PostgresEventStore that satisfies
 	// the DeployTimelineEventStore contract.
 	DeployTimelineStore timelinehttp.DeployTimelineEventStore
-	ScaleHandler        *scale.ScaleHandler
+	ScaleHandler        *scalinghttp.ScaleHandler
 	BuildListHandler    *builds.BuildListHandler
 	// BuildStatsHandler serves GET /api/v1/builds/stats — the tenant-scoped
 	// deploys aggregate for the Overview sparkline (J-06 D2). Nil disables the route.
@@ -152,7 +153,7 @@ type Config struct {
 	RepositoryHandler *repositorieshttp.RepositoryHandler
 	// Plan J-09 T2.1 (2026-06-05): dashboard repo picker source.
 	IntegrationsGitHubHandler *integrationshttp.IntegrationsGitHubHandler
-	PreviewHandler            *preview.PreviewHandler // Sprint 5 / T2.3 — preview environments
+	PreviewHandler            *previewhttp.PreviewHandler // Sprint 5 / T2.3 — preview environments
 	IsProduction              bool
 	AuditWriter               mwaudit.AuditWriter
 	AuditHandler              *audithttp.AuditHandler

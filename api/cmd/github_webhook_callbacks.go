@@ -12,7 +12,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/github"
 	ghwebhook "github.com/getloopscale/loopzero/api/internal/github/webhook"
-	"github.com/getloopscale/loopzero/api/internal/services/preview"
+	"github.com/getloopscale/loopzero/api/internal/preview"
 )
 
 // linkedRepoLookup finds the project a GitHub repository is linked to.

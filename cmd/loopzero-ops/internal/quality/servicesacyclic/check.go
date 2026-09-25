@@ -7,16 +7,17 @@
 // routesacyclic. The inter-context import graph must stay the acyclic DAG the M9
 // split produced, deny-by-default:
 //
-//	build     → release, scaling
+//	build     → release
 //	release   → (no sibling)
-//	scaling   → (no sibling)
-//	preview   → (no sibling)
 //	domain    → (no sibling)
 //	platform  → (no sibling)
 //	placement → (no sibling)
 //
 // The shared types every context needs live in api/internal/deploycontracts,
 // OUTSIDE this package, which is why no context needs a sibling to reach them.
+//
+// scaling and preview left for their feature directories when api/internal was
+// organized by feature (2026-09-25); feature-fence governs them there.
 //
 // Any edge not in the allow-list fails: a reverse edge (release → build) would
 // re-create a cycle, a new cross edge erodes the split, and a new context that is
@@ -57,10 +58,8 @@ const (
 // allowed is the deny-by-default registry: allowed[A] is the set of contexts A
 // may import.
 var allowed = map[string]map[string]bool{
-	"build":     {"release": true, "scaling": true},
+	"build":     {"release": true},
 	"release":   {},
-	"scaling":   {},
-	"preview":   {},
 	"domain":    {},
 	"platform":  {},
 	"placement": {},

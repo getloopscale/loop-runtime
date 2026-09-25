@@ -12,9 +12,9 @@ import (
 	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
-	"github.com/getloopscale/loopzero/api/internal/routes/projects"
-	"github.com/getloopscale/loopzero/api/internal/routes/source"
+	"github.com/getloopscale/loopzero/api/internal/projects/projectshttp"
 	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
+	"github.com/getloopscale/loopzero/api/internal/source/sourcehttp"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/api/internal/surfaces"
 	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
@@ -170,14 +170,14 @@ func registerSourceRoutes(r chi.Router, cfg Config, ch routeChains) {
 			"Without it the first step of every deploy — uploading the bundle — disappears") {
 		return
 	}
-	var opts []func(*source.SourceHandler)
+	var opts []func(*sourcehttp.SourceHandler)
 	if cfg.ObjectUploader != nil {
-		opts = append(opts, source.WithObjectUploader(cfg.ObjectUploader))
+		opts = append(opts, sourcehttp.WithObjectUploader(cfg.ObjectUploader))
 	}
 	if cfg.SourceBucket != "" {
-		opts = append(opts, source.WithSourceBucket(cfg.SourceBucket))
+		opts = append(opts, sourcehttp.WithSourceBucket(cfg.SourceBucket))
 	}
-	h := source.NewSourceHandler(cfg.SourceStore, opts...)
+	h := sourcehttp.NewSourceHandler(cfg.SourceStore, opts...)
 	// Rate limited, not idempotent: a 500 MB body is not hashed for replay.
 	r.With(ch.limited(audited("source.uploaded", "source"))...).Post("/api/v1/source/upload", h.Upload)
 }
@@ -189,7 +189,7 @@ func registerProjectRoutes(r chi.Router, cfg Config, ch routeChains) {
 			"TenantCRMgr from the Kubernetes client; the routes need both") {
 		return
 	}
-	h := projects.NewProjectHandler(cfg.ProjectStore, cfg.TenantCRMgr)
+	h := projectshttp.NewProjectHandler(cfg.ProjectStore, cfg.TenantCRMgr)
 	if cfg.ProjectDeleter != nil {
 		h.SetDeleter(cfg.ProjectDeleter)
 	}

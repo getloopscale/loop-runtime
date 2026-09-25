@@ -14,7 +14,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
-	previewsvc "github.com/getloopscale/loopzero/api/internal/services/preview"
+	previewsvc "github.com/getloopscale/loopzero/api/internal/preview"
 
 	// Aliased because this file ALSO imports `api/internal/placement`, and both
 	// packages are named `placement`. The disambiguation lives here, in the only
@@ -36,8 +36,8 @@ import (
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/placement"
+	previewroutes "github.com/getloopscale/loopzero/api/internal/preview/previewhttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
-	previewroutes "github.com/getloopscale/loopzero/api/internal/routes/preview"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/timeline/aggregator"
 	"github.com/getloopscale/loopzero/pkg/enforcement"

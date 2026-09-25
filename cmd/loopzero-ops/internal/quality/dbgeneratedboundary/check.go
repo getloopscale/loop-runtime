@@ -157,7 +157,24 @@ func Check(cfg Config) (Outcome, error) {
 			missing = append(missing, sub)
 			continue
 		}
-		v, n, err := walkDir(dir, handWritten[sub])
+		v, n, err := walkDir(dir, handWritten[sub], nil)
+		if err != nil {
+			return Outcome{}, err
+		}
+		all = append(all, v...)
+		scanned += n
+	}
+
+	// Every feature's own code — its root and non-transport subpackages — is
+	// fenced from the generated package, as services/ was. Its HTTP packages
+	// were scanned above with both fences; its adapter package is where
+	// persistence rows are translated, as adapters/ was, and is not fenced.
+	for _, f := range featurefence.Features() {
+		dir := filepath.Join(cfg.RepoRoot, "api", "internal", f)
+		if _, err := os.Stat(dir); err != nil {
+			continue // feature-fence owns the question of a registered feature that is absent
+		}
+		v, n, err := walkDir(dir, false, skipTransportAndAdapters)
 		if err != nil {
 			return Outcome{}, err
 		}
@@ -185,7 +202,7 @@ func ActionableFix() string {
 // walkDir walks dir for .go files (test files INCLUDED — a test that imports
 // generated from an outer layer is still a boundary breach) and collects
 // forbidden imports.
-func walkDir(dir string, alsoHandWritten bool) ([]Violation, int, error) {
+func walkDir(dir string, alsoHandWritten bool, skipDir func(name string) bool) ([]Violation, int, error) {
 	var violations []Violation
 	count := 0
 
@@ -194,6 +211,9 @@ func walkDir(dir string, alsoHandWritten bool) ([]Violation, int, error) {
 			return walkErr
 		}
 		if info.IsDir() {
+			if path != dir && skipDir != nil && skipDir(info.Name()) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if !strings.HasSuffix(info.Name(), ".go") {
@@ -209,6 +229,12 @@ func walkDir(dir string, alsoHandWritten bool) ([]Violation, int, error) {
 	})
 
 	return violations, count, err
+}
+
+// skipTransportAndAdapters leaves out a feature's HTTP packages (scanned on
+// their own, with the hand-written fence too) and its adapter package.
+func skipTransportAndAdapters(name string) bool {
+	return strings.HasSuffix(name, "http") || strings.HasSuffix(name, "adapter")
 }
 
 // scanFile parses a single .go file and returns a violation per forbidden

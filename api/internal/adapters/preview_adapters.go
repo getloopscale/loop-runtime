@@ -9,7 +9,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
-	"github.com/getloopscale/loopzero/api/internal/services/preview"
+	"github.com/getloopscale/loopzero/api/internal/preview"
 )
 
 // PreviewAppsLookupAdapter implements preview.PreviewBuildAppsLookup by

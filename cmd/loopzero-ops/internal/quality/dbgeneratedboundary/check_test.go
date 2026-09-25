@@ -315,3 +315,30 @@ func TestCheck_FeatureHTTPPackageImportingGeneratedFails(t *testing.T) {
 		t.Errorf("an HTTP package must not import the generated package; got %+v", out.Violations)
 	}
 }
+
+// A feature root holds what services/ held and keeps its fence against the
+// generated package; the feature's adapter package, like adapters/ before it,
+// is where persistence rows are translated and is not fenced.
+func TestCheck_FeatureRootImportingGeneratedFails(t *testing.T) {
+	root := t.TempDir()
+	mkGo(t, root, "api/internal/placement", handWritten+"/generated") // any registered feature
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if out.Pass {
+		t.Error("a feature's own code must not import the generated package")
+	}
+}
+
+func TestCheck_FeatureAdapterImportingGeneratedPasses(t *testing.T) {
+	root := t.TempDir()
+	mkGo(t, root, "api/internal/placement/placementadapter", handWritten+"/generated")
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !out.Pass {
+		t.Errorf("a feature's adapter package translates persistence rows, as adapters/ did; got %+v", out.Violations)
+	}
+}

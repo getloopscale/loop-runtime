@@ -8,6 +8,7 @@ package featurefence
 // discovery.
 var registry = map[string]Entry{
 	// ── features ────────────────────────────────────────────────────────────
+	"audit":          {Kind: Feature},
 	"auth":           {Kind: Feature},
 	"billing":        {Kind: Feature},
 	"bootstrap":      {Kind: Feature},
@@ -15,17 +16,20 @@ var registry = map[string]Entry{
 	"health":         {Kind: Feature},
 	"integrations":   {Kind: Feature},
 	"logs":           {Kind: Feature},
+	"metering":       {Kind: Feature, Deps: []string{"placement"}},
+	"placement":      {Kind: Feature},
+	"preview":        {Kind: Feature},
 	"projectmetrics": {Kind: Feature},
+	"projects":       {Kind: Feature},
 	"repositories":   {Kind: Feature},
+	"scaling":        {Kind: Feature},
 	"secrets":        {Kind: Feature},
+	"source":         {Kind: Feature},
 	"status":         {Kind: Feature},
 	"teams":          {Kind: Feature},
 	"tenants":        {Kind: Feature},
 	"timeline":       {Kind: Feature},
 	"version":        {Kind: Feature},
-	"audit":          {Kind: Feature},
-	"metering":       {Kind: Feature, Deps: []string{"placement"}},
-	"placement":      {Kind: Feature},
 
 	// ── shared kernel ───────────────────────────────────────────────────────
 	"archive":         {Kind: Kernel},
@@ -59,13 +63,13 @@ var registry = map[string]Entry{
 
 	// ── layer folders being dissolved into features ─────────────────────────
 	// Each entry below disappears when its code reaches the feature that owns it.
-	"adapters":   {Kind: Layer, Deps: []string{"buildplane", "cfzone", "db", "deploycontracts", "github", "environments", "integrations", "k8s", "lock", "logs", "ports", "repositories", "routes", "services", "sse", "status", "timeline"}},
+	"adapters":   {Kind: Layer, Deps: []string{"buildplane", "cfzone", "db", "deploycontracts", "github", "environments", "integrations", "k8s", "lock", "logs", "ports", "preview", "repositories", "routes", "services", "sse", "status", "timeline"}},
 	"argocd":     {Kind: Layer, Deps: []string{"deploycontracts", "k8s", "metrics", "placement"}},
 	"buildplane": {Kind: Layer, Deps: []string{"archive", "deploycontracts", "events", "gitclient", "k8s", "metrics", "scrub"}},
 	"cfkv":       {Kind: Layer, Deps: []string{"metrics"}},
 	"cfzone":     {Kind: Layer},
 	"routes":     {Kind: Layer, Deps: []string{"buildplane", "correlation", "db", "github", "httpio", "k8s", "metrics", "middleware", "pagination", "plantier", "ports", "routestest", "services", "sse", "validation"}},
-	"services":   {Kind: Layer, Deps: []string{"cfkv", "db", "deploycontracts", "events", "manifests", "metrics", "placement", "ports", "processing", "scrub", "sse"}},
+	"services":   {Kind: Layer, Deps: []string{"cfkv", "db", "deploycontracts", "events", "manifests", "metrics", "placement", "ports", "processing", "scaling", "scrub", "sse"}},
 
 	// ── composition roots ───────────────────────────────────────────────────
 	"server":          {Kind: Composition},

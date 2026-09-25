@@ -11,7 +11,7 @@ import (
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 
-	"github.com/getloopscale/loopzero/api/internal/services/scaling"
+	"github.com/getloopscale/loopzero/api/internal/scaling"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"

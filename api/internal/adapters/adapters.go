@@ -20,5 +20,5 @@
 //   - WorkflowSubmitter → api/internal/buildplane/argo/workflow_submitter.go
 //   - GitOpsPusher      → api/internal/gitops/gitea_pusher.go
 //   - SyncClient        → api/internal/argocd/sync_client.go
-//   - SourceStore       → api/internal/buildplane/source/gitea_store.go
+//   - SourceStore       → api/internal/source/gitea_store.go
 package adapters

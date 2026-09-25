@@ -29,7 +29,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
-	"github.com/getloopscale/loopzero/api/internal/routes/scale"
+	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
 	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
@@ -100,7 +100,7 @@ func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 		RollbackHandler:           &rollback.RollbackHandler{},
 		PromoteHandler:            &promote.PromoteHandler{},
 		StatusHandler:             &statushttp.StatusHandler{},
-		ScaleHandler:              &scale.ScaleHandler{},
+		ScaleHandler:              &scalinghttp.ScaleHandler{},
 		BuildListHandler:          &builds.BuildListHandler{},
 		BuildStatsHandler:         &builds.BuildStatsHandler{},
 		EnvironmentHandler:        &environmentshttp.EnvironmentHandler{},

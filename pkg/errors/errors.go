@@ -323,7 +323,7 @@ var (
 
 	// ErrSourceUploadFailed is the neutral fallback returned when pushing the
 	// bundle to the source store fails AND the typed PushBundleError mapping
-	// (PushBundleErrorReason.Summary in api/internal/buildplane/source) cannot identify a
+	// (PushBundleErrorReason.Summary in api/internal/source) cannot identify a
 	// specific reason. Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.3
 	// (closes loopzero-cloud#31): replaced the legacy actively-misleading
 	// "Ensure your git history is clean and try again." text (the user's git
@@ -633,7 +633,7 @@ var ErrBuildSubmitFailed = &LoopZeroError{
 // names) uses base.Message and never the detail.
 //
 // The reason → summary catalogs live next to the reason enums that own them
-// (api/internal/buildplane/source PushBundleErrorReason, api/internal/services/build
+// (api/internal/source PushBundleErrorReason, api/internal/services/build
 // SubmitBuildErrorReason), so an enum and its copy change together; this
 // function is only the composition rule.
 func NewComposed(base *LoopZeroError, summary, detail, traceID string) *LoopZeroError {

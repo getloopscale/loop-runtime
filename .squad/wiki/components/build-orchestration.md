@@ -19,7 +19,7 @@ sources:
     resource: "api/internal/buildplane/admission/build.go#L1"
     note: "buildplane/admission"
   - id: bo-src
-    resource: "api/internal/buildplane/source/store.go#L1"
+    resource: "api/internal/source/store.go#L1"
     note: "buildplane/source"
   - id: bo-shell
     resource: "api/internal/buildplane/shellgen/builder.go#L1"
@@ -28,7 +28,7 @@ sources:
     resource: "api/internal/services/deploycontracts/app_unit.go#L1"
     note: "services/deploycontracts"
   - id: bo-scaling
-    resource: "api/internal/services/scaling/scaling_resolver.go#L1"
+    resource: "api/internal/scaling/scaling_resolver.go#L1"
     note: "services/scaling"
   - id: bo-submit
     resource: "api/internal/buildplane/argo/buildkit.go#L43"
@@ -66,12 +66,12 @@ Argo latency does not block other deploys on the same environment.
 | `api.services` | `api/internal/services` | package | — | `api/internal/services/build/build_orchestrator.go:1` | Directory grouping with NO Go files of its own; 8 sub-packages (build, deploycontracts, domain, placement, platform, preview, release, scaling). |
 | `api.services.build` | `api/internal/services/build` | package | application | `api/internal/services/build/build_orchestrator.go:1` | The build orchestrator. The widest service: it imports buildplane/source, cfkv, db, db/store, events, manifests, metrics, ports, processing, scrub, sse and three sibling services. |
 | `api.services.deploycontracts` | `api/internal/services/deploycontracts` | package | domain | `api/internal/services/deploycontracts/app_unit.go:1` | The shared deploy contract types. The hub of the services graph: SIX of the eight services sub-packages import it (build, domain, platform, preview, release, scaling) and so does buildplane/argo. It imports only db, manifests and ports. |
-| `api.services.scaling` | `api/internal/services/scaling` | package | application | `api/internal/services/scaling/scaling_resolver.go:1` | Scaling resolution; imports db/store and deploycontracts only. |
+| `api.services.scaling` | `api/internal/scaling` | package | application | `api/internal/scaling/scaling_resolver.go:1` | Scaling resolution; imports db/store and deploycontracts only. |
 | `api.buildplane` | `api/internal/buildplane` | package | — | `api/internal/buildplane/argo/buildkit.go:1` | Directory grouping with NO Go files of its own; 4 sub-packages: argo (workflow specs), source (bundle upload/validation), admission (capacity gate), shellgen. |
 | `api.buildplane.admission` | `api/internal/buildplane/admission` | package | application | `api/internal/buildplane/admission/build.go:1` | Per-cell concurrent build ceiling and per-tenant build quota, both returning HTTP 429 with a Retry-After hint. Gated by LOOPZERO_ADMISSION_CONTROL, which its own doc says defaults to false — when off, Check always admits. |
 | `api.buildplane.argo` | `api/internal/buildplane/argo` | package | infrastructure | `api/internal/buildplane/argo/buildkit.go:1` | 15 files / 8,212 lines. The only api package importing the third-party github.com/getloopscale/loopzero-forge SDK. Also owns canonical_dockerfile.go, which replaced loopzero-packs with two platform-controlled multi-stage Dockerfiles for a fixed python+node stack. |
 | `api.buildplane.shellgen` | `api/internal/buildplane/shellgen` | package | foundation | `api/internal/buildplane/shellgen/builder.go:1` | Shell fragment generation for workflow steps. Zero imports; one consumer (buildplane/argo). |
-| `api.buildplane.source` | `api/internal/buildplane/source` | package | infrastructure | `api/internal/buildplane/source/store.go:1` | Bundle upload store over Gitea, safe tar extraction, and the services.json validators that form the LoopZeroKit/LoopZeroCloud seam. |
+| `api.buildplane.source` | `api/internal/source` | package | infrastructure | `api/internal/source/store.go:1` | Bundle upload store over Gitea, safe tar extraction, and the services.json validators that form the LoopZeroKit/LoopZeroCloud seam. |
 
 ## Measured size
 
@@ -112,10 +112,10 @@ so a later pass does not re-derive the phantom cycle.[^bo-cycle-note]
 [^bo-svc]: `api/internal/services/build/build_orchestrator.go:1`
 [^bo-argo]: `api/internal/buildplane/argo/buildkit.go:1`
 [^bo-adm]: `api/internal/buildplane/admission/build.go:1`
-[^bo-src]: `api/internal/buildplane/source/store.go:1`
+[^bo-src]: `api/internal/source/store.go:1`
 [^bo-shell]: `api/internal/buildplane/shellgen/builder.go:1`
 [^bo-contracts]: `api/internal/services/deploycontracts/app_unit.go:1`
-[^bo-scaling]: `api/internal/services/scaling/scaling_resolver.go:1`
+[^bo-scaling]: `api/internal/scaling/scaling_resolver.go:1`
 [^bo-submit]: `api/internal/buildplane/argo/buildkit.go:43`
 [^bo-poll]: `api/internal/services/build/build_reconcile_single.go:55`
 [^bo-cosign]: `api/internal/buildplane/argo/cosign.go:57-67`

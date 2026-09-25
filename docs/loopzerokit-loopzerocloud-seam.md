@@ -1,8 +1,8 @@
 # The LoopZeroKit ↔ LoopZeroCloud seam
 
 **Mandatory pre-read.** Consult this before editing anything that touches
-`api/internal/routes/source/source.go`, `api/internal/buildplane/source/services.schema.json`,
-`api/internal/buildplane/source/validator_*.go`, `api/internal/manifests/renderer.go`, or
+`api/internal/source/sourcehttp/source.go`, `api/internal/source/services.schema.json`,
+`api/internal/source/validator_*.go`, `api/internal/manifests/renderer.go`, or
 the `services_json` / multipart upload contract.
 
 This document used to be mirrored on the LoopZeroKit side. **That mirror no longer exists
@@ -36,7 +36,7 @@ someone adopt LoopZeroKit without adopting the platform.
        part 1: services_json      <- order is part of the contract
        part 2: bundle
 
-3. api/internal/routes/source/source.go — SourceHandler.Upload
+3. api/internal/source/sourcehttp/source.go — SourceHandler.Upload
      readUploadForm(r) streams the body with r.MultipartReader():
      a. first part is not services_json     -> 400 MULTIPART_FIELD_ORDER
                                                (a loopzero_yaml first part -> 422 E-009)
@@ -72,16 +72,16 @@ Any future change that breaks one of these is a regression.
 
 - **`tenantID` and `projectID` MUST match DNS-1123** before flowing into `fmt.Sprintf` repo
   names. Single canonical regex `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`; sentinel
-  `source.ErrInvalidTenantOrProject` (`api/internal/buildplane/source/gitea_store.go`).
+  `source.ErrInvalidTenantOrProject` (`api/internal/source/gitea_store.go`).
 - **`env` keys MUST match POSIX shape AND reject reserved keys.** Schema:
   `patternProperties ^[A-Z_][A-Z0-9_]*$` + `maxLength 4096` + `maxProperties 64`. Blocklist:
   `PATH`, `HOME`, `USER`, `SHELL`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, plus prefixes `DYLD_*`,
-  `KUBERNETES_*`, `LOOPZERO_*` (`api/internal/buildplane/source/validator_env.go`).
+  `KUBERNETES_*`, `LOOPZERO_*` (`api/internal/source/validator_env.go`).
 
 ### Wire
 
 - **Multipart field order is part of the contract** — `services_json` first, `bundle`
-  second. Enforced by `readUploadForm` (`api/internal/routes/source/upload_form.go`),
+  second. Enforced by `readUploadForm` (`api/internal/source/sourcehttp/upload_form.go`),
   which streams the body part by part and refuses a first part that is not
   `services_json` before reading anything else. It replaced a `GetBody`-based peek that
   was unreachable for real traffic: `net/http` never sets `GetBody` on a server request,

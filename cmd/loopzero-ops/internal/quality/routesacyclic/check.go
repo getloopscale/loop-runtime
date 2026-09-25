@@ -43,15 +43,11 @@ var testOnlyLeaves = map[string]bool{}
 var allowed = map[string]map[string]bool{
 	// families
 	"domains":  {},
-	"preview":  {},
-	"scale":    {},
 	"admin":    {},
-	"projects": {},
 	"builds":   {},
 	"promote":  {},
 	"rollback": {},
 	"argocd":   {},
-	"source":   {},
 }
 
 // Config controls the gate.

@@ -3,15 +3,6 @@
 
 package ports
 
-import "context"
-
-// PreviewService is the optional service used by the preview Create handler.
-// Lives in domain/ (not routes/) per T1.3 of deep-review-remediation-plan
-// to break the routes-as-type-hub anti-pattern (find_arch_001).
-type PreviewService interface {
-	CreatePreview(ctx context.Context, req CreatePreviewRequest) (*Preview, error)
-}
-
 // CreatePreviewRequest is the JSON payload accepted by the Create handler.
 // Field names match the CLI's preview shape and the github.PullRequestEvent
 // fields used by the webhook handler.

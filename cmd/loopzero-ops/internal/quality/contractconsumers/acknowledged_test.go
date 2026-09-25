@@ -163,3 +163,48 @@ func TestAMovedFileKeepsItsDeclarationsForTheAcknowledgement(t *testing.T) {
 		t.Errorf("the acknowledged drop must still be reported, got %v", out.Acknowledged)
 	}
 }
+
+// Rename detection pairs a moved file only while it still looks like itself. A
+// file that moved AND changed since the comparison base shows as one deletion
+// and one addition, so per path it still "lost" the tag it now declares
+// elsewhere. What decides is the count: a declaration that left one file and
+// appeared in another did not leave the contract.
+func TestAMovedAndRewrittenFileStillKeepsItsDeclarations(t *testing.T) {
+	root := gitTree(t)
+	write := func(rel, body string) {
+		p := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	filler := func(word string) string {
+		var b strings.Builder
+		for i := 0; i < 60; i++ {
+			b.WriteString("// " + word + " line that makes the two files dissimilar\n")
+		}
+		return b.String()
+	}
+	write("api/internal/routes/a/a.go", withGone+filler("base"))
+	write("api/internal/routes/b/b.go", strings.Replace(withGone, "package a", "package b", 1))
+	write("api/internal/reader/reader.go", "package reader\n\nfunc r(x struct{ gone int }) int { return x.gone }\n")
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-qm", "base")
+	git(t, root, "rm", "-q", "api/internal/routes/a/a.go")
+	write("api/internal/x/xhttp/a.go", withGone+filler("head"))
+	write("api/internal/routes/b/b.go", strings.Replace(withoutGone, "package a", "package b", 1))
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-qm", "head")
+	acks := writeAcks(t, root, "gone | api/internal/routes/b/b.go | a nil pointer with omitempty that no handler ever set\n")
+
+	out, err := Check(Config{RepoRoot: root, BaseRef: "HEAD~1", AcknowledgementsFile: acks})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !out.Pass || len(out.Findings) != 0 {
+		t.Fatalf("the declaration that left a.go reappeared in xhttp/a.go; only b.go's is gone, and it is acknowledged. got pass=%v findings=%+v stale=%v",
+			out.Pass, out.Findings, out.StaleAcknowledgements)
+	}
+}

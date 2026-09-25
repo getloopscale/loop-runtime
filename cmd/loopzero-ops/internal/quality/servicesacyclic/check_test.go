@@ -34,14 +34,13 @@ func importing(pkg string, contexts ...string) string {
 	return body
 }
 
-// legalTree is the frozen DAG in miniature: build reaches release and scaling,
+// legalTree is the frozen DAG in miniature: build reaches release,
 // everything else is self-contained.
 func legalTree(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	writeGo(t, root, "api/internal/services/build/b.go", importing("build", "release", "scaling"))
+	writeGo(t, root, "api/internal/services/build/b.go", importing("build", "release"))
 	writeGo(t, root, "api/internal/services/release/r.go", importing("release"))
-	writeGo(t, root, "api/internal/services/scaling/s.go", importing("scaling"))
 	writeGo(t, root, "api/internal/services/placement/p.go", importing("placement"))
 	return root
 }
@@ -70,10 +69,10 @@ func TestCheck_ReverseEdgeFails(t *testing.T) {
 
 func TestCheck_CrossEdgeBetweenSelfContainedContextsFails(t *testing.T) {
 	root := legalTree(t)
-	writeGo(t, root, "api/internal/services/placement/x.go", importing("placement", "scaling"))
+	writeGo(t, root, "api/internal/services/placement/x.go", importing("placement", "release"))
 
 	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, subpackagefence.ErrForbiddenEdge) {
-		t.Fatalf("placement → scaling is not in the allow-list; err = %v", err)
+		t.Fatalf("placement → release is not in the allow-list; err = %v", err)
 	}
 }
 

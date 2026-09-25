@@ -232,7 +232,7 @@ says where that ADR's text is in git, and none of it is reconstructed from memor
 
 | ADR | Cited from | Text at `git show 4f728eb7a:<path>` |
 |---|---|---|
-| ADR-0006 | `api/internal/routes/projects/projects.go:259` | **not in the tree even before the consolidation** |
+| ADR-0006 | `api/internal/projects/projectshttp/projects.go:262` | **not in the tree even before the consolidation** |
 | ADR-0018 | `api/cmd/controller/setup_metering.go:102` | `metering-compute-loop-plan` |
 | ADR-0020 | `cmd/loopzero-ops/internal/quality/prodimagetags/check.go:5` | `2026-05-22-shell-script-strategic-plan` |
 | ADR-0022 | `operators/cmd/registration_test.go:125` | **not in the tree even before the consolidation** |
