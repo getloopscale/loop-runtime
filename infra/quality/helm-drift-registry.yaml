@@ -42,36 +42,6 @@ kinds:
     decision: Chart-pair drift is recorded, never blessed per pair
     reason: >-
       Measured 2026-08-16 by rendering the pairs: IngressRoute belongs to the Traefik of the bootstrap path; the published chart does not assume an ingress.
-  - pair: loopzero-cloud:loopzero-cloud
-    kind: ConfigMap
-    decision: Chart-pair drift is recorded, never blessed per pair
-    reason: >-
-      Measured 2026-08-16 by rendering the pairs: the published chart mounts the dashboard configuration through a ConfigMap; the bootstrap chart receives it as literal env in the helmfile values.
-  - pair: loopzero-cloud:loopzero-cloud
-    kind: NetworkPolicy
-    decision: Chart-pair drift is recorded, never blessed per pair
-    reason: >-
-      Measured 2026-08-16 by rendering the pairs: network policy belongs to the published chart; the bootstrap path runs in a dev cluster whose network is not segmented.
-  - pair: loopzero-cloud:loopzero-cloud
-    kind: Secret
-    decision: Chart-pair drift is recorded, never blessed per pair
-    reason: >-
-      Measured 2026-08-16 by rendering the pairs: the published chart declares the dashboard Secret; on the bootstrap path it is provisioned from outside the chart (generate-secrets / ESO), an asymmetry of provenance rather than of resource.
-  - pair: loopzero-cloud:loopzero-cloud
-    kind: PodDisruptionBudget
-    decision: Chart-pair drift is recorded, never blessed per pair
-    reason: >-
-      Measured 2026-08-16 by rendering the pairs: a PodDisruptionBudget presumes more than one replica; the bootstrap path runs a single replica in dev.
-  - pair: loopzero-cloud:loopzero-cloud
-    kind: ServiceAccount
-    decision: Chart-pair drift is recorded, never blessed per pair
-    reason: >-
-      Measured 2026-08-16 by rendering the pairs: the published chart creates the ServiceAccount; on the bootstrap path it comes from the helmfile, outside the chart.
-  - pair: loopzero-cloud:loopzero-cloud
-    kind: IngressRoute
-    decision: Chart-pair drift is recorded, never blessed per pair
-    reason: >-
-      Measured 2026-08-16 by rendering the pairs: IngressRoute belongs to the Traefik of the bootstrap path; the published chart does not assume an ingress exists in the target cluster.
 
 cells:
   - pair: loopzero-api:loopzero-api

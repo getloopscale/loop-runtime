@@ -167,7 +167,7 @@ func (r *Report) checkTemplatePresent(root string) {
 // checkToggleDefaultOff mirrors the tenantNamespace convention of the chart values.yaml:
 // a VAP that can self-inflict a DoS ships OFF and is enabled by overlay.
 func (r *Report) checkToggleDefaultOff(root string) {
-	p := filepath.Join(root, chartPath, "values.yaml")
+	p := filepath.Clean(filepath.Join(root, chartPath, "values.yaml"))
 	b, err := os.ReadFile(p)
 	if err != nil {
 		r.fail("toggle-default-off", "%s unreadable: %v", p, err)

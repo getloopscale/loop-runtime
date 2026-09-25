@@ -3,8 +3,10 @@
 // Package loopzerocloudpublished_test — render-time tests for the PUBLISHED
 // variant of loopzero-cloud (Plan 2026-05-20 v1.1, Task #128 follow-up).
 //
-// Companion to helm/loopzero-cloud/ which tests the bootstrap variant. Both
-// MUST stay in lock-step per CLAUDE.md "3 overlapping charts" pattern.
+// There is one loopzero-cloud chart: ArgoCD consumes it with these defaults, and the
+// Helmfile bootstrap installs it with charts/loopzero-cloud/values-bootstrap.yaml
+// (bootstrap_install_test.go). The bootstrap copy under infra/helm/loopzero-cloud and
+// its render suite were deleted when the pair became one chart.
 //
 // Published shape (charts/loopzero-cloud, uses loopzero-common library):
 //   - 5 standard app.kubernetes.io/* labels (vs minimal in bootstrap)

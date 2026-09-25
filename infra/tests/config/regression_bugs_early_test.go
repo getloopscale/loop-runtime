@@ -309,7 +309,9 @@ func TestB35DatabaseUrlMapping(t *testing.T) {
 	// infra-tests-load-regression-obsolete.md`.
 	files := []string{
 		"../../helm/loopzero-api/templates/deployment.yaml",
-		"../../helm/loopzero-cloud/templates/deployment.yaml",
+		// loopzero-cloud maps the key through a typed secrets.keyRefs entry of the
+		// values Helmfile installs the chart with.
+		"../../../charts/loopzero-cloud/values-bootstrap.yaml",
 	}
 	for _, f := range files {
 		data, err := os.ReadFile(f)
@@ -381,7 +383,7 @@ func TestB48SmokeArgocdHttp(t *testing.T) {
 }
 
 func TestB49LoopZeroCloudOryUrls(t *testing.T) {
-	data, err := os.ReadFile("../../helm/loopzero-cloud/values.yaml")
+	data, err := os.ReadFile("../../../charts/loopzero-cloud/values-bootstrap.yaml")
 	if err != nil {
 		t.Fatalf("read loopzero-cloud values.yaml: %v", err)
 	}

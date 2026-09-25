@@ -41,35 +41,31 @@ pass() { echo "PASS — $1"; }
 fail_() { echo "FAIL — $1"; fail=$((fail + 1)); }
 
 # --- A1: LENS_BASE_URL env is a non-empty http(s):// URL on the Deployment ---
-BASE_URL=$(yq eval-all '(select(.kind == "Deployment" and .metadata.name == "loopzero-cloud")
-  | .spec.template.spec.containers[]
-  | select(.name == "loopzero-cloud")
-  | .env[]
-  | select(.name == "LENS_BASE_URL")
-  | .value) // ""' "$TMP/rendered.yaml")
+BASE_URL=$(yq eval-all '(select(.kind == "ConfigMap" and .metadata.name == "loopzero-cloud")
+  | .data.LENS_BASE_URL) // ""' "$TMP/rendered.yaml")
 
 case "$BASE_URL" in
   http://*|https://*) pass "LENS_BASE_URL=$BASE_URL" ;;
-  "") fail_ "LENS_BASE_URL env absent from Deployment/loopzero-cloud (or empty)" ;;
+  "") fail_ "LENS_BASE_URL absent from ConfigMap/loopzero-cloud (or empty)" ;;
   *)  fail_ "LENS_BASE_URL value not http(s):// URL (got '$BASE_URL')" ;;
 esac
 
 # --- A2: LENS_PLATFORM_ADMIN_KEY via valueFrom.secretKeyRef name=loopzero-lens-admin-key ---
 SR_NAME=$(yq eval-all '(select(.kind == "Deployment" and .metadata.name == "loopzero-cloud")
   | .spec.template.spec.containers[]
-  | select(.name == "loopzero-cloud")
+  | select(.name == "cloud")
   | .env[]
   | select(.name == "LENS_PLATFORM_ADMIN_KEY")
   | .valueFrom.secretKeyRef.name) // ""' "$TMP/rendered.yaml")
 SR_KEY=$(yq eval-all '(select(.kind == "Deployment" and .metadata.name == "loopzero-cloud")
   | .spec.template.spec.containers[]
-  | select(.name == "loopzero-cloud")
+  | select(.name == "cloud")
   | .env[]
   | select(.name == "LENS_PLATFORM_ADMIN_KEY")
   | .valueFrom.secretKeyRef.key) // ""' "$TMP/rendered.yaml")
 SR_OPT=$(yq eval-all '(select(.kind == "Deployment" and .metadata.name == "loopzero-cloud")
   | .spec.template.spec.containers[]
-  | select(.name == "loopzero-cloud")
+  | select(.name == "cloud")
   | .env[]
   | select(.name == "LENS_PLATFORM_ADMIN_KEY")
   | .valueFrom.secretKeyRef.optional) // false' "$TMP/rendered.yaml")
@@ -81,7 +77,7 @@ else
 fi
 
 # --- A3: ExternalSecret template file present in chart ---
-TPL="infra/helm/loopzero-cloud/templates/externalsecret-lens-admin-key.yaml"
+TPL="charts/loopzero-cloud/templates/externalsecret-admin-keys.yaml"
 if [ -f "$TPL" ]; then
   pass "ExternalSecret template present at $TPL"
 else

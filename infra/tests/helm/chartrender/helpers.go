@@ -133,8 +133,8 @@ var ErrAmbiguousChart = errors.New("chart name resolves to two charts")
 
 // BootstrapChartPath resolves to infra/helm/<name>/ ONLY.
 //
-// Use it for the two names declared in BOTH chart trees - loopzero-api and
-// loopzero-cloud (infra/quality/chart-pairs.txt) - which ChartPath refuses.
+// Use it for a name declared in BOTH chart trees (infra/quality/chart-pairs.txt),
+// which ChartPath refuses.
 // For a name present in exactly one tree, ChartPath suffices.
 func BootstrapChartPath(chartName string) (string, error) {
 	if chartName == "" {
@@ -179,8 +179,8 @@ func PublishedChartPath(chartName string) (string, error) {
 // a name that means two charts has no single right answer. Present in
 // neither, it fails with "not found in infra/helm/ or charts/".
 //
-// Exactly two names are declared in both trees - loopzero-api and loopzero-cloud
-// (infra/quality/chart-pairs.txt). Reach those through BootstrapChartPath
+// The names declared in both trees are listed in infra/quality/chart-pairs.txt.
+// Reach those through BootstrapChartPath
 // or PublishedChartPath, which carry the tree in the call instead of
 // relying on a precedence rule.
 func ChartPath(chartName string) (string, error) {

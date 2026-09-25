@@ -21,7 +21,7 @@ import (
 
 // runRegressionScript invokes regression-checks.sh and returns combined output.
 func TestB50LoopZeroCloudPort13002(t *testing.T) {
-	data, err := os.ReadFile("../../helm/loopzero-cloud/values.yaml")
+	data, err := os.ReadFile("../../../charts/loopzero-cloud/values.yaml")
 	if err != nil {
 		t.Fatalf("read loopzero-cloud values.yaml: %v", err)
 	}
@@ -29,11 +29,10 @@ func TestB50LoopZeroCloudPort13002(t *testing.T) {
 	if !strings.Contains(s, "port: 13002") {
 		t.Errorf("B50 regression: loopzero-cloud service.port must be 13002 (matches binary :13002)")
 	}
-	tplData, err := os.ReadFile("../../helm/loopzero-cloud/templates/deployment.yaml")
-	if err != nil {
-		t.Fatalf("read loopzero-cloud deployment.yaml: %v", err)
-	}
-	if !strings.Contains(string(tplData), "path: /health") {
+	// The probes are values of the one loopzero-cloud chart, rendered by its
+	// Deployment template; the bootstrap copy that spelled them in the
+	// template was deleted when the pair became one chart.
+	if !strings.Contains(s, "path: /health") {
 		t.Errorf("B50 regression: loopzero-cloud probes must use /health (not /)")
 	}
 }

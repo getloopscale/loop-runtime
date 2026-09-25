@@ -235,7 +235,7 @@ k8s_resource(
 # The cloud-API + dashboard now live in the standalone loopzero-cloud repo with their
 # own dev loop (which assumes the engine + loopzero-data are running). The engine
 # Tiltfile no longer builds/deploys cloud from source. The deployed loopzero-cloud
-# SERVICE chart (infra/helm/loopzero-cloud) remains platform infra, sourced from the
+# SERVICE chart (charts/loopzero-cloud) remains platform infra, sourced from the
 # loopzero-cloud repo's published image.
 
 # ---------------------------------------------------------------------------

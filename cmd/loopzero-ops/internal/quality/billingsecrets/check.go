@@ -34,13 +34,39 @@ var billingSecretNames = []string{
 	"loopzero-stripe-api-keys",
 }
 
-// chartTemplates are the two siblings that must move together.
-//
-// `CLAUDE.md § Helm chart dual system`: `loopzero-cloud` exists in `infra/helm/` (installed
-// by Helmfile) and in `charts/` (published via OCI). Fixing only one publishes the defect.
-var chartTemplates = []string{
-	"infra/helm/loopzero-cloud/templates/deployment.yaml",
-	"charts/loopzero-cloud/templates/deployment.yaml",
+// chartTemplate mounts the billing Secrets. There is one loopzero-cloud chart: Helmfile
+// installs charts/loopzero-cloud and ArgoCD consumes it; the bootstrap copy under infra/helm
+// was deleted when the pair became one chart (docs/decisions.md, "One chart per
+// bootstrap/published pair").
+const chartTemplate = "charts/loopzero-cloud/templates/deployment.yaml"
+
+// valuesFiles are the files that can mount a Secret with a literal optionality through
+// `secrets.additionalSources`: the chart's own values and every Helmfile environment
+// overlay of loopzero-cloud. The template alone cannot see a billing Secret listed there,
+// and that listing would carry exactly the literal this gate refuses.
+var valuesFiles = []string{
+	"charts/loopzero-cloud/values*.yaml",
+	"infra/helmfile/values/*/loopzero-cloud.yaml.gotmpl",
+}
+
+// scanTargets returns the template and every existing values file, in a stable order.
+func scanTargets(root string) ([]string, error) {
+	targets := []string{chartTemplate}
+	for _, pattern := range valuesFiles {
+		matches, err := filepath.Glob(filepath.Join(root, pattern))
+		if err != nil {
+			return nil, fmt.Errorf("glob %s: %w", pattern, err)
+		}
+		sort.Strings(matches)
+		for _, m := range matches {
+			rel, err := filepath.Rel(root, m)
+			if err != nil {
+				return nil, fmt.Errorf("relativise %s: %w", m, err)
+			}
+			targets = append(targets, filepath.ToSlash(rel))
+		}
+	}
+	return targets, nil
 }
 
 // Config is the gate's input.
@@ -63,7 +89,8 @@ type Outcome struct {
 	Scanned []string
 }
 
-// Check scans both charts and fails literal optionality on the billing secrets.
+// Check scans the chart template and the values that feed it, and fails literal
+// optionality on the billing secrets.
 //
 // It works on the template's TEXT, not on parsed YAML, for a concrete reason: the file
 // contains Go template syntax (`{{ ... }}`), which no YAML parser accepts. Rendering would
@@ -71,7 +98,11 @@ type Outcome struct {
 // binary — which `CLAUDE.md § D5` refuses.
 func Check(cfg Config) (Outcome, error) {
 	var out Outcome
-	for _, rel := range chartTemplates {
+	targets, err := scanTargets(cfg.RepoRoot)
+	if err != nil {
+		return out, err
+	}
+	for _, rel := range targets {
 		path := filepath.Join(cfg.RepoRoot, rel)
 		f, err := os.Open(path) // #nosec G304 -- path derived from a fixed list
 		if err != nil {
@@ -113,7 +144,9 @@ func scanTemplate(r *os.File, rel string) ([]Finding, error) {
 	n := 0
 	for sc.Scan() {
 		n++
-		line := strings.TrimSpace(sc.Text())
+		// A values list writes the first key of an entry after the dash
+		// (`- name: loopzero-stripe-webhook`); a template writes it on its own line.
+		line := strings.TrimPrefix(strings.TrimSpace(sc.Text()), "- ")
 
 		if name, ok := strings.CutPrefix(line, "name:"); ok {
 			current = ""

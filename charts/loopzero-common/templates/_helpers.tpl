@@ -411,6 +411,157 @@ Usage:
 
 {{/*
 ----------------------------------------------------------------------
+SECRETS CREATED OUTSIDE THE CHART
+----------------------------------------------------------------------
+*/}}
+
+{{/*
+envFrom entries for Secrets the chart does not create — provisioned by ESO,
+a bootstrap task or an operator. Each entry is typed and schema-validated in
+the consuming chart:
+
+  secrets:
+    additionalSources:
+      - name: loopzero-openbao-approle
+        optional: true
+        reason: "..."   # required when optional is true
+
+`optional: true` lets the kubelet start the container with the Secret absent,
+which is exactly the mechanism by which a dependency disappears without the
+startup saying anything (B-104). So an optional source must carry the reason
+it may be absent, and the consuming chart's schema refuses one without it.
+Render after the chart's own sources: a later envFrom source wins a key both
+define.
+
+Usage in a container:
+  envFrom:
+    ...
+    {{- include "loopzero-common.additionalSecretSources" . | nindent 12 }}
+*/}}
+{{- define "loopzero-common.additionalSecretSources" -}}
+{{- range ((.Values.secrets | default dict).additionalSources | default list) }}
+- secretRef:
+    name: {{ .name | quote }}
+    optional: {{ .optional }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Environment entries mapping ONE key of a Secret the chart does not create onto
+the variable the binary reads — for a Secret whose key is not the variable name
+(loopzero-db-credentials stores the URL as `uri`; the binary reads DATABASE_URL).
+Same typing and the same reason rule as additionalSources; the entry mirrors
+the Kubernetes shape (name, secretKeyRef name/key):
+
+  secrets:
+    keyRefs:
+      - name: DATABASE_URL
+        secretName: loopzero-db-credentials
+        key: uri
+        optional: true
+        reason: "..."
+
+An explicit container variable outranks every envFrom source, so a keyRef
+decides its variable regardless of what the ConfigMap or an envFrom Secret
+carries.
+
+Usage in a container:
+  env:
+    {{- include "loopzero-common.secretKeyRefs" . | nindent 12 }}
+*/}}
+{{- define "loopzero-common.secretKeyRefs" -}}
+{{- range ((.Values.secrets | default dict).keyRefs | default list) }}
+- name: {{ .name | quote }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .secretName | quote }}
+      key: {{ .key | quote }}
+      optional: {{ .optional }}
+{{- end }}
+{{- end -}}
+
+{{/*
+----------------------------------------------------------------------
+INGRESS ROUTE (Traefik)
+----------------------------------------------------------------------
+*/}}
+
+{{/*
+A Traefik IngressRoute to the chart's Service, off unless the install enables
+it. A published chart does not assume an ingress exists in the target cluster;
+the Helmfile bootstrap does run Traefik, and turns this on.
+
+  ingressRoute:
+    enabled: false
+    host: ""                 # required when enabled
+    entryPoints: [websecure]
+    middlewares: []          # [{name, namespace}]
+    certIssuer: CFManaged    # a ClusterIssuer name, or CFManaged
+
+`CFManaged` means TLS terminates at the Cloudflare edge: the route carries an
+empty tls block and no cert-manager Certificate is emitted. Any other value is
+the ClusterIssuer of a Certificate named <fullname>-tls for the host.
+
+Usage (templates/ingressroute.yaml):
+  {{ include "loopzero-common.ingressRoute" . }}
+*/}}
+{{- define "loopzero-common.ingressRoute" -}}
+{{- $ir := .Values.ingressRoute | default dict -}}
+{{- if $ir.enabled }}
+{{- if not $ir.host }}
+{{- fail (printf "%s: ingressRoute.host is required when ingressRoute.enabled is true" .Chart.Name) }}
+{{- end }}
+{{- $name := include "loopzero-common.fullname" . }}
+{{- $cfManaged := eq ($ir.certIssuer | default "CFManaged") "CFManaged" }}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "loopzero-common.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    {{- toYaml ($ir.entryPoints | default (list "websecure")) | nindent 4 }}
+  routes:
+    - match: Host(`{{ $ir.host }}`)
+      kind: Rule
+      {{- with $ir.middlewares }}
+      middlewares:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ $name }}
+          port: {{ .Values.service.port }}
+  tls:
+    {{- if $cfManaged }}
+    {}
+    {{- else }}
+    secretName: {{ $name }}-tls
+    {{- end }}
+{{- if not $cfManaged }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $name }}-tls
+  labels:
+    {{- include "loopzero-common.labels" . | nindent 4 }}
+spec:
+  secretName: {{ $name }}-tls
+  duration: 2160h     # 90d
+  renewBefore: 360h   # 15d
+  commonName: {{ $ir.host }}
+  dnsNames:
+    - {{ $ir.host }}
+  issuerRef:
+    name: {{ $ir.certIssuer | quote }}
+    kind: ClusterIssuer
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+----------------------------------------------------------------------
 TMP VOLUME (charts-sota T2.6 — readOnlyRootFilesystem compat)
 ----------------------------------------------------------------------
 */}}

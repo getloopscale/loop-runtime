@@ -89,6 +89,18 @@ spec:
             - secretRef:
                 name: {{ .Values.existingSecret }}
             {{- end }}
+            {{- with .Values.billing.apiKeysSecret }}
+            # Stripe API keys, rotated apart from the webhook secret; required exactly
+            # when this environment declares that it charges (billing.required).
+            - secretRef:
+                name: {{ . | quote }}
+                optional: {{ not $.Values.billing.required }}
+            {{- end }}
+            {{- include "loopzero-common.additionalSecretSources" . | nindent 12 }}
+          {{- with (include "loopzero-common.secretKeyRefs" .) }}
+          env:
+            {{- . | nindent 12 }}
+          {{- end }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}
@@ -102,3 +114,7 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
             {{- include "loopzero-common.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            {{- include "loopzero-common.tmpVolumeMount" . | nindent 12 }}
+      volumes:
+        {{- include "loopzero-common.tmpVolume" . | nindent 8 }}

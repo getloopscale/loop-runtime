@@ -180,7 +180,7 @@ A merge patch carries no `resourceVersion`, so it never 409s against a concurren
 
 ### Helm chart dual system
 
-`infra/helm/` (bootstrap, Helmfile L2) and `charts/` (published OCI, ArgoCD L3) coexist by design (ADR D1). **2 charts exist in BOTH trees under the same `name`** — `loopzero-api` and `loopzero-cloud`: when patching one, apply the same fix to the other. Refer to each by its **path**, never by the bare name — `infra/helm/loopzero-api` is the bootstrap one, `charts/loopzero-api` is the published OCI one.
+`infra/helm/` (bootstrap, Helmfile L2) and `charts/` (published OCI, ArgoCD L3) coexist by design (ADR D1). **1 chart exists in BOTH trees under the same `name`** — `loopzero-api`: when patching one, apply the same fix to the other. Refer to each by its **path**, never by the bare name — `infra/helm/loopzero-api` is the bootstrap one, `charts/loopzero-api` is the published OCI one. `loopzero-cloud` is ONE chart, `charts/loopzero-cloud`: Helmfile installs it with `charts/loopzero-cloud/values-bootstrap.yaml` (docs/decisions.md, "One chart per bootstrap/published pair").
 
 For Go code under `infra/tests`, this is now mechanised rather than remembered: `chartrender.ChartPath` **refuses** a name declared in both trees and names both paths, so a colliding chart is reached through `BootstrapChartPath` or `PublishedChartPath`, which carry the tree in the call. Documents, helmfiles, manifests and the `Tiltfile` are not reached by that mechanism and remain governed by the instruction above (B-002).
 

@@ -22,7 +22,7 @@ func TestChartPath_resolves_known_charts(t *testing.T) {
 	t.Parallel()
 
 	// Every name below exists in exactly ONE tree, which is the only case
-	// ChartPath resolves. loopzero-api and loopzero-cloud are declared in BOTH and are
+	// ChartPath resolves. loopzero-api is declared in BOTH and is
 	// therefore refused, not preferred — see TestChartPath_refuses_a_colliding_name.
 	// postgresql + cert-manager are upstream-wrappers (no Chart.yaml) —
 	// they would be auto-exempt per coverage gate, not testable here.
@@ -34,6 +34,7 @@ func TestChartPath_resolves_known_charts(t *testing.T) {
 		{"chaos-mesh lives in infra/helm/ with Chart.yaml", "chaos-mesh", "infra/helm/chaos-mesh"},
 		{"loopzero-app-operator lives in charts/", "loopzero-app-operator", "charts/loopzero-app-operator"},
 		{"loopzero-common (library) lives in charts/", "loopzero-common", "charts/loopzero-common"},
+		{"loopzero-cloud lives in charts/ only since its bootstrap copy was deleted", "loopzero-cloud", "charts/loopzero-cloud"},
 	}
 
 	for _, tc := range cases {
@@ -90,7 +91,7 @@ func TestChartPath_rejects_empty_name(t *testing.T) {
 func TestChartPath_refuses_a_colliding_name(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"loopzero-api", "loopzero-cloud"} {
+	for _, name := range []string{"loopzero-api"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
@@ -225,7 +226,7 @@ func TestNewOptions_rejects_missing_env_file(t *testing.T) {
 
 // TestBootstrapChartPath_resolves_overlapping_charts confirms explicit
 // bootstrap-only resolution for the charts that still exist in infra/helm/ as
-// a copy of a charts/ chart (loopzero-api, loopzero-cloud). Closes the variant-ambiguity gap
+// a copy of a charts/ chart (loopzero-api). Closes the variant-ambiguity gap
 // surfaced during T3.1 — `feat(infra): T3.1 (1/10) loopzero-cloud bootstrap render
 // tests (10/10 GREEN)`, 2026-05-20. The SHA that stood here (05cecb64) does not
 // resolve after the 2026-09-16 history rewrite and has no equivalent in the new
@@ -234,7 +235,7 @@ func TestNewOptions_rejects_missing_env_file(t *testing.T) {
 func TestBootstrapChartPath_resolves_overlapping_charts(t *testing.T) {
 	t.Parallel()
 
-	cases := []string{"loopzero-api", "loopzero-cloud"}
+	cases := []string{"loopzero-api"}
 	for _, name := range cases {
 		t.Run(name, func(t *testing.T) {
 			got, err := BootstrapChartPath(name)
@@ -250,8 +251,8 @@ func TestBootstrapChartPath_resolves_overlapping_charts(t *testing.T) {
 }
 
 // TestPublishedChartPath_resolves_overlapping_charts confirms explicit
-// published-variant resolution for the 2 charts that exist in both
-// infra/helm/ AND charts/ (loopzero-api, loopzero-cloud).
+// published-variant resolution for the charts that had a bootstrap copy in
+// infra/helm/ (loopzero-api, loopzero-cloud).
 func TestPublishedChartPath_resolves_overlapping_charts(t *testing.T) {
 	t.Parallel()
 

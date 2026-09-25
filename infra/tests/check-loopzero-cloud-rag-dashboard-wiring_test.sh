@@ -37,58 +37,54 @@ pass() { echo "PASS — $1"; }
 fail_() { echo "FAIL — $1"; fail=$((fail + 1)); }
 
 # --- A1: RAG_BASE_URL env is a non-empty http(s):// URL on the Deployment ---
-BASE_URL=$(yq eval-all '(select(.kind == "Deployment" and .metadata.name == "loopzero-cloud")
-  | .spec.template.spec.containers[]
-  | select(.name == "loopzero-cloud")
-  | .env[]
-  | select(.name == "RAG_BASE_URL")
-  | .value) // ""' "$TMP/rendered.yaml")
+BASE_URL=$(yq eval-all '(select(.kind == "ConfigMap" and .metadata.name == "loopzero-cloud")
+  | .data.RAG_BASE_URL) // ""' "$TMP/rendered.yaml")
 
 case "$BASE_URL" in
   http://*|https://*) pass "RAG_BASE_URL=$BASE_URL" ;;
-  "") fail_ "RAG_BASE_URL env absent from Deployment/loopzero-cloud (or empty)" ;;
+  "") fail_ "RAG_BASE_URL absent from ConfigMap/loopzero-cloud (or empty)" ;;
   *)  fail_ "RAG_BASE_URL value not http(s):// URL (got '$BASE_URL')" ;;
 esac
 
-# --- A1b: a URL aponta para o ARTEFATO DA PIPELINE, nao para um processo solto ---
+# --- A1b: the URL points at the PIPELINE ARTIFACT, not at a loose process ---
 #
-# O gate A1 acima nasceu em 2026-07-15 porque RAG_BASE_URL vinha VAZIA, e por isso
-# so verifica presenca e esquema. Uma coordenada ERRADA passa por ele.
+# Gate A1 above was born on 2026-07-15 because RAG_BASE_URL was EMPTY, so it only
+# checks presence and scheme. A WRONG coordinate passes it.
 #
-# Foi o que aconteceu ate 2026-07-29: a URL apontava para :18082, um processo
-# `node` iniciado a mao no host, enquanto o container da pipeline
-# (ghcr.io/getloopscale/loopzero-rag:develop) servia :8787. O gate ficava verde, o
-# endpoint respondia 200, e o unico sintoma era a coluna de versao do painel M21
-# vindo vazia — porque o processo solto emite `built_at: "unknown"`.
+# That is what happened until 2026-07-29: the URL pointed at :18082, a `node`
+# process started by hand on the host, while the pipeline container
+# (ghcr.io/getloopscale/loopzero-rag:develop) served :8787. The gate stayed green, the
+# endpoint answered 200, and the only symptom was the M21 panel's version column
+# coming back empty — because the loose process reports `built_at: "unknown"`.
 #
-# Um alvo que responde 200 nao prova que e o alvo CERTO. Esta checagem trava a
-# porta, que e o que distingue os dois.
+# A target that answers 200 does not prove it is the RIGHT target. This check pins
+# the port, which is what tells the two apart.
 case "$BASE_URL" in
   *:18082*)
-    fail_ "RAG_BASE_URL aponta para :18082 — o processo host solto, nao o container da pipeline.
-       O container publicado pelo CI serve :8787 e reporta version/built_at reais;
-       o processo solto reporta 'dev'/'unknown'. Ver o comentario em
+    fail_ "RAG_BASE_URL points at :18082 — the loose host process, not the pipeline container.
+       The container CI publishes serves :8787 and reports a real version/built_at;
+       the loose process reports 'dev'/'unknown'. See the comment in
        infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl." ;;
-  *:8787*) pass "RAG_BASE_URL aponta para o container da pipeline (:8787)" ;;
-  *) pass "RAG_BASE_URL=$BASE_URL (porta nao reconhecida — revise se e intencional)" ;;
+  *:8787*) pass "RAG_BASE_URL points at the pipeline container (:8787)" ;;
+  *) pass "RAG_BASE_URL=$BASE_URL (port not recognised — check that it is intentional)" ;;
 esac
 
 # --- A2: RAG_PLATFORM_ADMIN_KEY via valueFrom.secretKeyRef name=loopzero-rag-admin-key ---
 SR_NAME=$(yq eval-all '(select(.kind == "Deployment" and .metadata.name == "loopzero-cloud")
   | .spec.template.spec.containers[]
-  | select(.name == "loopzero-cloud")
+  | select(.name == "cloud")
   | .env[]
   | select(.name == "RAG_PLATFORM_ADMIN_KEY")
   | .valueFrom.secretKeyRef.name) // ""' "$TMP/rendered.yaml")
 SR_KEY=$(yq eval-all '(select(.kind == "Deployment" and .metadata.name == "loopzero-cloud")
   | .spec.template.spec.containers[]
-  | select(.name == "loopzero-cloud")
+  | select(.name == "cloud")
   | .env[]
   | select(.name == "RAG_PLATFORM_ADMIN_KEY")
   | .valueFrom.secretKeyRef.key) // ""' "$TMP/rendered.yaml")
 SR_OPT=$(yq eval-all '(select(.kind == "Deployment" and .metadata.name == "loopzero-cloud")
   | .spec.template.spec.containers[]
-  | select(.name == "loopzero-cloud")
+  | select(.name == "cloud")
   | .env[]
   | select(.name == "RAG_PLATFORM_ADMIN_KEY")
   | .valueFrom.secretKeyRef.optional) // false' "$TMP/rendered.yaml")
@@ -100,7 +96,7 @@ else
 fi
 
 # --- A3: ExternalSecret template file present in chart ---
-TPL="infra/helm/loopzero-cloud/templates/externalsecret-rag-admin-key.yaml"
+TPL="charts/loopzero-cloud/templates/externalsecret-admin-keys.yaml"
 if [ -f "$TPL" ]; then
   pass "ExternalSecret template present at $TPL"
 else

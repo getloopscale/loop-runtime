@@ -192,7 +192,6 @@ which fails both ways — an undeclared pair, or a declaration that outlived its
 | `static-assets` | cell | ours | — | `{{ .Values.profile.staticAssets }}` |
 | `tempo` | core | upstream | 1.14.0 | `always` |
 | `loopzero-api` | core | ours | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |
-| `loopzero-cloud` | core | ours | — | `{{ and .Values.profile.loopzeroCloud (ne (.Values \| get "clusterRole" "dev") "standalone") }}` |
 | `loopzero-external-secrets` | — | undeclared | — | `always` |
 | `traefik` | cell, core | upstream | 28.3.0 | `always` |
 | `velero` | core | ours | — | `always` |

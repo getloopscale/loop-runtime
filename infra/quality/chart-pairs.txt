@@ -23,4 +23,3 @@
 # Format: <infra/helm dir> | <charts dir> | <what each side is>
 
 loopzero-api | loopzero-api | infra/helm bootstraps the engine on the core cluster; charts/ is the OCI chart ArgoCD consumes
-loopzero-cloud | loopzero-cloud | infra/helm bootstraps the control plane; charts/ is the published OCI chart

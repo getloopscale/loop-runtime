@@ -56,7 +56,7 @@ const valueMount = `
 // TestFailsLiteralOptionalMount is the case that fails today.
 func TestFailsLiteralOptionalMount(t *testing.T) {
 	root := t.TempDir()
-	writeChart(t, root, "infra/helm/loopzero-cloud/templates/deployment.yaml", literalMount)
+	writeChart(t, root, "charts/loopzero-cloud/templates/deployment.yaml", literalMount)
 
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
@@ -74,7 +74,7 @@ func TestFailsLiteralOptionalMount(t *testing.T) {
 // TestAcceptsMountDecidedByValue — the correct form passes.
 func TestAcceptsMountDecidedByValue(t *testing.T) {
 	root := t.TempDir()
-	writeChart(t, root, "infra/helm/loopzero-cloud/templates/deployment.yaml", valueMount)
+	writeChart(t, root, "charts/loopzero-cloud/templates/deployment.yaml", valueMount)
 
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
@@ -86,29 +86,54 @@ func TestAcceptsMountDecidedByValue(t *testing.T) {
 	}
 }
 
-// TestScansBothSiblingCharts pins the overlapping-charts rule.
+// TestFailsLiteralOptionalFromAValuesFile pins the path the template alone cannot see.
 //
-// `CLAUDE.md § Helm chart dual system`: `loopzero-cloud` exists in `infra/helm/` and in
-// `charts/`, and fixing only one leaves the other publishing the defect. A gate that looked
-// only at the first would pass while the sibling stays broken — and the sibling is
-// precisely the one published via OCI, which is what consumers install.
-func TestScansBothSiblingCharts(t *testing.T) {
+// The chart mounts Secrets it does not create from `secrets.additionalSources`, each with
+// a literal `optional`. Listing a billing Secret there would bring back exactly the
+// literal this gate exists to refuse, written in a values file instead of the template —
+// so every values file that feeds loopzero-cloud is scanned too: the chart's own and every
+// Helmfile environment overlay. The Stripe API keys have a typed path that ties their
+// optionality to billing.required (`billing.apiKeysSecret`), and that is the one to use.
+func TestFailsLiteralOptionalFromAValuesFile(t *testing.T) {
 	root := t.TempDir()
-	writeChart(t, root, "infra/helm/loopzero-cloud/templates/deployment.yaml", valueMount)
-	writeChart(t, root, "charts/loopzero-cloud/templates/deployment.yaml", literalMount)
+	writeChart(t, root, "charts/loopzero-cloud/templates/deployment.yaml", valueMount)
+	writeChart(t, root, "infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl", `
+secrets:
+  additionalSources:
+    - name: loopzero-stripe-webhook
+      optional: true
+      reason: "a reason is not what makes this acceptable"
+`)
 
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
-	if len(out.Findings) != 2 {
-		t.Fatalf("the published sibling is still literal; wanted 2 findings from charts/, got %d",
-			len(out.Findings))
+	if len(out.Findings) != 1 {
+		t.Fatalf("a billing Secret mounted with a literal optional from an overlay; wanted 1 finding, got %d: %+v",
+			len(out.Findings), out.Findings)
 	}
-	for _, f := range out.Findings {
-		if !strings.Contains(f.File, "charts/loopzero-cloud") {
-			t.Errorf("the finding should point at the broken sibling, got %q", f.File)
-		}
+	if !strings.Contains(out.Findings[0].File, "infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl") {
+		t.Errorf("the finding should point at the overlay, got %q", out.Findings[0].File)
+	}
+}
+
+// TestTypedApiKeysPathIsNotALiteral — `billing.apiKeysSecret` names the Secret without a
+// literal optionality; the template derives it from billing.required.
+func TestTypedApiKeysPathIsNotALiteral(t *testing.T) {
+	root := t.TempDir()
+	writeChart(t, root, "charts/loopzero-cloud/templates/deployment.yaml", valueMount)
+	writeChart(t, root, "charts/loopzero-cloud/values-bootstrap.yaml", "billing:\n  apiKeysSecret: loopzero-stripe-api-keys\n")
+
+	out, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if len(out.Findings) != 0 {
+		t.Errorf("the typed path carries no literal optional; got %+v", out.Findings)
+	}
+	if len(out.Scanned) != 2 {
+		t.Errorf("both files must be read — a gate that read nothing looks like one that passed; scanned %v", out.Scanned)
 	}
 }
 

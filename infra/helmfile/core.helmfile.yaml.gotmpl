@@ -605,7 +605,10 @@ releases:
     labels:
       profile: dashboard-only
     namespace: loopzero-system
-    chart: ../helm/loopzero-cloud
+    # The published chart, installed with charts/loopzero-cloud/values-bootstrap.yaml:
+    # there is one loopzero-cloud chart (docs/decisions.md, "One chart per
+    # bootstrap/published pair").
+    chart: ../../charts/loopzero-cloud
     # Bug #29 LIVE fix (2026-05-17 iter 20): loopzero-cloud image not in DOCR
     # for drill. Skip — drill L2 harness goes through loopzero-api directly,
     # not loopzero-cloud dashboard. Production keeps loopzero-cloud installed.
@@ -620,28 +623,22 @@ releases:
       - loopzero-auth/ory-hydra
       - loopzero-system/loopzero-api
     values:
-      - ../helm/loopzero-cloud/values.yaml
-      # CHG-2026-04-30-INFRA-PARITY / T1.3 — local registry override.
-{{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
-      - ../helm/loopzero-cloud/values-standalone-multi.yaml
-{{- end }}
+      - ../../charts/loopzero-cloud/values-bootstrap.yaml
       # Plan 2026-06-04-dev-public-docr-fix-forward T2.1 — env-specific
-      # overlay (DOCR :dev + do-registry pullSecret for cloud-local envs).
+      # overlay (image channel, pull secret, per-environment URLs).
       - values/{{ .Environment.Name }}/loopzero-cloud.yaml.gotmpl
       # T3.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
-      # Inline values overlay: when env yaml provides publicAuthUrl (the
-      # browser-facing Kratos host), override loopzero-cloud's KRATOS_PUBLIC_URL
-      # so cloud's /v1/auth/session/token uses the public URL when redirecting
-      # the browser back to Kratos. Similarly, BILLING_RETURN_URL drives Stripe
-      # checkout success_url back to the dashboard.
+      # When the environment provides publicAuthUrl (the browser-facing Kratos
+      # host), the cloud API redirects the browser back to Kratos through it
+      # (/v1/auth/session/token); uiBaseUrl is where Stripe checkout returns.
       # v1.1 EC-07: if-hasKey pattern (not | default) because empty string is
       # NOT treated as zero-value in Go templates.
-      - env:
+      - config:
 {{- if hasKey .Values "publicAuthUrl" }}
-          KRATOS_PUBLIC_URL: {{ .Values.publicAuthUrl | trimSuffix "/" | quote }}
+          kratosPublicUrl: {{ .Values.publicAuthUrl | trimSuffix "/" | quote }}
 {{- end }}
 {{- if hasKey .Values "uiBaseUrl" }}
-          BILLING_RETURN_URL: {{ .Values.uiBaseUrl | trimSuffix "/" | quote }}
+          billingReturnUrl: {{ .Values.uiBaseUrl | trimSuffix "/" | quote }}
 {{- end }}
 
   # Wave 90: Chaos engineering (active-execution-plan §3.A.4, iter 2)

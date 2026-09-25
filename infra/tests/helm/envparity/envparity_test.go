@@ -42,7 +42,6 @@ var parityCharts = []string{
 	"loopzero-api-published",
 	"loopzero-app-operator",
 	"loopzero-build-cwts",
-	"loopzero-cloud",
 	"loopzero-cloud-published",
 	"loopzero-crds",
 	"loopzero-dashboard",

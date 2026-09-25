@@ -1,7 +1,0 @@
-# CHG-2026-04-30-INFRA-PARITY / T1.3 — local registry override for standalone-multi
-# Production points to registry.digitalocean.com/loopzero-system/* (values.yaml).
-# In k3d standalone-multi, image lives in the in-cluster registry.
-image:
-  repository: k3d-loopzero-registry:5000/loopzero-cloud
-  tag: latest
-  pullPolicy: Always

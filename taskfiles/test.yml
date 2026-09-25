@@ -615,7 +615,9 @@ tasks:
       # Internal LoopZero charts (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5+).
       # Skip Traefik IngressRoute and ClusterImagePolicy CRDs (not in default schema).
       - helm template loopzero-api infra/helm/loopzero-api/ | kubeconform --strict --skip IngressRoute,Certificate --summary
-      - helm template loopzero-cloud infra/helm/loopzero-cloud/ | kubeconform --strict --skip IngressRoute,Certificate --summary
+      # loopzero-cloud is one chart (charts/), installed by Helmfile with its bootstrap values.
+      - helm dependency build charts/loopzero-cloud/ >/dev/null
+      - helm template loopzero-cloud charts/loopzero-cloud/ -f charts/loopzero-cloud/values-bootstrap.yaml | kubeconform --strict --skip IngressRoute,Certificate,ExternalSecret --summary
       # ADR-0023 / plan v1.1 T1.5: monolith charts deleted. The 4 split
       # operator charts live in charts/ (validated by validate:helm-charts target).
       - helm template cloudflared infra/helm/cloudflared/ | kubeconform --strict --summary
@@ -664,7 +666,7 @@ tasks:
     cmds:
       - |
         FAIL=0
-        for d in cloudflared cluster-issuer network-policies smoke-test loopzero-api loopzero-cloud; do
+        for d in cloudflared cluster-issuer network-policies smoke-test loopzero-api; do
           if ! helm lint infra/helm/$d/ >/dev/null 2>&1; then
             echo "FAIL  $d (helm lint)"; FAIL=$((FAIL+1)); continue
           fi
