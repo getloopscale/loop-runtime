@@ -203,11 +203,12 @@ func main() {
 
 		dh, cfZoneClient := setupDomains(stores, cfg, logger)
 		domainHandler = dh
+		readinessSource := setupReadinessSource(cfg, logger)
 
 		startLoopsElection(shutdownCtx, &bgWg, cfg, bgAdapter, logger, func(loopsCtx context.Context) {
 			startLeaderLoops(loopsCtx, &bgWg,
 				bgAdapter, bgStores, workflows, orchDeps, k8sDeps, cellRouter,
-				cfZoneClient, cfg, logger)
+				cfZoneClient, readinessSource, cfg, logger)
 		})
 	}
 	defer waitForBackgroundGoroutines(&bgWg, logger)

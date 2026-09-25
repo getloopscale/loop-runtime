@@ -17,6 +17,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
 	"github.com/getloopscale/loopzero/api/internal/domains/domainsadapter"
 	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
+	"github.com/getloopscale/loopzero/api/internal/environments"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 )
@@ -81,6 +82,22 @@ func setupDomains(stores *StoreDeps, cfg config.Config, logger *slog.Logger) (*d
 	return domainHandler, cfZoneClient
 }
 
+// setupReadinessSource builds the data-plane readiness poller's Prometheus
+// source when LOOPZERO_DATA_PLANE_POLLER_ENABLED is on, and refuses to start on a
+// source it cannot build: a poller silently absent leaves every dashboard
+// badge "Unknown" with no error anywhere.
+func setupReadinessSource(cfg config.Config, logger *slog.Logger) environments.ReplicasReadySource {
+	source, err := backgroundloops.NewReadinessSource(cfg)
+	if err != nil {
+		logger.Error("refusing to start", "error", err)
+		os.Exit(1)
+	}
+	if source != nil {
+		logger.Info("data-plane readiness poller enabled", "interval", cfg.DataPlanePollerInterval)
+	}
+	return source
+}
+
 // startLeaderLoops starts the background loop graph (backgroundloops.Build)
 // over the BACKGROUND pool, each loop bound to ctx: they stop when the
 // election cancels it (lease fenced or shutdown). `bgAdapter` and `stores`
@@ -95,24 +112,26 @@ func startLeaderLoops(
 	k8sDeps *K8sDeps,
 	cellRouter placement.Router,
 	cfZoneClient *cfzone.Client,
+	readinessSource environments.ReplicasReadySource,
 	cfg config.Config,
 	logger *slog.Logger,
 ) {
 	deps := backgroundloops.Deps{
-		WorkerPool:     bgAdapter,
-		BuildStore:     stores.BuildStore,
-		ReleaseStore:   stores.ReleaseStore,
-		EnvTargetStore: stores.EnvTargetStore,
-		EventStore:     stores.PgEventStore,
-		Locker:         stores.Locker,
-		DomainStore:    stores.DomainStore,
-		CellStore:      stores.CellStore,
-		AppCR:          k8sDeps.AppCRMgr,
-		Workflow:       workflows.WorkflowSubmitter,
-		Sync:           workflows.SyncClient,
-		GitOps:         workflows.GitOpsPusher,
-		Orchestrator:   orchDeps.Orchestrator,
-		CFZone:         cfZoneClient,
+		WorkerPool:      bgAdapter,
+		BuildStore:      stores.BuildStore,
+		ReleaseStore:    stores.ReleaseStore,
+		EnvTargetStore:  stores.EnvTargetStore,
+		EventStore:      stores.PgEventStore,
+		Locker:          stores.Locker,
+		DomainStore:     stores.DomainStore,
+		CellStore:       stores.CellStore,
+		AppCR:           k8sDeps.AppCRMgr,
+		Workflow:        workflows.WorkflowSubmitter,
+		Sync:            workflows.SyncClient,
+		GitOps:          workflows.GitOpsPusher,
+		Orchestrator:    orchDeps.Orchestrator,
+		CFZone:          cfZoneClient,
+		ReadinessSource: readinessSource,
 	}
 	if lister, ok := cellRouter.(deploycontracts.CellLister); ok {
 		deps.CellLister = lister

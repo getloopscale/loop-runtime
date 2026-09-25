@@ -272,9 +272,9 @@ type ProjectSummary struct {
 	// LastReplicasReadyValue + LastReplicasReadyAt — T3.2 of plan
 	// dashboard-badge-data-plane-poller closing Red Team loopzero-cloud#128
 	// (badge lies "Live" when control-plane ACTIVE + data-plane 502).
-	// The DataPlanePoller Runnable in loopzero-app-operator scrapes
-	// kube_deployment_status_replicas_ready per (tenant,project,env)
-	// tuple and UPDATEs environment_targets on each tick. Surfaced here
+	// The api's readiness poller (environments.ReadinessPoller) reads
+	// ready replicas per (tenant,project,env) from Prometheus and
+	// records them in environment_targets on each tick. Surfaced here
 	// via the ListProjectsWithSummaryByTenant LATERAL join for the
 	// permanent (production-flavor) env. Nil means no snapshot yet —
 	// the dashboard maps NULL to the honest "Unknown" state per EC-7

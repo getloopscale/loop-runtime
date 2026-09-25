@@ -40,6 +40,42 @@ meeting date is not the meeting.
 | 2026-05-29 | **Adopt sqlc as the canonical database access layer**, replacing hand-rolled pgx. |
 | 2026-05-29 | **Render `schema.gen.sql` by replaying golang-migrate against an ephemeral PostgreSQL 16**; golang-migrate stays the canonical migrator. |
 | 2026-05-29 | **sqlc migration rollback playbook** — operator-witnessed criteria plus an atomic rollback mechanism. |
+| 2026-09-25 | **Only the api writes the api's tables — the data-plane readiness poller moves from loopzero-app-operator into the api.** Full record below the table. |
+
+**Only the api writes the api's tables** (2026-09-25).
+
+The dashboard's project badge reads `environment_targets.last_replicas_ready_{value,at}`. The
+app-operator filled them: a leader-elected Runnable queried Prometheus and ran `UPDATE
+environment_targets` over a DSN of its own (`LOOPZERO_DATA_PLANE_POLLER_PG_URL`, a plaintext
+password in the dev-public ConfigMap). A workload controller depended on another component's
+table layout with no contract; a schema change in `api` broke it at runtime only, and a
+cross-tenant `UPDATE` under a role other than `loopzero_worker` succeeds only if that role
+bypasses the table's tenant-isolation policy.
+
+*Decision.* The poller is an api background loop (`environments.ReadinessPoller`), started by
+`backgroundloops.Build` on the elected leader in either binary. It reads Prometheus through
+`environmentsadapter.PrometheusReplicasReadySource` and writes through a sqlc query on the
+background pool. The operator has no database access at all. Configuration moved with it:
+`dataPlanePoller.{enabled,prometheusUrl,interval}` on `charts/loopzero-api`, same
+`LOOPZERO_DATA_PLANE_POLLER_*` keys, no DSN.
+
+*No environment lock.* The write touches only the two observation columns, never the release
+pointers `withEnvironmentLock` guards, so it cannot interleave with a deploy mutation beyond
+the row lock Postgres already takes.
+
+*What was rejected.*
+- *The operator reports through a CR's status and the api copies it.* The only CR keyed by
+  (tenant, project, environment) is `Environment`, whose status has one writer, the environment
+  controller; a second writer breaks the single-status-writer invariant. The api would also
+  need an informer to copy the status back into the table the dashboard query joins.
+- *An internal authenticated api endpoint the operator calls.* No operator calls the api
+  today: it would add a service identity, key distribution and an operator → api network
+  dependency, all to relay a Prometheus reading the api can take itself.
+
+**Who is affected.** Operators of an install that enabled `dataPlanePoller` on
+`loopzero-app-operator`: the block now lives on `loopzero-api`, without `pgUrl`. **What would break.**
+Nothing at the badge; a values file still setting `dataPlanePoller` on `loopzero-app-operator`
+fails that chart's schema, so the move cannot be missed silently.
 
 ### Deploy model
 

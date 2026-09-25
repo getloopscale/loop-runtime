@@ -100,3 +100,14 @@ ORDER BY environment;
 -- preview rows on PR close. Idempotent (DELETE matches 0 or 1 row).
 DELETE FROM environment_targets
 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND kind = $4;
+
+-- name: RecordEnvironmentTargetReplicasReady :execrows
+-- Data-plane readiness snapshot written by the api's readiness poller
+-- (environments.ReadinessPoller) from Prometheus. Touches ONLY the two
+-- observation columns the dashboard badge reads, so it never contends with
+-- the release pointers the env lock guards. Zero rows affected means the
+-- (tenant, project, environment) has no target row — the caller reports it.
+-- Cross-tenant by design: runs on the background (loopzero_worker) pool.
+UPDATE environment_targets
+SET last_replicas_ready_value = $1, last_replicas_ready_at = $2
+WHERE tenant_id = $3 AND project_id = $4 AND environment = $5;

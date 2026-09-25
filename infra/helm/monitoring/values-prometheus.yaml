@@ -133,8 +133,8 @@ extraScrapeConfigs: |
   # Native Prometheus feature (scrape_configs, parsimony rung 3).
   # Without this the mgmt Prometheus has NO visibility into tenant
   # workload Deployments, so `kube_deployment_status_replicas_ready`
-  # returns an empty vector and the DataPlanePoller writes zero rows
-  # to env_targets. Address `k3d-loopzero-cell-0-server-0:30030` is the
+  # returns an empty vector and the api's readiness poller writes zero
+  # rows to env_targets. Address `k3d-loopzero-cell-0-server-0:30030` is the
   # NodePort exposed by the workload monitoring chart; resolves via
   # the CoreDNS NodeHosts patch shipped by
   # `loopzero-ops seed networking-cross-cluster-coredns` (M15 W3).

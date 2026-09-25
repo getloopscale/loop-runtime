@@ -348,6 +348,26 @@ metrics:
     # target labels Prometheus attaches; false renames the clash to exported_<label>.
     honorLabels: false
 
+# dataPlanePoller — the api's readiness poller (Red Team loopzero-cloud#128).
+# When enabled, the elected api leader queries Prometheus every `interval`
+# for the ready replicas of every tenant environment and records them in
+# environment_targets, which the dashboard's /projects badge reads to tell a
+# deploy that is serving from one that is down. The api owns that table; the
+# poller moved here from loopzero-app-operator so no other component writes it.
+#
+# Injected into the ConfigMap as LOOPZERO_DATA_PLANE_POLLER_*; the binary refuses
+# to start when enabled without an absolute http(s) prometheusUrl. The
+# loopzero-common NetworkPolicy helper adds the monitoring/prometheus:9090 egress
+# rule when enabled is true.
+dataPlanePoller:
+  enabled: false
+  # Prometheus base URL reachable from the api pod — the one scraping the
+  # cells' kube-state-metrics (e.g.
+  # http://prometheus-server.monitoring.svc.cluster.local:80).
+  prometheusUrl: ""
+  # Scrape cadence, a Go duration.
+  interval: "30s"
+
 networkPolicy:
   enabled: true
   ingress:

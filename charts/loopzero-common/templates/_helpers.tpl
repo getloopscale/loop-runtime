@@ -628,7 +628,8 @@ spec:
     {{- /* T2.2 of plan dashboard-badge-data-plane-poller (Red Team #128).
            When the consuming chart declares dataPlanePoller.enabled=true,
            implicitly add the Prometheus egress rule the poller needs so
-           the operator does not need to duplicate it in every values file.
+           no values file has to duplicate it. loopzero-api is the one chart
+           that declares it (the poller moved there from loopzero-app-operator).
            `and` short-circuits on charts that do not declare
            .Values.dataPlanePoller at all — no leakage. */}}
     {{- if and .Values.dataPlanePoller .Values.dataPlanePoller.enabled }}

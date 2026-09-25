@@ -5,6 +5,7 @@ package backgroundloops
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -17,6 +18,8 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/domains"
 	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
 	"github.com/getloopscale/loopzero/api/internal/domains/domainsadapter"
+	"github.com/getloopscale/loopzero/api/internal/environments"
+	"github.com/getloopscale/loopzero/api/internal/environments/environmentsadapter"
 	"github.com/getloopscale/loopzero/api/internal/gitops"
 	"github.com/getloopscale/loopzero/api/internal/lock"
 	"github.com/getloopscale/loopzero/api/internal/middleware/policy"
@@ -63,6 +66,11 @@ type Deps struct {
 	CellLister deploycontracts.CellLister
 	CFZone     *cfzone.Client
 
+	// ReadinessSource observes the data plane for the readiness poller that
+	// feeds the dashboard's project badge. Optional: nil (the default, and
+	// what LOOPZERO_DATA_PLANE_POLLER_ENABLED=false wires) runs no poller.
+	ReadinessSource environments.ReplicasReadySource
+
 	// CellID scopes the build/release loops to one cell (the controller's
 	// LOOPZERO_CELL_ID). Empty means every cell, and no per-cell concurrency cap.
 	CellID string
@@ -88,6 +96,10 @@ func Build(cfg config.Config, d Deps, logger *slog.Logger) []Loop {
 	}
 	if d.CellLister != nil {
 		loops = append(loops, Loop{"orphan-detector", placement.NewOrphanDetector(d.CellLister, d.CellStore, logger, 60*time.Second).Start})
+	}
+	if d.ReadinessSource != nil {
+		loops = append(loops, Loop{"data-plane-readiness-poller",
+			environments.NewReadinessPoller(d.ReadinessSource, d.EnvTargetStore, cfg.DataPlanePollerInterval, logger).Start})
 	}
 	return loops
 }
@@ -183,6 +195,21 @@ func newDomainHealthChecker(cfg config.Config, d Deps, logger *slog.Logger) *dom
 		GraceDays:   14,
 		StaleDays:   7,
 	})
+}
+
+// NewReadinessSource builds the data-plane observation the readiness poller
+// needs, or returns nil when LOOPZERO_DATA_PLANE_POLLER_ENABLED is off. Both
+// binaries call it and refuse to start on its error, the same way they
+// refuse an invalid configuration.
+func NewReadinessSource(cfg config.Config) (environments.ReplicasReadySource, error) {
+	if !cfg.DataPlanePollerEnabled {
+		return nil, nil
+	}
+	source, err := environmentsadapter.NewPrometheusReplicasReadySource(cfg.DataPlanePollerPrometheusURL)
+	if err != nil {
+		return nil, fmt.Errorf("data-plane readiness poller: %w", err)
+	}
+	return source, nil
 }
 
 // CNAMETarget is the hostname custom domains must CNAME to.

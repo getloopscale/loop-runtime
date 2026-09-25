@@ -95,3 +95,12 @@ config:
   # Mirrors the preview split above; single source of truth is pkg/naming.AppURL.
   baseDomain: "loopzero.local"
   loopzeroPublicDomain: "prod-dev.loopzero.example"
+
+# The readiness poller behind the dashboard's /projects badge (Red Team #128) runs in
+# the api, which owns environment_targets. It queries the core Prometheus, which
+# scrapes the cells' kube-state-metrics; the loopzero-common NetworkPolicy helper adds
+# the monitoring/prometheus:9090 egress rule when enabled.
+dataPlanePoller:
+  enabled: true
+  prometheusUrl: "http://prometheus-server.monitoring.svc.cluster.local:80"
+  interval: "30s"

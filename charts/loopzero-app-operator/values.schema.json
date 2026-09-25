@@ -228,25 +228,6 @@
     "cell0KubeconfigMount": {
       "type": "object"
     },
-    "dataPlanePoller": {
-      "type": "object",
-      "description": "T2.2 of plan dashboard-badge-data-plane-poller (Red Team #128). When enabled, the operator registers a Prometheus scrape Runnable that persists per-(tenant,project,env) readiness snapshots into env_targets. Off by default.",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "pgUrl": {
-          "type": "string"
-        },
-        "prometheusUrl": {
-          "type": "string"
-        },
-        "interval": {
-          "type": "string"
-        }
-      }
-    },
     "startupProbe": {
       "type": "object"
     },

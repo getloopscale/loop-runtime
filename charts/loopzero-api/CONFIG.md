@@ -49,6 +49,9 @@ This table is **set-equal** to the rendered ConfigMap keys (hermetic Go guard `T
 | `LOOPZERO_PUBLIC_DOMAIN` | (empty) | N | public-url | app wildcard public domain |
 | `LOOPZERO_CLUSTER_ISSUER` | `letsencrypt-prod` | Y | - | cert-manager ClusterIssuer (required prod) |
 | `LOOPZERO_PROMETHEUS_ADDRESS` | (empty) | N | internal-url | Prometheus URL for canary analysis |
+| `LOOPZERO_DATA_PLANE_POLLER_ENABLED` | `false` | N | - | record per-environment ready replicas for the dashboard badge (#128) |
+| `LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL` | (empty) | N | internal-url | Prometheus the readiness poller queries (absolute http(s) URL) |
+| `LOOPZERO_DATA_PLANE_POLLER_INTERVAL` | `30s` | N | - | readiness poller cadence |
 | `LOKI_URL` | `http://loki.monitoring:3100` | N | internal-url | Loki push URL |
 | `LOOPZERO_GRAFANA_BASE_URL` | (empty) | N | public-url | Grafana deep-link root |
 | `GITHUB_APP_ID` | (empty) | N | - | GitHub App ID |

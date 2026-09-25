@@ -144,34 +144,6 @@ nodeSelector: {}
 # from the cluster Secret. Default disabled — production cells set this to
 # true once the loopzero-cluster-kubeconfigs Secret is available, then bump
 # requireRunning=true to enforce fail-fast (ADR D3).
-# dataPlanePoller — T2.2 of plan dashboard-badge-data-plane-poller
-# (Red Team loopzero-cloud#128). When enabled, the app-operator registers a
-# manager.Runnable that scrapes kube_deployment_status_replicas_ready
-# from Prometheus every `interval` and persists per-(tenant, project, env)
-# snapshots into env_targets. Consumed by ListProjectsWithSummaryByTenant
-# LATERAL JOIN so the /projects list badge is data-plane-aware.
-#
-# Injected into the operator ConfigMap (envFrom) — the 4 keys are
-# ALWAYS present with defaults, so the CONFIG.md ↔ ConfigMap
-# set-equality gate is satisfied. Runtime fail-fast lives in the
-# binary (`operators/cmd/app-operator/main.go`): when ENABLED=true,
-# missing PG_URL / PROMETHEUS_URL exits non-zero.
-#
-# The chart's NetworkPolicy auto-adds `monitoring/prometheus:9090`
-# egress when this block sets `enabled: true` (see the loopzero-common
-# helper).
-dataPlanePoller:
-  enabled: false
-  # PG DSN for the LATERAL-JOIN table (env_targets). Same DB the engine
-  # uses; the poller UPDATEs env_targets.last_replicas_ready_{value,at}.
-  pgUrl: ""
-  # Prometheus base URL — the operator posts to `${prometheusUrl}/api/v1/query`.
-  # Typically the cluster-internal service DNS + port (e.g.
-  # `http://prometheus-server.monitoring.svc.cluster.local:80`).
-  prometheusUrl: ""
-  # Scrape cadence. 30s is the canonical default (blueprint Q6 + EC-7).
-  interval: "30s"
-
 cell0KubeconfigMount:
   # Flipped on 2026-08-09. It had been `false` since T1.4a of the deep-review-remediation-plan,
   # which left the mount default-off for a gradual rollout — and the flip never happened.

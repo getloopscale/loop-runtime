@@ -112,6 +112,11 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	if cfg.CFZoneManagement {
 		deps.CFZone = cfzone.NewClient(cfg.CFAccountID, cfg.CFAPIToken)
 	}
+	readinessSource, err := backgroundloops.NewReadinessSource(cfg)
+	if err != nil {
+		return nil, err
+	}
+	deps.ReadinessSource = readinessSource
 	return backgroundloops.Build(cfg, deps, logger), nil
 }
 

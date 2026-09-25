@@ -36,6 +36,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
@@ -245,4 +246,27 @@ func generatedEnvTargetToEnvTarget(row generated.EnvironmentTarget) *Environment
 		t.UpdatedAt = row.UpdatedAt.Time
 	}
 	return t
+}
+
+// RecordReplicasReady writes the data-plane readiness snapshot of one
+// (tenant, project, environment): the ready replica count and when it was
+// observed. It touches only those two observation columns — never the
+// release pointers the environment lock guards — so it runs outside the
+// lock. found is false when no target row matches, which the caller must
+// report: a snapshot that is never written silently goes stale.
+//
+// Cross-tenant: build the store on the background (loopzero_worker) pool.
+func (s *PostgresEnvironmentTargetStore) RecordReplicasReady(ctx context.Context, tenantID, projectID, env string, replicasReady int32, at time.Time) (found bool, err error) {
+	q := generated.New()
+	rows, err := q.RecordEnvironmentTargetReplicasReady(ctx, s.resolveSqlcDBTX(nil), generated.RecordEnvironmentTargetReplicasReadyParams{
+		LastReplicasReadyValue: &replicasReady,
+		LastReplicasReadyAt:    dbconv.TimeToTimestamptz(at),
+		TenantID:               tenantID,
+		ProjectID:              projectID,
+		Environment:            env,
+	})
+	if err != nil {
+		return false, fmt.Errorf("environment target store: record replicas ready for %s/%s/%s: %w", tenantID, projectID, env, err)
+	}
+	return rows > 0, nil
 }

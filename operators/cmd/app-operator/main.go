@@ -7,18 +7,11 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"flag"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/go-logr/logr"
-	// pgx stdlib driver — registered on import; used only when the data-plane
-	// poller is enabled (default OFF). Zero runtime cost for legacy operators.
-	_ "github.com/jackc/pgx/v5/stdlib"
-	promapi "github.com/prometheus/client_golang/api"
-	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -154,52 +147,6 @@ func main() {
 	}); err != nil {
 		setupLog.Error(err, "unable to setup ExposureController")
 		os.Exit(1)
-	}
-
-	// T2.2 of plan dashboard-badge-data-plane-poller — closes Red Team
-	// loopzero-cloud#128. Opt-in periodic Prometheus scrape that persists
-	// per-(tenant, project, environment) readiness snapshots into
-	// env_targets. See operators/internal/app/data_plane_poller.go.
-	//
-	// Env gate (default OFF): registering the Runnable is an operator
-	// decision because it introduces PG + Prometheus dependencies that
-	// legacy app-operator deployments don't need.
-	//
-	// When LOOPZERO_DATA_PLANE_POLLER_ENABLED=true, LOOPZERO_DATA_PLANE_POLLER_PG_URL
-	// and LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL become MANDATORY — refusing
-	// to start on missing config is the honest signal (fail-fast, no
-	// silent no-op that would hide misconfiguration).
-	//
-	// LOOPZERO_DATA_PLANE_POLLER_INTERVAL controls the scrape cadence; 30s is
-	// the canonical default (blueprint Q6 + EC-7 no-flicker headroom).
-	if os.Getenv("LOOPZERO_DATA_PLANE_POLLER_ENABLED") == "true" {
-		pgURL := os.Getenv("LOOPZERO_DATA_PLANE_POLLER_PG_URL")
-		promURL := os.Getenv("LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL")
-		if pgURL == "" || promURL == "" {
-			setupLog.Error(nil, "LOOPZERO_DATA_PLANE_POLLER_ENABLED=true but PG_URL / PROMETHEUS_URL missing — refusing to start")
-			os.Exit(1)
-		}
-		interval, err := operatorboot.PositiveDuration(os.Getenv, "LOOPZERO_DATA_PLANE_POLLER_INTERVAL", 30*time.Second)
-		if err != nil {
-			setupLog.Error(err, "data-plane-poller: invalid interval — refusing to start")
-			os.Exit(1)
-		}
-		db, err := sql.Open("pgx", pgURL)
-		if err != nil {
-			setupLog.Error(err, "data-plane-poller: sql.Open failed — refusing to start")
-			os.Exit(1)
-		}
-		promClient, err := promapi.NewClient(promapi.Config{Address: promURL})
-		if err != nil {
-			setupLog.Error(err, "data-plane-poller: prom client init failed — refusing to start")
-			os.Exit(1)
-		}
-		poller := app.NewDataPlanePoller(&app.PromV1Adapter{API: promv1.NewAPI(promClient)}, app.NewPostgresReadinessSink(db), interval, nil)
-		if err := mgr.Add(poller); err != nil {
-			setupLog.Error(err, "data-plane-poller: mgr.Add failed — refusing to start")
-			os.Exit(1)
-		}
-		setupLog.Info("data-plane-poller: enabled", "interval", interval)
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

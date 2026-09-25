@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -222,6 +223,16 @@ type Config struct {
 	// contingency: fit 100 apps in the DO dev runtime cluster). Off by
 	// default; LOOPZERO_LEAN_RESOURCES "true" or "1" turns it on.
 	LeanResources bool
+
+	// Data-plane readiness poller (environments.ReadinessPoller,
+	// loopzero-cloud#128): records per-environment ready replicas for the
+	// dashboard badge. Off unless LOOPZERO_DATA_PLANE_POLLER_ENABLED; when on,
+	// DataPlanePollerPrometheusURL is the Prometheus the api queries — the
+	// one holding kube-state-metrics for the cells, reachable from the api
+	// pod (unlike PrometheusAddress, which workload pods must reach).
+	DataPlanePollerEnabled       bool
+	DataPlanePollerPrometheusURL string
+	DataPlanePollerInterval      time.Duration
 
 	// Credentials (read from env vars or K8s secrets)
 	GiteaToken          string
@@ -494,6 +505,10 @@ func Load() Config {
 		ProgressiveDelivery:   progressiveDeliveryEnabled(os.Getenv("LOOPZERO_PROGRESSIVE_DELIVERY")),
 		LeanResources:         leanResourcesEnabled(os.Getenv("LOOPZERO_LEAN_RESOURCES")),
 
+		DataPlanePollerEnabled:       envBool("LOOPZERO_DATA_PLANE_POLLER_ENABLED", false),
+		DataPlanePollerPrometheusURL: os.Getenv("LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL"),
+		DataPlanePollerInterval:      l.duration("LOOPZERO_DATA_PLANE_POLLER_INTERVAL", 30*time.Second),
+
 		// Credentials
 		GiteaToken:          os.Getenv("GITEA_TOKEN"),
 		ArgocdToken:         os.Getenv("ARGOCD_TOKEN"),
@@ -676,11 +691,34 @@ func (c Config) Validate() error {
 	if err := c.validateDatabaseSSL(); err != nil {
 		return err
 	}
+	if err := c.validateDataPlanePoller(); err != nil {
+		return err
+	}
 	c.logFeatureGates()
 	if err := c.validateOpenBaoTransit(); err != nil {
 		return err
 	}
 	c.logCryptoMode()
+	return nil
+}
+
+// validateDataPlanePoller refuses an enabled readiness poller it could not
+// run: no Prometheus, a Prometheus address that is not an absolute http(s)
+// URL, or an interval that would never tick.
+func (c Config) validateDataPlanePoller() error {
+	if !c.DataPlanePollerEnabled {
+		return nil
+	}
+	if c.DataPlanePollerPrometheusURL == "" {
+		return fmt.Errorf("LOOPZERO_DATA_PLANE_POLLER_ENABLED=true requires LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL")
+	}
+	u, err := url.Parse(c.DataPlanePollerPrometheusURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Errorf("LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL=%q must be an absolute http(s) URL", c.DataPlanePollerPrometheusURL)
+	}
+	if c.DataPlanePollerInterval <= 0 {
+		return fmt.Errorf("LOOPZERO_DATA_PLANE_POLLER_INTERVAL=%s must be positive", c.DataPlanePollerInterval)
+	}
 	return nil
 }
 

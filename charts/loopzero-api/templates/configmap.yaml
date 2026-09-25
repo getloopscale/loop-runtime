@@ -47,6 +47,9 @@ data:
   LOOPZERO_PUBLIC_DOMAIN: {{ .Values.config.loopzeroPublicDomain | quote }}
   LOOPZERO_CLUSTER_ISSUER: {{ .Values.config.loopzeroClusterIssuer | quote }}
   LOOPZERO_PROMETHEUS_ADDRESS: {{ .Values.config.loopzeroPrometheusAddress | quote }}
+  LOOPZERO_DATA_PLANE_POLLER_ENABLED: {{ .Values.dataPlanePoller.enabled | quote }}
+  LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL: {{ .Values.dataPlanePoller.prometheusUrl | quote }}
+  LOOPZERO_DATA_PLANE_POLLER_INTERVAL: {{ .Values.dataPlanePoller.interval | quote }}
   LOKI_URL: {{ .Values.config.lokiUrl | quote }}
   LOOPZERO_GRAFANA_BASE_URL: {{ .Values.config.loopzeroGrafanaBaseUrl | quote }}
   GITHUB_APP_ID: {{ .Values.config.githubAppId | quote }}

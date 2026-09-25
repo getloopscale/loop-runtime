@@ -309,13 +309,13 @@ run_step "15c-seed-stripe-webhook-endpoint" "(cd $REPO_ROOT/cmd/loopzero-ops && 
 # (dev-public: enabled=true; standalone-multi: not declared → treated
 # as disabled). Legacy shell-env override kept for local dev workflows.
 POLLER_ENABLED_CFG="$(kubectl --context "${CORE_CONTEXT:-k3d-loopzero-core}" \
-  -n loopzero-system get configmap loopzero-app-operator \
+  -n loopzero-system get configmap loopzero-api \
   -o jsonpath='{.data.LOOPZERO_DATA_PLANE_POLLER_ENABLED}' 2>/dev/null || true)"
 if [[ "${LOOPZERO_DATA_PLANE_POLLER_ENABLED:-$POLLER_ENABLED_CFG}" == "true" ]]; then
   POLLER_WARMUP_S="${LOOPZERO_DATA_PLANE_POLLER_WARMUP_S:-45}"
   run_step "16-data-plane-poller-first-tick" "sleep $POLLER_WARMUP_S && log '   data-plane poller warmed up (${POLLER_WARMUP_S}s wait)' && true"
 else
-  skip_step "16-data-plane-poller-first-tick" "skipped — loopzero-app-operator ConfigMap has LOOPZERO_DATA_PLANE_POLLER_ENABLED='${POLLER_ENABLED_CFG:-<absent>}' (poller not wired for this env)"
+  skip_step "16-data-plane-poller-first-tick" "skipped — loopzero-api ConfigMap has LOOPZERO_DATA_PLANE_POLLER_ENABLED='${POLLER_ENABLED_CFG:-<absent>}' (poller not wired for this env)"
 fi
 
 # Step 17 (NEW 2026-07-14) — data-plane host + edge fail-closed probes.

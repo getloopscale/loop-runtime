@@ -592,6 +592,23 @@
     "metrics": {
       "type": "object"
     },
+    "dataPlanePoller": {
+      "type": "object",
+      "description": "Readiness poller (Red Team loopzero-cloud#128): the elected api leader records per-environment ready replicas from Prometheus into environment_targets for the dashboard badge. Off by default.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "prometheusUrl": {
+          "type": "string"
+        },
+        "interval": {
+          "type": "string",
+          "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+        }
+      }
+    },
     "networkPolicy": {
       "type": "object"
     },

@@ -120,8 +120,8 @@ SELECT
   COALESCE(active_release.status, '')::text AS active_release_status_raw,
   -- T3.1 of plan dashboard-badge-data-plane-poller — closes Red Team
   -- loopzero-cloud#128. Surfaces the most recent data-plane readiness
-  -- snapshot persisted by the DataPlanePoller (Runnable in
-  -- loopzero-app-operator) into the dashboard /projects list so the badge
+  -- snapshot persisted by the api's readiness poller
+  -- (environments.ReadinessPoller) into the dashboard /projects list so the badge
   -- can distinguish control-plane ACTIVE + data-plane-serving from
   -- control-plane ACTIVE + data-plane-down. Prefers `kind='permanent'`
   -- env_targets (production-flavor) because the badge on the list is

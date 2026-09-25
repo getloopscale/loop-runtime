@@ -13,6 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/environments"
 )
 
 type stubCellLister struct{}
@@ -58,6 +59,40 @@ func TestBuildAddsOrphanDetectorOnlyWithACellLister(t *testing.T) {
 	// Assert
 	if !slices.Contains(names, "orphan-detector") {
 		t.Fatalf("loops = %v, want orphan-detector when a CellLister is wired", names)
+	}
+}
+
+type stubReadinessSource struct{}
+
+func (stubReadinessSource) ReplicasReady(context.Context) ([]environments.ReplicasReadySample, error) {
+	return nil, nil
+}
+
+func TestBuildAddsTheReadinessPollerOnlyWithAReadinessSource(t *testing.T) {
+	// Arrange / Act
+	without := loopNames(buildWith(t, Deps{}))
+	with := loopNames(buildWith(t, Deps{ReadinessSource: stubReadinessSource{}}))
+
+	// Assert
+	if slices.Contains(without, "data-plane-readiness-poller") {
+		t.Errorf("loops without a source = %v, want no readiness poller", without)
+	}
+	if !slices.Contains(with, "data-plane-readiness-poller") {
+		t.Errorf("loops with a source = %v, want the readiness poller", with)
+	}
+}
+
+func TestNewReadinessSourceIsNilWhenThePollerIsOff(t *testing.T) {
+	source, err := NewReadinessSource(config.Config{})
+	if err != nil || source != nil {
+		t.Fatalf("NewReadinessSource = (%v, %v), want (nil, nil)", source, err)
+	}
+}
+
+func TestNewReadinessSourceBuildsAPrometheusSourceWhenThePollerIsOn(t *testing.T) {
+	source, err := NewReadinessSource(config.Config{DataPlanePollerEnabled: true, DataPlanePollerPrometheusURL: "http://prometheus:9090"})
+	if err != nil || source == nil {
+		t.Fatalf("NewReadinessSource = (%v, %v), want a source", source, err)
 	}
 }
 

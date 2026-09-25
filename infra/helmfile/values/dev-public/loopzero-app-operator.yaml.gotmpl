@@ -19,16 +19,6 @@ config:
   # Chart requires explicit baseDomain (no env-helmfile auto-injection).
   baseDomain: "{{ .Values.domain }}"
 
-# T2.2 of plan dashboard-badge-data-plane-poller (Red Team #128).
-# dev-public wires the poller at the cluster-internal Prometheus service.
-# The chart auto-adds the Prometheus egress rule when enabled=true —
-# no need to duplicate here (see loopzero-common.networkpolicy helper).
-dataPlanePoller:
-  enabled: true
-  pgUrl: "postgresql://loopzero:loopzero-dev-password@postgresql.loopzero-system.svc.cluster.local:5432/loopzero?sslmode=disable"
-  prometheusUrl: "http://prometheus-server.monitoring.svc.cluster.local:80"
-  interval: "30s"
-
 # dev-public NetworkPolicy override: gitea is in loopzero-system ns (not the
 # chart-default `gitea` ns). Same fix as loopzero-tenant-operator. Without
 # this, operator egress to gitea API is blocked → reconcile loops fail.

@@ -5,7 +5,6 @@ package operatorboot
 
 import (
 	"testing"
-	"time"
 )
 
 func envOf(m map[string]string) func(string) string {
@@ -32,23 +31,6 @@ func TestPositiveInt_RefusesMalformedAndNonPositiveValues(t *testing.T) {
 	for _, raw := range []string{"five", "0", "-3", "1.5"} {
 		if _, err := PositiveInt(envOf(map[string]string{"N": raw}), "N", 5); err == nil {
 			t.Errorf("PositiveInt(%q) accepted", raw)
-		}
-	}
-}
-
-func TestPositiveDuration_ReadsAndDefaults(t *testing.T) {
-	if got, err := PositiveDuration(envOf(nil), "D", 30*time.Second); err != nil || got != 30*time.Second {
-		t.Fatalf("unset: got (%v, %v)", got, err)
-	}
-	if got, err := PositiveDuration(envOf(map[string]string{"D": "45s"}), "D", 30*time.Second); err != nil || got != 45*time.Second {
-		t.Fatalf("45s: got (%v, %v)", got, err)
-	}
-}
-
-func TestPositiveDuration_RefusesMalformedAndNonPositiveValues(t *testing.T) {
-	for _, raw := range []string{"30", "soon", "0s", "-1m"} {
-		if _, err := PositiveDuration(envOf(map[string]string{"D": raw}), "D", time.Second); err == nil {
-			t.Errorf("PositiveDuration(%q) accepted", raw)
 		}
 	}
 }
