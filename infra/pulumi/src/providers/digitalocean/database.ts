@@ -60,14 +60,6 @@ export class DigitalOceanDatabaseProvider implements IProviderDatabase {
       name: "hydra",
     });
 
-    // Harbor container registry — used when Harbor is deployed as the tenant
-    // image registry (see harbor-bootstrap.ts). Harbor hardcodes the name
-    // "harbor_db" in its configuration.
-    new digitalocean.DatabaseDb(`${spec.name}-harbor`, {
-      clusterId: cluster.id,
-      name: "harbor_db",
-    });
-
     // Firewall: allow only specified K8s clusters to connect.
     // Without this, the DB is unreachable from all pods (connection timeout on port 25060).
     // This is critical for idempotency — destroy+recreate must re-add firewall rules.

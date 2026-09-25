@@ -12,9 +12,9 @@ import { DigitalOceanRegistryProvider } from "./registry";
  * DigitalOcean provider factory — fully functional.
  *
  * Each capability is delegated to a focused provider class (SRP). Some
- * DigitalOcean resources are built directly by the components that need them
- * (e.g. components/mgmt-redis-ha.ts), so this factory is the common path, not
- * an isolation boundary for @pulumi/digitalocean.
+ * DigitalOcean resources are built directly by the components that need them,
+ * so this factory is the common path, not an isolation boundary for
+ * @pulumi/digitalocean.
  */
 export class DigitalOceanProviderFactory implements CloudProviderFactory {
   private readonly network = new DigitalOceanNetworkProvider();

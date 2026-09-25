@@ -346,7 +346,7 @@ new digitalocean.DatabaseFirewall("drill-pg-firewall", {
 });
 
 // =============================================================================
-// 7. Managed Valkey/Redis (Bug #15 LIVE fix — mirror infra/pulumi/src/components/mgmt-redis-ha.ts)
+// 7. Managed Valkey/Redis (Bug #15 LIVE fix)
 // =============================================================================
 //
 // Per ADR-0016 D-6 + CTO Golden Rule #0 ("ambiente local fidedigno ao prod"):
@@ -374,7 +374,7 @@ const drillRedis = new LoopZeroManagedDb("drill-redis", {
   clusterName: `${doProject}-redis`,
   engine: "valkey",
   version: "8",
-  size: "db-amd-1vcpu-2gb", // non-prod tier (mirrors mgmt-redis-ha.ts:45 non-prod)
+  size: "db-amd-1vcpu-2gb", // non-prod tier
   region,
   nodeCount: 1,
   privateNetworkUuid: drillVpc.id,
@@ -382,7 +382,7 @@ const drillRedis = new LoopZeroManagedDb("drill-redis", {
 });
 
 // Firewall: same 4 DOKS clusters as drill-pg (mgmt needs Redis for gitea
-// cache/session/queue + harbor sessions; build/runtime currently don't but
+// cache/session/queue; build/runtime currently don't but
 // kept symmetric for future hardening + zero added cost since rules are free).
 new digitalocean.DatabaseFirewall("drill-redis-firewall", {
   clusterId: drillRedis.id,
@@ -452,9 +452,8 @@ export const pgPort = drillPG.port;
 export const pgDatabase = drillPG.database;
 
 // Shared infrastructure — Managed Valkey/Redis (Bug #15 LIVE fix)
-// Mirrors prod precedent infra/pulumi/src/components/mgmt-redis-ha.ts:65-69.
-// Used by gitea (cache/session/queue) + harbor (sessions/queue/cache) via
-// drill-helmfile-bootstrap.sh exporting LOOPZERO_*_REDIS_HOST/PASSWORD env vars.
+// Used by gitea (cache/session/queue) via drill-helmfile-bootstrap.sh
+// exporting GITEA_REDIS_HOST/PORT/PASSWORD env vars.
 // privateHost ensures DOKS pods reach Valkey via internal VPC (10.40.0.0/16),
 // NOT public internet (would require explicit firewall allow per IP).
 export const redisHost = drillRedis.privateHost;

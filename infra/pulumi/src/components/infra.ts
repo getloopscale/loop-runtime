@@ -9,7 +9,6 @@ import { CloudProvider } from "../core/types";
 import { CloudProviderFactory } from "../contracts/provider";
 import { DatabaseClusterOutput } from "../contracts/database";
 import { DigitalOceanProviderFactory } from "../providers/digitalocean";
-import { HarborRegistryProvider } from "../providers/harbor";
 import { PlatformStackConfig } from "../config/stack";
 
 // ---------------------------------------------------------------------------
@@ -54,10 +53,6 @@ export interface InfraOutputs {
   // Provider-agnostic storage endpoints (eliminates hardcoded digitaloceanspaces.com).
   readonly spacesEndpoint: pulumi.Output<string>;
   readonly s3Endpoint: pulumi.Output<string>;
-
-  // Container images S3 backend — used by Harbor for blob/manifest storage.
-  // Only created when registryType is "harbor".
-  readonly containerImagesBucketName?: pulumi.Output<string>;
 
   // Container Registry
   readonly registryEndpoint: pulumi.Output<string>;
@@ -287,24 +282,9 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
   // Storage endpoint — provider-specific S3-compatible endpoint for SDKs and Loki.
   const storageEndpoints = factory.getStorageEndpoint({ region: config.region });
 
-  // --- Container images bucket (Harbor S3 backend) ---
-  // Created when harborExternalUrl is set. Harbor stores tenant image blobs
-  // and manifests here via S3-compatible API (DO Spaces).
-  // DOCR remains the registry for platform images.
-  let containerImagesBucketName: pulumi.Output<string> | undefined;
-  if (config.harborExternalUrl) {
-    const containerImagesBucket = factory.createObjectStorage({
-      name: bucketName({ project: config.project, env: config.environment, region: config.region, suffix: "container-images" }),
-      region: config.region,
-      versioning: false,
-      tags,
-    });
-    containerImagesBucketName = containerImagesBucket.bucketName;
-  }
-
   // --- Container registry (platform images = DOCR) ---
-  // DOCR for platform images (loopzero-api, loopzero-tenant-controller, loopzero-cloud, loopzero-dashboard)
-  // Harbor for tenant images — deployed separately in bootstrap phase.
+  // DOCR for platform and tenant images (loopzero-api, loopzero-tenant-controller, loopzero-cloud,
+  // loopzero-dashboard, and every tenant build).
   //
   // ADR-0015: Adopt-or-Create policy for live stateful resources. DO allows ONE
   // registry per account, so we adopt whatever name already exists rather than
@@ -359,7 +339,6 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
     veleroBackupsBucketName: veleroBackupsBucket.bucketName,
     spacesEndpoint: storageEndpoints.endpoint,
     s3Endpoint: storageEndpoints.s3Endpoint,
-    containerImagesBucketName,
     registryEndpoint,
     registryName,
   };

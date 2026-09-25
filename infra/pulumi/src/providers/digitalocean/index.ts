@@ -13,7 +13,7 @@ import { DigitalOceanRegistryProvider } from "./registry";
  *
  * Each capability is delegated to a focused provider class (SRP). Some
  * DigitalOcean resources are built directly by the components that need them
- * (e.g. components/mgmt-redis-ha.ts), so this factory is the common path, not
+ * (e.g. components/do-spaces-openbao-backups.ts), so this factory is the common path, not
  * an isolation boundary for @pulumi/digitalocean.
  */
 export class DigitalOceanProviderFactory implements CloudProviderFactory {

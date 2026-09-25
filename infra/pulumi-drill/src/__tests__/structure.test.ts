@@ -187,7 +187,6 @@ describe("loopzero-drill — Managed Valkey/Redis (Bug #15 LIVE fix)", () => {
   it("documents Bug #15 root cause + ADR-0016 prod parity in comment", () => {
     expect(src).toMatch(/Bug #15 LIVE/);
     expect(src).toMatch(/ADR-0016/);
-    expect(src).toMatch(/mirror.*mgmt-redis-ha/i);
   });
 });
 
