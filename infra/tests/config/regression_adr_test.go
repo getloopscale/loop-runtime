@@ -13,6 +13,7 @@ package config
 
 import (
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -127,24 +128,28 @@ func TestADR0018T32_VAPTemplateExists(t *testing.T) {
 	}
 }
 
-// B-095: a cerca `loopzero-tenant-namespace-policy` casa CREATE **e UPDATE**, e remover finalizer e'
-// um UPDATE. Sem isentar os proprios controllers, um CR cujo namespace nao satisfaca a validacao
-// fica IMPOSSIVEL DE APAGAR — o operator nunca conclui a delecao e o requeue nunca converge. E' a
-// mesma armadilha que o cabecalho da irma `vap-tenant-cr-shape` descreve.
+// B-095: loopzero-tenant-namespace-policy matches CREATE **and UPDATE**, and removing a finalizer is
+// an UPDATE. Without exempting the platform's own controllers, a CR whose namespace fails the
+// validation becomes IMPOSSIBLE TO DELETE — the operator never finishes the deletion and the
+// requeue never converges. Same trap the header of the sibling `vap-tenant-cr-shape` describes.
 //
-// A lista precisa ser NAO-VAZIA: a forma `!(x in [])` e' sempre verdadeira, entao uma lista vazia
-// faz a politica valer para toda identidade e negar tudo — armadilha de CEL registrada no
-// `CLAUDE.md`. Por isso este teste exige os nomes, e nao so' a presenca do matchCondition.
+// The list must be NON-EMPTY: `!(x in [])` is always true, so an empty list makes the policy
+// apply to every identity and deny everything — a CEL trap recorded in `CLAUDE.md`. So this test
+// requires the names, not just the presence of the matchCondition.
+//
+// The exemption is rendered by the loopzero-admission.systemActorExemptions helper from
+// `systemActorExemptions.platformServiceAccounts`, so only the RENDERED policy carries the names.
 func TestVAPTenantNamespaceExemptsItsOwnControllers(t *testing.T) {
-	const path = "../../helm/admission-policies/templates/vap-tenant-namespace.yaml"
-	data, err := os.ReadFile(path)
+	out, err := exec.Command("helm", "template", "ap", "../../helm/admission-policies",
+		"--set", "vaps.tenantNamespace=true",
+		"--show-only", "templates/vap-tenant-namespace.yaml").CombinedOutput()
 	if err != nil {
-		t.Fatalf("VAP template missing: %v", err)
+		t.Fatalf("helm template: %v\n%s", err, out)
 	}
-	s := string(data)
+	s := string(out)
 	if !strings.Contains(s, "exclude-system-actors") {
-		t.Fatal("a politica nao isenta os atores de sistema: ligada, ela trava a remocao de " +
-			"finalizer e torna o CR indeletavel")
+		t.Fatal("the policy does not exempt system actors: switched on, it blocks finalizer " +
+			"removal and makes the CR undeletable")
 	}
 	for _, sa := range []string{
 		"system:serviceaccount:loopzero-system:loopzero-api",
@@ -154,8 +159,8 @@ func TestVAPTenantNamespaceExemptsItsOwnControllers(t *testing.T) {
 		"system:masters",
 	} {
 		if !strings.Contains(s, sa) {
-			t.Errorf("a lista de isencao nao nomeia %q; uma lista incompleta nega escritas "+
-				"legitimas, e uma lista VAZIA (`!(x in [])`) nega todas", sa)
+			t.Errorf("the exemption list does not name %q; an incomplete list denies legitimate "+
+				"writes, and an EMPTY one (`!(x in [])`) denies them all", sa)
 		}
 	}
 }
