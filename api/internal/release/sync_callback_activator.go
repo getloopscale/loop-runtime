@@ -14,6 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
@@ -167,11 +168,11 @@ func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error 
 		// Fallback path: scan PENDING releases in the default cell.
 		// Real production always hits the efficient tenant+env path above;
 		// this branch only fires in tests with simple store fakes. We pass
-		// db.CellDefault because the callback itself does not carry cell
+		// domain.DefaultCellID because the callback itself does not carry cell
 		// information — if a caller needs cross-cell callback routing, the
 		// efficient finder must be implemented on the store.
 		var allReleases []db.Release
-		allReleases, err = a.releaseStore.FindPendingReleases(ctx, db.CellDefault)
+		allReleases, err = a.releaseStore.FindPendingReleases(ctx, domain.DefaultCellID)
 		if err == nil {
 			for _, r := range allReleases {
 				if r.TenantID == tenantID && r.Environment == env {

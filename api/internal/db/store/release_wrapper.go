@@ -48,6 +48,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/id"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -521,7 +522,7 @@ func statusesCancelledOnProjectDelete(statuses []string) []string {
 // Empty cellID defaults to CellDefault per multi-cell backward compat.
 func (s *ReleaseStoreSqlc) FindPendingReleases(ctx context.Context, cellID string) ([]db.Release, error) {
 	if cellID == "" {
-		cellID = db.CellDefault
+		cellID = domain.DefaultCellID
 	}
 	rows, err := s.q.FindPendingReleasesByCell(ctx, s.gen(nil), cellID)
 	if err != nil {
@@ -539,7 +540,7 @@ func (s *ReleaseStoreSqlc) FindPendingReleases(ctx context.Context, cellID strin
 // by the convergence-loop health ticker (MEET-2026-03-31-023 T1-4).
 func (s *ReleaseStoreSqlc) FindActiveReleases(ctx context.Context, cellID string) ([]db.Release, error) {
 	if cellID == "" {
-		cellID = db.CellDefault
+		cellID = domain.DefaultCellID
 	}
 	rows, err := s.q.FindActiveReleasesByCell(ctx, s.gen(nil), cellID)
 	if err != nil {

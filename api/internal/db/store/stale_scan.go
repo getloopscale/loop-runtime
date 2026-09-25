@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // StaleReleaseRow is a release that has sat in READY or PENDING past a cutoff.
@@ -29,7 +30,7 @@ type StaleBuildCutoffs struct {
 }
 
 // PostgresStaleScanner finds rows the reapers must time out. The queries are
-// scoped to one cell (roadmap 03); an empty cell means db.CellDefault for
+// scoped to one cell (roadmap 03); an empty cell means domain.DefaultCellID for
 // single-cell deployments. Both are capped at 100 rows, oldest first.
 type PostgresStaleScanner struct {
 	DB db.DBTX
@@ -98,7 +99,7 @@ func (s *PostgresStaleScanner) StaleBuildRows(ctx context.Context, cellID string
 
 func cellOrDefault(cellID string) string {
 	if cellID == "" {
-		return db.CellDefault
+		return domain.DefaultCellID
 	}
 	return cellID
 }

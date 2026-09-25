@@ -111,7 +111,7 @@ type ReleaseStore interface {
 	// ArgoCD sync verification) for the given cell. Used by the Release
 	// Convergence Loop (MEET-2026-03-27-012 Phase 1.1). Roadmap 03 adds
 	// the cell_id filter so multi-cell controllers stay isolated. Pass
-	// CellDefault for single-cell backward compatibility.
+	// domain.DefaultCellID for single-cell backward compatibility.
 	FindPendingReleases(ctx context.Context, cellID string) ([]Release, error)
 	// FindActiveReleases returns releases in ACTIVE state for the given
 	// cell, used by the health check ticker (MEET-2026-03-31-023 T1-4)

@@ -57,7 +57,7 @@ type BuildReconcileLoopConfig struct {
 	// Set from config.MaxConcurrentBuildsPerTenant, the one per-tenant limit.
 	MaxBuildsPerTenant int
 	// CellID scopes the loop to a single cell (roadmap 03). Empty or
-	// "cell-0" means single-cell / backward-compatible behavior.
+	// domain.DefaultCellID means single-cell / backward-compatible behavior.
 	// MEET-053 A-07: When CellLister is set, CellID is ignored and the
 	// loop iterates over all cells returned by the lister each tick.
 	CellID string

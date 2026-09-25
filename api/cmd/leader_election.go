@@ -14,6 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/leader"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // leaseAcquirer is the part of leader.Acquirer the API's election uses.
@@ -134,7 +135,7 @@ func startLoopsElection(ctx context.Context, bgWg *sync.WaitGroup, cfg config.Co
 	election := &loopsElection{
 		acquirer: leader.NewAcquirer(bgAdapter, leaderCfg),
 		name:     leader.BackgroundLoopsLeaseName,
-		cellID:   db.CellDefault,
+		cellID:   domain.DefaultCellID,
 		holder:   leaseHolder(),
 		tick:     ticker.C,
 		logger:   logger,

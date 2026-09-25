@@ -17,6 +17,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -284,8 +285,8 @@ func TestReleaseConvergenceLoop_CellID_Default(t *testing.T) {
 	loop := &ReleaseConvergenceLoop{
 		cfg: ReleaseConvergenceLoopConfig{CellID: ""},
 	}
-	if loop.cellID() != db.CellDefault {
-		t.Errorf("expected %q, got %q", db.CellDefault, loop.cellID())
+	if loop.cellID() != domain.DefaultCellID {
+		t.Errorf("expected %q, got %q", domain.DefaultCellID, loop.cellID())
 	}
 }
 

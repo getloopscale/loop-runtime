@@ -13,6 +13,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -90,8 +91,8 @@ func TestStaleBuildChecker_EmptyCellIDDefaultsToCellDefault(t *testing.T) {
 	checker := staleBuildChecker(cap)
 
 	_, _ = checker.FindStaleBuilds(context.Background(), "", time.Minute, time.Minute, time.Minute, time.Minute)
-	if cap.lastArgs[4] != db.CellDefault {
-		t.Errorf("empty cellID should default to %q, got %v", db.CellDefault, cap.lastArgs[4])
+	if cap.lastArgs[4] != domain.DefaultCellID {
+		t.Errorf("empty cellID should default to %q, got %v", domain.DefaultCellID, cap.lastArgs[4])
 	}
 }
 

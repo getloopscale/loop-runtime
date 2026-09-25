@@ -13,6 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/events"
+	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -26,7 +27,7 @@ type ReleaseReaperConfig struct {
 	// Interval is how often the reaper runs.
 	Interval time.Duration
 	// CellID scopes the reaper to a single cell (roadmap 03). Empty or
-	// "cell-0" means single-cell / backward-compatible behavior.
+	// domain.DefaultCellID means single-cell / backward-compatible behavior.
 	CellID string
 }
 
@@ -53,7 +54,7 @@ type StaleRelease struct {
 // ReleaseStaleChecker finds releases that have exceeded their state timeout.
 type ReleaseStaleChecker interface {
 	// FindStaleReleases returns stale releases belonging to the given cell.
-	// Roadmap 03: pass db.CellDefault for single-cell / backward-compatible
+	// Roadmap 03: pass domain.DefaultCellID for single-cell / backward-compatible
 	// behavior.
 	FindStaleReleases(ctx context.Context, cellID string, readyTimeout, pendingTimeout time.Duration) ([]StaleRelease, error)
 }
@@ -151,7 +152,7 @@ func releaseReaperReason(event statemachine.ReleasePhaseEvent) string {
 func (r *ReleaseReaper) reap(ctx context.Context) int {
 	cellID := r.cfg.CellID
 	if cellID == "" {
-		cellID = db.CellDefault
+		cellID = domain.DefaultCellID
 	}
 	stale, err := r.checker.FindStaleReleases(ctx, cellID, r.cfg.ReadyTimeout, r.cfg.PendingTimeout)
 	if err != nil {
@@ -269,7 +270,7 @@ type staleReleaseChecker struct {
 }
 
 // FindStaleReleases returns the releases of one cell (roadmap 03; empty means
-// db.CellDefault) that exceeded their state timeout. READY times out with
+// domain.DefaultCellID) that exceeded their state timeout. READY times out with
 // GitPushTimeout and PENDING with SyncTimeout; any other phase is skipped.
 func (c *staleReleaseChecker) FindStaleReleases(ctx context.Context, cellID string, readyTimeout, pendingTimeout time.Duration) ([]StaleRelease, error) {
 	now := c.now()

@@ -14,8 +14,6 @@ package db
 //   - BuildStore interface (service field types depend on it)
 //   - buildMachine singleton (state-machine SafeTransition target;
 //     used by BuildStoreSqlc.UpdateStatus)
-//   - CellDefault constant (cross-store; both build + release stores
-//     consume it as the single-cell backward-compat default)
 //
 // The sqlc-backed implementation (BuildStoreSqlc) lives in
 // build_wrapper.go and satisfies BuildStore 1:1.
@@ -41,13 +39,6 @@ import (
 // constant (verified by TestBuildTypedMachine_WireFormatCompatibility),
 // so DB rows persisted under the untyped path read back identically.
 // No migration of `builds.status` column needed.
-
-// CellDefault is the cell identifier used by single-cell deployments
-// and as the default for any row created without an explicit cell
-// assignment. Kept as a local constant to avoid a db→placement package
-// dependency; placement.DefaultCellID is the authoritative value and
-// must match.
-const CellDefault = "cell-0"
 
 // Build represents a build record in the database.
 type Build struct {
@@ -151,7 +142,7 @@ type BuildStore interface {
 	// 2026-06-08-dashboard-screens-review-fixes T2.2 + ADR D3.
 	ListEnvsForProject(ctx context.Context, tenantID, projectName string) ([]string, error)
 	// FindActiveBuilds returns QUEUED/RUNNING/RELEASING builds
-	// belonging to the given cell (roadmap 03). Pass CellDefault for
+	// belonging to the given cell (roadmap 03). Pass domain.DefaultCellID for
 	// single-cell / backward compatible behavior.
 	FindActiveBuilds(ctx context.Context, cellID string) ([]Build, error)
 	CancelActiveBuilds(ctx context.Context, tx DBTX, tenantID, projectID, env string) (int, []string, error)

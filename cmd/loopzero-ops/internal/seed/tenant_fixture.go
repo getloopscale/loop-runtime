@@ -66,7 +66,6 @@ const (
 	tenantFixtureHelmfileEnvKey  = "LOOPZERO_HELMFILE_ENV"
 
 	tenantFixtureNamespace   = "loopzero-system"
-	tenantFixtureCellID      = "cell-0"
 	tenantFixtureProject     = "teste"
 	tenantFixtureEnvName     = "production"
 	tenantFixtureEnvCluster  = "workload"
@@ -276,7 +275,7 @@ func ensureTenantCR(ctx context.Context, cli ctrlclient.Client, tenantID, crdPla
 	tenant.SetNamespace(tenantFixtureNamespace)
 	tenant.SetName(tenantID)
 	spec := map[string]any{
-		"cellID":      tenantFixtureCellID,
+		"cellID":      domain.DefaultCellID,
 		"displayName": displayName,
 		"plan":        crdPlan,
 		"environments": []any{

@@ -48,6 +48,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -131,7 +132,7 @@ func NewAcquirer(tx db.DBTX, cfg Config) *Acquirer {
 // stale row and both succeed.
 func (a *Acquirer) Acquire(ctx context.Context, name, cellID, holder string) (*Lease, error) {
 	if cellID == "" {
-		cellID = db.CellDefault
+		cellID = domain.DefaultCellID
 	}
 	// The UPSERT uses ON CONFLICT DO UPDATE with a predicate (WHERE
 	// leader_generations.heartbeat_at < now() - interval). On conflict

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/processing"
+	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/naming"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -38,7 +39,7 @@ type ReleaseConvergenceLoopConfig struct {
 	// MaxConcurrent bounds parallel release verifications.
 	MaxConcurrent int
 	// CellID scopes the loop to a single cell (roadmap 03). Empty or
-	// "cell-0" means single-cell / backward-compatible behavior.
+	// domain.DefaultCellID means single-cell / backward-compatible behavior.
 	CellID string
 }
 
@@ -174,7 +175,7 @@ func (r *ReleaseConvergenceLoop) Start(ctx context.Context) {
 
 func (r *ReleaseConvergenceLoop) cellID() string {
 	if r.cfg.CellID == "" {
-		return db.CellDefault
+		return domain.DefaultCellID
 	}
 	return r.cfg.CellID
 }

@@ -14,16 +14,18 @@
 //
 // CHG-2026-04-30-DELETE-SINGLE-CELL deleted DefaultEngine, the Engine
 // interface, ConstraintEngine and CellLabelQuerier, all unused in production
-// paths. ExtractRegion (below) and DefaultCellID (cells.go) were kept: the
-// first feeds CellStatus.Region, the second names the dev single-cluster
-// cell. The cell-0 value of tenants.cell_id remains as the SQL DEFAULT — this
+// paths. ExtractRegion (below) was kept: it feeds CellStatus.Region. The
+// default cell id itself is domain.DefaultCellID (pkg/domain), shared with
+// operators and cmd/loopzero-ops. The cell-0 value of tenants.cell_id remains as the SQL DEFAULT — this
 // is data, not code, and has its own comment in 000001_initial_schema.up.sql.
 package placement
 
 import (
 	"context"
 	"fmt"
+
 	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
+	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // TenantCellQuerier abstracts tenant-to-cell lookups against the DB.
@@ -41,14 +43,14 @@ type TenantCellQuerier interface {
 // ExtractRegion derives a region label from a cell_id.
 // Convention: cell-{region}-{nn}. Examples:
 //
-//	DefaultCellID  → "default" (legacy single-cell installs)
+//	domain.DefaultCellID  → "default" (legacy single-cell installs)
 //	"cell-sfo3-02" → "sfo3"
 //	"cell-1"       → "1" (no region encoded; rare)
 //
 // Used by services/cell_service.go to populate CellStatus.Region in
 // API responses.
 func ExtractRegion(cellID string) string {
-	if cellID == DefaultCellID {
+	if cellID == domain.DefaultCellID {
 		return "default"
 	}
 	if len(cellID) > 5 { // strip "cell-" prefix

@@ -209,7 +209,7 @@ LIMIT 50;
 -- name: FindPendingCustomDomainsForAutoVerify :many
 -- Cell-scoped via JOIN to tenants table (multi-cell isolation per
 -- roadmap 03). Empty cellID is handled by the wrapper (defaults to
--- CellDefault before invocation).
+-- domain.DefaultCellID before invocation).
 SELECT cd.id, cd.tenant_id, cd.project_name, cd.app_name, cd.environment, cd.domain, cd.status,
        cd.verification_token, cd.verified_at, cd.tls_status, cd.tls_expires_at,
        cd.failure_reason, cd.last_cname_check, cd.cname_consecutive_failures, cd.created_at, cd.updated_at,

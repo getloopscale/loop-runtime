@@ -89,7 +89,7 @@ func (r *RecordingDBTX) Query(_ context.Context, sql string, args ...any) (db.Ro
 	if r.FilterByCellID {
 		var wanted string
 		for _, a := range args {
-			if s, ok := a.(string); ok && (s == "cell-0" || strings.HasPrefix(s, "cell-")) {
+			if s, ok := a.(string); ok && strings.HasPrefix(s, "cell-") {
 				wanted = s
 				break
 			}

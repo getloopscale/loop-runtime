@@ -13,13 +13,14 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // DomainHealthStore abstracts persistence needed by the health checker.
 type DomainHealthStore interface {
 	// FindPendingForAutoVerify returns pending_verification domains owned by
-	// tenants belonging to the given cell (roadmap 03). Pass "cell-0"
+	// tenants belonging to the given cell (roadmap 03). Pass domain.DefaultCellID
 	// or "" for single-cell / backward-compatible behavior.
 	FindPendingForAutoVerify(ctx context.Context, cellID string) ([]ports.CustomDomain, error)
 	FindActiveForCNAMECheck(ctx context.Context, staleAfter time.Time) ([]ports.CustomDomain, error)
@@ -59,7 +60,7 @@ type DomainHealthCheckerConfig struct {
 	GraceDays   int           // CNAME failure grace (default: 14, configurable via DOMAIN_CNAME_GRACE_DAYS)
 	StaleDays   int           // Pending cleanup threshold (default: 7)
 	// CellID scopes the checker to a single cell (roadmap 03). Empty or
-	// "cell-0" means single-cell / backward-compatible behavior.
+	// domain.DefaultCellID means single-cell / backward-compatible behavior.
 	CellID string
 }
 
@@ -92,7 +93,7 @@ func NewDomainHealthChecker(
 	}
 	cellID := cfg.CellID
 	if cellID == "" {
-		cellID = "cell-0"
+		cellID = domain.DefaultCellID
 	}
 	return &DomainHealthChecker{
 		store:       store,

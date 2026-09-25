@@ -30,7 +30,7 @@
 #
 # The text above now describes what the code does. The 2:1 relation (`cell-default` + `cell-1`
 # on the same cluster) was eliminated by `B-005`, and `DefaultCellID` is `cell-0`
-# (`api/internal/placement/cells.go:30`).
+# (`pkg/domain/cell.go`).
 #
 # Usage:
 #   bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell <0|1> --env <dev|drill|prod|standalone|standalone-multi> [--dry-run]

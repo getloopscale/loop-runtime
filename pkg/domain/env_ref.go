@@ -17,7 +17,7 @@ import (
 //   - TenantID:  RFC 1123-compliant tenant identifier (e.g., "tn-08fa2ecedc3c")
 //   - Project:   monorepo project slug from loopzero.yaml (e.g., "api", "frontend")
 //   - EnvName:   environment name (e.g., DefaultPermanentEnv "production", "staging-eu-1", "preview-pr-42")
-//   - CellID:    multi-cell placement target (e.g., placement.DefaultCellID "cell-0"); empty for single-cell
+//   - CellID:    multi-cell placement target (e.g., DefaultCellID); empty for single-cell
 //
 // EnvRef is IMMUTABLE by construction (no mutator methods) — race-clean.
 type EnvRef struct {

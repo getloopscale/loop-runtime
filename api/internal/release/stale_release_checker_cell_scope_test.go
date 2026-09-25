@@ -13,6 +13,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -135,8 +136,8 @@ func TestStaleReleaseChecker_MapsStatusToTimeoutEventAndSkipsOthers(t *testing.T
 	if got[1].ID != "rel-2" || got[1].Event != statemachine.RPEventSyncTimeout || got[1].Environment != "production" {
 		t.Errorf("PENDING row mapped wrong: %+v", got[1])
 	}
-	if src.lastArgs[2] != db.CellDefault {
-		t.Errorf("empty cell must default to %q, got %v", db.CellDefault, src.lastArgs[2])
+	if src.lastArgs[2] != domain.DefaultCellID {
+		t.Errorf("empty cell must default to %q, got %v", domain.DefaultCellID, src.lastArgs[2])
 	}
 }
 

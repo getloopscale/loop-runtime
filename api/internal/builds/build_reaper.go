@@ -13,6 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -29,7 +30,7 @@ type BuildReaperConfig struct {
 	// Interval is how often the reaper runs.
 	Interval time.Duration
 	// CellID scopes the reaper to a single cell (roadmap 03). Empty or
-	// "cell-0" means single-cell / backward-compatible behavior.
+	// domain.DefaultCellID means single-cell / backward-compatible behavior.
 	CellID string
 }
 
@@ -74,7 +75,7 @@ type StaleBuild struct {
 // BuildStaleChecker finds builds that have exceeded their state timeout.
 type BuildStaleChecker interface {
 	// FindStaleBuilds returns builds whose state has exceeded the given
-	// timeout, scoped to the given cell. Roadmap 03: pass db.CellDefault for
+	// timeout, scoped to the given cell. Roadmap 03: pass domain.DefaultCellID for
 	// single-cell / backward-compatible behavior.
 	FindStaleBuilds(ctx context.Context, cellID string, queueTimeout, runningTimeout, releasingTimeout, cancelTimeout time.Duration) ([]StaleBuild, error)
 }
@@ -211,7 +212,7 @@ func humanBudget(d time.Duration) string {
 func (r *BuildReaper) reap(ctx context.Context) int {
 	cellID := r.cfg.CellID
 	if cellID == "" {
-		cellID = db.CellDefault
+		cellID = domain.DefaultCellID
 	}
 	stale, err := r.checker.FindStaleBuilds(ctx, cellID, r.cfg.QueueTimeout, r.cfg.RunningTimeout, r.cfg.ReleasingTimeout, r.cfg.CancelTimeout)
 	if err != nil {
@@ -325,7 +326,7 @@ type staleBuildChecker struct {
 }
 
 // FindStaleBuilds returns the builds of one cell (roadmap 03; empty means
-// db.CellDefault) that exceeded their phase timeout, with the event each
+// domain.DefaultCellID) that exceeded their phase timeout, with the event each
 // phase times out through (buildTimeoutEvents).
 func (c *staleBuildChecker) FindStaleBuilds(ctx context.Context, cellID string, queueTimeout, runningTimeout, releasingTimeout, cancelTimeout time.Duration) ([]StaleBuild, error) {
 	now := c.now()

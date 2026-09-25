@@ -8,9 +8,9 @@ import (
 	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
+	"github.com/getloopscale/loopzero/pkg/domain"
 
 	"github.com/getloopscale/loopzero/api/internal/builds"
-	"github.com/getloopscale/loopzero/api/internal/placement"
 
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/k8s/secretsync"
@@ -55,14 +55,14 @@ func setupK8s(cfg config.Config, logger *slog.Logger) (*K8sDeps, error) {
 
 // setupSecretK8sSync builds the Secret + ExternalSecret writer (ESO). Its
 // runtime client is the cell-0 kubeconfig (CELL_0_KUBECONFIG), so it serves
-// placement.DefaultCellID only and refuses tenants placed elsewhere instead
+// domain.DefaultCellID only and refuses tenants placed elsewhere instead
 // of writing their ExternalSecret into a cluster that does not host them.
 // F-01: returns the interface as nil (not a typed nil) when unavailable.
 func setupSecretK8sSync(cfg config.Config, tenantCells secretsync.TenantCellLookup, logger *slog.Logger) secretshttp.SecretK8sSync {
 	mgr, err := secretsync.NewSecretK8sManager(
 		cfg.MgmtKubeconfig, cfg.MgmtKubeContext,
 		cfg.RuntimeKubeconfig, cfg.RuntimeKubeContext,
-		placement.DefaultCellID, tenantCells,
+		domain.DefaultCellID, tenantCells,
 	)
 	if err != nil {
 		logger.Warn("secret K8s manager not available — ESO sync disabled", "error", err)

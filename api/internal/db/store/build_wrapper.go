@@ -41,6 +41,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/id"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -429,7 +430,7 @@ func (s *BuildStoreSqlc) ListEnvsForProject(ctx context.Context, tenantID, proje
 // backward compat.
 func (s *BuildStoreSqlc) FindActiveBuilds(ctx context.Context, cellID string) ([]db.Build, error) {
 	if cellID == "" {
-		cellID = db.CellDefault
+		cellID = domain.DefaultCellID
 	}
 	rows, err := s.q.FindActiveBuildsByCell(ctx, s.gen(nil), cellID)
 	if err != nil {

@@ -17,8 +17,8 @@ import (
 	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/leader"
+	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // ---------------------------------------------------------------------------
@@ -38,8 +38,8 @@ func TestSilenceKlog_DoesNotPanic(t *testing.T) {
 func TestCellID_EmptyEnvVar_ReturnsCellDefault(t *testing.T) {
 	t.Setenv("LOOPZERO_CELL_ID", "")
 	got := cellID(config.Config{})
-	if got != db.CellDefault {
-		t.Errorf("cellID() = %q, want %q for empty env var", got, db.CellDefault)
+	if got != domain.DefaultCellID {
+		t.Errorf("cellID() = %q, want %q for empty env var", got, domain.DefaultCellID)
 	}
 }
 
@@ -149,7 +149,7 @@ func TestReadyz_Fenced_IncludesErrorField(t *testing.T) {
 	acq := leader.NewAcquirer(fake, leader.DefaultConfig())
 	lease := &leader.Lease{
 		Name:         leaderLoopName,
-		CellID:       db.CellDefault,
+		CellID:       domain.DefaultCellID,
 		Holder:       "my-pod",
 		GenerationID: 1,
 	}
@@ -234,7 +234,7 @@ func TestRunHeartbeat_StopsOnContextCancel(t *testing.T) {
 	acq := leader.NewAcquirer(fake, leader.DefaultConfig())
 	lease := &leader.Lease{
 		Name:         leaderLoopName,
-		CellID:       db.CellDefault,
+		CellID:       domain.DefaultCellID,
 		Holder:       "test-pod",
 		GenerationID: 1,
 	}
@@ -272,7 +272,7 @@ func TestRunHeartbeat_InvokesCancelRoot_WhenFenced(t *testing.T) {
 	acq := leader.NewAcquirer(fake, leader.DefaultConfig())
 	lease := &leader.Lease{
 		Name:         leaderLoopName,
-		CellID:       db.CellDefault,
+		CellID:       domain.DefaultCellID,
 		Holder:       "my-pod",
 		GenerationID: 1,
 	}

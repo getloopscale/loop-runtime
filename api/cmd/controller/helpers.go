@@ -15,8 +15,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/leader"
+	"github.com/getloopscale/loopzero/pkg/domain"
 
 	"k8s.io/klog/v2"
 )
@@ -33,7 +33,7 @@ func cellID(_ config.Config) string {
 	if v := os.Getenv("LOOPZERO_CELL_ID"); v != "" {
 		return v
 	}
-	return db.CellDefault
+	return domain.DefaultCellID
 }
 
 // podName returns the holder identifier for the leader lease. Prefers

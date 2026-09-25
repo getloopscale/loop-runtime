@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
@@ -310,7 +311,7 @@ func (s *PostgresDomainStore) claimByStatus(ctx context.Context, fromStatus, toS
 
 func (s *PostgresDomainStore) FindPendingForAutoVerify(ctx context.Context, cellID string) ([]ports.CustomDomain, error) {
 	if cellID == "" {
-		cellID = db.CellDefault
+		cellID = domain.DefaultCellID
 	}
 	bridge := s.bridge()
 	q := generated.New()

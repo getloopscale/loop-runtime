@@ -24,24 +24,24 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/vault"
 
 	"github.com/jackc/pgx/v5"
 
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 )
 
 // brokerSingleClusterCellID names the cell the broker bearer middleware
 // MUST inject into the synthetic TokenReviewResult for dev-public single
-// cluster. It references `placement.DefaultCellID` as the canonical
+// cluster. It references `domain.DefaultCellID` as the canonical
 // single source of truth (T1.1 of plan 2026-06-10-j22-layer2-code-review-fixes
 // ADR D1 + EC-3 absorption — closes consensus-CRITICAL #13 X-Cell-ID
 // forgery + the magic-literal `"cell-0"` sub-finding). There is no
 // multi-cluster broker authentication yet: the broker serves this one cell,
 // and serving another needs a per-cell TokenReview (ADR D1 follow-up).
-const brokerSingleClusterCellID = placement.DefaultCellID
+const brokerSingleClusterCellID = domain.DefaultCellID
 
 // tenantCellQuerier is the narrow surface inlineTenantBinding uses on
 // store.PostgresCellStore, so tests can supply a fake.
@@ -150,7 +150,7 @@ func setupSecretFetchDeps(secretStore secretValueReader, cellStore tenantCellQue
 // the request context so the existing handler at routes/internal_secret_fetch.go
 // (which calls auth.CrossClusterFromContext) does not need a parallel
 // auth code path. CellID is derived SERVER-SIDE from the package-canonical
-// `placement.DefaultCellID` constant — the caller-supplied X-Cell-ID
+// `domain.DefaultCellID` constant — the caller-supplied X-Cell-ID
 // header is intentionally ignored (T1.1 of plan
 // 2026-06-10-j22-layer2-code-review-fixes / ADR D1 / closes consensus-CRITICAL
 // #13 X-Cell-ID forgery). A multi-cluster path would replace this with a
@@ -178,7 +178,7 @@ func brokerBearerMiddleware(expectedToken string, next http.HandlerFunc) http.Ha
 		// holder of LOOPZERO_BROKER_TOKEN spoof any cell and read every
 		// tenant's secrets (consensus-CRITICAL of /loop-code-review).
 		// The cellID is derived server-side from the package-canonical
-		// `placement.DefaultCellID` constant. A multi-cluster path
+		// `domain.DefaultCellID` constant. A multi-cluster path
 		// (per-cell TokenReview) is a follow-up that does not exist yet.
 		_ = r.Header.Get("X-Cell-ID")
 		cellID := brokerSingleClusterCellID

@@ -10,6 +10,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // reconcile checks all non-terminal builds and reconciles their state
@@ -44,7 +45,7 @@ func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
 	for _, cellID := range cellIDs {
 		cid := cellID
 		if cid == "" {
-			cid = db.CellDefault
+			cid = domain.DefaultCellID
 		}
 		cellBuilds, err := r.buildStore.FindActiveBuilds(ctx, cid)
 		if err != nil {
