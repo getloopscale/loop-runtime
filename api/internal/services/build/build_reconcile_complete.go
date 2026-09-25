@@ -316,7 +316,7 @@ func emitSigstoreObservations(status *deploycontracts.WorkflowStatus, appName, r
 			signComponent = "fulcio"
 		}
 	}
-	metrics.ObserveCosignSign(true /* keyless */, 0, signOK, signComponent)
+	metrics.ObserveCosignSign(signOK, signComponent)
 
 	// Fulcio cert issuance duration (subset of cosign sign): wired forward-
 	// compatibly. Operator follow-up to surface `fulcio_duration_ms` from the
@@ -341,7 +341,7 @@ func emitSigstoreObservations(status *deploycontracts.WorkflowStatus, appName, r
 			attestComponent = "rekor"
 		}
 	}
-	metrics.ObserveCosignAttest(true /* keyless */, 0, attestOK, attestComponent)
+	metrics.ObserveCosignAttest(attestOK, attestComponent)
 
 	// rekor_url null/populated SLI counter.
 	metrics.ObserveRekorURLPersist(rekorURL)

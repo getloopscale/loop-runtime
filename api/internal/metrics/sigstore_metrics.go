@@ -4,6 +4,8 @@
 package metrics
 
 import (
+	"strconv"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -92,41 +94,44 @@ var (
 	})
 )
 
-// ObserveCosignSign records duration + result + (optional) failing component
-// in a single call. The empty-output guard (EC-NEW of plan v1.1) lives at
-// the call site (enrichAppReleasesWithAttestation): callers must NOT pass
-// a negative or implausible duration; this function trusts its input.
-func ObserveCosignSign(keyless bool, durationSeconds float64, success bool, errorComponent string) {
-	label := "false"
-	if keyless {
-		label = "true"
-	}
-	CosignSignDuration.WithLabelValues(label).Observe(durationSeconds)
+// ObserveCosignSign records the outcome of a sign step and, on failure, the
+// Sigstore component it is attributed to. It observes no latency: a caller
+// that did not time the step must not put a 0s sample into the histogram,
+// where it reads as a very fast signature.
+func ObserveCosignSign(success bool, errorComponent string) {
 	if success {
 		CosignSignTotal.WithLabelValues("success").Inc()
-	} else {
-		CosignSignTotal.WithLabelValues("failure").Inc()
-		if errorComponent != "" {
-			CosignSignErrors.WithLabelValues(errorComponent).Inc()
-		}
+		return
+	}
+	CosignSignTotal.WithLabelValues("failure").Inc()
+	if errorComponent != "" {
+		CosignSignErrors.WithLabelValues(errorComponent).Inc()
 	}
 }
 
+// ObserveCosignSignDuration records a sign step's measured latency, labelled
+// by signing mode. Call it only with a duration that was actually measured.
+func ObserveCosignSignDuration(keyless bool, seconds float64) {
+	mode := strconv.FormatBool(keyless)
+	CosignSignDuration.WithLabelValues(mode).Observe(seconds)
+}
+
 // ObserveCosignAttest mirrors ObserveCosignSign for the attest step.
-func ObserveCosignAttest(keyless bool, durationSeconds float64, success bool, errorComponent string) {
-	label := "false"
-	if keyless {
-		label = "true"
-	}
-	CosignAttestDuration.WithLabelValues(label).Observe(durationSeconds)
+func ObserveCosignAttest(success bool, errorComponent string) {
 	if success {
 		CosignAttestTotal.WithLabelValues("success").Inc()
-	} else {
-		CosignAttestTotal.WithLabelValues("failure").Inc()
-		if errorComponent != "" {
-			CosignAttestErrors.WithLabelValues(errorComponent).Inc()
-		}
+		return
 	}
+	CosignAttestTotal.WithLabelValues("failure").Inc()
+	if errorComponent != "" {
+		CosignAttestErrors.WithLabelValues(errorComponent).Inc()
+	}
+}
+
+// ObserveCosignAttestDuration mirrors ObserveCosignSignDuration for attest.
+func ObserveCosignAttestDuration(keyless bool, seconds float64) {
+	mode := strconv.FormatBool(keyless)
+	CosignAttestDuration.WithLabelValues(mode).Observe(seconds)
 }
 
 // ObserveRekorURLPersist increments the appropriate bucket of
