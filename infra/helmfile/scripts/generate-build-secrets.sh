@@ -53,26 +53,6 @@ is_valid_cosign_secret() {
   return 0
 }
 
-backup_build_secrets() {
-  local backup_dir="${HOME}/.loopzero/backups"
-  mkdir -p "$backup_dir"
-  chmod 700 "$backup_dir"
-  local ts
-  ts=$(date +%Y%m%d-%H%M%S)
-  local out="${backup_dir}/build-secrets-${ENV}-${ts}.yaml"
-  kubectl get secret -n argo \
-    cosign-signing-key buildkit-registry-config minio-credentials \
-    -o yaml 2>/dev/null > "$out" || true
-  if [[ -s "$out" ]]; then
-    chmod 600 "$out"
-    log "backup written: $out"
-    ls -t "${backup_dir}/build-secrets-${ENV}-"*.yaml 2>/dev/null | tail -n +11 | xargs -r rm -f
-  else
-    rm -f "$out"
-    log "backup skipped (no build secrets present yet — first install)"
-  fi
-}
-
 ensure_namespace argo
 
 # 1) cosign keypair — IDEMPOTENT (B1 + iter 14)
@@ -150,6 +130,9 @@ if [[ -n "${LOOPZERO_BUCKET_NAME:-}" ]]; then
 fi
 
 # 4) Backup all build-cluster Secrets for disaster recovery.
-backup_build_secrets
+# The restorable backup lives in generate-secrets.sh; this one used to dump raw
+# `kubectl get -o yaml`, which does not re-apply after the Secret changed.
+KUBECTL_CONTEXT="$KUBECTL_CONTEXT" "$(dirname "$0")/generate-secrets.sh" --backup-only \
+  "build-secrets-${ENV}" argo/cosign-signing-key argo/buildkit-registry-config argo/minio-credentials
 
 log "build secrets generated for env=$ENV (idempotent — re-runs preserve cosign signing key)"

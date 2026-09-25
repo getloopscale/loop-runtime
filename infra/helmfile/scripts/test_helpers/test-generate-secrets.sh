@@ -37,8 +37,8 @@ export LOOPZERO_SPACES_SECRET="SECRET_KEY"
 export LOOPZERO_REGISTRY_ENDPOINT="registry.digitalocean.com/loopzero"
 
 # Execute
-log "Running generate-secrets.sh dev mgmt..."
-bash "$SECRETS_SCRIPT" dev mgmt 2>/dev/null || {
+log "Running generate-secrets.sh dev core..."
+bash "$SECRETS_SCRIPT" dev core 2>/dev/null || {
   fail "script execution" "exit non-zero"
 }
 

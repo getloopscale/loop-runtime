@@ -8,6 +8,9 @@
 # (B1 cosign placeholder, B4 token drift, generic password rotation churn).
 #
 # Usage: generate-secrets.sh <env> <cluster>
+#        generate-secrets.sh --backup-only <file-prefix> <namespace/name>...
+#          Only writes a restorable backup of the named Secrets (the context comes
+#          from KUBECTL_CONTEXT). The build and runtime generators use this.
 #   env:     dev | prod | standalone
 #   cluster: core | runtime
 #
@@ -23,8 +26,15 @@
 # Restore: kubectl apply -f <backup-file>
 set -euo pipefail
 
-ENV="${1:?usage: $0 <env> <cluster>}"
-CLUSTER="${2:?usage: $0 <env> <cluster>}"
+BACKUP_ONLY=false
+if [[ "${1:-}" == "--backup-only" ]]; then
+  BACKUP_ONLY=true
+  shift
+  [[ $# -ge 2 ]] || { echo "usage: $0 --backup-only <file-prefix> <namespace/name>..." >&2; exit 1; }
+else
+  ENV="${1:?usage: $0 <env> <cluster>}"
+  CLUSTER="${2:?usage: $0 <env> <cluster>}"
+fi
 
 # Canonical 2026-06-20 (issue #115): pin kubectl context to the mgmt cluster.
 # This script applies Secrets to mgmt — without the pin, an active shell
@@ -79,55 +89,69 @@ apply_secret() {
   log "secret $ns/$name applied (idempotent)"
 }
 
+# backup_secrets <file-prefix> <namespace/name>...
+#
+# The one restorable Secret backup of the bootstrap scripts. generate-build-secrets.sh
+# and generate-runtime-secrets.sh call it through `--backup-only` instead of keeping
+# their own copies — theirs dumped raw `kubectl get -o yaml`, which carries
+# resourceVersion/uid/managedFields and fails to re-apply ("object has been modified").
+#
+# Writes ~/.loopzero/backups/<file-prefix>-<timestamp>.yaml (chmod 600) and keeps the ten
+# most recent per prefix.
 backup_secrets() {
+  local prefix="$1"
+  shift
   local backup_dir="${HOME}/.loopzero/backups"
   mkdir -p "$backup_dir"
   chmod 700 "$backup_dir"
   local ts
   ts=$(date +%Y%m%d-%H%M%S)
-  local out="${backup_dir}/secrets-${CLUSTER}-${ENV}-${ts}.yaml"
-  # Dump every LoopZero-managed Secret in loopzero-system into a single file.
+  local out="${backup_dir}/${prefix}-${ts}.yaml"
+  local raw item
+  raw=$(mktemp)
+  for item in "$@"; do
+    # A Secret not created yet (first install) is simply absent from the backup.
+    kubectl get secret -n "${item%%/*}" "${item#*/}" -o yaml 2>/dev/null >>"$raw" && echo '---' >>"$raw" || true
+  done
   # CRITICAL (iter 17 fix): strip server-managed fields (resourceVersion, uid,
   # creationTimestamp, managedFields, ownerReferences) so `kubectl apply -f <file>`
   # works on a different cluster OR after the original Secret was modified.
   # Without stripping, restore fails with: "Conflict: object has been modified".
-  kubectl get secret -n loopzero-system \
-    loopzero-db-credentials gitea-admin minio-credentials \
-    harbor-admin harbor-redis-credentials loopzero-registry-pull \
-    -o yaml 2>/dev/null | python3 -c "
+  python3 -c "
 import sys, yaml
-docs = list(yaml.safe_load_all(sys.stdin))
 out = []
-for d in docs:
-    if not d:
+for d in yaml.safe_load_all(sys.stdin):
+    # Only a mapping can be a Secret; anything else kubectl printed is not one.
+    if not isinstance(d, dict):
         continue
-    # If list of items (kubectl get -o yaml returns a List)
     items = d.get('items', [d]) if d.get('kind') == 'List' else [d]
     for item in items:
-        if not item:
+        if not isinstance(item, dict):
             continue
         meta = item.get('metadata', {})
-        # Remove server-generated fields that block apply on a different state
         for f in ('resourceVersion', 'uid', 'creationTimestamp',
                   'managedFields', 'ownerReferences', 'selfLink', 'generation'):
             meta.pop(f, None)
-        # Drop status (server-side only)
         item.pop('status', None)
         out.append(item)
 if out:
     print(yaml.safe_dump_all(out, default_flow_style=False))
-" > "$out" 2>/dev/null || true
+" <"$raw" >"$out"
+  rm -f "$raw"
   if [[ -s "$out" ]]; then
     chmod 600 "$out"
     log "backup written: $out (cleaned of server-managed fields — restorable)"
-    # Keep only the 10 most recent backups per cluster/env to avoid disk bloat
-    # while preserving recent rotation history.
-    ls -t "${backup_dir}/secrets-${CLUSTER}-${ENV}-"*.yaml 2>/dev/null | tail -n +11 | xargs -r rm -f
+    ls -t "${backup_dir}/${prefix}-"*.yaml 2>/dev/null | tail -n +11 | xargs -r rm -f
   else
     rm -f "$out"
-    log "backup skipped (no LoopZero Secrets present yet — first install)"
+    log "backup skipped (no Secrets present yet — first install)"
   fi
 }
+
+if [[ "$BACKUP_ONLY" == "true" ]]; then
+  backup_secrets "$@"
+  exit 0
+fi
 
 # O cluster central chama-se `core` desde o rename de 2026-08-09 (ADR
 # docs/decisions.md). Chamador e guarda mudaram
@@ -532,6 +556,8 @@ KUBECONFIG_EOF
 fi
 
 # 8) Backup all LoopZero-managed Secrets for disaster recovery.
-backup_secrets
+backup_secrets "secrets-${CLUSTER}-${ENV}" \
+  loopzero-system/loopzero-db-credentials loopzero-system/gitea-admin loopzero-system/minio-credentials \
+  loopzero-system/harbor-admin loopzero-system/harbor-redis-credentials loopzero-system/loopzero-registry-pull
 
 log "mgmt secrets generated for env=$ENV (idempotent — re-runs preserve values)"
