@@ -1908,15 +1908,15 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 				}, &envCR)).To(Succeed())
 			}, timeout, interval).Should(Succeed())
 
-			// Act: remove "staging" from the FIRST tenant
-			var t loopzerov1.Tenant
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name: tenantName, Namespace: "default",
-			}, &t)).To(Succeed())
-			t.Spec.Environments = []loopzerov1.TenantEnvironmentEntry{
-				{Name: "production", Cluster: "workload", Project: "default-project"},
-			}
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			// Act: remove "staging" from the FIRST tenant. The controllers write
+			// this Tenant concurrently (status patches, the Environment delete
+			// pruning its tuple), so the update retries on conflict.
+			t := loopzerov1.Tenant{ObjectMeta: metav1.ObjectMeta{Name: tenantName, Namespace: "default"}}
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &t, func() {
+				t.Spec.Environments = []loopzerov1.TenantEnvironmentEntry{
+					{Name: "production", Cluster: "workload", Project: "default-project"},
+				}
+			})).To(Succeed())
 
 			// Wait for TenantController to mark the staging CR for deletion
 			Eventually(func(g Gomega) {
