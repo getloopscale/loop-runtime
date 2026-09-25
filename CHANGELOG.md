@@ -61,6 +61,14 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- helm-drift reads its recorded chart-pair divergences from infra/quality/helm-drift-registry.yaml, and each entry names the docs/decisions.md row it rests on instead of an internal ticket id; the --json `adr` field now carries that decision
+
+- The adapter-ports, alert-runbooks, billing-secrets, caddy-host-parity, chart-pairs, contract-consumers, dashboard-root-parity, dev-public-env, docs-contract-refs, ecosystem-validators, error-vocabulary, helm-topology-index, ldflag-symbols and lint-coverage quality gates now print their messages and descriptions in English
+
+- loopzero-external-secrets-chart-sanity and loopzero-external-secrets-creation-policy now fail (exit 5) when helm is not installed instead of passing as advisory
+
+- dangling-script-refs only treats versioned files as callers; skills in the gitignored .claude kit no longer affect its verdict
+
 - The published charts now reject values that have no effect (for example `ingress`, `autoscaling`, `podSecurityContext`, unknown `config` keys on loopzero-cloud) instead of accepting and ignoring them; loopzero-cloud's example values no longer set inert keys.
 
 - The published loopzero-api, loopzero-cloud, loopzero-dashboard and operator charts now merge a chart-local `imagePullSecrets` with `global.imagePullSecrets`.
@@ -206,6 +214,42 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- Resource-name composers (namespaces, repositories, application and secret names) name the missing field when an input is empty, e.g. "namespace: tenant slug must not be empty", instead of a generic "argument must not be empty".
+
+- advisory-lock-scope, correlation-header and crd-semantic-diff now fail when they find nothing to scan (a missing source tree, or a --crd filter that matches no CRD) instead of reporting PASS, and print how many files they scanned
+
+- dev-public-oidc-redirect-syntax now reports the 10 assertions it evaluates; it advertised 9
+
+- coverage-baseline no longer drops coverage for files whose profile path contains a drive letter
+
+- ldflag-symbols now fails when a -X target has the right name but is not a string variable, and cli-exit-codes no longer skips a CLI checkout located under a __tests__ directory
+
+- helm-overlap-parity orders pre-release chart versions per semver (rc.10 after rc.2)
+
+- The cosign and service-auth deadline ratchets no longer count a marker date as a day older in the evening in negative UTC offsets
+
+- k6-load-rigor validates the L5 manifest YAML in-process and no longer passes when python3 is missing or fails when PyYAML is missing
+
+- helm-overlap-parity no longer passes on a truncated render when helm prints warnings or a rendered document fails to parse
+
+- lint-coverage no longer records a golangci-lint run that crashed as a module with zero findings
+
+- Six quality gates (acyclic-graph, alert-runbooks, billing-layers, chart-pairs, drill-outputs-consumers, cost-series-producers) now fail when a file in scope cannot be read or parsed instead of silently skipping it
+
+- ecosystem-validators, clusterimagepolicy-mode and docs-contract-refs no longer change their verdict depending on whether the gitignored .claude kit is installed on the machine
+
+- divergence-matrix reads the local-vs-prod matrix from docs/operations.md and runs in quality:gates instead of failing on every clone
+
+- billing-layers no longer fails on every fresh clone: open debts are read from the versioned registry instead of the unversioned BACKLOG.md
+
+- contract-consumers now scans the dashboard and CLI sibling checkouts for readers of a dropped JSON field, reports PARTIAL when one is absent, and fails when git grep errors instead of passing
+
+- decisions-deletion now guards docs/decisions.md and docs/runbooks.md and fails when git cannot resolve the base or head ref instead of reporting a clean result
+
+- coverage-diff now fails when the touched-lines file is missing or unreadable instead of reporting an empty-diff PASS
+
+- helm-diff-structural now fails when it cannot compute the diff instead of silently skipping the security-context downgrade checks
 
 - Secret backups written by the build-cluster and runtime-cluster secret generators can now be restored with `kubectl apply`; they used to keep server fields that made the apply fail once the Secret had changed.
 
@@ -412,6 +456,8 @@ to [Semantic Versioning](https://semver.org/).
   explanation (#B-069)
 
 ### Security
+
+- cluster-role-no-secrets-star no longer treats a chart-wide `if .Values.rbac.create` wrapper as a cutover guard; it now reports the cluster-wide secrets grants in the operator charts and fails when a ClusterRole template cannot be read
 
 - The bootstrap loopzero-api role no longer grants every verb (including deletecollection) on the platform's own resources; it grants the same explicit verbs as the published chart.
 
