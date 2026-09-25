@@ -155,6 +155,8 @@ type harborInit struct {
 	logger   *slog.Logger
 	timeout  time.Duration
 	platform string
+	// pollInterval is the pause between health checks. Zero means 3s.
+	pollInterval time.Duration
 }
 
 // healthResponse represents the Harbor /api/v2.0/health response.
@@ -168,53 +170,61 @@ type healthComponent struct {
 	Status string `json:"status"`
 }
 
-// waitHealthy polls Harbor health until all components are healthy or timeout.
+// waitHealthy polls Harbor health until it reports healthy or the timeout
+// passes. A failed request, a non-200 status, an unreadable or unparseable
+// body and an unhealthy report are all retried.
 func (h *harborInit) waitHealthy(ctx context.Context) error {
 	deadline := time.Now().Add(h.timeout)
-	ticker := time.NewTicker(3 * time.Second)
+	interval := h.pollInterval
+	if interval <= 0 {
+		interval = 3 * time.Second
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	for {
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout after %s waiting for Harbor health", h.timeout)
-		}
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.baseURL+"/api/v2.0/health", nil)
-		if err != nil {
-			return fmt.Errorf("creating health request: %w", err)
-		}
-
-		resp, err := h.client.Do(req)
-		if err != nil {
-			h.logger.Info("health check failed, retrying", "error", err)
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-ticker.C:
-				continue
+	for time.Now().Before(deadline) {
+		hr, err := h.fetchHealth(ctx)
+		if err == nil && hr.Status == "healthy" {
+			for _, c := range hr.Components {
+				h.logger.Info("component healthy", "name", c.Name, "status", c.Status)
 			}
+			return nil
 		}
-
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-
-		if resp.StatusCode == http.StatusOK {
-			var hr healthResponse
-			if err := json.Unmarshal(body, &hr); err == nil && hr.Status == "healthy" {
-				for _, c := range hr.Components {
-					h.logger.Info("component healthy", "name", c.Name, "status", c.Status)
-				}
-				return nil
-			}
-		}
-
-		h.logger.Info("Harbor not yet healthy, retrying", "status_code", resp.StatusCode)
+		h.logger.Info("Harbor not yet healthy, retrying", "error", err, "status", hr.Status)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
 		}
 	}
+	return fmt.Errorf("timeout after %s waiting for Harbor health", h.timeout)
+}
+
+// fetchHealth reads Harbor's health report. Every failure is returned: a
+// transport error, a non-200 status, a body that cannot be read or parsed.
+func (h *harborInit) fetchHealth(ctx context.Context) (healthResponse, error) {
+	var hr healthResponse
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.baseURL+"/api/v2.0/health", nil)
+	if err != nil {
+		return hr, fmt.Errorf("creating health request: %w", err)
+	}
+	resp, err := h.client.Do(req)
+	if err != nil {
+		return hr, fmt.Errorf("health request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return hr, fmt.Errorf("reading health response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return hr, fmt.Errorf("health endpoint returned %d", resp.StatusCode)
+	}
+	if err := json.Unmarshal(body, &hr); err != nil {
+		return hr, fmt.Errorf("parsing health response: %w", err)
+	}
+	return hr, nil
 }
 
 // changeAdminPassword changes the admin password. Idempotent: if the new
@@ -313,21 +323,9 @@ func (h *harborInit) createProject(ctx context.Context) error {
 // verifyStorage checks that the storage component is healthy in the Harbor
 // health response.
 func (h *harborInit) verifyStorage(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.baseURL+"/api/v2.0/health", nil)
+	hr, err := h.fetchHealth(ctx)
 	if err != nil {
-		return fmt.Errorf("creating health request: %w", err)
-	}
-
-	resp, err := h.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("health request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-	var hr healthResponse
-	if err := json.Unmarshal(body, &hr); err != nil {
-		return fmt.Errorf("parsing health response: %w", err)
+		return err
 	}
 
 	for _, c := range hr.Components {
