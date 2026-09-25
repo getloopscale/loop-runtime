@@ -3,10 +3,10 @@
 
 // Package slo is the pure-logic SLO verdict of the chaos resilience runner.
 //
-// Chamava-se `chaosslo` e vivia em `internal/quality/`, onde nao pertencia: ele
-// serve o subcomando `chaos`, nao um gate, e por isso o oraculo `quality --list`
-// nunca o enumerou (B-066). O prefixo do nome existia para desambiguar dentro
-// daquele diretorio; sob `internal/chaos/` o caminho ja' diz o mesmo.
+// It was called `chaosslo` and lived in internal/quality/, where it did not belong:
+// it serves the `chaos` subcommand, not a gate, so the `quality --list` oracle
+// never enumerated it (B-066). The name prefix disambiguated it inside that
+// directory; under internal/chaos/ the path says the same.
 // (Track C TC3.1 of 2026-05-24-drill-consolidation-migration-plan).
 //
 // It compares baseline / during / post chaos samples and decides whether the

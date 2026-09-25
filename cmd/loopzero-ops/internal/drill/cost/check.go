@@ -3,10 +3,10 @@
 
 // Package cost is the pure-logic core of infra/scripts/drill/cost-report.sh.
 //
-// Chamava-se `drillcost` e vivia em `internal/quality/`, onde nao pertencia: ele
-// serve o subcomando `drill`, nao um gate, e por isso o oraculo `quality --list`
-// nunca o enumerou (B-066). O prefixo do nome existia para desambiguar dentro
-// daquele diretorio; sob `internal/drill/` o caminho ja' diz o mesmo.
+// It was called `drillcost` and lived in internal/quality/, where it did not belong:
+// it serves the `drill` subcommand, not a gate, so the `quality --list` oracle
+// never enumerated it (B-066). The name prefix disambiguated it inside that
+// directory; under internal/drill/ the path says the same.
 // (Track C TC2.1 of 2026-05-24-drill-consolidation-migration-plan).
 //
 // It computes a drill run's cost from a provision/teardown window + DO hourly

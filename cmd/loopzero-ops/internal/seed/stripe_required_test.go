@@ -8,28 +8,30 @@ import (
 	"testing"
 )
 
-// O verde falso que estes testes matam.
+// The false green these tests kill.
 //
-// MEDIDO em 2026-08-11: `seed stripe-webhook-secret --verify` numa máquina sem
-// `dev-credentials.json` imprime `SKIP — dev-credentials.json absent (SKIP-graceful)` e
-// sai com código 0. `Verdict.ExitCode()` (seed.go:58) devolve 0 para PASS e para SKIP,
-// então a corrente pós-cleanroom inteira fica verde num ambiente que não consegue nem
-// cobrar nem verificar um pagamento.
+// MEASURED 2026-08-11: `seed stripe-webhook-secret --verify` on a machine
+// without dev-credentials.json printed `SKIP — dev-credentials.json absent
+// (SKIP-graceful)` and exited 0. Verdict.ExitCode returns success for PASS and
+// for SKIP, so the whole post-cleanroom chain stayed green in an environment
+// that could neither charge nor verify a payment.
 //
-// SKIP é a semântica certa quando o insumo é opcional. Deixa de ser quando o ambiente
-// declarou que oferece a capacidade — aí a ausência é defeito, e um defeito que reporta
-// sucesso é pior que um que reporta falha.
+// SKIP is the right meaning when the input is optional. It stops being right
+// once the environment declared it offers the capability — then the absence is
+// a defect, and a defect that reports success is worse than one that reports
+// failure.
 
-// stripePreconditioner é o que os dois seeds de Stripe têm em comum.
+// stripePreconditioner is what the Stripe seeds have in common.
 //
-// Declarada aqui, no teste, e não na produção: é o teste que precisa tratar os dois
-// uniformemente. Criar a interface no código de produção para servir só ao teste seria
-// abstração sem segundo consumidor — o que `rules/parsimony-ladder.md` rung 1 recusa.
+// Declared here, in the test, and not in production: the test is what needs to
+// treat them uniformly. An interface in production code serving only the test
+// would be an abstraction with no second consumer, which
+// rules/parsimony-ladder.md rung 1 refuses.
 type stripePreconditioner interface {
 	precondition(Deps) (Result, bool)
 }
 
-func seedsDeStripe() map[string]stripePreconditioner {
+func stripeSeeds() map[string]stripePreconditioner {
 	return map[string]stripePreconditioner{
 		"webhook-secret":   &StripeWebhookSecretSeed{},
 		"api-keys":         &StripeAPIKeysSeed{},
@@ -37,91 +39,87 @@ func seedsDeStripe() map[string]stripePreconditioner {
 	}
 }
 
-// TestSeedFalhaSemCredencialQuandoACobrancaEExigida — o caso que inverte o resultado.
-func TestSeedFalhaSemCredencialQuandoACobrancaEExigida(t *testing.T) {
-	for nome, s := range seedsDeStripe() {
-		t.Run(nome, func(t *testing.T) {
+// The case that flips the outcome.
+func TestSeedFailsWithoutCredentialsWhenBillingIsRequired(t *testing.T) {
+	for name, s := range stripeSeeds() {
+		t.Run(name, func(t *testing.T) {
 			d := Deps{Creds: nil, Policy: NewEnvRequirementPolicy("dev-public")}
-			res, parou := s.precondition(d)
-			if !parou {
-				t.Fatal("sem credencial o seed não pode seguir para a mutação")
+			res, stopped := s.precondition(d)
+			if !stopped {
+				t.Fatal("without credentials the seed must not go on to mutate anything")
 			}
 			if res.Verdict != FAIL {
-				t.Fatalf("um ambiente que declara cobrança e não tem a credencial está "+
-					"defeituoso, não configurado; queria FAIL, veio %s (%s)", res.Verdict, res.Reason)
+				t.Fatalf("an environment that declares billing and lacks the credential is "+
+					"defective, not configured; want FAIL, got %s (%s)", res.Verdict, res.Reason)
 			}
 			if res.Verdict.ExitCode() == 0 {
-				t.Error("o código de saída precisa ser diferente de zero, senão a corrente " +
-					"continua verde e nada disto muda")
+				t.Error("the exit status must be non-zero, or the chain stays green and nothing changes")
 			}
 		})
 	}
 }
 
-// TestSeedPulaSemCredencialQuandoNaoEExigida é a proteção contra regressão.
-//
-// O hermético roda sem credencial de Stripe DE PROPÓSITO. Se esta mudança o quebrasse,
-// teria trocado um verde falso por um vermelho falso, que não é progresso.
-func TestSeedPulaSemCredencialQuandoNaoEExigida(t *testing.T) {
-	for nome, s := range seedsDeStripe() {
-		t.Run(nome, func(t *testing.T) {
-			for _, amb := range []string{"", "standalone-multi"} {
-				d := Deps{Creds: nil, Policy: NewEnvRequirementPolicy(amb)}
-				res, parou := s.precondition(d)
-				if !parou || res.Verdict != SKIP {
-					t.Errorf("ambiente %q não promete cobrar; queria SKIP, veio %s", amb, res.Verdict)
+// The regression guard: the hermetic tier runs without Stripe credentials ON
+// PURPOSE. Breaking it would trade a false green for a false red.
+func TestSeedSkipsWithoutCredentialsWhenBillingIsNotRequired(t *testing.T) {
+	for name, s := range stripeSeeds() {
+		t.Run(name, func(t *testing.T) {
+			for _, env := range []string{"", "standalone-multi"} {
+				d := Deps{Creds: nil, Policy: NewEnvRequirementPolicy(env)}
+				res, stopped := s.precondition(d)
+				if !stopped || res.Verdict != SKIP {
+					t.Errorf("environment %q does not promise to charge; want SKIP, got %s", env, res.Verdict)
 				}
 			}
 		})
 	}
 }
 
-// TestSeedSemPoliticaPreservaOComportamentoAnterior — nil-safe de ponta a ponta.
-func TestSeedSemPoliticaPreservaOComportamentoAnterior(t *testing.T) {
-	for nome, s := range seedsDeStripe() {
-		t.Run(nome, func(t *testing.T) {
+// Nil-safe end to end.
+func TestSeedWithoutAPolicyKeepsThePreviousBehaviour(t *testing.T) {
+	for name, s := range stripeSeeds() {
+		t.Run(name, func(t *testing.T) {
 			res, _ := s.precondition(Deps{Creds: nil})
 			if res.Verdict != SKIP {
-				t.Errorf("Deps sem política deve pular como antes; veio %s", res.Verdict)
+				t.Errorf("Deps without a policy must skip as before; got %s", res.Verdict)
 			}
 		})
 	}
 }
 
-// TestPlaceholderTambemFalhaQuandoExigido fecha o segundo caminho para o mesmo estado.
-//
-// Há DOIS jeitos de o insumo faltar: o arquivo ausente e o valor-placeholder. Corrigir só
-// o primeiro deixa o segundo produzindo exatamente o mesmo verde falso — e o segundo é o
-// mais provável em produção, porque um arquivo presente parece configurado.
-func TestPlaceholderTambemFalhaQuandoExigido(t *testing.T) {
+// There are TWO ways for the input to be missing: the absent file and the
+// placeholder value. Fixing only the first leaves the second producing the same
+// false green — and the second is likelier in production, because a present
+// file looks configured.
+func TestPlaceholderAlsoFailsWhenRequired(t *testing.T) {
 	creds := &Creds{}
 	creds.Stripe.WebhookSecret = stripePlaceholder
 	creds.Stripe.APIKey = stripePlaceholder
 
-	for nome, s := range seedsDeStripe() {
-		t.Run(nome, func(t *testing.T) {
+	for name, s := range stripeSeeds() {
+		t.Run(name, func(t *testing.T) {
 			d := Deps{Creds: creds, Policy: NewEnvRequirementPolicy("dev-public")}
-			res, parou := s.precondition(d)
-			if !parou || res.Verdict != FAIL {
-				t.Fatalf("placeholder é ausência com aparência de configuração; queria FAIL, veio %s (%s)",
+			res, stopped := s.precondition(d)
+			if !stopped || res.Verdict != FAIL {
+				t.Fatalf("a placeholder is an absence that looks like configuration; want FAIL, got %s (%s)",
 					res.Verdict, res.Reason)
 			}
 		})
 	}
 }
 
-// TestARazaoDoFailDizOQueFazer — uma falha que não diz o que fazer vira uma escavação.
-func TestARazaoDoFailDizOQueFazer(t *testing.T) {
-	for nome, s := range seedsDeStripe() {
-		t.Run(nome, func(t *testing.T) {
+// A failure that does not say what to do becomes a dig.
+func TestFailReasonSaysWhatToDo(t *testing.T) {
+	for name, s := range stripeSeeds() {
+		t.Run(name, func(t *testing.T) {
 			d := Deps{Creds: nil, Policy: NewEnvRequirementPolicy("dev-public")}
 			res, _ := s.precondition(d)
 			r := strings.ToLower(res.Reason)
 			if !strings.Contains(r, "dev-credentials.json") {
-				t.Errorf("a razão precisa nomear o arquivo que falta; veio %q", res.Reason)
+				t.Errorf("the reason must name the missing file; got %q", res.Reason)
 			}
 			if !strings.Contains(r, string(CapabilityBilling)) {
-				t.Errorf("a razão precisa nomear a capacidade exigida; veio %q", res.Reason)
+				t.Errorf("the reason must name the required capability; got %q", res.Reason)
 			}
 		})
 	}

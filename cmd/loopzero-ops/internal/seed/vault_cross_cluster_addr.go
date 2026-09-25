@@ -216,22 +216,22 @@ func getDeploymentContainerEnv(ctx context.Context, cli ctrlclient.Client,
 	return "", nil
 }
 
-// Os prazos de espera de rollout, nomeados. Eles DIVERGEM de propósito, e cada
-// divergência tem uma razão que só sobrevive se estiver escrita:
+// The rollout settle deadlines, named. They DIFFER on purpose, and each
+// difference has a reason that only survives if written down:
 //
-//   - loopzeroAPISettle — o loopzero-api sobe pesado (migrações + conexão a vários
-//     clusters), então é o mais longo.
-//   - loopzeroAPIResettle — a segunda espera do MESMO seed, depois da mudança de env
-//     já ter sido aplicada. É metade porque o Deployment acabou de assentar na
-//     primeira; se demorar mais que isso, esperar não vai resolver.
-//   - kratosSettle — Deployment + StatefulSet, mais leves que o loopzero-api.
-//   - corednsSettle — o mais curto: um Deployment de sistema, leve e sem estado,
-//     que reinicia rápido.
+//   - loopzeroAPISettle — loopzero-api starts heavy (migrations plus connections to
+//     several clusters), so it is the longest.
+//   - loopzeroAPIResettle — the SAME seed's second wait, after the env change has
+//     been applied. It is half because the Deployment just settled on the
+//     first; if it takes longer than that, waiting will not fix it.
+//   - kratosSettle — a Deployment plus a StatefulSet, lighter than loopzero-api.
+//   - corednsSettle — the shortest: a light, stateless system Deployment that
+//     restarts fast.
 //
-// Antes eram sete literais espalhados por seis arquivos, e um oitavo chamador
-// escreveria o seu — a forma se propaga por ser lida. Nenhum deles é o prazo
-// EFETIVO: quem resolve é Deps.settleTimeout, para que um ambiente hermético
-// possa injetar o seu sem que o valor de produção mude.
+// They used to be seven literals across six files, and an eighth caller would
+// have written its own — the shape spreads by being read. None is the
+// EFFECTIVE deadline: Deps.settleTimeout resolves that, so a hermetic
+// environment can inject its own without changing the production value.
 const (
 	loopzeroAPISettle   = 120 * time.Second
 	loopzeroAPIResettle = 60 * time.Second

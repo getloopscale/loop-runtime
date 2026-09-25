@@ -11,25 +11,24 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-// O erro de recurso-nao-encontrado precisa nomear o cluster em que se procurou.
+// A not-found error must name the cluster that was searched.
 //
-// B-024, medido 2026-08-10: `loopzero-ops seed patch-kratos` reprovou com
-// `get configmap loopzero-auth/ory-kratos-config: configmaps "ory-kratos-config" not found` —
-// e o ConfigMap existia. O seed estava falando com outro cluster, porque `k3d:secrets:create`
-// troca o contexto ativo como efeito colateral e os seeds herdam o que estiver ativo.
-//
-// A mensagem mandava procurar o recurso certo no cluster errado. Nomear o contexto e o que
-// separa "o recurso nao existe" de "voce esta olhando o lugar errado".
+// B-024, measured 2026-08-10: `loopzero-ops seed patch-kratos` failed with
+// `get configmap loopzero-auth/ory-kratos-config: configmaps "ory-kratos-config" not found`
+// — and the ConfigMap existed. The seed was talking to another cluster, because
+// `k3d:secrets:create` switches the active context as a side effect and seeds
+// inherit whatever is active. Naming the context is what separates "the resource
+// does not exist" from "you are looking in the wrong place".
 func TestGetConfigMap_NotFoundNamesTheContext(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
 	k := NewKubeClientForContext(c, "k3d-loopzero-secrets")
 
 	_, err := k.GetConfigMap(context.Background(), "loopzero-auth", "ory-kratos-config")
 	if err == nil {
-		t.Fatal("esperava erro de nao-encontrado")
+		t.Fatal("want a not-found error")
 	}
 	if !strings.Contains(err.Error(), "k3d-loopzero-secrets") {
-		t.Errorf("a mensagem nao nomeia o contexto:\n  %v", err)
+		t.Errorf("the message does not name the context:\n  %v", err)
 	}
 }
 
@@ -37,76 +36,75 @@ func TestGetSecret_NotFoundNamesTheContext(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
 	k := NewKubeClientForContext(c, "k3d-loopzero-secrets")
 
-	_, err := k.GetSecret(context.Background(), "loopzero-system", "nao-existe")
+	_, err := k.GetSecret(context.Background(), "loopzero-system", "absent")
 	if err == nil {
-		t.Fatal("esperava erro de nao-encontrado")
+		t.Fatal("want a not-found error")
 	}
 	if !strings.Contains(err.Error(), "k3d-loopzero-secrets") {
-		t.Errorf("a mensagem nao nomeia o contexto:\n  %v", err)
+		t.Errorf("the message does not name the context:\n  %v", err)
 	}
 }
 
-// Sem contexto declarado a mensagem fica como era. Os 96 sitios de teste que usam o
-// construtor antigo nao precisam mudar por causa disto, e uma mensagem com um contexto
-// vazio pendurado seria pior que a original.
+// With no declared context the message reads as it always did: the test sites
+// using the old constructor need not change, and a message with an empty
+// context dangling from it would be worse than the original.
 func TestNotFound_WithoutAContextTheMessageIsUnchanged(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
 	k := NewKubeClient(c)
 
 	_, err := k.GetConfigMap(context.Background(), "loopzero-auth", "ory-kratos-config")
 	if err == nil {
-		t.Fatal("esperava erro de nao-encontrado")
+		t.Fatal("want a not-found error")
 	}
-	if strings.Contains(err.Error(), "contexto") {
-		t.Errorf("sem contexto declarado a mensagem nao deve inventar um:\n  %v", err)
+	if strings.Contains(err.Error(), "(context ") {
+		t.Errorf("with no declared context the message must not invent one:\n  %v", err)
 	}
 	if !strings.Contains(err.Error(), "loopzero-auth/ory-kratos-config") {
-		t.Errorf("a mensagem perdeu o recurso que sempre nomeou:\n  %v", err)
+		t.Errorf("the message lost the resource it always named:\n  %v", err)
 	}
 }
 
-// A cobertura tem de alcancar TODAS as operacoes, nao so as duas do relato original.
-//
-// Achado 4 da revisao: 5 de 11 sitios ficaram sem o contexto — inclusive
-// `RolloutRestartDeployment`, chamado por `patch_kratos.go:94`, que e o proprio seed do
-// relato do B-024. Mesmo modo de falha, mensagem sem contexto.
+// The coverage has to reach EVERY operation, not only the two from the
+// original report. Review finding 4: 5 of 11 sites had no context — including
+// RolloutRestartDeployment, called by the patch-kratos seed that B-024 was
+// about.
 func TestEveryOperationNamesTheContext(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
 	k := NewKubeClientForContext(c, "k3d-loopzero-secrets")
 	ctx := context.Background()
 
-	casos := map[string]error{}
-	_, errCM := k.GetConfigMap(ctx, "ns", "ausente")
-	casos["GetConfigMap"] = errCM
-	_, errS := k.GetSecret(ctx, "ns", "ausente")
-	casos["GetSecret"] = errS
-	casos["RolloutRestartDeployment"] = k.RolloutRestartDeployment(ctx, "ns", "ausente")
+	cases := map[string]error{}
+	_, errCM := k.GetConfigMap(ctx, "ns", "absent")
+	cases["GetConfigMap"] = errCM
+	_, errS := k.GetSecret(ctx, "ns", "absent")
+	cases["GetSecret"] = errS
+	cases["RolloutRestartDeployment"] = k.RolloutRestartDeployment(ctx, "ns", "absent")
+	_, errSvc := k.GetService(ctx, "ns", "absent")
+	cases["GetService"] = errSvc
 
-	for nome, err := range casos {
+	for name, err := range cases {
 		if err == nil {
-			t.Errorf("%s: esperava erro sobre recurso ausente", nome)
+			t.Errorf("%s: want an error about the absent resource", name)
 			continue
 		}
 		if !strings.Contains(err.Error(), "k3d-loopzero-secrets") {
-			t.Errorf("%s nao nomeia o contexto:\n  %v", nome, err)
+			t.Errorf("%s does not name the context:\n  %v", name, err)
 		}
 	}
 }
 
-// O identificador do recurso NAO pode sumir quando o contexto entra.
-//
-// Achado 5 da revisao: um mutante que apagasse `namespace/name` das mensagens com contexto
-// passava a suite inteira — os testes protegiam so o sufixo novo. Saber o cluster sem saber
-// o recurso e meia mensagem.
+// The resource identifier must NOT vanish when the context is added. Review
+// finding 5: a mutant deleting `namespace/name` from contextual messages passed
+// the whole suite, because the tests only guarded the new suffix.
 func TestContextIsAddedWithoutLosingTheResource(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
 	k := NewKubeClientForContext(c, "k3d-loopzero-secrets")
 
 	_, err := k.GetConfigMap(context.Background(), "loopzero-auth", "ory-kratos-config")
 	if err == nil {
-		t.Fatal("esperava erro")
+		t.Fatal("want an error")
 	}
 	if !strings.Contains(err.Error(), "loopzero-auth/ory-kratos-config") {
-		t.Errorf("o recurso sumiu da mensagem quando o contexto entrou:\n  %v", err)
+		t.Errorf("the resource vanished from the message when the context was added:\n  %v", err)
 	}
 }

@@ -91,11 +91,11 @@ func (s *GiteaTokenSeed) Run(d Deps) Result {
 
 	// Layer 3: sync 3 consumer Secrets.
 	tokenBytes := []byte(token)
-	// B-108 — este seed e' invocavel sozinho (`loopzero-ops seed gitea-token`), que e' como um
-	// operador conserta uma peca sem repetir a cadeia inteira. Ali nao ha ordem que
-	// garanta o namespace, e a falha e' silenciosa do nosso lado: o seed para, a
-	// cadeia segue, e o efeito aparece noutro sistema. Idempotente — um Get quando
-	// o namespace ja existe, que e' o caminho canonico.
+	// B-108 — this seed runs on its own (`loopzero-ops seed gitea-token`), which is how an operator
+	// repairs one piece without repeating the whole chain. Nothing then guarantees
+	// the namespace, and the failure is silent on our side: the seed stops, the
+	// chain goes on, and the effect shows up in another system. Idempotent — a
+	// Get when the namespace exists, which is the usual path.
 	if err := d.Kube.EnsureNamespace(d.Ctx, giteaAdminNamespace); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("ensure namespace %s: %v", giteaAdminNamespace, err)}
 	}

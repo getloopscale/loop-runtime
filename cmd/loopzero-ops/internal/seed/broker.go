@@ -245,21 +245,22 @@ func defaultDockerNetworkInspect(network, container string) (string, error) {
 // dockerNetworkGateway returns the IPv4 gateway of a docker network — the address
 // of the bridge itself.
 //
-// POR QUE ELE EXISTE (loopzero-workspace#23). O IP de um CONTAINER e' atribuido por
-// DHCP e EMBARALHA a cada `docker restart` / `k3d cluster create`: qualquer config
-// que o tenha gravado passa a apontar para outro cluster, EM SILENCIO — e o sintoma
-// nunca acusa a causa (`loopzero logs` vazio le-se como "Loki fora do ar", nunca como
-// "voce esta' falando com o cluster errado"). O gateway nao participa desse sorteio:
-// e' declarado no IPAM da rede e vive enquanto a rede viver. Combinado com uma porta
-// PUBLICADA — declarada na config versionada do cluster, nao sorteada — forma o unico
-// endereco estavel que um processo fora do cluster tem para falar com ele. Foi o que
-// tirou o item 1 do issue da classe.
+// WHY IT EXISTS (loopzero-workspace#23). A CONTAINER's IP is assigned by DHCP and
+// SHUFFLES on every `docker restart` / `k3d cluster create`: any config that
+// recorded it starts pointing at another cluster, IN SILENCE — and the symptom
+// never names the cause (an empty `loopzero logs` reads as "Loki is down", never as
+// "you are talking to the wrong cluster"). The gateway takes no part in that
+// shuffle: it is declared in the network's IPAM and lives as long as the
+// network does. Paired with a PUBLISHED port — declared in the cluster's
+// versioned config, not drawn — it is the one stable address a process outside
+// the cluster has to reach it.
 //
-// DERIVADO, nunca fixado em texto: `172.18.0.1` e' verdade para a rede `k3d-loopzero` de
-// hoje; outra rede tem outra bridge. Ler do IPAM preserva a PROPRIEDADE (estabilidade)
-// sem herdar o literal — e literal de IP e' exatamente o que este issue combate.
+// DERIVED, never written as a literal: `172.18.0.1` is true for today's
+// `k3d-loopzero` network; another network has another bridge. Reading the IPAM
+// keeps the PROPERTY (stability) without inheriting the literal — and an IP
+// literal is exactly what this issue fights.
 //
-// D1 exemption: read-only introspection, mesmo caso do vizinho acima.
+// D1 exemption: read-only introspection, the same case as the neighbour above.
 func defaultDockerNetworkGateway(network string) (string, error) {
 	out, err := exec.Command("docker", "network", "inspect", network).Output()
 	if err != nil {

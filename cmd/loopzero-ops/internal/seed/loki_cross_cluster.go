@@ -40,10 +40,10 @@ const (
 	lokiDefaultNodePort      = 30120
 	lokiCanonicalPushURL     = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
 	lokiLoopZeroAPILokiURLEnvVar = "LOKI_URL"
-	// `lokiBuildServerContainer = "k3d-loopzero-build-server-0"` foi REMOVIDA junto com o
-	// defeito: era o container cujo IP a Layer 3 gravava. Deixa-la seria convidar a
-	// proxima pessoa a voltar a usa-la — e um simbolo morto que aponta para o
-	// comportamento errado e' pior que nenhum.
+	// `lokiBuildServerContainer = "k3d-loopzero-build-server-0"` was REMOVED with the
+	// defect: it was the container whose IP Layer 3 recorded. Keeping it would
+	// invite the next person to use it again, and a dead symbol pointing at the
+	// wrong behaviour is worse than none.
 )
 
 // pushURLRE matches any http://... URL followed by /loki/api/v1/push. Used to
@@ -87,25 +87,28 @@ func (s *LokiCrossClusterSeed) Run(d Deps) Result {
 
 	// Layer 3 — set loopzero-api LOKI_URL.
 	//
-	// GATEWAY, nao o IP do container (loopzero-workspace#23 item 2). O endereco de
-	// `k3d-loopzero-build-server-0` e' distribuido por DHCP e EMBARALHA a cada
-	// `docker restart` / `k3d cluster create`: no mapa medido em 2026-08-01,
-	// `172.18.0.4` era o server de build e `172.18.0.7` o de mgmt — depois de um
-	// reboot o LOKI_URL gravado podia apontar para OUTRO cluster, e o sintoma
-	// (`loopzero logs` vazio) le-se como "Loki fora do ar", nunca como "cluster errado".
+	// The GATEWAY, not the container IP (loopzero-workspace#23 item 2). The address
+	// of `k3d-loopzero-build-server-0` is assigned by DHCP and SHUFFLES on every
+	// `docker restart` / `k3d cluster create`: in the map measured on
+	// 2026-08-01, `172.18.0.4` was the build server and `172.18.0.7` the mgmt one
+	// — after a reboot the recorded LOKI_URL could point at ANOTHER cluster, and
+	// the symptom (an empty `loopzero logs`) reads as "Loki is down", never as "wrong
+	// cluster".
 	//
-	// O par estavel e' gateway + porta PUBLICADA no serverlb, declarada em
-	// `infra/k3d/build-cluster.yaml`. Sem a publicacao o gateway sozinho nao alcanca
-	// a NodePort — por isso as duas mudancas andam juntas.
+	// The stable pair is the gateway plus the port PUBLISHED on the serverlb,
+	// declared in `infra/k3d/build-cluster.yaml`. Without the publication the
+	// gateway alone does not reach the NodePort, which is why the two changes
+	// travel together.
 	//
-	// FALHA ALTO se o gateway nao resolve. Cair no IP do container como fallback
-	// reintroduziria o defeito EM SILENCIO, e um fallback silencioso para o
-	// comportamento errado e' pior que a falha: nunca e' investigado.
+	// FAILS LOUD when the gateway does not resolve. Falling back to the
+	// container IP would reintroduce the defect IN SILENCE, and a silent
+	// fallback to the wrong behaviour is worse than the failure: it is never
+	// investigated.
 	gateway, err := d.Host.dockerGateway(brokerNetworkName)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf(
-			"Layer 3 gateway da rede %s: %v — sem gateway nao ha endereco estavel para LOKI_URL "+
-				"(gravar IP de container reintroduz loopzero-workspace#23)", brokerNetworkName, err)}
+			"Layer 3 gateway of network %s: %v — without a gateway there is no stable address for LOKI_URL "+
+				"(recording a container IP reintroduces loopzero-workspace#23)", brokerNetworkName, err)}
 	}
 	canonicalURL := fmt.Sprintf("http://%s:%d", gateway, nodePort)
 	if d.DryRun {

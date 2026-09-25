@@ -5,76 +5,68 @@ package seed
 
 import "testing"
 
-// A distância entre DECLARAR uma capacidade e TÊ-LA é o que estes testes medem.
+// These tests measure the gap between DECLARING a capability and HAVING it.
 //
-// Medido em 2026-08-11: o app-dev subiu 20h servindo um painel que mostra plano, preço e
-// botão de upgrade, com o segredo que verifica pagamentos ausente. Nenhuma camada mentiu
-// isoladamente — cada uma tratou a ausência como uma configuração legítima. É legítima,
-// num ambiente hermético; não é, num que promete cobrar.
+// Measured 2026-08-11: app-dev ran for 20h serving a dashboard with plan, price
+// and upgrade button while the secret that verifies payments was absent. No
+// layer lied on its own — each treated the absence as legitimate configuration.
+// It is legitimate in a hermetic environment; it is not in one that promises to
+// charge.
 
-// TestPoliticaExigeCobrancaQuandoOAmbienteADeclara é o caso que muda o comportamento.
-func TestPoliticaExigeCobrancaQuandoOAmbienteADeclara(t *testing.T) {
+func TestPolicyRequiresBillingWhereTheEnvironmentDeclaresIt(t *testing.T) {
 	p := NewEnvRequirementPolicy("dev-public")
 	if !p.Requires(CapabilityBilling) {
-		t.Fatal("dev-public serve o painel público com plano e preço; se ele declara cobrança, " +
-			"a ausência da credencial é defeito e não configuração")
+		t.Fatal("dev-public serves the public dashboard with plan and price; since it declares billing, " +
+			"a missing credential is a defect, not configuration")
 	}
 }
 
-// TestPoliticaNaoExigeNoAmbienteQueNaoDeclara protege o comportamento de hoje.
-//
-// O hermético roda sem credencial de Stripe de propósito, e continuar verde ali é o que
-// permite que esta mudança entre sem quebrar quem não prometeu nada.
-func TestPoliticaNaoExigeNoAmbienteQueNaoDeclara(t *testing.T) {
-	for _, amb := range []string{"", "standalone-multi", "drill"} {
-		if NewEnvRequirementPolicy(amb).Requires(CapabilityBilling) {
-			t.Errorf("ambiente %q não declara cobrança; exigi-la ali quebra o hermético", amb)
+// The hermetic environment runs without Stripe credentials on purpose, and
+// staying green there is what let this change land without breaking anyone
+// who promised nothing.
+func TestPolicyDoesNotRequireBillingWhereItIsNotDeclared(t *testing.T) {
+	for _, env := range []string{"", "standalone-multi", "drill"} {
+		if NewEnvRequirementPolicy(env).Requires(CapabilityBilling) {
+			t.Errorf("environment %q does not declare billing; requiring it there breaks the hermetic tier", env)
 		}
 	}
 }
 
-// TestCapacidadeDesconhecidaNaoEExigida — a tabela é dado, e dado tem buraco.
-//
-// Uma capacidade que ninguém declarou não pode virar exigência por omissão: seria a mesma
-// polaridade invertida que este trabalho existe para corrigir, só que no outro sentido.
-func TestCapacidadeDesconhecidaNaoEExigida(t *testing.T) {
-	if NewEnvRequirementPolicy("dev-public").Requires(Capability("coisa-que-nao-existe")) {
-		t.Error("capacidade não declarada não pode ser exigida por omissão")
+// The table is data, and data has holes: a capability nobody declared must not
+// become a requirement by omission.
+func TestUnknownCapabilityIsNotRequired(t *testing.T) {
+	if NewEnvRequirementPolicy("dev-public").Requires(Capability("no-such-capability")) {
+		t.Error("an undeclared capability must not be required by omission")
 	}
 }
 
-// TestPoliticaNulaNaoExigeNada é a garantia de que a injeção é opcional.
-//
-// `Deps` é construído em vários lugares (testes, subcomandos antigos). Se uma `Deps` sem
-// política passasse a exigir, esta mudança quebraria chamadores que nada têm a ver com
-// cobrança — e o modo de falha seria um FAIL sem explicação.
-func TestPoliticaNulaNaoExigeNada(t *testing.T) {
+// Deps is built in many places (tests, older subcommands). If a Deps without a
+// policy started demanding, this would break callers unrelated to billing with
+// an unexplained FAIL.
+func TestDepsWithoutAPolicyRequiresNothing(t *testing.T) {
 	var d Deps
 	if d.RequiresCapability(CapabilityBilling) {
-		t.Error("Deps sem política deve se comportar como hoje: não exigir")
+		t.Error("Deps without a policy must behave as before: require nothing")
 	}
 }
 
-// TestDepsConsultaAPoliticaInjetada — o caminho que os seeds vão usar.
-func TestDepsConsultaAPoliticaInjetada(t *testing.T) {
+func TestDepsDelegatesToTheInjectedPolicy(t *testing.T) {
 	d := Deps{Policy: NewEnvRequirementPolicy("dev-public")}
 	if !d.RequiresCapability(CapabilityBilling) {
-		t.Error("Deps deve delegar à política injetada, não reimplementar a decisão")
+		t.Error("Deps must delegate to the injected policy, not reimplement the decision")
 	}
 }
 
-// TestAmbienteQueDeclaraCobrancaEstaNaTabela trava a tabela real contra esvaziamento.
-//
-// Uma tabela de exigências que fica vazia não falha — ela passa a permitir tudo, em
-// silêncio. É exatamente o modo de falha da lista de bloqueio do firewall, medido em
-// 2026-08-10: uma lista que envelheceu para o lado inseguro sem que nada acusasse.
-func TestAmbienteQueDeclaraCobrancaEstaNaTabela(t *testing.T) {
+// A requirement table that empties does not fail — it starts permitting
+// everything, in silence. That is how the firewall block list aged toward the
+// unsafe side, measured 2026-08-10, without anything noticing.
+func TestTheBillingEnvironmentIsInTheTable(t *testing.T) {
 	if len(capabilitiesByEnv) == 0 {
-		t.Fatal("a tabela de capacidades está vazia — nenhum ambiente exigiria nada")
+		t.Fatal("the capability table is empty — no environment would require anything")
 	}
 	caps, ok := capabilitiesByEnv["dev-public"]
 	if !ok || len(caps) == 0 {
-		t.Fatal("dev-public é o ambiente que serve o painel público; ele precisa declarar " +
-			"o que oferece, ou a política não tem o que exigir")
+		t.Fatal("dev-public serves the public dashboard; it must declare what it offers, " +
+			"or the policy has nothing to require")
 	}
 }

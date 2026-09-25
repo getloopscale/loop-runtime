@@ -88,8 +88,8 @@ type Services interface {
 // kubeClient is the production KubeClient backed by a controller-runtime client.
 type kubeClient struct {
 	c client.Client
-	// contextName nomeia o cluster com que este cliente fala. Vazio quando o chamador
-	// nao o declarou — e ai as mensagens ficam como sempre foram.
+	// contextName names the cluster this client talks to. Empty when the caller
+	// did not declare it, and then messages read as they always did.
 	contextName string
 }
 
@@ -100,35 +100,37 @@ func NewKubeClient(c client.Client) KubeClient {
 	return &kubeClient{c: c}
 }
 
-// NewKubeClientForContext e o mesmo cliente sabendo com QUAL cluster fala.
+// NewKubeClientForContext is the same client, knowing WHICH cluster it talks to.
 //
-// # Por que existe
+// # Why it exists
 //
-// B-024, medido 2026-08-10: `loopzero-ops seed patch-kratos` reprovou com
-// `get configmap loopzero-auth/ory-kratos-config: configmaps "ory-kratos-config" not found`, e
-// o ConfigMap existia. O seed falava com outro cluster — `k3d:secrets:create` troca o
-// contexto ativo como efeito colateral, e os seeds herdam o que estiver ativo. A mensagem
-// mandava procurar o recurso certo no cluster errado, e o custo era tempo de depuracao em
-// cima de um sistema que ja estava quebrado.
+// B-024, measured 2026-08-10: `loopzero-ops seed patch-kratos` failed with
+// `get configmap loopzero-auth/ory-kratos-config: configmaps "ory-kratos-config" not found`,
+// and the ConfigMap existed. The seed was talking to another cluster —
+// `k3d:secrets:create` switches the active context as a side effect, and seeds
+// inherit whatever is active. The message sent people to look for the right
+// resource in the wrong cluster, at the cost of debugging time on a system that
+// was already broken.
 //
-// # Por que um construtor irmao, e nao um parametro a mais
+// # Why a sibling constructor and not one more parameter
 //
-// `NewKubeClient` tem 98 chamadores, 96 deles em teste. Trocar a assinatura churnaria 96
-// sitios por um beneficio que nao os envolve — teste com cliente falso nao tem contexto de
-// kubeconfig para nomear. Este construtor e opt-in: a raiz de composicao usa, o resto fica.
+// NewKubeClient has 98 callers, 96 of them in tests. Changing its signature
+// would churn 96 sites for a benefit that does not involve them — a test with a
+// fake client has no kubeconfig context to name. This constructor is opt-in:
+// the composition root uses it, and nothing else has to.
 func NewKubeClientForContext(c client.Client, contextName string) KubeClient {
 	return &kubeClient{c: c, contextName: contextName}
 }
 
-// resourceAt descreve o alvo de uma operacao, nomeando o cluster quando ele e conhecido.
+// resourceAt names the target of an operation, with the cluster when known.
 //
-// Sem contexto declarado devolve exatamente o que a mensagem sempre trouxe — inventar um
-// rotulo vazio seria pior que a original.
+// With no declared context it returns exactly what the message always carried —
+// inventing an empty label would be worse than the original.
 func (k *kubeClient) resourceAt(namespace, name string) string {
 	if k.contextName == "" {
 		return namespace + "/" + name
 	}
-	return namespace + "/" + name + " (contexto " + k.contextName + ")"
+	return namespace + "/" + name + " (context " + k.contextName + ")"
 }
 
 func (k *kubeClient) CreateOrUpdateSecret(ctx context.Context, s *corev1.Secret) (bool, error) {

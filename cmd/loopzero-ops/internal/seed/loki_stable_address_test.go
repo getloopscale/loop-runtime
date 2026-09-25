@@ -13,37 +13,39 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-// loopzero-workspace#23, item 2 — LOKI_URL deixa de gravar IP de container.
+// loopzero-workspace#23, item 2 — LOKI_URL stops recording a container IP.
 //
-// O DEFEITO. A Layer 3 derivava a URL do IP do container `k3d-loopzero-build-server-0`.
-// IPs de rede Docker sao atribuidos por DHCP e EMBARALHAM a cada `docker restart` /
-// `k3d cluster create`: no mapa medido em 2026-08-01, `172.18.0.4` era o server de
-// build, `172.18.0.7` o de mgmt e `172.18.0.10` o serverlb de workload — e nada
-// garante que continuem assim depois de um reboot.
+// THE DEFECT. Layer 3 derived the URL from the IP of container
+// `k3d-loopzero-build-server-0`. Docker network IPs are assigned by DHCP and
+// SHUFFLE on every `docker restart` / `k3d cluster create`: in the map measured
+// on 2026-08-01, `172.18.0.4` was the build server, `172.18.0.7` mgmt and
+// `172.18.0.10` the workload serverlb — and nothing keeps them so after a
+// reboot.
 //
-// POR QUE E' PIOR QUE UM ENDERECO ERRADO. O sintoma nunca aponta para a causa. Um
-// `LOKI_URL` que passou a apontar para OUTRO cluster nao devolve "cluster errado":
-// devolve `loopzero logs` vazio, ou `connection refused`, que se le como "Loki fora do
-// ar". A mesma classe fez duas investigacoes do #114 gastarem esforco rotacionando
-// credencial — o que funciona ate' o proximo restart, e por isso o defeito parece
-// periodico e insoluvel.
+// WHY IT IS WORSE THAN A WRONG ADDRESS. The symptom never points at the cause.
+// A LOKI_URL now pointing at ANOTHER cluster does not return "wrong cluster": it
+// returns an empty `loopzero logs`, or `connection refused`, which reads as "Loki is
+// down". The same class made two #114 investigations spend effort rotating
+// credentials — which works until the next restart, so the defect looks
+// periodic and unsolvable.
 //
-// A SAIDA e' a que ja tirou o item 1 da classe: o GATEWAY da rede (`.0.1`) mais uma
-// porta PUBLICADA no serverlb. O gateway nao e' distribuido por DHCP — e' o endereco
-// da propria bridge, declarado no IPAM da rede — e a porta publicada esta' na config
-// versionada do cluster (`infra/k3d/build-cluster.yaml`), nao no sorteio do Docker.
+// THE WAY OUT is the one that already closed item 1 of the class: the network
+// GATEWAY (`.0.1`) plus a port PUBLISHED on the serverlb. The gateway is not
+// assigned by DHCP — it is the bridge's own address, declared in the network's
+// IPAM — and the published port is in the cluster's versioned config
+// (`infra/k3d/build-cluster.yaml`), not in Docker's draw.
 //
-// Derivado, nunca fixado em texto: `172.18.0.1` e' verdade para a rede `k3d-loopzero`
-// de hoje: outra rede tem outra bridge. Ler do IPAM mantem a propriedade
-// (estabilidade) sem herdar o literal.
+// Derived, never written as a literal: `172.18.0.1` is true for today's
+// `k3d-loopzero` network; another network has another bridge.
 
-// rede sem gateway declarado no IPAM — o caso que nao pode virar fallback silencioso.
+// A network with no IPAM gateway — the case that must not become a silent
+// fallback.
 var errNoGatewayForTest = errors.New("network declares no IPAM gateway")
 
-func TestLokiCrossCluster_URLDerivaDoGatewayNaoDoContainer(t *testing.T) {
+func TestLokiCrossCluster_URLDerivesFromTheGatewayNotTheContainer(t *testing.T) {
 	var host Host
-	// Arrange — o fake distingue as duas fontes: se o codigo perguntar pelo IP do
-	// CONTAINER, recebe 172.20.0.99; se perguntar pelo GATEWAY, recebe 172.20.0.1.
+	// Arrange — the fake tells the two sources apart: asked for the CONTAINER IP
+	// it answers 172.20.0.99; asked for the GATEWAY, 172.20.0.1.
 	host.DockerNetworkIP = func(network, container string) (string, error) { return "172.20.0.99", nil }
 	host.DockerGateway = func(network string) (string, error) { return "172.20.0.1", nil }
 
@@ -92,19 +94,20 @@ func TestLokiCrossCluster_URLDerivaDoGatewayNaoDoContainer(t *testing.T) {
 		t.Fatalf("getDeploymentContainerEnv: %v", err)
 	}
 	if strings.Contains(env, "172.20.0.99") {
-		t.Errorf("LOKI_URL = %q — gravou o IP do CONTAINER, que embaralha a cada restart do k3d "+
+		t.Errorf("LOKI_URL = %q — it recorded the CONTAINER IP, which shuffles on every k3d restart "+
 			"(loopzero-workspace#23 item 2)", env)
 	}
 	if !strings.HasPrefix(env, "http://172.20.0.1:") {
-		t.Errorf("LOKI_URL = %q, esperado derivar do gateway da rede (http://172.20.0.1:<porta>)", env)
+		t.Errorf("LOKI_URL = %q, want it derived from the network gateway (http://172.20.0.1:<port>)", env)
 	}
 }
 
-func TestLokiCrossCluster_FalhaAltoQuandoOGatewayNaoResolve(t *testing.T) {
+func TestLokiCrossCluster_FailsLoudWhenTheGatewayDoesNotResolve(t *testing.T) {
 	var host Host
-	// Fail-fast: sem gateway nao existe endereco estavel. Cair no IP do container
-	// como "fallback" reintroduziria o defeito EM SILENCIO — e um fallback silencioso
-	// para o comportamento errado e' pior que a falha, porque nunca e' investigado.
+	// Fail fast: with no gateway there is no stable address. Falling back to the
+	// container IP would reintroduce the defect IN SILENCE — and a silent fallback
+	// to the wrong behaviour is worse than the failure, because it is never
+	// investigated.
 	host.DockerNetworkIP = func(network, container string) (string, error) { return "172.20.0.99", nil }
 	host.DockerGateway = func(network string) (string, error) { return "", errNoGatewayForTest }
 
@@ -141,10 +144,10 @@ func TestLokiCrossCluster_FalhaAltoQuandoOGatewayNaoResolve(t *testing.T) {
 	})
 
 	if got.Verdict != FAIL {
-		t.Fatalf("Verdict = %s (%s), want FAIL — sem gateway nao ha endereco estavel", got.Verdict, got.Reason)
+		t.Fatalf("Verdict = %s (%s), want FAIL — with no gateway there is no stable address", got.Verdict, got.Reason)
 	}
 	env, _ := getDeploymentContainerEnv(context.Background(), mgmtC, "loopzero-system", "loopzero-api", lokiLoopZeroAPILokiURLEnvVar)
 	if strings.Contains(env, "172.20.0.99") {
-		t.Errorf("caiu no IP do container como fallback silencioso: LOKI_URL = %q", env)
+		t.Errorf("fell back to the container IP in silence: LOKI_URL = %q", env)
 	}
 }
