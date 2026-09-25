@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package syncrecovery owns the one policy for driving an ArgoCD sync past a stuck
+package deploycontracts
+
+// This file owns the one policy for driving an ArgoCD sync past a stuck
 // operation: trigger the sync, and when ArgoCD answers that an operation is already
 // in progress, terminate that operation before retrying.
 //
@@ -9,8 +11,10 @@
 // loop and the two project-delete paths — each with its own budget, backoff and a
 // duck-typed assertion for TerminateOperation that could fail silently. A change to
 // the policy had to be made in four places and was not. Callers now differ only in
-// the Policy they pass; the mechanism is here once.
-package syncrecovery
+// the SyncRecoveryPolicy they pass; the mechanism is here once.
+//
+// It lives in this sink because two services contexts (release, platform) share
+// it, and the services DAG allows shared symbols only here.
 
 import (
 	"context"
@@ -21,16 +25,16 @@ import (
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
-// Syncer is the part of the sync client the recovery policy drives. Both methods
+// SyncRecoveryClient is the part of the sync client the recovery policy drives. Both methods
 // are required: a client that cannot terminate an operation cannot recover from a
 // stuck one, and discovering that at runtime is what the old type assertions did.
-type Syncer interface {
+type SyncRecoveryClient interface {
 	TriggerSync(ctx context.Context, appName string) error
 	TerminateOperation(ctx context.Context, appName string) error
 }
 
-// Policy is the retry budget of one caller.
-type Policy struct {
+// SyncRecoveryPolicy is the retry budget of one caller.
+type SyncRecoveryPolicy struct {
 	// MaxAttempts bounds the attempts when the latest failure is NOT a stuck
 	// operation (connection refused, 5xx, auth).
 	MaxAttempts int
@@ -48,13 +52,13 @@ type Policy struct {
 // ShouldTerminate reports whether consecutiveStuck stuck failures warrant
 // terminating the operation. Exported for the convergence loop, which retries
 // across ticks rather than inside one call and so keeps its own counter.
-func (p Policy) ShouldTerminate(consecutiveStuck int) bool {
+func (p SyncRecoveryPolicy) ShouldTerminate(consecutiveStuck int) bool {
 	return p.TerminateAfterStuck > 0 && consecutiveStuck >= p.TerminateAfterStuck
 }
 
-// IsStuck reports whether err is ArgoCD refusing a sync because an operation is
+// IsSyncStuck reports whether err is ArgoCD refusing a sync because an operation is
 // already running on the application.
-func IsStuck(err error) bool {
+func IsSyncStuck(err error) bool {
 	return errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress)
 }
 
@@ -63,7 +67,7 @@ func IsStuck(err error) bool {
 // termination is not returned as an error because no caller can do more with it
 // than log it: the next TriggerSync is what reports whether the lock cleared, and
 // that error IS returned to the caller.
-func Terminate(ctx context.Context, s Syncer, appName string, logger *slog.Logger) bool {
+func TerminateStuckSync(ctx context.Context, s SyncRecoveryClient, appName string, logger *slog.Logger) bool {
 	if err := s.TerminateOperation(ctx, appName); err != nil {
 		logger.Error("failed to terminate stuck argocd operation", "app", appName, "error", err)
 		return false
@@ -76,11 +80,11 @@ func Terminate(ctx context.Context, s Syncer, appName string, logger *slog.Logge
 // operation when the policy says so. It returns nil on the first successful
 // trigger, ctx.Err() when the context ends during a backoff, and otherwise the
 // last trigger error once the budget is exhausted.
-func Trigger(ctx context.Context, s Syncer, appName string, p Policy, logger *slog.Logger) error {
-	return trigger(ctx, s, appName, p, logger, sleep)
+func TriggerSyncWithRecovery(ctx context.Context, s SyncRecoveryClient, appName string, p SyncRecoveryPolicy, logger *slog.Logger) error {
+	return triggerSyncWithRecovery(ctx, s, appName, p, logger, sleepOrDone)
 }
 
-func trigger(ctx context.Context, s Syncer, appName string, p Policy, logger *slog.Logger,
+func triggerSyncWithRecovery(ctx context.Context, s SyncRecoveryClient, appName string, p SyncRecoveryPolicy, logger *slog.Logger,
 	wait func(context.Context, time.Duration) error) error {
 	consecutiveStuck := 0
 	for failures := 1; ; failures++ {
@@ -88,7 +92,7 @@ func trigger(ctx context.Context, s Syncer, appName string, p Policy, logger *sl
 		if err == nil {
 			return nil
 		}
-		stuck := IsStuck(err)
+		stuck := IsSyncStuck(err)
 		if stuck {
 			consecutiveStuck++
 		} else {
@@ -104,7 +108,7 @@ func trigger(ctx context.Context, s Syncer, appName string, p Policy, logger *sl
 		logger.Warn("argocd sync trigger failed, retrying",
 			"app", appName, "attempt", failures, "stuck_operation", stuck, "error", err)
 		if stuck && p.ShouldTerminate(consecutiveStuck) {
-			Terminate(ctx, s, appName, logger)
+			TerminateStuckSync(ctx, s, appName, logger)
 		}
 		if waitErr := wait(ctx, p.Backoff(failures, stuck)); waitErr != nil {
 			return waitErr
@@ -112,7 +116,7 @@ func trigger(ctx context.Context, s Syncer, appName string, p Policy, logger *sl
 	}
 }
 
-func sleep(ctx context.Context, d time.Duration) error {
+func sleepOrDone(ctx context.Context, d time.Duration) error {
 	if d <= 0 {
 		return ctx.Err()
 	}

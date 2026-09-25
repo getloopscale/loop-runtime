@@ -14,7 +14,6 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/services/syncrecovery"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
@@ -33,8 +32,8 @@ type ProjectDeleterDeps struct {
 	ScalingStore      ProjectDeleteScalingStore // nil-safe: when nil, skips app_scaling_config cascade
 	Locker            deploycontracts.EnvironmentLocker
 	GitOps            deploycontracts.GitOpsPusher
-	WorkflowCanceller WorkflowCanceller   // nil-safe: skips workflow cancel if not set
-	Sync              syncrecovery.Syncer // nil-safe: skips ArgoCD sync trigger if not set
+	WorkflowCanceller WorkflowCanceller                  // nil-safe: skips workflow cancel if not set
+	Sync              deploycontracts.SyncRecoveryClient // nil-safe: skips ArgoCD sync trigger if not set
 }
 
 // ProjectDeleteProjectStore defines the project store operations needed by ProjectDeleter.
@@ -66,7 +65,7 @@ type ProjectDeleter struct {
 	locker            deploycontracts.EnvironmentLocker
 	gitops            deploycontracts.GitOpsPusher
 	workflowCanceller WorkflowCanceller
-	sync              syncrecovery.Syncer
+	sync              deploycontracts.SyncRecoveryClient
 }
 
 // NewProjectDeleter creates a new ProjectDeleter with all dependencies injected.
@@ -172,7 +171,7 @@ func (d *ProjectDeleter) Delete(ctx context.Context, req ports.ProjectDeleteInpu
 				}
 				syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
 				defer syncCancel()
-				syncErr := syncrecovery.Trigger(syncCtx, d.sync, argoAppName, fallbackPruneSyncPolicy, slog.Default())
+				syncErr := deploycontracts.TriggerSyncWithRecovery(syncCtx, d.sync, argoAppName, fallbackPruneSyncPolicy, slog.Default())
 				if syncErr != nil {
 					slog.Warn("argocd sync after fallback delete failed",
 						"app", argoAppName, "error", syncErr)
@@ -307,7 +306,7 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req ports.Projec
 		syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
 		defer syncCancel()
 
-		lastErr := syncrecovery.Trigger(syncCtx, d.sync, argoAppName, pruneSyncPolicy, slog.Default())
+		lastErr := deploycontracts.TriggerSyncWithRecovery(syncCtx, d.sync, argoAppName, pruneSyncPolicy, slog.Default())
 		if lastErr == nil {
 			slog.Info("argocd sync triggered after gitops remove",
 				"app", argoAppName, "project", req.ProjectName, "environment", env)
@@ -325,7 +324,7 @@ func (d *ProjectDeleter) deleteEnvironment(ctx context.Context, req ports.Projec
 // Every stuck failure terminates the operation immediately: the application is
 // being emptied, so there is no peer sync worth waiting for. Three attempts with
 // a 1s-then-3s backoff ride out a transient auth or network blip.
-var pruneSyncPolicy = syncrecovery.Policy{
+var pruneSyncPolicy = deploycontracts.SyncRecoveryPolicy{
 	MaxAttempts:         3,
 	MaxStuckAttempts:    3,
 	TerminateAfterStuck: 1,
@@ -340,7 +339,7 @@ var pruneSyncPolicy = syncrecovery.Policy{
 
 // fallbackPruneSyncPolicy is the best-effort variant used when no environment
 // target exists: one attempt, plus one retry after terminating a stuck operation.
-var fallbackPruneSyncPolicy = syncrecovery.Policy{
+var fallbackPruneSyncPolicy = deploycontracts.SyncRecoveryPolicy{
 	MaxAttempts:         1,
 	MaxStuckAttempts:    2,
 	TerminateAfterStuck: 1,

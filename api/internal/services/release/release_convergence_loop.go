@@ -22,7 +22,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/events"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/services/syncrecovery"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -280,7 +279,7 @@ func (r *ReleaseConvergenceLoop) handleSyncTimeout(ctx context.Context, release 
 	r.logger.Warn("release convergence: sync timeout",
 		"release_id", release.ID, "build_id", release.BuildID,
 		"elapsed", elapsed, "timeout", r.cfg.SyncTimeout)
-	syncrecovery.Terminate(ctx, r.sync_, argoAppName, r.logger.With("release_id", release.ID, "reason", "sync_timeout"))
+	deploycontracts.TerminateStuckSync(ctx, r.sync_, argoAppName, r.logger.With("release_id", release.ID, "reason", "sync_timeout"))
 	r.failRelease(ctx, release, "Sync timeout: service did not become healthy within the time limit")
 }
 
@@ -513,7 +512,7 @@ func classifyAbortReason(reason string) string {
 // convergenceSyncPolicy is the stuck-operation rule the convergence loop applies
 // across ticks: it retries once per tick rather than inside one call, so only the
 // termination threshold of the shared policy applies here.
-var convergenceSyncPolicy = syncrecovery.Policy{TerminateAfterStuck: 2}
+var convergenceSyncPolicy = deploycontracts.SyncRecoveryPolicy{TerminateAfterStuck: 2}
 
 // maxSyncRetriggers bounds the number of times the convergence loop will
 // retrigger TriggerSync for a single release. Prevents infinite retry loops.
@@ -566,14 +565,14 @@ func (r *ReleaseConvergenceLoop) retriggerSyncIfNeeded(ctx context.Context, rele
 		// TerminateOperation. The timeout-side termination in verifyRelease
 		// fires only AFTER failure; this pre-failure path
 		// recovers without losing the release.
-		if syncrecovery.IsStuck(err) {
+		if deploycontracts.IsSyncStuck(err) {
 			// Count the stuck failure in the same counter as a retrigger, so the
 			// policy's threshold is reached after two consecutive stuck ticks. One
 			// is a normal race (the operation completes between the status check and
 			// the retrigger); two means the lock is stuck.
 			counter.Add(1)
 			if convergenceSyncPolicy.ShouldTerminate(int(counter.Load())) {
-				syncrecovery.Terminate(ctx, r.sync_, argoAppName,
+				deploycontracts.TerminateStuckSync(ctx, r.sync_, argoAppName,
 					r.logger.With("release_id", release.ID, "reason", "pre_timeout_recovery"))
 			}
 		}

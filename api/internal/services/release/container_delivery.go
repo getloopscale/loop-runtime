@@ -17,7 +17,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/events"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/services/syncrecovery"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -521,7 +520,7 @@ func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build d
 // earlier attempt never cancels a peer's legitimate sync (V9 dogfood 2026-05-29/30).
 // Any other failure keeps a 3-attempt exponential budget (1s, 2s) so a genuine
 // outage fails fast.
-var containerSyncPolicy = syncrecovery.Policy{
+var containerSyncPolicy = deploycontracts.SyncRecoveryPolicy{
 	MaxAttempts:         3,
 	MaxStuckAttempts:    8,
 	TerminateAfterStuck: 7,
@@ -534,5 +533,5 @@ var containerSyncPolicy = syncrecovery.Policy{
 }
 
 func (c *ContainerDeliveryActivator) triggerSyncWithRetry(ctx context.Context, appName string) error {
-	return syncrecovery.Trigger(ctx, c.sync, appName, containerSyncPolicy, slog.Default())
+	return deploycontracts.TriggerSyncWithRecovery(ctx, c.sync, appName, containerSyncPolicy, slog.Default())
 }
