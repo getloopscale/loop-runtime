@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -398,20 +399,26 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 		},
 	}
 
-	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, argoSecret, func() error {
-		if argoSecret.Labels == nil {
-			argoSecret.Labels = make(map[string]string)
-		}
-		argoSecret.Labels[constants.ArgoCDSecretTypeLabel] = constants.ArgoCDSecretTypeCluster
-		argoSecret.Labels[constants.LabelManagedBy] = constants.ManagedByClusterCredentialController
-		argoSecret.Labels[constants.LabelClusterCredential] = cr.Name
+	// The Secret has a second writer (ArgoCD itself, or an overlapping
+	// reconcile), so a write can lose the optimistic-concurrency race.
+	// CreateOrUpdate re-reads on each attempt; the CA is not fetched again.
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		_, err := controllerutil.CreateOrUpdate(ctx, r.Client, argoSecret, func() error {
+			if argoSecret.Labels == nil {
+				argoSecret.Labels = make(map[string]string)
+			}
+			argoSecret.Labels[constants.ArgoCDSecretTypeLabel] = constants.ArgoCDSecretTypeCluster
+			argoSecret.Labels[constants.LabelManagedBy] = constants.ManagedByClusterCredentialController
+			argoSecret.Labels[constants.LabelClusterCredential] = cr.Name
 
-		argoSecret.StringData = map[string]string{
-			"name":   cr.Spec.ClusterName,
-			"server": cr.Spec.APIServer,
-			"config": string(configJSON),
-		}
-		return nil
+			argoSecret.StringData = map[string]string{
+				"name":   cr.Spec.ClusterName,
+				"server": cr.Spec.APIServer,
+				"config": string(configJSON),
+			}
+			return nil
+		})
+		return err
 	})
 	if err != nil {
 		return fmt.Errorf("argocd cluster secret %s/%s: %w", r.ArgoCDNamespace, secretName, err)
