@@ -5,8 +5,16 @@
 // tenant after it exists: pinning it to a cell (CellPinner), reporting on cells
 // (CellService) and evicting tenants (TenantEvictor).
 //
+// Two packages share the name, and the split is by moment, not by topic:
+//
+//   - api/internal/placement decides a NEW tenant's cell, once, at bootstrap
+//     (RoundRobinEngine), and resolves a cell id to its endpoints on every
+//     request (DynamicRouter). It never moves a tenant.
+//   - this package acts on a tenant that already has a cell. CellPinner.Pin is
+//     the only path that moves one ("how does a tenant change cells?" ends here).
+//
 // It was named `placementsvc`, a suffix that existed only to avoid colliding with
-// `api/internal/placement` (the one-time placement engine and the router).
+// `api/internal/placement`.
 // Measured 2026-08-19 (B-057): of the 21 files importing either package, exactly
 // one imports both — the composition root, which now carries the alias.
 //
