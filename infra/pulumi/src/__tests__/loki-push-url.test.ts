@@ -32,6 +32,7 @@ interface LokiBlock {
 
 interface EnvDoc {
   loki?: LokiBlock;
+  crossCluster?: { lokiNodePort?: number };
 }
 
 function loadEnv(name: string): EnvDoc {
@@ -80,9 +81,10 @@ describe('Loki cross-cluster push URL wiring (audit M08 #18 / §6.C.4b)', () => 
       expect(env.loki?.pushUrl).toBe('http://172.18.0.3:30094/loki/api/v1/push');
     });
 
-    it('standalone-multi points at the k3d mgmt NodePort', () => {
+    it('standalone-multi derives the push address from the published build Loki port', () => {
       const env = loadEnv('standalone-multi');
-      expect(env.loki?.pushUrl).toBe('http://172.18.0.3:30094/loki/api/v1/push');
+      expect(env.loki?.pushUrl).toBeUndefined();
+      expect(env.crossCluster?.lokiNodePort).toBe(30120);
     });
 
     it('drill points at the DOKS internal LB for the drill cluster', () => {
@@ -143,15 +145,30 @@ describe('Loki cross-cluster push URL wiring (audit M08 #18 / §6.C.4b)', () => 
       }
     });
 
-    it('every environment file declares a pushUrl (no implicit fallback in prod)', () => {
-      // The template falls back to the k3d default when the key is absent.
-      // For prod/drill, an absent key would silently route to 172.18.0.3
-      // (a private k3d IP that does not exist cross-VPC). The contract is:
-      // EVERY environment file declares pushUrl explicitly.
-      const files = fs.readdirSync(ENVS_DIR).filter((f) => f.endsWith('.yaml'));
-      for (const file of files) {
-        const base = path.basename(file, '.yaml');
+    it('every environment file declares where Promtail pushes (no implicit fallback in prod)', () => {
+      // The template falls back to the k3d default when neither key is present.
+      // For prod/drill, that would silently route to 172.18.0.3 (a private k3d
+      // IP that does not exist cross-VPC). The contract is: EVERY environment
+      // file declares the push target explicitly — either loki.pushUrl, or
+      // crossCluster.lokiNodePort, from which the template derives the address
+      // on the k3d cross-cluster topologies.
+      // Scope: the environments of the platform helmfiles (environments.yaml,
+      // included by core/cell/build through `bases:`) — the ones that install
+      // Promtail. vault-local belongs to the secrets helmfile alone, which
+      // installs no Promtail and so has no push target to declare.
+      const platform = yaml.load(
+        fs.readFileSync(path.join(ENVS_DIR, '..', 'environments.yaml'), 'utf-8'),
+      ) as { environments: Record<string, unknown> };
+      const bases = Object.keys(platform.environments);
+      expect(bases.length).toBeGreaterThan(0);
+      for (const base of bases) {
         const env = loadEnv(base);
+        const nodePort = env.crossCluster?.lokiNodePort;
+        if (nodePort !== undefined) {
+          expect(Number.isInteger(nodePort), `${base}.yaml lokiNodePort not an integer`).toBe(true);
+          expect(env.loki?.pushUrl, `${base}.yaml declares both pushUrl and lokiNodePort`).toBeUndefined();
+          continue;
+        }
         expect(env.loki?.pushUrl, `${base}.yaml missing loki.pushUrl`).toBeDefined();
         expect(typeof env.loki?.pushUrl, `${base}.yaml pushUrl not a string`).toBe('string');
         expect(env.loki?.pushUrl, `${base}.yaml pushUrl empty`).not.toBe('');

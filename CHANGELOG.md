@@ -297,6 +297,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- On the multi-cluster local topologies (dev-public, standalone-public, standalone-multi), cell log shippers now push to the build cluster's published Loki port, so workload logs from the cells reach Loki; they pushed to a Service the cells do not have or to a stale container IP (principle_violations#67)
+
 - The published `loopzero-cloud` chart mounts a writable `/tmp`, so data exports no longer fail on its read-only root filesystem (design_pattern_findings#29)
 
 - The platform operator's `loopzero-system` and ArgoCD Roles now bind the chart's ServiceAccount; under any release name other than the chart's they bound a ServiceAccount that does not exist (principle_violations#149, principle_violations#150)

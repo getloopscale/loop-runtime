@@ -88,7 +88,10 @@ registries:
 
 loki:
   maxGlobalStreamsPerUser: 50000
-  pushUrl: http://172.18.0.3:30094/loki/api/v1/push
+  # No pushUrl: crossCluster.lokiNodePort publishes the build cluster's Loki, and
+  # infra/helm/promtail/values.yaml.gotmpl derives every Promtail's push address
+  # from it. The 172.18.0.3:30094 this carried was a container IP from before the
+  # k3d network re-IP, and no Promtail could reach it.
 
 policyMode: warn
 inClusterPostgres: true

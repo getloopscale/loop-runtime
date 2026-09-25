@@ -180,9 +180,9 @@ releases:
     chart: grafana/promtail
     version: 6.16.6
     # Read by ../helm/promtail/values.yaml.gotmpl: this Promtail runs in the same cluster
-    # as the Loki above, so it pushes to the in-cluster Service and not to the
-    # environment's loki.pushUrl, which is the address for Promtails elsewhere (the
-    # cells). The `loki-cross-cluster` seed used to rewrite this cluster's Promtail
+    # as the Loki above, so where the environment publishes that Loki through
+    # crossCluster.lokiNodePort it pushes to the in-cluster Service, while the cells
+    # push to the published port. The `loki-cross-cluster` seed used to rewrite this cluster's Promtail
     # Secret to the same URL after every sync.
     labels:
       lokiPush: colocated

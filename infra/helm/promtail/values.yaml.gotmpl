@@ -11,16 +11,22 @@
 # Helmfile templating expands the `.Environment.Values.loki.pushUrl` lookup
 # at sync time; the chart sees a fully-resolved literal.
 #
-# The build cluster's release is labelled `lokiPush: colocated`: it runs next to the
-# Loki build.helmfile installs. Where that Loki is the one the platform reads — the
-# environment publishes it cross-cluster through crossCluster.lokiNodePort, the k3d
-# topologies — this Promtail pushes to the in-cluster Service, and pushUrl stays the
-# address for the Promtails in other clusters (the cells). Elsewhere (prod, drill)
-# pushUrl names a central Loki and every Promtail uses it.
+# Where the environment publishes the build cluster's Loki through
+# crossCluster.lokiNodePort (the k3d cross-cluster topologies), that Loki is the only
+# one, and the address is derived from that one value rather than from pushUrl:
+#   - the build Promtail (release label `lokiPush: colocated`) runs next to it and
+#     pushes to the in-cluster Service;
+#   - every other Promtail (the cells) pushes to the port the build serverlb
+#     publishes on the host, reached as host.k3d.internal.
+# Elsewhere (prod, drill, the single-cluster k3d envs) pushUrl names the Loki every
+# Promtail uses.
+{{- $lokiNodePort := .Environment.Values | getOrNil "crossCluster.lokiNodePort" }}
 config:
   clients:
-{{- if and (eq (index .Release.Labels "lokiPush") "colocated") (.Environment.Values | getOrNil "crossCluster.lokiNodePort") }}
+{{- if and $lokiNodePort (eq (index .Release.Labels "lokiPush") "colocated") }}
     - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+{{- else if $lokiNodePort }}
+    - url: http://host.k3d.internal:{{ $lokiNodePort }}/loki/api/v1/push
 {{- else }}
     - url: {{ .Environment.Values | getOrNil "loki.pushUrl" | default "http://172.18.0.3:30094/loki/api/v1/push" }}
 {{- end }}

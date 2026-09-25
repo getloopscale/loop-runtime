@@ -228,6 +228,22 @@ func TestCellPromtailKeepsTheEnvironmentPushURL(t *testing.T) {
 	}
 }
 
+// On the k3d cross-cluster topologies the only Loki runs in the build cluster,
+// published on the host at crossCluster.lokiNodePort. A cell Promtail must push
+// there: the environment's pushUrl named either an in-cluster Service the cell
+// does not have (dev-public) or a container IP docker reassigns (standalone-*).
+func TestK3dCellPromtailPushesToTheBuildLokiPublishedPort(t *testing.T) {
+	for _, env := range []string{"dev-public", "standalone-public", "standalone-multi"} {
+		t.Run(env, func(t *testing.T) {
+			values := helmfileValues(t, "cell.helmfile.yaml.gotmpl", env, "promtail", "LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0")
+			const want = "http://host.k3d.internal:30120/loki/api/v1/push" // crossCluster.lokiNodePort
+			if got := dig(values, "config", "clients", 0, "url"); got != want {
+				t.Errorf("cell Promtail pushes to %v, want the build Loki's published port %q", got, want)
+			}
+		})
+	}
+}
+
 // Replaces the `broker` seed's `helm upgrade --install loopzero-broker` on the cell,
 // which Helmfile never saw.
 func TestDevPublicCellInstallsTheSecretFetchBroker(t *testing.T) {

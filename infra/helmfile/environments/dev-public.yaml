@@ -67,17 +67,11 @@ registries:
 
 loki:
   maxGlobalStreamsPerUser: 50000
-  # Canonical same-cluster ClusterIP URL (LIVE-caught 2026-06-09 sponsor
-  # walkthrough): Promtail + Loki both run on the build cluster monitoring
-  # namespace, so the canonical push path is the in-cluster Service —
-  # NOT a cross-cluster NodePort indirection. The previous literal
-  # http://172.18.0.3:30094 was a stale legacy IP from before the
-  # k3d-loopzero network re-IP (commit 4f37675b); Promtail was retrying
-  # forever with "connection refused" and zero logs reached Loki, so
-  # build pipeline logs showed empty in the dashboard. DNS name (no IP
-  # hardcode per feedback_no_hardcode_gate_2026_06_09) makes the wiring
-  # env-agnostic.
-  pushUrl: http://loki.monitoring.svc:3100/loki/api/v1/push
+  # No pushUrl: this environment publishes the build cluster's Loki through
+  # crossCluster.lokiNodePort, and infra/helm/promtail/values.yaml.gotmpl derives
+  # every Promtail's push address from that one value (in-cluster Service on the
+  # build cluster, host.k3d.internal:<port> on the cells). The in-cluster URL this
+  # used to carry was right only for the build cluster; the cells have no Loki.
 
 policyMode: warn
 inClusterPostgres: true
