@@ -159,14 +159,23 @@ func (s *PreviewService) CreatePreview(ctx context.Context, req ports.CreatePrev
 	if err := s.validate(req); err != nil {
 		return nil, err
 	}
+	rec := s.newPreviewRecord(req)
+	if err := s.persistPreview(ctx, rec); err != nil {
+		return nil, fmt.Errorf("preview service: persist failed: %w", err)
+	}
+	s.upsertSlot(ctx, rec)
+	s.ensureCR(ctx, rec)
+	s.submitPreviewBuild(ctx, rec, req.LoopZeroYamlApps)
+	return rec.ToDomain(), nil
+}
 
-	now := time.Now().UTC()
+// newPreviewRecord builds the row to persist: TTL, optional GitHub metadata
+// and the public URL.
+func (s *PreviewService) newPreviewRecord(req ports.CreatePreviewRequest) *store.PreviewRecord {
 	ttl := s.deps.DefaultTTL
 	if req.TTLHours > 0 {
 		ttl = time.Duration(req.TTLHours) * time.Hour
 	}
-	expiresAt := now.Add(ttl)
-
 	rec := &store.PreviewRecord{
 		TenantID:  req.TenantID(),
 		ProjectID: req.ProjectID,
@@ -174,7 +183,7 @@ func (s *PreviewService) CreatePreview(ctx context.Context, req ports.CreatePrev
 		Branch:    req.Branch,
 		CommitSHA: req.CommitSHA,
 		Status:    store.PreviewStatusCreating,
-		ExpiresAt: expiresAt,
+		ExpiresAt: time.Now().UTC().Add(ttl),
 	}
 	if req.RepoFullName != "" {
 		rfn := req.RepoFullName
@@ -190,126 +199,140 @@ func (s *PreviewService) CreatePreview(ctx context.Context, req ports.CreatePrev
 	// IngressRoute (proxy 404). Best-effort; the dashboard repolls if the
 	// app set updates after CR creation.
 	entryApp := entryAppFromLoopZeroYaml(req.LoopZeroYamlApps)
-	url := s.previewURL(req.TenantID(), req.ProjectID, entryApp, req.PRNumber)
-	if url != "" {
-		u := url
-		rec.URL = &u
+	if url := s.previewURL(req.TenantID(), req.ProjectID, entryApp, req.PRNumber); url != "" {
+		rec.URL = &url
 	}
+	return rec
+}
 
-	// Step 2: persist. Create() runs UPSERT semantics for repeat PR pushes.
-	//
-	// T1.2 of deep-review-2026-05-10-remediation-plan: wrap the persist
-	// in the environment lock when a Locker is wired. Lock key uses the
-	// branch as the env equivalent — concurrent webhooks for different
-	// PRs (different branches) of the same project run in parallel; the
-	// same PR re-firing serializes. Falls back to non-locked path when
-	// Locker is nil (test scope).
-	persist := func(_ db.DBTX) error {
-		return s.deps.Store.Create(ctx, nil, rec)
+// persistPreview writes the row (UPSERT semantics for repeat PR pushes).
+//
+// T1.2 of deep-review-2026-05-10-remediation-plan: when a Locker is wired
+// the write runs inside the environment lock, on the lock's transaction, and
+// the lock is keyed on the preview environment (previewEnvName) — the same
+// key the preview's build locks on. Different PRs of one project run in
+// parallel; the same PR re-firing serializes with itself and its build.
+// Without a Locker (test scope) the write goes through the pool.
+func (s *PreviewService) persistPreview(ctx context.Context, rec *store.PreviewRecord) error {
+	persist := func(tx db.DBTX) error {
+		return s.deps.Store.Create(ctx, tx, rec)
 	}
-	var persistErr error
-	if s.deps.Locker != nil {
-		persistErr = s.deps.Locker.WithLock(ctx, req.TenantID(), req.ProjectID, req.Branch, persist)
-	} else {
-		persistErr = persist(nil)
+	if s.deps.Locker == nil {
+		return persist(nil)
 	}
-	if persistErr != nil {
-		return nil, fmt.Errorf("preview service: persist failed: %w", persistErr)
-	}
+	return s.deps.Locker.WithLock(ctx, rec.TenantID, rec.ProjectID, previewEnvName(rec.PRNumber), persist)
+}
 
-	// D3 (plan 2026-06-07-preview-as-category-single-slot-plan.md):
-	// substitute behavior. UPSERT preview_slot atomically with the new
-	// PR — ON CONFLICT (tenant_id) DO UPDATE replaces the previous
-	// active deployment. The slot is the single SOT for "this tenant's
-	// active preview deployment" — the dashboard reads from it; the
-	// dashboard's grid renders {permanent[], preview{}} where preview
-	// = this row when ActivePRNumber != NULL.
-	//
-	// Best-effort: failures are logged but do NOT fail the create. The
-	// preview_environments row already exists (step 2 succeeded); the
-	// slot is a denormalized cache for the dashboard. A missing slot
-	// row means the dashboard shows "No active branch" while the
-	// underlying preview still works.
-	if s.deps.SlotStore != nil {
-		urlForSlot := ""
-		if rec.URL != nil {
-			urlForSlot = *rec.URL
-		}
-		if upsertErr := s.deps.SlotStore.Upsert(ctx, nil,
-			rec.TenantID, rec.ProjectID,
-			int32(rec.PRNumber), rec.Branch, "", urlForSlot,
-		); upsertErr != nil {
-			s.deps.Logger.Error("preview service: preview_slot upsert failed (dashboard slot will be stale)",
-				"preview", rec.ID, "error", upsertErr)
-		} else {
-			s.deps.Logger.Info("preview service: preview_slot substituted (D3)",
-				"preview", rec.ID, "pr", rec.PRNumber, "branch", rec.Branch)
-		}
+// upsertSlot substitutes the tenant's single preview slot with this PR (D3,
+// plan 2026-06-07-preview-as-category-single-slot-plan.md). ON CONFLICT
+// (tenant_id) DO UPDATE replaces the previous active deployment; the slot is
+// the dashboard's source for "this tenant's active preview".
+//
+// Best-effort: the preview row already exists and the slot is a
+// denormalized cache, so a failure is logged and the create proceeds — the
+// dashboard shows "No active branch" while the preview still works.
+func (s *PreviewService) upsertSlot(ctx context.Context, rec *store.PreviewRecord) {
+	if s.deps.SlotStore == nil {
+		return
 	}
-
-	// Step 3: ensure CR. Best-effort.
-	if s.deps.CRCreator != nil {
-		spec := PreviewCRSpec{
-			Name:      rec.ID,
-			TenantID:  rec.TenantID,
-			ProjectID: rec.ProjectID,
-			PRNumber:  rec.PRNumber,
-			Branch:    rec.Branch,
-			ExpiresAt: expiresAt,
-		}
-		if err := s.deps.CRCreator.EnsurePreviewCR(ctx, spec); err != nil {
-			s.deps.Logger.Error("preview service: ensure CR failed (will retry on reconcile)",
-				"preview", rec.ID, "error", err)
-		}
+	urlForSlot := ""
+	if rec.URL != nil {
+		urlForSlot = *rec.URL
 	}
-
-	// Step 4: trigger build. Best-effort, but log loudly because a missing
-	// build means the preview is stuck in 'creating'.
-	if s.deps.Builds != nil {
-		buildReq := deploycontracts.SubmitBuildRequest{
-			TenantID:    rec.TenantID,
-			ProjectID:   rec.ProjectID,
-			Environment: previewEnvName(rec.PRNumber),
-			CommitSHA:   rec.CommitSHA,
-			CreatedBy:   "preview-service",
-		}
-		// LIVE catch 2026-06-07 Option B: prefer apps parsed from the PR
-		// commit's loopzero.yaml (carries framework/path/build → drives
-		// LanguageStrategy). Fall back to BuildAppsLookup (persisted apps
-		// from latest SUCCEEDED build — no framework/path/build, fails
-		// language-aware step resolution).
-		if len(req.LoopZeroYamlApps) > 0 {
-			buildReq.Apps = appsFromLoopZeroYaml(req.LoopZeroYamlApps)
-			s.deps.Logger.Info("preview service: apps inherited from PR loopzero.yaml",
-				"preview", rec.ID, "apps", len(buildReq.Apps))
-		} else if s.deps.BuildApps != nil {
-			apps, lookupErr := s.deps.BuildApps.LatestSucceededApps(ctx, rec.TenantID, rec.ProjectID)
-			if lookupErr != nil {
-				s.deps.Logger.Warn("preview service: app-spec lookup failed",
-					"preview", rec.ID, "error", lookupErr)
-			} else if len(apps) == 0 {
-				s.deps.Logger.Warn("preview service: no prior SUCCEEDED build to copy apps from",
-					"preview", rec.ID, "project", rec.ProjectID,
-					"hint", "Deploy main branch at least once before opening a PR")
-			} else {
-				buildReq.Apps = apps
-				s.deps.Logger.Info("preview service: apps inherited from latest SUCCEEDED build (no loopzero.yaml in PR)",
-					"preview", rec.ID, "apps", len(apps))
-			}
-		}
-		resp, err := s.deps.Builds.SubmitBuild(ctx, buildReq)
-		if err != nil {
-			s.deps.Logger.Error("preview service: build submission failed",
-				"preview", rec.ID, "error", err)
-		} else if resp != nil {
-			if updErr := s.deps.Store.UpdateBuild(ctx, nil, rec.ID, resp.BuildID, rec.CommitSHA); updErr != nil {
-				s.deps.Logger.Error("preview service: failed to link build to preview",
-					"preview", rec.ID, "build", resp.BuildID, "error", updErr)
-			}
-		}
+	if err := s.deps.SlotStore.Upsert(ctx, nil,
+		rec.TenantID, rec.ProjectID,
+		int32(rec.PRNumber), rec.Branch, "", urlForSlot,
+	); err != nil {
+		s.deps.Logger.Error("preview service: preview_slot upsert failed (dashboard slot will be stale)",
+			"preview", rec.ID, "error", err)
+		return
 	}
+	s.deps.Logger.Info("preview service: preview_slot substituted (D3)",
+		"preview", rec.ID, "pr", rec.PRNumber, "branch", rec.Branch)
+}
 
-	return rec.ToDomain(), nil
+// ensureCR asks the controller side to create the PreviewEnvironment CR.
+// Best-effort: the controller retries on reconcile.
+func (s *PreviewService) ensureCR(ctx context.Context, rec *store.PreviewRecord) {
+	if s.deps.CRCreator == nil {
+		return
+	}
+	spec := PreviewCRSpec{
+		Name:      rec.ID,
+		TenantID:  rec.TenantID,
+		ProjectID: rec.ProjectID,
+		PRNumber:  rec.PRNumber,
+		Branch:    rec.Branch,
+		ExpiresAt: rec.ExpiresAt,
+	}
+	if err := s.deps.CRCreator.EnsurePreviewCR(ctx, spec); err != nil {
+		s.deps.Logger.Error("preview service: ensure CR failed (will retry on reconcile)",
+			"preview", rec.ID, "error", err)
+	}
+}
+
+// submitPreviewBuild triggers the preview's build and links it to the row.
+// Best-effort, but logged loudly: a missing build leaves the preview stuck in
+// 'creating'.
+func (s *PreviewService) submitPreviewBuild(ctx context.Context, rec *store.PreviewRecord, loopzeroYamlApps map[string]map[string]interface{}) {
+	if s.deps.Builds == nil {
+		return
+	}
+	resp, err := s.deps.Builds.SubmitBuild(ctx, deploycontracts.SubmitBuildRequest{
+		TenantID:    rec.TenantID,
+		ProjectID:   rec.ProjectID,
+		Environment: previewEnvName(rec.PRNumber),
+		CommitSHA:   rec.CommitSHA,
+		CreatedBy:   "preview-service",
+		Apps:        s.resolvePreviewApps(ctx, rec, loopzeroYamlApps),
+	})
+	if err != nil {
+		s.deps.Logger.Error("preview service: build submission failed",
+			"preview", rec.ID, "error", err)
+		return
+	}
+	if resp == nil {
+		return
+	}
+	if err := s.deps.Store.UpdateBuild(ctx, nil, rec.ID, resp.BuildID, rec.CommitSHA); err != nil {
+		s.deps.Logger.Error("preview service: failed to link build to preview",
+			"preview", rec.ID, "build", resp.BuildID, "error", err)
+	}
+}
+
+// resolvePreviewApps picks the app specs the preview builds with.
+//
+// LIVE catch 2026-06-07 Option B: apps parsed from the PR commit's loopzero.yaml
+// are preferred (they carry framework/path/build, which drive
+// LanguageStrategy). Otherwise the apps of the latest SUCCEEDED build are
+// reused; those lack framework/path/build. With neither, the build is
+// submitted without apps and the lookup outcome is logged.
+func (s *PreviewService) resolvePreviewApps(ctx context.Context, rec *store.PreviewRecord, loopzeroYamlApps map[string]map[string]interface{}) []deploycontracts.AppSpec {
+	if len(loopzeroYamlApps) > 0 {
+		apps := appsFromLoopZeroYaml(loopzeroYamlApps)
+		s.deps.Logger.Info("preview service: apps inherited from PR loopzero.yaml",
+			"preview", rec.ID, "apps", len(apps))
+		return apps
+	}
+	if s.deps.BuildApps == nil {
+		return nil
+	}
+	apps, err := s.deps.BuildApps.LatestSucceededApps(ctx, rec.TenantID, rec.ProjectID)
+	switch {
+	case err != nil:
+		s.deps.Logger.Warn("preview service: app-spec lookup failed",
+			"preview", rec.ID, "error", err)
+		return nil
+	case len(apps) == 0:
+		s.deps.Logger.Warn("preview service: no prior SUCCEEDED build to copy apps from",
+			"preview", rec.ID, "project", rec.ProjectID,
+			"hint", "Deploy main branch at least once before opening a PR")
+		return nil
+	default:
+		s.deps.Logger.Info("preview service: apps inherited from latest SUCCEEDED build (no loopzero.yaml in PR)",
+			"preview", rec.ID, "apps", len(apps))
+		return apps
+	}
 }
 
 // DeletePreviewByPR is the entry point for the GitHub `pull_request: closed`
