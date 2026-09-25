@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package build is the build-pipeline bounded context (submit, reconcile, orchestrate, reap, GC). M9 Step 6.
 package build
 
 import (
