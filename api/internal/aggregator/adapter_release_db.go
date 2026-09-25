@@ -47,8 +47,6 @@ func (r *ReleaseDBReader) Stream(ctx context.Context, deployID string, out chan<
 	if r.PollInterval <= 0 {
 		r.PollInterval = 2 * time.Second
 	}
-	ticker := time.NewTicker(r.PollInterval)
-	defer ticker.Stop()
 
 	emit := func() (bool, error) {
 		row, err := r.Querier.QueryReleaseStatus(ctx, deployID)
@@ -77,25 +75,7 @@ func (r *ReleaseDBReader) Stream(ctx context.Context, deployID string, out chan<
 		return terminal, nil
 	}
 
-	if term, err := emit(); err != nil {
-		return err
-	} else if term {
-		return nil
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			term, err := emit()
-			if err != nil {
-				return err
-			}
-			if term {
-				return nil
-			}
-		}
-	}
+	return pollUntilTerminal(ctx, r.PollInterval, emit)
 }
 
 // stateProjection is where one row state lands on the deploy timeline.

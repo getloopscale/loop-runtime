@@ -28,9 +28,10 @@ type EventSink interface {
 	AppendDeployTimelineEvent(ctx context.Context, deployID, eventType string, data json.RawMessage) (int64, error)
 }
 
-// ScrubFunc is the canonical scrub interface (loose-coupled vs concrete
-// scrub.ScrubEvent so tests can inject identity-fn for negative cases).
-type ScrubFunc func(scrub.PhaseEvent) scrub.PhaseEvent
+// ScrubFunc removes internal terms from an event and reports how many
+// replacements it made (fed to loopzero_deploy_timeline_scrub_replacements_total).
+// Production passes scrub.ScrubEventWithCount; tests may inject another.
+type ScrubFunc func(scrub.PhaseEvent) (scrub.PhaseEvent, int)
 
 // Aggregator is the per-deploy goroutine that fan-ins phase events from
 // N SourceReaders, applies scrub at WRITE time (ADR D4a), drives a
@@ -186,8 +187,7 @@ func (a *Aggregator) handleEvent(ctx context.Context, ev readerEvent) {
 		DegradedReason:  ev.event.DegradedReason,
 		SubstateMessage: ev.event.SubstateMessage,
 	}
-	scrubbed, replaced := scrub.ScrubEventWithCount(scrubbedIn)
-	_ = a.scrubFunc // legacy injection retained for test stubs; counts come from ScrubEventWithCount.
+	scrubbed, replaced := a.scrubFunc(scrubbedIn)
 	if replaced > 0 {
 		metrics.DeployTimelineScrubReplacementsTotal.WithLabelValues(scrubbed.Phase).Add(float64(replaced))
 	}
@@ -253,7 +253,7 @@ func (a *Aggregator) emitPhaseEvent(ctx context.Context, e scrub.PhaseEvent, sou
 // trouble (panic, stream error, invalid transition). Frontends render
 // this as "deploy timeline temporarily unavailable" per ADR D6.
 func (a *Aggregator) emitAggregatorDegraded(ctx context.Context, reason string) {
-	scrubbed := a.scrubFunc(scrub.PhaseEvent{
+	scrubbed, _ := a.scrubFunc(scrub.PhaseEvent{
 		DegradedReason: reason,
 	})
 	payload := map[string]any{

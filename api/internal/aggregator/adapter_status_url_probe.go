@@ -48,8 +48,6 @@ func (s *StatusURLProbeReader) Stream(ctx context.Context, deployID string, out 
 	if s.MaxAttempts <= 0 {
 		s.MaxAttempts = 60
 	}
-	ticker := time.NewTicker(s.PollInterval)
-	defer ticker.Stop()
 	attempts := 0
 
 	emit := func() (bool, error) {
@@ -82,23 +80,5 @@ func (s *StatusURLProbeReader) Stream(ctx context.Context, deployID string, out 
 		return ev.Status == "completed" || ev.Status == "failed", nil
 	}
 
-	if term, err := emit(); err != nil {
-		return err
-	} else if term {
-		return nil
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			term, err := emit()
-			if err != nil {
-				return err
-			}
-			if term {
-				return nil
-			}
-		}
-	}
+	return pollUntilTerminal(ctx, s.PollInterval, emit)
 }

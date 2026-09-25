@@ -47,8 +47,6 @@ func (l *LokiMarkersReader) Stream(ctx context.Context, deployID string, out cha
 	if l.PollInterval <= 0 {
 		l.PollInterval = 3 * time.Second
 	}
-	ticker := time.NewTicker(l.PollInterval)
-	defer ticker.Stop()
 	last := time.Time{}
 
 	emit := func() (bool, error) {
@@ -79,25 +77,7 @@ func (l *LokiMarkersReader) Stream(ctx context.Context, deployID string, out cha
 		return terminal, nil
 	}
 
-	if term, err := emit(); err != nil {
-		return err
-	} else if term {
-		return nil
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			term, err := emit()
-			if err != nil {
-				return err
-			}
-			if term {
-				return nil
-			}
-		}
-	}
+	return pollUntilTerminal(ctx, l.PollInterval, emit)
 }
 
 func markerLevelToStatus(level, step string) string {

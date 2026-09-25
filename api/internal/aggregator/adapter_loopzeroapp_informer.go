@@ -41,8 +41,6 @@ func (t *LoopZeroAppInformerReader) Stream(ctx context.Context, deployID string,
 	if t.PollInterval <= 0 {
 		t.PollInterval = 2 * time.Second
 	}
-	ticker := time.NewTicker(t.PollInterval)
-	defer ticker.Stop()
 
 	emit := func() (bool, error) {
 		st, err := t.Querier.QueryLoopZeroAppPhase(ctx, deployID)
@@ -67,25 +65,7 @@ func (t *LoopZeroAppInformerReader) Stream(ctx context.Context, deployID string,
 		return terminal, nil
 	}
 
-	if term, err := emit(); err != nil {
-		return err
-	} else if term {
-		return nil
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			term, err := emit()
-			if err != nil {
-				return err
-			}
-			if term {
-				return nil
-			}
-		}
-	}
+	return pollUntilTerminal(ctx, t.PollInterval, emit)
 }
 
 func loopzeroAppProjection(phase string) (string, string, bool) {

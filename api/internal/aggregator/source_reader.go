@@ -37,7 +37,7 @@ const (
 )
 
 // PhaseEvent is the canonical event shape every adapter emits. Fields are
-// PRE-SCRUB — the aggregator runs scrub.ScrubEvent() before persistence
+// PRE-SCRUB — the aggregator runs its ScrubFunc (scrub.ScrubEventWithCount) before persistence
 // per ADR D4 (write-time scrub). NEVER persist a PhaseEvent without
 // calling scrub first.
 //

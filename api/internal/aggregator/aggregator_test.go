@@ -92,7 +92,7 @@ func TestAggregator_HappyPath_BuildToLive(t *testing.T) {
 		},
 	}
 
-	agg := New("dep-001", store, scrub.ScrubEvent, []SourceReader{reader})
+	agg := New("dep-001", store, scrub.ScrubEventWithCount, []SourceReader{reader})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	agg.Run(ctx)
@@ -135,7 +135,7 @@ func TestAggregator_ScrubAppliedBeforeAppend(t *testing.T) {
 			{Phase: "live", Status: "completed", Timestamp: now().Add(11 * time.Second)},
 		},
 	}
-	agg := New("dep-002", store, scrub.ScrubEvent, []SourceReader{reader})
+	agg := New("dep-002", store, scrub.ScrubEventWithCount, []SourceReader{reader})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	agg.Run(ctx)
@@ -158,7 +158,7 @@ func TestAggregator_ScrubAppliedBeforeAppend(t *testing.T) {
 // per ADR D1 § Drawbacks. No PANIC propagates to the caller.
 func TestAggregator_RecoverOnAdapterPanic(t *testing.T) {
 	store := &memoryStore{}
-	agg := New("dep-003", store, scrub.ScrubEvent, []SourceReader{&panickyReader{}})
+	agg := New("dep-003", store, scrub.ScrubEventWithCount, []SourceReader{&panickyReader{}})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -189,7 +189,7 @@ func TestAggregator_OutOfOrderTransitionEmitsDegraded(t *testing.T) {
 			{Phase: "sign", Status: "in_progress", Timestamp: now()},
 		},
 	}
-	agg := New("dep-004", store, scrub.ScrubEvent, []SourceReader{reader})
+	agg := New("dep-004", store, scrub.ScrubEventWithCount, []SourceReader{reader})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	agg.Run(ctx)
@@ -217,7 +217,7 @@ func TestAggregator_SourceFieldStamped(t *testing.T) {
 			{Phase: "build", Status: "in_progress", Timestamp: now()},
 		},
 	}
-	agg := New("dep-005", store, scrub.ScrubEvent, []SourceReader{reader})
+	agg := New("dep-005", store, scrub.ScrubEventWithCount, []SourceReader{reader})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	agg.Run(ctx)

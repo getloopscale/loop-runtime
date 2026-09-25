@@ -30,6 +30,6 @@ func SpawnFor(ctx context.Context, deployID string, sink EventSink, readers []So
 			Warn("SpawnFor called with nil sink or empty readers — aggregator not started")
 		return
 	}
-	agg := New(deployID, sink, scrub.ScrubEvent, readers)
+	agg := New(deployID, sink, scrub.ScrubEventWithCount, readers)
 	go agg.Run(ctx)
 }

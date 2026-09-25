@@ -95,14 +95,6 @@ var canonicalScrubRules = []scrubRule{
 	{regexp.MustCompile(`(?i)\btenant_id\b`), "team ID"},
 }
 
-// ScrubEvent returns a copy of in with every internal-term field replaced
-// by its product-language equivalent. Pure function — safe to call from
-// any goroutine. Empty input returns empty output.
-func ScrubEvent(in PhaseEvent) PhaseEvent {
-	out, _ := ScrubEventWithCount(in)
-	return out
-}
-
 // ScrubEventWithCount is the counted variant used by the aggregator to
 // feed loopzero_deploy_timeline_scrub_replacements_total. The integer is
 // the total number of regex-pattern matches replaced across all four
@@ -144,7 +136,7 @@ func applyAll(s string) (string, int) {
 // Text sanitises a loose string — an error message, a failure reason — before it
 // crosses the API boundary.
 //
-// `ScrubEvent` covers the timeline event, which was the only path that existed
+// `ScrubEventWithCount` covers the timeline event, which was the only path that existed
 // when this package was born. A build failure message leaves by another path and
 // used to reach the user as a CONSTANT, without the reason, precisely to avoid
 // leaking an internal term (B-152). With this it can carry the reason: the same

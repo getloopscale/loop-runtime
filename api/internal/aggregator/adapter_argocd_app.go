@@ -45,8 +45,6 @@ func (a *ArgoCDAppReader) Stream(ctx context.Context, deployID string, out chan<
 	if a.PollInterval <= 0 {
 		a.PollInterval = 2 * time.Second
 	}
-	ticker := time.NewTicker(a.PollInterval)
-	defer ticker.Stop()
 
 	emit := func() (bool, error) {
 		st, err := a.Querier.QueryAppStatus(ctx, deployID)
@@ -78,25 +76,7 @@ func (a *ArgoCDAppReader) Stream(ctx context.Context, deployID string, out chan<
 		return false, nil
 	}
 
-	if term, err := emit(); err != nil {
-		return err
-	} else if term {
-		return nil
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			term, err := emit()
-			if err != nil {
-				return err
-			}
-			if term {
-				return nil
-			}
-		}
-	}
+	return pollUntilTerminal(ctx, a.PollInterval, emit)
 }
 
 func healthToStatus(health, sync string) string {
