@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -32,35 +33,37 @@ const (
 	deliveryHeader  = "X-GitHub-Delivery"
 )
 
+// dispatchTimeout bounds one event's processing. The handler has already
+// answered GitHub, so nothing else would stop a stuck dispatch.
+const dispatchTimeout = 5 * time.Minute
+
 // PushHandler is called when a push event is received.
-type PushHandler func(event PushEvent) error
+type PushHandler func(ctx context.Context, event PushEvent) error
 
 // PullRequestHandler is called when a pull_request event is received.
-type PullRequestHandler func(event PullRequestEvent) error
+type PullRequestHandler func(ctx context.Context, event PullRequestEvent) error
 
 // InstallationHandler is called when an installation event is received.
-type InstallationHandler func(event InstallationEvent) error
-
-// DeliveryDeduplicator checks if a webhook delivery has already been processed.
-type DeliveryDeduplicator interface {
-	RecordDelivery(ctx context.Context, deliveryID, eventType string) (isDuplicate bool, err error)
-}
+type InstallationHandler func(ctx context.Context, event InstallationEvent) error
 
 // Handler receives GitHub webhook events, validates signatures, and dispatches.
 type Handler struct {
 	secret         []byte
 	logger         *slog.Logger
-	dedup          DeliveryDeduplicator
+	lifetime       context.Context
 	onPush         PushHandler
 	onPullRequest  PullRequestHandler
 	onInstallation InstallationHandler
 }
 
-// NewHandler creates a webhook handler with the given HMAC secret.
-func NewHandler(secret string, logger *slog.Logger) *Handler {
+// NewHandler creates a webhook handler with the given HMAC secret. lifetime
+// is the server's: every dispatch derives its context from it, so shutdown
+// cancels in-flight processing.
+func NewHandler(lifetime context.Context, secret string, logger *slog.Logger) *Handler {
 	return &Handler{
-		secret: []byte(secret),
-		logger: logger,
+		secret:   []byte(secret),
+		logger:   logger,
+		lifetime: lifetime,
 	}
 }
 
@@ -146,20 +149,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	log.Info("webhook: event received", "size", len(body))
 
-	// MEET-044 P1: Dedup by delivery_id — prevent duplicate processing.
-	if h.dedup != nil && deliveryID != "" {
-		isDup, dedupErr := h.dedup.RecordDelivery(r.Context(), deliveryID, eventType)
-		if dedupErr != nil {
-			log.Warn("webhook: dedup check failed (processing anyway)", "error", dedupErr)
-		} else if isDup {
-			log.Info("webhook: duplicate delivery, skipping")
-			metrics.GitHubWebhookDeliveriesTotal.WithLabelValues(eventType, "duplicate").Inc()
-			w.WriteHeader(http.StatusOK)
-			_, _ = fmt.Fprintf(w, `{"ok":true,"duplicate":true}`)
-			return
-		}
-	}
-
 	// Dispatch event (async — return 200 immediately)
 	// Errors are logged, not returned to GitHub.
 	metrics.GitHubWebhookDeliveriesTotal.WithLabelValues(eventType, "accepted").Inc()
@@ -190,6 +179,9 @@ func (h *Handler) validateSignature(body []byte, signature string) bool {
 
 // dispatch routes the event to the appropriate handler.
 func (h *Handler) dispatch(eventType string, body []byte, log *slog.Logger) {
+	ctx, cancel := context.WithTimeout(h.lifetime, dispatchTimeout)
+	defer cancel()
+
 	switch eventType {
 	case "push":
 		if h.onPush == nil {
@@ -200,7 +192,7 @@ func (h *Handler) dispatch(eventType string, body []byte, log *slog.Logger) {
 			log.Error("webhook: parse push event failed", "error", err)
 			return
 		}
-		if err := h.onPush(event); err != nil {
+		if err := h.onPush(ctx, event); err != nil {
 			log.Error("webhook: push handler failed", "error", err, "repo", event.Repository.FullName)
 		}
 
@@ -213,7 +205,7 @@ func (h *Handler) dispatch(eventType string, body []byte, log *slog.Logger) {
 			log.Error("webhook: parse pull_request event failed", "error", err)
 			return
 		}
-		if err := h.onPullRequest(event); err != nil {
+		if err := h.onPullRequest(ctx, event); err != nil {
 			log.Error("webhook: pull_request handler failed", "error", err, "repo", event.Repository.FullName)
 		}
 
@@ -226,7 +218,7 @@ func (h *Handler) dispatch(eventType string, body []byte, log *slog.Logger) {
 			log.Error("webhook: parse installation event failed", "error", err)
 			return
 		}
-		if err := h.onInstallation(event); err != nil {
+		if err := h.onInstallation(ctx, event); err != nil {
 			log.Error("webhook: installation handler failed", "error", err)
 		}
 

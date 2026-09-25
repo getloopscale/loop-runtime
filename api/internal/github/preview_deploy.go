@@ -88,8 +88,7 @@ func (d *PreviewDeployer) WithBundlePreparer(p SourceBundlePreparer) *PreviewDep
 // auto-deploy disabled, missing PR data) — those are not errors. Errors
 // here are logged by the webhook dispatcher; nothing is returned to
 // GitHub.
-func (d *PreviewDeployer) HandlePR(event webhook.PullRequestEvent) error {
-	ctx := context.Background()
+func (d *PreviewDeployer) HandlePR(ctx context.Context, event webhook.PullRequestEvent) error {
 
 	log := d.logger.With(
 		"action", event.Action,
@@ -113,10 +112,9 @@ func (d *PreviewDeployer) HandlePR(event webhook.PullRequestEvent) error {
 	}
 	repo, err := d.repoStore.GetByRepo(ctx, event.Repository.FullName)
 	if err != nil {
-		// Lookup failure isn't a hard fail — log and skip. The PR may be
-		// for a repo we don't manage; GitHub still gets 200 from us.
-		log.Error("preview deploy: repo lookup failed", "error", err)
-		return nil
+		// An unmanaged repo comes back as (nil, nil) below; an error here is a
+		// real failure, and swallowing it would lose the preview silently.
+		return fmt.Errorf("preview deploy: look up repo %s: %w", event.Repository.FullName, err)
 	}
 	if repo == nil {
 		log.Debug("preview deploy: repo not connected, ignoring")

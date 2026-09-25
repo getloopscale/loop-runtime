@@ -171,7 +171,7 @@ func setupGitHub(
 		}
 	}
 
-	wh := ghwebhook.NewHandler(githubWebhookSecret, logger)
+	wh := ghwebhook.NewHandler(shutdownCtx, githubWebhookSecret, logger)
 	wh.OnPush(newPushHandler(shutdownCtx, repoStore, autoDeployer, logger))
 	// Sprint 5 / T3.1 — wire PreviewDeployer.HandlePR. The deployer dispatches
 	// by event.Action: opened/synchronize/reopened → CreatePreview;
@@ -202,7 +202,7 @@ func setupGitHub(
 			WithBundlePreparer(autoDeployer) // shares the same bundle-prep logic
 		wh.OnPullRequest(previewDeployer.HandlePR)
 	}
-	wh.OnInstallation(newInstallationHandler(shutdownCtx, repoStore, logger))
+	wh.OnInstallation(newInstallationHandler(repoStore, logger))
 
 	logger.Info("github webhook: handler registered", "endpoint", "/api/v1/webhooks/github")
 

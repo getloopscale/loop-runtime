@@ -35,9 +35,11 @@ type installationRegistry interface {
 // to a non-default branch, and repositories that are not linked or have
 // auto-deploy off are ignored deliberately and return nil. A failed repository
 // lookup is NOT a deliberate ignore: it returns the error, so the delivery is
-// recorded as failed rather than as handled.
-func newPushHandler(shutdownCtx context.Context, repos linkedRepoLookup, deployer pushDeployer, logger *slog.Logger) func(ghwebhook.PushEvent) error {
-	return func(event ghwebhook.PushEvent) error {
+// recorded as failed rather than as handled. The lookup runs under the
+// dispatch context; the deploy it starts outlives the dispatch and is bound to
+// shutdownCtx instead.
+func newPushHandler(shutdownCtx context.Context, repos linkedRepoLookup, deployer pushDeployer, logger *slog.Logger) func(context.Context, ghwebhook.PushEvent) error {
+	return func(ctx context.Context, event ghwebhook.PushEvent) error {
 		log := logger.With(
 			"repo", event.Repository.FullName,
 			"branch", event.Branch(),
@@ -54,7 +56,7 @@ func newPushHandler(shutdownCtx context.Context, repos linkedRepoLookup, deploye
 			return nil
 		}
 
-		linked, err := repos.GetByRepo(shutdownCtx, event.Repository.FullName)
+		linked, err := repos.GetByRepo(ctx, event.Repository.FullName)
 		if err != nil {
 			return fmt.Errorf("github webhook: look up the project linked to %s: %w", event.Repository.FullName, err)
 		}
@@ -93,8 +95,8 @@ func newPushHandler(shutdownCtx context.Context, repos linkedRepoLookup, deploye
 // newInstallationHandler returns the installation-event callback. A failure to
 // record or remove the installation is returned, never logged-and-acknowledged:
 // a stale installation row is otherwise permanent and invisible.
-func newInstallationHandler(ctx context.Context, installs installationRegistry, logger *slog.Logger) func(ghwebhook.InstallationEvent) error {
-	return func(event ghwebhook.InstallationEvent) error {
+func newInstallationHandler(installs installationRegistry, logger *slog.Logger) func(context.Context, ghwebhook.InstallationEvent) error {
+	return func(ctx context.Context, event ghwebhook.InstallationEvent) error {
 		logger.Info("github webhook: installation event",
 			"action", event.Action,
 			"installation_id", event.Installation.ID,

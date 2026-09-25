@@ -45,7 +45,7 @@ func TestPushHandler_ReportsAFailedProjectLookup(t *testing.T) {
 	dbErr := errors.New("connection refused")
 	handle := newPushHandler(context.Background(), failingRepoLookup{err: dbErr}, unusedDeployer{}, discardLogger)
 
-	if err := handle(defaultBranchPush()); !errors.Is(err, dbErr) {
+	if err := handle(context.Background(), defaultBranchPush()); !errors.Is(err, dbErr) {
 		t.Fatalf("want the lookup error, got %v", err)
 	}
 }
@@ -59,12 +59,12 @@ func (f failingInstallations) DeleteInstallation(context.Context, int64) error {
 
 func TestInstallationHandler_ReportsAFailedSaveAndDelete(t *testing.T) {
 	dbErr := errors.New("connection refused")
-	handle := newInstallationHandler(context.Background(), failingInstallations{err: dbErr}, discardLogger)
+	handle := newInstallationHandler(failingInstallations{err: dbErr}, discardLogger)
 	for _, action := range []string{"created", "deleted"} {
 		var e ghwebhook.InstallationEvent
 		e.Action = action
 		e.Installation.ID = 42
-		if err := handle(e); !errors.Is(err, dbErr) {
+		if err := handle(context.Background(), e); !errors.Is(err, dbErr) {
 			t.Errorf("action %s: want the store error, got %v", action, err)
 		}
 	}
