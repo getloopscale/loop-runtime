@@ -37,7 +37,7 @@ import (
 // fake controller-runtime client needs the scheme to (de)serialize the
 // Tenant type. We do NOT register kubernetes core types here because
 // the tested paths don't touch them.
-func newTestSchemeForT3_5(t *testing.T) *runtime.Scheme {
+func loopzeroOnlyScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	s := runtime.NewScheme()
 	if err := loopzerov1.AddToScheme(s); err != nil {
@@ -55,7 +55,7 @@ func newTestSchemeForT3_5(t *testing.T) *runtime.Scheme {
 // deletion timestamps without orchestrating cleanup if there's nothing
 // to clean up.
 func TestReconcileDelete_NoFinalizer_ReturnsClean(t *testing.T) {
-	scheme := newTestSchemeForT3_5(t)
+	scheme := loopzeroOnlyScheme(t)
 	tenant := &loopzerov1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "no-finalizer-tenant",
@@ -82,8 +82,8 @@ func TestReconcileDelete_NoFinalizer_ReturnsClean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reconcileDelete without finalizer must NOT error: %v", err)
 	}
-	// `Requeue` é deprecated no controller-runtime; `RequeueAfter == 0` já é a prova
-	// canônica de que não há reenfileiramento, então a asserção antiga era redundante.
+	// `Requeue` is deprecated in controller-runtime; `RequeueAfter == 0` is
+	// already the proof that nothing is requeued.
 	if result.RequeueAfter != 0 {
 		t.Errorf("reconcileDelete without finalizer must NOT request requeue, got %v",
 			result.RequeueAfter)

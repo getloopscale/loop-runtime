@@ -46,11 +46,11 @@ func (f *fakeArgoListDelete) DeleteApplication(_ context.Context, appName string
 	return nil
 }
 
-// TestCanonicalDestNamespace_J23_69 pins the contract for the helper that
+// TestCanonicalDestNamespace_UsesTheThreeSegmentFormula pins the contract for the helper that
 // resolves ArgoCD App.destination.namespace in tenant_gitops.go.
 //
-// J-23 LIVE catch 2026-06-07 #69 (sponsor verbatim "Atacar #69 fix
-// tenant_gitops + CRD"): the renderer canonical refactor (commit
+// J-23 LIVE catch 2026-06-07 #69 (the sponsor asked for #69 to be fixed in
+// tenant_gitops and the CRD): the renderer canonical refactor (commit
 // a567cdbb5) emits manifests with the three-segment namespace
 // `loopzero-<tenant>-<project>-<env>`. Before this helper, tenant_gitops.go
 // emitted destinations via the legacy two-segment formula
@@ -66,7 +66,7 @@ func (f *fakeArgoListDelete) DeleteApplication(_ context.Context, appName string
 // previously asserted `loopzero-acme-{env}` were flipped to expect error —
 // the silent fallback was the smoking gun behind all 4 M2 LIVE workarounds
 // documented in feedback_m2_canonical_drift_operator_renderer.
-func TestCanonicalDestNamespace_J23_69(t *testing.T) {
+func TestCanonicalDestNamespace_UsesTheThreeSegmentFormula(t *testing.T) {
 	cases := []struct {
 		name    string
 		tenant  string
@@ -153,7 +153,7 @@ func TestCanonicalDestNamespace_J23_69(t *testing.T) {
 //     in operator logs.
 //
 // Sibling assertion to the "fallback legacy" cases in
-// TestCanonicalDestNamespace_J23_69 above; kept as a separate test
+// TestCanonicalDestNamespace_UsesTheThreeSegmentFormula above; kept as a separate test
 // function so the plan-cited symbol name is discoverable via
 // `go test -run TestCanonicalDestNamespaceRejectsEmptyProject`.
 func TestCanonicalDestNamespaceRejectsEmptyProject(t *testing.T) {
@@ -297,7 +297,7 @@ func TestBuildAppProjectDestNamespaces(t *testing.T) {
 // stayed OutOfSync/Missing forever because tenant_gitops.reconcileArgoCDApp
 // had emit paths for active envs + active previews but no prune pass for
 // the orphans left behind after PR close. This test locks the new behaviour.
-func TestPruneOrphanPreviewApps_J23_71(t *testing.T) {
+func TestPruneOrphanPreviewApps_RemovesAppsNoEnvironmentOrPreviewClaims(t *testing.T) {
 	cases := []struct {
 		name          string
 		tenant        string
@@ -349,11 +349,11 @@ func TestPruneOrphanPreviewApps_J23_71(t *testing.T) {
 			},
 		},
 		{
-			// #271: depois do rename, um App de nome LEGADO cai fora do conjunto
-			// esperado e é deletado — COM o finalizer de cascade, ou seja, levando o
-			// workload junto. É por isso que a limpeza do legado é PRÉ-deploy e não
-			// pós: docs/operations/argocd-app-identity-migration-runbook.md
-			name:          "App de nome legado é podado pelo prune canônico (por isso a limpeza é pré-deploy)",
+			// #271: after the rename, an App with a LEGACY name falls outside the
+			// expected set and is deleted — WITH the cascade finalizer, so its
+			// workload goes too. That is why legacy cleanup happens BEFORE the
+			// deploy, not after: docs/operations/argocd-app-identity-migration-runbook.md
+			name:          "a legacy-named App is pruned by the canonical prune (hence cleanup runs before the deploy)",
 			tenant:        "tn-acme",
 			envs:          []string{"production"},
 			activePreview: []int{},
@@ -442,11 +442,12 @@ func TestPruneOrphanPreviewApps_ListErrorBubbles(t *testing.T) {
 	}
 }
 
-// --- #271 D3: identidade canônica do Application (tenant, project, environment) ------
+// --- #271 D3: canonical Application identity (tenant, project, environment) ------
 //
-// Medido em app-dev 2026-08-08: appName e path omitiam env.Project enquanto destNS o
-// incluía, então dois projetos do mesmo tenant no mesmo ambiente colidiam num único
-// Application com destinos conflitantes (1519 escritas em 5 min). Plano:
+// Measured on app-dev 2026-08-08: appName and path omitted env.Project while
+// destNS included it, so two projects of one tenant in one environment
+// collided into a single Application with conflicting destinations (1519
+// writes in 5 minutes). Plan:
 // knowledge-base/plans/argocd-app-identity-canonical-plan.md
 
 func tenantWithEnvs(envs ...loopzerov1.TenantEnvironmentEntry) *loopzerov1.Tenant {
@@ -460,9 +461,9 @@ func tenantWithEnvs(envs ...loopzerov1.TenantEnvironmentEntry) *loopzerov1.Tenan
 	}
 }
 
-// TestBuildApplicationSpecs_ProjetosDistintosNaoColidem reproduz a colisão medida: dois
-// projetos com o MESMO env.Name têm de produzir dois Applications, com paths distintos.
-func TestBuildApplicationSpecs_ProjetosDistintosNaoColidem(t *testing.T) {
+// Reproduces the measured collision: two projects with the SAME env.Name must
+// produce two Applications, with distinct paths.
+func TestBuildApplicationSpecs_DistinctProjectsDoNotCollide(t *testing.T) {
 	r := &TenantReconciler{WorkloadClusterURL: "https://workload:6443"}
 	tenant := tenantWithEnvs(
 		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "alpha"},
@@ -474,45 +475,46 @@ func TestBuildApplicationSpecs_ProjetosDistintosNaoColidem(t *testing.T) {
 		t.Fatalf("buildApplicationSpecs: %v", err)
 	}
 
-	nomes := map[string]bool{}
+	names := map[string]bool{}
 	paths := map[string]bool{}
 	for _, s := range specs {
-		nomes[s.Name] = true
+		names[s.Name] = true
 		paths[s.Path] = true
 	}
-	if len(nomes) != 2 {
-		t.Errorf("dois projetos no mesmo ambiente devem produzir 2 Applications distintos; "+
-			"veio %d nome(s) %v — é a colisão da #271", len(nomes), nomes)
+	if len(names) != 2 {
+		t.Errorf("two projects in one environment must produce 2 distinct Applications; "+
+			"got %d name(s) %v — the #271 collision", len(names), names)
 	}
 	if len(paths) != 2 {
-		t.Errorf("cada Application deve ver só a subárvore do seu projeto; veio %d path(s) %v "+
-			"(gitea_pusher.go:136 escreve em {env}/{project}/)", len(paths), paths)
+		t.Errorf("each Application must see only its project's subtree; got %d path(s) %v "+
+			"(gitea_pusher.go:136 writes to {env}/{project}/)", len(paths), paths)
 	}
-	if !nomes["tn-test-alpha-preview"] || !nomes["tn-test-beta-preview"] {
-		t.Errorf("formato canônico é {tenant}-{project}-{env} (pkg/naming.ArgoAppName); veio %v", nomes)
+	if !names["tn-test-alpha-preview"] || !names["tn-test-beta-preview"] {
+		t.Errorf("the canonical format is {tenant}-{project}-{env} (pkg/naming.ArgoAppName); got %v", names)
 	}
 }
 
-// TestBuildApplicationSpecs_ProjectVazioFalhaAlto — mesma disciplina que
-// canonicalDestNamespace já tem (tenant_gitops.go:49-51): Project vazio não pode
-// gerar um nome degenerado em silêncio.
-func TestBuildApplicationSpecs_ProjectVazioFalhaAlto(t *testing.T) {
+// The same discipline canonicalDestNamespace already has
+// (tenant_gitops.go:49-51): an empty Project must not produce a degenerate
+// name in silence.
+func TestBuildApplicationSpecs_EmptyProjectFailsLoud(t *testing.T) {
 	r := &TenantReconciler{WorkloadClusterURL: "https://workload:6443"}
 	tenant := tenantWithEnvs(
 		loopzerov1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: ""},
 	)
 
 	if _, err := r.buildApplicationSpecs(tenant, nil, "http://gitea/x.git"); err == nil {
-		t.Fatal("Project vazio deve propagar erro, não gerar Application com nome degenerado")
+		t.Fatal("an empty Project must return an error, not an Application with a degenerate name")
 	}
 }
 
-// TestPruneExpectedIgualAoQueEnsureCria é o teste que torna impossível o cenário
-// destrutivo: pruneOrphanPreviewApps deleta toda Application do tenant fora do conjunto
-// `expected`, e o finalizer de cascade faz esse delete apagar o workload. Se `expected`
-// for computado por uma fórmula diferente da que cria os Apps, o operator deleta em
-// cascata exatamente o que acabou de criar. As duas leituras têm de vir da MESMA função.
-func TestPruneExpectedIgualAoQueEnsureCria(t *testing.T) {
+// The test that makes the destructive scenario impossible:
+// pruneOrphanPreviewApps deletes every Application of the tenant outside the
+// `expected` set, and the cascade finalizer makes that delete remove the
+// workload. If `expected` were computed by a different formula from the one
+// that creates the Apps, the operator would cascade-delete exactly what it
+// just created. Both readings must come from the SAME function.
+func TestPruneExpectedMatchesWhatEnsureCreates(t *testing.T) {
 	r := &TenantReconciler{WorkloadClusterURL: "https://workload:6443"}
 	tenant := tenantWithEnvs(
 		loopzerov1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: "alpha"},
@@ -523,70 +525,72 @@ func TestPruneExpectedIgualAoQueEnsureCria(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildApplicationSpecs: %v", err)
 	}
-	criados := map[string]bool{}
+	created := map[string]bool{}
 	for _, s := range specs {
-		criados[s.Name] = true
+		created[s.Name] = true
 	}
 
-	esperados, err := r.expectedApplicationNames(tenant, nil, "http://gitea/tn-test-gitops.git")
+	expected, err := r.expectedApplicationNames(tenant, nil, "http://gitea/tn-test-gitops.git")
 	if err != nil {
 		t.Fatalf("expectedApplicationNames: %v", err)
 	}
 
-	for name := range criados {
-		if !esperados[name] {
-			t.Errorf("o prune deletaria %q, que o próprio reconcile acabou de criar — "+
-				"com o finalizer de cascade isso apaga o workload do tenant", name)
+	for name := range created {
+		if !expected[name] {
+			t.Errorf("the prune would delete %q, which this same reconcile just created — "+
+				"with the cascade finalizer that removes the tenant's workload", name)
 		}
 	}
-	for name := range esperados {
-		if !criados[name] {
-			t.Errorf("o prune espera %q, que ninguém cria — nome órfão no conjunto de proteção", name)
+	for name := range expected {
+		if !created[name] {
+			t.Errorf("the prune expects %q, which nothing creates — an orphan name in the protected set", name)
 		}
 	}
 }
 
-// --- #273: identidade do Environment CR ---------------------------------------------
+// --- #273: Environment CR identity ---------------------------------------------
 //
-// Medido em app-dev 2026-08-08: 5 das 9 tuplas (project, environment) declaradas não
-// tinham Environment CR nenhum, porque o nome do CR omitia o projeto e cada projeto
-// sobrescrevia o anterior via CreateOrUpdate. O projeto perdedor nunca recebia
-// namespace, RBAC nem NetworkPolicy — em silêncio.
+// Measured on app-dev 2026-08-08: 5 of the 9 declared (project, environment)
+// tuples had no Environment CR at all, because the CR name omitted the
+// project and each project overwrote the previous one through
+// CreateOrUpdate. The losing project never got a namespace, RBAC or
+// NetworkPolicy — in silence.
 
-func TestBuildEnvironmentCRNames_ProjetosDistintosNaoColidem(t *testing.T) {
+func TestBuildEnvironmentCRNames_DistinctProjectsDoNotCollide(t *testing.T) {
 	tenant := tenantWithEnvs(
 		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "alpha"},
 		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "beta"},
 	)
 
-	nomes, err := buildEnvironmentCRNames(tenant)
+	names, err := buildEnvironmentCRNames(tenant)
 	if err != nil {
 		t.Fatalf("buildEnvironmentCRNames: %v", err)
 	}
-	if len(nomes) != 2 {
-		t.Errorf("dois projetos no mesmo ambiente precisam de 2 Environment CRs; veio %d %v — "+
-			"o projeto perdedor fica sem namespace, RBAC e NetworkPolicy (#273)", len(nomes), nomes)
+	if len(names) != 2 {
+		t.Errorf("two projects in one environment need 2 Environment CRs; got %d %v — "+
+			"the losing project is left without namespace, RBAC and NetworkPolicy (#273)", len(names), names)
 	}
-	if !nomes["tn-test-alpha-preview"] || !nomes["tn-test-beta-preview"] {
-		t.Errorf("formato canônico é {tenant}-{project}-{env}; veio %v", nomes)
+	if !names["tn-test-alpha-preview"] || !names["tn-test-beta-preview"] {
+		t.Errorf("the canonical format is {tenant}-{project}-{env}; got %v", names)
 	}
 }
 
-func TestBuildEnvironmentCRNames_ProjectVazioFalhaAlto(t *testing.T) {
+func TestBuildEnvironmentCRNames_EmptyProjectFailsLoud(t *testing.T) {
 	tenant := tenantWithEnvs(
 		loopzerov1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: ""},
 	)
 	if _, err := buildEnvironmentCRNames(tenant); err == nil {
-		t.Fatal("Project vazio deve propagar erro, não gerar nome degenerado")
+		t.Fatal("an empty Project must return an error, not a degenerate name")
 	}
 }
 
-// TestEnvironmentCRDesiredIgualAoQueSeCria é o irmão de TestPruneExpectedIgualAoQueEnsureCria.
-// O conjunto `desired` protege Environment CRs da coleta de lixo, e deletar um Environment CR
-// faz o EnvironmentReconciler deletar o NAMESPACE no cluster de runtime
-// (environment_controller.go:325-335). Se `desired` divergir do que o loop cria, o operator
-// apaga os namespaces dos tenants. As duas leituras têm de vir da mesma função.
-func TestEnvironmentCRDesiredIgualAoQueSeCria(t *testing.T) {
+// The sibling of TestPruneExpectedMatchesWhatEnsureCreates. The `desired`
+// set protects Environment CRs from garbage collection, and deleting an
+// Environment CR makes the EnvironmentReconciler delete the NAMESPACE on the
+// runtime cluster (environment_controller.go:325-335). If `desired` diverged
+// from what the loop creates, the operator would delete tenants' namespaces.
+// Both readings must come from the same function.
+func TestEnvironmentCRDesiredMatchesWhatIsCreated(t *testing.T) {
 	tenant := tenantWithEnvs(
 		loopzerov1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: "alpha"},
 		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "beta"},
@@ -597,17 +601,17 @@ func TestEnvironmentCRDesiredIgualAoQueSeCria(t *testing.T) {
 		t.Fatalf("buildEnvironmentCRNames: %v", err)
 	}
 	for _, env := range tenant.Spec.Environments {
-		criado, nerr := naming.EnvironmentCRName(tenant.Name, env.Project, env.Name)
+		created, nerr := naming.EnvironmentCRName(tenant.Name, env.Project, env.Name)
 		if nerr != nil {
 			t.Fatalf("EnvironmentCRName: %v", nerr)
 		}
-		if !desired[criado] {
-			t.Errorf("o GC deletaria o Environment CR %q que o próprio loop cria — "+
-				"e deletar um Environment CR apaga o namespace no cluster de runtime", criado)
+		if !desired[created] {
+			t.Errorf("the GC would delete Environment CR %q, which this same loop creates — "+
+				"and deleting an Environment CR removes the namespace on the runtime cluster", created)
 		}
 	}
 	if len(desired) != len(tenant.Spec.Environments) {
-		t.Errorf("desired tem %d nomes para %d environments — sobra ou falta proteção",
+		t.Errorf("desired has %d names for %d environments — protection is missing or excess",
 			len(desired), len(tenant.Spec.Environments))
 	}
 }

@@ -111,7 +111,7 @@ func makeTenantSpec(project string) loopzerov1.TenantSpec {
 	}
 }
 
-var _ = Describe("T1.1 — TenantEnvironmentEntry.Project CRD validation", func() {
+var _ = Describe("TenantEnvironmentEntry.Project CRD validation", func() {
 	Context("required-field gate (RED 1)", func() {
 		It("rejects Tenant CR whose Environments entry has empty Project", func() {
 			tenant := &loopzerov1.Tenant{

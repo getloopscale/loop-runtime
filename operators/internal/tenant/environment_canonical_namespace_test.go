@@ -1,23 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package tenant_test — T3.1 of plan 2026-06-09-m2-operator-canonical-fix
-// v1.4. Ginkgo envtest specs that pin the EnvironmentController canonical
-// M2 namespace contract.
+// Ginkgo envtest specs that pin the EnvironmentController's canonical
+// namespace contract (plan 2026-06-09-m2-operator-canonical-fix v1.4, T3.1):
 //
-// Two RED tests defined per plan TDD body (lines 488-514):
-//   - RED 1 (M2 canonical): Environment CR with Project=teste + Environment=production
-//     causes EnvironmentController to create namespace `loopzero-tn-X-teste-production`
-//     (3-segment canonical) — never the M1 2-seg form.
-//   - RED 2 (EC-3 / 63-char overflow): Environment CR whose Project + Environment
-//     combine into a name >63 chars causes the controller to set Status condition
-//     TypeEnvNamespaceReady=False Reason=NameTooLong and NOT requeue (avoids the
-//     retry-storm that would otherwise hammer the API server with invalid Creates).
+//   - An Environment CR with Project=teste and Environment=production makes
+//     the controller create namespace `loopzero-tn-X-teste-production` (the
+//     three-segment canonical form), never the two-segment legacy form.
+//   - An Environment CR whose Project and Environment combine into a name
+//     longer than 63 characters gets NamespaceReady=False Reason=NameTooLong
+//     and is not requeued (which would hammer the API server with invalid
+//     Creates).
 //
-// Pattern: each spec builds an Environment CR via k8sClient.Create, waits for
-// the EnvironmentController reconcile to settle, then asserts on either the
-// created Namespace or the Status condition. The envtest manager started in
-// suite_test.go has the EnvironmentController registered (per suite Setup).
+// Each spec creates an Environment CR, waits for the reconcile to settle,
+// then asserts on the created Namespace or the status condition.
+//
+// These specs exercise the Environment controller but live in this package
+// because the envtest suite that runs both the Tenant and the Environment
+// controllers (the Environment needs its parent Tenant) is this one; the
+// environment package has only fake-client tests and no envtest suite.
 
 package tenant_test
 
@@ -32,13 +33,12 @@ import (
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
-// buildEnvironmentT31 constructs an Environment CR in `default/` namespace
-// with the (project, env, tenant) tuple under test. Mirrors the plan's
-// `buildEnvironment` helper signature.
-func buildEnvironmentT31(project, envName, tenantName string) *loopzerov1.Environment {
+// canonicalNamespaceEnvironment constructs an Environment CR in the `default`
+// namespace with the (project, env, tenant) tuple under test.
+func canonicalNamespaceEnvironment(project, envName, tenantName string) *loopzerov1.Environment {
 	return &loopzerov1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
-			// #273: a identidade do Environment CR inclui o projeto.
+			// #273: the Environment CR identity includes the project.
 			Name:      tenantName + "-" + project + "-" + envName,
 			Namespace: "default",
 		},
@@ -58,20 +58,20 @@ func buildEnvironmentT31(project, envName, tenantName string) *loopzerov1.Enviro
 	}
 }
 
-var _ = Describe("T3.1 — EnvironmentController M2 canonical namespace + EC-3 overflow", Ordered, func() {
+var _ = Describe("EnvironmentController canonical namespace and 63-char overflow", Ordered, func() {
 
-	Context("M2 canonical namespace (RED 1)", func() {
+	Context("canonical three-segment namespace", func() {
 		It("creates namespace `loopzero-tn-X-teste-production` when Project=teste + Environment=production", func() {
-			env := buildEnvironmentT31("teste", "production", "tn-t31")
+			env := canonicalNamespaceEnvironment("teste", "production", "tn-canon")
 			// Spec.Namespace.Name is filtered out by the CRD's `Optional`
 			// validation but the controller recomputes from Project regardless.
-			env.Spec.Namespace.Name = "tn-t31-production" // M1-shaped (wrong) — controller must override
+			env.Spec.Namespace.Name = "tn-canon-production" // M1-shaped (wrong) — controller must override
 			createWithParentTenant(env)
 
 			Eventually(func(g Gomega) {
 				var ns corev1.Namespace
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-tn-t31-teste-production",
+					Name: "loopzero-tn-canon-teste-production",
 				}, &ns)).To(Succeed())
 			}, timeout, interval).Should(Succeed())
 		})
@@ -79,13 +79,13 @@ var _ = Describe("T3.1 — EnvironmentController M2 canonical namespace + EC-3 o
 		AfterAll(func() {
 			// Best-effort cleanup so re-runs (or sister describes) start clean.
 			_ = k8sClient.Delete(ctx, &loopzerov1.Environment{
-				ObjectMeta: metav1.ObjectMeta{Name: "tn-t31-production", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "tn-canon-teste-production", Namespace: "default"},
 			})
 		})
 	})
 
-	Context("EC-3 63-char overflow (RED 2)", func() {
-		// Fixed by MEET-2026-07-02-002 (t31 flake). The former ~50% flake was a
+	Context("names longer than 63 characters", func() {
+		// Fixed by MEET-2026-07-02-002. The former ~50% flake was a
 		// status-write concurrency bug: the environment reconcile persisted the
 		// NameTooLong condition via a refetch-then-restore Status().Update that
 		// silently dropped the condition on an optimistic-concurrency conflict
@@ -99,7 +99,7 @@ var _ = Describe("T3.1 — EnvironmentController M2 canonical namespace + EC-3 o
 		It("sets Status condition NameTooLong without requeue when computed name >63 chars", func() {
 			// Compose tenant + project + env so the canonical name exceeds
 			// 63 chars: `loopzero-<26>-<27>-<25>` = 4 + 26 + 1 + 27 + 1 + 25 = 84 chars.
-			env := buildEnvironmentT31(
+			env := canonicalNamespaceEnvironment(
 				"production-data-pipeline-v2", // 27 chars
 				"staging-canary-experiment",   // 25 chars
 				"tn-very-long-tenant-name-h",  // 26 chars (rest RFC-1123 — leading lowercase + hyphens)
