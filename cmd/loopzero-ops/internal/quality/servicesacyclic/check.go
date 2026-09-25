@@ -114,6 +114,9 @@ func Check(cfg Config) (Outcome, error) {
 	if cfg.RepoRoot == "" {
 		cfg.RepoRoot = "."
 	}
+	if err := checkRegistryAcyclic(allowed); err != nil {
+		return Outcome{}, err
+	}
 	root := filepath.Join(cfg.RepoRoot, servicesRoot)
 	info, err := os.Stat(root)
 	if err != nil {
