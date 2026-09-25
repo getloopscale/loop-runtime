@@ -69,6 +69,14 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `chart-default-tags` also checks the bootstrap values of charts Helmfile installs from `charts/`, and `helm-topology-index` now lists those releases, so both still cover what Helmfile installs after the pairs became one chart (design_pattern_findings#29)
+
+- Helmfile now installs `charts/loopzero-api` with bootstrap values in place of the duplicate `infra/helm/loopzero-api`; the API keeps the same environment, and on an existing cluster the `loopzero-api` Deployment is recreated once because its selector changes (design_pattern_findings#29)
+
+- Helmfile now installs `charts/loopzero-cloud` with bootstrap values in place of the duplicate `infra/helm/loopzero-cloud`; the dashboard keeps the same environment, and on an existing cluster the `loopzero-cloud` Deployment is recreated once because its selector changes (design_pattern_findings#29)
+
+- Helmfile now installs the admission policies from the published `charts/loopzero-admission-policies` chart on the core cluster and on every cell; the duplicate bootstrap chart `infra/helm/admission-policies` is removed, and rendered policies are unchanged in every environment (design_pattern_findings#29)
+
 - The platform operator chart refuses an empty `config.argocdNamespace` at render time (principle_violations#149, principle_violations#150)
 
 - A ClusterCredential whose kubeconfig Secret lives outside `loopzero-system` is now refused by name when a tenant, app or preview operator resolves its cell, instead of being read on the operator's behalf (principle_violations#149, principle_violations#150)
@@ -229,6 +237,10 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- The `task helm:test:env` target is removed: after the per-environment loopzero-api stubs went with the bootstrap chart it selected no test (design_pattern_findings#29)
+
+- The `helm-drift` and `helm-overlap-parity` quality gates and their registries are retired, since no chart exists in two trees any more; `chart-pairs` now refuses any chart present in both, including a template-identical copy under another name (design_pattern_findings#29)
+
 - The loopzero-api chart no longer accepts config.maxBuildsPerTenant; set config.maxConcurrentBuildsPerTenant (principle_violations#49)
 
 - The loopzero-preview-operator chart no longer accepts config.baseDomain and the loopzero-app-operator chart no longer accepts config.loopzeroReaperGracePeriodSeconds: nothing read them since the preview URL comes from the API and the unused reaper was deleted; remove them from your values, which now fail schema validation (principle_violations#74)
@@ -274,6 +286,8 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- The published `loopzero-cloud` chart mounts a writable `/tmp`, so data exports no longer fail on its read-only root filesystem (design_pattern_findings#29)
 
 - The platform operator's `loopzero-system` and ArgoCD Roles now bind the chart's ServiceAccount; under any release name other than the chart's they bound a ServiceAccount that does not exist (principle_violations#149, principle_violations#150)
 
@@ -750,6 +764,8 @@ to [Semantic Versioning](https://semver.org/).
   explanation (#B-069)
 
 ### Security
+
+- The bootstrap `loopzero-api` no longer holds cluster-wide `secrets` delete or `pods/exec`: deleting Secrets is granted only in its own namespace, and patching or deleting ArgoCD Applications sits behind a value that is off for ArgoCD installs (design_pattern_findings#29)
 
 - The platform operator no longer holds cluster-wide Secret access: it reads and updates Secrets only in `loopzero-system` and writes ArgoCD's Secrets only in `config.argocdNamespace`, each through a namespaced Role, and caches Secrets in those two namespaces alone (principle_violations#149, principle_violations#150)
 
