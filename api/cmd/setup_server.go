@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/middleware/observability"
 	"log/slog"
 	"os"
 	"strings"
@@ -90,12 +91,9 @@ func buildServerConfig(
 	shutdownCancel context.CancelFunc,
 	logger *slog.Logger,
 ) server.Config {
-	// Beta Logs Gate — ContextLogger wires correlation_id enrichment
-	// into every handler's request-scoped logger. The OTel extractor is
-	// nil here because trace_id enrichment is handled by the OtelHTTP
-	// middleware separately; once an OTel-aware extractor is wired
-	// (operators/cmd pattern), it can be passed in.
-	contextLogger := pkglogging.NewContextLogger(logger, nil)
+	// Beta Logs Gate — ContextLogger enriches every handler's request-scoped
+	// logger with correlation_id and, from the span OtelHTTP opened, trace_id.
+	contextLogger := pkglogging.NewContextLogger(logger, observability.TraceIDs)
 
 	// The environment handler is a builder whose three collaborators each come
 	// from a dependency `main.go` can pass nil — so the chain has to be applied
