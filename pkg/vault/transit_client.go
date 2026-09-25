@@ -129,9 +129,11 @@ var (
 // a logical group) while staying inside the single-segment grammar.
 const tenantKeyPrefix = "loopzero-tenants-"
 
-// tenantKeyName returns the canonical OpenBao transit key name for
-// a tenant: tenantKeyPrefix + tenantID, single-segment safe.
-func tenantKeyName(tenantID string) string {
+// TenantKeyName returns the canonical OpenBao transit key name for
+// a tenant: tenantKeyPrefix + tenantID, single-segment safe. It is the one
+// definition of the name: the api encrypts with it and the operator's
+// crypto-shredding path deletes it, so the two can never name different keys.
+func TenantKeyName(tenantID string) string {
 	return tenantKeyPrefix + tenantID
 }
 
@@ -364,7 +366,7 @@ func (c *TransitClient) Encrypt(ctx context.Context, tenantID string, plaintext 
 // status, transport-or-auth-err). status is exposed so the caller can
 // distinguish 404 (EC-06 self-heal trigger) from other 4xx surfaces.
 func (c *TransitClient) tryEncrypt(ctx context.Context, tenantID string, reqBody []byte) (string, int, error) {
-	path := fmt.Sprintf("/v1/transit/encrypt/%s", tenantKeyName(tenantID))
+	path := fmt.Sprintf("/v1/transit/encrypt/%s", TenantKeyName(tenantID))
 	status, respBody, err := c.doWithRelogin(ctx, http.MethodPost, path, reqBody)
 	if err != nil {
 		return "", 0, err
@@ -407,7 +409,7 @@ func (c *TransitClient) createTransitKey(ctx context.Context, tenantID string) e
 	if err != nil {
 		return fmt.Errorf("vault: encode key-create request: %w", err)
 	}
-	path := fmt.Sprintf("/v1/transit/keys/%s", tenantKeyName(tenantID))
+	path := fmt.Sprintf("/v1/transit/keys/%s", TenantKeyName(tenantID))
 	status, respBody, err := c.doWithRelogin(ctx, http.MethodPost, path, reqBody)
 	if err != nil {
 		return err
@@ -444,7 +446,7 @@ func (c *TransitClient) Decrypt(ctx context.Context, tenantID, ciphertext string
 		return nil, fmt.Errorf("vault: encode decrypt request: %w", err)
 	}
 
-	path := fmt.Sprintf("/v1/transit/decrypt/%s", tenantKeyName(tenantID))
+	path := fmt.Sprintf("/v1/transit/decrypt/%s", TenantKeyName(tenantID))
 	var resp struct {
 		Data struct {
 			Plaintext string `json:"plaintext"`

@@ -9,14 +9,17 @@ import (
 	"testing"
 )
 
-func TestTenantKeyPath_FormatsCorrectly(t *testing.T) {
+// The shredder must delete the key the api actually encrypts with. The api
+// creates "loopzero-tenants-<id>"; this path used to name "tenant-<id>", a key
+// nobody creates, so a delete through it would have erased nothing and
+// reported success.
+func TestTenantKeyPath_NamesTheKeyTheAPIEncryptsWith(t *testing.T) {
 	cases := []struct {
 		tenantID string
 		want     string
 	}{
-		{"abc123", "transit/keys/tenant-abc123"},
-		{"tenant_with_underscore", "transit/keys/tenant-tenant_with_underscore"},
-		{"", "transit/keys/tenant-"},
+		{"abc123", "transit/keys/loopzero-tenants-abc123"},
+		{"tenant_with_underscore", "transit/keys/loopzero-tenants-tenant_with_underscore"},
 	}
 	for _, c := range cases {
 		got := TenantKeyPath(c.tenantID)

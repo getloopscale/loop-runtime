@@ -12,7 +12,8 @@ package vault
 import (
 	"context"
 	"errors"
-	"fmt"
+
+	pkgvault "github.com/getloopscale/loopzero/pkg/vault"
 )
 
 // TenantTransitClient is what the operator side still owns of the per-tenant Vault
@@ -47,10 +48,9 @@ var (
 	ErrVaultUnreachable   = errors.New("vault: unreachable (network/timeout/5xx)")
 )
 
-// TenantKeyPath returns the canonical Vault path for a tenant's transit key.
-// Format: transit/keys/tenant-<tenantID>.
-// Per T3.2 + T3.3 plan + tenant-controller-transit policy in openbao-init values.yaml
-// (capabilities=[create, read, update, delete] on path "transit/keys/tenant-+").
+// TenantKeyPath returns the Vault path of a tenant's transit key:
+// "transit/keys/" + the key name the api encrypts with (pkg/vault.TenantKeyName).
+// Deleting any other name would erase nothing and still report success.
 func TenantKeyPath(tenantID string) string {
-	return fmt.Sprintf("transit/keys/tenant-%s", tenantID)
+	return "transit/keys/" + pkgvault.TenantKeyName(tenantID)
 }
