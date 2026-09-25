@@ -30,14 +30,14 @@ func setupHelmfileContextParity(_ *flag.FlagSet) Check {
 		o, err := helmfilecontextparity.Check(helmfilecontextparity.Config{RepoRoot: inv.Root})
 		fmt.Fprintln(inv.Stdout, o.Summary())
 		for _, d := range o.Divergences {
-			fmt.Fprintf(inv.Stdout, "  DIVERGE %s:%d — %s é invocado com --kube-context %q, mas declara %q\n",
+			fmt.Fprintf(inv.Stdout, "  DIVERGES %s:%d — %s is invoked with --kube-context %q but declares %q\n",
 				d.Taskfile, d.Line, d.Helmfile, d.Invoked, d.Declared)
 		}
 		for _, m := range o.MissingEnv {
-			fmt.Fprintf(inv.Stdout, "  VAR AUSENTE %s\n", m)
+			fmt.Fprintf(inv.Stdout, "  MISSING VAR %s\n", m)
 		}
 		for _, u := range o.Undeclared {
-			fmt.Fprintf(inv.Stdout, "  SEM CONTEXTO %s — um `helmfile sync` sem flag herdaria o contexto ativo do kubectl\n", u)
+			fmt.Fprintf(inv.Stdout, "  NO CONTEXT %s — a `helmfile sync` without the flag would inherit kubectl's active context\n", u)
 		}
 		if err != nil {
 			if !isViolation(err, helmfilecontextparity.ErrContextDiverges, helmfilecontextparity.ErrContextNotDeclared, helmfilecontextparity.ErrRequiredEnvNotSet) {

@@ -20,8 +20,12 @@ func init() {
 	})
 }
 
+// setupBillingLayers checks that the billing CHAIN stays enumerable and owned.
+// Its sibling billing-secrets covers ONE layer; this covers the list of all of
+// them, which is what B-038 measured: "the fifth layer was born without the
+// check the other four had".
 func setupBillingLayers(fs *flag.FlagSet) Check {
-	sibling := fs.String("sibling-root", "", "raiz de ../loopzero-cloud (padrão: irmão do repo-root)")
+	sibling := fs.String("sibling-root", "", "root of ../loopzero-cloud (default: the sibling of --root)")
 	return func(inv Invocation) (Outcome, error) {
 		if *sibling == "" {
 			*sibling = filepath.Join(inv.Root, "..", "loopzero-cloud")
@@ -32,8 +36,8 @@ func setupBillingLayers(fs *flag.FlagSet) Check {
 			if !isViolation(err, billinglayers.ErrUndeclaredSurface, billinglayers.ErrBelowFloor, billinglayers.ErrGuardUnresolved, billinglayers.ErrRegistryMalformed) {
 				return Fail, err
 			}
-			// Não existe ramo que devolva 0 sem veredito: uma guarda que não resolve, uma
-			// dívida fechada sem cobertura, ou uma camada nova não declarada reprovam aqui.
+			// No branch returns 0 without a verdict: a guard that does not resolve,
+			// closed debt without coverage, or an undeclared new layer all fail here.
 			fmt.Fprintf(inv.Stderr, "billing-layers: FAIL — %v\n", err)
 			return Fail, nil
 		}

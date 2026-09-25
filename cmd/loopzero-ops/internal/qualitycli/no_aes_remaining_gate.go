@@ -15,12 +15,13 @@ func init() {
 	register(Gate{
 		Name:    "no-aes-remaining",
 		Summary: "Calendar-gated: fails on remaining AES code paths post-transit migration.",
-		// Virou ENFORCED em 2026-08-01 (prazo T+60d) com o branch AES legado ainda no
-		// dispatcher — 4 achados em api/internal/db/store/secret_wrapper.go:{148,152,188,192}.
-		// Medido 2026-08-06. A divida T10.3 (deletar o branch) segue aberta: remover o
-		// caminho de leitura AES antes de provar que nenhum segredo persistido usa o
-		// prefixo antigo torna esses dados irrecuperaveis, entao a correcao exige
-		// evidencia de migracao que este repo nao carrega.
+		// ENFORCED since 2026-08-01 (T+60d deadline) with the legacy AES branch still
+		// in the dispatcher — 4 findings in
+		// api/internal/db/store/secret_wrapper.go:{148,152,188,192}, measured
+		// 2026-08-06. The T10.3 debt (delete the branch) stays open: removing the
+		// AES read path before proving no persisted secret uses the old prefix makes
+		// that data unrecoverable, so the fix needs migration evidence this
+		// repository does not carry.
 		Wiring: failingGate,
 		Setup:  setupNoAESRemaining,
 	})

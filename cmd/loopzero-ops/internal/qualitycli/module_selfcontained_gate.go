@@ -18,10 +18,9 @@ func init() {
 	})
 }
 
-// runBillingLayers verifica que a CADEIA de cobrança continua enumerável, com dono.
-//
-// O irmão `billing-secrets` cobre UMA camada. Este cobre a lista das cinco — e é a lista
-// que o B-038 mede: "a quinta camada nasce sem a verificação que as outras quatro tinham".
+// setupModuleSelfContained builds every Go module on its own, without go.work,
+// which is how CI builds it: a module that only compiles inside the workspace
+// passes locally and fails there.
 func setupModuleSelfContained(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (Outcome, error) {
 		out, err := moduleselfcontained.Check(moduleselfcontained.Config{RepoRoot: inv.Root})

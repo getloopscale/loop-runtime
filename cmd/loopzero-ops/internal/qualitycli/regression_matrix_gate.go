@@ -22,13 +22,12 @@ func init() {
 // setupRegressionMatrix is the matrix-integrity gate replacing
 // audit-regression-matrix.sh + audit-golden-test.sh (Track B TB5). It audits
 // the bootstrap regression matrix: every entry's Verification artifact must
-// still resolve in the repo. FAILs if any critical (Pode Recorrer=NÃO) entry's
-// artifact is unresolvable. Unlike the bash original, it has no set-e/return-2
-// fragility (the prior gate silently aborted at exit 2 — see
-// finding-2026-05-24-audit-regression-matrix-set-e-abort).
+// still resolve in the repo. It FAILs when the artifact of a critical entry (one
+// whose can-recur column is NO) does not resolve. Unlike the bash original it
+// has no set-e fragility: the prior gate silently aborted at its exit 2.
 func setupRegressionMatrix(fs *flag.FlagSet) Check {
 	matrix := fs.String("matrix", "docs/runbooks.md", "matrix markdown path (repo-relative)")
-	strict := fs.Bool("strict", false, "fail on ANY miss, not just critical (Pode Recorrer=NÃO) ones")
+	strict := fs.Bool("strict", false, "fail on ANY miss, not just critical ones (can-recur column NO)")
 	return func(inv Invocation) (Outcome, error) {
 		matrixPath := *matrix
 		if !filepath.IsAbs(matrixPath) {

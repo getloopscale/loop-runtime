@@ -27,7 +27,7 @@ func setupRunbookParity(_ *flag.FlagSet) Check {
 			}
 			fmt.Fprintf(inv.Stderr, "runbook-parity: FAIL — %v\n", err)
 			for _, f := range out.Findings {
-				fmt.Fprintf(inv.Stderr, "  %s:%d nomeia %q; runbook prescreve %q\n", f.File, f.Line, f.Named, f.Prescribed)
+				fmt.Fprintf(inv.Stderr, "  %s:%d names %q; the runbook prescribes %q\n", f.File, f.Line, f.Named, f.Prescribed)
 			}
 			return Fail, nil
 		}

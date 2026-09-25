@@ -14,25 +14,27 @@ func init() {
 	register(Gate{
 		Name:    "migration-test-coverage",
 		Summary: "Every DB migration has corresponding test coverage.",
-		// 44 migrations with no matching api/tests/unit/migration_*_test.go (re-measured
-		// 2026-09-06, B-067; era 42 aqui, 43 no item e 48 antes desta fatia).
+		// 44 migrations with no matching api/tests/unit/migration_*_test.go
+		// (re-measured 2026-09-06, B-067; it read 42 here, 43 in the item and 48
+		// before this slice).
 		//
-		// A parte "That is 42 pieces of real work, not a mislabel" ERA FALSA e foi medida:
-		// CINCO das violacoes eram mislabel. `migration_loopzero_api_keys_test.go`,
-		// `migration_memory_p3_test.go`, `migration_api_key_rotation_test.go` e
-		// `migration_webhook_delivery_test.go` — 37 funcoes de teste e 68 asserts, verdes —
-		// abrem o proprio `.up.sql` das migrations 000024/000025/000026/000031/000033 e
-		// mesmo assim eram acusadas, porque o nome do arquivo nao comecava com o numero.
-		// Renomear os quatro derrubou a contagem de 48 para 44 sem afrouxar o gate.
+		// "That is 42 pieces of real work, not a mislabel" was FALSE, measured:
+		// FIVE violations were mislabels. migration_loopzero_api_keys_test.go,
+		// migration_memory_p3_test.go, migration_api_key_rotation_test.go and
+		// migration_webhook_delivery_test.go — 37 test functions, 68 asserts, green
+		// — open the .up.sql of migrations 000024/000025/000026/000031/000033 and
+		// were still flagged because the file name did not start with the number.
+		// Renaming the four took the count from 48 to 44 without loosening the gate.
 		//
-		// O que continua verdadeiro, e e' a razao de nao alargar o casamento: o gate confere
-		// que o ARQUIVO existe, entao stubs vazios o deixariam verde sem testar nada — a
-		// barra e' a forma canonica de migration_012_fk_on_delete_test.go. Casar por
-		// CONTEUDO trocaria este falso positivo por um falso negativo pior (mencionar o nome
-		// da migration num comentario passaria a contar como teste).
+		// Still true, and the reason not to widen the match: the gate checks that
+		// the FILE exists, so empty stubs would turn it green while testing nothing
+		// — the bar is the shape of migration_012_fk_on_delete_test.go. Matching on
+		// CONTENT would trade this false positive for a worse false negative (a
+		// comment naming the migration would count as a test).
 		//
-		// Residual conhecido: 000026_memory_exports segue acusada e E' testada — um arquivo
-		// so' pode carregar um prefixo numerico. Ver a nota em migration_000025_000026_memory_test.go.
+		// Known residual: 000026_memory_exports is still flagged and IS tested — a
+		// file can carry only one numeric prefix. See the note in
+		// migration_000025_000026_memory_test.go.
 		Wiring: failingGate,
 		Setup:  setupMigrationTestCoverage,
 	})
