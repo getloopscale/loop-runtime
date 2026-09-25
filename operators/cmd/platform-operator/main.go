@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -78,12 +79,15 @@ func main() {
 		operatorboot.StartPprofServer()
 	}
 
-	// CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C16. Cache
-	// scoping per ADR-0018 v2 C9 + operator-split-invariants.md I-1.
-	// PlatformBootstrap, GitRepositoryBinding, ClusterCredential all
-	// live in `loopzero-system` only.
-	platformCRDNamespaces := map[string]cache.Config{
-		constants.NamespacePlatformSystem: {},
+	argoCDNamespace := os.Getenv("ARGOCD_NAMESPACE")
+	if argoCDNamespace == "" {
+		argoCDNamespace = constants.DefaultArgoCDNamespace
+	}
+
+	cacheOpts, err := managerCacheOptions(argoCDNamespace)
+	if err != nil {
+		setupLog.Error(err, "invalid manager cache scoping")
+		os.Exit(1)
 	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
@@ -93,22 +97,11 @@ func main() {
 		HealthProbeBindAddress: healthProbeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "loopzero-platform-operator.loopzero.io",
-		Cache: cache.Options{
-			ByObject: map[client.Object]cache.ByObject{
-				&loopzerov1.PlatformBootstrap{}:    {Namespaces: platformCRDNamespaces},
-				&loopzerov1.GitRepositoryBinding{}: {Namespaces: platformCRDNamespaces},
-				&loopzerov1.ClusterCredential{}:    {Namespaces: platformCRDNamespaces},
-			},
-		},
+		Cache:                  cacheOpts,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create manager")
 		os.Exit(1)
-	}
-
-	argoCDNamespace := os.Getenv("ARGOCD_NAMESPACE")
-	if argoCDNamespace == "" {
-		argoCDNamespace = constants.DefaultArgoCDNamespace
 	}
 
 	httpClient := httpclient.New()
@@ -142,4 +135,37 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// managerCacheOptions scopes the manager's informers.
+//
+// CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C16. Cache
+// scoping per ADR-0018 v2 C9 + operator-split-invariants.md I-1.
+// PlatformBootstrap, GitRepositoryBinding, ClusterCredential all
+// live in `loopzero-system` only.
+//
+// Secrets are read and written in two namespaces, the ones the chart grants
+// through namespaced Roles: loopzero-system (cell kubeconfigs, the Gitea admin
+// Secret, platform-tokens, Git credentials) and the ArgoCD namespace (the
+// cluster, repository and repo-creds Secrets the controllers write for
+// ArgoCD, and its admin Secret). The Secret informer — which also feeds the
+// ClusterCredential controller's Secret watch — watches those two only. A
+// resource naming a Secret anywhere else fails the read loudly instead of
+// reaching it.
+func managerCacheOptions(argoCDNamespace string) (cache.Options, error) {
+	platformCRDNamespaces := map[string]cache.Config{
+		constants.NamespacePlatformSystem: {},
+	}
+	secretScope, err := operatorboot.SecretCache(constants.NamespacePlatformSystem, argoCDNamespace)
+	if err != nil {
+		return cache.Options{}, err
+	}
+	return cache.Options{
+		ByObject: map[client.Object]cache.ByObject{
+			&loopzerov1.PlatformBootstrap{}:    {Namespaces: platformCRDNamespaces},
+			&loopzerov1.GitRepositoryBinding{}: {Namespaces: platformCRDNamespaces},
+			&loopzerov1.ClusterCredential{}:    {Namespaces: platformCRDNamespaces},
+			&corev1.Secret{}:               secretScope,
+		},
+	}, nil
 }

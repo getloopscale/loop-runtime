@@ -47,6 +47,20 @@ var operatorSecretAccessTable = []operatorSecretAccess{
 		// the cell's own identity.
 		namespaces: map[string][]string{"loopzero-system": {"get", "list", "watch"}},
 	},
+	{
+		chart: "loopzero-platform-operator",
+		namespaces: map[string][]string{
+			// kubeconfig Secrets (ClusterCredential, read and watched), the Gitea
+			// admin Secret and platform-tokens (PlatformBootstrap, read and
+			// updated), the Git credential (GitRepositoryBinding). Deleting
+			// platform-tokens is a separate rule restricted by resourceNames.
+			"loopzero-system": {"get", "list", "watch", "update"},
+			// ArgoCD cluster, repository and repo-creds Secrets, created,
+			// updated and deleted by the three controllers; the admin Secret
+			// read by PlatformBootstrap.
+			"argocd": {"get", "list", "watch", "create", "update", "delete"},
+		},
+	},
 }
 
 // TestOperatorCharts_GrantNoClusterWideSecretOrConfigMapAccess — a ClusterRole

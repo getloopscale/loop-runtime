@@ -43,7 +43,8 @@ const (
 // +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",namespace=argocd,resources=secrets,verbs=get;list;watch;create;update;delete
 type ClusterCredentialReconciler struct {
 	client.Client
 	ArgoCDNamespace string

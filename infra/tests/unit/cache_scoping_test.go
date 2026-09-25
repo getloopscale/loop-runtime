@@ -65,7 +65,9 @@ func TestCacheScoping_PlatformOperatorScopesPlatformCRDs(t *testing.T) {
 
 	for _, must := range []string{
 		"platformCRDNamespaces",
-		"Cache: cache.Options",
+		"func managerCacheOptions(argoCDNamespace string) (cache.Options, error)",
+		"Cache:                  cacheOpts",
+		"&corev1.Secret{}:               secretScope",
 		"&loopzerov1.PlatformBootstrap{}",
 		"&loopzerov1.GitRepositoryBinding{}",
 		"&loopzerov1.ClusterCredential{}",

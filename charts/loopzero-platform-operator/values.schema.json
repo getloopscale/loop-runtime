@@ -164,6 +164,10 @@
       "properties": {
         "create": {
           "type": "boolean"
+        },
+        "legacyClusterWideSecrets": {
+          "type": "boolean",
+          "description": "Cutover escape hatch: grants cluster-wide Secret read for an operator image that predates the scoped Secret cache. Default false."
         }
       }
     },
@@ -172,7 +176,9 @@
       "additionalProperties": false,
       "properties": {
         "argocdNamespace": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "description": "Namespace ArgoCD runs in. The operator writes its Secrets there, and the chart's role-argocd.yaml grants that access in this namespace only."
         },
         "operatorInsecureSkipTls": {
           "type": "string"

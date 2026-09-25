@@ -59,7 +59,9 @@ type ArgoCDBootstrapClient interface {
 // +kubebuilder:rbac:groups=loopzero.io,resources=platformbootstraps,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=loopzero.io,resources=platformbootstraps/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=loopzero.io,resources=platformbootstraps/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch;update
+// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,resourceNames=platform-tokens,verbs=delete
+// +kubebuilder:rbac:groups="",namespace=argocd,resources=secrets,verbs=get;list;watch;create;update
 type PlatformBootstrapReconciler struct {
 	client.Client
 	HTTPClient       *http.Client
