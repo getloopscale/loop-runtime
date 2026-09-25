@@ -5,7 +5,6 @@ package argo
 
 import (
 	"fmt"
-	"os"
 
 	forge "github.com/getloopscale/loopzero-forge"
 	"github.com/getloopscale/loopzero-forge/model"
@@ -13,26 +12,12 @@ import (
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
-// loopzeroCosignImage returns the loopzero-cosign-signer image, allowing override via env var.
-// Local dev sets LOOPZERO_COSIGN_IMAGE to use the k3d registry image.
-// Mirrors the loopzeroPacks() pattern in languages.go (NEW-11 fix 2026-04-30:
-// dogfood E2E unblock surfaced that DOCR images were hardcoded for cosign +
-// syft, with the override pattern only applied to packs-runner. Without
-// this, local builds always 401 against DOCR for the sign-image step).
-func loopzeroCosignImage() string {
-	if v := os.Getenv("LOOPZERO_COSIGN_IMAGE"); v != "" {
-		return v
+// orImage returns configured, or fallback when nothing was configured.
+func orImage(configured, fallback string) string {
+	if configured != "" {
+		return configured
 	}
-	return imageCosignSigner
-}
-
-// loopzeroSyftImage returns the loopzero-syft-scanner image, allowing override via env var.
-// Local dev sets LOOPZERO_SYFT_IMAGE to use the k3d registry image.
-func loopzeroSyftImage() string {
-	if v := os.Getenv("LOOPZERO_SYFT_IMAGE"); v != "" {
-		return v
-	}
-	return imageSyftScanner
+	return fallback
 }
 
 // CosignSignParams configures the cosign signing template behavior.
@@ -52,6 +37,8 @@ type CosignSignParams struct {
 	// Default false; LOCAL k3d sets via Config.CosignInsecureSkipSCT.
 	// EC-11 fix: even when InsecureSkipSCT=true, flag is OMITTED if Keyless=false.
 	InsecureSkipSCT bool
+	// SignerImage overrides the cosign signer image; empty = imageCosignSigner.
+	SignerImage string
 }
 
 // cosignSignTemplate generates an inline container template that signs a
@@ -94,12 +81,13 @@ func cosignSignTemplateWithParams(p CosignSignParams) *forge.Script {
 	if p.Keyless {
 		return cosignSignTemplateKeyless(p)
 	}
-	return cosignSignTemplateKeyBased(p.AppName, p.ImageTag, p.InsecureRegistry)
+	return cosignSignTemplateKeyBased(p)
 }
 
 // cosignSignTemplateKeyBased is the original key-based signing template.
 // Renamed-extracted from `cosignSignTemplate` to make the mode-split explicit.
-func cosignSignTemplateKeyBased(appName, imageTag string, insecureRegistry bool) *forge.Script {
+func cosignSignTemplateKeyBased(p CosignSignParams) *forge.Script {
+	appName, imageTag, insecureRegistry := p.AppName, p.ImageTag, p.InsecureRegistry
 	metadataFile := metadataFileFor(appName)
 
 	// cosign v3 distinguishes: --allow-insecure-registry (self-signed TLS) from
@@ -160,7 +148,7 @@ echo "Image signed successfully"
 
 	return &forge.Script{
 		Name:    naming.SignStepName(appName),
-		Image:   loopzeroCosignImage(),
+		Image:   orImage(p.SignerImage, imageCosignSigner),
 		Command: []string{"sh"},
 		Source:  script,
 		Outputs: []forge.Parameter{
@@ -334,7 +322,7 @@ echo "Image signed successfully (keyless)"
 
 	return &forge.Script{
 		Name:    naming.SignStepName(p.AppName),
-		Image:   loopzeroCosignImage(),
+		Image:   orImage(p.SignerImage, imageCosignSigner),
 		Command: []string{"sh"},
 		Source:  script,
 		Outputs: []forge.Parameter{

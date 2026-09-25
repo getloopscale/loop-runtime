@@ -49,6 +49,11 @@ var workflowGVR = WorkflowGVR
 
 // WorkflowSubmitterConfig holds configuration for connecting to the build cluster.
 type WorkflowSubmitterConfig struct {
+	// CosignImage and SyftImage override the signer and SBOM scanner images;
+	// empty means the built-in ones.
+	CosignImage string
+	SyftImage   string
+
 	Kubeconfig string // Path to kubeconfig file
 	Context    string // Kube context (e.g., "k3d-loopzero-build")
 
@@ -125,7 +130,9 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 		CosignRekorURL:        cfg.CosignRekorURL,
 		CosignAttestEnabled:   cfg.CosignAttestEnabled,
 		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT, // T1.2 CR-1 fix
-		Env:                   cfg.Env,                   // T1.1 of plan 2026-06-01-p1-security-hardening (sec-010)
+		CosignImage:           cfg.CosignImage,
+		SyftImage:             cfg.SyftImage,
+		Env:                   cfg.Env, // T1.1 of plan 2026-06-01-p1-security-hardening (sec-010)
 	})
 
 	return &WorkflowSubmitter{

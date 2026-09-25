@@ -18,7 +18,7 @@ import (
 // three SBOM metadata outputs that build_reconcile_complete (T3.1) reads.
 func TestSyftScanTemplate_DeclaresOutputs(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
-		"registry.example.com/org/app:abc", false)
+		"registry.example.com/org/app:abc", false, "")
 
 	if len(c.Outputs) < 3 {
 		t.Fatalf("expected at least 3 outputs (s3 key, format, count), got %d", len(c.Outputs))
@@ -42,7 +42,7 @@ func TestSyftScanTemplate_DeclaresOutputs(t *testing.T) {
 // trust model of cosignSignTemplate.
 func TestSyftScanTemplate_OutputsOnLocalTmp(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
-		"registry.example.com/org/app:abc", false)
+		"registry.example.com/org/app:abc", false, "")
 
 	for _, p := range c.Outputs {
 		if p.ValueFrom == nil || p.ValueFrom.Path == "" {
@@ -66,7 +66,7 @@ func TestSyftScanTemplate_OutputsOnLocalTmp(t *testing.T) {
 // CLI flag. Now must use SYFT_REGISTRY_INSECURE_USE_HTTP env var.
 func TestSyftScanTemplate_Insecure_EmitsFlag(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
-		"k3d-loopzero-registry:5000/tn-1/proj-1/api:abc", true)
+		"k3d-loopzero-registry:5000/tn-1/proj-1/api:abc", true, "")
 	script := c.Source
 	if !strings.Contains(script, "SYFT_REGISTRY_INSECURE_USE_HTTP=true") {
 		t.Errorf("insecure registry MUST export SYFT_REGISTRY_INSECURE_USE_HTTP=true:\n%s", script)
@@ -82,7 +82,7 @@ func TestSyftScanTemplate_Insecure_EmitsFlag(t *testing.T) {
 
 func TestSyftScanTemplate_Secure_NoInsecureFlag(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
-		"registry.digitalocean.com/loopzero/api:abc", false)
+		"registry.digitalocean.com/loopzero/api:abc", false, "")
 	script := c.Source
 	if strings.Contains(script, "--source-registry-insecure") {
 		t.Errorf("secure registry must NOT emit --source-registry-insecure:\n%s", script)
@@ -92,7 +92,7 @@ func TestSyftScanTemplate_Secure_NoInsecureFlag(t *testing.T) {
 // TestSyftScanTemplate_SecurityContext_NonRoot — UID 1000 + RunAsNonRoot.
 func TestSyftScanTemplate_SecurityContext_NonRoot(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
-		"registry.example.com/org/app:abc", false)
+		"registry.example.com/org/app:abc", false, "")
 	if c.SecurityContext == nil {
 		t.Fatal("SecurityContext must not be nil")
 	}
@@ -108,7 +108,7 @@ func TestSyftScanTemplate_SecurityContext_NonRoot(t *testing.T) {
 // the canonical key sbom/{tenant}/{project}/{commit}/{app}.cdx.json.
 func TestSyftScanTemplate_UploadsToS3(t *testing.T) {
 	c := syftScanTemplate("tn-acme", "proj-shop", "deadbeef", "api",
-		"registry.example.com/org/app:abc", false)
+		"registry.example.com/org/app:abc", false, "")
 	script := c.Source
 	if !strings.Contains(script, "aws s3 cp") {
 		t.Errorf("script must contain aws s3 cp:\n%s", script)
@@ -124,7 +124,7 @@ func TestSyftScanTemplate_UploadsToS3(t *testing.T) {
 // runtime download.
 func TestSyftScanTemplate_UsesPreBuiltImage(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
-		"registry.example.com/org/app:abc", false)
+		"registry.example.com/org/app:abc", false, "")
 	if c.Image != imageSyftScanner {
 		t.Errorf("expected image %q, got %q", imageSyftScanner, c.Image)
 	}
@@ -135,7 +135,7 @@ func TestSyftScanTemplate_UsesPreBuiltImage(t *testing.T) {
 // This pins the SBOM to the cryptographically signed bytes.
 func TestSyftScanTemplate_ReadsDigestFromMetadata(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
-		"registry.example.com/org/app:abc", false)
+		"registry.example.com/org/app:abc", false, "")
 	script := c.Source
 	if !strings.Contains(script, "metadata-api.json") {
 		t.Errorf("script must read BuildKit metadata-api.json:\n%s", script)
@@ -148,7 +148,7 @@ func TestSyftScanTemplate_ReadsDigestFromMetadata(t *testing.T) {
 // TestSyftScanTemplate_OutputFormatIsCycloneDX — D1 default format.
 func TestSyftScanTemplate_OutputFormatIsCycloneDX(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
-		"registry.example.com/org/app:abc", false)
+		"registry.example.com/org/app:abc", false, "")
 	script := c.Source
 	if !strings.Contains(script, "cyclonedx-json=") {
 		t.Errorf("default SBOM format must be cyclonedx-json:\n%s", script)
@@ -159,7 +159,7 @@ func TestSyftScanTemplate_OutputFormatIsCycloneDX(t *testing.T) {
 // from the K8s Secret (SecretEnv binding).
 func TestSyftScanTemplate_HasMinIOEnv(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
-		"registry.example.com/org/app:abc", false)
+		"registry.example.com/org/app:abc", false, "")
 	want := map[string]bool{
 		"AWS_ACCESS_KEY_ID":     false,
 		"AWS_SECRET_ACCESS_KEY": false,
@@ -181,7 +181,7 @@ func TestSyftScanTemplate_HasMinIOEnv(t *testing.T) {
 // TestSyftScanTemplate_RegistryConfigReadOnly — defense in depth.
 func TestSyftScanTemplate_RegistryConfigReadOnly(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
-		"registry.example.com/org/app:abc", false)
+		"registry.example.com/org/app:abc", false, "")
 	for _, vol := range c.VolumeMounts {
 		if sv, ok := vol.(*forge.SecretVolume); ok {
 			if sv.SecretName == secretRegistryConfig && !sv.ReadOnly {
@@ -195,7 +195,7 @@ func TestSyftScanTemplate_RegistryConfigReadOnly(t *testing.T) {
 // scanner has no business holding the signing key.
 func TestSyftScanTemplate_NoCosignKeyMount(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
-		"registry.example.com/org/app:abc", false)
+		"registry.example.com/org/app:abc", false, "")
 	for _, vol := range c.VolumeMounts {
 		if sv, ok := vol.(*forge.SecretVolume); ok {
 			if sv.SecretName == secretCosignKey {
@@ -261,7 +261,7 @@ func TestWorkflowBuilder_SBOMTaskContinueOnFailed(t *testing.T) {
 // 512Mi request balances OOM headroom vs cluster scheduling pressure.
 func TestSyftScanTemplate_MemoryLimitsAccommodateNodeJSScans(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "app",
-		"registry.example.com/org/app:abc", false)
+		"registry.example.com/org/app:abc", false, "")
 	if c.Resources == nil {
 		t.Fatalf("syft template missing Resources spec")
 	}

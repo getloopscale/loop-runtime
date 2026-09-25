@@ -53,7 +53,7 @@ const (
 // ContinueOn{Failed: true}. SBOM failure must NOT block the deploy.
 func syftScanTemplate(
 	tenantID, projectID, commitSHA, appName, imageTag string,
-	insecureRegistry bool,
+	insecureRegistry bool, scannerImage string,
 ) *forge.Script {
 	metadataFile := metadataFileFor(appName)
 	sbomLocalPath := fmt.Sprintf("%s/sbom-%s.cdx.json", sbomLocalDir, appName)
@@ -141,7 +141,7 @@ echo "SBOM generated and uploaded successfully"
 
 	return &forge.Script{
 		Name:    naming.SBOMStepName(appName),
-		Image:   loopzeroSyftImage(),
+		Image:   orImage(scannerImage, imageSyftScanner),
 		Command: []string{"sh"},
 		Source:  script,
 		Outputs: []forge.Parameter{

@@ -62,6 +62,11 @@ type Config struct {
 	// Enterprise Server install points it at its appliance.
 	GitHubAPIBaseURL string
 
+	// CosignImage and SyftImage override the build's signer and SBOM scanner
+	// images (LOOPZERO_COSIGN_IMAGE / LOOPZERO_SYFT_IMAGE); empty = built-in images.
+	CosignImage string
+	SyftImage   string
+
 	// EnvBlocklistMode is how services.json env keys on the reserved blocklist
 	// are handled (LOOPZERO_ENV_BLOCKLIST_MODE): "enforce" (default) or "warn".
 	// Warn is refused in production.
@@ -400,6 +405,8 @@ func Load() Config {
 		TracingEnabled:   envBool("LOOPZERO_TRACING_ENABLED", true),
 		OTelEndpoint:     os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 		GitHubAPIBaseURL: envOr("GITHUB_API_BASE_URL", "https://api.github.com"),
+		CosignImage:      os.Getenv("LOOPZERO_COSIGN_IMAGE"),
+		SyftImage:        os.Getenv("LOOPZERO_SYFT_IMAGE"),
 		EnvBlocklistMode: strings.ToLower(strings.TrimSpace(envOr("LOOPZERO_ENV_BLOCKLIST_MODE", "enforce"))),
 
 		// HTTP Server Timeouts

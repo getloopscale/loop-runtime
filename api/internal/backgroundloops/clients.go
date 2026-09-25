@@ -49,6 +49,8 @@ func NewWorkflowSubmitter(cfg config.Config, logger *slog.Logger) (*platform.Cir
 		CosignFulcioURL:       cfg.CosignFulcioURL,
 		CosignRekorURL:        cfg.CosignRekorURL,
 		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT,
+		CosignImage:           cfg.CosignImage,
+		SyftImage:             cfg.SyftImage,
 		Env:                   cfg.Env, // sec-010: per-environment Fulcio audience
 	})
 	if err != nil {

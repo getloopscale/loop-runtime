@@ -30,6 +30,8 @@ import (
 // match the cosign-sign step naming convention; SBOMLocalPath references
 // the syft step's output file (mounted via shared workspace).
 type CosignAttestParams struct {
+	// SignerImage overrides the cosign signer image; empty = imageCosignSigner.
+	SignerImage   string
 	AppName       string
 	ImageTag      string
 	SBOMLocalPath string // e.g., /workspace/sbom-{app}.cdx.json from syft step
@@ -194,7 +196,7 @@ echo "Attestation complete; Rekor entry: ${REKOR_ENTRY_URL:-<none>}"
 
 	return &forge.Script{
 		Name:    naming.AttestStepName(p.AppName),
-		Image:   loopzeroCosignImage(),
+		Image:   orImage(p.SignerImage, imageCosignSigner),
 		Command: []string{"sh"},
 		Source:  script,
 		// v1.1 EC-NEW-6: activeDeadlineSeconds bounds Rekor latency.

@@ -39,6 +39,11 @@ type InfraParams struct {
 	RegistryInsecure  bool   // true for local dev registries without TLS
 	BaseDomain        string // Base domain for app hostnames (e.g., "loopzero.local")
 	HarborRegistryURL string // MEET-048: secondary registry for dual-push. Empty = disabled.
+	// CosignImage and SyftImage override the signer and SBOM scanner images
+	// (config LOOPZERO_COSIGN_IMAGE / LOOPZERO_SYFT_IMAGE; local k3d points them at
+	// its registry). Empty means the built-in imageCosignSigner/imageSyftScanner.
+	CosignImage string
+	SyftImage   string
 	// CosignKeyless toggles the signing mode used by cosignSignTemplate.
 	// false (default): key-based, COSIGN_KEY mounted from `cosign-signing-key` Secret.
 	// true:            keyless via Fulcio + Rekor; SA token mounted as OIDC bearer.
@@ -266,9 +271,10 @@ func (b *WorkflowBuilder) appDeliveryTemplates(spec deploycontracts.WorkflowSpec
 			FulcioURL:        b.infraParams.CosignFulcioURL,
 			RekorURL:         b.infraParams.CosignRekorURL,
 			InsecureSkipSCT:  b.infraParams.CosignInsecureSkipSCT, // T1.2 CR-1 fix
+			SignerImage:      b.infraParams.CosignImage,
 		}),
 		syftScanTemplate(spec.TenantID, spec.ProjectID, spec.CommitSHA,
-			appPlan.AppName, appPlan.ImageTag, b.infraParams.RegistryInsecure),
+			appPlan.AppName, appPlan.ImageTag, b.infraParams.RegistryInsecure, b.infraParams.SyftImage),
 	}
 	// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
 	if b.infraParams.CosignAttestEnabled {
@@ -281,6 +287,7 @@ func (b *WorkflowBuilder) appDeliveryTemplates(spec deploycontracts.WorkflowSpec
 			FulcioURL:        b.infraParams.CosignFulcioURL,
 			RekorURL:         b.infraParams.CosignRekorURL,
 			InsecureSkipSCT:  b.infraParams.CosignInsecureSkipSCT, // T1.2 CR-1 fix
+			SignerImage:      b.infraParams.CosignImage,
 		}))
 	}
 	if b.infraParams.HarborRegistryURL != "" {

@@ -79,7 +79,7 @@ func TestScriptMigration_DeliverArtifact_EmitsScriptBlock(t *testing.T) {
 
 func TestScriptMigration_SyftSBOM_EmitsScriptBlock(t *testing.T) {
 	s := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
-		"registry.example.com/tn-1/api:abc1234", false)
+		"registry.example.com/tn-1/api:abc1234", false, "")
 	tpl, err := s.BuildTemplate()
 	if err != nil {
 		t.Fatalf("BuildTemplate: %v", err)
