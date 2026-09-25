@@ -140,7 +140,7 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | `operators/` | 4 split binaries (`operators/cmd/{tenant,app,preview,platform}-operator`) — kubebuilder + controller-runtime |
 | `operators/api/` | CRD Go types (own module) |
 | `pkg/` | Shared libs: `statemachine`, `errors`, `naming`, `conditions`, `enforcement`, `circuitbreaker`, `healthcheck`, `id`, `logging`, `domain`, `events`, `vault`, `shellrun`, `pulumi`, `correlation` |
-| `cmd/loopzero-ops/` | Ops + quality binary: **125** wired quality gates of 143 registered (**155** directories — the difference is helpers and not-yet-wired checks; `loopzero-ops quality --list` is the oracle) + `seed` / `drill` / `pulumi` / `chaos` subcommands |
+| `cmd/loopzero-ops/` | Ops + quality binary: **125** wired quality gates of 143 registered (**155** directories — the difference is helpers and not-yet-wired checks; `loopzero-ops quality --list` is the oracle) + `seed` / `drill` / `pulumi` / `chaos` / `dsn` subcommands |
 | `infra/helm/` (**43** dirs) | Bootstrap charts — installed by **Helmfile L2** |
 | `charts/` (12) | Published OCI charts — consumed by **ArgoCD L3**; use the `loopzero-common` library |
 | `infra/tests/` | Ginkgo e2e, chaos, load (k6), unit (own module) |

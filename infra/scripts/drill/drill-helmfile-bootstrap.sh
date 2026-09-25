@@ -96,6 +96,18 @@ HEALTH_WAIT_TIMEOUT="${HEALTH_WAIT_TIMEOUT:-5m}"
 
 log() { printf '[drill-helmfile-bootstrap] %s\n' "$*" >&2; }
 
+# loopzero-ops is the Go home of the logic the drill scripts used to re-implement
+# in sed and SQL heredocs (#236): one implementation, tested once. An installed
+# binary wins; otherwise it is built from this checkout.
+DRILL_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+loopzero_ops() {
+  if command -v loopzero-ops >/dev/null 2>&1; then
+    loopzero-ops "$@"
+  else
+    (cd "$DRILL_REPO_ROOT/cmd/loopzero-ops" && go run . "$@")
+  fi
+}
+
 # --- Pre-flight checks ---
 log "Pre-flight checks..."
 
@@ -251,13 +263,14 @@ export LOOPZERO_API_DSN="$LOOPZERO_API_DSN_VAL"
 KRATOS_DSN_VAL="" HYDRA_DSN_VAL="" GITEA_DSN_VAL="" LOOPZERO_API_DSN_VAL=""
 
 # Gitea uses 4 separate fields (NOT single DSN — chart-specific T3.3)
-# Parse DSN into HOST/USER/PASSWORD/DB for gitea chart consumption.
-# DSN format: postgres://USER:PASSWORD@HOST:PORT/DB?sslmode=require
-GITEA_USER=$(echo "$GITEA_DSN" | sed -E 's|postgres://([^:]+):.*|\1|')
-GITEA_PASSWORD=$(echo "$GITEA_DSN" | sed -E 's|postgres://[^:]+:([^@]+)@.*|\1|')
-GITEA_HOST=$(echo "$GITEA_DSN" | sed -E 's|.*@([^:]+):[0-9]+/.*|\1|')
-GITEA_PORT=$(echo "$GITEA_DSN" | sed -E 's|.*@[^:]+:([0-9]+)/.*|\1|')
-GITEA_DB=$(echo "$GITEA_DSN" | sed -E 's|.*/([^?]+)\?.*|\1|')
+# Split the DSN into HOST/PORT/USER/PASSWORD/DB for gitea chart consumption.
+# `loopzero-ops dsn` accepts postgres:// and postgresql:// and fails loudly on
+# anything else; the sed split it replaces matched postgres:// only.
+GITEA_USER=$(printf '%s' "$GITEA_DSN" | loopzero_ops dsn user)
+GITEA_PASSWORD=$(printf '%s' "$GITEA_DSN" | loopzero_ops dsn password)
+GITEA_HOST=$(printf '%s' "$GITEA_DSN" | loopzero_ops dsn host)
+GITEA_PORT=$(printf '%s' "$GITEA_DSN" | loopzero_ops dsn port)
+GITEA_DB=$(printf '%s' "$GITEA_DSN" | loopzero_ops dsn database)
 export GITEA_HOST GITEA_PORT GITEA_USER GITEA_PASSWORD GITEA_DB
 log "  4 DSN env vars exported (kratos, hydra, gitea split-4, loopzero-api)"
 
@@ -360,22 +373,13 @@ if [[ -z "$LOOPZERO_DB_PASSWORD" ]]; then
   # Fall back to extracting from pgUri (pulumi-drill doesn't export pgPassword
   # as separate output — only via pgUri composite).
   #
-  # Bug #17 LIVE FIX (caught 2026-05-17 iter 10 on loopzero-api CrashLoopBackOff
-  # "too many colons in address"): DO Managed PG returns pgUri with scheme
-  # "postgresql://" (NOT "postgres://"). The old sed regex `^postgres://`
-  # didn't match → substitution failed silently → LOOPZERO_DB_PASSWORD ended up
-  # being the ENTIRE URI → generate-secrets.sh built a double-wrapped DSN:
-  #   postgresql://doadmin:postgresql://doadmin:PASS@host:port/db?...@host:...
-  #
-  # Fix: regex matches both schemes via `postgres(ql)?://`. Defensive: also
-  # validate the extracted password doesn't contain `://` (a sentinel that
-  # extraction failed and we got the URI itself).
+  # Bug #17 (2026-05-17): a sed regex anchored on `postgres://` did not match
+  # the `postgresql://` URI DO Managed PG returns, printed the whole URI, and
+  # the URI became the password. `loopzero-ops dsn` parses both schemes and exits
+  # non-zero instead of echoing its input.
   PG_URI="$(pulumi_out pgUri true)"
-  LOOPZERO_DB_PASSWORD="$(echo "$PG_URI" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|')"
-  if [[ -z "$LOOPZERO_DB_PASSWORD" || "$LOOPZERO_DB_PASSWORD" == *"://"* ]]; then
-    log "ERROR: pgUri password extraction failed (Bug #17 regression)"
-    log "  pgUri scheme may have changed; expected postgres:// or postgresql://"
-    log "  extracted: $(echo "$LOOPZERO_DB_PASSWORD" | sed 's/./*/g' | head -c 50)..."
+  if ! LOOPZERO_DB_PASSWORD="$(printf '%s' "$PG_URI" | loopzero_ops dsn password)"; then
+    log "ERROR: pgUri password extraction failed (see the loopzero-ops error above)"
     exit 2
   fi
 fi
@@ -699,10 +703,11 @@ export KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml"
 # exported $LOOPZERO_API_DSN (line 231) which preserves the DSN through scope.
 # Without this fix, PG_PASS was parsed from empty string → empty → migrate
 # tried to auth doadmin with empty password → pq: password auth failed.
+LOOPZERO_API_DB_PASS="$(printf '%s' "$LOOPZERO_API_DSN" | loopzero_ops dsn password)"
 PG_HOST="$PG_HOST_VAL" \
 PG_PORT="$PG_PORT_VAL" \
 PG_USER=doadmin \
-PG_PASS=$(echo "$LOOPZERO_API_DSN" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|') \
+PG_PASS="$LOOPZERO_API_DB_PASS" \
 PG_DB=loopzero \
 PG_SSLMODE=require \
 DRILL_KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml" \

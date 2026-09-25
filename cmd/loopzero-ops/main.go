@@ -36,6 +36,7 @@ SUBCOMMANDS:
   drill <subcommand> [flags]           Drill/DR pure-logic helpers (see drill --help)
   chaos <subcommand> [flags]           Chaos runner pure-logic helpers (see chaos --help)
   seed <name> [flags]                  Canonical post-Cleanroom seeds (see seed --help)
+  dsn <field>                          Print one part of a Postgres DSN read on stdin
 
 EXIT CODES (every subcommand):
   0  success
@@ -68,6 +69,8 @@ func run(args []string) int {
 		return runLeak(args[1:])
 	case "seed":
 		return runSeed(args[1:])
+	case "dsn":
+		return runDSNMain(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n\n%s", args[0], helpText)
 		return 1

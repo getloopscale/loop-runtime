@@ -81,6 +81,18 @@ MIN_JWT_TTL_SECONDS=7200
 
 log() { printf '[drill-mint-jwt] %s\n' "$*" >&2; }
 
+# loopzero-ops is the Go home of the logic this script used to re-implement in sed
+# and SQL (#236). An installed binary wins; otherwise it is built from this
+# checkout.
+DRILL_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+loopzero_ops() {
+  if command -v loopzero-ops >/dev/null 2>&1; then
+    loopzero-ops "$@"
+  else
+    (cd "$DRILL_REPO_ROOT/cmd/loopzero-ops" && go run . "$@")
+  fi
+}
+
 # --- EC-04 fix: Hydra readiness wait (BEFORE any exec attempt) ---
 # Stdout suppressed; only failure surfaces via log + exit 2.
 log "Waiting for Hydra pod readiness (max 120s)..."
@@ -123,9 +135,10 @@ if [[ -z "${DRILL_PG_HOST:-}" ]] && [[ -d "infra/pulumi-drill" ]]; then
   DRILL_PG_HOST=$(PULUMI_GET pgHost) || true
   DRILL_PG_PORT=$(PULUMI_GET pgPort) || true
   PG_URI_FULL=$(PULUMI_GET pgUri --show-secrets) || true
-  # Parse password from pgUri (regex matches postgres:// + postgresql:// per Bug #17)
+  # Parse password from pgUri (postgres:// and postgresql://, Bug #17). A
+  # pgUri that does not parse aborts here rather than becoming the password.
   if [[ -n "$PG_URI_FULL" ]]; then
-    DRILL_PG_PASS=$(echo "$PG_URI_FULL" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|')
+    DRILL_PG_PASS=$(printf '%s' "$PG_URI_FULL" | loopzero_ops dsn password)
     export DRILL_PG_HOST DRILL_PG_PORT DRILL_PG_PASS
     log "  ✓ DRILL_PG_HOST=$DRILL_PG_HOST DRILL_PG_PORT=$DRILL_PG_PORT (password parsed from pgUri)"
   fi
