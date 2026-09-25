@@ -244,18 +244,18 @@ The `task pkg:usage-matrix:check` gate fails when the table is out of date (gate
 
 | Package | Total imports | api/internal | operators/internal | cloud | cli | Other |
 |---|---:|---:|---:|---:|---:|---:|
-| `pkg/circuitbreaker` | 6 | 0 | 4 | 0 | 0 | 2 |
+| `pkg/circuitbreaker` | 11 | 2 | 7 | 0 | 0 | 2 |
 | `pkg/conditions` | 3 | 0 | 2 | 0 | 0 | 1 |
-| `pkg/correlation` | 14 | 2 | 8 | 0 | 0 | 4 |
-| `pkg/domain` | 15 | 8 | 2 | 0 | 0 | 5 |
-| `pkg/enforcement` | 18 | 12 | 0 | 0 | 0 | 6 |
-| `pkg/errors` | 114 | 84 | 0 | 0 | 0 | 30 |
+| `pkg/correlation` | 13 | 3 | 8 | 0 | 0 | 2 |
+| `pkg/domain` | 18 | 11 | 2 | 0 | 0 | 5 |
+| `pkg/enforcement` | 23 | 18 | 0 | 0 | 0 | 5 |
+| `pkg/errors` | 132 | 104 | 0 | 0 | 0 | 28 |
 | `pkg/healthcheck` | 5 | 0 | 0 | 0 | 0 | 5 |
 | `pkg/id` | 7 | 6 | 0 | 0 | 0 | 1 |
-| `pkg/logging` | 11 | 3 | 0 | 0 | 0 | 8 |
-| `pkg/naming` | 37 | 21 | 11 | 0 | 0 | 5 |
-| `pkg/statemachine` | 58 | 34 | 10 | 0 | 0 | 14 |
-| `pkg/vault` | 8 | 2 | 1 | 0 | 0 | 5 |
+| `pkg/logging` | 11 | 6 | 0 | 0 | 0 | 5 |
+| `pkg/naming` | 54 | 37 | 12 | 0 | 0 | 5 |
+| `pkg/statemachine` | 69 | 53 | 11 | 0 | 0 | 5 |
+| `pkg/vault` | 7 | 2 | 0 | 0 | 0 | 5 |
 
 <!-- USAGE-MATRIX-END -->
 
