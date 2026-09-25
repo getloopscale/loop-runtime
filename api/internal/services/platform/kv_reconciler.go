@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/cfkv"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
@@ -20,17 +19,23 @@ type KVRoutingSource interface {
 	ExpectedStaticKeys(ctx context.Context) (map[string]bool, error)
 }
 
+// KVKeyLister lists the keys present in the edge routing KV namespace;
+// *cfkv.Client implements it.
+type KVKeyLister interface {
+	ListKeys(ctx context.Context) ([]string, error)
+}
+
 // KVReconciler periodically compares database state against Cloudflare KV state.
 // V1: detection only — logs drift and emits metrics. Does NOT auto-correct.
 type KVReconciler struct {
-	kvClient *cfkv.Client
+	kvClient KVKeyLister
 	source   KVRoutingSource
 	logger   *slog.Logger
 	interval time.Duration
 }
 
 // NewKVReconciler creates a reconciler that checks for KV drift every interval.
-func NewKVReconciler(kvClient *cfkv.Client, source KVRoutingSource, logger *slog.Logger, interval time.Duration) *KVReconciler {
+func NewKVReconciler(kvClient KVKeyLister, source KVRoutingSource, logger *slog.Logger, interval time.Duration) *KVReconciler {
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}

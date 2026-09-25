@@ -4,6 +4,8 @@
 package platform
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -69,5 +71,66 @@ func TestAuditLogPrunerOpts_Defaults(t *testing.T) {
 	}
 	if opts.Logger == nil {
 		t.Error("default Logger must be non-nil")
+	}
+}
+
+// scriptedDeleter returns the scripted batch sizes in order, then errAt's error.
+type scriptedDeleter struct {
+	batches []int64
+	errAt   int
+	err     error
+	calls   int
+	cutoff  time.Time
+	limit   int
+}
+
+func (d *scriptedDeleter) DeleteAuditLogBatch(_ context.Context, cutoff time.Time, limit int) (int64, error) {
+	d.cutoff, d.limit = cutoff, limit
+	i := d.calls
+	d.calls++
+	if d.err != nil && i == d.errAt {
+		return 0, d.err
+	}
+	if i < len(d.batches) {
+		return d.batches[i], nil
+	}
+	return 0, nil
+}
+
+func TestAuditLogPruner_StopsAtTheFirstUnderfilledBatch(t *testing.T) {
+	now := time.Date(2026, 9, 25, 2, 0, 0, 0, time.UTC)
+	d := &scriptedDeleter{batches: []int64{10, 10, 3, 10}}
+	p := NewAuditLogPruner(d, AuditLogPrunerOpts{BatchSize: 10, RetentionDuration: 24 * time.Hour, Now: func() time.Time { return now }})
+
+	total, err := p.PruneOnce(context.Background())
+
+	if err != nil || total != 23 || d.calls != 3 {
+		t.Fatalf("total=%d calls=%d err=%v, want 23 over 3 batches", total, d.calls, err)
+	}
+	if !d.cutoff.Equal(now.Add(-24*time.Hour)) || d.limit != 10 {
+		t.Errorf("cutoff=%v limit=%d", d.cutoff, d.limit)
+	}
+}
+
+func TestAuditLogPruner_CapsAPassAtMaxBatches(t *testing.T) {
+	d := &scriptedDeleter{batches: []int64{5, 5, 5, 5}}
+	p := NewAuditLogPruner(d, AuditLogPrunerOpts{BatchSize: 5, MaxBatches: 2})
+
+	total, err := p.PruneOnce(context.Background())
+
+	if err != nil || total != 10 || d.calls != 2 {
+		t.Fatalf("total=%d calls=%d err=%v, want 10 over 2 batches", total, d.calls, err)
+	}
+}
+
+func TestAuditLogPruner_BatchFailureStopsAndReportsWhatWasDeleted(t *testing.T) {
+	boom := errors.New("trigger rejected delete")
+	d := &scriptedDeleter{batches: []int64{5}, errAt: 1, err: boom}
+	p := NewAuditLogPruner(d, AuditLogPrunerOpts{BatchSize: 5})
+
+	total, err := p.PruneOnce(context.Background())
+
+	if !errors.Is(err, boom) || total != 5 {
+		t.Fatalf("total=%d err=%v, want 5 and the batch error", total, err)
 	}
 }

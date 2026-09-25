@@ -321,7 +321,7 @@ func createCoreLoops(
 	// Quality-Gate Phase 2: wire AuditLogPruner — ADR-0047 audit_log retention
 	// (1 year default). Was implemented but never wired, leaving audit_log to
 	// grow unbounded. PruneOnce runs nightly at 02:00 local via Start().
-	auditLogPruner := platform.NewAuditLogPruner(bgAdapter.Pool, platform.AuditLogPrunerOpts{
+	auditLogPruner := platform.NewAuditLogPruner(&store.PostgresAuditLogPruneStore{Pool: bgAdapter.Pool}, platform.AuditLogPrunerOpts{
 		Logger: logger,
 	})
 

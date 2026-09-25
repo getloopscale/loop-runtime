@@ -9,8 +9,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
@@ -21,20 +19,24 @@ import (
 // events flow through Stripe and are NOT in audit_log — Stripe owns their
 // retention SLA.
 //
-// The pruner runs in batches inside a transaction with a session-local
-// override (`SET LOCAL loopzero.audit_pruner = 'true'`) that the immutability
-// trigger (migration 000014) recognizes. The bypass scope is the
-// transaction only — psql, app code, and runaway queries still hit the
-// EXCEPTION because they will not have set the var.
+// The pruner decides WHEN and HOW MUCH to delete; each batch is deleted by
+// an AuditLogBatchDeleter (store.PostgresAuditLogPruneStore in production),
+// which owns the transaction and the immutability-trigger bypass.
 //
 // Usage:
 //
-//	pruner := services.NewAuditLogPruner(pool, services.AuditLogPrunerOpts{})
+//	pruner := platform.NewAuditLogPruner(&store.PostgresAuditLogPruneStore{Pool: pool}, platform.AuditLogPrunerOpts{})
 //	pruner.Start(ctx)  // runs nightly at 02:00 local time, no-op until then
 type AuditLogPruner struct {
-	pool   *pgxpool.Pool
-	opts   AuditLogPrunerOpts
-	logger *slog.Logger
+	deleter AuditLogBatchDeleter
+	opts    AuditLogPrunerOpts
+	logger  *slog.Logger
+}
+
+// AuditLogBatchDeleter deletes up to limit audit_log rows older than cutoff,
+// oldest first, in one transaction, and reports how many it deleted.
+type AuditLogBatchDeleter interface {
+	DeleteAuditLogBatch(ctx context.Context, cutoff time.Time, limit int) (int64, error)
 }
 
 // AuditLogPrunerOpts configures the pruner.
@@ -71,29 +73,28 @@ func (o *AuditLogPrunerOpts) defaults() {
 	}
 }
 
-// NewAuditLogPruner constructs a pruner from a pool + options.
-func NewAuditLogPruner(pool *pgxpool.Pool, opts AuditLogPrunerOpts) *AuditLogPruner {
+// NewAuditLogPruner constructs a pruner from a batch deleter + options.
+func NewAuditLogPruner(deleter AuditLogBatchDeleter, opts AuditLogPrunerOpts) *AuditLogPruner {
 	opts.defaults()
 	return &AuditLogPruner{
-		pool:   pool,
-		opts:   opts,
-		logger: opts.Logger,
+		deleter: deleter,
+		opts:    opts,
+		logger:  opts.Logger,
 	}
 }
 
 // PruneOnce runs a single pruning pass — deletes rows in batches up to
 // MaxBatches × BatchSize. Returns total rows deleted.
 //
-// Each batch runs in its own transaction with `SET LOCAL loopzero.audit_pruner =
-// 'true'` so the immutability trigger lets the DELETE through. The
-// transaction commits on success or rolls back on error — partial deletes
-// across batches are intentional (next run picks up where this stopped).
+// Each batch commits on its own, so partial deletes across batches are
+// intentional: a failed batch stops the pass and the next run picks up where
+// this one stopped.
 func (p *AuditLogPruner) PruneOnce(ctx context.Context) (int64, error) {
 	cutoff := p.opts.Now().Add(-p.opts.RetentionDuration)
 
 	var totalDeleted int64
 	for batch := 0; batch < p.opts.MaxBatches; batch++ {
-		deleted, err := p.deleteBatch(ctx, cutoff)
+		deleted, err := p.deleter.DeleteAuditLogBatch(ctx, cutoff, p.opts.BatchSize)
 		if err != nil {
 			metrics.AuditLogPrunerFailTotal.Inc()
 			return totalDeleted, fmt.Errorf("audit_log_pruner batch %d: %w", batch, err)
@@ -112,44 +113,6 @@ func (p *AuditLogPruner) PruneOnce(ctx context.Context) (int64, error) {
 		"retention_days", int(p.opts.RetentionDuration.Hours()/24),
 	)
 	return totalDeleted, nil
-}
-
-// deleteBatch runs one batched DELETE inside a transaction with the
-// audit_log_pruner bypass session var.
-func (p *AuditLogPruner) deleteBatch(ctx context.Context, cutoff time.Time) (int64, error) {
-	tx, err := p.pool.Begin(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	// SET LOCAL is transaction-scoped — bypass ends at COMMIT or ROLLBACK.
-	// Migration 000014 made audit_log_prevent_mutation() check this var.
-	if _, err := tx.Exec(ctx, "SET LOCAL loopzero.audit_pruner = 'true'"); err != nil {
-		return 0, fmt.Errorf("set local: %w", err)
-	}
-
-	// Delete oldest batch — ORDER BY created_at ASC + LIMIT enforces FIFO,
-	// so the BRIN index from migration 000013 is used efficiently.
-	tag, err := tx.Exec(ctx,
-		`DELETE FROM audit_log
-		 WHERE id IN (
-		   SELECT id FROM audit_log
-		   WHERE created_at < $1
-		   ORDER BY created_at ASC
-		   LIMIT $2
-		 )`,
-		cutoff, p.opts.BatchSize,
-	)
-	if err != nil {
-		return 0, fmt.Errorf("delete: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("commit: %w", err)
-	}
-
-	return tag.RowsAffected(), nil
 }
 
 // Start runs the pruner nightly at 02:00 local time. Returns when ctx is
