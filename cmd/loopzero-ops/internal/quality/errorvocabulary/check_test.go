@@ -12,23 +12,23 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
-func escrever(t *testing.T, raiz, rel, corpo string) {
+func writeFile(t *testing.T, root, rel, body string) {
 	t.Helper()
-	p := filepath.Join(raiz, rel)
+	p := filepath.Join(root, rel)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(p, []byte(corpo), 0o644); err != nil {
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// O mutante: uma mensagem que nomeia a ferramenta interna. Sem esta prova o gate
-// poderia estar verde por nao enxergar nada, que e' indistinguivel de nao haver
-// defeito.
-func TestReprovaMensagemComTermoBanido(t *testing.T) {
-	raiz := t.TempDir()
-	escrever(t, raiz, "api/internal/routes/x/x.go", `package x
+// The mutant: a message that names the internal tool. Without this proof the gate
+// could be green by seeing nothing, which is indistinguishable from there being no
+// defect.
+func TestFailsMessageWithBannedTerm(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "api/internal/routes/x/x.go", `package x
 
 type e struct{}
 
@@ -42,30 +42,30 @@ func h() {
 	httpio.WriteLoopZeroError(nil, e{}.Wrap("ArgoCD sync failed for tenant_id tn-1; check Gitea and MinIO"))
 }
 `)
-	escrever(t, raiz, "api/internal/services/y/y.go", "package y\n")
+	writeFile(t, root, "api/internal/services/y/y.go", "package y\n")
 
-	out, err := Check(Config{RepoRoot: raiz})
+	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
 	if out.Pass {
-		t.Fatal("mensagem com ArgoCD/tenant_id/Gitea/MinIO passou — o gate nao enxerga a forma que existe para vigiar")
+		t.Fatal("a message with ArgoCD/tenant_id/Gitea/MinIO passed — the gate does not see the shape it exists to watch")
 	}
-	if len(out.Violacoes) != 1 {
-		t.Fatalf("queria 1 violacao (uma mensagem), veio %d: %+v", len(out.Violacoes), out.Violacoes)
+	if len(out.Violations) != 1 {
+		t.Fatalf("wanted 1 violation (one message), got %d: %+v", len(out.Violations), out.Violations)
 	}
-	if !strings.Contains(out.Violacoes[0].Mensagem, "ArgoCD") {
-		t.Errorf("a violacao nao carrega a mensagem ofensora: %+v", out.Violacoes[0])
+	if !strings.Contains(out.Violations[0].Message, "ArgoCD") {
+		t.Errorf("the violation does not carry the offending message: %+v", out.Violations[0])
 	}
 }
 
-// A contrapartida: um literal com o mesmo termo FORA de um escritor de erro nao
-// e' saida ao usuario — e' log ou nome de campo interno. Sem esta assercao o gate
-// viraria uma proibicao geral da palavra no codigo, reprovaria por toda parte e
-// seria desligado na primeira sexta-feira.
-func TestNaoReprovaTermoForaDeEscritorDeErro(t *testing.T) {
-	raiz := t.TempDir()
-	escrever(t, raiz, "api/internal/routes/x/x.go", `package x
+// The counterpart: a literal with the same term OUTSIDE an error writer is not
+// user-facing output — it is a log or an internal field name. Without this assertion
+// the gate would become a general ban on the word in code, would fail everywhere and
+// would be switched off on the first Friday.
+func TestDoesNotFailTermOutsideErrorWriter(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "api/internal/routes/x/x.go", `package x
 
 import "log/slog"
 
@@ -73,39 +73,38 @@ func h() {
 	slog.Warn("ArgoCD sync failed for tenant_id tn-1")
 }
 `)
-	escrever(t, raiz, "api/internal/services/y/y.go", "package y\n")
+	writeFile(t, root, "api/internal/services/y/y.go", "package y\n")
 
-	out, err := Check(Config{RepoRoot: raiz})
+	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
 	if !out.Pass {
-		t.Errorf("um log com termo interno foi reprovado; a Regra 3 protege a SAIDA AO USUARIO, nao o vocabulario do codigo: %+v", out.Violacoes)
+		t.Errorf("a log with an internal term was failed; Rule 3 protects USER-FACING OUTPUT, not the vocabulary of the code: %+v", out.Violations)
 	}
 }
 
-// A populacao real. Um mutante prova que o detector dispara; so' isto diz o que
-// ele encontra no que existe. O item registrou que nenhuma mensagem carrega termo
-// banido hoje — o gate nasce verde, e este teste e' o que sustenta essa frase.
-func TestArvoreRealEstaLimpa(t *testing.T) {
+// The real population. A mutant proves the detector fires; only this says what it
+// finds in what exists. The item recorded that no message carries a banned term
+// today — the gate is born green, and this test is what backs that sentence.
+func TestRealTreeIsClean(t *testing.T) {
 	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
-	if out.Arquivos == 0 || out.Mensagens == 0 {
-		t.Fatalf("varredura vazia (%d arquivos, %d mensagens): verde sobre nada nao e' verde", out.Arquivos, out.Mensagens)
+	if out.Files == 0 || out.Messages == 0 {
+		t.Fatalf("empty scan (%d files, %d messages): green about nothing is not green", out.Files, out.Messages)
 	}
-	// Piso MEDIDO em 2026-08-19: 168 literais dentro de escritores de erro. A
-	// primeira versao deste teste exigiu 200, numero que eu tirei do "277
-	// mensagens" do B-081 — e 277 conta CALL SITES de `WriteLoopZeroError`, nao
-	// literais. Duas metricas diferentes; repetir uma no lugar da outra e' como se
-	// inventa um numero. Um valor menor que 168 significa que a varredura
-	// encolheu (escritor renomeado, raiz movida) e o verde passou a valer menos
-	// sem que nada avisasse.
-	if out.Mensagens < 168 {
-		t.Errorf("apenas %d mensagem(ns) alcancada(s); a arvore real tinha 168 em 2026-08-19", out.Mensagens)
+	// Floor MEASURED 2026-08-19: 168 literals inside error writers. The first
+	// version of this test demanded 200, a number I took from B-081's "277
+	// messages" — and 277 counts CALL SITES of `WriteLoopZeroError`, not literals.
+	// Two different metrics; repeating one in place of the other is how a number
+	// gets invented. A value below 168 means the scan shrank (writer renamed, root
+	// moved) and the green started to be worth less without anything warning.
+	if out.Messages < 168 {
+		t.Errorf("only %d message(s) reached; the real tree had 168 on 2026-08-19", out.Messages)
 	}
 	if !out.Pass {
-		t.Errorf("a arvore real carrega mensagem com termo banido pela Regra 3:\n%+v", out.Violacoes)
+		t.Errorf("the real tree carries a message with a term banned by Rule 3:\n%+v", out.Violations)
 	}
 }

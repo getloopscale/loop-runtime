@@ -15,7 +15,7 @@ import (
 // A TRACKED PATH that does not exist has to show up, for the same reason an absent
 // consumer root already does — and this file protected the two halves asymmetrically.
 //
-// consumerRoots got raizesAusentes on 2026-08-19 (B-100/B-040) because `git grep -- a b c`
+// consumerRoots got its missing-roots guard on 2026-08-19 (B-100/B-040) because `git grep -- a b c`
 // silently ignores a pathspec that matches nothing. trackedFiles is handed over in exactly
 // the same way — `git diff --unified=0 base..head -- <list>` in collectDroppedJSONTags and
 // `git grep -cE ... -- <list>` in structsDeclaringTagAt — and had no guard at all. Measured

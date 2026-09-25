@@ -304,27 +304,27 @@ func (adrResolver) resolve(repoRoot string, ref Reference) resolution {
 			if !strings.Contains(string(b), ref.Raw) {
 				return nil
 			}
-			// Um DOCUMENTO DE DECISAO resolve apenas o ADR que ele DECLARA ser, e
-			// nao todo id que menciona. Sem isto, o documento que registra a
-			// AUSENCIA de um ADR fabricava a presenca dele — foi o que aconteceu
-			// com `ADR-0024`, citado cinco vezes por um ADR justamente para dizer
-			// que nao existe (B-086). E' textualmente o que o comentario de
-			// `cycleArtifactDirs` acima proibe, uma pasta ao lado.
+			// A DECISION DOCUMENT resolves only the ADR it DECLARES itself to be, not
+			// every id it mentions. Without this, the document that records the
+			// ABSENCE of an ADR fabricated its presence — which is what happened
+			// with `ADR-0024`, cited five times by an ADR precisely to say that it
+			// does not exist (B-086): a record of an absence must never fabricate a
+			// presence.
 			//
-			// O criterio e' ESTRUTURAL e nao vem do diretorio: qualquer outra
-			// documentacao — runbook, doc de arquitetura — segue resolvendo por
-			// mencao, e um documento de decisao que declare o id no proprio
-			// cabecalho resolve normalmente. Medido em 2026-08-19: nenhum
-			// documento de decisao declara id de ADR hoje (eles se identificam por
-			// data + slug), e so' DOIS ids resolviam exclusivamente por eles — um e'
-			// fixture de teste deste pacote, o outro nao e' citado por codigo de
-			// producao. Estouro zero sobre as 35 referencias que resolvem.
+			// The criterion is STRUCTURAL and does not come from the directory: any
+			// other documentation — runbook, architecture doc — keeps resolving by
+			// mention, and a decision document that declares the id in its own
+			// header resolves normally. Measured 2026-08-19: no decision document
+			// declares an ADR id today (they identify themselves by date + slug),
+			// and only TWO ids resolved exclusively through them — one is a test
+			// fixture of this package, the other is not cited by production code.
+			// Zero overshoot across the 35 references that resolve.
 			//
-			// Os dois ids nao aparecem escritos aqui de proposito: este gate le'
-			// comentarios Go, entao nomea-los transformaria ESTA explicacao em duas
-			// citacoes normativas que nao resolvem. Foi o que aconteceu na primeira
-			// versao deste comentario — a mesma armadilha do B-086, um nivel acima:
-			// escrever sobre um ADR ausente fabricou uma citacao a ele.
+			// The two ids are deliberately not written here: this gate reads Go
+			// comments, so naming them would turn THIS explanation into two
+			// normative citations that do not resolve. That is what happened in the
+			// first version of this comment — the same trap as B-086, one level up:
+			// writing about an absent ADR fabricated a citation to it.
 			if isDecisionDoc(repoRoot, p) && !declaresADR(string(b), ref.Raw) {
 				return nil
 			}
@@ -446,8 +446,8 @@ func Check(cfg Config) (Outcome, error) {
 	return out, nil
 }
 
-// decisionDocDirs sao as arvores onde vivem documentos que DECIDEM sobre ADRs.
-// Um documento aqui e' um ator no assunto, nao uma descricao neutra dele.
+// decisionDocDirs are the trees holding documents that DECIDE about ADRs.
+// A document here is an actor in the matter, not a neutral description of it.
 var decisionDocDirs = []string{
 	filepath.Join("docs", "decisions"),
 }
@@ -465,20 +465,20 @@ func isDecisionDoc(repoRoot, path string) bool {
 	return false
 }
 
-// declaresADR diz se o documento se IDENTIFICA como aquele ADR, e nao apenas o
-// menciona.
+// declaresADR reports whether the document IDENTIFIES itself as that ADR, rather
+// than merely mentioning it.
 //
 // The criterion is the TITLE: the first non-empty line, and nothing else. A
 // document whose title carries the id IS that ADR; one that only cites it in
 // the body is talking ABOUT it — which is how a record stating that an ADR
 // does not exist stopped fabricating its presence (B-086).
-func declaresADR(conteudo, raw string) bool {
-	for _, l := range strings.Split(conteudo, "\n") {
+func declaresADR(content, raw string) bool {
+	for _, l := range strings.Split(content, "\n") {
 		t := strings.TrimSpace(l)
 		if t == "" {
 			continue
 		}
-		// primeira linha nao vazia — o titulo
+		// first non-empty line — the title
 		return strings.Contains(t, raw)
 	}
 	return false

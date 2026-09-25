@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package errorvocabulary garante que as mensagens de erro AUTORADAS nos
-// handlers nao carreguem os termos internos que a Regra Inquebravel 3 proibe em
-// saida ao usuario.
+// Package errorvocabulary ensures that the error messages AUTHORED in the
+// handlers do not carry the internal terms that Unbreakable Rule 3 forbids in
+// user-facing output.
 //
-// Por que o escritor nao resolve isto: `httpio.WriteLoopZeroError` e' pass-through
-// puro — ele nao inventa vocabulario nem o filtra, e esta' certo assim.
-// Alimentado com uma mensagem suja, entrega os termos verbatim no corpo. A
-// superficie de risco sao as ~277 mensagens escritas nos call sites (B-081), e
-// entre os gates nao havia nenhum sobre o vocabulario delas.
+// Why the writer does not solve this: `httpio.WriteLoopZeroError` is pure
+// pass-through — it neither invents vocabulary nor filters it, and that is
+// correct. Fed a dirty message, it delivers the terms verbatim in the body. The
+// risk surface is the ~277 messages written at the call sites (B-081), and among
+// the gates there was none about their vocabulary.
 //
-// O gate NASCE VERDE: medido em 2026-08-19, nenhuma mensagem em `routes/` ou
-// `services/` carrega termo banido. Ele nao conserta nada hoje — impede que a
-// proxima mensagem quebre a regra sem que ninguem perceba.
+// The gate IS BORN GREEN: measured 2026-08-19, no message in `routes/` or
+// `services/` carries a banned term. It fixes nothing today — it prevents the
+// next message from breaking the rule without anyone noticing.
 package errorvocabulary
 
 import (
@@ -28,11 +28,11 @@ import (
 	"strings"
 )
 
-// escritoresDeErro sao as funcoes cujo argumento chega ao CORPO da resposta.
-// Um literal dentro da expressao de argumento de uma delas e' texto que o
-// usuario le'. Fora delas, um literal com "ArgoCD" e' log ou nome de campo
-// interno, e nao viola a Regra 3.
-var escritoresDeErro = map[string]bool{
+// errorWriters are the functions whose argument reaches the response BODY.
+// A literal inside the argument expression of one of them is text the user
+// reads. Outside them, a literal containing "ArgoCD" is a log or an internal
+// field name, and does not violate Rule 3.
+var errorWriters = map[string]bool{
 	"WriteLoopZeroError":                true,
 	"WriteLoopZeroErrorWithFieldErrors": true,
 	"WriteCodeErrorJSON":            true,
@@ -41,11 +41,11 @@ var escritoresDeErro = map[string]bool{
 	"FieldError":                    true,
 }
 
-// termosBanidos e' a lista da Regra Inquebravel 3 (CLAUDE.md § The Rules).
-// A comparacao e' case-insensitive: a regra lista `ArgoCD` e `argocd`
-// separadamente, e o que ela protege e' o usuario nao ler o nome da ferramenta —
-// a caixa nao muda isso.
-var termosBanidos = []string{
+// bannedTerms is the list from Unbreakable Rule 3 (CLAUDE.md § The Rules).
+// The comparison is case-insensitive: the rule lists `ArgoCD` and `argocd`
+// separately, and what it protects is the user not reading the tool's name —
+// letter case does not change that.
+var bannedTerms = []string{
 	"argocd",
 	"gitops",
 	"crd",
@@ -62,24 +62,24 @@ var termosBanidos = []string{
 // Config drives the gate.
 type Config struct {
 	RepoRoot string
-	// Roots sao os diretorios varridos. Vazio usa o padrao medido no B-081.
+	// Roots are the scanned directories. Empty uses the default measured in B-081.
 	Roots []string
 }
 
-// Violacao e' uma mensagem suja, com o termo que a suja.
-type Violacao struct {
-	Arquivo  string
-	Linha    int
-	Termo    string
-	Mensagem string
+// Violation is a dirty message, with the term that makes it dirty.
+type Violation struct {
+	File    string
+	Line    int
+	Term    string
+	Message string
 }
 
 // Outcome carries the gate result.
 type Outcome struct {
-	Pass      bool
-	Arquivos  int
-	Mensagens int
-	Violacoes []Violacao
+	Pass       bool
+	Files      int
+	Messages   int
+	Violations []Violation
 }
 
 // Check runs the gate.
@@ -100,38 +100,38 @@ func Check(cfg Config) (Outcome, error) {
 		dir := filepath.Join(cfg.RepoRoot, r)
 		err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
-				// Uma raiz ausente e' FALHA, nunca skip: uma varredura que nao
-				// alcanca nada reporta verde sobre nada.
+				// A missing root is a FAILURE, never a skip: a scan that reaches
+				// nothing reports green about nothing.
 				return err
 			}
 			if d.IsDir() || !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
 				return nil
 			}
-			out.Arquivos++
-			return varrerArquivo(cfg.RepoRoot, p, &out)
+			out.Files++
+			return scanFile(cfg.RepoRoot, p, &out)
 		})
 		if err != nil {
-			return out, fmt.Errorf("varrendo %s: %w", r, err)
+			return out, fmt.Errorf("scanning %s: %w", r, err)
 		}
 	}
 
-	sort.Slice(out.Violacoes, func(i, j int) bool {
-		if out.Violacoes[i].Arquivo != out.Violacoes[j].Arquivo {
-			return out.Violacoes[i].Arquivo < out.Violacoes[j].Arquivo
+	sort.Slice(out.Violations, func(i, j int) bool {
+		if out.Violations[i].File != out.Violations[j].File {
+			return out.Violations[i].File < out.Violations[j].File
 		}
-		return out.Violacoes[i].Linha < out.Violacoes[j].Linha
+		return out.Violations[i].Line < out.Violations[j].Line
 	})
-	out.Pass = len(out.Violacoes) == 0
+	out.Pass = len(out.Violations) == 0
 	return out, nil
 }
 
-func varrerArquivo(root, caminho string, out *Outcome) error {
+func scanFile(root, path string, out *Outcome) error {
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, caminho, nil, 0)
+	f, err := parser.ParseFile(fset, path, nil, 0)
 	if err != nil {
-		return fmt.Errorf("parse %s: %w", caminho, err)
+		return fmt.Errorf("parse %s: %w", path, err)
 	}
-	rel, _ := filepath.Rel(root, caminho)
+	rel, _ := filepath.Rel(root, path)
 
 	ast.Inspect(f, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
@@ -139,30 +139,30 @@ func varrerArquivo(root, caminho string, out *Outcome) error {
 			return true
 		}
 		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || !escritoresDeErro[sel.Sel.Name] {
+		if !ok || !errorWriters[sel.Sel.Name] {
 			return true
 		}
-		// Desce em TODA a expressao de argumento: a mensagem costuma vir de um
-		// `.Wrap("...")` encadeado dentro da chamada, e nao como literal direto.
+		// Descend into the WHOLE argument expression: the message usually comes from
+		// a `.Wrap("...")` chained inside the call, not as a direct literal.
 		for _, arg := range call.Args {
 			ast.Inspect(arg, func(m ast.Node) bool {
 				lit, ok := m.(*ast.BasicLit)
 				if !ok || lit.Kind != token.STRING {
 					return true
 				}
-				texto, err := strconv.Unquote(lit.Value)
+				text, err := strconv.Unquote(lit.Value)
 				if err != nil {
 					return true
 				}
-				out.Mensagens++
-				baixo := strings.ToLower(texto)
-				for _, t := range termosBanidos {
-					if strings.Contains(baixo, t) {
-						out.Violacoes = append(out.Violacoes, Violacao{
-							Arquivo:  rel,
-							Linha:    fset.Position(lit.Pos()).Line,
-							Termo:    t,
-							Mensagem: texto,
+				out.Messages++
+				lower := strings.ToLower(text)
+				for _, t := range bannedTerms {
+					if strings.Contains(lower, t) {
+						out.Violations = append(out.Violations, Violation{
+							File:    rel,
+							Line:    fset.Position(lit.Pos()).Line,
+							Term:    t,
+							Message: text,
 						})
 						break
 					}
@@ -177,6 +177,6 @@ func varrerArquivo(root, caminho string, out *Outcome) error {
 
 // Summary describes the outcome.
 func (o Outcome) Summary() string {
-	return fmt.Sprintf("%d arquivo(s) varrido(s), %d mensagem(ns) autorada(s) em escritor de erro, %d violacao(oes)",
-		o.Arquivos, o.Mensagens, len(o.Violacoes))
+	return fmt.Sprintf("%d file(s) scanned, %d message(s) authored in an error writer, %d violation(s)",
+		o.Files, o.Messages, len(o.Violations))
 }

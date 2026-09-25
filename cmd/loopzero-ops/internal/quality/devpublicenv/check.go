@@ -65,17 +65,17 @@ func Check(cfg Config) (Outcome, error) {
 
 	// Core public URLs.
 	//
-	// Um painel, um nome. `app-dev` e a superficie canonica desde 2026-06-22, mas o
-	// ambiente seguia declarando `cloud-dev` como dashboardOrigin e publicCloudUrl —
-	// dois nomes para a MESMA coisa, que so funcionava porque o `cloud-dev` respondia
-	// 301 para o `app-dev`. E o mesmo defeito que motivou a renomeacao dos clusters e a
-	// unificacao das cells, agora na camada de identidade: CORS e URL de retorno
-	// autorizando um host que existe apenas para redirecionar.
+	// One dashboard, one name. `app-dev` has been the canonical surface since 2026-06-22,
+	// but the environment kept declaring `cloud-dev` as dashboardOrigin and publicCloudUrl —
+	// two names for the SAME thing, which only worked because `cloud-dev` answered
+	// 301 to `app-dev`. It is the same defect that motivated renaming the clusters and
+	// unifying the cells, now at the identity layer: CORS and return URL
+	// authorizing a host that exists only to redirect.
 	//
-	// O host `cloud-dev` foi removido em 2026-08-10. Antes de remove-lo foi verificado
-	// que as duas metades dele estavam cobertas: o webhook do GitHub ja e registrado
-	// contra `app-dev` (cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44) e o
-	// `app-dev` ja tem o mesmo desvio direto para o loopzero-api, entao nada dependia dele.
+	// The `cloud-dev` host was removed on 2026-08-10. Before removing it, both halves of
+	// it were verified to be covered: the GitHub webhook is already registered
+	// against `app-dev` (cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44) and
+	// `app-dev` already has the same direct bypass to loopzero-api, so nothing depended on it.
 	assertContains("publicAuthUrl points to auth-dev", `publicAuthUrl: "https://auth-dev.loopzero.example"`)
 	assertContains("publicCloudUrl points to app-dev", `publicCloudUrl: "https://app-dev.loopzero.example"`)
 	assertContains("uiBaseUrl points to app-dev", `uiBaseUrl: "https://app-dev.loopzero.example"`)
@@ -86,12 +86,12 @@ func Check(cfg Config) (Outcome, error) {
 	assertContains("corsAllowedOrigins includes app-dev", `  - "https://app-dev.loopzero.example"`)
 	assertContains("allowedReturnUrls includes app-dev trailing slash", `  - "https://app-dev.loopzero.example/"`)
 
-	// E o inverso, que e o que impede o host de voltar por inercia: autorizar em CORS ou
-	// em URL de retorno um host que nao existe mais e superficie de auth concedida a
-	// ninguem.
+	// And the inverse, which is what stops the host from coming back by inertia: authorizing
+	// in CORS or in a return URL a host that no longer exists is auth surface granted to
+	// nobody.
 	if strings.Contains(text, "cloud-dev.loopzero.example") {
-		failures = append(failures, "PRESENT: cloud-dev.loopzero.example — o host foi removido em 2026-08-10; "+
-			"mante-lo em CORS/allowedReturnUrls autoriza uma origem que nao responde")
+		failures = append(failures, "PRESENT: cloud-dev.loopzero.example — the host was removed on 2026-08-10; "+
+			"keeping it in CORS/allowedReturnUrls authorizes an origin that does not respond")
 	}
 
 	// No localhost leak

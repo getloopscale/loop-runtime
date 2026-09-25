@@ -41,9 +41,9 @@ var (
 )
 `
 
-// TestCheck_ResolveOCaminhoContraARealidade is the whole point of this gate.
+// TestCheck_ResolvesThePathAgainstReality is the whole point of this gate.
 //
-// `-X <importpath>.<símbolo>` over a path that does not exist is a NO-OP that
+// `-X <importpath>.<symbol>` over a path that does not exist is a NO-OP that
 // exits 0. The Go linker does not warn, by design, so the build succeeds and the
 // binary keeps its default — measured live on 2026-08-16 as
 // `{"version":"dev","built_at":"unknown"}` (B-053).
@@ -53,7 +53,7 @@ var (
 // refactor relocates the symbol, the Dockerfile keeps the old path, and the
 // injection silently stops working. Resolving the path against the go.mod and the
 // symbol against the AST is what makes the assertion depend on what EXISTS.
-func TestCheck_ResolveOCaminhoContraARealidade(t *testing.T) {
+func TestCheck_ResolvesThePathAgainstReality(t *testing.T) {
 	const mod = "github.com/getloopscale/loopzero/api"
 
 	cases := []struct {
@@ -65,48 +65,48 @@ func TestCheck_ResolveOCaminhoContraARealidade(t *testing.T) {
 		wantIn     string
 	}{
 		{
-			name:       "caminho e simbolo existem",
+			name:       "path and symbol exist",
 			dockerfile: "RUN go build -ldflags \"-X " + mod + "/internal/routes/version.versionTag=v1\"\n",
 			pkgDir:     "internal/routes/version", pkgSrc: pkgWithSymbols,
 			wantPass: true,
 		},
 		{
-			name: "org errada — o defeito medido do B-053",
-			// Uma letra: getloopscale contra getloopscale. O linker aceita e nao injeta nada.
+			name: "wrong org — the defect measured in B-053",
+			// One word apart: getloopscale versus getloopscale. The linker accepts it and injects nothing.
 			dockerfile: "RUN go build -ldflags \"-X github.com/getloopscale/loopzero/api/internal/routes/version.versionTag=v1\"\n",
 			pkgDir:     "internal/routes/version", pkgSrc: pkgWithSymbols,
-			wantPass: false, wantIn: "nenhum módulo",
+			wantPass: false, wantIn: "no module",
 		},
 		{
-			name: "pacote movido — a falha que uma refatoracao legitima introduz",
-			// O simbolo vive em internal/routes/version; o Dockerfile aponta para o
-			// pacote plano que a decomposicao esvaziou.
+			name: "package moved — the failure a legitimate refactor introduces",
+			// The symbol lives in internal/routes/version; the Dockerfile points at the
+			// flat package that the decomposition emptied.
 			dockerfile: "RUN go build -ldflags \"-X " + mod + "/internal/routes.versionTag=v1\"\n",
 			pkgDir:     "internal/routes/version", pkgSrc: pkgWithSymbols,
-			// A razao tem de dizer MOVEU, e nao "falta o simbolo". O diretorio
-			// `internal/routes` EXISTE — sobrevive como pai de `version` — e nao
-			// guarda pacote Go nenhum. Dizer "o pacote existe, falta a variavel"
-			// mandaria o leitor procurar num pacote que nao esta la, que foi a
-			// primeira mensagem que escrevi e que este caso reprovou.
-			wantPass: false, wantIn: "MOVEU",
+			// The reason has to say MOVED, not "the symbol is missing". The directory
+			// `internal/routes` EXISTS — it survives as the parent of `version` — and
+			// holds no Go package at all. Saying "the package exists, the variable is
+			// missing" would send the reader looking in a package that is not there,
+			// which was the first message I wrote and the one this case failed.
+			wantPass: false, wantIn: "MOVED",
 		},
 		{
-			name:       "pacote existe mas o simbolo nao",
+			name:       "package exists but the symbol does not",
 			dockerfile: "RUN go build -ldflags \"-X " + mod + "/internal/routes/version.versionSHA=abc\"\n",
 			pkgDir:     "internal/routes/version", pkgSrc: pkgWithSymbols,
 			wantPass: false, wantIn: "versionSHA",
 		},
 		{
-			name:       "Dockerfile sem -X nenhum nao e violacao",
-			dockerfile: "FROM alpine\nRUN echo oi\n",
+			name:       "Dockerfile with no -X at all is not a violation",
+			dockerfile: "FROM alpine\nRUN echo hi\n",
 			pkgDir:     "internal/routes/version", pkgSrc: pkgWithSymbols,
 			wantPass: true,
 		},
 		{
-			name: "simbolo que nao e variavel de topo nao conta como existente",
-			// `-X` so escreve em variavel STRING de pacote. Uma constante ou uma
-			// funcao com o mesmo nome deixaria o gate verde sobre uma injecao que
-			// continua sendo no-op.
+			name: "symbol that is not a top-level variable does not count as existing",
+			// `-X` only writes into a package-level STRING variable. A constant or a
+			// function with the same name would leave the gate green over an injection
+			// that is still a no-op.
 			dockerfile: "RUN go build -ldflags \"-X " + mod + "/internal/routes/version.versionTag=v1\"\n",
 			pkgDir:     "internal/routes/version",
 			pkgSrc:     "package version\n\nconst versionTag = \"dev\"\n",
@@ -122,7 +122,7 @@ func TestCheck_ResolveOCaminhoContraARealidade(t *testing.T) {
 				t.Fatalf("Check: %v", err)
 			}
 			if out.Pass != tc.wantPass {
-				t.Fatalf("Pass = %v, esperado %v (violações: %+v)", out.Pass, tc.wantPass, out.Violations)
+				t.Fatalf("Pass = %v, want %v (violations: %+v)", out.Pass, tc.wantPass, out.Violations)
 			}
 			if tc.wantIn != "" {
 				joined := ""
@@ -130,18 +130,18 @@ func TestCheck_ResolveOCaminhoContraARealidade(t *testing.T) {
 					joined += v.Reason + " " + v.Symbol + " "
 				}
 				if !strings.Contains(joined, tc.wantIn) {
-					t.Errorf("a violação não nomeia a causa (%q): %+v", tc.wantIn, out.Violations)
+					t.Errorf("the violation does not name the cause (%q): %+v", tc.wantIn, out.Violations)
 				}
 			}
 		})
 	}
 }
 
-// TestCheck_ArvoreSemDockerfileEhFalha keeps the invariant every gate in this tree
+// TestCheck_TreeWithoutDockerfileIsFailure keeps the invariant every gate in this tree
 // shares: "nothing to check" and "everything is clean" are different facts, and
 // reporting the second for the first is how a gate goes quiet.
-func TestCheck_ArvoreSemDockerfileEhFalha(t *testing.T) {
+func TestCheck_TreeWithoutDockerfileIsFailure(t *testing.T) {
 	if _, err := Check(Config{Root: t.TempDir()}); err == nil {
-		t.Fatal("uma árvore sem Dockerfile nenhum foi aceita como limpa")
+		t.Fatal("a tree with no Dockerfile at all was accepted as clean")
 	}
 }

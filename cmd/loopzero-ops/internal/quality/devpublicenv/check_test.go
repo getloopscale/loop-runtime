@@ -109,16 +109,16 @@ func TestCheck_RealRepoPasses(t *testing.T) {
 	t.Skip("could not locate dev-public.yaml within 8 parent dirs")
 }
 
-// TestCheck_CloudDevReappearingFails trava o que a remocao do host comprou.
+// TestCheck_CloudDevReappearingFails locks in what removing the host bought.
 //
-// `cloud-dev` foi removido em 2026-08-10 por ser um segundo nome para o mesmo painel,
-// servindo apenas 301. O risco real nao e alguem recriar o host — e alguem devolver a
-// string a `corsAllowedOrigins` ou a `allowedReturnUrls` numa correcao apressada, e com
-// isso autorizar em auth uma origem que NAO RESPONDE. Uma origem autorizada que ninguem
-// controla e pior que uma origem a menos.
+// `cloud-dev` was removed on 2026-08-10 for being a second name for the same dashboard,
+// serving only 301. The real risk is not someone recreating the host — it is someone
+// putting the string back into `corsAllowedOrigins` or `allowedReturnUrls` in a hurried
+// fix, and thereby authorizing in auth an origin that DOES NOT RESPOND. An authorized
+// origin that nobody controls is worse than one origin fewer.
 func TestCheck_CloudDevReappearingFails(t *testing.T) {
 	root := writeFixture(t, canonical+"\n  - \"https://cloud-dev.loopzero.example\"\n")
 	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrViolations) {
-		t.Fatalf("esperava ErrViolations ao reintroduzir cloud-dev numa lista de origens, obteve %v", err)
+		t.Fatalf("expected ErrViolations when reintroducing cloud-dev into an origin list, got %v", err)
 	}
 }

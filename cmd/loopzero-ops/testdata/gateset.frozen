@@ -1,5 +1,5 @@
 acyclic-graph	gates	Enforces the decomposition DAG (loopzero-contracts ◄── engine/cloud/cli); no import cycle.
-adapter-ports	gates	Todo adaptador declara em tempo de compilacao qual porta satisfaz.
+adapter-ports	gates	Every adapter declares at compile time which port it satisfies.
 advisory-lock-scope	gates	Forbids session-scoped pg_advisory_lock; only pg_advisory_xact_lock is allowed.
 agpl-isolation	gates	Verifies AGPL-licensed code stays isolated from proprietary import paths.
 alert-runbooks	-	Every Prometheus alert has a linked runbook annotation.
@@ -9,14 +9,14 @@ base-image-digest	gates	Base images are pinned by digest, not floating tags.
 baseline-compare	-	Compares a captured steady-state baseline against the current state.
 baseline-update	-	Updates the committed steady-state baseline artifact.
 billing-layers	gates	As camadas de cobranca precisam ser enumeraveis e com dono; divida fechada sem cobertura reprova.
-billing-secrets	gates	Segredos de cobranca nao podem ter opcionalidade literal; a decisao e por valor.
-caddy-host-parity	gates	Hostname exigido pela verificacao de borda precisa de bloco de site que termine o TLS.
-caddyfile-csp	gates	Operator-local edge Caddyfile invariants (no CSP on app-dev, preserved headers, rate-limit).
+billing-secrets	gates	Billing secrets must not have literal optionality; the decision is made by value.
+caddy-host-parity	gates	A hostname the edge check requires needs a site block that terminates TLS.
+caddyfile-csp	gates	Operator-local edge Caddyfile invariants (prod-bundle app-dev with a CSP superset of the dashboard meta CSP, preserved headers, auth-dev rate limits, trusted proxies).
 caddyfile-dev-server-deny	gates	Defense-in-depth: app-dev block MUST 404 dev-server-only paths (/src/*, /.env, /@vite/*, /node_modules/*, /vite.config.*). Regression protection for loopzero-cloud#141.
 caddyfile-no-docker-ip	gates	Blocks hardcoded 172.18.x.x Docker network IPs in infra/local/Caddyfile + enforces canonical https://127.0.0.1:8443 upstream in both wildcard blocks (M-Migrate2 2026-07-07 replaces infra/tests/check-caddyfile-no-docker-network-ip_test.sh — closes Red Team loopzero-cloud#127 guard).
 canonical-fixture-repo	gates	Rejects legacy loopzero-repotest fixture in LIVE test/seed scripts; canonical is getloopscale/loopzerokit-example (M-Migrate2 2026-07-07 replaces infra/tests/check-canonical-fixture-repo_test.sh).
 chart-default-tags	gates	loopzero-owned charts must not default their image tag to a mutable ref (#232).
-chart-pairs	gates	Chart que existe nas duas arvores com o mesmo nome precisa estar declarado.
+chart-pairs	gates	A chart that exists in both trees under the same name must be declared.
 check-allowlist-sunsets	gates	Every exemption in rules/code-review-allowlist.txt carries a sunset, and on that date it stops exempting anything
 cli-exit-codes	gates	Enforces the permanent CLI exit-code contract (0/1/2/3/4/5 only).
 cluster-rename-guard	gates	Proves the cluster rename (B-001: mgmt->core, vault->secrets) touched only cluster identifiers. Asserts every line a pre-rename baseline classified GENERIC still exists byte-for-byte — `vault` carries 74 such lines naming OpenBao, `mgmt` carries zero. Refuses to run when the baseline cannot be proven an ancestor of HEAD, because a baseline captured after the first edit compares the new state with itself and passes forever. T0.1 of plans/cluster-rename-core-secrets-plan.md.
@@ -34,7 +34,7 @@ credentials-sot	gates	T1.1 SoT drift audit — every Secret created by canonical
 dangling-data-refs	diff	Detects data/file references that no longer resolve after a change.
 dangling-script-refs	diff	Detects shell-script references that no longer resolve after a change.
 dashboard-promtool	gates	Validates Grafana dashboard + Prometheus rules via promtool.
-dashboard-root-parity	gates	O runbook do painel precisa nomear o caminho que a borda de fato serve.
+dashboard-root-parity	gates	The dashboard runbook must name the path the edge actually serves.
 db-generated-boundary	gates	MA-7 Gate A: no services/routes/server imports internal/db/generated.
 decisions-deletion	gates	Guards deletion of decision/ADR records.
 dev-public-billing-portal-syntax	gates	Hermetic contract for infra/tests/e2e/live/dev-public-billing-portal_test.sh — 8 assertions (bash -n / strict-mode / log+assert / billing endpoint / exit-code contract / allowlisted). M20 T2.1 Wave A gate 1/18.
@@ -43,12 +43,12 @@ dev-public-oidc-redirect-syntax	gates	Hermetic contract for infra/tests/e2e/live
 dev-public-loopzero-external-secrets-overlay	gates	Locks post-T1.2 workload-identity contract for infra/helmfile/values/dev-public/loopzero-external-secrets.yaml.gotmpl (enabled=false safe default, K8s-auth shape, no legacy AppRole roleId/secretRef, canonical mgmt DNS, EC-1/EC-2 traceability). M-Migrate2 2026-07-07 replaces infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh.
 divergence-matrix	gates	Checks the local-vs-prod divergence matrix is current.
 dockerfile-no-docker-hub	gates	Forbids unqualified docker.io/Docker Hub base images.
-docs-contract-refs	gates	Toda referencia .claude/rules/*.md no CLAUDE.md e todo ADR-NNNN citado em comentario Go resolve (ou tem excecao com prazo).
+docs-contract-refs	gates	Every .claude/rules/*.md reference in CLAUDE.md and every ADR-NNNN cited in a Go comment resolves (or has an exception with a deadline).
 domain-sink-purity	gates	Ratchet: the services DAG sink must not grow its persistence surface (B-049).
 drill-creds-isolation	-	Ensures DR-drill credentials are isolated from production.
 drill-outputs-consumers	gates	Verifies drill Pulumi-output consumers use the canonical schema.
-ecosystem-validators	gates	Roda `check_xrefs.py` e `test_e2e_smoke.py`, que o protocolo de mudanca de golden rule exige verdes e que nenhum gate rodava (B-129). Reporta FAIL e WARN SEPARADOS: somar faria o aviso apagar a falha.
-error-vocabulary	gates	Mensagem de erro autorada nao pode carregar termo interno proibido pela Regra 3.
+ecosystem-validators	gates	Runs `check_xrefs.py` and `test_e2e_smoke.py`, which the golden-rule change protocol requires green and which no gate ran (B-129). Reports FAIL and WARN SEPARATELY: adding them would let the warning erase the failure.
+error-vocabulary	gates	An authored error message must not carry an internal term forbidden by Rule 3.
 git-diff-to-lines	-	Utility: converts a git diff into a changed-line set for other gates.
 gomod-auth-org	gates	The org build files authenticate to matches the org go.mod requires (a drift makes git fetch unauthenticated and GitHub answer 'not found').
 helm-diff-structural	-	Structural pre-sync Helm diff to catch drift before apply.
@@ -59,7 +59,7 @@ helmfile-context-parity	gates	A task que invoca um helmfile aponta para o cluste
 install-git-hooks	gates	Validates the M8 1.5 pre-push hook + installer canonical shape + idempotency (M-Migrate2 2026-07-07 replaces infra/tests/check-install-git-hooks_test.sh).
 k6-load-rigor	gates	k6 load-harness rigor: dropped_iterations Counter threshold in `base` (EC-2), L5 distributed manifest shape (TestRun kind + pinned image + secretKeyRef + no inline secret, EC-1 YAML validity), k6:distributed:l5 task wired, README per-level runner doc. M-Migrate2 2026-07-07 replaces infra/tests/check-k6-load-rigor_test.sh.
 ldflag-symbols	gates	Refuses a `-X` ldflag injection whose import path or symbol does not resolve on disk — the linker accepts it silently and the binary keeps its default (B-053).
-lint-coverage	gates	Todo modulo Go e medido (lint + gofmt), com catraca por modulo contra regressao.
+lint-coverage	gates	Every Go module is measured (lint + gofmt), with a per-module ratchet against regression.
 loki-retention-schema	gates	Trio-compat regression for T8.2 Loki retention_stream schema: infra/helm/loki/values.yaml parses cleanly + deploymentMode SingleBinary (cleanroom-compatible) + exactly 1 retention_stream entry + selector secrets-system + period 2160h + priority int (Loki startup schema) + default retention_period 168h. 7 assertions. Uses gopkg.in/yaml.v3 (already-vendored, per plan D2 parsimony rung 4). M-Migrate2 2026-07-10 M16 T3.2 Wave 2 replaces infra/tests/check-loki-retention-schema_test.sh.
 loki-vault-retention	gates	T8.5 archive CronJob for Loki vault-audit logs (kind + schedule 04:00 UTC monthly + concurrencyPolicy Forbid + runAsNonRoot + capabilities drop ALL + logcli/mc invocation + AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY secretKeyRef + loki-archive-s3-creds Secret + secrets-system NS target). The T8.2 retention rule is owned by loki-retention-schema. M-Migrate2 2026-07-10 M16 T3.1 Wave 2 replaces infra/tests/check-loki-vault-retention_test.sh.
 ma7-status-locality	gates	MA-7 Gates B+C: sqlc status funcs + SafeTransition only in db/store/.

@@ -18,9 +18,9 @@ var repoRoot = qtestutil.MustRepoRoot()
 
 // pythonAvailable reports whether the interpreter this gate shells out to exists.
 //
-// Nada aqui faz SKIP na ausência dele: `Check` documenta que devolve `Advisory` sem
-// interpretador, e essa é a contrapartida — um teste que some naquele ambiente deixa
-// o único caminho que roda ali sem prova.
+// Nothing here SKIPs in its absence: `Check` documents that it returns `Advisory`
+// without an interpreter, and this is the counterpart — a test that vanishes in that
+// environment leaves the only path that runs there without proof.
 func pythonAvailable() bool {
 	_, err := exec.LookPath("python3")
 	return err == nil
@@ -57,15 +57,15 @@ func TestGreenValidatorsPass(t *testing.T) {
 	out, err := Check(cfg)
 	if !pythonAvailable() {
 		if err != nil || !out.Advisory {
-			t.Fatalf("sem python3 o gate é advisory e não erro; err=%v out=%+v", err, out)
+			t.Fatalf("without python3 the gate is advisory, not an error; err=%v out=%+v", err, out)
 		}
 		return
 	}
 	if err != nil {
-		t.Fatalf("validadores verdes devem passar: %v", err)
+		t.Fatalf("green validators must pass: %v", err)
 	}
 	if len(out.Results) != 2 {
-		t.Fatalf("os dois precisam ter rodado; got %+v", out.Results)
+		t.Fatalf("both must have run; got %+v", out.Results)
 	}
 }
 
@@ -83,15 +83,15 @@ func TestRedValidatorFails(t *testing.T) {
 		return
 	}
 	if !errors.Is(err, ErrValidatorFailed) {
-		t.Fatalf("um validador vermelho reprova o gate: %v", err)
+		t.Fatalf("a red validator fails the gate: %v", err)
 	}
 	if f := out.Failed(); len(f) != 1 || f[0].Name != "bad" {
-		t.Fatalf("o validador que reprovou precisa ser nomeado; got %+v", f)
+		t.Fatalf("the validator that failed must be named; got %+v", f)
 	}
 }
 
-// A bala 3 do DoD: WARN não pode virar ruído que apaga o FAIL. Um validador que sai 0
-// com avisos PASSA, e os avisos são contados separadamente.
+// DoD bullet 3: WARN must not become noise that erases FAIL. A validator that exits 0
+// with warnings PASSES, and the warnings are counted separately.
 func TestWarningsAreCountedButDoNotFail(t *testing.T) {
 	root := fakeEco(t, map[string]string{
 		"warn.py": "print('  [WARN] a')\nprint('  [WARN] b')\nprint('Overall: PASS')\n",
@@ -103,10 +103,10 @@ func TestWarningsAreCountedButDoNotFail(t *testing.T) {
 		return
 	}
 	if err != nil {
-		t.Fatalf("aviso não é reprovação: %v", err)
+		t.Fatalf("a warning is not a failure: %v", err)
 	}
 	if out.Warnings() != 2 {
-		t.Fatalf("os avisos precisam ser contados para que sua evolução seja visível; got %d", out.Warnings())
+		t.Fatalf("warnings must be counted so their evolution is visible; got %d", out.Warnings())
 	}
 }
 
@@ -135,9 +135,9 @@ func TestKitNotInstalledIsAdvisory(t *testing.T) {
 	}
 }
 
-// Os dois layouts. Fixar um faria o gate reportar ausência no outro — o defeito do
-// B-120, noutro lugar. A sonda mudou de `scripts/` para `mechanisms/` porque o kit
-// relocou tudo em `mechanisms/<família>/`; o teste segue esse contrato.
+// Both layouts. Pinning one would make the gate report absence in the other — the
+// B-120 defect, elsewhere. The probe moved from `scripts/` to `mechanisms/` because the
+// kit relocated everything into `mechanisms/<family>/`; the test follows that contract.
 func TestBothLayoutsResolve(t *testing.T) {
 	plugin := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(plugin, ".claude", "mechanisms"), 0o755); err != nil {

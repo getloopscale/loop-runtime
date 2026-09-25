@@ -386,12 +386,12 @@ func writeDoc(full, body string) error {
 func docHeader() string {
 	return `---
 type: reference
-title: "Topologia Helm — o que roda em qual cluster"
+title: "Helm Topology — what runs on which cluster"
 ---
 
-# Topologia Helm
+# Helm Topology
 
-> **Documento gerado. Não edite à mão** — a próxima execução do gate sobrescreve.
+> **Generated document. Do not edit by hand** — the next run of the gate overwrites it.
 > Source: ` + "`infra/helmfile/*.helmfile.yaml.gotmpl`" + `. Regenerate with:
 > ` + "`loopzero-ops quality helm-topology-index --write`" + `
 
@@ -416,6 +416,6 @@ comes from the release declaration, not from a folder convention.
 }
 
 func docFooter() string {
-	return "\nA data de geração fica fora da tabela por desenho: um gate de frescor responde\n" +
-		"\"o conteúdo divergiu da fonte?\", não \"isto foi gerado hoje?\".\n"
+	return "\nThe generation date stays out of the table by design: a freshness gate answers\n" +
+		"\"has the content diverged from the source?\", not \"was this generated today?\".\n"
 }

@@ -196,9 +196,9 @@ func runEcosystemValidators(args []string) int {
 		}
 		return 1
 	}
-	// FAIL e WARN reportados separados: somá-los faria o aviso apagar a falha, e um
-	// validador que sempre avisa ensina a ignorá-lo.
-	fmt.Printf("ecosystem-validators: PASS — %d validador(es) verdes, %d aviso(s)\n",
+	// FAIL and WARN are reported separately: adding them up would let the warning
+	// erase the failure, and a validator that always warns teaches people to ignore it.
+	fmt.Printf("ecosystem-validators: PASS — %d validator(s) green, %d warning(s)\n",
 		len(out.Results), out.Warnings())
 	return 0
 }

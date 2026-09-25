@@ -103,16 +103,16 @@ func runAlertRunbooks(args []string) int {
 		for _, v := range o.Violations {
 			fmt.Printf("RUNBOOK-MISSING VIOLATION: %s\n", v)
 		}
-		// SITES e ALERTAS sao numeros diferentes, e a mensagem antiga dizia "alert(s)"
-		// enquanto contava sites. Nove arquivos de alerta existem duas vezes na arvore
-		// (`infra/helm/...` e a copia espelhada em `charts/...`), entao a contagem de
-		// sites e' maior que a de alertas — medido 2026-09-06: 46 sites, 37 alertas.
-		// Chamar 46 de "alertas sem runbook" infla a divida em 24%.
+		// SITES and ALERTS are different numbers, and the old message said "alert(s)"
+		// while counting sites. Nine alert files exist twice in the tree
+		// (`infra/helm/...` and the mirrored copy in `charts/...`), so the site count
+		// is higher than the alert count — measured 2026-09-06: 46 sites, 37 alerts.
+		// Calling 46 "alerts without runbook" inflates the debt by 24%.
 		fmt.Fprintf(os.Stderr, "\nFAIL — %d alert(s) without runbook annotation, in %d site(s).\n",
-			o.AlertasDistintos(), len(o.Violations))
-		if o.AlertasDistintos() != len(o.Violations) {
+			o.DistinctAlerts(), len(o.Violations))
+		if o.DistinctAlerts() != len(o.Violations) {
 			fmt.Fprintf(os.Stderr, "(%d site(s) are mirrored copies of the same alert — fix every site.)\n",
-				len(o.Violations)-o.AlertasDistintos())
+				len(o.Violations)-o.DistinctAlerts())
 		}
 		fmt.Fprintln(os.Stderr, "To fix: add a `runbook_url:` annotation linking to recovery docs, OR add the")
 		fmt.Fprintln(os.Stderr, "alert name to ExceptionList (cmd/loopzero-ops/internal/quality/alertrunbooks) with an explanation.")

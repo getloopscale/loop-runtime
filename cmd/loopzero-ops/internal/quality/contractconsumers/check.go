@@ -267,18 +267,18 @@ func collectDroppedJSONTags(root, base, head string) ([]string, error) {
 	// a wire break is a gate people learn to push past.
 	tags := make([]string, 0, len(seen))
 	for t := range seen {
-		antes, err := structsDeclaringTagAt(root, base, t)
+		before, err := structsDeclaringTagAt(root, base, t)
 		if err != nil {
 			return nil, err
 		}
-		depois, err := structsDeclaringTagAt(root, head, t)
+		after, err := structsDeclaringTagAt(root, head, t)
 		if err != nil {
 			return nil, err
 		}
-		// Uma declaracao a MENOS e' a queda. Igual ou mais significa que a tag
-		// mudou de nome de struct, de arquivo ou de pacote — nada disso mexe no
-		// contrato de fio.
-		if depois >= antes {
+		// One declaration FEWER is the drop. Equal or more means the tag changed
+		// struct name, file or package — none of which touches the wire
+		// contract.
+		if after >= before {
 			continue
 		}
 		tags = append(tags, t)
@@ -287,24 +287,24 @@ func collectDroppedJSONTags(root, base, head string) ([]string, error) {
 	return tags, nil
 }
 
-// structsDeclaringTagAt conta QUANTAS structs declaram `json:"<tag>"` nos
-// arquivos rastreados, na revisao dada.
+// structsDeclaringTagAt counts HOW MANY structs declare `json:"<tag>"` in the
+// tracked files, at the given revision.
 //
-// A versao anterior perguntava apenas se a tag existia em ALGUMA struct, e isso
-// tinha um furo medido: `repositories.go` declarava `json:"repo"` DUAS vezes, e
-// tirar de uma ficava invisivel porque a outra respondia "ainda existe" (B-100).
+// The previous version only asked whether the tag existed in ANY struct, and that
+// had a measured hole: `repositories.go` declared `json:"repo"` TWICE, and
+// removing it from one was invisible because the other answered "still exists" (B-100).
 //
-// Contar, e nao identificar a struct pelo NOME, e' deliberado. Escopar por nome
-// pegaria o furo, mas criaria um falso positivo novo: renomear a struct — ou
-// move-la de pacote, que o desenho original protege explicitamente — nao muda o
-// contrato de fio e passaria a ser reportado como quebra. Um gate que acusa
-// renomeacao e' um gate que as pessoas aprendem a contornar, que e' o custo que
-// este proprio item registra. A contagem cai quando uma declaracao some e nao se
-// mexe quando uma declaracao muda de nome ou de lugar.
+// Counting, rather than identifying the struct by NAME, is deliberate. Scoping by
+// name would catch the hole but create a new false positive: renaming the struct —
+// or moving it to another package, which the original design explicitly protects —
+// does not change the wire contract and would start being reported as a break. A
+// gate that blames a rename is a gate people learn to work around, which is the
+// cost this very item records. The count drops when a declaration disappears and
+// does not move when a declaration changes name or place.
 //
-// LIMITE QUE FICA, declarado: se um mesmo commit TIRA a tag de uma struct e a
-// ACRESCENTA noutra, a contagem nao se move e a troca passa. E' mais estreito que
-// o furo anterior e nao tem cura sem informacao de tipo nos dois lados.
+// REMAINING LIMIT, declared: if a single commit REMOVES the tag from one struct and
+// ADDS it to another, the count does not move and the swap passes. That is narrower
+// than the previous hole and has no cure without type information on both sides.
 func structsDeclaringTagAt(root, rev, tag string) (int, error) {
 	pattern := `json:"` + regexp.QuoteMeta(tag) + `[",]`
 
@@ -316,23 +316,23 @@ func structsDeclaringTagAt(root, rev, tag string) (int, error) {
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 
-	// `git grep -c` exits 1 sem nenhuma ocorrencia, que e' a resposta e nao falha.
+	// `git grep -c` exits 1 with no match at all, which is the answer and not a failure.
 	var exitErr *exec.ExitError
 	if err != nil && (!errors.As(err, &exitErr) || exitErr.ExitCode() != 1) {
 		return 0, fmt.Errorf("git grep for %q at %s failed: %v (stderr: %s)", tag, rev, err, stderr.String())
 	}
 
 	total := 0
-	for _, linha := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
-		if linha == "" {
+	for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+		if line == "" {
 			continue
 		}
-		// formato: `<rev>:<arquivo>:<n>`
-		idx := strings.LastIndex(linha, ":")
+		// format: `<rev>:<file>:<n>`
+		idx := strings.LastIndex(line, ":")
 		if idx < 0 {
 			continue
 		}
-		n, cerr := strconv.Atoi(strings.TrimSpace(linha[idx+1:]))
+		n, cerr := strconv.Atoi(strings.TrimSpace(line[idx+1:]))
 		if cerr != nil {
 			continue
 		}

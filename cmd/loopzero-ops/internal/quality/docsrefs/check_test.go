@@ -146,7 +146,7 @@ func TestCheck_AllowlistedRefPasses(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		".claude/rules/present.md": "x\n", // the kit is installed
 		"CLAUDE.md":                "Read `.claude/rules/ghost.md`.\n",
-		"docsrefs-allowlist.txt":   "rule | .claude/rules/ghost.md | " + future() + " | decisao pendente do dono\n",
+		"docsrefs-allowlist.txt":   "rule | .claude/rules/ghost.md | " + future() + " | owner decision pending\n",
 	})
 	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil {
 		t.Errorf("an allowlisted reference within its sunset must pass; got %v", err)
@@ -157,7 +157,7 @@ func TestCheck_ExpiredAllowlistEntryFails(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		".claude/rules/present.md": "x\n", // the kit is installed
 		"CLAUDE.md":                "Read `.claude/rules/ghost.md`.\n",
-		"docsrefs-allowlist.txt":   "rule | .claude/rules/ghost.md | " + past() + " | prazo vencido\n",
+		"docsrefs-allowlist.txt":   "rule | .claude/rules/ghost.md | " + past() + " | deadline passed\n",
 	})
 	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); !errors.Is(err, ErrUnresolvedReferences) {
 		t.Errorf("an expired entry must stop exempting; got %v", err)
@@ -169,7 +169,7 @@ func TestCheck_SunsetTodayStillPasses(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		".claude/rules/present.md": "x\n", // the kit is installed
 		"CLAUDE.md":                "Read `.claude/rules/ghost.md`.\n",
-		"docsrefs-allowlist.txt":   "rule | .claude/rules/ghost.md | " + today() + " | ultimo dia\n",
+		"docsrefs-allowlist.txt":   "rule | .claude/rules/ghost.md | " + today() + " | last day\n",
 	})
 	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil {
 		t.Errorf("the sunset date is inclusive; got %v", err)
@@ -182,7 +182,7 @@ func TestCheck_SunsetTodayStillPasses(t *testing.T) {
 func TestCheck_MalformedAllowlistIsAnError(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"CLAUDE.md":              "x\n",
-		"docsrefs-allowlist.txt": "rule | .claude/rules/ghost.md | sem-data\n",
+		"docsrefs-allowlist.txt": "rule | .claude/rules/ghost.md | no-date\n",
 	})
 	_, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")})
 	if !errors.Is(err, ErrMalformedAllowlist) {
@@ -194,7 +194,7 @@ func TestCheck_AllowlistCommentsAndBlanksAreSkipped(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"CLAUDE.md":                "Read `.claude/rules/present.md`.\n",
 		".claude/rules/present.md": "x\n",
-		"docsrefs-allowlist.txt":   "# comentario\n\n   \n",
+		"docsrefs-allowlist.txt":   "# comment\n\n   \n",
 	})
 	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil {
 		t.Errorf("comments and blank lines are not entries; got %v", err)
@@ -209,7 +209,7 @@ func TestCheck_CleanTreePasses(t *testing.T) {
 		".claude/rules/present.md": "x\n",
 		"pkg/a/a.go":               "package a\n\n// per ADR-0042.\nconst A = 1\n",
 		"docs/d.md":                "ADR-0042 says so\n",
-		"docsrefs-allowlist.txt":   "# nada isento\n",
+		"docsrefs-allowlist.txt":   "# nothing exempt\n",
 	})
 	out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")})
 	if err != nil {

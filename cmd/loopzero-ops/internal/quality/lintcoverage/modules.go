@@ -13,15 +13,15 @@ import (
 
 // ErrNoModules means the sweep found no Go module.
 //
-// Ausência é FALHA, nunca "nenhum módulo, tudo certo": uma varredura que não alcançou nada
-// reportando verde é a forma que este repositório já pagou em `B-040`, `B-124` e `B-143`.
-var ErrNoModules = errors.New("nenhum módulo Go encontrado — não achar nada não é o mesmo que não achar nada errado")
+// Absence is a FAILURE, never "no modules, all fine": a sweep that reached nothing and
+// reports green is the shape this repository already paid for in `B-040`, `B-124` and `B-143`.
+var ErrNoModules = errors.New("no Go module found — finding nothing is not the same as finding nothing wrong")
 
-// skipDirs são subárvores que contêm `go.mod` de terceiros.
+// skipDirs are subtrees that contain third-party `go.mod` files.
 //
-// Lista fechada e curta de propósito. O que ela NÃO faz é listar os módulos nossos — foi
-// exatamente uma lista à mão de módulos que deixou cinco de fora do `task lint` e ninguém
-// percebeu, porque o gate seguia verde sobre o que não olhava.
+// A closed, short list on purpose. What it does NOT do is list our own modules — it was
+// exactly a hand-written list of modules that left five out of `task lint` without anyone
+// noticing, because the gate stayed green over what it did not look at.
 var skipDirs = map[string]bool{
 	"vendor":       true,
 	"node_modules": true,
@@ -31,14 +31,14 @@ var skipDirs = map[string]bool{
 
 // DiscoverModules lists every Go module in the tree, relative to root.
 //
-// Derivado do DISCO, nunca declarado: um módulo novo entra sozinho, que é a propriedade que
-// faltava. A ordenação é estável para que a saída e a linha de base sejam determinísticas —
-// uma linha de base cuja ordem varia produz diff que ninguém consegue revisar.
+// Derived from DISK, never declared: a new module enters on its own, which is the property that
+// was missing. The ordering is stable so that the output and the baseline are deterministic —
+// a baseline whose order varies produces a diff nobody can review.
 func DiscoverModules(root string) ([]string, error) {
 	var out []string
 	err := filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil //nolint:nilerr // diretório ilegível não é módulo; a ausência total reprova abaixo
+			return nil //nolint:nilerr // an unreadable directory is not a module; total absence fails below
 		}
 		if info.IsDir() {
 			if skipDirs[info.Name()] {
@@ -51,16 +51,16 @@ func DiscoverModules(root string) ([]string, error) {
 		}
 		rel, rerr := filepath.Rel(root, filepath.Dir(p))
 		if rerr != nil {
-			return nil //nolint:nilerr // caminho fora da raiz não é módulo nosso
+			return nil //nolint:nilerr // a path outside the root is not our module
 		}
 		if rel == "." {
-			return nil // não há go.mod na raiz deste repositório (ver CLAUDE.md § Multi-module)
+			return nil // this repository has no go.mod at the root (see CLAUDE.md § Multi-module)
 		}
 		out = append(out, filepath.ToSlash(rel))
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("varrendo %s: %w", root, err)
+		return nil, fmt.Errorf("walking %s: %w", root, err)
 	}
 	sort.Strings(out)
 	if len(out) == 0 {

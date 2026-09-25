@@ -359,15 +359,16 @@ func runRouteAuthCoverage(args []string) int {
 	return 0
 }
 
-// runBillingSecrets reprova opcionalidade LITERAL nos segredos de cobrança.
+// runBillingSecrets fails LITERAL optionality on the billing secrets.
 //
-// Medido em 2026-08-11 no app-dev: o pod do painel rodou 20h `Running` sem
-// `loopzero-stripe-webhook` e sem `loopzero-stripe-api-keys`, sem emitir um único evento —
-// porque `optional: true` é, para o Kubernetes, uma configuração perfeitamente normal.
+// Measured on 2026-08-11 in app-dev: the dashboard pod ran 20h `Running` without
+// `loopzero-stripe-webhook` and without `loopzero-stripe-api-keys`, emitting not a single
+// event — because `optional: true` is, to Kubernetes, a perfectly normal setting.
 //
-// O gate não exige que os segredos sejam sempre obrigatórios: o hermético monta sem
-// credencial de propósito. Exige que a decisão seja um VALOR, porque um literal vale
-// igualmente para todo ambiente, e o público acaba herdando a escolha mais permissiva.
+// The gate does not require the secrets to be always mandatory: the hermetic setup
+// mounts without credentials on purpose. It requires the decision to be a VALUE,
+// because a literal holds equally for every environment, and the public one ends up
+// inheriting the most permissive choice.
 func runBillingSecrets(args []string) int {
 	fs := flag.NewFlagSet("billing-secrets", flag.ContinueOnError)
 	root := fs.String("repo-root", ".", "repository root")
@@ -380,16 +381,16 @@ func runBillingSecrets(args []string) int {
 		return 5
 	}
 	if len(outcome.Findings) > 0 {
-		fmt.Fprintf(os.Stderr, "billing-secrets: FAIL — %d montagem(ns) de segredo de cobrança com opcionalidade literal:\n",
+		fmt.Fprintf(os.Stderr, "billing-secrets: FAIL — %d billing secret mount(s) with literal optionality:\n",
 			len(outcome.Findings))
 		for _, f := range outcome.Findings {
 			fmt.Fprintf(os.Stderr, "  %s:%d — %s\n", f.File, f.Line, f.Why)
 		}
 		return 2
 	}
-	// Dizer QUANTOS arquivos foram lidos importa: um gate que não achou nada por não ter
-	// lido nada se pareceria, no log, com um gate que passou.
-	fmt.Printf("billing-secrets: PASS — %d chart(s) verificados, opcionalidade decidida por valor\n",
+	// Saying HOW MANY files were read matters: a gate that found nothing because it
+	// read nothing would look, in the log, like a gate that passed.
+	fmt.Printf("billing-secrets: PASS — %d chart(s) checked, optionality decided by value\n",
 		len(outcome.Scanned))
 	return 0
 }
@@ -448,7 +449,7 @@ func runAdapterPorts(args []string) int {
 		fmt.Fprintf(os.Stderr, "adapter-ports: FAIL — %v\n", err)
 		return 2
 	}
-	fmt.Printf("adapter-ports: PASS — %d adaptador(es), todos declarando a porta que satisfazem\n", out.Scanned)
+	fmt.Printf("adapter-ports: PASS — %d adapter(s), each declaring the port it satisfies\n", out.Scanned)
 	return 0
 }
 
@@ -466,10 +467,10 @@ func runErrorVocabulary(args []string) int {
 	}
 	if !out.Pass {
 		fmt.Fprintf(os.Stderr, "error-vocabulary: FAIL — %s\n", out.Summary())
-		for _, v := range out.Violacoes {
-			fmt.Fprintf(os.Stderr, "  %s:%d carrega %q em saida ao usuario: %q\n", v.Arquivo, v.Linha, v.Termo, v.Mensagem)
+		for _, v := range out.Violations {
+			fmt.Fprintf(os.Stderr, "  %s:%d carries %q in user-facing output: %q\n", v.File, v.Line, v.Term, v.Message)
 		}
-		fmt.Fprintln(os.Stderr, "  A Regra Inquebravel 3 proibe estes termos na saida ao usuario. Use linguagem de produto.")
+		fmt.Fprintln(os.Stderr, "  Unbreakable Rule 3 forbids these terms in user-facing output. Use product language.")
 		return 1
 	}
 	fmt.Printf("error-vocabulary: PASS — %s\n", out.Summary())
@@ -547,7 +548,7 @@ func runDashboardRootParity(args []string) int {
 		fmt.Fprintf(os.Stderr, "dashboard-root-parity: FAIL — %v\n", err)
 		return 2
 	}
-	fmt.Printf("dashboard-root-parity: PASS — a borda serve %s e o runbook o nomeia\n", out.Served)
+	fmt.Printf("dashboard-root-parity: PASS — the edge serves %s and the runbook names it\n", out.Served)
 	return 0
 }
 
@@ -562,18 +563,18 @@ func runCaddyHostParity(args []string) int {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "caddy-host-parity: FAIL — %v\n", err)
 		for _, f := range out.Findings {
-			fmt.Fprintf(os.Stderr, "  %s sem bloco de site; sem certificado o handshake cai antes de qualquer HTTP\n", f.Host)
+			fmt.Fprintf(os.Stderr, "  %s has no site block; without a certificate the handshake fails before any HTTP\n", f.Host)
 		}
 		return 2
 	}
-	fmt.Printf("caddy-host-parity: PASS — %d hostnames exigidos, %d servidos\n", out.Scanned, out.Served)
+	fmt.Printf("caddy-host-parity: PASS — %d hostnames required, %d served\n", out.Scanned, out.Served)
 	return 0
 }
 
 func runLintCoverage(args []string) int {
 	fs := flag.NewFlagSet("lint-coverage", flag.ContinueOnError)
 	root := fs.String("repo-root", ".", "repository root")
-	write := fs.Bool("write", false, "recongela a linha de base com o medido")
+	write := fs.Bool("write", false, "re-freeze the baseline with the measured values")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
@@ -581,10 +582,10 @@ func runLintCoverage(args []string) int {
 
 	if *write {
 		out, merr := lintcoverage.Measure(lintcoverage.Config{RepoRoot: *root})
-		// Recongelar usa o MEDIDO, mesmo quando houve regressão — é um ato consciente,
-		// e o diff do arquivo é onde ele fica visível.
+		// Re-freezing uses what was MEASURED, even after a regression — it is a
+		// deliberate act, and the file's diff is where it becomes visible.
 		if merr != nil || (len(out.Lint) == 0 && len(out.Gofmt) == 0) {
-			fmt.Fprintf(os.Stderr, "lint-coverage: nada medido, nada a congelar: %v\n", merr)
+			fmt.Fprintf(os.Stderr, "lint-coverage: nothing measured, nothing to freeze: %v\n", merr)
 			return 5
 		}
 		p := filepath.Join(*root, lintcoverage.BaselineRelPath)
@@ -592,7 +593,7 @@ func runLintCoverage(args []string) int {
 			fmt.Fprintf(os.Stderr, "lint-coverage: %v\n", werr)
 			return 5
 		}
-		fmt.Printf("lint-coverage: linha de base regravada — %s\n", out.Reason)
+		fmt.Printf("lint-coverage: baseline rewritten — %s\n", out.Reason)
 		return 0
 	}
 
@@ -600,13 +601,13 @@ func runLintCoverage(args []string) int {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "lint-coverage: FAIL — %v\n", err)
 		for _, r := range out.Regressions {
-			fmt.Fprintf(os.Stderr, "  regressão: %s [%s] %d → %d\n", r.Module, r.Dimension, r.Was, r.Now)
+			fmt.Fprintf(os.Stderr, "  regression: %s [%s] %d → %d\n", r.Module, r.Dimension, r.Was, r.Now)
 		}
 		return 2
 	}
 	fmt.Printf("lint-coverage: PASS — %s\n", out.Reason)
 	for _, i := range out.Improvements {
-		fmt.Printf("  melhorou: %s %d → %d (recongele com `--write`)\n", i.Module, i.Was, i.Now)
+		fmt.Printf("  improved: %s %d → %d (re-freeze with `--write`)\n", i.Module, i.Was, i.Now)
 	}
 	return 0
 }

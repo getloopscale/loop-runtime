@@ -4,25 +4,26 @@
 // Package ecosystemvalidators runs the two validators the ecosystem's own change
 // protocol requires — and which nothing ran.
 //
-// # O achado
+// # The finding
 //
-// `rules/cycle-rule-schema.md § Golden Rule Change Protocol` exige, para toda mudança
-// numa golden rule LOCKED, que *"`check_xrefs.py` and `test_e2e_smoke.py` both PASS"*.
+// `rules/cycle-rule-schema.md § Golden Rule Change Protocol` requires, for every change
+// to a LOCKED golden rule, that *"`check_xrefs.py` and `test_e2e_smoke.py` both PASS"*.
 //
-// Medido 2026-08-17 ao cumprir esse protocolo no `B-127`:
-// `grep -rn "check_xrefs" taskfiles/ cmd/loopzero-ops/ .claude/hooks/` **não retorna
-// nada** — nenhuma task, nenhum gate, nenhum hook os invoca. E ao rodá-los pela
-// primeira vez, `check_xrefs.py` saiu **FAIL com 4 achados**, todos introduzidos no
-// mesmo dia sem que nada acusasse.
+// Measured 2026-08-17 while following that protocol for `B-127`:
+// `grep -rn "check_xrefs" taskfiles/ cmd/loopzero-ops/ .claude/hooks/` **returns
+// nothing** — no task, no gate, no hook invokes them. And when they were run for the
+// first time, `check_xrefs.py` came out **FAIL with 4 findings**, all introduced the
+// same day without anything flagging them.
 //
-// É a mesma forma do `B-124` (três suítes vermelhas que nenhuma task rodava), noutro
-// par de validadores: **um requisito de processo sem execução é uma promessa**.
+// It is the same shape as `B-124` (three red suites that no task ran), in another
+// pair of validators: **a process requirement with no execution is a promise**.
 //
-// # FAIL e WARN são reportados separados, de propósito
+// # FAIL and WARN are reported separately, on purpose
 //
-// `check_xrefs.py` sai 0 com WARNs. Um gate que somasse os dois faria o aviso apagar
-// a falha — e um validador que sempre reporta avisos ensina a ignorá-lo, que é como
-// os 4 achados de FAIL passariam despercebidos entre 6 avisos crônicos.
+// `check_xrefs.py` exits 0 with WARNs. A gate that summed the two would let the warning
+// erase the failure — and a validator that always reports warnings teaches people to
+// ignore it, which is how the 4 FAIL findings would go unnoticed among 6 chronic
+// warnings.
 package ecosystemvalidators
 
 import (
@@ -36,32 +37,33 @@ import (
 )
 
 // ErrValidatorFailed means at least one validator exited non-zero.
-var ErrValidatorFailed = errors.New("um validador do ecossistema reprovou — eles são requisito do protocolo de mudança de golden rule, e até hoje nenhum gate os rodava")
+var ErrValidatorFailed = errors.New("an ecosystem validator failed — they are a requirement of the golden-rule change protocol, and until now no gate ran them")
 
 // ErrValidatorsMissing means the validator scripts are not on disk.
 //
-// Ausência é FALHA, nunca skip: o gate existe porque ninguém os rodava, e reportar
-// verde por não os encontrar reproduziria o defeito com aparência de cobertura.
-var ErrValidatorsMissing = errors.New("os validadores do ecossistema não estão no disco — um gate que não acha o que audita não pode reportar verde")
+// Absence is a FAILURE, never a skip: the gate exists because nobody ran them, and
+// reporting green for not finding them would reproduce the defect with the look of
+// coverage.
+var ErrValidatorsMissing = errors.New("the ecosystem validators are not on disk — a gate that cannot find what it audits cannot report green")
 
 // Validator is one script to run.
 type Validator struct {
 	Name string
 	Rel  string
-	// Args sao os argumentos passados ao script, e existem porque um deles tem
-	// DUAS perguntas legitimas e o chamador decide qual esta a fazer.
+	// Args are the arguments passed to the script, and they exist because one of
+	// them has TWO legitimate questions and the caller decides which one it is asking.
 	//
-	// `verify_ecosystem.py` por omissao julga os ultimos 40 commits, que e' a
-	// pergunta certa para uma auditoria avulsa: o repositorio segue as suas
-	// convencoes? Este pacote corre na cadeia
-	// `.git/hooks/pre-push` -> `task quality:gates` -> aqui, e a pergunta ai e'
-	// outra: este push pode entrar? Ai so' contam as violacoes que quem empurra
-	// ainda consegue consertar.
+	// `verify_ecosystem.py` by default grades the last 40 commits, which is the
+	// right question for a standalone audit: does the repository follow its
+	// conventions? This package runs in the chain
+	// `.git/hooks/pre-push` -> `task quality:gates` -> here, and the question there
+	// is a different one: may this push land? There, only the violations the pusher
+	// can still fix count.
 	//
-	// Medido 2026-09-16: com `-40`, tres dos quatro achados ja' estavam em
-	// `origin/workspace` e os dois mais proximos sairiam da janela em 11 e 13
-	// commits — que nao podiam acontecer, porque o gate recusava os commits que
-	// moveriam a janela. Cada peca estava certa e juntas eram um impasse.
+	// Measured 2026-09-16: with `-40`, three of the four findings were already on
+	// `origin/workspace` and the two nearest would leave the window in 11 and 13
+	// commits — which could not happen, because the gate refused the commits that
+	// would move the window. Each piece was right and together they were a deadlock.
 	Args []string
 }
 
@@ -136,13 +138,14 @@ func kitInstalled(eco string) bool {
 
 // resolveEco returns the ecosystem directory, honouring both layouts.
 //
-// Plugin (todo consumidor) tem o ecossistema em `.claude/`; standalone (o repo do
-// próprio kit) o tem na raiz. Fixar um dos dois faria o gate reportar ausência num
-// dos layouts — que é o defeito do `B-120`, noutro lugar.
+// Plugin (every consumer) has the ecosystem under `.claude/`; standalone (the kit's
+// own repo) has it at the root. Pinning one of the two would make the gate report
+// absence in one of the layouts — which is the `B-120` defect, elsewhere.
 //
-// A sonda mudou de `scripts/` para `mechanisms/` porque o kit relocou tudo em
-// `mechanisms/<família>/`. `scripts/` deixou de existir; probar por ela é probar
-// por um diretório que nenhum layout carrega, e o gate cai para `root` em ambos.
+// The probe moved from `scripts/` to `mechanisms/` because the kit relocated
+// everything into `mechanisms/<family>/`. `scripts/` no longer exists; probing for it
+// is probing for a directory no layout carries, and the gate falls back to `root` in
+// both.
 func resolveEco(root, rel string) string {
 	if rel != "" {
 		return filepath.Join(root, rel)
@@ -190,11 +193,11 @@ func Check(cfg Config) (Outcome, error) {
 }
 
 func run(root, script, name string, args []string, timeout time.Duration) Result {
-	// G204: o caminho não vem de entrada do usuário. Ele é `DefaultValidators`
-	// (constantes do pacote) juntado à raiz resolvida, e `Check` já provou que o
-	// arquivo existe antes de chegar aqui. O `Validators` configurável existe para
-	// os testes montarem uma árvore própria.
-	cmd := exec.Command("python3", append([]string{script}, args...)...) //nolint:gosec // caminho e args de constantes do pacote, não de entrada
+	// G204: the path does not come from user input. It is `DefaultValidators`
+	// (package constants) joined to the resolved root, and `Check` has already proven
+	// the file exists before getting here. The configurable `Validators` exists so
+	// tests can build a tree of their own.
+	cmd := exec.Command("python3", append([]string{script}, args...)...) //nolint:gosec // path and args come from package constants, not from input
 	cmd.Dir = root
 
 	done := make(chan struct{})
@@ -212,7 +215,7 @@ func run(root, script, name string, args []string, timeout time.Duration) Result
 			_ = cmd.Process.Kill()
 		}
 		<-done
-		return Result{Name: name, Passed: false, Tail: fmt.Sprintf("estourou %s", timeout)}
+		return Result{Name: name, Passed: false, Tail: fmt.Sprintf("timed out after %s", timeout)}
 	}
 
 	body := string(output)

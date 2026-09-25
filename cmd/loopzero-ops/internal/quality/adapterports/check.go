@@ -1,33 +1,33 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package adapterports dá ao pacote `adapters` um critério de admissão que consegue recusar.
+// Package adapterports gives the `adapters` package an admission criterion that can refuse.
 //
-// # O defeito, medido
+// # The defect, measured
 //
-// B-058, 2026-08-18. O pacote `api/internal/adapters` admitia membro por uma regra que não
-// nega nada: *"é um adapter"*. Medido: dos **nove** adaptadores, cinco nomeavam a porta que
-// satisfazem em **prosa**, quatro não diziam nada, e apenas **um** a afirmava em tempo de
-// compilação.
+// B-058, 2026-08-18. The `api/internal/adapters` package admitted members by a rule that
+// denies nothing: *"it is an adapter"*. Measured: of the **nine** adapters, five named the
+// port they satisfy in **prose**, four said nothing, and only **one** asserted it at compile
+// time.
 //
-// Prosa não compila. Um comentário dizendo *"implements routes.X"* continua ali depois de a
-// interface mudar de forma, de nome ou de lugar — e o próximo leitor confia nele.
+// Prose does not compile. A comment saying *"implements routes.X"* stays there after the
+// interface changes shape, name or location — and the next reader trusts it.
 //
-// # O critério
+// # The criterion
 //
-// Todo arquivo com tipo exportado neste pacote declara, com `var _ Porta = (*Tipo)(nil)`,
-// qual porta satisfaz. Quem não souber nomear a porta não pertence aqui — e essa é
-// exatamente a frase que o critério antigo não conseguia dizer.
+// Every file with an exported type in this package declares, with `var _ Port = (*Type)(nil)`,
+// which port it satisfies. Whoever cannot name the port does not belong here — and that is
+// exactly the sentence the old criterion could not say.
 //
-// A distinção que importa: `var _ = pkg.Tipo{}` é asserção de **uso**, não de porta. Ela não
-// afirma que o adaptador satisfaz interface alguma, e confundir as duas deixaria passar o
-// defeito que esta guarda existe para pegar.
+// The distinction that matters: `var _ = pkg.Type{}` is a **usage** assertion, not a port
+// assertion. It does not claim the adapter satisfies any interface, and confusing the two
+// would let through the defect this guard exists to catch.
 //
-// # O limite
+// # The limit
 //
-// Ele exige que a porta esteja DECLARADA, não que seja a porta certa. Um adaptador que
-// asserta a interface errada compila e passa aqui — mas o consumidor não compilaria, então o
-// compilador cobre essa metade.
+// It requires the port to be DECLARED, not that it be the right port. An adapter that
+// asserts the wrong interface compiles and passes here — but the consumer would not
+// compile, so the compiler covers that half.
 package adapterports
 
 import (
@@ -42,15 +42,15 @@ import (
 )
 
 // ErrNoPortDeclared means an adapter file declares an exported type without naming its port.
-var ErrNoPortDeclared = errors.New("adaptador nao declara a porta que satisfaz")
+var ErrNoPortDeclared = errors.New("adapter does not declare the port it satisfies")
 
 // ErrNothingScanned means the package is absent — silence, not cleanliness.
 //
-// A outra alternativa do DoD de B-058 e DISSOLVER este pacote. Se isso acontecer, esta
-// guarda tem de reprovar em vez de ficar verde sobre um diretorio que sumiu.
-var ErrNothingScanned = errors.New("pacote adapters ausente — nao achar nada nao e o mesmo que nao achar nada errado")
+// The other alternative in B-058's DoD is to DISSOLVE this package. If that happens, this
+// guard must fail instead of staying green over a directory that disappeared.
+var ErrNothingScanned = errors.New("adapters package absent — finding nothing is not the same as finding nothing wrong")
 
-const pacote = "api/internal/adapters"
+const adaptersPackage = "api/internal/adapters"
 
 // Config drives the check.
 type Config struct {
@@ -63,11 +63,11 @@ type Outcome struct {
 	Missing []string
 }
 
-// declaraPorta reporta se o arquivo tem `var _ <algo> = ...` com TIPO declarado.
+// declaresPort reports whether the file has `var _ <something> = ...` with a declared TYPE.
 //
-// `var _ = expr` (sem tipo) e assercao de uso e nao conta.
-func declaraPorta(arq *ast.File) bool {
-	for _, d := range arq.Decls {
+// `var _ = expr` (no type) is a usage assertion and does not count.
+func declaresPort(file *ast.File) bool {
+	for _, d := range file.Decls {
 		g, ok := d.(*ast.GenDecl)
 		if !ok || g.Tok != token.VAR {
 			continue
@@ -75,7 +75,7 @@ func declaraPorta(arq *ast.File) bool {
 		for _, spec := range g.Specs {
 			v, ok := spec.(*ast.ValueSpec)
 			if !ok || v.Type == nil {
-				continue // sem tipo declarado: assercao de uso
+				continue // no declared type: usage assertion
 			}
 			for _, n := range v.Names {
 				if n.Name == "_" {
@@ -87,9 +87,9 @@ func declaraPorta(arq *ast.File) bool {
 	return false
 }
 
-// temTipoExportado reporta se o arquivo declara algum tipo exportado.
-func temTipoExportado(arq *ast.File) bool {
-	for _, d := range arq.Decls {
+// hasExportedType reports whether the file declares any exported type.
+func hasExportedType(file *ast.File) bool {
+	for _, d := range file.Decls {
 		g, ok := d.(*ast.GenDecl)
 		if !ok || g.Tok != token.TYPE {
 			continue
@@ -110,39 +110,39 @@ func Check(cfg Config) (Outcome, error) {
 	if root == "" {
 		root = "."
 	}
-	dir := filepath.Join(root, filepath.FromSlash(pacote))
+	dir := filepath.Join(root, filepath.FromSlash(adaptersPackage))
 
-	entradas, err := os.ReadDir(dir)
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return out, fmt.Errorf("%w: %s", ErrNothingScanned, pacote)
+		return out, fmt.Errorf("%w: %s", ErrNothingScanned, adaptersPackage)
 	}
 
 	fset := token.NewFileSet()
-	for _, e := range entradas {
-		nome := e.Name()
-		if e.IsDir() || !strings.HasSuffix(nome, ".go") || strings.HasSuffix(nome, "_test.go") {
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			continue
 		}
-		arq, err := parser.ParseFile(fset, filepath.Join(dir, nome), nil, 0)
+		file, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, 0)
 		if err != nil {
-			return out, fmt.Errorf("analisar %s: %w", nome, err)
+			return out, fmt.Errorf("parse %s: %w", name, err)
 		}
-		if !temTipoExportado(arq) {
-			continue // nao e adaptador; nao ha porta a exigir
+		if !hasExportedType(file) {
+			continue // not an adapter; there is no port to require
 		}
 		out.Scanned++
-		if !declaraPorta(arq) {
-			out.Missing = append(out.Missing, nome)
+		if !declaresPort(file) {
+			out.Missing = append(out.Missing, name)
 		}
 	}
 
 	if out.Scanned == 0 && len(out.Missing) == 0 {
-		// Nenhum arquivo com tipo exportado: ou o pacote foi dissolvido, ou a varredura
-		// nao alcancou nada. Os dois merecem os olhos de alguem.
-		return out, fmt.Errorf("%w: %s nao tem adaptador algum", ErrNothingScanned, pacote)
+		// No file with an exported type: either the package was dissolved, or the scan
+		// reached nothing. Both deserve someone's eyes.
+		return out, fmt.Errorf("%w: %s has no adapter at all", ErrNothingScanned, adaptersPackage)
 	}
 	if len(out.Missing) > 0 {
-		return out, fmt.Errorf("%w: %s — declare `var _ <Porta> = (*<Tipo>)(nil)`",
+		return out, fmt.Errorf("%w: %s — declare `var _ <Port> = (*<Type>)(nil)`",
 			ErrNoPortDeclared, strings.Join(out.Missing, ", "))
 	}
 	return out, nil
