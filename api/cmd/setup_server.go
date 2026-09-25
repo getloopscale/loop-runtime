@@ -5,10 +5,8 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
-	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/middleware/observability"
 
@@ -17,8 +15,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
-
-	"github.com/getloopscale/loopzero/api/internal/services/build/stepwatch"
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
@@ -32,11 +28,6 @@ import (
 	placementsvc "github.com/getloopscale/loopzero/api/internal/services/placement"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-
-	"github.com/jackc/pgx/v5"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/aggregator"
@@ -52,7 +43,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/health"
 	previewroutes "github.com/getloopscale/loopzero/api/internal/routes/preview"
 	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 	pkglogging "github.com/getloopscale/loopzero/pkg/logging"
 )
@@ -108,11 +98,11 @@ func buildServerConfig(
 	// which is the same condition that makes the routes it guards unreachable.
 	environmentHandler := environments.NewEnvironmentHandler(k8sDeps.TenantCRMgr)
 	if dbAdapter != nil {
-		environmentHandler = environmentHandler.WithKPILookup(&envKPILookupPgx{pool: dbAdapter.Pool})
+		environmentHandler = environmentHandler.WithKPILookup(&adapters.EnvKPILookup{DB: dbAdapter})
 	}
 	if stores != nil {
 		environmentHandler = environmentHandler.WithPreviewSlotLookup(
-			&previewSlotLookupAdapter{store: stores.PreviewSlotStore},
+			&adapters.PreviewSlotLookup{Store: stores.PreviewSlotStore},
 		)
 	}
 	if dbDeps != nil {
@@ -153,7 +143,7 @@ func buildServerConfig(
 		// prefix). When stores.ObjUploader is nil (no S3 in dev), the
 		// handler still serves metadata but omits download_url.
 		BuildSBOMHandler: builds.NewBuildSBOMHandler(
-			newAppSBOMStoreAdapter(dbAdapter),
+			&adapters.AppSBOMStore{Inner: store.NewAppAttestationStoreSqlc(dbAdapter)},
 			toSBOMURLGenerator(stores),
 			cfg.SourceBucket,
 			logger,
@@ -352,7 +342,7 @@ func buildServerConfig(
 		// CHG-2026-04-30-DELETE-SINGLE-CELL: pinner also patches Tenant CR
 		// so operator reconcile re-emits ArgoCD destination with new cell.
 		pinner := placementsvc.NewCellPinner(&store.PostgresCellStore{DB: dbAdapter})
-		if mgmt := buildMgmtDynamicClient(logger); mgmt != nil {
+		if mgmt := buildMgmtDynamicClient(cfg, logger); mgmt != nil {
 			pinner = pinner.WithTenantCRPatcher(adapters.NewTenantCRCellPatcher(mgmt, "loopzero-system"))
 		}
 		sc.Admin.Pinner = pinner
@@ -450,45 +440,6 @@ func buildServerConfig(
 	return sc
 }
 
-// appSBOMStoreAdapter bridges the per-app attestation store
-// (db.PostgresAppAttestationStore) into routes.AppSBOMStore by projecting
-// AppAttestationInfo onto the routes-shape AppSBOMInfo. The adapter
-// keeps the routes layer decoupled from db types.
-//
-// Sprint 6 / T1.2.
-// T1.3b (plan 2026-05-29-sqlc-migration v1.3): adapter inner type
-// widened from concrete *PostgresAppAttestationStore to
-// store.AppAttestationStore interface so AppAttestationStoreSqlc drops in
-// without churn.
-type appSBOMStoreAdapter struct {
-	inner store.AppAttestationStore
-}
-
-func newAppSBOMStoreAdapter(d *db.PgxAdapter) *appSBOMStoreAdapter {
-	return &appSBOMStoreAdapter{inner: store.NewAppAttestationStoreSqlc(d)}
-}
-
-func (a *appSBOMStoreAdapter) GetBuildAppSBOMs(
-	ctx context.Context, tenantID, buildID string,
-) ([]builds.AppSBOMInfo, error) {
-	infos, err := a.inner.GetBuildAppAttestations(ctx, tenantID, buildID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]builds.AppSBOMInfo, 0, len(infos))
-	for _, in := range infos {
-		out = append(out, builds.AppSBOMInfo{
-			AppName:            in.AppName,
-			SBOMS3Key:          in.SBOMS3Key,
-			SBOMFormat:         in.SBOMFormat,
-			SBOMComponentCount: in.SBOMComponentCount,
-			SBOMGeneratedAt:    in.SBOMGeneratedAt,
-			Signed:             in.Signed,
-		})
-	}
-	return out, nil
-}
-
 // toSBOMURLGenerator returns a SBOMURLGenerator if the configured
 // uploader supports presigning, else nil. When nil, the SBOM endpoint
 // returns metadata-only (no download_url).
@@ -500,195 +451,4 @@ func toSBOMURLGenerator(stores *StoreDeps) builds.SBOMURLGenerator {
 		return g
 	}
 	return nil
-}
-
-// buildMgmtDynamicClient constructs a dynamic.Interface for the mgmt
-// cluster. CHG-2026-04-30-DELETE-SINGLE-CELL: required by CellPinner to
-// patch tenant.spec.cellID after a successful DB update. Prefers
-// in-cluster config so loopzero-api SA's RBAC applies (loopzero.io/tenants
-// resource permission granted via clusterrolebinding/loopzero-api).
-//
-// Returns nil on failure (logged) — pinner falls back to DB-only mode
-// which logs a manual `kubectl patch` hint when the CR patch is skipped.
-func buildMgmtDynamicClient(logger *slog.Logger) dynamic.Interface {
-	cfg, err := rest.InClusterConfig()
-	if err != nil {
-		logger.Warn("cell pinner: in-cluster config unavailable, CR patches disabled",
-			"error", err)
-		return nil
-	}
-	dyn, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		logger.Warn("cell pinner: dynamic.NewForConfig failed, CR patches disabled",
-			"error", err)
-		return nil
-	}
-	return dyn
-}
-
-// =============================================================================
-// startArgoStepWatcher — Plan J-17 T1.3 production wiring
-// =============================================================================
-//
-// Polls Argo Workflows on the build cluster every 2s, extracts Pod node
-// phase transitions, and emits build.step.{started,succeeded,failed}
-// events to the SSE journal (sse_events table). Without this goroutine
-// the dashboard's BuildTimelineLive shows zero step events even though
-// the workflow is running — the LIVE bug caught 2026-06-06 J-17 dogfood
-// (image loopzero-api:j17-iter1 missed this wiring on first roll-out).
-//
-// Failure modes are non-fatal: the watcher logs + skips a tick. EC-1
-// surfaces 401/403 to the dedicated counter so Grafana alerts fire
-// before silent token expiry breaks visibility.
-//
-// Lifecycle: started before the HTTP server, cancelled at shutdown.
-func startArgoStepWatcher(ctx context.Context, cfg config.Config, eventStore sse.EventStore, logger *slog.Logger) {
-	if eventStore == nil {
-		logger.Warn("argo step watcher: event store nil, skipping")
-		return
-	}
-
-	// Build a dynamic client connected to the build cluster, mirroring the
-	// pattern in argo.NewWorkflowSubmitter. clientcmd handles in-cluster
-	// SA token + ExplicitPath kubeconfig for local dev.
-	loadingRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: cfg.BuildKubeconfig}
-	overrides := &clientcmd.ConfigOverrides{}
-	if cfg.BuildKubeContext != "" {
-		overrides.CurrentContext = cfg.BuildKubeContext
-	}
-	restCfg, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides).ClientConfig()
-	if err != nil {
-		logger.Warn("argo step watcher: build cluster config failed, watcher disabled",
-			"error", err)
-		return
-	}
-
-	// Issue #242 fix 3 — pick up a rotated build-cluster credential without a
-	// pod restart.
-	//
-	// The token resolved above is a VALUE captured at process start. When the
-	// operator rotates `loopzero-cluster-kubeconfigs.build.kubeconfig`, the mounted
-	// file changes and this client does not: every poll keeps authenticating
-	// with a credential that was already replaced, and the only recovery is
-	// deleting the pod. The watcher already noticed (`ReportWatchError` → the
-	// 401/403 log + ArgoWatcherTokenExpiredTotal); it had no way to act on it.
-	//
-	// Wired ONLY when the kubeconfig is a real file. In-cluster (empty path)
-	// client-go already refreshes the projected SA token natively — wrapping
-	// there would replace a working mechanism with a weaker one.
-	if cfg.BuildKubeconfig != "" {
-		restCfg.WrapTransport = adapters.NewReloadingTransportWrapper(cfg.BuildKubeconfig, cfg.BuildKubeContext)
-		// The wrapper owns the Authorization header. Left set, client-go also
-		// installs its own bearer round-tripper carrying the STARTUP token, and
-		// whichever writes the header last wins — reintroducing exactly the
-		// staleness this removes.
-		restCfg.BearerToken = ""
-		restCfg.BearerTokenFile = ""
-		logger.Info("argo step watcher: build-cluster token reloads on auth failure",
-			"kubeconfig", cfg.BuildKubeconfig)
-	}
-	dyn, err := dynamic.NewForConfig(restCfg)
-	if err != nil {
-		logger.Warn("argo step watcher: dynamic.NewForConfig failed, watcher disabled",
-			"error", err)
-		return
-	}
-
-	// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T2.1 (closes loopzero-cloud#37):
-	// scope the workflow watcher to the `argo` namespace specifically. The
-	// pre-Sprint-8 empty namespace `""` was interpreted by kubernetes as
-	// cluster-scope LIST, which the Sprint 7 RBAC fix (namespace-scoped Role
-	// for argo/loopzero-workflow-submitter) does NOT grant. The watcher then 403'd
-	// every poll → couldn't observe workflow state → reconcile loop blocked
-	// → release stuck in SYNC_FAILED → `active_release: null` (#37 root cause).
-	// All LoopZero Workflow CRs are created in the `argo` namespace by the build
-	// orchestrator (workflow_submitter.go); the pre-Sprint-8 comment about
-	// per-tenant namespaces was incorrect — workflows have ALWAYS lived in
-	// argo, only the build PODS run per-tenant. KISS + least privilege.
-	source := adapters.NewK8sWorkflowNodeSource(dyn, "argo", 2*time.Second, logger)
-	// terminalIDs is nil — first-tick startup may emit duplicate step events
-	// for already-running workflows; the watcher's internal lastPhase dedup
-	// catches duplicates from tick 2 onwards. A future enhancement can wire
-	// a BuildStore-backed TerminalBuildIDStore for cleaner cold start.
-	watcher := stepwatch.NewArgoStepWatcher(source, eventStore, nil, logger)
-	source.WithWatchErrorHandler(watcher.ReportWatchError)
-
-	go func() {
-		if err := watcher.Start(ctx); err != nil && ctx.Err() == nil {
-			logger.Warn("argo step watcher: stopped unexpectedly", "error", err)
-		}
-	}()
-}
-
-// envKPILookupPgx implements routes.EnvKPILookup using direct pgx queries.
-// J-10 v1.1 LIVE catch 2026-06-07 — populates the dashboard
-// EnvironmentKPIRow with last_deploy timestamp + git commit SHA.
-//
-// DESIGN: one round-trip per List call (1 SQL). DISTINCT ON (environment)
-// returns the most recent ACTIVE release per env across all projects of
-// the tenant.
-type envKPILookupPgx struct {
-	pool interface {
-		Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	}
-}
-
-func (l *envKPILookupPgx) LatestActivePerEnv(ctx context.Context, tenantID string) (map[string]environments.EnvKPI, error) {
-	const q = `
-		SELECT DISTINCT ON (environment)
-			environment, git_commit, created_at
-		FROM releases
-		WHERE tenant_id = $1 AND status = 'ACTIVE'
-		ORDER BY environment, created_at DESC
-	`
-	rows, err := l.pool.Query(ctx, q, tenantID)
-	if err != nil {
-		return nil, fmt.Errorf("envKPILookupPgx: %w", err)
-	}
-	defer rows.Close()
-	result := make(map[string]environments.EnvKPI)
-	for rows.Next() {
-		var env, sha string
-		var createdAt time.Time
-		if scanErr := rows.Scan(&env, &sha, &createdAt); scanErr != nil {
-			return nil, fmt.Errorf("envKPILookupPgx scan: %w", scanErr)
-		}
-		result[env] = environments.EnvKPI{
-			LastDeploy:    createdAt.UTC().Format(time.RFC3339),
-			LastDeploySha: sha,
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("envKPILookupPgx rows: %w", err)
-	}
-	return result, nil
-}
-
-// previewSlotLookupAdapter implements routes.PreviewSlotLookup using
-// the store.PreviewSlotStore.
-//
-// 2026-06-07 per-project model (migration 000028): ListPreviewSlots
-// returns ALL slots for the tenant — one per project. Empty slice
-// when the tenant has no previews; never nil.
-type previewSlotLookupAdapter struct {
-	store *store.PostgresPreviewSlotStore
-}
-
-func (a *previewSlotLookupAdapter) ListPreviewSlots(ctx context.Context, tenantID string) ([]environments.PreviewSlotInfo, error) {
-	slots, err := a.store.ListByTenant(ctx, tenantID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]environments.PreviewSlotInfo, 0, len(slots))
-	for _, slot := range slots {
-		out = append(out, environments.PreviewSlotInfo{
-			ProjectID:       slot.ProjectID,
-			ActivePRNumber:  slot.ActivePRNumber,
-			ActiveBranch:    slot.ActiveBranch,
-			ActiveReleaseID: slot.ActiveReleaseID,
-			URL:             slot.URL,
-			UpdatedAt:       slot.UpdatedAt.UTC().Format(time.RFC3339),
-		})
-	}
-	return out, nil
 }

@@ -23,13 +23,12 @@ import (
 	"time"
 
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/getloopscale/loopzero/api/internal/argocd"
 	"github.com/getloopscale/loopzero/api/internal/buildplane/argo"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/gitops"
+	"github.com/getloopscale/loopzero/api/internal/k8s"
 	"github.com/getloopscale/loopzero/api/internal/services/platform"
 )
 
@@ -119,7 +118,7 @@ func circuitBreaker(cfg config.Config) platform.CircuitBreakerConfig {
 // Both failures are logged: a stale static token keeps working until ArgoCD
 // rejects it.
 func newArgoCDTokenProvider(cfg config.Config, logger *slog.Logger) argocd.TokenProvider {
-	restCfg, err := MgmtRestConfig(cfg)
+	restCfg, err := k8s.RestConfig(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
 	if err != nil {
 		logger.Warn("argocd token provider: no mgmt cluster config, using static token", "error", err)
 		return nil
@@ -142,20 +141,4 @@ func newArgoCDTokenProvider(cfg config.Config, logger *slog.Logger) argocd.Token
 	provider.Start(context.Background())
 	logger.Info("argocd token provider: KubeMintingTokenProvider active (self-healing)", "argocd_url", cfg.ArgocdURL)
 	return provider
-}
-
-// MgmtRestConfig resolves the REST config for the mgmt cluster: in-cluster
-// first (so the pod's own ServiceAccount and its RBAC apply), then the
-// explicit CORE kubeconfig/context for out-of-cluster runs.
-func MgmtRestConfig(cfg config.Config) (*rest.Config, error) {
-	if inCluster, err := rest.InClusterConfig(); err == nil {
-		return inCluster, nil
-	}
-	rules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: cfg.MgmtKubeconfig}
-	overrides := &clientcmd.ConfigOverrides{CurrentContext: cfg.MgmtKubeContext}
-	restCfg, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, overrides).ClientConfig()
-	if err != nil {
-		return nil, fmt.Errorf("mgmt cluster config: %w", err)
-	}
-	return restCfg, nil
 }

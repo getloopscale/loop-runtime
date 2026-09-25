@@ -184,3 +184,11 @@ WHERE tenant_id = $1
   AND status = 'PENDING'
 ORDER BY created_at ASC
 LIMIT 100;
+
+-- name: ListLatestActiveReleasePerEnv :many
+-- The most recent ACTIVE release per environment across all of a tenant's
+-- projects: the dashboard's per-environment last-deploy KPI.
+SELECT DISTINCT ON (environment) environment, git_commit, created_at
+FROM releases
+WHERE tenant_id = $1 AND status = 'ACTIVE'
+ORDER BY environment, created_at DESC;

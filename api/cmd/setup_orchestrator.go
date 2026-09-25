@@ -405,7 +405,7 @@ func setupOrchestrator(
 	// "{tenant}-{project}-{env}" name cannot be split positionally. Without the
 	// mgmt dynamic client the callback cannot identify releases and activation
 	// falls to the convergence loop.
-	if mgmtDynamic := buildMgmtDynamicClient(logger); mgmtDynamic != nil {
+	if mgmtDynamic := buildMgmtDynamicClient(cfg, logger); mgmtDynamic != nil {
 		syncCallbackActivator = syncCallbackActivator.WithAppLabelReader(
 			adapters.NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd"),
 		)

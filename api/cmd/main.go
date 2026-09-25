@@ -352,7 +352,7 @@ func main() {
 			Logger: logger,
 		}
 		if os.Getenv("LOOPZERO_ENV_READINESS_CHECKER") == "true" {
-			if mgmtDynamic := buildMgmtDynamicClient(logger); mgmtDynamic != nil {
+			if mgmtDynamic := buildMgmtDynamicClient(cfg, logger); mgmtDynamic != nil {
 				ensurer.ReadinessChecker = adapters.NewEnvironmentCRReader(mgmtDynamic, "loopzero-system")
 				logger.Info("env readiness checker wired — EnsureEnvironment will poll Environment CR.status.phase before returning (Sprint A trio-fix 2026-06-01)")
 			}

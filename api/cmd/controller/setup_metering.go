@@ -24,11 +24,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/k8s"
 	"github.com/getloopscale/loopzero/api/internal/leader"
 	"github.com/getloopscale/loopzero/api/internal/metering"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
@@ -105,9 +104,9 @@ const tenantCRNamespace = "loopzero-system"
 // meteringMgmtClient builds a controller-runtime client for the mgmt cluster whose
 // scheme includes the loopzero.io CRD types (Tenant, ClusterCredential) AND corev1
 // (the kubeconfig Secret). In-cluster config first, then the kubeconfig + context
-// (mirrors k8s.restConfig's resolution order).
+// (k8s.RestConfig).
 func meteringMgmtClient(cfg config.Config) (ctrlclient.Client, error) {
-	restCfg, err := meteringMgmtRestConfig(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
+	restCfg, err := k8s.RestConfig(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
 	if err != nil {
 		return nil, err
 	}
@@ -123,20 +122,4 @@ func meteringMgmtClient(cfg config.Config) (ctrlclient.Client, error) {
 		return nil, fmt.Errorf("metering: build mgmt client: %w", err)
 	}
 	return c, nil
-}
-
-func meteringMgmtRestConfig(kubeconfig, kubeContext string) (*rest.Config, error) {
-	if cfg, err := rest.InClusterConfig(); err == nil {
-		return cfg, nil
-	}
-	loadingRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig}
-	overrides := &clientcmd.ConfigOverrides{}
-	if kubeContext != "" {
-		overrides.CurrentContext = kubeContext
-	}
-	restCfg, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides).ClientConfig()
-	if err != nil {
-		return nil, fmt.Errorf("metering: resolve mgmt rest config: %w", err)
-	}
-	return restCfg, nil
 }

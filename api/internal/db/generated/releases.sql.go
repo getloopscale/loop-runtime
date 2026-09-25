@@ -602,6 +602,41 @@ func (q *Queries) InsertRelease(ctx context.Context, db DBTX, arg InsertReleaseP
 	return i, err
 }
 
+const listLatestActiveReleasePerEnv = `-- name: ListLatestActiveReleasePerEnv :many
+SELECT DISTINCT ON (environment) environment, git_commit, created_at
+FROM releases
+WHERE tenant_id = $1 AND status = 'ACTIVE'
+ORDER BY environment, created_at DESC
+`
+
+type ListLatestActiveReleasePerEnvRow struct {
+	Environment string             `json:"environment"`
+	GitCommit   *string            `json:"git_commit"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+// The most recent ACTIVE release per environment across all of a tenant's
+// projects: the dashboard's per-environment last-deploy KPI.
+func (q *Queries) ListLatestActiveReleasePerEnv(ctx context.Context, db DBTX, tenantID string) ([]ListLatestActiveReleasePerEnvRow, error) {
+	rows, err := db.Query(ctx, listLatestActiveReleasePerEnv, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLatestActiveReleasePerEnvRow
+	for rows.Next() {
+		var i ListLatestActiveReleasePerEnvRow
+		if err := rows.Scan(&i.Environment, &i.GitCommit, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReleaseStatusesByEnv = `-- name: ListReleaseStatusesByEnv :many
 SELECT DISTINCT status FROM releases
 WHERE tenant_id = $1
