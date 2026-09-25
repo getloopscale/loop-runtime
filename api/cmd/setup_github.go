@@ -52,7 +52,7 @@ type GitHubDeps struct {
 // with `if cfg.GitHubWebhookHandler != nil`). This restores Rule 10
 // ("Local equals production") for the connect/disconnect flow.
 func setupGitHub(
-	dbAdapter *db.PgxAdapter,
+	dbAdapter, crossTenant *db.PgxAdapter,
 	stores *StoreDeps,
 	orch *builds.BuildOrchestrator,
 	k8sDeps *K8sDeps,
@@ -62,7 +62,7 @@ func setupGitHub(
 ) *GitHubDeps {
 	// Repository store for webhook lookups and CRUD. Required for the
 	// RepositoryHandler — always created when the DB is reachable.
-	repoStore := &store.PostgresRepositoryStore{DB: dbAdapter}
+	repoStore := newRepositoryStore(crossTenant)
 	repoHandler := repositorieshttp.NewRepositoryHandler(&repositoriesadapter.RepoStoreAdapter{Store: repoStore})
 
 	// GitHub App client for API calls (source download, commit status, PR comments).
@@ -215,4 +215,16 @@ func setupGitHub(
 		AppClient:           ghAppClient,
 		IntegrationsHandler: integrationsHandler,
 	}
+}
+
+// newRepositoryStore builds the store of GitHub installations and repository
+// links on the cross-tenant pool. Both are global objects: the webhook arrives
+// with no tenant and resolves the owner from them, and the API's authorization
+// gates ask which tenant owns an installation or a repository before letting
+// the caller act. Over the request pool, scoped to the caller, another tenant's
+// installation is hidden and "no owner" read as "not claimed" — the owner check
+// passed. The API-path queries carry their own tenant predicate
+// (queries/repositories.sql), and the handlers enforce ownership.
+func newRepositoryStore(crossTenant db.DBTX) *store.PostgresRepositoryStore {
+	return &store.PostgresRepositoryStore{DB: crossTenant}
 }

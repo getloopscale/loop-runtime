@@ -197,13 +197,21 @@ func brokerBearerMiddleware(expectedToken string, next http.HandlerFunc) http.Ha
 // for ESO's webhook ClusterSecretStore: it loads the vault:v1: ciphertext,
 // decrypts it through OpenBao transit and returns plaintext_b64, behind the
 // broker bearer token. Nil (route not registered) when transit, the database
-// or the cell store is missing, or when no broker token is configured.
-func newSecretFetchBroker(cfg config.Config, transit vault.Transit, dbAdapter *db.PgxAdapter,
-	cellStore *store.PostgresCellStore, stores *StoreDeps, logger *slog.Logger) http.HandlerFunc {
-	if transit == nil || dbAdapter == nil || cellStore == nil || stores == nil {
+// or the cross-tenant pool is missing, or when no broker token is configured.
+//
+// The cell binding reads which cell a tenant is placed on BEFORE the caller is
+// authorized for that tenant, so it reads through the cross-tenant pool: over
+// the request pool, with no scope yet, the tenant row is hidden by fail-closed
+// RLS and every fetch answered 404 tenant_not_found. The secret read and the
+// audit record run on the request pool, scoped by the handler once the binding
+// has authorized the caller.
+func newSecretFetchBroker(cfg config.Config, transit vault.Transit, dbAdapter, crossTenant *db.PgxAdapter,
+	stores *StoreDeps, logger *slog.Logger) http.HandlerFunc {
+	if transit == nil || dbAdapter == nil || crossTenant == nil || stores == nil {
 		return nil
 	}
-	fetchDeps := setupSecretFetchDeps(stores.PgSecretStore, cellStore, &store.AuditLogger{DB: dbAdapter})
+	placement := &store.PostgresCellStore{DB: crossTenant}
+	fetchDeps := setupSecretFetchDeps(stores.PgSecretStore, placement, &store.AuditLogger{DB: dbAdapter})
 	if fetchDeps == nil {
 		return nil
 	}

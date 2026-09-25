@@ -156,7 +156,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	// and retries with backoff (safer than registering a broken handler).
 	if surfaces.Recorded(cfg.Surfaces, surfaces.SecretFetch, cfg.Secrets.FetchHandler != nil,
 		"one of four dependencies is missing, and main.go:429-441 requires all four: the "+
-			"secrets backend transit client, the database, cellStore and `LOOPZERO_BROKER_TOKEN`. "+
+			"secrets backend transit client, the database, the cross-tenant pool and `LOOPZERO_BROKER_TOKEN`. "+
 			"Measured on dev-public 2026-08-16: the `loopzero-broker-token` Secret DOES NOT EXIST, "+
 			"so this surface is already off there") {
 		// T2.1 + ADR D2 of plan 2026-06-10-j22-layer2-code-review-fixes

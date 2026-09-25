@@ -166,6 +166,7 @@ func main() {
 		// store) count through the background pool. Measured: an account with 2
 		// tenants and 1 project each read 1 through the request pool and 2
 		// through loopzero_worker. See internal/db/store/project_wrapper.go.
+		wireCrossTenantLookups(dbDeps, bgAdapter)
 		wirePlanEnforcement(dbDeps, bgAdapter, logger)
 		projectCap := newProjectCapEnforcement(dbDeps.PlanLimiter, bgAdapter)
 		wireProjectCap(dbDeps.PostgresProjects, projectCap)
@@ -175,7 +176,7 @@ func main() {
 			os.Exit(1)
 		}
 		orchDeps = setupOrchestrator(dbAdapter, stores, workflows, cfg, httpTransport, logger, projectCap, envEnsurer)
-		ghDeps = setupGitHub(dbAdapter, stores, orchDeps.Orchestrator, k8sDeps, cfg, shutdownCtx, logger)
+		ghDeps = setupGitHub(dbAdapter, bgAdapter, stores, orchDeps.Orchestrator, k8sDeps, cfg, shutdownCtx, logger)
 	}
 
 	// Plan J-17 T1.3 — start the Argo step watcher in a background
@@ -213,7 +214,7 @@ func main() {
 	}
 	defer waitForBackgroundGoroutines(&bgWg, logger)
 
-	buildHandler := setupBuildHandler(dbAdapter, orchDeps, cellStore, cfg, shutdownCtx, logger)
+	buildHandler := setupBuildHandler(bgAdapter, orchDeps, cellStore, cfg, shutdownCtx, logger)
 
 	// The same ensurer serves deploy and project creation (and promote,
 	// wired in setupOrchestrator). The build handler exists only with the
@@ -264,7 +265,7 @@ func main() {
 	verifyRateLimiter := ratelimit.NewVerifyRateLimiter(1, 30*time.Second)
 	srvCfg.Guards.VerifyRateLimiter = verifyRateLimiter
 
-	srvCfg.Secrets.FetchHandler = newSecretFetchBroker(cfg, transit, dbAdapter, cellStore, stores, logger)
+	srvCfg.Secrets.FetchHandler = newSecretFetchBroker(cfg, transit, dbAdapter, bgAdapter, stores, logger)
 	// T4.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4: ADR D4 —
 	// every project gets a `production` env auto-created on POST
 	// /api/v1/projects. Same EnvironmentEnsurer that powers loopzero deploy
@@ -286,20 +287,20 @@ func silenceKlog() {
 	_ = klogFlags.Set("stderrthreshold", "FATAL")
 }
 
+// setupBuildHandler builds the build route handler. crossTenant is the
+// background pool: the admission gate counts every tenant's builds on a cell.
 func setupBuildHandler(
-	dbAdapter *db.PgxAdapter, orchDeps *OrchestratorDeps, cellStore *store.PostgresCellStore,
+	crossTenant *db.PgxAdapter, orchDeps *OrchestratorDeps, cellStore *store.PostgresCellStore,
 	cfg config.Config, shutdownCtx context.Context, logger *slog.Logger,
 ) *buildshttp.BuildHandler {
 	if orchDeps == nil {
 		return nil
 	}
 	buildHandler := buildshttp.NewBuildHandler(orchDeps.BuildOrchestrator, logger)
-	if dbAdapter == nil {
+	if crossTenant == nil {
 		return buildHandler
 	}
-	// T1.2b (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper
-	// satisfies db.BuildStore 1:1 — admission querier seam unchanged.
-	querier := &buildsadapter.BuildStoreAdmissionQuerier{Store: store.NewBuildStoreSqlc(dbAdapter)}
+	querier := newAdmissionQuerier(crossTenant)
 	admissionCfg := admission.DefaultConfig()
 	if cfg.MaxConcurrentBuildsPerCell > 0 {
 		admissionCfg.MaxConcurrentPerCell = cfg.MaxConcurrentBuildsPerCell
@@ -319,6 +320,14 @@ func setupBuildHandler(
 	// function that returns only the handler. It moved to `setup_server.go`, where the server
 	// config is assembled and where it can be handed to the middleware that decides.
 	return buildHandler
+}
+
+// newAdmissionQuerier reads the active builds the admission gate counts. The
+// per-cell cap spans every tenant placed on the cell, so it reads through the
+// cross-tenant pool: over the request pool, scoped to the caller, it would count
+// the caller's builds alone and the cap would never engage.
+func newAdmissionQuerier(crossTenant db.DBTX) *buildsadapter.BuildStoreAdmissionQuerier {
+	return &buildsadapter.BuildStoreAdmissionQuerier{Store: store.NewBuildStoreSqlc(crossTenant)}
 }
 
 // leaseHolder names this process in the leader lease: the pod name Kubernetes

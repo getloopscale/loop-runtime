@@ -27,7 +27,9 @@ import (
 
 // DatabaseDeps holds everything produced by setupDatabase.
 type DatabaseDeps struct {
-	DBAdapter    *db.PgxAdapter
+	DBAdapter *db.PgxAdapter
+	// MemberStore is set by wireCrossTenantLookups once the cross-tenant pool
+	// exists: resolving a user's teams spans tenants.
 	MemberStore  auth.MembershipStore
 	ProjectStore ports.ProjectStore
 	// PostgresProjects is the same instance as ProjectStore, typed concretely
@@ -111,7 +113,6 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 	projectStore := &store.PostgresProjectStore{DB: poolCfg}
 	deps := &DatabaseDeps{
 		DBAdapter:        poolCfg,
-		MemberStore:      &store.PostgresMembershipStore{DB: poolCfg},
 		ProjectStore:     projectStore,
 		PostgresProjects: projectStore,
 		DBHealth:         poolCfg,
@@ -146,6 +147,15 @@ func backgroundPoolConfig(cfg config.Config) db.PoolConfig {
 		ConnectTimeout:    cfg.DBConnectTimeout,
 		StatementTimeout:  cfg.DBStatementTimeout,
 	}
+}
+
+// wireCrossTenantLookups builds the lookups authentication makes before a team
+// is selected. Resolving which teams a user belongs to spans tenants — a user
+// may belong to several — so it reads through the cross-tenant pool; over the
+// request pool tenant_members is hidden by fail-closed RLS and every
+// authenticated call would be refused with NO_TENANT.
+func wireCrossTenantLookups(deps *DatabaseDeps, crossTenant db.DBTX) {
+	deps.MemberStore = &store.PostgresMembershipStore{DB: crossTenant}
 }
 
 // wirePlanEnforcement builds the plan-limits store and the limiter every plan
