@@ -132,8 +132,8 @@ func NewRouter(cfg Config) *chi.Mux {
 
 	// Internal-only routes (no auth — called by platform controllers, not users)
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Bootstrap, cfg.BootstrapStore != nil,
-		"no database — the BootstrapStore is `PostgresBootstrapStore` (setup_stores.go:117) "+
-			"and is only built inside the block that requires `dbAdapter`") {
+		"no database — the BootstrapStore is `PostgresBootstrapStore`, built by wirePlacement "+
+			"(setup_server.go) on the cross-tenant background pool, which exists only with a database") {
 		bootstrap := bootstraphttp.NewBootstrapHandler(cfg.BootstrapStore, cfg.BootstrapSecret, cfg.CellPlacement)
 		r.Post("/internal/bootstrap", bootstrap.Bootstrap)
 	}

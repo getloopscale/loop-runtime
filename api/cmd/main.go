@@ -242,7 +242,7 @@ func main() {
 	})
 
 	srvCfg := buildServerConfig(serverWiring{
-		cfg: cfg, dbAdapter: dbAdapter, dbDeps: dbDeps, stores: stores,
+		cfg: cfg, dbAdapter: dbAdapter, crossTenant: bgAdapter, dbDeps: dbDeps, stores: stores,
 		orchDeps: orchDeps, ghDeps: ghDeps, k8sDeps: k8sDeps,
 		cellRouter: cellRouter, cellStore: cellStore,
 		domainHandler: domainHandler, buildHandler: buildHandler,

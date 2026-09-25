@@ -61,8 +61,12 @@ func setupHealthServices(cfg config.Config) []healthhttp.ServiceHealthChecker {
 // no-database boot, and for orchDeps, ghDeps, cellRouter and cellStore when
 // their setup was skipped; k8sDeps is never nil (setupK8s failing exits).
 type serverWiring struct {
-	cfg            config.Config
-	dbAdapter      *db.PgxAdapter
+	cfg       config.Config
+	dbAdapter *db.PgxAdapter
+	// crossTenant is the background pool (loopzero_worker), asserted able to
+	// cross tenants at boot. Tenant provisioning runs on it; nil without a
+	// database.
+	crossTenant    *db.PgxAdapter
 	dbDeps         *DatabaseDeps
 	stores         *StoreDeps
 	orchDeps       *OrchestratorDeps
@@ -233,7 +237,6 @@ func wireStores(sc *server.Config, w serverWiring) {
 			blu, timelineadapter.NewDeployTimelineSSEReader(stores.EventStore))
 	}
 	sc.Secrets.Store = stores.SecretStore
-	sc.BootstrapStore = stores.BootstrapStore
 	sc.BootstrapSecret = w.cfg.BootstrapSecret
 }
 
@@ -393,14 +396,22 @@ func newPreviewService(w serverWiring, previewStore *store.PostgresPreviewStore)
 	return ps
 }
 
-// wirePlacement wires the cell placement engine (round-robin under the
-// advisory-lock serializer) and the cell discovery health check.
+// wirePlacement wires tenant provisioning — the cell placement engine
+// (round-robin under the advisory-lock serializer) and the bootstrap store
+// that writes inside its transaction — and the cell discovery health check.
+//
+// Provisioning runs on the cross-tenant pool, not the request pool. Placement
+// counts every cell's tenants, and bootstrap writes a tenant that does not
+// exist yet, so no tenant scope can be set; under fail-closed RLS (migration
+// 000062) the request role would count zero tenants per cell and be refused
+// the tenant INSERT.
 func wirePlacement(sc *server.Config, w serverWiring) {
-	if w.dbAdapter == nil {
+	if w.crossTenant == nil {
 		return
 	}
-	engine := placement.NewRoundRobinEngine(w.cellRouter, w.cellStore, w.cfg.MaxTenantsPerCell)
-	sc.CellPlacement = engine.WithSerializer(placement.NewAdvisoryLockSerializer(w.dbAdapter.Pool))
+	engine := placement.NewRoundRobinEngine(w.cellRouter, &store.PostgresCellStore{DB: w.crossTenant}, w.cfg.MaxTenantsPerCell)
+	sc.CellPlacement = engine.WithSerializer(placement.NewAdvisoryLockSerializer(w.crossTenant.Pool))
+	sc.BootstrapStore = &store.PostgresBootstrapStore{DB: w.crossTenant}
 	if checker, ok := w.cellRouter.(healthhttp.CellDiscoveryChecker); ok {
 		sc.CellDiscovery = checker
 	}

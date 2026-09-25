@@ -9,7 +9,6 @@ import (
 	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/lock"
-	"github.com/getloopscale/loopzero/api/internal/ports"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
@@ -29,7 +28,7 @@ import (
 // ReleaseStore field types use the db.* interfaces so the sqlc-backed
 // wrappers (BuildStoreSqlc, ReleaseStoreSqlc) drop in transparently. The
 // rest of StoreDeps already mixes concrete + interface types (EventStore,
-// SecretStore, BootstrapStore are interfaces; DomainStore + CellStore
+// SecretStore are interfaces; DomainStore + CellStore
 // are still concrete pending their T1.x/T2.x sqlc migrations).
 type StoreDeps struct {
 	BuildStore       db.BuildStore
@@ -42,13 +41,12 @@ type StoreDeps struct {
 	// PgSecretStore is the same store as SecretStore, typed concretely for the
 	// two consumers that need more than the route port: the deploy-time
 	// resyncer (ListForResync) and the ESO broker (ReadValue).
-	PgSecretStore  *store.PostgresSecretStore
-	BootstrapStore ports.BootstrapStore
-	DomainStore    *store.PostgresDomainStore
-	CellStore      *store.PostgresCellStore
-	SourceStore    source.SourceStore
-	ObjUploader    sourceroutes.ObjectUploader
-	Locker         *lock.PoolEnvironmentLocker
+	PgSecretStore *store.PostgresSecretStore
+	DomainStore   *store.PostgresDomainStore
+	CellStore     *store.PostgresCellStore
+	SourceStore   source.SourceStore
+	ObjUploader   sourceroutes.ObjectUploader
+	Locker        *lock.PoolEnvironmentLocker
 
 	// SSE adapter
 	BuildStoreReader sse.BuildStoreReader
@@ -125,7 +123,6 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 		PgEventStore:     pgEventStore,
 		SecretStore:      secretStore,
 		PgSecretStore:    secretStore,
-		BootstrapStore:   &store.PostgresBootstrapStore{DB: dbAdapter},
 		DomainStore:      &store.PostgresDomainStore{DB: dbAdapter},
 		CellStore:        &store.PostgresCellStore{DB: dbAdapter},
 		SourceStore:      giteaSourceStore,

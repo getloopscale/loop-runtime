@@ -28,6 +28,8 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -93,11 +95,13 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate required fields at the boundary.
-	if req.AdminGitHubID == "" {
+	// Validate required fields at the boundary. The user is either named
+	// explicitly (admin_user_id, the Kratos identity) or is the legacy GitHub
+	// identity, which needs its GitHub id.
+	if req.AdminGitHubID == "" && req.AdminUserID == "" {
 		httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
 			Code:    "MISSING_FIELD",
-			Message: "admin_github_id is required",
+			Message: "admin_user_id or admin_github_id is required",
 		})
 		return
 	}
@@ -136,6 +140,13 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		userID, tenantID, created, err = h.store.Bootstrap(txCtx, req)
 		return err
 	})
+	if errors.Is(assignErr, ports.ErrTenantSlugTaken) {
+		httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+			Code:    "TENANT_SLUG_TAKEN",
+			Message: fmt.Sprintf("tenant_slug %q belongs to another account; choose another slug", req.TenantSlug),
+		})
+		return
+	}
 	if assignErr != nil {
 		slog.Error("bootstrap failed", "error", assignErr)
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)

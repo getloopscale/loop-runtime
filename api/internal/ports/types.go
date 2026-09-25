@@ -318,11 +318,22 @@ type BootstrapRequest struct {
 	TenantSlug        string `json:"tenant_slug"`
 	TenantDisplayName string `json:"tenant_display_name"`
 	Plan              string `json:"plan"`
+	// AdminUserID names the user explicitly — the Kratos identity id, which
+	// is users.id for every non-legacy user. When empty the user is the legacy
+	// GitHub identity github-<admin_login>, and admin_github_id is required.
+	AdminUserID string `json:"admin_user_id"`
+	// AdminEmail and AdminDisplayName describe that user; they default to
+	// <admin_login>@users.noreply.github.com and admin_login.
+	AdminEmail       string `json:"admin_email"`
+	AdminDisplayName string `json:"admin_display_name"`
 	// CellID is set by the PlacementEngine before persisting.
 	// Not part of the JSON body -- injected by the handler.
-	// ADR-0008: Phase 0 = "cell-0", Phase 1+ = PlacementEngine assigns.
 	CellID string `json:"-"`
 }
+
+// ErrTenantSlugTaken is returned by BootstrapStore.Bootstrap when the
+// requested tenant slug belongs to a tenant another identity owns.
+var ErrTenantSlugTaken = errors.New("tenant slug is owned by another identity")
 
 // BootstrapStore abstracts the database operations for bootstrap.
 // Implemented by PostgresBootstrapStore (production) and bootstraptest.InMemoryStore (tests).

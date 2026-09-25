@@ -16,6 +16,7 @@ import (
 var apiStatusByCode = map[string]int{
 	"BUILD_NOT_TERMINAL":    http.StatusConflict, // adapters/build_adapter.go — redeploy guard
 	"ENV_ALREADY_EXISTS":    http.StatusConflict, // environments/environmentshttp — duplicate (project, env)
+	"TENANT_SLUG_TAKEN":     http.StatusConflict, // bootstrap/bootstraphttp — slug owned by another identity
 	"USER_NOT_FOUND":        http.StatusNotFound, // teams/teamshttp
 	"MEMBER_NOT_FOUND":      http.StatusNotFound, // teams/teamshttp
 	"TEAM_MEMBER_NOT_FOUND": http.StatusNotFound, // teams/teamshttp (remove)
