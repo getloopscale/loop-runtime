@@ -103,16 +103,14 @@ func (s *GiteaTokenSeed) Run(d Deps) Result {
 		map[string][]byte{giteaAdminTokenSecretKey: tokenBytes}); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3a: %v", err)}
 	}
-	// loopzero-api-tokens may not exist yet — create-or-update to gitea-token key.
-	if _, err := d.Kube.CreateOrUpdateSecret(d.Ctx,
-		secretOf(giteaAdminNamespace, loopzeroAPITokensSecret,
-			map[string][]byte{loopzeroAPITokensGiteaKey: tokenBytes})); err != nil {
+	// loopzero-api-tokens is shared (argocd-token from the argocd-token seed,
+	// cf-api-token from External Secrets): write only the gitea-token key.
+	if err := d.Kube.MergeSecretData(d.Ctx, giteaAdminNamespace, loopzeroAPITokensSecret,
+		map[string][]byte{loopzeroAPITokensGiteaKey: tokenBytes}); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3b: %v", err)}
 	}
-	// loopzero-tenant-operator Secret similarly create-or-update.
-	if _, err := d.Kube.CreateOrUpdateSecret(d.Ctx,
-		secretOf(giteaAdminNamespace, loopzeroTenantOperatorSecret,
-			map[string][]byte{loopzeroTenantOperatorKey: tokenBytes})); err != nil {
+	if err := d.Kube.MergeSecretData(d.Ctx, giteaAdminNamespace, loopzeroTenantOperatorSecret,
+		map[string][]byte{loopzeroTenantOperatorKey: tokenBytes}); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3c: %v", err)}
 	}
 

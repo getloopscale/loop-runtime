@@ -85,14 +85,20 @@ func (s *ArgoCDTokenSeed) Run(d Deps) Result {
 	if err := d.Kube.EnsureNamespace(d.Ctx, minioNamespace); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("ensure namespace %s: %v", minioNamespace, err)}
 	}
-	sec := secretOf(minioNamespace, loopzeroAPITokensSecret,
-		map[string][]byte{loopzeroAPITokensKey: []byte(token)})
-	if _, err := d.Kube.CreateOrUpdateSecret(d.Ctx, sec); err != nil {
+	// loopzero-api-tokens is shared (gitea-token from the gitea-token seed,
+	// cf-api-token from External Secrets): write only the argocd-token key.
+	if err := d.Kube.MergeSecretData(d.Ctx, minioNamespace, loopzeroAPITokensSecret,
+		map[string][]byte{loopzeroAPITokensKey: []byte(token)}); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("apply %s/%s: %v", minioNamespace, loopzeroAPITokensSecret, err)}
 	}
-	// Step 4: rollout restart loopzero-api
+	// Step 4: rollout restart loopzero-api. A loopzero-api not deployed yet reads the
+	// token when it starts, so there is nothing to restart — the same rule the
+	// gitea-token seed applies. Any other error is a real failure.
 	if err := d.Kube.RolloutRestartDeployment(d.Ctx, minioNamespace, minioLoopZeroAPIDeployment); err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("rollout %s/%s: %v", minioNamespace, minioLoopZeroAPIDeployment, err)}
+		if !isNotFoundErr(err) {
+			return Result{Verdict: FAIL, Reason: fmt.Sprintf("rollout %s/%s: %v", minioNamespace, minioLoopZeroAPIDeployment, err)}
+		}
+		return Result{Verdict: PASS, Reason: fmt.Sprintf("minted argocd token → %s/%s (%s not deployed yet — nothing to restart)", minioNamespace, loopzeroAPITokensSecret, minioLoopZeroAPIDeployment)}
 	}
 	return Result{Verdict: PASS, Reason: fmt.Sprintf("minted argocd token → %s/%s + rollout %s", minioNamespace, loopzeroAPITokensSecret, minioLoopZeroAPIDeployment)}
 }

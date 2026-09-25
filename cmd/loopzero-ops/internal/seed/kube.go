@@ -48,6 +48,12 @@ type SecretStore interface {
 	// (Get+Update — preserves resourceVersion and other keys). NotFound-shaped
 	// errors are returned verbatim so callers can decide skip vs fail.
 	PatchSecretData(ctx context.Context, namespace, name string, patch map[string][]byte) error
+	// MergeSecretData writes only the given keys: it creates the Secret with
+	// them when absent, and otherwise sets them on the live Secret, leaving
+	// every other key alone. It is the write for a Secret several producers
+	// share, where CreateOrUpdateSecret would erase the keys this caller does
+	// not own.
+	MergeSecretData(ctx context.Context, namespace, name string, data map[string][]byte) error
 }
 
 // ConfigStore reads and patches ConfigMaps.
@@ -188,6 +194,23 @@ func (k *kubeClient) PatchSecretData(ctx context.Context, namespace, name string
 		return fmt.Errorf("update secret %s: %w", k.resourceAt(namespace, name), err)
 	}
 	return nil
+}
+
+func (k *kubeClient) MergeSecretData(ctx context.Context, namespace, name string, data map[string][]byte) error {
+	// Create first, so a Secret another producer creates concurrently is never
+	// overwritten: AlreadyExists falls through to a key-level patch.
+	fresh := make(map[string][]byte, len(data))
+	for key, v := range data {
+		fresh[key] = v
+	}
+	err := k.c.Create(ctx, secretOf(namespace, name, fresh))
+	if err == nil {
+		return nil
+	}
+	if !apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("create secret %s: %w", k.resourceAt(namespace, name), err)
+	}
+	return k.PatchSecretData(ctx, namespace, name, data)
 }
 
 func (k *kubeClient) GetConfigMap(ctx context.Context, namespace, name string) (*corev1.ConfigMap, error) {

@@ -163,9 +163,9 @@ Reconciled by `task bootstrap:standalone` locally, by Pulumi + Helmfile on drill
 |---|---|---|---|---|
 | `loopzero-db-credentials` | loopzero-system | `generate-secrets.sh:146` | loopzero-api, loopzero-cloud, Hydra/Kratos DSN | manual — see playbook |
 | `gitea-admin` | loopzero-system | `generate-secrets.sh:157-158` | Gitea pod, tenant + app operators | Gitea admin UI, then re-run `provision-api-tokens.sh` |
-| `loopzero-api-tokens` | loopzero-system | `provision-api-tokens.sh:100` | loopzero-api `/health/deep` | re-run the script |
-| `argocd-creds-gitea` | argocd | `provision-api-tokens.sh:119` | ArgoCD repo-creds (Gitea HTTPS) | with `gitea-admin` |
-| `cluster-cell-0` | argocd | `provision-api-tokens.sh:155` | ArgoCD destination resolution | n/a — kubeconfig embedded |
+| `loopzero-api-tokens` | loopzero-system | `loopzero-ops seed gitea-token` / `argocd-token` (each writes only its key; ESO adds `cf-api-token`) | loopzero-api `/health/deep` | re-run `provision-api-tokens.sh` |
+| `argocd-creds-gitea` | argocd | `loopzero-ops seed argocd-gitea-creds` | ArgoCD repo-creds (Gitea HTTPS) | with `gitea-admin` |
+| `cluster-cell-0` | argocd | `provision-api-tokens.sh:81` | ArgoCD destination resolution | n/a — kubeconfig embedded |
 | `minio-credentials` | argo | `generate-build-secrets.sh:108` | Argo Workflows + BuildKit cache | with the MinIO root |
 | `cosign-signing-key` | argo | `generate-build-secrets.sh:87` | the cosign-signer step | **quarterly** |
 | `buildkit-registry-config` | argo | `generate-build-secrets.sh:100` | BuildKit `--registry-config` | with the registry creds |
@@ -196,7 +196,6 @@ Dev fallbacks compiled into chart values. Each is a known default that can reach
 | `infra/helm/ory-kratos/values.yaml.gotmpl:14` | `loopzero-dev-password` (DSN inline) |
 | `infra/helmfile/scripts/generate-secrets.sh:140` | `loopzero-dev-password` fallback |
 | `infra/helmfile/scripts/generate-runtime-secrets.sh:119` | `loopzero-dev-password` fallback |
-| `infra/scripts/production/provision-api-tokens.sh:23` | `loopzero-gitea-dev-2026` fallback |
 
 ### Rotation playbook
 

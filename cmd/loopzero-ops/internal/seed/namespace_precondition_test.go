@@ -75,7 +75,9 @@ func TestSeedsEnsureTheirNamespaceBeforeWriting(t *testing.T) {
 					switch fn.Sel.Name {
 					case "EnsureNamespace":
 						ensures = append(ensures, line)
-					case "CreateOrUpdateSecret":
+					case "CreateOrUpdateSecret", "MergeSecretData":
+						// Both create the Secret when it is absent, so both
+						// need the namespace to exist first.
 						writes = append(writes, line)
 					}
 				}
