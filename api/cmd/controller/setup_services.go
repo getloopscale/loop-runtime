@@ -196,7 +196,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	// ---- Build reaper ----
 	buildReaper := build.NewBuildReaper(
 		buildStore,
-		&build.PostgresStaleBuildChecker{DB: dbAdapter},
+		build.NewStaleBuildChecker(&store.PostgresStaleScanner{DB: dbAdapter}),
 		locker,
 		workflowSubmitter,
 		pgEventStore,
@@ -215,7 +215,7 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 	// ---- Release reaper ----
 	releaseReaper := release.NewReleaseReaper(
 		releaseStore,
-		&release.PostgresStaleReleaseChecker{DB: dbAdapter},
+		release.NewStaleReleaseChecker(&store.PostgresStaleScanner{DB: dbAdapter}),
 		locker,
 		pgEventStore,
 		logger,

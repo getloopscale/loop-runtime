@@ -263,7 +263,7 @@ func createCoreLoops(
 
 	reaper := build.NewBuildReaper(
 		buildStore,
-		&build.PostgresStaleBuildChecker{DB: bgAdapter},
+		build.NewStaleBuildChecker(&store.PostgresStaleScanner{DB: bgAdapter}),
 		stores.Locker,
 		workflows.WorkflowSubmitter,
 		stores.EventStore,
@@ -283,7 +283,7 @@ func createCoreLoops(
 
 	releaseReaper := release.NewReleaseReaper(
 		releaseStore,
-		&release.PostgresStaleReleaseChecker{DB: bgAdapter},
+		release.NewStaleReleaseChecker(&store.PostgresStaleScanner{DB: bgAdapter}),
 		stores.Locker,
 		pgEventStore,
 		logger,

@@ -14,11 +14,13 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
 // Roadmap 03 — the reapers must scope their Find* queries to a single cell.
-// These tests verify the SQL emitted by PostgresStaleBuildChecker and
-// PostgresStaleReleaseChecker includes `cell_id = $N` and binds the caller's
+// These tests verify the SQL emitted by store.PostgresStaleScanner, behind the
+// build and release stale checkers, includes `cell_id = $N` and binds the caller's
 // cellID to that parameter.
 //
 // The fake DBTX captures SQL + args; nothing hits a real Postgres.
@@ -53,9 +55,9 @@ type emptyDBRow struct{}
 
 func (emptyDBRow) Scan(_ ...any) error { return db.ErrNoRows }
 
-func TestPostgresStaleBuildChecker_FindStaleBuilds_ScopedByCellID(t *testing.T) {
+func TestStaleBuildChecker_FindStaleBuilds_ScopedByCellID(t *testing.T) {
 	cap := &capturingDBTX{}
-	checker := &build.PostgresStaleBuildChecker{DB: cap}
+	checker := staleBuildChecker(cap)
 
 	_, err := checker.FindStaleBuilds(
 		context.Background(),
@@ -82,9 +84,9 @@ func TestPostgresStaleBuildChecker_FindStaleBuilds_ScopedByCellID(t *testing.T) 
 	}
 }
 
-func TestPostgresStaleBuildChecker_EmptyCellIDDefaultsToCellDefault(t *testing.T) {
+func TestStaleBuildChecker_EmptyCellIDDefaultsToCellDefault(t *testing.T) {
 	cap := &capturingDBTX{}
-	checker := &build.PostgresStaleBuildChecker{DB: cap}
+	checker := staleBuildChecker(cap)
 
 	_, _ = checker.FindStaleBuilds(context.Background(), "", time.Minute, time.Minute, time.Minute, time.Minute)
 	if cap.lastArgs[4] != db.CellDefault {
@@ -92,9 +94,9 @@ func TestPostgresStaleBuildChecker_EmptyCellIDDefaultsToCellDefault(t *testing.T
 	}
 }
 
-func TestPostgresStaleReleaseChecker_FindStaleReleases_ScopedByCellID(t *testing.T) {
+func TestStaleReleaseChecker_FindStaleReleases_ScopedByCellID(t *testing.T) {
 	cap := &capturingDBTX{}
-	checker := &release.PostgresStaleReleaseChecker{DB: cap}
+	checker := staleReleaseChecker(cap)
 
 	_, err := checker.FindStaleReleases(
 		context.Background(),
@@ -118,4 +120,86 @@ func TestPostgresStaleReleaseChecker_FindStaleReleases_ScopedByCellID(t *testing
 	if cap.lastArgs[2] != "cell-sfo3-02" {
 		t.Errorf("expected arg[2] == 'cell-sfo3-02', got %v", cap.lastArgs[2])
 	}
+}
+
+// rowsDBTX returns fixed rows so the status → timeout-event mapping can be
+// observed end to end.
+type rowsDBTX struct {
+	capturingDBTX
+	rows [][]string
+}
+
+func (r *rowsDBTX) Query(ctx context.Context, sql string, args ...any) (db.Rows, error) {
+	_, _ = r.capturingDBTX.Query(ctx, sql, args...)
+	return &fixedRows{rows: r.rows, i: -1}, nil
+}
+
+type fixedRows struct {
+	rows [][]string
+	i    int
+}
+
+func (f *fixedRows) Next() bool { f.i++; return f.i < len(f.rows) }
+func (f *fixedRows) Scan(dest ...any) error {
+	for k := range dest {
+		*(dest[k].(*string)) = f.rows[f.i][k]
+	}
+	return nil
+}
+func (f *fixedRows) Err() error { return nil }
+func (f *fixedRows) Close()     {}
+
+func TestStaleReleaseChecker_MapsStatusToTimeoutEventAndSkipsOthers(t *testing.T) {
+	src := &rowsDBTX{rows: [][]string{
+		{"rel-1", "READY", "tn", "p", "production", "b1"},
+		{"rel-2", "PENDING", "tn", "p", "production", "b2"},
+		{"rel-3", "ACTIVE", "tn", "p", "production", "b3"},
+	}}
+
+	got, err := staleReleaseChecker(src).FindStaleReleases(context.Background(), "", time.Minute, time.Minute)
+
+	if err != nil {
+		t.Fatalf("FindStaleReleases: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 stale releases (ACTIVE skipped), got %+v", got)
+	}
+	if got[0].ID != "rel-1" || got[0].Event != statemachine.RPEventGitPushTimeout || got[0].BuildID != "b1" {
+		t.Errorf("READY row mapped wrong: %+v", got[0])
+	}
+	if got[1].ID != "rel-2" || got[1].Event != statemachine.RPEventSyncTimeout || got[1].Environment != "production" {
+		t.Errorf("PENDING row mapped wrong: %+v", got[1])
+	}
+	if src.lastArgs[2] != db.CellDefault {
+		t.Errorf("empty cell must default to %q, got %v", db.CellDefault, src.lastArgs[2])
+	}
+}
+
+func TestStaleBuildChecker_MapsStatusToTimeoutEventAndSkipsOthers(t *testing.T) {
+	src := &rowsDBTX{rows: [][]string{
+		{"b-1", "QUEUED"},
+		{"b-2", "RUNNING"},
+		{"b-3", "SUCCEEDED"},
+	}}
+
+	got, err := staleBuildChecker(src).FindStaleBuilds(context.Background(), "", time.Minute, time.Minute, time.Minute, time.Minute)
+
+	if err != nil {
+		t.Fatalf("FindStaleBuilds: %v", err)
+	}
+	if len(got) != 2 || got[0].ID != "b-1" || got[1].ID != "b-2" {
+		t.Fatalf("want b-1 and b-2 (SUCCEEDED skipped), got %+v", got)
+	}
+	if got[0].State != statemachine.BuildPhase("QUEUED") || got[0].Event == "" || got[1].Event == "" {
+		t.Errorf("timeout events not mapped: %+v", got)
+	}
+}
+
+// The production composition: the store's scanner behind the reaper's port.
+func staleReleaseChecker(dbtx db.DBTX) release.ReleaseStaleChecker {
+	return release.NewStaleReleaseChecker(&store.PostgresStaleScanner{DB: dbtx})
+}
+
+func staleBuildChecker(dbtx db.DBTX) build.BuildStaleChecker {
+	return build.NewStaleBuildChecker(&store.PostgresStaleScanner{DB: dbtx})
 }

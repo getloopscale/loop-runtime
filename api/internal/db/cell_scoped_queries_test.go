@@ -234,6 +234,6 @@ func TestFindPendingCustomDomainsForAutoVerify_QuerySoT_ContainsJoinAndCellPredi
 // backward-compat for rows with cell_id='cell-0' (migration
 // 000029 default) is verified by the integration suite.
 
-// NOTE: Stale checkers (PostgresStaleBuildChecker, PostgresStaleReleaseChecker)
-// live in the services package — their SQL-shape tests are in
+// NOTE: The stale-row queries (store.PostgresStaleScanner) are exercised
+// through the build and release stale checkers; their SQL-shape tests are in
 // api/tests/unit/stale_checker_cell_scope_test.go (same dbtest.RecordingDBTX pattern).

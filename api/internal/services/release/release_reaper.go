@@ -6,11 +6,11 @@ package release
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/events"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -251,48 +251,37 @@ func (r *ReleaseReaper) reap(ctx context.Context) int {
 	return reaped
 }
 
-// PostgresStaleReleaseChecker implements ReleaseStaleChecker using PostgreSQL.
-type PostgresStaleReleaseChecker struct {
-	DB db.DBTX
+// StaleReleaseRowReader is the persistence query behind ReleaseStaleChecker;
+// *store.PostgresStaleScanner implements it.
+type StaleReleaseRowReader interface {
+	StaleReleaseRows(ctx context.Context, cellID string, readyBefore, pendingBefore time.Time) ([]store.StaleReleaseRow, error)
 }
 
-// FindStaleReleases queries for releases that have exceeded their state timeout,
-// scoped to the given cell (roadmap 03). Pass db.CellDefault for backward
-// compatibility with single-cell deployments.
-func (c *PostgresStaleReleaseChecker) FindStaleReleases(ctx context.Context, cellID string, readyTimeout, pendingTimeout time.Duration) ([]StaleRelease, error) {
-	if cellID == "" {
-		cellID = db.CellDefault
-	}
-	// cell_id filter uses idx_releases_cell_status_created (migration 000029).
-	query := `
-		SELECT id, status, tenant_id, project_id, environment, build_id FROM releases
-		WHERE cell_id = $3
-		  AND ((status = 'READY' AND created_at < $1)
-		    OR (status = 'PENDING' AND created_at < $2))
-		ORDER BY created_at ASC
-		LIMIT 100
-	`
+// NewStaleReleaseChecker adapts the stale-row query to ReleaseStaleChecker:
+// it turns the timeouts into cutoffs and decides the timeout event per phase.
+func NewStaleReleaseChecker(rows StaleReleaseRowReader) ReleaseStaleChecker {
+	return &staleReleaseChecker{rows: rows, now: time.Now}
+}
 
-	now := time.Now()
-	rows, err := c.DB.Query(ctx, query,
-		now.Add(-readyTimeout),
-		now.Add(-pendingTimeout),
-		cellID,
-	)
+type staleReleaseChecker struct {
+	rows StaleReleaseRowReader
+	now  func() time.Time
+}
+
+// FindStaleReleases returns the releases of one cell (roadmap 03; empty means
+// db.CellDefault) that exceeded their state timeout. READY times out with
+// GitPushTimeout and PENDING with SyncTimeout; any other phase is skipped.
+func (c *staleReleaseChecker) FindStaleReleases(ctx context.Context, cellID string, readyTimeout, pendingTimeout time.Duration) ([]StaleRelease, error) {
+	now := c.now()
+	rows, err := c.rows.StaleReleaseRows(ctx, cellID, now.Add(-readyTimeout), now.Add(-pendingTimeout))
 	if err != nil {
-		return nil, fmt.Errorf("find stale releases: %w", err)
+		return nil, err
 	}
-	defer rows.Close()
-
 	var result []StaleRelease
-	for rows.Next() {
-		var id, status, tenantID, projectID, environment, buildID string
-		if err := rows.Scan(&id, &status, &tenantID, &projectID, &environment, &buildID); err != nil {
-			return nil, fmt.Errorf("scan stale release: %w", err)
-		}
-
+	for _, row := range rows {
+		phase := statemachine.ReleasePhase(row.Status)
 		var event statemachine.ReleasePhaseEvent
-		switch statemachine.ReleasePhase(status) {
+		switch phase {
 		case statemachine.RPhReady:
 			event = statemachine.RPEventGitPushTimeout
 		case statemachine.RPhPending:
@@ -300,17 +289,10 @@ func (c *PostgresStaleReleaseChecker) FindStaleReleases(ctx context.Context, cel
 		default:
 			continue
 		}
-
 		result = append(result, StaleRelease{
-			ID:          id,
-			State:       statemachine.ReleasePhase(status),
-			Event:       event,
-			TenantID:    tenantID,
-			ProjectID:   projectID,
-			Environment: environment,
-			BuildID:     buildID,
+			ID: row.ID, State: phase, Event: event,
+			TenantID: row.TenantID, ProjectID: row.ProjectID, Environment: row.Environment, BuildID: row.BuildID,
 		})
 	}
-
-	return result, rows.Err()
+	return result, nil
 }

@@ -307,65 +307,47 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 	return reaped
 }
 
-// PostgresStaleBuildChecker implements BuildStaleChecker using PostgreSQL.
-type PostgresStaleBuildChecker struct {
-	DB db.DBTX
+// StaleBuildRowReader is the persistence query behind BuildStaleChecker;
+// *store.PostgresStaleScanner implements it.
+type StaleBuildRowReader interface {
+	StaleBuildRows(ctx context.Context, cellID string, cutoffs store.StaleBuildCutoffs) ([]store.StaleBuildRow, error)
 }
 
-// FindStaleBuilds queries for builds that have exceeded their state timeout,
-// scoped to the given cell (roadmap 03). Pass db.CellDefault for backward
-// compatibility with single-cell deployments.
-func (c *PostgresStaleBuildChecker) FindStaleBuilds(ctx context.Context, cellID string, queueTimeout, runningTimeout, releasingTimeout, cancelTimeout time.Duration) ([]StaleBuild, error) {
-	if cellID == "" {
-		cellID = db.CellDefault
-	}
-	// MEET-2026-03-26-008: RELEASING added — builds stuck in release activation
-	// are reaped after 10min (default) to prevent infinite retry.
-	// cell_id filter (migration 000029) uses idx_builds_cell_status_created.
-	query := `
-		SELECT id, status FROM builds
-		WHERE cell_id = $5
-		  AND ((status = 'QUEUED' AND created_at < $1)
-		    OR (status = 'RUNNING' AND started_at < $2)
-		    OR (status = 'RELEASING' AND started_at < $3)
-		    OR (status = 'CANCELLING' AND started_at < $4))
-		ORDER BY created_at ASC
-		LIMIT 100
-	`
+// NewStaleBuildChecker adapts the stale-row query to BuildStaleChecker: it
+// turns the phase timeouts into cutoffs and keeps only phases that time out.
+func NewStaleBuildChecker(rows StaleBuildRowReader) BuildStaleChecker {
+	return &staleBuildChecker{rows: rows, now: time.Now}
+}
 
-	now := time.Now()
-	rows, err := c.DB.Query(ctx, query,
-		now.Add(-queueTimeout),
-		now.Add(-runningTimeout),
-		now.Add(-releasingTimeout),
-		now.Add(-cancelTimeout),
-		cellID,
-	)
+type staleBuildChecker struct {
+	rows StaleBuildRowReader
+	now  func() time.Time
+}
+
+// FindStaleBuilds returns the builds of one cell (roadmap 03; empty means
+// db.CellDefault) that exceeded their phase timeout, with the event each
+// phase times out through (buildTimeoutEvents).
+func (c *staleBuildChecker) FindStaleBuilds(ctx context.Context, cellID string, queueTimeout, runningTimeout, releasingTimeout, cancelTimeout time.Duration) ([]StaleBuild, error) {
+	now := c.now()
+	rows, err := c.rows.StaleBuildRows(ctx, cellID, store.StaleBuildCutoffs{
+		QueuedBefore:     now.Add(-queueTimeout),
+		RunningBefore:    now.Add(-runningTimeout),
+		ReleasingBefore:  now.Add(-releasingTimeout),
+		CancellingBefore: now.Add(-cancelTimeout),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("find stale builds: %w", err)
+		return nil, err
 	}
-	defer rows.Close()
-
 	var result []StaleBuild
-	for rows.Next() {
-		var id, status string
-		if err := rows.Scan(&id, &status); err != nil {
-			return nil, fmt.Errorf("scan stale build: %w", err)
-		}
-
-		event, timesOut := buildTimeoutEvents[statemachine.BuildPhase(status)]
+	for _, row := range rows {
+		phase := statemachine.BuildPhase(row.Status)
+		event, timesOut := buildTimeoutEvents[phase]
 		if !timesOut {
 			continue
 		}
-
-		result = append(result, StaleBuild{
-			ID:    id,
-			State: statemachine.BuildPhase(status),
-			Event: event,
-		})
+		result = append(result, StaleBuild{ID: row.ID, State: phase, Event: event})
 	}
-
-	return result, rows.Err()
+	return result, nil
 }
 
 // finalizer takes the reaper's builds to a terminal phase.
