@@ -60,18 +60,11 @@ func fullProtectedConfig() Config {
 	return Config{
 		TokenValidator:            fixedTokenValidator{},
 		MemberStore:               fixedMembership{},
-		RateLimiter:               &ratelimit.RateLimiter{},
-		VerifyRateLimiter:         &ratelimit.VerifyRateLimiter{},
-		IdempotencyStore:          stubIdempotencyStore{},
-		PlanLimiter:               &enforcement.PlanLimiter{},
-		CostEnforcer:              &policy.CostEnforcer{},
 		SourceStore:               stubSourceStore{},
 		ProjectStore:              stubProjectStore{},
 		TenantCRMgr:               stubTenantCRManager{},
 		EventStore:                stubEventStore{},
 		BuildStoreReader:          stubBuildStoreReader{},
-		SecretStore:               stubSecretStore{},
-		SecretEnvLocker:           stubSecretLocker{},
 		BuildHandler:              &builds.BuildHandler{},
 		BuildAttestationHandler:   &builds.BuildAttestationHandler{},
 		BuildSBOMHandler:          &builds.BuildSBOMHandler{},
@@ -95,6 +88,8 @@ func fullProtectedConfig() Config {
 		IntegrationsGitHubHandler: &integrations.IntegrationsGitHubHandler{},
 		PreviewHandler:            &preview.PreviewHandler{},
 		AuditHandler:              &audit.AuditHandler{},
+		Guards:                    RouteGuards{RateLimiter: &ratelimit.RateLimiter{}, VerifyRateLimiter: &ratelimit.VerifyRateLimiter{}, IdempotencyStore: stubIdempotencyStore{}, PlanLimiter: &enforcement.PlanLimiter{}, CostEnforcer: &policy.CostEnforcer{}},
+		Secrets:                   SecretsConfig{Store: stubSecretStore{}, EnvLocker: stubSecretLocker{}},
 	}
 }
 
@@ -136,7 +131,7 @@ var protectedFamilies = []protectedFamily{
 		"DELETE /api/v1/projects/{name}", "DELETE /api/v1/projects/{name}/environments/{env}"}},
 	{surfaces.EventsStream, func(c *Config) { c.EventStore = nil }, []string{
 		"GET /api/v1/builds/{id}/stream", "GET /api/v1/projects/{name}/builds/stream"}},
-	{surfaces.Secrets, func(c *Config) { c.SecretEnvLocker = nil }, []string{
+	{surfaces.Secrets, func(c *Config) { c.Secrets.EnvLocker = nil }, []string{
 		"GET /api/v1/secrets", "POST /api/v1/secrets", "POST /api/v1/secrets/bulk",
 		"DELETE /api/v1/secrets/{name}"}},
 	{surfaces.Builds, func(c *Config) { c.BuildHandler = nil }, []string{

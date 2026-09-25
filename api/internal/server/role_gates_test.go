@@ -26,10 +26,10 @@ func routerAs(t *testing.T, role string) http.Handler {
 	t.Helper()
 	cfg := fullProtectedConfig()
 	cfg.MemberStore = roleMembership{role: role}
-	cfg.RateLimiter = ratelimit.NewRateLimiter(1000, time.Minute)
-	cfg.IdempotencyStore = memoryIdempotencyStore{}
+	cfg.Guards.RateLimiter = ratelimit.NewRateLimiter(1000, time.Minute)
+	cfg.Guards.IdempotencyStore = memoryIdempotencyStore{}
 	cfg.ActiveTeamStore = stubActiveTeamStore{}
-	cfg.VerifyRateLimiter = nil
+	cfg.Guards.VerifyRateLimiter = nil
 	cfg.AuditWriter = func(string, string, string, string, string, string, map[string]any) {}
 	return NewRouter(cfg)
 }

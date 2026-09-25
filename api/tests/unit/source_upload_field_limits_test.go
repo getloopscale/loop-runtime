@@ -66,7 +66,6 @@ func t61BaseCfg(logger *slog.Logger) server.Config {
 		ProjectStore:         &stubProjectStore{},
 		TenantCRMgr:          &stubTenantCRManager{},
 		SourceStore:          &stubSourceStore{},
-		IdempotencyStore:     &stubIdempotencyStore{},
 		EventStore:           &stubEventStore{},
 		BuildStoreReader:     &stubBuildReader{},
 		BootstrapStore:       &stubBootstrapStore{},
@@ -85,7 +84,8 @@ func t61BaseCfg(logger *slog.Logger) server.Config {
 		LogStreamHandler:     logs.NewLogStreamHandler(nil, nil, logs.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
 		TenantDeletionStore:  &stubTenantDeletionStore{},
-		AdminEvictor:         &stubTenantEvictor{},
+		Guards:               server.RouteGuards{IdempotencyStore: &stubIdempotencyStore{}},
+		Admin:                server.AdminConfig{Evictor: &stubTenantEvictor{}},
 	}
 }
 

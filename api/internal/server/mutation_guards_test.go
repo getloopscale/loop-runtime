@@ -68,12 +68,12 @@ func (memoryIdempotencyStore) Store(context.Context, *policy.IdempotencyRecord) 
 func guardedRouter(t *testing.T, limiter *ratelimit.RateLimiter) http.Handler {
 	t.Helper()
 	cfg := fullProtectedConfig()
-	cfg.RateLimiter = limiter
-	cfg.IdempotencyStore = memoryIdempotencyStore{}
+	cfg.Guards.RateLimiter = limiter
+	cfg.Guards.IdempotencyStore = memoryIdempotencyStore{}
 	cfg.ActiveTeamStore = stubActiveTeamStore{}
 	// The per-domain verify limiter is exercised by its own tests; here the
 	// tenant limiter must be the one that answers.
-	cfg.VerifyRateLimiter = nil
+	cfg.Guards.VerifyRateLimiter = nil
 	cfg.AuditWriter = func(string, string, string, string, string, string, map[string]any) {}
 	return NewRouter(cfg)
 }

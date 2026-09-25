@@ -85,21 +85,21 @@ func concatMiddleware(parts ...[]middleware) []middleware {
 // cost gates are pass-through when their limiter is unset.
 func newRouteChains(cfg Config) routeChains {
 	var c routeChains
-	if cfg.RateLimiter != nil {
-		c.rateLimited = []middleware{cfg.RateLimiter.Middleware()}
+	if cfg.Guards.RateLimiter != nil {
+		c.rateLimited = []middleware{cfg.Guards.RateLimiter.Middleware()}
 	}
 	c.idempotent = c.limited()
-	if cfg.IdempotencyStore != nil {
-		c.idempotent = c.idempotentWith(policy.Idempotency(cfg.IdempotencyStore))
+	if cfg.Guards.IdempotencyStore != nil {
+		c.idempotent = c.idempotentWith(policy.Idempotency(cfg.Guards.IdempotencyStore))
 	}
 
-	upgradeURL := cfg.UpgradeURL
+	upgradeURL := cfg.Guards.UpgradeURL
 	if upgradeURL == "" {
 		upgradeURL = "/billing"
 	}
-	usage := cfg.planUsage()
+	usage := cfg.Guards.planUsage()
 	planGate := func(metric string, count enforcement.UsageCounter) middleware {
-		return policy.PlanLimits(cfg.PlanLimiter, policy.PlanLimitCheck{Metric: metric, Count: count},
+		return policy.PlanLimits(cfg.Guards.PlanLimiter, policy.PlanLimitCheck{Metric: metric, Count: count},
 			tenantFromRequest, upgradeURL, cfg.Logger)
 	}
 	// M4 (account-level tenancy, Phase 2): there is no per-tenant projects
@@ -111,7 +111,7 @@ func newRouteChains(cfg Config) routeChains {
 	c.environmentQuota = planGate("environments", usage.PermanentEnvironments)
 	c.seatQuota = planGate("seats", usage.Seats)
 	// T1.9 (Wave 1): the cost cap is distinct from the builds/month rate cap.
-	c.buildMinutes = cfg.CostEnforcer.Middleware(enforcementMetricBuildMinutes)
+	c.buildMinutes = cfg.Guards.CostEnforcer.Middleware(enforcementMetricBuildMinutes)
 	return c
 }
 
@@ -219,20 +219,20 @@ func registerEventStreamRoutes(r chi.Router, cfg Config, _ routeChains) {
 	// Plan J-17 T2.3 — the project stream reuses the build stream's knobs so
 	// operators configure one set of intervals.
 	projectOpts := []sse.ProjectStreamOption{sse.WithProjectLogger(cfg.Logger)}
-	if cfg.SSEHeartbeatInterval > 0 {
-		buildOpts = append(buildOpts, sse.WithHeartbeatInterval(cfg.SSEHeartbeatInterval))
-		projectOpts = append(projectOpts, sse.WithProjectHeartbeatInterval(cfg.SSEHeartbeatInterval))
+	if cfg.SSE.HeartbeatInterval > 0 {
+		buildOpts = append(buildOpts, sse.WithHeartbeatInterval(cfg.SSE.HeartbeatInterval))
+		projectOpts = append(projectOpts, sse.WithProjectHeartbeatInterval(cfg.SSE.HeartbeatInterval))
 	}
-	if cfg.SSEPollInterval > 0 {
-		buildOpts = append(buildOpts, sse.WithPollInterval(cfg.SSEPollInterval))
-		projectOpts = append(projectOpts, sse.WithProjectPollInterval(cfg.SSEPollInterval))
+	if cfg.SSE.PollInterval > 0 {
+		buildOpts = append(buildOpts, sse.WithPollInterval(cfg.SSE.PollInterval))
+		projectOpts = append(projectOpts, sse.WithProjectPollInterval(cfg.SSE.PollInterval))
 	}
-	if cfg.SSESafetyTimeout > 0 {
-		buildOpts = append(buildOpts, sse.WithSafetyTimeout(cfg.SSESafetyTimeout))
+	if cfg.SSE.SafetyTimeout > 0 {
+		buildOpts = append(buildOpts, sse.WithSafetyTimeout(cfg.SSE.SafetyTimeout))
 	}
-	if cfg.SSEMaxConcurrentStreams > 0 {
-		buildOpts = append(buildOpts, sse.WithMaxConcurrentStreams(cfg.SSEMaxConcurrentStreams))
-		projectOpts = append(projectOpts, sse.WithProjectMaxConcurrentStreams(cfg.SSEMaxConcurrentStreams))
+	if cfg.SSE.MaxConcurrentStreams > 0 {
+		buildOpts = append(buildOpts, sse.WithMaxConcurrentStreams(cfg.SSE.MaxConcurrentStreams))
+		projectOpts = append(projectOpts, sse.WithProjectMaxConcurrentStreams(cfg.SSE.MaxConcurrentStreams))
 	}
 	r.Get("/api/v1/builds/{id}/stream", sse.NewStreamHandler(cfg.EventStore, cfg.BuildStoreReader, buildOpts...).ServeHTTP)
 	r.Get("/api/v1/projects/{name}/builds/stream", sse.NewProjectStreamHandler(cfg.EventStore, projectOpts...).ServeHTTP)
@@ -241,29 +241,29 @@ func registerEventStreamRoutes(r chi.Router, cfg Config, _ routeChains) {
 // registerSecretRoutes: Sprint A T1.1 (comp-001) — every secret mutation runs
 // under the environment lock, so the routes exist only when the lock does.
 func registerSecretRoutes(r chi.Router, cfg Config, ch routeChains) {
-	if !surfaces.Recorded(cfg.Surfaces, surfaces.Secrets, cfg.SecretStore != nil && cfg.SecretEnvLocker != nil,
+	if !surfaces.Recorded(cfg.Surfaces, surfaces.Secrets, cfg.Secrets.Store != nil && cfg.Secrets.EnvLocker != nil,
 		"no database — the SecretStore and the environment locker both come from `stores` "+
 			"(setup_server.go), and a secret mutation outside the lock races a deploy") {
 		return
 	}
-	h := secrets.NewSecretHandler(cfg.SecretStore, cfg.SecretEnvLocker)
-	if cfg.SecretK8sSync != nil {
-		h.SetK8sSync(cfg.SecretK8sSync)
+	h := secrets.NewSecretHandler(cfg.Secrets.Store, cfg.Secrets.EnvLocker)
+	if cfg.Secrets.K8sSync != nil {
+		h.SetK8sSync(cfg.Secrets.K8sSync)
 	}
 	// SECRET_* domain audit rows and the J-22 T1.3 per-environment plan gate.
-	if cfg.SecretAuditLogger != nil {
-		h.SetAuditLogger(cfg.SecretAuditLogger)
+	if cfg.Secrets.AuditLogger != nil {
+		h.SetAuditLogger(cfg.Secrets.AuditLogger)
 	}
-	if cfg.PlanLimiter != nil {
-		h.SetPlanLimiter(cfg.PlanLimiter)
+	if cfg.Guards.PlanLimiter != nil {
+		h.SetPlanLimiter(cfg.Guards.PlanLimiter)
 	}
 	// T1.2 (j22 transit plan): cross-tenant binding check (EC-03 / CWE-204).
-	if cfg.SecretProjectChecker != nil {
-		h.SetProjectChecker(cfg.SecretProjectChecker)
+	if cfg.Secrets.ProjectChecker != nil {
+		h.SetProjectChecker(cfg.Secrets.ProjectChecker)
 	}
 	// T2.3+T2.5: OpenBao transit encryption so plaintext never reaches PG.
-	if cfg.SecretTransit != nil {
-		h.SetTransitClient(cfg.SecretTransit)
+	if cfg.Secrets.Transit != nil {
+		h.SetTransitClient(cfg.Secrets.Transit)
 	}
 	r.Get("/api/v1/secrets", h.List)
 	r.With(ch.limited(audited("secret.set", "secret"))...).Post("/api/v1/secrets", h.Set)
@@ -427,8 +427,8 @@ func registerDomainRoutes(r chi.Router, cfg Config, ch routeChains) {
 	// J11D7 LOCKED ADR: /verify uses the per-(tenant, domain) limiter in front
 	// of the tenant-wide one; without it, the tenant limiter alone (ADR D3).
 	verify := ch.limited(audited("domain.verified", "domain"))
-	if cfg.VerifyRateLimiter != nil {
-		verify = concatMiddleware([]middleware{cfg.VerifyRateLimiter.Middleware()}, verify)
+	if cfg.Guards.VerifyRateLimiter != nil {
+		verify = concatMiddleware([]middleware{cfg.Guards.VerifyRateLimiter.Middleware()}, verify)
 	}
 	r.With(verify...).Post("/api/v1/domains/{domain}/verify", cfg.DomainHandler.Verify)
 	r.With(gatedBy("admin", ch.limited(audited("domain.removed", "domain")))...).Delete("/api/v1/domains/{domain}", cfg.DomainHandler.Delete)

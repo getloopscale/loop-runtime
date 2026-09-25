@@ -48,8 +48,8 @@ func secretsRouter(t *testing.T, cfgFn func(*server.Config)) http.Handler {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	cfg := t61BaseCfg(logger)
-	cfg.SecretStore = &fakeSecretStore{}
-	cfg.SecretEnvLocker = &recordingLocker{}
+	cfg.Secrets.Store = &fakeSecretStore{}
+	cfg.Secrets.EnvLocker = &recordingLocker{}
 	cfgFn(&cfg)
 	return server.NewRouter(cfg)
 }
@@ -65,7 +65,7 @@ func postAuthed(h http.Handler, path, body string) *httptest.ResponseRecorder {
 
 func TestRouter_SecretSetWritesADomainAuditRow(t *testing.T) {
 	audit := &recordingAuditLogger{}
-	h := secretsRouter(t, func(c *server.Config) { c.SecretAuditLogger = audit })
+	h := secretsRouter(t, func(c *server.Config) { c.Secrets.AuditLogger = audit })
 
 	rec := postAuthed(h, "/api/v1/secrets?project=proj-x",
 		`{"name":"DB_URL","value":"postgres://x","environment":"production","app":"api"}`)
@@ -80,7 +80,7 @@ func TestRouter_SecretSetWritesADomainAuditRow(t *testing.T) {
 
 func TestRouter_SecretBulkIsGatedByThePlanLimit(t *testing.T) {
 	limiter := enforcement.NewPlanLimiterWithStore(fixedLimitsStore{plan: "starter", hard: 1}, slog.Default())
-	h := secretsRouter(t, func(c *server.Config) { c.PlanLimiter = limiter })
+	h := secretsRouter(t, func(c *server.Config) { c.Guards.PlanLimiter = limiter })
 
 	rec := postAuthed(h, "/api/v1/secrets/bulk",
 		`{"project":"proj-x","secrets":[{"name":"A","value":"1","envs":["production"]},{"name":"B","value":"2","envs":["production"]}]}`)

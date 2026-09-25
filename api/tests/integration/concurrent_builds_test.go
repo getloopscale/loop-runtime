@@ -259,15 +259,14 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 
 	buildHandler := builds.NewBuildHandler(orchAdapter, logger)
 	router := server.NewRouter(server.Config{
-		Port:               "0",
-		Logger:             logger,
-		DB:                 adapter,
-		TokenValidator:     &fakeTokenValidator{},
-		MemberStore:        &fakeMembershipStore{},
-		IdempotencyStore:   idempotencyStore,
-		BuildHandler:       buildHandler,
-		ArgoCallbackSecret: "test-secret",
-		EventStore:         eventStore,
+		Port:           "0",
+		Logger:         logger,
+		DB:             adapter,
+		TokenValidator: &fakeTokenValidator{},
+		MemberStore:    &fakeMembershipStore{},
+		BuildHandler:   buildHandler,
+		EventStore:     eventStore,
+		Guards:         server.RouteGuards{IdempotencyStore: idempotencyStore},
 	})
 
 	srv := httptest.NewServer(router)

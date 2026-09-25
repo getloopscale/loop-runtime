@@ -94,22 +94,18 @@ type Config struct {
 	// environments row writes. nil-safe: when nil, ProjectHandler.Create
 	// behaves identically to the pre-T4.1 handler (TestProjectCreate_BackwardCompatNoEnsurer).
 	ProjectEnvEnsurer promote.EnvironmentEnsurer
-	IdempotencyStore  policy.IdempotencyStore
 	SourceStore       source.SourceStore
 	ObjectUploader    sourceroutes.ObjectUploader // optional: upload bundles to S3/Spaces for build access
 	SourceBucket      string                      // S3 bucket name for source bundles (env: SOURCE_BUCKET)
-	// ArgoCallbackSecret is deprecated — callback route removed (C-01 fix).
-	ArgoCallbackSecret string
-	EventStore         sse.EventStore
-	BuildStoreReader   sse.BuildStoreReader
-	SecretStore        secrets.SecretStore
-	BootstrapStore     ports.BootstrapStore
-	BootstrapSecret    string                      // SEC-003: shared secret for /internal/bootstrap auth
-	CellPlacement      ports.CellPlacementEngine   // ADR-0008: Cell assignment for new tenants
-	CellDiscovery      health.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
-	ShutdownCtx        context.Context
-	ShutdownCancel     context.CancelFunc
-	BuildHandler       *builds.BuildHandler
+	EventStore        sse.EventStore
+	BuildStoreReader  sse.BuildStoreReader
+	BootstrapStore    ports.BootstrapStore
+	BootstrapSecret   string                      // SEC-003: shared secret for /internal/bootstrap auth
+	CellPlacement     ports.CellPlacementEngine   // ADR-0008: Cell assignment for new tenants
+	CellDiscovery     health.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
+	ShutdownCtx       context.Context
+	ShutdownCancel    context.CancelFunc
+	BuildHandler      *builds.BuildHandler
 	// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: handler for
 	// GET /api/v1/builds/{id}/attestation. Wired in api/cmd/setup_routes.go
 	// against PostgresAttestationStore.
@@ -118,32 +114,13 @@ type Config struct {
 	// per-app SBOM metadata + presigned download URLs from S3.
 	BuildSBOMHandler    *builds.BuildSBOMHandler
 	ArgoCallbackHandler *argocd.ArgoCallbackHandler
-	RateLimiter         *ratelimit.RateLimiter
-	// IPRateLimit is the optional pre-auth IP-based rate limiter (T2.4).
-	// When non-nil, mounted as the FIRST middleware so brute-force attempts
-	// on /api/v1/auth/* are dropped at the edge.
-	IPRateLimit *ratelimit.IPRateLimiter
-	// VerifyRateLimiter is the per-(tenant, domain) limiter for
-	// POST /api/v1/domains/{domain}/verify per J11D7 LOCKED ADR
-	// (1 reverify per 30 seconds per (tenant, domain)).
-	VerifyRateLimiter *ratelimit.VerifyRateLimiter
-	// HTTP server timeouts (configurable via env vars)
-	ReadHeaderTimeout time.Duration
-	ReadTimeout       time.Duration
-	IdleTimeout       time.Duration
-	ShutdownTimeout   time.Duration
-	// SSE stream configuration
-	SSEHeartbeatInterval    time.Duration
-	SSEPollInterval         time.Duration
-	SSESafetyTimeout        time.Duration
-	SSEMaxConcurrentStreams int64
-	LogsHandler             *logs.LogsHandler
-	LogStreamHandler        *logs.LogStreamHandler
-	RollbackHandler         *rollback.RollbackHandler
-	PromoteHandler          *promote.PromoteHandler
-	StatusHandler           *status.StatusHandler
-	MetricsProxyHandler     *metrics.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy
-	StatusSSEHandler        *status.StatusSSEHandler     // T2.1 J-18 T1.3.b — SSE signal.changed stream
+	LogsHandler         *logs.LogsHandler
+	LogStreamHandler    *logs.LogStreamHandler
+	RollbackHandler     *rollback.RollbackHandler
+	PromoteHandler      *promote.PromoteHandler
+	StatusHandler       *status.StatusHandler
+	MetricsProxyHandler *metrics.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy
+	StatusSSEHandler    *status.StatusSSEHandler     // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	// DeployTimelineStore wires GET /api/v1/deploys/{deployID}/timeline
 	// per plan deploy-timeline-canonical-5-phases T5.1. nil-safe: when
 	// nil, the route is omitted (legacy / test paths). Production wires
@@ -154,45 +131,7 @@ type Config struct {
 	BuildListHandler    *builds.BuildListHandler
 	// BuildStatsHandler serves GET /api/v1/builds/stats — the tenant-scoped
 	// deploys aggregate for the Overview sparkline (J-06 D2). Nil disables the route.
-	BuildStatsHandler *builds.BuildStatsHandler
-	SecretK8sSync     secrets.SecretK8sSync
-	// SecretEnvLocker injects the environment lock into SecretHandler so
-	// Set/DeleteSecret serialize with concurrent `loopzero deploy` flows.
-	// Sprint A T1.1 (closes comp-001 CRITICAL — secret mutations were
-	// running without the advisory lock). Wired from cmd/setup_server.go
-	// using the same *adapters.PoolEnvironmentLocker injected into build
-	// orchestrators. Required by the secret routes: when nil they are not
-	// mounted (recorded as a disabled surface), never mounted unlocked.
-	SecretEnvLocker secrets.SecretEnvLocker
-	// SecretAuditLogger writes the SECRET_* domain audit rows. Wired from
-	// cmd/setup_server.go with the same store.AuditLogger the orchestrator
-	// uses; nil only where there is no database.
-	SecretAuditLogger secrets.AuditLogger
-	// SecretProjectChecker injects the cross-tenant binding check (T1.2 of
-	// plan 2026-06-10-j22-openbao-transit-eso-sync v1.2). When wired, Bulk
-	// resolves the requested project's owning tenant via the tenant-scoped
-	// GetByName and returns 404 PROJECT_NOT_FOUND for cross-tenant attempts
-	// AND for nonexistent projects — byte-identical response (EC-03
-	// existence-leak prevention / CWE-204 defense). nil-safe: when nil,
-	// Bulk skips the check (legacy/test path). Production wires the
-	// existing *store.PostgresProjectStore directly (signature matches).
-	SecretProjectChecker secrets.SecretProjectChecker
-	// SecretTransit injects the OpenBao transit encrypt path into the Bulk
-	// handler (T2.3+T2.5 of plan 2026-06-10-j22-openbao-transit-eso-sync
-	// v1.2). When wired, Bulk encrypts every entry.Value via Encrypt
-	// BEFORE invoking store.Set so PG never receives plaintext bytes —
-	// even if the store has its own vault dispatch (which it does in
-	// the canonical wire path), encryptForStore detects the vault:v1:
-	// prefix and passes through (no double-encrypt). Production wires
-	// the same *vault.TransitClient that the secret store dispatches
-	// through; nil disables the handler-layer encrypt (legacy AES path).
-	SecretTransit secrets.SecretTransit
-	// SecretFetchHandler exposes /internal/v1/secret-fetch/{tenant_id}/{name}
-	// for ESO ClusterSecretStore webhook backend to resolve secrets via
-	// loopzero-api (T4.1 of openbao-adoption v1.3). Wired by setup_secret_fetch.go
-	// in api/cmd/. nil-safe: when nil, route is not registered (LIVE 404 ⇒
-	// ESO retries with backoff — safer than registering a broken handler).
-	SecretFetchHandler http.HandlerFunc
+	BuildStatsHandler  *builds.BuildStatsHandler
 	EnvironmentHandler *environments.EnvironmentHandler
 	TeamHandler        *teams.TeamHandler
 	// AUDIT-10: narrow store for /whoami username lookup. Nil is legal (handler
@@ -221,32 +160,102 @@ type Config struct {
 	// find_billing_route_not_wired HIGH). Wires GET /api/v1/billing and
 	// POST /api/v1/billing/portal. Nil-safe: when nil, the routes are
 	// skipped and CLI returns its own error rather than 404.
-	BillingHandler *billing.BillingHandler
-	AdminEvictor   admin.TenantEvictor
-	AdminPinner    admin.CellPinner // CHG-2026-04-30-DELETE-SINGLE-CELL
-	// T4.4 of plan 2026-05-28-meet-001-engineering-closure: diagnostic
-	// read-only endpoint for on-call. Nil-safe — when unset, the route
-	// is not mounted and the handler answers 404 like the other admin
-	// routes. Wired by api/cmd/setup_server.go.
-	ReleaseInspector release.ReleaseInspector
-	PlanLimiter      *enforcement.PlanLimiter
+	BillingHandler    *billing.BillingHandler
+	CORSAllowedOrigin string // CORS_ALLOWED_ORIGIN — empty in production blocks all cross-origin requests
+	// Timeouts are the HTTP server's timeouts.
+	Timeouts HTTPTimeouts
+	// SSE configures every live stream the router serves.
+	SSE SSEConfig
+	// Guards are the per-route protections the route chains are built from.
+	Guards RouteGuards
+	// Secrets carries what the secret routes and the secret broker need.
+	Secrets SecretsConfig
+	// Admin carries the collaborators of the operator (admin) routes.
+	Admin AdminConfig
+}
+
+// HTTPTimeouts are the HTTP server's timeouts (configurable via env vars).
+type HTTPTimeouts struct {
+	ReadHeader time.Duration
+	Read       time.Duration
+	Idle       time.Duration
+	// Shutdown bounds the graceful stop.
+	Shutdown time.Duration
+}
+
+// SSEConfig configures the live streams (build, project, signals, logs,
+// deploy timeline).
+type SSEConfig struct {
+	HeartbeatInterval    time.Duration
+	PollInterval         time.Duration
+	SafetyTimeout        time.Duration
+	MaxConcurrentStreams int64
+}
+
+// RouteGuards are the protections the route chains are assembled from. Each
+// is optional unless a route family says otherwise; a nil guard is skipped
+// and, where it matters, recorded as a disabled surface.
+type RouteGuards struct {
+	// RateLimiter limits every authenticated mutation per tenant:user.
+	RateLimiter *ratelimit.RateLimiter
+	// IPRateLimit is the pre-auth per-IP limiter, mounted first so
+	// brute-force attempts are dropped before authentication (T2.4).
+	IPRateLimit *ratelimit.IPRateLimiter
+	// VerifyRateLimiter limits POST /domains/{domain}/verify per
+	// (tenant, domain) (J11D7: 1 re-verify per 30 seconds).
+	VerifyRateLimiter *ratelimit.VerifyRateLimiter
+	// IdempotencyStore backs the Idempotency-Key routes.
+	IdempotencyStore policy.IdempotencyStore
+	// PlanLimiter gates rate-style plan limits (builds/month, seats,
+	// environments, concurrent deploys).
+	PlanLimiter *enforcement.PlanLimiter
 	// PlanUsage measures the usage PlanLimiter gates (builds this month,
 	// permanent environments, seats). Set together with PlanLimiter; each
 	// method is an enforcement.UsageCounter.
 	PlanUsage PlanUsage
-	// CostEnforcer gates quantity-style metrics (egress bytes, registry pulls,
-	// build minutes) against per-plan caps from cost_counters (migration 000017).
-	// Distinct from PlanLimiter which gates rate-style limits (builds/month,
-	// concurrent deploys). Nil-safe — when unset, the middleware pass-through.
-	// Wired by api/cmd/setup_server.go::setupCostEnforcer (T1.9 production wiring).
+	// CostEnforcer gates quantity-style metrics (egress bytes, registry
+	// pulls, build minutes) against per-plan caps. Nil passes through and
+	// records the decision as `disabled`.
 	CostEnforcer *policy.CostEnforcer
-	UpgradeURL   string
-	// PGPoolGate decides whether a mutation passes given the pool's state. B-054: these
-	// were two fields (`PGPoolStatsFunc` + `PGCircuitBreakerThresholdPct`) that made the
-	// router compute an instantaneous percentage while the gate WITH hysteresis existed
-	// and was never consulted.
-	PGPoolGate        policy.PoolGate
-	CORSAllowedOrigin string // CORS_ALLOWED_ORIGIN — empty in production blocks all cross-origin requests
+	// UpgradeURL is where a plan-limit refusal points the user.
+	UpgradeURL string
+	// PGPoolGate refuses mutations while the database pool is saturated
+	// (hysteresis gate, B-054). Nil disables it.
+	PGPoolGate policy.PoolGate
+}
+
+// SecretsConfig carries what the secret routes and the secret broker need.
+type SecretsConfig struct {
+	// Store persists secrets. Required for the secret routes.
+	Store secrets.SecretStore
+	// EnvLocker is the environment lock every secret mutation takes, so a
+	// write serializes with a deploy capturing config. Required: without it
+	// the secret routes are not mounted (a recorded disabled surface), never
+	// mounted unlocked.
+	EnvLocker secrets.SecretEnvLocker
+	// K8sSync mirrors secrets to the runtime cluster. Optional.
+	K8sSync secrets.SecretK8sSync
+	// AuditLogger writes the SECRET_* audit rows. Nil only without a database.
+	AuditLogger secrets.AuditLogger
+	// ProjectChecker makes bulk writes answer an identical 404 for a
+	// project of another tenant and a missing one (existence-leak
+	// prevention). Nil skips the check.
+	ProjectChecker secrets.SecretProjectChecker
+	// Transit encrypts bulk values before the store sees them. Nil disables
+	// handler-layer encryption.
+	Transit secrets.SecretTransit
+	// FetchHandler serves /internal/v1/secret-fetch/{tenant_id}/{name}, the
+	// broker the runtime cluster resolves secrets through. Nil leaves the
+	// route unregistered (the caller retries on 404).
+	FetchHandler http.HandlerFunc
+}
+
+// AdminConfig carries the collaborators of the operator (admin) routes; each
+// route is mounted only when its collaborator is set.
+type AdminConfig struct {
+	Evictor          admin.TenantEvictor
+	Pinner           admin.CellPinner
+	ReleaseInspector release.ReleaseInspector
 }
 
 // Run starts the HTTP server with graceful shutdown.
@@ -288,9 +297,9 @@ func Run(cfg Config) error {
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           router,
-		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
-		ReadTimeout:       cfg.ReadTimeout,
-		IdleTimeout:       cfg.IdleTimeout,
+		ReadHeaderTimeout: cfg.Timeouts.ReadHeader,
+		ReadTimeout:       cfg.Timeouts.Read,
+		IdleTimeout:       cfg.Timeouts.Idle,
 		// WriteTimeout intentionally omitted — SSE streams (/builds/{id}/stream)
 		// are long-lived connections that must remain open for the duration of a
 		// build (up to 30 minutes). Setting a server-wide WriteTimeout would kill
@@ -329,7 +338,7 @@ func Run(cfg Config) error {
 	// goroutines (reaper, cleaner, pruner, callback processors) to stop.
 	cfg.ShutdownCancel()
 
-	shutdownTimeout := cfg.ShutdownTimeout
+	shutdownTimeout := cfg.Timeouts.Shutdown
 	if shutdownTimeout == 0 {
 		shutdownTimeout = 15 * time.Second
 	}
@@ -378,9 +387,9 @@ func (unconfiguredPlanUsage) Seats(context.Context, string) (int, error) {
 }
 
 // planUsage returns the configured PlanUsage, or one that refuses to count.
-func (c *Config) planUsage() PlanUsage {
-	if c.PlanUsage == nil {
+func (g *RouteGuards) planUsage() PlanUsage {
+	if g.PlanUsage == nil {
 		return unconfiguredPlanUsage{}
 	}
-	return c.PlanUsage
+	return g.PlanUsage
 }

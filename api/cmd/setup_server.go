@@ -135,8 +135,7 @@ func buildServerConfig(
 		HealthServices: healthServices,
 		TokenValidator: tokenValidator,
 		TenantCRMgr:    k8sDeps.TenantCRMgr,
-		SecretK8sSync:  k8sDeps.SecretK8sSync,
-		// SecretEnvLocker and SecretProjectChecker are read off `stores` and
+		// Secrets.EnvLocker and Secrets.ProjectChecker are read off `stores` and
 		// `dbDeps` inside the guards below — both are nil on the no-database
 		// boot (`setupDatabase` returns (nil, nil) when DATABASE_URL is empty),
 		// and reading them here panicked before the guards were ever reached.
@@ -159,37 +158,44 @@ func buildServerConfig(
 			cfg.SourceBucket,
 			logger,
 		),
-		EnvironmentHandler:      environmentHandler,
-		ShutdownCtx:             shutdownCtx,
-		ShutdownCancel:          shutdownCancel,
-		RateLimiter:             rateLimiter,
-		ReadHeaderTimeout:       cfg.ReadHeaderTimeout,
-		ReadTimeout:             cfg.ReadTimeout,
-		IdleTimeout:             cfg.IdleTimeout,
-		ShutdownTimeout:         cfg.GracefulShutdownTime,
-		SSEHeartbeatInterval:    cfg.SSEHeartbeatInterval,
-		SSEPollInterval:         cfg.SSEPollInterval,
-		SSESafetyTimeout:        cfg.SSESafetyTimeout,
-		SSEMaxConcurrentStreams: int64(cfg.SSEMaxConcurrentStreams),
-		IsProduction:            cfg.IsProduction(),
-		UpgradeURL:              os.Getenv("BILLING_UPGRADE_URL"),
-		CORSAllowedOrigin:       cfg.CORSAllowedOrigin,
+		EnvironmentHandler: environmentHandler,
+		ShutdownCtx:        shutdownCtx,
+		ShutdownCancel:     shutdownCancel,
+		IsProduction:       cfg.IsProduction(),
+		CORSAllowedOrigin:  cfg.CORSAllowedOrigin,
+		Secrets:            server.SecretsConfig{K8sSync: k8sDeps.SecretK8sSync},
+		Guards: server.RouteGuards{
+			RateLimiter: rateLimiter,
+			UpgradeURL:  os.Getenv("BILLING_UPGRADE_URL"),
+		},
+		Timeouts: server.HTTPTimeouts{
+			ReadHeader: cfg.ReadHeaderTimeout,
+			Read:       cfg.ReadTimeout,
+			Idle:       cfg.IdleTimeout,
+			Shutdown:   cfg.GracefulShutdownTime,
+		},
+		SSE: server.SSEConfig{
+			HeartbeatInterval:    cfg.SSEHeartbeatInterval,
+			PollInterval:         cfg.SSEPollInterval,
+			SafetyTimeout:        cfg.SSESafetyTimeout,
+			MaxConcurrentStreams: int64(cfg.SSEMaxConcurrentStreams),
+		},
 	}
 
 	if dbDeps != nil {
 		sc.MemberStore = dbDeps.MemberStore
 		sc.ProjectStore = dbDeps.ProjectStore
 		sc.DB = dbDeps.DBHealth
-		sc.PlanLimiter = dbDeps.PlanLimiter
+		sc.Guards.PlanLimiter = dbDeps.PlanLimiter
 		if dbDeps.PlanLimiter != nil {
-			sc.PlanUsage = store.NewPostgresPlanUsageStore(dbDeps.DBAdapter.Pool)
+			sc.Guards.PlanUsage = store.NewPostgresPlanUsageStore(dbDeps.DBAdapter.Pool)
 		}
 		// T1.2 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): the existing
 		// *store.PostgresProjectStore doubles as the cross-tenant binding checker
 		// (EC-03 absorption — 404 byte-identical between cross-tenant attempts and
 		// nonexistent projects; CWE-204 defense). PostgresProjectStore.GetByName
 		// already matches secrets.SecretProjectChecker, so no adapter is needed.
-		sc.SecretProjectChecker = dbDeps.ProjectStore
+		sc.Secrets.ProjectChecker = dbDeps.ProjectStore
 	}
 
 	// T1.9 production wiring: CostEnforcer for HTTP 402 on cost cap exceeded.
@@ -212,7 +218,7 @@ func buildServerConfig(
 		// is single-source-of-truth.
 		limitsStore := enforcement.NewSQLLimitsStore(dbDeps.StdDB)
 		planReader := store.NewPlanReader(limitsStore)
-		sc.CostEnforcer = policy.NewCostEnforcer(costChecker, planReader, logger)
+		sc.Guards.CostEnforcer = policy.NewCostEnforcer(costChecker, planReader, logger)
 		// Wire PlanTierStore into ScaleHandler + ProjectHandler so they
 		// resolve the canonical tier (per ADR D4 of plan
 		// 2026-06-15-code-review-49-findings-remediation). Without this,
@@ -249,7 +255,7 @@ func buildServerConfig(
 		// without advisory lock). Reuses the same locker injected into build
 		// orchestrators, so secret writes serialize with deploys on the same
 		// (tenant, project, env) key. Lock-domain parity EC-2.
-		sc.SecretEnvLocker = stores.Locker
+		sc.Secrets.EnvLocker = stores.Locker
 		sc.BuildStoreReader = stores.BuildStoreReader
 		// T5.1 — canonical Deploy Timeline read-store. Composes the
 		// build-store reader (BuildLookup → tenant_id) and an SSE event
@@ -261,7 +267,7 @@ func buildServerConfig(
 				adapters.NewDeployTimelineSSEReader(stores.EventStore),
 			)
 		}
-		sc.SecretStore = stores.SecretStore
+		sc.Secrets.Store = stores.SecretStore
 		sc.BootstrapStore = stores.BootstrapStore
 		sc.BootstrapSecret = cfg.BootstrapSecret
 	}
@@ -288,8 +294,8 @@ func buildServerConfig(
 	}
 
 	if dbAdapter != nil {
-		sc.IdempotencyStore = &store.PostgresIdempotencyStore{DB: dbAdapter}
-		sc.SecretAuditLogger = &store.AuditLogger{DB: dbAdapter}
+		sc.Guards.IdempotencyStore = &store.PostgresIdempotencyStore{DB: dbAdapter}
+		sc.Secrets.AuditLogger = &store.AuditLogger{DB: dbAdapter}
 		// T1.6 of deep-review-remediation: wire BillingHandler so
 		// GET /api/v1/billing returns plan + usage instead of 404.
 		// T1.9 production: also wire the cost cap CostStore so the
@@ -336,7 +342,7 @@ func buildServerConfig(
 		// born unreachable, and a quality pass removed it as dead code three weeks
 		// later.
 		sc.TenantDeletionStore = store.NewTenantDeletionStoreSqlc(dbAdapter)
-		sc.AdminEvictor = buildAdminEvictor(cfg, dbAdapter)
+		sc.Admin.Evictor = buildAdminEvictor(cfg, dbAdapter)
 		// CHG-2026-04-30-DELETE-SINGLE-CELL: wire the CellPinner so the
 		// /api/v1/admin/tenants/pin endpoint registered in router.go can
 		// actually serve requests. Previously the handler existed but had
@@ -345,7 +351,7 @@ func buildServerConfig(
 		// tenant.
 		// CHG-2026-04-30-DELETE-SINGLE-CELL: pinner also patches Tenant CR
 		// so operator reconcile re-emits ArgoCD destination with new cell.
-		sc.AdminPinner = placementsvc.NewCellPinner(&store.PostgresCellStore{DB: dbAdapter}).
+		sc.Admin.Pinner = placementsvc.NewCellPinner(&store.PostgresCellStore{DB: dbAdapter}).
 			WithKubeClient(buildMgmtDynamicClient(logger), "loopzero-system")
 		// T4.4 of plan 2026-05-28-meet-001-engineering-closure: wire the
 		// ReleaseInspector so GET /api/v1/admin/releases/{id}/inspect can
@@ -361,7 +367,7 @@ func buildServerConfig(
 		// ReleaseInspector is read-only path so AppendSideEffect emit
 		// never fires; pass a no-op eventStore that returns 0/nil to
 		// satisfy the non-nil contract without touching sse_events table.
-		sc.ReleaseInspector = release.NewReleaseInspector(
+		sc.Admin.ReleaseInspector = release.NewReleaseInspector(
 			store.NewReleaseStoreSqlc(dbAdapter, store.NoopEventStore{}),
 			&store.PostgresAuditStore{DB: dbAdapter},
 			nil,
@@ -387,7 +393,7 @@ func buildServerConfig(
 			<-shutdownCtx.Done()
 			pgGate.Stop()
 		}()
-		sc.PGPoolGate = pgGate
+		sc.Guards.PGPoolGate = pgGate
 		logger.Info("pg pool gate enabled",
 			"high_water", 0.90, "low_water", 0.75, "max_conns", cfg.DBMaxConns)
 		// Sprint 5 / T2.3 + T1.1 — Preview environments handler + service.

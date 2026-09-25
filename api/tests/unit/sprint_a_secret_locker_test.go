@@ -141,11 +141,11 @@ func TestSprintA_ServerConfig_SecretEnvLocker_Field_Exists(t *testing.T) {
 	// server.Config contra uma renomeacao silenciosa. Omiti-lo (QF1011) manteria a
 	// linha e perderia a garantia, que e a unica coisa que ela existe para dar.
 	//nolint:staticcheck // QF1011: o tipo explicito e o proposito, nao redundancia
-	var _ secrets.SecretEnvLocker = cfg.SecretEnvLocker
+	var _ secrets.SecretEnvLocker = cfg.Secrets.EnvLocker
 
 	// Runtime: zero-value is nil (nil-safe legacy default).
-	if cfg.SecretEnvLocker != nil {
-		t.Errorf("zero-value SecretEnvLocker should be nil, got %v", cfg.SecretEnvLocker)
+	if cfg.Secrets.EnvLocker != nil {
+		t.Errorf("zero-value SecretEnvLocker should be nil, got %v", cfg.Secrets.EnvLocker)
 	}
 }
 

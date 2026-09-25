@@ -26,7 +26,7 @@ func TestRouter_MutatingRoutesSpendOneRateLimitTokenPerRequest(t *testing.T) {
 	for _, path := range []string{"/api/v1/domains", "/api/v1/projects/proj-x/previews"} {
 		t.Run(path, func(t *testing.T) {
 			cfg := t61BaseCfg(logger)
-			cfg.RateLimiter = ratelimit.NewRateLimiter(1, time.Hour)
+			cfg.Guards.RateLimiter = ratelimit.NewRateLimiter(1, time.Hour)
 			cfg.PreviewHandler = preview.NewPreviewHandler(nil, nil, logger)
 			h := server.NewRouter(cfg)
 

@@ -60,9 +60,7 @@ func adminRouter(t *testing.T) http.Handler {
 	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET", legacyProxySecret)
 	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS", "")
 	return NewRouter(Config{
-		AdminEvictor:     stubEvictor{},
-		AdminPinner:      stubPinner{},
-		ReleaseInspector: stubInspector{},
+		Admin: AdminConfig{Evictor: stubEvictor{}, Pinner: stubPinner{}, ReleaseInspector: stubInspector{}},
 	})
 }
 

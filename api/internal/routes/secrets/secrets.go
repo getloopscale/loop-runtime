@@ -180,7 +180,7 @@ func (h *SecretHandler) SetK8sSync(sync SecretK8sSync) {
 // SetPlanLimiter configures the plan-limit gate for secret mutations.
 // J-22 T1.3: Bulk consults the gate BEFORE invoking store.Set; denied
 // requests return 402 PLAN_LIMIT_EXCEEDED without store/audit calls. The
-// router wires it from server.Config.PlanLimiter.
+// router wires it from server.Config.Guards.PlanLimiter.
 func (h *SecretHandler) SetPlanLimiter(limiter SecretPlanLimiter) {
 	h.planLimits = limiter
 }

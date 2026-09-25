@@ -74,9 +74,9 @@ func TestMutatingRoutes_RecordTheirDeclaredAuditIdentity(t *testing.T) {
 		}
 		var got auditIdentity
 		cfg := guardedConfigForWalk()
-		cfg.IdempotencyStore = memoryIdempotencyStore{}
-		cfg.RateLimiter = ratelimit.NewRateLimiter(1000, time.Hour)
-		cfg.VerifyRateLimiter = nil
+		cfg.Guards.IdempotencyStore = memoryIdempotencyStore{}
+		cfg.Guards.RateLimiter = ratelimit.NewRateLimiter(1000, time.Hour)
+		cfg.Guards.VerifyRateLimiter = nil
 		cfg.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 		cfg.AuditWriter = func(_, action, _, resourceType, _, _ string, _ map[string]any) {
 			got = auditIdentity{action, resourceType}

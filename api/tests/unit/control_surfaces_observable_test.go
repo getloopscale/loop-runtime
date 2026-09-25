@@ -111,7 +111,7 @@ func TestSecretFetchSurface_LigadaQuandoOHandlerExiste(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	router := server.NewRouter(server.Config{Surfaces: reg, SecretFetchHandler: handler})
+	router := server.NewRouter(server.Config{Surfaces: reg, Secrets: server.SecretsConfig{FetchHandler: handler}})
 	metrics.PublishSurfaces(reg.All())
 
 	if got := testutil.ToFloat64(metrics.SurfaceEnabled.WithLabelValues(surfaces.SecretFetch)); got != 1 {

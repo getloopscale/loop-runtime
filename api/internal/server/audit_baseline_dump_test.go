@@ -95,9 +95,6 @@ func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 		BuildAttestationHandler:   &builds.BuildAttestationHandler{},
 		BuildSBOMHandler:          &builds.BuildSBOMHandler{},
 		ArgoCallbackHandler:       &argocd.ArgoCallbackHandler{},
-		RateLimiter:               &ratelimit.RateLimiter{},
-		IPRateLimit:               &ratelimit.IPRateLimiter{},
-		VerifyRateLimiter:         &ratelimit.VerifyRateLimiter{},
 		LogsHandler:               &logs.LogsHandler{},
 		LogStreamHandler:          &logs.LogStreamHandler{},
 		RollbackHandler:           &rollback.RollbackHandler{},
@@ -113,8 +110,7 @@ func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 		IntegrationsGitHubHandler: &integrations.IntegrationsGitHubHandler{},
 		AuditHandler:              &audit.AuditHandler{},
 		BillingHandler:            &billing.BillingHandler{},
-		PlanLimiter:               &enforcement.PlanLimiter{},
-		CostEnforcer:              &policy.CostEnforcer{},
+		Guards:                    RouteGuards{RateLimiter: &ratelimit.RateLimiter{}, IPRateLimit: &ratelimit.IPRateLimiter{}, VerifyRateLimiter: &ratelimit.VerifyRateLimiter{}, PlanLimiter: &enforcement.PlanLimiter{}, CostEnforcer: &policy.CostEnforcer{}},
 	}
 	r := NewRouter(cfg)
 

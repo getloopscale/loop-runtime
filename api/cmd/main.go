@@ -409,7 +409,7 @@ func main() {
 		k8sDeps, cellRouter, cellStore, domainHandler, buildHandler,
 		healthServices, authDeps.TokenValidator, rateLimiter,
 		shutdownCtx, shutdownCancel, logger)
-	srvCfg.IPRateLimit = ipRateLimiter
+	srvCfg.Guards.IPRateLimit = ipRateLimiter
 
 	// M3 of qa-readiness-roadmap-2026-06-23 — J11D7 LOCKED ADR:
 	// per-(tenant, domain) rate-limit for POST /api/v1/domains/{domain}/verify
@@ -417,7 +417,7 @@ func main() {
 	// wraps RateLimiter internally — see plan m3-verify-rate-limit-middleware
 	// ADR D1.
 	verifyRateLimiter := ratelimit.NewVerifyRateLimiter(1, 30*time.Second)
-	srvCfg.VerifyRateLimiter = verifyRateLimiter
+	srvCfg.Guards.VerifyRateLimiter = verifyRateLimiter
 
 	// T2.3+T2.5 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): thread
 	// the OpenBao transit client into router so SecretHandler.Bulk encrypts
@@ -428,10 +428,10 @@ func main() {
 	// when CryptoMode != "transit"; router's nil guard keeps the legacy
 	// path active in that case.
 	if transit != nil {
-		srvCfg.SecretTransit = transit
+		srvCfg.Secrets.Transit = transit
 	}
 	// Layer 2 ESO sync chain (plan 2026-06-10-j22-openbao-transit-eso-sync
-	// v1.2 D3): wire SecretFetchHandler for the broker endpoint
+	// v1.2 D3): wire Secrets.FetchHandler for the broker endpoint
 	// /internal/v1/secret-fetch/{tenant_id}/{secret_name}. ESO running in
 	// mgmt cluster (Wave -1 of core.helmfile) calls this endpoint via the
 	// webhook ClusterSecretStore to resolve user secrets — loopzero-api loads
@@ -450,7 +450,7 @@ func main() {
 		brokerToken := os.Getenv("LOOPZERO_BROKER_TOKEN")
 		if fetchDeps != nil && brokerToken != "" {
 			rawHandler := secrets.NewSecretFetchHandler(*fetchDeps)
-			srvCfg.SecretFetchHandler = brokerBearerMiddleware(brokerToken, rawHandler)
+			srvCfg.Secrets.FetchHandler = brokerBearerMiddleware(brokerToken, rawHandler)
 		} else if fetchDeps != nil {
 			logger.Warn("secret-fetch broker disabled: LOOPZERO_BROKER_TOKEN not set", "component", "broker")
 		}

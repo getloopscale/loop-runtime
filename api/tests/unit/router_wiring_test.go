@@ -214,7 +214,6 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 		ProjectStore:              &stubProjectStore{},
 		TenantCRMgr:               &stubTenantCRManager{},
 		SourceStore:               &stubSourceStore{},
-		IdempotencyStore:          &stubIdempotencyStore{},
 		EventStore:                &stubEventStore{},
 		BuildStoreReader:          &stubBuildReader{},
 		BootstrapStore:            &stubBootstrapStore{},
@@ -234,7 +233,8 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 		LogStreamHandler:          logs.NewLogStreamHandler(nil, nil, logs.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler:      &stubGitHubWebhookHandler{},
 		TenantDeletionStore:       &stubTenantDeletionStore{},
-		AdminEvictor:              &stubTenantEvictor{},
+		Guards:                    server.RouteGuards{IdempotencyStore: &stubIdempotencyStore{}},
+		Admin:                     server.AdminConfig{Evictor: &stubTenantEvictor{}},
 	}
 
 	router := server.NewRouter(cfg)

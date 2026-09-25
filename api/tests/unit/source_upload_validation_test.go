@@ -104,7 +104,6 @@ func TestSourceUpload_PathTraversalTenant_Returns400(t *testing.T) {
 		ProjectStore:         &stubProjectStore{},
 		TenantCRMgr:          &stubTenantCRManager{},
 		SourceStore:          &stubInvalidProjectSourceStore{},
-		IdempotencyStore:     &stubIdempotencyStore{},
 		EventStore:           &stubEventStore{},
 		BuildStoreReader:     &stubBuildReader{},
 		BootstrapStore:       &stubBootstrapStore{},
@@ -123,7 +122,8 @@ func TestSourceUpload_PathTraversalTenant_Returns400(t *testing.T) {
 		LogStreamHandler:     logs.NewLogStreamHandler(nil, nil, logs.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
 		TenantDeletionStore:  &stubTenantDeletionStore{},
-		AdminEvictor:         &stubTenantEvictor{},
+		Guards:               server.RouteGuards{IdempotencyStore: &stubIdempotencyStore{}},
+		Admin:                server.AdminConfig{Evictor: &stubTenantEvictor{}},
 	}
 
 	router := server.NewRouter(cfg)

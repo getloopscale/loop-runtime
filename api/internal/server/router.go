@@ -48,8 +48,8 @@ func NewRouter(cfg Config) *chi.Mux {
 	// route — are rejected at the edge without consuming downstream resources.
 	// Trusted proxy CIDRs from env so production CF Tunnel can be honored
 	// while dev k3d defaults to "trust nobody".
-	if cfg.IPRateLimit != nil {
-		r.Use(cfg.IPRateLimit.Middleware)
+	if cfg.Guards.IPRateLimit != nil {
+		r.Use(cfg.Guards.IPRateLimit.Middleware)
 	}
 
 	// Security headers — before CORS so they are always present.
@@ -75,9 +75,9 @@ func NewRouter(cfg Config) *chi.Mux {
 	r.Use(observability.RequestLogging(cfg.Logger))
 
 	// PG backpressure: reject mutations when connection pool is near saturation.
-	if cfg.PGPoolGate != nil {
+	if cfg.Guards.PGPoolGate != nil {
 		pgCB := policy.NewPGCircuitBreaker(policy.PGCircuitBreakerConfig{
-			Gate: cfg.PGPoolGate,
+			Gate: cfg.Guards.PGPoolGate,
 		})
 		r.Use(pgCB.Middleware())
 	}
@@ -149,7 +149,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	// nil-safe: when transit/store/cellStore/token are missing the
 	// handler stays nil and the route is not registered — ESO sees 404
 	// and retries with backoff (safer than registering a broken handler).
-	if surfaces.Recorded(cfg.Surfaces, surfaces.SecretFetch, cfg.SecretFetchHandler != nil,
+	if surfaces.Recorded(cfg.Surfaces, surfaces.SecretFetch, cfg.Secrets.FetchHandler != nil,
 		"one of four dependencies is missing, and main.go:429-441 requires all four: the "+
 			"secrets backend transit client, the database, cellStore and `LOOPZERO_BROKER_TOKEN`. "+
 			"Measured on dev-public 2026-08-16: the `loopzero-broker-token` Secret DOES NOT EXIST, "+
@@ -161,7 +161,7 @@ func NewRouter(cfg Config) *chi.Mux {
 		// (EC-08 regex `^[A-Z][A-Z0-9_]*$` forbids `.` → safe delimiter).
 		// Handler splits property into 3 parts and scopes broker SQL by
 		// canonical composite unique key (closes HIGH #15 scope-drop).
-		r.Post("/internal/v1/secret-fetch/{tenant_id}/{secret_name}", cfg.SecretFetchHandler)
+		r.Post("/internal/v1/secret-fetch/{tenant_id}/{secret_name}", cfg.Secrets.FetchHandler)
 	}
 
 	// GitHub webhook (no auth — GitHub validates via HMAC signature internally)
@@ -190,33 +190,33 @@ func NewRouter(cfg Config) *chi.Mux {
 	// (canonical) + _PREVIOUS — NOT the legacy LOOPZERO_SERVICE_AUTH_SECRET that
 	// the cloud /engine/* proxy carries on user-JWT requests. The handler
 	// still enforces LOOPZERO_ADMIN_API=true as a separate defense-in-depth gate.
-	if surfaces.Recorded(cfg.Surfaces, surfaces.AdminEvict, cfg.AdminEvictor != nil,
+	if surfaces.Recorded(cfg.Surfaces, surfaces.AdminEvict, cfg.Admin.Evictor != nil,
 		"no database — `buildAdminEvictor` (setup_server.go:290) runs inside the block "+
 			"that requires `dbAdapter`. A missing `loopzero-api-admin` Secret does NOT turn "+
 			"this route off: it feeds the key the middleware checks, and without it "+
 			"access is DENIED (fail closed), not opened") {
 		r.With(mwauth.RequireAdminService).Post(
 			"/api/v1/admin/tenants/evict",
-			admin.AdminEvictHandler(cfg.AdminEvictor),
+			admin.AdminEvictHandler(cfg.Admin.Evictor),
 		)
 	}
 	// CHG-2026-04-30-DELETE-SINGLE-CELL: pin tenants to specific cell.
-	if surfaces.Recorded(cfg.Surfaces, surfaces.AdminPin, cfg.AdminPinner != nil,
+	if surfaces.Recorded(cfg.Surfaces, surfaces.AdminPin, cfg.Admin.Pinner != nil,
 		"no database — the CellPinner is built on `PostgresCellStore` "+
 			"(setup_server.go:299). This is the ONLY route that moves a tenant between cells, "+
 			"so turning it off does not degrade anything: it removes the operation") {
-		r.With(mwauth.RequireAdminService).Post("/api/v1/admin/tenants/pin", admin.AdminPinCellHandler(cfg.AdminPinner, cfg.AuditWriter))
+		r.With(mwauth.RequireAdminService).Post("/api/v1/admin/tenants/pin", admin.AdminPinCellHandler(cfg.Admin.Pinner, cfg.AuditWriter))
 	}
 	// T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md:
 	// diagnostic read-only endpoint for on-call to inspect a release's
 	// signing + attestation chain without source access. Like every admin
 	// route it sits behind mwauth.RequireAdminService; the handler keeps only
 	// the LOOPZERO_ADMIN_API feature gate.
-	if surfaces.Recorded(cfg.Surfaces, surfaces.ReleaseInspect, cfg.ReleaseInspector != nil,
+	if surfaces.Recorded(cfg.Surfaces, surfaces.ReleaseInspect, cfg.Admin.ReleaseInspector != nil,
 		"no database — built in setup_server.go:315, inside the block that requires "+
 			"`dbAdapter`. It is on-call's view of a release's signing chain; turned off, "+
 			"on-call loses the diagnosis exactly when it is needed") {
-		r.With(mwauth.RequireAdminService).Get("/api/v1/admin/releases/{id}/inspect", admin.AdminReleaseInspectHandler(cfg.ReleaseInspector))
+		r.With(mwauth.RequireAdminService).Get("/api/v1/admin/releases/{id}/inspect", admin.AdminReleaseInspectHandler(cfg.Admin.ReleaseInspector))
 	}
 
 	// Protected routes (auth required)
@@ -265,8 +265,10 @@ func NewRouter(cfg Config) *chi.Mux {
 		})
 	}
 
-	// C-01 fix: Callback route removed. Build completion is now detected by the
-	// BuildReconcileLoop which polls Argo Workflow CRDs from the control plane.
+	// C-01: the build-completion callback (build plane → API) was removed; build
+	// completion is detected by the BuildReconcileLoop polling workflows from the
+	// control plane. The sync callback above (/internal/argocd-callback) is a
+	// different route and is live: GitOps sync notifications reach it.
 
 	return r
 }
