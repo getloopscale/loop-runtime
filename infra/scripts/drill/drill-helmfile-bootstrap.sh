@@ -443,19 +443,15 @@ log "  ✓ loopzero-crds installed — applying 3 ClusterCredentials (cell-0 + c
 export DRILL_KUBECONFIG="$CORE_KUBECONFIG"
 # Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env
 CELL_SCRIPT="$(cd "$(dirname "$0")/../../.." && pwd)/infra/helmfile/scripts/bootstrap-cell-cc.sh"
-bash "$CELL_SCRIPT" --cell default --env drill 2>&1 | tail -3 || {
-  log "ERROR: bootstrap cell-0 failed"
-  exit 3
-}
-bash "$CELL_SCRIPT" --cell 1 --env drill 2>&1 | tail -3 || {
-  log "ERROR: bootstrap cell-0 failed"
-  exit 3
-}
-bash "$CELL_SCRIPT" --cell 2 --env drill 2>&1 | tail -3 || {
-  log "ERROR: bootstrap cell-1 failed"
-  exit 3
-}
-log "  ✓ 3 ClusterCredentials applied"
+# bootstrap-cell-cc.sh accepts only the post-rename cell ids 0 and 1; the
+# default/1/2 ids this used to pass were refused, and cell-0 was never created.
+for cell_id in 0 1; do
+  bash "$CELL_SCRIPT" --cell "$cell_id" --env drill 2>&1 | tail -3 || {
+    log "ERROR: bootstrap cell-$cell_id failed"
+    exit 3
+  }
+done
+log "  ✓ 2 ClusterCredentials applied (cell-0, cell-1)"
 
 # Bug #22 LIVE FIX (caught 2026-05-17 iter 15 on loopzero-api 0 CCs discovered):
 # K8sCellStore.LoadCells filters by status.connected=true (set by
@@ -463,13 +459,13 @@ log "  ✓ 3 ClusterCredentials applied"
 # isn't installed yet (chicken-and-egg). For drill, we KNOW apiServers
 # are reachable (we provisioned them), so set status.connected=true
 # manually via kubectl patch. Mirrors `task k3d:heal` H13 pattern.
-log "Bug #22 fix: patching status.connected=true on 3 CCs..."
-for cell in cell-0 cell-0 cell-1; do
+log "Bug #22 fix: patching status.connected=true on 2 CCs..."
+for cell in cell-0 cell-1; do
   kubectl patch clustercredential "$cell" --type=merge --subresource=status \
     -p '{"status":{"connected":true,"lastReconciledAt":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}}' \
     --namespace loopzero-system 2>&1 | grep -E "patched|^Error" | head -1
 done
-log "  ✓ 3 CCs marked status.connected=true (loopzero-api will find cells at startup)"
+log "  ✓ 2 CCs marked status.connected=true (loopzero-api will find cells at startup)"
 
 # Bug #25 LIVE FIX (caught 2026-05-17 iter 18): operator charts require
 # GITEA_TOKEN env var. Extract from gitea-admin Secret (created by generate-
@@ -726,7 +722,7 @@ log "Bug #50 fix: creating loopzero-platform-topology wiring ConfigMap..."
 export KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml"
 LOOPZERO_MGMT_INGRESS_IP=$(kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
 LOOPZERO_MGMT_INGRESS_IP="$LOOPZERO_MGMT_INGRESS_IP" \
-  bash "$HELMFILE_DIR/scripts/create-wiring-configmap.sh" drill 2>&1 | tail -5 | sed 's/^/  /' || true
+  bash "$HELMFILE_DIR/scripts/create-wiring-configmap.sh" drill 2>&1 | tail -5 | sed 's/^/  /'
 log "  ✓ wiring ConfigMap applied"
 
 # Bug #52 LIVE FIX (caught 2026-05-18 iter 41): infra/helm/loopzero-api/values.yaml
@@ -1075,21 +1071,30 @@ if [[ -n "$CF_TOKEN_VAL" ]]; then
 fi
 
 # Bug #69 LIVE FIX (caught 2026-05-18 iter 47): loopzero-api restart cycles can
-# leak pg_advisory_lock when old pods don't release before new ones acquire.
-# Reconcile loops won't start without leader → builds get reaper-failed.
-# Heal: terminate any backend holding the leader lock before final restart.
-log "Bug #69 fix: terminate stale leader-election pg_advisory_lock holders..."
+# leak the leader-election advisory lock when old pods don't release before new
+# ones acquire. Reconcile loops won't start without a leader, so builds get
+# reaper-failed. Heal: terminate the backend holding THAT lock before the final
+# restart — and only that one. The key is api/cmd/setup_background.go's
+# leaderLockID (0x7468656F6C656164); Postgres stores a bigint advisory key as
+# classid (high 32 bits) + objid (low 32 bits) with objsubid=1. Terminating
+# every granted advisory lock, as this used to, also killed sessions holding
+# per-environment deploy locks mid-transaction.
+log "Bug #69 fix: terminate a stale leader-election advisory lock holder..."
 # Bug #18 LIVE FIX (caught 2026-05-19): use $LOOPZERO_API_DSN (exported) not
 # $LOOPZERO_API_DSN_VAL (cleared at line 233 for defense-in-depth).
 PG_PASS_VAL=$(echo "$LOOPZERO_API_DSN" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|')
 KILL_LOCK_POD="drill-kill-lock-$RANDOM"
-kubectl -n loopzero-system run "$KILL_LOCK_POD" --restart=Never --image=postgres:16-alpine --quiet \
-  --env="PGPASSWORD=$PG_PASS_VAL" --env="PGSSLMODE=require" --command -- \
-  psql --host="$PG_HOST_VAL" --port="$PG_PORT_VAL" --username=doadmin --dbname=loopzero \
-       --no-psqlrc -c "SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype='advisory' AND granted=true;" >/dev/null 2>&1 || true
-kubectl -n loopzero-system wait --for=jsonpath='{.status.phase}'=Succeeded "pod/$KILL_LOCK_POD" --timeout=60s >/dev/null 2>&1 || true
+LEADER_LOCK_SQL="SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype = 'advisory' AND granted AND objsubid = 1 AND ((classid::bigint << 32) | objid::bigint) = x'7468656F6C656164'::bigint;"
+if kubectl -n loopzero-system run "$KILL_LOCK_POD" --restart=Never --image=postgres:16-alpine --quiet \
+     --env="PGPASSWORD=$PG_PASS_VAL" --env="PGSSLMODE=require" --command -- \
+     psql --host="$PG_HOST_VAL" --port="$PG_PORT_VAL" --username=doadmin --dbname=loopzero \
+     --no-psqlrc -v ON_ERROR_STOP=1 -c "$LEADER_LOCK_SQL" >/dev/null 2>&1 \
+   && kubectl -n loopzero-system wait --for=jsonpath='{.status.phase}'=Succeeded "pod/$KILL_LOCK_POD" --timeout=60s >/dev/null 2>&1; then
+  log "  ✓ Stale leader-election lock holder terminated (if any)"
+else
+  log "  WARN: could not clear a stale leader-election lock; loopzero-api may wait for the old leader to exit"
+fi
 kubectl -n loopzero-system delete pod "$KILL_LOCK_POD" --wait=false >/dev/null 2>&1 || true
-log "  ✓ Stale pg_advisory_lock holders terminated"
 
 # Restart loopzero-api to pick up env + secret changes
 log "Bug #46+#54 fix: restart loopzero-api to reload env vars..."
