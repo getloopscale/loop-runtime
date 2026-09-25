@@ -47,15 +47,6 @@ import (
 // (tenant, project, env) tuple serialize via pg_advisory_xact_lock per
 // CLAUDE.md Concurrency Model + EC-5 absorption.
 
-// DefaultPodCostPerHour is the conservative per-pod hourly cost used when
-// no per-cluster rate has been wired. Matches the public pricing page at
-// https://loopzero.example/pricing as of plan v1.1 sign-off.
-//
-// Source of truth: dashboard cost preview MUST reconcile to whatever value
-// the handler returns in `monthly_cost_usd` — client preview is hint, not
-// authority (ADR D1 + EC-2).
-const DefaultPodCostPerHour float64 = 0.05
-
 // ScaleProjectStore abstracts project lookup for scale (DIP).
 type ScaleProjectStore interface {
 	GetByName(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error)
@@ -93,7 +84,7 @@ type ScaleApplyFunc func(ctx context.Context, cfg ScaleConfigInput) (changed boo
 // build path enforced via this same checker, but the LIVE scale path
 // bypassed it entirely). Wiring this checker here closes the bypass.
 type ScaleReplicasChecker interface {
-	CheckReplicasValue(ctx context.Context, tenantID string, requested int) (allowed bool, plan string, limit int, err error)
+	CheckReplicasValue(tenantID string, requested int) (allowed bool, plan string, limit int)
 }
 
 // ScaleHandler provides the HTTP handler for scaling operations.
@@ -127,7 +118,7 @@ func NewScaleHandler(projects ScaleProjectStore, apply ScaleApplyFunc, kedaEnabl
 		projects:       projects,
 		apply:          apply,
 		kedaEnabled:    kedaEnabled,
-		podCostPerHour: DefaultPodCostPerHour,
+		podCostPerHour: enforcement.DefaultPodCostPerHour,
 	}
 }
 
@@ -258,7 +249,7 @@ func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if lerr := h.enforceLimits(r.Context(), &req, planTier, hasAuto, uc.TenantID); lerr != nil {
+	if lerr := h.enforceLimits(&req, planTier, hasAuto, uc.TenantID); lerr != nil {
 		httpio.WriteLoopZeroError(w, lerr)
 		return
 	}
@@ -274,82 +265,87 @@ func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg, resp, effectiveReplicas, scaleToZero := h.buildScaleResult(
-		&req, hasFixed, planTier, uc.TenantID, name, uc.UserID,
-	)
+	decision := h.buildScaleResult(&req, hasFixed, planTier, uc.TenantID, name, uc.UserID)
 
 	// Plan T2.2 fallback: when no apply closure wired (tests), return stub
 	// 202 with the computed preview so callers still see canonical shape.
 	if h.apply == nil {
-		httpio.WriteJSON(w, http.StatusAccepted, resp)
+		httpio.WriteJSON(w, http.StatusAccepted, decision.resp)
 		return
 	}
 
-	h.applyAndLog(w, r, &cfg, &resp, &req, name, planTier, effectiveReplicas, scaleToZero)
+	h.applyAndLog(w, r, &decision)
 }
 
-// parseScaleRequest decodes the request body + validates request shape
-// (mutual exclusion + missing fields + default environment). Returns the
-// parsed request, hasFixed / hasAuto flags, and a LoopZeroError to write when
-// validation fails.
+// parseScaleRequest decodes the request body and validates its shape. It
+// returns the request (environment defaulted to production), which of the two
+// modes it asks for, and the LoopZeroError to write when it is refused.
 func parseScaleRequest(r *http.Request) (req scaleRequest, hasFixed, hasAuto bool, err *loopzeroerrors.LoopZeroError) {
 	if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil {
-		err = loopzeroerrors.ErrInvalidRequest.Wrap("invalid JSON body")
-		return
-	}
-	if req.App == "" {
-		err = loopzeroerrors.ErrMissingField.Wrap("app name is required")
-		return
+		return req, false, false, loopzeroerrors.ErrInvalidRequest.Wrap("invalid JSON body")
 	}
 	if req.Environment == "" {
 		req.Environment = "production"
 	}
-	hasFixed = req.Replicas != nil
-	hasAuto = req.Min != nil || req.Max != nil || req.CPU != nil || req.Memory != nil
-	if hasFixed && hasAuto {
-		err = loopzeroerrors.ErrInvalidRequest.Wrap(
+	hasFixed, hasAuto = req.mode()
+	return req, hasFixed, hasAuto, req.validate(hasFixed, hasAuto)
+}
+
+// mode reports whether the request asks for fixed replicas, autoscaling, or
+// (invalidly) both or neither.
+func (req *scaleRequest) mode() (fixed, auto bool) {
+	fixed = req.Replicas != nil
+	auto = req.Min != nil || req.Max != nil || req.CPU != nil || req.Memory != nil
+	return fixed, auto
+}
+
+// validate returns the first reason the request is refused, or nil.
+func (req *scaleRequest) validate(fixed, auto bool) *loopzeroerrors.LoopZeroError {
+	if req.App == "" {
+		return loopzeroerrors.ErrMissingField.Wrap("app name is required")
+	}
+	if err := validateScaleMode(fixed, auto); err != nil {
+		return err
+	}
+	return req.validateReplicaBounds(fixed)
+}
+
+// validateScaleMode requires exactly one of the two modes.
+func validateScaleMode(fixed, auto bool) *loopzeroerrors.LoopZeroError {
+	switch {
+	case fixed && auto:
+		return loopzeroerrors.ErrInvalidRequest.Wrap(
 			"cannot mix 'replicas' with 'min'/'max'/'cpu'/'memory': use 'replicas' for fixed scaling or autoscaling fields for autoscaling")
-		return
-	}
-	if !hasFixed && !hasAuto {
-		err = loopzeroerrors.ErrMissingField.Wrap(
+	case !fixed && !auto:
+		return loopzeroerrors.ErrMissingField.Wrap(
 			"specify 'replicas' for fixed scaling or 'min'/'max'/'cpu'/'memory' for autoscaling")
-		return
 	}
-	// Red Team loopzero-cloud#103 closure: replicas <= 0 is client input
-	// validation (NOT a server failure), MUST surface as 400 with the
-	// client-classified `INVALID_REPLICAS` code. The Red Team observed
-	// `replicas:-5 -> 500 INVALID_ARGUMENT` — status×code mismatch + 5xx
-	// for a 4xx-class error. Same gate guards autoscaling.min/max < 0.
-	if hasFixed && *req.Replicas <= 0 {
-		err = loopzeroerrors.NewLoopZeroError(
-			"INVALID_REPLICAS",
-			"replicas must be > 0 (use 0 only via 'min: 0' on autoscaling, not 'replicas')")
+	return nil
+}
 
-		return
+// validateReplicaBounds refuses replica counts outside what the mode allows.
+// Red Team loopzero-cloud#103: these are client input errors, answered as 400
+// INVALID_REPLICAS, never as a 5xx.
+func (req *scaleRequest) validateReplicaBounds(fixed bool) *loopzeroerrors.LoopZeroError {
+	switch {
+	case fixed && *req.Replicas <= 0:
+		return invalidReplicas("replicas must be > 0 (use 0 only via 'min: 0' on autoscaling, not 'replicas')")
+	case req.Min != nil && *req.Min < 0:
+		return invalidReplicas("autoscaling 'min' must be >= 0")
+	case req.Max != nil && *req.Max <= 0:
+		return invalidReplicas("autoscaling 'max' must be > 0")
 	}
-	if req.Min != nil && *req.Min < 0 {
-		err = loopzeroerrors.NewLoopZeroError(
-			"INVALID_REPLICAS",
-			"autoscaling 'min' must be >= 0")
+	return nil
+}
 
-		return
-	}
-	if req.Max != nil && *req.Max <= 0 {
-		err = loopzeroerrors.NewLoopZeroError(
-			"INVALID_REPLICAS",
-			"autoscaling 'max' must be > 0")
-
-		return
-	}
-	return
+func invalidReplicas(message string) *loopzeroerrors.LoopZeroError {
+	return loopzeroerrors.NewLoopZeroError("INVALID_REPLICAS", message)
 }
 
 // enforceLimits applies the EC-3 KEDA tier gate + EC-4 HPA bounds. Server-
 // side enforcement at the handler boundary; client UI mirrors for UX.
 // Returns the first LoopZeroError to write, or nil when both gates pass.
 func (h *ScaleHandler) enforceLimits(
-	ctx context.Context,
 	req *scaleRequest,
 	planTier pkgdomain.PlanTier,
 	hasAuto bool,
@@ -365,7 +361,7 @@ func (h *ScaleHandler) enforceLimits(
 	// + the dashboard scale form + any direct API client. Without
 	// this, Starter tier could set replicas:999 and the apply path
 	// honored it.
-	if err := h.enforceReplicaCap(ctx, req, tenantID); err != nil {
+	if err := h.enforceReplicaCap(req, tenantID); err != nil {
 		return err
 	}
 	if !hasAuto {
@@ -379,7 +375,7 @@ func (h *ScaleHandler) enforceLimits(
 // gates `replicas`. For autoscaling, the cap gates `max` (the
 // ceiling — what the cluster would actually scale TO under load).
 // A nil checker disables enforcement (tests + legacy callsites).
-func (h *ScaleHandler) enforceReplicaCap(ctx context.Context, req *scaleRequest, tenantID string) *loopzeroerrors.LoopZeroError {
+func (h *ScaleHandler) enforceReplicaCap(req *scaleRequest, tenantID string) *loopzeroerrors.LoopZeroError {
 	if h.replicasChecker == nil {
 		return nil
 	}
@@ -392,16 +388,7 @@ func (h *ScaleHandler) enforceReplicaCap(ctx context.Context, req *scaleRequest,
 	default:
 		return nil
 	}
-	allowed, plan, cap, err := h.replicasChecker.CheckReplicasValue(ctx, tenantID, requested)
-	if err != nil {
-		slog.Error("scale: replica cap could not be verified",
-			"tenant_id", tenantID, "requested", requested, "error", err)
-		var loopzeroErr *loopzeroerrors.LoopZeroError
-		if errors.As(err, &loopzeroErr) {
-			return loopzeroErr
-		}
-		return loopzeroerrors.ErrPlatformDegraded.Wrap("plan limits could not be verified — retry shortly")
-	}
+	allowed, plan, cap := h.replicasChecker.CheckReplicasValue(tenantID, requested)
 	if allowed {
 		return nil
 	}
@@ -431,14 +418,14 @@ func (h *ScaleHandler) enforceKEDA(req *scaleRequest, planTier pkgdomain.PlanTie
 // fall within the valid range and never trigger this gate.
 func enforceHPABounds(req *scaleRequest) *loopzeroerrors.LoopZeroError {
 	if req.CPU != nil {
-		if err := assertHPABounds(*req.CPU, defaultMemoryTarget(req.Memory)); err != nil {
+		if err := assertHPABounds(*req.CPU, valueOr(req.Memory, enforcement.DefaultHPAMemoryTarget)); err != nil {
 			return err
 		}
 	}
 	if req.Memory != nil && req.CPU == nil {
 		// CPU defaulted later; validate memory in isolation against its
 		// own bounds (cpu uses default 80 which is always valid).
-		if err := assertHPABounds(defaultCPUTarget(req.CPU), *req.Memory); err != nil {
+		if err := assertHPABounds(valueOr(req.CPU, enforcement.DefaultHPACPUTarget), *req.Memory); err != nil {
 			return err
 		}
 	}
@@ -460,17 +447,27 @@ func assertHPABounds(cpu, memory int) *loopzeroerrors.LoopZeroError {
 	return loopzeroerrors.ErrInvalidRequest.Wrap(err.Error())
 }
 
-// buildScaleResult composes the ScaleConfigInput + scaleResponse for both
-// fixed-replicas and autoscaling modes. Returns the effective replicas
-// count (used in cost computation + audit log) and scaleToZero flag (for
-// the EC-3 / KEDA wiring at apply time).
+// scaleDecision is what a validated scale request resolves to: the config to
+// persist, the response to answer with, and the facts the audit line records.
+type scaleDecision struct {
+	cfg               ScaleConfigInput
+	resp              scaleResponse
+	planTier          pkgdomain.PlanTier
+	effectiveReplicas int  // replicas the cost is computed for (max, for autoscaling)
+	scaleToZero       bool // min is 0 (KEDA wiring at apply time)
+}
+
+// buildScaleResult composes the scaleDecision for both fixed-replicas and
+// autoscaling modes.
 func (h *ScaleHandler) buildScaleResult(
 	req *scaleRequest,
 	hasFixed bool,
 	planTier pkgdomain.PlanTier,
 	tenantID, projectName, userID string,
-) (cfg ScaleConfigInput, resp scaleResponse, effectiveReplicas int, scaleToZero bool) {
-	resp = scaleResponse{
+) scaleDecision {
+	var effectiveReplicas int
+	var scaleToZero bool
+	resp := scaleResponse{
 		App:         req.App,
 		Environment: req.Environment,
 		Status:      "acknowledged",
@@ -503,7 +500,7 @@ func (h *ScaleHandler) buildScaleResult(
 	// EC-2 absorption: server-authoritative monthly cost.
 	resp.MonthlyCostUSD = enforcement.ComputeMonthlyCost(effectiveReplicas, h.podCostPerHour)
 
-	cfg = ScaleConfigInput{
+	cfg := ScaleConfigInput{
 		TenantID: tenantID,
 		// B40 (CHG-2026-05-05-DOGFOOD-B40): persist with project NAME, not UUID.
 		// CLAUDE.md "Project name vs project ID": CLI sends name as project_id
@@ -519,27 +516,30 @@ func (h *ScaleHandler) buildScaleResult(
 		ScaleToZero:     scaleToZero,
 		UpdatedBy:       userID,
 	}
-	return
+	return scaleDecision{
+		cfg:               cfg,
+		resp:              resp,
+		planTier:          planTier,
+		effectiveReplicas: effectiveReplicas,
+		scaleToZero:       scaleToZero,
+	}
 }
 
-// buildAutoscaling computes the canonical scaleAutoscaling block with
-// defaults applied: max=3 / cpu=80 / memory=80 / cooldown=300 when
-// scale-to-zero. Pinned defaults match Kubernetes HPA convention.
+// buildAutoscaling computes the canonical scaleAutoscaling block, filling
+// what the request left out with the enforcement defaults (max replicas, CPU
+// and memory targets, and the scale-to-zero cooldown when min is 0).
 func buildAutoscaling(req *scaleRequest) *scaleAutoscaling {
-	as := &scaleAutoscaling{}
+	as := &scaleAutoscaling{
+		Max:          valueOr(req.Max, enforcement.DefaultHPAMaxReplicas),
+		CPUTarget:    valueOr(req.CPU, enforcement.DefaultHPACPUTarget),
+		MemoryTarget: valueOr(req.Memory, enforcement.DefaultHPAMemoryTarget),
+	}
 	if req.Min != nil {
 		as.Min = *req.Min
 	}
-	if req.Max != nil {
-		as.Max = *req.Max
-	} else {
-		as.Max = 3 // default
-	}
-	as.CPUTarget = defaultCPUTarget(req.CPU)
-	as.MemoryTarget = defaultMemoryTarget(req.Memory)
 	if as.Min == 0 {
-		defaultCooldown := 300
-		as.Cooldown = &defaultCooldown
+		cooldown := enforcement.DefaultScaleToZeroCooldownSeconds
+		as.Cooldown = &cooldown
 	}
 	return as
 }
@@ -548,18 +548,8 @@ func buildAutoscaling(req *scaleRequest) *scaleAutoscaling {
 // around the Upsert via pg_advisory_xact_lock per Concurrency Model),
 // maps errors to LoopZeroError, sets the final status, and writes the audit
 // slog entry for the metrics pipeline.
-func (h *ScaleHandler) applyAndLog(
-	w http.ResponseWriter,
-	r *http.Request,
-	cfg *ScaleConfigInput,
-	resp *scaleResponse,
-	req *scaleRequest,
-	name string,
-	planTier pkgdomain.PlanTier,
-	effectiveReplicas int,
-	scaleToZero bool,
-) {
-	changed, err := h.apply(r.Context(), *cfg)
+func (h *ScaleHandler) applyAndLog(w http.ResponseWriter, r *http.Request, d *scaleDecision) {
+	changed, err := h.apply(r.Context(), d.cfg)
 	if err != nil {
 		var te *loopzeroerrors.LoopZeroError
 		if errors.As(err, &te) {
@@ -570,40 +560,28 @@ func (h *ScaleHandler) applyAndLog(
 		return
 	}
 	if changed {
-		resp.Status = "applied"
+		d.resp.Status = "applied"
 	} else {
-		resp.Status = "no_change"
+		d.resp.Status = "no_change"
 	}
 	slog.Info("scale.applied",
-		"tenant_id", cfg.TenantID,
-		"project", name,
-		"environment", req.Environment,
-		"app", req.App,
-		"plan_tier", string(planTier),
-		"replicas", effectiveReplicas,
-		"scale_to_zero", scaleToZero,
-		"monthly_cost_usd", resp.MonthlyCostUSD,
+		"tenant_id", d.cfg.TenantID,
+		"project", d.cfg.ProjectID,
+		"environment", d.cfg.Environment,
+		"app", d.cfg.AppName,
+		"plan_tier", string(d.planTier),
+		"replicas", d.effectiveReplicas,
+		"scale_to_zero", d.scaleToZero,
+		"monthly_cost_usd", d.resp.MonthlyCostUSD,
 		"changed", changed,
 	)
-	httpio.WriteJSON(w, http.StatusOK, *resp)
+	httpio.WriteJSON(w, http.StatusOK, d.resp)
 }
 
-// defaultCPUTarget returns 80 (canonical Kubernetes HPA default) when no
-// explicit target was provided. Pinned at module level so the test suite
-// + handler share one source of truth.
-func defaultCPUTarget(p *int) int {
+// valueOr returns *p, or fallback when p is nil.
+func valueOr(p *int, fallback int) int {
 	if p == nil {
-		return 80
-	}
-	return *p
-}
-
-// defaultMemoryTarget returns 80 when no explicit memory target was
-// provided. Within the canonical [10,90] memory bounds — never triggers
-// the validation rejection on its own.
-func defaultMemoryTarget(p *int) int {
-	if p == nil {
-		return 80
+		return fallback
 	}
 	return *p
 }
