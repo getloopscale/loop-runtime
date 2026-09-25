@@ -6,14 +6,14 @@ package server_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
+	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/environments"
-	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
-	"github.com/getloopscale/loopzero/api/internal/routes/status"
+	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
 	"io"
@@ -188,11 +188,11 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	// For routes behind auth, we provide a valid Bearer token so auth passes.
 
 	buildHandler := builds.NewBuildHandler(nil, logger)
-	logsHandler := logs.NewLogsHandler(nil, nil)
+	logsHandler := logshttp.NewLogsHandler(nil, nil)
 	rollbackHandler := rollback.NewRollbackHandler(nil, nil, "test.local")
-	statusHandler := status.NewStatusHandler(nil, nil, nil, "test.local", "", "")
+	statusHandler := statushttp.NewStatusHandler(nil, nil, nil, "test.local", "", "")
 	buildListHandler := builds.NewBuildListHandler(nil)
-	environmentHandler := environments.NewEnvironmentHandler(nil)
+	environmentHandler := environmentshttp.NewEnvironmentHandler(nil)
 	teamHandler := teamshttp.NewTeamHandler(nil)
 	domainHandler := domains.NewDomainHandler(nil, nil, nil, "test.local")
 	repositoryHandler := repositorieshttp.NewRepositoryHandler(nil)
@@ -228,7 +228,7 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 		IntegrationsGitHubHandler: integrationsGitHubHandler,
 		AuditHandler:              auditHandler,
 		ArgoCallbackHandler:       argoCallbackHandler,
-		LogStreamHandler:          logs.NewLogStreamHandler(nil, nil, logs.LogStreamHandlerOpts{}),
+		LogStreamHandler:          logshttp.NewLogStreamHandler(nil, nil, logshttp.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler:      &stubGitHubWebhookHandler{},
 		TenantDeletionStore:       &stubTenantDeletionStore{},
 		Guards:                    server.RouteGuards{IdempotencyStore: &stubIdempotencyStore{}},

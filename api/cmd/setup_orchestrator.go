@@ -10,14 +10,14 @@ import (
 	"os"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
-	"github.com/getloopscale/loopzero/api/internal/routes/status"
+	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
@@ -32,7 +32,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/loki"
+	"github.com/getloopscale/loopzero/api/internal/logs/loki"
 	"github.com/getloopscale/loopzero/api/internal/routes/scale"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
@@ -118,13 +118,13 @@ func wireProjectCap(s *store.PostgresProjectStore, e projectCapEnforcement) {
 type OrchestratorDeps struct {
 	Orchestrator        *build.BuildOrchestrator
 	BuildOrchestrator   builds.BuildOrchestratorService
-	LogsHandler         *logs.LogsHandler
-	LogStreamHandler    *logs.LogStreamHandler
+	LogsHandler         *logshttp.LogsHandler
+	LogStreamHandler    *logshttp.LogStreamHandler
 	RollbackHandler     *rollback.RollbackHandler
 	PromoteHandler      *promote.PromoteHandler
-	StatusHandler       *status.StatusHandler
+	StatusHandler       *statushttp.StatusHandler
 	MetricsProxyHandler *projectmetricshttp.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
-	StatusSSEHandler    *status.StatusSSEHandler                // T2.1 J-18 T1.3.b — SSE signal.changed stream
+	StatusSSEHandler    *statushttp.StatusSSEHandler            // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	ScaleHandler        *scale.ScaleHandler
 	BuildListHandler    *builds.BuildListHandler
 	BuildStatsHandler   *builds.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
@@ -238,8 +238,8 @@ func setupOrchestrator(
 	}
 	lokiClient := loki.NewClient(cfg.LokiURL, lokiHTTPClient, logger)
 	logBuildStore := &adapters.LogBuildStoreAdapter{Store: stores.BuildStore}
-	logsHandler := logs.NewLogsHandler(logBuildStore, lokiClient)
-	logStreamHandler := logs.NewLogStreamHandler(logBuildStore, lokiClient, logs.LogStreamHandlerOpts{
+	logsHandler := logshttp.NewLogsHandler(logBuildStore, lokiClient)
+	logStreamHandler := logshttp.NewLogStreamHandler(logBuildStore, lokiClient, logshttp.LogStreamHandlerOpts{
 		Logger: logger,
 	})
 
@@ -289,7 +289,7 @@ func setupOrchestrator(
 	// Status handler — wires project, build, and release stores (H6 status endpoint)
 	statusBuildStore := &adapters.StatusBuildStoreAdapter{Store: stores.BuildStore}
 	statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
-	statusHandler := status.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
+	statusHandler := statushttp.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
 
 	// T1.2 J-18 — Prometheus query_range proxy for the Status page KPI strip +
 	// SignalDetailSheet histograms. When LOOPZERO_PROMETHEUS_ADDRESS is set, wire the
@@ -306,7 +306,7 @@ func setupOrchestrator(
 	// T2.1 J-18 T1.3.b — SSE signal.changed stream handler, on the concrete
 	// PostgresEventStore (constructed in setup_stores.go): only it reads the
 	// environment-scoped signals, which are keyed by release id.
-	statusSSEHandler := status.NewStatusSSEHandler(projectStore, stores.PgEventStore, status.StatusSSEHandlerOpts{})
+	statusSSEHandler := statushttp.NewStatusSSEHandler(projectStore, stores.PgEventStore, statushttp.StatusSSEHandlerOpts{})
 
 	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate).
 	// Plan T2.2: real persistence via PostgresScalingStore (was: stub-202 returning acknowledged).

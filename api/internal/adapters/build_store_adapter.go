@@ -10,9 +10,9 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	buildroutes "github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/logs"
-	"github.com/getloopscale/loopzero/api/internal/routes/status"
+	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
@@ -63,7 +63,7 @@ type LogBuildStoreAdapter struct {
 	}
 }
 
-func (a *LogBuildStoreAdapter) GetByID(ctx context.Context, id string) (*logs.LogBuild, error) {
+func (a *LogBuildStoreAdapter) GetByID(ctx context.Context, id string) (*logshttp.LogBuild, error) {
 	build, err := a.Store.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func (a *LogBuildStoreAdapter) GetByID(ctx context.Context, id string) (*logs.Lo
 	if build == nil {
 		return nil, nil
 	}
-	return &logs.LogBuild{
+	return &logshttp.LogBuild{
 		ID:       build.ID,
 		TenantID: build.TenantID,
 		Status:   build.Status,
@@ -80,7 +80,7 @@ func (a *LogBuildStoreAdapter) GetByID(ctx context.Context, id string) (*logs.Lo
 
 // GetByIDForTenant routes to the tenant-scoped DB query — T0.4 of
 // deep-review-2026-05-10-remediation-plan (find_sec_idor_buildstore).
-func (a *LogBuildStoreAdapter) GetByIDForTenant(ctx context.Context, tenantID, id string) (*logs.LogBuild, error) {
+func (a *LogBuildStoreAdapter) GetByIDForTenant(ctx context.Context, tenantID, id string) (*logshttp.LogBuild, error) {
 	build, err := a.Store.GetByIDForTenant(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func (a *LogBuildStoreAdapter) GetByIDForTenant(ctx context.Context, tenantID, i
 	if build == nil {
 		return nil, nil
 	}
-	return &logs.LogBuild{
+	return &logshttp.LogBuild{
 		ID:       build.ID,
 		TenantID: build.TenantID,
 		Status:   build.Status,
@@ -101,19 +101,19 @@ type StatusBuildStoreAdapter struct {
 	Store projectBuilds
 }
 
-func (a *StatusBuildStoreAdapter) ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]status.StatusBuild, error) {
+func (a *StatusBuildStoreAdapter) ListByProject(ctx context.Context, tenantID, projectID string, limit, offset int) ([]statushttp.StatusBuild, error) {
 	builds, err := a.Store.ListByProject(ctx, tenantID, projectID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]status.StatusBuild, len(builds))
+	result := make([]statushttp.StatusBuild, len(builds))
 	for i, b := range builds {
 		scaling, serr := extractScalingFromAppsSpec(b.AppsSpec)
 		if serr != nil {
 			slog.WarnContext(ctx, "build status: apps_spec does not decode; scaling omitted",
 				"build_id", b.ID, "tenant_id", tenantID, "error", serr)
 		}
-		result[i] = status.StatusBuild{
+		result[i] = statushttp.StatusBuild{
 			ID:              b.ID,
 			Environment:     b.Environment,
 			Status:          b.Status,
@@ -131,7 +131,7 @@ func (a *StatusBuildStoreAdapter) ListByProject(ctx context.Context, tenantID, p
 // extractScalingFromAppsSpec parses the first app's autoscaling config from the
 // build's apps_spec JSON. Returns (nil, nil) when no autoscaling is configured
 // and an error when the stored value is not the array of apps it should be.
-func extractScalingFromAppsSpec(appsSpec json.RawMessage) (*status.StatusBuildScaling, error) {
+func extractScalingFromAppsSpec(appsSpec json.RawMessage) (*statushttp.StatusBuildScaling, error) {
 	if len(appsSpec) == 0 {
 		return nil, nil
 	}
@@ -142,7 +142,7 @@ func extractScalingFromAppsSpec(appsSpec json.RawMessage) (*status.StatusBuildSc
 	// Use the first app with autoscaling configured (matches Apps[0] pattern).
 	for _, app := range apps {
 		if app.Autoscaling != nil && app.Autoscaling.MaxReplicas > 0 {
-			return &status.StatusBuildScaling{
+			return &statushttp.StatusBuildScaling{
 				MinReplicas: app.Autoscaling.MinReplicas,
 				MaxReplicas: app.Autoscaling.MaxReplicas,
 			}, nil

@@ -11,8 +11,8 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
-	"github.com/getloopscale/loopzero/api/internal/aggregator"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/api/internal/timeline/aggregator"
 )
 
 // makeDeployTimelineSpawn returns the canonical spawner callback wired
@@ -71,7 +71,7 @@ type sseTimelineQuerier struct {
 // build completion).
 //
 // Returned state names are mapped by releaseStateProjection
-// (api/internal/aggregator/adapter_release_db.go) to the canonical
+// (api/internal/timeline/aggregator/adapter_release_db.go) to the canonical
 // (phase, status) FSM tuple.
 func eventTypeToCanonicalTransitions(eventType string) []string {
 	switch eventType {

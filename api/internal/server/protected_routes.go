@@ -14,11 +14,11 @@ import (
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	"github.com/getloopscale/loopzero/api/internal/routes/projects"
 	"github.com/getloopscale/loopzero/api/internal/routes/source"
-	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
 	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/api/internal/surfaces"
 	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
+	"github.com/getloopscale/loopzero/api/internal/timeline/timelinehttp"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
@@ -345,7 +345,7 @@ func registerProjectReadRoutes(r chi.Router, cfg Config, _ routeChains) {
 	}
 	// T5.1 — canonical Deploy Timeline, tenant resolved from the auth context.
 	if cfg.DeployTimelineStore != nil {
-		timeline.RegisterDeployTimelineRoute(r, cfg.DeployTimelineStore, func(ctx context.Context) (string, bool) {
+		timelinehttp.RegisterDeployTimelineRoute(r, cfg.DeployTimelineStore, func(ctx context.Context) (string, bool) {
 			tenantID := tenantFromContext(ctx)
 			return tenantID, tenantID != ""
 		})

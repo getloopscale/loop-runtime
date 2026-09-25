@@ -13,7 +13,7 @@ sources:
     resource: "api/internal/metering/metering_loop.go#L3"
     note: "metering"
   - id: me-agg
-    resource: "api/internal/aggregator/source_reader.go#L3"
+    resource: "api/internal/timeline/aggregator/source_reader.go#L3"
     note: "aggregator"
   - id: me-proc
     resource: "api/internal/processing/claim_store.go#L3"
@@ -59,7 +59,7 @@ under-bill.[^me-capture]
 | Component | Path | Kind | Layer | Anchor | What it is |
 |---|---|---|---|---|---|
 | `api.metering` | `api/internal/metering` | package | application | `api/internal/metering/metering_loop.go:3` | Leader-gated, single-flighted, panic-recovered, kill-switched usage collection loop. Reaches runtime cells through a per-cell client. |
-| `api.aggregator` | `api/internal/aggregator` | package | application | `api/internal/aggregator/source_reader.go:3` | Per-deploy goroutine fanning in 5 source-reader adapters (ArgoCD app, Loki markers, release DB, URL probe, LoopZeroApplication informer) into one canonical 5-phase timeline. |
+| `api.aggregator` | `api/internal/timeline/aggregator` | package | application | `api/internal/timeline/aggregator/source_reader.go:3` | Per-deploy goroutine fanning in 5 source-reader adapters (ArgoCD app, Loki markers, release DB, URL probe, LoopZeroApplication informer) into one canonical 5-phase timeline. |
 | `api.processing` | `api/internal/processing` | package | application | `api/internal/processing/claim_store.go:3` | Compare-and-swap claim on (processing_by, processing_since) replacing an in-process sync.Map, which stopped working once the controller became a separate binary. |
 | `api.payloadlog` | `api/internal/payloadlog` | package | application | `api/internal/payloadlog/logger.go:3` | Dispatcher->worker payload logger. Its own doc states the production wiring is DORMANT, gated on a compliance requirement: the mechanism and its tests exist, the request-path caller does not. |
 | `api.scrub` | `api/internal/scrub` | package | domain | `api/internal/scrub/scrub.go:3` | Regex denylist rewriting internal terms before they reach a client, applied at WRITE time so the SSE event store never holds an unscrubbed term. This is the mechanism behind the repository's Rule 3. |
@@ -96,7 +96,7 @@ under-bill.[^me-capture]
 # Evidence
 
 [^me-met]: `api/internal/metering/metering_loop.go:3`
-[^me-agg]: `api/internal/aggregator/source_reader.go:3`
+[^me-agg]: `api/internal/timeline/aggregator/source_reader.go:3`
 [^me-proc]: `api/internal/processing/claim_store.go:3`
 [^me-pay]: `api/internal/payloadlog/logger.go:3`
 [^me-scrub]: `api/internal/scrub/scrub.go:3`

@@ -11,13 +11,17 @@ var registry = map[string]Entry{
 	"auth":           {Kind: Feature},
 	"billing":        {Kind: Feature},
 	"bootstrap":      {Kind: Feature},
+	"environments":   {Kind: Feature},
 	"health":         {Kind: Feature},
 	"integrations":   {Kind: Feature},
+	"logs":           {Kind: Feature},
 	"projectmetrics": {Kind: Feature},
 	"repositories":   {Kind: Feature},
 	"secrets":        {Kind: Feature},
+	"status":         {Kind: Feature},
 	"teams":          {Kind: Feature},
 	"tenants":        {Kind: Feature},
+	"timeline":       {Kind: Feature},
 	"version":        {Kind: Feature},
 	"audit":          {Kind: Feature},
 	"metering":       {Kind: Feature, Deps: []string{"placement"}},
@@ -55,13 +59,11 @@ var registry = map[string]Entry{
 
 	// ── layer folders being dissolved into features ─────────────────────────
 	// Each entry below disappears when its code reaches the feature that owns it.
-	"adapters":   {Kind: Layer, Deps: []string{"aggregator", "buildplane", "cfzone", "db", "deploycontracts", "github", "integrations", "k8s", "lock", "ports", "repositories", "routes", "services", "sse"}},
-	"aggregator": {Kind: Layer, Deps: []string{"metrics", "ports", "scrub"}},
+	"adapters":   {Kind: Layer, Deps: []string{"buildplane", "cfzone", "db", "deploycontracts", "github", "environments", "integrations", "k8s", "lock", "logs", "ports", "repositories", "routes", "services", "sse", "status", "timeline"}},
 	"argocd":     {Kind: Layer, Deps: []string{"deploycontracts", "k8s", "metrics", "placement"}},
 	"buildplane": {Kind: Layer, Deps: []string{"archive", "deploycontracts", "events", "gitclient", "k8s", "metrics", "scrub"}},
 	"cfkv":       {Kind: Layer, Deps: []string{"metrics"}},
 	"cfzone":     {Kind: Layer},
-	"loki":       {Kind: Layer, Deps: []string{"ports"}},
 	"routes":     {Kind: Layer, Deps: []string{"buildplane", "correlation", "db", "github", "httpio", "k8s", "metrics", "middleware", "pagination", "plantier", "ports", "routestest", "services", "sse", "validation"}},
 	"services":   {Kind: Layer, Deps: []string{"cfkv", "db", "deploycontracts", "events", "manifests", "metrics", "placement", "ports", "processing", "scrub", "sse"}},
 

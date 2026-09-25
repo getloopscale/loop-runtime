@@ -7,8 +7,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 )
 
 // EnvProjectLookupAdapter wires the canonical routes.ProjectStore
@@ -55,4 +55,4 @@ func (a *EnvProjectLookupAdapter) ProjectExistsForTenant(ctx context.Context, te
 }
 
 // The port this adapter satisfies, asserted at compile time.
-var _ environments.EnvProjectLookup = (*EnvProjectLookupAdapter)(nil)
+var _ environmentshttp.EnvProjectLookup = (*EnvProjectLookupAdapter)(nil)

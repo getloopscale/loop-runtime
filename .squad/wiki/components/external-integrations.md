@@ -22,7 +22,7 @@ sources:
     resource: "api/internal/github/webhook/handler.go#L3"
     note: "github/webhook"
   - id: ei-loki
-    resource: "api/internal/loki/client.go#L3"
+    resource: "api/internal/logs/loki/client.go#L3"
     note: "loki"
   - id: ei-trace
     resource: "api/internal/tracing/tracing.go#L3"
@@ -55,7 +55,7 @@ module that speak a third-party protocol.
 | `api.cfzone` | `api/internal/cfzone` | package | infrastructure | `api/internal/cfzone/types.go:1` | Cloudflare Zone API client for custom apex domains. |
 | `api.github` | `api/internal/github` | package | infrastructure | `api/internal/github/appclient.go:3` | GitHub App client: source tarball download, commit status, PR comments, auto-deploy and preview-deploy drivers. |
 | `api.github.webhook` | `api/internal/github/webhook` | package | interface | `api/internal/github/webhook/handler.go:3` | Inbound webhook receiver — an entry point into the system from outside, HMAC-verified. |
-| `api.loki` | `api/internal/loki` | package | infrastructure | `api/internal/loki/client.go:3` | Loki query client; the source of build output shown by the logs route. |
+| `api.loki` | `api/internal/logs/loki` | package | infrastructure | `api/internal/logs/loki/client.go:3` | Loki query client; the source of build output shown by the logs route. |
 | `api.tracing` | `api/internal/tracing` | package | infrastructure | `api/internal/tracing/tracing.go:3` | OTLP/gRPC tracer bootstrap: 1s export timeout, retry disabled, bounded queue 2048, flag LOOPZERO_TRACING_ENABLED. |
 
 ## Measured size
@@ -93,7 +93,7 @@ module that speak a third-party protocol.
 [^ei-cfzone]: `api/internal/cfzone/types.go:1`
 [^ei-gh]: `api/internal/github/appclient.go:3`
 [^ei-ghwh]: `api/internal/github/webhook/handler.go:3`
-[^ei-loki]: `api/internal/loki/client.go:3`
+[^ei-loki]: `api/internal/logs/loki/client.go:3`
 [^ei-trace]: `api/internal/tracing/tracing.go:3`
 [^ei-kv-write]: `api/internal/cfkv/client.go:67`
 [^ei-zone]: `api/internal/cfzone/client.go:19`

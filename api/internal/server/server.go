@@ -15,19 +15,19 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/auth/authhttp"
 	"github.com/getloopscale/loopzero/api/internal/bootstrap"
+	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
+	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/admin"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/environments"
-	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
-	"github.com/getloopscale/loopzero/api/internal/routes/status"
-	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
+	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
+	"github.com/getloopscale/loopzero/api/internal/timeline/timelinehttp"
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
@@ -115,25 +115,25 @@ type Config struct {
 	// per-app SBOM metadata + presigned download URLs from S3.
 	BuildSBOMHandler    *builds.BuildSBOMHandler
 	ArgoCallbackHandler *argocd.ArgoCallbackHandler
-	LogsHandler         *logs.LogsHandler
-	LogStreamHandler    *logs.LogStreamHandler
+	LogsHandler         *logshttp.LogsHandler
+	LogStreamHandler    *logshttp.LogStreamHandler
 	RollbackHandler     *rollback.RollbackHandler
 	PromoteHandler      *promote.PromoteHandler
-	StatusHandler       *status.StatusHandler
+	StatusHandler       *statushttp.StatusHandler
 	MetricsProxyHandler *projectmetricshttp.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy
-	StatusSSEHandler    *status.StatusSSEHandler                // T2.1 J-18 T1.3.b — SSE signal.changed stream
+	StatusSSEHandler    *statushttp.StatusSSEHandler            // T2.1 J-18 T1.3.b — SSE signal.changed stream
 	// DeployTimelineStore wires GET /api/v1/deploys/{deployID}/timeline
 	// per plan deploy-timeline-canonical-5-phases T5.1. nil-safe: when
 	// nil, the route is omitted (legacy / test paths). Production wires
 	// aggregator.SSEEventSink-backed PostgresEventStore that satisfies
 	// the DeployTimelineEventStore contract.
-	DeployTimelineStore timeline.DeployTimelineEventStore
+	DeployTimelineStore timelinehttp.DeployTimelineEventStore
 	ScaleHandler        *scale.ScaleHandler
 	BuildListHandler    *builds.BuildListHandler
 	// BuildStatsHandler serves GET /api/v1/builds/stats — the tenant-scoped
 	// deploys aggregate for the Overview sparkline (J-06 D2). Nil disables the route.
 	BuildStatsHandler  *builds.BuildStatsHandler
-	EnvironmentHandler *environments.EnvironmentHandler
+	EnvironmentHandler *environmentshttp.EnvironmentHandler
 	TeamHandler        *teamshttp.TeamHandler
 	// AUDIT-10: narrow store for /whoami username lookup. Nil is legal (handler
 	// omits username field). Implemented by store.PostgresTeamStore.

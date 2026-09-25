@@ -13,7 +13,7 @@ import (
 )
 
 // prometheusClient is the concrete PrometheusQueryClient (J-18 T1.2). It executes
-// Prometheus `query_range` over HTTP, structurally mirroring the api/internal/loki
+// Prometheus `query_range` over HTTP, structurally mirroring the api/internal/logs/loki
 // client. Errors are SCRUBBED — the PromQL (which carries tenant_id + project
 // labels) is never echoed into an error or log.
 type prometheusClient struct {

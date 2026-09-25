@@ -17,7 +17,9 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
 	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
+	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
+	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
@@ -25,12 +27,10 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
-	"github.com/getloopscale/loopzero/api/internal/routes/environments"
-	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/scale"
-	"github.com/getloopscale/loopzero/api/internal/routes/status"
+	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
@@ -95,15 +95,15 @@ func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 		BuildAttestationHandler:   &builds.BuildAttestationHandler{},
 		BuildSBOMHandler:          &builds.BuildSBOMHandler{},
 		ArgoCallbackHandler:       &argocd.ArgoCallbackHandler{},
-		LogsHandler:               &logs.LogsHandler{},
-		LogStreamHandler:          &logs.LogStreamHandler{},
+		LogsHandler:               &logshttp.LogsHandler{},
+		LogStreamHandler:          &logshttp.LogStreamHandler{},
 		RollbackHandler:           &rollback.RollbackHandler{},
 		PromoteHandler:            &promote.PromoteHandler{},
-		StatusHandler:             &status.StatusHandler{},
+		StatusHandler:             &statushttp.StatusHandler{},
 		ScaleHandler:              &scale.ScaleHandler{},
 		BuildListHandler:          &builds.BuildListHandler{},
 		BuildStatsHandler:         &builds.BuildStatsHandler{},
-		EnvironmentHandler:        &environments.EnvironmentHandler{},
+		EnvironmentHandler:        &environmentshttp.EnvironmentHandler{},
 		TeamHandler:               &teamshttp.TeamHandler{},
 		DomainHandler:             &domains.DomainHandler{},
 		RepositoryHandler:         &repositorieshttp.RepositoryHandler{},

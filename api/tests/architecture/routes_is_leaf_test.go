@@ -40,7 +40,7 @@ func TestImportGraph_RoutesIsLeaf(t *testing.T) {
 		"github.com/getloopscale/loopzero/api/internal/services/...",
 		"github.com/getloopscale/loopzero/api/internal/db/...",
 		"github.com/getloopscale/loopzero/api/internal/k8s/...",
-		"github.com/getloopscale/loopzero/api/internal/loki/...",
+		"github.com/getloopscale/loopzero/api/internal/logs/loki/...",
 		"github.com/getloopscale/loopzero/api/internal/github/...",
 	}
 

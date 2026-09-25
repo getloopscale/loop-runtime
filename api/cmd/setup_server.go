@@ -8,8 +8,8 @@ import (
 	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
+	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
@@ -26,7 +26,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
-	"github.com/getloopscale/loopzero/api/internal/aggregator"
 	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
 	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
 	"github.com/getloopscale/loopzero/api/internal/config"
@@ -40,6 +39,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
 	previewroutes "github.com/getloopscale/loopzero/api/internal/routes/preview"
 	"github.com/getloopscale/loopzero/api/internal/server"
+	"github.com/getloopscale/loopzero/api/internal/timeline/aggregator"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 	pkglogging "github.com/getloopscale/loopzero/pkg/logging"
 )
@@ -156,8 +156,8 @@ func baseServerConfig(w serverWiring) server.Config {
 // provides it exists. The project lookup is the cross-tenant gate (EC-1): the
 // handler falls open without it, and it is absent only when there is no
 // database — the same condition that makes the routes it guards unreachable.
-func newEnvironmentHandler(w serverWiring) *environments.EnvironmentHandler {
-	h := environments.NewEnvironmentHandler(w.k8sDeps.TenantCRMgr)
+func newEnvironmentHandler(w serverWiring) *environmentshttp.EnvironmentHandler {
+	h := environmentshttp.NewEnvironmentHandler(w.k8sDeps.TenantCRMgr)
 	if w.dbAdapter != nil {
 		h = h.WithKPILookup(&adapters.EnvKPILookup{DB: w.dbAdapter})
 	}

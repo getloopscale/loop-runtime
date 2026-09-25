@@ -9,12 +9,12 @@ package server_test
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
+	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/environments"
-	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
-	"github.com/getloopscale/loopzero/api/internal/routes/status"
+	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 	"io"
 	"log/slog"
@@ -71,17 +71,17 @@ func t61BaseCfg(logger *slog.Logger) server.Config {
 		BootstrapStore:       &stubBootstrapStore{},
 		BootstrapSecret:      "test-bootstrap-secret",
 		BuildHandler:         builds.NewBuildHandler(nil, logger),
-		LogsHandler:          logs.NewLogsHandler(nil, nil),
+		LogsHandler:          logshttp.NewLogsHandler(nil, nil),
 		RollbackHandler:      rollback.NewRollbackHandler(nil, nil, "test.local"),
-		StatusHandler:        status.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
+		StatusHandler:        statushttp.NewStatusHandler(nil, nil, nil, "test.local", "", ""),
 		BuildListHandler:     builds.NewBuildListHandler(nil),
-		EnvironmentHandler:   environments.NewEnvironmentHandler(nil),
+		EnvironmentHandler:   environmentshttp.NewEnvironmentHandler(nil),
 		TeamHandler:          teamshttp.NewTeamHandler(nil),
 		DomainHandler:        domains.NewDomainHandler(nil, nil, nil, "test.local"),
 		RepositoryHandler:    repositorieshttp.NewRepositoryHandler(nil),
 		AuditHandler:         audithttp.NewAuditHandler(nil),
 		ArgoCallbackHandler:  argocd.NewArgoCallbackHandler(&stubReleaseActivator{}, logger, "test-secret"),
-		LogStreamHandler:     logs.NewLogStreamHandler(nil, nil, logs.LogStreamHandlerOpts{}),
+		LogStreamHandler:     logshttp.NewLogStreamHandler(nil, nil, logshttp.LogStreamHandlerOpts{}),
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
 		TenantDeletionStore:  &stubTenantDeletionStore{},
 		Guards:               server.RouteGuards{IdempotencyStore: &stubIdempotencyStore{}},

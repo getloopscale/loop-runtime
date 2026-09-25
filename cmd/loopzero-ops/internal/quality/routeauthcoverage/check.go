@@ -74,7 +74,7 @@ type Config struct {
 // Measured on 2026-08-17 by scanning production `api/**/*.go`: a single file registers
 // a route outside router.go.
 var DefaultOffRouterMounts = map[string]string{
-	"api/internal/routes/timeline/deploy_timeline_register.go": "canonical mount point of the timeline, called from router.go:550 — from INSIDE the protected range. " +
+	"api/internal/timeline/timelinehttp/deploy_timeline_register.go": "canonical mount point of the timeline, called from router.go:550 — from INSIDE the protected range. " +
 		"The helper exists so the wiring has a test (`deploy_timeline_register_test.go`), and the route returns its own 401 when there is no tenant. " +
 		"Measured in B-123: the gate reported 42 routes over a system with at least 43, and this was the missing one.",
 }

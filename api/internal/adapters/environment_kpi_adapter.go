@@ -10,10 +10,10 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/api/internal/routes/environments"
+	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 )
 
-var _ environments.EnvKPILookup = (*EnvKPILookup)(nil)
+var _ environmentshttp.EnvKPILookup = (*EnvKPILookup)(nil)
 
 // EnvKPILookup fills the dashboard's per-environment KPI row (last deploy
 // time and commit) from the most recent ACTIVE release of each environment,
@@ -23,7 +23,7 @@ type EnvKPILookup struct {
 }
 
 // LatestActivePerEnv returns the last-deploy KPI keyed by environment name.
-func (l *EnvKPILookup) LatestActivePerEnv(ctx context.Context, tenantID string) (map[string]environments.EnvKPI, error) {
+func (l *EnvKPILookup) LatestActivePerEnv(ctx context.Context, tenantID string) (map[string]environmentshttp.EnvKPI, error) {
 	rows, err := generated.New().ListLatestActiveReleasePerEnv(ctx, db.Generated(l.DB), tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("environment KPI lookup: %w", err)
@@ -31,14 +31,14 @@ func (l *EnvKPILookup) LatestActivePerEnv(ctx context.Context, tenantID string) 
 	return envKPIsFromRows(rows), nil
 }
 
-func envKPIsFromRows(rows []generated.ListLatestActiveReleasePerEnvRow) map[string]environments.EnvKPI {
-	out := make(map[string]environments.EnvKPI, len(rows))
+func envKPIsFromRows(rows []generated.ListLatestActiveReleasePerEnvRow) map[string]environmentshttp.EnvKPI {
+	out := make(map[string]environmentshttp.EnvKPI, len(rows))
 	for _, r := range rows {
 		sha := ""
 		if r.GitCommit != nil {
 			sha = *r.GitCommit
 		}
-		out[r.Environment] = environments.EnvKPI{
+		out[r.Environment] = environmentshttp.EnvKPI{
 			LastDeploy:    r.CreatedAt.Time.UTC().Format(time.RFC3339),
 			LastDeploySha: sha,
 		}

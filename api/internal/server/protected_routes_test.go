@@ -14,7 +14,9 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
 	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
 	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
+	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
+	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/ports"
@@ -22,19 +24,17 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
 	"github.com/getloopscale/loopzero/api/internal/routes/builds"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
-	"github.com/getloopscale/loopzero/api/internal/routes/environments"
-	"github.com/getloopscale/loopzero/api/internal/routes/logs"
 	"github.com/getloopscale/loopzero/api/internal/routes/preview"
 	"github.com/getloopscale/loopzero/api/internal/routes/promote"
 	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
 	"github.com/getloopscale/loopzero/api/internal/routes/scale"
-	"github.com/getloopscale/loopzero/api/internal/routes/status"
-	"github.com/getloopscale/loopzero/api/internal/routes/timeline"
 	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 	"github.com/getloopscale/loopzero/api/internal/sse"
+	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 	"github.com/getloopscale/loopzero/api/internal/surfaces"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
+	"github.com/getloopscale/loopzero/api/internal/timeline/timelinehttp"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
@@ -52,7 +52,7 @@ type (
 		tenantshttp.TenantDeletionStore
 	}
 	stubTimelineStore struct {
-		timeline.DeployTimelineEventStore
+		timelinehttp.DeployTimelineEventStore
 	}
 	stubIdempotencyStore struct{ policy.IdempotencyStore }
 )
@@ -70,11 +70,11 @@ func fullProtectedConfig() Config {
 		BuildHandler:              &builds.BuildHandler{},
 		BuildAttestationHandler:   &builds.BuildAttestationHandler{},
 		BuildSBOMHandler:          &builds.BuildSBOMHandler{},
-		LogsHandler:               &logs.LogsHandler{},
-		LogStreamHandler:          &logs.LogStreamHandler{},
-		StatusHandler:             &status.StatusHandler{},
+		LogsHandler:               &logshttp.LogsHandler{},
+		LogStreamHandler:          &logshttp.LogStreamHandler{},
+		StatusHandler:             &statushttp.StatusHandler{},
 		MetricsProxyHandler:       &projectmetricshttp.MetricsProxyHandler{},
-		StatusSSEHandler:          &status.StatusSSEHandler{},
+		StatusSSEHandler:          &statushttp.StatusSSEHandler{},
 		DeployTimelineStore:       stubTimelineStore{},
 		ScaleHandler:              &scale.ScaleHandler{},
 		BuildListHandler:          &builds.BuildListHandler{},
@@ -84,7 +84,7 @@ func fullProtectedConfig() Config {
 		TeamHandler:               &teamshttp.TeamHandler{},
 		TenantDeletionStore:       stubTenantDeletion{},
 		BillingHandler:            &billinghttp.BillingHandler{},
-		EnvironmentHandler:        &environments.EnvironmentHandler{},
+		EnvironmentHandler:        &environmentshttp.EnvironmentHandler{},
 		DomainHandler:             &domains.DomainHandler{},
 		RepositoryHandler:         &repositorieshttp.RepositoryHandler{},
 		IntegrationsGitHubHandler: &integrationshttp.IntegrationsGitHubHandler{},

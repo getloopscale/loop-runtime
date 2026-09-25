@@ -19,7 +19,8 @@
 // What this gate detects:
 //   - Removed `<Field> <Type> `json:"<tag>"“ lines in tracked Go files under:
 //     api/internal/ports/*.go
-//     api/internal/<feature>/<name>http/*.go (every HTTP package)
+//     api/internal/<feature>/<name>http/*.go and <feature>/ports.go (the
+//     handlers and the ports a feature owns)
 //     api/internal/db/generated/*.go
 //   - For each removed field, greps consumers in:
 //     ../loopzero-cloud/dashboard/src/  (TS/TSX, sibling checkout)
@@ -136,12 +137,19 @@ var trackedFiles = []string{
 	"api/internal/db/generated/", // any *.go under this dir
 }
 
-// handlerSurface names the handler half of the contract surface in reports. The
-// handlers used to live under one directory, api/internal/routes/; since
-// api/internal was organized by feature (2026-09-25) they are every
-// `<feature>/<name>http` package, so the paths are discovered rather than
-// declared, and an empty discovery is reported under this name.
-const handlerSurface = "api/internal/<feature>/<name>http/"
+// featureSurface names the feature half of the contract surface in reports.
+// The handlers used to live under one directory, api/internal/routes/, and every
+// port type under api/internal/ports/. Since api/internal was organized by
+// feature (2026-09-25) the handlers are the `<feature>/<name>http` packages and a
+// port only one feature consumes lives in that feature's `ports.go`. Both are
+// discovered rather than declared, and a discovery that finds neither is
+// reported under this name.
+//
+// What is tracked is exactly the code that was tracked before the move, at its
+// new address: the handlers and the port types. A feature's service code came
+// from api/internal/services/, which was never tracked, and tracking it now
+// would count at head declarations the base never counted — masking a real drop.
+const featureSurface = "api/internal/<feature>/{<name>http/,ports.go}"
 
 // legacyRoutesDir is the handler tree before the feature layout. It stays in the
 // pathspec handed to git even where it no longer exists in the checkout: the
@@ -151,31 +159,30 @@ const handlerSurface = "api/internal/<feature>/<name>http/"
 // pathspec that matches nothing, which is exactly the behaviour wanted here.
 const legacyRoutesDir = "api/internal/routes/"
 
-// handlerPaths returns the discovered handler directories, each with a trailing
-// slash so git reads it as a directory pathspec.
-func handlerPaths(root string) []string {
+// featurePaths returns every HTTP package directory (with a trailing slash, so
+// git reads it as a directory pathspec) and every feature `ports.go`.
+func featurePaths(root string) []string {
 	var out []string
-	dirs, err := featurefence.HTTPPackageDirs(root)
-	if err == nil {
+	if dirs, err := featurefence.HTTPPackageDirs(root); err == nil {
 		for _, d := range dirs {
 			out = append(out, filepath.ToSlash(d)+"/")
 		}
 	}
-	if _, err := os.Stat(filepath.Join(root, legacyRoutesDir)); err == nil {
-		out = append(out, legacyRoutesDir)
+	ports, err := filepath.Glob(filepath.Join(root, "api", "internal", "*", "ports.go"))
+	if err == nil {
+		for _, p := range ports {
+			if rel, rerr := filepath.Rel(root, p); rerr == nil {
+				out = append(out, filepath.ToSlash(rel))
+			}
+		}
 	}
 	return out
 }
 
-// trackedPaths is every pathspec handed to git: the declared files plus the
-// discovered handler directories.
+// trackedPaths is every pathspec handed to git: the declared files, the feature
+// handlers and ports, and the legacy routes tree.
 func trackedPaths(root string) []string {
-	paths := append(append([]string{}, trackedFiles...), handlerPaths(root)...)
-	for _, p := range paths {
-		if p == legacyRoutesDir {
-			return paths
-		}
-	}
+	paths := append(append([]string{}, trackedFiles...), featurePaths(root)...)
 	return append(paths, legacyRoutesDir)
 }
 
@@ -487,8 +494,8 @@ func missingTrackedPaths(root string) []string {
 			missing = append(missing, f)
 		}
 	}
-	if len(handlerPaths(root)) == 0 {
-		missing = append(missing, handlerSurface)
+	if len(featurePaths(root)) == 0 {
+		missing = append(missing, featureSurface)
 	}
 	return missing
 }

@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/routes/environments"
+	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 )
 
-var _ environments.PreviewSlotLookup = (*PreviewSlotLookup)(nil)
+var _ environmentshttp.PreviewSlotLookup = (*PreviewSlotLookup)(nil)
 
 type previewSlotsByTenant interface {
 	ListByTenant(ctx context.Context, tenantID string) ([]store.PreviewSlot, error)
@@ -25,14 +25,14 @@ type PreviewSlotLookup struct {
 }
 
 // ListPreviewSlots returns every preview slot of the tenant.
-func (a *PreviewSlotLookup) ListPreviewSlots(ctx context.Context, tenantID string) ([]environments.PreviewSlotInfo, error) {
+func (a *PreviewSlotLookup) ListPreviewSlots(ctx context.Context, tenantID string) ([]environmentshttp.PreviewSlotInfo, error) {
 	slots, err := a.Store.ListByTenant(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]environments.PreviewSlotInfo, 0, len(slots))
+	out := make([]environmentshttp.PreviewSlotInfo, 0, len(slots))
 	for _, slot := range slots {
-		out = append(out, environments.PreviewSlotInfo{
+		out = append(out, environmentshttp.PreviewSlotInfo{
 			ProjectID:       slot.ProjectID,
 			ActivePRNumber:  slot.ActivePRNumber,
 			ActiveBranch:    slot.ActiveBranch,

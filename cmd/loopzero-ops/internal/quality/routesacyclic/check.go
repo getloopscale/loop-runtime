@@ -42,20 +42,16 @@ var testOnlyLeaves = map[string]bool{}
 // a declaration rather than a discovery.
 var allowed = map[string]map[string]bool{
 	// families
-	"domains":      {},
-	"preview":      {},
-	"scale":        {},
-	"admin":        {},
-	"projects":     {},
-	"environments": {},
-	"builds":       {},
-	"promote":      {},
-	"rollback":     {},
-	"status":       {},
-	"logs":         {},
-	"timeline":     {},
-	"argocd":       {},
-	"source":       {},
+	"domains":  {},
+	"preview":  {},
+	"scale":    {},
+	"admin":    {},
+	"projects": {},
+	"builds":   {},
+	"promote":  {},
+	"rollback": {},
+	"argocd":   {},
+	"source":   {},
 }
 
 // Config controls the gate.
