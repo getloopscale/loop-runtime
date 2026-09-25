@@ -1,31 +1,31 @@
 #!/usr/bin/env bash
 # LIVE regression-protector for Red Team loopzero/loopzero#155 closure
-# (Billing: checkout 'pro' retorna 503 BILLING_NOT_CONFIGURED — Stripe
-# price IDs não provisionados no dev).
+# (Billing: checkout 'pro' returns 503 BILLING_NOT_CONFIGURED — Stripe
+# price IDs not provisioned in dev).
 #
 # OPERATOR HARD STOP per .claude/rules/cleanroom-up-live-test-mandate.md
-# INQUEBRÁVEL — run AFTER Cleanroom TOTAL + UP + seed-post-cleanroom-all.sh.
+# UNBREAKABLE — run AFTER Cleanroom TOTAL + UP + seed-post-cleanroom-all.sh.
 #
 # Reproduces #155 verbatim:
-#   * Follow-up do #154 (rotas /v1/billing* já registradas).
-#   * Root cause: STRIPE_PRICE_{STARTER,PRO,TEAM} env vars unset no pod
-#     loopzero-cloud → PriceIDForPlan("pro") retorna "" →
-#     `internal/routes/billing.go:216` emite 503 BILLING_NOT_CONFIGURED.
-#   * Fix: `loopzero-ops seed stripe-api-keys` lê `stripe.price_{starter,pro,
-#     team}` do dev-credentials.json e materializa no Secret
-#     `loopzero-stripe-api-keys` alongside STRIPE_API_KEY. Restart do #154
-#     garante que o pod pega os novos env vars.
+#   * Follow-up of #154 (/v1/billing* routes already registered).
+#   * Root cause: STRIPE_PRICE_{STARTER,PRO,TEAM} env vars unset in the
+#     loopzero-cloud pod → PriceIDForPlan("pro") returns "" →
+#     `internal/routes/billing.go:216` emits 503 BILLING_NOT_CONFIGURED.
+#   * Fix: `loopzero-ops seed stripe-api-keys` reads `stripe.price_{starter,pro,
+#     team}` from dev-credentials.json and materializes them in the Secret
+#     `loopzero-stripe-api-keys` alongside STRIPE_API_KEY. The #154 restart
+#     guarantees the pod picks up the new env vars.
 #
-# Per `feedback_issue_fix_requires_failing_e2e_test_2026_06_25` INQUEBRÁVEL.
+# Per `feedback_issue_fix_requires_failing_e2e_test_2026_06_25` UNBREAKABLE.
 #
 # Scenarios:
 #   A — Secret loopzero-stripe-api-keys contains STRIPE_PRICE_PRO key
-#       (non-empty base64 value). Requer kubectl.
+#       (non-empty base64 value). Requires kubectl.
 #   B — loopzero-cloud pod env includes STRIPE_PRICE_PRO with non-empty value
 #       (envFrom.secretRef materialized correctly).
 #   C — POST /v1/billing/checkout {"plan":"pro"} does NOT return 503
 #       BILLING_NOT_CONFIGURED. Expected: 200 with checkout_url OR 4xx
-#       de auth/config differently — but NOT 503 with that specific code.
+#       from auth/config differently — but NOT 503 with that specific code.
 #
 # Slug:           billing-stripe-price-ids-seed-canonical
 # Issue:          loopzero/loopzero#155
@@ -57,7 +57,7 @@ Environment:
   CORE_CONTEXT      default k3d-loopzero-core
   SESSION_JWT_FILE  default ~/.loopzero/local-dogfood-session-jwt.txt (or canonical)
 
-Per cleanroom-up-live-test-mandate.md INQUEBRÁVEL. Operator-side. Not for CI.
+Per cleanroom-up-live-test-mandate.md UNBREAKABLE. Operator-side. Not for CI.
 EOF
 }
 

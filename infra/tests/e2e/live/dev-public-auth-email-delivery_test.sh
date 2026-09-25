@@ -31,7 +31,7 @@
 #     to confirm Resend received what Kratos sent.
 #   - kubectl context k3d-loopzero-core reachable.
 #
-# OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md INQUEBRÁVEL —
+# OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md UNBREAKABLE —
 # requires Cleanroom TOTAL precedence + the canonical seed chain.
 #
 # Exit codes:

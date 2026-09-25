@@ -174,12 +174,12 @@ func TestF11ArgocdLuaHealthChecksDefined(t *testing.T) {
 			t.Errorf("F-11 regression: argocd values.yaml must declare %q Lua health check", key)
 		}
 	}
-	// Lua deve usar `obj.spec` para IngressRoute (não `obj.status` — IngressRoute
-	// não tem .status field).
+	// Lua must use `obj.spec` for IngressRoute (not `obj.status` — IngressRoute
+	// has no .status field).
 	if !strings.Contains(s, "obj.spec.routes") {
 		t.Error("F-11 regression: IngressRoute health must check obj.spec.routes (no .status field)")
 	}
-	// Certificate deve parsear .status.conditions Ready type.
+	// Certificate must parse the .status.conditions Ready type.
 	if !strings.Contains(s, "obj.status.conditions") || !strings.Contains(s, `c.type == "Ready"`) {
 		t.Error("F-11 regression: Certificate health must parse status.conditions Ready type")
 	}
@@ -200,7 +200,7 @@ func TestF12LoopZeroApiTokensSecretGenerated(t *testing.T) {
 	if !strings.Contains(s, "/api/v1/session") {
 		t.Error("F-12 regression: script must POST to argocd /api/v1/session for JWT generation")
 	}
-	// Idempotência: se login falhar, preserve existing token. Helper renamed
+	// Idempotency: if login fails, preserve the existing token. Helper renamed
 	// from `get_existing` to `get_or_generate` (latter handles both branches).
 	if !strings.Contains(s, "loopzero-api-tokens loopzero-system argocd-token") {
 		t.Error("F-12 regression: script must look up existing argocd-token in loopzero-api-tokens for mid-bootstrap idempotency")
@@ -239,7 +239,7 @@ func TestF04MigrationScriptExists(t *testing.T) {
 	if !strings.Contains(s, "force-reconcile=") {
 		t.Error("F-04 regression: script must trigger force-reconcile on canonical CR after delete to re-validate shared resources")
 	}
-	// DRY_RUN default (não destrutivo sem --apply explícito).
+	// DRY_RUN by default (non-destructive without an explicit --apply).
 	if !strings.Contains(s, "DRY_RUN=1") {
 		t.Error("F-04 regression: script must default to DRY_RUN=1 (require explicit --apply for destructive ops)")
 	}
@@ -267,7 +267,7 @@ func TestF09EnsurePullSecretHandlesNotFound(t *testing.T) {
 	if !strings.Contains(s, "errors.IsNotFound") {
 		t.Error("F-09 regression: ensurePullSecret path must check errors.IsNotFound to distinguish missing source from real failures")
 	}
-	// Condition reason "SourceMissing" para o caso esperado.
+	// Condition reason "SourceMissing" for the expected case.
 	if !strings.Contains(s, `"SourceMissing"`) {
 		t.Error("F-09 regression: NotFound case must set condition reason=SourceMissing")
 	}

@@ -99,17 +99,17 @@ verify_certs() {
   [[ $VERIFY -eq 1 && $DRY_RUN -eq 0 ]] || return 0
   log "waiting 8s for cert issuance + reload..."
   sleep 8
-  # cloud-dev.loopzero.example saiu desta lista em 2026-08-18. O Caddyfile o removeu
-  # deliberadamente em 2026-08-10 (era host publico servindo redirecionamento, com
-  # superficie de auth concedida a ninguem) e esta lista nao acompanhou. O resultado
-  # foi um verificador que exigia certificado de um hostname que ninguem serve — e
-  # que portanto reprovava 100% das vezes sobre a configuracao correta. Um gate que
-  # nao pode passar e um gate que ninguem roda, e foi assim que o webhook do GitHub
-  # ficou semanas entregando contra `tls: internal error` sem que nada avisasse.
-  # A carga do webhook vive em `app-dev`, que ja tem o handle /api/v1/webhooks/github.
-  # B-025 (2026-08-19): os tres hosts SEM sufixo sairam do Caddyfile — serviam processos de
-  # desenvolvimento sob nome de producao. Verificar TLS deles aqui passaria a reprovar sempre,
-  # que e' exatamente a forma de gate-que-nao-pode-passar descrita no comentario acima.
+  # cloud-dev.loopzero.example left this list on 2026-08-18. The Caddyfile removed it
+  # deliberately on 2026-08-10 (it was a public host serving a redirect, with an
+  # auth surface granted to nobody) and this list did not follow. The result
+  # was a verifier that demanded a certificate for a hostname nobody serves — and
+  # that therefore failed 100% of the time against the correct configuration. A gate that
+  # cannot pass is a gate nobody runs, and that is how the GitHub webhook
+  # spent weeks delivering against `tls: internal error` without anything warning.
+  # The webhook payload lives on `app-dev`, which already has the /api/v1/webhooks/github handle.
+  # B-025 (2026-08-19): the three hosts WITHOUT a suffix left the Caddyfile — they served
+  # development processes under a production name. Verifying their TLS here would fail forever,
+  # which is exactly the gate-that-cannot-pass shape described in the comment above.
   local hosts=(
     auth-dev.loopzero.example app-dev.loopzero.example
   )

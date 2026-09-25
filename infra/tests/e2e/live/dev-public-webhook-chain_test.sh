@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dev-public-webhook-chain_test.sh
 #
-# T2.2 of plan 2026-06-08-pre-release-test-rigor v1.2 (Cenário 1).
+# T2.2 of plan 2026-06-08-pre-release-test-rigor v1.2 (Scenario 1).
 #
 # LIVE end-to-end webhook chain assertion against dev-public:
 #   GitHub push → webhook → loopzero-api → source bundle → Argo workflow →

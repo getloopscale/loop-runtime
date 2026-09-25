@@ -5,9 +5,9 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 SRC="$ROOT/infra/scripts/local/git-hooks"
 DST="$ROOT/.git/hooks"
-# Lista de um item hoje, e o loop existe para que continue sendo uma lista
-# quando o segundo hook chegar. shellcheck avisa que a iteracao roda uma vez so'
-# — e' verdade e e' intencional.
+# A one-item list today, and the loop exists so it keeps being a list
+# when the second hook arrives. shellcheck warns that the iteration runs only once
+# — that is true and intentional.
 # shellcheck disable=SC2043
 for hook in pre-push; do
   install -m 0755 "$SRC/$hook" "$DST/$hook"

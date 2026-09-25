@@ -30,7 +30,7 @@
 //   - F1 root cause + fix commit: loopzero commit 7c255524
 //   - Reach plan (host.k3d.internal canonical for vault reach): cb7cc254 (T1.2)
 //   - R3 bao_auth ordering canonical: 96ab943e
-//   - Mandate: .claude/rules/cleanroom-up-live-test-mandate.md INQUEBRÁVEL
+//   - Mandate: .claude/rules/cleanroom-up-live-test-mandate.md UNBREAKABLE
 //   - Prompt: docs/f1-san-aligned-guard-prompt.md (umbrella)
 //   - Sister gate (script-level, vault reach): host_k3d_internal_canonical_test.go
 package charts

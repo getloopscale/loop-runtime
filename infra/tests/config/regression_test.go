@@ -261,9 +261,9 @@ func TestT61DogfoodLoopH1TestExists(t *testing.T) {
 	if !strings.Contains(s, "func TestDogfoodLoopH1(") {
 		t.Error("T6.1 regression: TestDogfoodLoopH1 function must exist")
 	}
-	// Cleanup: defer project delete é obrigatório (Prova de Morte).
+	// Cleanup: a deferred project delete is mandatory (Proof of Death).
 	if !strings.Contains(s, `"project", "delete"`) {
-		t.Error("T6.1 regression: test must defer project delete for cleanup (Prova de Morte)")
+		t.Error("T6.1 regression: test must defer project delete for cleanup (Proof of Death)")
 	}
 	// Rule 3 enforcement scan.
 	if !strings.Contains(s, "ArgoCD") || !strings.Contains(s, "GitOps") {

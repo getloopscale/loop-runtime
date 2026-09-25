@@ -148,10 +148,10 @@ for cmd in helmfile kubectl pulumi; do
 done
 
 # Plan 2026-05-19-drill-skills-rigor-restoration Bug C cleanup:
-# Export DOKS context names ANTES de Phase 3 helmfile sync. loopzero-api drill
-# overlay (values-loopzero-api-drill.yaml.gotmpl) consome via `requiredEnv` —
-# substitui kubectl-set-env workaround pós-sync (que era revertido a cada
-# re-sync). Names extraídos do current-context line dos kubeconfigs baixados.
+# Export DOKS context names BEFORE the Phase 3 helmfile sync. The loopzero-api drill
+# overlay (values-loopzero-api-drill.yaml.gotmpl) consumes them via `requiredEnv` —
+# replacing the post-sync kubectl-set-env workaround (which was reverted on every
+# re-sync). Names extracted from the current-context line of the downloaded kubeconfigs.
 export CORE_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/mgmt.yaml" | awk '{print $2}')
 export BUILD_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/build.yaml" | awk '{print $2}')
 export CELL_0_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/runtime.yaml" | awk '{print $2}')
@@ -504,11 +504,11 @@ log "  ✓ ConfigMaps loopzero-build-kubeconfig + loopzero-cell-0-kubeconfig cre
 # password (DO standard token-only auth).
 if [[ -n "${DIGITALOCEAN_TOKEN:-}" ]]; then
   # Plan 2026-05-19-drill-skills-rigor-restoration Bug B fix:
-  # Operator (environment_rbac.go:170) lookup secret named "loopzero-system" em
-  # mgmt loopzero-system ns (source) — copia para tenant ns como "loopzero-system".
+  # Operator (environment_rbac.go:170) looks up the secret named "loopzero-system" in
+  # the mgmt loopzero-system ns (source) — and copies it to the tenant ns as "loopzero-system".
   # Previous bootstrap only created "loopzero-registry-pull" → operator log
-  # "SourceMissing" silently → tenant pods ImagePullBackOff. Fix: criar
-  # AMBOS nomes (canonical "loopzero-system" for operator + legacy
+  # "SourceMissing" silently → tenant pods ImagePullBackOff. Fix: create
+  # BOTH names (canonical "loopzero-system" for operator + legacy
   # "loopzero-registry-pull" for Argo workflow + build pipeline).
   log "Bug #16+B fix: re-creating loopzero-system + loopzero-registry-pull Secrets (DO token auth)..."
   for SECRET_NAME in loopzero-system loopzero-registry-pull; do
@@ -815,8 +815,8 @@ kubectl -n loopzero-system create secret generic loopzero-cluster-kubeconfigs \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 # Plan 2026-05-19-drill-skills-rigor-restoration Bug C cleanup:
 # REMOVED kubectl-set-env workaround (lines 790-797 pre-fix). MGMT/BUILD/
-# CELL_0_KUBE_CONTEXT env vars são agora exportadas em Phase 0 pre-flight
-# e consumidas pelo Helm chart via .Values.kubeContexts (sobrevive re-sync).
+# CELL_0_KUBE_CONTEXT env vars are now exported in the Phase 0 pre-flight
+# and consumed by the Helm chart via .Values.kubeContexts (survives re-sync).
 log "  ✓ Real kubeconfigs mounted (context names provided to chart via export at Phase 0)"
 
 # Bug #60 LIVE FIX (caught 2026-05-18 iter 44): operator Secrets have dual

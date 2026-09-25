@@ -73,7 +73,7 @@ set -euo pipefail
 #         table seed creates 3 rows (cell-0, cell-0, cell-1) but
 #         wire-clusters.sh non-fatal "WARN: continuing" path silently failed
 #         on cell-0 → DynamicRouter.Resolve("cell-0") = unknown cell. Pin
-#         para cell-0 atualizaria DB + CR, mas operator deploy falharia.
+#         to cell-0 would update DB + CR, but the operator deploy would fail.
 #         Fix: invoke clustercredential-create.sh directly using the workload
 #         cluster scoped kubeconfig. Idempotent (kubectl apply).
 #
@@ -507,7 +507,7 @@ fi
 # Discovered LIVE 2026-04-30 — NEW-15: project delete failed to trigger
 # ArgoCD prune sync because [DEPLOY_SERVICE_AUTH_FAILED] — token had
 # expired 13.8h before. Cleanup of solo-server resources never happened,
-# Prova de Morte timed out 300s.
+# Proof of Death timed out 300s.
 # ---------------------------------------------------------------------------
 log "H11: ensuring ArgoCD token in loopzero-api-tokens Secret is valid"
 TOKEN_RAW=$(kubectl --context "$MGMT_CTX" -n loopzero-system get secret loopzero-api-tokens \

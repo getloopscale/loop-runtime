@@ -265,7 +265,7 @@ func kubectlArgs(kubeContext string) []string {
 // (production + staging) into an existing CR without stripping envs added
 // dynamically via the API (`loopzero deploy --env <jX>` → AddEnvironment).
 //
-// Sprint A trio-fix 2026-06-02 (continuação do c892e355): seedE2E is called
+// Sprint A trio-fix 2026-06-02 (continuation of c892e355): seedE2E is called
 // from every journey's BeforeAll. Pre-fix, this `kubectl apply` overwrote
 // `spec.environments` with [production, staging] every time, stripping the
 // `j-solo`/`j-secrets`/`j-rollback`/etc envs that earlier journeys had

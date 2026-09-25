@@ -8,8 +8,8 @@
 //   - L3NoisyNeighbor — exercises B-C (git push race) + Rule 6 concurrent
 //     rejection by issuing 10 rapid deploys against the same tenant.
 //
-// Iter 17: implementação real substituindo os stubs. Skipa quando ambiente
-// não está disponível (mesmo padrão de real_deploy_test.go).
+// Iter 17: real implementation replacing the stubs. Skips when the environment
+// is not available (same pattern as real_deploy_test.go).
 
 package load
 
@@ -24,9 +24,9 @@ import (
 	"time"
 )
 
-// TestRealDeploy_L3RealisticWithChurn provisiona 100 tenants, deleta 10
-// random, recria os MESMOS 10, redeploy, verifica que TODOS os 100 servem
-// HTTP 200. Cobre B11 (gitops archived) + B17 (repo-server cache stale após
+// TestRealDeploy_L3RealisticWithChurn provisions 100 tenants, deletes 10 at
+// random, recreates the SAME 10, redeploys, and verifies that ALL 100 serve
+// HTTP 200. Covers B11 (gitops archived) + B17 (repo-server cache stale after
 // delete+recreate).
 func TestRealDeploy_L3RealisticWithChurn(t *testing.T) {
 	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {

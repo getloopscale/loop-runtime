@@ -2,7 +2,7 @@
 # Canonical POST-CLEANROOM master seed — orchestrates the 7-step chain
 # required between `task setup` completion and dogfood-all --live-only.
 #
-# Per `.claude/rules/cleanroom-up-live-test-mandate.md` INQUEBRÁVEL +
+# Per `.claude/rules/cleanroom-up-live-test-mandate.md` UNBREAKABLE +
 # memory `feedback_post_cleanroom_seed_admin_canonical` /
 # `feedback_post_cleanroom_kratos_patch_dev_public` /
 # `feedback_post_cleanroom_seed_github_app_canonical`: a fresh Cleanroom
@@ -31,7 +31,7 @@
 # Promtail push URL are environment values that `helmfile sync` renders
 # (infra/tests/charts/seeded_wiring_is_rendered_test.go).
 #
-# Per cleanroom-up-live-test-mandate.md INQUEBRÁVEL: this script CANNOT
+# Per cleanroom-up-live-test-mandate.md UNBREAKABLE: this script CANNOT
 # be skipped — it's the canonical bridge between `task setup` and the
 # operational state where dogfood-all --live-only expects to find
 # functional fixtures.
@@ -45,18 +45,18 @@
 
 set -euo pipefail
 
-# B-024: FIXA o cluster que os seeds operam, em vez de deixá-los herdar o contexto ativo.
+# B-024: PINS the cluster the seeds operate on, instead of letting them inherit the active context.
 #
-# O passo 0a deste script roda `task k3d:secrets:create`, e o `k3d cluster create` trocava
-# o `current-context` como efeito colateral — então todo seed abaixo dele operava o cluster
-# de secrets achando que era o central, e reportava "recurso não encontrado" sobre recursos
-# que existiam. O taskfile deixou de trocar o contexto, mas isso sozinho apenas mudaria QUAL
-# cluster errado seria atingido: sem fixar, os seeds cairiam onde quer que o `task setup`
-# tenha deixado o kubectl.
+# Step 0a of this script runs `task k3d:secrets:create`, and `k3d cluster create` used to switch
+# the `current-context` as a side effect — so every seed below it operated on the secrets
+# cluster believing it was the core one, and reported "resource not found" about resources
+# that existed. The taskfile stopped switching the context, but that alone would only change WHICH
+# wrong cluster got hit: without pinning, the seeds would land wherever `task setup`
+# happened to leave kubectl.
 #
-# A variável já era a convenção deste script (ver o `kubectl --context "${CORE_CONTEXT:-...}"`
-# mais abaixo); aqui ela passa a valer para os seeds também. `export` porque `run_step` usa
-# `eval`, e o binário a lê em `resolveContextName`.
+# The variable was already this script's convention (see the `kubectl --context "${CORE_CONTEXT:-...}"`
+# further down); here it starts applying to the seeds too. `export` because `run_step` uses
+# `eval`, and the binary reads it in `resolveContextName`.
 export CORE_CONTEXT="${CORE_CONTEXT:-k3d-loopzero-core}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -141,7 +141,7 @@ VERIFY_FLAG=""
 # dev-public TEST tier uses an AUTOMATED Shamir init; the witness +
 # distributed-shard ceremony is scoped to prod/persistent vaults only).
 #
-# Jeito A INQUEBRÁVEL: this uses `task k3d:secrets:create` +
+# Approach A UNBREAKABLE: this uses `task k3d:secrets:create` +
 # `task k3d:secrets:bootstrap` against the SEPARATE k3d-loopzero-secrets cluster.
 # `task k3d:secrets:bootstrap-in-core` remains PROHIBITED (independent of
 # witness scope — separate-cluster topology violation).
@@ -176,7 +176,7 @@ fi
 # per the canonical runbook (VK.5) — codified here closes the seed chain
 # FAIL=11 for the cross-cluster ESO read path. Reuses the existing
 # canonical vault-bootstrap-eso.sh (NOT a new .sh — Rule 9 + un-homed-logic).
-# Only meaningful under Jeito A (separate loopzero-secrets cluster); single-
+# Only meaningful under Approach A (separate loopzero-secrets cluster); single-
 # cluster runs no-op via the script's own preflight.
 if [[ "$SKIP_VAULT" == "1" ]]; then
   skip_step "1b-vault-bootstrap-eso" "skipped together with step 1 (operator already ran vault chain)"
@@ -270,7 +270,7 @@ fi
 run_step "12-seed-chaos-mesh-canonical" "bash $SCRIPT_DIR/seed-chaos-mesh-canonical.sh $VERIFY_FLAG"
 
 # Step 13 (NEW M2 2026-06-23) — ArgoCD admin token
-# EC-3 absorption (v1.1): env-gate dev-public OR standalone-multi — ArgoCD não existe em outros envs
+# EC-3 absorption (v1.1): env-gate dev-public OR standalone-multi — ArgoCD does not exist in other envs
 if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" || "${LOOPZERO_HELMFILE_ENV:-}" == "standalone-multi" ]]; then
   run_step "13-seed-argocd-token" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed argocd-token ${VERIFY_FLAG:+--verify})"
 else

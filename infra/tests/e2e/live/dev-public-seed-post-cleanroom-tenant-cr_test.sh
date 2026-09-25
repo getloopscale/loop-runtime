@@ -2,11 +2,11 @@
 # dev-public-seed-post-cleanroom-tenant-cr_test.sh
 #
 # Plan: seed-post-cleanroom-tenant-cr-provisioning (v1.0)
-# Closes: Red Team loopzero-cloud#118 — QA Red Team identity loga em dev-public mas
-#         tenant CR ausente em k3d-loopzero-core → deploys falham porque
-#         tenant-operator não consegue reconciliar tenant inexistente.
+# Closes: Red Team loopzero-cloud#118 — QA Red Team identity logs into dev-public but
+#         the tenant CR is absent in k3d-loopzero-core → deploys fail because
+#         tenant-operator cannot reconcile a nonexistent tenant.
 #
-# PER `feedback_issue_fix_requires_failing_e2e_test_2026_06_25` INQUEBRÁVEL:
+# PER `feedback_issue_fix_requires_failing_e2e_test_2026_06_25` UNBREAKABLE:
 # this LIVE bash is the canonical contract — it MUST reproduce the issue
 # verbatim BEFORE the fix lands (RED) and pass AFTER the fix lands (GREEN).
 #

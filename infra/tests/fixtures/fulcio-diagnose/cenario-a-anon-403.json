@@ -1,6 +1,6 @@
 {
   "name": "cenario-a-anon-403",
-  "description": "K3s kube-apiserver com --anonymous-auth=false; discovery endpoint retorna 403 → Fulcio não consegue fetch JWKS. Variante 401 (default K3s sem ClusterRoleBinding system:unauthenticated) coberta por cenario-a-401-unauthorized.json (Ralph iter 4 LIVE).",
+  "description": "K3s kube-apiserver with --anonymous-auth=false; discovery endpoint returns 403 → Fulcio cannot fetch JWKS. The 401 variant (K3s default without the system:unauthenticated ClusterRoleBinding) is covered by cenario-a-401-unauthorized.json (Ralph iter 4 LIVE).",
   "sa_token_jwt": "eyJhbGciOiJSUzI1NiIsImtpZCI6Im1vY2sta2lkIn0.eyJpc3MiOiJodHRwczovL2t1YmVybmV0ZXMuZGVmYXVsdC5zdmMuY2x1c3Rlci5sb2NhbCIsImF1ZCI6WyJzaWdzdG9yZSJdLCJleHAiOjk5OTk5OTk5OTksImlhdCI6MTc3OTkyNzAwMH0.signature",
   "sa_token_iss": "https://kubernetes.default.svc.cluster.local",
   "sa_token_aud": "sigstore",

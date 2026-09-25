@@ -3,23 +3,23 @@
 
 // Package e2e — dogfood loop H1 (CHG-2026-04-29-DOGFOOD T6.1).
 //
-// **Goal**: validar a jornada completa do usuário-real `login → init →
-// deploy → status → rollback → delete` contra k3d standalone-multi com
-// LOOPZERO_TOKEN real, garantindo Prova de Vida + Prova de Morte.
+// **Goal**: validate the complete real-user journey `login → init →
+// deploy → status → rollback → delete` against k3d standalone-multi with a
+// real LOOPZERO_TOKEN, guaranteeing Proof of Life + Proof of Death.
 //
 // **Why distinct from `deploy_e2e_test.go`?**
-// - `deploy_e2e_test.go` (T4.3 do plano-pai) foca no caminho **deploy**
-//   ponta-a-ponta; assume que tenant/projeto já existem.
-// - `dogfood_loop_h1_test.go` (T6.1) foca na **jornada do usuário** —
-//   ele faz `loopzero login`, executa cada passo do happy path como um
-//   operator real, e o test valida que cada exit code faz match com a
-//   intenção (Rule 4).
+//   - `deploy_e2e_test.go` (T4.3 of the parent plan) focuses on the **deploy**
+//     path end-to-end; it assumes tenant/project already exist.
+//   - `dogfood_loop_h1_test.go` (T6.1) focuses on the **user journey** —
+//     it runs `loopzero login`, executes each step of the happy path as a
+//     real operator would, and the test validates that each exit code matches
+//     the intent (Rule 4).
 //
-// **Gating**: requer `LOOPZERO_E2E_DOGFOOD=1` + `LOOPZERO_TOKEN` válido (GitHub
-// PAT com `read:user` scope ou Hydra OAuth token). CI roda como manual
-// trigger (não em PR builds — exige cluster real).
+// **Gating**: requires `LOOPZERO_E2E_DOGFOOD=1` + a valid `LOOPZERO_TOKEN` (GitHub
+// PAT with `read:user` scope or a Hydra OAuth token). CI runs it as a manual
+// trigger (not on PR builds — it needs a real cluster).
 //
-// **Cleanup**: defer `loopzero project delete` em cada test.
+// **Cleanup**: defer `loopzero project delete` in each test.
 package e2e
 
 import (
@@ -33,9 +33,9 @@ import (
 )
 
 const (
-	dogfoodFlag        = "LOOPZERO_E2E_DOGFOOD"
+	dogfoodFlag         = "LOOPZERO_E2E_DOGFOOD"
 	dogfoodTenantPrefix = "df-h1"
-	dogfoodTimeout     = 25 * time.Minute
+	dogfoodTimeout      = 25 * time.Minute
 )
 
 // requireDogfoodFlag skips the test unless LOOPZERO_E2E_DOGFOOD=1 + LOOPZERO_TOKEN.
@@ -65,7 +65,7 @@ func requireDogfoodFlag(t *testing.T) (loopzeroBin, loopzeroToken string) {
 }
 
 // loopzeroExec runs `loopzero <args>` and returns (stdout, stderr, exitCode).
-// Always passes --json para parsing programático e estabilidade de schema.
+// Always passes --json for programmatic parsing and schema stability.
 type loopzeroResult struct {
 	stdout   string
 	stderr   string
@@ -87,8 +87,8 @@ func loopzeroExec(t *testing.T, loopzeroBin string, env []string, dir string, ar
 	return loopzeroResult{stdout: string(stdout), stderr: string(stderr), exitCode: exitCode}
 }
 
-// parseJSONLine extrai o primeiro JSON válido de stdout (algumas commands
-// escrevem progress lines antes do JSON). Distinct name to avoid clash com
+// parseJSONLine extracts the first valid JSON from stdout (some commands
+// write progress lines before the JSON). Distinct name to avoid a clash with
 // parseJSON em cli_helpers_test.go.
 func parseJSONLine(t *testing.T, raw string) map[string]any {
 	t.Helper()
@@ -110,18 +110,18 @@ func parseJSONLine(t *testing.T, raw string) map[string]any {
 	return nil
 }
 
-// TestDogfoodLoopH1 — jornada user-real completa.
+// TestDogfoodLoopH1 — complete real-user journey.
 //
 // Steps:
 //  1. `loopzero login --token $LOOPZERO_TOKEN` — exit 0
 //  2. `loopzero whoami --json` — authenticated:true
-//  3. `loopzero init --yes --name <unique>` em tmp dir — loopzero.yaml escrito,
-//     exit 0 (preflightAuth passa porque token é válido — F-05 contract)
-//  4. `loopzero deploy --json` — exit 0, build_id retornado, app eventualmente
-//     atinge HTTP 200 via Traefik (Prova de Vida)
+//  3. `loopzero init --yes --name <unique>` in a tmp dir — loopzero.yaml written,
+//     exit 0 (preflightAuth passes because the token is valid — F-05 contract)
+//  4. `loopzero deploy --json` — exit 0, build_id returned, app eventually
+//     reaches HTTP 200 via Traefik (Proof of Life)
 //  5. `loopzero status --json` — environment ACTIVE
 //  6. `loopzero project delete <name> --yes --json` — exit 0
-//  7. Prova de Morte: workload pod removido em <60s
+//  7. Proof of Death: workload pod removed in <60s
 //
 // Each step asserts exit code + parses JSON response + checks specific
 // invariants (auth, schema, no internal terms in output).
@@ -182,8 +182,8 @@ func TestDogfoodLoopH1(t *testing.T) {
 		t.Fatalf("step 3: loopzero.yaml missing after init: %v", err)
 	}
 
-	// Defer cleanup — Prova de Morte (step 7) acontece aqui se test
-	// falhar antes de chegar lá.
+	// Defer cleanup — Proof of Death (step 7) happens here if the test
+	// fails before getting there.
 	defer func() {
 		_ = loopzeroExec(t, loopzeroBin, baseEnv, tmpProject,
 			"project", "delete", uniqueName, "--yes", "--json")
@@ -218,13 +218,13 @@ func TestDogfoodLoopH1(t *testing.T) {
 	t.Logf("dogfood loop H1 PASS: tenant=%s deployed and status verified", uniqueName)
 }
 
-// TestDogfoodLoopStructureExists — non-gated; valida que o test exists +
-// schema. Roda em CI normal.
+// TestDogfoodLoopStructureExists — non-gated; validates that the test exists +
+// its schema. Runs in normal CI.
 func TestDogfoodLoopStructureExists(t *testing.T) {
 	if _, err := os.Stat("dogfood_loop_h1_test.go"); err != nil {
 		t.Errorf("dogfood loop test file missing: %v", err)
 	}
-	// Sanity: o gating env var é o esperado.
+	// Sanity: the gating env var is the expected one.
 	if dogfoodFlag != "LOOPZERO_E2E_DOGFOOD" {
 		t.Errorf("gating env var changed unexpectedly: %s", dogfoodFlag)
 	}

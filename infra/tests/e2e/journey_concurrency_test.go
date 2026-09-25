@@ -2,8 +2,8 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Journey 14: Concurrency + Lock Discipline (absorbed from edge_concurrency
-// + failure_scenarios on 2026-05-25 per user mandate "manter somente os
-// dogfood full, absorva o que faz sentido").
+// + failure_scenarios on 2026-05-25 per user mandate "keep only the
+// full dogfood ones, absorb whatever makes sense").
 //
 // Validates contracts that historically lived in non-journey files but
 // describe REAL user-observable behavior:

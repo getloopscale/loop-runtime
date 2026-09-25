@@ -1,6 +1,6 @@
 {
   "name": "cenario-a-401-unauthorized",
-  "description": "K3s default — system:service-account-issuer-discovery ClusterRole bound apenas a system:authenticated, NÃO system:unauthenticated. Fulcio (anonymous OIDC discovery client) recebe 401 Unauthorized. Same fix as 403 variant: add ClusterRoleBinding para system:unauthenticated group. LIVE-discovered Ralph iter 4 (2026-05-28).",
+  "description": "K3s default — system:service-account-issuer-discovery ClusterRole bound only to system:authenticated, NOT system:unauthenticated. Fulcio (anonymous OIDC discovery client) receives 401 Unauthorized. Same fix as 403 variant: add ClusterRoleBinding for the system:unauthenticated group. LIVE-discovered Ralph iter 4 (2026-05-28).",
   "sa_token_jwt": "eyJhbGciOiJSUzI1NiIsImtpZCI6Im1vY2sta2lkIn0.eyJpc3MiOiJodHRwczovL2t1YmVybmV0ZXMuZGVmYXVsdC5zdmMuY2x1c3Rlci5sb2NhbCIsImF1ZCI6WyJzaWdzdG9yZSJdLCJleHAiOjk5OTk5OTk5OTksImlhdCI6MTc3OTkyNzAwMH0.signature",
   "sa_token_iss": "https://kubernetes.default.svc.cluster.local",
   "sa_token_aud": "sigstore",

@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # Plan m37-tenant-cr-project-sync-canonical-fix v1.0 T3.1 — LIVE 4-scenario
-# E2E for `loopzero-cloud#37` cenário 4 (BUILD → RELEASE → URL chain). The
+# E2E for `loopzero-cloud#37` scenario 4 (BUILD → RELEASE → URL chain). The
 # Sprint 8 #37 close shipped the watcher namespace-scoped LIST but missed
 # the per-(project,env) tuple shallow-check gap that prevents `loopzero deploy`
 # from extending a tenant's Tenant CR `spec.environments[]` when a NEW
 # project is deployed against an existing tenant.
 #
-# Per the INQUEBRÁVEL feedback_issue_fix_requires_failing_e2e_test_2026_06_25
+# Per the UNBREAKABLE feedback_issue_fix_requires_failing_e2e_test_2026_06_25
 # (sponsor verbatim 2026-06-25): this script MUST be authored +
 # RED-confirmed against the pre-m37 engine BEFORE the m37 fix rolls out;
 # LIVE-PROOF post-fix is the rollout-passes-GREEN.
 #
 # OPERATOR HARD STOP per .claude/rules/cleanroom-up-live-test-mandate.md
-# INQUEBRÁVEL for full --live coverage (requires valid JWT + dev-public
+# UNBREAKABLE for full --live coverage (requires valid JWT + dev-public
 # reachable + kubectl context k3d-loopzero-core). The hermetic --skip-live
 # path is the CI-safe entry.
 set -euo pipefail
@@ -48,7 +48,7 @@ usage() {
     cat <<EOF
 Usage: $(basename "$0") [--skip-live] [--scenario=A|B|C|D] [--json] [--help]
 
-LIVE 4-scenario test for loopzero-cloud#37 cenário 4 (BUILD → RELEASE → URL).
+LIVE 4-scenario test for loopzero-cloud#37 scenario 4 (BUILD → RELEASE → URL).
 
   A — Tenant CR \`spec.environments[]\` gains the (project, env) tuple
       after POST /api/v1/builds for a NEW project on existing tenant

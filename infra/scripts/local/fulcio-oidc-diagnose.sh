@@ -2,7 +2,7 @@
 # fulcio-oidc-diagnose.sh — Diagnose Fulcio K8s OIDC trust chain (M07 keyless).
 #
 # Per plan v1.1 2026-05-28-M07-fulcio-oidc-trust-to-3-85-plan
-# § T0.1. Identifies which cenário (A/B/C/D/GREEN/UNKNOWN) is blocking
+# § T0.1. Identifies which scenario (A/B/C/D/GREEN/UNKNOWN) is blocking
 # Fulcio /api/v2/signingCert validation in ≤30s.
 #
 # Verdict:
@@ -54,10 +54,10 @@ mkdir -p "$PROBE_OUT_DIR"
 
 # ─── Trap cleanup (idempotent) ─────────────────────────────────────
 cleanup_done=0
-# Invocada via `trap on_exit EXIT INT TERM` — o shellcheck nao ve' invocacao por
-# trap. Os DOIS codigos porque o diagnostico mudou de numero entre versoes:
-# SC2317 no 0.9.x (o que o Ubuntu 24.04 do runner embarca) e SC2329 no 0.10+.
-# Suprimir so' um deixa o outro ambiente vermelho.
+# Invoked via `trap on_exit EXIT INT TERM` — shellcheck does not see invocation by
+# trap. BOTH codes because the diagnostic changed number between versions:
+# SC2317 in 0.9.x (what the runner's Ubuntu 24.04 ships) and SC2329 in 0.10+.
+# Suppressing only one leaves the other environment red.
 # shellcheck disable=SC2317,SC2329
 on_exit() {
   if [[ "$cleanup_done" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
@@ -124,12 +124,12 @@ elif [[ "$match_oidc" == "false" ]]; then
   VERDICT="C"
   EXIT_CODE=2
 elif [[ "$discovery" == "403" || "$discovery" == "401" ]]; then
-  # Cenário A: anonymous discovery blocked.
+  # Scenario A: anonymous discovery blocked.
   #   - 403 Forbidden = K3s explicit anonymous-auth=false
   #   - 401 Unauthorized = K3s default behavior (system:service-account-issuer-discovery
   #     ClusterRole bound only to system:authenticated, NOT system:unauthenticated).
   #     Fix path identical: add ClusterRoleBinding for system:unauthenticated.
-  #     Descoberta LIVE 2026-05-28 Ralph iter 4.
+  #     Discovered LIVE 2026-05-28 Ralph iter 4.
   VERDICT="A"
   EXIT_CODE=0
 elif [[ "$discovery" != "200" || "$jwks" != "200" ]]; then
@@ -162,10 +162,10 @@ echo "  VERDICT: ${VERDICT}  (exit ${EXIT_CODE})" >&2
 echo "═══════════════════════════════════════════════════════════" >&2
 case "$VERDICT" in
   GREEN)   echo "  ✓ Fulcio OIDC trust chain healthy — no fix needed" >&2 ;;
-  A)       echo "  → Cenário A: anonymous discovery 403 — create ClusterRoleBinding system:service-account-issuer-discovery" >&2 ;;
-  B)       echo "  → Cenário B: NetworkPolicy/connectivity — open egress sigstore-system→kube-apiserver" >&2 ;;
-  C)       echo "  → Cenário C: issuer mismatch — add token iss to Fulcio OIDCIssuers config" >&2 ;;
-  D)       echo "  → Cenário D: TLS CA mount missing — mount kube-root-ca.crt in Fulcio pod" >&2 ;;
+  A)       echo "  → Scenario A: anonymous discovery 403 — create ClusterRoleBinding system:service-account-issuer-discovery" >&2 ;;
+  B)       echo "  → Scenario B: NetworkPolicy/connectivity — open egress sigstore-system→kube-apiserver" >&2 ;;
+  C)       echo "  → Scenario C: issuer mismatch — add token iss to Fulcio OIDCIssuers config" >&2 ;;
+  D)       echo "  → Scenario D: TLS CA mount missing — mount kube-root-ca.crt in Fulcio pod" >&2 ;;
   UNKNOWN) echo "  ? Inconclusive — review $PROBE_OUT_DIR/verdict.json + escalate" >&2 ;;
 esac
 echo "  Full report: $PROBE_OUT_DIR/verdict.json" >&2

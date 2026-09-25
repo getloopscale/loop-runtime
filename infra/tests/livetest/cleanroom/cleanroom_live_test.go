@@ -27,10 +27,10 @@ import (
 
 var _ = Describe("Cleanroom canonical chain v2", Label("live", "cleanroom"), func() {
 	var (
-		ctx       context.Context
-		cancel    context.CancelFunc
-		opts      Options
-		repoRoot  string
+		ctx      context.Context
+		cancel   context.CancelFunc
+		opts     Options
+		repoRoot string
 	)
 
 	BeforeEach(func() {
@@ -50,7 +50,7 @@ var _ = Describe("Cleanroom canonical chain v2", Label("live", "cleanroom"), fun
 		Expect(repoRoot).ToNot(BeEmpty(), "could not locate repo root (set LOOPZERO_REPO_ROOT)")
 		opts = DefaultOptions(repoRoot)
 
-		// 45min budget for full chain (more than v1 mandate per mandate INQUEBRÁVEL).
+		// 45min budget for full chain (more than v1 mandate per mandate UNBREAKABLE).
 		ctx, cancel = context.WithTimeout(context.Background(), 45*time.Minute)
 	})
 

@@ -22,14 +22,14 @@
 // of the 4-step Tier N/A data-only milestone closure pattern.
 //
 // Closes M5 of qa-readiness-roadmap-2026-06-23 from DATA_INGESTED →
-// ENGINEERING_COMPLETED. LIVE chain (4 pós-sponsor steps) still
+// ENGINEERING_COMPLETED. LIVE chain (4 post-sponsor steps) still
 // deferred to M7 Cleanroom per cleanroom-up-live-test-mandate
-// INQUEBRÁVEL.
+// UNBREAKABLE.
 //
 // Pivot rationale: original implementation was a bash test
 // (infra/tests/check-stripe-sot-shape_test.sh) but that triggered
 // the unhomed-baseline gate (domain "test" un-homed +1). Per
-// goal "SEMPRE FAANG LEVEL, e sem re-trabalho, SEM WORKAROUNDS",
+// goal "ALWAYS FAANG LEVEL, and without rework, NO WORKAROUNDS",
 // re-implemented as Go test in the canonical hermetic test umbrella
 // (infra/tests/charts/) which runs via `go test ./charts/` already
 // wired in task quality:gates pre-push hook.

@@ -13,8 +13,8 @@ import (
 // dev-public-cross-cluster-secrets (issue #111). The legacy
 // vault-bootstrap-dev.sh defaulted CONTEXT to k3d-loopzero-core and applied
 // every kubectl call (both the OpenBao read-side AND the mgmt-side
-// Secret writes) against the SAME context — incompatible with Jeito A
-// canonical (sponsor mandate INQUEBRÁVEL 2026-06-19) which keeps
+// Secret writes) against the SAME context — incompatible with Approach A
+// canonical (sponsor mandate UNBREAKABLE 2026-06-19) which keeps
 // OpenBao in a separate k3d-loopzero-secrets cluster.
 //
 // Post-T1.1 the script splits into two contexts:
@@ -33,7 +33,7 @@ import (
 func TestVaultBootstrapDev_SplitContexts(t *testing.T) {
 	body := readScript(t, "vault-bootstrap-dev.sh")
 
-	// T1. OPENBAO_CONTEXT default is k3d-loopzero-secrets (Jeito A canonical).
+	// T1. OPENBAO_CONTEXT default is k3d-loopzero-secrets (Approach A canonical).
 	// Pattern accepts the canonical assignment whether the variable is
 	// renamed to OPENBAO_CONTEXT (preferred) OR kept as CONTEXT with the
 	// new default — but the DEFAULT VALUE must be k3d-loopzero-secrets.
@@ -43,7 +43,7 @@ func TestVaultBootstrapDev_SplitContexts(t *testing.T) {
 		t.Fatalf("could not find OPENBAO_CONTEXT default-resolution line — expected pattern like `OPENBAO_CONTEXT=\"${OPENBAO_CONTEXT:-k3d-loopzero-secrets}\"`")
 	}
 	if got, want := openbaoDefault[1], "k3d-loopzero-secrets"; got != want {
-		t.Errorf("OPENBAO_CONTEXT default = %q; want %q (Jeito A sponsor mandate INQUEBRÁVEL 2026-06-19 — OpenBao lives in separate loopzero-secrets cluster, NOT mgmt)", got, want)
+		t.Errorf("OPENBAO_CONTEXT default = %q; want %q (Approach A sponsor mandate UNBREAKABLE 2026-06-19 — OpenBao lives in separate loopzero-secrets cluster, NOT mgmt)", got, want)
 	}
 
 	// T2. TARGET_CONTEXT variable exists and defaults to k3d-loopzero-core
@@ -87,7 +87,7 @@ func TestVaultBootstrapDev_SplitContexts(t *testing.T) {
 	// targeting the openbao pod.
 	openbaoExecRe := regexp.MustCompile(`kubectl[^\n]*--context "\$OPENBAO_CONTEXT"[^\n]*(?:exec|get)[^\n]*"\$POD"`)
 	if !openbaoExecRe.MatchString(body) {
-		t.Error("OpenBao read-side calls do not use --context \"$OPENBAO_CONTEXT\" — Jeito A split-context contract requires the bao operator/exec calls to target the loopzero-secrets cluster")
+		t.Error("OpenBao read-side calls do not use --context \"$OPENBAO_CONTEXT\" — Approach A split-context contract requires the bao operator/exec calls to target the loopzero-secrets cluster")
 	}
 
 	// T7. No literal `-n external-secrets` regression (preserves the
@@ -99,9 +99,9 @@ func TestVaultBootstrapDev_SplitContexts(t *testing.T) {
 	// T8. Traceability: issue #111 / dev-public-cross-cluster-secrets
 	// must appear in the script body so a future operator understands
 	// why the split-context shape exists.
-	traceRe := regexp.MustCompile(`issue #111|dev-public-cross-cluster-secrets|Jeito A`)
+	traceRe := regexp.MustCompile(`issue #111|dev-public-cross-cluster-secrets|Approach A`)
 	if !traceRe.MatchString(body) {
-		t.Error("canonical traceability comment missing — future operator will not understand why split-context (Jeito A INQUEBRÁVEL)")
+		t.Error("canonical traceability comment missing — future operator will not understand why split-context (Approach A UNBREAKABLE)")
 	}
 
 	// T9. EC-6 idempotency guard preserved: `bao operator init` is
