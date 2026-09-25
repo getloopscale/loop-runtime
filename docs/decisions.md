@@ -98,10 +98,118 @@ requires it to name who is affected, what breaks and what was rejected — above
 
 | Date | Decision |
 |---|---|
+| 2026-09-25 | **`api/internal` is organized by feature.** One axis: each feature's service, HTTP handlers, ports and driven adapters live under `api/internal/<feature>/`; the layer folders `services/`, `routes/`, `adapters/` and `buildplane/` are dissolved into the features. Supersedes the open half of the 2026-09-06 `services/platform` row: its nine concerns are split among the features they serve. Full record below the table. |
 | 2026-09-06 | **Rename `api/internal/domain` to `api/internal/ports`**, with the coupled DIP-layer cleanup. |
 | 2026-09-06 | **`services/platform` admission criterion — divide by concern.** A package's admission criterion must be able to REFUSE. `api/internal/k8s` shrank from 7 non-test files / 1,520 lines to 3 / 111, with `k8s/{tenancy,workload,secretsync}` as homes, enforced by `loopzero-ops quality package-admission`. `api/internal/adapters` closed via `adapter-ports`. **`api/internal/services/platform` is OPEN** — measurement refuted the suggested name, since every member runs in the api binary rather than the controller, so renaming versus splitting is undecided. |
 | 2026-06-11 | **`pkg/domain.EnvRef` value object** (D2) · **`pkg/domain.DefaultPermanentEnv` canonical constant** (D3) · **plan-tier canonical resolution** (D4) · **hot-path complexity decomposition** (D6). |
 | 2026-05-21 | **Naming conventions.** Prefer the longer, unambiguous name: `user_metadata` over `metadata`, `content_type` over `type`, `from_date` over `from`. |
+
+**`api/internal` is organized by feature** (2026-09-25).
+
+Measured at `0db5c3dc8`: the top level of `api/internal` mixed layer folders (`services/` with 7
+contexts, `routes/` with 26 handler families and 4 shared leaves, `adapters/` with 28 production
+files, `ports/`, `buildplane/`) with feature folders (`placement/`, `metering/`). One feature was
+reachable under two paths: placement under `placement/` and `services/placement/`, the build under
+`services/build/`, `routes/builds/`, `buildplane/` and `adapters/`. The owner chose one axis —
+package-by-feature.
+
+*Layout.* A feature is a capability the engine serves. Its root package `api/internal/<feature>`
+holds the service and the ports only that feature consumes; its HTTP handlers live in
+`<feature>/<name>http` (one package per handler family, so `release` has four); its driven
+adapters — code that satisfies a port with persistence, Kubernetes or another feature's service —
+live in `<feature>/<feature>adapter`. A single-consumer integration moves under its feature.
+
+| Feature | Root | HTTP | Adapter | Also under it |
+|---|---|---|---|---|
+| `audit` | action enum, audit-log pruner, `AuditStore` | `audithttp` | — | — |
+| `auth` | — | `authhttp` | — | — |
+| `billing` | — | `billinghttp` | — | — |
+| `bootstrap` | `CellPlacementEngine` | `bootstraphttp` | — | — |
+| `build` | orchestrator, reconcile, reaper, GC, KV reconciler, `AttestationStore` | `buildhttp` | `buildadapter` | `admission`, `argo`, `shellgen`, `stepwatch`, `cfkv` |
+| `domains` | provisioner, health checker, CF reconciler, domain ports | `domainshttp` | `domainsadapter` | `cfzone` |
+| `environments` | environment ensurer | `environmentshttp` | `environmentsadapter` | — |
+| `health` | — | `healthhttp` | — | — |
+| `integrations` | — | `integrationshttp` | `integrationsadapter` | — |
+| `logs` | log query ports | `logshttp` | `logsadapter` | `loki` |
+| `metering` | usage metering (unchanged) | — | — | — |
+| `placement` | engine, router, cell pinner, tenant evictor (`placement/` + `services/placement/` merged) | `placementhttp` | `placementadapter` | — |
+| `preview` | preview service, `PreviewService` | `previewhttp` | `previewadapter` | — |
+| `projectmetrics` | — | `projectmetricshttp` | — | — |
+| `projects` | project deleter and its ports | `projectshttp` | — | — |
+| `release` | activator, convergence, promotion, rollback, reaper | `promotehttp`, `rollbackhttp`, `argocdhttp`, `releasehttp` | `releaseadapter` | `argocd` |
+| `repositories` | — | `repositorieshttp` | `repositoriesadapter` | — |
+| `scaling` | scaling resolver | `scalinghttp` | — | — |
+| `secrets` | secret resyncer, `SecretStore`, `SecretK8sSync` | `secretshttp` | — | — |
+| `source` | bundle intake (was `buildplane/source`) | `sourcehttp` | — | — |
+| `status` | — | `statushttp` | `statusadapter` | — |
+| `teams` | `TeamStore` | `teamshttp` | — | — |
+| `tenants` | orphan detector | `tenantshttp` | — | — |
+| `timeline` | `DeployTimelineEvent` | `timelinehttp` | `timelineadapter` | `aggregator` |
+| `version` | — | `versionhttp` | — | — |
+
+`routes/admin` was not a feature: its three endpoints are operator surfaces of two features, so
+eviction and pinning moved to `placementhttp` and the release inspection to `releasehttp`.
+`routes/metrics` became `projectmetrics` because `metrics` is the instrumentation kernel.
+
+*Shared kernel* — horizontal by nature, each consumed by more than one feature or by the router:
+
+| Package | Why it is shared |
+|---|---|
+| `db` (+ `store`, `generated`, `dbtx`, `dbconv`, `dbtest`, `raw`) | one schema, and sqlc generates ONE package that only persistence may import; a build row is read by build, release, status, logs and preview, so per-feature stores would turn every cross-table read into a feature edge |
+| `ports` | value types that cross the persistence ↔ feature seam (db/store implements them), and interfaces consumed by more than one feature |
+| `deploycontracts`, `manifests` | the deploy contract every deploying feature and `gitops` share; the manifests it renders |
+| `events`, `processing`, `sse` | event payloads, dedup claims and the event stream that build and release write and three HTTP families read |
+| `lock`, `leader` | the environment lock (Rule 6) and the fencing primitive |
+| `middleware/*`, `httpio`, `pagination`, `plantier`, `routestest` | the request pipeline and the HTTP helpers several families share; `routestest` is test-only |
+| `correlation`, `validation`, `scrub` | request correlation, input validation, user-facing scrubbing |
+| `metrics`, `surfaces`, `tracing`, `config` | instrumentation and configuration |
+| `k8s` (+ `tenancy`, `workload`, `secretsync`) | Kubernetes plumbing and resource managers used by placement, environments, build and preview; the homes are fixed by `package-admission` |
+| `gitops`, `gitclient`, `github`, `archive`, `objectstore` | integrations consumed by more than one feature |
+| `orchestrationbreaker` | circuit breakers around the Argo Workflows submitter (build) and the ArgoCD sync client (release), which share one breaker policy |
+| `projectstatus` | the project-status mapping the persistence layer applies |
+
+*Composition roots:* `server` (the router) and `backgroundloops` may import any feature and are
+imported by nothing inside `api/internal`. `archtest` and `contract` hold tests only.
+
+*The dependency graph is a DAG*, enforced by `loopzero-ops quality feature-fence`:
+
+```
+build    → release, scaling
+release  → placement
+metering → placement
+every other feature → kernel only
+kernel   → kernel only
+server, backgroundloops → any feature
+```
+
+Inside a feature: an HTTP package imports its own feature and the kernel, never another feature,
+and nothing but its own subtree, its feature's adapter package and a composition root imports it;
+an adapter package is imported by composition roots only; the root never imports its HTTP or
+adapter packages. `db/generated` stays reachable from exactly the set that reached it before —
+`db/**` and adapter packages — and hand-written `db` stays forbidden in `server` and every HTTP
+package, as it was for `routes/`.
+
+**Who is affected.** Anyone editing `api/`: every import path under `api/internal` outside `db`,
+`middleware`, `k8s` and the other kernel packages changes. `api/Dockerfile`'s `-ldflags -X` now
+names `version/versionhttp`. The gates that named layer paths follow the move.
+
+**What would break.** Nothing at runtime: the change is moves, import rewrites and renames, with no
+logic changed. Out-of-tree tooling that hard-codes an old path breaks at build time.
+
+**What was rejected.**
+- *Package-by-layer* — keep `services/`, `routes/`, `adapters/` and fold `placement/` and
+  `buildplane/` into them. It removes the duplicate paths but keeps one feature spread across
+  three trees. The owner chose feature.
+- *Handlers in the feature root* — puts `net/http` in the service package, and the fence could no
+  longer forbid the service from depending on its transport.
+- *Adapters in the HTTP package* — 9 of the 26 adapter files name persistence types (`db.Build`,
+  `db.Release`) or call generated queries; since slice-6 `db-generated-boundary` refuses
+  hand-written `db` in the HTTP layer, so this would loosen a gate. Moving each port into the root
+  instead would put response DTOs such as `BuildStatusResponse` in the service package.
+- *Stores per feature* — see the `db` row above.
+- *A `platform` feature* — `services/platform` held nine concerns serving six features (audit,
+  environments, projects, secrets, tenants, build) plus two breakers and an idempotency cleaner;
+  they shared nothing but the directory.
 
 ### Testing and tooling
 
