@@ -36,7 +36,7 @@ type StoreDeps struct {
 	EnvTargetStore   *store.PostgresEnvironmentTargetStore
 	PreviewSlotStore *store.PostgresPreviewSlotStore // 2026-06-07 D2 — single-slot preview
 	EventStore       sse.EventStore
-	PgEventStore     *sse.PostgresEventStore
+	PgEventStore     *store.PostgresEventStore
 	SecretStore      secrets.SecretStore
 	BootstrapStore   ports.BootstrapStore
 	DomainStore      *store.PostgresDomainStore
@@ -68,7 +68,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 	// T1.3.b of plan 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1:
 	// EventStore must be constructed BEFORE releaseStore so AppendSideEffect
 	// can emit signal.changed events via canonical SSE infrastructure.
-	pgEventStore := sse.NewPostgresEventStore(dbAdapter, dbAdapter)
+	pgEventStore := store.NewPostgresEventStore(dbAdapter, dbAdapter)
 	// T1.1c2c (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper.
 	// Satisfies db.ReleaseStore interface 1:1 — service field types
 	// unchanged. State-machine SafeTransition runs at store layer (D4).

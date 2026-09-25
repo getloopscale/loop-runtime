@@ -13,7 +13,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/aggregator"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/sse"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 )
 
 // _ keeps the db import (releaseStore was removed in v2 of the spawner
@@ -31,7 +31,7 @@ var _ db.ReleaseStore = nil
 // The release_db source alone delivers ~60% of the canonical timeline
 // signal (release transitions: PENDING → ACTIVE → ROLLED_BACK), enough
 // for the v1 dashboard hero card while the remaining adapters mature.
-func makeDeployTimelineSpawn(eventStore *sse.PostgresEventStore, releaseStore db.ReleaseStore) build.DeployTimelineSpawner {
+func makeDeployTimelineSpawn(eventStore *store.PostgresEventStore, releaseStore db.ReleaseStore) build.DeployTimelineSpawner {
 	if eventStore == nil {
 		return nil
 	}
@@ -68,7 +68,7 @@ func makeDeployTimelineSpawn(eventStore *sse.PostgresEventStore, releaseStore db
 // FindReleaseForBuild + tenant-scoped query when the orchestrator
 // can pass tenant_id through the spawner signature.
 type releaseStoreQuerier struct {
-	eventStore *sse.PostgresEventStore
+	eventStore *store.PostgresEventStore
 	mu         sync.Mutex
 	pending    []string
 	seen       map[string]bool

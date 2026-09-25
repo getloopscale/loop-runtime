@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -494,4 +495,28 @@ type Preview struct {
 	CreatedAt    string `json:"created_at"`
 	UpdatedAt    string `json:"updated_at,omitempty"`
 	TTLExpiresAt string `json:"ttl_expires_at,omitempty"`
+}
+
+// SSEEvent represents a single event in the SSE event journal.
+type SSEEvent struct {
+	ID        int64           `json:"id"`
+	BuildID   string          `json:"build_id"`
+	EventType string          `json:"event_type"`
+	Data      json.RawMessage `json:"data"`
+	CreatedAt time.Time       `json:"created_at"`
+}
+
+// EventStore defines the contract for SSE event persistence.
+// Supports append, replay (via Last-Event-ID), and cleanup.
+type EventStore interface {
+	Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
+	GetAfter(ctx context.Context, buildID string, afterID int64) ([]SSEEvent, error)
+	// GetAfterForProject returns sse_events for ALL builds owned by
+	// (tenantID, projectName) whose id > afterID. Plan J-17 T2.3 — backs
+	// the project-level stream that powers the realtime deployments list.
+	// Implementations MUST enforce tenant ownership in the SQL itself
+	// (defense-in-depth — handler also checks, but the store closes the
+	// vulnerability window between auth and query).
+	GetAfterForProject(ctx context.Context, tenantID string, projectName string, afterID int64) ([]SSEEvent, error)
+	Prune(ctx context.Context, olderThan time.Duration) (int64, error)
 }

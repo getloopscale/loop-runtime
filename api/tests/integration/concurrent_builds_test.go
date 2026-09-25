@@ -42,7 +42,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/logging"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -231,7 +230,7 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 	buildStore := store.NewBuildStoreSqlc(adapter)                             // T1.2b
 	releaseStore := store.NewReleaseStoreSqlc(adapter, store.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	envTargetStore := store.NewPostgresEnvironmentTargetStore(adapter, adapter)
-	eventStore := sse.NewPostgresEventStore(adapter, adapter)
+	eventStore := store.NewPostgresEventStore(adapter, adapter)
 	idempotencyStore := &store.PostgresIdempotencyStore{DB: adapter}
 
 	// Create real locker backed by the pool (reusing adapters package — no duplication)

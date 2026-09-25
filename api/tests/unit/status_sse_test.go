@@ -27,7 +27,7 @@ import (
 //  - EC-7 cross-tenant returns 404 NOT 403 (existence-leak-prevention)
 //  - EC-5 Flusher comma-ok form (500 not panic when Flusher missing)
 //  - EC-2 (signal.changed of one env only) is the store query's job and is
-//    tested on PostgresEventStore.GetSignalsAfter in internal/sse
+//    tested on PostgresEventStore.GetSignalsAfter in internal/db/store
 //  - EC-9 Last-Event-ID dedup by id
 //  - validation: env query required (per memory feedback_j19)
 //  - happy path: SSE wire format named event + Flush per event

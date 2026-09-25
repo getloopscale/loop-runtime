@@ -11,13 +11,14 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
 // --- Compile-time interface check ---
 
 func TestPostgresEventStoreImplementsInterface(t *testing.T) {
-	var _ sse.EventStore = (*sse.PostgresEventStore)(nil)
+	var _ sse.EventStore = (*store.PostgresEventStore)(nil)
 }
 
 // --- Fakes ---
@@ -157,22 +158,22 @@ func (r *fakeSSERows) Close()     {}
 
 func TestAppendReturnsSequentialID(t *testing.T) {
 	fake := newFakeSSEQueryExec()
-	store := sse.NewPostgresEventStore(fake, fake)
+	eventStore := store.NewPostgresEventStore(fake, fake)
 
 	ctx := context.Background()
 	data := json.RawMessage(`{"step":"clone"}`)
 
-	id1, err := store.Append(ctx, "build-1", "progress", data)
+	id1, err := eventStore.Append(ctx, "build-1", "progress", data)
 	if err != nil {
 		t.Fatalf("Append 1 failed: %v", err)
 	}
 
-	id2, err := store.Append(ctx, "build-1", "progress", data)
+	id2, err := eventStore.Append(ctx, "build-1", "progress", data)
 	if err != nil {
 		t.Fatalf("Append 2 failed: %v", err)
 	}
 
-	id3, err := store.Append(ctx, "build-1", "progress", data)
+	id3, err := eventStore.Append(ctx, "build-1", "progress", data)
 	if err != nil {
 		t.Fatalf("Append 3 failed: %v", err)
 	}
@@ -184,7 +185,7 @@ func TestAppendReturnsSequentialID(t *testing.T) {
 
 func TestGetAfterReturnsEventsAfterID(t *testing.T) {
 	fake := newFakeSSEQueryExec()
-	store := sse.NewPostgresEventStore(fake, fake)
+	eventStore := store.NewPostgresEventStore(fake, fake)
 
 	ctx := context.Background()
 
@@ -192,7 +193,7 @@ func TestGetAfterReturnsEventsAfterID(t *testing.T) {
 	var ids []int64
 	for i := 0; i < 5; i++ {
 		data := json.RawMessage(`{"step":"` + string(rune('a'+i)) + `"}`)
-		id, err := store.Append(ctx, "build-1", "progress", data)
+		id, err := eventStore.Append(ctx, "build-1", "progress", data)
 		if err != nil {
 			t.Fatalf("Append %d failed: %v", i, err)
 		}
@@ -200,7 +201,7 @@ func TestGetAfterReturnsEventsAfterID(t *testing.T) {
 	}
 
 	// GetAfter id=2 should return events 3, 4, 5
-	events, err := store.GetAfter(ctx, "build-1", ids[1])
+	events, err := eventStore.GetAfter(ctx, "build-1", ids[1])
 	if err != nil {
 		t.Fatalf("GetAfter failed: %v", err)
 	}
@@ -219,18 +220,18 @@ func TestGetAfterReturnsEventsAfterID(t *testing.T) {
 
 func TestGetAfterWithNonexistentIDReturnsEmpty(t *testing.T) {
 	fake := newFakeSSEQueryExec()
-	store := sse.NewPostgresEventStore(fake, fake)
+	eventStore := store.NewPostgresEventStore(fake, fake)
 
 	ctx := context.Background()
 
 	// Append one event
-	_, err := store.Append(ctx, "build-1", "progress", json.RawMessage(`{}`))
+	_, err := eventStore.Append(ctx, "build-1", "progress", json.RawMessage(`{}`))
 	if err != nil {
 		t.Fatalf("Append failed: %v", err)
 	}
 
 	// GetAfter with very high ID
-	events, err := store.GetAfter(ctx, "build-1", 999999)
+	events, err := eventStore.GetAfter(ctx, "build-1", 999999)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -246,20 +247,20 @@ func TestGetAfterWithNonexistentIDReturnsEmpty(t *testing.T) {
 
 func TestGetAfterOrdering(t *testing.T) {
 	fake := newFakeSSEQueryExec()
-	store := sse.NewPostgresEventStore(fake, fake)
+	eventStore := store.NewPostgresEventStore(fake, fake)
 
 	ctx := context.Background()
 
 	// Append events with different types to verify ordering
 	types := []string{"clone", "build", "push", "deploy"}
 	for _, et := range types {
-		_, err := store.Append(ctx, "build-1", et, json.RawMessage(`{}`))
+		_, err := eventStore.Append(ctx, "build-1", et, json.RawMessage(`{}`))
 		if err != nil {
 			t.Fatalf("Append %s failed: %v", et, err)
 		}
 	}
 
-	events, err := store.GetAfter(ctx, "build-1", 0)
+	events, err := eventStore.GetAfter(ctx, "build-1", 0)
 	if err != nil {
 		t.Fatalf("GetAfter failed: %v", err)
 	}
@@ -286,13 +287,13 @@ func TestGetAfterOrdering(t *testing.T) {
 
 func TestPruneRemovesOldEvents(t *testing.T) {
 	fake := newFakeSSEQueryExec()
-	store := sse.NewPostgresEventStore(fake, fake)
+	eventStore := store.NewPostgresEventStore(fake, fake)
 
 	ctx := context.Background()
 
 	// Insert events (they get time.Now() as createdAt in the fake)
 	for i := 0; i < 3; i++ {
-		_, err := store.Append(ctx, "build-1", "progress", json.RawMessage(`{}`))
+		_, err := eventStore.Append(ctx, "build-1", "progress", json.RawMessage(`{}`))
 		if err != nil {
 			t.Fatalf("Append %d failed: %v", i, err)
 		}
@@ -304,7 +305,7 @@ func TestPruneRemovesOldEvents(t *testing.T) {
 	fake.rows[1].createdAt = oldTime
 
 	// Prune events older than 1 hour
-	count, err := store.Prune(ctx, 1*time.Hour)
+	count, err := eventStore.Prune(ctx, 1*time.Hour)
 	if err != nil {
 		t.Fatalf("Prune failed: %v", err)
 	}
@@ -314,7 +315,7 @@ func TestPruneRemovesOldEvents(t *testing.T) {
 	}
 
 	// Verify remaining events
-	events, err := store.GetAfter(ctx, "build-1", 0)
+	events, err := eventStore.GetAfter(ctx, "build-1", 0)
 	if err != nil {
 		t.Fatalf("GetAfter after prune failed: %v", err)
 	}
@@ -326,13 +327,13 @@ func TestPruneRemovesOldEvents(t *testing.T) {
 
 func TestPruneReturnsCount(t *testing.T) {
 	fake := newFakeSSEQueryExec()
-	store := sse.NewPostgresEventStore(fake, fake)
+	eventStore := store.NewPostgresEventStore(fake, fake)
 
 	ctx := context.Background()
 
 	// Insert 5 events
 	for i := 0; i < 5; i++ {
-		_, err := store.Append(ctx, "build-1", "progress", json.RawMessage(`{}`))
+		_, err := eventStore.Append(ctx, "build-1", "progress", json.RawMessage(`{}`))
 		if err != nil {
 			t.Fatalf("Append %d failed: %v", i, err)
 		}
@@ -344,7 +345,7 @@ func TestPruneReturnsCount(t *testing.T) {
 		fake.rows[i].createdAt = oldTime
 	}
 
-	count, err := store.Prune(ctx, 24*time.Hour)
+	count, err := eventStore.Prune(ctx, 24*time.Hour)
 	if err != nil {
 		t.Fatalf("Prune failed: %v", err)
 	}
@@ -354,7 +355,7 @@ func TestPruneReturnsCount(t *testing.T) {
 	}
 
 	// Prune again with nothing old — should return 0
-	count, err = store.Prune(ctx, 24*time.Hour)
+	count, err = eventStore.Prune(ctx, 24*time.Hour)
 	if err != nil {
 		t.Fatalf("Prune (second call) failed: %v", err)
 	}

@@ -38,7 +38,7 @@ import (
 
 // StatusSSEEventStore is the one read StatusSSEHandler needs: the
 // signal.changed events of ONE environment of a project (satisfied by
-// *sse.PostgresEventStore). The environment is part of the query because a
+// *store.PostgresEventStore). The environment is part of the query because a
 // client subscribed to ?env=staging must never receive production signals.
 type StatusSSEEventStore interface {
 	GetSignalsAfter(ctx context.Context, tenantID, projectName, environment string, afterID int64) ([]sse.SSEEvent, error)

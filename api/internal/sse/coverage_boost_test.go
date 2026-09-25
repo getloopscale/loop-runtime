@@ -59,7 +59,7 @@ func TestEventPruner_Start_StopsOnCancel(t *testing.T) {
 }
 
 // =============================================================================
-// PostgresEventStore tests (with fakes)
+// EventPruner tests (with a fake store)
 // =============================================================================
 
 // fakeEventStore implements EventStore for testing.
@@ -108,16 +108,5 @@ func TestEventPruner_PruneError_Continues(t *testing.T) {
 		// OK — pruner continued despite error and stopped on cancel.
 	case <-time.After(3 * time.Second):
 		t.Fatal("pruner did not stop")
-	}
-}
-
-// =============================================================================
-// PostgresEventStore — NewPostgresEventStore
-// =============================================================================
-
-func TestNewPostgresEventStore_SetsFields(t *testing.T) {
-	store := NewPostgresEventStore(nil, nil)
-	if store == nil {
-		t.Fatal("expected non-nil store")
 	}
 }

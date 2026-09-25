@@ -20,7 +20,7 @@ type SSEAppender interface {
 // buildID — this reuses the same sse_events table without a migration.
 //
 // Plan T4.1: the canonical write-path adapter. Production wires
-// sse.PostgresEventStore here; tests use SSEAppender stubs.
+// store.PostgresEventStore here; tests use SSEAppender stubs.
 //
 // Per ADR D8 the EventStore enforces tenant_id at SQL level via a join
 // on the builds table — same defense applies here because deploy IDs
