@@ -49,8 +49,8 @@ func TestOPortaoDoPoolEstaLigadoAoMiddleware(t *testing.T) {
 		t.Error("`setup_server.go` nao constroi o PGPoolBreaker: sem ele o portao do pool volta a " +
 			"ser o percentual instantaneo, que oscila na linha de corte (B-054)")
 	}
-	if !strings.Contains(f, "sc.PGPoolGate = ") {
-		t.Error("o breaker e' construido mas nao e' entregue como `sc.PGPoolGate` — construido, " +
+	if !strings.Contains(f, "sc.Guards.PGPoolGate = ") {
+		t.Error("o breaker e' construido mas nao e' entregue como `sc.Guards.PGPoolGate` — construido, " +
 			"iniciado, parado no shutdown e nunca consultado foi exatamente o estado que o B-054 mediu")
 	}
 
@@ -58,8 +58,8 @@ func TestOPortaoDoPoolEstaLigadoAoMiddleware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lendo o router: %v", err)
 	}
-	if !strings.Contains(string(router), "cfg.PGPoolGate") {
-		t.Error("o router nao consulta `cfg.PGPoolGate`: o portao existe e ninguem pergunta a ele")
+	if !strings.Contains(string(router), "cfg.Guards.PGPoolGate") {
+		t.Error("o router nao consulta `cfg.Guards.PGPoolGate`: o portao existe e ninguem pergunta a ele")
 	}
 
 	// E a advertencia de "sem chamador" tem de ter saido, senao o arquivo descreve no presente
