@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-
 	"github.com/getloopscale/loopzero/api/internal/github/webhook"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 )
@@ -22,10 +20,19 @@ type PreviewLifecycleService interface {
 	DeletePreviewByPR(ctx context.Context, tenantID, projectID string, prNumber int) error
 }
 
-// RepoLookup looks up a project repository by full GitHub name. Subset of
-// store.PostgresRepositoryStore — kept narrow for testability.
+// ConnectedRepo is what the preview deployer needs to know about a GitHub
+// repository linked to a project. It is this package's own type, so the
+// persistence model can change without reaching the GitHub integration.
+type ConnectedRepo struct {
+	TenantID    string
+	ProjectName string
+	AutoDeploy  bool
+}
+
+// RepoLookup finds the project a GitHub repository is linked to. It returns
+// (nil, nil) for a repository that is not linked; an error is a real failure.
 type RepoLookup interface {
-	GetByRepo(ctx context.Context, repoFullName string) (*store.ProjectRepository, error)
+	GetByRepo(ctx context.Context, repoFullName string) (*ConnectedRepo, error)
 }
 
 // SourceBundlePreparer prepares the source bundle on S3 for a commit
@@ -150,7 +157,7 @@ func (d *PreviewDeployer) HandlePR(ctx context.Context, event webhook.PullReques
 func (d *PreviewDeployer) handleCreate(
 	ctx context.Context,
 	log *slog.Logger,
-	repo *store.ProjectRepository,
+	repo *ConnectedRepo,
 	event webhook.PullRequestEvent,
 ) error {
 	branch := event.PullRequest.Head.Ref
@@ -217,7 +224,7 @@ func (d *PreviewDeployer) handleCreate(
 func (d *PreviewDeployer) handleClosed(
 	ctx context.Context,
 	log *slog.Logger,
-	repo *store.ProjectRepository,
+	repo *ConnectedRepo,
 	event webhook.PullRequestEvent,
 ) error {
 	if event.Number <= 0 {

@@ -198,7 +198,7 @@ func setupGitHub(
 		// does not exist would accept the delivery and fail on the first call.
 		logger.Error("preview service init failed — PR webhooks disabled", "error", psErr)
 	} else {
-		previewDeployer := github.NewPreviewDeployer(previewSvc, repoStore, logger).
+		previewDeployer := github.NewPreviewDeployer(previewSvc, &adapters.ConnectedRepoAdapter{Store: repoStore}, logger).
 			WithBundlePreparer(autoDeployer) // shares the same bundle-prep logic
 		wh.OnPullRequest(previewDeployer.HandlePR)
 	}

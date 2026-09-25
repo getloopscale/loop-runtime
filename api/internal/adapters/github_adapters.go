@@ -119,9 +119,25 @@ func (a *BuildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req 
 	return nil
 }
 
+// ConnectedRepoAdapter bridges store.PostgresRepositoryStore to
+// github.RepoLookup, translating the persisted row into the GitHub
+// package's own ConnectedRepo so that package does not import the store.
+type ConnectedRepoAdapter struct {
+	Store *store.PostgresRepositoryStore
+}
+
+func (a *ConnectedRepoAdapter) GetByRepo(ctx context.Context, repoFullName string) (*github.ConnectedRepo, error) {
+	row, err := a.Store.GetByRepo(ctx, repoFullName)
+	if err != nil || row == nil {
+		return nil, err
+	}
+	return &github.ConnectedRepo{TenantID: row.TenantID, ProjectName: row.ProjectName, AutoDeploy: row.AutoDeploy}, nil
+}
+
 // The ports these adapters satisfy, asserted at compile time.
 var (
 	_ github.BuildLookup      = (*BuildLookupAdapter)(nil)
 	_ github.RepositoryLookup = (*RepoLookupAdapter)(nil)
 	_ github.BuildSubmitter   = (*BuildSubmitterAdapter)(nil)
+	_ github.RepoLookup       = (*ConnectedRepoAdapter)(nil)
 )
