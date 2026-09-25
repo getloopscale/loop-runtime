@@ -95,14 +95,17 @@ func TestRealTreeIsClean(t *testing.T) {
 	if out.Files == 0 || out.Messages == 0 {
 		t.Fatalf("empty scan (%d files, %d messages): green about nothing is not green", out.Files, out.Messages)
 	}
-	// Floor MEASURED 2026-08-19: 168 literals inside error writers. The first
-	// version of this test demanded 200, a number I took from B-081's "277
-	// messages" — and 277 counts CALL SITES of `WriteLoopZeroError`, not literals.
-	// Two different metrics; repeating one in place of the other is how a number
-	// gets invented. A value below 168 means the scan shrank (writer renamed, root
-	// moved) and the green started to be worth less without anything warning.
-	if out.Messages < 168 {
-		t.Errorf("only %d message(s) reached; the real tree had 168 on 2026-08-19", out.Messages)
+	// Floor MEASURED 2026-09-25: 143 authored messages. It read 168 from
+	// 2026-08-19 until the scan was corrected: it counted EVERY string literal
+	// inside a writer call, error codes included (NewLoopZeroError's first argument,
+	// a LoopZeroError literal's Code), and it did not see a message authored in a
+	// constructor outside the writer. When the upload, build and team handlers
+	// moved to build-then-write, 37 messages left the scan and the gate stayed
+	// green. Counted the corrected way (messages only, wherever authored) the
+	// same base tree holds 146; the 3 fewer are the role refusals now answered by
+	// one RequireRole. A value below 143 means the scan shrank again.
+	if out.Messages < 143 {
+		t.Errorf("only %d message(s) reached; the real tree had 143 on 2026-09-25", out.Messages)
 	}
 	if !out.Pass {
 		t.Errorf("the real tree carries a message with a term banned by Rule 3:\n%+v", out.Violations)

@@ -41,6 +41,42 @@ var errorWriters = map[string]bool{
 	"FieldError":                    true,
 }
 
+// A handler that builds its error before writing it authors the message in the
+// constructor, outside any writer call. messageConstructor and errorType name
+// those two authoring sites so the scan reaches them.
+const (
+	messageConstructor = "NewLoopZeroError"
+	errorType          = "LoopZeroError"
+)
+
+// calleeName returns the final identifier of a function or type expression:
+// "WriteLoopZeroError" for httpio.WriteLoopZeroError, "LoopZeroError" for
+// loopzeroerrors.LoopZeroError. Any other shape has no name.
+func calleeName(e ast.Expr) string {
+	switch v := e.(type) {
+	case *ast.SelectorExpr:
+		return v.Sel.Name
+	case *ast.Ident:
+		return v.Name
+	}
+	return ""
+}
+
+// messageField returns the Message value of a LoopZeroError literal, or nil when
+// the literal sets none. The Code field is a contract, not prose.
+func messageField(lit *ast.CompositeLit) ast.Expr {
+	for _, elt := range lit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		if key, ok := kv.Key.(*ast.Ident); ok && key.Name == "Message" {
+			return kv.Value
+		}
+	}
+	return nil
+}
+
 // bannedTerms is the list from Unbreakable Rule 3 (CLAUDE.md § The Rules).
 // The comparison is case-insensitive: the rule lists `ArgoCD` and `argocd`
 // separately, and what it protects is the user not reading the tool's name —
@@ -133,42 +169,72 @@ func scanFile(root, path string, out *Outcome) error {
 	}
 	rel, _ := filepath.Rel(root, path)
 
-	ast.Inspect(f, func(n ast.Node) bool {
-		call, ok := n.(*ast.CallExpr)
-		if !ok {
-			return true
+	var judge func(expr ast.Expr)
+	judge = func(expr ast.Expr) {
+		if expr == nil {
+			return
 		}
-		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || !errorWriters[sel.Sel.Name] {
-			return true
-		}
-		// Descend into the WHOLE argument expression: the message usually comes from
-		// a `.Wrap("...")` chained inside the call, not as a direct literal.
-		for _, arg := range call.Args {
-			ast.Inspect(arg, func(m ast.Node) bool {
-				lit, ok := m.(*ast.BasicLit)
-				if !ok || lit.Kind != token.STRING {
-					return true
-				}
-				text, err := strconv.Unquote(lit.Value)
-				if err != nil {
-					return true
-				}
-				out.Messages++
-				lower := strings.ToLower(text)
-				for _, t := range bannedTerms {
-					if strings.Contains(lower, t) {
-						out.Violations = append(out.Violations, Violation{
-							File:    rel,
-							Line:    fset.Position(lit.Pos()).Line,
-							Term:    t,
-							Message: text,
-						})
-						break
-					}
-				}
+		ast.Inspect(expr, func(m ast.Node) bool {
+			if call, ok := m.(*ast.CallExpr); ok && calleeName(call.Fun) == messageConstructor && len(call.Args) >= 2 {
+				// Only the message; the code is a contract, not prose.
+				judge(call.Args[1])
+				return false
+			}
+			if lit, ok := m.(*ast.CompositeLit); ok && calleeName(lit.Type) == errorType {
+				judge(messageField(lit))
+				return false
+			}
+			lit, ok := m.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
 				return true
-			})
+			}
+			text, err := strconv.Unquote(lit.Value)
+			if err != nil {
+				return true
+			}
+			out.Messages++
+			lower := strings.ToLower(text)
+			for _, t := range bannedTerms {
+				if strings.Contains(lower, t) {
+					out.Violations = append(out.Violations, Violation{
+						File:    rel,
+						Line:    fset.Position(lit.Pos()).Line,
+						Term:    t,
+						Message: text,
+					})
+					break
+				}
+			}
+			return true
+		})
+	}
+
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.CallExpr:
+			name := calleeName(node.Fun)
+			if errorWriters[name] {
+				// Descend into the WHOLE argument expression: the message usually
+				// comes from a `.Wrap("...")` chained inside the call, not as a
+				// direct literal. Children are not revisited, so a constructor
+				// inside the argument is one message, not two.
+				for _, arg := range node.Args {
+					judge(arg)
+				}
+				return false
+			}
+			if name == messageConstructor && len(node.Args) >= 2 {
+				// The code (first argument) is a machine-readable contract; the
+				// message is what the user reads.
+				judge(node.Args[1])
+				return false
+			}
+		case *ast.CompositeLit:
+			if calleeName(node.Type) != errorType {
+				return true
+			}
+			judge(messageField(node))
+			return false
 		}
 		return true
 	})
@@ -177,6 +243,6 @@ func scanFile(root, path string, out *Outcome) error {
 
 // Summary describes the outcome.
 func (o Outcome) Summary() string {
-	return fmt.Sprintf("%d file(s) scanned, %d message(s) authored in an error writer, %d violation(s)",
+	return fmt.Sprintf("%d file(s) scanned, %d user-facing error message(s), %d violation(s)",
 		o.Files, o.Messages, len(o.Violations))
 }
