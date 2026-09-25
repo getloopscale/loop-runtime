@@ -7,7 +7,7 @@
 // GET /api/v1/admin/releases/{id}/inspect
 //
 // Gated behind LOOPZERO_ADMIN_API=true. Service authentication is NOT done
-// here: the router mounts this handler behind mwauth.RequireAdminService,
+// here: the router mounts this handler behind Authenticator.RequireAdminService,
 // the one admin gate (canonical LOOPZERO_ADMIN_SERVICE_AUTH_SECRET only).
 // Returns the diagnostic payload assembled by release.ReleaseInspector.
 //
@@ -24,7 +24,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
 
 	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 
@@ -36,9 +35,9 @@ import (
 // AdminReleaseInspectHandler returns an http.HandlerFunc bound to the
 // supplied inspector. The handler is intentionally thin — all logic
 // lives in release.ReleaseInspector (DIP).
-func AdminReleaseInspectHandler(inspector release.ReleaseInspector) http.HandlerFunc {
+func AdminReleaseInspectHandler(inspector release.ReleaseInspector, apiEnabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if os.Getenv("LOOPZERO_ADMIN_API") != "true" {
+		if !apiEnabled { // LOOPZERO_ADMIN_API, read once at boot
 			httpio.WriteCodeErrorJSON(w, http.StatusNotFound, "NOT_FOUND", "Endpoint not available.")
 			return
 		}

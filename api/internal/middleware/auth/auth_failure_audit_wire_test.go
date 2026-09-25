@@ -18,14 +18,14 @@ import (
 // T1.3 wire test (Phase A.4 of MEET-2026-05-12).
 //
 // Verifies that each failure path in this package's Auth/Admin middlewares
-// invokes the registered AuthFailureAuditor via the package-level
-// DefaultAuthAuditor singleton. The auditor itself has separate tests
+// invokes the AuthFailureAuditor configured on the Authenticator. The auditor itself has separate tests
 // covering rate limiting and metadata enrichment.
 
 // captureAuditor records every emission for assertion.
 type captureAuditor struct {
-	mu     sync.Mutex
-	events []capturedEvent
+	mu      sync.Mutex
+	events  []capturedEvent
+	auditor *AuthFailureAuditor // the auditor to put in an Authenticator's Config
 }
 
 type capturedEvent struct {
@@ -48,12 +48,9 @@ func newCapturingDefault() *captureAuditor {
 		})
 		return nil
 	}
-	auditor := NewAuthFailureAuditor(writer, slog.Default(), clientip.Resolver{})
-	DefaultAuthAuditor = auditor
+	c.auditor = NewAuthFailureAuditor(writer, slog.Default(), clientip.Resolver{})
 	return c
 }
-
-func clearDefault() { DefaultAuthAuditor = nil }
 
 // captured returns a snapshot. Caller must not modify.
 func (c *captureAuditor) captured() []capturedEvent {
@@ -70,9 +67,9 @@ func (c *captureAuditor) captured() []capturedEvent {
 
 func TestAuthFailureAudit_Wire_RequireAdminService_MissingHeader(t *testing.T) {
 	cap := newCapturingDefault()
-	defer clearDefault()
 
-	handler := RequireAdminService(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	authn := NewAuthenticator(Config{Auditor: cap.auditor})
+	handler := authn.RequireAdminService(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("next must not be called")
 	}))
 
@@ -103,13 +100,8 @@ func TestAuthFailureAudit_Wire_RequireAdminService_MissingHeader(t *testing.T) {
 // any tenant-owner JWT routed via the proxy passed the admin auth gate; the QA Red
 // Team filed #16 against that bypass.
 func TestRequireAdminService_RejectsLegacySecret(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "canonical-admin-secret")
-	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET", "legacy-proxy-secret")
-	// Ensure rotation siblings are empty so we isolate the legacy-vs-canonical decision.
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS", "")
-	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS", "")
-
-	handler := RequireAdminService(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	authn := NewAuthenticator(Config{AdminServiceSecret: "canonical-admin-secret", ServiceSecret: "legacy-proxy-secret"})
+	handler := authn.RequireAdminService(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("next must not be called when only the legacy proxy secret is provided")
 	}))
 
@@ -126,11 +118,9 @@ func TestRequireAdminService_RejectsLegacySecret(t *testing.T) {
 // TestRequireAdminService_AcceptsCanonical asserts the canonical secret still authorises
 // admin requests post-T1.0 (the narrow MUST NOT break legitimate operator-side calls).
 func TestRequireAdminService_AcceptsCanonical(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "canonical-admin-secret")
-	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET", "legacy-proxy-secret")
-
 	called := false
-	handler := RequireAdminService(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	authn := NewAuthenticator(Config{AdminServiceSecret: "canonical-admin-secret", ServiceSecret: "legacy-proxy-secret"})
+	handler := authn.RequireAdminService(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		called = true
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -151,11 +141,9 @@ func TestRequireAdminService_AcceptsCanonical(t *testing.T) {
 // TestRequireAdminService_AcceptsCanonicalPrevious asserts the canonical _PREVIOUS
 // rotation sibling still authorises (rotation use case preserved).
 func TestRequireAdminService_AcceptsCanonicalPrevious(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "new-canonical-admin-secret")
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS", "old-canonical-admin-secret")
-
 	called := false
-	handler := RequireAdminService(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	authn := NewAuthenticator(Config{AdminServiceSecret: "new-canonical-admin-secret", AdminServiceSecretPrevious: "old-canonical-admin-secret"})
+	handler := authn.RequireAdminService(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		called = true
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -197,9 +185,9 @@ func (s *wireStubStore) GetMemberships(_ context.Context, _ string) ([]TenantMem
 
 func TestAuthFailureAudit_Wire_Bearer_MissingHeader(t *testing.T) {
 	cap := newCapturingDefault()
-	defer clearDefault()
 
-	handler := AuthWithTTL(
+	authn := NewAuthenticator(Config{Auditor: cap.auditor})
+	handler := authn.MiddlewareWithTTL(
 		&wireStubValidator{result: &TokenValidationResult{UserID: "u-1"}},
 		&wireStubStore{memberships: []TenantMembership{{TenantID: "tn-1", Role: "owner"}}},
 		time.Minute,
@@ -220,9 +208,9 @@ func TestAuthFailureAudit_Wire_Bearer_MissingHeader(t *testing.T) {
 
 func TestAuthFailureAudit_Wire_Bearer_InvalidToken(t *testing.T) {
 	cap := newCapturingDefault()
-	defer clearDefault()
 
-	handler := AuthWithTTL(
+	authn := NewAuthenticator(Config{Auditor: cap.auditor})
+	handler := authn.MiddlewareWithTTL(
 		&wireStubValidator{err: ErrInvalidToken},
 		&wireStubStore{},
 		time.Minute,
@@ -243,9 +231,9 @@ func TestAuthFailureAudit_Wire_Bearer_InvalidToken(t *testing.T) {
 
 func TestAuthFailureAudit_Wire_Bearer_TransientInfra_NoEmit(t *testing.T) {
 	cap := newCapturingDefault()
-	defer clearDefault()
 
-	handler := AuthWithTTL(
+	authn := NewAuthenticator(Config{Auditor: cap.auditor})
+	handler := authn.MiddlewareWithTTL(
 		&wireStubValidator{err: errors.New("JWKS unreachable")},
 		&wireStubStore{},
 		time.Minute,
@@ -269,9 +257,9 @@ func TestAuthFailureAudit_Wire_Bearer_TransientInfra_NoEmit(t *testing.T) {
 
 func TestAuthFailureAudit_Wire_Bearer_ZeroMemberships(t *testing.T) {
 	cap := newCapturingDefault()
-	defer clearDefault()
 
-	handler := AuthWithTTL(
+	authn := NewAuthenticator(Config{Auditor: cap.auditor})
+	handler := authn.MiddlewareWithTTL(
 		&wireStubValidator{result: &TokenValidationResult{UserID: "u-orphan"}},
 		&wireStubStore{memberships: nil}, // zero memberships
 		time.Minute,
@@ -292,9 +280,9 @@ func TestAuthFailureAudit_Wire_Bearer_ZeroMemberships(t *testing.T) {
 
 func TestAuthFailureAudit_Wire_Bearer_NonMemberTenant(t *testing.T) {
 	cap := newCapturingDefault()
-	defer clearDefault()
 
-	handler := AuthWithTTL(
+	authn := NewAuthenticator(Config{Auditor: cap.auditor})
+	handler := authn.MiddlewareWithTTL(
 		&wireStubValidator{result: &TokenValidationResult{UserID: "u-multi"}},
 		&wireStubStore{memberships: []TenantMembership{
 			{TenantID: "tn-a", Role: "owner"},
@@ -323,13 +311,9 @@ func TestAuthFailureAudit_Wire_Bearer_NonMemberTenant(t *testing.T) {
 
 func TestAuthFailureAudit_Wire_ServiceAuth_NonMemberTenant(t *testing.T) {
 	cap := newCapturingDefault()
-	defer clearDefault()
 
-	prev := ServiceAuthSecret
-	ServiceAuthSecret = "valid-secret"
-	defer func() { ServiceAuthSecret = prev }()
-
-	handler := AuthWithTTL(
+	authn := NewAuthenticator(Config{ServiceSecret: "valid-secret", Auditor: cap.auditor})
+	handler := authn.MiddlewareWithTTL(
 		&wireStubValidator{},
 		&wireStubStore{memberships: []TenantMembership{{TenantID: "tn-real", Role: "owner"}}},
 		time.Minute,
@@ -352,13 +336,9 @@ func TestAuthFailureAudit_Wire_ServiceAuth_NonMemberTenant(t *testing.T) {
 
 func TestAuthFailureAudit_Wire_ServiceAuth_InvalidSecret(t *testing.T) {
 	cap := newCapturingDefault()
-	defer clearDefault()
 
-	prev := ServiceAuthSecret
-	ServiceAuthSecret = "the-real-secret"
-	defer func() { ServiceAuthSecret = prev }()
-
-	handler := AuthWithTTL(
+	authn := NewAuthenticator(Config{ServiceSecret: "the-real-secret", Auditor: cap.auditor})
+	handler := authn.MiddlewareWithTTL(
 		&wireStubValidator{},
 		&wireStubStore{},
 		time.Minute,
@@ -378,14 +358,12 @@ func TestAuthFailureAudit_Wire_ServiceAuth_InvalidSecret(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------------
-// Nil-safe: when DefaultAuthAuditor is nil, no panic and no test fakes called
+// Nil-safe: with no auditor configured, no panic and no test fakes called
 // -----------------------------------------------------------------------------
 
 func TestAuthFailureAudit_Wire_NilAuditor_NoPanic(t *testing.T) {
-	clearDefault() // ensure nil
-	defer clearDefault()
-
-	handler := RequireAdminService(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	authn := NewAuthenticator(Config{})
+	handler := authn.RequireAdminService(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("next must not be called")
 	}))
 

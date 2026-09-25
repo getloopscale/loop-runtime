@@ -31,7 +31,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -74,7 +73,7 @@ type TenantEvictor interface {
 //
 // Security:
 //   - LOOPZERO_ADMIN_API env must be "true" (feature flag off by default)
-//   - X-Service-Auth check is enforced by middleware.RequireAdminService
+//   - X-Service-Auth check is enforced by Authenticator.RequireAdminService
 //     at the router layer (qa-sprint2-cleanup-2026-06-24 T1.2 migration —
 //     closes loopzero-cloud#16). The middleware accepts ONLY the canonical
 //     LOOPZERO_ADMIN_SERVICE_AUTH_SECRET (+ _PREVIOUS rotation sibling); the
@@ -83,9 +82,9 @@ type TenantEvictor interface {
 //
 // The handler validates input, resolves matches via evictor, and enqueues.
 // Actual FK-ordered DELETE + finalizer cleanup is in services layer.
-func AdminEvictHandler(evictor TenantEvictor) http.HandlerFunc {
+func AdminEvictHandler(evictor TenantEvictor, apiEnabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if os.Getenv("LOOPZERO_ADMIN_API") != "true" {
+		if !apiEnabled { // LOOPZERO_ADMIN_API, read once at boot
 			httpio.WriteCodeErrorJSON(w, http.StatusNotFound, "NOT_FOUND", "Endpoint not available.")
 			return
 		}

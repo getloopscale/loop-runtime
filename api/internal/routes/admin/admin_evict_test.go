@@ -30,11 +30,11 @@ func (f *fakeEvictor) EnqueueEviction(_ context.Context, _ []string) (string, er
 	return f.enqueueID, f.enqErr
 }
 
-func doEvict(t *testing.T, input AdminEvictInput, ev TenantEvictor, setEnv map[string]string, headers map[string]string) *httptest.ResponseRecorder {
+// doEvict drives the route as the router mounts it. settings carries the
+// operator configuration by its environment names (LOOPZERO_ADMIN_API and the
+// service secrets), which cmd reads once at boot.
+func doEvict(t *testing.T, input AdminEvictInput, ev TenantEvictor, settings map[string]string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
-	for k, v := range setEnv {
-		t.Setenv(k, v)
-	}
 	body, _ := json.Marshal(input)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants/evict", bytes.NewReader(body))
 	for k, v := range headers {
@@ -42,10 +42,10 @@ func doEvict(t *testing.T, input AdminEvictInput, ev TenantEvictor, setEnv map[s
 	}
 	w := httptest.NewRecorder()
 	// qa-sprint2-cleanup-2026-06-24 T1.2: route handler is wrapped with
-	// auth.RequireAdminService at the router layer. Tests exercise the
+	// Authenticator.RequireAdminService at the router layer. Tests exercise the
 	// SAME chain (middleware → handler) so the auth-gate behavior is covered
 	// alongside the handler logic.
-	auth.RequireAdminService(AdminEvictHandler(ev)).ServeHTTP(w, req)
+	adminRoute(settings, AdminEvictHandler(ev, settings["LOOPZERO_ADMIN_API"] == "true")).ServeHTTP(w, req)
 	return w
 }
 
@@ -248,14 +248,22 @@ func TestAdminEvict_EnqueueFailure_SanitizesErrorBody(t *testing.T) {
 }
 
 func TestAdminEvict_BadJSON_Returns400(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "s")
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants/evict",
 		bytes.NewReader([]byte("not-json")))
 	req.Header.Set("X-Service-Auth", "s")
 	w := httptest.NewRecorder()
-	AdminEvictHandler(&fakeEvictor{}).ServeHTTP(w, req)
+	AdminEvictHandler(&fakeEvictor{}, true).ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("want 400 bad json, got %d", w.Code)
 	}
+}
+
+// adminRoute wraps h in the admin gate built from settings.
+func adminRoute(settings map[string]string, h http.Handler) http.Handler {
+	authn := auth.NewAuthenticator(auth.Config{
+		ServiceSecret:              settings["LOOPZERO_SERVICE_AUTH_SECRET"],
+		AdminServiceSecret:         settings["LOOPZERO_ADMIN_SERVICE_AUTH_SECRET"],
+		AdminServiceSecretPrevious: settings["LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS"],
+	})
+	return authn.RequireAdminService(h)
 }

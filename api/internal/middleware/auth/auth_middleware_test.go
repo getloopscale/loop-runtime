@@ -46,7 +46,8 @@ func TestAuth_ValidToken_SetsUserContext(t *testing.T) {
 	}
 
 	var captured *UserContext
-	handler := AuthWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{})
+	handler := authn.MiddlewareWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured = GetUserContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -79,7 +80,8 @@ func TestAuth_MissingHeader_Returns401(t *testing.T) {
 	// Arrange
 	validator := &stubValidator{result: &TokenValidationResult{}}
 	store := &stubMembershipStore{}
-	handler := AuthWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{})
+	handler := authn.MiddlewareWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called")
 	}))
 
@@ -98,7 +100,8 @@ func TestAuth_ExpiredToken_Returns401(t *testing.T) {
 	// Arrange
 	validator := &stubValidator{err: ErrInvalidToken}
 	store := &stubMembershipStore{}
-	handler := AuthWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{})
+	handler := authn.MiddlewareWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called")
 	}))
 
@@ -120,7 +123,8 @@ func TestAuth_NoMemberships_Returns403(t *testing.T) {
 		result: &TokenValidationResult{UserID: "user-orphan", Email: "orphan@test.com"},
 	}
 	store := &stubMembershipStore{memberships: nil}
-	handler := AuthWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{})
+	handler := authn.MiddlewareWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called")
 	}))
 
@@ -147,7 +151,8 @@ func TestAuth_MultipleTenants_NeedsHeader(t *testing.T) {
 			{TenantID: "tn-b", Role: "member"},
 		},
 	}
-	handler := AuthWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{})
+	handler := authn.MiddlewareWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called")
 	}))
 
@@ -176,7 +181,8 @@ func TestAuth_MultipleTenants_WithHeader_Resolves(t *testing.T) {
 	}
 
 	var captured *UserContext
-	handler := AuthWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{})
+	handler := authn.MiddlewareWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured = GetUserContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -202,9 +208,6 @@ func TestAuth_MultipleTenants_WithHeader_Resolves(t *testing.T) {
 
 func TestAuth_ServiceAuth_ValidSecret(t *testing.T) {
 	// Arrange
-	oldSecret := ServiceAuthSecret
-	ServiceAuthSecret = "test-service-secret"
-	defer func() { ServiceAuthSecret = oldSecret }()
 
 	store := &stubMembershipStore{
 		memberships: []TenantMembership{{TenantID: "tn-svc", Role: "admin"}},
@@ -212,7 +215,8 @@ func TestAuth_ServiceAuth_ValidSecret(t *testing.T) {
 	validator := &stubValidator{} // should not be called
 
 	var captured *UserContext
-	handler := AuthWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{ServiceSecret: "test-service-secret"})
+	handler := authn.MiddlewareWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured = GetUserContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -237,13 +241,11 @@ func TestAuth_ServiceAuth_ValidSecret(t *testing.T) {
 
 func TestAuth_ServiceAuth_InvalidSecret_Returns401(t *testing.T) {
 	// Arrange
-	oldSecret := ServiceAuthSecret
-	ServiceAuthSecret = "correct-secret"
-	defer func() { ServiceAuthSecret = oldSecret }()
 
 	store := &stubMembershipStore{}
 	validator := &stubValidator{}
-	handler := AuthWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{ServiceSecret: "correct-secret"})
+	handler := authn.MiddlewareWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called")
 	}))
 
@@ -263,7 +265,8 @@ func TestAuth_ValidatorError_Returns503(t *testing.T) {
 	// Arrange: non-ErrInvalidToken error = service unavailable
 	validator := &stubValidator{err: errors.New("connection refused")}
 	store := &stubMembershipStore{}
-	handler := AuthWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{})
+	handler := authn.MiddlewareWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called")
 	}))
 

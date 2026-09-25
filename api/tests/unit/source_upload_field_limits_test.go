@@ -85,14 +85,13 @@ func t61BaseCfg(logger *slog.Logger) server.Config {
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
 		TenantDeletionStore:  &stubTenantDeletionStore{},
 		Guards:               server.RouteGuards{IdempotencyStore: &stubIdempotencyStore{}},
-		Admin:                server.AdminConfig{Evictor: &stubTenantEvictor{}},
+		Admin:                server.AdminConfig{APIEnabled: true, Evictor: &stubTenantEvictor{}},
 	}
 }
 
 // EC-4 — services_json field exceeding 256 KB is rejected with HTTP 413 +
 // code SERVICES_JSON_TOO_LARGE.
 func TestSourceUpload_ServicesJSONExceeds256KB_Returns413(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	router := server.NewRouter(t61BaseCfg(logger))
 
@@ -134,7 +133,6 @@ func TestSourceUpload_ServicesJSONExceeds256KB_Returns413(t *testing.T) {
 // EC-5 — when the multipart body sends bundle BEFORE services_json the API
 // MUST reject with HTTP 400 + code MULTIPART_FIELD_ORDER.
 func TestSourceUpload_BundleFirstFieldOrder_Returns400(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	router := server.NewRouter(t61BaseCfg(logger))
 
@@ -175,7 +173,6 @@ func TestSourceUpload_BundleFirstFieldOrder_Returns400(t *testing.T) {
 // The downstream validation may still fail (invalid bundle/services contents)
 // but the order gate MUST NOT trigger.
 func TestSourceUpload_ServicesJSONFirstFieldOrder_NotRejectedByOrderGate(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	router := server.NewRouter(t61BaseCfg(logger))
 

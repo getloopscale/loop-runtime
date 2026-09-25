@@ -12,7 +12,6 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/getloopscale/loopzero-contracts/serviceauth"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // nonceStoreBootstrapTimeout caps how long bootstrap waits for the
@@ -25,7 +24,7 @@ import (
 // for the rationale.
 const nonceStoreBootstrapTimeout = 2 * time.Second
 
-// setupServiceAuthNonceStore wires `auth.ServiceAuthNonceStore`.
+// setupServiceAuthNonceStore returns the service-auth replay-protection nonce store.
 //
 // Env: LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR (e.g., "redis.loopzero-system:6379").
 // When empty OR unreachable, falls back to *InMemoryNonceStore.
@@ -39,15 +38,11 @@ const nonceStoreBootstrapTimeout = 2 * time.Second
 // in pkg/middleware init(), but that default is process-local and
 // won't share state across replicas. This function replaces the
 // default with the Redis-backed implementation when env-configured.
-func setupServiceAuthNonceStore(logger *slog.Logger) {
+func setupServiceAuthNonceStore(logger *slog.Logger) serviceauth.NonceStore {
 	addr := os.Getenv("LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR")
 	if addr == "" {
-		// Default: in-memory store (already installed by middleware init).
-		// Re-install explicitly so the bootstrap is deterministic regardless
-		// of test pollution from prior runs.
-		auth.ServiceAuthNonceStore = serviceauth.NewInMemoryNonceStore(5 * time.Minute)
 		logger.Info("service-auth nonce store: in-memory (set LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR for multi-replica Redis)")
-		return
+		return serviceauth.NewInMemoryNonceStore(5 * time.Minute)
 	}
 
 	client := redis.NewClient(&redis.Options{
@@ -63,12 +58,11 @@ func setupServiceAuthNonceStore(logger *slog.Logger) {
 	defer cancel()
 	if err := client.Ping(ctx).Err(); err != nil {
 		_ = client.Close()
-		auth.ServiceAuthNonceStore = serviceauth.NewInMemoryNonceStore(5 * time.Minute)
 		logger.Warn("service-auth nonce store: Redis ping failed at bootstrap; falling back to in-memory",
 			"addr", addr, "error", err)
-		return
+		return serviceauth.NewInMemoryNonceStore(5 * time.Minute)
 	}
 
-	auth.ServiceAuthNonceStore = serviceauth.NewRedisNonceStore(client, 5*time.Minute)
 	logger.Info("service-auth nonce store: Redis", "addr", addr)
+	return serviceauth.NewRedisNonceStore(client, 5*time.Minute)
 }

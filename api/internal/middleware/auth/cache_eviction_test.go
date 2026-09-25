@@ -189,7 +189,8 @@ func TestValidateWithCache_ConcurrentRequests_NoDataRace(t *testing.T) {
 	validator := &concurrentTokenValidator{}
 	store := &concurrentMembershipStore{}
 
-	mw := AuthWithTTL(validator, store, 50*time.Millisecond)
+	authn := NewAuthenticator(Config{})
+	mw := authn.MiddlewareWithTTL(validator, store, 50*time.Millisecond)
 
 	okHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

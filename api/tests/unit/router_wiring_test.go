@@ -180,8 +180,6 @@ func (s *stubIdempotencyStore) Store(_ context.Context, _ *policy.IdempotencyRec
 // (method not allowed). Any other status (200, 401, 400, 500) is acceptable
 // because it proves the route handler was reached.
 func TestRouter_AllRoutesRegistered(t *testing.T) {
-	// Admin evict route requires LOOPZERO_ADMIN_API=true to be registered (feature flag).
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
@@ -234,7 +232,7 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 		GitHubWebhookHandler:      &stubGitHubWebhookHandler{},
 		TenantDeletionStore:       &stubTenantDeletionStore{},
 		Guards:                    server.RouteGuards{IdempotencyStore: &stubIdempotencyStore{}},
-		Admin:                     server.AdminConfig{Evictor: &stubTenantEvictor{}},
+		Admin:                     server.AdminConfig{APIEnabled: true, Evictor: &stubTenantEvictor{}},
 	}
 
 	router := server.NewRouter(cfg)

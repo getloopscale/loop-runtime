@@ -172,6 +172,12 @@ type Config struct {
 	Secrets SecretsConfig
 	// Admin carries the collaborators of the operator (admin) routes.
 	Admin AdminConfig
+	// Auth is the authenticator every user route and admin route goes
+	// through. Nil means an Authenticator with no secrets configured: user
+	// routes still validate tokens, and admin routes refuse everyone.
+	Auth *mwauth.Authenticator
+	// Maintenance is LOOPZERO_MAINTENANCE_MODE, parsed at boot. The zero value is off.
+	Maintenance policy.MaintenanceSetting
 }
 
 // HTTPTimeouts are the HTTP server's timeouts (configurable via env vars).
@@ -253,6 +259,9 @@ type SecretsConfig struct {
 // AdminConfig carries the collaborators of the operator (admin) routes; each
 // route is mounted only when its collaborator is set.
 type AdminConfig struct {
+	// APIEnabled is the LOOPZERO_ADMIN_API feature flag: off, the admin routes
+	// answer 404 even to an authorized operator.
+	APIEnabled       bool
 	Evictor          admin.TenantEvictor
 	Pinner           admin.CellPinner
 	ReleaseInspector release.ReleaseInspector

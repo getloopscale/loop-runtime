@@ -47,14 +47,21 @@ type TenantDeletionResponse struct {
 // TenantHandler handles tenant lifecycle operations.
 type TenantHandler struct {
 	deletionStore TenantDeletionStore
-	logger        *slog.Logger
+	// isAdminKey reports whether an X-Admin-Key value is the platform-admin
+	// key (auth.Authenticator.ValidateAdminAPIKey in production).
+	isAdminKey func(string) bool
+	logger     *slog.Logger
 }
 
 // NewTenantHandler creates a new handler for tenant lifecycle operations.
-func NewTenantHandler(store TenantDeletionStore, logger *slog.Logger) *TenantHandler {
+func NewTenantHandler(store TenantDeletionStore, logger *slog.Logger, isAdminKey func(string) bool) *TenantHandler {
+	if isAdminKey == nil {
+		panic("tenants: NewTenantHandler requires the admin-key check")
+	}
 	return &TenantHandler{
 		deletionStore: store,
 		logger:        logger,
+		isAdminKey:    isAdminKey,
 	}
 }
 
@@ -87,7 +94,7 @@ func (h *TenantHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// previously used `r.Header.Get("X-Admin-Key") != ""` which checked only
 	// header presence — any authenticated user could spoof. Now validates the
 	// key value against AdminAPIKey via constant-time compare.
-	isAdmin := auth.ValidateAdminAPIKey(r.Header.Get("X-Admin-Key"))
+	isAdmin := h.isAdminKey(r.Header.Get("X-Admin-Key"))
 	if !isAdmin && uc.TenantID != tenantID {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
 		return
@@ -179,7 +186,7 @@ func (h *TenantHandler) Restore(w http.ResponseWriter, r *http.Request) {
 	// IDOR protection
 	// T0.2 of deep-review-remediation-plan (closes find_sec_001 CRITICAL):
 	// validates key value, not header presence.
-	isAdmin := auth.ValidateAdminAPIKey(r.Header.Get("X-Admin-Key"))
+	isAdmin := h.isAdminKey(r.Header.Get("X-Admin-Key"))
 	if !isAdmin && uc.TenantID != tenantID {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
 		return

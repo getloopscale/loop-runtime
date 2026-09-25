@@ -23,7 +23,7 @@ import (
 // somebody tried to delete.
 func TestTenantsDeleteDeclaresTenantIDAsResourceID(t *testing.T) {
 	// Arrange.
-	h := NewTenantHandler(&fakeTenantDeletionStore{}, slog.Default())
+	h := NewTenantHandler(&fakeTenantDeletionStore{}, slog.Default(), func(string) bool { return false })
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tenants/tn-victim", nil)
 	req = routestest.WithChiParam(req, "id", "tn-victim")
 	req = routestest.WithAuditSlot(routestest.WithAuth(req, routestest.DefaultUserContext()))

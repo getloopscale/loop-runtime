@@ -25,7 +25,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
 	"regexp"
 	"strings"
 
@@ -86,10 +85,10 @@ var validCellIDPattern = regexp.MustCompile(`^cell-[a-z0-9-]+$`)
 // pinner-only wiring). The actor is the fixed string "admin:service-auth": this
 // route authenticates via a shared secret (LOOPZERO_ADMIN_SERVICE_AUTH_SECRET), which
 // carries no per-user subject — the raw secret is NEVER written to the audit body.
-func AdminPinCellHandler(pinner CellPinner, audit audit.AuditWriter) http.HandlerFunc {
+func AdminPinCellHandler(pinner CellPinner, audit audit.AuditWriter, apiEnabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Feature flag gate (matches admin_evict semantics).
-		if os.Getenv("LOOPZERO_ADMIN_API") != "true" {
+		if !apiEnabled { // LOOPZERO_ADMIN_API, read once at boot
 			http.NotFound(w, r)
 			return
 		}

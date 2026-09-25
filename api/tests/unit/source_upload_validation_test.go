@@ -92,7 +92,6 @@ func newValidSourceUploadReq(t *testing.T, projectName string) *http.Request {
 // the route MUST return HTTP 400 with INVALID_TENANT_OR_PROJECT code so
 // the user sees an actionable validation error (not a generic 500).
 func TestSourceUpload_PathTraversalTenant_Returns400(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	cfg := server.Config{
@@ -123,7 +122,7 @@ func TestSourceUpload_PathTraversalTenant_Returns400(t *testing.T) {
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
 		TenantDeletionStore:  &stubTenantDeletionStore{},
 		Guards:               server.RouteGuards{IdempotencyStore: &stubIdempotencyStore{}},
-		Admin:                server.AdminConfig{Evictor: &stubTenantEvictor{}},
+		Admin:                server.AdminConfig{APIEnabled: true, Evictor: &stubTenantEvictor{}},
 	}
 
 	router := server.NewRouter(cfg)

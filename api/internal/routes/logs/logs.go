@@ -13,7 +13,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -27,14 +26,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
-
-// isDebugAuthorized gates ?mode=debug on /logs (plan J-17 Layer 3): the
-// LOOPZERO_ADMIN_API feature flag must be on, and the caller must be an operator
-// as defined by auth.AdminServiceAuthorized — the same predicate the admin
-// routes' middleware uses. Dashboard user JWTs CANNOT enable debug.
-func isDebugAuthorized(r *http.Request) bool {
-	return os.Getenv("LOOPZERO_ADMIN_API") == "true" && auth.AdminServiceAuthorized(r)
-}
 
 // parseSinceParam converts a `?since=<value>` query parameter into a
 // number of seconds. Accepts:
@@ -127,6 +118,10 @@ var errLogsUnavailable = loopzeroerrors.NewLoopZeroError("LOGS_UNAVAILABLE",
 type LogsHandler struct {
 	builds  LogBuildStore
 	querier LogQuerier
+	// debugAuthorized decides whether a request may use ?mode=debug (plan
+	// J-17 Layer 3). Nil refuses everyone: dashboard user JWTs never enable
+	// debug, only an operator the router vouches for.
+	debugAuthorized func(*http.Request) bool
 }
 
 // NewLogsHandler creates a new LogsHandler.
@@ -135,6 +130,14 @@ func NewLogsHandler(builds LogBuildStore, querier LogQuerier) *LogsHandler {
 		builds:  builds,
 		querier: querier,
 	}
+}
+
+// WithDebugAuthorizer returns a copy of the handler that admits ?mode=debug
+// for the requests authorized reports true for.
+func (h *LogsHandler) WithDebugAuthorizer(authorized func(*http.Request) bool) *LogsHandler {
+	withDebug := *h
+	withDebug.debugAuthorized = authorized
+	return &withDebug
 }
 
 // Get handles GET /api/v1/builds/{id}/logs.
@@ -192,7 +195,7 @@ func (h *LogsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// + X-Service-Auth pattern used by admin endpoints — a dashboard user
 	// JWT cannot enable it.
 	if r.URL.Query().Get("mode") == "debug" {
-		if !isDebugAuthorized(r) {
+		if h.debugAuthorized == nil || !h.debugAuthorized(r) {
 			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
 			return
 		}

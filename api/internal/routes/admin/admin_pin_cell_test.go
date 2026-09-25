@@ -17,7 +17,6 @@ import (
 	"strings"
 	"testing"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/services/build"
 
 	"github.com/getloopscale/loopzero/api/internal/services/placement"
@@ -42,20 +41,17 @@ func (f *fakePinner) Pin(_ context.Context, tenantID, cellID string) (string, er
 	return f.prev, f.err
 }
 
-func doPin(t *testing.T, body any, p CellPinner, env map[string]string, headers map[string]string) *httptest.ResponseRecorder {
+func doPin(t *testing.T, body any, p CellPinner, settings map[string]string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
-	for k, v := range env {
-		t.Setenv(k, v)
-	}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants/pin", bytes.NewReader(b))
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
 	rec := httptest.NewRecorder()
-	// The router mounts this handler behind auth.RequireAdminService; the
+	// The router mounts this handler behind Authenticator.RequireAdminService; the
 	// test exercises the same chain so the auth gate is covered with it.
-	auth.RequireAdminService(AdminPinCellHandler(p, nil)).ServeHTTP(rec, req)
+	adminRoute(settings, AdminPinCellHandler(p, nil, settings["LOOPZERO_ADMIN_API"] == "true")).ServeHTTP(rec, req)
 	return rec
 }
 
@@ -93,12 +89,10 @@ func TestAdminPinCell_WrongSecret_Returns403(t *testing.T) {
 }
 
 func TestAdminPinCell_BadJSON_Returns400(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret")
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants/pin", bytes.NewReader([]byte("{not json")))
 	req.Header.Set("X-Service-Auth", "secret")
 	rec := httptest.NewRecorder()
-	AdminPinCellHandler(&fakePinner{}, nil).ServeHTTP(rec, req)
+	AdminPinCellHandler(&fakePinner{}, nil, true).ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rec.Code)
 	}
@@ -109,8 +103,6 @@ func TestAdminPinCell_BadJSON_Returns400(t *testing.T) {
 // audit entry with the safe fixed actor and from/to metadata. Proves the pin path
 // is now forensically traceable (was NOT before — the gap the review surfaced).
 func TestAdminPinCell_Success_WritesAuditEntry(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret")
 
 	var calls int
 	var got struct {
@@ -127,7 +119,7 @@ func TestAdminPinCell_Success_WritesAuditEntry(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants/pin", bytes.NewReader(b))
 	req.Header.Set("X-Service-Auth", "secret")
 	rec := httptest.NewRecorder()
-	AdminPinCellHandler(&fakePinner{prev: "cell-0"}, audit).ServeHTTP(rec, req)
+	AdminPinCellHandler(&fakePinner{prev: "cell-0"}, audit, true).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (body: %s)", rec.Code, rec.Body.String())
@@ -152,8 +144,6 @@ func TestAdminPinCell_Success_WritesAuditEntry(t *testing.T) {
 // TestAdminPinCell_NoOpPin_WritesNoAudit: re-pinning to the same cell is not a
 // move — it must NOT emit an audit entry (keeps the audit log meaningful).
 func TestAdminPinCell_NoOpPin_WritesNoAudit(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret")
 
 	var calls int
 	audit := func(_, _, _, _, _, _ string, _ map[string]any) { calls++ }
@@ -162,7 +152,7 @@ func TestAdminPinCell_NoOpPin_WritesNoAudit(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants/pin", bytes.NewReader(b))
 	req.Header.Set("X-Service-Auth", "secret")
 	rec := httptest.NewRecorder()
-	AdminPinCellHandler(&fakePinner{prev: "cell-1"}, audit).ServeHTTP(rec, req) // already on cell-1
+	AdminPinCellHandler(&fakePinner{prev: "cell-1"}, audit, true).ServeHTTP(rec, req) // already on cell-1
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)

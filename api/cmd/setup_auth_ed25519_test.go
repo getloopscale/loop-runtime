@@ -10,23 +10,20 @@ import (
 	"log/slog"
 	"os"
 	"testing"
-
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // TestLoadServiceAuthEd25519Trust_PopulatesCurrentOnly — happy path with
 // only LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT set (steady-state, no
 // rotation in flight). The trust set ends with exactly one public key.
 func TestLoadServiceAuthEd25519Trust_PopulatesCurrentOnly(t *testing.T) {
-	resetMiddlewareEd25519State(t)
 	pub, _, _ := ed25519.GenerateKey(rand.Reader)
 	t.Setenv("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT", base64.StdEncoding.EncodeToString(pub))
 	t.Setenv("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS", "")
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	loadServiceAuthEd25519Trust(logger)
+	trust := loadServiceAuthEd25519Trust(logger)
 
-	if got := len(auth.ServiceAuthEd25519PublicKeys); got != 1 {
+	if got := len(trust); got != 1 {
 		t.Fatalf("want 1 trusted key (current only), got %d", got)
 	}
 }
@@ -35,16 +32,15 @@ func TestLoadServiceAuthEd25519Trust_PopulatesCurrentOnly(t *testing.T) {
 // window: BOTH current and previous public keys must be in the trust
 // set so signatures from EITHER key validate.
 func TestLoadServiceAuthEd25519Trust_PopulatesCurrentAndPrevious(t *testing.T) {
-	resetMiddlewareEd25519State(t)
 	curPub, _, _ := ed25519.GenerateKey(rand.Reader)
 	prevPub, _, _ := ed25519.GenerateKey(rand.Reader)
 	t.Setenv("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT", base64.StdEncoding.EncodeToString(curPub))
 	t.Setenv("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS", base64.StdEncoding.EncodeToString(prevPub))
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	loadServiceAuthEd25519Trust(logger)
+	trust := loadServiceAuthEd25519Trust(logger)
 
-	if got := len(auth.ServiceAuthEd25519PublicKeys); got != 2 {
+	if got := len(trust); got != 2 {
 		t.Fatalf("want 2 trusted keys (current + previous), got %d", got)
 	}
 }
@@ -54,14 +50,13 @@ func TestLoadServiceAuthEd25519Trust_PopulatesCurrentAndPrevious(t *testing.T) {
 // fail-closed branch (ErrNoTrustedKeys) is exercised only when a signed
 // request actually arrives (Phase 1 accept-both ignores unsigned).
 func TestLoadServiceAuthEd25519Trust_EmptyEnv_LeavesTrustSetEmpty(t *testing.T) {
-	resetMiddlewareEd25519State(t)
 	t.Setenv("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT", "")
 	t.Setenv("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS", "")
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	loadServiceAuthEd25519Trust(logger)
+	trust := loadServiceAuthEd25519Trust(logger)
 
-	if got := len(auth.ServiceAuthEd25519PublicKeys); got != 0 {
+	if got := len(trust); got != 0 {
 		t.Fatalf("want 0 trusted keys (Phase 1 unconfigured), got %d", got)
 	}
 }
@@ -75,11 +70,10 @@ func TestLoadServiceAuthEd25519Trust_EmptyEnv_LeavesTrustSetEmpty(t *testing.T) 
 // error and the caller (setupAuth) wraps it into a fatal log.
 // Test the loader function level.
 func TestLoadServiceAuthEd25519Trust_MalformedCurrent_FailsClosed(t *testing.T) {
-	resetMiddlewareEd25519State(t)
 	t.Setenv("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT", "@@@not-valid-base64@@@")
 	t.Setenv("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS", "")
 
-	if err := loadServiceAuthEd25519TrustE(); err == nil {
+	if _, err := loadServiceAuthEd25519TrustE(); err == nil {
 		t.Fatal("malformed current key must produce an error (fail-closed)")
 	}
 }
@@ -88,26 +82,22 @@ func TestLoadServiceAuthEd25519Trust_MalformedCurrent_FailsClosed(t *testing.T) 
 // decodes but the resulting bytes are not ed25519.PublicKeySize.
 // Same fail-closed requirement as malformed base64.
 func TestLoadServiceAuthEd25519Trust_WrongKeySize_FailsClosed(t *testing.T) {
-	resetMiddlewareEd25519State(t)
 	t.Setenv("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT", base64.StdEncoding.EncodeToString([]byte("too-short")))
 	t.Setenv("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS", "")
 
-	if err := loadServiceAuthEd25519TrustE(); err == nil {
+	if _, err := loadServiceAuthEd25519TrustE(); err == nil {
 		t.Fatal("wrong-size current key must produce an error (fail-closed)")
 	}
 }
 
 // TestServiceAuthRequireSignatureFlag_DefaultFalse — Phase 1 default.
-// Without the env var set, ServiceAuthRequireSignature stays false
+// Without the env var set, the require-signature flag stays false
 // (accept-both). Operator flips to true only after the 7-day soak per
 // Q3 cutover decision.
 func TestServiceAuthRequireSignatureFlag_DefaultFalse(t *testing.T) {
-	resetMiddlewareEd25519State(t)
 	t.Setenv("LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE", "")
 
-	loadServiceAuthRequireSignatureFlag()
-
-	if auth.ServiceAuthRequireSignature {
+	if serviceAuthRequireSignature() {
 		t.Fatal("unset env var must default to false (Phase 1 accept-both)")
 	}
 }
@@ -116,30 +106,12 @@ func TestServiceAuthRequireSignatureFlag_DefaultFalse(t *testing.T) {
 // opt-in. Accepts "true" / "1" / "yes" so the operator runbook can
 // document a friendly value.
 func TestServiceAuthRequireSignatureFlag_TrueValue(t *testing.T) {
-	resetMiddlewareEd25519State(t)
 	for _, v := range []string{"true", "TRUE", "1", "yes", "YES"} {
 		t.Run(v, func(t *testing.T) {
-			auth.ServiceAuthRequireSignature = false
 			t.Setenv("LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE", v)
-			loadServiceAuthRequireSignatureFlag()
-			if !auth.ServiceAuthRequireSignature {
+			if !serviceAuthRequireSignature() {
 				t.Errorf("env=%q must enable Phase 2 require-signed", v)
 			}
 		})
 	}
-}
-
-// resetMiddlewareEd25519State restores the package-level middleware
-// singletons between tests so cross-test pollution does not produce
-// false greens.
-func resetMiddlewareEd25519State(t *testing.T) {
-	t.Helper()
-	oldKeys := auth.ServiceAuthEd25519PublicKeys
-	oldFlag := auth.ServiceAuthRequireSignature
-	auth.ServiceAuthEd25519PublicKeys = nil
-	auth.ServiceAuthRequireSignature = false
-	t.Cleanup(func() {
-		auth.ServiceAuthEd25519PublicKeys = oldKeys
-		auth.ServiceAuthRequireSignature = oldFlag
-	})
 }

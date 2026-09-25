@@ -6,14 +6,13 @@ package policy
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 )
 
 // MaintenanceMode is an HTTP middleware that returns 503 Service Unavailable on
-// MUTATING requests (POST/PUT/PATCH/DELETE) when env var LOOPZERO_MAINTENANCE_MODE
-// is set to a non-empty value. Read-only requests (GET/HEAD/OPTIONS) and the
+// MUTATING requests (POST/PUT/PATCH/DELETE) while the maintenance setting
+// (LOOPZERO_MAINTENANCE_MODE, see ParseMaintenanceSetting) is on. Read-only requests (GET/HEAD/OPTIONS) and the
 // health endpoint always pass through.
 //
 // Sprint 8 v3.2 / CHG-002a / D-7: required pre-flight before T0.1 (PG resize)
@@ -32,10 +31,40 @@ import (
 //
 // Retry-After header is also set so HTTP-aware clients honor backoff
 // (CLI `transient.ts` parses this).
-func MaintenanceMode(next http.Handler) http.Handler {
+func MaintenanceMode(setting MaintenanceSetting) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return maintenanceGate(setting, next)
+	}
+}
+
+// MaintenanceSetting is LOOPZERO_MAINTENANCE_MODE, parsed once at boot.
+type MaintenanceSetting struct {
+	Enabled bool
+	Message string // shown to refused callers
+}
+
+const defaultMaintenanceMessage = "LoopZero is in maintenance mode. Mutations are temporarily disabled while infrastructure is being resized. Try again shortly."
+
+// ParseMaintenanceSetting reads a LOOPZERO_MAINTENANCE_MODE value. Empty, "0",
+// "false", "off" and "no" (any case) mean off — the published chart renders
+// "false" by default, so reading every non-empty value as "on" put a default
+// install into maintenance. "1", "true", "on" and "yes" mean on with the
+// default message; any other value means on, with that value as the message
+// shown to callers.
+func ParseMaintenanceSetting(raw string) MaintenanceSetting {
+	v := strings.TrimSpace(raw)
+	switch strings.ToLower(v) {
+	case "", "0", "false", "off", "no":
+		return MaintenanceSetting{}
+	case "1", "true", "on", "yes":
+		return MaintenanceSetting{Enabled: true, Message: defaultMaintenanceMessage}
+	}
+	return MaintenanceSetting{Enabled: true, Message: v}
+}
+
+func maintenanceGate(setting MaintenanceSetting, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mode := os.Getenv("LOOPZERO_MAINTENANCE_MODE")
-		if mode == "" {
+		if !setting.Enabled {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -60,17 +89,13 @@ func MaintenanceMode(next http.Handler) http.Handler {
 		}
 
 		retryAfter := 300 // default 5 minutes — covers managed-PG failover window
-		message := "LoopZero is in maintenance mode. Mutations are temporarily disabled while infrastructure is being resized. Try again shortly."
-		if mode != "1" && mode != "true" {
-			message = mode // operator-supplied human-readable message overrides default
-		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"code":                "MAINTENANCE_MODE",
-			"message":             message,
+			"message":             setting.Message,
 			"retry_after_seconds": retryAfter,
 		})
 	})

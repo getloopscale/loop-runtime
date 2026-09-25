@@ -29,7 +29,9 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
+	"github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/routes/domains"
@@ -155,10 +157,12 @@ func main() {
 	trustedProxyCIDRs := clientip.ParseTrustedProxyCIDRs(os.Getenv("LOOPZERO_TRUSTED_PROXY_CIDRS"))
 	logger.Info("trusted proxy CIDRs loaded", "count", len(trustedProxyCIDRs))
 
-	// T1.3 (Wave 1 Phase A.4): wire auth failure auditor to persist
-	// auth rejections to audit_log. Must run AFTER setupDatabase so the
-	// writer has a real DB; nil-safe when dbAdapter is unavailable.
-	WireAuthFailureAuditor(dbAdapter, logger, clientip.NewResolver(trustedProxyCIDRs))
+	// T1.3 (Wave 1 Phase A.4): the auth failure auditor persists auth
+	// rejections to audit_log, so it is built AFTER setupDatabase; nil when
+	// dbAdapter is unavailable. It completes the authentication config read
+	// in setupAuth, and the Authenticator is built once from both.
+	authDeps.Config.Auditor = buildAuthFailureAuditor(dbAdapter, logger, clientip.NewResolver(trustedProxyCIDRs))
+	authenticator := auth.NewAuthenticator(authDeps.Config)
 
 	var stores *StoreDeps
 
@@ -410,6 +414,9 @@ func main() {
 		healthServices, authDeps.TokenValidator, rateLimiter,
 		shutdownCtx, shutdownCancel, logger)
 	srvCfg.Guards.IPRateLimit = ipRateLimiter
+	srvCfg.Auth = authenticator
+	srvCfg.Admin.APIEnabled = os.Getenv("LOOPZERO_ADMIN_API") == "true"
+	srvCfg.Maintenance = policy.ParseMaintenanceSetting(os.Getenv("LOOPZERO_MAINTENANCE_MODE"))
 
 	// M3 of qa-readiness-roadmap-2026-06-23 — J11D7 LOCKED ADR:
 	// per-(tenant, domain) rate-limit for POST /api/v1/domains/{domain}/verify

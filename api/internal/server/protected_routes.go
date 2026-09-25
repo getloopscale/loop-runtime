@@ -301,7 +301,13 @@ func registerBuildReadRoutes(r chi.Router, cfg Config, _ routeChains) {
 	}
 	if surfaces.Recorded(cfg.Surfaces, surfaces.BuildLogs, cfg.LogsHandler != nil,
 		"no database — comes from `orchDeps` (setup_server.go), which requires `dbAdapter`") {
-		r.Get("/api/v1/builds/{id}/logs", cfg.LogsHandler.Get)
+		// ?mode=debug is for operators: the admin flag must be on and the
+		// caller must carry the admin service secret — the same question the
+		// admin routes ask.
+		logsHandler := cfg.LogsHandler.WithDebugAuthorizer(func(r *http.Request) bool {
+			return cfg.Admin.APIEnabled && cfg.Auth.AdminServiceAuthorized(r)
+		})
+		r.Get("/api/v1/builds/{id}/logs", logsHandler.Get)
 	}
 	if surfaces.Recorded(cfg.Surfaces, surfaces.LogStream, cfg.LogStreamHandler != nil,
 		"no database — comes from `orchDeps`. Without it live deploy output disappears and "+
@@ -383,7 +389,7 @@ func registerTenantRoutes(r chi.Router, cfg Config, ch routeChains) {
 		"no database — the TenantDeletionStore is built inside the `dbAdapter` block (setup_server.go)") {
 		return
 	}
-	h := tenants.NewTenantHandler(cfg.TenantDeletionStore, cfg.Logger)
+	h := tenants.NewTenantHandler(cfg.TenantDeletionStore, cfg.Logger, cfg.Auth.ValidateAdminAPIKey)
 	r.With(ch.limited(audited("tenant.deleted", "tenant"))...).Delete("/api/v1/tenants/{id}", h.Delete)
 	r.With(ch.limited(audited("tenant.restored", "tenant"))...).Post("/api/v1/tenants/{id}/restore", h.Restore)
 }

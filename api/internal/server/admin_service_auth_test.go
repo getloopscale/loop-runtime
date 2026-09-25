@@ -5,6 +5,7 @@ package server
 
 import (
 	"context"
+	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,7 +15,7 @@ import (
 )
 
 // Every /api/v1/admin/* route must pass through the ONE admin gate
-// (mwauth.RequireAdminService). The cloud proxy attaches the legacy
+// (Authenticator.RequireAdminService). The cloud proxy attaches the legacy
 // LOOPZERO_SERVICE_AUTH_SECRET to every forwarded user-JWT request, so a route
 // that honours that secret lets any signed-in owner reach operator
 // primitives (loopzero-cloud#16). The assertion is made on the real router,
@@ -54,13 +55,12 @@ var adminRoutes = []adminRoute{
 
 func adminRouter(t *testing.T) http.Handler {
 	t.Helper()
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", canonicalAdminSecret)
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS", "")
-	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET", legacyProxySecret)
-	t.Setenv("LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS", "")
 	return NewRouter(Config{
-		Admin: AdminConfig{Evictor: stubEvictor{}, Pinner: stubPinner{}, ReleaseInspector: stubInspector{}},
+		Auth: mwauth.NewAuthenticator(mwauth.Config{
+			AdminServiceSecret: canonicalAdminSecret,
+			ServiceSecret:      legacyProxySecret,
+		}),
+		Admin: AdminConfig{APIEnabled: true, Evictor: stubEvictor{}, Pinner: stubPinner{}, ReleaseInspector: stubInspector{}},
 	})
 }
 

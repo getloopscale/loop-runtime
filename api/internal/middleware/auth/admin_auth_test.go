@@ -8,40 +8,29 @@ import (
 )
 
 func TestValidateAdminAPIKey_CurrentKey(t *testing.T) {
-	AdminAPIKey = "test-admin-key-current"
-	AdminAPIKeyPrevious = ""
-	defer func() { AdminAPIKey = ""; AdminAPIKeyPrevious = "" }()
-
-	if !ValidateAdminAPIKey("test-admin-key-current") {
+	authn := NewAuthenticator(Config{AdminAPIKey: "test-admin-key-current", AdminAPIKeyPrevious: ""})
+	if !authn.ValidateAdminAPIKey("test-admin-key-current") {
 		t.Error("should accept current key")
 	}
 }
 
 func TestValidateAdminAPIKey_PreviousKey(t *testing.T) {
-	AdminAPIKey = "test-admin-key-current"
-	AdminAPIKeyPrevious = "test-admin-key-previous"
-	defer func() { AdminAPIKey = ""; AdminAPIKeyPrevious = "" }()
-
-	if !ValidateAdminAPIKey("test-admin-key-previous") {
+	authn := NewAuthenticator(Config{AdminAPIKey: "test-admin-key-current", AdminAPIKeyPrevious: "test-admin-key-previous"})
+	if !authn.ValidateAdminAPIKey("test-admin-key-previous") {
 		t.Error("should accept previous key during rotation")
 	}
 }
 
 func TestValidateAdminAPIKey_InvalidKey(t *testing.T) {
-	AdminAPIKey = "test-admin-key-current"
-	AdminAPIKeyPrevious = "test-admin-key-previous"
-	defer func() { AdminAPIKey = ""; AdminAPIKeyPrevious = "" }()
-
-	if ValidateAdminAPIKey("wrong-key") {
+	authn := NewAuthenticator(Config{AdminAPIKey: "test-admin-key-current", AdminAPIKeyPrevious: "test-admin-key-previous"})
+	if authn.ValidateAdminAPIKey("wrong-key") {
 		t.Error("should reject invalid key")
 	}
 }
 
 func TestValidateAdminAPIKey_EmptyConfig(t *testing.T) {
-	AdminAPIKey = ""
-	AdminAPIKeyPrevious = ""
-
-	if ValidateAdminAPIKey("any-key") {
+	authn := NewAuthenticator(Config{AdminAPIKey: "", AdminAPIKeyPrevious: ""})
+	if authn.ValidateAdminAPIKey("any-key") {
 		t.Error("should reject when admin key is not configured")
 	}
 }

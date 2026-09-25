@@ -41,6 +41,10 @@ const enforcementMetricBuildMinutes = planpkg.MetricBuildMinutes
 
 // NewRouter creates a chi router with middleware and routes.
 func NewRouter(cfg Config) *chi.Mux {
+	if cfg.Auth == nil {
+		cfg.Auth = mwauth.NewAuthenticator(mwauth.Config{})
+	}
+	authn := cfg.Auth
 	r := chi.NewRouter()
 
 	// Pre-auth IP rate limit (T2.4 of deep-review-remediation-plan, ADR D4).
@@ -61,7 +65,7 @@ func NewRouter(cfg Config) *chi.Mux {
 
 	// Maintenance mode: block mutating requests during infrastructure operations
 	// (e.g., PG resize). Must come before auth so 503 is returned without token check.
-	r.Use(policy.MaintenanceMode)
+	r.Use(policy.MaintenanceMode(cfg.Maintenance))
 
 	// Middleware chain: metrics → otel-tracing → correlation-id → request-logger → logging → backpressure
 	r.Use(metrics.HTTPMetrics)
@@ -185,7 +189,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	// middleware that requires identity headers.
 	//
 	// qa-sprint2-cleanup-2026-06-24 T1.2 (closes loopzero-cloud#16): /evict now
-	// wraps the handler with mwauth.RequireAdminService (chi canonical
+	// wraps the handler with Authenticator.RequireAdminService (chi canonical
 	// r.With form). The middleware reads only LOOPZERO_ADMIN_SERVICE_AUTH_SECRET
 	// (canonical) + _PREVIOUS — NOT the legacy LOOPZERO_SERVICE_AUTH_SECRET that
 	// the cloud /engine/* proxy carries on user-JWT requests. The handler
@@ -195,9 +199,9 @@ func NewRouter(cfg Config) *chi.Mux {
 			"that requires `dbAdapter`. A missing `loopzero-api-admin` Secret does NOT turn "+
 			"this route off: it feeds the key the middleware checks, and without it "+
 			"access is DENIED (fail closed), not opened") {
-		r.With(mwauth.RequireAdminService).Post(
+		r.With(authn.RequireAdminService).Post(
 			"/api/v1/admin/tenants/evict",
-			admin.AdminEvictHandler(cfg.Admin.Evictor),
+			admin.AdminEvictHandler(cfg.Admin.Evictor, cfg.Admin.APIEnabled),
 		)
 	}
 	// CHG-2026-04-30-DELETE-SINGLE-CELL: pin tenants to specific cell.
@@ -205,18 +209,18 @@ func NewRouter(cfg Config) *chi.Mux {
 		"no database — the CellPinner is built on `PostgresCellStore` "+
 			"(setup_server.go:299). This is the ONLY route that moves a tenant between cells, "+
 			"so turning it off does not degrade anything: it removes the operation") {
-		r.With(mwauth.RequireAdminService).Post("/api/v1/admin/tenants/pin", admin.AdminPinCellHandler(cfg.Admin.Pinner, cfg.AuditWriter))
+		r.With(authn.RequireAdminService).Post("/api/v1/admin/tenants/pin", admin.AdminPinCellHandler(cfg.Admin.Pinner, cfg.AuditWriter, cfg.Admin.APIEnabled))
 	}
 	// T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md:
 	// diagnostic read-only endpoint for on-call to inspect a release's
 	// signing + attestation chain without source access. Like every admin
-	// route it sits behind mwauth.RequireAdminService; the handler keeps only
+	// route it sits behind Authenticator.RequireAdminService; the handler keeps only
 	// the LOOPZERO_ADMIN_API feature gate.
 	if surfaces.Recorded(cfg.Surfaces, surfaces.ReleaseInspect, cfg.Admin.ReleaseInspector != nil,
 		"no database — built in setup_server.go:315, inside the block that requires "+
 			"`dbAdapter`. It is on-call's view of a release's signing chain; turned off, "+
 			"on-call loses the diagnosis exactly when it is needed") {
-		r.With(mwauth.RequireAdminService).Get("/api/v1/admin/releases/{id}/inspect", admin.AdminReleaseInspectHandler(cfg.Admin.ReleaseInspector))
+		r.With(authn.RequireAdminService).Get("/api/v1/admin/releases/{id}/inspect", admin.AdminReleaseInspectHandler(cfg.Admin.ReleaseInspector, cfg.Admin.APIEnabled))
 	}
 
 	// Protected routes (auth required)
@@ -232,7 +236,7 @@ func NewRouter(cfg Config) *chi.Mux {
 			"always built (setup_auth.go:75), so in practice this means "+
 			"MemberStore is missing — which depends on the database") {
 		r.Group(func(r chi.Router) {
-			r.Use(mwauth.Auth(cfg.TokenValidator, cfg.MemberStore))
+			r.Use(mwauth.Auth(authn, cfg.TokenValidator, cfg.MemberStore))
 			r.Use(audit.AuditLog(cfg.Logger, cfg.AuditWriter))
 
 			// Auth routes

@@ -53,32 +53,6 @@ type AuthFailureAuditor struct {
 	clientIP clientip.Resolver
 }
 
-// DefaultAuthAuditor is the package-level singleton wired by the boot
-// process (`api/cmd/setup_auth.go`). All failure paths in this package
-// call `emitAuthFailure(...)` which nil-safe dispatches to this auditor.
-//
-// Pattern matches existing `ServiceAuthSecret` / `AdminAPIKey` package-
-// level vars — assign-once at boot, read-only thereafter (no races in
-// production). Tests leave it nil; the helper short-circuits.
-//
-// Wave 1 Phase A.4 of MEET-2026-05-12 wires this from setup_auth.go.
-var DefaultAuthAuditor *AuthFailureAuditor
-
-// emitAuthFailure is the nil-safe dispatch helper used by failure paths
-// in this package. Reads `DefaultAuthAuditor` once; if nil (test path
-// or pre-wire boot), is a no-op.
-//
-// The auditor itself is also nil-safe in Emit, but reading the var here
-// makes the call sites uniform and grep-friendly: every reject path
-// has one `emitAuthFailure(r, action, reason, ...)` line.
-func emitAuthFailure(r *http.Request, action AuthFailureAction, reason string, metadata map[string]any) {
-	auditor := DefaultAuthAuditor
-	if auditor == nil {
-		return
-	}
-	auditor.Emit(r.Context(), r, action, reason, metadata)
-}
-
 // NewAuthFailureAuditor returns an auditor throttled to 100 rows/min per client
 // IP. Per EC-NEW v1.1: prevents bot-scanning floods from filling audit_log.
 // clientIP decides which address a request is throttled (and recorded) under;

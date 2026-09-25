@@ -3,7 +3,7 @@
 //
 // Plan v1.2 T1.1 (cutover-deep-review-hardening): defensive regression tests
 // asserting that POST /api/v1/source/upload requires JWT Bearer authentication
-// via auth.Auth — NOT just handler self-check.
+// via the auth middleware — NOT just handler self-check.
 //
 // Context: Deep review 2026-06-05 raised C1 "endpoint outside auth group".
 // Architecture re-audit T0.1 (2026-06-06) confirmed FALSE POSITIVE — the
@@ -69,9 +69,8 @@ func newSourceUploadMultipartReq(t *testing.T, auth string) *http.Request {
 
 // TestSourceUpload_Unauthenticated_Returns401 — EC-baseline of Plan T1.1.
 // POST without Authorization header must return 401 BEFORE reaching the
-// handler. Proves auth.Auth is in the chain.
+// handler. Proves the auth middleware is in the chain.
 func TestSourceUpload_Unauthenticated_Returns401(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	cfg := server.Config{
@@ -102,7 +101,7 @@ func TestSourceUpload_Unauthenticated_Returns401(t *testing.T) {
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
 		TenantDeletionStore:  &stubTenantDeletionStore{},
 		Guards:               server.RouteGuards{IdempotencyStore: &stubIdempotencyStore{}},
-		Admin:                server.AdminConfig{Evictor: &stubTenantEvictor{}},
+		Admin:                server.AdminConfig{APIEnabled: true, Evictor: &stubTenantEvictor{}},
 	}
 
 	router := server.NewRouter(cfg)
@@ -116,10 +115,9 @@ func TestSourceUpload_Unauthenticated_Returns401(t *testing.T) {
 }
 
 // TestSourceUpload_InvalidBearerToken_Returns401 — EC-6 (v1.1) variant.
-// POST with malformed Bearer token must return 401 via auth.Auth
+// POST with malformed Bearer token must return 401 via the auth middleware
 // JWT validation, NOT via handler self-check.
 func TestSourceUpload_InvalidBearerToken_Returns401(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	// Use a TokenValidator that rejects everything.
@@ -153,7 +151,7 @@ func TestSourceUpload_InvalidBearerToken_Returns401(t *testing.T) {
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
 		TenantDeletionStore:  &stubTenantDeletionStore{},
 		Guards:               server.RouteGuards{IdempotencyStore: &stubIdempotencyStore{}},
-		Admin:                server.AdminConfig{Evictor: &stubTenantEvictor{}},
+		Admin:                server.AdminConfig{APIEnabled: true, Evictor: &stubTenantEvictor{}},
 	}
 
 	router := server.NewRouter(cfg)
@@ -161,22 +159,21 @@ func TestSourceUpload_InvalidBearerToken_Returns401(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
-	// auth.Auth either rejects with 401 (invalid token claim) OR 503
+	// The auth middleware either rejects with 401 (invalid token claim) OR 503
 	// (validator service error). Both prove the middleware was invoked;
 	// 200 / 400 would prove bypass (handler reached without auth).
 	if rec.Code != http.StatusUnauthorized && rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("expected 401 or 503 via auth.Auth (proves middleware in chain), got %d: %s",
+		t.Errorf("expected 401 or 503 via the auth middleware (proves middleware in chain), got %d: %s",
 			rec.Code, rec.Body.String())
 	}
 }
 
 // TestSourceUpload_XServiceAuthHeader_DoesNotBypass — EC-6 (v1.1).
 // POST with X-Service-Auth header but NO Authorization Bearer must return
-// 401. auth.Auth on /source/upload must NOT have any code path
+// 401. The auth middleware on /source/upload must NOT have any code path
 // that accepts X-Service-Auth (those are for admin endpoints in
 // /api/v1/admin/* with separate middleware).
 func TestSourceUpload_XServiceAuthHeader_DoesNotBypass(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	cfg := server.Config{
@@ -207,7 +204,7 @@ func TestSourceUpload_XServiceAuthHeader_DoesNotBypass(t *testing.T) {
 		GitHubWebhookHandler: &stubGitHubWebhookHandler{},
 		TenantDeletionStore:  &stubTenantDeletionStore{},
 		Guards:               server.RouteGuards{IdempotencyStore: &stubIdempotencyStore{}},
-		Admin:                server.AdminConfig{Evictor: &stubTenantEvictor{}},
+		Admin:                server.AdminConfig{APIEnabled: true, Evictor: &stubTenantEvictor{}},
 	}
 
 	router := server.NewRouter(cfg)

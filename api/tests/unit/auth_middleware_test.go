@@ -51,7 +51,7 @@ func TestAuthMiddleware(t *testing.T) {
 	t.Run("no Authorization header → 401", func(t *testing.T) {
 		validator := &fakeTokenValidator{}
 		store := &fakeMembershipStore{}
-		mw := auth.Auth(validator, store)
+		mw := auth.Auth(auth.NewAuthenticator(auth.Config{}), validator, store)
 		handler := mw(okHandler)
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -72,7 +72,7 @@ func TestAuthMiddleware(t *testing.T) {
 	t.Run("invalid token → 401", func(t *testing.T) {
 		validator := &fakeTokenValidator{result: nil, err: auth.ErrInvalidToken}
 		store := &fakeMembershipStore{}
-		mw := auth.Auth(validator, store)
+		mw := auth.Auth(auth.NewAuthenticator(auth.Config{}), validator, store)
 		handler := mw(okHandler)
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -97,7 +97,7 @@ func TestAuthMiddleware(t *testing.T) {
 				{TenantID: "acme", Role: "owner"},
 			},
 		}
-		mw := auth.Auth(validator, store)
+		mw := auth.Auth(auth.NewAuthenticator(auth.Config{}), validator, store)
 		handler := mw(okHandler)
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -134,7 +134,7 @@ func TestAuthMiddleware(t *testing.T) {
 				{TenantID: "globex", Role: "member"},
 			},
 		}
-		mw := auth.Auth(validator, store)
+		mw := auth.Auth(auth.NewAuthenticator(auth.Config{}), validator, store)
 		handler := mw(okHandler)
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -166,7 +166,7 @@ func TestAuthMiddleware(t *testing.T) {
 				{TenantID: "globex", Role: "member"},
 			},
 		}
-		mw := auth.Auth(validator, store)
+		mw := auth.Auth(auth.NewAuthenticator(auth.Config{}), validator, store)
 		handler := mw(okHandler)
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -192,7 +192,7 @@ func TestAuthMiddleware(t *testing.T) {
 			},
 		}
 		store := &fakeMembershipStore{memberships: nil}
-		mw := auth.Auth(validator, store)
+		mw := auth.Auth(auth.NewAuthenticator(auth.Config{}), validator, store)
 		handler := mw(okHandler)
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -223,7 +223,7 @@ func TestAuthMiddleware(t *testing.T) {
 				{TenantID: "globex", Role: "member"},
 			},
 		}
-		mw := auth.Auth(validator, store)
+		mw := auth.Auth(auth.NewAuthenticator(auth.Config{}), validator, store)
 		handler := mw(okHandler)
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -248,7 +248,7 @@ func TestAuthMiddleware(t *testing.T) {
 				{TenantID: "acme", Role: "owner"},
 			},
 		}
-		mw := auth.Auth(validator, store)
+		mw := auth.Auth(auth.NewAuthenticator(auth.Config{}), validator, store)
 		handler := mw(okHandler)
 
 		// First call
@@ -280,7 +280,7 @@ func TestAuthMiddleware(t *testing.T) {
 			},
 		}
 		// Use 1ms TTL so the cache expires almost immediately
-		mw := auth.AuthWithTTL(validator, store, 1*time.Millisecond)
+		mw := auth.NewAuthenticator(auth.Config{}).MiddlewareWithTTL(validator, store, 1*time.Millisecond)
 		handler := mw(okHandler)
 
 		// First call — populates cache

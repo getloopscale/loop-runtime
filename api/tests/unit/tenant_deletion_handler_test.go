@@ -63,7 +63,7 @@ func (s *fakeTenantDeletionStore) WriteTombstone(_ context.Context, tombstone te
 }
 
 func setupTenantRouter(store tenants.TenantDeletionStore) *chi.Mux {
-	handler := tenants.NewTenantHandler(store, slog.Default())
+	handler := tenants.NewTenantHandler(store, slog.Default(), func(string) bool { return false })
 	r := chi.NewRouter()
 	r.Delete("/api/v1/tenants/{id}", handler.Delete)
 	r.Post("/api/v1/tenants/{id}/restore", handler.Restore)

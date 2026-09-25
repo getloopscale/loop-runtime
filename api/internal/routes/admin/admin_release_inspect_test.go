@@ -33,18 +33,17 @@ func (f *fakeInspector) Inspect(ctx context.Context, releaseID string) (*release
 	return f.inspect(ctx, releaseID)
 }
 
-func setupHandler(t *testing.T, inspector release.ReleaseInspector) http.Handler {
+func setupHandler(t *testing.T, inspector release.ReleaseInspector, apiEnabled bool) http.Handler {
 	t.Helper()
 	r := chi.NewRouter()
-	// The router mounts this handler behind auth.RequireAdminService; the
+	// The router mounts this handler behind Authenticator.RequireAdminService; the
 	// test exercises the same chain so the auth gate is covered with it.
-	r.With(auth.RequireAdminService).Get("/api/v1/admin/releases/{id}/inspect", AdminReleaseInspectHandler(inspector))
+	authn := auth.NewAuthenticator(auth.Config{AdminServiceSecret: "secret-abc"})
+	r.With(authn.RequireAdminService).Get("/api/v1/admin/releases/{id}/inspect", AdminReleaseInspectHandler(inspector, apiEnabled))
 	return r
 }
 
 func TestAdminReleaseInspect_HappyPath(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret-abc")
 	insp := &fakeInspector{inspect: func(_ context.Context, _ string) (*release.ReleaseInspection, error) {
 		return &release.ReleaseInspection{
 			ReleaseID:       "rel-001",
@@ -55,7 +54,7 @@ func TestAdminReleaseInspect_HappyPath(t *testing.T) {
 			AuditLogEntries: []release.ReleaseInspectionAuditRow{},
 		}, nil
 	}}
-	srv := setupHandler(t, insp)
+	srv := setupHandler(t, insp, true)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/releases/rel-001/inspect", nil)
 	req.Header.Set("X-Service-Auth", "secret-abc")
@@ -78,9 +77,7 @@ func TestAdminReleaseInspect_HappyPath(t *testing.T) {
 }
 
 func TestAdminReleaseInspect_403_WithoutServiceAuth(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret-abc")
-	srv := setupHandler(t, &fakeInspector{})
+	srv := setupHandler(t, &fakeInspector{}, true)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/releases/rel-001/inspect", nil)
 	// No X-Service-Auth header.
@@ -93,9 +90,7 @@ func TestAdminReleaseInspect_403_WithoutServiceAuth(t *testing.T) {
 }
 
 func TestAdminReleaseInspect_403_WithWrongServiceAuth(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret-abc")
-	srv := setupHandler(t, &fakeInspector{})
+	srv := setupHandler(t, &fakeInspector{}, true)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/releases/rel-001/inspect", nil)
 	req.Header.Set("X-Service-Auth", "wrong-secret")
@@ -110,9 +105,7 @@ func TestAdminReleaseInspect_403_WithWrongServiceAuth(t *testing.T) {
 func TestAdminReleaseInspect_404_WhenAdminAPIDisabled(t *testing.T) {
 	// LOOPZERO_ADMIN_API NOT set → an authenticated operator still sees 404:
 	// the flag hides the endpoint even from callers holding the secret.
-	t.Setenv("LOOPZERO_ADMIN_API", "")
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret-abc")
-	srv := setupHandler(t, &fakeInspector{})
+	srv := setupHandler(t, &fakeInspector{}, false)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/releases/rel-001/inspect", nil)
 	req.Header.Set("X-Service-Auth", "secret-abc")
@@ -125,12 +118,10 @@ func TestAdminReleaseInspect_404_WhenAdminAPIDisabled(t *testing.T) {
 }
 
 func TestAdminReleaseInspect_404_ForUnknownRelease(t *testing.T) {
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret-abc")
 	insp := &fakeInspector{inspect: func(_ context.Context, id string) (*release.ReleaseInspection, error) {
 		return nil, release.ErrReleaseInspectionNotFound{ReleaseID: id}
 	}}
-	srv := setupHandler(t, insp)
+	srv := setupHandler(t, insp, true)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/releases/rel-missing/inspect", nil)
 	req.Header.Set("X-Service-Auth", "secret-abc")
@@ -149,8 +140,6 @@ func TestAdminReleaseInspect_Returns_AttestationChain(t *testing.T) {
 	// CR-10 specific assertion: the response must surface the
 	// image_attestation_rekor_url + signing_path so on-call can
 	// answer "which write path was taken" without log access.
-	t.Setenv("LOOPZERO_ADMIN_API", "true")
-	t.Setenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET", "secret-abc")
 	rekorURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=42"
 	insp := &fakeInspector{inspect: func(_ context.Context, _ string) (*release.ReleaseInspection, error) {
 		return &release.ReleaseInspection{
@@ -163,7 +152,7 @@ func TestAdminReleaseInspect_Returns_AttestationChain(t *testing.T) {
 			AuditLogEntries:          []release.ReleaseInspectionAuditRow{},
 		}, nil
 	}}
-	srv := setupHandler(t, insp)
+	srv := setupHandler(t, insp, true)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/releases/rel-001/inspect", nil)
 	req.Header.Set("X-Service-Auth", "secret-abc")
