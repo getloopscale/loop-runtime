@@ -54,6 +54,11 @@ func TestClassifyRenderFailureSeparatesNetworkFromContent(t *testing.T) {
 // and uses `--skip-deps` (0s, zero repos); `openbao` renders a REMOTE chart and
 // cannot.
 //
+// Since 2026-09-25 the network-free execution lives in ONE helper,
+// `helmfile_render_test.go`, which forces `--skip-deps` on every call and offers
+// `template` for local charts and `write-values` for remote ones; `loopzero-cloud`
+// and every later render go through it. The count stays at two files.
+//
 // This test exists so the next execution added is a conscious decision: it fails
 // if a third appears without `--skip-deps` and without a declared way out.
 func TestHelmfileExecutionsInTheGateAreTheMeasuredOnes(t *testing.T) {

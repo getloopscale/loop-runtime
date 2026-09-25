@@ -1,7 +1,6 @@
 package charts
 
 import (
-	"os/exec"
 	"strings"
 	"testing"
 )
@@ -58,26 +57,7 @@ func TestLoopZeroCloudNodePortIsOptional(t *testing.T) {
 
 func renderLoopZeroCloudService(t *testing.T) string {
 	t.Helper()
-	root := repoRoot(t)
-	cmd := exec.Command(
-		"helmfile",
-		"-f", "infra/helmfile/core.helmfile.yaml.gotmpl",
-		"-e", "dev-public",
-		"--selector", "name=loopzero-cloud",
-		// B-156: without this `helmfile template` runs `helm repo add/update` against the
-		// remote repositories the file declares, even with the selector pointing at one
-		// release. Measured 2026-08-19: 17 repo calls and 10s on a good network; under load
-		// 123.89s and a FAILURE, blocking a commit that only touched CHANGELOG and BACKLOG.
-		// With the flag: 0s and zero calls.
-		"--skip-deps",
-		"template",
-	)
-	cmd.Dir = root
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("helmfile template failed: %v\n%s", err, truncate(string(out), 1200))
-	}
-	return string(out)
+	return helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "dev-public", "loopzero-cloud", "charts/loopzero-cloud")
 }
 
 func truncate(s string, n int) string {
