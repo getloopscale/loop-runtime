@@ -91,41 +91,7 @@ func (c *Client) QueryBuildLogs(ctx context.Context, buildID string, opts ports.
 		startNano = time.Now().Add(-7 * 24 * time.Hour).UnixNano()
 	}
 
-	// Query Loki API: GET /loki/api/v1/query_range
-	params := url.Values{
-		"query":     {query},
-		"limit":     {strconv.Itoa(limit)},
-		"direction": {"forward"},
-		"start":     {strconv.FormatInt(startNano, 10)},
-		"end":       {strconv.FormatInt(time.Now().UnixNano(), 10)},
-	}
-
-	reqURL := fmt.Sprintf("%s/loki/api/v1/query_range?%s", c.baseURL, params.Encode())
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("loki: create request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		c.logger.Warn("loki query failed", "error", err, "build_id", buildID)
-		return nil, fmt.Errorf("loki: query: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		c.logger.Warn("loki non-200 response", "status", resp.StatusCode, "body", string(body), "build_id", buildID)
-		return nil, fmt.Errorf("loki: unexpected status %d", resp.StatusCode)
-	}
-
-	var lokiResp lokiQueryResponse
-	if err := json.NewDecoder(resp.Body).Decode(&lokiResp); err != nil {
-		return nil, fmt.Errorf("loki: decode response: %w", err)
-	}
-
-	return parseLokiStreams(lokiResp), nil
+	return c.queryRange(ctx, query, limit, startNano, "build_id", buildID)
 }
 
 // lokiQueryResponse is the Loki API response structure.
@@ -144,41 +110,44 @@ type lokiStream struct {
 	Values [][]string        `json:"values"` // [[nanosecond_timestamp, log_line], ...]
 }
 
-// parseLokiStreams converts Loki stream results into LogEntry slices.
-func parseLokiStreams(resp lokiQueryResponse) []ports.LogEntry {
-	var entries []ports.LogEntry
-
+// parseLokiStreams converts Loki stream results into LogEntry slices ordered
+// by the nanosecond timestamp Loki sent. The displayed Timestamp has second
+// precision, so ordering on it would scramble lines within one second; a
+// stable sort keeps a stream's own order for lines with the same nanosecond.
+func parseLokiStreams(resp lokiQueryResponse) ([]ports.LogEntry, error) {
+	type timedEntry struct {
+		ns    int64
+		entry ports.LogEntry
+	}
+	var timed []timedEntry
 	for _, stream := range resp.Data.Result {
 		step := stream.Stream["step"]
 		if step == "" {
 			step = stream.Stream["container"]
 		}
-		streamType := "stdout"
-
 		for _, value := range stream.Values {
 			if len(value) < 2 {
 				continue
 			}
-			nsTimestamp := value[0]
-			content := value[1]
-
-			ts := parseNanosecondTimestamp(nsTimestamp)
-
-			entries = append(entries, ports.LogEntry{
+			ns, err := strconv.ParseInt(value[0], 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("loki: line timestamp %q is not nanoseconds: %w", value[0], err)
+			}
+			timed = append(timed, timedEntry{ns: ns, entry: ports.LogEntry{
 				Step:      step,
-				Stream:    streamType,
-				Content:   content,
-				Timestamp: ts,
-			})
+				Stream:    "stdout",
+				Content:   value[1],
+				Timestamp: time.Unix(0, ns).UTC().Format(time.RFC3339),
+			}})
 		}
 	}
+	sort.SliceStable(timed, func(i, j int) bool { return timed[i].ns < timed[j].ns })
 
-	// Sort by timestamp ascending
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Timestamp < entries[j].Timestamp
-	})
-
-	return entries
+	entries := make([]ports.LogEntry, len(timed))
+	for i, t := range timed {
+		entries[i] = t.entry
+	}
+	return entries, nil
 }
 
 // logParamRegex allows only safe characters in LogQL query parameters.
@@ -263,7 +232,6 @@ func (c *Client) QueryBuildLogsSince(ctx context.Context, queryKey string, since
 		if qerr != nil {
 			return nil, qerr
 		}
-		_ = query // silence unused-variable warning if removed later
 	} else {
 		// Build logs: query by workflow name containing buildID
 		if !isValidLogParam(queryKey) {
@@ -285,6 +253,13 @@ func (c *Client) QueryBuildLogsSince(ctx context.Context, queryKey string, since
 		startNano = time.Now().Add(-1 * time.Hour).UnixNano()
 	}
 
+	return c.queryRange(ctx, query, limit, startNano, "key", queryKey)
+}
+
+// queryRange runs one forward query_range call from startNano to now and
+// returns the lines in time order. logKey/logValue name the caller's subject
+// in the warning logged on failure.
+func (c *Client) queryRange(ctx context.Context, query string, limit int, startNano int64, logKey, logValue string) ([]ports.LogEntry, error) {
 	params := url.Values{
 		"query":     {query},
 		"limit":     {strconv.Itoa(limit)},
@@ -292,24 +267,22 @@ func (c *Client) QueryBuildLogsSince(ctx context.Context, queryKey string, since
 		"start":     {strconv.FormatInt(startNano, 10)},
 		"end":       {strconv.FormatInt(time.Now().UnixNano(), 10)},
 	}
-
 	reqURL := fmt.Sprintf("%s/loki/api/v1/query_range?%s", c.baseURL, params.Encode())
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("loki: create request: %w", err)
 	}
-
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		c.logger.Warn("loki stream query failed", "error", err, "key", queryKey)
+		c.logger.Warn("loki query failed", "error", err, logKey, logValue)
 		return nil, fmt.Errorf("loki: query: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		c.logger.Warn("loki stream non-200 response", "status", resp.StatusCode, "body", string(body), "key", queryKey)
+		c.logger.Warn("loki non-200 response", "status", resp.StatusCode, "body", string(body), logKey, logValue)
 		return nil, fmt.Errorf("loki: unexpected status %d", resp.StatusCode)
 	}
 
@@ -317,16 +290,5 @@ func (c *Client) QueryBuildLogsSince(ctx context.Context, queryKey string, since
 	if err := json.NewDecoder(resp.Body).Decode(&lokiResp); err != nil {
 		return nil, fmt.Errorf("loki: decode response: %w", err)
 	}
-
-	return parseLokiStreams(lokiResp), nil
-}
-
-// parseNanosecondTimestamp converts Loki's nanosecond string timestamp to RFC3339.
-func parseNanosecondTimestamp(ns string) string {
-	nsInt, err := strconv.ParseInt(ns, 10, 64)
-	if err != nil {
-		return ns
-	}
-	t := time.Unix(0, nsInt)
-	return t.UTC().Format(time.RFC3339)
+	return parseLokiStreams(lokiResp)
 }
