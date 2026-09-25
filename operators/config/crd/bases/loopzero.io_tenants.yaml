@@ -194,11 +194,15 @@ spec:
                 - maxStorage
                 type: object
               plan:
-                description: 'Plan is the subscription tier: starter, growth, or enterprise.'
+                description: |-
+                  Plan is the subscription tier: starter, pro, team or enterprise
+                  (growth is accepted as the legacy name for pro).
                 enum:
                 - starter
-                - growth
+                - pro
+                - team
                 - enterprise
+                - growth
                 type: string
               preview:
                 description: Preview configures preview environment limits.

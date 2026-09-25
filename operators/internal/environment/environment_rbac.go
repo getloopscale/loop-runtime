@@ -18,6 +18,7 @@ import (
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/planentitlements"
 	"github.com/getloopscale/loopzero/operators/internal/tenantpolicy"
 )
 
@@ -207,7 +208,8 @@ func rbacRulesForPlan(plan loopzerov1.PlanTier) []rbacv1.PolicyRule {
 		},
 	}
 
-	if plan == loopzerov1.PlanGrowth || plan == loopzerov1.PlanEnterprise {
+	entitled := planentitlements.For(plan)
+	if entitled.ManagesSecrets {
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups: []string{""},
 			Resources: []string{"secrets"},
@@ -215,7 +217,7 @@ func rbacRulesForPlan(plan loopzerov1.PlanTier) []rbacv1.PolicyRule {
 		})
 	}
 
-	if plan == loopzerov1.PlanEnterprise {
+	if entitled.ManagesNetworking {
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups: []string{"networking.k8s.io"},
 			Resources: []string{"ingresses", "networkpolicies"},

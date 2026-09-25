@@ -1047,6 +1047,24 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		})
 	})
 
+	// The api writes the canonical tier names; the CRD must accept them.
+	Context("pro plan", func() {
+		const tenantName = "pc-pro"
+
+		BeforeAll(func() {
+			createTenantAndWaitActive(tenantName, loopzerov1.PlanPro, []string{"production"})
+		})
+
+		It("should create the paid mid-tier PriorityClass", func() {
+			expectPriorityClass("loopzero-tenant-growth", 500, corev1.PreemptLowerPriority)
+		})
+
+		AfterAll(func() {
+			deleteTenantWithFinalizer(tenantName)
+			deleteTenantNamespaces(tenantName)
+		})
+	})
+
 	Context("enterprise plan", func() {
 		const tenantName = "pc-enterprise"
 

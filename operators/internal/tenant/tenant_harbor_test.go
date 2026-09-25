@@ -12,29 +12,6 @@ import (
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
-func TestHarborQuotaForPlan(t *testing.T) {
-	const gb = 1024 * 1024 * 1024
-
-	tests := []struct {
-		plan loopzerov1.PlanTier
-		want int64
-	}{
-		{loopzerov1.PlanStarter, 5 * gb},
-		{loopzerov1.PlanGrowth, 50 * gb},
-		{loopzerov1.PlanEnterprise, -1},
-		{loopzerov1.PlanTier("unknown"), 5 * gb}, // conservative default
-	}
-
-	for _, tt := range tests {
-		t.Run(string(tt.plan), func(t *testing.T) {
-			got := harborQuotaForPlan(tt.plan)
-			if got != tt.want {
-				t.Errorf("harborQuotaForPlan(%q) = %d, want %d", tt.plan, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestBuildDockerConfigJSON(t *testing.T) {
 	got, err := buildDockerConfigJSON("harbor.example.com", "robot$build-acme", "s3cr3t")
 	if err != nil {

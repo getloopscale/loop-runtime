@@ -88,8 +88,10 @@ spec:
                   RBAC rules.
                 enum:
                 - starter
-                - growth
+                - pro
+                - team
                 - enterprise
+                - growth
                 type: string
               project:
                 description: |-

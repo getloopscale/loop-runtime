@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -16,19 +15,8 @@ import (
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/planentitlements"
 )
-
-// priorityClassForPlan returns the PriorityClass name, value, and preemption policy for a given plan.
-func priorityClassForPlan(plan loopzerov1.PlanTier) (name string, value int32, preemptionPolicy corev1.PreemptionPolicy) {
-	switch plan {
-	case loopzerov1.PlanGrowth:
-		return constants.PriorityClassGrowth, constants.PriorityValueGrowth, corev1.PreemptLowerPriority
-	case loopzerov1.PlanEnterprise:
-		return constants.PriorityClassEnterprise, constants.PriorityValueEnterprise, corev1.PreemptLowerPriority
-	default:
-		return constants.PriorityClassStarter, constants.PriorityValueStarter, corev1.PreemptNever
-	}
-}
 
 // reconcilePriorityClass ensures the PriorityClass for the tenant's plan exists.
 // PriorityClasses are cluster-scoped and shared across tenants of the same plan,
@@ -41,7 +29,8 @@ func priorityClassForPlan(plan loopzerov1.PlanTier) (name string, value int32, p
 // and parallelism controls. Plan-based priority would create starvation for starter tenants
 // during peak build times, which is worse than FIFO ordering.
 func (r *TenantReconciler) reconcilePriorityClass(ctx context.Context, tenant *loopzerov1.Tenant) error {
-	pcName, pcValue, preemptionPolicy := priorityClassForPlan(tenant.Spec.Plan)
+	entitled := planentitlements.For(tenant.Spec.Plan)
+	pcName, pcValue, preemptionPolicy := entitled.PriorityClassName, entitled.PriorityValue, entitled.Preemption
 
 	runtimeClient, err := r.runtimeClient(ctx, tenant)
 	if err != nil {

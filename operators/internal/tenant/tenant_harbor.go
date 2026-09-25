@@ -22,6 +22,7 @@ import (
 	k "github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/harbor"
 	"github.com/getloopscale/loopzero/operators/internal/metrics"
+	"github.com/getloopscale/loopzero/operators/internal/planentitlements"
 	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
@@ -37,7 +38,7 @@ func (r *TenantReconciler) ensureHarborProject(ctx context.Context, tenant *loop
 	ctx, span := reconcileloop.StartChildSpan(ctx, "tenant.harbor.ensure")
 	defer span.End()
 
-	quota := harborQuotaForPlan(tenant.Spec.Plan)
+	quota := planentitlements.For(tenant.Spec.Plan).HarborQuotaBytes
 
 	if err := r.HarborClient.EnsureProject(ctx, tenant.Name, harbor.ProjectOpts{
 		StorageQuota: quota,
@@ -406,20 +407,4 @@ func buildDockerConfigJSON(registryHost, username, password string) (string, err
 		return "", fmt.Errorf("harbor: marshal docker config: %w", err)
 	}
 	return string(data), nil
-}
-
-// harborQuotaForPlan returns the Harbor storage quota in bytes for a given plan tier.
-func harborQuotaForPlan(plan loopzerov1.PlanTier) int64 {
-	const gb = 1024 * 1024 * 1024
-	switch plan {
-	case loopzerov1.PlanStarter:
-		return 5 * gb
-	case loopzerov1.PlanGrowth:
-		return 50 * gb
-	case loopzerov1.PlanEnterprise:
-		return -1 // unlimited
-	default:
-		// Conservative default: same as starter.
-		return 5 * gb
-	}
 }

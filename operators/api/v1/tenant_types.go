@@ -8,14 +8,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// PlanTier represents a tenant's subscription plan.
-// +kubebuilder:validation:Enum=starter;growth;enterprise
+// PlanTier represents a tenant's subscription plan, in the canonical
+// vocabulary the api writes (pkg/domain.PlanTier): starter, pro, team,
+// enterprise. "growth" is the pre-2026-05-12 name for pro and stays valid so
+// stored CRs carrying it still pass validation on update.
+// +kubebuilder:validation:Enum=starter;pro;team;enterprise;growth
 type PlanTier string
 
 const (
 	PlanStarter    PlanTier = "starter"
-	PlanGrowth     PlanTier = "growth"
+	PlanPro        PlanTier = "pro"
+	PlanTeam       PlanTier = "team"
 	PlanEnterprise PlanTier = "enterprise"
+	// PlanGrowth is the legacy name for PlanPro.
+	PlanGrowth PlanTier = "growth"
 )
 
 // TenantPhase represents the overall lifecycle phase of a Tenant.
@@ -56,7 +62,8 @@ type TenantSpec struct {
 	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9][a-zA-Z0-9 _.\-]*$`
 	DisplayName string `json:"displayName"`
 
-	// Plan is the subscription tier: starter, growth, or enterprise.
+	// Plan is the subscription tier: starter, pro, team or enterprise
+	// (growth is accepted as the legacy name for pro).
 	Plan PlanTier `json:"plan"`
 
 	// Environments lists the environments available to this tenant.
