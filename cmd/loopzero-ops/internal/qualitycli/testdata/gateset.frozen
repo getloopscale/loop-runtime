@@ -103,7 +103,6 @@ script-count	gates	Tracks the total shell-script count against the reduction tar
 scripts-audit	-	Audits shell scripts against the allowlist ledger.
 security-context	gates	Enforces pod securityContext (non-root, limits, probes).
 service-auth-rotation	-	Enforces the Ed25519 service-auth key rotation cadence.
-services-acyclic	gates	M9 Step 6: services bounded-context imports form the frozen acyclic DAG.
 shell-hygiene	gates	Lints shell scripts for strict-mode and hygiene rules.
 shellcheck-advisory	gates	Advisory shell-lint gate — runs shellcheck across infra/scripts/local + infra/tests/check-*-syntax_test + infra/tests/e2e/live/dev-public-*. Tolerates SC1091/SC2155/SC2086/SC2046. Advisory-only fallthrough when shellcheck not installed (WARN + exit 0). M-Migrate2 2026-07-07 replaces infra/scripts/local/shellcheck-advisory.sh.
 silent-surface	gates	Ratchet: refuses a NEW router surface guarded by `if cfg.X != nil` that does not report whether it was registered (B-104). Baseline may fall, never rise.

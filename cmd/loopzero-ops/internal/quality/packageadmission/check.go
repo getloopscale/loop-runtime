@@ -15,8 +15,9 @@
 //   - api/internal/k8s admitted by TECHNOLOGY — "it uses client-go". Measured on
 //     2026-09-04: 7 non-test files, 1520 non-test lines, three responsibilities
 //     sharing one directory because they share a client library. This gate closes it.
-//   - api/internal/services/platform still admits by nothing this gate can express;
-//     see docs/architecture.md for the measurement.
+//   - api/internal/services/platform admitted by nothing this gate could express.
+//     It was dissolved when api/internal was organized by feature (2026-09-25):
+//     each of its concerns moved to the feature it serves.
 //
 // # The criterion this gate enforces
 //

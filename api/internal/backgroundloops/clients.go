@@ -28,15 +28,15 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/gitops"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loopzero/api/internal/orchestrationbreaker"
 	"github.com/getloopscale/loopzero/api/internal/release/argocd"
-	"github.com/getloopscale/loopzero/api/internal/services/platform"
 )
 
 // NewWorkflowSubmitter builds the circuit-breaker-wrapped Argo Workflows
 // submitter for the build cluster, with every submitter setting the
 // configuration carries (Harbor registry, per-environment Fulcio audience,
 // cosign keyless/attestation).
-func NewWorkflowSubmitter(cfg config.Config, logger *slog.Logger) (*platform.CircuitBreakerWorkflowSubmitter, error) {
+func NewWorkflowSubmitter(cfg config.Config, logger *slog.Logger) (*orchestrationbreaker.CircuitBreakerWorkflowSubmitter, error) {
 	raw, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
 		Kubeconfig:            cfg.BuildKubeconfig,
 		Context:               cfg.BuildKubeContext,
@@ -63,7 +63,7 @@ func NewWorkflowSubmitter(cfg config.Config, logger *slog.Logger) (*platform.Cir
 			"attest_enabled", cfg.CosignAttestEnabled)
 	}
 	// Fail fast against an Argo outage instead of retrying every deploy.
-	return platform.NewCircuitBreakerWorkflowSubmitter(raw, circuitBreaker(cfg), logger), nil
+	return orchestrationbreaker.NewCircuitBreakerWorkflowSubmitter(raw, circuitBreaker(cfg), logger), nil
 }
 
 // NewSyncClient builds the circuit-breaker-wrapped ArgoCD sync client. It
@@ -72,7 +72,7 @@ func NewWorkflowSubmitter(cfg config.Config, logger *slog.Logger) (*platform.Cir
 // back to the static cfg.ArgocdToken otherwise. transport is shared pooling
 // for the secure case; nil uses the default transport. A configured CA that
 // cannot be used is an error: the client never falls back to insecure TLS.
-func NewSyncClient(cfg config.Config, transport *http.Transport, logger *slog.Logger) (*platform.CircuitBreakerSyncClient, error) {
+func NewSyncClient(cfg config.Config, transport *http.Transport, logger *slog.Logger) (*orchestrationbreaker.CircuitBreakerSyncClient, error) {
 	httpClient := &http.Client{Timeout: cfg.ArgocdClientTimeout}
 	if cfg.ArgocdInsecure {
 		// Local k3d only: cert-manager cannot issue for *.loopzero.local. Production
@@ -100,7 +100,7 @@ func NewSyncClient(cfg config.Config, transport *http.Transport, logger *slog.Lo
 	if err != nil {
 		return nil, fmt.Errorf("deployment sync client: %w", err)
 	}
-	return platform.NewCircuitBreakerSyncClient(raw, circuitBreaker(cfg), logger), nil
+	return orchestrationbreaker.NewCircuitBreakerSyncClient(raw, circuitBreaker(cfg), logger), nil
 }
 
 // NewGitOpsPusher builds the Gitea pusher manifests are committed through.
@@ -112,8 +112,8 @@ func NewGitOpsPusher(cfg config.Config) *gitops.GiteaGitOpsPusher {
 	})
 }
 
-func circuitBreaker(cfg config.Config) platform.CircuitBreakerConfig {
-	return platform.CircuitBreakerConfig{
+func circuitBreaker(cfg config.Config) orchestrationbreaker.CircuitBreakerConfig {
+	return orchestrationbreaker.CircuitBreakerConfig{
 		OpenThreshold:  cfg.CBOpenThreshold,
 		CloseThreshold: cfg.CBCloseThreshold,
 		RetryInterval:  cfg.CBRetryInterval,

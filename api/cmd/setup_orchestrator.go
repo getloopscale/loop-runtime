@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loopzero/api/internal/environments"
 	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
 	"github.com/getloopscale/loopzero/api/internal/projects"
@@ -22,8 +23,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/builds"
 
 	"github.com/getloopscale/loopzero/api/internal/release"
-
-	"github.com/getloopscale/loopzero/api/internal/services/platform"
 
 	"github.com/getloopscale/loopzero/api/internal/scaling"
 
@@ -142,7 +141,7 @@ func setupOrchestrator(
 	httpTransport *http.Transport,
 	logger *slog.Logger,
 	projectCap projectCapEnforcement,
-	envEnsurer *platform.EnvironmentEnsurer,
+	envEnsurer *environments.EnvironmentEnsurer,
 ) *OrchestratorDeps {
 	// The orchestrator builds its OWN project store for the deploy-time
 	// EnsureProject path (`loopzero deploy <new-name>`). It is wired through the same

@@ -5,7 +5,7 @@
 // (docs/decisions.md Decision D3; ADR
 // .claude/knowledge-base/decisions/2026-07-03-m9-db-store-subpackage-topology.md).
 //
-// Invariant (Gate A): NO file under api/internal/{services,server}, an HTTP
+// Invariant (Gate A): NO file under api/internal/server, api/cmd, an HTTP
 // package or a feature's own code imports the sqlc-generated package
 // api/internal/db/generated — and, in the
 // layers measured free of it, the hand-written api/internal/db as well.
@@ -78,7 +78,6 @@ const generatedImportPath = "github.com/getloopscale/loopzero/api/internal/db/ge
 // the stores — the single highest-leverage place a bypass would be authored,
 // so it is fenced alongside the request-handling layers.
 var forbiddenDirs = []string{
-	"api/internal/services",
 	"api/internal/server",
 	"api/cmd",
 }
@@ -188,14 +187,14 @@ func Check(cfg Config) (Outcome, error) {
 // ActionableFix returns the operator-facing message for FAIL output.
 func ActionableFix() string {
 	return "An outer layer imports a persistence package it must not.\n" +
-		"  · " + generatedImportPath + " — forbidden in services/server/cmd, the HTTP\n" +
-		"    packages and every feature's own code. It\n" +
+		"  · " + generatedImportPath + " — forbidden in server/cmd, the HTTP packages\n" +
+		"    and every feature's own code (what services/ held). It\n" +
 		"    bypasses the db-store adapter's read-modify-write + advisory-lock scope\n" +
 		"    (MA-7 Gate A). Route the access through the entity's Store adapter in\n" +
 		"    api/internal/db/store/ instead.\n" +
 		"  · " + handWrittenDBPath + " — forbidden in " + strings.Join(dirsForbiddenFromHandWrittenDB, ", ") +
 		" and every HTTP package only.\n    That fence is deliberately narrower than the generated one: the other\n" +
-		"    layers — services and cmd — carry 73 importers (re-measured 2026-09-04:\n" +
+		"    layers — the feature services and cmd — carry 73 importers (re-measured 2026-09-04:\n" +
 		"    services 54, cmd 19), and a gate that fails on arrival is an exemption at\n" +
 		"    birth. Widening it is B-079."
 }

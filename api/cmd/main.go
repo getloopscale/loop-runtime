@@ -15,11 +15,10 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
+	"github.com/getloopscale/loopzero/api/internal/secrets"
 
 	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
-
-	"github.com/getloopscale/loopzero/api/internal/services/platform"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
@@ -368,7 +367,7 @@ func withSecretResyncer(h *buildshttp.BuildHandler, stores *StoreDeps, k8sDeps *
 		return h
 	}
 	logger.Info("secret resyncer wired: deploy repopulates ExternalSecrets after the env ensurer")
-	return h.WithSecretResyncer(&platform.SecretResyncer{
+	return h.WithSecretResyncer(&secrets.SecretResyncer{
 		Store:  stores.PgSecretStore,
 		K8s:    k8sDeps.SecretK8sSync,
 		Logger: logger,

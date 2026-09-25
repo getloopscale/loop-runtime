@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package platform
+package secrets
 
 // secret_resyncer_test.go — T7.2 of plan 2026-06-01-p3-infra-observability-
 // test-debt-plan.md v1.1 — regression tests for V9 L20 fix

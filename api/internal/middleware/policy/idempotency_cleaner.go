@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package platform
+package policy
 
 import (
 	"context"
@@ -9,22 +9,22 @@ import (
 	"time"
 )
 
-// IdempotencyStore defines the cleanup contract for expired idempotency keys.
-// Implemented by store.PostgresIdempotencyStore.
-type IdempotencyStore interface {
+// IdempotencyCleanupStore defines the cleanup contract for expired idempotency
+// keys. Implemented by store.PostgresIdempotencyStore.
+type IdempotencyCleanupStore interface {
 	Cleanup(ctx context.Context) (int64, error)
 }
 
 // IdempotencyCleaner periodically removes expired idempotency keys (A-08).
 // Without this, the idempotency_keys table grows unbounded.
 type IdempotencyCleaner struct {
-	store    IdempotencyStore
+	store    IdempotencyCleanupStore
 	logger   *slog.Logger
 	interval time.Duration
 }
 
 // NewIdempotencyCleaner creates a new IdempotencyCleaner.
-func NewIdempotencyCleaner(store IdempotencyStore, logger *slog.Logger, interval time.Duration) *IdempotencyCleaner {
+func NewIdempotencyCleaner(store IdempotencyCleanupStore, logger *slog.Logger, interval time.Duration) *IdempotencyCleaner {
 	return &IdempotencyCleaner{store: store, logger: logger, interval: interval}
 }
 

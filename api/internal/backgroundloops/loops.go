@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/adapters"
+	"github.com/getloopscale/loopzero/api/internal/audit"
 	"github.com/getloopscale/loopzero/api/internal/builds"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -17,9 +18,10 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/domains"
 	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
 	"github.com/getloopscale/loopzero/api/internal/gitops"
+	"github.com/getloopscale/loopzero/api/internal/middleware/policy"
+	"github.com/getloopscale/loopzero/api/internal/orchestrationbreaker"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/release"
-	"github.com/getloopscale/loopzero/api/internal/services/platform"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 )
 
@@ -43,8 +45,8 @@ type Deps struct {
 	DomainStore    *store.PostgresDomainStore
 	CellStore      *store.PostgresCellStore
 	AppCR          builds.ApplicationCREnsurer
-	Workflow       *platform.CircuitBreakerWorkflowSubmitter
-	Sync           *platform.CircuitBreakerSyncClient
+	Workflow       *orchestrationbreaker.CircuitBreakerWorkflowSubmitter
+	Sync           *orchestrationbreaker.CircuitBreakerSyncClient
 	GitOps         *gitops.GiteaGitOpsPusher
 	Orchestrator   *builds.BuildOrchestrator
 
@@ -74,17 +76,17 @@ func Build(cfg config.Config, d Deps, logger *slog.Logger) []Loop {
 		{"build-reaper", newBuildReaper(cfg, d, reconcile, logger).Start},
 		{"release-reaper", newReleaseReaper(cfg, d, logger).Start},
 		{"release-convergence", newConvergenceLoop(cfg, d, logger).Start},
-		{"idempotency-cleaner", platform.NewIdempotencyCleaner(&store.PostgresIdempotencyStore{DB: d.WorkerPool}, logger, time.Hour).Start},
+		{"idempotency-cleaner", policy.NewIdempotencyCleaner(&store.PostgresIdempotencyStore{DB: d.WorkerPool}, logger, time.Hour).Start},
 		{"event-pruner", sse.NewEventPruner(d.EventStore, logger, 24*time.Hour, time.Hour).Start},
 		{"cell-metrics", placement.NewCellMetricsCollector(d.CellStore, logger, 60*time.Second).Start},
 		{"build-gc", builds.NewBuildGC(&store.PostgresBuildGCStore{DB: d.WorkerPool}, logger, time.Hour, 30*24*time.Hour, 10).Start},
 		// ADR-0047 audit_log retention (1 year); prunes nightly at 02:00.
-		{"audit-log-pruner", platform.NewAuditLogPruner(&store.PostgresAuditLogPruneStore{Pool: d.WorkerPool.Pool}, platform.AuditLogPrunerOpts{Logger: logger}).Start},
+		{"audit-log-pruner", audit.NewAuditLogPruner(&store.PostgresAuditLogPruneStore{Pool: d.WorkerPool.Pool}, audit.AuditLogPrunerOpts{Logger: logger}).Start},
 		{"domain-provisioner", newDomainProvisioner(cfg, d, logger).Start},
 		{"domain-health-checker", newDomainHealthChecker(cfg, d, logger).Start},
 	}
 	if d.CellLister != nil {
-		loops = append(loops, Loop{"orphan-detector", platform.NewOrphanDetector(d.CellLister, d.CellStore, logger, 60*time.Second).Start})
+		loops = append(loops, Loop{"orphan-detector", placement.NewOrphanDetector(d.CellLister, d.CellStore, logger, 60*time.Second).Start})
 	}
 	return loops
 }

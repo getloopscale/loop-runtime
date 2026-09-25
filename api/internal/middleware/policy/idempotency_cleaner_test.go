@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package platform
+package policy
 
 import (
 	"context"
@@ -12,19 +12,19 @@ import (
 
 // --- Test doubles ---
 
-type fakeIdempotencyStore struct {
+type fakeIdempotencyCleanupStore struct {
 	cleanedUp int64
 	err       error
 }
 
-func (f *fakeIdempotencyStore) Cleanup(_ context.Context) (int64, error) {
+func (f *fakeIdempotencyCleanupStore) Cleanup(_ context.Context) (int64, error) {
 	return f.cleanedUp, f.err
 }
 
 // --- Tests ---
 
 func TestNewIdempotencyCleaner(t *testing.T) {
-	store := &fakeIdempotencyStore{}
+	store := &fakeIdempotencyCleanupStore{}
 	cleaner := NewIdempotencyCleaner(store, slog.Default(), 5*time.Minute)
 	if cleaner == nil {
 		t.Fatal("expected non-nil cleaner")
@@ -38,7 +38,7 @@ func TestNewIdempotencyCleaner(t *testing.T) {
 }
 
 func TestIdempotencyCleaner_Start_StopsOnContextCancel(t *testing.T) {
-	store := &fakeIdempotencyStore{cleanedUp: 0}
+	store := &fakeIdempotencyCleanupStore{cleanedUp: 0}
 	cleaner := NewIdempotencyCleaner(store, slog.Default(), 50*time.Millisecond)
 
 	ctx, cancel := context.WithCancel(context.Background())

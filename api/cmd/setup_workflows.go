@@ -12,14 +12,14 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/builds/cfkv"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/gitops"
-	"github.com/getloopscale/loopzero/api/internal/services/platform"
+	"github.com/getloopscale/loopzero/api/internal/orchestrationbreaker"
 )
 
 // WorkflowDeps holds workflow submitter, sync client, gitops pusher, and KV client.
 type WorkflowDeps struct {
 	// WorkflowSubmitter is circuit-breaker-wrapped.
-	WorkflowSubmitter *platform.CircuitBreakerWorkflowSubmitter
-	SyncClient        *platform.CircuitBreakerSyncClient
+	WorkflowSubmitter *orchestrationbreaker.CircuitBreakerWorkflowSubmitter
+	SyncClient        *orchestrationbreaker.CircuitBreakerSyncClient
 	GitOpsPusher      *gitops.GiteaGitOpsPusher
 	KVClient          builds.StaticRoutingClient
 }

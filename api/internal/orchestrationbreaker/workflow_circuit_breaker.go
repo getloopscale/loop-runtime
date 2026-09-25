@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package platform is the platform-bootstrap bounded context. M9 Step 6.
-package platform
+// Package orchestrationbreaker guards the two clients every deploy depends on —
+// the Argo Workflows submitter the builds feature uses and the ArgoCD sync
+// client the release feature uses — with one circuit-breaker policy, so an
+// outage of either surfaces as ErrPlatformDegraded instead of a pile of
+// timeouts. It is shared kernel: both features consume the decorated clients
+// through deploycontracts, and the breaker policy is one.
+package orchestrationbreaker
 
 import (
 	"context"

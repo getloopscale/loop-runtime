@@ -33,7 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
-	"github.com/getloopscale/loopzero/api/internal/services/platform"
+	"github.com/getloopscale/loopzero/api/internal/environments"
 )
 
 // environmentCRGVR — same Group/Version as Tenant CR, different Resource.
@@ -52,7 +52,7 @@ type EnvironmentCRReader struct {
 	Namespace string // canonical "loopzero-system" (matches operators/internal/tenant)
 }
 
-var _ platform.EnvironmentReadinessChecker = (*EnvironmentCRReader)(nil)
+var _ environments.EnvironmentReadinessChecker = (*EnvironmentCRReader)(nil)
 
 // NewEnvironmentCRReader constructs a reader bound to the core-cluster
 // dynamic client. Namespace defaults to "loopzero-system" if empty.

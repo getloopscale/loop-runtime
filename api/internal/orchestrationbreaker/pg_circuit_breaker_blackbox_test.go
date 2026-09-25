@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package platform_test
+package orchestrationbreaker_test
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/platform"
+	"github.com/getloopscale/loopzero/api/internal/orchestrationbreaker"
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
@@ -60,8 +60,8 @@ func (f *fakeInnerSync) TerminateOperation(_ context.Context, _ string) error {
 
 // --- Helper ---
 
-func defaultCBConfig() platform.CircuitBreakerConfig {
-	return platform.CircuitBreakerConfig{
+func defaultCBConfig() orchestrationbreaker.CircuitBreakerConfig {
+	return orchestrationbreaker.CircuitBreakerConfig{
 		OpenThreshold:  3,
 		CloseThreshold: 2,
 		RetryInterval:  30 * time.Second,
@@ -73,7 +73,7 @@ func defaultCBConfig() platform.CircuitBreakerConfig {
 func TestCircuitBreaker_ClosedState_TriggerSyncPassesThrough(t *testing.T) {
 	// Arrange
 	inner := &fakeInnerSync{}
-	cb := platform.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+	cb := orchestrationbreaker.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Act
 	err := cb.TriggerSync(context.Background(), "my-app")
@@ -90,7 +90,7 @@ func TestCircuitBreaker_ClosedState_TriggerSyncPassesThrough(t *testing.T) {
 func TestCircuitBreaker_ClosedState_WaitForSyncPassesThrough(t *testing.T) {
 	// Arrange
 	inner := &fakeInnerSync{}
-	cb := platform.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+	cb := orchestrationbreaker.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Act
 	err := cb.WaitForSync(context.Background(), "my-app", 30*time.Second, nil)
@@ -107,7 +107,7 @@ func TestCircuitBreaker_ClosedState_WaitForSyncPassesThrough(t *testing.T) {
 func TestCircuitBreaker_OpenState_RejectsTriggerSync(t *testing.T) {
 	// Arrange: cause enough failures to open the circuit, then verify rejection
 	inner := &fakeInnerSync{triggerErr: errors.New("connection refused")}
-	cb := platform.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+	cb := orchestrationbreaker.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Open the circuit with 3 consecutive failures
 	for i := 0; i < 3; i++ {
@@ -133,7 +133,7 @@ func TestCircuitBreaker_OpenState_RejectsTriggerSync(t *testing.T) {
 func TestCircuitBreaker_OpenState_RejectsWaitForSync(t *testing.T) {
 	// Arrange: open the circuit
 	inner := &fakeInnerSync{triggerErr: errors.New("connection refused")}
-	cb := platform.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+	cb := orchestrationbreaker.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	for i := 0; i < 3; i++ {
 		_ = cb.TriggerSync(context.Background(), "my-app")
@@ -155,13 +155,13 @@ func TestCircuitBreaker_OpenState_RejectsWaitForSync(t *testing.T) {
 
 func TestCircuitBreaker_HalfOpen_AllowsRecoveryProbe(t *testing.T) {
 	// Arrange: use a very short retry interval so half-open triggers immediately
-	cfg := platform.CircuitBreakerConfig{
+	cfg := orchestrationbreaker.CircuitBreakerConfig{
 		OpenThreshold:  3,
 		CloseThreshold: 2,
 		RetryInterval:  1 * time.Millisecond, // very short so test doesn't need to sleep
 	}
 	inner := &fakeInnerSync{triggerErr: errors.New("connection refused")}
-	cb := platform.NewCircuitBreakerSyncClient(inner, cfg, testLogger)
+	cb := orchestrationbreaker.NewCircuitBreakerSyncClient(inner, cfg, testLogger)
 
 	// Open the circuit
 	for i := 0; i < 3; i++ {
@@ -190,7 +190,7 @@ func TestCircuitBreaker_HalfOpen_AllowsRecoveryProbe(t *testing.T) {
 func TestCircuitBreaker_ClosedToOpen_AfterThresholdFailures(t *testing.T) {
 	// Arrange: start closed, cause 3 consecutive failures (open threshold)
 	inner := &fakeInnerSync{triggerErr: errors.New("connection refused")}
-	cb := platform.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+	cb := orchestrationbreaker.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Act: 3 failures
 	for i := 0; i < 3; i++ {
@@ -211,13 +211,13 @@ func TestCircuitBreaker_ClosedToOpen_AfterThresholdFailures(t *testing.T) {
 
 func TestCircuitBreaker_OpenToClosed_AfterThresholdSuccesses(t *testing.T) {
 	// Arrange: open the circuit, then allow recovery probes to close it
-	cfg := platform.CircuitBreakerConfig{
+	cfg := orchestrationbreaker.CircuitBreakerConfig{
 		OpenThreshold:  3,
 		CloseThreshold: 2, // 2 successes to close
 		RetryInterval:  1 * time.Millisecond,
 	}
 	inner := &fakeInnerSync{triggerErr: errors.New("connection refused")}
-	cb := platform.NewCircuitBreakerSyncClient(inner, cfg, testLogger)
+	cb := orchestrationbreaker.NewCircuitBreakerSyncClient(inner, cfg, testLogger)
 
 	// Open the circuit
 	for i := 0; i < 3; i++ {
@@ -248,7 +248,7 @@ func TestCircuitBreaker_InnerErrorPropagated(t *testing.T) {
 	// Arrange: circuit closed, inner returns error
 	innerErr := errors.New("argocd 503")
 	inner := &fakeInnerSync{triggerErr: innerErr}
-	cb := platform.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+	cb := orchestrationbreaker.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Act
 	err := cb.TriggerSync(context.Background(), "my-app")
@@ -265,7 +265,7 @@ func TestCircuitBreaker_InnerErrorPropagated(t *testing.T) {
 func TestCircuitBreaker_AuthFailure_DoesNotOpenCircuit(t *testing.T) {
 	// 401 errors MUST NOT count toward circuit breaker threshold (MEET-013)
 	inner := &fakeInnerSync{triggerErr: loopzeroerrors.ErrDeployServiceAuthFailed}
-	cb := platform.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+	cb := orchestrationbreaker.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Send 10 auth failures — more than the open threshold (3)
 	for i := 0; i < 10; i++ {
@@ -292,7 +292,7 @@ func TestCircuitBreaker_AuthFailure_DoesNotOpenCircuit(t *testing.T) {
 func TestCircuitBreaker_ServiceFailure_StillOpensCircuit(t *testing.T) {
 	// 503 errors MUST still open the circuit (regression test)
 	inner := &fakeInnerSync{triggerErr: errors.New("argocd: connection refused")}
-	cb := platform.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+	cb := orchestrationbreaker.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Send 3 service failures (threshold)
 	for i := 0; i < 3; i++ {
@@ -308,7 +308,7 @@ func TestCircuitBreaker_ServiceFailure_StillOpensCircuit(t *testing.T) {
 
 func TestCircuitBreaker_GetAppStatus_DelegatesToInner(t *testing.T) {
 	inner := &fakeInnerSync{}
-	cb := platform.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+	cb := orchestrationbreaker.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	synced, healthy, err := cb.GetAppStatus(context.Background(), "my-app", nil)
 
@@ -322,7 +322,7 @@ func TestCircuitBreaker_GetAppStatus_DelegatesToInner(t *testing.T) {
 
 func TestCircuitBreaker_GetSyncRevision_DelegatesToInner(t *testing.T) {
 	inner := &fakeInnerSync{}
-	cb := platform.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+	cb := orchestrationbreaker.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	rev, err := cb.GetSyncRevision(context.Background(), "my-app")
 
@@ -338,7 +338,7 @@ func TestCircuitBreaker_SyncOperationInProgress_DoesNotOpenCircuit(t *testing.T)
 	// 409 "operation in progress" MUST NOT count toward circuit breaker threshold (MEET-2026-03-29-019).
 	// A single stuck ArgoCD Application should not trip the circuit for the entire platform.
 	inner := &fakeInnerSync{triggerErr: loopzeroerrors.ErrSyncOperationInProgress}
-	cb := platform.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
+	cb := orchestrationbreaker.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Send 10 x 409 — well above the open threshold (3)
 	for i := 0; i < 10; i++ {
@@ -362,5 +362,5 @@ func TestCircuitBreaker_SyncOperationInProgress_DoesNotOpenCircuit(t *testing.T)
 
 func TestCircuitBreaker_ImplementsSyncClient(t *testing.T) {
 	// Compile-time check
-	var _ deploycontracts.SyncClient = (*platform.CircuitBreakerSyncClient)(nil)
+	var _ deploycontracts.SyncClient = (*orchestrationbreaker.CircuitBreakerSyncClient)(nil)
 }

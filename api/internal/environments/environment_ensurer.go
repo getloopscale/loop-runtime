@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package platform
+// Package environments is the environment feature: the environments of a
+// project, created on first deploy (EnvironmentEnsurer) and served by
+// environmentshttp.
+package environments
 
 import (
 	"context"
