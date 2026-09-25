@@ -98,6 +98,14 @@ serviceAccount:
 
 rbac:
   create: true
+  # Cutover escape hatch, OFF by default. The operator reads Secrets only in
+  # loopzero-system, granted by a namespaced Role (templates/role-secret-access.yaml),
+  # and its manager caches Secrets in that namespace alone. An operator image
+  # built before that scoping lists Secrets in every namespace and fails
+  # without a cluster-wide grant; set this to true only while such an image
+  # runs against this chart, and back to false once it is replaced. It adds
+  # cluster-wide Secret READ to the ClusterRole — never write, never ConfigMaps.
+  legacyClusterWideSecrets: false
 
 startupProbe:
   enabled: true

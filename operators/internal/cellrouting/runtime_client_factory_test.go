@@ -223,3 +223,34 @@ func TestUnavailableFactory_ReturnsTheTypedErrorForEveryCell(t *testing.T) {
 		}
 	}
 }
+
+// TestCellAwareFactory_RefusesAKubeconfigSecretOutsideThePlatformNamespace —
+// the operators hold Secret read only in the platform namespace, and a
+// ClusterCredential is an instruction to read a Secret on the operator's
+// behalf. A SecretRef naming another namespace is refused by name, before any
+// read, instead of surfacing later as an opaque cache or RBAC error — and
+// instead of turning the credential into a way to read Secrets the operator
+// was never meant to reach.
+func TestCellAwareFactory_RefusesAKubeconfigSecretOutsideThePlatformNamespace(t *testing.T) {
+	scheme := newSchemeForTest(t)
+	cc := &loopzerov1.ClusterCredential{
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loopzero-system"},
+		Spec: loopzerov1.ClusterCredentialSpec{
+			ClusterName: "loopzero-cell-1",
+			APIServer:   "https://172.18.0.10:6443",
+			CellID:      "cell-1",
+			SecretRef:   loopzerov1.SecretReference{Name: "cell-1-kubeconfig", Namespace: "kube-system"},
+		},
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1-kubeconfig", Namespace: "kube-system"},
+		Data:       map[string][]byte{"kubeconfig": kubeconfigFor("https://172.18.0.10:6443", "t")},
+	}
+	mgmt := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cc, secret).Build()
+	f := NewCellAwareRuntimeClientFactory(mgmt, nil, "loopzero-system")
+
+	_, err := f.For(context.Background(), "cell-1")
+	if !errors.Is(err, ErrKubeconfigSecretOutsidePlatformNamespace) {
+		t.Fatalf("For(cell-1) error = %v, want ErrKubeconfigSecretOutsidePlatformNamespace", err)
+	}
+}

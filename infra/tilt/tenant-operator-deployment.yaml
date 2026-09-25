@@ -66,10 +66,8 @@ rules:
     resources: ["networkpolicies"]
     verbs: ["get", "list", "watch", "create", "update", "delete"]
 
-  # --- Secrets: kubeconfig secrets for cross-cluster access ---
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  # --- Secrets: NOT here — Role tenant-operator-secrets-loopzero-system below.
+  # Mirrors charts/loopzero-tenant-operator/templates/role-secret-access.yaml.
 
   # --- PriorityClasses: tenant workload priorities ---
   - apiGroups: ["scheduling.k8s.io"]
@@ -78,7 +76,7 @@ rules:
 
   # --- Workload resources: required for RBAC escalation prevention ---
   - apiGroups: [""]
-    resources: ["configmaps", "services"]
+    resources: ["services"]
     verbs: ["get", "list", "create", "update", "patch"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
@@ -112,6 +110,32 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: tenant-operator
+subjects:
+  - kind: ServiceAccount
+    name: tenant-operator
+    namespace: loopzero-system
+---
+# Secret read in loopzero-system only: cell kubeconfigs and the registry pull
+# Secret. The operator's Secret cache watches this namespace alone.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tenant-operator-secrets-loopzero-system
+  namespace: loopzero-system
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tenant-operator-secrets-loopzero-system
+  namespace: loopzero-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tenant-operator-secrets-loopzero-system
 subjects:
   - kind: ServiceAccount
     name: tenant-operator

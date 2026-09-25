@@ -131,6 +131,11 @@ func (f *CellAwareRuntimeClientFactory) kubeconfigSecret(ctx context.Context, ce
 	if secretNS == "" {
 		secretNS = f.MgmtNamespace
 	}
+	if secretNS != f.MgmtNamespace {
+		return nil, fmt.Errorf("runtime-client-factory: ClusterCredential %s/%s for cell %q references Secret %s/%s: %w (%s)",
+			match.Namespace, match.Name, cellID, secretNS, match.Spec.SecretRef.Name,
+			ErrKubeconfigSecretOutsidePlatformNamespace, f.MgmtNamespace)
+	}
 	var secret corev1.Secret
 	if err := f.MgmtClient.Get(ctx, client.ObjectKey{Name: match.Spec.SecretRef.Name, Namespace: secretNS}, &secret); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -182,6 +187,13 @@ func (s *staticRuntimeClientFactory) For(_ context.Context, _ string) (client.Cl
 	}
 	return s.c, nil
 }
+
+// ErrKubeconfigSecretOutsidePlatformNamespace is returned for a
+// ClusterCredential whose kubeconfig Secret is not in the platform namespace.
+// The operators are granted Secret read in that namespace only (a namespaced
+// Role, with a Secret cache scoped to match), so a credential pointing
+// elsewhere is refused by name rather than read on the operator's behalf.
+var ErrKubeconfigSecretOutsidePlatformNamespace = errors.New("kubeconfig Secret must live in the platform namespace")
 
 // ErrRuntimeClusterUnavailable is returned by a factory for a deployment that
 // was configured without runtime cluster access.

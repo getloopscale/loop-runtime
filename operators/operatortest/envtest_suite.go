@@ -160,7 +160,7 @@ func StartEnvtest(t TestT, cfg EnvtestConfig) *EnvtestHandle {
 	testEnv := &envtest.Environment{
 		CRDDirectoryPaths:     []string{crdPathOrDefault(cfg.CRDPath)},
 		ErrorIfCRDPathMissing: true,
-		BinaryAssetsDirectory: envtestBinaryDir(os.Getenv("KUBEBUILDER_ASSETS"), userHomeDir()),
+		BinaryAssetsDirectory: BinaryAssetsDirectory(),
 	}
 	restCfg, err := testEnv.Start()
 	if err != nil {
@@ -194,6 +194,13 @@ func StartEnvtest(t TestT, cfg EnvtestConfig) *EnvtestHandle {
 	}
 
 	return h
+}
+
+// BinaryAssetsDirectory is where the envtest binaries (kube-apiserver, etcd)
+// live on this machine, for a test that builds its own envtest.Environment
+// instead of going through StartEnvtest.
+func BinaryAssetsDirectory() string {
+	return envtestBinaryDir(os.Getenv("KUBEBUILDER_ASSETS"), userHomeDir())
 }
 
 // userHomeDir returns the user's home directory, or "" when it is unknown

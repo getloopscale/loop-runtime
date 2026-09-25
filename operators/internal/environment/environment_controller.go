@@ -63,6 +63,7 @@ var environmentSM = statemachine.NewEnvironmentTypedMachine()
 // +kubebuilder:rbac:groups=loopzero.io,resources=environments/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=loopzero.io,resources=environments/finalizers,verbs=update
 // +kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch;patch
+// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch
 type EnvironmentReconciler struct {
 	client.Client
 	RuntimeFactory   cellrouting.RuntimeClientFactory
