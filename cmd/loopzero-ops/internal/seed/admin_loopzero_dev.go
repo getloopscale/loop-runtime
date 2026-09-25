@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // AdminLoopzeroDevSeed is the Go port of
@@ -23,19 +24,20 @@ import (
 // admin@loopzero.example. End-to-end 4-phase chain:
 //
 //  1. Ensure Kratos identity via admin API (create if absent).
-//  2. Ensure auxiliary PG state (users / accounts / tenants /
-//     tenant_members / user_identity_map / subscriptions) as idempotent
-//     autocommit upserts, not a transaction — see adminEnsurePGState.
-//     This writes the engine's tenancy schema directly, placing the tenant
-//     on cell-0 without the placement engine; it is a dev fixture, and
-//     any schema or placement change must be mirrored here by hand.
+//  2. Provision the identity's tenant through the engine — POST
+//     /internal/bootstrap, authenticated with the bootstrap secret. The
+//     engine places the tenant in a cell and writes user, Account, tenant,
+//     membership and subscription in its placement transaction, so ids,
+//     placement and the tenancy schema have one owner. See
+//     adminProvisionTenant.
 //  3. Reset identity password via PUT (Kratos v26 quirk: PUT hashes,
 //     JSON Patch stores cleartext) + mint session via browser login
 //     flow + persist session cookie at mode 0600.
 //  4. Optional --verify probes /sessions/whoami + JWT exchange.
 //
-// SKIP-graceful when Kratos/PG endpoints unreachable — hermetic tests
-// use httptest for Kratos + stubPgConn for PG.
+// SKIP-graceful when the Kratos admin endpoint is not configured, and
+// phase 2 is skipped (and said so) when the engine API is not — hermetic
+// tests use httptest for both.
 type AdminLoopzeroDevSeed struct{}
 
 func NewAdminLoopzeroDevSeed() *AdminLoopzeroDevSeed { return &AdminLoopzeroDevSeed{} }
@@ -45,8 +47,6 @@ func (s *AdminLoopzeroDevSeed) Name() string        { return "admin-loopzero-dev
 const (
 	adminDefaultEmail        = "admin@loopzero.example"
 	adminDefaultDisplayName  = "LoopZero Admin"
-	adminDefaultUsername     = "admin"
-	adminDefaultTenantSlug   = "admin"
 	adminDefaultPublicKratos = "https://auth-dev.loopzero.example"
 	adminDefaultPublicCloud  = "https://app-dev.loopzero.example"
 	// SEED_PASSWORD kept in a constant so the same value is used across seeds.
@@ -59,7 +59,8 @@ const (
 	adminKratosAdminEnv   = "KRATOS_ADMIN_URL" // test override for httptest
 	adminSessionFileEnv   = "SESSION_FILE"
 	adminSessionJWTEnv    = "SESSION_JWT_FILE"
-	adminPGConnEnv        = "LOOPZERO_PG_CONN" // reuse tenant-fixture pattern
+	adminAPIURLEnv        = "LOOPZERO_API_URL"          // engine API base, e.g. a port-forward to svc/loopzero-api
+	adminBootstrapEnv     = "LOOPZERO_BOOTSTRAP_SECRET" // the engine's /internal/bootstrap secret
 	adminCanonicalProject = "seed"
 )
 
@@ -76,7 +77,8 @@ type AdminLoopzeroDevConfig struct {
 	KratosAdminURL   string
 	SessionFile      string
 	SessionJWTFile   string
-	PGConn           string
+	APIURL           string
+	BootstrapSecret  string
 	CanonicalProject string
 }
 
@@ -93,11 +95,15 @@ func (s *AdminLoopzeroDevSeed) Run(d Deps) Result {
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Phase 1 identity: %v", err)}
 	}
-	// Phase 2 — PG auxiliary state (SKIP-graceful when PG conn absent).
-	if cfg.PGConn != "" {
-		if err := adminEnsurePGState(d.Ctx, d.Host, cfg, identityID); err != nil {
-			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Phase 2 PG state: %v", err)}
+	// Phase 2 — tenant provisioning through the engine (skipped, and said so,
+	// when the engine API is not configured).
+	tenantNote := fmt.Sprintf("tenant provisioning skipped: %s not set", adminAPIURLEnv)
+	if cfg.APIURL != "" {
+		tenantID, err := adminProvisionTenant(d.Ctx, d.Host.devHTTP(), cfg, identityID)
+		if err != nil {
+			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Phase 2 tenant provisioning: %v", err)}
 		}
+		tenantNote = "tenant " + tenantID
 	}
 	// Phase 3 — Password reset + session cookie mint.
 	if err := kratosSetIdentityPassword(d.Ctx, d.Host.devHTTP(), cfg, identityID); err != nil {
@@ -110,7 +116,7 @@ func (s *AdminLoopzeroDevSeed) Run(d Deps) Result {
 	if err := adminWriteSessionFile(cfg.SessionFile, cookie); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Phase 3 session file: %v", err)}
 	}
-	return Result{Verdict: PASS, Reason: fmt.Sprintf("identity %s + session cookie persisted (%d bytes) to %s", identityID, len(cookie), cfg.SessionFile)}
+	return Result{Verdict: PASS, Reason: fmt.Sprintf("identity %s (%s) + session cookie persisted (%d bytes) to %s", identityID, tenantNote, len(cookie), cfg.SessionFile)}
 }
 
 // Verify probes /sessions/whoami using the persisted session cookie.
@@ -138,20 +144,39 @@ func loadAdminConfig(h Host) AdminLoopzeroDevConfig {
 	home := h.getenv("HOME")
 	sessionFile := h.envOr(adminSessionFileEnv, home+"/.loopzero/admin-loopzero-dev-session.txt")
 	sessionJWT := h.envOr(adminSessionJWTEnv, home+"/.loopzero/local-dogfood-session-jwt.txt")
+	email := h.envOr(adminEmailEnv, adminDefaultEmail)
+	handle := identityHandle(email)
 	return AdminLoopzeroDevConfig{
-		Email:            h.envOr(adminEmailEnv, adminDefaultEmail),
+		Email:            email,
 		DisplayName:      adminDefaultDisplayName,
-		Username:         adminDefaultUsername,
-		TenantSlug:       adminDefaultTenantSlug,
+		Username:         handle,
+		TenantSlug:       handle,
 		SeedPassword:     h.envOr(adminSeedPasswordEnv, adminSeedPassword),
 		PublicKratosURL:  h.envOr(adminPublicKratosEnv, adminDefaultPublicKratos),
 		PublicCloudURL:   h.envOr(adminPublicCloudEnv, adminDefaultPublicCloud),
 		KratosAdminURL:   h.getenv(adminKratosAdminEnv),
 		SessionFile:      sessionFile,
 		SessionJWTFile:   sessionJWT,
-		PGConn:           h.getenv(adminPGConnEnv),
+		APIURL:           strings.TrimRight(h.getenv(adminAPIURLEnv), "/"),
+		BootstrapSecret:  h.getenv(adminBootstrapEnv),
 		CanonicalProject: adminCanonicalProject,
 	}
+}
+
+// identityHandle derives the username and tenant slug of a seeded identity
+// from its email's local part (admin@loopzero.example → "admin"), so two seeded
+// identities never ask for the same unique username or slug.
+func identityHandle(email string) string {
+	local, _, _ := strings.Cut(strings.ToLower(email), "@")
+	var b strings.Builder
+	for _, r := range local {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('-')
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 // --- Phase 1: Kratos identity ---
@@ -391,87 +416,61 @@ func kratosWhoami(ctx context.Context, client *http.Client, publicKratosURL, coo
 	return got.Identity.Traits.Email, nil
 }
 
-// --- Phase 2: PG state ---
+// --- Phase 2: tenant provisioning ---
 
-// adminEnsurePGState runs the canonical 7-statement upsert cluster (the same
-// statements as the bash SQL block) as a sequence of idempotent autocommit
-// statements — NOT a single transaction (the pgConn seam is Exec-only; it
-// exposes no Begin/Commit).
-//
-// Atomicity is provided by IDEMPOTENCY + SELF-HEALING, not by a transaction:
-// every statement is an ON-CONFLICT-DO-NOTHING upsert (or a NOT-EXISTS-guarded
-// INSERT ... SELECT), and the statements are cross-referential in dependency
-// order (users -> accounts -> tenants -> tenant_members/user_identity_map ->
-// users.active_tenant_id -> subscriptions). A mid-chain failure therefore
-// leaves a partial-but-recoverable state that the NEXT run completes: the
-// already-written rows become no-ops and the failed tail is retried. The first
-// statement failing leaves no rows at all (clean failure). This is acceptable
-// for a dev-bootstrap seed and needs no transaction machinery (KISS/YAGNI).
-//
-// If cross-user isolation ever becomes a requirement, wrapping this in an
-// explicit SERIALIZABLE transaction is a T2 change: it requires extending the
-// shared pgConn seam (tenant_fixture.go) with Begin/Commit + a pgTx interface,
-// implemented in pgConnAdapter and the test stub.
-func adminEnsurePGState(ctx context.Context, h Host, cfg AdminLoopzeroDevConfig, kratosID string) error {
-	conn, err := h.pgConnect(ctx, cfg.PGConn)
+// adminBootstrapResponse is the engine's POST /internal/bootstrap answer.
+type adminBootstrapResponse struct {
+	TenantID string `json:"tenant_id"`
+}
+
+// adminProvisionTenant asks the engine to provision the identity's tenant:
+// POST /internal/bootstrap with the identity (users.id is the Kratos id),
+// its handle as username and slug, and the Starter plan. The engine owns the
+// id derivation, the cell placement and every tenancy write; this seed only
+// names who is being provisioned. Idempotent — a re-run answers the same
+// tenant. Returns the tenant id the engine chose.
+func adminProvisionTenant(ctx context.Context, client *http.Client, cfg AdminLoopzeroDevConfig, kratosID string) (string, error) {
+	if cfg.BootstrapSecret == "" {
+		return "", fmt.Errorf("%s is required with %s (the engine refuses an unauthenticated bootstrap)", adminBootstrapEnv, adminAPIURLEnv)
+	}
+	body, err := json.Marshal(map[string]string{
+		"admin_user_id":       kratosID,
+		"admin_login":         cfg.Username,
+		"admin_email":         cfg.Email,
+		"admin_display_name":  cfg.DisplayName,
+		"tenant_slug":         cfg.TenantSlug,
+		"tenant_display_name": cfg.DisplayName,
+		"plan":                "starter",
+	})
 	if err != nil {
-		return fmt.Errorf("pgx connect: %w", err)
+		return "", fmt.Errorf("encode bootstrap request: %w", err)
 	}
-	defer func() { _ = conn.Close(ctx) }()
-	// Execute the canonical INSERTs. In hermetic tests, stubPgConn records exec
-	// calls without running actual SQL. In prod, pgx runs against PG directly.
-	stmts := []string{
-		// users
-		`INSERT INTO users (id, email, username, display_name)
-		 VALUES ($1, $2, $3, $4)
-		 ON CONFLICT (id) DO NOTHING`,
-		// accounts
-		`INSERT INTO accounts (id, display_name, plan, owner_id)
-		 VALUES ('acct-' || substring(encode(sha256(($1 || '-account')::bytea), 'hex'), 1, 16),
-		         $2, 'starter', $1)
-		 ON CONFLICT (owner_id) DO NOTHING`,
-		// tenants
-		`INSERT INTO tenants (id, display_name, slug, owner_id, cell_id, account_id)
-		 SELECT 'tn-' || substring(encode(sha256(($1 || '-' || $3)::bytea), 'hex'), 1, 16),
-		        $2, $3, $1, 'cell-0', a.id
-		 FROM accounts a
-		 WHERE a.owner_id = $1
-		   AND NOT EXISTS (SELECT 1 FROM tenants WHERE owner_id = $1)`,
-		// tenant_members
-		`INSERT INTO tenant_members (tenant_id, user_id, role)
-		 SELECT t.id, $1, 'owner' FROM tenants t WHERE t.owner_id = $1
-		 ON CONFLICT (tenant_id, user_id) DO NOTHING`,
-		// user_identity_map
-		`INSERT INTO user_identity_map (kratos_identity_id, user_id)
-		 VALUES ($1, $1)
-		 ON CONFLICT (kratos_identity_id) DO NOTHING`,
-		// users.active_tenant_id
-		`UPDATE users SET active_tenant_id = (SELECT id FROM tenants WHERE owner_id = $1 LIMIT 1),
-		        updated_at = now()
-		 WHERE id = $1
-		   AND (active_tenant_id IS NULL
-		        OR active_tenant_id NOT IN (SELECT id FROM tenants WHERE owner_id = $1))`,
-		// subscriptions
-		`INSERT INTO subscriptions (id, tenant_id, account_id, plan, status)
-		 SELECT 'sub-dev-' || t.id, t.id, t.account_id, 'starter', 'active'
-		 FROM tenants t WHERE t.owner_id = $1
-		 ON CONFLICT (account_id) DO NOTHING`,
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.APIURL+"/internal/bootstrap", bytes.NewReader(body))
+	if err != nil {
+		return "", err
 	}
-	argsPerStmt := [][]any{
-		{kratosID, cfg.Email, cfg.Username, cfg.DisplayName},
-		{kratosID, cfg.DisplayName},
-		{kratosID, cfg.DisplayName, cfg.TenantSlug},
-		{kratosID},
-		{kratosID},
-		{kratosID},
-		{kratosID},
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+cfg.BootstrapSecret)
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("POST /internal/bootstrap: %w", err)
 	}
-	for i, sql := range stmts {
-		if err := conn.Exec(ctx, sql, argsPerStmt[i]...); err != nil {
-			return fmt.Errorf("stmt %d: %w", i+1, err)
-		}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if err != nil {
+		return "", fmt.Errorf("read bootstrap response: %w", err)
 	}
-	return nil
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("POST /internal/bootstrap: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	var out adminBootstrapResponse
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "", fmt.Errorf("decode bootstrap response: %w", err)
+	}
+	if out.TenantID == "" {
+		return "", fmt.Errorf("POST /internal/bootstrap answered no tenant_id: %s", strings.TrimSpace(string(raw)))
+	}
+	return out.TenantID, nil
 }
 
 // --- Phase 3 helpers ---

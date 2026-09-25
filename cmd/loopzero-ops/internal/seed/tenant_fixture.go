@@ -43,7 +43,10 @@ import (
 //     broker-validate + handler-process + PG-write chain is exercised.
 //
 //  3. Ensure Tenant CR + ArgoCD AppProject (unstructured — CRDs may not be
-//     in scheme; unstructured avoids the registration coupling).
+//     in scheme; unstructured avoids the registration coupling). The Tenant
+//     CR carries the cell the engine placed the tenant in (tenants.cell_id,
+//     read in layer 1); without the database it is not written at all
+//     rather than written with a guessed cell.
 //
 // This seed is dev-public-only (SKIP when LOOPZERO_HELMFILE_ENV != "dev-public").
 type TenantFixtureSeed struct{}
@@ -128,11 +131,15 @@ func (s *TenantFixtureSeed) Run(d Deps) Result {
 		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would upsert subscription plan=%s + replay GH webhook + ensure Tenant CR + AppProject for %s", planTier, tenantID)}
 	}
 
-	// Layer 1 — subscription upsert (skip-graceful when PG conn absent).
+	// Layer 1 — read the tenant's placement and upsert the subscription
+	// (skip-graceful when PG conn absent).
+	var cellID string
 	if pgConn := d.Host.getenv(tenantFixturePGConnEnv); pgConn != "" {
-		if err := upsertTenantSubscription(d.Ctx, d.Host, pgConn, tenantID, planTier); err != nil {
+		placed, err := upsertTenantSubscription(d.Ctx, d.Host, pgConn, tenantID, planTier)
+		if err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 1 subscription upsert: %v", err)}
 		}
+		cellID = placed
 	}
 
 	// Layer 2 — GitHub webhook replay (skip-graceful when creds absent).
@@ -150,15 +157,18 @@ func (s *TenantFixtureSeed) Run(d Deps) Result {
 	}
 
 	// Layer 3a + 3b — Tenant CR + AppProject unstructured.
+	var crNote string
 	if d.CtrlClient != nil {
-		if err := ensureTenantCR(d.Ctx, d.CtrlClient, tenantID, crdPlan, d.Host.envOr("LOOPZERO_TENANT_DISPLAY_NAME", "LoopZero Dev Tenant")); err != nil {
+		if cellID == "" {
+			crNote = fmt.Sprintf(" (Tenant CR skipped: %s not set, so the tenant's placed cell is unknown)", tenantFixturePGConnEnv)
+		} else if err := ensureTenantCR(d.Ctx, d.CtrlClient, tenantID, cellID, crdPlan, d.Host.envOr("LOOPZERO_TENANT_DISPLAY_NAME", "LoopZero Dev Tenant")); err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3a Tenant CR: %v", err)}
 		}
 		if err := ensureAppProject(d.Ctx, d.CtrlClient, tenantID); err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3b AppProject: %v", err)}
 		}
 	}
-	return Result{Verdict: PASS, Reason: fmt.Sprintf("tenant fixture seeded (tenant=%s plan=%s)%s", tenantID, planTier, webhookWarn)}
+	return Result{Verdict: PASS, Reason: fmt.Sprintf("tenant fixture seeded (tenant=%s plan=%s)%s%s", tenantID, planTier, webhookWarn, crNote)}
 }
 
 // Verify probes that Tenant CR + AppProject exist for the target tenant.
@@ -187,26 +197,30 @@ func (s *TenantFixtureSeed) Verify(d Deps) Result {
 	return Result{Verdict: PASS, Reason: fmt.Sprintf("Tenant CR + AppProject present for %s", tenantID)}
 }
 
-// upsertTenantSubscription materializes the subscription row idempotently.
-func upsertTenantSubscription(ctx context.Context, h Host, pgConnStr, tenantID, planTier string) error {
+// upsertTenantSubscription materializes the subscription row idempotently and
+// returns the cell the engine placed the tenant in. The plan tier has no engine
+// write path — subscriptions come from the billing control plane — so this
+// fixture stands in for it; the tenant itself must already exist (provisioned
+// through the engine by the admin-loopzero-dev seed).
+func upsertTenantSubscription(ctx context.Context, h Host, pgConnStr, tenantID, planTier string) (string, error) {
 	conn, err := h.pgConnect(ctx, pgConnStr)
 	if err != nil {
-		return fmt.Errorf("pgx connect: %w", err)
+		return "", fmt.Errorf("pgx connect: %w", err)
 	}
 	defer func() { _ = conn.Close(ctx) }()
 
-	var accountID string
-	if err := conn.QueryRow(ctx, "SELECT account_id FROM tenants WHERE id=$1", tenantID).Scan(&accountID); err != nil {
-		return fmt.Errorf("resolve account_id for tenant %s: %w", tenantID, err)
+	var accountID, cellID string
+	if err := conn.QueryRow(ctx, "SELECT account_id, cell_id FROM tenants WHERE id=$1", tenantID).Scan(&accountID, &cellID); err != nil {
+		return "", fmt.Errorf("resolve account and cell of tenant %s: %w", tenantID, err)
 	}
 	subID := "sub-dev-" + tenantID
 	sql := `INSERT INTO subscriptions (id, tenant_id, account_id, plan, status)
 	        VALUES ($1, $2, $3, $4, 'active')
 	        ON CONFLICT (account_id) DO UPDATE SET plan=$4, status='active', updated_at=now()`
 	if err := conn.Exec(ctx, sql, subID, tenantID, accountID, planTier); err != nil {
-		return fmt.Errorf("insert subscription: %w", err)
+		return "", fmt.Errorf("insert subscription: %w", err)
 	}
-	return nil
+	return cellID, nil
 }
 
 // replayGitHubInstallationWebhook POSTs a canonical installation.created
@@ -269,13 +283,13 @@ func tenantCRDPlan(tier domain.PlanTier) (string, error) {
 
 // ensureTenantCR creates or updates the Tenant CR (unstructured — CRD may not
 // be in the scheme in fake-client tests; unstructured decouples).
-func ensureTenantCR(ctx context.Context, cli ctrlclient.Client, tenantID, crdPlan, displayName string) error {
+func ensureTenantCR(ctx context.Context, cli ctrlclient.Client, tenantID, cellID, crdPlan, displayName string) error {
 	tenant := &unstructured.Unstructured{}
 	tenant.SetGroupVersionKind(schema.GroupVersionKind{Group: "loopzero.io", Version: "v1", Kind: "Tenant"})
 	tenant.SetNamespace(tenantFixtureNamespace)
 	tenant.SetName(tenantID)
 	spec := map[string]any{
-		"cellID":      domain.DefaultCellID,
+		"cellID":      cellID,
 		"displayName": displayName,
 		"plan":        crdPlan,
 		"environments": []any{

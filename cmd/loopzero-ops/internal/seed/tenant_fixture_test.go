@@ -180,7 +180,7 @@ func TestTenantFixture_UpsertsSubscription(t *testing.T) {
 	})
 	conn := &stubPgConn{
 		rowScan: map[string]*stubPgRow{
-			"SELECT account_id": {values: []any{"acct-123"}},
+			"SELECT account_id, cell_id": {values: []any{"acct-123", "cell-0"}},
 		},
 	}
 	host.PGConnect = pgOf(conn)
@@ -277,7 +277,11 @@ func TestTenantFixture_CreatesTenantCRAndAppProject(t *testing.T) {
 	host.Getenv = envOf(map[string]string{
 		tenantFixtureHelmfileEnvKey: "dev-public",
 		tenantFixtureTenantIDEnv:    "tn-abc",
+		tenantFixturePGConnEnv:      "postgres://x",
 	})
+	host.PGConnect = pgOf(&stubPgConn{rowScan: map[string]*stubPgRow{
+		"SELECT account_id, cell_id": {values: []any{"acct-123", "cell-sfo3-02"}},
+	}})
 	c := fake.NewClientBuilder().Build()
 	got := NewTenantFixtureSeed().Run(Deps{Host: host, Ctx: context.Background(), CtrlClient: c})
 	if got.Verdict != PASS {
@@ -287,6 +291,11 @@ func TestTenantFixture_CreatesTenantCRAndAppProject(t *testing.T) {
 	tenant.SetGroupVersionKind(schema.GroupVersionKind{Group: "loopzero.io", Version: "v1", Kind: "Tenant"})
 	if err := c.Get(context.Background(), ctrlclient.ObjectKey{Namespace: "loopzero-system", Name: "tn-abc"}, &tenant); err != nil {
 		t.Fatalf("Tenant CR missing: %v", err)
+	}
+	// The CR carries the cell the engine placed the tenant in, never a
+	// fixture's own guess.
+	if got := tenant.Object["spec"].(map[string]any)["cellID"]; got != "cell-sfo3-02" {
+		t.Errorf("cellID = %v, want the placed cell cell-sfo3-02", got)
 	}
 	if tenant.Object["spec"].(map[string]any)["plan"] != "enterprise" {
 		t.Errorf("plan = %v, want 'enterprise' (team → enterprise map)", tenant.Object["spec"].(map[string]any)["plan"])
@@ -328,5 +337,25 @@ func TestTenantFixture_ApplyUnstructured_UpdatesWhenExists(t *testing.T) {
 func TestTenantFixture_Name(t *testing.T) {
 	if got := NewTenantFixtureSeed().Name(); got != "tenant-fixture" {
 		t.Errorf("Name = %q", got)
+	}
+}
+
+// Without the database the tenant's placed cell is unknown, so the Tenant CR is
+// not written with a guessed one; the AppProject, which names no cell, is.
+func TestTenantFixture_SkipsTheTenantCRWithoutThePlacedCell(t *testing.T) {
+	var host Host
+	host.Getenv = envOf(map[string]string{
+		tenantFixtureHelmfileEnvKey: "dev-public",
+		tenantFixtureTenantIDEnv:    "tn-abc",
+	})
+	c := fake.NewClientBuilder().Build()
+
+	got := NewTenantFixtureSeed().Run(Deps{Host: host, Ctx: context.Background(), CtrlClient: c})
+
+	var tenant unstructured.Unstructured
+	tenant.SetGroupVersionKind(schema.GroupVersionKind{Group: "loopzero.io", Version: "v1", Kind: "Tenant"})
+	err := c.Get(context.Background(), ctrlclient.ObjectKey{Namespace: "loopzero-system", Name: "tn-abc"}, &tenant)
+	if got.Verdict != PASS || err == nil || !strings.Contains(got.Reason, tenantFixturePGConnEnv) {
+		t.Fatalf("Run = %s (%s), Tenant CR lookup err=%v; want PASS, no CR, and the reason naming %s", got.Verdict, got.Reason, err, tenantFixturePGConnEnv)
 	}
 }

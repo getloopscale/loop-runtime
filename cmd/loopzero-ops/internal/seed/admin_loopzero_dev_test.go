@@ -232,40 +232,82 @@ func TestAdminWriteSessionFile_Mode0600(t *testing.T) {
 	}
 }
 
-func TestAdminEnsurePGState_ExecutesCanonicalStatements(t *testing.T) {
-	var host Host
-	conn := &stubPgConn{}
-	host.PGConnect = pgOf(conn)
-	cfg := AdminLoopzeroDevConfig{
-		Email: "admin@loopzero.example", Username: "admin",
-		DisplayName: "LoopZero Admin", TenantSlug: "admin", PGConn: "postgres://x",
-	}
-	if err := adminEnsurePGState(context.Background(), host, cfg, "kratos-id-1"); err != nil {
-		t.Fatalf("ensure: %v", err)
-	}
-	// Verify all 7 canonical statements ran.
-	if len(conn.execs) != 7 {
-		t.Fatalf("statements run = %d, want 7 (users + accounts + tenants + tenant_members + user_identity_map + users update + subscriptions)", len(conn.execs))
-	}
-	joined := strings.ToLower(func() string {
-		var b strings.Builder
-		for _, e := range conn.execs {
-			b.WriteString(e.sql)
-			b.WriteByte(' ')
+// engineBootstrapStub is the engine's POST /internal/bootstrap, recording what
+// the seed sent and answering status with body.
+func engineBootstrapStub(t *testing.T, status int, body string) (*httptest.Server, *map[string]string, *string) {
+	t.Helper()
+	sent := map[string]string{}
+	var auth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/bootstrap" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
 		}
-		return b.String()
-	}())
-	for _, want := range []string{
-		"insert into users",
-		"insert into accounts",
-		"insert into tenants",
-		"insert into tenant_members",
-		"insert into user_identity_map",
-		"update users",
-		"insert into subscriptions",
+		auth = r.Header.Get("Authorization")
+		_ = json.NewDecoder(r.Body).Decode(&sent)
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &sent, &auth
+}
+
+func TestAdminProvisionTenantAsksTheEngineToProvisionTheIdentity(t *testing.T) {
+	srv, sent, auth := engineBootstrapStub(t, http.StatusOK, `{"status":"ok","user_id":"kratos-id-1","tenant_id":"tn-admin","created":true}`)
+	cfg := AdminLoopzeroDevConfig{
+		Email: "admin@loopzero.example", Username: "admin", DisplayName: "LoopZero Admin", TenantSlug: "admin",
+		APIURL: srv.URL, BootstrapSecret: "boot-secret",
+	}
+
+	tenantID, err := adminProvisionTenant(context.Background(), srv.Client(), cfg, "kratos-id-1")
+
+	if err != nil || tenantID != "tn-admin" {
+		t.Fatalf("adminProvisionTenant = %q, %v", tenantID, err)
+	}
+	if *auth != "Bearer boot-secret" {
+		t.Errorf("Authorization = %q, want the bootstrap secret", *auth)
+	}
+	want := map[string]string{"admin_user_id": "kratos-id-1", "admin_login": "admin", "admin_email": "admin@loopzero.example", "tenant_slug": "admin", "plan": "starter"}
+	for k, v := range want {
+		if (*sent)[k] != v {
+			t.Errorf("request %s = %q, want %q", k, (*sent)[k], v)
+		}
+	}
+	if _, cell := (*sent)["cell_id"]; cell {
+		t.Error("the seed must not choose a cell; placement is the engine's")
+	}
+}
+
+func TestAdminProvisionTenantSurfacesTheEngineRefusal(t *testing.T) {
+	srv, _, _ := engineBootstrapStub(t, http.StatusConflict, `{"code":"TENANT_SLUG_TAKEN"}`)
+	cfg := AdminLoopzeroDevConfig{TenantSlug: "admin", APIURL: srv.URL, BootstrapSecret: "boot-secret"}
+
+	_, err := adminProvisionTenant(context.Background(), srv.Client(), cfg, "kratos-id-1")
+
+	if err == nil || !strings.Contains(err.Error(), "409") || !strings.Contains(err.Error(), "TENANT_SLUG_TAKEN") {
+		t.Fatalf("error = %v, want the HTTP status and the engine's code", err)
+	}
+}
+
+func TestAdminProvisionTenantRefusesToRunWithoutTheBootstrapSecret(t *testing.T) {
+	srv, _, auth := engineBootstrapStub(t, http.StatusOK, `{"tenant_id":"tn-admin"}`)
+	cfg := AdminLoopzeroDevConfig{TenantSlug: "admin", APIURL: srv.URL}
+
+	_, err := adminProvisionTenant(context.Background(), srv.Client(), cfg, "kratos-id-1")
+
+	if err == nil || *auth != "" {
+		t.Fatalf("error = %v, request sent with auth %q; want a refusal before any request", err, *auth)
+	}
+}
+
+func TestIdentityHandleIsTheSanitizedEmailLocalPart(t *testing.T) {
+	for email, want := range map[string]string{
+		"admin@loopzero.example":            "admin",
+		"paulohenrique.java@gmail.com": "paulohenrique-java",
+		"Some_User+qa@example.test":    "some-user-qa",
 	} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("missing canonical statement: %s", want)
+		if got := identityHandle(email); got != want {
+			t.Errorf("identityHandle(%q) = %q, want %q", email, got, want)
 		}
 	}
 }
@@ -302,5 +344,28 @@ func TestAdminLoopzeroDev_Verify_FailWhenSessionFileEmpty(t *testing.T) {
 func TestAdminLoopzeroDev_Name(t *testing.T) {
 	if got := NewAdminLoopzeroDevSeed().Name(); got != "admin-loopzero-dev" {
 		t.Errorf("Name = %q", got)
+	}
+}
+
+func TestAdminLoopzeroDevProvisionsTheTenantThroughTheEngine(t *testing.T) {
+	_, kratos := newKratosStub(t, "kratos-id-1")
+	defer kratos.Close()
+	engine, sent, _ := engineBootstrapStub(t, http.StatusOK, `{"tenant_id":"tn-admin"}`)
+	var host Host
+	host.Getenv = envOf(map[string]string{
+		adminKratosAdminEnv:  kratos.URL,
+		adminPublicKratosEnv: kratos.URL,
+		adminSessionFileEnv:  filepath.Join(t.TempDir(), "session.txt"),
+		adminAPIURLEnv:       engine.URL,
+		adminBootstrapEnv:    "boot-secret",
+	})
+
+	got := NewAdminLoopzeroDevSeed().Run(Deps{Host: host, Ctx: context.Background()})
+
+	if got.Verdict != PASS || !strings.Contains(got.Reason, "tenant tn-admin") {
+		t.Fatalf("Run = %s (%s), want PASS naming the engine's tenant", got.Verdict, got.Reason)
+	}
+	if (*sent)["admin_user_id"] != "kratos-id-1" {
+		t.Errorf("engine provisioned %q, want the Kratos identity", (*sent)["admin_user_id"])
 	}
 }
