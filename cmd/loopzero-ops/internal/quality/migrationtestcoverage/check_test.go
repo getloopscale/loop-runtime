@@ -146,7 +146,7 @@ func TestCheck_AllCovered(t *testing.T) {
 	root := setup(t, map[string]string{
 		"api/internal/db/migrations/000001_initial_schema.up.sql": "-- init",
 		"api/internal/db/migrations/000011_add_index.up.sql":      "-- index",
-		"api/tests/unit/migration_000011_add_index_test.go":       "package unit",
+		"api/internal/db/migration_000011_add_index_test.go":      "package db_test",
 		// 000001 is in DefaultExceptions; 000011 has a test.
 	})
 	out, err := Check(Config{Root: root})
@@ -175,7 +175,7 @@ func TestCheck_MissingTestBlocks(t *testing.T) {
 func TestCheck_3DigitTestFileAcceptedForLargeMigration(t *testing.T) {
 	root := setup(t, map[string]string{
 		"api/internal/db/migrations/000011_release_check.up.sql": "-- ...",
-		"api/tests/unit/migration_011_release_check_test.go":     "package unit",
+		"api/internal/db/migration_011_release_check_test.go":    "package db_test",
 	})
 	out, err := Check(Config{Root: root})
 	require.NoError(t, err)
@@ -220,8 +220,8 @@ func TestCheck_MultipleMigrationsMixed(t *testing.T) {
 		"api/internal/db/migrations/000020_add_a.up.sql":          "-- ...",  // test present
 		"api/internal/db/migrations/000021_add_b.up.sql":          "-- ...",  // MISSING
 		"api/internal/db/migrations/000022_add_c.up.sql":          "-- ...",  // test present
-		"api/tests/unit/migration_000020_a_test.go":               "package unit",
-		"api/tests/unit/migration_000022_c_test.go":               "package unit",
+		"api/internal/db/migration_000020_a_test.go":              "package db_test",
+		"api/internal/db/migration_000022_c_test.go":              "package db_test",
 	})
 	out, err := Check(Config{Root: root})
 	require.NoError(t, err)
@@ -236,7 +236,7 @@ func TestCheck_BaseWithoutUnderscore(t *testing.T) {
 	// Edge case: migration name with no underscore separator.
 	root := setup(t, map[string]string{
 		"api/internal/db/migrations/000099.up.sql": "-- ...",
-		"api/tests/unit/migration_000099_test.go":  "package unit",
+		"api/internal/db/migration_000099_test.go": "package db_test",
 	})
 	out, err := Check(Config{Root: root})
 	require.NoError(t, err)
@@ -249,7 +249,7 @@ func TestCheck_BaseWithoutUnderscore(t *testing.T) {
 
 func TestDefaults(t *testing.T) {
 	assert.Equal(t, "api/internal/db/migrations", DefaultMigrationsDir)
-	assert.Equal(t, "api/tests/unit", DefaultUnitTestsDir)
+	assert.Equal(t, "api/internal/db", DefaultUnitTestsDir)
 	require.Len(t, DefaultExceptions, 5)
 	assert.Contains(t, DefaultExceptions, "000001_initial_schema")
 	assert.Contains(t, DefaultExceptions, "000003")

@@ -236,4 +236,6 @@ func TestFindPendingCustomDomainsForAutoVerify_QuerySoT_ContainsJoinAndCellPredi
 
 // NOTE: The stale-row queries (store.PostgresStaleScanner) are exercised
 // through the build and release stale checkers; their SQL-shape tests are in
-// api/tests/unit/stale_checker_cell_scope_test.go (same dbtest.RecordingDBTX pattern).
+// services/build/stale_build_checker_cell_scope_test.go and
+// services/release/stale_release_checker_cell_scope_test.go (same fake-DBTX
+// pattern).
