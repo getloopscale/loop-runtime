@@ -6,8 +6,9 @@ FROM golang:1.26.1-alpine3.22@sha256:07e91d24f6330432729082bb580983181809e0a48f0
 WORKDIR /src
 
 COPY infra/scripts/go.mod infra/scripts/go.sum* ./infra/scripts/
-# infra/scripts/go.mod has `replace ../tests` — copy its go.mod to satisfy the replace
-COPY infra/tests/go.mod infra/tests/go.sum* ./infra/tests/
+# infra/scripts/go.mod replaces the shared pkg module with ../../pkg; the
+# module graph needs its go.mod even though harbor-init imports none of it.
+COPY pkg/go.mod pkg/go.sum* ./pkg/
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     cd infra/scripts && go mod download
 

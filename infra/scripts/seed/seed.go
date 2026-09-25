@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 const (
@@ -344,24 +346,35 @@ func getExistingEnvs(kubeContext string) ([]map[string]string, bool, error) {
 	if len(trimmed) == 0 || string(trimmed) == "null" {
 		return nil, true, nil // CR exists but no envs (edge case during teardown)
 	}
-	var rawEnvs []map[string]interface{}
-	if err := json.Unmarshal(trimmed, &rawEnvs); err != nil {
-		// Non-fatal: log and fall back to baseline. Better safe than strip.
-		return nil, true, nil
+	envs, err := parseEnvironments(trimmed)
+	if err != nil {
+		return nil, true, err
 	}
-	out2 := make([]map[string]string, 0, len(rawEnvs))
+	return envs, true, nil
+}
+
+// parseEnvironments reads a Tenant's spec.environments. An unreadable list is
+// an error: re-applying the Tenant without it would strip every environment
+// added since the seed last ran.
+func parseEnvironments(raw []byte) ([]map[string]string, error) {
+	var rawEnvs []map[string]interface{}
+	if err := json.Unmarshal(raw, &rawEnvs); err != nil {
+		return nil, fmt.Errorf("parse tenant %s spec.environments %q: %w", TenantID, raw, err)
+	}
+	envs := make([]map[string]string, 0, len(rawEnvs))
 	for _, e := range rawEnvs {
 		name, _ := e["name"].(string)
-		cluster, _ := e["cluster"].(string)
 		if name == "" {
 			continue
 		}
+		cluster, _ := e["cluster"].(string)
 		if cluster == "" {
 			cluster = "workload" // baseline default
 		}
-		out2 = append(out2, map[string]string{"name": name, "cluster": cluster})
+		project, _ := e["project"].(string)
+		envs = append(envs, map[string]string{"name": name, "cluster": cluster, "project": project})
 	}
-	return out2, true, nil
+	return envs, nil
 }
 
 // mergeEnvs unions existing envs with the baseline [production, staging],
@@ -369,8 +382,8 @@ func getExistingEnvs(kubeContext string) ([]map[string]string, bool, error) {
 // the baseline is always present.
 func mergeEnvs(existing []map[string]string) []map[string]string {
 	baseline := []map[string]string{
-		{"name": "production", "cluster": "workload"},
-		{"name": "staging", "cluster": "workload"},
+		{"name": "production", "cluster": "workload", "project": ProjectName},
+		{"name": "staging", "cluster": "workload", "project": ProjectName},
 	}
 	if len(existing) == 0 {
 		return baseline
@@ -399,7 +412,7 @@ type expectedNamespace struct {
 // WaitForReconciliation polls for namespace existence with the given timeout.
 //
 // The TenantController materializes namespaces across multiple clusters:
-//   - workload cluster: loopzero-{tenant}-production, loopzero-{tenant}-staging
+//   - workload cluster: loopzero-{tenant}-{project}-production and -staging
 //     (canonical naming pkg adds "loopzero-" prefix per ADR-0018)
 //   - build cluster:    build-{tenant}
 //
@@ -407,7 +420,10 @@ type expectedNamespace struct {
 // now ignored — each expected namespace declares its own target context.
 func WaitForReconciliation(kubeContext string, timeout time.Duration) error {
 	_ = kubeContext // legacy parameter, retained for back-compat
-	expected := ExpectedNamespacesByContext()
+	expected, err := ExpectedNamespacesByContext()
+	if err != nil {
+		return err
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -431,16 +447,22 @@ func WaitForReconciliation(kubeContext string, timeout time.Duration) error {
 }
 
 // ExpectedNamespacesByContext returns each expected namespace paired with the
-// kubectl context where it should exist.
-func ExpectedNamespacesByContext() []expectedNamespace {
-	return []expectedNamespace{
-		// Workload namespaces are created by the operator with "loopzero-" prefix
-		// on the workload cluster (cell context).
-		{context: "k3d-loopzero-cell-0", name: "loopzero-" + TenantID + "-production"},
-		{context: "k3d-loopzero-cell-0", name: "loopzero-" + TenantID + "-staging"},
-		// Build namespace is created on the build cluster (no "loopzero-" prefix).
-		{context: "k3d-loopzero-build", name: "build-" + TenantID},
+// kubectl context where it should exist. Names come from pkg/naming, the
+// formula the operators create them with.
+func ExpectedNamespacesByContext() ([]expectedNamespace, error) {
+	var expected []expectedNamespace
+	for _, env := range []string{"production", "staging"} {
+		ns, err := naming.Namespace(TenantID, ProjectName, env)
+		if err != nil {
+			return nil, fmt.Errorf("expected %s namespace: %w", env, err)
+		}
+		expected = append(expected, expectedNamespace{context: "k3d-loopzero-cell-0", name: ns})
 	}
+	build, err := naming.BuildNamespace(TenantID)
+	if err != nil {
+		return nil, fmt.Errorf("expected build namespace: %w", err)
+	}
+	return append(expected, expectedNamespace{context: "k3d-loopzero-build", name: build}), nil
 }
 
 // findMissingNamespacesByContext returns "ctx/name" identifiers for any
