@@ -4,15 +4,18 @@
 //
 // New routes added without auth + without allowlist entry fail this gate.
 //
-// Algorithm (ports the bash awk brace-counter into a Go line-walker):
-//  1. Locate the middleware.Auth chi.Router group line range (via brace depth).
-//  2. Locate the registerProtectedRoutes function body line range (also protected).
-//  3. Enumerate every r.{Get,Post,Put,Patch,Delete,Method}( call.
-//  4. For each: PASS if line inside Auth range OR ProtectedFunc range OR route
-//     matches allowlist prefix. FAIL otherwise.
+// Algorithm, over the go/parser AST of router.go:
+//  1. Locate the body of the `Group(func(r chi.Router){…})` that references
+//     middleware.Auth, by AST position.
+//  2. Locate the body of registerProtectedRoutes (also protected).
+//  3. Enumerate every chi registration call (Get, Post, …, Handle, Method), on any
+//     receiver chain, so `r.With(mw).Post(…)` counts like `r.Post(…)`.
+//  4. For each: PASS if its line is inside either body OR the route matches an
+//     allowlist prefix. FAIL otherwise.
 //
-// Migrated from infra/tests/check-route-auth-coverage_test.sh
-// (M-Migrate2 continuation 2026-07-07). Hermetic — pure text walk on router.go.
+// It then refuses an enumeration below the declared floor, and scans the rest of
+// the api tree for route registrations outside router.go that are not declared.
+// Hermetic: it parses source and runs nothing.
 package routeauthcoverage
 
 import (

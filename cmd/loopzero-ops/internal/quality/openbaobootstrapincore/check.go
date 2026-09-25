@@ -7,9 +7,9 @@
 // This gate used to assert that the shortcut CANONICAL-MIRRORED the upstream
 // task: matching helmfile selectors, matching kubectl waits, a total context
 // swap, a pre-flight citing `task setup`. Eighteen assertions on the SHAPE of
-// something the platform's own rule forbids in every tier
-// (.claude/rules/cleanroom-up-live-test-mandate.md: "é uma violação de
-// topologia, não um atalho").
+// something the platform's own topology forbids: installing OpenBao into the
+// core cluster is a topology violation, not a shortcut (CLAUDE.md § Four Planes;
+// docs/decisions.md § Open, 2026-09-09).
 //
 // A gate that verifies a violator is well-formed does worse than nothing: its
 // green is read as approval. B-047 measured exactly that — the rule prohibited,
@@ -97,9 +97,8 @@ type Outcome struct {
 
 // ErrForbiddenShortcut means the core-cluster OpenBao shortcut is present.
 var ErrForbiddenShortcut = errors.New(
-	"installing OpenBao into the core cluster is forbidden in EVERY tier " +
-		"(.claude/rules/cleanroom-up-live-test-mandate.md; " +
-		"ADR docs/decisions.md)")
+	"installing OpenBao into the core cluster is forbidden: it is a topology " +
+		"violation, not a shortcut (docs/decisions.md § Open, 2026-09-09)")
 
 // ErrNothingScanned means the taskfile could not be read or was empty, so
 // nothing was verified.

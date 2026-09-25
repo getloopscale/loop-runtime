@@ -515,7 +515,7 @@ func runStdlibOnly(args []string) int {
 		fmt.Fprintf(os.Stderr, "stdlib-only: FAIL — %v\n", err)
 		return 2
 	}
-	fmt.Printf("stdlib-only: PASS — %d import(s), todos da biblioteca padrao\n", out.Scanned)
+	fmt.Printf("stdlib-only: PASS — %d import(s), all from the standard library\n", out.Scanned)
 	return 0
 }
 

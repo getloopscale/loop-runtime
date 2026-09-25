@@ -148,8 +148,6 @@ func Check(cfg Config) (Outcome, error) {
 	return Outcome{}, nil
 }
 
-// statAndRead returns the file bytes on success. When missing, returns nil + os.PathError.
-
 // runHelperJSON reproduces the bash invocation:
 //
 //	printf 'c1:PASS:OK\nc3:WARN:kubectl context unreachable\n' > T
