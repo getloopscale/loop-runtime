@@ -5,9 +5,9 @@ package manifests
 
 import "testing"
 
-// Tests for LOOPZERO_LEAN_RESOURCES env flag — T-08 contingency path.
-// Plan: docs/plans/50k-immediate-focus.md (Option A, backup for DO
-// droplet quota delay).
+// Tests for the lean-resources fallback — T-08 contingency path. The switch
+// is RenderInput.LeanResources, filled by the caller from
+// config.Config.LeanResources (env LOOPZERO_LEAN_RESOURCES).
 
 func TestResources_DefaultFallback(t *testing.T) {
 	ri := RenderInput{}
@@ -25,9 +25,8 @@ func TestResources_DefaultFallback(t *testing.T) {
 	}
 }
 
-func TestResources_LeanFallback_WhenFlagTrue(t *testing.T) {
-	t.Setenv("LOOPZERO_LEAN_RESOURCES", "true")
-	ri := RenderInput{}
+func TestResources_LeanFallback_WhenInputIsLean(t *testing.T) {
+	ri := RenderInput{LeanResources: true}
 	if got := ri.cpuRequest(); got != "50m" {
 		t.Errorf("lean cpu request = %q, want 50m", got)
 	}
@@ -42,13 +41,14 @@ func TestResources_LeanFallback_WhenFlagTrue(t *testing.T) {
 	}
 }
 
-func TestResources_LeanFallback_WhenFlagOne(t *testing.T) {
-	// "1" and "true" are equivalent — common shell pattern
-	// (e.g. env var set by a flag-passing script).
-	t.Setenv("LOOPZERO_LEAN_RESOURCES", "1")
+// TestResources_IgnoreTheProcessEnvironment pins that the rendered sizing is a
+// function of RenderInput alone: the API process environment must not change
+// what the renderer produces for the same input.
+func TestResources_IgnoreTheProcessEnvironment(t *testing.T) {
+	t.Setenv("LOOPZERO_LEAN_RESOURCES", "true")
 	ri := RenderInput{}
-	if got := ri.memoryRequest(); got != "64Mi" {
-		t.Errorf("lean (=1) memory request = %q, want 64Mi", got)
+	if got := ri.memoryRequest(); got != "128Mi" {
+		t.Errorf("memory request = %q with LeanResources unset, want 128Mi regardless of the process env", got)
 	}
 }
 
@@ -56,8 +56,8 @@ func TestResources_LeanFlagIgnoresExplicit(t *testing.T) {
 	// Critical invariant: if the caller supplies a specific default,
 	// lean mode MUST NOT override it. Otherwise lean mode would silently
 	// shrink production deploys where capacity planning is explicit.
-	t.Setenv("LOOPZERO_LEAN_RESOURCES", "true")
 	ri := RenderInput{
+		LeanResources:        true,
 		DefaultCPURequest:    "200m",
 		DefaultMemoryRequest: "512Mi",
 		DefaultCPULimit:      "1000m",
@@ -74,18 +74,6 @@ func TestResources_LeanFlagIgnoresExplicit(t *testing.T) {
 	}
 	if got := ri.memoryLimit(); got != "2Gi" {
 		t.Errorf("explicit memory limit should win, got %q", got)
-	}
-}
-
-func TestResources_LeanFlagOffValues(t *testing.T) {
-	for _, v := range []string{"", "false", "0", "FALSE", "no", "off"} {
-		t.Run("flag="+v, func(t *testing.T) {
-			t.Setenv("LOOPZERO_LEAN_RESOURCES", v)
-			ri := RenderInput{}
-			if got := ri.memoryRequest(); got != "128Mi" {
-				t.Errorf("flag=%q should leave defaults, got memoryRequest=%q", v, got)
-			}
-		})
 	}
 }
 

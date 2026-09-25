@@ -48,6 +48,12 @@ type BuildReconcileLoopConfig struct {
 	// Prometheus-based canary analysis steps. Sourced from
 	// Config.PrometheusAddress (env LOOPZERO_PROMETHEUS_ADDRESS).
 	PrometheusAddress string
+	// ProgressiveDelivery and LeanResources are copied into every RenderInput
+	// the loop builds. Sourced from Config.ProgressiveDelivery (env
+	// LOOPZERO_PROGRESSIVE_DELIVERY) and Config.LeanResources (env
+	// LOOPZERO_LEAN_RESOURCES).
+	ProgressiveDelivery bool
+	LeanResources       bool
 	// MaxConcurrent is the maximum number of builds reconciled concurrently.
 	// Bounds pressure on the Kubernetes API and Argo Workflow queries.
 	// Default: 10.

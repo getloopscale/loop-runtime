@@ -115,13 +115,15 @@ func (f *fakeLockerProvisioner) WithLock(_ context.Context, _, _, _ string, fn f
 }
 
 type fakeGitOpsProvisioner struct {
-	pushCalled   bool
-	pushErr      error
-	removeCalled bool
+	pushCalled    bool
+	pushErr       error
+	removeCalled  bool
+	lastManifests string
 }
 
-func (f *fakeGitOpsProvisioner) Push(_ context.Context, _ deploycontracts.GitOpsPushOpts) (string, error) {
+func (f *fakeGitOpsProvisioner) Push(_ context.Context, opts deploycontracts.GitOpsPushOpts) (string, error) {
 	f.pushCalled = true
+	f.lastManifests = opts.Manifests
 	return "abc123", f.pushErr
 }
 func (f *fakeGitOpsProvisioner) Remove(_ context.Context, _ deploycontracts.GitOpsRemoveOpts) (string, error) {

@@ -72,6 +72,10 @@ type SourceHandler struct {
 	store        source.SourceStore
 	objStore     ObjectUploader // optional: upload bundle to object storage for build cluster access
 	sourceBucket string         // S3 bucket for source bundles (default: "loopzero-builds")
+	// envBlocklist is how a reserved services.json env key is handled. The
+	// zero value enforces (fail-closed); WithEnvBlocklistMode sets it from
+	// config.Config.EnvBlocklistMode.
+	envBlocklist source.EnvBlocklistMode
 }
 
 // NewSourceHandler creates a new SourceHandler.
@@ -81,6 +85,14 @@ func NewSourceHandler(store source.SourceStore, opts ...func(*SourceHandler)) *S
 		opt(h)
 	}
 	return h
+}
+
+// WithEnvBlocklistMode sets how a services.json env key on the reserved
+// blocklist is handled on upload (config.Config.EnvBlocklistMode).
+func WithEnvBlocklistMode(mode source.EnvBlocklistMode) func(*SourceHandler) {
+	return func(h *SourceHandler) {
+		h.envBlocklist = mode
+	}
 }
 
 // WithSourceBucket configures the S3 bucket name for source bundles.
@@ -127,7 +139,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	// The wire contract (field order, per-field caps, schema) is enforced
 	// while streaming, before the bundle is read: see readUploadForm.
-	form, rej := readUploadForm(r)
+	form, rej := readUploadForm(r, h.envBlocklist)
 	if rej != nil {
 		if len(rej.fields) > 0 {
 			httpio.WriteLoopZeroErrorWithFieldErrors(w, rej.err, rej.fields)

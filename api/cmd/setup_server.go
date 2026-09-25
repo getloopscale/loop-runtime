@@ -13,6 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/environments/environmentsadapter"
 	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 	"github.com/getloopscale/loopzero/api/internal/placement/placementadapter"
+	"github.com/getloopscale/loopzero/api/internal/source"
 	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 
 	"github.com/getloopscale/loopzero/api/internal/release"
@@ -219,6 +220,7 @@ func wireStores(sc *server.Config, w serverWiring) {
 	sc.SourceStore = stores.SourceStore
 	sc.ObjectUploader = stores.ObjUploader
 	sc.SourceBucket = w.cfg.SourceBucket
+	sc.EnvBlocklistMode = source.EnvBlocklistMode(w.cfg.EnvBlocklistMode)
 	sc.EventStore = stores.EventStore
 	// Secret writes take the same environment lock as deploys, so they
 	// serialize on the same (tenant, project, env) key.

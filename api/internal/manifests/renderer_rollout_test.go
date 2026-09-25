@@ -363,13 +363,6 @@ func TestIngressRoute_PointsToService_Legacy(t *testing.T) {
 	}
 }
 
-func TestProgressiveDeliveryEnabled_DefaultTrue(t *testing.T) {
-	t.Setenv("LOOPZERO_PROGRESSIVE_DELIVERY", "")
-	if !ProgressiveDeliveryEnabled() {
-		t.Errorf("default should be true (no env var set)")
-	}
-}
-
 // argo-rollouts-progressive-delivery-plan T3.1 — KEDA + HPA target Rollout
 
 func TestBuildHPA_TargetsRollout_Progressive(t *testing.T) {
@@ -479,16 +472,5 @@ func TestBuildHTTPScaledObject_PointsToServiceLegacy(t *testing.T) {
 	expected := resourceName(input.ProjectID, app.Name)
 	if httpSO.Spec.ScaleTargetRef.Service != expected {
 		t.Errorf("Legacy HTTPScaledObject Service = %q, want %q", httpSO.Spec.ScaleTargetRef.Service, expected)
-	}
-}
-
-func TestProgressiveDeliveryEnabled_FalseFlag(t *testing.T) {
-	t.Setenv("LOOPZERO_PROGRESSIVE_DELIVERY", "false")
-	if ProgressiveDeliveryEnabled() {
-		t.Errorf("LOOPZERO_PROGRESSIVE_DELIVERY=false should disable")
-	}
-	t.Setenv("LOOPZERO_PROGRESSIVE_DELIVERY", "0")
-	if ProgressiveDeliveryEnabled() {
-		t.Errorf("LOOPZERO_PROGRESSIVE_DELIVERY=0 should disable")
 	}
 }

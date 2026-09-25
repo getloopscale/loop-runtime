@@ -25,7 +25,7 @@ func TestValidateServicesJSON_ValidPayload(t *testing.T) {
 			}
 		]
 	}`
-	m, err := ValidateServicesJSONNative(content)
+	m, err := ValidateServicesJSONNative(content, EnvBlocklistEnforce)
 	if err != nil {
 		t.Fatalf("expected nil err, got %v", err)
 	}
@@ -60,7 +60,7 @@ func findService(m *ServicesManifest, name string) *ServiceEntry {
 
 // EC-B3-7 (v3.1) — truncated/empty payload returns E-008.
 func TestValidateServicesJSON_EmptyPayload_ReturnsE008(t *testing.T) {
-	_, err := ValidateServicesJSONNative("")
+	_, err := ValidateServicesJSONNative("", EnvBlocklistEnforce)
 	if err == nil {
 		t.Fatal("expected validation error on empty payload")
 	}
@@ -71,7 +71,7 @@ func TestValidateServicesJSON_EmptyPayload_ReturnsE008(t *testing.T) {
 
 func TestValidateServicesJSON_TruncatedPayload_ReturnsE008(t *testing.T) {
 	// Mid-object truncation
-	_, err := ValidateServicesJSONNative(`{"version":1,"services":[`)
+	_, err := ValidateServicesJSONNative(`{"version":1,"services":[`, EnvBlocklistEnforce)
 	if err == nil {
 		t.Fatal("expected validation error on truncated payload")
 	}
@@ -99,7 +99,7 @@ func TestValidateServicesJSON_InvalidField_ReturnsErrorWithFieldPath(t *testing.
 			}
 		]
 	}`
-	_, err := ValidateServicesJSONNative(content)
+	_, err := ValidateServicesJSONNative(content, EnvBlocklistEnforce)
 	if err == nil {
 		t.Fatal("expected validation error on invalid port type")
 	}
@@ -127,7 +127,7 @@ func TestValidateServicesJSON_InvalidRuntime_ReturnsErrorWithEnum(t *testing.T) 
 			}
 		]
 	}`
-	_, err := ValidateServicesJSONNative(content)
+	_, err := ValidateServicesJSONNative(content, EnvBlocklistEnforce)
 	if err == nil {
 		t.Fatal("expected validation error on invalid runtime enum")
 	}
@@ -164,7 +164,7 @@ func TestValidateServicesJSON_MultipleServices_PreservesNames(t *testing.T) {
 			}
 		]
 	}`
-	m, err := ValidateServicesJSONNative(content)
+	m, err := ValidateServicesJSONNative(content, EnvBlocklistEnforce)
 	if err != nil {
 		t.Fatalf("expected nil err, got %v", err)
 	}
@@ -206,7 +206,7 @@ func TestValidateServicesJSONNative_AggregatesAllFieldErrors_closes29(t *testing
 			"port": 0
 		}]
 	}`
-	_, err := ValidateServicesJSONNative(payload)
+	_, err := ValidateServicesJSONNative(payload, EnvBlocklistEnforce)
 	if err == nil {
 		t.Fatal("expected validation error for multi-violation payload, got nil")
 	}
@@ -237,7 +237,7 @@ func TestValidateServicesJSONNative_AggregatesAllFieldErrors_closes29(t *testing
 // Empty payload triggers the validator.go:98 site (E-008 missing payload) — this asserts
 // the constructor populated the slice even though only one violation exists.
 func TestValidateServicesJSONNative_EmptyPayload_PopulatesErrorsSlicePerEC2(t *testing.T) {
-	_, err := ValidateServicesJSONNative("")
+	_, err := ValidateServicesJSONNative("", EnvBlocklistEnforce)
 	if err == nil {
 		t.Fatal("expected E-008 error for empty payload, got nil")
 	}

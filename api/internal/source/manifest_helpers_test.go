@@ -69,7 +69,7 @@ func TestValidateServicesJSONNative_PreservesWorkerType(t *testing.T) {
 		]
 	}`
 	// Act
-	m, err := ValidateServicesJSONNative(content)
+	m, err := ValidateServicesJSONNative(content, EnvBlocklistEnforce)
 	// Assert
 	if err != nil {
 		t.Fatalf("ValidateServicesJSONNative: unexpected error: %v", err)

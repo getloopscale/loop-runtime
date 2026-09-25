@@ -19,7 +19,6 @@ import (
 // flipping to enforce.
 func TestWarnModeUploadWithAReservedEnvKeyIsLoggedAndCounted(t *testing.T) {
 	// Arrange
-	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "warn")
 	var logs bytes.Buffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
@@ -28,7 +27,7 @@ func TestWarnModeUploadWithAReservedEnvKeyIsLoggedAndCounted(t *testing.T) {
 	manifest := `{"version":2,"project":"shop","services":[{"name":"api","runtime":"node","port":3000,"start":"node server.js","proxy":"/api","dev":"node server.js","healthcheck":"/health","cors":false,"passSetCookie":false,"env":{"LD_PRELOAD":"/x.so"}}]}`
 
 	// Act
-	_, err := ValidateServicesJSONNative(manifest)
+	_, err := ValidateServicesJSONNative(manifest, EnvBlocklistWarn)
 
 	// Assert
 	if err != nil {

@@ -177,6 +177,7 @@ func registerSourceRoutes(r chi.Router, cfg Config, ch routeChains) {
 	if cfg.SourceBucket != "" {
 		opts = append(opts, sourcehttp.WithSourceBucket(cfg.SourceBucket))
 	}
+	opts = append(opts, sourcehttp.WithEnvBlocklistMode(cfg.EnvBlocklistMode))
 	h := sourcehttp.NewSourceHandler(cfg.SourceStore, opts...)
 	// Rate limited, not idempotent: a 500 MB body is not hashed for replay.
 	r.With(ch.limited(audited("source.uploaded", "source"))...).Post("/api/v1/source/upload", h.Upload)

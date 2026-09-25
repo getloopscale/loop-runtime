@@ -174,7 +174,8 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 		Apps:              manifestApps,
 		// argo-rollouts-progressive-delivery-plan T1.2.
 		PrometheusAddress:   r.cfg.PrometheusAddress,
-		ProgressiveDelivery: manifests.ProgressiveDeliveryEnabled(),
+		ProgressiveDelivery: r.cfg.ProgressiveDelivery,
+		LeanResources:       r.cfg.LeanResources,
 		// T6.2 of deep-review-remediation-plan (closes find_code_006 / CODE-006 MEDIUM):
 		// populate tenant plan so canary steps match subscription tier.
 		// Pre-T6.2 every Pro/Team/Enterprise tenant silently received

@@ -94,13 +94,15 @@ func Build(cfg config.Config, d Deps, logger *slog.Logger) []Loop {
 
 func newReconcileLoop(cfg config.Config, d Deps, logger *slog.Logger) *builds.BuildReconcileLoop {
 	loopCfg := builds.BuildReconcileLoopConfig{
-		Interval:           cfg.ReconcileInterval,
-		RegistryURL:        cfg.RegistryURL,
-		BaseDomain:         cfg.BaseDomain,
-		ClusterIssuer:      cfg.ClusterIssuer,
-		PrometheusAddress:  cfg.PrometheusAddress,
-		MaxBuildsPerTenant: cfg.MaxConcurrentBuildsPerTenant,
-		CellID:             d.CellID,
+		Interval:            cfg.ReconcileInterval,
+		RegistryURL:         cfg.RegistryURL,
+		BaseDomain:          cfg.BaseDomain,
+		ClusterIssuer:       cfg.ClusterIssuer,
+		PrometheusAddress:   cfg.PrometheusAddress,
+		ProgressiveDelivery: cfg.ProgressiveDelivery,
+		LeanResources:       cfg.LeanResources,
+		MaxBuildsPerTenant:  cfg.MaxConcurrentBuildsPerTenant,
+		CellID:              d.CellID,
 	}
 	if d.CellID != "" {
 		loopCfg.MaxConcurrent = cfg.MaxConcurrentBuildsPerCell
@@ -161,11 +163,13 @@ func newConvergenceLoop(cfg config.Config, d Deps, logger *slog.Logger) *release
 func newDomainProvisioner(cfg config.Config, d Deps, logger *slog.Logger) *domains.DomainProvisioner {
 	p := domains.NewDomainProvisioner(d.DomainStore, d.ReleaseStore, d.BuildStore, d.GitOps, d.Locker, logger,
 		domains.DomainProvisionerConfig{
-			Interval:          30 * time.Second,
-			BaseDomain:        cfg.BaseDomain,
-			RegistryURL:       cfg.RegistryURL,
-			ClusterIssuer:     cfg.ClusterIssuer,
-			PrometheusAddress: cfg.PrometheusAddress,
+			Interval:            30 * time.Second,
+			BaseDomain:          cfg.BaseDomain,
+			RegistryURL:         cfg.RegistryURL,
+			ClusterIssuer:       cfg.ClusterIssuer,
+			PrometheusAddress:   cfg.PrometheusAddress,
+			ProgressiveDelivery: cfg.ProgressiveDelivery,
+			LeanResources:       cfg.LeanResources,
 		})
 	if cfg.CFZoneManagement && d.CFZone != nil {
 		p.WithCFZone(&domainsadapter.CFZoneStatusAdapter{Client: d.CFZone})

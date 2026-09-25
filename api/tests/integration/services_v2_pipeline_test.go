@@ -46,8 +46,7 @@ const v2ServicesJSON = `{
 }`
 
 func TestPhaseDE2E_V2Schema_PreservesProjectAndType(t *testing.T) {
-	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "enforce")
-	m, err := source.ValidateServicesJSONNative(v2ServicesJSON)
+	m, err := source.ValidateServicesJSONNative(v2ServicesJSON, source.EnvBlocklistEnforce)
 	if err != nil {
 		t.Fatalf("v2 services.json must validate, got: %v", err)
 	}
@@ -70,7 +69,6 @@ func TestPhaseDE2E_V2Schema_PreservesProjectAndType(t *testing.T) {
 }
 
 func TestPhaseDE2E_V1Schema_FallsBackToServicesBundle(t *testing.T) {
-	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "enforce")
 	const v1 = `{
 		"version": 1,
 		"services": [
@@ -87,7 +85,7 @@ func TestPhaseDE2E_V1Schema_FallsBackToServicesBundle(t *testing.T) {
 			}
 		]
 	}`
-	m, err := source.ValidateServicesJSONNative(v1)
+	m, err := source.ValidateServicesJSONNative(v1, source.EnvBlocklistEnforce)
 	if err != nil {
 		t.Fatalf("v1 must validate (deprecated path), got: %v", err)
 	}

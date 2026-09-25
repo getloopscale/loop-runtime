@@ -109,10 +109,11 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 		// argo-rollouts-progressive-delivery-plan T1.2 — Progressive delivery wiring.
 		// Plan defaults to "starter" inside the renderer when empty (V1: tenant
 		// plan lookup is YAGNI — fixed conservative steps work for all tiers
-		// until real plan-aware behavior is needed). PrometheusAddress and
-		// ProgressiveDelivery come from Config.
+		// until real plan-aware behavior is needed). PrometheusAddress,
+		// ProgressiveDelivery and LeanResources come from Config.
 		PrometheusAddress:   r.cfg.PrometheusAddress,
-		ProgressiveDelivery: manifests.ProgressiveDeliveryEnabled(),
+		ProgressiveDelivery: r.cfg.ProgressiveDelivery,
+		LeanResources:       r.cfg.LeanResources,
 	})
 	if renderErr != nil {
 		r.logger.Error("reconcile loop: manifests.Render failed", "build_id", build.ID, "error", renderErr)

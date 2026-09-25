@@ -6,7 +6,6 @@ package source
 import (
 	"fmt"
 	"log/slog"
-	"os"
 	"sort"
 	"strings"
 
@@ -26,14 +25,8 @@ import (
 //   - KUBERNETES_*: K8s service-discovery override (downward API conflict)
 //   - LOOPZERO_* (prefix): platform-reserved variables (audit, billing, telemetry)
 //
-// EC-8 (v1.1 absorbed): `LOOPZERO_ENV_BLOCKLIST_MODE` env var lets ops roll the
-// blocklist out as warn-only first. Values:
-//
-//	"warn"    — log violations, accept payload (default during 30-day window)
-//	"enforce" — reject payload with VALIDATION_FAILED (target steady state)
-//
-// Empty / unknown values default to "enforce" — fail-closed per CLAUDE.md
-// Error Handling §8 (fail fast, fail clear, fail high).
+// EC-8 (v1.1 absorbed): the EnvBlocklistMode the caller passes lets ops roll
+// the blocklist out as warn-only first (see EnvBlocklistMode below).
 var reservedEnvKeys = map[string]struct{}{
 	"PATH":            {},
 	"HOME":            {},
@@ -79,17 +72,25 @@ var runtimeHijackEnvPrefixes = []string{
 	"LOOPZERO_",
 }
 
-// envBlocklistMode reports the active enforcement mode for the reserved key
-// blocklist. Reads `LOOPZERO_ENV_BLOCKLIST_MODE` at call time so the test suite
-// can toggle behavior via t.Setenv without process restart.
-func envBlocklistMode() string {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("LOOPZERO_ENV_BLOCKLIST_MODE"))) {
-	case "warn":
-		return "warn"
-	default:
-		// fail-closed: empty / unknown / "enforce" all collapse to enforce
-		return "enforce"
-	}
+// EnvBlocklistMode is how a services.json env key on the reserved blocklist is
+// handled. The composition root passes config.Config.EnvBlocklistMode (env
+// LOOPZERO_ENV_BLOCKLIST_MODE), which config.Validate already restricts to these
+// two values and refuses as warn in production.
+type EnvBlocklistMode string
+
+const (
+	// EnvBlocklistEnforce rejects the payload with VALIDATION_FAILED — the
+	// target steady state.
+	EnvBlocklistEnforce EnvBlocklistMode = "enforce"
+	// EnvBlocklistWarn logs and counts each violation and accepts the payload.
+	EnvBlocklistWarn EnvBlocklistMode = "warn"
+)
+
+// warns reports whether the mode only warns. Anything but EnvBlocklistWarn —
+// empty or unknown included — enforces: fail-closed per CLAUDE.md Error
+// Handling §8.
+func (m EnvBlocklistMode) warns() bool {
+	return m == EnvBlocklistWarn
 }
 
 // isReservedEnvKey returns true when `key` matches the exact-block list OR
@@ -109,15 +110,14 @@ func isReservedEnvKey(key string) bool {
 
 // validateReservedEnvKeys scans every service's env map and returns a
 // ValidationError describing the first reserved key encountered (sorted
-// deterministically for stable error messages). When the active mode is
-// "warn", violations are logged but no error is returned.
+// deterministically for stable error messages). When mode is
+// EnvBlocklistWarn, violations are logged but no error is returned.
 //
 // Returns nil when no violations are found OR when running in warn mode.
-func validateReservedEnvKeys(manifest *ServicesManifest, logger *slog.Logger) *ValidationError {
+func validateReservedEnvKeys(manifest *ServicesManifest, mode EnvBlocklistMode, logger *slog.Logger) *ValidationError {
 	if manifest == nil {
 		return nil
 	}
-	mode := envBlocklistMode()
 
 	type violation struct {
 		service string
@@ -149,13 +149,13 @@ func validateReservedEnvKeys(manifest *ServicesManifest, logger *slog.Logger) *V
 		first.service, first.key, first.key,
 	)
 
-	if mode == "warn" {
+	if mode.warns() {
 		// Warn mode: the upload IS accepted, so every violation is logged and
 		// counted — the blast radius operators observe before flipping to
 		// enforce.
 		for _, v := range violations {
 			logger.Warn("services.json reserved env key (warn-only mode)",
-				"service", v.service, "key", v.key, "mode", mode)
+				"service", v.service, "key", v.key, "mode", string(mode))
 			metrics.ServicesReservedEnvKeyAccepted.Inc()
 		}
 		return nil

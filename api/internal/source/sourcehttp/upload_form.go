@@ -58,7 +58,7 @@ func (f *uploadForm) close() {
 //
 // Streaming replaced a GetBody-based peek that net/http never enables on
 // server requests, so the order was unenforced for every real upload.
-func readUploadForm(r *http.Request) (*uploadForm, *uploadRejection) {
+func readUploadForm(r *http.Request, blocklist source.EnvBlocklistMode) (*uploadForm, *uploadRejection) {
 	mr, err := r.MultipartReader()
 	if err != nil {
 		return nil, &uploadRejection{err: loopzeroerrors.ErrInvalidRequest}
@@ -71,7 +71,7 @@ func readUploadForm(r *http.Request) (*uploadForm, *uploadRejection) {
 	if err != nil {
 		return nil, rejectionForReadError(err, loopzeroerrors.ErrInvalidRequest)
 	}
-	manifest, rej := readManifestPart(first)
+	manifest, rej := readManifestPart(first, blocklist)
 	if rej != nil {
 		return nil, rej
 	}
@@ -84,7 +84,7 @@ func readUploadForm(r *http.Request) (*uploadForm, *uploadRejection) {
 }
 
 // readManifestPart applies rules 1-3 to the first part.
-func readManifestPart(part *multipart.Part) (*source.ServicesManifest, *uploadRejection) {
+func readManifestPart(part *multipart.Part, blocklist source.EnvBlocklistMode) (*source.ServicesManifest, *uploadRejection) {
 	defer func() { _ = part.Close() }()
 
 	switch name := part.FormName(); name {
@@ -120,7 +120,7 @@ func readManifestPart(part *multipart.Part) (*source.ServicesManifest, *uploadRe
 		return nil, &uploadRejection{err: missingServicesJSON()}
 	}
 
-	manifest, err := source.ValidateServicesJSONNative(string(raw))
+	manifest, err := source.ValidateServicesJSONNative(string(raw), blocklist)
 	if err != nil {
 		return nil, rejectionForManifestError(err)
 	}

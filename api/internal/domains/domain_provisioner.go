@@ -70,6 +70,8 @@ type DomainProvisioner struct {
 	registryURL    string
 	clusterIssuer  string // B14 (MEET-2026-04-23-058): required for manifest rendering
 	prometheusAddr string // argo-rollouts-progressive-delivery-plan T1.2 (D6)
+	progressive    bool   // Config.ProgressiveDelivery (D8)
+	leanResources  bool   // Config.LeanResources (T-08)
 	interval       time.Duration
 	cfZone         CFZoneStatusChecker // nil = v1 only, non-nil = v2 CF Zone polling
 }
@@ -81,6 +83,10 @@ type DomainProvisionerConfig struct {
 	RegistryURL       string
 	ClusterIssuer     string // B14: ClusterIssuer for Certificate CRs
 	PrometheusAddress string // argo-rollouts-progressive-delivery-plan T1.2 (D6)
+	// ProgressiveDelivery and LeanResources are copied into every RenderInput
+	// the provisioner builds (Config.ProgressiveDelivery / Config.LeanResources).
+	ProgressiveDelivery bool
+	LeanResources       bool
 }
 
 // DefaultDomainProvisionerConfig returns sensible defaults.
@@ -115,6 +121,8 @@ func NewDomainProvisioner(
 		registryURL:    cfg.RegistryURL,
 		clusterIssuer:  cfg.ClusterIssuer,     // B14
 		prometheusAddr: cfg.PrometheusAddress, // argo-rollouts-progressive-delivery-plan T1.2
+		progressive:    cfg.ProgressiveDelivery,
+		leanResources:  cfg.LeanResources,
 		interval:       interval,
 	}
 }
@@ -366,7 +374,8 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d ports.CustomD
 			Apps:              manifestApps,
 			// argo-rollouts-progressive-delivery-plan T1.2.
 			PrometheusAddress:   p.prometheusAddr,
-			ProgressiveDelivery: manifests.ProgressiveDeliveryEnabled(),
+			ProgressiveDelivery: p.progressive,
+			LeanResources:       p.leanResources,
 		})
 		if renderErr != nil {
 			return fmt.Errorf("manifests.Render: %w", renderErr)
@@ -517,7 +526,8 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d ports.CustomDoma
 			Apps:              manifestApps,
 			// argo-rollouts-progressive-delivery-plan T1.2.
 			PrometheusAddress:   p.prometheusAddr,
-			ProgressiveDelivery: manifests.ProgressiveDeliveryEnabled(),
+			ProgressiveDelivery: p.progressive,
+			LeanResources:       p.leanResources,
 		})
 		if renderErr != nil {
 			return fmt.Errorf("manifests.Render (domain remove): %w", renderErr)

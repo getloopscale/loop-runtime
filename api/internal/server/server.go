@@ -99,15 +99,19 @@ type Config struct {
 	SourceStore       source.SourceStore
 	ObjectUploader    sourceroutes.ObjectUploader // optional: upload bundles to S3/Spaces for build access
 	SourceBucket      string                      // S3 bucket name for source bundles (env: SOURCE_BUCKET)
-	EventStore        sse.EventStore
-	BuildStoreReader  sse.BuildStoreReader
-	BootstrapStore    ports.BootstrapStore
-	BootstrapSecret   string                          // SEC-003: shared secret for /internal/bootstrap auth
-	CellPlacement     bootstrap.CellPlacementEngine   // ADR-0008: Cell assignment for new tenants
-	CellDiscovery     healthhttp.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
-	ShutdownCtx       context.Context
-	ShutdownCancel    context.CancelFunc
-	BuildHandler      *buildshttp.BuildHandler
+	// EnvBlocklistMode is how a reserved services.json env key is handled on
+	// upload (config.Config.EnvBlocklistMode, env LOOPZERO_ENV_BLOCKLIST_MODE).
+	// The zero value enforces.
+	EnvBlocklistMode source.EnvBlocklistMode
+	EventStore       sse.EventStore
+	BuildStoreReader sse.BuildStoreReader
+	BootstrapStore   ports.BootstrapStore
+	BootstrapSecret  string                          // SEC-003: shared secret for /internal/bootstrap auth
+	CellPlacement    bootstrap.CellPlacementEngine   // ADR-0008: Cell assignment for new tenants
+	CellDiscovery    healthhttp.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
+	ShutdownCtx      context.Context
+	ShutdownCancel   context.CancelFunc
+	BuildHandler     *buildshttp.BuildHandler
 	// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: handler for
 	// GET /api/v1/builds/{id}/attestation. Wired in api/cmd/setup_routes.go
 	// against PostgresAttestationStore.

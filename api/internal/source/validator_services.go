@@ -95,7 +95,10 @@ func compileSchema() (*jsonschema.Schema, error) {
 // callsites should consume the native shape (carries dependsOn, openapi,
 // type, env fully typed). ValidateServicesJSON remains for legacy callers
 // that still need the *LoopZeroYAML adapter; it now delegates here.
-func ValidateServicesJSONNative(content string) (*ServicesManifest, error) {
+//
+// mode decides what a reserved env key does (see EnvBlocklistMode); callers
+// pass the validated config.Config.EnvBlocklistMode.
+func ValidateServicesJSONNative(content string, mode EnvBlocklistMode) (*ServicesManifest, error) {
 	if strings.TrimSpace(content) == "" {
 		return nil, NewValidationError(
 			"services_json",
@@ -159,7 +162,7 @@ func ValidateServicesJSONNative(content string) (*ServicesManifest, error) {
 		)
 	}
 
-	if envErr := validateReservedEnvKeys(&manifest, slog.Default()); envErr != nil {
+	if envErr := validateReservedEnvKeys(&manifest, mode, slog.Default()); envErr != nil {
 		return nil, envErr
 	}
 

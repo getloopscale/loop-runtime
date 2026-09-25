@@ -33,7 +33,7 @@ func TestSchema_RejectsFrontendType(t *testing.T) {
 			}
 		]
 	}`
-	_, err := ValidateServicesJSONNative(content)
+	_, err := ValidateServicesJSONNative(content, EnvBlocklistEnforce)
 	if err == nil {
 		t.Fatal("expected schema rejection for type=frontend, got nil")
 	}
@@ -59,7 +59,7 @@ func TestSchema_AcceptsServerAndWorker(t *testing.T) {
 				}
 			]
 		}`
-		if _, err := ValidateServicesJSONNative(content); err != nil {
+		if _, err := ValidateServicesJSONNative(content, EnvBlocklistEnforce); err != nil {
 			t.Errorf("type=%q must be accepted, got error: %v", typ, err)
 		}
 	}

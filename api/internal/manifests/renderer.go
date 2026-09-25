@@ -24,7 +24,6 @@ package manifests
 
 import (
 	"fmt"
-	"os"
 	"strings"
 )
 
@@ -185,23 +184,17 @@ type RenderInput struct {
 	PrometheusAddress string
 
 	// ProgressiveDelivery controls whether to emit Rollout (canary) or
-	// legacy Deployment manifests (D8). Default: true. Set false via env
-	// flag LOOPZERO_PROGRESSIVE_DELIVERY=false to revert to legacy Deployment
-	// during incident rollback. Callers must populate from
-	// ProgressiveDeliveryEnabled() helper.
+	// legacy Deployment manifests (D8). Callers fill it from
+	// config.Config.ProgressiveDelivery (env LOOPZERO_PROGRESSIVE_DELIVERY,
+	// default on), so an operator can revert to legacy Deployment during an
+	// incident rollback.
 	ProgressiveDelivery bool
-}
 
-// ProgressiveDeliveryEnabled reports whether Rollout manifests should be
-// emitted. Reads env LOOPZERO_PROGRESSIVE_DELIVERY (D8). Default: true.
-// Returns false only when the env var is explicitly "false" or "0"
-// (case-insensitive).
-func ProgressiveDeliveryEnabled() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("LOOPZERO_PROGRESSIVE_DELIVERY")))
-	if v == "false" || v == "0" {
-		return false
-	}
-	return true
+	// LeanResources halves the fallback resource defaults (the Default*
+	// fields above still win when set) to fit 100 apps in the current DO dev
+	// runtime cluster while a droplet quota increase is in flight. Callers
+	// fill it from config.Config.LeanResources (env LOOPZERO_LEAN_RESOURCES).
+	LeanResources bool
 }
 
 // RenderDocs generates Kubernetes manifests (Deployment, Service,
@@ -265,20 +258,11 @@ func (ri RenderInput) clusterIssuerName() string {
 	return ri.ClusterIssuerName
 }
 
-// leanResourcesEnabled reports whether the LOOPZERO_LEAN_RESOURCES env var
-// is set (case-insensitive "true" or "1"). When lean mode is on, the
-// fallback defaults are halved to fit 100 apps in the current DO dev
-// runtime cluster while a droplet quota increase is in flight.
-func leanResourcesEnabled() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("LOOPZERO_LEAN_RESOURCES")))
-	return v == "true" || v == "1"
-}
-
 func (ri RenderInput) cpuRequest() string {
 	if ri.DefaultCPURequest != "" {
 		return ri.DefaultCPURequest
 	}
-	if leanResourcesEnabled() {
+	if ri.LeanResources {
 		return "50m"
 	}
 	return "100m"
@@ -288,7 +272,7 @@ func (ri RenderInput) memoryRequest() string {
 	if ri.DefaultMemoryRequest != "" {
 		return ri.DefaultMemoryRequest
 	}
-	if leanResourcesEnabled() {
+	if ri.LeanResources {
 		return "64Mi"
 	}
 	return "128Mi"
@@ -298,7 +282,7 @@ func (ri RenderInput) cpuLimit() string {
 	if ri.DefaultCPULimit != "" {
 		return ri.DefaultCPULimit
 	}
-	if leanResourcesEnabled() {
+	if ri.LeanResources {
 		return "250m"
 	}
 	return "500m"
@@ -308,7 +292,7 @@ func (ri RenderInput) memoryLimit() string {
 	if ri.DefaultMemoryLimit != "" {
 		return ri.DefaultMemoryLimit
 	}
-	if leanResourcesEnabled() {
+	if ri.LeanResources {
 		return "256Mi"
 	}
 	return "512Mi"

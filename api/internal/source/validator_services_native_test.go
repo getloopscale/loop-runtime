@@ -27,7 +27,7 @@ func TestValidateServicesJSONNative_Valid_ReturnsManifest(t *testing.T) {
 			}
 		]
 	}`
-	m, err := ValidateServicesJSONNative(content)
+	m, err := ValidateServicesJSONNative(content, EnvBlocklistEnforce)
 	if err != nil {
 		t.Fatalf("expected nil err, got %v", err)
 	}
@@ -72,7 +72,7 @@ func TestValidateServicesJSONNative_PreservesDependsOn(t *testing.T) {
 			}
 		]
 	}`
-	m, err := ValidateServicesJSONNative(content)
+	m, err := ValidateServicesJSONNative(content, EnvBlocklistEnforce)
 	if err != nil {
 		t.Fatalf("expected nil err, got %v", err)
 	}
@@ -103,7 +103,7 @@ func TestValidateServicesJSONNative_PreservesOpenAPI(t *testing.T) {
 			}
 		]
 	}`
-	m, err := ValidateServicesJSONNative(content)
+	m, err := ValidateServicesJSONNative(content, EnvBlocklistEnforce)
 	if err != nil {
 		t.Fatalf("expected nil err, got %v", err)
 	}
@@ -113,7 +113,7 @@ func TestValidateServicesJSONNative_PreservesOpenAPI(t *testing.T) {
 }
 
 func TestValidateServicesJSONNative_EmptyContent_ReturnsE008(t *testing.T) {
-	_, err := ValidateServicesJSONNative("")
+	_, err := ValidateServicesJSONNative("", EnvBlocklistEnforce)
 	if err == nil {
 		t.Fatal("expected E-008 on empty content, got nil")
 	}

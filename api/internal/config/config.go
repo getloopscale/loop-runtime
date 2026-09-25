@@ -212,6 +212,17 @@ type Config struct {
 	// (canary still runs setWeight+pause but skips analysis steps).
 	PrometheusAddress string
 
+	// ProgressiveDelivery selects Rollout (canary) manifests over the legacy
+	// Deployment (argo-rollouts-progressive-delivery D8). On by default; set
+	// LOOPZERO_PROGRESSIVE_DELIVERY to "false" or "0" to revert to the legacy
+	// Deployment during an incident rollback.
+	ProgressiveDelivery bool
+
+	// LeanResources halves the renderer's fallback resource defaults (T-08
+	// contingency: fit 100 apps in the DO dev runtime cluster). Off by
+	// default; LOOPZERO_LEAN_RESOURCES "true" or "1" turns it on.
+	LeanResources bool
+
 	// Credentials (read from env vars or K8s secrets)
 	GiteaToken          string
 	ArgocdToken         string
@@ -480,6 +491,8 @@ func Load() Config {
 		GrafanaBaseURL:        os.Getenv("LOOPZERO_GRAFANA_BASE_URL"),
 		ClusterIssuer:         os.Getenv("LOOPZERO_CLUSTER_ISSUER"),
 		PrometheusAddress:     os.Getenv("LOOPZERO_PROMETHEUS_ADDRESS"),
+		ProgressiveDelivery:   progressiveDeliveryEnabled(os.Getenv("LOOPZERO_PROGRESSIVE_DELIVERY")),
+		LeanResources:         leanResourcesEnabled(os.Getenv("LOOPZERO_LEAN_RESOURCES")),
 
 		// Credentials
 		GiteaToken:          os.Getenv("GITEA_TOKEN"),
@@ -999,6 +1012,21 @@ func envTime(key string) time.Time {
 // pprofEnabled accepts exactly "true" or "1": profiling is opt-in, so any
 // other spelling (including "TRUE" and "yes") leaves it off.
 func pprofEnabled(v string) bool {
+	return v == "true" || v == "1"
+}
+
+// progressiveDeliveryEnabled reports whether LOOPZERO_PROGRESSIVE_DELIVERY leaves
+// progressive delivery on: everything but an explicit "false" or "0"
+// (case-insensitive, trimmed) does, so the default is on.
+func progressiveDeliveryEnabled(v string) bool {
+	v = strings.ToLower(strings.TrimSpace(v))
+	return v != "false" && v != "0"
+}
+
+// leanResourcesEnabled reports whether LOOPZERO_LEAN_RESOURCES turns lean resource
+// defaults on: only "true" or "1" (case-insensitive, trimmed) does.
+func leanResourcesEnabled(v string) bool {
+	v = strings.ToLower(strings.TrimSpace(v))
 	return v == "true" || v == "1"
 }
 
