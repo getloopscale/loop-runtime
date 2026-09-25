@@ -4,6 +4,8 @@
 package charts
 
 import (
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -41,5 +43,27 @@ func TestAppOperatorCanReadTenant(t *testing.T) {
 		t.Errorf("the ClusterRole does not grant read on `tenants`, but reconcileWorkloadStatus "+
 			"does a Get on a Tenant before anything else — without it the workload status is "+
 			"never read (#274). Rendered ClusterRole:\n%s", clusterRole)
+	}
+}
+
+// TestAppOperatorCanReadClusterCredentials — both controllers resolve a
+// placed tenant's cell through CellAwareRuntimeClientFactory, which lists the
+// ClusterCredentials to find the cell's kubeconfig Secret. The chart granted
+// read on tenants but not on clustercredentials, so every lookup for a named
+// cell was forbidden: the fast-path Healthy and the TLS certificate check never
+// reached the workload. The Tilt manifest has carried the grant all along.
+func TestAppOperatorCanReadClusterCredentials(t *testing.T) {
+	docs := renderRBAC(t, "loopzero-app-operator", nil)
+	var verbs []string
+	for _, cr := range docs.clusterRoles {
+		for _, rule := range cr.Rules {
+			if slices.Contains(rule.APIGroups, "loopzero.io") && slices.Contains(rule.Resources, "clustercredentials") {
+				verbs = append(verbs, rule.Verbs...)
+			}
+		}
+	}
+	sort.Strings(verbs)
+	if want := []string{"get", "list", "watch"}; !slices.Equal(verbs, want) {
+		t.Errorf("app-operator ClusterRole verbs on clustercredentials = %v, want %v", verbs, want)
 	}
 }

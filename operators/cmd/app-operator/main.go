@@ -19,9 +19,12 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	promapi "github.com/prometheus/client_golang/api"
 	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -88,6 +91,11 @@ func main() {
 		operatorboot.StartPprofServer()
 	}
 
+	cacheOpts, err := managerCacheOptions()
+	if err != nil {
+		setupLog.Error(err, "invalid manager cache scoping")
+		os.Exit(1)
+	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -96,6 +104,7 @@ func main() {
 		HealthProbeBindAddress: healthProbeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "loopzero-app-operator.loopzero.io",
+		Cache:                  cacheOpts,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create manager")
@@ -207,6 +216,25 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// managerCacheOptions scopes the manager's informers.
+//
+// The only Secret this operator reads on this cluster is a cell's kubeconfig,
+// in loopzero-system (CellAwareRuntimeClientFactory). The chart grants exactly
+// that through a namespaced Role, so the Secret informer watches that
+// namespace and nothing else. The workload CRDs stay cluster-wide (ADR-0018
+// C9): they live in per-tenant namespaces.
+func managerCacheOptions() (cache.Options, error) {
+	secretScope, err := operatorboot.SecretCache(constants.NamespacePlatformSystem)
+	if err != nil {
+		return cache.Options{}, err
+	}
+	return cache.Options{
+		ByObject: map[client.Object]cache.ByObject{
+			&corev1.Secret{}: secretScope,
+		},
+	}, nil
 }
 
 // runtimeFactory builds the cell-aware factory from the CELL_0_KUBECONFIG

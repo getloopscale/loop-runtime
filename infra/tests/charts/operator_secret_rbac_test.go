@@ -33,6 +33,13 @@ var operatorSecretAccessTable = []operatorSecretAccess{
 		// read through the manager cache.
 		namespaces: map[string][]string{"loopzero-system": {"get", "list", "watch"}},
 	},
+	{
+		chart: "loopzero-app-operator",
+		// cell kubeconfig Secrets (CellAwareRuntimeClientFactory), read through
+		// the manager cache. The TLS Secret the ExposureController checks is
+		// read in the workload's cell, with the cell's own identity.
+		namespaces: map[string][]string{"loopzero-system": {"get", "list", "watch"}},
+	},
 }
 
 // TestOperatorCharts_GrantNoClusterWideSecretOrConfigMapAccess — a ClusterRole

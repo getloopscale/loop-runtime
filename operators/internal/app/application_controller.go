@@ -49,6 +49,8 @@ const workloadReadyTimeout = 5 * time.Second
 // +kubebuilder:rbac:groups=loopzero.io,resources=loopzeroapplications/finalizers,verbs=update
 // +kubebuilder:rbac:groups=loopzero.io,resources=exposedroutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch
+// +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch
 type ApplicationReconciler struct {
 	client.Client
 	Scheme     *runtime.Scheme

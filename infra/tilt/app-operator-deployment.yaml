@@ -36,10 +36,8 @@ rules:
     resources: ["clustercredentials"]
     verbs: ["get", "list", "watch"]
 
-  # --- Secrets: read-only for app config references ---
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["get", "list", "watch"]
+  # --- Secrets: NOT here — Role app-operator-secrets-loopzero-system below.
+  # Mirrors charts/loopzero-app-operator/templates/role-secret-access.yaml.
 
   # --- Services: read-only for routing validation ---
   - apiGroups: [""]
@@ -69,6 +67,32 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: app-operator
+subjects:
+  - kind: ServiceAccount
+    name: app-operator
+    namespace: loopzero-system
+---
+# Secret read in loopzero-system only: cell kubeconfigs. The operator's Secret
+# cache watches this namespace alone.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: app-operator-secrets-loopzero-system
+  namespace: loopzero-system
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: app-operator-secrets-loopzero-system
+  namespace: loopzero-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: app-operator-secrets-loopzero-system
 subjects:
   - kind: ServiceAccount
     name: app-operator
