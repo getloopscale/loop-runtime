@@ -523,8 +523,10 @@ func TestRealDeploy_L3Realistic_100Tenants(t *testing.T) {
 	t.Logf("  Apps Live:     %d / %d (HTTP 200 verified on %s)", liveCnt, tenantCount, os.Getenv("LOOPZERO_VERIFY_APP_NAME"))
 	t.Log("═══════════════════════════════════════════════════════")
 
-	// L3-realistic accepts >= 95% (Sprint 8 / ADR-0010 Gate #1 progress
-	// metric). hello-server L3 demands 99.5% because its DAG is trivial;
+	// L3-realistic accepts >= 95% (Sprint 8 multi-cell Gate #1 progress
+	// metric; the cell-architecture decision was recorded in meeting
+	// MEET-2026-04-17-051 — `git show 57e8a5968:docs/meetings/records/MEET-2026-04-17-051.md`
+	// — and its ADR document never entered this tree). hello-server L3 demands 99.5% because its DAG is trivial;
 	// realistic 4-app builds add legitimate failure surface (npm registry
 	// flakes, transient OOMs on Next.js build). 95% is the documented
 	// gate threshold — tighten as we drive root causes out.
