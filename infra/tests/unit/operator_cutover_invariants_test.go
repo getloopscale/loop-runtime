@@ -263,7 +263,7 @@ func TestT09_TilftileSplitOperatorMigrationStatus(t *testing.T) {
 // WHOLE test skipped — discarding the endpoint check that genuinely is ours.
 // A sibling repo's source is not this repo's to guarantee. What this repo does
 // guarantee is pinned where it can actually be executed:
-//   - api/tests/unit/control_surfaces_observable_test.go builds the router and
+//   - api/internal/server/control_surfaces_observable_test.go builds the router and
 //     asserts the AdminPin surface is recorded with its route.
 //   - api/internal/routes/admin/admin_pin_cell_test.go covers the handler and
 //     its 403 without X-Service-Auth.
@@ -289,7 +289,7 @@ func TestT11_CellsMigrationPresent(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("000006_cells.up.sql missing: %v", err)
 	}
-	testPath := filepath.Join(repoRoot(), "api", "tests", "unit", "migration_006_cells_test.go")
+	testPath := filepath.Join(repoRoot(), "api", "internal", "db", "migration_006_cells_test.go")
 	if _, err := os.Stat(testPath); err != nil {
 		t.Errorf("migration_006_cells_test.go missing — C1 of T-1.3 incomplete: %v", err)
 	}

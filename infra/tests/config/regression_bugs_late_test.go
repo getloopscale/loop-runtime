@@ -14,6 +14,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -153,10 +154,20 @@ func TestB64AdmissionPoliciesAlertsConditional(t *testing.T) {
 }
 
 func TestB77LoopZeroApiGiteaOrgConfigurable(t *testing.T) {
+	// The API and the controller build their GitOps pusher through one
+	// constructor, backgroundloops.NewGitOpsPusher; the org is set there.
 	files := []string{
-		"../../../api/cmd/setup_workflows.go",
+		"../../../api/internal/backgroundloops/clients.go",
 		"../../../api/cmd/setup_stores.go",
-		"../../../api/cmd/controller/setup_services.go",
+	}
+	for _, root := range []string{"../../../api/cmd/setup_workflows.go", "../../../api/cmd/controller/setup_services.go"} {
+		data, err := os.ReadFile(root)
+		if err != nil {
+			t.Fatalf("read %s: %v", root, err)
+		}
+		if !strings.Contains(string(data), "backgroundloops.NewGitOpsPusher(") {
+			t.Errorf("B77 regression: %s must build its GitOps pusher through backgroundloops.NewGitOpsPusher, where the org comes from cfg.GiteaOrg", root)
+		}
 	}
 	for _, f := range files {
 		data, err := os.ReadFile(f)
@@ -336,8 +347,8 @@ func TestB71BuildHelmfileHasCWTs(t *testing.T) {
 // "Constructs", not "imports". An audit measured the earlier wording false on
 // 2026-09-05: `go list -deps ./cmd/platform-operator` resolves
 // operators/internal/gitea too, through operators/internal/platform. The
-// conclusion survives — NewRealProvisioner is called only at
-// tenant-operator/main.go:148, and the platform path takes its organisations from
+// conclusion survives — NewRealProvisioner is called only in
+// tenant-operator/main.go, and the platform path takes its organisations from
 // pb.Spec.Gitea.Organizations rather than a literal — but the premise did not, and
 // a right conclusion through a false premise exonerates the wrong change next time.
 func TestB69GiteaOrgConfigurable(t *testing.T) {
@@ -353,12 +364,18 @@ func TestB69GiteaOrgConfigurable(t *testing.T) {
 	// "acme" would have satisfied it. Requiring the variable in the third position
 	// is the same correction a mutation run forced on the ADR-0018 metric
 	// assertions in regression_adr_test.go: check the declaration, not a mention.
-	if !strings.Contains(s, "gitea.NewRealProvisioner(giteaURL, giteaToken, giteaOrg)") {
+	// Since 4e6f524e0 the operator loads its settings once into a config struct
+	// (config.go), so the org reaches the provisioner as cfg.GiteaOrg.
+	if !strings.Contains(s, "gitea.NewRealProvisioner(cfg.GiteaURL, cfg.GiteaToken, cfg.GiteaOrg)") {
 		t.Error("B69 regression: the Gitea provisioner's orgName must be the configured " +
 			"giteaOrg variable, not a string literal")
 	}
-	if !strings.Contains(s, `os.Getenv("GITEA_ORG")`) {
-		t.Error("B69 regression: GITEA_ORG env var read missing -- required for configurable org")
+	cfgData, err := os.ReadFile("../../../operators/cmd/tenant-operator/config.go")
+	if err != nil {
+		t.Fatalf("read tenant-operator config.go: %v", err)
+	}
+	if !regexp.MustCompile(`GiteaOrg:\s+orDefault\("GITEA_ORG",`).Match(cfgData) {
+		t.Error("B69 regression: the tenant operator's config must load GiteaOrg from the GITEA_ORG env var")
 	}
 	// Reading the env is only half of the contract: a key the chart never sets is
 	// not configurable in any real install, which is what the (now absent)

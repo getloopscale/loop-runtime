@@ -14,7 +14,7 @@ func init() {
 	register(Gate{
 		Name:    "migration-test-coverage",
 		Summary: "Every DB migration has corresponding test coverage.",
-		// 44 migrations with no matching api/tests/unit/migration_*_test.go
+		// 44 migrations with no matching api/internal/db/migration_*_test.go
 		// (re-measured 2026-09-06, B-067; it read 42 here, 43 in the item and 48
 		// before this slice).
 		//

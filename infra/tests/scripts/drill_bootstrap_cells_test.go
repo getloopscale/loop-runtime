@@ -56,23 +56,23 @@ func TestDrillBootstrap_PatchesEachCellOnce(t *testing.T) {
 	}
 }
 
-// Only the leader-election lock may be cleared. The key is the api's
-// leaderLockID; if either side changes, the drill would terminate a session
-// holding some other lock, or none.
-func TestDrillBootstrap_ClearsOnlyTheAPILeaderLock(t *testing.T) {
-	src, err := os.ReadFile(filepath.Join("..", "..", "..", "api", "cmd", "setup_background.go"))
+// The drill must not terminate backends by advisory lock. It used to kill the
+// holder of the API's leader-election lock (Bug #69), and before that every
+// granted advisory lock, which also killed sessions holding per-environment
+// deploy locks mid-transaction. The API now elects through the fenced lease in
+// leader_generations, which a new pod takes over once the old heartbeat is
+// stale, so no session holds a leader lock and any such kill can only reach a
+// deploy lock.
+func TestDrillBootstrap_TerminatesNoAdvisoryLockHolder(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "..", "api", "cmd", "leader_election.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := regexp.MustCompile(`const leaderLockID int64 = 0x([0-9A-Fa-f]+)`).FindSubmatch(src)
-	if m == nil {
-		t.Fatal("leaderLockID not found in api/cmd/setup_background.go")
+	if !strings.Contains(string(src), "leader.BackgroundLoopsLeaseName") {
+		t.Fatal("the API no longer elects through the fenced lease; re-examine whether the drill needs a lock heal")
 	}
 	drill := readDrillBootstrap(t)
-	if !strings.Contains(drill, "= x'"+string(m[1])+"'::bigint") {
-		t.Fatalf("the drill does not scope the lock kill to leaderLockID 0x%s", m[1])
-	}
-	if strings.Contains(drill, "WHERE locktype='advisory' AND granted=true;") {
-		t.Fatal("the drill still terminates every granted advisory lock")
+	if regexp.MustCompile(`pg_terminate_backend[^;]*pg_locks`).MatchString(drill) {
+		t.Fatal("the drill terminates a backend by lock; the only locks left to hit are deploy locks")
 	}
 }

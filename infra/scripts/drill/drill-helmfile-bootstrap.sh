@@ -1070,31 +1070,13 @@ if [[ -n "$CF_TOKEN_VAL" ]]; then
   fi
 fi
 
-# Bug #69 LIVE FIX (caught 2026-05-18 iter 47): loopzero-api restart cycles can
-# leak the leader-election advisory lock when old pods don't release before new
-# ones acquire. Reconcile loops won't start without a leader, so builds get
-# reaper-failed. Heal: terminate the backend holding THAT lock before the final
-# restart — and only that one. The key is api/cmd/setup_background.go's
-# leaderLockID (0x7468656F6C656164); Postgres stores a bigint advisory key as
-# classid (high 32 bits) + objid (low 32 bits) with objsubid=1. Terminating
-# every granted advisory lock, as this used to, also killed sessions holding
-# per-environment deploy locks mid-transaction.
-log "Bug #69 fix: terminate a stale leader-election advisory lock holder..."
-# Bug #18 LIVE FIX (caught 2026-05-19): use $LOOPZERO_API_DSN (exported) not
-# $LOOPZERO_API_DSN_VAL (cleared at line 233 for defense-in-depth).
-PG_PASS_VAL=$(echo "$LOOPZERO_API_DSN" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|')
-KILL_LOCK_POD="drill-kill-lock-$RANDOM"
-LEADER_LOCK_SQL="SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype = 'advisory' AND granted AND objsubid = 1 AND ((classid::bigint << 32) | objid::bigint) = x'7468656F6C656164'::bigint;"
-if kubectl -n loopzero-system run "$KILL_LOCK_POD" --restart=Never --image=postgres:16-alpine --quiet \
-     --env="PGPASSWORD=$PG_PASS_VAL" --env="PGSSLMODE=require" --command -- \
-     psql --host="$PG_HOST_VAL" --port="$PG_PORT_VAL" --username=doadmin --dbname=loopzero \
-     --no-psqlrc -v ON_ERROR_STOP=1 -c "$LEADER_LOCK_SQL" >/dev/null 2>&1 \
-   && kubectl -n loopzero-system wait --for=jsonpath='{.status.phase}'=Succeeded "pod/$KILL_LOCK_POD" --timeout=60s >/dev/null 2>&1; then
-  log "  ✓ Stale leader-election lock holder terminated (if any)"
-else
-  log "  WARN: could not clear a stale leader-election lock; loopzero-api may wait for the old leader to exit"
-fi
-kubectl -n loopzero-system delete pod "$KILL_LOCK_POD" --wait=false >/dev/null 2>&1 || true
+# Bug #69 (caught 2026-05-18 iter 47) was a leader-election advisory lock leaked
+# across loopzero-api restarts, healed here by terminating its holder. The API no
+# longer elects with an advisory lock: it takes the fenced lease in
+# leader_generations (api/internal/leader), which a new pod takes over once the
+# old holder's heartbeat is older than StaleAfter. There is no session to kill,
+# and terminating backends by advisory lock would only reach the per-environment
+# deploy locks.
 
 # Restart loopzero-api to pick up env + secret changes
 log "Bug #46+#54 fix: restart loopzero-api to reload env vars..."
