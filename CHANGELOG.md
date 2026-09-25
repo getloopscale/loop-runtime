@@ -61,6 +61,12 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `webhook-canonical-path` now fails when none of its scan directories exists, instead of passing over nothing (principle_violations#257)
+
+- `loopzero-api-openbao-approle-envfrom` and `option-b-eso-deploy-doc` no longer require citations of private assistant memory in the chart and the runbook (principle_violations#270)
+
+- `skill-paths`, `skill-script-paths`, `skill-suites` and `records-tree-split` now exit 5 (NOT VERIFIED) on a machine without the gitignored kit or records tree, instead of failing with a misleading count or passing over nothing (principle_violations#270)
+
 - helm-drift reads its recorded chart-pair divergences from infra/quality/helm-drift-registry.yaml, and each entry names the docs/decisions.md row it rests on instead of an internal ticket id; the --json `adr` field now carries that decision
 
 - The adapter-ports, alert-runbooks, billing-secrets, caddy-host-parity, chart-pairs, contract-consumers, dashboard-root-parity, dev-public-env, docs-contract-refs, ecosystem-validators, error-vocabulary, helm-topology-index, ldflag-symbols and lint-coverage quality gates now print their messages and descriptions in English
@@ -214,6 +220,34 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- `no-migrate-force` now fails on a file it cannot read or a line too long to scan, instead of skipping it (principle_violations#257)
+
+- `silent-surface` no longer counts calls on repositories or responses as route registrations (principle_violations#273)
+
+- `transit-coverage` now parses the whole secret-store package, so a raw encrypt/decrypt call hidden after a brace in a string, or moved into another store file, is caught (principle_violations#272)
+
+- The openbao-init chart no longer declares the `k8s-cell-0` auth mount twice, and `openbao-init-auth-mounts` reads the mounts from the chart and refuses duplicates (principle_violations#268)
+
+- `sqlc-tx-prop` now checks the database stores, where a pool-bound query inside a transaction can actually occur; it previously scanned code that can never import the generated queries and passed vacuously (principle_violations#267)
+
+- `worker-csp` now fails when the worker sets no Content-Security-Policy or no script policy at all (principle_violations#266)
+
+- `scheduled-image` now reports an image expression it cannot resolve instead of treating it as a third-party image (principle_violations#265)
+
+- `publish-hygiene` no longer drops the findings of a file that contains a very long line (principle_violations#264)
+
+- Ten quality gates (including `orphan-alerts`, `mock-budget`, `no-shell-wrap`, `security-context`, `prod-image-digests`, `sqlc-sync`) now fail when they cannot read a file or scanned nothing, instead of passing (principle_violations#263)
+
+- `ory-kratos-public-urls` now fails when an environment does not render, instead of reporting SKIP (principle_violations#262)
+
+- `test-deletion`, `no-new-bash` and `quarantine-protect` now fail when the base ref or diff range cannot be read, instead of passing over a comparison they never made (principle_violations#261)
+
+- Four quality-gate tests that checked the real repository had been skipping on every run; they now run and fail when the repository root cannot be found (principle_violations#249)
+
+- The `no-legacy-sa-token-secret`, `no-pulumi-inline-secrets` and `no-aes-remaining` gates now fail on a file they cannot read instead of passing with a warning (principle_violations#248)
+
+- The `trivy-scan` quality gate now fails when Trivy is missing or cannot complete a scan, instead of reporting SKIP and exiting 0 over an unscanned tree (principle_violations#247)
 
 - Resource-name composers (namespaces, repositories, application and secret names) name the missing field when an input is empty, e.g. "namespace: tenant slug must not be empty", instead of a generic "argument must not be empty".
 
