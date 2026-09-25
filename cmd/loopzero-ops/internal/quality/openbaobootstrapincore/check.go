@@ -131,7 +131,7 @@ func Check(cfg Config) (Outcome, error) {
 	for _, rel := range files {
 		body, rerr := os.ReadFile(filepath.Join(root, rel))
 		if rerr != nil {
-			return out, fmt.Errorf("%w: %v", ErrNothingScanned, rerr)
+			return out, fmt.Errorf("%w: %w", ErrNothingScanned, rerr)
 		}
 		lines := joinContinuations(strings.Split(string(body), "\n"))
 		out.LinesScanned += len(lines)

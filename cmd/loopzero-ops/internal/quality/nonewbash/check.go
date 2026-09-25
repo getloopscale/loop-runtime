@@ -115,7 +115,7 @@ func gitDiffAdded(repoRoot, base, head string) ([]string, error) {
 	cmd.Dir = repoRoot
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("git diff failed: %v\n%s", err, out)
+		return nil, fmt.Errorf("git diff failed: %w\n%s", err, out)
 	}
 	var paths []string
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {

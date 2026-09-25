@@ -149,7 +149,7 @@ func parseStore(dir string) ([]parsedFile, error) {
 		fset := token.NewFileSet()
 		f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, 0)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %s: %v", ErrUnparseable, name, err)
+			return nil, fmt.Errorf("%w: %s: %w", ErrUnparseable, name, err)
 		}
 		out = append(out, parsedFile{rel: storeDir + "/" + name, fset: fset, file: f})
 	}

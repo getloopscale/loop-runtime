@@ -256,7 +256,7 @@ func collectDroppedJSONTags(root, base, head string) ([]string, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("git diff failed: %v (stderr: %s)", err, stderr.String())
+		return nil, fmt.Errorf("git diff failed: %w (stderr: %s)", err, stderr.String())
 	}
 
 	seen := map[string]struct{}{}
@@ -353,7 +353,7 @@ func declarationsPerFileAt(root, rev, tag string) (map[string]int, error) {
 	// `git grep -c` exits 1 with no match at all, which is the answer and not a failure.
 	var exitErr *exec.ExitError
 	if err != nil && (!errors.As(err, &exitErr) || exitErr.ExitCode() != 1) {
-		return nil, fmt.Errorf("git grep for %q at %s failed: %v (stderr: %s)", tag, rev, err, stderr.String())
+		return nil, fmt.Errorf("git grep for %q at %s failed: %w (stderr: %s)", tag, rev, err, stderr.String())
 	}
 
 	perFile := map[string]int{}
@@ -429,7 +429,7 @@ func grepConsumersForTag(root, tag string, roots []consumerRoot) ([]Finding, err
 		if err := cmd.Run(); err != nil {
 			var exitErr *exec.ExitError
 			if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
-				return nil, fmt.Errorf("git grep for %q in %s failed: %v (stderr: %s)",
+				return nil, fmt.Errorf("git grep for %q in %s failed: %w (stderr: %s)",
 					tag, c.String(), err, strings.TrimSpace(stderr.String()))
 			}
 		}

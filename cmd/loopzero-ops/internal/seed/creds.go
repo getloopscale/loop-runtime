@@ -82,7 +82,7 @@ func LoadCreds(path string) (*Creds, error) {
 	var c Creds
 	// Unknown fields are tolerated (the file may carry keys other seeds use).
 	if err := json.Unmarshal(data, &c); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrCredsMalformed, err)
+		return nil, fmt.Errorf("%w: %w", ErrCredsMalformed, err)
 	}
 	return &c, nil
 }

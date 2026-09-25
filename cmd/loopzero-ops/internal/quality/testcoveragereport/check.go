@@ -124,7 +124,7 @@ func Check(cfg Config) (Outcome, error) {
 
 	pct, failedPkgs, parseErr := parseCoverageJSON(stdout)
 	if parseErr != nil {
-		return Outcome{}, fmt.Errorf("%w: %v", ErrCoverageParseFailed, parseErr)
+		return Outcome{}, fmt.Errorf("%w: %w", ErrCoverageParseFailed, parseErr)
 	}
 
 	pass := pct >= threshold && len(failedPkgs) == 0

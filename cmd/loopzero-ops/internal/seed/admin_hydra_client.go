@@ -136,7 +136,7 @@ func adminHydraLookupUserID(ctx context.Context, h Host, url, email string) (str
 	defer cancel()
 	var id string
 	err = c.QueryRow(qctx, "SELECT id FROM users WHERE email = $1", email).Scan(&id)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nil
 	}
 	return id, err
@@ -277,7 +277,7 @@ func openHydraAdminTunnel(d Deps) (*Tunnel, error) {
 	target.PodLabels = PodMetaLabels("hydra")
 	tunnel, fallbackErr := d.PortForwardCtor(d.Ctx, target)
 	if fallbackErr != nil {
-		return nil, fmt.Errorf("port-forward %s: %w (fallback label hydra: %v)", hydraAdminServiceName, err, fallbackErr)
+		return nil, fmt.Errorf("port-forward %s: %w (fallback label hydra: %w)", hydraAdminServiceName, err, fallbackErr)
 	}
 	return tunnel, nil
 }

@@ -277,7 +277,7 @@ func readTargets(root string, files []string) (string, error) {
 	for _, f := range files {
 		body, err := os.ReadFile(filepath.Join(root, f))
 		if err != nil {
-			return "", fmt.Errorf("%w: %v", ErrNothingScanned, err)
+			return "", fmt.Errorf("%w: %w", ErrNothingScanned, err)
 		}
 		b.Write(body)
 		b.WriteString("\n")

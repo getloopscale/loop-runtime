@@ -6,6 +6,7 @@ package seed
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -65,7 +66,8 @@ func defaultGhAPI(body []byte, args ...string) ([]byte, error) {
 		// Name the request by verb and path only: argv may carry request
 		// fields, and this error is surfaced verbatim in the seed's Reason.
 		verb, path := ghRequestLine(args)
-		if ee, ok := err.(*exec.ExitError); ok {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
 			return out, fmt.Errorf("gh api %s %s: %w (stderr: %s)", verb, path, err, strings.TrimSpace(string(ee.Stderr)))
 		}
 		return out, fmt.Errorf("gh api %s %s: %w", verb, path, err)
