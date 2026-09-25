@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/k8s"
 
 	forge "github.com/getloopscale/loopzero-forge"
 	forgemodel "github.com/getloopscale/loopzero-forge/model"
@@ -21,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/tools/clientcmd"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -103,13 +103,9 @@ type WorkflowSubmitter struct {
 
 // NewWorkflowSubmitter creates a WorkflowSubmitter connected to the build cluster.
 func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, error) {
-	loadingRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: cfg.Kubeconfig}
-	overrides := &clientcmd.ConfigOverrides{}
-	if cfg.Context != "" {
-		overrides.CurrentContext = cfg.Context
-	}
-
-	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides).ClientConfig()
+	// The build cluster is never the one the API runs in, so no in-cluster
+	// preference: k8s.ExplicitRestConfig.
+	config, err := k8s.ExplicitRestConfig(cfg.Kubeconfig, cfg.Context)
 	if err != nil {
 		return nil, fmt.Errorf("argo: build cluster config: %w", err)
 	}

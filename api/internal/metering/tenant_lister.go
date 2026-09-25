@@ -15,6 +15,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/getloopscale/loopzero/api/internal/k8s"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
@@ -22,7 +23,7 @@ import (
 // k8s.tenantNamespace (ADR-0018 v2 / C1): a hard-coded const, NOT env-overridable
 // — the metering enumeration MUST NOT be re-pointable at another namespace, which
 // was the misplacement vector the ADR closed.
-const tenantCRNamespace = "loopzero-system"
+const tenantCRNamespace = k8s.ControlPlaneNamespace
 
 // TenantLister enumerates the tenant IDs the metering loop must meter this tick.
 // The DIP boundary (the worker depends on this narrow interface, not on a concrete

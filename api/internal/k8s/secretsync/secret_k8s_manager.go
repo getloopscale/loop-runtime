@@ -24,9 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 
+	"github.com/getloopscale/loopzero/api/internal/k8s"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/naming"
@@ -88,29 +87,18 @@ func NewSecretK8sManager(mgmtKubeconfig, mgmtContext, runtimeKubeconfig, runtime
 		return nil, errors.New("secret k8s manager: the tenant cell lookup and the runtime cell id are required")
 	}
 	// Mgmt cluster — typed client for Secret creation. In-cluster preferred.
-	var mgmtConfig *rest.Config
-	if inCfg, inErr := rest.InClusterConfig(); inErr == nil {
-		mgmtConfig = inCfg
-	} else {
-		var err error
-		mgmtConfig, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-			&clientcmd.ClientConfigLoadingRules{ExplicitPath: mgmtKubeconfig},
-			&clientcmd.ConfigOverrides{CurrentContext: mgmtContext},
-		).ClientConfig()
-		if err != nil {
-			return nil, fmt.Errorf("secret k8s manager: mgmt config: %w", err)
-		}
+	mgmtConfig, err := k8s.RestConfig(mgmtKubeconfig, mgmtContext)
+	if err != nil {
+		return nil, fmt.Errorf("secret k8s manager: mgmt config: %w", err)
 	}
 	mgmtClient, err := kubernetes.NewForConfig(mgmtConfig)
 	if err != nil {
 		return nil, fmt.Errorf("secret k8s manager: mgmt client: %w", err)
 	}
 
-	// Runtime cluster — dynamic client for ExternalSecret CRs
-	runtimeConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		&clientcmd.ClientConfigLoadingRules{ExplicitPath: runtimeKubeconfig},
-		&clientcmd.ConfigOverrides{CurrentContext: runtimeContext},
-	).ClientConfig()
+	// Runtime cluster — dynamic client for ExternalSecret CRs. The API does
+	// not run there, so no in-cluster preference.
+	runtimeConfig, err := k8s.ExplicitRestConfig(runtimeKubeconfig, runtimeContext)
 	if err != nil {
 		return nil, fmt.Errorf("secret k8s manager: runtime config: %w", err)
 	}
@@ -122,7 +110,7 @@ func NewSecretK8sManager(mgmtKubeconfig, mgmtContext, runtimeKubeconfig, runtime
 	return &SecretK8sManager{
 		mgmtClient:     mgmtClient,
 		runtimeDynamic: runtimeDynamic,
-		mgmtNamespace:  "loopzero-system",
+		mgmtNamespace:  k8s.ControlPlaneNamespace,
 		tenantCells:    tenantCells,
 		runtimeCellID:  runtimeCellID,
 	}, nil

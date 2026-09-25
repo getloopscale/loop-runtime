@@ -24,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/getloopscale/loopzero/api/internal/k8s"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 
@@ -162,7 +163,7 @@ func NewKubeMintingTokenProvider(cfg KubeMintingConfig) (*KubeMintingTokenProvid
 		cfg.AccountName = "loopzero-api"
 	}
 	if cfg.Namespace == "" {
-		cfg.Namespace = "loopzero-system"
+		cfg.Namespace = k8s.ControlPlaneNamespace
 	}
 	if cfg.TokenSecretName == "" {
 		cfg.TokenSecretName = "loopzero-api-tokens"

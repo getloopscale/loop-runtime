@@ -25,6 +25,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/getloopscale/loopzero/api/internal/k8s"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
@@ -46,7 +47,7 @@ type SecretCellClientProvider struct {
 // Secrets). mgmtNamespace defaults to loopzero-system (ADR-0018 — the canonical CR ns).
 func NewSecretCellClientProvider(mgmtClient client.Client, mgmtNamespace string) *SecretCellClientProvider {
 	if mgmtNamespace == "" {
-		mgmtNamespace = "loopzero-system"
+		mgmtNamespace = k8s.ControlPlaneNamespace
 	}
 	return &SecretCellClientProvider{
 		mgmtClient:   mgmtClient,
