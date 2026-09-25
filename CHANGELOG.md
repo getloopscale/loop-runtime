@@ -235,6 +235,40 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Only one API replica runs the background loops at a time, and a replica that loses the lease stops them
+
+- A scaling configuration is refused for an environment name that can never become a valid environment (leading or trailing hyphen)
+
+- A duplicate-name conflict is reported the same way on every deploy path
+
+- Evicting a team either completes or changes nothing; a failure part-way no longer leaves a half-deleted team
+
+- Moving a team to another cell cannot race a concurrent move or a new-team placement past the cell's capacity
+
+- Build cleanup keeps each team's own recent builds; two teams with the same project and environment names no longer evict each other's history
+
+- The API refuses to start when replay protection, quota enforcement or team controls are configured but unreachable, instead of running with them silently off
+
+- A failed GitHub push or installation event is reported as a failed delivery instead of being silently acknowledged
+
+- Build status and build listings report a database failure instead of showing a build with no apps
+
+- Preview environments rebuilt from an earlier build keep the app's runtime, path, build and start commands, instead of failing to sync
+
+- Compute usage is metered for every environment of a team again; namespaces were being skipped, under-counting usage
+
+- A secret stored encrypted is never returned or synced as its ciphertext when the encryption backend is unavailable; the request fails with a backend-unavailable error instead
+
+- The per-Account project limit is now enforced across all of an account's teams when a deploy creates a new project; previously each team could create up to the limit
+
+- The per-environment last-deploy summary no longer fails for an environment whose active release has no recorded commit
+
+- Creating a preview on an installation without a build orchestrator returns "preview service not available" instead of failing with an internal error
+
+- Deleting a project no longer cancels archived releases, and now also cancels rolled-back ones, matching the release lifecycle
+
+- Deploy webhooks (deploy.failed, deploy.succeeded) now fire whichever process runs the background loops, and the controller runs the same audit-log retention, build cleanup and custom-domain loops as the API
+
 - Pinning a team to a cell that is full now answers 409 "cell at capacity" instead of an internal error (#26)
 
 - Opening or re-pushing a pull request now records its preview under the same lock as the preview build, so concurrent webhooks for one pull request can no longer race (#33)
