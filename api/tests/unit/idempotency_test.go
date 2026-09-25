@@ -111,6 +111,7 @@ func TestIdempotencyMiddleware(t *testing.T) {
 		// Pre-populate cache
 		store.keys["key-123"] = &policy.IdempotencyRecord{
 			Key:            "key-123",
+			Endpoint:       "/api/v1/projects",
 			RequestHash:    hashBody(body),
 			ResponseStatus: http.StatusCreated,
 			ResponseBody:   []byte(`{"id":"proj-cached"}`),
@@ -176,42 +177,31 @@ func TestIdempotencyMiddleware(t *testing.T) {
 		}
 	})
 
-	t.Run("body larger than 10MB is truncated by LimitReader", func(t *testing.T) {
+	t.Run("body larger than 10MB is refused, not processed truncated", func(t *testing.T) {
 		store := newFakeIdempotencyStore()
+		called := false
 		mw := policy.Idempotency(store)
-		handler := mw(dummyHandler())
+		handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called = true
+			w.WriteHeader(http.StatusCreated)
+		}))
 
-		// Create a body larger than 10MB (10MB + 1 byte)
 		const limit = 10 << 20 // 10 MB
-		largeBody := make([]byte, limit+1)
-		for i := range largeBody {
-			largeBody[i] = 'A'
-		}
+		largeBody := bytes.Repeat([]byte{'A'}, limit+1)
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewReader(largeBody))
 		req.Header.Set("Idempotency-Key", "key-large-body")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 
-		// The request should still be processed (body is truncated to 10MB for hashing)
-		if rec.Code != http.StatusCreated {
-			t.Fatalf("expected 201 even with large body, got %d: %s", rec.Code, rec.Body.String())
+		if rec.Code != http.StatusRequestEntityTooLarge {
+			t.Fatalf("expected 413 for a body over 10MB, got %d: %s", rec.Code, rec.Body.String())
 		}
-
-		// Verify the hash was computed on the truncated body (10MB, not 10MB+1)
-		record, _ := store.Get(context.Background(), "key-large-body", "")
-		if record == nil {
-			t.Fatal("expected idempotency record to be stored")
+		if called {
+			t.Fatal("handler ran on a request the middleware refused")
 		}
-
-		// The hash should match a 10MB body of 'A's, not 10MB+1
-		truncated := make([]byte, limit)
-		for i := range truncated {
-			truncated[i] = 'A'
-		}
-		expectedHash := hashBody(string(truncated))
-		if record.RequestHash != expectedHash {
-			t.Fatal("expected hash to be computed on truncated body (10MB), not full body")
+		if record, _ := store.Get(context.Background(), "key-large-body", ""); record != nil {
+			t.Fatal("a refused request must not leave an idempotency record")
 		}
 	})
 }
