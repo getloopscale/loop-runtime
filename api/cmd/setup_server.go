@@ -351,8 +351,11 @@ func buildServerConfig(
 		// tenant.
 		// CHG-2026-04-30-DELETE-SINGLE-CELL: pinner also patches Tenant CR
 		// so operator reconcile re-emits ArgoCD destination with new cell.
-		sc.Admin.Pinner = placementsvc.NewCellPinner(&store.PostgresCellStore{DB: dbAdapter}).
-			WithKubeClient(buildMgmtDynamicClient(logger), "loopzero-system")
+		pinner := placementsvc.NewCellPinner(&store.PostgresCellStore{DB: dbAdapter})
+		if mgmt := buildMgmtDynamicClient(logger); mgmt != nil {
+			pinner = pinner.WithTenantCRPatcher(adapters.NewTenantCRCellPatcher(mgmt, "loopzero-system"))
+		}
+		sc.Admin.Pinner = pinner
 		// T4.4 of plan 2026-05-28-meet-001-engineering-closure: wire the
 		// ReleaseInspector so GET /api/v1/admin/releases/{id}/inspect can
 		// serve requests. buildStore is intentionally nil — the inspector

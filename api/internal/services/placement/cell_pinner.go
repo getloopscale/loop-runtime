@@ -21,28 +21,21 @@ package placement
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/dynamic"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
-// tenantGVR is the GroupVersionResource for the Tenant CR. Hardcoded
-// here (instead of importing operators/api/v1) so this service has no
-// operator-package dependency.
-var tenantGVR = schema.GroupVersionResource{
-	Group:    "loopzero.io",
-	Version:  "v1",
-	Resource: "tenants",
+// TenantCRPatcher moves a tenant's Tenant CR to a cell (spec.cellID).
+// adapters.TenantCRCellPatcher implements it against the mgmt cluster.
+type TenantCRPatcher interface {
+	PatchTenantCellID(ctx context.Context, tenantID, cellID string) error
+	// Namespace is where the Tenant CRs live, quoted in the repair hint.
+	Namespace() string
 }
 
 // CellPinnerStore is the persistence interface CellPinner depends on,
@@ -100,31 +93,27 @@ var ErrCellPinDiverged = &loopzeroerrors.LoopZeroError{
 // Without the CR patch, the DB and the K8s state diverge and the
 // operator continues writing the previous cell.
 type CellPinner struct {
-	store    CellPinnerStore
-	mgmtKube dynamic.Interface // optional: when nil, CR patch is skipped
-	mgmtNS   string            // namespace where Tenant CRs live (default "loopzero-system")
+	store CellPinnerStore
+	// crPatcher is optional: when nil, the pin is database-only.
+	crPatcher TenantCRPatcher
 	// patchBackoff is the wait before CR patch attempt n (n >= 1). Injected so
 	// tests of the failure paths run without real sleeps.
 	patchBackoff func(attempt int) time.Duration
 }
 
-// NewCellPinner constructs a pinner with the given persistence backend.
-// The mgmtKube + namespace can be nil/empty in tests; the production
-// wireup (api/cmd/setup_server.go) passes a real dynamic client so the
-// CR patch happens on every successful pin.
+// NewCellPinner constructs a database-only pinner. The production wireup
+// (api/cmd/setup_server.go) adds a TenantCRPatcher so the CR patch happens on
+// every successful pin.
 func NewCellPinner(store CellPinnerStore) *CellPinner {
-	return &CellPinner{store: store, mgmtNS: "loopzero-system", patchBackoff: crPatchBackoff}
+	return &CellPinner{store: store, patchBackoff: crPatchBackoff}
 }
 
-// WithKubeClient returns a copy of the pinner that also patches the
-// Tenant CR after a successful DB update. Returns the receiver
-// unchanged when client is nil — preserves test ergonomics.
-func (p *CellPinner) WithKubeClient(client dynamic.Interface, namespace string) *CellPinner {
+// WithTenantCRPatcher returns a copy of the pinner that also patches the
+// Tenant CR after a successful database update. A nil patcher leaves the copy
+// database-only.
+func (p *CellPinner) WithTenantCRPatcher(patcher TenantCRPatcher) *CellPinner {
 	cp := *p
-	cp.mgmtKube = client
-	if namespace != "" {
-		cp.mgmtNS = namespace
-	}
+	cp.crPatcher = patcher
 	return &cp
 }
 
@@ -133,7 +122,7 @@ func (p *CellPinner) WithKubeClient(client dynamic.Interface, namespace string) 
 // CLAUDE.md makes this the only path that moves a tenant, and requires the
 // database update and the Tenant CR patch to land together. Flow:
 //  1. Update the database via CellPinnerStore (validates tenant, cell, capacity).
-//  2. If a kube client is wired, merge-patch the Tenant CR spec.cellID, retrying
+//  2. If a TenantCRPatcher is wired, merge-patch the Tenant CR spec.cellID, retrying
 //     transient apiserver failures.
 //  3. If the patch still fails, revert the database to the previous cell and
 //     return ErrCellPinNotApplied: nothing moved, and the caller may retry.
@@ -150,7 +139,7 @@ func (p *CellPinner) Pin(ctx context.Context, tenantID, cellID string) (string, 
 	if err != nil {
 		return "", err
 	}
-	if p.mgmtKube == nil {
+	if p.crPatcher == nil {
 		return prev, nil
 	}
 	patchErr := p.patchTenantCRWithRetry(ctx, tenantID, cellID)
@@ -175,7 +164,7 @@ func (p *CellPinner) patchTenantCRWithRetry(ctx context.Context, tenantID, cellI
 			case <-time.After(p.patchBackoff(attempt)):
 			}
 		}
-		if patchErr = p.patchTenantCR(ctx, tenantID, cellID); patchErr == nil {
+		if patchErr = p.crPatcher.PatchTenantCellID(ctx, tenantID, cellID); patchErr == nil {
 			return nil
 		}
 	}
@@ -190,7 +179,7 @@ func (p *CellPinner) patchTenantCRWithRetry(ctx context.Context, tenantID, cellI
 func (p *CellPinner) revertAfterFailedPatch(ctx context.Context, tenantID, prevCell, cellID string, patchErr error) error {
 	if prevCell == "" || prevCell == cellID {
 		return fmt.Errorf("%w: tenant %s is on %s in the database but the Tenant CR could not be patched (%w); %s",
-			ErrCellPinDiverged, tenantID, cellID, patchErr, repairHint(p.mgmtNS, tenantID, cellID))
+			ErrCellPinDiverged, tenantID, cellID, patchErr, repairHint(p.crPatcher.Namespace(), tenantID, cellID))
 	}
 	revertCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
@@ -199,7 +188,7 @@ func (p *CellPinner) revertAfterFailedPatch(ctx context.Context, tenantID, prevC
 			"tenant", tenantID, "new_cell", cellID, "previous_cell", prevCell,
 			"patch_error", patchErr, "revert_error", revertErr)
 		return fmt.Errorf("%w: tenant %s is on %s in the database but the Tenant CR could not be patched (%w), and reverting to %s failed (%w); %s",
-			ErrCellPinDiverged, tenantID, cellID, patchErr, prevCell, revertErr, repairHint(p.mgmtNS, tenantID, cellID))
+			ErrCellPinDiverged, tenantID, cellID, patchErr, prevCell, revertErr, repairHint(p.crPatcher.Namespace(), tenantID, cellID))
 	}
 	slog.Warn("cell pinner: Tenant CR patch failed; database reverted, tenant not moved",
 		"tenant", tenantID, "new_cell", cellID, "previous_cell", prevCell, "error", patchErr)
@@ -219,22 +208,6 @@ func intPow(base, exp int) int {
 		r *= base
 	}
 	return r
-}
-
-// patchTenantCR applies a strategic-merge patch to spec.cellID on the
-// named Tenant CR. Idempotent — re-pinning to the same cell is a no-op
-// from the operator's perspective.
-func (p *CellPinner) patchTenantCR(ctx context.Context, tenantID, cellID string) error {
-	patch, err := json.Marshal(map[string]any{"spec": map[string]any{"cellID": cellID}})
-	if err != nil {
-		return fmt.Errorf("marshal patch: %w", err)
-	}
-	_, err = p.mgmtKube.Resource(tenantGVR).Namespace(p.mgmtNS).
-		Patch(ctx, tenantID, types.MergePatchType, patch, metav1.PatchOptions{})
-	if err != nil {
-		return fmt.Errorf("patch tenant %s: %w", tenantID, err)
-	}
-	return nil
 }
 
 // repairHint is the operator guidance attached to ErrCellPinDiverged, when the
