@@ -33,7 +33,8 @@ name: CI
 #
 # This header used to describe a `pull_request` trigger and call it one of "the
 # TWO triggers, not one". The `on:` block below has not had a `pull_request` key
-# since 464b9d7e3, "ci: validacao pos-merge em develop e main; PR sem acao" — the
+# since 464b9d7e3, "ci: validacao pos-merge em develop e main; PR sem acao"  # english-only: verbatim quote of a commit subject
+# (in English: "post-merge validation on develop and main; no action on PRs") — the
 # commit that made the decision this file records, which changed the trigger and
 # left the paragraph describing the old one. So the header outlived what it
 # described by every run since. Corrected 2026-09-06 rather than deleted, because
@@ -386,8 +387,8 @@ jobs:
   # with it the possibility of forgetting to add a name to it.
   # ---------------------------------------------------------------------------
   tenant-isolation:
-    # Pula num PR de FORK, e a razao e' mecanica, nao politica: os passos abaixo
-    # usam um deploy key para buscar o sibling PRIVADO `loopzero-contracts`, e o
+    # Skipped on a FORK's PR, and the reason is mechanical, not political: the steps below
+    # use a deploy key to fetch the PRIVATE sibling `loopzero-contracts`, and
     # GitHub does not hand a secret to a workflow triggered by a fork's PR. Without this
     # condition the job RUNS and fails at the deploy-key step — a red that says nothing
     # about the contribution. `ci-gate` accepts the skip by name, for a fork only.
@@ -448,7 +449,7 @@ jobs:
           set -euo pipefail
           api_v=$(awk '/getloopscale\/loopzero-contracts/ {print $2}' loopzero/api/go.mod | head -1)
           if [ -z "$api_v" ]; then
-            echo "::error::loopzero/api/go.mod nao declara loopzero-contracts."
+            echo "::error::loopzero/api/go.mod does not declare loopzero-contracts."
             exit 1
           fi
           echo "ref=$api_v" >> "$GITHUB_OUTPUT"
@@ -485,7 +486,7 @@ jobs:
           # The dump replays a few metering helpers out of dependency order.
           # Those errors are tolerated here and the outcome is asserted below —
           # a count is a stronger check than a clean-looking log.
-          echo "::group::schema (como owner loopzero)"
+          echo "::group::schema (as owner loopzero)"
           PGPASSWORD=loopzero psql -U loopzero -d loopzero_test \
             -f loopzero/api/internal/db/schema.gen.sql 2>&1 | tail -5
           echo "::endgroup::"
@@ -526,7 +527,7 @@ jobs:
                    OR pg_get_expr(p.polqual, p.polrelid) LIKE '%''''::text%');")"
           echo "rls_enabled=$rls forced=$forced fail_open_policies=$open"
           if [ "$open" -ne 0 ]; then
-            echo "::error::$open policy(ies) ainda aceitam contexto vazio — o disjunto fail-open voltou."
+            echo "::error::$open policy(ies) still accept an empty context — the fail-open disjunct is back."
             exit 1
           fi
           if [ "$rls" -lt 30 ] || [ "$forced" -lt 30 ]; then

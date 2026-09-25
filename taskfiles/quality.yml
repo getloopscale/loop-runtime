@@ -59,31 +59,31 @@ tasks:
   hermetic:
     desc: Run quality-gate hermetic Go tests + verify the gate module builds
     cmds:
-      # Apontava para `pkg/quality`, relocado no M9 para cmd/loopzero-ops/internal/quality.
-      # O alvo abortava (exit 201) e derrubava `quality:all` no primeiro deps —
-      # so `quality:gates` sozinho era verde, que e o que o delivery-gate roda, e
-      # por isso ninguem viu. B-087.
-      # `./...`, nao `./internal/quality/...`: o pacote `main` de cmd/loopzero-ops
-      # NAO esta em ./internal/..., e e onde vivem TestOracle_MatchesFrozenBaseline,
-      # TestEveryGateIsWiredOrExempted, TestNoStalePkgQualityPath e
-      # TestTaskfilesDoNotCdIntoMissingDirs. Os dois ultimos sao guardas contra
-      # exatamente a familia de defeito do B-087 — e nao rodavam. Custo: ~12s.
+      # It pointed at `pkg/quality`, relocated at M9 to cmd/loopzero-ops/internal/quality.
+      # The target aborted (exit 201) and took down `quality:all` at the first deps —
+      # only `quality:gates` on its own was green, which is what the delivery-gate runs,
+      # and that is why nobody saw it. B-087.
+      # `./...`, not `./internal/quality/...`: cmd/loopzero-ops's `main` package
+      # is NOT under ./internal/..., and it is where TestOracle_MatchesFrozenBaseline,
+      # TestEveryGateIsWiredOrExempted, TestNoStalePkgQualityPath and
+      # TestTaskfilesDoNotCdIntoMissingDirs live. The last two guard against
+      # exactly B-087's defect family — and they were not running. Cost: ~12s.
       - cd cmd/loopzero-ops && go test ./... -count=1
-      # Os binarios de `tools/` constroem sozinhos (o modulo nao declara require
-      # nenhum), e GOWORK=off mantem a invocacao hermetica. Ninguem os alcancava:
-      # viviam so em `test:unit`, que o gate de entrega nao chama. O B-088 nomeia
-      # os dois no titulo.
+      # The `tools/` binaries build on their own (the module declares no require
+      # at all), and GOWORK=off keeps the invocation hermetic. Nothing reached them:
+      # they lived only in `test:unit`, which the delivery gate does not call. B-088
+      # names both of them in its title.
       #
-      # ATENCAO: este comentario afirmava que `tools/` esta "FORA do go.work por
-      # desenho". Isso deixou de ser verdade em 0f8a2e5f9 (B-170) —
-      # `./tools/gen-service-auth-ed25519` esta no `use` do go.work desde
-      # 2026-08-31, senao `cd tools/... && go test ./...` falha com "directory
-      # prefix . does not contain modules listed in go.work". A pertinencia ao
-      # workspace e pinada por TestGoWorkListsEveryModuleInRepo.
+      # NOTE: this comment claimed that `tools/` is "OUTSIDE go.work by
+      # design". That stopped being true in 0f8a2e5f9 (B-170) —
+      # `./tools/gen-service-auth-ed25519` is in go.work's `use` since
+      # 2026-08-31, otherwise `cd tools/... && go test ./...` fails with "directory
+      # prefix . does not contain modules listed in go.work". Membership in the
+      # workspace is pinned by TestGoWorkListsEveryModuleInRepo.
       #
-      # Era um par; virou um. `tools/loopzero-dockerfile-lint` foi REMOVIDO em 2026-08-19
-      # (B-157): ele validava Dockerfile fornecido pelo usuario, e esse caminho saiu na
-      # T2.2 — o build gera Dockerfile canonico em processo. Nenhum caminho o invocava.
+      # It was a pair; it became one. `tools/loopzero-dockerfile-lint` was REMOVED on 2026-08-19
+      # (B-157): it validated a user-supplied Dockerfile, and that path left in
+      # T2.2 — the build generates a canonical Dockerfile in-process. No path invoked it.
       - cd tools/gen-service-auth-ed25519 && GOWORK=off go test ./... -count=1
       - cd cmd/loopzero-ops && go build ./...
 
@@ -91,36 +91,36 @@ tasks:
     desc: Full-repo-scan quality gates (no git diff required)
     deps: [build]
     cmds:
-      # unhomed-logic voltou ao agregado: fora desligado porque `.claude/rules/shell-scripts-allowlist.md`
-      # tinha saido do repo, e o gate abortava o pre-push em vez de medir. O allowlist foi restaurado.
+      # unhomed-logic is back in the aggregate: it had been switched off because `.claude/rules/shell-scripts-allowlist.md`
+      # had left the repo, and the gate aborted the pre-push instead of measuring. The allowlist was restored.
       - /tmp/loopzero-ops quality unhomed-logic
-      # Os tres abaixo saem do ledger de gates nao-wired (#255): crd-semantic-diff
-      # ja passava e estava rotulado errado; stack-coverage passou a derivar as
-      # strategies do runtimeRegistry (a lista paralela apodreceu quando o produto
-      # reduziu para node+python); base-image-digest passou depois de pinar os 16
-      # FROM no digest do index multi-arch. Somados: < 1.1s.
-      # B-095: Tenant/Environment fora de `loopzero-system` fica invisivel ao operator (cache
-      # restrito a esse namespace) e indeletavel se a cerca de admissao for ligada — remover
-      # finalizer e' um UPDATE. O bootstrap de producao semeava um em `default`.
+      # The three below leave the ledger of non-wired gates (#255): crd-semantic-diff
+      # already passed and was mislabelled; stack-coverage now derives the
+      # strategies from runtimeRegistry (the parallel list rotted when the product
+      # shrank to node+python); base-image-digest passed after pinning the 16
+      # FROMs to the multi-arch index digest. Combined: < 1.1s.
+      # B-095: a Tenant/Environment outside `loopzero-system` is invisible to the operator (cache
+      # restricted to that namespace) and undeletable if the admission fence is switched on —
+      # removing a finalizer is an UPDATE. The production bootstrap seeded one in `default`.
       - /tmp/loopzero-ops quality platform-cr-namespace
       - /tmp/loopzero-ops quality crd-semantic-diff
       - /tmp/loopzero-ops quality stack-coverage
       - /tmp/loopzero-ops quality base-image-digest
-      # test-coverage-report sai do ledger de "measured broken": media 0.00% vinha de
-      # medir ./infra/tests/{unit,charts}, pacotes so-de-teste. Contra o codigo de
-      # producao (pkg + gates) mede 85.33% em 9s, com o floor subido de 30% para 75%.
+      # test-coverage-report leaves the "measured broken" ledger: the 0.00% average came from
+      # measuring ./infra/tests/{unit,charts}, test-only packages. Against production
+      # code (pkg + gates) it measures 85.33% in 9s, with the floor raised from 30% to 75%.
       - /tmp/loopzero-ops quality test-coverage-report
-      # skip-link sai do ledger: o baseline era posicional (file:LINE), entao qualquer
-      # edicao acima de um skip o re-reportava como novo — 145 entradas casando quase
-      # nada e 189 falsos "NEW". A chave passou a ser arquivo + texto do proprio skip.
+      # skip-link leaves the ledger: the baseline was positional (file:LINE), so any
+      # edit above a skip re-reported it as new — 145 entries matching almost
+      # nothing and 189 false "NEW"s. The key is now file + the skip's own text.
       - /tmp/loopzero-ops quality skip-link
-      # proxy-exposure: todo reverse_proxy do edge declara o que deixa passar.
-      # Um proxy herda o contrato de resposta do upstream, entao o que chega no
-      # browser e' invisivel neste repo ate alguem escrever. 26 proxies, 21ms.
+      # proxy-exposure: every edge reverse_proxy declares what it lets through.
+      # A proxy inherits the upstream's response contract, so what reaches the
+      # browser is invisible in this repo until someone writes it down. 26 proxies, 21ms.
       - /tmp/loopzero-ops quality proxy-exposure
-      # mock-budget e pkg-usage-matrix saem do ledger de slowGate: estavam rotulados
-      # ">25s" e medem 0.6s e 0.7s. O segundo tambem parou de publicar um falso
-      # "dead code candidate" para cmd/loopzero-ops/internal/pulumi, que so tem sub-pacotes.
+      # mock-budget and pkg-usage-matrix leave the slowGate ledger: they were labelled
+      # ">25s" and measure 0.6s and 0.7s. The second also stopped publishing a false
+      # "dead code candidate" for cmd/loopzero-ops/internal/pulumi, which only has sub-packages.
       - /tmp/loopzero-ops quality mock-budget
       - /tmp/loopzero-ops quality pkg-usage-matrix
       - /tmp/loopzero-ops quality script-count
@@ -142,41 +142,41 @@ tasks:
       # until T9 Vault provider migration runs. Gate is wired in loopzero-ops and can be
       # invoked manually: `/tmp/loopzero-ops quality no-pulumi-inline-secrets`.
       # Pre-migration FAIL is INTENTIONAL forcing-function (operator visibility).
-      # no-aes-remaining desligado do gate agregado: o prazo T+60d venceu em 2026-08-01 e o
-      # branch AES legado do dispatcher (api/internal/db/store/secret_wrapper.go) ainda esta la,
-      # entao o gate passou a travar todo push em vez de sinalizar. Continua registrado no
-      # loopzero-ops e invocavel a mao: `/tmp/loopzero-ops quality no-aes-remaining`.
-      # A divida T10.3 (deletar o branch AES) segue aberta.
-      # Higiene dos workflows (#233 action sem SHA / #250 `${{ }}` dentro de `run:`). Nao e um gate
-      # do loopzero-ops de proposito: o alvo e YAML do `.github/`, nao codigo Go, e o registry do
-      # loopzero-ops tem uma contagem travada em `gate-list`.
+      # no-aes-remaining switched off in the aggregate gate: the T+60d deadline expired on 2026-08-01
+      # and the dispatcher's legacy AES branch (api/internal/db/store/secret_wrapper.go) is still there,
+      # so the gate started blocking every push instead of signalling. It is still registered in
+      # loopzero-ops and invocable by hand: `/tmp/loopzero-ops quality no-aes-remaining`.
+      # The T10.3 debt (delete the AES branch) remains open.
+      # Workflow hygiene (#233 action without SHA / #250 `${{ }}` inside `run:`). It is not a
+      # loopzero-ops gate on purpose: the target is `.github/` YAML, not Go code, and the loopzero-ops
+      # registry has a count locked in `gate-list`.
       #
-      # Ele TAMBEM roda como workflow (`.github/workflows/workflow-hygiene.yml`), mas hoje nenhum
-      # workflow deste repo consegue runner — a conta `getloopscale` esta bloqueada por billing e
-      # todo job morre antes do primeiro step. Enquanto isso, esta linha e o unico consumidor vivo
-      # da guarda; sem ela, a guarda existiria sem nunca rodar, que e o defeito que ela combate.
+      # It ALSO runs as a workflow (`.github/workflows/workflow-hygiene.yml`), but today no
+      # workflow in this repo gets a runner — the `getloopscale` account is blocked by billing and
+      # every job dies before the first step. Meanwhile, this line is the guard's only live
+      # consumer; without it the guard would exist without ever running, which is the defect it fights.
       - bash .github/scripts/check-workflow-hygiene.sh
       - /tmp/loopzero-ops quality anonymous-auth
-      - /tmp/loopzero-ops quality billing-secrets   # B-037: opcionalidade de segredo de cobranca e valor, nao literal
-      - /tmp/loopzero-ops quality billing-layers    # B-038: as cinco camadas de cobranca enumeraveis, com dono e catraca
-      - /tmp/loopzero-ops quality scheduled-image   # B-019: agendamento nao aponta para imagem sem caminho de publicacao
-      - /tmp/loopzero-ops quality lint-coverage     # B-121/B-083/B-148: todo modulo Go medido, catraca por modulo
-      - /tmp/loopzero-ops quality runbook-parity    # B-140: mensagem de erro nao manda fazer o que o runbook proibe
-      - /tmp/loopzero-ops quality caddy-host-parity # B-150: hostname exigido pela verificacao precisa de bloco que termine o TLS
-      - /tmp/loopzero-ops quality dashboard-root-parity # B-039: o runbook nomeia o caminho que a borda serve
+      - /tmp/loopzero-ops quality billing-secrets   # B-037: billing-secret optionality is a value, not a literal
+      - /tmp/loopzero-ops quality billing-layers    # B-038: the five billing layers, enumerable, with an owner and a ratchet
+      - /tmp/loopzero-ops quality scheduled-image   # B-019: a schedule does not point at an image with no publication path
+      - /tmp/loopzero-ops quality lint-coverage     # B-121/B-083/B-148: every Go module measured, per-module ratchet
+      - /tmp/loopzero-ops quality runbook-parity    # B-140: an error message does not tell you to do what the runbook forbids
+      - /tmp/loopzero-ops quality caddy-host-parity # B-150: a hostname the verification requires needs a block that terminates TLS
+      - /tmp/loopzero-ops quality dashboard-root-parity # B-039: the runbook names the path the edge serves
       - /tmp/loopzero-ops quality chart-pairs          # B-056, 2026-09-25: no chart exists twice across infra/helm and charts/ (one chart per pair)
-      - /tmp/loopzero-ops quality stdlib-only          # B-057: o vocabulario compartilhado nao arrasta dependencia
-      - /tmp/loopzero-ops quality adapter-ports        # B-058: adaptador declara a porta que satisfaz
-      - /tmp/loopzero-ops quality package-admission    # B-058: o plumbing k8s nao admite dominio, e as tres casas do split seguem povoadas
-      - /tmp/loopzero-ops quality error-vocabulary   # B-081: Regra 3 nas mensagens de erro autoradas
-      - /tmp/loopzero-ops quality readiness-summary   # B-138: o sumario de prontidao e a ultima mutacao antes de persistir, nos 6 reconcilers
-      # B-158: o registro que o cycle-maintenance le para escolher o proximo item. Ele esteve
-      # INVALID (id fora de ordem + indice obsoleto) sem ninguem saber, e o efeito nao foi
-      # cosmetico: um item MEDIDO preso em `raw` era ranqueado abaixo de itens nao medidos.
-      # Barra em blocker/major; DoD vago (minor) sai com 0 e nao barra.
+      - /tmp/loopzero-ops quality stdlib-only          # B-057: the shared vocabulary drags in no dependency
+      - /tmp/loopzero-ops quality adapter-ports        # B-058: an adapter declares the port it satisfies
+      - /tmp/loopzero-ops quality package-admission    # B-058: the k8s plumbing admits no domain, and the split's three homes stay populated
+      - /tmp/loopzero-ops quality error-vocabulary   # B-081: Rule 3 in authored error messages
+      - /tmp/loopzero-ops quality readiness-summary   # B-138: the readiness summary is the last mutation before persisting, in the 6 reconcilers
+      # B-158: the registry cycle-maintenance reads to choose the next item. It was
+      # INVALID (out-of-order id + stale index) without anyone knowing, and the effect was not
+      # cosmetic: a MEASURED item stuck at `raw` was ranked below unmeasured items.
+      # Blocks on blocker/major; a vague DoD (minor) exits 0 and does not block.
       # MEET-ASYNC-AMENDMENT-2026-08-19-wire-backlog-validator (pending ratification).
       - python3 .claude/skills/backlog-review/scripts/check_backlog_structure.py BACKLOG.md
-      - /tmp/loopzero-ops quality module-selfcontained  # B-140: todo modulo compila sem go.work (o CI usa GOWORK=off)
+      - /tmp/loopzero-ops quality module-selfcontained  # B-140: every module compiles without go.work (CI uses GOWORK=off)
       - /tmp/loopzero-ops quality correlation-header   # T6.1 of plan 2026-06-01-p3-infra-observability-test-debt
       - /tmp/loopzero-ops quality prod-image-digests
       - /tmp/loopzero-ops quality prod-image-tags   # #232 — wire the mutable-tag gate (extended to prod overlays infra/helmfile/values/prod); was registered-but-unrun (review NEEDS_FIXES 2026-07-12)
@@ -195,12 +195,12 @@ tasks:
       # stay guarded against unauthorized DELETE. Wired here, not just registered: #255
       # found 10 gates that existed and never ran, which is how a guardrail silently rots.
       - /tmp/loopzero-ops quality vap-delete-guardrail
-      # Índice de topologia: qual chart roda em qual cluster, derivado dos helmfiles.
-      # Wired, não só registrado — #255 encontrou 10 gates que existiam e nunca rodavam.
+      # Topology index: which chart runs on which cluster, derived from the helmfiles.
+      # Wired, not just registered — #255 found 10 gates that existed and never ran.
       - /tmp/loopzero-ops quality helm-topology-index
-      # A org que os arquivos de build AUTENTICAM tem de bater com a que os go.mod PEDEM.
-      # Divergiu duas vezes em dois dias (ci.yml, api/Dockerfile) e a segunda quebrou o build
-      # da imagem no merge para develop — com "not found", que parece repo inexistente.
+      # The org the build files AUTHENTICATE against has to match the one the go.mod files REQUEST.
+      # It diverged twice in two days (ci.yml, api/Dockerfile) and the second time broke the image
+      # build on the merge to develop — with "not found", which looks like a nonexistent repo.
       - /tmp/loopzero-ops quality gomod-auth-org
       - /tmp/loopzero-ops quality argo-app-identity
       - /tmp/loopzero-ops quality corrections-txt-closed
@@ -219,53 +219,53 @@ tasks:
       - /tmp/loopzero-ops quality no-migrate-force
       - /tmp/loopzero-ops quality no-shell-wrap
       - /tmp/loopzero-ops quality orphan-alerts
-      # B-181: o agregador de custo do loopzero-cloud consulta tres series `loopzero_*` e duas
-      # nao tem produtor em repositorio nenhum — medido ao vivo em 2026-09-05, vetor
-      # vazio nas tres. O desencontro era silencioso dos dois lados. O gate le o pin em
-      # api/internal/contract/testdata/cost-aggregator-series.txt e responde por serie:
-      # produtor verificado, ausencia RASTREADA (impressa, nao vermelha), ou nova serie
-      # sem declaracao (vermelho). Sem o loopzero-cloud em disco ele diz PARTIAL e nomeia o
-      # que nao comparou — nunca PASS sobre o que nao observou (B-169).
+      # B-181: loopzero-cloud's cost aggregator queries three `loopzero_*` series and two of them
+      # have no producer in any repository — measured live on 2026-09-05, an empty vector
+      # on all three. The mismatch was silent on both sides. The gate reads the pin in
+      # api/internal/contract/testdata/cost-aggregator-series.txt and answers per series:
+      # producer verified, TRACKED absence (printed, not red), or a new series
+      # with no declaration (red). Without loopzero-cloud on disk it says PARTIAL and names
+      # what it did not compare — never PASS over what it did not observe (B-169).
       - /tmp/loopzero-ops quality cost-series-producers
       - /tmp/loopzero-ops quality test-deletion
       - /tmp/loopzero-ops quality test-pyramid
       - /tmp/loopzero-ops quality test-targets
-      # B-180: um teste em infra/tests/ que faz stat num caminho e pula quando ele
-      # falta e condicional na FORMA e incondicional no FATO assim que o caminho sai
-      # da arvore — o pacote segue imprimindo ok e tudo abaixo da guarda e codigo
-      # morto. Quatro skips assim viviam em config/ desde o M5, um deles com
-      # os.ReadFile + t.Fatalf inalcancaveis (B-169 fechou a mesma forma em unit/).
-      # O gate le o pin em infra/quality/test-skip-absent-path.txt e responde por
-      # skip: CONDITIONAL, TRACKED (impresso, nao vermelho), EXTERNAL (fora do repo,
-      # nao julgado) ou ausente-e-nao-declarado (vermelho). Sem sujeito — arvore
-      # movida, zero arquivos, zero skips, pin ilegivel — ele sai 5 dizendo o que
-      # faltou, nunca 0.
+      # B-180: a test in infra/tests/ that stats a path and skips when it is missing
+      # is conditional in FORM and unconditional in FACT as soon as the path leaves
+      # the tree — the package keeps printing ok and everything below the guard is dead
+      # code. Four such skips lived in config/ since M5, one of them with an
+      # unreachable os.ReadFile + t.Fatalf (B-169 closed the same shape in unit/).
+      # The gate reads the pin in infra/quality/test-skip-absent-path.txt and answers per
+      # skip: CONDITIONAL, TRACKED (printed, not red), EXTERNAL (outside the repo,
+      # not judged) or absent-and-undeclared (red). With no subject — tree
+      # moved, zero files, zero skips, unreadable pin — it exits 5 saying what was
+      # missing, never 0.
       - /tmp/loopzero-ops quality test-skip-absent-path
-      # B-184: a metade SEM guarda da mesma classe. Um `t.Skip` nu — sem condicao
-      # nenhuma — nao e' um ramo: ele aborta a funcao, entao TUDO abaixo dele e'
-      # inalcancavel e mesmo assim se le como assercao viva. Dois testes de regressao
-      # estavam assim desde o T1.4 (um deles escondia o hardcode que o B-069 tinha
-      # removido, de volta em tenant-operator/main.go) e mais seis viviam dentro de
-      # closures `t.Run`. O gate reprova um skip nu COM codigo embaixo, e deixa em paz
-      # o que nao tem nada embaixo — esse e' honesto. O pin em
-      # infra/quality/test-skip-unconditional.txt guarda ancoras VIVAS: se o teste de
-      # "tem statement depois?" parar de funcionar, a linha declarada deixa de ser
-      # reencontrada e o gate fica vermelho em vez de silencioso. Sem sujeito — arvore
-      # movida, zero arquivos, zero skips, zero skips incondicionais, pin ilegivel ou
-      # ambiguo — ele sai 5, nunca 0.
+      # B-184: the UNGUARDED half of the same class. A bare `t.Skip` — with no condition
+      # at all — is not a branch: it aborts the function, so EVERYTHING below it is
+      # unreachable and still reads as a live assertion. Two regression tests
+      # were like that since T1.4 (one of them hid the hardcode B-069 had
+      # removed, back in tenant-operator/main.go) and six more lived inside
+      # `t.Run` closures. The gate fails a bare skip WITH code below it, and leaves
+      # alone one with nothing below it — that one is honest. The pin in
+      # infra/quality/test-skip-unconditional.txt keeps LIVE anchors: if the
+      # "is there a statement after it?" test stops working, the declared line is no
+      # longer found and the gate turns red instead of silent. With no subject — tree
+      # moved, zero files, zero skips, zero unconditional skips, an unreadable or
+      # ambiguous pin — it exits 5, never 0.
       - /tmp/loopzero-ops quality test-skip-unconditional
-      # Wired 2026-07-30 after its finding was fixed: it reprovava exigindo
-      # `cli:link`/`cli:build`, removidas no #254 porque `cli/` saiu no M2. O
-      # contrato declarava uma capacidade que o repo perdeu dois milestones
-      # atrás — corrigido no ExpectedCommands, não reintroduzindo as tasks.
+      # Wired 2026-07-30 after its finding was fixed: it failed by demanding
+      # `cli:link`/`cli:build`, removed in #254 because `cli/` left at M2. The
+      # contract declared a capability the repo lost two milestones
+      # earlier — fixed in ExpectedCommands, not by reintroducing the tasks.
       - /tmp/loopzero-ops quality taskfile-interface
-      # Regression lock do #59: middleware Traefik com CSP estático nunca pode ser
-      # anexado a rota de tenant — clobbaria o nonce por request do LoopZeroKit e
-      # mataria todo script inline em silêncio. Verde hoje; wired para continuar assim.
+      # Regression lock for #59: a Traefik middleware with a static CSP must never be
+      # attached to a tenant route — it would clobber LoopZeroKit's per-request nonce and
+      # silently kill every inline script. Green today; wired to stay that way.
       - /tmp/loopzero-ops quality tenant-csp-passthrough
-      # Wired 2026-07-30 assim que os achados foram corrigidos (CHG-2026-07-30-002).
-      - /tmp/loopzero-ops quality worker-csp          # #35 — CSP do CF Worker sem script inline
-      - /tmp/loopzero-ops quality chart-default-tags  # #232 — chart loopzero-owned sem tag mutável no default
+      # Wired 2026-07-30 as soon as the findings were fixed (CHG-2026-07-30-002).
+      - /tmp/loopzero-ops quality worker-csp          # #35 — CF Worker CSP without inline script
+      - /tmp/loopzero-ops quality chart-default-tags  # #232 — loopzero-owned chart with no mutable tag in the default
       - /tmp/loopzero-ops quality values-duplicate-keys  # a values file declaring one key twice loses the first block silently
       # sqlc T3 governance gates (T0.3-T0.5 of plan 2026-05-29-sqlc-
       # migration v1.2). Phase 0 baseline: each gate trivially passes
@@ -301,8 +301,8 @@ tasks:
       - bash infra/tests/secrets/check-scoped-kubeconfig-cold-bootstrap_test.sh        # openbao-adoption iter 34: T7.3 cold-bootstrap legacy SA-token Secret block (cell wiring)
       - bash infra/tests/secrets/check-promtail-vault-empty-targets_test.sh            # openbao-adoption iter 34: T8.1 promtail filter when secrets-system NS absent (dogfood compat)
       # B-033 (2026-08-31): dev-public overlay MUST publish LOOPZERO_PROMETHEUS_URL for
-      # cost aggregator wiring — hermetic, no live cluster required. Sem essa var,
-      # cost_counters fica vazia em dev-public e CostEnforcer degrada para pass-through.
+      # cost aggregator wiring — hermetic, no live cluster required. Without that var,
+      # cost_counters stays empty in dev-public and CostEnforcer degrades to pass-through.
       - bash infra/tests/check-loopzero-cloud-cost-aggregator-wiring_test.sh
       - /tmp/loopzero-ops quality credentials-sot                    # M-Migrate2 (2026-07-07): replaced infra/tests/docs/credentials-sot_test.sh with pure-logic Go gate. Doc-sync: credentials-required.md enumerates bootstrap Secrets.
       # J-22 openbao-transit v1.2 productive-idle hermetic tests (iters 20-26) — wired iter 27.
@@ -314,19 +314,19 @@ tasks:
       # with upstream / overlay role_id hardcode / rehearsal block falling
       # through to encrypt path).
       - /tmp/loopzero-ops quality loopzero-api-openbao-approle-envfrom                   # M-Migrate2 (2026-07-07): replaced infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh with Go gate. iter 20 T6.1 chart envFrom secretRef contract (7 assertions). Advisory when helm absent.
-      - /tmp/loopzero-ops quality openbao-bootstrap-in-core-task                       # B-047 (2026-08-12): gate INVERTIDO — antes travava a FORMA do atalho proibido (18 assercoes), agora reprova a existencia dele e o efeito equivalente sob outro nome.
-      - /tmp/loopzero-ops quality helmfile-context-parity                             # B-044 (2026-08-12): uma task que invoca um helmfile apontando para contexto divergente do que o helmfile declara reprova. Estava desligado porque a task k3d:secrets:bootstrap-in-core produzia 4 divergencias; removida em 2026-08-12 (B-047), o gate passou a 0 divergencias e o wiring que o teste de wiring dizia 'follows that removal' foi feito.
-      - /tmp/loopzero-ops quality clusterimagepolicy-mode                             # B-045 (2026-08-12): o deny-flip so pode ficar em 'enforce' com ADR assinando o cutover. Estava desligado porque reprovava por falta do ADR — que agora existe (2026-08-12-clusterimagepolicy-deny-flip.md). Ligado, ele impede a reversao silenciosa para 'warn'.
-      - /tmp/loopzero-ops quality security-context --gate                              # B-045 (2026-08-12): com --gate ele REPROVA um chart NON-CONFORMANT sem excecao registrada. Sem a flag e modo relatorio, e era assim que ele estava sendo lido — a auditoria que gerou a bala rodou sem a flag e concluiu que o gate 'saia 0 imprimindo violacao'. Ligado com a flag, ele impede que um TERCEIRO chart entre sem endurecimento nem excecao.
+      - /tmp/loopzero-ops quality openbao-bootstrap-in-core-task                       # B-047 (2026-08-12): gate INVERTED — it used to lock the SHAPE of the forbidden shortcut (18 assertions), now it fails on its existence and on the equivalent effect under another name.
+      - /tmp/loopzero-ops quality helmfile-context-parity                             # B-044 (2026-08-12): a task that invokes a helmfile pointing at a context different from the one the helmfile declares fails. It was switched off because the k3d:secrets:bootstrap-in-core task produced 4 divergences; once that was removed on 2026-08-12 (B-047), the gate went to 0 divergences and the wiring the wiring test said 'follows that removal' was done.
+      - /tmp/loopzero-ops quality clusterimagepolicy-mode                             # B-045 (2026-08-12): the deny-flip may only stay at 'enforce' with an ADR signing the cutover. It was switched off because it failed for lack of the ADR — which now exists (2026-08-12-clusterimagepolicy-deny-flip.md). Switched on, it prevents a silent reversal to 'warn'.
+      - /tmp/loopzero-ops quality security-context --gate                              # B-045 (2026-08-12): with --gate it FAILS a NON-CONFORMANT chart with no registered exception. Without the flag it is report mode, and that is how it was being read — the audit that produced the bullet ran without the flag and concluded the gate 'exited 0 while printing a violation'. Switched on with the flag, it stops a THIRD chart from entering with neither hardening nor an exception.
       - /tmp/loopzero-ops quality dev-public-loopzero-external-secrets-overlay           # M-Migrate2 (2026-07-07): replaced infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh with pure-logic Go gate. iter 25 dev-public ESO overlay shape + anti-hardcode (18 assertions).
       - /tmp/loopzero-ops quality option-b-eso-deploy-doc                            # M-Migrate2 (2026-07-07): replaced infra/tests/check-option-b-eso-deploy-doc_test.sh with pure-logic Go gate. iter 33 Option B ESO deploy doc structure + version drift defense (25 assertions).
       - /tmp/loopzero-ops quality vault-bootstrap-unseal-loop                        # M-Migrate2 (2026-07-07): replaced infra/tests/check-vault-bootstrap-unseal-loop_test.sh with pure-logic Go gate. 2026-06-15 dev-public Cleanroom unseal-loop canonical fix (16 assertions; pipefail+bao rc=2 regression guard).
       # M1 hermetic guards (plan m1-commit-canonical-30-fixes v1.2 SHIPPABLE 96.4 — 2026-06-23)
-      - /tmp/loopzero-ops quality caddyfile-no-docker-ip                              # M-Migrate2 (2026-07-07): replaced infra/tests/check-caddyfile-no-docker-network-ip_test.sh with pure-logic Go gate. Red Team #127 (2026-07-01): rejects hardcoded 172.18.x.x Docker network IPs in Caddyfile reverse_proxy — DHCP drift routes customer-app requests to VAULT cluster → 502 sustentado dev-public-wide.
+      - /tmp/loopzero-ops quality caddyfile-no-docker-ip                              # M-Migrate2 (2026-07-07): replaced infra/tests/check-caddyfile-no-docker-network-ip_test.sh with pure-logic Go gate. Red Team #127 (2026-07-01): rejects hardcoded 172.18.x.x Docker network IPs in Caddyfile reverse_proxy — DHCP drift routes customer-app requests to VAULT cluster → sustained 502 dev-public-wide.
       # M2 hermetic guards (plan m2-promote-11-canonical-seeds v1.1 SHIPPABLE 95.2 — 2026-06-23)
       - /tmp/loopzero-ops quality check-allowlist-sunsets                            # M-Migrate2 (2026-07-07): replaced infra/tests/check-allowlist-sunsets_test.sh with pure-logic Go gate. T5.2.a plan 2026-06-11-code-review-remediation: hermetic test for `.claude/scripts/check-allowlist-sunsets.py` (CI blocks past-sunset entries in rules/code-review-allowlist.txt).
-      # O script Python de sunsets saiu do repo com o `.claude/`; a checagem equivalente
-      # continua acima, no gate Go `check-allowlist-sunsets`, que le o mesmo allowlist.
+      # The Python sunsets script left the repo with `.claude/`; the equivalent check
+      # remains above, in the Go gate `check-allowlist-sunsets`, which reads the same allowlist.
       # Plan 2026-06-15-code-review-49-findings-remediation hermetic gates.
       # Phase 1 (T1.2) — J-20 Scale LIVE bash syntax companion.
       # Phase 5 (T5.1) — 4 ORPHAN companions for billing-portal + oidc-redirect
@@ -342,7 +342,7 @@ tasks:
       # T-cov-1 of plan 2026-06-15-100pct-dashboard-coverage-roadmap Phase 2A
       # (R2-F8 HIGH closure): every user-facing API route must be in the
       # middleware.Auth group OR appear in the explicit public-allowlist.
-      - /tmp/loopzero-ops quality cluster-rename-guard                             # B-001 T0.1: prova que o rename de cluster (mgmt->core, vault->secrets) tocou so identificadores. Toda linha classificada GENERIC antes do rename tem de sobreviver byte a byte — sao 70, e `vault` responde pela maioria porque ali a palavra nomeia o OpenBao.
+      - /tmp/loopzero-ops quality cluster-rename-guard                             # B-001 T0.1: proves the cluster rename (mgmt->core, vault->secrets) touched only identifiers. Every line classified GENERIC before the rename has to survive byte for byte — there are 70, and `vault` accounts for most of them because there the word names OpenBao.
       - /tmp/loopzero-ops quality route-auth-coverage                                # M-Migrate2 (2026-07-07): replaced infra/tests/check-route-auth-coverage_test.sh with pure-logic Go gate. R2-F8 HIGH: every router.go route MUST be inside middleware.Auth group OR registerProtectedRoutes OR explicit public-allowlist. 40 routes verified.
       # M16 Phase 1 hygiene (2026-07-10): 5 previously-registered M-Migrate2 gates wired in per plan D1 (Rule 3 dead-code closure).
       - /tmp/loopzero-ops quality webhook-canonical-path                             # M16 T1.1 (2026-07-10): pre-Wave-1 backfill. Registered by M-Migrate2 (2026-07-07 replaces infra/tests/check-webhook-canonical-path_test.sh) but not wired into quality:gates until now.
@@ -352,23 +352,23 @@ tasks:
       - /tmp/loopzero-ops quality render-schema-gen-sql                              # M16 T1.5 (2026-07-10): pre-Wave-1 backfill. Registered by M-Migrate2 (2026-07-07) but not wired until now.
       - /tmp/loopzero-ops quality no-cloud-dev-default                              # M16 T2.3 (2026-07-10): M-Migrate2 Wave 1 — replaces infra/tests/check-no-cloud-dev-default_test.sh (T1.1 Caddy 301 redirect trap guard: no test/seed script may default to cloud-dev.loopzero.example; webhook handler /api/v1/webhooks/github is single exception).
       - /tmp/loopzero-ops quality divergence-matrix                                # every LOCAL ONLY (LP-NNN) marker has a row in docs/operations.md and every OPEN row a live marker. Wired once the matrix moved into a versioned document; before, it read a gitignored path and exited 5 on every clone.
-      - /tmp/loopzero-ops quality docs-contract-refs                                # B-052 (2026-08-11): toda referencia .claude/rules/*.md no CLAUDE.md e todo ADR-NNNN citado em comentario Go resolve, ou tem excecao datada. Uma referencia normativa que nao resolve e pior que nenhuma: ela e seguida.
-      - /tmp/loopzero-ops quality test-target-coverage                                # B-087/B-088 (2026-08-13): 5 dos 9 modulos nao tinham teste rodando por task nenhuma, e o alvo que os agregaria abortava desde o M9. A causa nos dois foi uma lista escrita a mao nunca comparada com o disco; este gate e essa comparacao.
-      - /tmp/loopzero-ops quality drill-outputs-consumers                           # B-045 (2026-08-11): estava isento como operator-run e nao e — le apenas infra/pulumi-drill/src e docs; hermetico e verde. Sem categoria de isencao valida, a resposta e ligar.
+      - /tmp/loopzero-ops quality docs-contract-refs                                # B-052 (2026-08-11): every .claude/rules/*.md reference in CLAUDE.md and every ADR-NNNN cited in a Go comment resolves, or has a dated exception. A normative reference that does not resolve is worse than none: it gets followed.
+      - /tmp/loopzero-ops quality test-target-coverage                                # B-087/B-088 (2026-08-13): 5 of the 9 modules had no test running through any task, and the target that would aggregate them had aborted since M9. The cause in both was a hand-written list never compared with the disk; this gate is that comparison.
+      - /tmp/loopzero-ops quality drill-outputs-consumers                           # B-045 (2026-08-11): it was exempted as operator-run and it is not — it only reads infra/pulumi-drill/src and docs; hermetic and green. With no valid exemption category, the answer is to switch it on.
       - /tmp/loopzero-ops quality loki-vault-retention                               # M16 T3.1 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-loki-vault-retention_test.sh (T8.5 archive CronJob hardening; T8.2 retention is loki-retention-schema).
       - /tmp/loopzero-ops quality loki-retention-schema                              # M16 T3.2 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-loki-retention-schema_test.sh (trio-compat schema regression: SingleBinary + retention_stream secrets-system + priority int; 7 assertions).
       - /tmp/loopzero-ops quality vault-prom-alerts                                  # M16 T3.3 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-vault-prom-alerts_test.sh (T8.4 PrometheusRule vault-audit-alerts: 4 P1 alerts + severity=critical + runbook_url + team+domain labels + invariant marker).
       - /tmp/loopzero-ops quality loopzero-external-secrets-chart-sanity                 # M16 T3.5 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-loopzero-external-secrets-chart-sanity_test.sh (iter 23 chart sanity: 8 assertions across 5 canonical envs; helm-template; advisory when helm absent).
       - /tmp/loopzero-ops quality ory-kratos-public-urls                              # M22 empirical follow-up (2026-07-10) — helm-template golden test for Ory Kratos public URLs; migrated from infra/tests/helm/ory-kratos-public-urls_test.sh per M-Migrate2 (M16 T3.5 esochartsanity shape). Advisory when helmfile absent. The ONLY M22 target allowlisted; delivers empirical allowlist -1.
       - /tmp/loopzero-ops quality loopzero-external-secrets-creation-policy              # M16 T3.6 (2026-07-10): M-Migrate2 Wave 2 — replaces infra/tests/check-loopzero-external-secrets-creation-policy_test.sh (iter 20 P0 regression: creationPolicy Orphan NOT Owner; 4 assertions; helm-template; advisory when helm absent).
-      - /tmp/loopzero-ops quality ldflag-symbols                                   # B-053: `-X` sobre simbolo inexistente e no-op que sai 0; o linker nao avisa e o binario fica com o default.
-      - /tmp/loopzero-ops quality silent-surface                                   # B-104: catraca contra superficie de rota que some sem dizer. Medida 2026-08-16: 34 mudas em 35 guardas. So pode descer.
-      - /tmp/loopzero-ops quality status-writer-contract                            # B-085 bala 4 (2026-08-12, B-041): a cerca nasce ANTES do fatiamento de routes, por exigencia do item — uma cerca escrita depois e escrita para caber no que ja foi feito.
-      - /tmp/loopzero-ops quality domain-sink-purity                                 # slice-4 T1.1 (2026-08-12, B-049): catraca sobre os tipos de persistencia que atravessam o sink do DAG de services. Nao fecha o vazamento (custa 57 call sites, B-079) — impede que cresca, que e o que atinge os 35 dependentes.
-      - /tmp/loopzero-ops quality skill-suites                                     # B-124 (2026-08-16): as suites pytest do ecossistema; tres de quinze estavam vermelhas e nenhuma task as rodava.
-      - /tmp/loopzero-ops quality ecosystem-validators                            # B-129 (2026-08-17): check_xrefs.py + test_e2e_smoke.py, exigidos verdes pelo protocolo de mudanca de golden rule e rodados por nada ate hoje.
-      - /tmp/loopzero-ops quality publish-hygiene                                 # B-130 (2026-08-17): caminho de workstation em arquivo versionado vivo; historia publicada e publica RETROATIVAMENTE.
-      - /tmp/loopzero-ops quality skill-script-paths                                # B-120 (2026-08-16): toda invocacao de script num SKILL.md resolve nos dois layouts do ecossistema (.claude/ no plugin, raiz no standalone).
+      - /tmp/loopzero-ops quality ldflag-symbols                                   # B-053: `-X` on a nonexistent symbol is a no-op that exits 0; the linker does not warn and the binary keeps the default.
+      - /tmp/loopzero-ops quality silent-surface                                   # B-104: ratchet against route surface that disappears silently. Measured 2026-08-16: 34 silent out of 35 guards. It can only go down.
+      - /tmp/loopzero-ops quality status-writer-contract                            # B-085 bullet 4 (2026-08-12, B-041): the fence is born BEFORE the routes slicing, as the item requires — a fence written afterwards is written to fit what was already done.
+      - /tmp/loopzero-ops quality domain-sink-purity                                 # slice-4 T1.1 (2026-08-12, B-049): ratchet on the persistence types that cross the sink of the services DAG. It does not close the leak (that costs 57 call sites, B-079) — it stops it from growing, which is what reaches the 35 dependents.
+      - /tmp/loopzero-ops quality skill-suites                                     # B-124 (2026-08-16): the ecosystem's pytest suites; three of fifteen were red and no task ran them.
+      - /tmp/loopzero-ops quality ecosystem-validators                            # B-129 (2026-08-17): check_xrefs.py + test_e2e_smoke.py, required green by the golden-rule change protocol and run by nothing until today.
+      - /tmp/loopzero-ops quality publish-hygiene                                 # B-130 (2026-08-17): a workstation path in a live versioned file; published history is public RETROACTIVELY.
+      - /tmp/loopzero-ops quality skill-script-paths                                # B-120 (2026-08-16): every script invocation in a SKILL.md resolves in both of the ecosystem's layouts (.claude/ in the plugin, the root in standalone).
       - /tmp/loopzero-ops quality openbao-init-auth-mounts                           # M16 T3.7 (2026-07-10): M-Migrate2 Wave 2 CLOSE — replaces infra/tests/check-openbao-init-auth-mounts_test.sh (T5.1-T5.9 per-cluster K8s auth mounts + per-binary roles + isolation invariants; helm-template; advisory when helm absent).
       # Wire: chart Go guards (infra/tests/charts/) — locks NodePort/serverlb
       # canonical (T1.1 vault_host_published_reach), F-1 NetworkPolicy, gateway-
@@ -477,13 +477,13 @@ tasks:
 
   leak:live:
     desc: |
-      Sonda LIVE que prova o fecho da borda publica — a que o gate `proxy-exposure`
-      cita no proprio cabecalho e que nao existia ate 2026-08-10.
+      LIVE probe that proves the public edge is closed — the one the `proxy-exposure` gate
+      cites in its own header and that did not exist until 2026-08-10.
 
-      NAO e um quality gate: todos eles sao hermeticos por contrato, e esta depende de
-      rede contra um alvo vivo. Por isso mora em `loopzero-ops leak`, ao lado de `chaos` e
-      `drill`. Nao entra em `task quality:gates`.
+      It is NOT a quality gate: all of those are hermetic by contract, and this one depends on
+      the network against a live target. That is why it lives in `loopzero-ops leak`, next to `chaos`
+      and `drill`. It is not part of `task quality:gates`.
 
-      Alvo padrao: app-dev.loopzero.example + auth-dev.loopzero.example. Passe flags via CLI_ARGS.
+      Default target: app-dev.loopzero.example + auth-dev.loopzero.example. Pass flags via CLI_ARGS.
     cmds:
       - /tmp/loopzero-ops leak live {{.CLI_ARGS}}

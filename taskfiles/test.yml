@@ -78,29 +78,29 @@ tasks:
       - cd operators && go test ./... -short
       - cd operators/api && go test ./... -short
       - cd api && go test ./... -short
-      # `helm/` (29 arquivos) nao rodava em task nenhuma — o mesmo defeito do
-      # B-088, um nivel abaixo do modulo. `scripts/` (11) e `config/` (5)
-      # tambem nao rodavam E estavam VERMELHOS, e por isso ficaram de fora:
-      # adiciona-los sem consertar o que acusavam deixaria o alvo vermelho, e
-      # um alvo vermelho vira alvo desligado.
+      # `helm/` (29 files) ran in no task at all — the same defect as
+      # B-088, one level below the module. `scripts/` (11) and `config/` (5)
+      # did not run either AND were RED, which is why they were left out:
+      # adding them without fixing what they flagged would leave the target red,
+      # and a red target becomes a switched-off target.
       #
-      # B-092 mediu os dois FAIL e os dois eram FALSOS, em formas diferentes.
-      # Um comparava a GRAFIA da fonte contra um repositorio que e MONTADO por
-      # template, entao a substring canonica nunca aparecia contigua. O outro
-      # aceitava `latest` e recusava a sentinela `SET-BY-CI` — permitindo o que
-      # a issue #232 rejeitou por nome e recusando o que ela escolheu.
+      # B-092 measured the two FAILs and both were FALSE, in different ways.
+      # One compared the source's SPELLING against a repository that is ASSEMBLED
+      # from a template, so the canonical substring never appeared contiguously. The
+      # other accepted `latest` and refused the `SET-BY-CI` sentinel — allowing what
+      # issue #232 rejected by name and refusing what it chose.
       #
-      # O segundo e o achado que justifica ligar isto: um teste que ninguem roda
-      # nao apenas deixa de proteger, ele CONGELA um contrato vencido, e
-      # bloquearia o desenho correto no dia em que fosse ligado.
+      # The second is the finding that justifies switching this on: a test nobody runs
+      # does not merely stop protecting, it FREEZES an expired contract, and
+      # would block the correct design on the day it was switched on.
       #
-      # E a varredura da populacao — nao so das duas subarvores que o item
-      # nomeava — achou uma terceira: `performance/` tem 23 arquivos de teste,
-      # roda em 37ms sem infraestrutura nenhuma, esta VERDE, e nao era alcancada
-      # por alvo nenhum. Passou despercebida porque o item contou as vermelhas.
+      # And sweeping the whole population — not only the two subtrees the item
+      # named — found a third: `performance/` has 23 test files,
+      # runs in 37ms with no infrastructure at all, is GREEN, and was reached
+      # by no target. It went unnoticed because the item counted the red ones.
       #
-      # `e2e/`, `chaos/`, `charts/` e `livetest/` seguem fora deste alvo por
-      # terem alvo proprio ou exigirem cluster, que e outra classe.
+      # `e2e/`, `chaos/`, `charts/` and `livetest/` stay outside this target because
+      # they have their own target or require a cluster, which is another class.
       # -count=1: these suites assert on files OUTSIDE their own module (Tiltfile,
       # api/**, infra/helm/**, go.work). Go's test cache keys on THIS module's
       # inputs, so none of those reads invalidate it. Measured 2026-09-05 with an
@@ -110,22 +110,22 @@ tasks:
       # go.work. Without the flag these guards report on a tree they never read.
       # Cost measured on this target: 1.31s -> 2.31s. B-169/B-170.
       - cd infra/tests && go test -count=1 ./unit/... ./helm/... ./scripts/... ./config/... ./performance/... -short
-      # cmd/loopzero-ops e onde vivem os 123 quality gates. Os testes que provam que
-      # um gate reprova o que deve reprovar nao rodavam por caminho nenhum —
-      # `quality:hermetic` fazia `go build`, nao `go test`. B-088.
+      # cmd/loopzero-ops is where the 123 quality gates live. The tests proving that
+      # a gate fails what it must fail ran through no path at all —
+      # `quality:hermetic` did `go build`, not `go test`. B-088.
       - cd cmd/loopzero-ops && go test ./... -short
-      # Construem sozinhos (o modulo nao declara require nenhum), entao GOWORK=off
-      # continua sendo a invocacao correta e hermetica. Nunca foram nomeados por
-      # task nenhuma. B-088.
+      # They build on their own (the module declares no require at all), so GOWORK=off
+      # is still the correct, hermetic invocation. No task ever named them.
+      # B-088.
       #
-      # Este comentario dizia "Fora do go.work por desenho" e deixou de ser verdade
-      # em 0f8a2e5f9 (B-170): `./tools/gen-service-auth-ed25519` ESTA no `use` do
-      # go.work desde 2026-08-31, porque sem isso `cd tools/... && go test ./...`
-      # falhava com "directory prefix . does not contain modules listed in go.work".
-      # GOWORK=off aqui e escolha de hermeticidade, nao consequencia de ausencia.
+      # This comment said "Outside go.work by design" and stopped being true
+      # in 0f8a2e5f9 (B-170): `./tools/gen-service-auth-ed25519` IS in go.work's `use`
+      # since 2026-08-31, because without it `cd tools/... && go test ./...`
+      # failed with "directory prefix . does not contain modules listed in go.work".
+      # GOWORK=off here is a choice of hermeticity, not a consequence of absence.
       #
-      # Eram dois; sobrou um. `tools/loopzero-dockerfile-lint` foi REMOVIDO em 2026-08-19
-      # (B-157): validava Dockerfile do usuario, caminho que saiu na T2.2.
+      # There were two; one is left. `tools/loopzero-dockerfile-lint` was REMOVED on 2026-08-19
+      # (B-157): it validated the user's Dockerfile, a path that left in T2.2.
       - cd tools/gen-service-auth-ed25519 && GOWORK=off go test ./... -short
 
   test:integration:
@@ -469,24 +469,24 @@ tasks:
         echo "PASS: No vulnerabilities at MEDIUM+ severity"
 
   lint:
-    desc: Lint de TODOS os modulos Go, com catraca por modulo (B-121/B-083/B-148)
+    desc: Lint ALL Go modules, with a per-module ratchet (B-121/B-083/B-148)
     cmds:
       - |
-        # CORRIGIDO 2026-08-18. Esta task rodava TRES modulos de NOVE, em tres entradas `cmds`
-        # separadas — e o Task aborta na primeira que sai != 0, entao um achado em `pkg`
-        # impedia `api` de ser medido. Foi por isso que o B-009 reportou "11 achados, todos em
-        # operators": `api` nunca tinha sido olhado.
+        # FIXED 2026-08-18. This task ran THREE modules out of NINE, in three separate `cmds`
+        # entries — and Task aborts on the first one that exits != 0, so a finding in `pkg`
+        # stopped `api` from being measured. That is why B-009 reported "11 findings, all in
+        # operators": `api` had never been looked at.
         #
-        # Medido no dia da correcao, modulo a modulo: os tres cobertos em 0, e 318 achados nos
-        # que ninguem olhava — 221 deles em `cmd/loopzero-ops`, o binario que executa os 130 gates
-        # deste repositorio. Mais 155 arquivos fora do `gofmt`, invisiveis porque nenhum linter
-        # de formatacao esta habilitado no .golangci.yml.
+        # Measured on the day of the fix, module by module: the three covered ones at 0, and 318
+        # findings in the ones nobody looked at — 221 of them in `cmd/loopzero-ops`, the binary that
+        # runs this repository's 130 gates. Plus 155 files outside `gofmt`, invisible because no
+        # formatting linter is enabled in .golangci.yml.
         #
-        # A `lint:strict` saiu junto: ela comparava um total agregado contra um baseline de 200
-        # (`api=140 + operators=60`) com os dois em ZERO. Duas tasks com vereditos opostos sobre
-        # a mesma coisa e pior que uma errada.
+        # `lint:strict` left with it: it compared an aggregate total against a baseline of 200
+        # (`api=140 + operators=60`) with both at ZERO. Two tasks with opposite verdicts about
+        # the same thing is worse than one wrong one.
         #
-        # A logica agora tem casa e teste em cmd/loopzero-ops/internal/quality/lintcoverage.
+        # The logic now has a home and a test in cmd/loopzero-ops/internal/quality/lintcoverage.
         if [ ! -x /tmp/loopzero-ops ]; then
           (cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .)
         fi
@@ -494,27 +494,27 @@ tasks:
 
   validate:helm-deps:
     desc: |
-      Vendoriza as dependências de TODO chart que declara `dependencies:`, nas duas
-      árvores (`charts/` e `infra/helm/`). Fecha a condição C24 de
+      Vendors the dependencies of EVERY chart that declares `dependencies:`, in both
+      trees (`charts/` and `infra/helm/`). Closes condition C24 of
       MEET-INFRA-NORMALIZE-T3-operator-split.
 
-      Por que descoberta e não lista fixa: `charts/*/charts/` é gitignored, então um
-      clone novo não tem dependência nenhuma vendorizada. Enquanto esta task listava
-      9 charts à mão e só de `charts/`, `task setup` reprovava num clone limpo —
-      medido em 2026-08-10 no droplet app-dev, primeiro em `loopzero-crds` (dep local
-      `loopzero-common`) e, depois de corrigido, em `opencost` (dep remota, sob
-      `infra/helm/`). Uma lista fixa só cobre os charts que alguém lembrou de
-      adicionar; a descoberta cobre o que existe.
+      Why discovery and not a fixed list: `charts/*/charts/` is gitignored, so a
+      fresh clone has no vendored dependency at all. While this task listed
+      9 charts by hand and only from `charts/`, `task setup` failed on a clean clone —
+      measured on 2026-08-10 on the app-dev droplet, first on `loopzero-crds` (local dep
+      `loopzero-common`) and, once that was fixed, on `opencost` (remote dep, under
+      `infra/helm/`). A fixed list only covers the charts someone remembered to
+      add; discovery covers what exists.
 
-      Falha de dependência REMOTA não aborta: um chart cujo upstream saiu do ar ou
-      renomeou a versão não é motivo para impedir toda instalação nova, e as falhas
-      são impressas com o erro do upstream em vez de engolidas. Dependência local
-      (`file://`) é outra coisa — ela vive neste repositório, então falhar nela é
-      defeito nosso e aborta.
+      A REMOTE dependency failure does not abort: a chart whose upstream went offline or
+      renamed the version is no reason to block every fresh install, and the failures
+      are printed with the upstream's error instead of being swallowed. A local
+      dependency (`file://`) is another matter — it lives in this repository, so a
+      failure there is our defect and aborts.
     cmds:
       - |
         set -uo pipefail
-        falhas=0; ok=0
+        failures=0; ok=0
         for chart in charts/*/ infra/helm/*/; do
           [[ -f "$chart/Chart.yaml" ]] || continue
           grep -q "^dependencies:" "$chart/Chart.yaml" || continue
@@ -522,17 +522,17 @@ tasks:
              || helm dependency update "$chart" >/tmp/helm-dep.out 2>&1; then
             ok=$((ok+1))
           else
-            falhas=$((falhas+1))
-            echo "  [FALHA] $chart"
+            failures=$((failures+1))
+            echo "  [FAIL] $chart"
             tail -2 /tmp/helm-dep.out | sed 's/^/          /'
-            # Dependência local quebrada é defeito deste repositório, não do upstream.
+            # A broken local dependency is this repository's defect, not the upstream's.
             if grep -q "file://" "$chart/Chart.yaml"; then
-              echo "  [ABORT] $chart declara dependência file:// — isto e defeito nosso." >&2
+              echo "  [ABORT] $chart declares a file:// dependency — this is our defect." >&2
               exit 1
             fi
           fi
         done
-        echo "[validate:helm-deps] $ok chart(s) com dependências vendorizadas, $falhas com upstream indisponível"
+        echo "[validate:helm-deps] $ok chart(s) with vendored dependencies, $failures with an unavailable upstream"
 
   generate:rbac:
     desc: |
@@ -609,8 +609,8 @@ tasks:
       - kubeconform --strict infra/helm/gitea/templates/pdb.yaml
       - kubeconform --strict infra/helm/argocd/templates/pdb.yaml
       # NetworkPolicies
-      # network-policies migrou de raw manifest para Helm chart (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5).
-      # `helm template` produz uma stream de YAML que kubeconform pode consumir via stdin.
+      # network-policies migrated from a raw manifest to a Helm chart (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5).
+      # `helm template` produces a YAML stream that kubeconform can consume via stdin.
       - helm template network-policies infra/helm/network-policies/ | kubeconform --strict --summary
       # Internal LoopZero charts (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5+).
       # Skip Traefik IngressRoute and ClusterImagePolicy CRDs (not in default schema).
@@ -755,12 +755,12 @@ tasks:
   migrate:tenants:
     desc: |
       F-04 (CHG-2026-04-29-DOGFOOD T3.3) — Reconcile Tenant + Environment
-      CRs duplicados entre namespaces para o canônico loopzero-system. Default
-      é dry-run; usar `task migrate:tenants -- --apply` para commit.
+      CRs duplicated across namespaces into the canonical loopzero-system. Default
+      is dry-run; use `task migrate:tenants -- --apply` to commit.
 
-      CRITICAL: este é o T1 fix (data cleanup). T3.1 (hard-code do
-      namespace no operator/API code) + T3.2 (ValidatingAdmissionPolicy
-      preventiva) ficam T2 governance per CLAUDE.md Pre-release rule
+      CRITICAL: this is the T1 fix (data cleanup). T3.1 (hard-coding the
+      namespace in operator/API code) + T3.2 (preventive
+      ValidatingAdmissionPolicy) stay T2 governance per CLAUDE.md Pre-release rule
       (touches tenant isolation contract).
     cmds:
       - bash infra/scripts/production/migrate-tenant-namespace.sh {{.CLI_ARGS}}
@@ -850,8 +850,8 @@ tasks:
         set -e
         cd infra/helm/chaos-mesh
         helm dependency update
-        # Volta pela raiz do PROPRIO checkout. Era um caminho absoluto de uma
-        # maquina so — o alvo falhava em qualquer outro clone.
+        # Go back through the root of THIS checkout. It used to be an absolute path from
+        # a single machine — the target failed on any other clone.
         cd "{{.ROOT_DIR}}"
         for KCFG in ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-mgmt.yaml \
                     ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-build.yaml \
@@ -1078,14 +1078,14 @@ tasks:
   # ============================================================================
   # Pre-release test rigor — plan 2026-06-08-pre-release-test-rigor v1.2
   # Per ADR D1 (canonical entry) + ADR D8 (wall-clock 120 min budget).
-  # 4 Cenários extend cleanroom + dogfood + chaos-test + live-proof so the
+  # 4 Scenarios extend cleanroom + dogfood + chaos-test + live-proof so the
   # suite catches the 5 LIVE-only bugs that slipped past the prior gates
   # (dashboard-screens-review-fixes T5.3 sponsor walkthrough).
   # ============================================================================
 
   test:pre-release-rigor:scenario-2:
     desc: |
-      Cenário 2 (baseline match) — runs the cleanroom Phase 0 + Phase 5
+      Scenario 2 (baseline match) — runs the cleanroom Phase 0 + Phase 5
       baseline-capture + diff per T1.1 + T1.2. Verifies post-rebuild state
       structurally matches the pre-rebuild snapshot (volatile fields EC-7
       normalized). Internal budget ~45 min for full cleanroom; this task
@@ -1107,7 +1107,7 @@ tasks:
 
   test:pre-release-rigor:scenario-1:
     desc: |
-      Cenário 1 (webhook → autodeploy → HTTPS 200 chain) — runs T2.2 LIVE
+      Scenario 1 (webhook → autodeploy → HTTPS 200 chain) — runs T2.2 LIVE
       bash chain. EC-13 absorption: when invoked standalone (without
       scenario-2 having run first), the "baseline match" assertion is
       SKIP — the chain validation still proceeds. Plan T2.2.
@@ -1129,8 +1129,8 @@ tasks:
       Scenario 3 (chaos C11/C12) and scenario 4 (api-sanity live-proof) were
       retired: their scripts were deleted, so the tasks could only fail with
       "No such file". Chaos coverage lives in chaos:v2:hermetic and the
-      live-proof checks were absorbed into the contra-prova chain
-      (infra/tests/livetest/contraprova, Camada 8) run by chain:v2:full.
+      live-proof checks were absorbed into the counter-proof chain
+      (infra/tests/livetest/contraprova, Layer 8) run by chain:v2:full.
 
       Default Task semantics provide fail-fast — if any scenario exits
       non-zero, the umbrella aborts (per ADR D6). No `ignore_error: true`
@@ -1145,7 +1145,7 @@ tasks:
   # Canonical chain runner v2 — replaces archive/canonical-tests-v1/scripts/local/cleanroom-canonical-chain-runner.sh.
   cleanroom:v2:
     desc: |
-      T3.1 v2 cleanroom canonical chain (Ginkgo) — 6 fases Phase 0..5.
+      T3.1 v2 cleanroom canonical chain (Ginkgo) — 6 phases, Phase 0..5.
       Wall-clock budget ~30-45min. Requires LIVE k3d clusters.
       Phases: baseline pre + clean:all + setup + tilt up + doctor + baseline post-diff.
     cmds:
@@ -1158,7 +1158,7 @@ tasks:
     cmds:
       - go test ./infra/tests/livetest/cleanroom/... -count=1 -timeout 1m
 
-  # T3.2 + T3.3 + T3.4 of plan canonical-tests-rewrite-v2 v1.0 — v2 dogfood / chaos / contra-prova
+  # T3.2 + T3.3 + T3.4 of plan canonical-tests-rewrite-v2 v1.0 — v2 dogfood / chaos / counter-proof
   dogfood:v2:hermetic:
     desc: |
       T3.2 v2 dogfood helper unit tests (hermetic). Validates Env + JWT loader +
@@ -1180,7 +1180,7 @@ tasks:
   dogfood:v2:
     desc: |
       T3.2 v2 dogfood per-journey LIVE Ginkgo specs. Requires dev-public UP +
-      JWT seed at ~/.loopzero/local-dogfood-token.txt. Gated por build tag `live`.
+      JWT seed at ~/.loopzero/local-dogfood-token.txt. Gated by build tag `live`.
     cmds:
       - go test -tags=live ./infra/tests/livetest/dogfood/... -count=1 -timeout 1h -v
 
@@ -1193,7 +1193,7 @@ tasks:
 
   contraprova:v2:hermetic:
     desc: |
-      T3.4 v2 contra-prova helper unit tests (hermetic). Validates 8 camadas
+      T3.4 v2 counter-proof helper unit tests (hermetic). Validates 8 layers
       (chaos summary byte-grep / JUnit XML parse / git state / live-proof
       absorption per ADR D3). No LIVE deploy needed.
     cmds:
@@ -1212,23 +1212,23 @@ tasks:
   # T3.5 of plan canonical-tests-rewrite-v2 v1.0 — chain runner v2 (Taskfile composition per ADR D2)
   chain:v2:full:
     desc: |
-      T3.5 v2 canonical chain runner — composes 6 fases via Taskfile.
+      T3.5 v2 canonical chain runner — composes 6 phases via Taskfile.
       Replaces archive/canonical-tests-v1/scripts/local/cleanroom-canonical-chain-runner.sh
-      Per ADR D2: bash mantido apenas como wrapper de `task X` calls; chain
+      Per ADR D2: bash kept only as a wrapper of `task X` calls; chain
       orchestration moves to Taskfile composition.
-      Wall-clock budget ~60-90min (~30-45min cleanroom + ~5min seeds + ~30-45min dogfood + ~15min contra-prova).
+      Wall-clock budget ~60-90min (~30-45min cleanroom + ~5min seeds + ~30-45min dogfood + ~15min counter-proof).
       Pre-condition: dev-public infra UP + JWT seeded.
     cmds:
-      - task: cleanroom:v2  # T3.1 6 fases
+      - task: cleanroom:v2  # T3.1 6 phases
       - bash infra/scripts/local/seed-post-cleanroom-all.sh --verify
       - task: dogfood:v2    # T3.2 per-journey LIVE specs
       - go test -tags=live ./infra/tests/livetest/contraprova/... -count=1 -timeout 30m -v
-      - echo "T3.5 chain:v2:full ENGINEERING-COMPLETE — sponsor CP3 JUNTOS gate pending"
+      - echo "T3.5 chain:v2:full ENGINEERING-COMPLETE — sponsor CP3 TOGETHER gate pending"
 
   chain:v2:engineering:
     desc: |
-      T3.5 engineering-only subset (cleanroom + dogfood + contra-prova,
-      no sponsor JUNTOS gate). Use for halt-loop iteration during Phase 3+4 dev.
+      T3.5 engineering-only subset (cleanroom + dogfood + counter-proof,
+      no sponsor TOGETHER gate). Use for halt-loop iteration during Phase 3+4 dev.
     cmds:
       - task: cleanroom:v2:hermetic
       - task: dogfood:v2:hermetic

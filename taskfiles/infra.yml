@@ -71,8 +71,8 @@ tasks:
         HELMFILE_ENV="${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
         echo "[infra:install:core] helmfile env: $HELMFILE_ENV"
         bash infra/helmfile/scripts/generate-secrets.sh "$HELMFILE_ENV" mgmt
-      # GHCR canonical pre-flight (sponsor verbatim 2026-06-23 "NOSSO SISTEMA
-      # É GHCR"). For env dev-public, the 5 engine images (loopzero-api + 4 split
+      # GHCR canonical pre-flight (sponsor verbatim 2026-06-23 "NOSSO SISTEMA É GHCR",  # english-only: verbatim sponsor quote, kept as evidence
+      # i.e. "OUR SYSTEM IS GHCR"). For env dev-public, the 5 engine images (loopzero-api + 4 split
       # operators) AND loopzero-cloud + loopzero-dashboard are published canonically
       # by AM6 reusable workflow (.github/workflows/release-artifacts.yml +
       # build-publish.yml) to ghcr.io/getloopscale/*. Local engine task setup
@@ -216,10 +216,10 @@ tasks:
 
   infra:install:cell:
     desc: Install platform components in workload cluster via Helmfile (T2.3 of plan 2026-05-22)
-    # `requires` e o mecanismo NATIVO do Task: a task RECUSA rodar sem CELL_CTX, em vez
-    # de cair num padrao silencioso. Um default para a cell-0 recriaria o defeito na
-    # primeira chamada que esquecesse de passar o parametro — que foi exatamente como a
-    # divergencia entre as celulas nasceu.
+    # `requires` is Task's NATIVE mechanism: the task REFUSES to run without CELL_CTX,
+    # instead of falling back to a silent default. A default of cell-0 would recreate the
+    # defect on the first call that forgot to pass the parameter — which is exactly how
+    # the divergence between the cells was born.
     requires:
       vars: [CELL_CTX]
     deps: [helm:repos]
@@ -233,11 +233,11 @@ tasks:
       # generate-runtime-secrets.sh against the workload context (KUBECONFIG,
       # no global current-context mutation). Idempotent.
       - |
-        # O CLUSTER VEM DO PARAMETRO. Enquanto foi `loopzero-cell-0` fixo, este passo gerava o
-        # Secret `static-assets-s3` SEMPRE na primeira celula — e o `static-assets` da
-        # segunda ficava em CreateContainerConfigError com "secret not found", medido em
-        # 2026-08-10. E a mesma classe do defeito do contexto fixo, uma camada abaixo: nao
-        # basta instalar em cada celula se os segredos so nascem numa delas.
+        # THE CLUSTER COMES FROM THE PARAMETER. While it was a fixed `loopzero-cell-0`, this step
+        # generated the `static-assets-s3` Secret ALWAYS on the first cell — and the second
+        # cell's `static-assets` stayed in CreateContainerConfigError with "secret not found",
+        # measured on 2026-08-10. It is the same class as the fixed-context defect, one layer
+        # down: installing on every cell is not enough if the secrets are only born on one of them.
         CELL_CTX_K3D="{{.CELL_CTX}}"; CELL_CTX_K3D="${CELL_CTX_K3D#k3d-}"
         S3_KEY=$(kubectl --context {{.CORE_CONTEXT}} -n loopzero-system get secret minio-credentials -o jsonpath='{.data.accesskey}' | openssl base64 -d -A)
         S3_SECRET=$(kubectl --context {{.CORE_CONTEXT}} -n loopzero-system get secret minio-credentials -o jsonpath='{.data.secretkey}' | openssl base64 -d -A)
@@ -249,24 +249,24 @@ tasks:
       # cert-manager, traefik, keda, keda-http-addon, argo-rollouts, policy-controller,
       # admission-policies, promtail, cloudflared, cluster-issuer, rbac, static-assets.
       #
-      # O CONTEXTO E PARAMETRO, e nao fixo. Enquanto foi `{{.CELL_0_CONTEXT}}`, esta task
-      # instalava as 28 releases SEMPRE na cell-0: a cell-1 ficava so com as 5 do
-      # `k3d:bootstrap-cell-1` e um tenant fixado nela recebia MENOS plataforma —
-      # sem KEDA (escala por demanda), sem static-assets, sem cloudflared, sem
-      # policy-controller. Ninguem escolhe a celula (o roteamento e bin-packing), entao
-      # duas celulas com capacidades diferentes tornam o comportamento do produto
-      # dependente de onde o tenant caiu. Medido em 2026-08-10: 8 componentes na cell-0
-      # contra 4 na cell-1.
+      # THE CONTEXT IS A PARAMETER, not fixed. While it was `{{.CELL_0_CONTEXT}}`, this task
+      # installed the 28 releases ALWAYS on cell-0: cell-1 was left with only the 5 from
+      # `k3d:bootstrap-cell-1`, and a tenant pinned to it got LESS platform —
+      # no KEDA (on-demand scaling), no static-assets, no cloudflared, no
+      # policy-controller. Nobody chooses the cell (routing is bin-packing), so
+      # two cells with different capabilities make the product's behaviour
+      # depend on where the tenant landed. Measured on 2026-08-10: 8 components on cell-0
+      # against 4 on cell-1.
       #
-      # Pior: `task clusters:recreate -- cell-1` chama esta mesma task (k3d.yml), entao
-      # recriar a cell-1 instalava no cluster ERRADO, sem erro.
-      # LOOPZERO_CELL_CONTEXT vem do MESMO CELL_CTX que a flag: uma origem, dois
-      # consumidores. O helmfile declara `kubeContext: {{ `{{` }} requiredEnv
-      # "LOOPZERO_CELL_CONTEXT" {{ `}}` }}` para que um `helmfile sync` sem flag
-      # NAO aterrisse no contexto ativo do kubectl (medido contra helmfile
-      # 1.1.6: sem declaracao e sem flag, o helm nao recebe --kube-context
-      # nenhum). Amarrar valor fixo ali recriaria o defeito que os comentarios
-      # acima descrevem; `requiredEnv` falha alto quando ninguem passa.
+      # Worse: `task clusters:recreate -- cell-1` calls this same task (k3d.yml), so
+      # recreating cell-1 installed onto the WRONG cluster, with no error.
+      # LOOPZERO_CELL_CONTEXT comes from the SAME CELL_CTX as the flag: one source, two
+      # consumers. The helmfile declares `kubeContext: {{ `{{` }} requiredEnv
+      # "LOOPZERO_CELL_CONTEXT" {{ `}}` }}` so that a `helmfile sync` without the flag
+      # does NOT land on kubectl's active context (measured against helmfile
+      # 1.1.6: with no declaration and no flag, helm receives no --kube-context
+      # at all). Binding a fixed value there would recreate the defect the comments
+      # above describe; `requiredEnv` fails loudly when nobody passes it.
       - >-
         LOOPZERO_CELL_CONTEXT="{{.CELL_CTX}}"
         helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl
@@ -461,10 +461,10 @@ tasks:
           --kube-context {{.CORE_CONTEXT}} \
           --selector name=ory-kratos --selector name=ory-hydra \
           sync --skip-deps
-      # Pontes NodePort para a borda. Sem elas, `auth-dev` so e alcancavel por
-      # `kubectl port-forward` — que morreu com os clusters em 2026-08-10 e derrubou o
-      # login com Kratos e Hydra saudaveis (B-018, mesmo defeito do B-010). Aditivas: os
-      # Services ClusterIP do chart seguem intactos.
+      # NodePort bridges to the edge. Without them, `auth-dev` is only reachable through
+      # `kubectl port-forward` — which died with the clusters on 2026-08-10 and took down
+      # login while Kratos and Hydra were healthy (B-018, same defect as B-010). Additive:
+      # the chart's ClusterIP Services stay intact.
       - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/ory-kratos/nodeport-service.yaml
       - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/ory-hydra/nodeport-service.yaml
       - task: cloud:health

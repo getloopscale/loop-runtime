@@ -249,11 +249,11 @@ tasks:
 
         echo ""
         echo "=== Multi-Cell Topology (CTO Golden Rule #1) ==="
-        # Uma cell por cluster desde a unificacao 1:1 de 2026-08-09 (ADR
-        # docs/decisions.md). Esta lista tinha
-        # TRES entradas para duas maquinas e, depois da fusao, passou a checar `cell-0`
-        # duas vezes — contando o mesmo ClusterCredential duas vezes e comparando o
-        # resultado contra um total de 3 que nao existe mais.
+        # One cell per cluster since the 1:1 unification of 2026-08-09 (ADR
+        # docs/decisions.md). This list had
+        # THREE entries for two machines and, after the merge, started checking `cell-0`
+        # twice — counting the same ClusterCredential twice and comparing the
+        # result against a total of 3 that no longer exists.
         # Single-cell setups (CI, low-RAM dev) can downgrade FAIL → WARN via
         # LOOPZERO_DOCTOR_ALLOW_SINGLE_CELL=1.
         ALLOW_SINGLE="${LOOPZERO_DOCTOR_ALLOW_SINGLE_CELL:-0}"
@@ -629,8 +629,8 @@ tasks:
       DEEP cleanroom — clean:all + docker prune all caches + drop kernel
       page cache. Use BEFORE re-running trio when system has drifted
       (multiple cleanrooms accumulated state, memory fragmentation).
-      Sprint A trio-fix 2026-06-02 (operator goal: "cleanroom mais
-      limpo possível"). Verified Δ vs `clean:all`:
+      Sprint A trio-fix 2026-06-02 (operator goal: "a cleanroom as
+      clean as possible"). Verified Δ vs `clean:all`:
         - clean:all leaves: docker build cache (7+ GB), unused images
           (3+ GB), kernel page cache (5+ GB cold)
         - clean:deep recovers ALL of the above → ~15 GB freed +
@@ -748,10 +748,10 @@ tasks:
 
   k3d:argocd-keepalive:
     desc: |
-      Sprint A trio-fix 2026-06-02 — operator goal "sistema funcionando
-      conforme já estava". Periodic auto-restart of argocd-application-
+      Sprint A trio-fix 2026-06-02 — operator goal "the system working
+      the way it already did". Periodic auto-restart of argocd-application-
       controller statefulset every 4 minutes. Restores LOCAL k3d dogfood
-      from intermittent FAILs (App stuck Unknown → pod nunca aparece →
+      from intermittent FAILs (App stuck Unknown → pod never appears →
       spec timeout) caused by ArgoCD app-controller queue-stuck bug.
 
       Root cause (LIVE-diagnosed during Sprint A trio v7 dogfood 2026-06-02):

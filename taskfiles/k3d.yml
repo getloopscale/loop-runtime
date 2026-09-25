@@ -131,11 +131,11 @@ tasks:
   clusters:recreate:
     desc: Recreate a single k3d cluster (e.g., task clusters:recreate -- cell-0)
     cmds:
-      # O rotulo do case E o sufixo do cluster — `loopzero-${CLUSTER}` logo abaixo deriva o
-      # nome dele daqui. Enquanto o rotulo foi `mgmt` e o config `core-cluster.yaml`, esta
-      # task apagava `loopzero-mgmt` (inexistente, no-op silencioso) e criava `loopzero-core`: o
-      # "Recreating…" mentia e nenhum cluster era de fato recriado. Manter rotulo e nome
-      # 1:1 e o que impede a divergencia de voltar.
+      # The case label IS the cluster suffix — `loopzero-${CLUSTER}` just below derives the
+      # cluster name from it. While the label was `mgmt` and the config `core-cluster.yaml`, this
+      # task deleted `loopzero-mgmt` (nonexistent, a silent no-op) and created `loopzero-core`: the
+      # "Recreating…" lied and no cluster was actually recreated. Keeping label and name
+      # 1:1 is what stops the divergence from coming back.
       - |
         CLUSTER="{{.CLI_ARGS}}"
         if [ -z "$CLUSTER" ]; then
@@ -178,13 +178,13 @@ tasks:
           exit 1
         fi
       - task: registry:create
-      # `--kubeconfig-switch-context=false` (B-024): sem isto o create reaponta o
-      # `current-context` do operador, e como os seeds herdam o contexto ativo,
-      # qualquer seed rodado depois operava o cluster errado — reportando
-      # "recurso nao encontrado" sobre recursos que existiam.
+      # `--kubeconfig-switch-context=false` (B-024): without it the create repoints the
+      # operator's `current-context`, and since the seeds inherit the active context,
+      # any seed run afterwards operated on the wrong cluster — reporting
+      # "resource not found" about resources that existed.
       #
-      # `--kubeconfig-update-default` fica no padrao `true`: a entrada do contexto
-      # CONTINUA gravada, e os `--context k3d-loopzero-secrets` abaixo seguem valendo.
+      # `--kubeconfig-update-default` stays at its default `true`: the context entry
+      # IS STILL written, and the `--context k3d-loopzero-secrets` calls below keep working.
       - k3d cluster list -o json | grep -q '"name":"loopzero-secrets"' || k3d cluster create --config infra/k3d/secrets-cluster.yaml --kubeconfig-switch-context=false
       - kubectl --context k3d-loopzero-secrets wait --for=condition=Ready node --all --timeout=120s
       - kubectl --context k3d-loopzero-secrets cluster-info

@@ -313,12 +313,12 @@ def premise_0_ci_gates_the_pull_request(root: Path, report: Report) -> bool:
         report.unchecked(f"PREMISE 0 — CI gates the pull request: {ci} is not there.")
         return False
 
-    # Lido a mao, e nao por uma lib de YAML, pelo mesmo motivo que o resto deste
-    # arquivo: a checagem roda num runner cru, sem instalar nada, e uma dependencia
-    # a mais e' uma forma a mais de a checagem nao rodar. Comentarios sao
-    # descartados porque este repositorio escreve blocos inteiros de prosa dentro
-    # do `on:` -- um `# pull_request:` explicando por que ele NAO esta la' seria
-    # lido como se estivesse.
+    # Read by hand, not with a YAML library, for the same reason as the rest of this
+    # file: the check runs on a bare runner, installing nothing, and one more
+    # dependency is one more way for the check not to run. Comments are
+    # discarded because this repository writes whole blocks of prose inside the
+    # `on:` block -- a `# pull_request:` explaining why it is NOT there would be
+    # read as if it were.
     lines = [l.split("#", 1)[0].rstrip() for l in ci.read_text(encoding="utf-8").splitlines()]
     try:
         on_at = next(i for i, l in enumerate(lines) if l.rstrip() == "on:")

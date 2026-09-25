@@ -211,17 +211,18 @@ local_resource(
     labels=["loopzero"],
 )
 
-# Renderiza uma vez durante o CARREGAMENTO do Tiltfile, antes do k8s_yaml abaixo.
+# Renders once while the Tiltfile is LOADING, before the k8s_yaml below.
 #
-# Sem isto o Tiltfile nao carrega num clone novo, e o erro nao aponta para a causa:
-# `.tilt-rendered/` e gitignored, `k8s_yaml` le o arquivo no momento em que o Tiltfile
-# e avaliado, e quem o produz e o `local_resource` acima — que so roda DEPOIS que o
-# Tiltfile carregou. O recurso dependia do artefato que ele mesmo gera. Medido no
-# droplet app-dev em 2026-08-10, durante a reconstrucao total: `tilt up` abortou com
+# Without this the Tiltfile does not load on a fresh clone, and the error does not point
+# at the cause: `.tilt-rendered/` is gitignored, `k8s_yaml` reads the file at the moment
+# the Tiltfile is evaluated, and what produces it is the `local_resource` above — which
+# only runs AFTER the Tiltfile has loaded. The resource depended on the artifact it
+# generates itself. Measured on the app-dev droplet on 2026-08-10, during the full
+# rebuild: `tilt up` aborted with
 # "open .tilt-rendered/loopzero-api-runtime.yaml: no such file or directory".
 #
-# O `local_resource` continua existindo e nao e redundante: ele re-renderiza quando os
-# `deps` mudam, que e o laco de desenvolvimento. Este `local()` so garante o primeiro.
+# The `local_resource` still exists and is not redundant: it re-renders when the
+# `deps` change, which is the development loop. This `local()` only guarantees the first render.
 local(_API_RUNTIME_RENDER, quiet=True)
 k8s_yaml(".tilt-rendered/loopzero-api-runtime.yaml")
 

@@ -26,32 +26,33 @@
 #   subject_max  = 80
 
 # ---------------------------------------------------------------------------
-# `merge` e' um tipo DESTE repositorio, e nao uma concessao.
+# `merge` is a type of THIS repository, and not a concession.
 #
-# O fluxo `workspace -> develop -> main` (rules/git-safety.md) produz merges por
-# desenho: 24 dos commits que so' existem em `main` sao merges de PR de release,
-# zero deles carregando conteudo proprio. Um commit de merge nomeado `merge(B-069):`
-# diz o que e' e a que item pertence; forca-lo a `chore(merge):` diria menos.
+# The `workspace -> develop -> main` flow (rules/git-safety.md) produces merges by
+# design: 24 of the commits that exist only on `main` are release PR merges, none of
+# them carrying content of their own. A merge commit named `merge(B-069):` says what
+# it is and which item it belongs to; forcing it into `chore(merge):` would say less.
 #
-# `subject_max` a 85 e' o p90 medido sobre 300 assuntos deste repositorio, nao o 50
-# ou 72 que todo guia repete — um limite que reprova 44% do que o repositorio sempre
-# fez ensina as pessoas a ignorar o verificador.
+# `subject_max` at 85 is the p90 measured over 300 subjects of this repository, not the
+# 50 or 72 every guide repeats — a limit that fails 44% of what the repository has
+# always done teaches people to ignore the checker.
 commit_types = fix,feat,test,docs,refactor,chore,perf,build,ci,revert,merge
 subject_max  = 85
 
-# E UMA LICAO QUE CUSTOU UM COMMIT: o escopo e' a AREA, nao o item.
+# AND A LESSON THAT COST A COMMIT: the scope is the AREA, not the item.
 #
-# `merge(B-069):` foi recusado por `header_shape` e a razao nao e' o tipo — e' que
-# `B-069` e' maiusculo e o escopo pede lowercase kebab-case. `merge(api):` casa.
-# A §5.1 de `~/.claude/CLAUDE.md` ja' dizia onde o numero vai: na MENSAGEM do commit,
-# no corpo do PR, no CHANGELOG. O slot do escopo nao e' um desses.
+# `merge(B-069):` was refused by `header_shape`, and the reason is not the type — it is
+# that `B-069` is uppercase and the scope requires lowercase kebab-case. `merge(api):`
+# matches. §5.1 of `~/.claude/CLAUDE.md` already said where the number goes: in the
+# commit MESSAGE, in the PR body, in the CHANGELOG. The scope slot is none of those.
 
-# E o autor desta linha violou-a no commit seguinte: `602b67f04` tem 99 caracteres de
-# assunto contra os 85 declarados acima. Fica registrado em vez de corrigido, e a razao
-# e' proporcionalidade: o commit nao foi empurrado mas esta' quatro commits atras do HEAD,
-# e reescrever quatro por catorze caracteres custa mais do que o defeito. A janela do gate
-# e' de 40 commits, entao ele reporta um fato verdadeiro e deixa de o reportar sozinho.
+# And the author of this line violated it in the very next commit: `602b67f04` has a
+# 99-character subject against the 85 declared above. It is recorded rather than fixed,
+# and the reason is proportionality: the commit was not pushed but sits four commits
+# behind HEAD, and rewriting four commits over fourteen characters costs more than the
+# defect. The gate's window is 40 commits, so it reports a true fact and stops reporting
+# it on its own.
 #
-# O que NAO se faz e' mover o limite para 99 para o gate ficar verde. O 85 e' o p90 medido
-# sobre 300 assuntos deste repositorio; um assunto de 99 esta' no decil superior, entao o
-# outlier e' o commit e nao a regra.
+# What is NOT done is moving the limit to 99 so the gate goes green. 85 is the p90
+# measured over 300 subjects of this repository; a 99-character subject is in the top
+# decile, so the outlier is the commit and not the rule.

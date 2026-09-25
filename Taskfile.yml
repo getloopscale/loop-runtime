@@ -196,9 +196,9 @@ tasks:
       - task: registry:create
       - task: clusters:create
       - task: images:build
-      # Vendoriza dependencias ANTES do install: `charts/*/charts/` e gitignored, entao
-      # um clone novo nao tem nenhuma. Sem este passo, `task setup` reprovava num clone
-      # limpo (medido 2026-08-10 no droplet app-dev: loopzero-crds, depois opencost).
+      # Vendors dependencies BEFORE the install: `charts/*/charts/` is gitignored, so
+      # a fresh clone has none. Without this step, `task setup` failed on a clean
+      # clone (measured 2026-08-10 on the app-dev droplet: loopzero-crds, then opencost).
       - task: validate:helm-deps
       - task: infra:install
       - task: networking:setup
@@ -225,7 +225,7 @@ tasks:
       #   dev:seed (extra dev fixtures)
       #   tokens:provision (idempotent — script already invoked inside pre-db)
       #
-      # Sponsor "sem WORKAROUNDs" closure of [[feedback_task_setup_chain_gap_helm_timeout]].
+      # Sponsor "no WORKAROUNDs" closure of [[feedback_task_setup_chain_gap_helm_timeout]].
       - task: bootstrap:standalone:pre-db
       - task: db:migrate
       - task: bootstrap:standalone:post-db
@@ -381,7 +381,7 @@ tasks:
       cache. Idempotent (safe to re-run; no-op if no Secret changes).
     cmds:
       # Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env
-      # Duas chamadas, nao tres: `default` e `1` apontavam para o mesmo cluster.
+      # Two calls, not three: `default` and `1` pointed at the same cluster.
       - bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 0 --env standalone-multi
       - bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 1 --env standalone-multi
       # Sprint A 2026-06-01 — refresh app-controller informer cache so all
