@@ -55,8 +55,8 @@ func stubArgoCDServer(t *testing.T) *httptest.Server {
 // pfCtorPointingAt is a Deps.PortForwardCtor stub that returns a Tunnel whose
 // LocalPort points at the stub httptest.Server (no actual port-forward runs).
 // The Close func is a no-op — httptest.Server manages its own lifecycle.
-func pfCtorPointingAt(server *httptest.Server) func(context.Context, string, string, map[string]string, int, string) (*Tunnel, error) {
-	return func(context.Context, string, string, map[string]string, int, string) (*Tunnel, error) {
+func pfCtorPointingAt(server *httptest.Server) func(context.Context, TunnelTarget) (*Tunnel, error) {
+	return func(context.Context, TunnelTarget) (*Tunnel, error) {
 		u, _ := url.Parse(server.URL)
 		port, _ := strconv.Atoi(u.Port())
 		return &Tunnel{LocalPort: port, Close: func() {}}, nil

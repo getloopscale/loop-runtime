@@ -59,8 +59,10 @@ func (s *GiteaTokenSeed) Run(d Deps) Result {
 	if d.PortForwardCtor == nil {
 		return Result{Verdict: FAIL, Reason: "PortForwardCtor not wired"}
 	}
-	tunnel, err := d.PortForwardCtor(d.Ctx, "", giteaAdminNamespace,
-		PodMetaLabels("gitea"), 3000, "/api/v1/version")
+	tunnel, err := d.PortForwardCtor(d.Ctx, TunnelTarget{
+		Namespace: giteaAdminNamespace, PodLabels: PodMetaLabels("gitea"),
+		RemotePort: 3000, ProbePath: "/api/v1/version",
+	})
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("port-forward gitea: %v", err)}
 	}

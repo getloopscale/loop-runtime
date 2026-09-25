@@ -87,7 +87,7 @@ type Deps struct {
 	// PortForwardCtor opens a Tunnel to a Pod matching podLabels in namespace.
 	// Composed by the composition root so seeds do not import client-go rest
 	// config directly. Seeds pass namespace/labels/remotePort/probePath.
-	PortForwardCtor func(ctx context.Context, contextName, namespace string, podLabels map[string]string, remotePort int, probePath string) (*Tunnel, error)
+	PortForwardCtor func(ctx context.Context, target TunnelTarget) (*Tunnel, error)
 	// RestConfig + CtrlClient are the raw client-go artifacts for the mgmt
 	// context — kept on Deps so the PortForwardCtor default implementation
 	// (in the composition root) can lazily resolve pods without re-reading

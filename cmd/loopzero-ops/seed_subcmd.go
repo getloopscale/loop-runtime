@@ -163,9 +163,8 @@ func buildSeedDeps(dryRun bool) (seed.Deps, error) {
 	// buildKubeClientAndRest lazily.
 	restByCtx := map[string]*rest.Config{"": mgmtRest}
 	ctrlByCtx := map[string]ctrlclient.Client{"": mgmtCtrl}
-	pfCtor := func(ctx context.Context, contextName, namespace string,
-		labels map[string]string, remotePort int, probePath string,
-	) (*seed.Tunnel, error) {
+	pfCtor := func(ctx context.Context, target seed.TunnelTarget) (*seed.Tunnel, error) {
+		contextName := target.Context
 		r, ok := restByCtx[contextName]
 		c, ok2 := ctrlByCtx[contextName]
 		if !ok || !ok2 {
@@ -177,7 +176,7 @@ func buildSeedDeps(dryRun bool) (seed.Deps, error) {
 			restByCtx[contextName] = rr
 			ctrlByCtx[contextName] = cc
 		}
-		return seed.OpenTunnelForService(ctx, r, c, namespace, labels, remotePort, probePath)
+		return seed.OpenTunnelForService(ctx, r, c, target)
 	}
 	return seed.Deps{
 		Ctx:             context.Background(),

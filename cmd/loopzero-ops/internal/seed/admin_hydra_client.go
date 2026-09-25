@@ -72,19 +72,9 @@ func (s *AdminHydraClientSeed) Run(d Deps) Result {
 	}
 
 	// Step 2 — port-forward Hydra admin API.
-	if d.PortForwardCtor == nil {
-		return Result{Verdict: FAIL, Reason: "PortForwardCtor not wired"}
-	}
-	tunnel, err := d.PortForwardCtor(d.Ctx, "", hydraAdminNamespaceCanon,
-		PodMetaLabels(hydraAdminServiceName), hydraAdminRemotePort, "/health/ready")
+	tunnel, err := openHydraAdminTunnel(d)
 	if err != nil {
-		// Some Hydra deployments name the pod ory-hydra + selector app.k8s.io/name=hydra.
-		// Fall back to plain "hydra" pod label.
-		tunnel, err = d.PortForwardCtor(d.Ctx, "", hydraAdminNamespaceCanon,
-			PodMetaLabels("hydra"), hydraAdminRemotePort, "/health/ready")
-		if err != nil {
-			return Result{Verdict: FAIL, Reason: fmt.Sprintf("port-forward %s: %v", hydraAdminServiceName, err)}
-		}
+		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
 	defer tunnel.Close()
 
@@ -114,17 +104,9 @@ func (s *AdminHydraClientSeed) Verify(d Deps) Result {
 	if userID == "" {
 		return Result{Verdict: FAIL, Reason: "admin@loopzero.example not in users"}
 	}
-	if d.PortForwardCtor == nil {
-		return Result{Verdict: FAIL, Reason: "PortForwardCtor not wired"}
-	}
-	tunnel, err := d.PortForwardCtor(d.Ctx, "", hydraAdminNamespaceCanon,
-		PodMetaLabels(hydraAdminServiceName), hydraAdminRemotePort, "/health/ready")
+	tunnel, err := openHydraAdminTunnel(d)
 	if err != nil {
-		tunnel, err = d.PortForwardCtor(d.Ctx, "", hydraAdminNamespaceCanon,
-			PodMetaLabels("hydra"), hydraAdminRemotePort, "/health/ready")
-		if err != nil {
-			return Result{Verdict: FAIL, Reason: fmt.Sprintf("port-forward %s: %v", hydraAdminServiceName, err)}
-		}
+		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
 	defer tunnel.Close()
 
@@ -273,4 +255,29 @@ func mustHexSecret(nBytes int) string {
 		panic(err)
 	}
 	return hex.EncodeToString(b)
+}
+
+// openHydraAdminTunnel opens a tunnel to the Hydra admin API. The pod is
+// labelled by its service name on some installs and by plain "hydra" on
+// others, so both are tried in that order.
+func openHydraAdminTunnel(d Deps) (*Tunnel, error) {
+	if d.PortForwardCtor == nil {
+		return nil, fmt.Errorf("PortForwardCtor not wired")
+	}
+	target := TunnelTarget{
+		Namespace:  hydraAdminNamespaceCanon,
+		PodLabels:  PodMetaLabels(hydraAdminServiceName),
+		RemotePort: hydraAdminRemotePort,
+		ProbePath:  "/health/ready",
+	}
+	tunnel, err := d.PortForwardCtor(d.Ctx, target)
+	if err == nil {
+		return tunnel, nil
+	}
+	target.PodLabels = PodMetaLabels("hydra")
+	tunnel, fallbackErr := d.PortForwardCtor(d.Ctx, target)
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("port-forward %s: %w (fallback label hydra: %v)", hydraAdminServiceName, err, fallbackErr)
+	}
+	return tunnel, nil
 }

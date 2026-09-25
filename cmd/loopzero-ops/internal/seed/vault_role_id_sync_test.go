@@ -143,8 +143,8 @@ func TestReadVaultUnsealRootToken_FailWhenRootTokenEmpty(t *testing.T) {
 // pfCtorPointingAtTLS returns a Deps.PortForwardCtor that points at an
 // httptest.NewTLSServer URL. Callers pass "https:" scheme URLs to the
 // caller — this factory ignores the scheme and just returns the port.
-func pfCtorPointingAtTLS(server *httptest.Server) func(context.Context, string, string, map[string]string, int, string) (*Tunnel, error) {
-	return func(context.Context, string, string, map[string]string, int, string) (*Tunnel, error) {
+func pfCtorPointingAtTLS(server *httptest.Server) func(context.Context, TunnelTarget) (*Tunnel, error) {
+	return func(context.Context, TunnelTarget) (*Tunnel, error) {
 		u, _ := url.Parse(server.URL)
 		port, _ := strconv.Atoi(u.Port())
 		return &Tunnel{LocalPort: port, Close: func() {}}, nil

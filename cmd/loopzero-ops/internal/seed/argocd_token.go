@@ -55,8 +55,10 @@ func (s *ArgoCDTokenSeed) Run(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: "PortForwardCtor not wired (composition root gap)"}
 	}
 	// Port-forward argocd-server (svc port 80 → target 8080 plaintext, canonical).
-	tunnel, err := d.PortForwardCtor(d.Ctx, "", argocdNamespace,
-		PodMetaLabels("argocd-server"), 8080, "/healthz")
+	tunnel, err := d.PortForwardCtor(d.Ctx, TunnelTarget{
+		Namespace: argocdNamespace, PodLabels: PodMetaLabels("argocd-server"),
+		RemotePort: 8080, ProbePath: "/healthz",
+	})
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("port-forward argocd-server: %v", err)}
 	}

@@ -53,8 +53,10 @@ func (s *VaultRoleIDSyncSeed) Run(d Deps) Result {
 	if d.PortForwardCtor == nil {
 		return Result{Verdict: FAIL, Reason: "PortForwardCtor not wired"}
 	}
-	tunnel, err := d.PortForwardCtor(d.Ctx, vaultContextName, vaultNamespace,
-		PodLabels{"app.kubernetes.io/name": "openbao"}, vaultOpenBaoPortRemote, "")
+	tunnel, err := d.PortForwardCtor(d.Ctx, TunnelTarget{
+		Context: vaultContextName, Namespace: vaultNamespace, PodLabels: PodLabels{"app.kubernetes.io/name": "openbao"},
+		RemotePort: vaultOpenBaoPortRemote, ProbePath: "",
+	})
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("port-forward openbao (vault ctx): %v", err)}
 	}
