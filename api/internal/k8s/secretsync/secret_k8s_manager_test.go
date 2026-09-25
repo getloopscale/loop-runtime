@@ -59,7 +59,7 @@ func TestCreateSecret_OnError_DoesNotLogValue(t *testing.T) {
 		scheme := runtime.NewScheme()
 		dynFake := dynamicfake.NewSimpleDynamicClient(scheme)
 
-		mgr := &SecretK8sManager{mgmtClient: mgmtFake, runtimeDynamic: dynFake, mgmtNamespace: "loopzero-system"}
+		mgr := &SecretK8sManager{mgmtClient: mgmtFake, runtimeDynamic: dynFake, mgmtNamespace: "loopzero-system", tenantCells: fixedCell("cell-0"), runtimeCellID: "cell-0"}
 		err := mgr.CreateSecret(context.Background(), tenantID, projectID, env, app, secretName, secretValue)
 		if err == nil {
 			t.Fatal("expected error")
@@ -90,7 +90,7 @@ func TestCreateSecret_OnError_DoesNotLogValue(t *testing.T) {
 			return true, nil, errors.New("runtime ExternalSecret create failed")
 		})
 
-		mgr := &SecretK8sManager{mgmtClient: mgmtFake, runtimeDynamic: dynFake, mgmtNamespace: "loopzero-system"}
+		mgr := &SecretK8sManager{mgmtClient: mgmtFake, runtimeDynamic: dynFake, mgmtNamespace: "loopzero-system", tenantCells: fixedCell("cell-0"), runtimeCellID: "cell-0"}
 		err := mgr.CreateSecret(context.Background(), tenantID, projectID, env, app, secretName, secretValue)
 		if err == nil {
 			t.Fatal("expected error")

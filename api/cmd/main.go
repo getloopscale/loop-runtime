@@ -147,6 +147,7 @@ func main() {
 			logger.Error("failed to setup stores", "error", err)
 			os.Exit(1)
 		}
+		k8sDeps.SecretK8sSync = setupSecretK8sSync(cfg, stores.CellStore, logger)
 		// The background loops do NOT use the request pool. That pool is
 		// deliberately unable to see another tenant (AssertRequestPoolIsolated
 		// refuses to boot if it can), and sweeping across tenants is exactly

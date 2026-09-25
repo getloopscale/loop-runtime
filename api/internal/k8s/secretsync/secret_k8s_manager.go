@@ -12,6 +12,7 @@ package secretsync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -37,6 +38,34 @@ type SecretK8sManager struct {
 	mgmtClient     kubernetes.Interface
 	runtimeDynamic dynamic.Interface
 	mgmtNamespace  string
+	// tenantCells and runtimeCellID keep writes on the one cluster this
+	// manager can reach: runtimeDynamic serves runtimeCellID only.
+	tenantCells   TenantCellLookup
+	runtimeCellID string
+}
+
+// TenantCellLookup reads the cell a tenant was placed on (tenants.cell_id).
+type TenantCellLookup interface {
+	GetTenantCellID(ctx context.Context, tenantID string) (string, error)
+}
+
+// ErrTenantCellNotServed is returned when a tenant lives on a cell whose
+// runtime cluster this manager has no client for. Writing its ExternalSecret
+// to the cluster it does have would create an object in a cluster that does
+// not host the tenant's namespace — the secret would never reach the app.
+var ErrTenantCellNotServed = errors.New("secret sync: the tenant's cell is not served by this API instance")
+
+// requireServedCell refuses before any cluster is touched when the tenant is
+// placed on a cell other than the one runtimeDynamic points at.
+func (m *SecretK8sManager) requireServedCell(ctx context.Context, tenantID string) error {
+	cellID, err := m.tenantCells.GetTenantCellID(ctx, tenantID)
+	if err != nil {
+		return fmt.Errorf("secret sync: read cell of tenant %s: %w", tenantID, err)
+	}
+	if cellID != m.runtimeCellID {
+		return fmt.Errorf("%w: tenant %s is on %q, this instance writes to %q", ErrTenantCellNotServed, tenantID, cellID, m.runtimeCellID)
+	}
+	return nil
 }
 
 var externalSecretGVR = schema.GroupVersionResource{
@@ -54,7 +83,10 @@ var externalSecretGVR = schema.GroupVersionResource{
 // out-of-cluster path used a kubeconfig with kube-system:default SA token
 // which doesn't have those permissions, producing 403 on every loopzero
 // secret set call.
-func NewSecretK8sManager(mgmtKubeconfig, mgmtContext, cell0Kubeconfig, runtimeContext string) (*SecretK8sManager, error) {
+func NewSecretK8sManager(mgmtKubeconfig, mgmtContext, runtimeKubeconfig, runtimeContext, runtimeCellID string, tenantCells TenantCellLookup) (*SecretK8sManager, error) {
+	if tenantCells == nil || runtimeCellID == "" {
+		return nil, errors.New("secret k8s manager: the tenant cell lookup and the runtime cell id are required")
+	}
 	// Mgmt cluster — typed client for Secret creation. In-cluster preferred.
 	var mgmtConfig *rest.Config
 	if inCfg, inErr := rest.InClusterConfig(); inErr == nil {
@@ -76,7 +108,7 @@ func NewSecretK8sManager(mgmtKubeconfig, mgmtContext, cell0Kubeconfig, runtimeCo
 
 	// Runtime cluster — dynamic client for ExternalSecret CRs
 	runtimeConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		&clientcmd.ClientConfigLoadingRules{ExplicitPath: cell0Kubeconfig},
+		&clientcmd.ClientConfigLoadingRules{ExplicitPath: runtimeKubeconfig},
 		&clientcmd.ConfigOverrides{CurrentContext: runtimeContext},
 	).ClientConfig()
 	if err != nil {
@@ -91,6 +123,8 @@ func NewSecretK8sManager(mgmtKubeconfig, mgmtContext, cell0Kubeconfig, runtimeCo
 		mgmtClient:     mgmtClient,
 		runtimeDynamic: runtimeDynamic,
 		mgmtNamespace:  "loopzero-system",
+		tenantCells:    tenantCells,
+		runtimeCellID:  runtimeCellID,
 	}, nil
 }
 
@@ -170,6 +204,12 @@ func tenantNamespaceFor(tenantID, projectID, env string) (string, error) {
 // CreateSecret creates a K8s Secret on the mgmt cluster and an ExternalSecret CR
 // on the runtime cluster for ESO to sync the value to the workload namespace.
 func (m *SecretK8sManager) CreateSecret(ctx context.Context, tenantID, projectID, env, app, name, value string) error {
+	if err := m.requireServedCell(ctx, tenantID); err != nil {
+		// B-177: the row is already persisted when CreateSecret runs, so this
+		// exit counts like every other one.
+		metrics.SecretExternalSecretTotal.WithLabelValues("fail").Inc()
+		return err
+	}
 	// T4.1 (plan 2026-06-10-j22-layer2-code-review-fixes): rename local var to
 	// `secretObjName` so it no longer shadows the package-level `k8sName` func
 	// declared 30 LOC above. Originally LIVE-caught by /loop-code-review as a
@@ -364,6 +404,9 @@ func (m *SecretK8sManager) CreateSecret(ctx context.Context, tenantID, projectID
 // LIVE-caught 2026-06-10 J-22 walkthrough: signature extended with projectID
 // so the delete path mirrors CreateSecret's M2 canonical 3-segment namespace.
 func (m *SecretK8sManager) DeleteSecret(ctx context.Context, tenantID, projectID, env, app, name string) error {
+	if err := m.requireServedCell(ctx, tenantID); err != nil {
+		return err
+	}
 	// T4.1: rename local var to avoid shadowing the package-level `k8sName` func.
 	secretObjName := secretName(tenantID, app, name)
 

@@ -67,7 +67,7 @@ func TestCreateSecret_EveryExitMovesTheCounter(t *testing.T) {
 	// newManager wires a manager whose mgmt client and dynamic client are both
 	// healthy fakes. Each sub-test breaks exactly the one thing it is about.
 	newManager := func(mgmt *fake.Clientset, dyn *dynamicfake.FakeDynamicClient) *SecretK8sManager {
-		return &SecretK8sManager{mgmtClient: mgmt, runtimeDynamic: dyn, mgmtNamespace: mgmtNS}
+		return &SecretK8sManager{mgmtClient: mgmt, runtimeDynamic: dyn, mgmtNamespace: mgmtNS, tenantCells: fixedCell("cell-0"), runtimeCellID: "cell-0"}
 	}
 	newDyn := func() *dynamicfake.FakeDynamicClient {
 		return dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
@@ -90,6 +90,20 @@ func TestCreateSecret_EveryExitMovesTheCounter(t *testing.T) {
 		if got != 1 {
 			t.Errorf("mgmt-write failure moved loopzero_secret_externalsecret_total{result=%q} by %v, want exactly 1 — B-177: store.Set has already persisted the row when CreateSecret is reached, so an exit that counts nothing leaves a row in `secrets` with sum(loopzero_secret_externalsecret_total) at zero, and the B-126 trigger misses it (err was: %v)",
 				wantResult, got, err)
+		}
+	})
+
+	t.Run("tenant placed on a cell this instance does not serve", func(t *testing.T) {
+		mgr := newManager(fake.NewClientset(), newDyn())
+		mgr.tenantCells = fixedCell("cell-1")
+
+		before := externalSecretResult(wantResult)
+		err := mgr.CreateSecret(context.Background(), tenantID, projectID, env, app, secretKey, secretVal)
+		if err == nil {
+			t.Fatal("expected the placement check to refuse; the sub-test asserts nothing otherwise")
+		}
+		if got := externalSecretResult(wantResult) - before; got != 1 {
+			t.Errorf("placement refusal moved loopzero_secret_externalsecret_total{result=%q} by %v, want exactly 1 — the row is already persisted by the time CreateSecret runs (err was: %v)", wantResult, got, err)
 		}
 	})
 
