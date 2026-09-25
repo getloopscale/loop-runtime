@@ -50,7 +50,7 @@ func NewStaticTokenProvider(token string) *StaticTokenProvider {
 }
 
 func (p *StaticTokenProvider) Token() (string, error) { return p.token, nil }
-func (p *StaticTokenProvider) Refresh() error { return nil }
+func (p *StaticTokenProvider) Refresh() error         { return nil }
 
 // FileWatchTokenProvider reads the token from a file (mounted K8s Secret)
 // and periodically re-reads it to pick up rotations without pod restart.

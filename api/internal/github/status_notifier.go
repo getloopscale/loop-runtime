@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
@@ -66,14 +65,15 @@ func (n *StatusNotifier) OnBuildSucceeded(ctx context.Context, tenantID, project
 		return // not a GitHub-connected project
 	}
 
-	parts := strings.SplitN(repoFullName, "/", 2)
-	if len(parts) != 2 {
+	owner, repo, ok := splitOwnerRepo(repoFullName)
+	if !ok {
+		n.logger.Warn("github status: connected repository name is not owner/repo; status not set", "repo", repoFullName)
 		return
 	}
 
 	deployURL := n.deployURL(ctx, tenantID, projectName, buildID, environment)
 
-	if err := n.appClient.SetCommitStatus(ctx, installationID, parts[0], parts[1], commitSHA, CommitStatus{
+	if err := n.appClient.SetCommitStatus(ctx, installationID, owner, repo, commitSHA, CommitStatus{
 		State:       "success",
 		TargetURL:   deployURL,
 		Description: fmt.Sprintf("Deployed to %s", environment),
@@ -111,12 +111,13 @@ func (n *StatusNotifier) OnBuildFailed(ctx context.Context, tenantID, projectNam
 		return
 	}
 
-	parts := strings.SplitN(repoFullName, "/", 2)
-	if len(parts) != 2 {
+	owner, repo, ok := splitOwnerRepo(repoFullName)
+	if !ok {
+		n.logger.Warn("github status: connected repository name is not owner/repo; status not set", "repo", repoFullName)
 		return
 	}
 
-	if err := n.appClient.SetCommitStatus(ctx, installationID, parts[0], parts[1], commitSHA, CommitStatus{
+	if err := n.appClient.SetCommitStatus(ctx, installationID, owner, repo, commitSHA, CommitStatus{
 		State:       "failure",
 		Description: "Build failed",
 		Context:     "loopzero/deploy",

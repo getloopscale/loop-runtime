@@ -262,11 +262,11 @@ func (d *AutoDeployer) PrepareSourceBundle(ctx context.Context, repoFullName, co
 }
 
 func splitRepoFullName(repoFullName string) (owner, repo string, err error) {
-	parts := strings.SplitN(repoFullName, "/", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+	owner, repo, ok := splitOwnerRepo(repoFullName)
+	if !ok {
 		return "", "", fmt.Errorf("invalid repo name: %s", repoFullName)
 	}
-	return parts[0], parts[1], nil
+	return owner, repo, nil
 }
 
 // sourceTarball is a downloaded GitHub tarball kept in a temp file, because

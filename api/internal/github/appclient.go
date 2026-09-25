@@ -7,6 +7,7 @@
 package github
 
 import (
+	"bytes"
 	"context"
 	"crypto/rsa"
 	"crypto/x509"
@@ -224,10 +225,17 @@ type CommitStatus struct {
 func (c *AppClient) SetCommitStatus(ctx context.Context, installationID int64, owner, repo, sha string, status CommitStatus) error {
 	url := fmt.Sprintf("%s/repos/%s/%s/statuses/%s", c.apiBase(), owner, repo, sha)
 
-	payload := fmt.Sprintf(`{"state":%q,"target_url":%q,"description":%q,"context":%q}`,
-		status.State, status.TargetURL, status.Description, status.Context)
+	payload, err := json.Marshal(struct {
+		State       string `json:"state"`
+		TargetURL   string `json:"target_url,omitempty"`
+		Description string `json:"description"`
+		Context     string `json:"context"`
+	}{status.State, status.TargetURL, status.Description, status.Context})
+	if err != nil {
+		return fmt.Errorf("github: encode commit status: %w", err)
+	}
 
-	resp, err := c.doAuthenticated(ctx, installationID, "POST", url, stringReader(payload))
+	resp, err := c.doAuthenticated(ctx, installationID, "POST", url, bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("github: set commit status: %w", err)
 	}
@@ -238,33 +246,6 @@ func (c *AppClient) SetCommitStatus(ctx context.Context, installationID int64, o
 		return fmt.Errorf("github: set commit status (status %d): %s", resp.StatusCode, string(body))
 	}
 	return nil
-}
-
-// --- PR Comments ---
-
-// CommentOnPR posts a comment on a pull request.
-func (c *AppClient) CommentOnPR(ctx context.Context, installationID int64, owner, repo string, prNumber int, body string) error {
-	url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/comments", c.apiBase(), owner, repo, prNumber)
-
-	payload := fmt.Sprintf(`{"body":%q}`, body)
-
-	resp, err := c.doAuthenticated(ctx, installationID, "POST", url, stringReader(payload))
-	if err != nil {
-		return fmt.Errorf("github: comment on PR: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusCreated {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("github: comment on PR (status %d): %s", resp.StatusCode, string(respBody))
-	}
-	return nil
-}
-
-// --- Helpers ---
-
-func stringReader(s string) io.Reader {
-	return strings.NewReader(s)
 }
 
 // Plan J-09 T5.1 + T2.1 (2026-06-05) — repo introspection helpers used by

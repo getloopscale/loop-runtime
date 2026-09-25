@@ -436,36 +436,47 @@ func TestSetCommitStatus_APIError(t *testing.T) {
 	}
 }
 
-func TestCommentOnPR_Success(t *testing.T) {
-	// Arrange
-	var receivedBody string
+func TestSetCommitStatusSendsTheDescriptionAsValidJSON(t *testing.T) {
+	// Arrange: a description with a control byte, which Go quoting (%q)
+	// renders as \a — an escape JSON does not have, so GitHub answers 422.
+	const description = "build \a failed"
+	var got CommitStatus
+	var decodeErr error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/comments") {
-			body, _ := io.ReadAll(r.Body)
-			receivedBody = string(body)
+		if strings.Contains(r.URL.Path, "/statuses/") {
+			raw, _ := io.ReadAll(r.Body)
+			var body struct {
+				State, Description, Context string
+				TargetURL                   string `json:"target_url"`
+			}
+			decodeErr = json.Unmarshal(raw, &body)
+			got = CommitStatus{State: body.State, TargetURL: body.TargetURL, Description: body.Description, Context: body.Context}
 			w.WriteHeader(http.StatusCreated)
 			return
 		}
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"token":      "ghs_pr_token",
+			"token":      "ghs_status_token",
 			"expires_at": time.Now().Add(1 * time.Hour).Format(time.RFC3339),
 		})
 	}))
 	defer server.Close()
-
 	client := newTestAppClient(t, server)
 	client.httpClient = redirectingClient(server.URL)
+	want := CommitStatus{State: "failure", TargetURL: "https://x.example", Description: description, Context: "loopzero/deploy"}
 
 	// Act
-	err := client.CommentOnPR(context.Background(), 1, "owner", "repo", 42, "Deploy started!")
+	err := client.SetCommitStatus(context.Background(), 1, "owner", "repo", "sha123", want)
 
 	// Assert
 	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+		t.Fatalf("SetCommitStatus: %v", err)
 	}
-	if !strings.Contains(receivedBody, "Deploy started!") {
-		t.Errorf("expected comment body in request, got: %s", receivedBody)
+	if decodeErr != nil {
+		t.Fatalf("status body is not valid JSON: %v", decodeErr)
+	}
+	if got != want {
+		t.Errorf("status did not round-trip: got %+v, want %+v", got, want)
 	}
 }
 

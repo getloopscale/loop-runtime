@@ -4,6 +4,7 @@
 package argocd
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -515,8 +516,14 @@ func (p *KubeMintingTokenProvider) mintToken(ctx context.Context, creds refreshC
 
 func (p *KubeMintingTokenProvider) argocdLogin(ctx context.Context, user, pass string) (string, error) {
 	url := p.cfg.ArgoCDBaseURL + "/api/v1/session"
-	body := fmt.Sprintf(`{"username":%q,"password":%q}`, user, pass)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body))
+	body, err := json.Marshal(struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}{user, pass})
+	if err != nil {
+		return "", fmt.Errorf("encode login: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
