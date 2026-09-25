@@ -20,7 +20,7 @@ type SecretStore interface {
 }
 
 // SecretK8sSync abstracts K8s Secret + ExternalSecret CR creation (DIP).
-// ref.Env.Project is the canonical M2 namespace segment (per
+// ref.Project is the canonical M2 namespace segment (per
 // pkg/naming.Namespace); the runtime ExternalSecret CR lives at
 // loopzero-{tenant}-{project}-{env}.
 type SecretK8sSync interface {

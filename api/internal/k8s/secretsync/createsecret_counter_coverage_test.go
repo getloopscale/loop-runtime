@@ -41,7 +41,6 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // externalSecretResult reads one series. Used as a DELTA: the counter is a
@@ -83,7 +82,7 @@ func TestCreateSecret_EveryExitMovesTheCounter(t *testing.T) {
 
 		before := externalSecretResult(wantResult)
 		err := newManager(mgmtFake, newDyn()).
-			CreateSecret(context.Background(), ports.SecretRef{Env: domain.EnvRef{TenantID: tenantID, Project: projectID, EnvName: env}, App: app, Name: secretKey}, secretVal)
+			CreateSecret(context.Background(), ports.SecretRef{TenantID: tenantID, Project: projectID, Environment: env, App: app, Name: secretKey}, secretVal)
 		if err == nil {
 			t.Fatal("expected the mgmt-cluster Secret write to fail; the sub-test asserts nothing otherwise")
 		}
@@ -100,7 +99,7 @@ func TestCreateSecret_EveryExitMovesTheCounter(t *testing.T) {
 		mgr.tenantCells = fixedCell("cell-1")
 
 		before := externalSecretResult(wantResult)
-		err := mgr.CreateSecret(context.Background(), ports.SecretRef{Env: domain.EnvRef{TenantID: tenantID, Project: projectID, EnvName: env}, App: app, Name: secretKey}, secretVal)
+		err := mgr.CreateSecret(context.Background(), ports.SecretRef{TenantID: tenantID, Project: projectID, Environment: env, App: app, Name: secretKey}, secretVal)
 		if err == nil {
 			t.Fatal("expected the placement check to refuse; the sub-test asserts nothing otherwise")
 		}
@@ -118,7 +117,7 @@ func TestCreateSecret_EveryExitMovesTheCounter(t *testing.T) {
 
 		before := externalSecretResult(wantResult)
 		err := newManager(mgmtFake, newDyn()).
-			CreateSecret(context.Background(), ports.SecretRef{Env: domain.EnvRef{TenantID: tenantID, Project: projectID, EnvName: ""}, App: app, Name: secretKey}, secretVal)
+			CreateSecret(context.Background(), ports.SecretRef{TenantID: tenantID, Project: projectID, Environment: "", App: app, Name: secretKey}, secretVal)
 		if err == nil {
 			t.Fatal("expected namespace derivation to fail on an empty env; the sub-test asserts nothing otherwise")
 		}
@@ -143,7 +142,7 @@ func TestCreateSecret_EveryExitMovesTheCounter(t *testing.T) {
 
 		before := externalSecretResult("fail")
 		err := newManager(mgmtFake, dynFake).
-			CreateSecret(context.Background(), ports.SecretRef{Env: domain.EnvRef{TenantID: tenantID, Project: projectID, EnvName: env}, App: app, Name: secretKey}, secretVal)
+			CreateSecret(context.Background(), ports.SecretRef{TenantID: tenantID, Project: projectID, Environment: env, App: app, Name: secretKey}, secretVal)
 		if err == nil {
 			t.Fatal("expected the ExternalSecret write to fail; the sub-test asserts nothing otherwise")
 		}
@@ -158,7 +157,7 @@ func TestCreateSecret_EveryExitMovesTheCounter(t *testing.T) {
 		beforeOK := externalSecretResult("success")
 		beforeFail := externalSecretResult("fail")
 		if err := newManager(mgmtFake, newDyn()).
-			CreateSecret(context.Background(), ports.SecretRef{Env: domain.EnvRef{TenantID: tenantID, Project: projectID, EnvName: env}, App: app, Name: secretKey}, secretVal); err != nil {
+			CreateSecret(context.Background(), ports.SecretRef{TenantID: tenantID, Project: projectID, Environment: env, App: app, Name: secretKey}, secretVal); err != nil {
 			t.Fatalf("expected the happy path to succeed against healthy fakes, got: %v", err)
 		}
 		if got := externalSecretResult("success") - beforeOK; got != 1 {

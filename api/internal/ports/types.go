@@ -16,8 +16,6 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
-
-	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // --- Domain (Custom Domains) ---
@@ -161,14 +159,21 @@ type SecretMetadata struct {
 }
 
 // SecretRef identifies one secret delivered to a workload: the environment it
-// belongs to, the app it is scoped to (empty for a secret every app of the
-// environment receives) and its name. It is the Parameter Object the secret
-// sync port takes, so the five identifiers travel as one named value instead of
-// a positional string tuple that transposes silently.
+// belongs to (tenant, project, environment), the app it is scoped to (empty for
+// a secret every app of the environment receives) and its name. It is the
+// Parameter Object the secret sync port takes, so the identifiers travel as one
+// value with named fields instead of a positional string tuple that transposes
+// silently.
+//
+// The fields are plain strings, not domain.EnvRef: this package is the shared
+// vocabulary of the api module and imports only the standard library, a
+// property the stdlib-only gate enforces for every one of its importers.
 type SecretRef struct {
-	Env  domain.EnvRef
-	App  string
-	Name string
+	TenantID    string
+	Project     string
+	Environment string
+	App         string
+	Name        string
 }
 
 // --- Projects ---

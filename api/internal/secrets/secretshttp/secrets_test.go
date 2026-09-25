@@ -458,8 +458,8 @@ type fakeK8sSyncT11 struct {
 func (f *fakeK8sSyncT11) CreateSecret(_ context.Context, ref ports.SecretRef, _ string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.createCalls = append(f.createCalls, ref.Env.TenantID+":"+ref.Env.Project+":"+ref.Env.EnvName+":"+ref.Name)
-	if err, ok := f.failOnEnv[ref.Env.EnvName]; ok {
+	f.createCalls = append(f.createCalls, ref.TenantID+":"+ref.Project+":"+ref.Environment+":"+ref.Name)
+	if err, ok := f.failOnEnv[ref.Environment]; ok {
 		return err
 	}
 	return nil
@@ -468,7 +468,7 @@ func (f *fakeK8sSyncT11) CreateSecret(_ context.Context, ref ports.SecretRef, _ 
 func (f *fakeK8sSyncT11) DeleteSecret(_ context.Context, ref ports.SecretRef) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.deleteCalls = append(f.deleteCalls, ref.Env.TenantID+":"+ref.Env.Project+":"+ref.Env.EnvName+":"+ref.Name)
+	f.deleteCalls = append(f.deleteCalls, ref.TenantID+":"+ref.Project+":"+ref.Environment+":"+ref.Name)
 	return nil
 }
 

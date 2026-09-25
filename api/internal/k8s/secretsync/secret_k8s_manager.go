@@ -194,7 +194,7 @@ func tenantNamespaceFor(tenantID, projectID, env string) (string, error) {
 // secret named by ref into namespace: the broker ClusterSecretStore as source,
 // and the workload Secret the renderer's envFrom points at as target.
 func externalSecretObject(ref ports.SecretRef, namespace string) *unstructured.Unstructured {
-	tenantID, projectID, env := ref.Env.TenantID, ref.Env.Project, ref.Env.EnvName
+	tenantID, projectID, env := ref.TenantID, ref.Project, ref.Environment
 	app, name := ref.App, ref.Name
 	esName := externalSecretName(app, name)
 	esLabels := buildSecretLabels(tenantID, projectID, app)
@@ -273,7 +273,7 @@ func externalSecretObject(ref ports.SecretRef, namespace string) *unstructured.U
 // CreateSecret creates a K8s Secret on the mgmt cluster and an ExternalSecret CR
 // on the runtime cluster for ESO to sync the value to the workload namespace.
 func (m *SecretK8sManager) CreateSecret(ctx context.Context, ref ports.SecretRef, value string) error {
-	tenantID, projectID, env := ref.Env.TenantID, ref.Env.Project, ref.Env.EnvName
+	tenantID, projectID, env := ref.TenantID, ref.Project, ref.Environment
 	app, name := ref.App, ref.Name
 	if err := m.requireServedCell(ctx, tenantID); err != nil {
 		// B-177: the row is already persisted when CreateSecret runs, so this
@@ -401,11 +401,11 @@ func (m *SecretK8sManager) CreateSecret(ctx context.Context, ref ports.SecretRef
 }
 
 // DeleteSecret removes the K8s Secret from mgmt and ExternalSecret CR from runtime.
-// ref.Env.Project is the canonical M2 namespace segment (per
+// ref.Project is the canonical M2 namespace segment (per
 // `pkg/naming.Namespace`), so the delete path mirrors CreateSecret's M2
 // canonical 3-segment namespace.
 func (m *SecretK8sManager) DeleteSecret(ctx context.Context, ref ports.SecretRef) error {
-	tenantID, projectID, env := ref.Env.TenantID, ref.Env.Project, ref.Env.EnvName
+	tenantID, projectID, env := ref.TenantID, ref.Project, ref.Environment
 	app, name := ref.App, ref.Name
 	if err := m.requireServedCell(ctx, tenantID); err != nil {
 		return err

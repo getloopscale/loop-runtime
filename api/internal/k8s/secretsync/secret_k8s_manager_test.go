@@ -18,7 +18,6 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // TestCreateSecret_OnError_DoesNotLogValue is the T2.7 DoD test
@@ -63,7 +62,7 @@ func TestCreateSecret_OnError_DoesNotLogValue(t *testing.T) {
 		dynFake := dynamicfake.NewSimpleDynamicClient(scheme)
 
 		mgr := &SecretK8sManager{mgmtClient: mgmtFake, runtimeDynamic: dynFake, mgmtNamespace: "loopzero-system", tenantCells: fixedCell("cell-0"), runtimeCellID: "cell-0"}
-		err := mgr.CreateSecret(context.Background(), ports.SecretRef{Env: domain.EnvRef{TenantID: tenantID, Project: projectID, EnvName: env}, App: app, Name: secretName}, secretValue)
+		err := mgr.CreateSecret(context.Background(), ports.SecretRef{TenantID: tenantID, Project: projectID, Environment: env, App: app, Name: secretName}, secretValue)
 		if err == nil {
 			t.Fatal("expected error")
 		}
@@ -94,7 +93,7 @@ func TestCreateSecret_OnError_DoesNotLogValue(t *testing.T) {
 		})
 
 		mgr := &SecretK8sManager{mgmtClient: mgmtFake, runtimeDynamic: dynFake, mgmtNamespace: "loopzero-system", tenantCells: fixedCell("cell-0"), runtimeCellID: "cell-0"}
-		err := mgr.CreateSecret(context.Background(), ports.SecretRef{Env: domain.EnvRef{TenantID: tenantID, Project: projectID, EnvName: env}, App: app, Name: secretName}, secretValue)
+		err := mgr.CreateSecret(context.Background(), ports.SecretRef{TenantID: tenantID, Project: projectID, Environment: env, App: app, Name: secretName}, secretValue)
 		if err == nil {
 			t.Fatal("expected error")
 		}

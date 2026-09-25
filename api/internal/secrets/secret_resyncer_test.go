@@ -89,9 +89,9 @@ type fakeSecretK8sCreator struct {
 
 func (f *fakeSecretK8sCreator) CreateSecret(_ context.Context, ref ports.SecretRef, value string) error {
 	c := secretCall{
-		TenantID:  ref.Env.TenantID,
-		ProjectID: ref.Env.Project,
-		Env:       ref.Env.EnvName,
+		TenantID:  ref.TenantID,
+		ProjectID: ref.Project,
+		Env:       ref.Environment,
 		App:       ref.App,
 		Name:      ref.Name,
 		Value:     value,

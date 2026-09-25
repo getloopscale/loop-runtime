@@ -34,7 +34,6 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/httpio"
 	"github.com/getloopscale/loopzero/api/internal/secrets"
-	"github.com/getloopscale/loopzero/pkg/domain"
 	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
 
 	"github.com/go-chi/chi/v5"
@@ -600,7 +599,7 @@ func (h *SecretHandler) syncBulkWrite(ctx context.Context, tenantID, project str
 		return
 	}
 	if err := h.k8sSync.CreateSecret(ctx, ports.SecretRef{
-		Env:  domain.EnvRef{TenantID: tenantID, Project: project, EnvName: wr.env},
+		TenantID: tenantID, Project: project, Environment: wr.env,
 		Name: name,
 	}, wr.state.entry.Value); err != nil {
 		aggs.syncStatusPerEnv[wr.env] = "failed"
@@ -843,7 +842,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 	// is the point of asserting them in one test.
 	if h.k8sSync != nil {
 		if syncErr := h.k8sSync.CreateSecret(ctx, ports.SecretRef{
-			Env:  domain.EnvRef{TenantID: uc.TenantID, Project: project, EnvName: req.Environment},
+			TenantID: uc.TenantID, Project: project, Environment: req.Environment,
 			App:  req.App,
 			Name: req.Name,
 		}, req.Value); syncErr != nil {
@@ -938,7 +937,7 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 	// Remove K8s Secret from mgmt + ExternalSecret CR from workload
 	if h.k8sSync != nil {
 		if syncErr := h.k8sSync.DeleteSecret(ctx, ports.SecretRef{
-			Env:  domain.EnvRef{TenantID: uc.TenantID, Project: project, EnvName: env},
+			TenantID: uc.TenantID, Project: project, Environment: env,
 			App:  app,
 			Name: name,
 		}); syncErr != nil {

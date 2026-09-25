@@ -14,7 +14,6 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -150,7 +149,7 @@ func (r *SecretResyncer) syncOneWithTerminatingRetry(ctx context.Context, tenant
 	for {
 		attempt++
 		err := r.K8s.CreateSecret(ctx, ports.SecretRef{
-			Env:  domain.EnvRef{TenantID: tenantID, Project: projectID, EnvName: env},
+			TenantID: tenantID, Project: projectID, Environment: env,
 			App:  e.App,
 			Name: e.Name,
 		}, e.Value)
