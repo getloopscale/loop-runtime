@@ -65,7 +65,7 @@ func TestHistoricalCommentIsNotAFinding(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "api/go.mod", "module x\n\nrequire github.com/getloopscale/loopzero-contracts v0.4.0\n")
 	write(t, root, "api/Dockerfile", `FROM golang
-# CORRIGIDO: antes autenticava para github.com/getloopscale/ e o build quebrava.
+# FIXED: it used to authenticate to github.com/getloopscale/ and the build broke.
 ENV GOPRIVATE=github.com/getloopscale/*
 RUN git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
 `)

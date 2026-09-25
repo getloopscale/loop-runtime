@@ -24,27 +24,29 @@ func init() {
 		// present, not that a runbook exists, so adding 33 more dead links would
 		// buy a green gate and nothing else. An on-call operator following a 404 at
 		// 3am is worse off than one who knows there is no runbook.
-		// Duas correcoes medidas em 2026-08-19 (B-161, B-164), porque o paragrafo acima
-		// contava metade da historia:
+		// Two corrections measured on 2026-08-19 (B-161, B-164), because the paragraph
+		// above told half the story:
 		//
-		//  1. O gate JA' distingue link de runbook, na parte que da' para provar sem rede:
-		//     caminho deste repositorio que nao existe em disco, e URL do GitHub em org
-		//     diferente da canonica (`getloopscale`, tirada do caminho de modulo dos go.mod).
-		//     O que ele nao pode afirmar — se `docs.loopzero.example/runbooks/x` esta' viva —
-		//     fica CONTADO como nao-verificavel em vez de silenciado.
+		//  1. The gate ALREADY tells a link apart from a runbook, in the part that can be
+		//     proven without a network: a path in this repository that does not exist on
+		//     disk, and a GitHub URL in an org other than the canonical one (`getloopscale`,
+		//     taken from the module path in the go.mod files). What it cannot assert —
+		//     whether `docs.loopzero.example/runbooks/x` is live — is COUNTED as unverifiable
+		//     instead of silenced.
 		//
-		//  2. "33 alertas" era o numero de UM diretorio. O B-164 fechou esse escopo: o gate
-		//     varre os QUATRO diretorios de `DefaultRulesDirs`. Re-medido 2026-09-06 (B-067):
-		//     110 + 86 + 19 + 18 = **233 sites, e o gate ve os 233** — o "47%" acima descrevia
-		//     o estado ANTERIOR ao conserto e ficou no presente do indicativo depois dele.
+		//  2. "33 alerts" was the number for ONE directory. B-164 closed that scope: the
+		//     gate sweeps the FOUR directories of `DefaultRulesDirs`. Re-measured 2026-09-06
+		//     (B-067): 110 + 86 + 19 + 18 = **233 sites, and the gate sees all 233** — the
+		//     "47%" above described the state BEFORE the fix and stayed in the present
+		//     tense after it.
 		//
-		//  3. Sites e alertas nao sao o mesmo numero, e confundi-los infla a divida. Os 233
-		//     sites sao **145 alertas distintos**: `infra/helm/...` e `charts/...` sao copias
-		//     espelhadas, entao 88 sites repetem um alerta ja' contado. Na parte que reprova,
-		//     a diferenca e' 46 sites para **37 alertas**. A mensagem do gate agora diz os
-		//     dois numeros, e a violacao carrega o diretorio — sem ele, os 9 pares espelhados
-		//     saiam como linhas identicas e consertar uma copia deixava a outra reprovando
-		//     com a mesma string.
+		//  3. Sites and alerts are not the same number, and confusing them inflates the
+		//     debt. The 233 sites are **145 distinct alerts**: `infra/helm/...` and
+		//     `charts/...` are mirrored copies, so 88 sites repeat an alert already counted.
+		//     In the failing part, the difference is 46 sites for **37 alerts**. The gate's
+		//     message now states both numbers, and the violation carries the directory —
+		//     without it, the 9 mirrored pairs came out as identical lines and fixing one
+		//     copy left the other failing with the same string.
 		Wiring: failingGate,
 		Setup:  setupAlertRunbooks,
 	})

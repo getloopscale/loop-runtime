@@ -52,8 +52,8 @@ const (
 
 // CanRecurNo is the matrix value (with the diacritic) marking an entry whose
 // regression CANNOT recur safely — a MISS here is critical. The matrix is written
-// in Portuguese and "NÃO" means "NO"; this literal is DATA matched against the
-// matrix cells, so it must stay exactly as the matrix spells it.
+// in Portuguese and the value below means "NO"; this literal is DATA matched
+// against the matrix cells, so it must stay exactly as the matrix spells it.
 const CanRecurNo = "NÃO" // english-only: data matched verbatim against the matrix cells
 
 // Row is one parsed data row of the matrix.

@@ -17,10 +17,10 @@ func init() {
 	})
 }
 
-// setupPlatformCRNamespace recusa manifesto versionado que aplique Tenant/Environment fora de
-// `loopzero-system` (B-095). Fora do lugar o CR fica invisivel ao operator, cujo cache e' restrito a
-// esse namespace — e indeletavel se a cerca de admissao for ligada, porque remover finalizer e'
-// um UPDATE.
+// setupPlatformCRNamespace refuses a versioned manifest that applies a Tenant/Environment
+// outside `loopzero-system` (B-095). Out of place, the CR is invisible to the operator, whose cache
+// is restricted to that namespace — and undeletable if the admission fence is switched on,
+// because removing a finalizer is an UPDATE.
 func setupPlatformCRNamespace(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (Outcome, error) {
 		out, err := platformcrnamespace.Check(platformcrnamespace.Config{RepoRoot: inv.Root})

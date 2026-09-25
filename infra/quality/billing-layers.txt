@@ -1,25 +1,29 @@
-# Registro das camadas de cobrança — lido por `loopzero-ops quality billing-layers`.
+# Registry of the billing layers — read by `loopzero-ops quality billing-layers`.
 #
-# POLARIDADE: FECHADO POR PADRÃO. Um arquivo que referencia um insumo de cobrança e não
-# aparece aqui é uma REPROVAÇÃO, não um silêncio.
+# POLARITY: CLOSED BY DEFAULT. A file that references a billing input and does not
+# appear here is a FAILURE, not a silence.
 #
-# POR QUE ELE EXISTE
-#   Em 2026-08-11 mediram-se CINCO camadas independentes onde a ausência de configuração
-#   de cobrança era tolerada, todas falhando para o MESMO lado — não cobrar, não barrar,
-#   não verificar — e nenhuma dizendo isso. O painel serviu 20h com plano e preço na tela
-#   enquanto o segredo que verifica pagamentos não existia no cluster.
-#   Cada escolha é defensável isolada. A direção do erro é o achado: um sistema de
-#   cobrança que erra sempre para o mesmo lado não é tolerante, tem viés. (B-038)
+# WHY IT EXISTS
+#   On 2026-08-11, FIVE independent layers were measured in which missing billing
+#   configuration was tolerated, all failing towards the SAME side — do not charge,
+#   do not block, do not verify — and none of them saying so. The dashboard served for
+#   20h with plan and price on screen while the secret that verifies payments did not
+#   exist in the cluster.
+#   Each choice is defensible in isolation. The direction of the error is the finding: a
+#   billing system that always errs to the same side is not tolerant, it is biased. (B-038)
 #
-# FORMATO
-#   [ancora]       um insumo por linha — a referência que marca um arquivo como candidato
-#   [piso]         o número mínimo de camadas; menos que isso REPROVA
-#   [camadas]      <id> | <repo> | <arquivos,vírgula> | <guarda> | <como degrada>
-#   [referencias]  <arquivo> | <por que NÃO é uma camada>
+# FORMAT
+#   The section names below are format keys matched literally by the parser
+#   ([ancora] = anchor, [piso] = floor, [camadas] = layers, [referencias] = references);
+#   they are data, not prose, and must not be renamed.
+#   [ancora]       one input per line — the reference that marks a file as a candidate
+#   [piso]         the minimum number of layers; fewer than that FAILS
+#   [camadas]      <id> | <repo> | <files,comma-separated> | <guard> | <how it degrades>
+#   [referencias]  <file> | <why it is NOT a layer>
 #
-# GUARDAS
-#   gate:<nome>   um gate do loopzero-ops cobre — só resolve se o gate for RODADO no quality.yml
-#   test:<path>   um teste afirma o invariante (verificado por EXISTÊNCIA, não conteúdo)
+# GUARDS
+#   gate:<name>   a loopzero-ops gate covers it — resolves only if the gate is RUN in quality.yml
+#   test:<path>   a test asserts the invariant (checked by EXISTENCE, not content)
 #   open:B-NNN    declared debt with an owner — resolves ONLY while the [debts] section
 #                 below records the item as open (raw, triaged, approved or planned);
 #                 shipped and killed FAIL
@@ -30,9 +34,10 @@
 #   one machine that had it. Closing a debt means editing its status in this file,
 #   in the same diff that swaps the layer's guard for `gate:` or `test:`.
 #
-# A CATRACA: fechar um item `open:` sem trocar a guarda REPROVA. É isso que impede a
-# dívida de virar tapete — sem ela, bastaria marcar o B-033 como entregue para a camada
-# ficar descoberta e silenciosa com este arquivo ainda afirmando que alguém cuida dela.
+# THE RATCHET: closing an `open:` item without swapping the guard FAILS. That is what
+# stops the debt from becoming a rug to sweep things under — without it, marking B-033 as
+# delivered would be enough to leave the layer uncovered and silent while this file still
+# claimed somebody takes care of it.
 
 [ancora]
 loopzero-stripe-webhook
@@ -46,24 +51,24 @@ stripe_subscription_item_id
 5
 
 [camadas]
-secret-mount | loopzero | charts/loopzero-cloud/templates/deployment.yaml,charts/loopzero-cloud/values-bootstrap.yaml,infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl | gate:billing-secrets | `optional: true` literal fazia o pod subir sem a credencial que autoriza cobrar; hoje é `{{ not .Values.billing.required }}`, ligado em dev-public. Medido 2026-08-11: 20h Running sem os dois Secrets, sem um único evento. (B-037)
-seed | loopzero | cmd/loopzero-ops/internal/seed/capability.go,cmd/loopzero-ops/internal/seed/stripe_webhook_secret.go,cmd/loopzero-ops/internal/seed/stripe_api_keys.go,cmd/loopzero-ops/internal/seed/stripe_webhook_endpoint.go | test:cmd/loopzero-ops/internal/seed/stripe_required_test.go | `SKIP-graceful` deixava a corrente verde sem credencial; hoje `MissingInput` reprova quando o ambiente DECLAROU a capacidade. Opcional por design continua pulando. (B-036)
-cost-gate | loopzero | api/internal/middleware/policy/cost_enforcement.go,api/internal/server/protected_routes.go,api/cmd/setup_server.go | test:api/internal/middleware/policy/cost_enforcement_disabled_test.go | nil-safe: com `CostEnforcer` não injetado o middleware segue pass-through DE PROPÓSITO — bloquear ali quebraria o boot tolerante que o desvio existe para permitir. O que a camada exigia era que isso parasse de ser SILENCIOSO, e é isso que o teste afirma: o desvio de receptor nulo emite `reason="disabled"`. Mutante confirmado em 2026-09-05 — apagar o incremento reprova o teste com a mensagem do próprio defeito. A guarda deixa de ser `open:B-033` porque a cobertura existe desde 2026-08-19 e apontar para um item aberto escondia isso. (B-033)
-cost-aggregator | loopzero-cloud | cmd/main.go | open:B-033 | `LOOPZERO_PROMETHEUS_URL` vazio desliga o agregador com um `logger.Info` — o mesmo nível do boot bem-sucedido. É a ÚNICA fonte de `cost_counters`, e o portão acima degrada para "passa" quando a tabela está vazia. NÃO trocada por `gate:check-loopzero-cloud-cost-aggregator-wiring`: em 2026-09-05 esse gate estava VERDE enquanto o Deployment em execução tinha zero variáveis casando `PROM/COST`, `cost_counters` tinha 0 linhas, e duas das três séries que o agregador consulta não são emitidas por repositório nenhum. Um gate que prova o render e cala sobre o cluster não cobre esta camada — trocar aqui seria o tapete que a catraca existe para impedir. (B-033)
-usage-report | loopzero-cloud | internal/metering/reporter.go,internal/metering/stalled.go | test:internal/metering/stalled_test.go | assinatura sem `stripe_subscription_item_id` fazia o reporter registrar WARN e seguir para sempre; hoje `stalled.go` decide pela IDADE — até 24h é espera, além disso é travamento. (B-034)
+secret-mount | loopzero | charts/loopzero-cloud/templates/deployment.yaml,charts/loopzero-cloud/values-bootstrap.yaml,infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl | gate:billing-secrets | a literal `optional: true` let the pod start without the credential that authorises charging; today it is `{{ not .Values.billing.required }}`, switched on in dev-public. Measured 2026-08-11: 20h Running without both Secrets, without a single event. (B-037)
+seed | loopzero | cmd/loopzero-ops/internal/seed/capability.go,cmd/loopzero-ops/internal/seed/stripe_webhook_secret.go,cmd/loopzero-ops/internal/seed/stripe_api_keys.go,cmd/loopzero-ops/internal/seed/stripe_webhook_endpoint.go | test:cmd/loopzero-ops/internal/seed/stripe_required_test.go | `SKIP-graceful` left the chain green without a credential; today `MissingInput` fails when the environment DECLARED the capability. Optional by design still skips. (B-036)
+cost-gate | loopzero | api/internal/middleware/policy/cost_enforcement.go,api/internal/server/protected_routes.go,api/cmd/setup_server.go | test:api/internal/middleware/policy/cost_enforcement_disabled_test.go | nil-safe: with `CostEnforcer` not injected the middleware stays pass-through ON PURPOSE — blocking there would break the tolerant boot the bypass exists to allow. What the layer required was that this stop being SILENT, and that is what the test asserts: the nil-receiver bypass emits `reason="disabled"`. Mutant confirmed on 2026-09-05 — deleting the increment fails the test with the defect's own message. The guard stops being `open:B-033` because the coverage has existed since 2026-08-19 and pointing at an open item hid that. (B-033)
+cost-aggregator | loopzero-cloud | cmd/main.go | open:B-033 | an empty `LOOPZERO_PROMETHEUS_URL` switches the aggregator off with a `logger.Info` — the same level as a successful boot. It is the ONLY source of `cost_counters`, and the gate above degrades to "pass" when the table is empty. NOT swapped for `gate:check-loopzero-cloud-cost-aggregator-wiring`: on 2026-09-05 that gate was GREEN while the running Deployment had zero variables matching `PROM/COST`, `cost_counters` had 0 rows, and two of the three series the aggregator queries are emitted by no repository at all. A gate that proves the render and stays silent about the cluster does not cover this layer — swapping it here would be the rug the ratchet exists to prevent. (B-033)
+usage-report | loopzero-cloud | internal/metering/reporter.go,internal/metering/stalled.go | test:internal/metering/stalled_test.go | a subscription without `stripe_subscription_item_id` made the reporter log a WARN and carry on forever; today `stalled.go` decides by AGE — up to 24h is waiting, beyond that it is stalled. (B-034)
 
 [referencias]
 charts/loopzero-cloud/templates/configmap.yaml | transport: renders config.prometheusUrl as LOOPZERO_PROMETHEUS_URL; whether cost is aggregated is decided by the cloud binary (layer cost-aggregator)
 charts/loopzero-cloud/values.yaml | documents config.prometheusUrl, empty by default; the value that turns the aggregator on lives in values/dev-public/
-api/internal/server/server.go | transporte: carrega o CostEnforcer até o router; a decisão de barrar é do middleware
-api/internal/db/store/cost_wrapper.go | acesso a `cost_counters`; lê e escreve, não decide se cobra
-api/internal/db/generated/models.go | gerado por sqlc a partir do schema; espelha a coluna, não a política
-cmd/loopzero-ops/internal/quality/billingsecrets/check.go | é a GUARDA da camada secret-mount, não a camada
-cmd/loopzero-ops/internal/quality/devpublicenv/check.go | confere presença de variáveis do dev-public; não decide nada sobre cobrança
+api/internal/server/server.go | transport: carries the CostEnforcer to the router; the decision to block belongs to the middleware
+api/internal/db/store/cost_wrapper.go | access to `cost_counters`; reads and writes, does not decide whether to charge
+api/internal/db/generated/models.go | generated by sqlc from the schema; mirrors the column, not the policy
+cmd/loopzero-ops/internal/quality/billingsecrets/check.go | it is the GUARD of the secret-mount layer, not the layer
+cmd/loopzero-ops/internal/quality/devpublicenv/check.go | checks that dev-public variables are present; decides nothing about billing
 cmd/loopzero-ops/internal/qualitycli/billing_secrets_gate.go | loopzero-ops gate adapter; it names the billing secrets to explain the gate and decides nothing about billing
-infra/helmfile/environments/dev-public.yaml | declara o ambiente; o valor que liga a cobrança mora em values/dev-public/
-taskfiles/infra.yml | task de operador que IMPRIME o comando de criar o Secret à mão; instrução, não caminho de execução
-taskfiles/quality.yml | comentário citando `LOOPZERO_PROMETHEUS_URL` e `CostEnforcer` para justificar o wire do gate `check-loopzero-cloud-cost-aggregator-wiring` sob `quality:gates`; é documentação da razão do gate, não caminho de cobrança
+infra/helmfile/environments/dev-public.yaml | declares the environment; the value that switches billing on lives in values/dev-public/
+taskfiles/infra.yml | operator task that PRINTS the command to create the Secret by hand; an instruction, not an execution path
+taskfiles/quality.yml | comment citing `LOOPZERO_PROMETHEUS_URL` and `CostEnforcer` to justify wiring the `check-loopzero-cloud-cost-aggregator-wiring` gate under `quality:gates`; it documents the gate's reason, not a billing path
 
 [debts]
 B-033 | approved | the cost-aggregator layer gets a guard that proves the running cluster aggregates cost (not only that the chart renders), replacing open:B-033

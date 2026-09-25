@@ -3,67 +3,68 @@
 
 // Package billinglayers refuses a billing chain whose layers stop having an owner.
 //
-// # O achado, medido
+// # The finding, measured
 //
-// Em 2026-08-11 mediram-se CINCO camadas independentes onde a ausência de configuração de
-// cobrança é tolerada — o monte do Secret, o seed, o agregador de custo, o portão de custo
-// e o reporte de uso. Todas falhando para o MESMO lado — não cobrar, não barrar, não
-// verificar — e nenhuma dizendo isso. A camada 3 anuncia a própria morte com um
-// `logger.Info("cost aggregator disabled")`: o mesmo nível de log do boot bem-sucedido.
+// On 2026-08-11, FIVE independent layers were measured in which missing billing
+// configuration is tolerated — the Secret mount, the seed, the cost aggregator, the cost
+// gate and the usage report. All of them failing towards the SAME side — do not charge,
+// do not block, do not verify — and none of them saying so. Layer 3 announces its own
+// death with a `logger.Info("cost aggregator disabled")`: the same log level as a
+// successful boot.
 //
-// Cada escolha é defensável isolada. Juntas formam um sistema que, diante de qualquer
-// configuração faltante, cobra menos e barra menos — e informa isso a ninguém. **A direção
-// do erro é o achado**: um sistema de cobrança que erra sempre para o mesmo lado não é
-// tolerante, tem viés (B-038).
+// Each choice is defensible in isolation. Together they form a system that, faced with any
+// missing configuration, charges less and blocks less — and tells nobody. **The direction
+// of the error is the finding**: a billing system that always errs to the same side is not
+// tolerant, it is biased (B-038).
 //
-// # O que este gate verifica, e o que ele NÃO verifica
+// # What this gate checks, and what it does NOT check
 //
-// Ele NÃO conserta as camadas — isso é dos itens B-033 e B-034. Ele garante que a lista
-// delas seja **enumerável, com dono, e impossível de encolher em silêncio**:
+// It does NOT fix the layers — that belongs to items B-033 and B-034. It guarantees that
+// their list is **enumerable, owned, and impossible to shrink in silence**:
 //
-//	guarda declarada que não resolve      →  REPROVA
-//	dívida `open:` cujo item foi fechado  →  REPROVA   ← a catraca
-//	menos camadas que o piso              →  REPROVA
-//	arquivo com insumo e sem declaração   →  REPROVA
-//	repositório irmão ausente             →  PARCIAL, nomeado — nunca verde silencioso
+//	declared guard that does not resolve   →  FAILS
+//	`open:` debt whose item was closed     →  FAILS   ← the ratchet
+//	fewer layers than the floor            →  FAILS
+//	file with an input and no declaration  →  FAILS
+//	sibling repository absent              →  PARTIAL, named — never a silent green
 //
-// # A âncora é DADO, e a razão é concreta
+// # The anchor is DATA, and the reason is concrete
 //
-// Ela mora no próprio registro, e não como literais neste arquivo. Escrita em Go, ela
-// faria este arquivo referenciar insumo de cobrança — e o gate reprovaria a si mesmo.
-// Como dado, ela vira revisável em vez de escondida numa constante.
+// It lives in the registry itself, and not as literals in this file. Written in Go, it
+// would make this file reference a billing input — and the gate would fail itself. As
+// data, it becomes reviewable instead of hidden in a constant.
 //
-// A escolha da âncora foi MEDIDA antes de ser feita: heurística por nome
-// (`billing|stripe|metering|cost`) casa **142** arquivos — ruído, não controle, e a corrida
-// armamentista que o `publishhygiene` recusou na metade de IP. Por referência a insumo,
-// **21** (16 aqui, 5 no irmão).
+// The choice of anchor was MEASURED before it was made: a name heuristic
+// (`billing|stripe|metering|cost`) matches **142** files — noise, not control, and the arms
+// race that `publishhygiene` refused halfway through for IPs. By reference to an input,
+// **21** (16 here, 5 in the sibling).
 //
-// # Limites, ditos em voz alta
+// # Limits, stated out loud
 //
-// Uma camada que degrade **sem tocar em nenhum insumo conhecido** passa despercebida.
-// Aconteceu durante esta própria fatia: o portão de custo (`api/internal/server/router.go`)
-// não citava nenhum insumo da âncora inicial, e só entrou quando o identificador do
-// enforcer foi acrescentado ao registro. A âncora é uma lista, e listas envelhecem.
+// A layer that degrades **without touching any known input** goes unnoticed. It happened
+// during this very slice: the cost gate (`api/internal/server/router.go`) cited no input
+// of the initial anchor, and only came in when the enforcer's identifier was added to the
+// registry. The anchor is a list, and lists age.
 //
-// E este parágrafo já reprovou este arquivo uma vez: a versão anterior nomeava aquele
-// identificador por extenso, o que fez o gate encontrar a si mesmo. Tirar a âncora do
-// código não basta se a PROSA a reintroduz — e declarar este arquivo como referência
-// resolveria por fora, deixando um ponto cego exatamente onde a trava é auditada.
+// And this paragraph has already failed this file once: the previous version spelled that
+// identifier out, which made the gate find itself. Taking the anchor out of the code is
+// not enough if the PROSE reintroduces it — and declaring this file as a reference would
+// resolve it from the outside, leaving a blind spot exactly where the lock is audited.
 //
-// E uma guarda `test:` é verificada por EXISTÊNCIA, não por conteúdo: o gate não sabe se
-// aquele teste afirma o invariante. Distinguir exigiria análise semântica de teste, que
-// nada neste repositório faz.
+// And a `test:` guard is checked by EXISTENCE, not by content: the gate does not know
+// whether that test asserts the invariant. Telling the two apart would require semantic
+// analysis of tests, which nothing in this repository does.
 //
-// A varredura de superfície cobre ESTE repositório apenas. As camadas do irmão são
-// verificadas por declaração — os arquivos existem, a guarda resolve —, mas um arquivo NOVO
-// lá que referencie um insumo não é detectado aqui. Isso é deliberado: varrer o irmão
-// faria uma mudança feita por outra pessoa, noutro repositório, travar o push deste. Um
-// gate que reprova por causa do trabalho alheio é desligado, e levaria junto a proteção
-// que dava.
+// The surface sweep covers THIS repository only. The sibling's layers are checked by
+// declaration — the files exist, the guard resolves — but a NEW file there that references
+// an input is not detected here. That is deliberate: sweeping the sibling would let a
+// change made by someone else, in another repository, block this one's push. A gate that
+// fails because of other people's work gets switched off, and takes the protection it gave
+// with it.
 //
-// Decisão registrada em
+// Decision recorded in
 // `.claude/knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-18-billing-layers-registry.md`
-// (T2, pendente de ratificação).
+// (T2, pending ratification).
 package billinglayers
 
 import (
@@ -78,13 +79,13 @@ import (
 )
 
 // ErrUndeclaredSurface means a file references a billing input without being declared.
-var ErrUndeclaredSurface = errors.New("arquivo referencia insumo de cobrança e não está declarado")
+var ErrUndeclaredSurface = errors.New("file references a billing input and is not declared")
 
 // ErrBelowFloor means the registry shrank below its declared minimum.
-var ErrBelowFloor = errors.New("menos camadas que o piso declarado")
+var ErrBelowFloor = errors.New("fewer layers than the declared floor")
 
 // ErrNothingScanned means the scan reached no file.
-var ErrNothingScanned = errors.New("nenhum arquivo varrido — não achar nada não é o mesmo que não achar nada errado")
+var ErrNothingScanned = errors.New("no file swept — finding nothing is not the same as finding nothing wrong")
 
 // RegistryRelPath is where the declared registry lives.
 const RegistryRelPath = "infra/quality/billing-layers.txt"
@@ -123,7 +124,7 @@ func Check(cfg Config) (Outcome, error) {
 
 	f, err := os.Open(filepath.Clean(filepath.Join(root, RegistryRelPath)))
 	if err != nil {
-		return out, fmt.Errorf("%w: não consegui ler %s: %w", ErrRegistryMalformed, RegistryRelPath, err)
+		return out, fmt.Errorf("%w: could not read %s: %w", ErrRegistryMalformed, RegistryRelPath, err)
 	}
 	reg, perr := ParseRegistry(f)
 	_ = f.Close()
@@ -140,15 +141,15 @@ func Check(cfg Config) (Outcome, error) {
 	}
 	resolver := NewGuardResolver(root, sibling, reg.Debts)
 
-	// EC-4: o piso é o que impede o registro de se auto-silenciar.
+	// EC-4: the floor is what stops the registry from silencing itself.
 	if out.Layers < reg.Floor {
-		return out, fmt.Errorf("%w: %d camadas declaradas, piso %d — remover uma camada de verdade exige baixar o piso no mesmo diff",
+		return out, fmt.Errorf("%w: %d layers declared, floor %d — really removing a layer requires lowering the floor in the same diff",
 			ErrBelowFloor, out.Layers, reg.Floor)
 	}
 
-	declarados := map[string]bool{RegistryRelPath: true} // EC-1: citar o insumo é a definição dele
+	declared := map[string]bool{RegistryRelPath: true} // EC-1: citing the input is its definition
 	for _, ref := range reg.References {
-		declarados[ref.File] = true
+		declared[ref.File] = true
 	}
 
 	for _, l := range reg.Layers {
@@ -159,9 +160,9 @@ func Check(cfg Config) (Outcome, error) {
 		}
 		for _, rel := range l.Files {
 			if l.Repo == "loopzero" {
-				declarados[rel] = true
+				declared[rel] = true
 			}
-			if err := resolver.resolveFile(rel, l.Repo, "arquivo da camada"); err != nil {
+			if err := resolver.resolveFile(rel, l.Repo, "layer file"); err != nil {
 				out.Broken = append(out.Broken, BrokenGuard{Layer: l.ID, Why: err.Error()})
 			}
 		}
@@ -170,15 +171,15 @@ func Check(cfg Config) (Outcome, error) {
 		}
 	}
 
-	arquivos, gerr := versionedFiles(root)
+	files, gerr := versionedFiles(root)
 	if gerr != nil {
 		return out, gerr
 	}
-	out.Scanned = len(arquivos)
+	out.Scanned = len(files)
 	if out.Scanned == 0 {
 		return out, ErrNothingScanned
 	}
-	out.Undeclared, err = undeclaredSurfaces(root, arquivos, reg.Anchor, declarados)
+	out.Undeclared, err = undeclaredSurfaces(root, files, reg.Anchor, declared)
 	if err != nil {
 		return out, err
 	}
@@ -187,36 +188,36 @@ func Check(cfg Config) (Outcome, error) {
 		return out, fmt.Errorf("%w: %s", ErrGuardUnresolved, describe(out.Broken))
 	}
 	if len(out.Undeclared) > 0 {
-		return out, fmt.Errorf("%w (%d): %s — declare como camada, ou como referência com a razão de não ser uma",
+		return out, fmt.Errorf("%w (%d): %s — declare it as a layer, or as a reference with the reason it is not one",
 			ErrUndeclaredSurface, len(out.Undeclared), strings.Join(out.Undeclared, ", "))
 	}
 
-	out.Reason = fmt.Sprintf("%d camada(s) com guarda que resolve, %d arquivo(s) varrido(s)", out.Layers, out.Scanned)
+	out.Reason = fmt.Sprintf("%d layer(s) with a guard that resolves, %d file(s) swept", out.Layers, out.Scanned)
 	if out.Partial {
-		out.Reason += fmt.Sprintf(" — COBERTURA PARCIAL: %s não verificada(s), repositório irmão ausente",
+		out.Reason += fmt.Sprintf(" — PARTIAL COVERAGE: %s not verified, sibling repository absent",
 			strings.Join(out.NotVerified, ", "))
 	}
 	return out, nil
 }
 
 func describe(b []BrokenGuard) string {
-	partes := make([]string, 0, len(b))
+	parts := make([]string, 0, len(b))
 	for _, x := range b {
-		partes = append(partes, x.Layer+": "+x.Why)
+		parts = append(parts, x.Layer+": "+x.Why)
 	}
-	return strings.Join(partes, "; ")
+	return strings.Join(parts, "; ")
 }
 
 // undeclaredSurfaces finds files that touch a billing input without being declared.
 // A versioned file it cannot read is an error: it may be exactly the new
 // layer the sweep exists to catch.
-func undeclaredSurfaces(root string, arquivos, ancora []string, declarados map[string]bool) ([]string, error) {
+func undeclaredSurfaces(root string, files, anchor []string, declared map[string]bool) ([]string, error) {
 	var out []string
-	for _, rel := range arquivos {
-		if declarados[rel] || !scannable(rel) {
+	for _, rel := range files {
+		if declared[rel] || !scannable(rel) {
 			continue
 		}
-		hit, err := referencesAnchor(filepath.Join(root, rel), ancora)
+		hit, err := referencesAnchor(filepath.Join(root, rel), anchor)
 		if err != nil {
 			return nil, fmt.Errorf("billing-layers: %s is versioned and unreadable, so it was not swept: %w", rel, err)
 		}
@@ -230,9 +231,9 @@ func undeclaredSurfaces(root string, arquivos, ancora []string, declarados map[s
 
 // scannable limits the sweep to the kinds of file a layer can live in.
 //
-// Os testes ficam de fora de propósito: um teste que cita o insumo está exercitando a
-// camada, não sendo uma. Incluí-los obrigaria a declarar cada arquivo de teste, e o
-// registro viraria uma lista de testes.
+// Tests are left out on purpose: a test that cites the input is exercising the layer,
+// not being one. Including them would force every test file to be declared, and the
+// registry would turn into a list of tests.
 func scannable(rel string) bool {
 	if strings.HasSuffix(rel, "_test.go") || strings.HasSuffix(rel, "_test.sh") {
 		return false
@@ -245,7 +246,7 @@ func scannable(rel string) bool {
 	return false
 }
 
-func referencesAnchor(abs string, ancora []string) (bool, error) {
+func referencesAnchor(abs string, anchor []string) (bool, error) {
 	f, err := os.Open(filepath.Clean(abs))
 	if err != nil {
 		return false, err
@@ -255,9 +256,9 @@ func referencesAnchor(abs string, ancora []string) (bool, error) {
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1024*1024), 1024*1024)
 	for sc.Scan() {
-		linha := sc.Text()
-		for _, a := range ancora {
-			if strings.Contains(linha, a) {
+		line := sc.Text()
+		for _, a := range anchor {
+			if strings.Contains(line, a) {
 				return true, nil
 			}
 		}
@@ -271,7 +272,7 @@ func versionedFiles(root string) ([]string, error) {
 	cmd.Dir = root
 	body, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("git ls-files em %s: %w", root, err)
+		return nil, fmt.Errorf("git ls-files in %s: %w", root, err)
 	}
 	var out []string
 	for _, l := range strings.Split(string(body), "\n") {

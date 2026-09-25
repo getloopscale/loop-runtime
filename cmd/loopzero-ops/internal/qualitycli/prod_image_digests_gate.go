@@ -41,13 +41,13 @@ func setupProdImageDigests(fs *flag.FlagSet) Check {
 			// populations is what kept three fixable findings invisible inside seven
 			// that nobody could fix — the reader could not tell which half was which.
 			if blocking := outcome.Enforced(); len(blocking) > 0 {
-				inv.Stderr.Printf("prod-image-digests: FAIL — %d referência(s) de imagem mutável que bloqueiam:\n", len(blocking))
+				inv.Stderr.Printf("prod-image-digests: FAIL — %d mutable image reference(s) that block:\n", len(blocking))
 				for _, v := range blocking {
 					inv.Stderr.Printf("  %s\n", v)
 				}
 			}
 			if warned := outcome.Warned(); len(warned) > 0 {
-				inv.Stderr.Printf("prod-image-digests: WARN — %d referência(s) reportada(s) sem bloquear (aguardam o publicador de imagens):\n", len(warned))
+				inv.Stderr.Printf("prod-image-digests: WARN — %d reference(s) reported without blocking (waiting on the image publisher):\n", len(warned))
 				for _, v := range warned {
 					inv.Stderr.Printf("  %s\n", v)
 				}

@@ -13,14 +13,14 @@ import (
 )
 
 // ErrGuardUnresolved means a declared guard does not actually guard anything.
-var ErrGuardUnresolved = errors.New("guarda declarada não resolve")
+var ErrGuardUnresolved = errors.New("declared guard does not resolve")
 
 // ErrSiblingAbsent means a layer lives in a repository that is not checked out.
 //
-// NÃO é reprovação: um checkout parcial não pode travar todo push. É reportado como
-// cobertura PARCIAL, no contrato de `rules/reference-provenance.md § 4` — o que não pode
-// acontecer é o verde silencioso sobre o que não foi olhado.
-var ErrSiblingAbsent = errors.New("repositório irmão ausente")
+// It is NOT a failure: a partial checkout must not block every push. It is reported as
+// PARTIAL coverage, under the contract of `rules/reference-provenance.md § 4` — what must
+// not happen is a silent green over what was not looked at.
+var ErrSiblingAbsent = errors.New("sibling repository absent")
 
 // openStatuses are the states in which a debt still has an owner. `planned`
 // and `approved` count as open: the ratchet exists to catch CLOSING without
@@ -34,8 +34,8 @@ var terminalStatuses = map[string]bool{"shipped": true, "killed": true}
 
 // GuardResolver answers whether a declared guard actually guards.
 //
-// Recebe as raízes como campos, e não lê `os.Getenv` nem assume o diretório corrente:
-// um colaborador que lê o processo não é substituível num teste.
+// It receives the roots as fields, and neither reads `os.Getenv` nor assumes the current
+// directory: a collaborator that reads the process cannot be substituted in a test.
 type GuardResolver struct {
 	repoRoot    string
 	siblingRoot string
@@ -62,46 +62,46 @@ func (g *GuardResolver) Resolve(guard Guard, repo string) error {
 	case GuardGate:
 		return g.resolveGate(guard.Target)
 	case GuardTest:
-		return g.resolveFile(guard.Target, repo, "teste")
+		return g.resolveFile(guard.Target, repo, "test")
 	case GuardOpen:
 		return g.resolveDebt(guard.Target)
 	default:
-		return fmt.Errorf("%w: forma %q", ErrGuardUnresolved, guard.Kind)
+		return fmt.Errorf("%w: form %q", ErrGuardUnresolved, guard.Kind)
 	}
 }
 
-// resolveGate exige que o gate seja RODADO, não apenas que exista.
+// resolveGate requires the gate to be RUN, not merely to exist.
 //
-// A verificação é sobre `taskfiles/quality.yml` — o lugar onde um gate passa a ser
-// executado — e não sobre a existência do pacote. Um gate implementado e não ligado é o
-// padrão "implementado mas não wired" do `CLAUDE.md`, e guarda exatamente nada.
-func (g *GuardResolver) resolveGate(nome string) error {
-	caminho := filepath.Join(g.repoRoot, "taskfiles", "quality.yml")
-	f, err := os.Open(filepath.Clean(caminho))
+// The check is against `taskfiles/quality.yml` — the place where a gate starts being
+// executed — and not against the package existing. A gate implemented and not switched on
+// is the "implemented but not wired" pattern from `CLAUDE.md`, and guards exactly nothing.
+func (g *GuardResolver) resolveGate(name string) error {
+	path := filepath.Join(g.repoRoot, "taskfiles", "quality.yml")
+	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
-		return fmt.Errorf("%w: não consegui ler %s: %w", ErrGuardUnresolved, caminho, err)
+		return fmt.Errorf("%w: could not read %s: %w", ErrGuardUnresolved, path, err)
 	}
 	defer func() { _ = f.Close() }()
 
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1024*1024), 1024*1024)
-	alvo := "quality " + nome
+	target := "quality " + name
 	for sc.Scan() {
-		if strings.Contains(sc.Text(), alvo) {
+		if strings.Contains(sc.Text(), target) {
 			return nil
 		}
 	}
-	return fmt.Errorf("%w: o gate %q não é invocado em taskfiles/quality.yml — um gate que ninguém roda não guarda nada",
-		ErrGuardUnresolved, nome)
+	return fmt.Errorf("%w: the gate %q is not invoked in taskfiles/quality.yml — a gate nobody runs guards nothing",
+		ErrGuardUnresolved, name)
 }
 
-func (g *GuardResolver) resolveFile(rel, repo, oQue string) error {
-	raiz := g.Root(repo)
-	if raiz == "" {
-		return fmt.Errorf("%w: %s em %s", ErrSiblingAbsent, rel, repo)
+func (g *GuardResolver) resolveFile(rel, repo, what string) error {
+	root := g.Root(repo)
+	if root == "" {
+		return fmt.Errorf("%w: %s in %s", ErrSiblingAbsent, rel, repo)
 	}
-	if _, err := os.Stat(filepath.Join(raiz, rel)); err != nil {
-		return fmt.Errorf("%w: %s %q não existe em %s", ErrGuardUnresolved, oQue, rel, repo)
+	if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
+		return fmt.Errorf("%w: %s %q does not exist in %s", ErrGuardUnresolved, what, rel, repo)
 	}
 	return nil
 }

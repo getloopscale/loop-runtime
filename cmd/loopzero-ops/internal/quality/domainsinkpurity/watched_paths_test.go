@@ -12,45 +12,45 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
-// prefixoDoModulo e' o unico prefixo que os caminhos vigiados usam. Derivar o
-// diretorio do caminho de import so' e' valido enquanto isto for verdade, e a
-// primeira assercao do teste e' justamente que continua sendo.
-const prefixoDoModulo = "github.com/getloopscale/loopzero/"
+// modulePrefix is the only prefix the watched paths use. Deriving the directory
+// from the import path is valid only while this holds, and the test's first
+// assertion is precisely that it still does.
+const modulePrefix = "github.com/getloopscale/loopzero/"
 
-// Este gate vigia por CAMINHO DE IMPORT. Um caminho que deixe de existir — um
-// pacote movido, renomeado ou deletado — nao produz erro: a chave simplesmente
-// para de casar, o pacote sai da vigilancia e o gate segue verde sobre menos do
-// que promete.
+// This gate watches by IMPORT PATH. A path that stops existing — a package
+// moved, renamed or deleted — produces no error: the key simply stops matching,
+// the package drops out of the watch and the gate stays green over less than it
+// promises.
 //
-// Nao e' hipotese. O doc-comment do proprio mapa registra que aconteceu: "a
-// primeira implementacao nao vigiava `manifests` de jeito nenhum — tres
-// referencias publicas cruzaram com o gate verde". O que faltava era esta
-// verificacao, e sem ela o proximo movimento de pacote repete o episodio.
-func TestCaminhosVigiadosExistemNaArvore(t *testing.T) {
-	raiz := qtestutil.Root(t)
+// This is not a hypothesis. The map's own doc-comment records that it happened:
+// "the first implementation did not watch them at all — three public references
+// crossed with the gate green". What was missing was this check, and without it
+// the next package move repeats the episode.
+func TestWatchedPathsExistInTheTree(t *testing.T) {
+	root := qtestutil.Root(t)
 	if len(watchedImportPaths) == 0 {
-		t.Fatal("mapa de vigilancia vazio: um gate que vigia nada passa por vacuidade")
+		t.Fatal("empty watch map: a gate that watches nothing passes vacuously")
 	}
-	for caminho := range watchedImportPaths {
-		if !strings.HasPrefix(caminho, prefixoDoModulo) {
-			t.Errorf("%q nao comeca com %q — a traducao para diretorio deixou de valer",
-				caminho, prefixoDoModulo)
+	for path := range watchedImportPaths {
+		if !strings.HasPrefix(path, modulePrefix) {
+			t.Errorf("%q does not start with %q — the translation to a directory no longer holds",
+				path, modulePrefix)
 			continue
 		}
-		dir := filepath.Join(raiz, strings.TrimPrefix(caminho, prefixoDoModulo))
+		dir := filepath.Join(root, strings.TrimPrefix(path, modulePrefix))
 		info, err := os.Stat(dir)
 		if err != nil || !info.IsDir() {
-			t.Errorf("o gate vigia %q, mas %s nao existe — o pacote saiu da vigilancia "+
-				"em silencio e o verde deixou de significar o que promete", caminho, dir)
+			t.Errorf("the gate watches %q, but %s does not exist — the package dropped out of the watch "+
+				"silently and green no longer means what it promises", path, dir)
 		}
 	}
 }
 
-// O diretorio do sink tem o mesmo modo de falha, e e' pior: sem ele o gate nao
-// tem o que ler.
-func TestDiretorioDoSinkExiste(t *testing.T) {
+// The sink directory has the same failure mode, and it is worse: without it the
+// gate has nothing to read.
+func TestSinkDirectoryExists(t *testing.T) {
 	dir := filepath.Join(qtestutil.Root(t), sinkDir)
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		t.Fatalf("sinkDir aponta para %s, que nao existe", dir)
+		t.Fatalf("sinkDir points at %s, which does not exist", dir)
 	}
 }
