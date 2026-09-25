@@ -6,6 +6,17 @@ CANNOT detect RBAC violations.
 Each gap has a corresponding negative test fixture (planned) so
 regressions in the analyzer's coverage become visible.
 
+## 0. A call with no marker covering it
+
+**Pattern:** a controller calls `r.Get(ctx, key, &corev1.Secret{})` and no
+`+kubebuilder:rbac` marker grants `get` on `secrets`.
+**Why missed:** the analyzer does not resolve the type of the object argument,
+so it cannot tell which (group, resource) a call touches. It checks markers
+for shape and wildcards, and `--strict` checks markers against call verbs,
+but never calls against markers.
+**Mitigation:** none in this analyzer; the missing permission surfaces as
+`Forbidden` at runtime, and PR review of each new call is the only check.
+
 ## 1. Dynamic client usage
 
 **Pattern:** `dynamic.NewForConfig(cfg).Resource(gvr).Namespace(ns).Get(...)`.

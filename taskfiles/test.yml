@@ -588,7 +588,8 @@ tasks:
       ADR-0026 D4 condition #5 / plan T4.3 — AST analyzer that detects
       RBAC anti-patterns the controller-gen pipeline can't catch:
         - wildcard markers (resources=*, verbs=*) — security style guide
-        - missing markers vs r.Client.X call sites (basic correlation)
+        - malformed markers (no verbs= clause)
+      It does NOT detect a call with no covering marker.
       See operators/hack/validate-rbac/KNOWN_GAPS.md for blind spots.
     cmds:
       - cd operators && go run ./hack/validate-rbac -dir internal/tenant
