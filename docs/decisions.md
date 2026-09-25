@@ -16,6 +16,7 @@ meeting date is not the meeting.
 
 | Date | Decision | Tier | What it turns on |
 |---|---|---|---|
+| 2026-09-15 | **Whether the bootstrap loopzero-api ClusterRole keeps cluster-wide secrets delete and pods/exec create** | — | `infra/helm/loopzero-api` grants both cluster-wide; the published `charts/loopzero-api` withholds `secrets` delete under every value of `rbac.legacyClusterWideSecrets` and omits `pods/exec` entirely. No caller for either grant has been measured. `helm-drift` records both cells as `undecided` in `infra/quality/helm-drift-registry.yaml` and names them on every run until this is decided. Record: `.squad/wiki/decisions/B-001-bootstrap-grant-disposition.md`. |
 | 2026-09-09 | **The secrets cluster is separate, and conditional** | T3 | Supersedes § Q2 of a RATIFIED ADR that placed OpenBao in a `vault-system` namespace on the core cluster. Three artifacts disagreed about where OpenBao runs and the disagreement was load-bearing. Because it supersedes a ratified decision, ratification is sponsor-direct — it is not implied by the file existing. |
 | 2026-09-07 | **Source bundles keep going through the API**, and the edge bound is made real | T2 | `POST /api/v1/source/upload` is served by `loopzero-api` itself; every deploy pushes up to 500 MB (`SOURCE_MAX_BUNDLE_SIZE`) through a pod limited to 500m CPU / 256Mi across 2 replicas. The decision keeps the path and makes the edge limit real rather than nominal. |
 | 2026-09-07 | **Fixed replicas for the control plane, autoscaling for tenant workloads** | T2 | The renderer emits an HPA — or a KEDA `ScaledObject` when `minReplicas` is 0 — for every tenant application. The platform that runs them does not get the same treatment. |
@@ -101,6 +102,7 @@ requires it to name who is affected, what breaks and what was rejected — above
 
 | Date | Decision |
 |---|---|
+| 2026-09-25 | **Chart-pair drift is recorded, never blessed per pair** — every resource kind and every RBAC (apiGroup, resource, verb) cell on which a bootstrap chart and its published twin differ is an entry in `infra/quality/helm-drift-registry.yaml` saying what was observed; `helm-drift` fails on any divergence without one. An entry is `declared` (intended and reviewed) or `undecided` (live, waiting on an open decision). Kinds were measured 2026-08-16, cells 2026-09-15. |
 | 2026-09-06 | **Test-pyramid e2e band — ratify the ratchet**, amending ADR D7. |
 | 2026-06-11 | **Wiring-triad pillar-(b) test contract** (D5). |
 | 2026-06-11 | **Tilt-owned YAML to Helm ConfigMap + Secret mount** as the canonical pattern (D1). |

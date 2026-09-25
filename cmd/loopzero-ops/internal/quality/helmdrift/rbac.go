@@ -181,7 +181,7 @@ func sortCells(cells []Cell) {
 // Silence is the contract for a converged pair, and for a pair where neither side
 // renders a ClusterRole: two of the three real pairs are in the second state, so
 // a comparison that spoke up regardless would be reporting on nothing.
-func auditPairRBAC(r Renderer, pairKey, publishedChart, bootstrapChart string, outcome *Outcome) {
+func auditPairRBAC(r Renderer, reg Registry, pairKey, publishedChart, bootstrapChart string, outcome *Outcome) {
 	onlyPub := map[Cell]bool{}
 	onlyBoot := map[Cell]bool{}
 	measured := false
@@ -228,7 +228,7 @@ func auditPairRBAC(r Renderer, pairKey, publishedChart, bootstrapChart string, o
 	// pair-wide blessing is how a ValidatingAdmissionPolicy left the published
 	// chart unnoticed, and the kind registry was re-keyed for the same reason.
 	for _, c := range append(append([]Cell{}, d.OnlyInPublished...), d.OnlyInBootstrap...) {
-		a, ok := approvedRBACCells[cellApprovalKey(pairKey, c)]
+		a, ok := reg.cell(pairKey, c)
 		if !ok {
 			d.Undeclared = append(d.Undeclared, c)
 			continue

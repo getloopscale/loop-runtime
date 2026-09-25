@@ -17,14 +17,14 @@ func mkTemplates(t *testing.T, root, chartPath string, files ...string) {
 		t.Fatalf("mkdir: %v", err)
 	}
 	for _, f := range files {
-		// O nome do arquivo E o kind na fixture: `ConfigMap.yaml` -> `kind: ConfigMap`.
+		// The file name IS the kind in the fixture: `ConfigMap.yaml` -> `kind: ConfigMap`.
 		//
-		// As fixtures escreviam `kind: X` em TODOS os arquivos, o que sob a
-		// comparacao por recurso (B-110) nao e deriva nenhuma — elas diferiam por
-		// NOME, que e exatamente o que o gate parou de medir. E derivar o kind
-		// capitalizando a primeira letra me deu `Configmap` contra o `ConfigMap`
-		// do registro: a mesma diferenca de grafia que este item existe para
-		// deixar de tratar como fato.
+		// The fixtures used to write `kind: X` in EVERY file, which under the
+		// per-resource comparison is no drift at all — they differed by NAME, which
+		// is exactly what the gate stopped measuring. And deriving the kind by
+		// capitalising the first letter gave `Configmap` against the registry's
+		// `ConfigMap`: the same spelling difference this comparison exists to stop
+		// treating as a fact.
 		kind := strings.TrimSuffix(f, ".yaml")
 		if err := os.WriteFile(filepath.Join(dir, f), []byte("kind: "+kind+"\n"), 0o644); err != nil {
 			t.Fatalf("write: %v", err)
@@ -38,7 +38,7 @@ func TestCheck_NoDrift_Pass(t *testing.T) {
 	mkTemplates(t, root, "charts/loopzero-foo", "Deployment.yaml", "Service.yaml")
 	mkTemplates(t, root, "infra/helm/loopzero-foo", "Deployment.yaml", "Service.yaml")
 	declareFixturePairs(t, root)
-	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
+	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}, Registry: realRegistry(t)})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -47,13 +47,13 @@ func TestCheck_NoDrift_Pass(t *testing.T) {
 	}
 }
 
-// TestCheck_UnapprovedDrift_Fail — differing templates without ADR → FAIL.
+// TestCheck_UnapprovedDrift_Fail — differing kinds with no registry entry → FAIL.
 func TestCheck_UnapprovedDrift_Fail(t *testing.T) {
 	root := t.TempDir()
 	mkTemplates(t, root, "charts/loopzero-foo", "Deployment.yaml", "Service.yaml", "Secret.yaml")
 	mkTemplates(t, root, "infra/helm/loopzero-foo", "Deployment.yaml")
 	declareFixturePairs(t, root)
-	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
+	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}, Registry: realRegistry(t)})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestCheck_UnapprovedDrift_Fail(t *testing.T) {
 	}
 }
 
-// TestCheck_ApprovedDrift_Pass — drift with approving ADR → PASS (intentional).
+// TestCheck_ApprovedDrift_Pass — drift recorded in the registry → PASS (intentional).
 //
 // Updated 2026-08-12 (slice-3 T1.4, ADR D2): the approval is now keyed by FILE,
 // not by pair, so this test names files the registry actually approves. The old
@@ -77,15 +77,15 @@ func TestCheck_ApprovedDrift_Pass(t *testing.T) {
 	mkTemplates(t, root, "charts/loopzero-api", "Deployment.yaml", "ConfigMap.yaml", "Secret.yaml")
 	mkTemplates(t, root, "infra/helm/loopzero-api", "Deployment.yaml")
 	declareFixturePairs(t, root)
-	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
+	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}, Registry: realRegistry(t)})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
 	if !o.Pass {
-		t.Errorf("esperava Pass (a deriva do loopzero-api esta aprovada por kind), veio %v", o.Drifts)
+		t.Errorf("want Pass (the loopzero-api drift is recorded per kind), got %v", o.Drifts)
 	}
-	if len(o.Drifts) != 1 || !o.Drifts[0].Intentional || o.Drifts[0].ADR != "B-110" {
-		t.Errorf("esperava deriva intencional assinada por B-110, veio %v", o.Drifts)
+	if len(o.Drifts) != 1 || !o.Drifts[0].Intentional || o.Drifts[0].Decision != recordedDriftDecision {
+		t.Errorf("want an intentional drift citing %q, got %v", recordedDriftDecision, o.Drifts)
 	}
 }
 
@@ -95,11 +95,11 @@ func TestCheck_ConceptualPair(t *testing.T) {
 	mkTemplates(t, root, "charts/loopzero-admission-policies", "ConfigMap.yaml", "Secret.yaml")
 	mkTemplates(t, root, "infra/helm/admission-policies", "ConfigMap.yaml")
 	declareFixturePairs(t, root)
-	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
+	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}, Registry: realRegistry(t)})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
-	// drift exists, no ADR → fail, but the pair must be DETECTED (conceptual mapping)
+	// drift exists and is not recorded → fail, but the pair must be DETECTED (conceptual mapping)
 	found := false
 	for _, d := range o.Drifts {
 		if d.Pair == "loopzero-admission-policies:admission-policies" {
@@ -117,7 +117,7 @@ func TestCheck_OnlyPublishedExists_NoCrash(t *testing.T) {
 	mkTemplates(t, root, "charts/loopzero-orphan", "a.yaml")
 	// no infra/helm/loopzero-orphan
 	declareFixturePairs(t, root)
-	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
+	o, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}, Registry: realRegistry(t)})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -146,15 +146,15 @@ func TestApprovedPair_DoesNotBlessAnUnseenFile(t *testing.T) {
 	}
 	mk("charts/loopzero-api/templates")
 	mk("infra/helm/loopzero-api/templates")
-	// Um recurso APROVADO ao lado de um que NENHUMA aprovacao cobre. O par
-	// loopzero-api tem entradas no registro, e a pergunta e se ter entradas o
-	// absolve do recurso seguinte — foi assim que uma ValidatingAdmissionPolicy
-	// sumiu do chart publicado sem ninguem notar.
+	// A RECORDED resource beside one that NO entry covers. The loopzero-api pair has
+	// entries in the registry, and the question is whether having entries absolves
+	// it of the next resource — that is how a ValidatingAdmissionPolicy vanished
+	// from the published chart without anyone noticing.
 	touch("charts/loopzero-api/templates/a.yaml", "ConfigMap")
 	touch("charts/loopzero-api/templates/b.yaml", "CronJob")
 
 	declareFixturePairs(t, root)
-	out, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
+	out, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}, Registry: realRegistry(t)})
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -163,52 +163,14 @@ func TestApprovedPair_DoesNotBlessAnUnseenFile(t *testing.T) {
 	}
 }
 
-// TestEveryApprovalIsMeasuredAssimetry replaces the pair of tests that guarded the
-// old filename-keyed registry.
+// fixtureRenderer returns the content of the `templates/` files as if it were the
+// rendered manifest.
 //
-// Those asserted one of THREE measured classes — both charts render it (filename
-// drift), neither renders it under default values (conditional), exactly one
-// renders it (real asymmetry). Keying by KIND collapses the first two by
-// construction: a kind only appears here when exactly one side installs it. So
-// the contract that survives is narrower and stronger — every entry names an ADR
-// and says what the two charts actually do differently.
-func TestEveryApprovalIsMeasuredAssimetry(t *testing.T) {
-	if len(approvedDriftKinds) == 0 {
-		t.Fatal("nenhuma aprovação para checar — o teste passaria por vacuidade")
-	}
-	for key, a := range approvedDriftKinds {
-		if a.ADR == "" {
-			t.Errorf("%s não carrega ADR — uma aprovação que ninguém assinou", key)
-		}
-		if len(strings.TrimSpace(a.Reason)) < 30 {
-			t.Errorf("%s: razão %q é curta demais para dizer o que foi observado sobre os dois charts",
-				key, a.Reason)
-		}
-		// A chave tem de ser `publicado:bootstrap:KIND`, e o kind e' um nome de
-		// recurso do Kubernetes — comeca em maiuscula. Uma chave com nome de
-		// arquivo (`.yaml`) seria uma entrada da era anterior sobrevivendo a
-		// migracao, e ela aprovaria algo que o gate nao mede mais.
-		parts := strings.Split(key, ":")
-		if len(parts) != 3 {
-			t.Errorf("%s não tem a forma `publicado:bootstrap:KIND`", key)
-			continue
-		}
-		kind := parts[2]
-		if strings.Contains(kind, ".") || kind == "" || kind[0] < 'A' || kind[0] > 'Z' {
-			t.Errorf("%s: %q não parece um kind do Kubernetes — uma entrada com nome de arquivo "+
-				"seria resíduo da chave anterior, aprovando algo que o gate não mede mais", key, kind)
-		}
-	}
-}
-
-// fixtureRenderer devolve o conteudo dos arquivos de `templates/` como se fossem
-// o manifesto renderizado.
-//
-// Os testes de Check montam fixtures em disco que NAO sao charts validos — nao
-// tem Chart.yaml, nem values. O helmRenderer real falharia em todos, e a falha
-// seria do fixture, nao do contrato sob teste. Injetar o duplo e o que permite a
-// esses testes continuarem afirmando o que sempre afirmaram (deriva aprovada,
-// deriva sem aprovacao, par conceitual) sobre uma base de comparacao nova.
+// The Check tests lay out fixtures on disk that are NOT valid charts — they have
+// no Chart.yaml and no values. The real helm renderer would fail on all of them,
+// and the failure would be the fixture's, not the contract's under test. Injecting
+// the double is what lets these tests keep asserting what they always asserted
+// (recorded drift, unrecorded drift, conceptual pair) over a new comparison basis.
 type fixtureRenderer struct{}
 
 // The `sets` are ignored: the fixture files on disk ARE the rendered output, so

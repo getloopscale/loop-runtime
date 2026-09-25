@@ -4,91 +4,87 @@
 package helmdrift
 
 import (
+	"errors"
 	"sort"
 	"strings"
 	"testing"
 )
 
-// B-001 T4.1. The cell registry carries the same teeth as the kind registry next
-// door, plus the one field it needs.
-//
-// It is a SECOND registry rather than more rows in the first, and the reason is
-// mechanical rather than aesthetic: TestEveryApprovalIsMeasuredAssimetry requires
-// the third key part to be a Kubernetes Kind — uppercase first letter, no dot —
-// and `(core)/secrets/delete` fails on both counts. Reusing the registry would
-// have meant weakening the assertion that cut twenty-one kind entries to eleven,
-// thirteen of which described nothing that diverged.
+// decisionsFixture is a decision record carrying one row the test registries cite.
+var decisionsFixture = []byte("| 2026-09-25 | **Fixture decision** |\n")
 
-// rbacApprovalDefects returns what is wrong with one entry, if anything. It lives
-// in the test file because it exists to judge the registry, and a judge compiled
-// into the gate would be a symbol the gate itself never calls.
-func rbacApprovalDefects(key string, a rbacApproval) []string {
-	var defects []string
-	if strings.TrimSpace(a.ADR) == "" {
-		defects = append(defects, "carries no ADR — an approval nobody signed")
-	}
-	if len(strings.TrimSpace(a.Reason)) < 30 {
-		defects = append(defects, "reason is too short to say what was observed about the two charts")
-	}
-	switch a.Status {
-	case statusDeclared, statusUndecided:
-	default:
-		defects = append(defects, "status "+a.Status+" is neither "+statusDeclared+" nor "+
-			statusUndecided+" — a typo must not invent a third claim")
-	}
+const validKind = `
+kinds:
+  - pair: loopzero-api:loopzero-api
+    kind: ConfigMap
+    decision: Fixture decision
+    reason: the published chart mounts configuration through a ConfigMap; bootstrap uses env
+`
 
-	parts := strings.Split(key, ":")
-	if len(parts) != 3 {
-		return append(defects, "is not shaped published:bootstrap:apiGroup/resource/verb")
-	}
-	cell := parts[2]
-	// A Kind-shaped key would be a kind-era entry surviving into this registry,
-	// approving something this comparison does not measure.
-	segments := strings.Split(cell, "/")
-	if len(segments) < 3 {
-		return append(defects, "third part "+cell+" is not a cell — a Kind-shaped key here "+
-			"would approve something the cell comparison never looks at")
-	}
-	for _, s := range segments {
-		if s == "" {
-			defects = append(defects, "third part "+cell+" has an empty segment, which would "+
-				"match every cell of that shape")
-			break
-		}
-	}
-	return defects
+func cellsRegistry(status, cell string) string {
+	return `
+cells:
+  - pair: loopzero-api:loopzero-api
+    side: bootstrap-only
+    rule: "apiGroups [(core)], resources [secrets], verbs [delete]"
+    decision: Fixture decision
+    status: ` + status + `
+    reason: bootstrap grants the cell and the published chart withholds it under every flag
+    cells:
+      - ` + cell + "\n"
 }
 
-func TestEveryRBACApprovalIsMeasuredAssimetry(t *testing.T) {
-	if len(approvedRBACCells) == 0 {
-		t.Fatal("no RBAC approvals to check — the test would pass by vacuity, which is the " +
-			"state a registry gate must never be able to reach")
+func TestParseRegistry_AcceptsAWellFormedRegistry(t *testing.T) {
+	reg, err := parseRegistry([]byte(validKind+cellsRegistry(statusDeclared, "(core)/secrets/delete")), decisionsFixture)
+	if err != nil {
+		t.Fatalf("parseRegistry: %v", err)
 	}
-	for key, a := range approvedRBACCells {
-		for _, d := range rbacApprovalDefects(key, a) {
-			t.Errorf("%s: %s", key, d)
-		}
+	if _, ok := reg.kind("loopzero-api:loopzero-api", "ConfigMap"); !ok {
+		t.Error("the ConfigMap entry was not loaded")
+	}
+	a, ok := reg.cell("loopzero-api:loopzero-api", Cell{Resource: "secrets", Verb: "delete"})
+	if !ok || a.Status != statusDeclared || a.Rule == "" {
+		t.Errorf("the secrets/delete cell was not loaded with its rule and status: %+v", a)
 	}
 }
 
-func TestCellRegistryRefusesAKindShapedKey(t *testing.T) {
-	got := rbacApprovalDefects("loopzero-api:loopzero-api:ConfigMap", rbacApproval{
-		ADR: "B-110", Status: statusDeclared,
-		Reason: "a kind-era entry that migrated into the cell registry by accident",
-	})
-	if len(got) == 0 {
-		t.Error("a Kind-shaped key was accepted by the cell registry's shape check")
+// Every way an entry can be untrustworthy is refused at load, so the gate never
+// runs against a registry that would license something nobody recorded.
+func TestParseRegistry_RefusesAnUntrustworthyEntry(t *testing.T) {
+	cases := map[string]string{
+		"decision missing from the record":    strings.Replace(validKind, "Fixture decision", "B-110", 1),
+		"reason too short":                    strings.Replace(validKind, "the published chart mounts configuration through a ConfigMap; bootstrap uses env", "differs", 1),
+		"file-name key in the kind registry":  strings.Replace(validKind, "kind: ConfigMap", "kind: configmap.yaml", 1),
+		"pair not shaped published:bootstrap": strings.Replace(validKind, "pair: loopzero-api:loopzero-api", "pair: loopzero-api", 1),
+		"unknown status":                      cellsRegistry("reviewed", "(core)/secrets/delete"),
+		"kind-shaped cell key":                cellsRegistry(statusDeclared, "ConfigMap"),
+		"cell with an empty segment":          cellsRegistry(statusDeclared, "(core)//delete"),
+		"the same kind recorded twice":        validKind + strings.TrimPrefix(validKind, "\nkinds:\n"),
+		"an unknown field":                    validKind + "extra: true\n",
+		"a registry that records nothing":     "kinds: []\ncells: []\n",
+	}
+	for name, raw := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := parseRegistry([]byte(raw), decisionsFixture); !errors.Is(err, ErrRegistryMalformed) {
+				t.Fatalf("want ErrRegistryMalformed, got %v", err)
+			}
+		})
 	}
 }
 
-func TestCellRegistryRefusesAnUnknownStatus(t *testing.T) {
-	got := rbacApprovalDefects("loopzero-api:loopzero-api:(core)/secrets/delete", rbacApproval{
-		ADR: "B-001", Status: "reviewed",
-		Reason: "a status nobody defined, which would read as a third kind of claim",
-	})
-	if len(got) == 0 {
-		t.Error("an unknown status was accepted; the enum is what stops the registry making " +
-			"a claim nobody defined")
+func TestLoadRegistry_MissingFileIsAnError(t *testing.T) {
+	if _, err := LoadRegistry(t.TempDir()); !errors.Is(err, ErrRegistryMalformed) {
+		t.Fatalf("want ErrRegistryMalformed for an absent registry, got %v", err)
+	}
+}
+
+// The committed registry loads, and every decision it cites is a row of
+// docs/decisions.md — which LoadRegistry itself enforces.
+func TestCommittedRegistryLoads(t *testing.T) {
+	reg := realRegistry(t)
+	if len(reg.kinds) == 0 || len(reg.cells) == 0 {
+		t.Fatalf("the committed registry holds %d kind(s) and %d cell(s); both comparisons have "+
+			"recorded divergences", len(reg.kinds), len(reg.cells))
 	}
 }
 
@@ -96,11 +92,9 @@ func TestCellRegistryRefusesAnUnknownStatus(t *testing.T) {
 // can match, because such a key would approve every cell of that shape.
 func TestCellApprovalKeyWithAnEmptyResourceIsRefused(t *testing.T) {
 	key := cellApprovalKey("loopzero-api:loopzero-api", Cell{Resource: "", Verb: "delete"})
-	if len(rbacApprovalDefects(key, rbacApproval{
-		ADR: "B-001", Status: statusDeclared,
-		Reason: "an entry whose resource segment is empty, which matches by accident",
-	})) == 0 {
-		t.Errorf("key %q was accepted despite an empty segment", key)
+	cell := strings.TrimPrefix(key, "loopzero-api:loopzero-api:")
+	if isCellKey(cell) {
+		t.Errorf("cell %q was accepted despite an empty segment", cell)
 	}
 }
 
@@ -130,24 +124,19 @@ metadata:
 rules: []
 `)
 
-	cells := []string{
+	reg := Registry{cells: map[string]rbacApproval{}}
+	for _, c := range []string{
 		"(core)/configmaps/delete", "(core)/configmaps/get", "(core)/configmaps/list",
 		"(core)/secrets/delete", "(core)/secrets/get", "(core)/secrets/list",
-	}
-	for _, c := range cells {
-		approvedRBACCells[pair+":"+c] = rbacApproval{
-			ADR: "B-001", Status: statusDeclared,
-			Reason: "fixture declaration installed by TestRemovingOneDeclarationFailsTheGate" +
-				"NamingThatCell; removed again before the test returns",
+	} {
+		reg.cells[pair+":"+c] = rbacApproval{
+			Decision: "Fixture decision", Status: statusDeclared,
+			Rule:   `apiGroups [(core)], resources [secrets, configmaps], verbs [get, list, delete]`,
+			Reason: "fixture declaration for the per-cell registry test",
 		}
 	}
-	defer func() {
-		for _, c := range cells {
-			delete(approvedRBACCells, pair+":"+c)
-		}
-	}()
 
-	out, drift := parityTreeNamed(t, "loopzero-declprobe", bootstrap, published)
+	out, drift := parityTreeWith(t, "loopzero-declprobe", bootstrap, published, reg)
 	if drift == nil {
 		t.Fatal("the fixture pair diverges on six cells and produced no finding")
 	}
@@ -157,10 +146,9 @@ rules: []
 			out.Pass, drift.Declared, drift.Undeclared)
 	}
 
-	withdrawn := pair + ":(core)/secrets/delete"
-	delete(approvedRBACCells, withdrawn)
+	delete(reg.cells, pair+":(core)/secrets/delete")
 
-	out, drift = parityTreeNamed(t, "loopzero-declprobe", bootstrap, published)
+	out, drift = parityTreeWith(t, "loopzero-declprobe", bootstrap, published, reg)
 	if drift == nil {
 		t.Fatal("withdrawing a declaration removed the finding altogether")
 	}
@@ -181,20 +169,20 @@ rules: []
 // turn green is a gate people route around — and listed by name in the report, so
 // "recorded" can never be read as "approved".
 func TestAnUndecidedCellIsReportedSeparatelyFromADeclaredOne(t *testing.T) {
+	reg := realRegistry(t)
 	var undecided []string
-	for key, a := range approvedRBACCells {
+	for key, a := range reg.cells {
 		if a.Status == statusUndecided {
 			undecided = append(undecided, key)
+			if a.Decision != openRBACDecision {
+				t.Errorf("%s cites %q; an undecided cell must cite the open decision it waits on", key, a.Decision)
+			}
 		}
 	}
 	sort.Strings(undecided)
-	if len(undecided) != 2 {
+	want := []string{"loopzero-api:loopzero-api:(core)/pods/exec/create", "loopzero-api:loopzero-api:(core)/secrets/delete"}
+	if strings.Join(undecided, ",") != strings.Join(want, ",") {
 		t.Fatalf("expected the two security cells to be the only undecided entries, got %v", undecided)
-	}
-	for _, key := range undecided {
-		if !strings.Contains(approvedRBACCells[key].Reason, "B-048") {
-			t.Errorf("%s does not name the item the decision belongs to", key)
-		}
 	}
 
 	d := RBACDrift{

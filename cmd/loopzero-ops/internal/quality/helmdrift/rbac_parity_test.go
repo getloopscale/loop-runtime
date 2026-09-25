@@ -46,6 +46,12 @@ func parityTree(t *testing.T, bootstrap, published []byte) (*Outcome, *RBACDrift
 // name with a test about comparison.
 func parityTreeNamed(t *testing.T, chart string, bootstrap, published []byte) (*Outcome, *RBACDrift) {
 	t.Helper()
+	return parityTreeWith(t, chart, bootstrap, published, Registry{})
+}
+
+// parityTreeWith is the same, audited against reg.
+func parityTreeWith(t *testing.T, chart string, bootstrap, published []byte, reg Registry) (*Outcome, *RBACDrift) {
+	t.Helper()
 	root := t.TempDir()
 	write := func(chartPath string, body []byte) {
 		dir := filepath.Join(root, chartPath, "templates")
@@ -60,7 +66,7 @@ func parityTreeNamed(t *testing.T, chart string, bootstrap, published []byte) (*
 	write("charts/"+chart, published)
 
 	declareFixturePairs(t, root)
-	out, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
+	out, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}, Registry: &reg})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}

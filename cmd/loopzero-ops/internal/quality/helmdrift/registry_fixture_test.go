@@ -10,7 +10,25 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/chartpairs"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
+
+// The two docs/decisions.md rows the committed registry cites.
+const (
+	recordedDriftDecision = "Chart-pair drift is recorded, never blessed per pair"
+	openRBACDecision      = "Whether the bootstrap loopzero-api ClusterRole keeps cluster-wide secrets delete and pods/exec create"
+)
+
+// realRegistry loads the committed registry, so a fixture tree exercises the
+// entries the gate actually runs with.
+func realRegistry(t *testing.T) *Registry {
+	t.Helper()
+	reg, err := LoadRegistry(qtestutil.Root(t))
+	if err != nil {
+		t.Fatalf("LoadRegistry: %v", err)
+	}
+	return &reg
+}
 
 // declareFixturePairs writes the pair registry for a fixture tree: every
 // charts/<x> with an infra/helm/<x> twin, plus the admission-policies

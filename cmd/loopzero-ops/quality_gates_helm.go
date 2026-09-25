@@ -131,8 +131,10 @@ func runHelmDrift(args []string) int {
 	if *format == "json" {
 		// Match the legacy bash JSON schema (consumed by charts-drift-cron.yml).
 		type driftJSON struct {
-			Pair                     string   `json:"pair"`
-			Intentional              bool     `json:"intentional"`
+			Pair        string `json:"pair"`
+			Intentional bool   `json:"intentional"`
+			// ADR keeps its field name (the --json contract); it carries the
+			// docs/decisions.md row the recorded drift cites.
 			ADR                      *string  `json:"adr"`
 			Severity                 string   `json:"severity"`
 			TemplatesOnlyInPublished []string `json:"templates_only_in_published"`
@@ -144,7 +146,7 @@ func runHelmDrift(args []string) int {
 			var adr *string
 			if d.Intentional {
 				sev = "info"
-				a := d.ADR
+				a := d.Decision
 				adr = &a
 			}
 			pub, boot := d.OnlyInPublished, d.OnlyInBootstrap
@@ -159,10 +161,14 @@ func runHelmDrift(args []string) int {
 				TemplatesOnlyInPublished: pub, TemplatesOnlyInBootstrap: boot,
 			})
 		}
-		b, _ := json.Marshal(struct {
+		b, err := json.Marshal(struct {
 			Drifts []driftJSON `json:"drifts"`
 			RBAC   []rbacJSON  `json:"rbac"`
 		}{Drifts: out.Drifts, RBAC: rbacDriftJSON(o.RBACDrifts)})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "helm-drift: encode json: %v\n", err)
+			return 5
+		}
 		fmt.Println(string(b))
 		if !o.Pass {
 			return 1
@@ -171,18 +177,18 @@ func runHelmDrift(args []string) int {
 	}
 
 	for _, e := range o.RenderErrors {
-		fmt.Fprintf(os.Stderr, "✗ helm template falhou: %s\n", e)
+		fmt.Fprintf(os.Stderr, "✗ helm template failed: %s\n", e)
 	}
 	kindsClean := len(o.Drifts) == 0 && len(o.RenderErrors) == 0
 	if kindsClean {
-		fmt.Println("✓ charts/ ↔ infra/helm/: os dois lados instalam os mesmos tipos de recurso.")
+		fmt.Println("✓ charts/ ↔ infra/helm/: both sides install the same kinds of resource.")
 	}
 	for _, d := range o.Drifts {
 		marker := "⚠"
-		status := "needs ADR or fix"
+		status := "needs a registry entry (" + helmdrift.RegistryRelPath + ") or a fix"
 		if d.Intentional {
 			marker = "ℹ"
-			status = "intentional (approved by " + d.ADR + ")"
+			status = "intentional (recorded under decision: " + d.Decision + ")"
 		}
 		if *format == "github-annotations" && !d.Intentional {
 			fmt.Printf("::warning::Drift detected for %s: templates differ\n", d.Pair)
@@ -196,7 +202,7 @@ func runHelmDrift(args []string) int {
 		}
 		fmt.Printf("  STATUS: %s\n", status)
 		for _, f := range d.Unapproved {
-			fmt.Printf("  SEM APROVAÇÃO: %s\n", f)
+			fmt.Printf("  UNRECORDED: %s\n", f)
 		}
 	}
 	// B-001: the second comparison. What the two sides GRANT is reported apart
@@ -222,13 +228,13 @@ func runHelmDrift(args []string) int {
 	// Printed on every run, green or red. A debt that lives only in a source
 	// comment is a debt nobody is reminded of.
 	if !o.Pass {
-		fmt.Fprintln(os.Stderr, "❌ Drifts without approving ADR detected.")
+		fmt.Fprintln(os.Stderr, "❌ Drifts with no registry entry detected ("+helmdrift.RegistryRelPath+").")
 		return 1
 	}
 	if kindsClean {
 		return 0
 	}
-	fmt.Println("✓ All drifts have approving ADRs (intentional).")
+	fmt.Println("✓ All drifts are recorded in " + helmdrift.RegistryRelPath + " (intentional).")
 	return 0
 }
 

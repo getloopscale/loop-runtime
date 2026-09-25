@@ -94,7 +94,7 @@ func TestDivergentGrantsInDeclaredPairAreRefused(t *testing.T) {
 	writeChart(t, root, "charts/loopzero-rbacprobe", "rbac.yaml", publishedClusterRole)
 
 	declareFixturePairs(t, root)
-	out, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}})
+	out, err := Check(Config{RepoRoot: root, Renderer: fixtureRenderer{}, Registry: &Registry{}})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}

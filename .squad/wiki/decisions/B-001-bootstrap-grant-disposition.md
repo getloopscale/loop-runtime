@@ -7,7 +7,8 @@
 `helm-drift` now compares what each side of a declared chart pair GRANTS, cell by
 cell. On the `loopzero-api` pair it finds **174 divergent `(apiGroup, resource, verb)`
 cells** of a 200-cell union, and every one of them is declared in
-`cmd/loopzero-ops/internal/quality/helmdrift/rbac_approvals.go`.
+`infra/quality/helm-drift-registry.yaml` (in Go literals in
+`cmd/loopzero-ops/internal/quality/helmdrift/rbac_approvals.go` until 2026-09-25).
 
 Two of those declarations are **not approvals**. They carry `Status:
 statusUndecided`, the gate prints them by name on every run, and this record
@@ -83,6 +84,6 @@ appropriate.
 
 ## Cross-references
 
-- Registry: `cmd/loopzero-ops/internal/quality/helmdrift/rbac_approvals.go`
+- Registry: `infra/quality/helm-drift-registry.yaml`, loaded by `cmd/loopzero-ops/internal/quality/helmdrift/registry.go`
 - Comparison: `cmd/loopzero-ops/internal/quality/helmdrift/rbac.go`
 - Item that decides the two cells: **B-048**
