@@ -16,7 +16,10 @@ import (
 
 // BuildLookupAdapter bridges db.BuildStore → github.BuildLookup.
 type BuildLookupAdapter struct {
-	Store buildByID
+	Store interface {
+		buildByID
+		buildApps
+	}
 }
 
 func (a *BuildLookupAdapter) GetCommitSHA(ctx context.Context, buildID string) (string, error) {
@@ -25,6 +28,22 @@ func (a *BuildLookupAdapter) GetCommitSHA(ctx context.Context, buildID string) (
 		return "", err
 	}
 	return build.CommitSHA, nil
+}
+
+// GetServedAppNames returns the build's apps that serve HTTP (a port), whose
+// public URL the commit status can link.
+func (a *BuildLookupAdapter) GetServedAppNames(ctx context.Context, buildID string) ([]string, error) {
+	apps, err := a.Store.GetBuildApps(ctx, buildID)
+	if err != nil {
+		return nil, err
+	}
+	var served []string
+	for _, app := range apps {
+		if app.Port > 0 {
+			served = append(served, app.Name)
+		}
+	}
+	return served, nil
 }
 
 // RepoLookupAdapter bridges store.PostgresRepositoryStore → github.RepositoryLookup.
