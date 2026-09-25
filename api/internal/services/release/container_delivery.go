@@ -50,7 +50,7 @@ type ContainerDeliveryActivator struct {
 	// release_app_attestations. Nil-safe: if absent, the activator falls
 	// back to the legacy releases.image_* columns only.
 	appAttestationStore store.AppAttestationStore
-	// J-16 slice 3: transactional-outbox writer. When set, ActivateReleaseKernel
+	// J-16 slice 3: transactional-outbox writer. When set, ActivationKernel.Activate
 	// stages a deploy.succeeded event on the activation tx. Nil-safe (skipped).
 	deployEventStore store.DeployEventStore
 }
@@ -505,7 +505,10 @@ func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build d
 		}
 		durationSecs := int(time.Since(build.CreatedAt).Seconds())
 
-		return ActivateReleaseKernel(ctx, tx, release, c.releaseStore, c.envTargetStore, c.eventStore, c.deployEventStore, apps, durationSecs, logger)
+		return ActivationKernel{
+			Releases: c.releaseStore, EnvTargets: c.envTargetStore, Events: c.eventStore,
+			DeployEvents: c.deployEventStore, Logger: logger,
+		}.Activate(ctx, tx, release, apps, durationSecs)
 	})
 }
 

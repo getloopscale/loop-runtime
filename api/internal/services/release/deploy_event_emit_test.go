@@ -45,20 +45,17 @@ func pendingReleaseFixture() db.Release {
 
 // The kernel stages a customer-safe deploy.succeeded event on the outbox when a
 // store is wired (J-16 slice 3, MEET-2026-07-03-005).
-func TestActivateReleaseKernel_EmitsDeploySucceededOutbox(t *testing.T) {
+func TestActivationKernel_EmitsDeploySucceededOutbox(t *testing.T) {
 	rel := pendingReleaseFixture()
 	relStore := newFakeConvergenceReleaseStore()
 	relStore.releases[rel.ID] = &rel
 	capture := &captureDeployEventStore{}
 
-	err := ActivateReleaseKernel(
-		context.Background(), nil, &rel,
-		relStore, newFakeConvergenceEnvTargetStore(), &fakeConvergenceEventStore{}, capture,
-		[]ActivationAppInfo{{Name: "web", Status: "Healthy", URL: "https://web.example.test"}},
-		5, slog.Default(),
-	)
+	err := ActivationKernel{
+		Releases: relStore, EnvTargets: newFakeConvergenceEnvTargetStore(), Events: &fakeConvergenceEventStore{}, DeployEvents: capture, Logger: slog.Default(),
+	}.Activate(context.Background(), nil, &rel, []ActivationAppInfo{{Name: "web", Status: "Healthy", URL: "https://web.example.test"}}, 5)
 	if err != nil {
-		t.Fatalf("ActivateReleaseKernel: %v", err)
+		t.Fatalf("ActivationKernel.Activate: %v", err)
 	}
 	if !capture.called {
 		t.Fatal("kernel did not emit a deploy event to the outbox")
@@ -98,17 +95,15 @@ func TestActivateReleaseKernel_EmitsDeploySucceededOutbox(t *testing.T) {
 
 // A nil store is the optional-dependency path (unit callers that don't exercise
 // the outbox) — the kernel must not panic and must not emit.
-func TestActivateReleaseKernel_NilDeployEventStore_SkipsEmit(t *testing.T) {
+func TestActivationKernel_NilDeployEventStore_SkipsEmit(t *testing.T) {
 	rel := pendingReleaseFixture()
 	rel.ID = "rel-nil000000000000"
 	relStore := newFakeConvergenceReleaseStore()
 	relStore.releases[rel.ID] = &rel
 
-	err := ActivateReleaseKernel(
-		context.Background(), nil, &rel,
-		relStore, newFakeConvergenceEnvTargetStore(), &fakeConvergenceEventStore{}, nil,
-		nil, 1, slog.Default(),
-	)
+	err := ActivationKernel{
+		Releases: relStore, EnvTargets: newFakeConvergenceEnvTargetStore(), Events: &fakeConvergenceEventStore{}, DeployEvents: nil, Logger: slog.Default(),
+	}.Activate(context.Background(), nil, &rel, nil, 1)
 	if err != nil {
 		t.Fatalf("kernel with nil deployEventStore returned error: %v", err)
 	}

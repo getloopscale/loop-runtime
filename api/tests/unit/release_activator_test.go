@@ -27,12 +27,12 @@ func (fakeDeployEventStore) AppendDeployEvent(_ context.Context, _ db.DBTX, _ st
 	return nil
 }
 
-// --- TestActivateReleaseKernel_HappyPath ---
+// --- TestActivationKernel_HappyPath ---
 // Full 7-step activation sequence: re-fetch confirms PENDING, gets previous
 // active release, transitions to ACTIVE, emits deploy.live, sets active env
 // target, supersedes previous release, emits deploy.completed.
 
-func TestActivateReleaseKernel_HappyPath(t *testing.T) {
+func TestActivationKernel_HappyPath(t *testing.T) {
 	// Arrange
 	releaseStore := newFakeConvergenceReleaseStore()
 	releaseStore.pending = []db.Release{{
@@ -56,12 +56,9 @@ func TestActivateReleaseKernel_HappyPath(t *testing.T) {
 	}
 
 	// Act
-	err := releasesvc.ActivateReleaseKernel(
-		context.Background(), nil, release,
-		releaseStore, envTargetStore, eventStore,
-		fakeDeployEventStore{},
-		apps, 42, testLogger,
-	)
+	err := releasesvc.ActivationKernel{
+		Releases: releaseStore, EnvTargets: envTargetStore, Events: eventStore, DeployEvents: fakeDeployEventStore{}, Logger: testLogger,
+	}.Activate(context.Background(), nil, release, apps, 42)
 
 	// Assert
 	if err != nil {
@@ -88,11 +85,11 @@ func TestActivateReleaseKernel_HappyPath(t *testing.T) {
 	}
 }
 
-// --- TestActivateReleaseKernel_SupersedesPreviousRelease ---
+// --- TestActivationKernel_SupersedesPreviousRelease ---
 // Regression test for the known supersede bug: when a previous ACTIVE release
 // exists, it must be superseded after the new release goes ACTIVE.
 
-func TestActivateReleaseKernel_SupersedesPreviousRelease(t *testing.T) {
+func TestActivationKernel_SupersedesPreviousRelease(t *testing.T) {
 	// Arrange: previous release is ACTIVE
 	releaseStore := newFakeConvergenceReleaseStore()
 
@@ -123,12 +120,9 @@ func TestActivateReleaseKernel_SupersedesPreviousRelease(t *testing.T) {
 	}
 
 	// Act
-	err := releasesvc.ActivateReleaseKernel(
-		context.Background(), nil, release,
-		releaseStore, envTargetStore, eventStore,
-		fakeDeployEventStore{},
-		nil, 10, testLogger,
-	)
+	err := releasesvc.ActivationKernel{
+		Releases: releaseStore, EnvTargets: envTargetStore, Events: eventStore, DeployEvents: fakeDeployEventStore{}, Logger: testLogger,
+	}.Activate(context.Background(), nil, release, nil, 10)
 
 	// Assert
 	if err != nil {
@@ -142,11 +136,11 @@ func TestActivateReleaseKernel_SupersedesPreviousRelease(t *testing.T) {
 	}
 }
 
-// --- TestActivateReleaseKernel_NoPreviousRelease ---
+// --- TestActivationKernel_NoPreviousRelease ---
 // First deploy: no previous active release. Supersede step should be skipped
 // without error.
 
-func TestActivateReleaseKernel_NoPreviousRelease(t *testing.T) {
+func TestActivationKernel_NoPreviousRelease(t *testing.T) {
 	// Arrange
 	releaseStore := newFakeConvergenceReleaseStore()
 	releaseStore.pending = []db.Release{{
@@ -167,12 +161,9 @@ func TestActivateReleaseKernel_NoPreviousRelease(t *testing.T) {
 	}
 
 	// Act
-	err := releasesvc.ActivateReleaseKernel(
-		context.Background(), nil, release,
-		releaseStore, envTargetStore, eventStore,
-		fakeDeployEventStore{},
-		nil, 5, testLogger,
-	)
+	err := releasesvc.ActivationKernel{
+		Releases: releaseStore, EnvTargets: envTargetStore, Events: eventStore, DeployEvents: fakeDeployEventStore{}, Logger: testLogger,
+	}.Activate(context.Background(), nil, release, nil, 5)
 
 	// Assert
 	if err != nil {
@@ -186,13 +177,13 @@ func TestActivateReleaseKernel_NoPreviousRelease(t *testing.T) {
 	}
 }
 
-// --- TestActivateReleaseKernel_AlreadyActive ---
+// --- TestActivationKernel_AlreadyActive ---
 // Release already ACTIVE (idempotent guard). Should skip without error.
 // This test is complementary to the existing
-// TestActivateReleaseKernel_SkipsAlreadyActiveRelease in release_convergence_loop_test.go,
+// TestActivationKernel_SkipsAlreadyActiveRelease in release_convergence_loop_test.go,
 // verifying no side effects at all.
 
-func TestActivateReleaseKernel_AlreadyActive_NoSideEffects(t *testing.T) {
+func TestActivationKernel_AlreadyActive_NoSideEffects(t *testing.T) {
 	// Arrange
 	releaseStore := newFakeConvergenceReleaseStore()
 	releaseStore.pending = []db.Release{{
@@ -212,13 +203,9 @@ func TestActivateReleaseKernel_AlreadyActive_NoSideEffects(t *testing.T) {
 	}
 
 	// Act
-	err := releasesvc.ActivateReleaseKernel(
-		context.Background(), nil, release,
-		releaseStore, envTargetStore, eventStore,
-		fakeDeployEventStore{},
-		[]releasesvc.ActivationAppInfo{{Name: "web", Status: "deployed"}},
-		10, testLogger,
-	)
+	err := releasesvc.ActivationKernel{
+		Releases: releaseStore, EnvTargets: envTargetStore, Events: eventStore, DeployEvents: fakeDeployEventStore{}, Logger: testLogger,
+	}.Activate(context.Background(), nil, release, []releasesvc.ActivationAppInfo{{Name: "web", Status: "deployed"}}, 10)
 
 	// Assert: idempotent skip
 	if err != nil {
@@ -234,7 +221,7 @@ func TestActivateReleaseKernel_AlreadyActive_NoSideEffects(t *testing.T) {
 
 // --- TestDeriveDeployID_Format ---
 // deriveDeployID is unexported, but we can test it indirectly through the
-// deploy.live event payload in ActivateReleaseKernel.
+// deploy.live event payload in ActivationKernel.Activate.
 
 func TestDeriveDeployID_Format_ViaCompletedEvent(t *testing.T) {
 	// Arrange: release ID "rel-8f3a2b1c" should produce deploy_id "d-8f3a2b1c"
@@ -256,12 +243,9 @@ func TestDeriveDeployID_Format_ViaCompletedEvent(t *testing.T) {
 	}
 
 	// Act
-	err := releasesvc.ActivateReleaseKernel(
-		context.Background(), nil, release,
-		releaseStore, envTargetStore, eventStore,
-		fakeDeployEventStore{},
-		nil, 5, testLogger,
-	)
+	err := releasesvc.ActivationKernel{
+		Releases: releaseStore, EnvTargets: envTargetStore, Events: eventStore, DeployEvents: fakeDeployEventStore{}, Logger: testLogger,
+	}.Activate(context.Background(), nil, release, nil, 5)
 
 	// Assert
 	if err != nil {
@@ -290,7 +274,7 @@ func TestDeriveDeployID_Format_ViaCompletedEvent(t *testing.T) {
 
 // --- TestReleaseAppsToActivationApps ---
 // releaseAppsToActivationApps is unexported, but we test its behavior via
-// ActivateReleaseKernel's deploy.completed event payload.
+// ActivationKernel.Activate's deploy.completed event payload.
 
 func TestReleaseAppsToActivationApps_ViaCompletedEvent(t *testing.T) {
 	// Arrange
@@ -317,12 +301,9 @@ func TestReleaseAppsToActivationApps_ViaCompletedEvent(t *testing.T) {
 	}
 
 	// Act
-	err := releasesvc.ActivateReleaseKernel(
-		context.Background(), nil, release,
-		releaseStore, envTargetStore, eventStore,
-		fakeDeployEventStore{},
-		apps, 15, testLogger,
-	)
+	err := releasesvc.ActivationKernel{
+		Releases: releaseStore, EnvTargets: envTargetStore, Events: eventStore, DeployEvents: fakeDeployEventStore{}, Logger: testLogger,
+	}.Activate(context.Background(), nil, release, apps, 15)
 
 	// Assert
 	if err != nil {

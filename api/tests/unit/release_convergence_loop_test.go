@@ -480,9 +480,9 @@ func TestReleaseConvergenceLoop_HandlesEmptyPendingList(t *testing.T) {
 	}
 }
 
-// --- MEET-2026-03-31-023 T0-1: ActivateReleaseKernel idempotency guard ---
+// --- MEET-2026-03-31-023 T0-1: ActivationKernel.Activate idempotency guard ---
 
-func TestActivateReleaseKernel_SkipsAlreadyActiveRelease(t *testing.T) {
+func TestActivationKernel_SkipsAlreadyActiveRelease(t *testing.T) {
 	// Arrange: release is passed as PENDING but has already been transitioned
 	// to ACTIVE by another activator (simulates callback + polling race).
 	releaseStore := newFakeConvergenceReleaseStore()
@@ -504,13 +504,10 @@ func TestActivateReleaseKernel_SkipsAlreadyActiveRelease(t *testing.T) {
 		Status: "PENDING", CreatedAt: time.Now(),
 	}
 
-	// Act: call ActivateReleaseKernel with the stale release
-	err := releasesvc.ActivateReleaseKernel(
-		context.Background(), nil, staleRelease,
-		releaseStore, envTargetStore, eventStore,
-		fakeDeployEventStore{},
-		nil, 10, testLogger,
-	)
+	// Act: call ActivationKernel.Activate with the stale release
+	err := releasesvc.ActivationKernel{
+		Releases: releaseStore, EnvTargets: envTargetStore, Events: eventStore, DeployEvents: fakeDeployEventStore{}, Logger: testLogger,
+	}.Activate(context.Background(), nil, staleRelease, nil, 10)
 
 	// Assert: no error (idempotent skip), no side effects
 	if err != nil {
@@ -524,7 +521,7 @@ func TestActivateReleaseKernel_SkipsAlreadyActiveRelease(t *testing.T) {
 	}
 }
 
-func TestActivateReleaseKernel_ProceedsWhenStillPending(t *testing.T) {
+func TestActivationKernel_ProceedsWhenStillPending(t *testing.T) {
 	// Arrange: release is PENDING in both the object and the store
 	releaseStore := newFakeConvergenceReleaseStore()
 	releaseStore.pending = []db.Release{{
@@ -544,12 +541,9 @@ func TestActivateReleaseKernel_ProceedsWhenStillPending(t *testing.T) {
 	}
 
 	// Act
-	err := releasesvc.ActivateReleaseKernel(
-		context.Background(), nil, release,
-		releaseStore, envTargetStore, eventStore,
-		fakeDeployEventStore{},
-		nil, 5, testLogger,
-	)
+	err := releasesvc.ActivationKernel{
+		Releases: releaseStore, EnvTargets: envTargetStore, Events: eventStore, DeployEvents: fakeDeployEventStore{}, Logger: testLogger,
+	}.Activate(context.Background(), nil, release, nil, 5)
 
 	// Assert: activation proceeds normally
 	if err != nil {

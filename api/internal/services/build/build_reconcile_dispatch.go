@@ -111,7 +111,7 @@ func (r *BuildReconcileLoop) reconcile(ctx context.Context) {
 					}
 				}()
 				// BRC-004 fix: recover from panics in reconcileBuild. The call chain
-				// reaches deep into BuildOrchestrator → DeliveryActivator → ActivateReleaseKernel.
+				// reaches deep into BuildOrchestrator → DeliveryActivator → ActivationKernel.Activate.
 				// State machine panics on invalid transitions (by design). Without recovery,
 				// a single corrupted build record crashes the entire API process.
 				defer func() {

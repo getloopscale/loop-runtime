@@ -19,7 +19,7 @@ import (
 )
 
 // --- BUG-03: SetGitCommit failure is fatal ---
-// The ActivateReleaseKernel idempotency guard re-fetches release status
+// The ActivationKernel.Activate idempotency guard re-fetches release status
 // inside the lock. If SetGitCommit fails, the release must NOT reach PENDING.
 // This prevents wrong-version activation via SyncCallbackActivator.
 
@@ -39,7 +39,7 @@ func TestBUG03_SetGitCommitFailurePreventsWrongVersionActivation(t *testing.T) {
 	// Empty GitCommit means the check is skipped, activating the wrong version.
 	//
 	// Fix: SetGitCommit failure is now fatal, so the release never reaches PENDING.
-	// This test verifies the guard at the ActivateReleaseKernel level:
+	// This test verifies the guard at the ActivationKernel.Activate level:
 	// if a release somehow reached PENDING with empty GitCommit, the callback
 	// would skip it (revision mismatch).
 

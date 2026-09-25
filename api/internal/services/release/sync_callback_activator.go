@@ -33,7 +33,7 @@ type SyncCallbackActivator struct {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
 	// J-16 slice 3: transactional-outbox writer (set via WithDeployEventStore).
-	// Nil-safe: ActivateReleaseKernel skips the deploy.succeeded emit when nil.
+	// Nil-safe: ActivationKernel.Activate skips the deploy.succeeded emit when nil.
 	deployEventStore store.DeployEventStore
 	baseDomain       string
 	// publicDomain is the operator-configured wildcard root mirrored from
@@ -235,6 +235,9 @@ func (a *SyncCallbackActivator) activateRelease(ctx context.Context, release *db
 	return a.locker.WithLock(ctx, release.TenantID, release.ProjectID, release.Environment, func(tx db.DBTX) error {
 		apps := releaseAppsToActivationApps(release, a.baseDomain, a.publicDomain)
 		duration := int(time.Since(release.CreatedAt).Seconds())
-		return ActivateReleaseKernel(ctx, tx, release, a.releaseStore, a.envTargetStore, a.eventStore, a.deployEventStore, apps, duration, a.logger)
+		return ActivationKernel{
+			Releases: a.releaseStore, EnvTargets: a.envTargetStore, Events: a.eventStore,
+			DeployEvents: a.deployEventStore, Logger: a.logger,
+		}.Activate(ctx, tx, release, apps, duration)
 	})
 }

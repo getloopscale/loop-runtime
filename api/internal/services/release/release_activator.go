@@ -94,28 +94,34 @@ type ActivationAppInfo struct {
 	URL    string // optional; set by container delivery (has build callback URLs)
 }
 
-// ActivateReleaseKernel implements the correct release activation sequence.
-// CODE-0001: Queries the previous active release BEFORE transitioning the new
-// release to ACTIVE, preventing the race where GetActiveByEnvTx returns the
-// just-activated release instead of the previous one.
+// ActivationKernel implements the correct release activation sequence. It is
+// the parameter object the three activation paths (ContainerDeliveryActivator,
+// ReleaseConvergenceLoop, SyncCallbackActivator) assemble from the stores they
+// already hold, instead of each passing the same four stores and a logger.
 //
-// This is the single source of truth for release activation. All three activation
-// paths (ContainerDeliveryActivator, ReleaseConvergenceLoop, SyncCallbackActivator)
-// MUST call this function inside a withEnvironmentLock transaction.
+// This is the single source of truth for release activation. Every path MUST
+// call Activate inside a withEnvironmentLock transaction.
+type ActivationKernel struct {
+	Releases   ReleaseActivationStore
+	EnvTargets store.EnvironmentTargetStore
+	Events     ReleaseActivationEventStore
+	// DeployEvents is the transactional outbox. Optional: nil in unit paths
+	// that do not exercise it, in which case no deploy.succeeded is staged.
+	DeployEvents store.DeployEventStore
+	Logger       *slog.Logger
+}
+
+// Activate moves a PENDING release to ACTIVE.
 //
-// Sequence: (1) get prev release, (2) transition ACTIVE, (3) emit deploy.live,
-// (4) SetActive, (5) supersede prev, (6) emit deploy.completed.
-func ActivateReleaseKernel(
-	ctx context.Context,
-	tx db.DBTX,
-	release *db.Release,
-	releaseStore ReleaseActivationStore,
-	envTargetStore store.EnvironmentTargetStore,
-	eventStore ReleaseActivationEventStore,
-	deployEventStore store.DeployEventStore,
-	apps []ActivationAppInfo,
-	durationSecs int,
-	logger *slog.Logger,
+// CODE-0001: the previous active release is queried BEFORE the new release is
+// transitioned, so GetActiveByEnvTx never returns the just-activated release.
+//
+// Sequence: (0) re-fetch inside the lock, (1) get previous release,
+// (2) supersede it, (3) transition ACTIVE, (4) emit deploy.live,
+// (5) SetActive, (5.5) stage the outbox event, (6) emit deploy.completed,
+// (7) notify external systems.
+func (k ActivationKernel) Activate(
+	ctx context.Context, tx db.DBTX, release *db.Release, apps []ActivationAppInfo, durationSecs int,
 ) error {
 	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.release.activate",
 		trace.WithAttributes(
@@ -128,164 +134,49 @@ func ActivateReleaseKernel(
 	// MEET-2026-03-31-023 T0-1: Idempotency guard — re-fetch release inside the lock
 	// to prevent duplicate activation when SyncCallbackActivator and
 	// ReleaseConvergenceLoop race on the same release.
-	current, err := releaseStore.GetByIDTx(ctx, tx, release.ID)
+	current, err := k.Releases.GetByIDTx(ctx, tx, release.ID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("activate release: re-fetch inside lock: %w", err)
 	}
 	if current.Status != string(statemachine.RPhPending) {
-		logger.Info("activate release: already transitioned, skipping",
+		k.Logger.Info("activate release: already transitioned, skipping",
 			"release_id", release.ID, "current_status", current.Status)
 		return nil
 	}
 
-	// Step 1: CODE-0001 — query previous ACTIVE release BEFORE activating new one.
-	prevRelease, err := releaseStore.GetActiveByEnvTx(ctx, tx, release.TenantID, release.ProjectID, release.Environment)
-	if err != nil {
-		return fmt.Errorf("activate release: get previous active: %w", err)
-	}
-
-	// Step 2: Supersede previous active release BEFORE activating the new one.
-	// T5.1 CV-M-1 dogfood regression fix (2026-06-02): partial unique index
-	// `idx_releases_active_unique` (migration 000022) enforces at-most-one-
-	// ACTIVE-per-env at the DB layer. Pre-fix order (UPDATE new ACTIVE first,
-	// then UPDATE prev SUPERSEDED) hit SQLSTATE 23505 because for an instant
-	// inside the tx, two rows were ACTIVE for the same (tenant, project, env)
-	// — which is precisely what the index now forbids. By superseding the
-	// previous release FIRST, we never have two ACTIVE rows simultaneously.
-	// Both UPDATEs run inside the same tx (withEnvironmentLock), so they
-	// remain atomic from any external observer's perspective: either both
-	// succeed (prev SUPERSEDED + new ACTIVE) or both rollback (prev stays
-	// ACTIVE + new stays PENDING).
-	//
-	// State machine validity:
-	//   - prev: ACTIVE --(RPEventNewActivated)--> SUPERSEDED  ✓
-	//   - new:  PENDING --(RPEventSyncCompleted)--> ACTIVE   ✓
-	// Both transitions are independent — order swap is safe.
-	//
-	// LIVE-caught regression: Journey 06 Rollback "v2 release is ACTIVE"
-	// timed out at 6m because convergence loop retried indefinitely with
-	// CONCURRENT_ACTIVATION errors until release reaper killed at sync
-	// timeout. Pre-T5.1 partial index, this bug was silent (2 ACTIVE rows
-	// coexisted briefly); post-T5.1 the index surfaces it, and the
-	// CONCURRENT_ACTIVATION typed error (CV-M-1, commit d8dbeaf4) made
-	// the loop fail-fast instead of silently retrying. The proper fix is
-	// at the activation kernel: invert the order.
-	if prevRelease != nil && prevRelease.ID != release.ID {
-		if _, supersedeErr := releaseStore.UpdateStatus(ctx, tx, prevRelease.ID, string(statemachine.RPEventNewActivated)); supersedeErr != nil {
-			logger.Error("activate release: failed to supersede previous",
-				"prev_id", prevRelease.ID, "new_id", release.ID, "error", supersedeErr)
-			return fmt.Errorf("activate release: supersede previous %s: %w", prevRelease.ID, supersedeErr)
-		}
-		logger.Info("activate release: superseded previous",
-			"prev_id", prevRelease.ID, "new_id", release.ID)
+	if err := k.supersedePrevious(ctx, tx, release); err != nil {
+		return err
 	}
 
 	// Step 3: Transition PENDING → ACTIVE. With the previous release now
-	// SUPERSEDED (Step 2), the partial unique index allows this transition
-	// without violating the at-most-one-ACTIVE-per-env invariant.
-	if _, err := releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.RPEventSyncCompleted)); err != nil {
+	// SUPERSEDED, the partial unique index allows this transition without
+	// violating the at-most-one-ACTIVE-per-env invariant.
+	if _, err := k.Releases.UpdateStatus(ctx, tx, release.ID, string(statemachine.RPEventSyncCompleted)); err != nil {
 		return fmt.Errorf("activate release: transition to ACTIVE: %w", err)
 	}
-
-	// MEET-2026-03-31-023 T1-8: Record convergence duration (PENDING → ACTIVE).
-	convergenceDuration := time.Since(release.CreatedAt).Seconds()
-	metrics.ReleaseConvergenceDuration.WithLabelValues(release.TenantID, release.Environment).Observe(convergenceDuration)
-
-	// End-to-end deploy duration: build creation → release ACTIVE.
-	// durationSecs is computed by callers as time.Since(build.CreatedAt).
-	metrics.DeployDuration.WithLabelValues(release.TenantID, release.Environment).Observe(float64(durationSecs))
-
-	// Phase 4A: Deploy lead time — same value, separate histogram for executive SLO tracking.
-	metrics.DeployLeadTime.WithLabelValues(release.TenantID, release.Environment).Observe(float64(durationSecs))
+	recordActivationMetrics(release, durationSecs)
 
 	// Step 4: Emit deploy.live SSE event.
 	liveData := events.SafeJSONMarshal(map[string]interface{}{
 		"deploy_id": deriveDeployID(release.ID),
 		"status":    "live",
 	})
-	if _, err := eventStore.Append(ctx, release.BuildID, "deploy.live", liveData); err != nil {
-		logger.Error("activate release: failed to emit deploy.live", "release_id", release.ID, "error", err)
+	if _, err := k.Events.Append(ctx, release.BuildID, "deploy.live", liveData); err != nil {
+		k.Logger.Error("activate release: failed to emit deploy.live", "release_id", release.ID, "error", err)
 	}
 
 	// Step 5: Update environment target pointer.
-	if err := envTargetStore.SetActive(ctx, tx, release.TenantID, release.ProjectID, release.Environment, release.ID); err != nil {
+	if err := k.EnvTargets.SetActive(ctx, tx, release.TenantID, release.ProjectID, release.Environment, release.ID); err != nil {
 		return fmt.Errorf("activate release: set active: %w", err)
 	}
 
-	// Step 5.5: Transactional outbox — stage the deploy.succeeded event on the
-	// SAME tx (Option C, MEET-2026-07-03-005). loopzero-cloud drains deploy_events
-	// and fans out to the customer's workspace_webhooks; the engine never
-	// references the webhook tables (decoupling invariant). FATAL by design: if
-	// the event cannot be staged, the whole activation rolls back and the
-	// convergence loop retries — this is what makes delivery at-least-once (no
-	// silently-lost deploy events). deployEventStore is an optional dependency
-	// (nil in unit paths that don't exercise the outbox), mirroring the
-	// onReleaseActivated callback convention below. transition_id is a fresh
-	// UUID per ENTRY into ACTIVE (NOT release.ID — a Release re-enters ACTIVE
-	// after rollback recovery, and each entry is a distinct deploy.succeeded).
-	// Payload carries customer-safe fields only (Rule 3).
-	if deployEventStore != nil {
-		deployID := deriveDeployID(release.ID)
-		if err := deployEventStore.AppendDeployEvent(ctx, tx, store.DeployEvent{
-			TransitionID:  "dpx-" + uuid.NewString(),
-			EventType:     "deploy.succeeded",
-			TenantID:      release.TenantID,
-			ProjectID:     release.ProjectID,
-			DeployID:      deployID,
-			CorrelationID: release.CorrelationID,
-			Payload: map[string]any{
-				"event":       "deploy.succeeded",
-				"deploy_id":   deployID,
-				"project":     release.ProjectID,
-				"environment": release.Environment,
-				"status":      "success",
-				"occurred_at": time.Now().UTC().Format(time.RFC3339),
-			},
-		}); err != nil {
-			return fmt.Errorf("activate release: stage deploy event: %w", err)
-		}
+	if err := k.stageDeploySucceeded(ctx, tx, release); err != nil {
+		return err
 	}
-
-	// Step 6: Emit deploy.completed SSE event — CLI waits for this to exit.
-	deployID := deriveDeployID(release.ID)
-	appResults := make([]map[string]interface{}, 0, len(apps))
-	for _, app := range apps {
-		entry := map[string]interface{}{
-			"name":   app.Name,
-			"status": app.Status,
-		}
-		if app.URL != "" {
-			entry["url"] = app.URL
-		}
-		appResults = append(appResults, entry)
-	}
-	completedData := events.SafeJSONMarshal(map[string]interface{}{
-		"deploy_id":        deployID,
-		"status":           "success",
-		"duration_seconds": durationSecs,
-		"apps":             appResults,
-	})
-	// T5.6 of deep-review-2026-05-10-remediation-plan (find_event_completed_swallowed MEDIUM):
-	// `deploy.completed` is the event the CLI waits on — a single emit
-	// failure means the CLI hangs until the deploy timeout. 3 attempts
-	// with 100ms backoff covers the typical "transient lock contention"
-	// failure mode without adding meaningful tail latency.
-	for attempt := 1; attempt <= 3; attempt++ {
-		_, err := eventStore.Append(ctx, release.BuildID, "deploy.completed", completedData)
-		if err == nil {
-			break
-		}
-		logger.Error("activate release: failed to emit deploy.completed",
-			"release_id", release.ID, "attempt", attempt, "error", err)
-		if attempt < 3 {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(100 * time.Millisecond):
-			}
-		}
+	if err := k.emitCompleted(ctx, release, apps, durationSecs); err != nil {
+		return err
 	}
 
 	// Step 7: Notify external systems (GitHub commit status, etc.)
@@ -301,6 +192,118 @@ func ActivateReleaseKernel(
 		}()
 	}
 
+	return nil
+}
+
+// supersedePrevious runs steps 1 and 2: find the environment's ACTIVE release
+// and supersede it BEFORE the new one is activated.
+//
+// T5.1 CV-M-1 dogfood regression fix (2026-06-02): the partial unique index
+// `idx_releases_active_unique` (migration 000022) enforces at-most-one-ACTIVE
+// per env. Activating first and superseding second hit SQLSTATE 23505 because
+// two rows were ACTIVE for an instant inside the tx. Both UPDATEs run in the
+// same tx (withEnvironmentLock), so they stay atomic to any observer.
+//
+// State machine validity:
+//   - prev: ACTIVE --(RPEventNewActivated)--> SUPERSEDED
+//   - new:  PENDING --(RPEventSyncCompleted)--> ACTIVE
+func (k ActivationKernel) supersedePrevious(ctx context.Context, tx db.DBTX, release *db.Release) error {
+	prevRelease, err := k.Releases.GetActiveByEnvTx(ctx, tx, release.TenantID, release.ProjectID, release.Environment)
+	if err != nil {
+		return fmt.Errorf("activate release: get previous active: %w", err)
+	}
+	if prevRelease == nil || prevRelease.ID == release.ID {
+		return nil
+	}
+	if _, err := k.Releases.UpdateStatus(ctx, tx, prevRelease.ID, string(statemachine.RPEventNewActivated)); err != nil {
+		k.Logger.Error("activate release: failed to supersede previous",
+			"prev_id", prevRelease.ID, "new_id", release.ID, "error", err)
+		return fmt.Errorf("activate release: supersede previous %s: %w", prevRelease.ID, err)
+	}
+	k.Logger.Info("activate release: superseded previous",
+		"prev_id", prevRelease.ID, "new_id", release.ID)
+	return nil
+}
+
+// recordActivationMetrics observes convergence (PENDING → ACTIVE, T1-8) and the
+// end-to-end deploy duration, which callers compute as time.Since(build.CreatedAt).
+// Deploy lead time is the same value in a separate histogram for SLO tracking.
+func recordActivationMetrics(release *db.Release, durationSecs int) {
+	metrics.ReleaseConvergenceDuration.WithLabelValues(release.TenantID, release.Environment).
+		Observe(time.Since(release.CreatedAt).Seconds())
+	metrics.DeployDuration.WithLabelValues(release.TenantID, release.Environment).Observe(float64(durationSecs))
+	metrics.DeployLeadTime.WithLabelValues(release.TenantID, release.Environment).Observe(float64(durationSecs))
+}
+
+// stageDeploySucceeded is step 5.5, the transactional outbox (Option C,
+// MEET-2026-07-03-005): the deploy.succeeded event is staged on the SAME tx.
+// loopzero-cloud drains deploy_events and fans out to the customer's webhooks; the
+// engine never references the webhook tables. FATAL by design: if the event
+// cannot be staged the activation rolls back and the convergence loop retries,
+// which is what makes delivery at-least-once. transition_id is a fresh UUID per
+// ENTRY into ACTIVE (a release re-enters ACTIVE after rollback recovery). The
+// payload carries customer-safe fields only (Rule 3).
+func (k ActivationKernel) stageDeploySucceeded(ctx context.Context, tx db.DBTX, release *db.Release) error {
+	if k.DeployEvents == nil {
+		return nil
+	}
+	deployID := deriveDeployID(release.ID)
+	if err := k.DeployEvents.AppendDeployEvent(ctx, tx, store.DeployEvent{
+		TransitionID:  "dpx-" + uuid.NewString(),
+		EventType:     "deploy.succeeded",
+		TenantID:      release.TenantID,
+		ProjectID:     release.ProjectID,
+		DeployID:      deployID,
+		CorrelationID: release.CorrelationID,
+		Payload: map[string]any{
+			"event":       "deploy.succeeded",
+			"deploy_id":   deployID,
+			"project":     release.ProjectID,
+			"environment": release.Environment,
+			"status":      "success",
+			"occurred_at": time.Now().UTC().Format(time.RFC3339),
+		},
+	}); err != nil {
+		return fmt.Errorf("activate release: stage deploy event: %w", err)
+	}
+	return nil
+}
+
+// emitCompleted is step 6: the deploy.completed SSE event the CLI waits on.
+// T5.6 (find_event_completed_swallowed): a single emit failure would leave the
+// CLI hanging until the deploy timeout, so it is attempted 3 times with a
+// 100ms backoff. Exhausting the attempts is logged, not returned — the release
+// is already ACTIVE.
+func (k ActivationKernel) emitCompleted(ctx context.Context, release *db.Release, apps []ActivationAppInfo, durationSecs int) error {
+	appResults := make([]map[string]interface{}, 0, len(apps))
+	for _, app := range apps {
+		entry := map[string]interface{}{"name": app.Name, "status": app.Status}
+		if app.URL != "" {
+			entry["url"] = app.URL
+		}
+		appResults = append(appResults, entry)
+	}
+	completedData := events.SafeJSONMarshal(map[string]interface{}{
+		"deploy_id":        deriveDeployID(release.ID),
+		"status":           "success",
+		"duration_seconds": durationSecs,
+		"apps":             appResults,
+	})
+	for attempt := 1; attempt <= 3; attempt++ {
+		_, err := k.Events.Append(ctx, release.BuildID, "deploy.completed", completedData)
+		if err == nil {
+			return nil
+		}
+		k.Logger.Error("activate release: failed to emit deploy.completed",
+			"release_id", release.ID, "attempt", attempt, "error", err)
+		if attempt < 3 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
+	}
 	return nil
 }
 

@@ -118,7 +118,7 @@ type ReleaseStore interface {
 	// to detect post-activation ArgoCD divergence.
 	FindActiveReleases(ctx context.Context, cellID string) ([]Release, error)
 	// GetByIDTx retrieves a release by ID within a transaction.
-	// MEET-2026-03-31-023 T0-1: Used by ActivateReleaseKernel
+	// MEET-2026-03-31-023 T0-1: Used by ActivationKernel.Activate
 	// idempotency guard.
 	GetByIDTx(ctx context.Context, tx DBTX, id string) (*Release, error)
 	// CancelAllByEnv transitions every non-terminal release for the

@@ -73,7 +73,7 @@ type ReleaseConvergenceLoop struct {
 		Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
 	}
 	// J-16 slice 3: transactional-outbox writer (set via WithDeployEventStore).
-	// Nil-safe: ActivateReleaseKernel skips the deploy.succeeded emit when nil.
+	// Nil-safe: ActivationKernel.Activate skips the deploy.succeeded emit when nil.
 	deployEventStore store.DeployEventStore
 	baseDomain       string
 	publicDomain     string // release-blockers-2026-06-25-set v1.1 #61 — canonical wildcard for deploy.completed URL (mirrors SyncCallbackActivator.publicDomain).
@@ -396,7 +396,10 @@ func (r *ReleaseConvergenceLoop) activateRelease(ctx context.Context, release *d
 	err := r.locker.WithLock(ctx, release.TenantID, release.ProjectID, release.Environment, func(tx db.DBTX) error {
 		apps := releaseAppsToActivationApps(release, r.baseDomain, r.publicDomain)
 		duration := int(time.Since(release.CreatedAt).Seconds())
-		return ActivateReleaseKernel(ctx, tx, release, r.releaseStore, r.envTargetStore, r.eventStore, r.deployEventStore, apps, duration, r.logger)
+		return ActivationKernel{
+			Releases: r.releaseStore, EnvTargets: r.envTargetStore, Events: r.eventStore,
+			DeployEvents: r.deployEventStore, Logger: r.logger,
+		}.Activate(ctx, tx, release, apps, duration)
 	})
 	if err != nil {
 		r.logger.Error("release convergence: activate failed",

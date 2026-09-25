@@ -246,7 +246,7 @@ func (s *ReleaseStoreSqlc) GetByID(ctx context.Context, releaseID string) (*db.R
 }
 
 // GetByIDTx retrieves a release by ID within a transaction. Used by
-// ActivateReleaseKernel idempotency guard (MEET-2026-03-31-023 T0-1).
+// ActivationKernel.Activate idempotency guard (MEET-2026-03-31-023 T0-1).
 // Cross-tenant by ID, like GetByID.
 func (s *ReleaseStoreSqlc) GetByIDTx(ctx context.Context, tx db.DBTX, releaseID string) (*db.Release, error) {
 	row, err := s.q.GetReleaseByID(ctx, s.gen(tx), releaseID)
@@ -351,7 +351,7 @@ func (s *ReleaseStoreSqlc) GetActiveByEnv(ctx context.Context, tenantID, project
 }
 
 // GetActiveByEnvTx returns the currently-ACTIVE release for an env tuple
-// within a transaction. Used by ActivateReleaseKernel.
+// within a transaction. Used by ActivationKernel.Activate.
 func (s *ReleaseStoreSqlc) GetActiveByEnvTx(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (*db.Release, error) {
 	row, err := s.q.GetActiveByEnv(ctx, s.gen(tx), generated.GetActiveByEnvParams{
 		TenantID:    tenantID,
