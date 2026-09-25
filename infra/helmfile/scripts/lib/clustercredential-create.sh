@@ -77,13 +77,13 @@ KUBECONFIG_PATH="${3:-}"
 # reconcile loop, so the cell simply never comes up and nothing reports why.
 KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-core}"
 MGMT_KUBECONFIG="${MGMT_KUBECONFIG:-}"
-kubectl() {
-  if [[ -n "$MGMT_KUBECONFIG" ]]; then
-    command kubectl --kubeconfig="$MGMT_KUBECONFIG" "$@"
-  else
-    command kubectl --context="$KUBECTL_CONTEXT" "$@"
-  fi
-}
+if [[ -n "$MGMT_KUBECONFIG" ]]; then
+  # Drill: MGMT is reached through its own kubeconfig file, pinned to the context
+  # that file names. Resolved below, once fail() exists, and never inherited.
+  export KUBECONFIG="$MGMT_KUBECONFIG"
+  KUBECTL_CONTEXT=""
+fi
+kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
 
 log() { printf '[cc-create] %s\n' "$*" >&2; }
 fail() { log "ERROR: $*"; exit "${2:-1}"; }
@@ -123,6 +123,10 @@ fi
 
 if [[ "$DRY_RUN" == "false" ]]; then
   command -v kubectl >/dev/null 2>&1 || fail "kubectl not found in PATH" 2
+  if [[ -n "$MGMT_KUBECONFIG" ]]; then
+    KUBECTL_CONTEXT="$(command kubectl config current-context 2>/dev/null || true)"
+    [[ -n "$KUBECTL_CONTEXT" ]] || fail "MGMT_KUBECONFIG=$MGMT_KUBECONFIG names no current-context" 2
+  fi
   if ! kubectl cluster-info --request-timeout=5s >/dev/null 2>&1; then
     fail "mgmt cluster unreachable (context=${MGMT_KUBECONFIG:-$KUBECTL_CONTEXT})" 2
   fi
