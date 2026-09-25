@@ -59,42 +59,44 @@ func TestMinIOCrossCluster_UsesExplicitEndpoint(t *testing.T) {
 // envInt / envDuration tests
 // =============================================================================
 
-func TestEnvInt_ReturnsDefault(t *testing.T) {
-	got := envInt("NONEXISTENT_TEST_VAR_123456", 42)
-	if got != 42 {
-		t.Errorf("expected 42, got %d", got)
+func TestEnvLoaderIntReturnsTheDefaultWhenUnset(t *testing.T) {
+	l := &envLoader{}
+	if got := l.int("NONEXISTENT_TEST_VAR_123456", 42); got != 42 || len(l.errs) != 0 {
+		t.Errorf("got %d errs %v, want 42 and no error", got, l.errs)
 	}
 }
 
-func TestEnvInt_ParsesValue(t *testing.T) {
+func TestEnvLoaderIntParsesAValue(t *testing.T) {
 	t.Setenv("TEST_ENV_INT_VAR", "99")
-	got := envInt("TEST_ENV_INT_VAR", 42)
-	if got != 99 {
+	l := &envLoader{}
+	if got := l.int("TEST_ENV_INT_VAR", 42); got != 99 {
 		t.Errorf("expected 99, got %d", got)
 	}
 }
 
-func TestEnvInt_InvalidReturnsDefault(t *testing.T) {
+func TestEnvLoaderIntRecordsAnInvalidValue(t *testing.T) {
 	t.Setenv("TEST_ENV_INT_BAD", "not-a-number")
-	got := envInt("TEST_ENV_INT_BAD", 42)
-	if got != 42 {
-		t.Errorf("expected 42 for invalid value, got %d", got)
+	l := &envLoader{}
+	l.int("TEST_ENV_INT_BAD", 42)
+	if len(l.errs) != 1 {
+		t.Fatalf("errs = %v, want one error for the invalid value", l.errs)
 	}
 }
 
-func TestEnvDuration_ParsesValue(t *testing.T) {
+func TestEnvLoaderDurationParsesAValue(t *testing.T) {
 	t.Setenv("TEST_DUR_VAR", "5m")
-	got := envDuration("TEST_DUR_VAR", 0)
-	if got.Minutes() != 5 {
+	l := &envLoader{}
+	if got := l.duration("TEST_DUR_VAR", 0); got.Minutes() != 5 {
 		t.Errorf("expected 5m, got %v", got)
 	}
 }
 
-func TestEnvDuration_InvalidReturnsDefault(t *testing.T) {
+func TestEnvLoaderDurationRecordsAnInvalidValue(t *testing.T) {
 	t.Setenv("TEST_DUR_BAD", "not-a-duration")
-	got := envDuration("TEST_DUR_BAD", 0)
-	if got != 0 {
-		t.Errorf("expected 0 for invalid duration, got %v", got)
+	l := &envLoader{}
+	l.duration("TEST_DUR_BAD", 0)
+	if len(l.errs) != 1 {
+		t.Fatalf("errs = %v, want one error for the invalid duration", l.errs)
 	}
 }
 

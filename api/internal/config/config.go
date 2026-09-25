@@ -7,6 +7,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -43,6 +44,9 @@ const (
 
 // Config holds all API server configuration, read from environment variables at startup.
 type Config struct {
+	// loadErrors are the variables Load could not parse; Validate reports them.
+	loadErrors []error
+
 	// Server
 	Port        string
 	MetricsPort string
@@ -371,33 +375,34 @@ func Load() Config {
 	home, _ := os.UserHomeDir()
 	defaultKubeconfig := home + "/.kube/config"
 
-	return Config{
+	l := &envLoader{}
+	cfg := Config{
 		// Server
 		Port:        envOr("PORT", "3001"),
 		MetricsPort: envOr("METRICS_PORT", "9090"),
 		Env:         envOr("LOOPZERO_ENV", "development"),
 
 		// HTTP Server Timeouts
-		ReadHeaderTimeout:    envDuration("SERVER_READ_HEADER_TIMEOUT", 10*time.Second),
-		ReadTimeout:          envDuration("SERVER_READ_TIMEOUT", 30*time.Second),
-		IdleTimeout:          envDuration("SERVER_IDLE_TIMEOUT", 120*time.Second),
-		GracefulShutdownTime: envDuration("SERVER_GRACEFUL_SHUTDOWN", 15*time.Second),
+		ReadHeaderTimeout:    l.duration("SERVER_READ_HEADER_TIMEOUT", 10*time.Second),
+		ReadTimeout:          l.duration("SERVER_READ_TIMEOUT", 30*time.Second),
+		IdleTimeout:          l.duration("SERVER_IDLE_TIMEOUT", 120*time.Second),
+		GracefulShutdownTime: l.duration("SERVER_GRACEFUL_SHUTDOWN", 15*time.Second),
 
 		// Database
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
 		WorkerDatabaseURL: os.Getenv("LOOPZERO_WORKER_DATABASE_URL"),
 		// Database Pool
-		DBMaxConns:         int32(envInt("DB_MAX_CONNS", 25)),
-		DBMinConns:         int32(envInt("DB_MIN_CONNS", 5)),
-		DBMaxConnIdleTime:  envDuration("DB_MAX_CONN_IDLE_TIME", 30*time.Second),
-		DBMaxConnLifetime:  envDuration("DB_MAX_CONN_LIFETIME", 1*time.Hour),
-		DBHealthCheckTime:  envDuration("DB_HEALTH_CHECK_PERIOD", 30*time.Second),
-		DBConnectTimeout:   envDuration("DB_CONNECT_TIMEOUT", 5*time.Second),
+		DBMaxConns:         int32(l.int("DB_MAX_CONNS", 25)),
+		DBMinConns:         int32(l.int("DB_MIN_CONNS", 5)),
+		DBMaxConnIdleTime:  l.duration("DB_MAX_CONN_IDLE_TIME", 30*time.Second),
+		DBMaxConnLifetime:  l.duration("DB_MAX_CONN_LIFETIME", 1*time.Hour),
+		DBHealthCheckTime:  l.duration("DB_HEALTH_CHECK_PERIOD", 30*time.Second),
+		DBConnectTimeout:   l.duration("DB_CONNECT_TIMEOUT", 5*time.Second),
 		DBStatementTimeout: envOr("DB_STATEMENT_TIMEOUT", "30000"),
 
 		// HTTP Clients
-		HTTPClientTimeout:   envDuration("HTTP_CLIENT_TIMEOUT", 10*time.Second),
-		ArgocdClientTimeout: envDuration("ARGOCD_CLIENT_TIMEOUT", 90*time.Second), // T1.1 D1: bumped 30→90s for concurrent Ginkgo load headroom
+		HTTPClientTimeout:   l.duration("HTTP_CLIENT_TIMEOUT", 10*time.Second),
+		ArgocdClientTimeout: l.duration("ARGOCD_CLIENT_TIMEOUT", 90*time.Second), // T1.1 D1: bumped 30→90s for concurrent Ginkgo load headroom
 
 		// Kubernetes Contexts
 		MgmtKubeconfig:     envOr("CORE_KUBECONFIG", defaultKubeconfig),
@@ -467,43 +472,43 @@ func Load() Config {
 
 		// Circuit Breaker
 		CBKey:            envOr("CB_KEY", "argocd"),
-		CBOpenThreshold:  envInt("CB_OPEN_THRESHOLD", 3),
-		CBCloseThreshold: envInt("CB_CLOSE_THRESHOLD", 2),
-		CBRetryInterval:  envDuration("CB_RETRY_INTERVAL", 30*time.Second),
+		CBOpenThreshold:  l.int("CB_OPEN_THRESHOLD", 3),
+		CBCloseThreshold: l.int("CB_CLOSE_THRESHOLD", 2),
+		CBRetryInterval:  l.duration("CB_RETRY_INTERVAL", 30*time.Second),
 
 		// ArgoCD Sync
-		ArgocdPollInterval: envDuration("ARGOCD_POLL_INTERVAL", 10*time.Second),
-		ArgocdSyncTimeout:  envDuration("ARGOCD_SYNC_TIMEOUT", 300*time.Second),
+		ArgocdPollInterval: l.duration("ARGOCD_POLL_INTERVAL", 10*time.Second),
+		ArgocdSyncTimeout:  l.duration("ARGOCD_SYNC_TIMEOUT", 300*time.Second),
 		ArgocdInsecure:     os.Getenv("ARGOCD_INSECURE") == "true",
 
 		// SSE
-		SSEHeartbeatInterval:    envDuration("SSE_HEARTBEAT_INTERVAL", 15*time.Second),
-		SSEPollInterval:         envDuration("SSE_POLL_INTERVAL", 1*time.Second),
-		SSESafetyTimeout:        envDuration("SSE_SAFETY_TIMEOUT", 5*time.Minute),
-		SSEMaxConcurrentStreams: envInt("SSE_MAX_CONCURRENT_STREAMS", 200),
+		SSEHeartbeatInterval:    l.duration("SSE_HEARTBEAT_INTERVAL", 15*time.Second),
+		SSEPollInterval:         l.duration("SSE_POLL_INTERVAL", 1*time.Second),
+		SSESafetyTimeout:        l.duration("SSE_SAFETY_TIMEOUT", 5*time.Minute),
+		SSEMaxConcurrentStreams: l.int("SSE_MAX_CONCURRENT_STREAMS", 200),
 
 		// Auth
-		AuthCacheTTL: envDuration("AUTH_CACHE_TTL", 5*time.Minute),
+		AuthCacheTTL: l.duration("AUTH_CACHE_TTL", 5*time.Minute),
 
 		// Source Upload
-		MaxBundleSize:      int64(envInt("SOURCE_MAX_BUNDLE_SIZE", 500*1024*1024)),
-		MultipartMaxMemory: int64(envInt("SOURCE_MULTIPART_MAX_MEMORY", 32<<20)),
+		MaxBundleSize:      int64(l.int("SOURCE_MAX_BUNDLE_SIZE", 500*1024*1024)),
+		MultipartMaxMemory: int64(l.int("SOURCE_MULTIPART_MAX_MEMORY", 32<<20)),
 
 		// Build Reaper (spec §5.1)
-		BuildQueueTimeout:     envDuration("BUILD_QUEUE_TIMEOUT", 5*time.Minute),
-		BuildRunningTimeout:   envDuration("BUILD_RUNNING_TIMEOUT", 30*time.Minute),
-		BuildReleasingTimeout: envDuration("BUILD_RELEASING_TIMEOUT", 10*time.Minute),
-		BuildCancelTimeout:    envDuration("BUILD_CANCEL_TIMEOUT", 60*time.Second),
-		BuildReaperInterval:   envDuration("BUILD_REAPER_INTERVAL", 30*time.Second),
+		BuildQueueTimeout:     l.duration("BUILD_QUEUE_TIMEOUT", 5*time.Minute),
+		BuildRunningTimeout:   l.duration("BUILD_RUNNING_TIMEOUT", 30*time.Minute),
+		BuildReleasingTimeout: l.duration("BUILD_RELEASING_TIMEOUT", 10*time.Minute),
+		BuildCancelTimeout:    l.duration("BUILD_CANCEL_TIMEOUT", 60*time.Second),
+		BuildReaperInterval:   l.duration("BUILD_REAPER_INTERVAL", 30*time.Second),
 
 		// Release Reaper (spec §5.2)
-		ReleaseReadyTimeout:   envDuration("RELEASE_READY_TIMEOUT", 5*time.Minute),
-		ReleasePendingTimeout: envDuration("RELEASE_PENDING_TIMEOUT", 6*time.Minute),
-		ReleaseReaperInterval: envDuration("RELEASE_REAPER_INTERVAL", 30*time.Second),
+		ReleaseReadyTimeout:   l.duration("RELEASE_READY_TIMEOUT", 5*time.Minute),
+		ReleasePendingTimeout: l.duration("RELEASE_PENDING_TIMEOUT", 6*time.Minute),
+		ReleaseReaperInterval: l.duration("RELEASE_REAPER_INTERVAL", 30*time.Second),
 
 		// Build Reconcile Loop (C-01 fix): polls Argo Workflow CRDs every 5s
-		ReconcileInterval:  envDuration("BUILD_RECONCILE_INTERVAL", 5*time.Second),
-		MaxBuildsPerTenant: envInt("MAX_BUILDS_PER_TENANT", 3),
+		ReconcileInterval:  l.duration("BUILD_RECONCILE_INTERVAL", 5*time.Second),
+		MaxBuildsPerTenant: l.int("MAX_BUILDS_PER_TENANT", 3),
 
 		// Loki (build log aggregation)
 		LokiURL: envOr("LOKI_URL", "http://loki.monitoring:3100"),
@@ -534,10 +539,10 @@ func Load() Config {
 
 		// Roadmap 07 — Backpressure & Admission Control.
 		AdmissionControl:             os.Getenv("LOOPZERO_ADMISSION_CONTROL") == "true",
-		MaxConcurrentBuildsPerCell:   envInt("MAX_CONCURRENT_BUILDS_PER_CELL", 20),
-		MaxTenantsPerCell:            envInt("MAX_TENANTS_PER_CELL", 5000),
-		MaxConcurrentBuildsPerTenant: envInt("MAX_CONCURRENT_BUILDS_PER_TENANT", 3),
-		PGCircuitBreakerThresholdPct: envInt("PG_CIRCUIT_BREAKER_THRESHOLD_PCT", 90),
+		MaxConcurrentBuildsPerCell:   l.int("MAX_CONCURRENT_BUILDS_PER_CELL", 20),
+		MaxTenantsPerCell:            l.int("MAX_TENANTS_PER_CELL", 5000),
+		MaxConcurrentBuildsPerTenant: l.int("MAX_CONCURRENT_BUILDS_PER_TENANT", 3),
+		PGCircuitBreakerThresholdPct: l.int("PG_CIRCUIT_BREAKER_THRESHOLD_PCT", 90),
 
 		// Scale 50k plan — Phase 0.2 feature flag (Phase 0.3 multi-cell is
 		// no longer toggle-gated; see CHG-2026-04-30-DELETE-SINGLE-CELL).
@@ -549,6 +554,8 @@ func Load() Config {
 		// KEDA scale-to-zero feature gate.
 		KEDAEnabled: os.Getenv("LOOPZERO_KEDA_ENABLED") == "true",
 	}
+	cfg.loadErrors = l.errs
+	return cfg
 }
 
 // Validate logs warnings about insecure defaults and returns an error for
@@ -586,6 +593,9 @@ func isValidEnv(s string) bool {
 // valid) that later checks assume. Mirrors the pre-refactor order
 // verbatim so behavior is byte-identical for the existing test suite.
 func (c Config) Validate() error {
+	if len(c.loadErrors) > 0 {
+		return fmt.Errorf("config: unparseable environment variables: %w", errors.Join(c.loadErrors...))
+	}
 	if err := c.validateEnv(); err != nil {
 		return err
 	}
@@ -881,25 +891,40 @@ func envOr(key, defaultValue string) string {
 	return defaultValue
 }
 
-// envInt returns the environment variable as int or the default.
-func envInt(key string, defaultValue int) int {
-	if v := os.Getenv(key); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
-			return i
-		}
-	}
-	return defaultValue
+// envLoader reads typed environment variables for Load and keeps every value
+// it could not parse, so a typo stops startup (via Validate) instead of
+// silently running with the default.
+type envLoader struct {
+	errs []error
 }
 
-// envDuration returns the environment variable as duration or the default.
-// Accepts Go duration strings: "30s", "5m", "1h".
-func envDuration(key string, defaultValue time.Duration) time.Duration {
-	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			return d
-		}
+// int returns the variable as an int, or defaultValue when it is unset.
+func (l *envLoader) int(key string, defaultValue int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultValue
 	}
-	return defaultValue
+	i, err := strconv.Atoi(v)
+	if err != nil {
+		l.errs = append(l.errs, fmt.Errorf("%s=%q is not an integer", key, v))
+		return defaultValue
+	}
+	return i
+}
+
+// duration returns the variable as a Go duration ("30s", "5m", "1h"), or
+// defaultValue when it is unset. A bare number has no unit and is rejected.
+func (l *envLoader) duration(key string, defaultValue time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultValue
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		l.errs = append(l.errs, fmt.Errorf("%s=%q is not a duration such as 30s or 5m", key, v))
+		return defaultValue
+	}
+	return d
 }
 
 // envTime parses an environment variable as an RFC 3339 timestamp.
