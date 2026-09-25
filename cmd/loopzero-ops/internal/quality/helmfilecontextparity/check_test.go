@@ -181,14 +181,13 @@ func TestCheck_RealTree(t *testing.T) {
 func countKubeContextLines(t *testing.T) int {
 	t.Helper()
 	root := qtestutil.Root(t)
-	// Le' o conjunto varrido de `globsPadrao`, a declaracao unica do gate, em vez
-	// de repetir a lista aqui. O aviso que este comentario substitui ja' dizia o
-	// porque: omitir uma fonte faz a reconciliacao comparar DUAS ARVORES
-	// DIFERENTES e falhar por uma razao que nada tem a ver com o parser. Foi
-	// exatamente o que aconteceu quando o gate passou a varrer os invocadores em
-	// script e esta lista ficou para tras (B-078).
+	// Reads the scanned set from `defaultGlobs`, the gate's single declaration,
+	// instead of repeating the list here: omitting a source makes the
+	// reconciliation compare TWO DIFFERENT TREES and fail for a reason that has
+	// nothing to do with the parser. That is exactly what happened when the gate
+	// began scanning script invokers and this list stayed behind (B-078).
 	var paths []string
-	for _, g := range globsPadrao {
+	for _, g := range defaultGlobs {
 		found, err := filepath.Glob(filepath.Join(root, g))
 		if err != nil {
 			t.Fatal(err)

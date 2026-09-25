@@ -11,16 +11,17 @@
 // It is not. Measured against helmfile 1.1.6 — the installed binary — with a
 // synthetic chart:
 //
-//	sem kubeContext, sem flag  → helm runs with NO --kube-context (kubectl's
-//	                             active context decides, silently)
-//	com kubeContext, sem flag  → helm runs with the declared context      ✅
-//	com kubeContext, flag ≠    → helm runs with THE FLAG's context        ❌
+//	no kubeContext, no flag      → helm runs with NO --kube-context (kubectl's
+//	                               active context decides, silently)
+//	kubeContext, no flag         → helm runs with the declared context      ✅
+//	kubeContext, different flag  → helm runs with THE FLAG's context        ❌
 //
 // The third row is the one that matters: the flag wins, with no error and no
 // warning. So declaring `kubeContext` fixes the dangerous DEFAULT, and cannot
 // produce the conflict. The conflict has to come from here.
 //
-// See docs/wiki/decisions and the slice-3 plan ADR D1.
+// The table above is the measurement the design rests on; the slice-3 plan that
+// first recorded it (ADR D1) is in git history.
 //
 // # What this gate proves, and what it does not
 //
@@ -132,60 +133,58 @@ func parameterised(v string) bool {
 // and without a trailing backslash.
 const invocationWindow = 10
 
-// Check walks every taskfile, pairs each helmfile invocation with the file it
-// targets, and compares the two declarations of the target cluster.
-// globsPadrao e' a UNICA declaracao do conjunto varrido. O contador
-// independente de `TestCheck_RealTree` le' daqui em vez de repetir a lista:
-// duas listas que precisam concordar acabam discordando, e quando isso
-// acontece a reconciliacao passa a comparar duas arvores diferentes e falha
-// por uma razao que nada tem a ver com o parser — que e' o proprio aviso
-// escrito no comentario daquele contador (B-078).
-var globsPadrao = []string{
+// defaultGlobs is the ONE declaration of the scanned set. The independent
+// counter in `TestCheck_RealTree` reads it instead of repeating the list: two
+// lists that must agree end up disagreeing, and the reconciliation then
+// compares two different trees and fails for a reason unrelated to the parser
+// (B-078).
+var defaultGlobs = []string{
 	"Taskfile.yml",
 	filepath.Join("taskfiles", "*.yml"),
-	// Os invocadores em SCRIPT ficam DE FORA, e a razao foi medida em 2026-08-18
-	// (B-078), nao suposta:
+	// SCRIPT invokers are left OUT, for a reason measured on 2026-08-18
+	// (B-078), not assumed:
 	//
-	//  1. Nao comprariam comparacao nenhuma. As quatro invocacoes em script
+	//  1. They would buy no comparison. The four script invocations
 	//     (`vault-bootstrap-dev.sh:267`, `operator-cutover-execute.sh:142,:204`,
-	//     `enable-vault-backup.sh:205`) parametrizam TANTO o contexto
-	//     (`$CTX`, `$SECRETS_CONTEXT`, `$OPENBAO_CONTEXT`) QUANTO o caminho
-	//     (`-f "$HELMFILE_PATH"`, `-f "${REPO_ROOT}/..."`). Todas cairiam em
-	//     "fora de alcance estatico".
+	//     `enable-vault-backup.sh:205`) parameterise BOTH the context
+	//     (`$CTX`, `$SECRETS_CONTEXT`, `$OPENBAO_CONTEXT`) AND the path
+	//     (`-f "$HELMFILE_PATH"`, `-f "${REPO_ROOT}/..."`). All of them would
+	//     land in "out of static reach".
 	//
-	//  2. E o parser nao as pareia de forma confiavel. Ele exige `-f` e
-	//     `--kube-context` na MESMA janela, e invocacao em shell quebra em
-	//     continuacoes: com os scripts incluidos, a arvore carregava 37
-	//     ocorrencias de `--kube-context` e a varredura pareava 28 — 9 caiam em
-	//     silencio, que e' precisamente o defeito que a reconciliacao de
-	//     `TestCheck_RealTree` existe para impedir.
+	//  2. And the parser does not pair them reliably. It needs `-f` and
+	//     `--kube-context` in the SAME window, and a shell invocation breaks
+	//     across continuations: with the scripts included the tree carried 37
+	//     `--kube-context` occurrences and the scan paired 28 — 9 fell away in
+	//     silence, which is precisely the defect the reconciliation in
+	//     `TestCheck_RealTree` exists to prevent.
 	//
-	// Meio-varrer produz um denominador que nao e' nem 24 nem 28, e um
-	// denominador instavel e' pior que um escopo declarado. O escopo esta'
-	// declarado aqui e a fracao aparece no `Summary()`.
+	// Half-scanning yields a denominator that is neither one nor the other, and
+	// an unstable denominator is worse than a declared scope. The scope is
+	// declared here and the fraction appears in `Summary()`.
 }
 
+// invocation is one targeted helmfile call: the line of its `helmfile` token
+// (0-based) and the two operands read from its window.
+type invocation struct {
+	line     int
+	helmfile string
+	context  string
+}
+
+// Check walks every taskfile, pairs each helmfile invocation with the file it
+// targets, and compares the two declarations of the target cluster.
 func Check(cfg Config) (Outcome, error) {
 	var out Outcome
-
 	globs := cfg.TaskfileGlobs
 	if len(globs) == 0 {
-		globs = globsPadrao
-
+		globs = defaultGlobs
 	}
-	var taskfiles []string
-	for _, g := range globs {
-		found, err := filepath.Glob(filepath.Join(cfg.RepoRoot, g))
-		if err != nil {
-			return out, fmt.Errorf("globbing %s: %w", g, err)
-		}
-		taskfiles = append(taskfiles, found...)
+	taskfiles, err := taskfilesIn(cfg.RepoRoot, globs)
+	if err != nil {
+		return out, err
 	}
-	sort.Strings(taskfiles)
 
-	declaredCache := map[string]string{}
-	undeclaredSet := map[string]bool{}
-
+	c := classifier{root: cfg.RepoRoot, declared: map[string]string{}, undeclared: map[string]bool{}, out: &out}
 	for _, tf := range taskfiles {
 		raw, err := os.ReadFile(tf)
 		if err != nil {
@@ -193,115 +192,144 @@ func Check(cfg Config) (Outcome, error) {
 		}
 		rel, _ := filepath.Rel(cfg.RepoRoot, tf)
 		lines := strings.Split(string(raw), "\n")
-
-		// Uma invocacao pode casar o token `helmfile` em MAIS DE UMA linha — o
-		// proprio caminho o contem (`-f infra/helmfile/...`), e em script a
-		// invocacao quebra em varias linhas com `\`. Sem esta desduplicacao a
-		// mesma ocorrencia de `--kube-context` era pareada uma vez por linha que
-		// casasse, e a varredura reportava 36 pareamentos para 24 ocorrencias
-		// reais. Quem pegou foi a reconciliacao contra a contagem independente em
-		// `TestCheck_RealTree`, que existe exatamente para isso (B-078).
-		contextoJaPareado := map[int]bool{}
-
-		for i, line := range lines {
-			if !helmfileTokenRe.MatchString(line) {
-				continue
-			}
-			janela := windowFrom(lines, i)
-			ctxLinha := -1
-			for k, l := range janela {
-				if contextFlagRe.MatchString(l) {
-					ctxLinha = i + k
-					break
-				}
-			}
-			if ctxLinha >= 0 && contextoJaPareado[ctxLinha] {
-				continue
-			}
-			window := joinNonComment(janela)
-
-			fm := fileFlagRe.FindStringSubmatch(window)
-			cm := contextFlagRe.FindStringSubmatch(window)
-			if fm == nil || cm == nil {
-				continue // not a targeted invocation (e.g. a bare `helmfile sync` in a doc block)
-			}
-			hfRel, invoked := fm[1], cm[1]
-
-			// O CAMINHO tambem pode ser parametrizado, e nao so' o contexto — e' o
-			// caso comum nos invocadores em script (`-f "$HELMFILE_PATH"`,
-			// `-f "${REPO_ROOT}/infra/..."`). Sem esta guarda o gate tentava ler o
-			// literal como arquivo, falhava, e classificava como "helmfile que NAO
-			// declara contexto" — uma acusacao grave inventada por um caminho que
-			// ele simplesmente nao consegue resolver. Fora de alcance estatico e'
-			// a classificacao honesta (B-078).
-			if ctxLinha >= 0 {
-				contextoJaPareado[ctxLinha] = true
-			}
-
-			if parameterised(hfRel) {
-				out.SkippedParameterised++
-				continue
-			}
-
-			declared, seen := declaredCache[hfRel]
-			if !seen {
-				declared = readDeclaredContext(cfg.RepoRoot, hfRel)
-				declaredCache[hfRel] = declared
-			}
-			if declared == "" {
-				if !undeclaredSet[hfRel] {
-					undeclaredSet[hfRel] = true
-					out.Undeclared = append(out.Undeclared, hfRel)
-				}
-				continue
-			}
-			if m := requiredEnvRe.FindStringSubmatch(declared); m != nil {
-				if !strings.Contains(envAssignmentWindow(lines, i), m[1]+"=") {
-					out.MissingEnv = append(out.MissingEnv,
-						fmt.Sprintf("%s:%d — %s exige %s, e a invocação não a exporta", rel, i+1, hfRel, m[1]))
-				}
-			}
-			if parameterised(invoked) || parameterised(declared) {
-				out.SkippedParameterised++
-				continue
-			}
-			out.ComparedCount++
-			if invoked != declared {
-				out.Divergences = append(out.Divergences, Divergence{
-					Taskfile: rel, Line: i + 1, Helmfile: hfRel,
-					Invoked: invoked, Declared: declared,
-				})
-			}
+		for _, inv := range parseInvocations(lines) {
+			c.classify(rel, lines, inv)
 		}
 	}
-
 	sort.Strings(out.Undeclared)
+	return out, verdict(out)
+}
 
-	// The floor comes AFTER the findings: when every invocation diverges, the
-	// counts alone cannot distinguish "worst possible result" from "measured
-	// nothing", and reporting the instrumentation error would bury the finding.
-	//
-	// Divergence is reported before absence because it names a concrete wrong
-	// cluster, while an undeclared helmfile is a latent one. Summary() carries
-	// both counts either way, so neither is hidden by the choice of error.
-	if len(out.Divergences) > 0 {
-		return out, ErrContextDiverges
+// taskfilesIn expands the globs under root, sorted.
+func taskfilesIn(root string, globs []string) ([]string, error) {
+	var taskfiles []string
+	for _, g := range globs {
+		found, err := filepath.Glob(filepath.Join(root, g))
+		if err != nil {
+			return nil, fmt.Errorf("globbing %s: %w", g, err)
+		}
+		taskfiles = append(taskfiles, found...)
 	}
-	if len(out.Undeclared) > 0 {
-		return out, ErrContextNotDeclared
+	sort.Strings(taskfiles)
+	return taskfiles, nil
+}
+
+// parseInvocations finds every targeted helmfile invocation in a taskfile.
+//
+// One invocation can match the `helmfile` token on MORE THAN ONE line — the
+// path itself contains it (`-f infra/helmfile/...`), and a shell invocation
+// wraps across lines with `\`. Without de-duplicating by the line that carries
+// `--kube-context`, the same occurrence was paired once per matching line and
+// the scan reported 36 pairings for 24 real occurrences. The reconciliation
+// against the independent count in `TestCheck_RealTree` caught it (B-078).
+func parseInvocations(lines []string) []invocation {
+	var found []invocation
+	pairedContextLines := map[int]bool{}
+	for i, line := range lines {
+		if !helmfileTokenRe.MatchString(line) {
+			continue
+		}
+		window := windowFrom(lines, i)
+		contextLine := -1
+		for k, l := range window {
+			if contextFlagRe.MatchString(l) {
+				contextLine = i + k
+				break
+			}
+		}
+		if contextLine >= 0 && pairedContextLines[contextLine] {
+			continue
+		}
+		joined := joinNonComment(window)
+		fm := fileFlagRe.FindStringSubmatch(joined)
+		cm := contextFlagRe.FindStringSubmatch(joined)
+		if fm == nil || cm == nil {
+			continue // not a targeted invocation (e.g. a bare `helmfile sync` in a doc block)
+		}
+		if contextLine >= 0 {
+			pairedContextLines[contextLine] = true
+		}
+		found = append(found, invocation{line: i, helmfile: fm[1], context: cm[1]})
 	}
-	if len(out.MissingEnv) > 0 {
-		return out, ErrRequiredEnvNotSet
+	return found
+}
+
+// classifier sorts invocations into the outcome, reading each targeted
+// helmfile's declared context once.
+type classifier struct {
+	root       string
+	declared   map[string]string
+	undeclared map[string]bool
+	out        *Outcome
+}
+
+func (c classifier) classify(rel string, lines []string, inv invocation) {
+	// The PATH can be parameterised too, not only the context — the common case
+	// in script invokers (`-f "$HELMFILE_PATH"`, `-f "${REPO_ROOT}/infra/..."`).
+	// Without this guard the gate tried to read the literal as a file, failed,
+	// and classified it as a "helmfile that declares NO context" — a serious
+	// accusation invented by a path it simply cannot resolve. Out of static
+	// reach is the honest classification (B-078).
+	if parameterised(inv.helmfile) {
+		c.out.SkippedParameterised++
+		return
 	}
-	// The floor measures what the doc-comment promises: zero COMPARISONS. Folding
-	// the parameterised count in here let a tree whose every context is a template
-	// report PASS having compared nothing — `route-auth-coverage: PASS — 0 routes`
-	// with a different subject. The parameterised count is reported, never
-	// counted as coverage.
-	if out.ComparedCount == 0 {
-		return out, ErrNothingCompared
+	declared, seen := c.declared[inv.helmfile]
+	if !seen {
+		declared = readDeclaredContext(c.root, inv.helmfile)
+		c.declared[inv.helmfile] = declared
 	}
-	return out, nil
+	if declared == "" {
+		if !c.undeclared[inv.helmfile] {
+			c.undeclared[inv.helmfile] = true
+			c.out.Undeclared = append(c.out.Undeclared, inv.helmfile)
+		}
+		return
+	}
+	if m := requiredEnvRe.FindStringSubmatch(declared); m != nil {
+		if !strings.Contains(envAssignmentWindow(lines, inv.line), m[1]+"=") {
+			c.out.MissingEnv = append(c.out.MissingEnv,
+				fmt.Sprintf("%s:%d — %s requires %s, and the invocation does not export it", rel, inv.line+1, inv.helmfile, m[1]))
+		}
+	}
+	if parameterised(inv.context) || parameterised(declared) {
+		c.out.SkippedParameterised++
+		return
+	}
+	c.out.ComparedCount++
+	if inv.context != declared {
+		c.out.Divergences = append(c.out.Divergences, Divergence{
+			Taskfile: rel, Line: inv.line + 1, Helmfile: inv.helmfile,
+			Invoked: inv.context, Declared: declared,
+		})
+	}
+}
+
+// verdict turns the outcome into the gate's error.
+//
+// The floor comes AFTER the findings: when every invocation diverges, the
+// counts alone cannot distinguish "worst possible result" from "measured
+// nothing", and reporting the instrumentation error would bury the finding.
+//
+// Divergence is reported before absence because it names a concrete wrong
+// cluster, while an undeclared helmfile is a latent one. Summary() carries
+// both counts either way, so neither is hidden by the choice of error.
+func verdict(out Outcome) error {
+	switch {
+	case len(out.Divergences) > 0:
+		return ErrContextDiverges
+	case len(out.Undeclared) > 0:
+		return ErrContextNotDeclared
+	case len(out.MissingEnv) > 0:
+		return ErrRequiredEnvNotSet
+	case out.ComparedCount == 0:
+		// The floor measures what the doc-comment promises: zero COMPARISONS.
+		// Folding the parameterised count in here let a tree whose every
+		// context is a template report PASS having compared nothing —
+		// `route-auth-coverage: PASS — 0 routes` with a different subject.
+		return ErrNothingCompared
+	}
+	return nil
 }
 
 // yamlBoundaryRe marks where one YAML construct ends and the next begins: a new
