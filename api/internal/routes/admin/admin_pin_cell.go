@@ -30,7 +30,6 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/correlation"
 	audit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
-	"github.com/getloopscale/loopzero/api/internal/services/build"
 
 	"github.com/getloopscale/loopzero/api/internal/services/placement"
 )
@@ -59,13 +58,13 @@ type AdminPinCellResponse struct {
 }
 
 // CellPinner is the service interface for pinning a tenant to a cell.
-// Implementation lives in services/cell_pinner.go (scaffold next).
+// Implementation: services/placement.CellPinner.
 //
 // Errors returned:
 //   - ErrCellNotFound      — cell_id does not exist in cells table.
 //   - ErrCellNotPinnable   — cells.status ∈ {draining, maintenance,
 //     retired}; only 'active' accepts pin.
-//   - ErrCellAtCapacity    — cells.capacity_tenants_max reached.
+//   - ErrCellAtTenantCapacity — cells.capacity_tenants_max reached.
 //   - ErrTenantNotFound    — tenant_id does not exist.
 type CellPinner interface {
 	Pin(ctx context.Context, tenantID, cellID string) (previousCell string, err error)
@@ -135,7 +134,7 @@ func AdminPinCellHandler(pinner CellPinner, audit audit.AuditWriter, apiEnabled 
 			case errors.Is(err, placement.ErrCellNotPinnable):
 				status = http.StatusConflict
 				code = "cell_not_pinnable"
-			case errors.Is(err, build.ErrCellAtCapacity):
+			case errors.Is(err, placement.ErrCellAtTenantCapacity):
 				status = http.StatusConflict
 				code = "cell_at_capacity"
 			}

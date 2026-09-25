@@ -17,8 +17,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/services/build"
-
 	"github.com/getloopscale/loopzero/api/internal/services/placement"
 )
 
@@ -248,10 +246,13 @@ func TestAdminPinCell_CellNotPinnable_Returns409(t *testing.T) {
 	}
 }
 
+// The pinner refuses a full cell with placement.ErrCellAtTenantCapacity (the
+// store's sentinel). The handler used to match build.ErrCellAtCapacity, an
+// error the pin path never returns, so a full cell answered 500.
 func TestAdminPinCell_CellAtCapacity_Returns409(t *testing.T) {
 	env := map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
-	pinner := &fakePinner{err: build.ErrCellAtCapacity}
+	pinner := &fakePinner{err: placement.ErrCellAtTenantCapacity}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, pinner, env, headers)
 	if rec.Code != http.StatusConflict {
 		t.Errorf("expected 409, got %d", rec.Code)
@@ -407,7 +408,7 @@ func TestAdminPinCell_ErrorMappingViaErrorsIs(t *testing.T) {
 		},
 		{
 			name:       "wrapped ErrCellAtCapacity returns 409",
-			err:        fmt.Errorf("pin failed: %w", build.ErrCellAtCapacity),
+			err:        fmt.Errorf("pin failed: %w", placement.ErrCellAtTenantCapacity),
 			wantStatus: http.StatusConflict,
 			wantCode:   "cell_at_capacity",
 		},
