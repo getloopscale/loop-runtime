@@ -37,7 +37,6 @@ var parityCharts = []string{
 	"chaos-mesh",
 	"cloudflared",
 	"cluster-issuer",
-	"harbor",
 	"network-policies",
 	"static-assets",
 	"loopzero-admission-policies",

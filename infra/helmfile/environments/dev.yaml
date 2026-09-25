@@ -30,7 +30,6 @@ replicas:
   controller: 1
   argocd: 1
   gitea: 1
-  harbor: 1
 
 # Resource sizing
 resources:
@@ -50,7 +49,6 @@ certIssuer:
 # Image registries (must match Pulumi outputs).
 registries:
   docrPrefix: "registry.digitalocean.com/loopzero-system/"
-  harborPrefix: "harbor.dev.loopzero.example/loopzero-platform/"
 
 # Loki capacity (B5)
 loki:
@@ -101,8 +99,7 @@ dashboardOrigin: "http://localhost:3000"
 # switch on the environment NAME.
 profile:
   highAvailability: true        # multi-replica Gitea on NFS (values-ha.yaml), distributed MinIO, KEDA HA overlays
-  managedRedis: false           # Gitea/Harbor use a managed Redis; the in-cluster gitea-redis/harbor-redis releases are not installed
-  harbor: true                  # install the Harbor registry mirror
+  managedRedis: false           # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
   kedaHttpAddon: true           # install the KEDA HTTP add-on on the cells
   staticAssets: true            # install the static-assets server on the cells
   loopzeroCloud: true               # install the control plane (loopzero-cloud), unless clusterRole is standalone

@@ -65,7 +65,6 @@ replicas:
   controller: 1
   argocd: 1
   gitea: 1
-  harbor: 1
 
 resources:
   default:
@@ -81,8 +80,6 @@ certIssuer:
   name: selfsigned-issuer
 
 registries:
-  docrPrefix: "harbor.loopzero.local/loopzero-platform/"
-  harborPrefix: "harbor.loopzero.local/loopzero-platform/"
   additionalPrefixes:
     - "k3d-loopzero-registry:5000/"
 
@@ -106,7 +103,6 @@ crossCluster:
   # pair at runtime and patch it onto live objects.
   lokiNodePort: 30120
   giteaApi: "http://host.k3d.internal:3000"
-  harborApi: "http://host.k3d.internal:30002"
   prometheusApi: "http://host.k3d.internal:9090"
 
 velero:
@@ -147,8 +143,7 @@ dashboardRoute:
 # switch on the environment NAME.
 profile:
   highAvailability: false       # multi-replica Gitea on NFS (values-ha.yaml), distributed MinIO, KEDA HA overlays
-  managedRedis: false           # Gitea/Harbor use a managed Redis; the in-cluster gitea-redis/harbor-redis releases are not installed
-  harbor: true                  # install the Harbor registry mirror
+  managedRedis: false           # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
   kedaHttpAddon: true           # install the KEDA HTTP add-on on the cells
   staticAssets: true            # install the static-assets server on the cells
   loopzeroCloud: true               # install the control plane (loopzero-cloud), unless clusterRole is standalone

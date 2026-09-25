@@ -56,7 +56,6 @@ replicas:
   controller: 1   # operator split-binary topology
   argocd: 1
   gitea: 1
-  harbor: 1
 
 # Per D2 — prod tier specs (NOT minimal). Drill mgmt nodes are medium per
 # Pulumi.drill.yaml mgmtNodeSize=s-4vcpu-8gb-amd × 3 nodes. Runtime/build
@@ -76,7 +75,6 @@ certIssuer:
 
 registries:
   docrPrefix: "registry.digitalocean.com/loopzero-drill/"
-  harborPrefix: "harbor.loopzero-drill.example/loopzero-platform/"
 
 loki:
   maxGlobalStreamsPerUser: 50000
@@ -173,8 +171,7 @@ dashboardRoute:
 # switch on the environment NAME.
 profile:
   highAvailability: false       # multi-replica Gitea on NFS (values-ha.yaml), distributed MinIO, KEDA HA overlays
-  managedRedis: true            # Gitea/Harbor use a managed Redis; the in-cluster gitea-redis/harbor-redis releases are not installed
-  harbor: false                 # install the Harbor registry mirror
+  managedRedis: true            # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
   kedaHttpAddon: false          # install the KEDA HTTP add-on on the cells
   staticAssets: false           # install the static-assets server on the cells
   loopzeroCloud: false              # install the control plane (loopzero-cloud), unless clusterRole is standalone

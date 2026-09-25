@@ -237,7 +237,7 @@ releases:
       # BuildKit pipelines that push to k3d-loopzero-registry:5000. Without this
       # allowlist entry the tenant pods are rejected by VAP
       # loopzero-restrict-image-registries on admission. Production envs (drill/prod)
-      # leave it empty so DOCR/Harbor remain the only acceptable prefixes
+      # leave it empty so the chart's registry prefix is the only accepted source
       # (defense-in-depth supply-chain).
       - name: registries.additionalPrefixes[0]
         value: "k3d-loopzero-registry:5000/"

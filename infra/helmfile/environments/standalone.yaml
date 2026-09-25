@@ -22,7 +22,6 @@ replicas:
   controller: 1
   argocd: 1
   gitea: 1
-  harbor: 1
 
 resources:
   default:
@@ -37,11 +36,6 @@ resources:
 certIssuer:
   kind: ClusterIssuer
   name: selfsigned-issuer
-
-registries:
-  # Single in-cluster registry for self-hosting.
-  docrPrefix: "harbor.loopzero.local/loopzero-platform/"
-  harborPrefix: "harbor.loopzero.local/loopzero-platform/"
 
 loki:
   maxGlobalStreamsPerUser: 50000
@@ -78,8 +72,7 @@ dashboardOrigin: "http://localhost:3000"
 # switch on the environment NAME.
 profile:
   highAvailability: false       # multi-replica Gitea on NFS (values-ha.yaml), distributed MinIO, KEDA HA overlays
-  managedRedis: false           # Gitea/Harbor use a managed Redis; the in-cluster gitea-redis/harbor-redis releases are not installed
-  harbor: true                  # install the Harbor registry mirror
+  managedRedis: false           # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
   kedaHttpAddon: true           # install the KEDA HTTP add-on on the cells
   staticAssets: true            # install the static-assets server on the cells
   loopzeroCloud: true               # install the control plane (loopzero-cloud), unless clusterRole is standalone

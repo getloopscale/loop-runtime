@@ -132,7 +132,7 @@ tasks:
   infra:install:core-dashboard-only:
     desc: |
       Install only the 16 core-cluster releases the dashboard demo needs (skips
-      harbor, opencost, chaos-mesh, monitoring, loki, tempo, otel, blackbox,
+      opencost, chaos-mesh, monitoring, loki, tempo, otel, blackbox,
       smoke-test, velero, nfs). Defaults to ENV=dev-public; override with
       ENV=<env>. Per T0.1 of plan 2026-05-29-dashboard-public-integration-
       canonicalization-plan.md.

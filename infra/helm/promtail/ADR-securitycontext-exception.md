@@ -45,7 +45,7 @@ A compromise of the promtail pod allows an attacker to:
 1. **HostPath mount is read-only** — `readOnly: true` on the `/var/log` volumeMount. Promtail cannot write to host filesystem.
 2. **DaemonSet runs in `loki-system` namespace** with PSA `privileged` ONLY for that namespace.
 3. **NetworkPolicy egress** — promtail only allowed to reach Loki service in the same cluster. Cannot exfiltrate to external endpoints.
-4. **Image source** — pulled from Harbor, signed by cosign.
+4. **Image source** — the upstream chart's default image, pulled from its vendor registry. This item used to say "pulled from Harbor, signed by cosign"; neither held — no values override pointed the image at Harbor, and Harbor was retired on 2026-09-25 (docs/decisions.md, "Retire Harbor").
 5. **Resource limits** — CPU/memory limits prevent DoS via hostPath read flooding.
 6. **Capability minimization** — only `DAC_READ_SEARCH` added; `SYS_ADMIN` and other dangerous caps NOT granted.
 

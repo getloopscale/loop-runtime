@@ -58,7 +58,7 @@
           "properties": {
             "scripts": {
               "type": "object",
-              "description": "Map of script-name → SQL. B27 requires CREATE DATABASE for gitea/kratos/hydra/harbor here."
+              "description": "Map of script-name → SQL. B27 requires CREATE DATABASE for gitea/kratos/hydra here."
             }
           }
         },

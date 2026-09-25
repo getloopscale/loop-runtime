@@ -110,7 +110,6 @@ tasks:
       Run render-time tests for a SINGLE chart.
       Usage: task helm:test:chart -- loopzero-api-published
              task helm:test:chart -- loopzero-cloud-published
-             task helm:test:chart -- harbor
       Faster than full suite (~1-30s per chart). Useful while iterating
       on a chart change.
     dir: infra/tests

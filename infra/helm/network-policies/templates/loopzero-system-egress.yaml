@@ -18,7 +18,7 @@ Egress targets (consolidated):
     fallback for cells where the API server lives off-cluster)
   - In-namespace ports 5432 (PostgreSQL), 3000 (Gitea), 9000 (MinIO),
     4444 (Hydra public), 4445 (Hydra admin), 4433 (Kratos public)
-  - External HTTPS (TCP/443) for DOCR, Harbor, GitHub API, Cloudflare API,
+  - External HTTPS (TCP/443) for DOCR, GitHub API, Cloudflare API,
     workload cluster APIs, build cluster Argo Workflows API
   - External TCP/3100 (Loki ingest) and TCP/4317 (Tempo OTel)
   - External UDP/7844 + TCP/443 to 198.41.192.0/24 (cloudflared only)
@@ -80,7 +80,7 @@ spec:
         - protocol: TCP
           port: 443
 
-    # 5. External HTTPS (DOCR, Harbor, GitHub API, Cloudflare API, workload
+    # 5. External HTTPS (DOCR, GitHub API, Cloudflare API, workload
     # cluster APIs, build cluster Argo). Excluding RFC1918 + link-local +
     # multicast keeps the egress out of any in-cluster service we did not
     # explicitly approve above.

@@ -604,7 +604,7 @@ groups it. **Classifying a tool as adopted or missing from memory is forbidden**
 |--------|--------|
 | Identity / Auth | `ory-kratos`, `ory-hydra`, `redis` |
 | Secrets | `openbao-cert`, `openbao-init`, `openbao-snapshot-agent`, `external-secrets`, `loopzero-external-secrets` |
-| Build pipeline | `argo-workflows`, `argo-events`, `argo-events-bus`, `argo-ci-namespace`, `loopzero-ci-workflows`, `harbor` (auxiliary registry; prod uses DOCR) |
+| Build pipeline | `argo-workflows`, `argo-events`, `argo-events-bus`, `argo-ci-namespace`, `loopzero-ci-workflows` |
 | GitOps | `argocd`, `gitea` |
 | Progressive delivery | `argo-rollouts`, `keda`, `keda-http-addon` |
 | Ingress / TLS | `traefik`, `cert-manager`, `cluster-issuer`, `cloudflared` |

@@ -97,7 +97,6 @@ func TestB22KratosNeedsPostgresConditional(t *testing.T) {
 func TestB23ServiceMonitorDisabled(t *testing.T) {
 	files := []string{
 		"../../helm/postgresql/values.yaml",
-		"../../helm/harbor/values.yaml",
 	}
 	for _, f := range files {
 		data, err := os.ReadFile(f)
@@ -166,7 +165,7 @@ func TestB27PostgresInitdbAllDBs(t *testing.T) {
 		t.Fatalf("read postgresql values.yaml: %v", err)
 	}
 	s := string(data)
-	required := []string{"CREATE DATABASE gitea", "CREATE DATABASE kratos", "CREATE DATABASE hydra", "CREATE DATABASE harbor"}
+	required := []string{"CREATE DATABASE gitea", "CREATE DATABASE kratos", "CREATE DATABASE hydra"}
 	for _, r := range required {
 		if !strings.Contains(s, r) {
 			t.Errorf("B27 regression: postgresql initdb missing `%s`", r)

@@ -7,7 +7,7 @@ kind: ClusterOriginIssuer
 metadata:
   name: cloudflare-origin-ca
   annotations:
-    loopzero.io/purpose: "TLS for UIs served only via Cloudflare (argocd, auth, cloud, harbor)"
+    loopzero.io/purpose: "TLS for UIs served only via Cloudflare (argocd, auth, cloud)"
     loopzero.io/rotation: "Annual review; certs valid up to 15y but operational rotation required"
 spec:
   requestType: OriginRSA  # or OriginECC

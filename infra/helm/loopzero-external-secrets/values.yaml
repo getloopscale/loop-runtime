@@ -211,8 +211,6 @@ externalSecrets:
         vaultKey: spaces/access_key_id
       - secretKey: SPACES_SECRET_ACCESS_KEY
         vaultKey: spaces/secret_access_key
-      - secretKey: HARBOR_ADMIN_PASSWORD
-        vaultKey: harbor/admin_password
 
   # === platform binary — Vault SPKI cert pin (T2.5 of openbao-adoption v1.3) ===
   # Written by openbao-init/templates/spki-extractor-cronjob.yaml every 5 min.

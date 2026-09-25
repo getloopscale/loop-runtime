@@ -19,7 +19,6 @@
 #   LOOPZERO_REGISTRY_ENDPOINT, LOOPZERO_BUCKET_NAME, LOOPZERO_BUCKET_ENDPOINT
 #   LOOPZERO_SPACES_KEY, LOOPZERO_SPACES_SECRET
 #   LOOPZERO_GITEA_ADMIN_PASSWORD, LOOPZERO_GITEA_TOKEN
-#   LOOPZERO_HARBOR_ADMIN_PASSWORD, LOOPZERO_HARBOR_REDIS_PASSWORD
 #
 # Backup: every successful run dumps loopzero-platform-secrets to
 #   ~/.loopzero/backups/secrets-mgmt-{env}-{timestamp}.yaml (chmod 600)
@@ -438,20 +437,7 @@ VELERO_CLOUD_INI="$(printf '[default]\naws_access_key_id=%s\naws_secret_access_k
 apply_secret velero-s3-credentials velero-system \
   --from-literal=cloud="$VELERO_CLOUD_INI"
 
-# 4) Harbor admin password — IDEMPOTENT.
-HARBOR_PWD="${LOOPZERO_HARBOR_ADMIN_PASSWORD:-$(get_or_generate harbor-admin loopzero-system password)}"
-apply_secret harbor-admin loopzero-system \
-  --from-literal=password="$HARBOR_PWD"
-
-# 5) Harbor Redis credentials — IDEMPOTENT.
-# Host comes from Pulumi (L1 DO Managed Valkey), password is the Valkey password.
-HARBOR_REDIS_PWD="${LOOPZERO_HARBOR_REDIS_PASSWORD:-$(get_or_generate harbor-redis-credentials loopzero-system password)}"
-apply_secret harbor-redis-credentials loopzero-system \
-  --from-literal=password="$HARBOR_REDIS_PWD" \
-  --from-literal=host="${LOOPZERO_HARBOR_REDIS_HOST:-harbor-redis-master.loopzero-system.svc.cluster.local}" \
-  --from-literal=port="${LOOPZERO_HARBOR_REDIS_PORT:-6379}"
-
-# 6) Registry pull secret (LoopZero's DOCR/Harbor) — passthrough from Pulumi outputs.
+# 4) Registry pull secret (LoopZero's DOCR) — passthrough from Pulumi outputs.
 if [[ -n "${LOOPZERO_REGISTRY_ENDPOINT:-}" ]]; then
   REG_AUTH=$(printf '%s' "${LOOPZERO_SPACES_KEY:-}:${LOOPZERO_SPACES_SECRET:-}" | base64 -w0)
   cat <<EOF | kubectl apply -f - >/dev/null
@@ -467,7 +453,7 @@ EOF
   log "secret loopzero-system/loopzero-registry-pull applied"
 fi
 
-# 7) Cluster kubeconfigs for loopzero-api / controllers (B36 fix).
+# 5) Cluster kubeconfigs for loopzero-api / controllers (B36 fix).
 #
 # B36 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — loopzero-api requires kubeconfigs
 # for mgmt/build/runtime clusters to submit Argo Workflows and reconcile
@@ -555,9 +541,9 @@ KUBECONFIG_EOF
     --from-literal=cell-0.kubeconfig="$RUNTIME_KC"
 fi
 
-# 8) Backup all LoopZero-managed Secrets for disaster recovery.
+# 6) Backup all LoopZero-managed Secrets for disaster recovery.
 backup_secrets "secrets-${CLUSTER}-${ENV}" \
   loopzero-system/loopzero-db-credentials loopzero-system/gitea-admin loopzero-system/minio-credentials \
-  loopzero-system/harbor-admin loopzero-system/harbor-redis-credentials loopzero-system/loopzero-registry-pull
+  loopzero-system/loopzero-registry-pull
 
 log "mgmt secrets generated for env=$ENV (idempotent — re-runs preserve values)"

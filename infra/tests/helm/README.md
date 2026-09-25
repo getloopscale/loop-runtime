@@ -19,7 +19,6 @@ task helm:test
 
 # Single chart (~1-30s) — fastest iteration loop
 task helm:test:chart -- loopzero-api
-task helm:test:chart -- harbor
 ```
 
 ## Why a separate test tier?

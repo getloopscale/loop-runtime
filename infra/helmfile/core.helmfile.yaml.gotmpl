@@ -60,8 +60,6 @@ repositories:
     url: https://open-telemetry.github.io/opentelemetry-helm-charts
   - name: ory
     url: https://k8s.ory.sh/helm/charts
-  - name: harbor
-    url: https://helm.goharbor.io
   - name: nfs-ganesha
     url: https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/
   - name: metrics-server
@@ -95,7 +93,7 @@ repositories:
 # lint, diff) and required cluster connectivity even in offline validation.
 # Required Secrets:
 #   loopzero-system/{loopzero-db-credentials,gitea-admin,minio-credentials,
-#                harbor-admin,harbor-redis-credentials,loopzero-registry-pull}
+#                loopzero-registry-pull}
 # Apply once: bash infra/helmfile/scripts/generate-secrets.sh <env> mgmt
 # ---------------------------------------------------------------------------
 
@@ -382,38 +380,6 @@ releases:
     version: 9.2.0
     values:
       - ../helm/blackbox-exporter/values.yaml
-
-  - name: harbor-redis
-    namespace: loopzero-system
-    chart: bitnami/redis
-    version: 19.6.4
-    # Bug #15 LIVE FIX: drill uses DO Managed Valkey (prod parity).
-    # Harbor in drill connects via LOOPZERO_HARBOR_REDIS_HOST/PASSWORD env vars
-    # set by drill-helmfile-bootstrap.sh from Pulumi outputs.
-    installed: {{ not .Values.profile.managedRedis }}
-    values:
-      - ../helm/redis/values.yaml
-
-  - name: harbor
-    namespace: loopzero-system
-    chart: harbor/harbor
-    version: 1.16.2
-    # Plan 2026-05-19-drill-skills-rigor-restoration Bug #1 (Phase 4 LIVE):
-    # Harbor has RWO PVCs (jobservice + registry) that block helm upgrade
-    # rolling restarts — new pod can't attach until old pod releases PVC.
-    # Drill uses DOCR directly (not Harbor as registry proxy) per Bug #16.
-    # Disable Harbor in drill — saves provision time + eliminates PVC conflict.
-    # Production keeps Harbor for image scanning + offline cache.
-    installed: {{ .Values.profile.harbor }}
-    needs:
-      - cert-manager/cert-manager
-      - traefik/traefik
-      - loopzero-system/minio
-{{- if not .Values.profile.managedRedis }}
-      - loopzero-system/harbor-redis
-{{- end }}
-    values:
-      - ../helm/harbor/values.yaml
 
   # Wave 1: Identity (depends on database via env vars)
   # B22 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — When inClusterPostgres=true

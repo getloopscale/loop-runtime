@@ -39,7 +39,6 @@ replicas:
   controller: 1
   argocd: 1
   gitea: 1
-  harbor: 1
 
 resources:
   default:
@@ -55,10 +54,8 @@ certIssuer:
   name: selfsigned-issuer
 
 registries:
-  docrPrefix: "harbor.loopzero.local/loopzero-platform/"
-  harborPrefix: "harbor.loopzero.local/loopzero-platform/"
   # CHG-2026-04-29-DOGFOOD iter 9 — k3d-loopzero-registry serves images
-  # built locally by the build pipeline (no DOCR/Harbor in dev). The
+  # built locally by the build pipeline (no DOCR in dev). The
   # tenant-id segment is intentionally NOT pinned: LoopZero names images
   # `<registry>/<tenant>/<project>-<app>:<sha>`, so the prefix needs
   # to cover all tenants in this k3d cluster.
@@ -91,7 +88,6 @@ crossCluster:
   # pair at runtime and patch it onto live objects.
   lokiNodePort: 30120
   giteaApi: "http://host.k3d.internal:3000"
-  harborApi: "http://host.k3d.internal:30002"
   prometheusApi: "http://host.k3d.internal:9090"
 
 # velero-backup-dr-plan v1.0 / T0.2 + ADR D5 — Velero BSL targets in-cluster
@@ -166,8 +162,7 @@ ciCronsEnabled: false
 # switch on the environment NAME.
 profile:
   highAvailability: false       # multi-replica Gitea on NFS (values-ha.yaml), distributed MinIO, KEDA HA overlays
-  managedRedis: false           # Gitea/Harbor use a managed Redis; the in-cluster gitea-redis/harbor-redis releases are not installed
-  harbor: true                  # install the Harbor registry mirror
+  managedRedis: false           # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
   kedaHttpAddon: true           # install the KEDA HTTP add-on on the cells
   staticAssets: true            # install the static-assets server on the cells
   loopzeroCloud: true               # install the control plane (loopzero-cloud), unless clusterRole is standalone

@@ -72,8 +72,8 @@ externalSecrets:
         vaultBinaryOverride: api
       - secretKey: DIGITALOCEAN_TOKEN
         vaultKey: digitalocean/token
-      - secretKey: HARBOR_ADMIN_PASSWORD
-        vaultKey: harbor/admin_password
+      - secretKey: SPACES_ACCESS_KEY_ID
+        vaultKey: spaces/access_key_id
 EOF
 
 # --- Fixture values file (operator-provided) ---
@@ -84,7 +84,7 @@ secrets:
     stripe/secret_key: "sk_test_stripe"
   operators:
     digitalocean/token: "dop_v1_test"
-    # harbor/admin_password intentionally absent → SKIP path
+    # spaces/access_key_id intentionally absent → SKIP path
 EOF
 
 # --- Fixture values file with ALL keys (idempotency case) ---
@@ -95,7 +95,7 @@ secrets:
     stripe/secret_key: "sk_test_stripe"
   operators:
     digitalocean/token: "dop_v1_test"
-    harbor/admin_password: "harbor_test_pass"
+    spaces/access_key_id: "spaces_test_key"
 EOF
 
 MOCK_BIN="$(mktemp -d)"
@@ -179,7 +179,7 @@ env -u BAO_ADDR -u BAO_TOKEN BAO_LOG="$BAO_LOG" PATH="$MOCK_BIN:$PATH" bash "$TA
   --secret-values-file "$WORKDIR/values.yaml" \
   --inventory "$WORKDIR/inventory.yaml" \
   --dry-run >"$out" 2>"$err"; rc=$?
-# Expected: total=5 seeded=4 skipped=1 (harbor missing) failed=0; no bao calls
+# Expected: total=5 seeded=4 skipped=1 (spaces key missing) failed=0; no bao calls
 dry_total=$(grep -oE "total=[0-9]+" "$err" | head -1 | cut -d= -f2)
 dry_seeded=$(grep -oE "seeded=[0-9]+" "$err" | head -1 | cut -d= -f2)
 dry_skipped=$(grep -oE "skipped=[0-9]+" "$err" | head -1 | cut -d= -f2)
@@ -227,7 +227,7 @@ BAO_ADDR="https://mock:8200" BAO_TOKEN="mock_root" BAO_LOG="$BAO_LOG" PATH="$MOC
   --env vault-local \
   --secret-values-file "$WORKDIR/values.yaml" \
   --inventory "$WORKDIR/inventory.yaml" >"$out" 2>"$err"; rc=$?
-# harbor/admin_password absent → 1 SKIP, exit 0 (not 2)
+# spaces/access_key_id absent → 1 SKIP, exit 0 (not 2)
 skipped_count=$(grep -oE "skipped=[0-9]+" "$err" | head -1 | cut -d= -f2)
 failed_count=$(grep -oE "failed=[0-9]+" "$err" | head -1 | cut -d= -f2)
 if [[ "$rc" == "0" ]] && [[ "$skipped_count" == "1" ]] && [[ "$failed_count" == "0" ]]; then
@@ -299,7 +299,7 @@ env -u BAO_ADDR -u BAO_TOKEN BAO_LOG="$BAO_LOG" PATH="$MOCK_BIN:$PATH" bash "$TA
   --dry-run >"$out" 2>"$err"; rc=$?
 # Fixture secrets that MUST NOT appear in script output
 leaked=0
-for secret in "ghp_test_gitea_token" "sk_test_stripe" "dop_v1_test" "harbor_test_pass"; do
+for secret in "ghp_test_gitea_token" "sk_test_stripe" "dop_v1_test" "spaces_test_key"; do
   if grep -qF "$secret" "$out" "$err"; then
     leaked=1
     printf '    LEAK: %s appeared in script output\n' "$secret"

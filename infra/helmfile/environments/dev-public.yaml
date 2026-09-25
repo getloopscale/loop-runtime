@@ -37,7 +37,6 @@ replicas:
   controller: 1
   argocd: 1
   gitea: 1
-  harbor: 1
 
 resources:
   default:
@@ -53,17 +52,14 @@ certIssuer:
   name: selfsigned-issuer
 
 # Plan 2026-06-04-dev-public-docr-fix-forward T1.2 — DOCR REAL for max prod
-# parity (sponsor decision P1 over P2 Harbor / P3 k3d-import workaround).
+# parity (sponsor decision P1 over P3 k3d-import workaround).
 # Platform images (loopzero-api, 4 operators) come from DOCR via `do-registry`
 # imagePullSecret provisioned by `task do-registry:provision` (T1.4).
-# Harbor local kept as SECONDARY (opt-in if operator runs Harbor in parallel).
 # k3d-loopzero-registry stays for BuildKit tenant builds (fast local iteration).
 registries:
   docrPrefix: "registry.digitalocean.com/loopzero-system/"
-  harborPrefix: "harbor.loopzero.local/loopzero-platform/"
   additionalPrefixes:
     - "k3d-loopzero-registry:5000/"
-    - "harbor.loopzero.local/loopzero-platform/"
 
 loki:
   maxGlobalStreamsPerUser: 50000
@@ -91,7 +87,6 @@ crossCluster:
   # record the core server-0 CONTAINER IP here, which docker reassigns on every restart.
   coreApi: "http://host.k3d.internal:13001"
   giteaApi: "http://host.k3d.internal:3000"
-  harborApi: "http://host.k3d.internal:30002"
   prometheusApi: "http://host.k3d.internal:9090"
 
 velero:
@@ -173,8 +168,7 @@ dashboardRoute:
 # switch on the environment NAME.
 profile:
   highAvailability: false       # multi-replica Gitea on NFS (values-ha.yaml), distributed MinIO, KEDA HA overlays
-  managedRedis: false           # Gitea/Harbor use a managed Redis; the in-cluster gitea-redis/harbor-redis releases are not installed
-  harbor: true                  # install the Harbor registry mirror
+  managedRedis: false           # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
   kedaHttpAddon: true           # install the KEDA HTTP add-on on the cells
   staticAssets: true            # install the static-assets server on the cells
   loopzeroCloud: true               # install the control plane (loopzero-cloud), unless clusterRole is standalone

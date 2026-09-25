@@ -100,8 +100,7 @@ securityContext:
 # ---------------------------------------------------------------------------
 # Prometheus metrics — exposed on each component. No ServiceMonitor: the cell
 # cluster runs no Prometheus Operator, so the monitoring.coreos.com/v1 CRD does
-# not exist there and a ServiceMonitor would fail the install (same reason as
-# B23 for Harbor).
+# not exist there and a ServiceMonitor would fail the install (B23).
 # ---------------------------------------------------------------------------
 prometheus:
   operator:

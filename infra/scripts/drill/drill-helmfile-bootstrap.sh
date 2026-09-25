@@ -341,7 +341,6 @@ log "  ✓ 4 DSN secrets reconciled to drill mgmt cluster"
 #   loopzero-system/loopzero-db-credentials (loopzero-api uses .data.uri)
 #   loopzero-system/gitea-admin (gitea chart admin password)
 #   loopzero-system/minio-credentials (rootUser/rootPassword)
-#   loopzero-system/harbor-admin + loopzero-system/harbor-redis-credentials
 #   loopzero-system/loopzero-registry-pull
 #
 # Without these, velero install times out at 900s ("Error: context deadline
@@ -395,10 +394,9 @@ export LOOPZERO_PROFILE="cloud"
 
 # Bug #15 LIVE FIX: Managed Valkey credentials (replaces in-cluster bitnami).
 # Per CTO Golden Rule #0 + ADR-0016 D-6: drill uses DO Managed Valkey,
-# mirrors prod posture. drill helmfile skips gitea-redis + harbor-redis
-# releases when env=drill (installed: false). These env vars feed:
-#   - gitea drill values override (cache/session/queue redis addr)
-#   - generate-secrets.sh harbor-redis-credentials Secret (HOST/PASSWORD)
+# mirrors prod posture. drill helmfile skips the gitea-redis release when
+# env=drill (installed: false). These env vars feed the gitea drill values
+# override (cache/session/queue redis addr).
 REDIS_HOST_VAL="$(pulumi_out redisHost false)"
 REDIS_PORT_VAL="$(pulumi_out redisPort false)"
 REDIS_PASSWORD_VAL="$(pulumi_out redisPassword true)"
@@ -418,14 +416,10 @@ export GITEA_REDIS_HOST="$REDIS_HOST_VAL"
 export GITEA_REDIS_PORT="$REDIS_PORT_VAL"
 export GITEA_REDIS_PASSWORD="$REDIS_PASSWORD_VAL"
 
-# Export for generate-secrets.sh harbor-redis-credentials path (line 303
-# in generate-secrets.sh uses LOOPZERO_HARBOR_REDIS_HOST default fallback).
-export LOOPZERO_HARBOR_REDIS_HOST="$REDIS_HOST_VAL"
-export LOOPZERO_HARBOR_REDIS_PASSWORD="$REDIS_PASSWORD_VAL"
-log "  ✓ Managed Valkey env exported (gitea + harbor will use $REDIS_HOST_VAL:$REDIS_PORT_VAL)"
+log "  ✓ Managed Valkey env exported (gitea will use $REDIS_HOST_VAL:$REDIS_PORT_VAL)"
 
 bash "$HELMFILE_DIR/scripts/generate-secrets.sh" drill mgmt
-log "  ✓ Platform Secrets generated (loopzero-db, gitea, minio, harbor, velero, registry-pull)"
+log "  ✓ Platform Secrets generated (loopzero-db, gitea, minio, velero, registry-pull)"
 
 # Bug #19 LIVE FIX (caught 2026-05-17 iter 12 on loopzero-api CrashLoopBackOff):
 # loopzero-api startup calls setupCellRouter which requires >=1 ClusterCredential
