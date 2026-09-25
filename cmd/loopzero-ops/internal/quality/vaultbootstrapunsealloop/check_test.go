@@ -30,7 +30,7 @@ func writeFixture(t *testing.T, body string) string {
 const canonical = `#!/usr/bin/env bash
 # CANONICAL FIX 2026-06-15: bao rc-independent parse.
 # Root cause: exit-code SEMANTICS + pipefail+bao rc=2 propagation triggered lowercase fallback.
-# Per sponsor mandate 2026-06-15 "sem WORKAROUNDs".
+# Per sponsor mandate 2026-06-15 "sem WORKAROUNDs". # english-only: fixture must carry the verbatim quote
 set -uo pipefail
 
 # --- Step 2: init check ---

@@ -81,10 +81,10 @@ func TestCheck_RenamedTargetWithTheSameEffectIsForbidden(t *testing.T) {
 	if !errors.Is(err, ErrForbiddenShortcut) {
 		t.Fatalf("err = %v; a renamed target with the SAME effect must still fail. violations=%v", err, out.Violations)
 	}
-	// "core context", não "mgmt": a mensagem passou a nomear o cluster pelo nome que ele
-	// tem desde o rename do B-001. O identificador Go segue com `mgmt` porque
-	// `MGMT_CONTEXT` continua sendo um nome de variável aceito — a mensagem é o que o
-	// operador lê, e ela apontava para um cluster que não existe mais.
+	// "core context", not "mgmt": the message now names the cluster by the name it has
+	// had since the B-001 rename. The Go identifier keeps `mgmt` because `MGMT_CONTEXT`
+	// is still an accepted variable name — the message is what the operator reads, and
+	// it pointed at a cluster that no longer exists.
 	if len(out.Violations) != 1 || !strings.Contains(out.Violations[0], "core context") {
 		t.Errorf("violations = %v; want the effect-based finding", out.Violations)
 	}
@@ -141,7 +141,7 @@ func TestCheck_EvasionsAreClosed(t *testing.T) {
 		{"template var", cleanTaskfile + "\n  k3d:x:\n    cmds:\n      - " + secretsSync + " --kube-context {{.CORE_CONTEXT}} sync\n"},
 		{"line continuation", cleanTaskfile + "\n  k3d:x:\n    cmds:\n      - " + secretsSync + " \\\n          --kube-context k3d-loopzero-core sync\n"},
 		{"four-space target", cleanTaskfile + "\n    k3d:secrets:bootstrap-in-core:\n      cmds:\n        - echo hi\n"},
-		{"trailing comment on target", cleanTaskfile + "\n  k3d:secrets:bootstrap-in-core: # atalho\n    cmds:\n      - echo hi\n"},
+		{"trailing comment on target", cleanTaskfile + "\n  k3d:secrets:bootstrap-in-core: # shortcut\n    cmds:\n      - echo hi\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -11,7 +11,7 @@
 // on every fresh init. Vault stayed sealed; operator manually invoked
 // `bao operator unseal $SHARD x3` as workaround.
 //
-// Sponsor mandate 2026-06-15 "sem WORKAROUNDs": fix canonical means capture
+// Sponsor mandate 2026-06-15 "sem WORKAROUNDs" ("no workarounds"): fix canonical means capture // english-only: verbatim quote of the sponsor mandate
 // stdout first, parse rc-independent, normalize the bool string.
 //
 // Migrated from infra/tests/check-vault-bootstrap-unseal-loop_test.sh
@@ -69,8 +69,8 @@ var (
 	auditExitCodeRE = regexp.MustCompile(`exit-code SEMANTICS`)
 	// E2: pipefail + bao rc=2 rationale.
 	auditPipefailRE = regexp.MustCompile(`pipefail.*bao rc=2`)
-	// E3: sponsor mandate cited.
-	auditSemWorkaroundsRE = regexp.MustCompile(`sem WORKAROUNDs`)
+	// E3: sponsor mandate cited, verbatim, in the language it was given.
+	auditNoWorkaroundsRE = regexp.MustCompile(`sem WORKAROUNDs`) // english-only: verbatim quote the script must carry
 )
 
 // Config controls the check.
@@ -146,7 +146,7 @@ func Check(cfg Config) (Outcome, error) {
 	assertMatch("audit trail: CANONICAL FIX 2026-06-15 marker", auditCanonicalFixRE)
 	assertMatch("audit trail: exit-code SEMANTICS rationale", auditExitCodeRE)
 	assertMatch("audit trail: pipefail+bao rc=2 rationale", auditPipefailRE)
-	assertMatch("audit trail: sponsor mandate 'sem WORKAROUNDs' cited", auditSemWorkaroundsRE)
+	assertMatch("audit trail: sponsor no-workarounds mandate cited", auditNoWorkaroundsRE)
 
 	if len(failures) > 0 {
 		return Outcome{Failures: failures}, ErrViolations

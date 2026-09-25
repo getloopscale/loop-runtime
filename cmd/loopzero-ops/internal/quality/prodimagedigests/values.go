@@ -99,8 +99,8 @@ func scanChartValues(chartsRoot string, out *Outcome) error {
 			Kind: KindMissingDigest,
 			File: valuesPath,
 			Text: fmt.Sprintf(
-				"image.digest ausente — o chart usa `loopzero-common.image`, que prefere digest e "+
-					"cai para `tag: %s`; a referência efetiva do install padrão é mutável",
+				"image.digest missing — the chart uses `loopzero-common.image`, which prefers a digest and "+
+					"falls back to `tag: %s`; the effective reference of the default install is mutable",
 				orPlaceholder(doc.Image.Tag)),
 		})
 	}
@@ -138,7 +138,7 @@ func chartDefersToHelper(chartDir string) (bool, error) {
 
 func orPlaceholder(tag string) string {
 	if strings.TrimSpace(tag) == "" {
-		return "(ausente — cai para .Chart.AppVersion)"
+		return "(missing — falls back to .Chart.AppVersion)"
 	}
 	return tag
 }

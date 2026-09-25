@@ -61,11 +61,11 @@ const taskfileGlob = "taskfiles/*.yml"
 
 // mgmtContextVars are Taskfile variables that resolve to the core context.
 //
-// O nome do identificador guarda `mgmt` DE PROPOSITO: `MGMT_CONTEXT` segue sendo um
-// nome de variavel aceito na lista abaixo, e renomear o identificador sem renomear o
-// que ele casa faria o codigo dizer uma coisa e verificar outra. As MENSAGENS, que o
-// operador le, foram atualizadas para `core` — elas nomeavam um cluster que nao existe
-// mais desde o rename do B-001.
+// The identifier keeps `mgmt` ON PURPOSE: `MGMT_CONTEXT` is still an accepted
+// variable name in the list below, and renaming the identifier without renaming what
+// it matches would make the code say one thing and check another. The MESSAGES, which
+// the operator reads, were updated to `core` — they named a cluster that has not
+// existed since the B-001 rename.
 // Measured: Taskfile.yml defines CORE_CONTEXT: k3d-loopzero-core, and
 // taskfiles/infra.yml writes `--kube-context {{.CORE_CONTEXT}}` — the repo's
 // dominant style. A literal-only scan would miss the way the repo actually
@@ -105,7 +105,7 @@ var ErrForbiddenShortcut = errors.New(
 var ErrNothingScanned = errors.New("taskfiles/k3d.yml produced no lines to scan; the boundary was not verified")
 
 // targetRe accepts any indentation and a trailing comment — an earlier version
-// required exactly two spaces and end-of-line, so `  x-in-core: # atalho` and a
+// required exactly two spaces and end-of-line, so `  x-in-core: # shortcut` and a
 // four-space target both slipped through.
 var targetRe = regexp.MustCompile(`^\s+([a-zA-Z0-9:_.-]*bootstrap-in-core[a-zA-Z0-9:_.-]*):\s*(#.*)?$`)
 

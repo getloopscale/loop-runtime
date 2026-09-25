@@ -140,52 +140,52 @@ func TestRealTreeIsClean(t *testing.T) {
 // invisible from inside: every file it opened was clean, so it reported PASS over the subset
 // it could see. That is the shape this repository keeps finding — a green that measured less
 // than it appeared to.
-func TestPegaInvocacaoDeScriptsSemPrefixoDeSkills(t *testing.T) {
+func TestCatchesScriptInvocationWithoutSkillsPrefix(t *testing.T) {
 	// `scripts/…` at the ecosystem root has the same defect and the same fix: it resolves in
 	// the standalone kit and nowhere else.
-	linha := `python3 scripts/check_xrefs.py --strict`
-	if achados := scanLine(linha); len(achados) == 0 {
-		t.Errorf("uma invocacao de `scripts/…` sem prefixo nao foi acusada; ela quebra num "+
-			"consumidor exatamente como `skills/…`, e o gate so' olhava a segunda forma: %q", linha)
+	line := `python3 scripts/check_xrefs.py --strict`
+	if findings := scanLine(line); len(findings) == 0 {
+		t.Errorf("an unprefixed `scripts/…` invocation was not flagged; it breaks in a "+
+			"consumer exactly like `skills/…`, and the gate only looked at the latter form: %q", line)
 	}
 }
 
-func TestNaoAcusaAFormaQueResolveNosDoisLayouts(t *testing.T) {
-	// A contrapartida, e ela e' o que impede o conserto de virar ruido: a forma inline que o
-	// kit passou a enviar tem de passar.
-	for _, linha := range []string{
+func TestDoesNotFlagTheFormThatResolvesInBothLayouts(t *testing.T) {
+	// The counterpart, and it is what keeps the fix from turning into noise: the inline form
+	// the kit started shipping has to pass.
+	for _, line := range []string{
 		`python3 "$([ -d .claude/skills ] && echo .claude || echo .)/scripts/check_xrefs.py"`,
 		`python3 "$ECO/skills/release/scripts/compute_next_version.py"`,
 		`python3 .claude/scripts/check_xrefs.py`,
 	} {
-		if achados := scanLine(linha); len(achados) > 0 {
-			t.Errorf("acusou a forma que JA resolve nos dois layouts: %q", linha)
+		if findings := scanLine(line); len(findings) > 0 {
+			t.Errorf("flagged the form that ALREADY resolves in both layouts: %q", line)
 		}
 	}
 }
 
-// Um `.local.md` na raiz do ecossistema e' estado de sessao, nao instrucao enviada: ele e'
-// gitignored e existe so' na maquina de quem rodou. Reprovar o repositorio por causa dele
-// seria o gate falhando por algo que nenhum consumidor recebe — e a raiz do `.claude/` carrega
-// um hoje (`codebase-architect-loop.local.md`, 16 invocacoes).
-func TestIgnoraArquivoLocalDeSessaoNaRaiz(t *testing.T) {
-	raiz := t.TempDir()
-	eco := filepath.Join(raiz, ".claude")
-	if err := os.MkdirAll(filepath.Join(eco, "skills", "alguma"), 0o755); err != nil {
+// A `.local.md` at the ecosystem root is session state, not shipped instruction: it is
+// gitignored and exists only on the machine of whoever ran it. Failing the repository over it
+// would be the gate failing on something no consumer receives — and the `.claude/` root carries
+// one today (`codebase-architect-loop.local.md`, 16 invocations).
+func TestIgnoresLocalSessionFileAtTheRoot(t *testing.T) {
+	root := t.TempDir()
+	eco := filepath.Join(root, ".claude")
+	if err := os.MkdirAll(filepath.Join(eco, "skills", "some"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(eco, "skills", "alguma", "SKILL.md"), []byte("ok\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(eco, "skills", "some", "SKILL.md"), []byte("ok\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// A forma quebrada, num arquivo que nunca sai desta maquina.
+	// The broken form, in a file that never leaves this machine.
 	if err := os.WriteFile(filepath.Join(eco, "loop.local.md"),
 		[]byte("python3 scripts/route_domain.py x\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	out, err := Check(Config{RepoRoot: raiz})
+	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
-		t.Fatalf("err = %v; um .local.md nao pode reprovar o repositorio: %+v", err, out.Findings)
+		t.Fatalf("err = %v; a .local.md must not fail the repository: %+v", err, out.Findings)
 	}
 }
 

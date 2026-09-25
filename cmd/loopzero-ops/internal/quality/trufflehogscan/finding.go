@@ -16,13 +16,13 @@ import (
 
 // ErrUnparseable means a line that IS JSON failed to parse.
 //
-// Pular em silêncio o que não parseia converte PERDA DE DADOS em "não achei nada" — a
-// forma exata do defeito que este pacote existe para matar (EC-3). Ruído de log, que
-// nem começa com `{`, é outra coisa e segue ignorado.
-var ErrUnparseable = errors.New("saída do scanner ilegível — perda de dados não é ausência de achado")
+// Silently skipping what does not parse turns DATA LOSS into "found nothing" — the
+// exact shape of the defect this package exists to kill (EC-3). Log noise, which
+// does not even start with `{`, is something else and is still ignored.
+var ErrUnparseable = errors.New("unreadable scanner output — data loss is not the absence of a finding")
 
-// maxLine — uma linha de achado carrega DetectorDescription e ExtraData; o padrão de
-// 64KiB de bufio.Scanner corta EM SILÊNCIO (EC-6).
+// maxLine — a finding line carries DetectorDescription and ExtraData; bufio.Scanner's
+// 64KiB default cuts SILENTLY (EC-6).
 const maxLine = 1024 * 1024
 
 // Finding is one trufflehog candidate.
@@ -37,22 +37,22 @@ type Finding struct {
 
 // ID is the stable identity written to the versioned baseline.
 //
-// É `sha256(detector + "\0" + bruto)` truncado, e NUNCA o bruto: o arquivo é versionado,
-// então gravar o valor vazaria o que o gate existe para impedir. O detector entra no hash
-// porque o mesmo texto reconhecido por dois detectores são dois candidatos.
+// It is a truncated `sha256(detector + "\0" + raw)`, and NEVER the raw value: the file is versioned,
+// so writing the value would leak what the gate exists to prevent. The detector goes into the hash
+// because the same text recognized by two detectors is two candidates.
 func (f Finding) ID() string { return f.id }
 
 // String renders a finding without ever exposing the secret.
 func (f Finding) String() string {
 	where := f.File
 	if where == "" {
-		where = "(mensagem de commit)"
+		where = "(commit message)"
 	}
 	return fmt.Sprintf("%s [%s] %s", where, f.Detector, f.id)
 }
 
 // rawFinding mirrors only the fields this gate reads. Everything else in trufflehog's
-// JSON — inclusive o bruto — morre neste struct e não alcança nenhum arquivo.
+// JSON — including the raw value — dies in this struct and reaches no file.
 type rawFinding struct {
 	DetectorName   string `json:"DetectorName"`
 	Raw            string `json:"Raw"`
@@ -81,10 +81,10 @@ func ParseFindings(r io.Reader) ([]Finding, error) {
 		}
 		var rf rawFinding
 		if err := json.Unmarshal([]byte(line), &rf); err != nil {
-			return nil, fmt.Errorf("%w: linha %d: %w", ErrUnparseable, n, err)
+			return nil, fmt.Errorf("%w: line %d: %w", ErrUnparseable, n, err)
 		}
 		if rf.DetectorName == "" {
-			continue // JSON válido que não é achado
+			continue // valid JSON that is not a finding
 		}
 		out = append(out, Finding{
 			Detector: rf.DetectorName,

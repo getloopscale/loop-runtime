@@ -15,40 +15,40 @@ import (
 	"strings"
 )
 
-// # Por que a enumeração é AST, e por que o escopo deixou de ser um arquivo
+// # Why the enumeration is AST-based, and why the scope stopped being one file
 //
-// O enumerador anterior era um regex sobre linhas: `^\s*r\.(?:Get|Post|…)\(`. Ele
-// exige que `r.` seja seguido IMEDIATAMENTE pelo verbo — e a forma mais numerosa do
-// roteador real é `r.With(rateLimitMiddlewares...).Post(…)`, em que vem `With`.
+// The previous enumerator was a line regex: `^\s*r\.(?:Get|Post|…)\(`. It requires
+// `r.` to be followed IMMEDIATELY by the verb — and the most numerous shape in the
+// real router is `r.With(rateLimitMiddlewares...).Post(…)`, where `With` comes next.
 //
-// Medido 2026-08-17: 42 registros diretos, **28** na forma encadeada, 1 montado por
-// helper noutro arquivo. O gate reportava `42 routes` sobre ~71 e vendia a garantia
-// "toda rota pública está atrás de Auth" verificando 59% delas.
+// Measured 2026-08-17: 42 direct registrations, **28** in the chained shape, 1 mounted
+// by a helper in another file. The gate reported `42 routes` over ~71 and sold the
+// guarantee "every public route is behind Auth" while checking 59% of them.
 //
-// Nenhuma das 29 invisíveis estava insegura — mas por POSIÇÃO, não por verificação:
-// 27 caem dentro de `registerProtectedRoutes` e uma está no allowlist. A linha 202 do
-// roteador (`r.With(middleware.RequireAdminService).Post(`) prova que a forma cega
-// também é usada FORA das faixas protegidas, então a próxima nessa forma poderia
-// nascer aberta com o gate dizendo PASS.
+// None of the 29 invisible ones was unsafe — but by POSITION, not by verification:
+// 27 fall inside `registerProtectedRoutes` and one is in the allowlist. Line 202 of the
+// router (`r.With(middleware.RequireAdminService).Post(`) proves the blind shape is
+// also used OUTSIDE the protected ranges, so the next one in that shape could be born
+// open with the gate saying PASS.
 //
-// A AST enxerga a CHAMADA, não a grafia: `r.With(a,b).Post(x)` e `r.Post(x)` são o
-// mesmo `*ast.CallExpr` com `Sel.Name == "Post"`, e o receptor é irrelevante.
+// The AST sees the CALL, not the spelling: `r.With(a,b).Post(x)` and `r.Post(x)` are
+// the same `*ast.CallExpr` with `Sel.Name == "Post"`, and the receiver is irrelevant.
 //
-// Ver MEET-ASYNC-AMENDMENT-2026-08-17-route-auth-coverage-is-blind-to-40-percent.
+// See MEET-ASYNC-AMENDMENT-2026-08-17-route-auth-coverage-is-blind-to-40-percent.
 
 // ErrRouterUnparseable means router.go exists but is not valid Go.
 //
-// Distinto de `ErrRouterNotFound` de propósito: "não achei o arquivo" e "achei e não
-// entendi" são erros de instrumentação diferentes, e colapsá-los faria o gate
-// enumerar zero e reportar o erro errado.
-var ErrRouterUnparseable = errors.New("router.go existe mas não é Go válido — o gate não enumerou nada, e isso é erro de instrumentação, não ausência de rotas")
+// Distinct from `ErrRouterNotFound` on purpose: "I did not find the file" and "I found
+// it and did not understand it" are different instrumentation errors, and collapsing
+// them would make the gate enumerate zero and report the wrong error.
+var ErrRouterUnparseable = errors.New("router.go exists but is not valid Go — the gate enumerated nothing, and that is an instrumentation error, not an absence of routes")
 
 // ErrUndeclaredOffRouterMount means a production file outside router.go registers a
 // route without a declared reason.
-var ErrUndeclaredOffRouterMount = errors.New("uma rota é registrada fora de router.go sem declaração — o gate não decide se ela está protegida, ele recusa não vê-la")
+var ErrUndeclaredOffRouterMount = errors.New("a route is registered outside router.go without a declaration — the gate does not decide whether it is protected, it refuses not to see it")
 
 // ErrEnumerationBelowFloor means the enumeration collapsed below the declared floor.
-var ErrEnumerationBelowFloor = errors.New("a enumeração ficou abaixo do piso declarado — uma queda pela metade é o modo de falha realista, e recusar apenas o zero nunca a pegaria")
+var ErrEnumerationBelowFloor = errors.New("the enumeration fell below the declared floor — a drop by half is the realistic failure mode, and refusing only zero would never catch it")
 
 // routeVerbs are the chi registration methods. `Handle`/`HandleFunc`/`Method`/
 // `MethodFunc` take the pattern in a later argument, which is why the pattern is
@@ -81,9 +81,9 @@ func enumerateFile(fset *token.FileSet, file *ast.File, rel string) []RouteSite 
 		}
 		pattern, ok := firstRouteLiteral(call.Args)
 		if !ok {
-			// Um verbo sem padrão literal não é enumerável — pode ser uma variável.
-			// Não inventamos o valor: seguir em frente e deixar o piso e a varredura
-			// da árvore cobrirem o buraco é mais honesto que adivinhar.
+			// A verb without a literal pattern is not enumerable — it may be a variable.
+			// We do not invent the value: moving on and letting the floor and the tree
+			// scan cover the hole is more honest than guessing.
 			return true
 		}
 		sites = append(sites, RouteSite{
@@ -218,7 +218,7 @@ func scanOffRouter(root string, declared map[string]string) ([]string, error) {
 
 	err := filepath.WalkDir(apiDir, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return nil //nolint:nilerr // uma árvore sem api/ não é defeito deste gate
+			return nil //nolint:nilerr // a tree without api/ is not this gate's defect
 		}
 		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
@@ -235,22 +235,23 @@ func scanOffRouter(root string, declared map[string]string) ([]string, error) {
 		fset := token.NewFileSet()
 		f, parseErr := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
 		if parseErr != nil {
-			// Um arquivo de produção que não parseia é problema de quem o escreveu,
-			// não deste gate; ignorar aqui evita que ele vire o reportador de erros
-			// de compilação de todo o módulo.
+			// A production file that does not parse is its author's problem, not this
+			// gate's; ignoring it here keeps the gate from becoming the compile-error
+			// reporter for the whole module.
 			return nil //nolint:nilerr
 		}
 		sites := enumerateOnChiRouterParams(fset, f, rel)
 		if len(sites) == 0 {
 			return nil
 		}
-		// Declarada é declarada COM RAZÃO. Uma entrada vazia não declara nada — só
-		// silencia, e silenciar por chave vazia é como uma isenção morre útil.
+		// Declared means declared WITH A REASON. An empty entry declares nothing — it
+		// only silences, and silencing through an empty key is how an exemption stops
+		// being useful.
 		if reason, ok := declared[rel]; ok && strings.TrimSpace(reason) != "" {
 			return nil
 		}
 		for _, s := range sites {
-			undeclared = append(undeclared, fmt.Sprintf("%s:%d  %s %s  (registro fora de router.go, sem declaração em OffRouterMounts)",
+			undeclared = append(undeclared, fmt.Sprintf("%s:%d  %s %s  (registration outside router.go, no declaration in OffRouterMounts)",
 				s.File, s.Line, s.Verb, s.Pattern))
 		}
 		return nil
@@ -258,27 +259,29 @@ func scanOffRouter(root string, declared map[string]string) ([]string, error) {
 	return undeclared, err
 }
 
-// enumerateOnChiRouterParams conta apenas registros feitos sobre um `chi.Router`
-// RECEBIDO COMO PARÂMETRO — isto é, sobre o roteador público, montado de fora.
+// enumerateOnChiRouterParams counts only registrations made on a `chi.Router`
+// RECEIVED AS A PARAMETER — that is, on the public router, mounted from outside.
 //
-// # Por que a distinção é semântica e não uma lista de caminhos
+// # Why the distinction is semantic and not a list of paths
 //
-// A primeira versão desta varredura contava qualquer registro HTTP sob `api/`, e
-// achou 10 sítios. Nove deles não têm nada a ver com o roteador que este gate
-// audita: `/debug/pprof/*` num `http.ServeMux` dedicado e numa porta própria
-// (`api/cmd/main.go`), `/healthz`+`/readyz`+`/metrics` no mux do binário
-// **controller**, e `/metrics` noutro mux (`internal/server/validation.go`).
+// The first version of this scan counted any HTTP registration under `api/`, and
+// found 10 sites. Nine of them have nothing to do with the router this gate audits:
+// `/debug/pprof/*` on a dedicated `http.ServeMux` and its own port
+// (`api/cmd/main.go`), `/healthz`+`/readyz`+`/metrics` on the mux of the
+// **controller** binary, and `/metrics` on another mux (`internal/server/validation.go`).
 //
-// Excluí-los por caminho produziria uma lista de exceções de nove entradas — o
-// mecanismo que o contraditor do MEET apontou como o que envelhece mal, e teria de
-// crescer a cada mux novo. A propriedade que realmente os separa é outra e não
-// envelhece: **rota registrada num `chi.Router` que a função recebeu é ponto de
-// montagem do roteador público; rota num `ServeMux` local é outro servidor.**
+// Excluding them by path would produce a nine-entry exception list — the mechanism
+// the MEET's dissenter pointed to as the one that ages badly, and it would have to
+// grow with every new mux. The property that actually separates them is another one,
+// and it does not age: **a route registered on a `chi.Router` the function received
+// is a mount point of the public router; a route on a local `ServeMux` is another
+// server.**
 //
-// Isto é análise sintática, não de tipos: casa `chi.Router` pela forma da expressão
-// do parâmetro. Um alias local (`type R = chi.Router`) escaparia — e escapa para o
-// lado SEGURO, porque o registro simplesmente não é contado como montagem no
-// roteador público, que é o que ele de fato não é sem alguém provar o contrário.
+// This is syntactic analysis, not type analysis: it matches `chi.Router` by the shape
+// of the parameter expression. A local alias (`type R = chi.Router`) would escape —
+// and it escapes to the SAFE side, because the registration is simply not counted as
+// a mount on the public router, which is what it in fact is not until someone proves
+// otherwise.
 func enumerateOnChiRouterParams(fset *token.FileSet, file *ast.File, rel string) []RouteSite {
 	var sites []RouteSite
 	for _, decl := range file.Decls {

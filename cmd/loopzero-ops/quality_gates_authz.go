@@ -281,6 +281,10 @@ func runOIDCCredAdminLoopzero(args []string) int {
 	}
 	resolveDotRoot(root)
 	outcome, err := oidccredadminloopzero.Check(oidccredadminloopzero.Config{RepoRoot: *root})
+	if err != nil && !errors.Is(err, oidccredadminloopzero.ErrViolations) {
+		fmt.Fprintf(os.Stderr, "oidc-cred-admin-loopzero: ERROR — could not complete scan: %v\n", err)
+		return 1
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "oidc-cred-admin-loopzero: FAIL — %d fabricated credential reference(s):\n", len(outcome.Violations))
 		for _, v := range outcome.Violations {
@@ -491,11 +495,11 @@ func runReadinessSummary(args []string) int {
 	}
 	if !out.Pass {
 		fmt.Fprintf(os.Stderr, "readiness-summary: FAIL — %s\n", out.Summary())
-		for _, v := range out.Violacoes {
-			fmt.Fprintf(os.Stderr, "  %s:%d — %s() persiste .status (%s) sem dobrar o sumario de prontidao, "+
-				"nem em linha nem por defer em quem a chama. Uma passagem por aqui deixa a condicao Ready "+
-				"com o que a passagem ANTERIOR calculou, e isso e lido como atual (ADR-0025 D3, B-105).\n",
-				v.Arquivo, v.Linha, v.Funcao, v.Forma)
+		for _, v := range out.Violations {
+			fmt.Fprintf(os.Stderr, "  %s:%d — %s() persists .status (%s) without folding the readiness summary, "+
+				"neither inline nor by a defer in its caller. A pass through here leaves the Ready condition "+
+				"with what the PREVIOUS pass computed, and that is read as current (ADR-0025 D3, B-105).\n",
+				v.File, v.Line, v.Func, v.Shape)
 		}
 		return 1
 	}

@@ -367,7 +367,7 @@ func TestCheck_AFamilyDeclaredAsALeafIsIncoherent(t *testing.T) {
 	cfg := Config{
 		RepoRoot: root,
 		Allowed:  map[string]map[string]bool{"httpio": {}, "tenants": {"httpio": true}},
-		Leaves:   map[string]bool{"httpio": true, "tenants": true}, // contradição
+		Leaves:   map[string]bool{"httpio": true, "tenants": true}, // contradiction
 	}
 	if _, err := Check(cfg); !errors.Is(err, subpackagefence.ErrIncoherentRegistry) {
 		t.Fatalf("a name declared both a family and a leaf must FAIL before anything is scanned; got %v", err)

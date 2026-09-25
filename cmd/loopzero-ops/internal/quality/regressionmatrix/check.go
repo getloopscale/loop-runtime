@@ -51,8 +51,10 @@ const (
 )
 
 // CanRecurNo is the matrix value (with the diacritic) marking an entry whose
-// regression CANNOT recur safely — a MISS here is critical.
-const CanRecurNo = "NÃO"
+// regression CANNOT recur safely — a MISS here is critical. The matrix is written
+// in Portuguese and "NÃO" means "NO"; this literal is DATA matched against the
+// matrix cells, so it must stay exactly as the matrix spells it.
+const CanRecurNo = "NÃO" // english-only: data matched verbatim against the matrix cells
 
 // Row is one parsed data row of the matrix.
 type Row struct {
@@ -71,7 +73,8 @@ var dataRowRe = regexp.MustCompile(`^\s*\|\s*[0-9]+\s*\|`)
 
 // ParseMatrix extracts the data rows from the matrix markdown. It reads the
 // pipe-delimited table, taking column 1 as ID, column 7 as Verification, and
-// column 8 as "Pode Recorrer?" (1-indexed among the cells BETWEEN the outer
+// column 8 as "Pode Recorrer?" — the matrix's own header, meaning "can it recur?"
+// (1-indexed among the cells BETWEEN the outer
 // pipes — identical to the bash `IFS='|' read` positional parse).
 func ParseMatrix(content string) []Row {
 	var rows []Row

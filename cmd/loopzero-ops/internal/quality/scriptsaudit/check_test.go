@@ -15,9 +15,9 @@ import (
 	"time"
 )
 
-// fixtureRepo materializa um repo sintético em t.TempDir com a estrutura
-// mínima necessária para exercitar ScanRepo + DetectCallers + ProposeDisposition.
-// Retorna o root path; cleanup é automático via t.TempDir().
+// fixtureRepo materializes a synthetic repo in t.TempDir with the minimal
+// structure needed to exercise ScanRepo + DetectCallers + ProposeDisposition.
+// Returns the root path; cleanup is automatic via t.TempDir().
 func fixtureRepo(t *testing.T, files map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
@@ -33,8 +33,8 @@ func fixtureRepo(t *testing.T, files map[string]string) string {
 	return root
 }
 
-// TestScanRepo_FindsAllShellScripts — baseline assertion: ScanRepo retorna
-// todos os .sh do repo, com Path + LOC + LastMod populados.
+// TestScanRepo_FindsAllShellScripts — baseline assertion: ScanRepo returns
+// every .sh in the repo, with Path + LOC + LastMod populated.
 func TestScanRepo_FindsAllShellScripts(t *testing.T) {
 	root := fixtureRepo(t, map[string]string{
 		"infra/scripts/a.sh":            "#!/bin/bash\necho a\n",
@@ -63,8 +63,8 @@ func TestScanRepo_FindsAllShellScripts(t *testing.T) {
 	}
 }
 
-// TestScanRepo_ExcludesNodeModules — vendor/, node_modules/, .git/ devem ser
-// excluídos da varredura.
+// TestScanRepo_ExcludesNodeModules — vendor/, node_modules/, .git/ must be
+// excluded from the scan.
 func TestScanRepo_ExcludesNodeModules(t *testing.T) {
 	root := fixtureRepo(t, map[string]string{
 		"infra/scripts/real.sh":        "#!/bin/bash\necho real\n",
@@ -85,13 +85,13 @@ func TestScanRepo_ExcludesNodeModules(t *testing.T) {
 	}
 }
 
-// TestScanRepo_HandlesSymlinks_NoCycle — EC-07: symlinks são deduplicados
-// (script real é listado UMA vez) e não causam ciclo.
+// TestScanRepo_HandlesSymlinks_NoCycle — EC-07: symlinks are deduplicated
+// (the real script is listed ONCE) and do not cause a cycle.
 func TestScanRepo_HandlesSymlinks_NoCycle(t *testing.T) {
 	root := fixtureRepo(t, map[string]string{
 		"infra/scripts/real.sh": "#!/bin/bash\necho real\n",
 	})
-	// Criar symlink apontando para real.sh
+	// Create a symlink pointing to real.sh
 	linkPath := filepath.Join(root, "infra/scripts/alias.sh")
 	if err := os.Symlink(filepath.Join(root, "infra/scripts/real.sh"), linkPath); err != nil {
 		t.Skipf("symlink not supported on this filesystem: %v", err)
@@ -101,8 +101,9 @@ func TestScanRepo_HandlesSymlinks_NoCycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ScanRepo: %v", err)
 	}
-	// O contrato: lista UMA vez (não duas). Aceitamos seja o real ou o alias
-	// como path canônico — mas NUNCA ambos. Implementação resolve via EvalSymlinks.
+	// The contract: listed ONCE (not twice). We accept either the real one or the
+	// alias as the canonical path — but NEVER both. The implementation resolves via
+	// EvalSymlinks.
 	if len(scripts) > 1 {
 		t.Errorf("expected 1 unique script after symlink dedup, got %d", len(scripts))
 		for _, s := range scripts {
@@ -114,8 +115,8 @@ func TestScanRepo_HandlesSymlinks_NoCycle(t *testing.T) {
 	}
 }
 
-// TestDetectCallers_FindsTaskfileRefs — script invocado por Taskfile.yml ou
-// taskfiles/*.yml deve aparecer com o caller correspondente.
+// TestDetectCallers_FindsTaskfileRefs — a script invoked by Taskfile.yml or
+// taskfiles/*.yml must show up with the corresponding caller.
 func TestDetectCallers_FindsTaskfileRefs(t *testing.T) {
 	root := fixtureRepo(t, map[string]string{
 		"infra/scripts/target.sh": "#!/bin/bash\necho target\n",
@@ -156,8 +157,8 @@ tasks:
 	}
 }
 
-// TestDetectCallers_FindsCIYamlRefs — script referenciado em
-// .github/workflows/*.yml deve aparecer com o caller correspondente.
+// TestDetectCallers_FindsCIYamlRefs — a script referenced in
+// .github/workflows/*.yml must show up with the corresponding caller.
 func TestDetectCallers_FindsCIYamlRefs(t *testing.T) {
 	root := fixtureRepo(t, map[string]string{
 		"infra/scripts/ci-tool.sh": "#!/bin/bash\necho ci\n",
@@ -194,8 +195,8 @@ jobs:
 	}
 }
 
-// TestDetectCallers_FindsCrossScriptRefs — script A.sh que invoca B.sh
-// deve criar caller A em B.
+// TestDetectCallers_FindsCrossScriptRefs — a script A.sh that invokes B.sh
+// must create caller A on B.
 func TestDetectCallers_FindsCrossScriptRefs(t *testing.T) {
 	root := fixtureRepo(t, map[string]string{
 		"infra/scripts/parent.sh": "#!/bin/bash\nbash infra/scripts/child.sh\n",
@@ -227,8 +228,8 @@ func TestDetectCallers_FindsCrossScriptRefs(t *testing.T) {
 	}
 }
 
-// TestProposeDisposition_DeadCode — script com 0 callers + last-mod > 90d
-// é classificado como DELETE-DEAD.
+// TestProposeDisposition_DeadCode — a script with 0 callers + last-mod > 90d
+// is classified as DELETE-DEAD.
 func TestProposeDisposition_DeadCode(t *testing.T) {
 	old := time.Now().Add(-100 * 24 * time.Hour)
 	s := Script{
@@ -243,8 +244,8 @@ func TestProposeDisposition_DeadCode(t *testing.T) {
 	}
 }
 
-// TestProposeDisposition_HermeticTest — X_test.sh é classificado como AUTO-DIE
-// (morre com o pai X.sh).
+// TestProposeDisposition_HermeticTest — X_test.sh is classified as AUTO-DIE
+// (it dies with its parent X.sh).
 func TestProposeDisposition_HermeticTest(t *testing.T) {
 	s := Script{
 		Path:    "infra/tests/scripts/foo_test.sh",
@@ -257,8 +258,8 @@ func TestProposeDisposition_HermeticTest(t *testing.T) {
 	}
 }
 
-// TestProposeDisposition_BareHelmWrapper — script com conteúdo `helm upgrade`
-// é classificado como DELEGATE-HELMFILE (per D2).
+// TestProposeDisposition_BareHelmWrapper — a script whose content is `helm upgrade`
+// is classified as DELEGATE-HELMFILE (per D2).
 func TestProposeDisposition_BareHelmWrapper(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "install.sh")
@@ -301,8 +302,8 @@ func TestScriptHasRealHelmInvocation(t *testing.T) {
 	}
 }
 
-// TestProposeDisposition_PureLogicGate — script pattern `check-*.sh` em
-// infra/scripts/ é candidato a MIGRATE-GO-PUREFN.
+// TestProposeDisposition_PureLogicGate — a script matching `check-*.sh` in
+// infra/scripts/ is a MIGRATE-GO-PUREFN candidate.
 func TestProposeDisposition_PureLogicGate(t *testing.T) {
 	s := Script{
 		Path:    "infra/scripts/check-prod-image-tags.sh",
@@ -382,17 +383,17 @@ func TestProposeDisposition_PureGenerator_StaysGenerator(t *testing.T) {
 }
 
 // TestProposeDisposition_ScriptWithDynamicCaller_NotMarkedDead — EC-03:
-// Quando script é referenciado via interpolação dinâmica (`bash "$VAR"`),
-// caller_count fica em zero (regex não pega), mas a heurística NÃO deve marcar
-// como DELETE-DEAD para esses casos. Esta validação acontece em T1.1 via grep
-// dinâmico; aqui validamos que CallerCount > 0 derruba DELETE-DEAD.
+// When a script is referenced through dynamic interpolation (`bash "$VAR"`),
+// caller_count stays at zero (the regex does not catch it), but the heuristic must
+// NOT mark it DELETE-DEAD in those cases. That validation happens in T1.1 via a
+// dynamic grep; here we validate that CallerCount > 0 rules out DELETE-DEAD.
 func TestProposeDisposition_ScriptWithDynamicCaller_NotMarkedDead(t *testing.T) {
 	old := time.Now().Add(-100 * 24 * time.Hour)
 	s := Script{
 		Path:    "infra/scripts/lib/dispatcher.sh",
 		LOC:     50,
 		LastMod: old,
-		Callers: []string{"infra/scripts/main.sh"}, // tem caller documentado
+		Callers: []string{"infra/scripts/main.sh"}, // has a documented caller
 	}
 	disp := ProposeDisposition(s, time.Now())
 	if disp == "DELETE-DEAD" {
@@ -400,7 +401,7 @@ func TestProposeDisposition_ScriptWithDynamicCaller_NotMarkedDead(t *testing.T) 
 	}
 }
 
-// TestEmitCSV_StableSchema — CSV emite header e linhas com o schema canônico:
+// TestEmitCSV_StableSchema — the CSV emits a header and rows with the canonical schema:
 // path, loc, last_mod_utc, caller_count, disposition, callers
 func TestEmitCSV_StableSchema(t *testing.T) {
 	scripts := []Script{
@@ -452,7 +453,7 @@ func TestEmitCSV_StableSchema(t *testing.T) {
 	}
 }
 
-// TestEmitCSV_DeterministicOrder — output ordenado por path (estável em diff).
+// TestEmitCSV_DeterministicOrder — output sorted by path (stable in a diff).
 func TestEmitCSV_DeterministicOrder(t *testing.T) {
 	scripts := []Script{
 		{Path: "zeta.sh", LOC: 1, LastMod: time.Now(), Disposition: "X"},

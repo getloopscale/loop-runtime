@@ -133,8 +133,8 @@ func runPlatformCRNamespace(args []string) int {
 		fmt.Fprintf(os.Stderr, "platform-cr-namespace: %v\n", err)
 		return 1
 	}
-	fmt.Printf("platform-cr-namespace: PASS — %d CR(s) de plataforma, todos em %s (%d arquivo(s))\n",
-		len(out.Conferidas), platformcrnamespace.NamespaceCanonico, out.Arquivos)
+	fmt.Printf("platform-cr-namespace: PASS — %d platform CR(s), all in %s (%d file(s))\n",
+		len(out.Checked), platformcrnamespace.CanonicalNamespace, out.Files)
 	return 0
 }
 

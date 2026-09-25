@@ -167,23 +167,23 @@ func runTestTargetCoverage(args []string) int {
 		fmt.Fprintln(os.Stderr, "exactly how cmd/loopzero-ops looked covered while no test of it ever ran (B-088).")
 		return 1
 	case errors.Is(err, testtargetcoverage.ErrPackageUncovered):
-		fmt.Fprintf(os.Stderr, "test-target-coverage: FAIL — %d pacote(s) com teste que nenhum alvo roda:\n", len(out.UncoveredPackages))
+		fmt.Fprintf(os.Stderr, "test-target-coverage: FAIL — %d package(s) with tests that no target runs:\n", len(out.UncoveredPackages))
 		for _, p := range out.UncoveredPackages {
 			fmt.Fprintf(os.Stderr, "  %s\n", p)
 		}
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "O MÓDULO tem alvo; ele é que não alcança estas subárvores. Alargue o padrão do")
-		fmt.Fprintln(os.Stderr, "alvo, dê um alvo próprio a elas, ou declare uma isenção de PACOTE com razão e")
-		fmt.Fprintln(os.Stderr, "sunset. Foi exatamente assim que 41 arquivos ficaram invisíveis num módulo que")
-		fmt.Fprintln(os.Stderr, "o gate reportava coberto (B-092/B-114).")
+		fmt.Fprintln(os.Stderr, "The MODULE has a target; it is the target that does not reach these subtrees. Widen")
+		fmt.Fprintln(os.Stderr, "the target's pattern, give them a target of their own, or declare a PACKAGE exemption")
+		fmt.Fprintln(os.Stderr, "with a reason and a sunset. This is exactly how 41 files went unseen in a module the")
+		fmt.Fprintln(os.Stderr, "gate reported as covered (B-092/B-114).")
 		return 1
 	case err != nil:
 		fmt.Fprintf(os.Stderr, "test-target-coverage: %v\n", err)
 		return 2
 	}
-	fmt.Printf("test-target-coverage: PASS — %d módulo(s), %d cobertos, %d isento(s) com razão datada. "+
-		"A granularidade é o PACOTE: um módulo com alvo ainda reprova se o padrão dele não alcançar "+
-		"uma subárvore que tem teste (B-114).\n",
+	fmt.Printf("test-target-coverage: PASS — %d module(s), %d covered, %d exempt with a dated reason. "+
+		"The granularity is the PACKAGE: a module with a target still fails if its pattern does not reach "+
+		"a subtree that has tests (B-114).\n",
 		len(out.Modules), len(out.Covered), len(out.Exempt))
 	return 0
 }
@@ -215,12 +215,12 @@ func runEcosystemValidators(args []string) int {
 	return 0
 }
 
-// runPublishHygiene recusa arquivo versionado VIVO que carregue caminho de workstation.
+// runPublishHygiene refuses a LIVE versioned file that carries a workstation path.
 //
-// Dos 20 repositórios irmãos medidos em 2026-08-17, UM tinha esta trava (o loopzero-rag) —
-// e foi por isso que o vazamento do kit apareceu lá. Nos outros 19 ele envelhecia em
-// silêncio. Este repositório publica charts OCI e imagens, e história publicada é
-// pública RETROATIVAMENTE.
+// Of the 20 sibling repositories measured on 2026-08-17, ONE had this guard (loopzero-rag) —
+// and that is why the kit's leak surfaced there. In the other 19 it aged in silence.
+// This repository publishes OCI charts and images, and published history is public
+// RETROACTIVELY.
 func runPublishHygiene(args []string) int {
 	fs := flag.NewFlagSet("publish-hygiene", flag.ContinueOnError)
 	root := fs.String("root", ".", "repo root directory")
@@ -236,13 +236,13 @@ func runPublishHygiene(args []string) int {
 			fmt.Fprintf(os.Stderr, "  %s:%d — %s\n", f.File, f.Line, f.Text)
 		}
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Troque o caminho absoluto por `~`, `<repo>` ou `<workspace>`, ou declare uma")
-		fmt.Fprintln(os.Stderr, "isenção com razão E sunset em internal/quality/publishhygiene. Registro datado")
-		fmt.Fprintln(os.Stderr, "(docs/wiki, plans/completed, baselines, CHANGELOG) já é isento por desenho:")
-		fmt.Fprintln(os.Stderr, "reescrevê-lo destruiria a evidência do que era verdade então.")
+		fmt.Fprintln(os.Stderr, "Replace the absolute path with `~`, `<repo>` or `<workspace>`, or declare an")
+		fmt.Fprintln(os.Stderr, "exemption with a reason AND a sunset in internal/quality/publishhygiene. A dated")
+		fmt.Fprintln(os.Stderr, "record (docs/wiki, plans/completed, baselines, CHANGELOG) is exempt by design:")
+		fmt.Fprintln(os.Stderr, "rewriting it would destroy the evidence of what was true then.")
 		return 1
 	}
-	fmt.Printf("publish-hygiene: PASS — %d arquivo(s) vivo(s) sem caminho de workstation, %d isento(s) com razão datada\n",
+	fmt.Printf("publish-hygiene: PASS — %d live file(s) with no workstation path, %d exempt with a dated reason\n",
 		out.Scanned, out.Exempt)
 	return 0
 }

@@ -173,11 +173,11 @@ func runTestPyramid(args []string) int {
 	resolveDotRoot(root)
 	basePath := filepath.Join(*root, *base)
 
-	// A etiqueta de PR continua sendo a saída de uma PR só. Ela vem antes de tudo
-	// porque é o único caso em que NÃO medir é a resposta certa.
+	// The PR label remains the way out for a single PR. It comes first because it
+	// is the one case where NOT measuring is the right answer.
 	for _, lbl := range strings.Split(os.Getenv("PR_LABELS"), ",") {
 		if strings.TrimSpace(lbl) == "pyramid-defer" {
-			fmt.Println("[pyramid] etiqueta 'pyramid-defer' — PASS (abra o issue automático)")
+			fmt.Println("[pyramid] label 'pyramid-defer' — PASS (open the automatic issue)")
 			return 0
 		}
 	}
@@ -188,13 +188,13 @@ func runTestPyramid(args []string) int {
 			fmt.Fprintf(os.Stderr, "[pyramid] %v\n", err)
 			return 1
 		}
-		note := "Derivada da arvore por testinventory.Derive, nao declarada (B-106)."
+		note := "Derived from the tree by testinventory.Derive, not declared (B-106)."
 		if err := testpyramid.WriteBaseline(basePath, inv, time.Now().UTC().Format("2006-01-02"), note); err != nil {
 			fmt.Fprintf(os.Stderr, "[pyramid] %v\n", err)
 			return 1
 		}
 		u, i, e := inv.Ratios()
-		fmt.Printf("[pyramid] linha de base congelada: %d arquivos — unit %.1f%% / integração %.1f%% / e2e %.1f%%\n",
+		fmt.Printf("[pyramid] baseline frozen: %d files — unit %.1f%% / integration %.1f%% / e2e %.1f%%\n",
 			inv.Total(), u, i, e)
 		return 0
 	}
@@ -205,16 +205,16 @@ func runTestPyramid(args []string) int {
 		for _, v := range o.Regressions {
 			fmt.Fprintf(os.Stderr, "  %s\n", v)
 		}
-		fmt.Fprintln(os.Stderr, "[pyramid] a catraca só permite melhora; use a etiqueta 'pyramid-defer' para uma PR")
+		fmt.Fprintln(os.Stderr, "[pyramid] the ratchet only allows improvement; use the 'pyramid-defer' label for a single PR")
 		return 1
 	}
-	fmt.Printf("[pyramid] PASS — %d arquivos derivados da árvore: unit %.1f%% / integração %.1f%% / e2e %.1f%%\n",
+	fmt.Printf("[pyramid] PASS — %d files derived from the tree: unit %.1f%% / integration %.1f%% / e2e %.1f%%\n",
 		o.Total, o.UnitPct, o.IntegPct, o.E2EPct)
-	// A distância até o alvo do ADR é reportada e NÃO bloqueia: aquele alvo foi
-	// calibrado contra um arquivo que declarava 0,1% de e2e. Silenciá-la esconderia
-	// a decisão pendente; bloquear nela criaria uma trava que o repo não satisfaz.
+	// The distance to the ADR target is reported and does NOT block: that target was
+	// calibrated against a file that declared 0.1% e2e. Silencing it would hide the
+	// pending decision; blocking on it would create a lock the repo cannot satisfy.
 	for _, g := range o.AspirationGaps {
-		fmt.Printf("[pyramid] distância até o alvo do ADR D7 (reportada, não bloqueia): %s\n", g)
+		fmt.Printf("[pyramid] distance to the ADR D7 target (reported, does not block): %s\n", g)
 	}
 	return 0
 }

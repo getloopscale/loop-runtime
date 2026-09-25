@@ -65,7 +65,7 @@ loki-vault-retention	gates	T8.5 archive CronJob for Loki vault-audit logs (kind 
 ma7-status-locality	gates	MA-7 Gates B+C: sqlc status funcs + SafeTransition only in db/store/.
 migration-test-coverage	-	Every DB migration has corresponding test coverage.
 mock-budget	gates	Caps the number of mocks per test (SRP smell budget).
-module-selfcontained	gates	Todo modulo Go precisa compilar sem o go.work, que e o que o CI faz.
+module-selfcontained	gates	Every Go module must build without go.work, which is what CI does.
 no-aes-remaining	-	Calendar-gated: fails on remaining AES code paths post-transit migration.
 no-cloud-dev-default	gates	T1.1 hermetic guard of plan m1-commit-canonical-30-fixes: no test/seed script in archive/canonical-tests-v1/scripts/local/, infra/tests/e2e/, or infra/scripts/local/ may declare a default env-var value pointing at cloud-dev.loopzero.example (Caddy 301 redirect trap post commit ee77b8da 2026-06-22). EC-1 absorption: /api/v1/webhooks/github handler is single exception (Caddyfile 142-156). M-Migrate2 2026-07-10 M16 T2.3 Wave 1 replaces infra/tests/check-no-cloud-dev-default_test.sh.
 no-env-vault-secrets	gates	Forbids secrets-as-env-var regression after the ESO/OpenBao migration.
@@ -75,32 +75,32 @@ no-new-bash	diff	Blocks new .sh files not in the shell-scripts allowlist.
 no-pulumi-inline-secrets	-	Forbids inline secret literals in Pulumi code.
 no-shell-wrap	gates	Forbids thin shell wrappers around pure-logic that belongs in Go.
 oidc-cred-admin-loopzero	gates	Rejects fabricated paulo@loopzero.test/LoopZeroDev2026! credentials; canonical is admin@loopzero.example/loopzero-dev-password (M-Migrate2 2026-07-07 replaces infra/tests/check-oidc-cred-admin-loopzero_test.sh).
-openbao-bootstrap-in-core-task	gates	Proibe instalar o plano de secrets no cluster mgmt: reprova a task bootstrap-in-core e qualquer helmfile de secrets apontado para contexto mgmt, em todo taskfiles/*.yml (B-047, ADR 2026-08-12-openbao-in-core-rule-vs-task).
+openbao-bootstrap-in-core-task	gates	Forbids installing the secrets plane into the mgmt cluster: fails the bootstrap-in-core task and any secrets helmfile pointed at a mgmt context, across every taskfiles/*.yml (B-047, ADR 2026-08-12-openbao-in-core-rule-vs-task).
 openbao-init-auth-mounts	gates	T5.1-T5.9 openbao-init auth mounts + per-binary roles: every k8s-* mount in authMethods declared once and rendered (k8s-core, k8s-build, at least one k8s-cell-*) + loopzero-api TTL 1h on k8s-core + loopzero-tenant/app/preview/platform-operator roles on k8s-core + argo-workflows on k8s-build + external-secrets-broker on each cell + isolation invariants (loopzero-api NOT on cells, ESO-broker NOT on core). Advisory when helm absent. M-Migrate2 2026-07-10 M16 T3.7 Wave 2 replaces infra/tests/check-openbao-init-auth-mounts_test.sh (Wave 2 COMPLETE).
 option-b-eso-deploy-doc	gates	Locks docs/operations/option-b-mgmt-helmfile-eso-deploy.md contract (4 sub-paths named, B1 recommended, B4 rejected, canonical commands + rollback + decision matrix + cross-references present, ESO version drift check against runtime helmfile). M-Migrate2 2026-07-07 replaces infra/tests/check-option-b-eso-deploy-doc_test.sh.
 orphan-alerts	gates	Detects Prometheus alerts with no owning dashboard/runbook.
 ory-kratos-lifespan	gates	Locks canonical self-service flow lifespans in infra/helm/ory-kratos/values.yaml.gotmpl: login=10m + registration=10m + recovery=15m (defense pair with edge rate_limit for Red Team #89 email-bomb closure). Section-scoped stricter than bash grep -A N (sibling lifespan can NOT leak). M-Migrate2 2026-07-07 replaces infra/tests/helm/ory-kratos-lifespan_test.sh.
 ory-kratos-public-urls	gates	Hermetic helm-template golden test for Ory Kratos serve.public.base_url + CORS + cookie.domain + allowed_return_urls + dashboardRoute-mapped ui_url across standalone-public + dev envs. Advisory-fallthrough when helmfile absent. M22 empirical follow-up (the ONLY M22 target allowlisted — delivers allowlist -1).
-package-admission	gates	B-058: o pacote de plumbing k8s nao admite vocabulario de dominio, e cada casa do split segue povoada.
+package-admission	gates	B-058: the k8s plumbing package admits no domain vocabulary, and every home of the split stays populated.
 pkg-usage-matrix	gates	Verifies the pkg/ cross-component usage matrix is current.
-platform-cr-namespace	gates	Tenant/Environment CRs em manifesto versionado devem viver em loopzero-system.
+platform-cr-namespace	gates	Tenant/Environment CRs in a versioned manifest must live in loopzero-system.
 postgresql-pdb-config	gates	Validates the PostgreSQL PodDisruptionBudget configuration.
 prod-image-digests	gates	Production manifests reference images by digest.
 prod-image-tags	gates	Forbids mutable :latest-style image tags in production manifests.
 proxy-exposure	gates	Every edge reverse_proxy declares what it lets through.
-publish-hygiene	gates	Nenhum arquivo versionado VIVO carrega caminho de workstation. Registro datado e isento por desenho (docs/README.md proibe reescreve-lo). A metade de IP do gate irmao do loopzero-rag NAO foi transportada: contra esta arvore ela deu 104 achados quase todos falsos (strings de versao, CIDRs da Cloudflare, o alvo vivo declarado). B-130.
+publish-hygiene	gates	No LIVE versioned file carries a workstation path. A dated record is exempt by design (docs/README.md forbids rewriting it). The IP half of the sibling loopzero-rag gate was NOT carried over: against this tree it produced 104 findings, almost all false (version strings, Cloudflare CIDRs, the declared live target). B-130.
 pulumi-required-secrets	gates	T1.5 — every Pulumi.<env>.yaml enumerates required secret keys (as `secure:` entry OR comment). Prod=6 keys, staging=4, drill=3 (DO token via env var per D7' sponsor override). Cross-checks prod keys also appear backticked in docs/operations.md. M-Migrate2 2026-07-07 replaces infra/tests/docs/pulumi-required-secrets_test.sh.
 quarantine-protect	diff	Protects the canonical-tests-v1 quarantine from accidental edits.
-readiness-summary	gates	O sumario de prontidao e a ultima mutacao de status antes de persistir, nos seis reconcilers.
+readiness-summary	gates	The readiness summary is the last status mutation before persisting, in all six reconcilers.
 records-tree-split	gates	One records tree is written; the retired one stays frozen (a second live tree accumulates half the truth).
 regression-matrix	gates	Verifies the regression-test matrix covers required scenarios.
 regression-test	-	Asserts a regression test exists for tracked fixed bugs.
 render-schema-gen-sql	gates	T0.2 sqlc schema render pipeline: ephemeral PG16 + golang-migrate replay + pg_dump inside container + post-process (drop ALTER OWNER TO, banners, SET, restrict, orphan --, collapse blanks, trim trailing WS) + sqlc compile pre-flight with throwaway probe. Default check-only mode validates toolchain + migrations dir. Pass --render for destructive pipeline. M-Migrate2 2026-07-07 replaces infra/scripts/ci/render-schema-gen-sql.sh.
 route-auth-coverage	gates	Enforces R2-F8 (HIGH) — every api/internal/server/router.go route MUST be inside middleware.Auth group OR registerProtectedRoutes OR explicit public-allowlist. Locates group ranges via brace-counter, enumerates r.{Get,Post,Put,Patch,Delete,Method}( calls. M-Migrate2 2026-07-07 replaces infra/tests/check-route-auth-coverage_test.sh.
 routes-acyclic	gates	Deny-by-default fence over api/internal/routes subpackages: registered families only, no sibling edges (B-041).
-runbook-parity	gates	Mensagem de rotacao de token nao pode nomear o ServiceAccount que o runbook proibe.
+runbook-parity	gates	A token-rotation message must not name the ServiceAccount the runbook forbids.
 runtime-slo	-	Validates runtime SLO definitions and thresholds.
-scheduled-image	gates	Execucao autonoma (agendada ou por evento) nao pode usar imagem nossa sem caminho de publicacao nesta arvore.
+scheduled-image	gates	Autonomous execution (scheduled or event-driven) must not use an image of ours that has no publication path in this tree.
 script-count	gates	Tracks the total shell-script count against the reduction target.
 scripts-audit	-	Audits shell scripts against the allowlist ledger.
 security-context	gates	Enforces pod securityContext (non-root, limits, probes).
@@ -110,8 +110,8 @@ shell-hygiene	gates	Lints shell scripts for strict-mode and hygiene rules.
 shellcheck-advisory	gates	Advisory shell-lint gate — runs shellcheck across infra/scripts/local + infra/tests/check-*-syntax_test + infra/tests/e2e/live/dev-public-*. Tolerates SC1091/SC2155/SC2086/SC2046. Advisory-only fallthrough when shellcheck not installed (WARN + exit 0). M-Migrate2 2026-07-07 replaces infra/scripts/local/shellcheck-advisory.sh.
 silent-surface	gates	Ratchet: refuses a NEW router surface guarded by `if cfg.X != nil` that does not report whether it was registered (B-104). Baseline may fall, never rise.
 skill-paths	gates	T0.1 EC D5: every infra/scripts/ path AND every `task X` invocation cited in any .claude/skills/*/SKILL.md MUST resolve on disk. Ports the bash awk task-name extractor + flattened/namespaced include set walk into Go. Skips task-automation skill (generic third-party). Enforces dogfood no-GH_TOKEN/.env + to-plan no-`task teardown` anti-patterns. M-Migrate2 2026-07-07 replaces infra/tests/skills/skill-paths_test.sh.
-skill-script-paths	gates	Toda invocacao de script num SKILL.md resolve nos DOIS layouts do ecossistema (.claude/ no plugin, raiz no standalone). Caminho nu quebra em um dos dois, e em qual depende de como o ecossistema foi instalado (B-120).
-skill-suites	gates	Roda as suites pytest de .claude/skills/*/tests/, que nenhuma task rodava. Advisory quando pytest ausente; FALHA quando a descoberta nao acha suite nenhuma, porque nao achar nada nao e o mesmo que nao achar nada errado (B-124).
+skill-script-paths	gates	Every script invocation in a SKILL.md resolves in BOTH ecosystem layouts (.claude/ in the plugin, the root in the standalone kit). A bare path breaks in one of them, and which one depends on how the ecosystem was installed (B-120).
+skill-suites	gates	Runs the pytest suites under .claude/skills/*/tests/, which no task ran. Advisory when pytest is absent; FAILS when discovery finds no suite, because finding nothing is not the same as finding nothing wrong; NOT VERIFIED (exit 5) where the gitignored kit is not installed (B-124).
 skip-link	gates	Every t.Skip/it.skip carries an issue URL (or lives in *_skip_test.go).
 spotcheck-dimension	-	Spot-checks a maturity-audit dimension against evidence.
 sprint-syntax	gates	Hermetic contract test for infra/scripts/local/check-sprint.sh + its homed helper check_sprint.py: script exists + bash -n clean + helper compiles (python3 -m py_compile) + no python3 heredoc (T3.2 de-costume gate) + JSON report shape (pass count + spaced-detail preservation + [id,status,detail] tuple layout) + allowlist entry present. Requires bash + python3 on PATH. M-Migrate2 2026-07-10 M16 T2.1 Wave 1 replaces infra/tests/check-sprint-syntax_test.sh.
@@ -119,7 +119,7 @@ sqlc-sync	gates	Committed sqlc generated/ is in sync with the schema codegen.
 sqlc-tx-prop	gates	Enforces pool-bound vs tx-bound query propagation inside withEnvironmentLock.
 stack-coverage	gates	Verifies the tool-inventory stack-coverage claims via grep.
 status-writer-contract	gates	Refuses a bare Status().Update anywhere in operators production code, including the local-alias and SubResource spellings (ADR 2026-08-12-status-writer-contract, B-085).
-stdlib-only	gates	O pacote de vocabulario compartilhado nao pode importar fora da biblioteca padrao.
+stdlib-only	gates	The shared vocabulary package must not import outside the standard library.
 taskfile-interface	gates	Validates the Taskfile public-interface contract.
 template-compliance	-	Checks documents comply with their canonical templates.
 tenant-csp-passthrough	gates	Static-CSP Traefik middleware must not be attached to tenant routes (#59).
@@ -129,7 +129,7 @@ test-deletion	gates	Guards deletion of test files against coverage loss.
 test-pyramid	gates	Validates the unit/integration/e2e test-pyramid balance.
 test-skip-absent-path	gates	B-180/B-183/B-186/B-188: a test under infra/tests/ or api/ may not skip on an absent path without declaring it — a skip guarded by a path that does not exist is unconditional in practice, and everything below it is dead code. Reads the probe inline, through same-package predicates (functions or unambiguously-named methods) that delegate to one another, in either arm of the guard; and reads the SKIP wherever it sits — inside a function literal, a defer, a select or type-switch clause, in the condition of a tag-less switch case, one same-package call away from the arm, or handed to a helper as an argument. Past its depth bound it reports UNRESOLVED and fails rather than going quiet.
 test-skip-unconditional	gates	B-184: a test under infra/tests/ or api/ may not open with a BARE t.Skip — no guard at all — and carry statements underneath it. A skip aborts the function, so everything below it is unreachable code that reads like a live assertion; two such tests had asserted nothing since T1.4 and six more sat in t.Run subtests. The unguarded half of the class test-skip-absent-path guards. Its pin holds live anchors, so a detector that stops recognising the shape goes red rather than quiet.
-test-target-coverage	gates	Todo PACOTE com teste e rodado por um alvo do Taskfile, ou tem isencao NOMEADA com razao e sunset. Granularidade de pacote, nao de modulo: um `./unit/...` marcava o modulo inteiro coberto enquanto 41 arquivos em tres subarvores nao rodavam (B-114). `go build` nao conta (B-087/B-088).
+test-target-coverage	gates	Every PACKAGE with tests is run by a Taskfile target, or carries a NAMED exemption with a reason and a sunset. Package granularity, not module: a `./unit/...` marked the whole module covered while 41 files in three subtrees never ran (B-114). `go build` does not count (B-087/B-088).
 test-targets	gates	Verifies Taskfile test targets exist and are wired.
 loopzero-api-openbao-approle-envfrom	gates	T6.1 of plan 2026-06-10-j22-openbao-transit-eso-sync: loopzero-api chart unconditionally wires AppRole secret_id via envFrom.secretRef to K8s Secret loopzero-openbao-approle (optional=true). Anti-hardcode gate — NO inline value: for OPENBAO_VAULT_SECRET_ID. Renders chart via helm template subprocess (Anti-Pattern #8 legitimate); advisory fallthrough when helm absent. M-Migrate2 2026-07-07 replaces infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh.
 loopzero-external-secrets-chart-sanity	gates	iter 23 chart-sanity contract for infra/helm/loopzero-external-secrets: renders 5 canonical envs (vault-local/standalone-multi/dev/drill/prod) + inventory-based ExternalSecret count parity + metadata.name uniqueness + refreshInterval + loopzero-secrets-secrets ClusterSecretStore refs + vaultBinaryOverride api/secrets/* resolution (≥3) + envName empty fail-fast + no operators/gitea path leak. 8 assertions. Advisory when helm absent. M-Migrate2 2026-07-10 M16 T3.5 Wave 2 replaces infra/tests/check-loopzero-external-secrets-chart-sanity_test.sh.

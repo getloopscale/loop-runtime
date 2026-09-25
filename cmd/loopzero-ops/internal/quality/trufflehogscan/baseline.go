@@ -14,9 +14,9 @@ import (
 
 // ErrBaselineMissing means the adjudicated baseline is absent.
 //
-// Ausente é FALHA, nunca conjunto vazio implícito (EC-2): ler a ausência como "nada
-// adjudicado, nada novo" transformaria um `rm` em bypass do gate.
-var ErrBaselineMissing = errors.New("linha de base ausente — não há verde possível sem o conjunto adjudicado")
+// Absent is a FAILURE, never an implicit empty set (EC-2): reading the absence as "nothing
+// adjudicated, nothing new" would turn an `rm` into a bypass of the gate.
+var ErrBaselineMissing = errors.New("baseline missing — no green is possible without the adjudicated set")
 
 // BaselineRelPath is where the adjudicated set lives, relative to the repo root.
 const BaselineRelPath = "infra/quality/trufflehog-baseline.json"
@@ -28,20 +28,20 @@ const defaultBaselineRel = BaselineRelPath
 type Entry struct {
 	ID       string `json:"id"`
 	Detector string `json:"detector"`
-	// File is CONTEXT, not identity. A identidade é (detector, bruto): o mesmo texto
-	// em cinco arquivos é UM candidato, porque a adjudicação diz "isto não é segredo"
-	// e essa natureza não muda de arquivo para arquivo. O nome do campo diz que é o
-	// primeiro lugar onde foi visto — chamá-lo de `file` sugeriria o único.
+	// File is CONTEXT, not identity. The identity is (detector, raw): the same text
+	// in five files is ONE candidate, because the adjudication says "this is not a secret"
+	// and that nature does not change from file to file. The field name says it is the
+	// first place it was seen — calling it `file` would suggest the only one.
 	File string `json:"first_seen_in"`
 }
 
 // baselineNote travels inside the artifact because whoever finds this file next will
 // not have this commit's context.
-const baselineNote = "Conjunto de candidatos ADJUDICADOS do trufflehog. " +
-	"Um candidato fora daqui REPROVA o gate até alguém regravar com `loopzero-ops quality trufflehog-scan --write` — " +
-	"e é o diff dessa regravação que é a adjudicação. " +
-	"`--write` RECUSA enquanto houver achado vivo: esta lista adjudica \"isto não é segredo\", nunca \"este segredo pode viver aqui\". " +
-	"`id` é sha256(detector+bruto) truncado — nenhum material de segredo mora neste arquivo. Ver B-143."
+const baselineNote = "Set of ADJUDICATED trufflehog candidates. " +
+	"A candidate outside this set FAILS the gate until someone rewrites it with `loopzero-ops quality trufflehog-scan --write` — " +
+	"and the diff of that rewrite is the adjudication. " +
+	"`--write` REFUSES while any live finding exists: this list adjudicates \"this is not a secret\", never \"this secret may live here\". " +
+	"`id` is a truncated sha256(detector+raw) — no secret material lives in this file. See B-143."
 
 // Baseline is the adjudicated candidate set.
 type Baseline struct {
@@ -54,13 +54,13 @@ func LoadBaseline(path string) (Baseline, error) {
 	var b Baseline
 	body, err := os.ReadFile(filepath.Clean(path))
 	if errors.Is(err, os.ErrNotExist) {
-		return b, fmt.Errorf("%w: %s (gere com `loopzero-ops quality trufflehog-scan --write`)", ErrBaselineMissing, path)
+		return b, fmt.Errorf("%w: %s (generate it with `loopzero-ops quality trufflehog-scan --write`)", ErrBaselineMissing, path)
 	}
 	if err != nil {
-		return b, fmt.Errorf("lendo %s: %w", path, err)
+		return b, fmt.Errorf("reading %s: %w", path, err)
 	}
 	if err := json.Unmarshal(body, &b); err != nil {
-		return b, fmt.Errorf("linha de base ilegível em %s: %w", path, err)
+		return b, fmt.Errorf("unreadable baseline at %s: %w", path, err)
 	}
 	return b, nil
 }
@@ -83,9 +83,9 @@ func (b Baseline) Unadjudicated(found []Finding) []Finding {
 
 // Stale returns baseline entries with no matching finding.
 //
-// Higiene da catraca — REPORTA, nunca reprova: um segredo removido da árvore não pode
-// virar motivo para o gate travar. Um conjunto que só cresce é um conjunto que ninguém
-// poda, e é assim que uma linha de base vira carimbo.
+// Ratchet hygiene — REPORTS, never fails: a secret removed from the tree cannot
+// become a reason for the gate to lock. A set that only grows is a set nobody
+// prunes, and that is how a baseline becomes a rubber stamp.
 func (b Baseline) Stale(found []Finding) []Entry {
 	live := map[string]bool{}
 	for _, f := range found {
@@ -110,13 +110,13 @@ func (b Baseline) index() map[string]bool {
 
 // WriteBaseline records the adjudicated set.
 //
-// Recusa enquanto houver achado VIVO (EC-1). Sem isso, regravar seria o caminho para
-// destravar um push barrado por uma credencial que funciona — e o mecanismo desenhado
-// para impedir o B-142 viraria a maneira de repetí-lo, com aparência de processo.
+// Refuses while any LIVE finding exists (EC-1). Without this, rewriting would be the way to
+// unlock a push blocked by a credential that works — and the mechanism designed
+// to prevent B-142 would become the way to repeat it, with the appearance of process.
 func WriteBaseline(path string, found []Finding) error {
 	for _, f := range found {
 		if f.Live {
-			return fmt.Errorf("%w: %s — a linha de base adjudica \"isto não é segredo\", nunca \"este segredo pode viver aqui\"",
+			return fmt.Errorf("%w: %s — the baseline adjudicates \"this is not a secret\", never \"this secret may live here\"",
 				ErrLiveSecret, f)
 		}
 	}
@@ -142,7 +142,7 @@ func WriteBaseline(path string, found []Finding) error {
 
 	body, err := json.MarshalIndent(b, "", "  ")
 	if err != nil {
-		return fmt.Errorf("serializando linha de base: %w", err)
+		return fmt.Errorf("serializing baseline: %w", err)
 	}
 	return os.WriteFile(path, append(body, '\n'), 0o600)
 }

@@ -2,9 +2,9 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package noshellwrap implements the D5 governance gate from
-// 2026-05-22-shell-script-strategic-plan: "Shell-wrap em Go is
-// PROIBIDO — Go code that shells out to a CLI when a native Go SDK exists is
-// dívida técnica."
+// 2026-05-22-shell-script-strategic-plan (translated): "Shell-wrap in Go is
+// FORBIDDEN — Go code that shells out to a CLI when a native Go SDK exists is
+// technical debt."
 //
 // Detection (AST-based, conservative):
 //
@@ -37,7 +37,7 @@ import (
 
 // ForbiddenCLI lists CLIs that have mature Go SDK alternatives. Shell-wrap of
 // these in production code (pkg/, cmd/) violates D5 unless suppressed with
-// //nolint:shell-wrap + justificativa.
+// //nolint:shell-wrap + a justification.
 var ForbiddenCLI = map[string]bool{
 	"pulumi":  true, // use github.com/pulumi/pulumi/sdk/v3 Automation API
 	"helm":    true, // use helm.sh/helm/v3 SDK

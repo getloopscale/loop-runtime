@@ -170,16 +170,16 @@ func runProdImageDigests(args []string) int {
 			}
 		}
 		fmt.Fprintln(os.Stderr, "")
-		// Duas classes, dois consertos. Antes do B-113 só a primeira existia, e a
-		// mensagem mandava "use o helper" — conselho inútil para um chart que JÁ
-		// usa o helper e não declara digest, que é a segunda classe inteira.
-		fmt.Fprintln(os.Stderr, "Conserto — literal no template (`image: foo/bar:v1.2.3`):")
-		fmt.Fprintln(os.Stderr, "     use `image: foo/bar@sha256:<digest>`, ou delegue a")
-		fmt.Fprintln(os.Stderr, "     `{{ include \"loopzero-common.image\" . }}`, que prefere digest.")
-		fmt.Fprintln(os.Stderr, "Conserto — `image.digest ausente` no values.yaml:")
-		fmt.Fprintln(os.Stderr, "     o template já está certo; falta o VALOR. Declare `image.digest`")
-		fmt.Fprintln(os.Stderr, "     (o publicador de imagens é quem o produz — um digest fixado à mão")
-		fmt.Fprintln(os.Stderr, "     vira mentira na próxima publicação).")
+		// Two classes, two fixes. Before B-113 only the first existed, and the
+		// message said "use the helper" — useless advice for a chart that ALREADY
+		// uses the helper and declares no digest, which is the whole second class.
+		fmt.Fprintln(os.Stderr, "Fix — literal in the template (`image: foo/bar:v1.2.3`):")
+		fmt.Fprintln(os.Stderr, "     use `image: foo/bar@sha256:<digest>`, or delegate to")
+		fmt.Fprintln(os.Stderr, "     `{{ include \"loopzero-common.image\" . }}`, which prefers a digest.")
+		fmt.Fprintln(os.Stderr, "Fix — `image.digest missing` in values.yaml:")
+		fmt.Fprintln(os.Stderr, "     the template is already right; the VALUE is missing. Declare `image.digest`")
+		fmt.Fprintln(os.Stderr, "     (the image publisher produces it — a digest pinned by hand")
+		fmt.Fprintln(os.Stderr, "     becomes a lie on the next publication).")
 		fmt.Fprintln(os.Stderr, "See docs/architecture.md for context.")
 		if !outcome.Pass {
 			return 1
@@ -239,7 +239,7 @@ func runTrufflehogScan(args []string) int {
 			fmt.Fprintf(os.Stderr, "trufflehog-scan: %v\n", err)
 			return 1
 		}
-		fmt.Printf("trufflehog-scan: linha de base regravada — %d candidato(s) adjudicado(s)\n", n)
+		fmt.Printf("trufflehog-scan: baseline rewritten — %d candidate(s) adjudicated\n", n)
 		return 0
 	}
 
@@ -247,19 +247,19 @@ func runTrufflehogScan(args []string) int {
 		RepoRoot: *root, BaselinePath: *baseline,
 	})
 	if err != nil {
-		// NÃO existe ramo que devolva 0 sem veredito. Os três caminhos que antes
-		// terminavam em `exit 0` sem saber se havia segredo — binário ausente, erro de
-		// execução, e o `--only-verified` sem rede — reprovam aqui (B-143).
+		// NO branch returns 0 without a verdict. The three paths that used to end in
+		// `exit 0` without knowing whether a secret was present — missing binary, run
+		// error, and `--only-verified` with no network — fail here (B-143).
 		fmt.Fprintf(os.Stderr, "trufflehog-scan: FAIL — %v\n", err)
 		return 1
 	}
 	fmt.Printf("trufflehog-scan: PASS — %s\n", out.Reason)
-	// Não reprova, e nem sempre é obsolescência: a base é gerada com --no-verification,
-	// que é superconjunto estrito do modo verificado (medido 67 ⊇ 65). Uma entrada sem
-	// achado correspondente pode ser um candidato que a verificação descarta — e é
-	// justamente por ela estar aqui que uma queda de rede não vira vermelho falso.
+	// Not a failure, and not always staleness: the baseline is generated with
+	// --no-verification, a strict superset of verified mode (measured 67 ⊇ 65). An
+	// entry with no matching finding may be a candidate verification discards — and
+	// its being here is exactly why a network outage does not turn into a false red.
 	for _, e := range out.StaleEntries {
-		fmt.Printf("  na linha de base sem achado nesta passada (não reprova; a base é superconjunto): %s [%s] %s\n",
+		fmt.Printf("  in the baseline with no finding this pass (not a failure; the baseline is a superset): %s [%s] %s\n",
 			e.File, e.Detector, e.ID)
 	}
 	return 0

@@ -14,10 +14,11 @@
 // touches only the fields that changed, so it cannot lose that race.
 //
 // `B-085` converted 28 such writes across six controllers. Its fourth DoD bullet
-// asked for this gate in the same breath, and for a while it did not exist:
+// asked for this gate in the same breath, and for a while it did not exist
+// (translated from the original Portuguese):
 //
-//	um gate estático recusa `Status().Update` novo nos operators —
-//	sem ele a migração é reversível por descuido
+//	a static gate refuses any new `Status().Update` in the operators —
+//	without it the migration is reversible by carelessness
 //
 // # Why a gate and not more per-package ratchets
 //
