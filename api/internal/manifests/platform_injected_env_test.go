@@ -27,7 +27,7 @@ func TestPlatformInjectsOnlyPortIntoTheWorkloadContainer(t *testing.T) {
 	app := AppManifestInput{Name: "api", Port: 8080, Secrets: []string{"DB_URL"}}
 
 	// Act
-	c := buildAppContainer(ri, app, app.Port)
+	c := buildAppContainer(scopeFor(t, ri), app, app.Port)
 
 	// Assert
 	var injected []string

@@ -30,7 +30,7 @@ func rolloutBaseInput() RenderInput {
 func TestBuildRollout_StarterPlan(t *testing.T) {
 	input := rolloutBaseInput()
 	input.Plan = "starter"
-	rollout := buildRollout(input, input.Apps[0], 3000)
+	rollout := buildRollout(scopeFor(t, input), input.Apps[0], 3000)
 
 	if rollout.APIVersion != "argoproj.io/v1alpha1" {
 		t.Errorf("APIVersion = %q, want argoproj.io/v1alpha1", rollout.APIVersion)
@@ -69,7 +69,7 @@ func TestBuildRollout_ProgressDeadlineSeconds(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			input := rolloutBaseInput()
 			input.Plan = tc.plan
-			rollout := buildRollout(input, input.Apps[0], 3000)
+			rollout := buildRollout(scopeFor(t, input), input.Apps[0], 3000)
 			if rollout.Spec.ProgressDeadlineSeconds != 300 {
 				t.Errorf("%s plan progressDeadlineSeconds = %d, want 300",
 					tc.plan, rollout.Spec.ProgressDeadlineSeconds)
@@ -81,7 +81,7 @@ func TestBuildRollout_ProgressDeadlineSeconds(t *testing.T) {
 func TestBuildRollout_ProPlanWithAnalysis(t *testing.T) {
 	input := rolloutBaseInput()
 	input.Plan = "pro"
-	rollout := buildRollout(input, input.Apps[0], 3000)
+	rollout := buildRollout(scopeFor(t, input), input.Apps[0], 3000)
 
 	steps := rollout.Spec.Strategy.Canary.Steps
 	if len(steps) != 5 {
@@ -109,7 +109,7 @@ func TestBuildRollout_ProPlanNoAnalysis(t *testing.T) {
 	input := rolloutBaseInput()
 	input.Plan = "pro"
 	input.PrometheusAddress = "" // Disables Analysis steps -> Pause fallback
-	rollout := buildRollout(input, input.Apps[0], 3000)
+	rollout := buildRollout(scopeFor(t, input), input.Apps[0], 3000)
 
 	steps := rollout.Spec.Strategy.Canary.Steps
 	if len(steps) != 5 {
@@ -127,7 +127,7 @@ func TestBuildRollout_ProPlanNoAnalysis(t *testing.T) {
 func TestBuildRollout_TeamPlan(t *testing.T) {
 	input := rolloutBaseInput()
 	input.Plan = "team"
-	rollout := buildRollout(input, input.Apps[0], 3000)
+	rollout := buildRollout(scopeFor(t, input), input.Apps[0], 3000)
 
 	steps := rollout.Spec.Strategy.Canary.Steps
 	if len(steps) != 7 {
@@ -146,7 +146,7 @@ func TestBuildRollout_TeamPlan(t *testing.T) {
 func TestBuildRollout_EmptyPlanDefaultsToStarter(t *testing.T) {
 	input := rolloutBaseInput()
 	input.Plan = ""
-	rollout := buildRollout(input, input.Apps[0], 3000)
+	rollout := buildRollout(scopeFor(t, input), input.Apps[0], 3000)
 	steps := rollout.Spec.Strategy.Canary.Steps
 	if len(steps) != 2 {
 		t.Errorf("empty plan should default to starter (2 steps), got %d", len(steps))
@@ -158,7 +158,7 @@ func TestBuildRollout_WorkerHasPauseOnlyNoTraffic(t *testing.T) {
 	input.Apps = []AppManifestInput{
 		{Name: "background", Type: "worker", ImageRef: "k3d-loopzero-registry:5000/acme/webapp/background@sha256:abc"},
 	}
-	rollout := buildRollout(input, input.Apps[0], 0)
+	rollout := buildRollout(scopeFor(t, input), input.Apps[0], 0)
 
 	if rollout.Spec.Strategy.Canary.StableService != "" {
 		t.Errorf("worker rollout should have empty StableService (no traffic), got %q", rollout.Spec.Strategy.Canary.StableService)
@@ -174,8 +174,8 @@ func TestBuildRollout_WorkerHasPauseOnlyNoTraffic(t *testing.T) {
 
 func TestBuildStableAndCanaryServices(t *testing.T) {
 	input := rolloutBaseInput()
-	stable := buildStableService(input, input.Apps[0], 3000)
-	canary := buildCanaryService(input, input.Apps[0], 3000)
+	stable := buildStableService(scopeFor(t, input), input.Apps[0], 3000)
+	canary := buildCanaryService(scopeFor(t, input), input.Apps[0], 3000)
 
 	if !strings.HasSuffix(stable.Metadata.Name, "-stable") {
 		t.Errorf("stable service name should end with -stable, got %q", stable.Metadata.Name)
@@ -192,7 +192,7 @@ func TestBuildStableAndCanaryServices(t *testing.T) {
 
 func TestBuildTraefikService_InitialWeights(t *testing.T) {
 	input := rolloutBaseInput()
-	ts := buildTraefikService(input, input.Apps[0], 3000)
+	ts := buildTraefikService(scopeFor(t, input), input.Apps[0], 3000)
 
 	if ts.APIVersion != "traefik.io/v1alpha1" {
 		t.Errorf("APIVersion = %q, want traefik.io/v1alpha1", ts.APIVersion)
@@ -216,7 +216,7 @@ func TestBuildTraefikService_InitialWeights(t *testing.T) {
 func TestBuildAnalysisTemplate_PrometheusQuery(t *testing.T) {
 	input := rolloutBaseInput()
 	input.PrometheusAddress = "http://prom.example:9090"
-	at := buildAnalysisTemplate(input, input.Apps[0])
+	at := buildAnalysisTemplate(scopeFor(t, input), input.Apps[0])
 
 	if at.APIVersion != "argoproj.io/v1alpha1" {
 		t.Errorf("APIVersion = %q, want argoproj.io/v1alpha1", at.APIVersion)
@@ -253,7 +253,10 @@ func TestBuildAnalysisTemplate_PrometheusQuery(t *testing.T) {
 func TestRenderServerApp_ProgressiveDelivery_RolloutAndServices(t *testing.T) {
 	input := rolloutBaseInput()
 	input.Plan = "pro"
-	docs := renderServerApp(input, input.Apps[0])
+	docs, err := renderServerApp(scopeFor(t, input), input.Apps[0])
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
 	combined := strings.Join(docs, "\n---\n")
 
 	// Should contain Rollout (NOT Deployment)
@@ -283,7 +286,10 @@ func TestRenderServerApp_ProgressiveDelivery_RolloutAndServices(t *testing.T) {
 func TestRenderServerApp_LegacyDeployment_FlagFalse(t *testing.T) {
 	input := rolloutBaseInput()
 	input.ProgressiveDelivery = false
-	docs := renderServerApp(input, input.Apps[0])
+	docs, err := renderServerApp(scopeFor(t, input), input.Apps[0])
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
 	combined := strings.Join(docs, "\n---\n")
 
 	if !strings.Contains(combined, "kind: Deployment") {
@@ -305,7 +311,10 @@ func TestRenderWorkerApp_ProgressiveDelivery_RolloutNoServices(t *testing.T) {
 	input.Apps = []AppManifestInput{
 		{Name: "background", Type: "worker", ImageRef: "k3d-loopzero-registry:5000/acme/webapp/background@sha256:abc"},
 	}
-	docs := renderWorkerApp(input, input.Apps[0])
+	docs, err := renderWorkerApp(scopeFor(t, input), input.Apps[0])
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
 	combined := strings.Join(docs, "\n---\n")
 
 	if !strings.Contains(combined, "kind: Rollout") {
@@ -325,7 +334,10 @@ func TestRenderWorkerApp_ProgressiveDelivery_RolloutNoServices(t *testing.T) {
 
 func TestIngressRoute_PointsToTraefikService_Progressive(t *testing.T) {
 	input := rolloutBaseInput()
-	docs := buildIngressResources(input, input.Apps[0], 3000)
+	docs, err := buildIngressResources(scopeFor(t, input), input.Apps[0], 3000)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
 	combined := strings.Join(docs, "\n---\n")
 
 	// IngressRoute should have services entry with kind: TraefikService
@@ -337,7 +349,10 @@ func TestIngressRoute_PointsToTraefikService_Progressive(t *testing.T) {
 func TestIngressRoute_PointsToService_Legacy(t *testing.T) {
 	input := rolloutBaseInput()
 	input.ProgressiveDelivery = false
-	docs := buildIngressResources(input, input.Apps[0], 3000)
+	docs, err := buildIngressResources(scopeFor(t, input), input.Apps[0], 3000)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
 	combined := strings.Join(docs, "\n---\n")
 
 	// Legacy path should NOT mention TraefikService kind in services
@@ -366,7 +381,7 @@ func TestBuildHPA_TargetsRollout_Progressive(t *testing.T) {
 		ImageRef:    "k3d-loopzero-registry:5000/acme/webapp/api@sha256:abc",
 		Autoscaling: &AutoscalingConfig{MinReplicas: 1, MaxReplicas: 5, TargetCPU: 70},
 	}
-	hpa := buildHPA(input, app)
+	hpa := buildHPA(scopeFor(t, input), app)
 	if hpa.Spec.ScaleTargetRef.Kind != "Rollout" {
 		t.Errorf("HPA Kind = %q, want Rollout when ProgressiveDelivery=true", hpa.Spec.ScaleTargetRef.Kind)
 	}
@@ -385,7 +400,7 @@ func TestBuildHPA_TargetsDeployment_Legacy(t *testing.T) {
 		ImageRef:    "k3d-loopzero-registry:5000/acme/webapp/api@sha256:abc",
 		Autoscaling: &AutoscalingConfig{MinReplicas: 1, MaxReplicas: 5, TargetCPU: 70},
 	}
-	hpa := buildHPA(input, app)
+	hpa := buildHPA(scopeFor(t, input), app)
 	if hpa.Spec.ScaleTargetRef.Kind != "Deployment" {
 		t.Errorf("HPA Kind = %q, want Deployment when ProgressiveDelivery=false", hpa.Spec.ScaleTargetRef.Kind)
 	}
@@ -400,7 +415,7 @@ func TestBuildScaledObject_TargetsRollout_Progressive(t *testing.T) {
 		ImageRef:    "k3d-loopzero-registry:5000/acme/webapp/api@sha256:abc",
 		Autoscaling: &AutoscalingConfig{MinReplicas: 0, MaxReplicas: 5, TargetCPU: 70},
 	}
-	so := buildScaledObject(input, app)
+	so := buildScaledObject(scopeFor(t, input), app)
 	if so.Spec.ScaleTargetRef.Kind != "Rollout" {
 		t.Errorf("ScaledObject Kind = %q, want Rollout", so.Spec.ScaleTargetRef.Kind)
 	}
@@ -423,7 +438,7 @@ func TestBuildScaledObject_LegacyDeployment(t *testing.T) {
 		ImageRef:    "k3d-loopzero-registry:5000/acme/webapp/api@sha256:abc",
 		Autoscaling: &AutoscalingConfig{MinReplicas: 0, MaxReplicas: 5, TargetCPU: 70},
 	}
-	so := buildScaledObject(input, app)
+	so := buildScaledObject(scopeFor(t, input), app)
 	// Legacy: Kind defaults to empty (KEDA infers Deployment)
 	if so.Spec.ScaleTargetRef.Kind != "" {
 		t.Errorf("Legacy ScaledObject Kind should be empty (KEDA defaults Deployment), got %q", so.Spec.ScaleTargetRef.Kind)
@@ -442,7 +457,7 @@ func TestBuildHTTPScaledObject_PointsToStableService_Progressive(t *testing.T) {
 		ImageRef:    "k3d-loopzero-registry:5000/acme/webapp/api@sha256:abc",
 		Autoscaling: &AutoscalingConfig{MinReplicas: 0, MaxReplicas: 3},
 	}
-	httpSO := buildHTTPScaledObject(input, app)
+	httpSO := buildHTTPScaledObject(scopeFor(t, input), app)
 	expected := resourceName(input.ProjectID, app.Name) + "-stable"
 	if httpSO.Spec.ScaleTargetRef.Service != expected {
 		t.Errorf("HTTPScaledObject Service = %q, want %q (-stable suffix when progressive delivery on)",
@@ -460,7 +475,7 @@ func TestBuildHTTPScaledObject_PointsToServiceLegacy(t *testing.T) {
 		ImageRef:    "k3d-loopzero-registry:5000/acme/webapp/api@sha256:abc",
 		Autoscaling: &AutoscalingConfig{MinReplicas: 0, MaxReplicas: 3},
 	}
-	httpSO := buildHTTPScaledObject(input, app)
+	httpSO := buildHTTPScaledObject(scopeFor(t, input), app)
 	expected := resourceName(input.ProjectID, app.Name)
 	if httpSO.Spec.ScaleTargetRef.Service != expected {
 		t.Errorf("Legacy HTTPScaledObject Service = %q, want %q", httpSO.Spec.ScaleTargetRef.Service, expected)

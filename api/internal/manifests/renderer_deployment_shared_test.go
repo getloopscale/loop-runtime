@@ -26,7 +26,7 @@ func TestLegacyDeploymentPodHasThePreStopDrain(t *testing.T) {
 	ri, app := legacyInput()
 
 	// Act
-	d := buildDeployment(ri, app, app.Port)
+	d := buildDeployment(scopeFor(t, ri), app, app.Port)
 
 	// Assert (#61): the endpoint-removal race is identical on the legacy path.
 	c := d.Spec.Template.Spec.Containers[0]
@@ -38,9 +38,9 @@ func TestLegacyDeploymentPodHasThePreStopDrain(t *testing.T) {
 func TestLegacyDeploymentPodIsTheSharedPodSpec(t *testing.T) {
 	ri, app := legacyInput()
 
-	d := buildDeployment(ri, app, app.Port)
+	d := buildDeployment(scopeFor(t, ri), app, app.Port)
 
-	want := buildAppPodSpec(buildAppContainer(ri, app, app.Port))
+	want := buildAppPodSpec(buildAppContainer(scopeFor(t, ri), app, app.Port))
 	if !reflect.DeepEqual(d.Spec.Template.Spec, want) {
 		t.Errorf("legacy Deployment pod spec diverges from the shared builder:\n got  %+v\n want %+v",
 			d.Spec.Template.Spec, want)

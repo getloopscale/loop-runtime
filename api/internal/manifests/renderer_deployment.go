@@ -8,8 +8,8 @@ import (
 )
 
 // buildDeployment creates a Deployment resource for an app.
-func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployment {
-	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
+func buildDeployment(ri renderScope, app AppManifestInput, port int) k8sDeployment {
+	ns := ri.ns
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	// Selector must use the project-scoped `app` label so two projects with
@@ -58,8 +58,8 @@ func buildDeployment(ri RenderInput, app AppManifestInput, port int) k8sDeployme
 
 // buildHPA creates a HorizontalPodAutoscaler for an app.
 // Only called when app.Autoscaling is non-nil.
-func buildHPA(ri RenderInput, app AppManifestInput) k8sHPA {
-	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
+func buildHPA(ri renderScope, app AppManifestInput) k8sHPA {
+	ns := ri.ns
 	labels := commonLabels(ri, app)
 
 	as := app.Autoscaling
@@ -120,7 +120,7 @@ func buildHPA(ri RenderInput, app AppManifestInput) k8sHPA {
 // buildScaledObject creates a KEDA ScaledObject for scale-to-zero apps.
 // Only called when app.Autoscaling.MinReplicas == 0.
 // KEDA manages the HPA internally — do NOT generate both HPA and ScaledObject.
-func buildScaledObject(ri RenderInput, app AppManifestInput) kedaScaledObject {
+func buildScaledObject(ri renderScope, app AppManifestInput) kedaScaledObject {
 	as := app.Autoscaling
 	maxR := as.MaxReplicas
 	if maxR < 1 {
@@ -162,7 +162,7 @@ func buildScaledObject(ri RenderInput, app AppManifestInput) kedaScaledObject {
 		Kind:       "ScaledObject",
 		Metadata: k8sMetadata{
 			Name:        resName + "-scaledobject",
-			Namespace:   namespace(ri.TenantID, ri.ProjectID, ri.Environment),
+			Namespace:   ri.ns,
 			Labels:      commonLabels(ri, app),
 			Annotations: annotations,
 		},
@@ -187,7 +187,7 @@ func buildScaledObject(ri RenderInput, app AppManifestInput) kedaScaledObject {
 
 // buildHTTPScaledObject creates a KEDA HTTP Add-on interceptor for cold start.
 // Only called for server/frontend apps with scale-to-zero (workers don't receive HTTP).
-func buildHTTPScaledObject(ri RenderInput, app AppManifestInput) kedaHTTPScaledObject {
+func buildHTTPScaledObject(ri renderScope, app AppManifestInput) kedaHTTPScaledObject {
 	maxR := app.Autoscaling.MaxReplicas
 	if maxR < 1 {
 		maxR = 3
@@ -223,7 +223,7 @@ func buildHTTPScaledObject(ri RenderInput, app AppManifestInput) kedaHTTPScaledO
 		Kind:       "HTTPScaledObject",
 		Metadata: k8sMetadata{
 			Name:      resName + "-httpso",
-			Namespace: namespace(ri.TenantID, ri.ProjectID, ri.Environment),
+			Namespace: ri.ns,
 			Labels:    commonLabels(ri, app),
 		},
 		Spec: kedaHTTPScaledObjectSpec{
@@ -241,8 +241,8 @@ func buildHTTPScaledObject(ri RenderInput, app AppManifestInput) kedaHTTPScaledO
 }
 
 // buildPDB creates a PodDisruptionBudget for an app.
-func buildPDB(ri RenderInput, app AppManifestInput) k8sPDB {
-	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
+func buildPDB(ri renderScope, app AppManifestInput) k8sPDB {
+	ns := ri.ns
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	selectorLabels := map[string]string{

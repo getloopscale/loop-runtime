@@ -12,8 +12,8 @@ import (
 )
 
 // buildService creates a Service resource for an app.
-func buildService(ri RenderInput, app AppManifestInput, port int) k8sService {
-	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
+func buildService(ri renderScope, app AppManifestInput, port int) k8sService {
+	ns := ri.ns
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 
@@ -41,8 +41,8 @@ func buildService(ri RenderInput, app AppManifestInput, port int) k8sService {
 // cert-manager issues a Let's Encrypt certificate via the ClusterIssuer.
 // The IngressRoute references the certificate secret for TLS termination.
 // Hostname format: {app}-{env}.{project}.{tenant}.{baseDomain}
-func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []string {
-	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
+func buildIngressResources(ri renderScope, app AppManifestInput, port int) ([]string, error) {
+	ns := ri.ns
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	hostname := appHostname(ri.TenantID, ri.ProjectID, app.Name, ri.Environment, ri.BaseDomain)
@@ -56,7 +56,7 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 	if certErr != nil {
 		// Fail loud: an invalid name here would produce a Certificate the controller
 		// never finds — exactly the silent failure mode of #277.
-		panic(fmt.Sprintf("render: cert secret name for %s/%s: %v", ri.ProjectID, app.Name, certErr))
+		return nil, fmt.Errorf("render: cert secret name for %s/%s: %w", ri.ProjectID, app.Name, certErr)
 	}
 
 	cert := certManagerCertificate{
@@ -121,7 +121,9 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 		},
 	}
 
-	docs := []string{marshalResource(cert), marshalResource(ingress)}
+	var docs docSet
+	docs.add(cert)
+	docs.add(ingress)
 
 	// Custom domains: each gets its own IngressRoute + Certificate (MEET-2026-04-05-033).
 	// Resource names are domain-derived (not index-based) to prevent churn on add/remove.
@@ -152,7 +154,7 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 					DNSNames: []string{cd.Domain},
 				},
 			}
-			docs = append(docs, marshalResource(cdCert))
+			docs.add(cdCert)
 		}
 
 		// IngressRoute always needed — Traefik must match Host() for routing.
@@ -203,10 +205,10 @@ func buildIngressResources(ri RenderInput, app AppManifestInput, port int) []str
 			cdIngress.Spec.TLS = &traefikTLS{SecretName: cdTLSName}
 		}
 
-		docs = append(docs, marshalResource(cdIngress))
+		docs.add(cdIngress)
 	}
 
-	return docs
+	return docs.result()
 }
 
 // domainResourceNames returns stable K8s resource names for a custom domain's

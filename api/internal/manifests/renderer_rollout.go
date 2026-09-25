@@ -30,8 +30,8 @@ import (
 // Workers (no traffic) get a Rollout with simple pause-only steps.
 // Server/frontend apps get full canary with TraefikService weighted
 // routing + Prometheus AnalysisTemplate when configured.
-func buildRollout(ri RenderInput, app AppManifestInput, port int) k8sRollout {
-	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
+func buildRollout(ri renderScope, app AppManifestInput, port int) k8sRollout {
+	ns := ri.ns
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	selectorLabels := map[string]string{
@@ -246,7 +246,7 @@ const canaryAnalysisTemplateName = "loopzero-canary-analysis"
 // Argo Rollouts manages spec.selector.rollouts-pod-template-hash to mark
 // pods as stable. Initial selector matches all rollout pods; the controller
 // injects the hash to scope it to the stable revision.
-func buildStableService(ri RenderInput, app AppManifestInput, port int) k8sService {
+func buildStableService(ri renderScope, app AppManifestInput, port int) k8sService {
 	resName := resourceName(ri.ProjectID, app.Name)
 	return buildRolloutService(ri, app, resName+"-stable", port)
 }
@@ -254,13 +254,13 @@ func buildStableService(ri RenderInput, app AppManifestInput, port int) k8sServi
 // buildCanaryService creates the canary Service for canary traffic split.
 // Same selector as stable; Argo Rollouts injects hash to scope to canary
 // revision pods.
-func buildCanaryService(ri RenderInput, app AppManifestInput, port int) k8sService {
+func buildCanaryService(ri renderScope, app AppManifestInput, port int) k8sService {
 	resName := resourceName(ri.ProjectID, app.Name)
 	return buildRolloutService(ri, app, resName+"-canary", port)
 }
 
-func buildRolloutService(ri RenderInput, app AppManifestInput, svcName string, port int) k8sService {
-	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
+func buildRolloutService(ri renderScope, app AppManifestInput, svcName string, port int) k8sService {
+	ns := ri.ns
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	selectorLabels := map[string]string{
@@ -294,8 +294,8 @@ func buildRolloutService(ri RenderInput, app AppManifestInput, svcName string, p
 //
 // Initial state: stable=100, canary=0 (no traffic to canary until rollout
 // progresses).
-func buildTraefikService(ri RenderInput, app AppManifestInput, port int) traefikWeightedService {
-	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
+func buildTraefikService(ri renderScope, app AppManifestInput, port int) traefikWeightedService {
+	ns := ri.ns
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	if port == 0 {
@@ -329,8 +329,8 @@ func buildTraefikService(ri RenderInput, app AppManifestInput, port int) traefik
 // Returns the template OR a zero-valued struct if PrometheusAddress is
 // empty (caller checks before emitting). The renderer skips emission of
 // the template doc in that case.
-func buildAnalysisTemplate(ri RenderInput, app AppManifestInput) analysisTemplate {
-	ns := namespace(ri.TenantID, ri.ProjectID, ri.Environment)
+func buildAnalysisTemplate(ri renderScope, app AppManifestInput) analysisTemplate {
+	ns := ri.ns
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	canarySvcPattern := fmt.Sprintf("%s-%s-canary.*", ns, resName)
@@ -373,7 +373,7 @@ func buildAnalysisTemplate(ri RenderInput, app AppManifestInput) analysisTemplat
 
 // buildAppContainer constructs the container spec from app config.
 // Shared between buildDeployment (legacy) and buildRollout (progressive).
-func buildAppContainer(ri RenderInput, app AppManifestInput, port int) k8sContainer {
+func buildAppContainer(ri renderScope, app AppManifestInput, port int) k8sContainer {
 	falseVal := false
 	trueVal := true
 
