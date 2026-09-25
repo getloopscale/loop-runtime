@@ -5,12 +5,10 @@
 // Plan 2026-05-25-live-ca-fetch-clustercredential T3.1 — used by
 // op_b_envtest_test.go new specs that exercise the live-fetch reconcile path.
 //
-// File lives in `package platform` (internal) so both unit tests
-// (ca_fetcher_test.go, also internal) and external specs in `package
-// platform_test` can use them via the StubCAFetcher / AlwaysFailFetcher
-// exported wrappers below.
-//
-// File is *_test.go so it does NOT compile into the operator binary.
+// export_test.go is the Go idiom for this: it is `package platform`, so it
+// can reach unexported identifiers, and its _test.go suffix keeps it out of
+// the operator binary while external specs in `package platform_test` still
+// see the exported wrappers below.
 
 package platform
 
@@ -27,7 +25,7 @@ import (
 // NewReconcilerForTesting constructs a standalone ClusterCredentialReconciler
 // outside the manager wiring. Used by envtest specs that need to inject
 // custom fakes (StubCAFetcher / AlwaysFailFetcher) without rebuilding the
-// whole manager. File is *_test.go so this is not in production code.
+// whole manager.
 func NewReconcilerForTesting(client ctrlclient.Client, argoCDNamespace string, fetcher caFetcher) *ClusterCredentialReconciler {
 	return &ClusterCredentialReconciler{
 		Client:          client,
