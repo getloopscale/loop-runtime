@@ -247,14 +247,14 @@ The `task pkg:usage-matrix:check` gate fails when the table is out of date (gate
 | `pkg/circuitbreaker` | 6 | 0 | 4 | 0 | 0 | 2 |
 | `pkg/conditions` | 3 | 0 | 2 | 0 | 0 | 1 |
 | `pkg/correlation` | 14 | 2 | 8 | 0 | 0 | 4 |
-| `pkg/domain` | 13 | 8 | 2 | 0 | 0 | 3 |
+| `pkg/domain` | 15 | 8 | 2 | 0 | 0 | 5 |
 | `pkg/enforcement` | 18 | 12 | 0 | 0 | 0 | 6 |
-| `pkg/errors` | 115 | 84 | 0 | 0 | 0 | 31 |
+| `pkg/errors` | 114 | 84 | 0 | 0 | 0 | 30 |
 | `pkg/healthcheck` | 5 | 0 | 0 | 0 | 0 | 5 |
 | `pkg/id` | 7 | 6 | 0 | 0 | 0 | 1 |
 | `pkg/logging` | 11 | 3 | 0 | 0 | 0 | 8 |
 | `pkg/naming` | 37 | 21 | 11 | 0 | 0 | 5 |
-| `pkg/statemachine` | 57 | 34 | 10 | 0 | 0 | 13 |
+| `pkg/statemachine` | 58 | 34 | 10 | 0 | 0 | 14 |
 | `pkg/vault` | 8 | 2 | 1 | 0 | 0 | 5 |
 
 <!-- USAGE-MATRIX-END -->

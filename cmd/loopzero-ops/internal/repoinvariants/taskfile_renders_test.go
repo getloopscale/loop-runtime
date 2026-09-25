@@ -44,7 +44,9 @@ var taskDryRunTargets = []string{
 // files nor touches a cluster.
 func TestTaskfileCommandsRender(t *testing.T) {
 	if _, err := exec.LookPath("task"); err != nil {
-		t.Skip("go-task not on PATH — render guard cannot run here")
+		// A failure, not a skip: go-task is a declared prerequisite, and a skip
+		// would erase the guard on exactly the machine that lacks it.
+		t.Fatal("go-task is not on PATH, and it is a declared prerequisite of this repository")
 	}
 
 	for _, target := range taskDryRunTargets {

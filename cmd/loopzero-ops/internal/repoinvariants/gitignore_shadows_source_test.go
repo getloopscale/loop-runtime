@@ -82,7 +82,9 @@ func isExcepted(path string) bool {
 // its ignore rules exclude, and fails when any of them is source.
 func TestGitignoreDoesNotShadowSourceFiles(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not on PATH")
+		// A failure, not a skip: git is a prerequisite of this repository, and a
+		// skip would erase the guard on exactly the machine that lacks it.
+		t.Fatal("git is not on PATH")
 	}
 
 	cmd := exec.Command("git", "ls-files", "--others", "--ignored", "--exclude-standard")

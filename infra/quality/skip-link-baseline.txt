@@ -153,10 +153,6 @@ cmd/loopzero-ops/internal/quality/vaultbootstrapunsealloop/check_test.go	t.Skip(
 cmd/loopzero-ops/internal/quality/vaultpromalerts/check_test.go	t.Skipf("could not locate ROADMAP.md (skipping)")
 cmd/loopzero-ops/internal/quality/webhookcanonicalpath/check_failclosed_test.go	t.Skip("permission-based walk-error test needs non-root (root bypasses chmod 000)")
 cmd/loopzero-ops/internal/quality/workercsp/check_test.go	t.Skipf("worker not found from this path: %s", out.Reason)
-cmd/loopzero-ops/quality_gitignore_shadows_source_test.go	t.Skip("git not on PATH")
-cmd/loopzero-ops/quality_registry_test.go	t.Skipf("live taskfile not found (%v); reality guard requires repo checkout", err)
-cmd/loopzero-ops/quality_registry_test.go	t.Skipf("frozen baseline not found (%v)", err)
-cmd/loopzero-ops/quality_taskfile_renders_test.go	t.Skip("go-task not on PATH — render guard cannot run here")
 infra/pulumi/src/__tests__/helmfile-environments-parity.test.ts	it.skip('helmfile binary not available — skipping parity test', () => {});
 infra/pulumi/src/__tests__/production-runbooks.test.ts	it.skip("runbook files removed — docs/runbooks/ deleted in governance consolidation 2026-05-11", () => {});
 infra/pulumi/src/__tests__/production-runbooks.test.ts	it.skip("runbook files removed — docs/runbooks/ deleted in governance consolidation 2026-05-11", () => {});

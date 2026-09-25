@@ -56,7 +56,7 @@ tasks:
     #
     # `{{ "{{" }}` renders to a literal `{{` for the shell. Only the OPENING
     # braces need escaping — a bare `}}` starts no action.
-    # Guarded by cmd/loopzero-ops/quality_taskfile_renders_test.go (`task --dry`).
+    # Guarded by cmd/loopzero-ops/internal/repoinvariants/taskfile_renders_test.go (`task --dry`).
     cmds:
       - |
         SRC="operators/config/crd/bases"
