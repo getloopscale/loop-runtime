@@ -18,7 +18,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/getloopscale/loopzero/api/internal/buildplane/argo"
-	"github.com/getloopscale/loopzero/api/internal/services/build"
+	"github.com/getloopscale/loopzero/api/internal/services/build/stepwatch"
 )
 
 func workflow(name string, nodes map[string]interface{}) *unstructured.Unstructured {
@@ -36,9 +36,9 @@ func nodeSource(objects ...runtime.Object) (*K8sWorkflowNodeSource, *dynamicfake
 	return NewK8sWorkflowNodeSource(client, "argo", 0, slog.Default()), client
 }
 
-func sweepEvents(s *K8sWorkflowNodeSource) []build.ArgoNodeEvent {
-	var got []build.ArgoNodeEvent
-	s.sweep(context.Background(), func(ev build.ArgoNodeEvent) { got = append(got, ev) })
+func sweepEvents(s *K8sWorkflowNodeSource) []stepwatch.ArgoNodeEvent {
+	var got []stepwatch.ArgoNodeEvent
+	s.sweep(context.Background(), func(ev stepwatch.ArgoNodeEvent) { got = append(got, ev) })
 	sort.Slice(got, func(i, j int) bool { return got[i].NodeName < got[j].NodeName })
 	return got
 }
@@ -62,7 +62,7 @@ func TestK8sWorkflowNodeSource_EmitsPodNodesOfBuildWorkflows(t *testing.T) {
 		t.Fatalf("want the 2 Pod nodes of the build workflow, got %+v", got)
 	}
 	if got[0].BuildID != "build-abc123" || got[0].DisplayName != "clone-repo" ||
-		got[0].Phase != build.ArgoNodePhase("Running") || got[0].StartedAt.IsZero() {
+		got[0].Phase != stepwatch.ArgoNodePhase("Running") || got[0].StartedAt.IsZero() {
 		t.Errorf("n1 = %+v", got[0])
 	}
 	if got[1].DisplayName != "n3" || got[1].Message != "exit 1" {

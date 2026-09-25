@@ -14,10 +14,10 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	"github.com/getloopscale/loopzero/api/internal/buildplane/argo"
-	"github.com/getloopscale/loopzero/api/internal/services/build"
+	"github.com/getloopscale/loopzero/api/internal/services/build/stepwatch"
 )
 
-// K8sWorkflowNodeSource implements build.WorkflowNodeSource: it polls Argo Workflows from the build cluster and
+// K8sWorkflowNodeSource implements stepwatch.WorkflowNodeSource: it polls Argo Workflows from the build cluster and
 // emits ArgoNodeEvent for every Pod node phase observed. Polling (rather
 // than informer/watch) keeps the adapter small and resilient to
 // reconnects — the watcher dedups duplicate events by (buildID, nodeName)
@@ -55,7 +55,7 @@ func (s *K8sWorkflowNodeSource) WithWatchErrorHandler(fn func(int, string)) *K8s
 // Run polls Workflows on the configured interval and emits handler calls.
 // Returns when ctx is cancelled. Transient list errors are logged and
 // retried on the next tick. Per-Workflow parse errors are skipped.
-func (s *K8sWorkflowNodeSource) Run(ctx context.Context, handler func(build.ArgoNodeEvent)) error {
+func (s *K8sWorkflowNodeSource) Run(ctx context.Context, handler func(stepwatch.ArgoNodeEvent)) error {
 	ticker := time.NewTicker(s.pollInterval)
 	defer ticker.Stop()
 	for {
@@ -68,7 +68,7 @@ func (s *K8sWorkflowNodeSource) Run(ctx context.Context, handler func(build.Argo
 	}
 }
 
-func (s *K8sWorkflowNodeSource) sweep(ctx context.Context, handler func(build.ArgoNodeEvent)) {
+func (s *K8sWorkflowNodeSource) sweep(ctx context.Context, handler func(stepwatch.ArgoNodeEvent)) {
 	list, err := s.client.Resource(argo.WorkflowGVR).Namespace(s.namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		// EC-1: surface 401/403 to the watcher's dedicated counter so a
@@ -85,7 +85,7 @@ func (s *K8sWorkflowNodeSource) sweep(ctx context.Context, handler func(build.Ar
 		return
 	}
 	for _, wf := range list.Items {
-		buildID := build.BuildIDFromWorkflowName(wf.GetName())
+		buildID := stepwatch.BuildIDFromWorkflowName(wf.GetName())
 		if buildID == "" {
 			continue
 		}
@@ -94,7 +94,7 @@ func (s *K8sWorkflowNodeSource) sweep(ctx context.Context, handler func(build.Ar
 }
 
 // emitNodes walks status.nodes and emits one event per Pod node.
-func (s *K8sWorkflowNodeSource) emitNodes(wf *unstructured.Unstructured, buildID string, handler func(build.ArgoNodeEvent)) {
+func (s *K8sWorkflowNodeSource) emitNodes(wf *unstructured.Unstructured, buildID string, handler func(stepwatch.ArgoNodeEvent)) {
 	nodes, found, err := unstructured.NestedMap(wf.Object, "status", "nodes")
 	if err != nil || !found {
 		return
@@ -118,12 +118,12 @@ func (s *K8sWorkflowNodeSource) emitNodes(wf *unstructured.Unstructured, buildID
 		startedAt := parseK8sTime(nodeMap, "startedAt")
 		finishedAt := parseK8sTime(nodeMap, "finishedAt")
 
-		handler(build.ArgoNodeEvent{
+		handler(stepwatch.ArgoNodeEvent{
 			BuildID:     buildID,
 			NodeName:    nodeID,
 			DisplayName: displayName,
 			NodeType:    nodeType,
-			Phase:       build.ArgoNodePhase(phase),
+			Phase:       stepwatch.ArgoNodePhase(phase),
 			StartedAt:   startedAt,
 			FinishedAt:  finishedAt,
 			Message:     message,

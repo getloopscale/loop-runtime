@@ -18,7 +18,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/routes/environments"
 	"github.com/getloopscale/loopzero/api/internal/routes/teams"
 
-	"github.com/getloopscale/loopzero/api/internal/services/build"
+	"github.com/getloopscale/loopzero/api/internal/services/build/stepwatch"
 
 	"github.com/getloopscale/loopzero/api/internal/services/release"
 
@@ -663,7 +663,7 @@ func startArgoStepWatcher(ctx context.Context, cfg config.Config, eventStore sse
 	// for already-running workflows; the watcher's internal lastPhase dedup
 	// catches duplicates from tick 2 onwards. A future enhancement can wire
 	// a BuildStore-backed TerminalBuildIDStore for cleaner cold start.
-	watcher := build.NewArgoStepWatcher(source, eventStore, nil, logger)
+	watcher := stepwatch.NewArgoStepWatcher(source, eventStore, nil, logger)
 	source.WithWatchErrorHandler(watcher.ReportWatchError)
 
 	go func() {
