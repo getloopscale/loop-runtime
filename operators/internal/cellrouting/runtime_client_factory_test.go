@@ -32,15 +32,16 @@ func newSchemeForTest(t *testing.T) *runtime.Scheme {
 	return scheme
 }
 
-// TestCellAwareFactory_DefaultClientOnlyForEmptyCellID trava a fronteira entre
-// "sem cell" e "cell nomeada".
+// TestCellAwareFactory_DefaultClientOnlyForEmptyCellID locks the boundary
+// between "no cell" and "a named cell".
 //
-// Este teste já aceitou DOIS valores no caminho legado: a string vazia e o nome da
-// primeira cell, que na época era `cell-default`. Isso funcionava porque aquele nome
-// era sentinela e cell ao mesmo tempo. Com a unificação 1:1 (ADR 2026-08-09) ela
-// virou `cell-0`, uma cell real com tenants, e aceitar o nome dela aqui devolveria o
-// cliente legado em vez do cluster dela — furando o isolamento por cell que esta
-// factory existe para garantir. A string vazia é a única sentinela.
+// This test once accepted TWO values on the legacy path: the empty string and
+// the name of the first cell, then `cell-default`. That worked because the name
+// was a sentinel and a cell at once. With the 1:1 unification (ADR 2026-08-09)
+// it became `cell-0`, a real cell with tenants, and accepting its name here
+// would return the legacy client instead of its cluster — breaking the per-cell
+// isolation this factory exists to guarantee. The empty string is the only
+// sentinel.
 func TestCellAwareFactory_DefaultClientOnlyForEmptyCellID(t *testing.T) {
 	scheme := newSchemeForTest(t)
 	mgmt := fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -56,11 +57,11 @@ func TestCellAwareFactory_DefaultClientOnlyForEmptyCellID(t *testing.T) {
 		t.Error(`For(""): expected default client, got different`)
 	}
 
-	// Uma cell nomeada NUNCA cai no atalho, mesmo sendo a primeira.
+	// A named cell NEVER takes the shortcut, even the first one.
 	if _, err := f.For(context.Background(), "cell-0"); err == nil {
-		t.Error(`For("cell-0"): devolveu o cliente legado; cell nomeada tem de resolver ` +
-			`o ClusterCredential dela, senão todo tenant da cell-0 seria reconciliado no ` +
-			`cluster errado`)
+		t.Error(`For("cell-0"): returned the legacy client; a named cell must resolve ` +
+			`its own ClusterCredential, or every cell-0 tenant would be reconciled on the ` +
+			`wrong cluster`)
 	}
 }
 

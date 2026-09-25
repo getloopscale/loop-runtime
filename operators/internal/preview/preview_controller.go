@@ -152,7 +152,7 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	}
 
 	// T1.1 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap: propagate
-	// correlation-id from CR annotation into reconcile context (no-op se ausente).
+	// correlation-id from CR annotation into reconcile context (no-op when absent).
 	ctx = correlation.WithID(ctx, preview.GetAnnotations()["loopzero.io/correlation-id"])
 
 	// Handle deletion

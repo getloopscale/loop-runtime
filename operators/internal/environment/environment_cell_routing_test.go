@@ -93,7 +93,7 @@ func reconcileRouted(t *testing.T, r *EnvironmentReconciler) error {
 }
 
 func TestEnvironmentReconcile_ProvisionsNamespaceInTheTenantCell(t *testing.T) {
-	s := t31TestScheme(t)
+	s := environmentTestScheme(t)
 	mgmt := fake.NewClientBuilder().WithScheme(s).
 		WithObjects(routedTenant("cell-1"), routedEnvironment()).
 		WithStatusSubresource(&loopzerov1.Environment{}).Build()
@@ -115,7 +115,7 @@ func TestEnvironmentReconcile_ProvisionsNamespaceInTheTenantCell(t *testing.T) {
 }
 
 func TestEnvironmentReconcile_RecordsTheCellItProvisionedIn(t *testing.T) {
-	s := t31TestScheme(t)
+	s := environmentTestScheme(t)
 	mgmt := fake.NewClientBuilder().WithScheme(s).
 		WithObjects(routedTenant("cell-1"), routedEnvironment()).
 		WithStatusSubresource(&loopzerov1.Environment{}).Build()
@@ -137,7 +137,7 @@ func TestEnvironmentReconcile_RecordsTheCellItProvisionedIn(t *testing.T) {
 }
 
 func TestEnvironmentReconcile_FailsWhenTheCellClientCannotBeResolved(t *testing.T) {
-	s := t31TestScheme(t)
+	s := environmentTestScheme(t)
 	mgmt := fake.NewClientBuilder().WithScheme(s).
 		WithObjects(routedTenant("cell-1"), routedEnvironment()).
 		WithStatusSubresource(&loopzerov1.Environment{}).Build()
@@ -157,7 +157,7 @@ func TestEnvironmentReconcile_FailsWhenTheCellClientCannotBeResolved(t *testing.
 }
 
 func TestEnvironmentReconcile_FailsWhenTheTenantIsUnreadable(t *testing.T) {
-	s := t31TestScheme(t)
+	s := environmentTestScheme(t)
 	mgmt := fake.NewClientBuilder().WithScheme(s).
 		WithObjects(routedEnvironment()).
 		WithStatusSubresource(&loopzerov1.Environment{}).Build()
@@ -174,7 +174,7 @@ func TestEnvironmentReconcile_FailsWhenTheTenantIsUnreadable(t *testing.T) {
 }
 
 func TestEnvironmentDelete_DeletesTheNamespaceInTheRecordedCell(t *testing.T) {
-	s := t31TestScheme(t)
+	s := environmentTestScheme(t)
 	// The tenant was re-pinned to cell-2 after provisioning; the namespace
 	// still lives where it was created.
 	mgmt := fake.NewClientBuilder().WithScheme(s).
@@ -196,7 +196,7 @@ func TestEnvironmentDelete_DeletesTheNamespaceInTheRecordedCell(t *testing.T) {
 }
 
 func TestEnvironmentDelete_KeepsTheFinalizerWhenTheNamespaceLookupFails(t *testing.T) {
-	s := t31TestScheme(t)
+	s := environmentTestScheme(t)
 	mgmt := fake.NewClientBuilder().WithScheme(s).
 		WithObjects(routedTenant("cell-1"), deletingRoutedEnvironment("cell-1", routedNamespace)).
 		WithStatusSubresource(&loopzerov1.Environment{}).Build()
@@ -226,7 +226,7 @@ func TestEnvironmentDelete_KeepsTheFinalizerWhenTheNamespaceLookupFails(t *testi
 }
 
 func TestEnvironmentDelete_FailsWhenAProvisionedNamespaceHasNoKnownCell(t *testing.T) {
-	s := t31TestScheme(t)
+	s := environmentTestScheme(t)
 	// No tenant and no recorded cell, but the environment did provision a
 	// namespace: it exists somewhere this controller can no longer locate.
 	mgmt := fake.NewClientBuilder().WithScheme(s).

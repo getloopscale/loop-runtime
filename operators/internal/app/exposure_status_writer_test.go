@@ -266,8 +266,8 @@ func TestExposedRoute_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *testing.T) 
 		name string
 		tls  bool
 	}{
-		{"sem TLS", false},
-		{"com TLS — roteia pelo sitio que so ele alcanca", true},
+		{"without TLS", false},
+		{"with TLS — routes through the site only it reaches", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) { assertAnchoredPatches(t, tc.tls) })
 	}
@@ -669,54 +669,50 @@ func findStatusPersistSites(t *testing.T) []statusPersistSite {
 // conformant because it counted `Patch` vs `Update`, while a failure branch
 // persisted without ever summarising.
 //
-// # Varredura de população, 2026-08-17 (B-109) — e o que ela NÃO estabelece
+// # Population sweep, 2026-08-17 (B-109) — and what it does NOT establish
 //
-// `rules/testing.md § 4.2` exige que toda guarda estrutural seja medida contra a
-// população real, e que o resultado fique registrado junto dela mesmo quando é zero.
-// Esta guarda é de PACOTE; a população são seis pacotes de operators.
+// `rules/testing.md § 4.2` requires every structural guard to be measured
+// against the real population, with the result recorded beside it even when it
+// is zero. This guard is PACKAGE-scoped; the population is six operator
+// packages.
 //
-// Varredos os seis por heurística (persistências de `.Status().Patch|Update(`, e se a
-// função que as envolve menciona o sumário de prontidão):
+// The six were swept heuristically (persists of `.Status().Patch|Update(`, and
+// whether the enclosing function names the readiness summary):
 //
-//	operators/internal/app                 2 com sumário,  2 sem
-//	operators/internal/environment         5              1
-//	operators/internal/platform            6              7
-//	operators/internal/preview             0              6
-//	operators/internal/reconcileloop       1              0
-//	operators/internal/tenant              2              3
-//	                                      ──             ──
-//	                                      16             19
+//	operators/internal/app                 2 with summary,  2 without
+//	operators/internal/environment         5                1
+//	operators/internal/platform            6                7
+//	operators/internal/preview             0                6
+//	operators/internal/reconcileloop       1                0
+//	operators/internal/tenant              2                3
+//	                                      ──               ──
+//	                                      16               19
 //
-// **A LIMITAÇÃO É PARTE DO RESULTADO, e sem ela o número seria pior que nenhum.** A
-// varredura divide o arquivo por `func ` no começo da linha e procura o sumário por
-// nome; ela não segue chamada, então uma função que delega o fold a um helper conta
-// como "sem". Os 19 são **sítios a olhar**, não 19 defeitos — afirmar o segundo seria
-// cometer aqui o mesmo erro que o B-109 nomeia.
+// **THE LIMITATION IS PART OF THE RESULT, and without it the number would be
+// worse than none.** The sweep split each file at `func ` at line start and
+// looked for the summary by name; it did not follow calls, so a function that
+// delegated the fold to a helper counted as "without". The 19 were **sites to
+// look at**, not 19 defects — claiming the latter would commit here the very
+// error B-109 names.
 //
-// O que o número **estabelece** é o que importa: o invariante **não é obviamente
-// universal**, e esta guarda cobre um sexto da população. Registrado como item próprio;
-// ampliar a guarda para os seis pacotes é uma fatia, não uma nota de rodapé.
+// # The SIX-package guard exists now, and it is the authoritative one (B-138)
 //
-// # A guarda dos SEIS pacotes existe agora, e ela e' a autoritativa (B-138)
+// `cmd/loopzero-ops/internal/quality/readinesssummary` covers the six packages by
+// AST and FOLLOWS THE CALL: a persist inside a helper counts as covered when
+// the helper folds the summary. That is what the count above could not see —
+// measured on 2026-08-19, the "19 without summary" were ALL artefacts of
+// stopping at the function around the `Patch`.
 //
-// `cmd/loopzero-ops/internal/quality/readinesssummary` cobre os seis pacotes por AST e
-// SEGUE A CHAMADA: um persist num helper conta como coberto quando quem o chama
-// carrega o `defer`, que e' a forma canonica dos sete reconcilers. Foi isso que a
-// contagem acima nao enxergava — medido em 2026-08-19, os "19 sem sumario" eram
-// TODOS artefato de parar na funcao que envolve o `Patch`. Com a chamada seguida:
-// 33 persists, 33 cobertos, zero violacoes; e o mutante que neutraliza o `defer` do
-// `preview` na arvore real devolve exatamente os 6 sitios que o item nomeia.
+// This package guard STAYS, and not out of inertia: it runs in the `operators`
+// suite, where whoever edits the controller already is, and fails next to the
+// error instead of in a separate binary. Both assert the same invariant at
+// different scopes; when they diverge, the six-package one wins.
 //
-// Esta guarda de pacote FICA, e a razao nao e' inercia: ela roda na suite de
-// `operators`, onde quem mexe no controller ja' esta', e falha a metros do erro em
-// vez de num binario separado. As duas afirmam o mesmo invariante em escopos
-// diferentes; quando divergirem, a de seis pacotes vence.
-//
-// So the assertion is on the ENCLOSING FUNCTION of each persist, not on how many
-// persists there are. A function may satisfy it two ways, and both are used here:
-// fold the summary in-line before the write (patchStatus), or cover every exit
-// with `defer DeferReadinessSummary` (the ExposedRoute reconcile). Counting sites
-// would have banned the second, which is the shape the other seven controllers use.
+// So the assertion is on the ENCLOSING FUNCTION of each persist, not on how
+// many persists there are: the function must fold the summary in-line before
+// the write (patchStatus, advanceAndPatch). The deferred form this guard once
+// also accepted was removed together with its helper, so every controller now
+// has one status writer that folds the summary itself.
 func TestApp_EveryStatusPersistFoldsTheReadinessSummary(t *testing.T) {
 	sites := findStatusPersistSites(t)
 	if len(sites) == 0 {
@@ -754,11 +750,9 @@ func TestApp_EveryStatusPersistFoldsTheReadinessSummary(t *testing.T) {
 			body = body[:end]
 		}
 
-		inline := strings.Contains(body, "SetReadinessSummaryViaPkg(")
-		deferred := strings.Contains(body, "DeferReadinessSummary(")
-		if !inline && !deferred {
+		if !strings.Contains(body, "SetReadinessSummaryViaPkg(") {
 			t.Errorf("%s:%d — %s() persists .status (reached by %s) without folding in the readiness "+
-				"summary and without a deferred one. A pass through this function leaves the Ready "+
+				"summary. A pass through this function leaves the Ready "+
 				"condition at whatever the PREVIOUS pass computed, which is read as current "+
 				"(ADR-0025 D3, B-105).", s.file, s.line, s.fn, s.form)
 		}

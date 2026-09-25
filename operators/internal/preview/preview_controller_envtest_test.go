@@ -70,9 +70,9 @@ var _ = Describe("PreviewController", Ordered, func() {
 			tenantSlug  = "acme"
 			projectSlug = "api"
 			prNumber    = 101
-			// J-23 canonical namespace formula 2026-06-07 (sponsor
-			// "Pense bem ao inves de um if PARA preview o TUDO DEVERIA
-			// esta separado por projeto"): uniformly
+			// J-23 canonical namespace formula 2026-06-07 (the sponsor
+			// asked for every environment, previews included, to be
+			// separated by project rather than special-cased): uniformly
 			// `loopzero-<tenant>-<project>-<env>` for all envs including
 			// preview-pr-N (was `<tenant>-<project>-pr-N` pre-refactor).
 			expectedNS = "loopzero-acme-api-preview-pr-101"

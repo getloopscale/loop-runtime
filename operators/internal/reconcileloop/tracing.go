@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package reconcileloop guarda o que acontece DENTRO de um laço de reconcile: o sumário
-// de prontidão, os predicados de evento, os finalizadores e a observabilidade das
-// próprias reconciliações.
+// Package reconcileloop holds what happens INSIDE a reconcile loop: the event
+// predicates, the finalizer helpers and the tracing of the reconciles
+// themselves.
 //
-// # O nome, e o que ele substituiu (B-061)
+// # The name, and what it replaced (B-061)
 //
-// Chamava-se `reconcilehelpers` e pontuou coesão 2/5 — o único pacote da família
-// "helpers" em toda a árvore Go, num limiar respeitado por 148 módulos e 730k LOC.
-// O doc dele ainda o chamava de `shared`, um nome que ele já não tinha: `go doc`
-// renderizava um pacote inexistente.
+// It was called `reconcilehelpers` and scored cohesion 2/5 — the only package
+// of the "helpers" family in the whole Go tree, against a threshold 148 modules
+// and 730k LOC respect. Its doc still called it `shared`, a name it no longer
+// had: `go doc` rendered a package that did not exist.
 //
-// Saíram daqui a política de tenant (`tenantpolicy`), o roteamento de cell
-// (`cellrouting`) e o arranque de binário (`operatorboot`). O que ficou tem uma razão
-// só de mudar, e o nome diz qual.
+// Tenant policy (`tenantpolicy`), cell routing (`cellrouting`) and binary
+// start-up (`operatorboot`) left it. What stayed has one reason to change, and
+// the name says which.
 package reconcileloop
 
 import (

@@ -29,9 +29,9 @@ func TestPreviewReconciler_NamespaceName_Canonical(t *testing.T) {
 		errMatch string
 	}{
 		{
-			// J-23 canonical refactor 2026-06-07 (sponsor verbatim
-			// "Pense bem ao inves de um if PARA preview o TUDO DEVERIA
-			// esta separado por projeto"): namespace formula is uniformly
+			// J-23 canonical refactor 2026-06-07 (the sponsor asked for
+			// every environment, previews included, to be separated by
+			// project rather than special-cased): namespace formula is uniformly
 			// `loopzero-<tenant>-<project>-<env>` for ALL envs including
 			// preview-pr-N. Pre-refactor was `<tenant>-<project>-pr-N`
 			// (no `loopzero-` prefix, no `preview-` env segment) — which
@@ -409,12 +409,13 @@ func TestPreviewReconciler_NamespaceName_RejectsLegacyFormat(t *testing.T) {
 	}
 }
 
-// Limpeza de deprecated (2026-08-08): naming.PreviewNamespace foi deletada. Seu
-// doc-comment prometia o formato legado "{tenant}-{project}-pr-{N}", mas o corpo já
-// delegava para Namespace — era um wrapper redundante, não um formato à parte. Este
-// teste fixa a equivalência que tornou a deleção segura: o namespace de preview é o
-// canônico loopzero-{tenant}-{project}-preview-pr-{N}, igual a qualquer outro ambiente.
-func TestPreviewNamespaceName_FormatoCanonico(t *testing.T) {
+// Deprecation cleanup (2026-08-08): naming.PreviewNamespace was deleted. Its
+// doc comment promised the legacy "{tenant}-{project}-pr-{N}" format, but the
+// body already delegated to Namespace — a redundant wrapper, not a format of its
+// own. This test pins the equivalence that made the deletion safe: the preview
+// namespace is the canonical loopzero-{tenant}-{project}-preview-pr-{N}, like any
+// other environment.
+func TestPreviewNamespaceName_IsTheCanonicalFormat(t *testing.T) {
 	r := &PreviewReconciler{}
 	preview := &loopzerov1.PreviewEnvironment{
 		Spec: loopzerov1.PreviewEnvironmentSpec{
@@ -428,7 +429,7 @@ func TestPreviewNamespaceName_FormatoCanonico(t *testing.T) {
 	}
 	want := "loopzero-tn-acme-teste-preview-pr-3"
 	if got != want {
-		t.Errorf("previewNamespaceName = %q, want %q — o formato legado não corresponde a "+
-			"nenhum namespace existente em nenhum cluster", got, want)
+		t.Errorf("previewNamespaceName = %q, want %q — the legacy format matches "+
+			"no namespace on any cluster", got, want)
 	}
 }

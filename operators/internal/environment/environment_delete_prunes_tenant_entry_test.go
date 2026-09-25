@@ -17,100 +17,102 @@ import (
 	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
 )
 
-// B-074. Apagar o Environment CR direto deixava a Application orfa: o reaper
-// `pruneOrphanPreviewApps` so' apaga Application FORA de `expectedApplicationNames`, e esse
-// conjunto vem de `Tenant.Spec.Environments` pela tupla (Project, Name). Com a tupla ainda no
-// spec, a Application continua ESPERADA e o reaper nunca a alcanca — enquanto o Namespace para
-// onde ela aponta ja foi apagado.
+// B-074. Deleting the Environment CR directly left the Application orphaned:
+// the reaper `pruneOrphanPreviewApps` only deletes Applications OUTSIDE
+// `expectedApplicationNames`, and that set comes from `Tenant.Spec.Environments`
+// by the (Project, Name) tuple. With the tuple still in the spec, the
+// Application stays EXPECTED and the reaper never reaches it — while the
+// Namespace it points at is already deleted.
 //
-// Registro T2: knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-19-environment-delete-orphans-application.md
-func tenantComDoisAmbientes() *loopzerov1.Tenant {
+// T2 record: knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-19-environment-delete-orphans-application.md
+func tenantWithTwoEnvironments() *loopzerov1.Tenant {
 	return &loopzerov1.Tenant{
-		ObjectMeta: metav1.ObjectMeta{Name: "tn-b074", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tn-shop", Namespace: "default"},
 		Spec: loopzerov1.TenantSpec{
 			Environments: []loopzerov1.TenantEnvironmentEntry{
-				{Name: "production", Cluster: "cell-0", Project: "loja"},
-				{Name: "staging", Cluster: "cell-0", Project: "loja"},
+				{Name: "production", Cluster: "cell-0", Project: "shop"},
+				{Name: "staging", Cluster: "cell-0", Project: "shop"},
 			},
 		},
 	}
 }
 
-func ambienteSendoApagado() *loopzerov1.Environment {
-	agora := metav1.NewTime(time.Now())
+func environmentBeingDeleted() *loopzerov1.Environment {
+	now := metav1.NewTime(time.Now())
 	return &loopzerov1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:              "env-b074",
+			Name:              "env-shop-staging",
 			Namespace:         "default",
-			DeletionTimestamp: &agora,
+			DeletionTimestamp: &now,
 			Finalizers:        []string{environmentFinalizer},
 		},
 		Spec: loopzerov1.EnvironmentCRSpec{
-			TenantRef:   loopzerov1.TenantRef{Name: "tn-b074"},
+			TenantRef:   loopzerov1.TenantRef{Name: "tn-shop"},
 			Environment: "staging",
-			Project:     "loja",
-			Namespace:   loopzerov1.NamespaceSpec{Name: "loopzero-tn-b074-loja-staging"},
+			Project:     "shop",
+			Namespace:   loopzerov1.NamespaceSpec{Name: "loopzero-tn-shop-shop-staging"},
 		},
 		Status: loopzerov1.EnvironmentCRStatus{Phase: loopzerov1.EnvironmentPhaseDeleting},
 	}
 }
 
-func TestApagarEnvironmentRemoveATuplaDoTenantParaOReaperAlcancarAApplication(t *testing.T) {
-	s := t31TestScheme(t)
+func TestDeletingAnEnvironmentRemovesItsTupleSoTheReaperReachesTheApplication(t *testing.T) {
+	s := environmentTestScheme(t)
 	cl := fake.NewClientBuilder().
 		WithScheme(s).
-		WithObjects(tenantComDoisAmbientes(), ambienteSendoApagado()).
+		WithObjects(tenantWithTwoEnvironments(), environmentBeingDeleted()).
 		WithStatusSubresource(&loopzerov1.Environment{}, &loopzerov1.Tenant{}).
 		Build()
 
 	r := &EnvironmentReconciler{Client: cl, RuntimeFactory: cellrouting.NewStaticRuntimeClientFactory(cl), Scheme: s}
 	if _, err := r.Reconcile(context.Background(),
-		ctrl.Request{NamespacedName: types.NamespacedName{Name: "env-b074", Namespace: "default"}}); err != nil {
+		ctrl.Request{NamespacedName: types.NamespacedName{Name: "env-shop-staging", Namespace: "default"}}); err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
 
 	var tn loopzerov1.Tenant
 	if err := cl.Get(context.Background(),
-		types.NamespacedName{Name: "tn-b074", Namespace: "default"}, &tn); err != nil {
-		t.Fatalf("lendo o Tenant: %v", err)
+		types.NamespacedName{Name: "tn-shop", Namespace: "default"}, &tn); err != nil {
+		t.Fatalf("reading the Tenant: %v", err)
 	}
 
 	for _, e := range tn.Spec.Environments {
-		if e.Project == "loja" && e.Name == "staging" {
-			t.Fatalf("a tupla (loja, staging) continua em Spec.Environments depois do delete — "+
-				"a Application segue ESPERADA pelo reaper e fica orfa, apontando para um Namespace "+
-				"que ja nao existe. Spec.Environments = %+v", tn.Spec.Environments)
+		if e.Project == "shop" && e.Name == "staging" {
+			t.Fatalf("the (shop, staging) tuple is still in Spec.Environments after the delete — "+
+				"the reaper keeps the Application EXPECTED and it is orphaned, pointing at a Namespace "+
+				"that no longer exists. Spec.Environments = %+v", tn.Spec.Environments)
 		}
 	}
-	// E a contrapartida: apagar um ambiente nao pode levar os outros junto.
+	// And the counterpart: deleting one environment must not take the others.
 	if len(tn.Spec.Environments) != 1 || tn.Spec.Environments[0].Name != "production" {
-		t.Errorf("Spec.Environments = %+v; a entrada de production nao era para ser tocada",
+		t.Errorf("Spec.Environments = %+v; the production entry was not to be touched",
 			tn.Spec.Environments)
 	}
 }
 
-// Caso negativo (`rules/testing.md` § 4.1): o Tenant ja' nao existe. Nao ha' tupla para remover,
-// e segurar o finalizer aqui travaria a delecao do Environment PARA SEMPRE — um conserto que
-// fecha um vazamento abrindo um deadlock nao vale.
-func TestApagarEnvironmentSemTenantNaoTravaADelecao(t *testing.T) {
-	s := t31TestScheme(t)
+// Negative case (`rules/testing.md` § 4.1): the Tenant no longer exists. There
+// is no tuple to remove, and holding the finalizer here would block the
+// Environment's deletion FOREVER — a fix that closes a leak by opening a
+// deadlock is no fix.
+func TestDeletingAnEnvironmentWithoutItsTenantDoesNotBlockTheDeletion(t *testing.T) {
+	s := environmentTestScheme(t)
 	cl := fake.NewClientBuilder().
 		WithScheme(s).
-		WithObjects(ambienteSendoApagado()). // sem Tenant
+		WithObjects(environmentBeingDeleted()). // no Tenant
 		WithStatusSubresource(&loopzerov1.Environment{}).
 		Build()
 
 	r := &EnvironmentReconciler{Client: cl, RuntimeFactory: cellrouting.NewStaticRuntimeClientFactory(cl), Scheme: s}
 	if _, err := r.Reconcile(context.Background(),
-		ctrl.Request{NamespacedName: types.NamespacedName{Name: "env-b074", Namespace: "default"}}); err != nil {
-		t.Fatalf("Reconcile devolveu erro sem Tenant: %v — o finalizer nunca sai e o CR fica preso", err)
+		ctrl.Request{NamespacedName: types.NamespacedName{Name: "env-shop-staging", Namespace: "default"}}); err != nil {
+		t.Fatalf("Reconcile returned an error with no Tenant: %v — the finalizer never leaves and the CR is stuck", err)
 	}
 
 	var env loopzerov1.Environment
 	err := cl.Get(context.Background(),
-		types.NamespacedName{Name: "env-b074", Namespace: "default"}, &env)
+		types.NamespacedName{Name: "env-shop-staging", Namespace: "default"}, &env)
 	if err == nil && len(env.Finalizers) > 0 {
-		t.Errorf("o finalizer %v continua no Environment; sem Tenant nao ha' o que podar e a "+
-			"delecao tinha de concluir", env.Finalizers)
+		t.Errorf("finalizer %v is still on the Environment; with no Tenant there is nothing to prune and "+
+			"the deletion had to complete", env.Finalizers)
 	}
 }

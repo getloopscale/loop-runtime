@@ -114,7 +114,7 @@ func TestPreviewController_HasNoBareStatusUpdate(t *testing.T) {
 		var lines []string
 		for i, l := range strings.Split(src, "\n") {
 			if strings.Contains(l, "Status().Update(") {
-				lines = append(lines, strings.TrimSpace(l)+"  (linha ~"+strconv.Itoa(i+1)+" do pacote sem comentários)")
+				lines = append(lines, strings.TrimSpace(l)+"  (line ~"+strconv.Itoa(i+1)+" of the comment-stripped package)")
 			}
 		}
 		t.Errorf("%d bare Status().Update call(s) remain — the contract persists status by merge patch "+

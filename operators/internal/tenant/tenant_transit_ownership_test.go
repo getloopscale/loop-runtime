@@ -12,51 +12,54 @@ import (
 	"github.com/getloopscale/loopzero/operators/internal/vault"
 )
 
-// O provisionamento de chave Transit por tenant é **api-side** — decidido em
-// `docs/wiki/decisions/2026-08-12-tenant-transit-key-ownership.md` (T3, ACCEPTED em
-// parte), item `B-042`.
+// Per-tenant Transit key provisioning is **api-side** — decided in
+// `docs/wiki/decisions/2026-08-12-tenant-transit-key-ownership.md` (T3,
+// partly ACCEPTED), item `B-042`.
 //
-// A evidência que decidiu: o caminho do `api` está ligado e roda (`api/cmd/main.go:162`
-// constrói o `pkg/vault.TransitClient`, que cria a chave preguiçosamente no primeiro 404
-// de encrypt, `transit_client.go:391`), e o caminho do operator **nunca teve
-// implementador de produção** — os únicos `EnsureTenantKey` da árvore eram dois mocks de
-// teste, e `TenantReconciler.VaultClient` não era atribuído em nenhum ponto de
-// construção. Dez semanas de no-op silencioso.
+// The evidence that decided it: the `api` path is wired and runs
+// (`api/cmd/main.go:162` builds the `pkg/vault.TransitClient`, which creates
+// the key lazily on the first encrypt 404, `transit_client.go:391`), and the
+// operator path **never had a production implementer** — the only
+// `EnsureTenantKey` in the tree were two test mocks, and
+// `TenantReconciler.VaultClient` was assigned at no construction site. Ten
+// weeks of silent no-op.
 //
-// Estes testes travam a decisão nos dois sentidos: o que saiu não pode voltar por
-// distração, e o que ficou não pode sair por arrumação.
+// These tests lock the decision both ways: what left cannot come back by
+// accident, and what stayed cannot leave as tidying.
 
-// A costura de PROVISIONAMENTO saiu. Uma reintrodução acidental — alguém "religando" o
-// passo por achar que o no-op era esquecimento — recria a divergência que tornava o
-// fail-fast do operator inócuo: o operator nomeia a chave `tenant-<id>` e o `api` nomeia
-// `loopzero-tenants-<id>`, então o operator garantiria uma chave que ninguém usa.
+// The PROVISIONING seam left. An accidental reintroduction — someone
+// "rewiring" the step believing the no-op was an oversight — recreates the
+// divergence that made the operator's fail-fast meaningless: the operator
+// names the key `tenant-<id>` and the `api` names it `loopzero-tenants-<id>`, so
+// the operator would guarantee a key nobody uses.
 func TestTransitKeyProvisioning_IsNotAnOperatorReconcileStep(t *testing.T) {
 	r := &TenantReconciler{}
-	for _, passo := range r.provisioningSteps(context.Background(), &loopzerov1.Tenant{}) {
-		nome := passo.condType
-		if strings.Contains(nome, "TransitKey") {
+	for _, step := range r.provisioningSteps(context.Background(), &loopzerov1.Tenant{}) {
+		name := step.condType
+		if strings.Contains(name, "TransitKey") {
 			t.Fatalf(
-				"o passo %q voltou à lista de reconcile do tenant-controller.\n\n"+
-					"O provisionamento é api-side (ADR 2026-08-12-tenant-transit-key-ownership, "+
-					"B-042). O operator nomeia a chave `tenant-<id>` e o api nomeia "+
-					"`loopzero-tenants-<id>` — um passo aqui garante uma chave que ninguém usa.",
-				nome,
+				"step %q is back in the tenant-controller reconcile list.\n\n"+
+					"Provisioning is api-side (ADR 2026-08-12-tenant-transit-key-ownership, "+
+					"B-042). The operator names the key `tenant-<id>` and the api names it "+
+					"`loopzero-tenants-<id>` — a step here guarantees a key nobody uses.",
+				name,
 			)
 		}
 	}
 }
 
-// O SHREDDING ficou, e ficou de propósito. `DeleteTenantKey` é o primitivo de
-// right-to-erasure: apagar a chave de um tenant torna todo ciphertext dele
-// permanentemente irrecuperável. O ADR recusou deletá-lo junto — a propriedade dele
-// depende do ciclo de vida de deleção de tenant, que a fatia não olhou (`B-075`).
+// SHREDDING stayed, and stayed on purpose. `DeleteTenantKey` is the
+// right-to-erasure primitive: deleting a tenant's key makes all of its
+// ciphertext permanently unrecoverable. The ADR refused to delete it along
+// with provisioning — its ownership depends on the tenant-deletion lifecycle,
+// which the slice did not examine (`B-075`).
 //
-// Sem este teste, a próxima limpeza de "interface com um método só" apaga o primitivo de
-// conformidade porque a outra metade dela morreu.
+// Without this test, the next cleanup of "an interface with a single method"
+// deletes the compliance primitive because its other half died.
 func TestTransitShredding_SurvivesTheProvisioningRemoval(t *testing.T) {
-	// Um tipo que implementa APENAS o shredding tem de satisfazer a interface. Se
-	// alguém reintroduzir EnsureTenantKey no contrato, isto para de compilar — que é
-	// exatamente o sinal que se quer, no momento em que se quer.
+	// A type implementing ONLY shredding must satisfy the interface. If
+	// someone reintroduces EnsureTenantKey into the contract, this stops
+	// compiling — exactly the signal wanted, at the moment it is wanted.
 	var _ vault.TenantTransitClient = shreddingOnly{}
 	_ = t
 }
@@ -65,32 +68,35 @@ type shreddingOnly struct{}
 
 func (shreddingOnly) DeleteTenantKey(context.Context, string) error { return nil }
 
-// A armadilha que a remoção do passo criava, e que só apareceria num deployment que
-// ligue o shredder: `requiredProvisioningConditions` acrescentava `TransitKeyAvailable`
-// sempre que `VaultClient != nil`, e o `VaultClient` **continua existindo** — ele carrega
-// a metade que ficou (`DeleteTenantKey`, `B-075`).
+// The trap the step removal created, which would only show in a deployment
+// that turns the shredder on: `requiredProvisioningConditions` added
+// `TransitKeyAvailable` whenever `VaultClient != nil`, and `VaultClient`
+// **still exists** — it carries the half that stayed (`DeleteTenantKey`,
+// `B-075`).
 //
-// Com o passo removido, ninguém escreve a condition. Exigi-la faria todo Tenant esperar
-// para sempre por um passo que não roda mais — e o sintoma apareceria só onde o shredder
-// fosse ligado, que é o ambiente onde ninguém está olhando para o controller de tenant.
+// With the step removed, nobody writes the condition. Requiring it would make
+// every Tenant wait forever for a step that no longer runs — and the symptom
+// would appear only where the shredder is on, which is the environment where
+// nobody is watching the tenant controller.
 //
-// A asserção é sobre ESTA condition, e não sobre "toda condition exigida tem um passo que
-// a escreve". A forma geral parece mais forte e é falsa: `QuotaEnforced` é exigida e
-// escrita por `tenant_build.go:54`, dentro do passo cujo `condType` é
-// `BuildNamespaceReady` — um passo escreve mais de uma condition, então `condType` não é
-// o conjunto do que ele produz. Afirmar a forma geral reprovaria por uma razão que não
-// existe, e é assim que um teste ensina a ser ignorado.
+// The assertion is about THIS condition, not about "every required condition
+// has a step that writes it". The general form looks stronger and is false:
+// `QuotaEnforced` is required and written by `tenant_build.go:54`, inside the
+// step whose `condType` is `BuildNamespaceReady` — one step writes more than
+// one condition, so `condType` is not the set of what it produces. Asserting
+// the general form would fail for a reason that does not exist, and that is
+// how a test teaches people to ignore it.
 func TestTenantActivation_DoesNotRequireTheConditionWhoseWriterWasRemoved(t *testing.T) {
-	comShredder := &TenantReconciler{VaultClient: shreddingOnly{}}
+	withShredder := &TenantReconciler{VaultClient: shreddingOnly{}}
 
-	for _, exigida := range comShredder.requiredProvisioningConditions() {
-		if strings.Contains(exigida, "TransitKey") {
+	for _, required := range withShredder.requiredProvisioningConditions() {
+		if strings.Contains(required, "TransitKey") {
 			t.Fatalf(
-				"a activation exige %q, e o único passo que a escrevia foi removido em "+
-					"2026-08-16 (provisionamento é api-side, B-042).\n\n"+
-					"Todo Tenant num deployment com o shredder ligado ficaria em "+
-					"Provisioning para sempre, esperando um passo que não roda.",
-				exigida,
+				"activation requires %q, and the only step that wrote it was removed on "+
+					"2026-08-16 (provisioning is api-side, B-042).\n\n"+
+					"Every Tenant in a deployment with the shredder on would stay in "+
+					"Provisioning forever, waiting for a step that does not run.",
+				required,
 			)
 		}
 	}

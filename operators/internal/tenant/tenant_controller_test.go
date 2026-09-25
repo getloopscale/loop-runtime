@@ -1599,9 +1599,10 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 				app := fakeArgoCDProvider.Applications[appName]
 				fakeArgoCDProvider.Mu.Unlock()
 
-				// #271: o path é {env}/{project}, casando com onde o pusher escreve os
-				// manifests (api/internal/gitops/gitea_pusher.go:136). Apontar para {env}
-				// sozinho fazia o App ler os manifests de todo projeto daquele ambiente.
+				// #271: the path is {env}/{project}, matching where the pusher writes
+				// the manifests (api/internal/gitops/gitea_pusher.go:136). Pointing at
+				// {env} alone made the App read every project's manifests in that
+				// environment.
 				Expect(app.Path).To(Equal(env+"/default-project"),
 					"ArgoCD Application %s should be scoped to its own project subtree", appName)
 			}

@@ -2,15 +2,15 @@
 // resource ceilings (LimitRange), who may talk to whom (NetworkPolicy) and which
 // service account may act (RoleBinding).
 //
-// # Por que isto saiu do pacote compartilhado (B-061)
+// # Why this left the shared package (B-061)
 //
-// `ApplyTenantLimitRange` e `ApplyTenantNetworkPolicies` decidem **o que um cliente
-// pode consumir e com quem pode falar**, e moravam num pacote chamado
-// `reconcilehelpers` — coesão 2/5, o único nome da família "helpers" em toda a árvore
-// Go, importado pelos quatro binários de operator.
+// `ApplyTenantLimitRange` and `ApplyTenantNetworkPolicies` decide **what a
+// customer may consume and whom it may talk to**, and they lived in a package
+// named `reconcilehelpers` — cohesion 2/5, the only "helpers" name in the whole
+// Go tree, imported by the four operator binaries.
 //
-// Um nome que não recusa nada, com esse alcance, é onde a próxima mistura entra. Este
-// nome recusa: um helper de reconcile não tem por que ser adicionado aqui.
+// A name that refuses nothing, with that reach, is where the next mix-up lands.
+// This name refuses: a reconcile helper has no reason to be added here.
 package tenantpolicy
 
 import (

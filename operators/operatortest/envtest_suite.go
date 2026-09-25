@@ -373,11 +373,10 @@ func (h *EnvtestHandle) Stop() {
 // specs. Increased from 15s to 30s in fire 30 of deep-review-remediation
 // after observing intermittent flakes in TestPlatformControllers (the
 // CredentialsResolved condition reconcile occasionally exceeded the 15s
-// envelope under load — Princípio 7: flaky tests are bugs).
+// envelope under load — Principle 7: flaky tests are bugs).
 //
-// Per CLAUDE.md global Princípio 7: "Testes devem ser determinísticos.
-// Se um teste falha intermitentemente (flaky), ele é um bug e deve ser
-// corrigido ou removido imediatamente."
+// Per the global CLAUDE.md, Principle 7: tests must be deterministic, and a
+// test that fails intermittently is a bug to fix or remove immediately.
 //
 // Increasing timeout is the conservative fix — doesn't mask logic bugs
 // (a missing reconcile would still timeout) but absorbs CI/host

@@ -69,18 +69,18 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient
 	//      (seeded once at platform bootstrap) into this namespace as loopzero-system.
 	//   2. Attach it to loopzero-app SA.
 	// F-09 (CHG-2026-04-29-DOGFOOD T4.1 / drift-baseline.md port #2):
-	// quando source pull secret não existe (standalone-multi, k3d local com
-	// registry público), antes este path logava "pull secret ensure failed
-	// (non-fatal)" a cada reconcile. Agora distinguimos NotFound (esperado
-	// em alguns profiles) de falha real: NotFound vira condição
-	// TypePullSecretReady=False/SourceMissing SEM log (idempotente, sem
-	// ruído); outras falhas continuam logadas.
+	// when the source pull secret does not exist (standalone-multi, local k3d
+	// with a public registry), this path used to log "pull secret ensure
+	// failed (non-fatal)" on every reconcile. NotFound (expected in some
+	// profiles) is now told apart from a real failure: NotFound becomes
+	// TypePullSecretReady=False/SourceMissing with NO log (idempotent, no
+	// noise); other failures are still logged.
 	switch err := r.ensurePullSecret(ctx, runtimeClient, nsName); {
 	case err == nil:
 		conditions.SetCondition(&env.Status.Conditions, conditions.TypePullSecretReady,
 			metav1.ConditionTrue, conditions.ReasonReady, "Pull secret provisioned", env.Generation)
 	case errors.IsNotFound(err):
-		// Source ausente: profile sem registry privado. Não é falha de runtime.
+		// Source absent: a profile with no private registry. Not a runtime failure.
 		conditions.SetCondition(&env.Status.Conditions, conditions.TypePullSecretReady,
 			metav1.ConditionFalse, "SourceMissing",
 			"Source registry pull secret not present in loopzero-system; pods will rely on public images or external auto-mount.",

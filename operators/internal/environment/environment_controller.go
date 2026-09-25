@@ -128,7 +128,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// T1.1 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap: propagate
-	// correlation-id from CR annotation into reconcile context (no-op se ausente).
+	// correlation-id from CR annotation into reconcile context (no-op when absent).
 	ctx = correlation.WithID(ctx, env.GetAnnotations()["loopzero.io/correlation-id"])
 
 	// Handle deletion with verify-then-remove finalizer pattern
@@ -348,8 +348,9 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 		return ctrl.Result{RequeueAfter: constants.RequeueNamespaceDeletionWait}, nil
 	}
 
-	// Namespace gone — retire a tupla do Tenant ANTES de soltar o finalizer, senao a
-	// Application fica orfa (B-074). Depois do finalizer nao ha' segunda chance: o CR some.
+	// Namespace gone — remove the tuple from the Tenant BEFORE releasing the finalizer,
+	// or the Application is orphaned (B-074). After the finalizer there is no second
+	// chance: the CR is gone.
 	if err := r.pruneTenantEnvironmentEntry(ctx, env); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -364,21 +365,24 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 	return ctrl.Result{}, nil
 }
 
-// pruneTenantEnvironmentEntry remove a tupla (Project, Environment) deste ambiente de
-// `Tenant.Spec.Environments`.
+// pruneTenantEnvironmentEntry removes this environment's (Project, Environment)
+// tuple from `Tenant.Spec.Environments`.
 //
-// B-074: apagar o Environment CR direto apagava o Namespace e soltava o finalizer, e mais nada.
-// A Application do ArgoCD continuava viva apontando para um Namespace que ja' nao existe, porque
-// o reaper que a alcancaria — `pruneOrphanPreviewApps` — so' apaga Application FORA de
-// `expectedApplicationNames`, conjunto derivado justamente desta lista pela tupla (Project, Name).
-// Enquanto a tupla estivesse la', a Application seguia ESPERADA.
+// B-074: deleting the Environment CR used to delete the Namespace and release
+// the finalizer, and nothing else. The ArgoCD Application stayed alive pointing
+// at a Namespace that no longer existed, because the reaper that would reach
+// it — `pruneOrphanPreviewApps` — only deletes Applications OUTSIDE
+// `expectedApplicationNames`, a set derived from exactly this list by the
+// (Project, Name) tuple. While the tuple stayed, the Application stayed
+// EXPECTED.
 //
-// Removemos a tupla em vez de apagar a Application aqui: o dono do `.spec` dela e' o operator do
-// tenant (ADR 2026-08-12-argocd-application-ownership, B-050). Abrir uma segunda via de delecao
-// num controller que nao e' o dono e' "codigo correto no lugar errado". Reusar o reaper que ja'
-// existe mantem um dono e um mecanismo.
+// The tuple is removed instead of deleting the Application here: the owner of
+// its `.spec` is the tenant operator (ADR
+// 2026-08-12-argocd-application-ownership, B-050). Opening a second deletion
+// path in a controller that is not the owner is "correct code in the wrong
+// place". Reusing the existing reaper keeps one owner and one mechanism.
 //
-// Registro T2:
+// T2 record:
 // knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-19-environment-delete-orphans-application.md
 func (r *EnvironmentReconciler) pruneTenantEnvironmentEntry(ctx context.Context, env *loopzerov1.Environment) error {
 	logger := log.FromContext(ctx)
@@ -387,28 +391,28 @@ func (r *EnvironmentReconciler) pruneTenantEnvironmentEntry(ctx context.Context,
 	key := client.ObjectKey{Name: env.Spec.TenantRef.Name, Namespace: env.Namespace}
 	if err := r.Get(ctx, key, &tenant); err != nil {
 		if errors.IsNotFound(err) {
-			// O Tenant ja' se foi: nao ha' tupla para remover, e segurar o finalizer aqui
-			// travaria a delecao do Environment para sempre.
+			// The Tenant is already gone: there is no tuple to remove, and holding
+			// the finalizer here would block the Environment's deletion forever.
 			return nil
 		}
 		return err
 	}
 
 	base := tenant.DeepCopy()
-	mantidas := make([]loopzerov1.TenantEnvironmentEntry, 0, len(tenant.Spec.Environments))
+	kept := make([]loopzerov1.TenantEnvironmentEntry, 0, len(tenant.Spec.Environments))
 	for _, e := range tenant.Spec.Environments {
 		if e.Project == env.Spec.Project && e.Name == env.Spec.Environment {
 			continue
 		}
-		mantidas = append(mantidas, e)
+		kept = append(kept, e)
 	}
-	if len(mantidas) == len(tenant.Spec.Environments) {
+	if len(kept) == len(tenant.Spec.Environments) {
 		return nil
 	}
-	tenant.Spec.Environments = mantidas
+	tenant.Spec.Environments = kept
 
-	// Merge patch off a base snapshot: nao carrega resourceVersion, entao nao da' 409 contra
-	// uma escrita concorrente da api em outro campo do mesmo spec.
+	// Merge patch off a base snapshot: it carries no resourceVersion, so it does not
+	// 409 against a concurrent api write to another field of the same spec.
 	if err := r.Patch(ctx, &tenant, client.MergeFrom(base)); err != nil {
 		return err
 	}

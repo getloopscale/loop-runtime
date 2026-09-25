@@ -138,8 +138,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// #277: o ExposureController precisa do mesmo factory que o ApplicationController —
-	// o Secret TLS que ele procura vive na cell do workload, não neste cluster.
+	// #277: the ExposureController needs the same factory as the ApplicationController —
+	// the TLS Secret it looks for lives in the workload's cell, not in this cluster.
 	if err := app.SetupExposureController(mgr, app.ExposureControllerConfig{
 		RuntimeFactory: appFactory,
 	}); err != nil {

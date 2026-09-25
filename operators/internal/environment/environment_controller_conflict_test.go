@@ -40,7 +40,7 @@ import (
 	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
 )
 
-func t31TestScheme(t *testing.T) *runtime.Scheme {
+func environmentTestScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	s := runtime.NewScheme()
 	if err := clientgoscheme.AddToScheme(s); err != nil {
@@ -87,7 +87,7 @@ func assertNameTooLong(t *testing.T, env *loopzerov1.Environment) {
 // MA-4: the NameTooLong branch must set ObservedGeneration to the observed
 // spec generation. Deterministic — no conflict injection.
 func TestEnvironmentReconciler_NameTooLong_SetsObservedGeneration(t *testing.T) {
-	s := t31TestScheme(t)
+	s := environmentTestScheme(t)
 	cl := fake.NewClientBuilder().
 		WithScheme(s).
 		WithObjects(overflowEnv()).
@@ -119,7 +119,7 @@ func TestEnvironmentReconciler_NameTooLong_SetsObservedGeneration(t *testing.T) 
 // error), never a silent nil. Second pass (no conflict) converges via
 // idempotent re-derivation.
 func TestEnvironmentReconciler_NameTooLong_RequeuesOnStatusConflict(t *testing.T) {
-	s := t31TestScheme(t)
+	s := environmentTestScheme(t)
 
 	conflictArmed := true
 	conflict := func(name string) error {
@@ -170,7 +170,7 @@ func TestEnvironmentReconciler_NameTooLong_RequeuesOnStatusConflict(t *testing.T
 // MA-3: a delete that arrives while the phase is still Empty must flow through
 // the additive SM edge (Empty→Deleting) and remove the finalizer without error.
 func TestEnvironmentReconciler_DeleteFromEmpty_RemovesFinalizer(t *testing.T) {
-	s := t31TestScheme(t)
+	s := environmentTestScheme(t)
 	now := metav1.Now()
 	env := &loopzerov1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
