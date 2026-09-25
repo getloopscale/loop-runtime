@@ -143,11 +143,49 @@ releases:
     version: 6.24.0
     values:
       - ../helm/loki/values.yaml
+{{- with .Values | get "crossCluster.lokiNodePort" nil }}
+      # The cross-cluster query bridge: loopzero-api on the core cluster reads Loki at
+      # host.k3d.internal:<lokiNodePort>, a port infra/k3d/build-cluster.yaml publishes
+      # on the build serverlb. The chart hard-codes its own `loki` Service as ClusterIP,
+      # so the bridge is a second Service rendered here — it used to be the
+      # `loki-cross-cluster` seed flipping the chart's Service to NodePort on the live
+      # cluster, which no sync knew about (principle_violations#67). Rendered only where
+      # the environment declares crossCluster.lokiNodePort: a published node port is a
+      # k3d topology fact, not something a managed cluster should open.
+      - extraObjects:
+          - apiVersion: v1
+            kind: Service
+            metadata:
+              name: loki-cross-cluster
+              namespace: monitoring
+              labels:
+                app.kubernetes.io/name: loki
+                app.kubernetes.io/component: cross-cluster-bridge
+            spec:
+              type: NodePort
+              selector:
+                app.kubernetes.io/name: loki
+                app.kubernetes.io/instance: loki
+                app.kubernetes.io/component: single-binary
+              ports:
+                - name: http-metrics
+                  port: 3100
+                  targetPort: http-metrics
+                  nodePort: {{ . }}
+                  protocol: TCP
+{{- end }}
 
   - name: promtail
     namespace: monitoring
     chart: grafana/promtail
     version: 6.16.6
+    # Read by ../helm/promtail/values.yaml.gotmpl: this Promtail runs in the same cluster
+    # as the Loki above, so it pushes to the in-cluster Service and not to the
+    # environment's loki.pushUrl, which is the address for Promtails elsewhere (the
+    # cells). The `loki-cross-cluster` seed used to rewrite this cluster's Promtail
+    # Secret to the same URL after every sync.
+    labels:
+      lokiPush: colocated
     needs:
       - monitoring/loki
     values:

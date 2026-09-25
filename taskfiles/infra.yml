@@ -305,7 +305,10 @@ tasks:
         -e "${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
         --kube-context {{.BUILD_CONTEXT}}
         --selector name=loki sync --skip-deps
-      - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/loki/nodeport-service.yaml
+      # The cross-cluster query bridge (Service loki-cross-cluster, NodePort
+      # crossCluster.lokiNodePort) is part of the loki release above. A kubectl apply
+      # of infra/helm/loki/nodeport-service.yaml used to follow here — onto the CORE
+      # cluster, where no Loki runs, so its selector matched nothing.
       # Promtail DaemonSet — scrape config filters for Argo Workflow pods ONLY (`workflows_argoproj_io_workflow` label).
       # At setup time, no workflows exist yet, so promtail's `/ready` endpoint returns 500 ("Unable to find any logs to tail").
       # `--wait` would timeout every bootstrap; readiness converges automatically once the first build runs.
@@ -1317,26 +1320,48 @@ tasks:
     cmds:
       - bash infra/scripts/local/caddy-up-dev-public.sh --verify
 
-  dev-public:patch-kratos:
+  dev-public:sync-kratos:
     desc: |
-      Idempotently patches ory-kratos-config ConfigMap to enforce dev-public
-      env configuration (OIDC keys, base_redirect_uri, CORS, cookies,
-      selfservice flows ui_url, Resend Bearer). T2.3 of plan 2026-06-04.
+      Re-render and apply the ory-kratos release for dev-public: OIDC keys,
+      base_redirect_uri, CORS, cookies, selfservice ui_url and the Resend Bearer,
+      all from the environment values plus the operator's .env.
 
-      Use after `helmfile sync` (in case it drifts the config back to
-      localhost defaults) or after restarting mgmt cluster.
+      This replaced `dev-public:patch-kratos`, which ran a seed that rewrote the
+      live ory-kratos-config ConfigMap after helmfile sync. Every value it wrote is
+      what helmfile renders (infra/tests/charts/seeded_wiring_is_rendered_test.go,
+      principle_violations#67), so a drift is fixed by re-syncing the release, never
+      by patching the object helmfile owns. Kratos rolls on its own: the chart's
+      checksum/kratos-config annotation changes with the config.
 
-      Required env (loaded from .env):
+      Required env (exported from .env):
         LOOPZERO_GITHUB_CLIENT_ID, LOOPZERO_GITHUB_CLIENT_SECRET
         LOOPZERO_GOOGLE_CLIENT_ID, LOOPZERO_GOOGLE_CLIENT_SECRET
         LOOPZERO_RESEND_API_KEY
-
-      Flags: pass --verify / --dry-run / --json after `--`, e.g.
-      `task dev-public:patch-kratos -- --verify`.
     cmds:
-      # The Go seed that replaced infra/scripts/local/patch-kratos-dev-public.sh
-      # (migrated 2026-07-08); the task kept calling the deleted script.
-      - cd cmd/loopzero-ops && go run . seed patch-kratos {{.CLI_ARGS}}
+      - |
+        if [ -f .env ]; then
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+        fi
+        for var in LOOPZERO_GITHUB_CLIENT_ID LOOPZERO_GITHUB_CLIENT_SECRET LOOPZERO_GOOGLE_CLIENT_ID LOOPZERO_GOOGLE_CLIENT_SECRET LOOPZERO_RESEND_API_KEY; do
+          if [ -z "$(printenv "$var")" ]; then
+            echo "ERROR: $var is not set (export it or add it to .env) — Kratos would render the REPLACE_VIA_* placeholder"
+            exit 1
+          fi
+        done
+        export LOOPZERO_DB_PASSWORD=$(kubectl --context {{.CORE_CONTEXT}} -n loopzero-system \
+          get secret loopzero-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}')
+        if [ -z "$LOOPZERO_DB_PASSWORD" ]; then
+          echo "ERROR: LOOPZERO_DB_PASSWORD not in loopzero-db-credentials Secret — run generate-secrets.sh first"
+          exit 1
+        fi
+        helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl \
+          -e dev-public \
+          --kube-context {{.CORE_CONTEXT}} \
+          --selector name=ory-kratos \
+          sync --skip-deps
 
   dev-public:trio:
     desc: |
@@ -1354,7 +1379,7 @@ tasks:
 
   dev-public:test:all:
     desc: |
-      Runs ALL 9 dev-public test suites (5 hermetic + 4 LIVE) and
+      Runs ALL 8 dev-public test suites (4 hermetic + 4 LIVE) and
       reports per-suite verdict + aggregate. T8.1+ of plan 2026-06-04.
       Use as pre-merge gate (after any dev-public script edit) or as
       daily health check.
@@ -1363,7 +1388,6 @@ tasks:
         Hermetic (~3s, no network):
           - dev-public-env_test.sh                15 asserts
           - check-live-proof-syntax_test.sh       22 asserts
-          - check-patch-kratos-syntax_test.sh     18 asserts
           - check-trio-dev-public-syntax_test.sh  17 asserts
           - check-dev-public-scripts-syntax_test  23 asserts
         LIVE (~30s, needs Caddy + Kratos + loopzero-cloud running):
@@ -1372,7 +1396,7 @@ tasks:
           - live-proof-dev-public.sh               9 asserts
           - trio-dev-public.sh                     4 asserts
 
-      Expected aggregate: 9 suites GREEN / 121 assertions PASS.
+      Expected aggregate: 8 suites GREEN / 103 assertions PASS.
     cmds:
       - bash infra/scripts/local/test-all-dev-public.sh
 
@@ -1402,7 +1426,6 @@ tasks:
         printf '[dev-public:bootstrap] DNS + Caddy OK.\n'
         printf '[dev-public:bootstrap] Next: \n'
         printf '  LOOPZERO_HELMFILE_ENV=dev-public task setup\n'
-        printf '  task dev-public:patch-kratos  # after helmfile sync\n'
         printf '  Then visit: https://app-dev.loopzero.example/login\n'
 
   # ---------------------------------------------------------------------------

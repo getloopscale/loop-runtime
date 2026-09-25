@@ -43,10 +43,12 @@ config:
   # Without these, the build stalls at sign-image-app with ImagePullBackOff 401.
   loopzeroCosignImage: "k3d-loopzero-registry:5000/loopzero-cosign-signer:v0.1.0"
   loopzeroSyftImage: "k3d-loopzero-registry:5000/loopzero-syft-scanner:v0.1.0"
-  # CANONICAL FIX 2026-06-15: the OpenBao Transit chain is on in dev-public. The role_id is
-  # below (secrets.openbaoVaultRoleId); the secret_id comes from Secret
-  # `loopzero-openbao-approle`. Without Transit, the dogfood secrets journey would validate its
-  # zero-leak property against unencrypted Postgres bytes — a bypass-PASS.
+  # CANONICAL FIX 2026-06-15: the OpenBao Transit chain is on in dev-public. Both halves of
+  # the AppRole arrive from Secret `loopzero-openbao-approle`: vault-bootstrap-dev.sh writes the
+  # secret_id and `loopzero-ops seed vault-role-id-sync` the role_id, which OpenBao issues anew
+  # at every bootstrap and so cannot be a literal here. Without Transit, the dogfood secrets
+  # journey would validate its zero-leak property against unencrypted Postgres bytes — a
+  # bypass-PASS.
   openbaoTransitEnabled: "true"
   # T1.2 of dev-public-cross-cluster-secrets (issue #111): OpenBao runs in a SEPARATE
   # k3d-loopzero-secrets cluster. EC-2: the URL stays the canonical intra-cluster DNS name so
@@ -54,6 +56,11 @@ config:
   # loopzero-secrets NodePort IP at resolve time. A single-cluster topology resolves the same
   # literal normally — no per-environment split.
   openbaoVaultAddr: "https://openbao.secrets-system.svc.cluster.local:8200"
+  # The build cluster's Loki, where the build pipeline logs land: the port the environment
+  # publishes on the build serverlb (crossCluster.lokiNodePort), reached through the docker
+  # network gateway that host.k3d.internal names in the core CoreDNS. It was the
+  # `loki-cross-cluster` seed's Deployment env patch until the value moved here.
+  lokiUrl: "http://host.k3d.internal:{{ .Values.crossCluster.lokiNodePort }}"
   # The public Hydra serves the JWKS for JWT verification.
   jwksUrl: "https://auth-dev.loopzero.example/.well-known/jwks.json"
   # CANONICAL FIX 2026-07-14 (2nd regression of loopzero-cloud#131): the issuer MUST be
@@ -88,9 +95,3 @@ config:
   # Mirrors the preview split above; single source of truth is pkg/naming.AppURL.
   baseDomain: "loopzero.local"
   loopzeroPublicDomain: "prod-dev.loopzero.example"
-
-secrets:
-  # AppRole role_id, read from `bao read auth/approle/role/loopzero-api/role-id` after
-  # vault-bootstrap-dev.sh. Not secret by itself — the secret_id is — and kept in the
-  # chart's own Secret rather than the ConfigMap.
-  openbaoVaultRoleId: "bf1a3367-4059-dd74-98bb-b1ae8ff0c9c7"

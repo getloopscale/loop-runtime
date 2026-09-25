@@ -118,6 +118,39 @@ releases:
     values:
       - ../helm/external-secrets/values.yaml
 
+  # The ESO secret-fetch broker: a webhook ClusterSecretStore through which ExternalSecrets
+  # in tenant namespaces ask loopzero-api for a tenant secret, sending the bearer token the
+  # `loopzero-ops seed broker` writes into Secret external-secrets/loopzero-broker-token and the
+  # cell id loopzero-api binds the fetch to.
+  #
+  # This release used to be a `helm upgrade --install loopzero-broker` run by that seed, out
+  # of Helmfile's sight (principle_violations#67), with the core server-0 container IP as
+  # the API address and envName forced to dev-public so the chart's plaintext-bearer
+  # guard would pass in any environment. Here envName is the real environment, so the
+  # guard decides — and the environment opts in through profile.secretFetchBroker.
+  #
+  # The platform ExternalSecrets the chart also carries are for the core and build
+  # clusters (one targets loopzero-build, a namespace a cell does not have): a cell installs
+  # the broker store only.
+  - name: loopzero-broker
+    namespace: external-secrets
+    chart: ../helm/loopzero-external-secrets
+    installed: {{ .Values.profile.secretFetchBroker }}
+    needs:
+      - external-secrets/external-secrets
+{{- if .Values.profile.secretFetchBroker }}
+    values:
+      - envName: {{ .Environment.Name }}
+        externalSecrets: []
+        broker:
+          enabled: true
+          apiURL: {{ .Values.crossCluster.coreApi | quote }}
+          # The cell this sync targets, from the same LOOPZERO_CELL_CONTEXT that pins the
+          # context above (k3d-loopzero-cell-<N> -> cell-<N>). A context that does not end in
+          # a cell id fails the render instead of binding every cell to cell-0.
+          cellID: {{ requiredEnv "LOOPZERO_CELL_CONTEXT" | regexFind "cell-[0-9]+$" | required "LOOPZERO_CELL_CONTEXT must end in cell-<N> to derive the broker's cell id" }}
+{{- end }}
+
   - name: kube-state-metrics
     namespace: monitoring
     chart: prometheus-community/kube-state-metrics

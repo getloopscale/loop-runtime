@@ -13,35 +13,54 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // VaultRoleIDSyncSeed is the Go port of
 // infra/scripts/local/seed-vault-role-id-sync.sh.
 //
 // Reads the fresh `loopzero-api` AppRole role_id from OpenBao (via port-forward
-// to the openbao-0 pod in the vault cluster) and upserts it on the mgmt/loopzero-
-// system/loopzero-api Deployment env `OPENBAO_VAULT_ROLE_ID`.
+// to the openbao-0 pod in the vault cluster) and writes it as
+// `OPENBAO_VAULT_ROLE_ID` into Secret loopzero-system/loopzero-openbao-approle — the Secret
+// vault-bootstrap-dev.sh created with the secret_id, and which the loopzero-api chart
+// already reads through envFrom. Then it restarts loopzero-api so the pod reads it.
+//
+// It used to upsert the value as an env var on the loopzero-api Deployment spec. That
+// spec is rendered by helmfile, an env var overrides every envFrom source, and the
+// override outlived the next sync — so the stale role id committed in the values
+// was never noticed (principle_violations#67). The role id changes at every vault
+// bootstrap, which is what makes it seed material: it cannot be a value in a file.
 //
 // The bash version execs `bao read` inside the pod; the Go port hits the
 // OpenBao HTTP API `/v1/auth/approle/role/loopzero-api/role-id` directly. Same
 // authoritative source — no shell-out to `bao`.
 //
 // Parity contract:
-//   - unseal file missing / no root_token       → FAIL
-//   - port-forward to vault fails               → FAIL
-//   - HTTP read of role-id returns empty/non-200 → FAIL
-//   - success                                    → PASS
+//   - unseal file missing / no root_token          → FAIL
+//   - port-forward to vault fails                  → FAIL
+//   - HTTP read of role-id returns empty/non-200   → FAIL
+//   - Secret loopzero-openbao-approle absent           → FAIL (vault-bootstrap-dev.sh has not run)
+//   - success                                      → PASS
 type VaultRoleIDSyncSeed struct{}
 
 func NewVaultRoleIDSyncSeed() *VaultRoleIDSyncSeed { return &VaultRoleIDSyncSeed{} }
 func (s *VaultRoleIDSyncSeed) Name() string        { return "vault-role-id-sync" }
 
 const (
+	vaultContextName           = "k3d-loopzero-secrets"
+	vaultNamespace             = "secrets-system"
 	vaultUnsealFileEnv         = "LOOPZERO_VAULT_UNSEAL_FILE"
 	vaultUnsealFileDefault     = ".loopzero/cleanroom-unseal.json"
 	vaultOpenBaoPortRemote     = 8200
-	openBaoVaultRoleIDEnvVar   = "OPENBAO_VAULT_ROLE_ID"
+	openBaoVaultRoleIDKey      = "OPENBAO_VAULT_ROLE_ID"
 	vaultRoleIDReadPathLoopZeroAPI = "/v1/auth/approle/role/loopzero-api/role-id"
+	// The Secret both AppRole halves live in, where loopzero-api reads them (charts/loopzero-api
+	// values-bootstrap.yaml secrets.additionalSources; infra/tilt/api-deployment.yaml).
+	openBaoAppRoleNamespace = "loopzero-system"
+	openBaoAppRoleSecret    = "loopzero-openbao-approle"
+	loopzeroAPINamespaceInCore  = "loopzero-system"
+	loopzeroAPIDeploymentInCore = "loopzero-api"
 )
 
 func (s *VaultRoleIDSyncSeed) Run(d Deps) Result {
@@ -72,33 +91,45 @@ func (s *VaultRoleIDSyncSeed) Run(d Deps) Result {
 	}
 
 	if d.DryRun {
-		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would upsert %s=%s… on loopzero-api", openBaoVaultRoleIDEnvVar, roleID[:8])}
+		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would write %s=%s… into %s/%s and restart loopzero-api",
+			openBaoVaultRoleIDKey, roleID[:8], openBaoAppRoleNamespace, openBaoAppRoleSecret)}
 	}
-	// Idempotent env upsert on mgmt loopzero-api.
-	if err := setDeploymentContainerEnv(d.Ctx, d.CtrlClient,
-		loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, openBaoVaultRoleIDEnvVar, roleID); err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("set env: %v", err)}
+	// The Secret must already exist: vault-bootstrap-dev.sh creates it with the
+	// secret_id, and a role id with no secret_id to pair with authenticates nothing.
+	// PatchSecretData keeps the keys it does not name.
+	if err := d.Kube.PatchSecretData(d.Ctx, openBaoAppRoleNamespace, openBaoAppRoleSecret,
+		map[string][]byte{openBaoVaultRoleIDKey: []byte(roleID)}); err != nil {
+		if apierrors.IsNotFound(err) {
+			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Secret %s/%s does not exist — run vault-bootstrap-dev.sh first, it writes the secret_id this role id pairs with",
+				openBaoAppRoleNamespace, openBaoAppRoleSecret)}
+		}
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("write %s into %s/%s: %v", openBaoVaultRoleIDKey, openBaoAppRoleNamespace, openBaoAppRoleSecret, err)}
+	}
+	// envFrom is read at container start: restart so the pod reads the new value.
+	if err := d.Kube.RolloutRestartDeployment(d.Ctx, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore); err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("restart loopzero-api: %v", err)}
 	}
 	if err := waitForRolloutSettled(d.Ctx, d.CtrlClient,
 		loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, d.settleTimeout(loopzeroAPISettle)); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("rollout: %v", err)}
 	}
-	return Result{Verdict: PASS, Reason: fmt.Sprintf("canonical role_id synced (first 8=%s…)", roleID[:8])}
+	return Result{Verdict: PASS, Reason: fmt.Sprintf("canonical role_id written to %s/%s (first 8=%s…)", openBaoAppRoleNamespace, openBaoAppRoleSecret, roleID[:8])}
 }
 
-// Verify probes that the mgmt loopzero-api Deployment env carries a non-empty
-// OPENBAO_VAULT_ROLE_ID. It does NOT re-open the vault tunnel — the deep
-// check requires reading from vault which is a separate cost.
+// Verify probes that Secret loopzero-openbao-approle carries a role id of the shape
+// OpenBao issues. It does NOT re-open the vault tunnel — the deep check requires
+// reading from vault, which is a separate cost.
 func (s *VaultRoleIDSyncSeed) Verify(d Deps) Result {
-	got, err := getDeploymentContainerEnv(d.Ctx, d.CtrlClient,
-		loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, openBaoVaultRoleIDEnvVar)
+	sec, err := d.Kube.GetSecret(d.Ctx, openBaoAppRoleNamespace, openBaoAppRoleSecret)
 	if err != nil {
-		return Result{Verdict: FAIL, Reason: err.Error()}
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("get %s/%s: %v", openBaoAppRoleNamespace, openBaoAppRoleSecret, err)}
 	}
-	if got == "" || len(got) < 30 {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("%s = %q (want ≥30-char UUID)", openBaoVaultRoleIDEnvVar, got)}
+	got := string(sec.Data[openBaoVaultRoleIDKey])
+	if len(got) < 30 {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("%s/%s %s is %d chars (want a ≥30-char role id)",
+			openBaoAppRoleNamespace, openBaoAppRoleSecret, openBaoVaultRoleIDKey, len(got))}
 	}
-	return Result{Verdict: PASS, Reason: fmt.Sprintf("%s wired (%d chars)", openBaoVaultRoleIDEnvVar, len(got))}
+	return Result{Verdict: PASS, Reason: fmt.Sprintf("%s wired in %s/%s (%d chars)", openBaoVaultRoleIDKey, openBaoAppRoleNamespace, openBaoAppRoleSecret, len(got))}
 }
 
 // readVaultUnsealRootToken pulls .root_token from the Cleanroom unseal file

@@ -17,14 +17,19 @@
 #                                    transit chain + SPKI pin
 # 2. loopzero-ops seed minio (M15 W1)        — MinIO password reset (mgmt + build)
 # 3. seed-admin-loopzero-dev.sh     — Kratos identity + tenant + session JWT
-# 4. patch-kratos-dev-public.sh    — Kratos ConfigMap URLs + cookies
 # 5. loopzero-ops seed github-app-dev (M15 W1)         — GitHub App PEM + webhook secret
 # 5b. seed-github-webhook-fixture-canonical.sh — repo-level webhook config
 # 6. loopzero-ops seed gitea-token (M15 W2)  — Gitea API token mint + 3-way sync
-# 7. loopzero-ops seed broker (M15 W3)       — loopzero-broker token + CSS + envFrom
-# 8. seed-loki-cross-cluster.sh    — Loki NodePort + Promtail URL +
-#                                    loopzero-api LOKI_URL
+# 7. loopzero-ops seed broker (M15 W3)       — loopzero-broker token (the store is the
+#                                    cell helmfile's release loopzero-broker)
 # 9. seed-tenant-fixture-canonical.sh — subscription plan + GH installation
+#
+# A step seeds secret material or data no helmfile can declare. The four that
+# patched objects helmfile renders — patch-kratos, hydra-urls, loki-cross-cluster
+# and vault-cross-cluster-addr — were removed (principle_violations#67): the Kratos
+# and Hydra URLs, LOKI_URL and its NodePort bridge, OPENBAO_VAULT_ADDR and the
+# Promtail push URL are environment values that `helmfile sync` renders
+# (infra/tests/charts/seeded_wiring_is_rendered_test.go).
 #
 # Per cleanroom-up-live-test-mandate.md INQUEBRÁVEL: this script CANNOT
 # be skipped — it's the canonical bridge between `task setup` and the
@@ -188,42 +193,9 @@ fi
 # Step 2
 run_step "2-seed-minio" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed minio ${VERIFY_FLAG:+--verify})"
 
-# CANONICAL ORDER FIX 2026-06-18 (Finding #4 of issue #91 — Cleanroom
-# mandate canonical chain run): Step 4 (patch-kratos-dev-public) MUST
-# precede Step 3 (seed-admin-loopzero-dev) because Step 3 HTTP-POSTs a
-# login submit against the canonical Kratos URL (auth-dev.loopzero.example)
-# and Kratos rejects the request with HTTP 000 when the ConfigMap is
-# still helm-default (localhost:4455 + missing cors / cookies.domain).
-# Same family: Step 4b (hydra URLs canonical) must also precede admin
-# so the OIDC callback chain is consistent. Memory
-# feedback_post_cleanroom_kratos_patch_dev_public already documents
-# the dependency — this re-ordering codifies it in the master script.
-
-# ENV-GATE 2026-06-19 (issue #99 of cleanroom-mandate-run-2026-06-19):
-# Steps 4 + 4b configure dev-public URLs (auth-dev.loopzero.example,
-# app-dev.loopzero.example) which are INAPPLICABLE in standalone-multi /
-# drill / prod envs. patch-kratos-dev-public.sh also requires
-# LOOPZERO_GITHUB_CLIENT_ID + LOOPZERO_GOOGLE_CLIENT_ID OAuth credentials
-# which operators typically only provision for dev-public. Running
-# these steps unconditionally produced VERDICT=FAIL when
-# `LOOPZERO_HELMFILE_ENV=standalone-multi task setup` operators ran
-# the master seed afterwards (and CASCADE-failed Steps 3, 9, 11
-# which depend on the dev-public Kratos config). Canonical fix:
-# gate both steps on `LOOPZERO_HELMFILE_ENV == dev-public` with a clear
-# SKIP message in other envs. Defaults to SKIP when env var unset.
-if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
-  # Step 4
-  run_step "4-patch-kratos-dev-public" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed patch-kratos ${VERIFY_FLAG:+--verify})"
-
-  # Step 4b (NEW 2026-06-16) — Hydra URLs canonical (sibling of patch-kratos)
-  run_step "4b-seed-hydra-urls" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed hydra-urls ${VERIFY_FLAG:+--verify})"
-else
-  skip_step "4-patch-kratos-dev-public" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
-  skip_step "4b-seed-hydra-urls" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
-fi
-
-# Step 3 (re-ordered 2026-06-18 per Finding #4 — admin login submit
-# requires Kratos ConfigMap canonical URLs from Steps 4 + 4b first)
+# Step 3 — the admin login submit needs the dev-public Kratos URLs, which
+# `helmfile sync` renders (it used to wait on the patch-kratos and hydra-urls
+# seeds, Finding #4 of issue #91; those patches are environment values now).
 run_step "3-seed-admin-loopzero-dev" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed admin-loopzero-dev ${VERIFY_FLAG:+--verify})"
 
 # Step 3b (NEW 2026-06-29 per Red Team #117 closure) — QA Red Team
@@ -265,11 +237,8 @@ run_step "6b-seed-argocd-gitea-creds" "(cd $REPO_ROOT/cmd/loopzero-ops && go run
 # Step 7
 run_step "7-seed-broker" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed broker ${VERIFY_FLAG:+--verify})"
 
-# Step 7b (NEW 2026-06-16) — Vault role_id sync into loopzero-api (MUST run AFTER vault-bootstrap-dev)
+# Step 7b (NEW 2026-06-16) — Vault role_id into Secret loopzero-openbao-approle (MUST run AFTER vault-bootstrap-dev)
 run_step "7b-seed-vault-role-id-sync" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed vault-role-id-sync ${VERIFY_FLAG:+--verify})"
-
-# Step 8
-run_step "8-seed-loki-cross-cluster" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed loki-cross-cluster ${VERIFY_FLAG:+--verify})"
 
 # Step 9
 # #123 (qa-dogfood-cleanup-2026-06-21 T2.2 / ADR-Q7): pass `--team`
@@ -306,13 +275,6 @@ if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" || "${LOOPZERO_HELMFILE_ENV:-
   run_step "13-seed-argocd-token" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed argocd-token ${VERIFY_FLAG:+--verify})"
 else
   skip_step "13-seed-argocd-token" "skipped — only applicable in dev-public/standalone-multi (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
-fi
-
-# Step 14 (NEW M2 2026-06-23) — OPENBAO_VAULT_ADDR cross-cluster (dev-public only — Jeito A)
-if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
-  run_step "14-seed-vault-cross-cluster-addr" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed vault-cross-cluster-addr ${VERIFY_FLAG:+--verify})"
-else
-  skip_step "14-seed-vault-cross-cluster-addr" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
 fi
 
 # Step 15 (M15 W1: migrated to loopzero-ops seed; bash script deleted) (NEW M2 2026-06-23) — loopzero-stripe-webhook Secret materialization (universal; SKIP-graceful on placeholder)

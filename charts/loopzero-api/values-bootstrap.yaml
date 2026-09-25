@@ -49,8 +49,8 @@ config:
   runtimeKubeContext: "in-cluster"
 
 secrets:
-  # The chart's own Secret carries only the keys an environment sets (dev-public sets
-  # the OpenBao role id); every other credential arrives from the Secrets below.
+  # The chart's own Secret carries only the keys an environment sets; every credential
+  # arrives from the Secrets below.
   create: true
   additionalSources:
     - name: loopzero-db-credentials
@@ -65,13 +65,15 @@ secrets:
     # (gate loopzero-api-openbao-approle-envfrom). Bootstrap it with
     #   kubectl create secret generic loopzero-openbao-approle \
     #     --from-literal=OPENBAO_VAULT_SECRET_ID="<from vault write>"
-    # as docs/runbooks.md (Transit cutover, step 2.1) describes.
+    # as docs/runbooks.md (Transit cutover, step 2.1) describes. On the k3d topologies
+    # vault-bootstrap-dev.sh writes the secret_id and `loopzero-ops seed vault-role-id-sync`
+    # adds OPENBAO_VAULT_ROLE_ID, which OpenBao issues anew at every bootstrap.
     - name: loopzero-openbao-approle
       optional: true
       reason: >-
-        AppRole secret_id, the one OpenBao credential that must come from a Secret. Dev and
-        test installs without OpenBao boot without it; config.Validate() fails loud at
-        startup when transit is enabled and the secret_id is missing.
+        Both halves of the OpenBao AppRole (role_id and secret_id). Dev and test installs
+        without OpenBao boot without it; config.Validate() fails loud at startup when
+        transit is enabled and either half is missing.
     - name: loopzero-broker-token
       optional: true
       reason: >-

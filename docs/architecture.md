@@ -199,7 +199,7 @@ trees, by name or as a template-identical copy under another name.
 | `loopzero-build-cwts` | build | ours | — | `always` |
 | `loopzero-cloud` | core | ours | — | `{{ and .Values.profile.loopzeroCloud (ne (.Values \| get "clusterRole" "dev") "standalone") }}` |
 | `loopzero-crds` | core | ours | — | `always` |
-| `loopzero-external-secrets` | — | undeclared | — | `always` |
+| `loopzero-external-secrets` | cell | ours | — | `{{ .Values.profile.secretFetchBroker }}` |
 | `loopzero-platform-operator` | core | ours | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |
 | `loopzero-preview-operator` | core | ours | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |
 | `loopzero-tenant-operator` | core | ours | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |

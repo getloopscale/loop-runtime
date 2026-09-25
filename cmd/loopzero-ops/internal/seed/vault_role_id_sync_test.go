@@ -13,9 +13,14 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -148,45 +153,110 @@ func pfCtorPointingAtTLS(server *httptest.Server) func(context.Context, TunnelTa
 	}
 }
 
-func TestVaultRoleIDSync_HappyPath(t *testing.T) {
-	var host Host
-	server := stubVaultRoleIDServer(t, "canonical-role-id-1234567890abcdef", "s.roottoken")
-	defer server.Close()
-	dir := t.TempDir()
-	unsealPath := writeUnsealFile(t, dir, "s.roottoken")
-
-	host.Getenv = func(k string) string {
-		if k == vaultUnsealFileEnv {
-			return unsealPath
-		}
-		return ""
+func TestVaultRoleIDSync_Name(t *testing.T) {
+	if got := NewVaultRoleIDSyncSeed().Name(); got != "vault-role-id-sync" {
+		t.Errorf("Name = %q, want vault-role-id-sync", got)
 	}
+}
 
-	// mgmt cluster has loopzero-api Deployment.
+// roleIDSyncDeps builds the dependencies for a Run against a fake core cluster
+// holding the loopzero-api Deployment plus the given objects, with OpenBao served by
+// a TLS stub that issues roleID.
+func roleIDSyncDeps(t *testing.T, roleID string, objs ...ctrlclient.Object) (Deps, ctrlclient.Client) {
+	t.Helper()
+	server := stubVaultRoleIDServer(t, roleID, "s.roottoken")
+	t.Cleanup(server.Close)
+	unsealPath := writeUnsealFile(t, t.TempDir(), "s.roottoken")
 	mgmt := fake.NewClientBuilder().WithScheme(newScheme(t)).
-		WithObjects(makeLoopZeroAPIDeploymentWithEnv(nil)).Build()
-	deps := Deps{Host: host,
+		WithObjects(append([]ctrlclient.Object{makeLoopZeroAPIDeploymentWithEnv(nil)}, objs...)...).Build()
+	return Deps{
+		Host: Host{Getenv: func(k string) string {
+			if k == vaultUnsealFileEnv {
+				return unsealPath
+			}
+			return ""
+		}},
 		RolloutSettleTimeout: time.Millisecond,
 		Ctx:                  context.Background(),
 		Kube:                 NewKubeClient(mgmt),
 		CtrlClient:           mgmt,
 		PortForwardCtor:      pfCtorPointingAtTLS(server),
+	}, mgmt
+}
+
+func approleSecret(data map[string][]byte) *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: "loopzero-openbao-approle"},
+		Data:       data,
 	}
+}
+
+// The role id is secret material the seed legitimately owns; the Deployment spec is
+// not — helmfile renders it, and an env var the seed adds there overrides every
+// envFrom source and survives the next sync (principle_violations#67).
+func TestVaultRoleIDSync_WritesTheRoleIDIntoTheAppRoleSecret(t *testing.T) {
+	const roleID = "fresh-role-id-1234567890abcdef0123"
+	deps, mgmt := roleIDSyncDeps(t, roleID,
+		approleSecret(map[string][]byte{"OPENBAO_VAULT_SECRET_ID": []byte("secret-id-from-bootstrap")}))
 
 	got := NewVaultRoleIDSyncSeed().Run(deps)
 
 	if got.Verdict != PASS {
 		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
 	}
-	value, _ := getDeploymentContainerEnv(context.Background(), mgmt,
-		"loopzero-system", "loopzero-api", "OPENBAO_VAULT_ROLE_ID")
-	if value != "canonical-role-id-1234567890abcdef" {
-		t.Errorf("OPENBAO_VAULT_ROLE_ID = %q", value)
+	sec, err := deps.Kube.GetSecret(deps.Ctx, "loopzero-system", "loopzero-openbao-approle")
+	if err != nil {
+		t.Fatalf("get the AppRole Secret: %v", err)
+	}
+	if string(sec.Data["OPENBAO_VAULT_ROLE_ID"]) != roleID {
+		t.Errorf("Secret OPENBAO_VAULT_ROLE_ID = %q, want %q", sec.Data["OPENBAO_VAULT_ROLE_ID"], roleID)
+	}
+	if string(sec.Data["OPENBAO_VAULT_SECRET_ID"]) != "secret-id-from-bootstrap" {
+		t.Errorf("the secret_id vault-bootstrap-dev.sh wrote was lost: %q", sec.Data["OPENBAO_VAULT_SECRET_ID"])
+	}
+	env, _ := getDeploymentEnvValue(t, mgmt, "OPENBAO_VAULT_ROLE_ID")
+	if env {
+		t.Error("the seed set OPENBAO_VAULT_ROLE_ID on the loopzero-api Deployment spec, which helmfile renders")
 	}
 }
 
-func TestVaultRoleIDSync_Name(t *testing.T) {
-	if got := NewVaultRoleIDSyncSeed().Name(); got != "vault-role-id-sync" {
-		t.Errorf("Name = %q, want vault-role-id-sync", got)
+// Without the Secret, vault-bootstrap-dev.sh has not run: there is no secret_id for
+// the role id to pair with, and inventing the Secret would hide that.
+func TestVaultRoleIDSync_FailsWhenTheAppRoleSecretIsAbsent(t *testing.T) {
+	deps, _ := roleIDSyncDeps(t, "fresh-role-id-1234567890abcdef0123")
+
+	got := NewVaultRoleIDSyncSeed().Run(deps)
+
+	if got.Verdict != FAIL {
+		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
 	}
+	if !strings.Contains(got.Reason, "vault-bootstrap-dev.sh") {
+		t.Errorf("Reason = %q, want it to name vault-bootstrap-dev.sh, the step that creates the Secret", got.Reason)
+	}
+}
+
+func TestVaultRoleIDSync_VerifyReadsTheAppRoleSecret(t *testing.T) {
+	deps, _ := roleIDSyncDeps(t, "unused",
+		approleSecret(map[string][]byte{"OPENBAO_VAULT_ROLE_ID": []byte("fresh-role-id-1234567890abcdef0123")}))
+
+	got := NewVaultRoleIDSyncSeed().Verify(deps)
+
+	if got.Verdict != PASS {
+		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
+	}
+}
+
+// getDeploymentEnvValue reports whether the loopzero-api container sets name in env.
+func getDeploymentEnvValue(t *testing.T, cli ctrlclient.Client, name string) (bool, string) {
+	t.Helper()
+	var d appsv1.Deployment
+	if err := cli.Get(context.Background(), ctrlclient.ObjectKey{Namespace: "loopzero-system", Name: "loopzero-api"}, &d); err != nil {
+		t.Fatalf("get deployment: %v", err)
+	}
+	for _, e := range d.Spec.Template.Spec.Containers[0].Env {
+		if e.Name == name {
+			return true, e.Value
+		}
+	}
+	return false, ""
 }

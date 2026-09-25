@@ -12,7 +12,7 @@ import (
 )
 
 // Host is everything a seed reads from outside the cluster: the process
-// environment, local tools (docker, helm, gh), HTTP and Postgres. It lives on
+// environment, local tools (docker, gh), HTTP and Postgres. It lives on
 // Deps, so a test builds the Host it needs instead of swapping package-level
 // variables — which made the seed tests share mutable state and forbade
 // t.Parallel.
@@ -29,14 +29,8 @@ type Host struct {
 	StripeHTTP *http.Client
 	// PGConnect opens a Postgres connection.
 	PGConnect func(ctx context.Context, connString string) (pgConn, error)
-	// DockerNetworkIP returns a container's IPv4 address inside a docker network.
-	DockerNetworkIP func(network, container string) (string, error)
-	// DockerGateway returns the IPv4 gateway of a docker network.
-	DockerGateway func(network string) (string, error)
 	// DockerContainerIP returns a container's first IP address.
 	DockerContainerIP func(container string) (string, error)
-	// HelmUpgrade installs or upgrades the broker chart.
-	HelmUpgrade func(chartPath, apiURL string) error
 	// GHAPI runs `gh api` with args, sending body (when non-nil) on stdin.
 	GHAPI func(body []byte, args ...string) ([]byte, error)
 	// GHAuthCheck reports whether gh is authenticated.
@@ -90,32 +84,11 @@ func (h Host) pgConnect(ctx context.Context, connString string) (pgConn, error) 
 	return pgxConnect(ctx, connString)
 }
 
-func (h Host) dockerNetworkIP(network, container string) (string, error) {
-	if h.DockerNetworkIP != nil {
-		return h.DockerNetworkIP(network, container)
-	}
-	return defaultDockerNetworkInspect(network, container)
-}
-
-func (h Host) dockerGateway(network string) (string, error) {
-	if h.DockerGateway != nil {
-		return h.DockerGateway(network)
-	}
-	return defaultDockerNetworkGateway(network)
-}
-
 func (h Host) dockerContainerIP(container string) (string, error) {
 	if h.DockerContainerIP != nil {
 		return h.DockerContainerIP(container)
 	}
 	return defaultDockerInspect(container)
-}
-
-func (h Host) helmUpgrade(chartPath, apiURL string) error {
-	if h.HelmUpgrade != nil {
-		return h.HelmUpgrade(chartPath, apiURL)
-	}
-	return defaultHelmUpgrade(chartPath, apiURL)
 }
 
 func (h Host) ghAPI(body []byte, args ...string) ([]byte, error) {

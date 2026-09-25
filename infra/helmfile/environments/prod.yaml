@@ -145,3 +145,4 @@ profile:
   smokeTest: true               # run the post-install smoke-test release
   localObjectStore: false       # in-cluster MinIO is the object store: deterministic dev root password, Velero waits for it
   localRegistry: false          # cells admit images from the local k3d registry (k3d-loopzero-registry:5000)
+  secretFetchBroker: false      # install the ESO secret-fetch broker (loopzero-broker) on the cells; its chart allows a plaintext bearer only in dev-public

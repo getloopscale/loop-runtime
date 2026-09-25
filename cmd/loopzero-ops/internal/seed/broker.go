@@ -6,12 +6,7 @@ package seed
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
@@ -21,39 +16,30 @@ import (
 
 // BrokerSeed is the Go port of infra/scripts/local/seed-broker-canonical.sh.
 //
-// 4-layer canonical broker chain:
+// It seeds the secret material of the ESO secret-fetch broker:
 //
-//  1. Generate/reuse canonical token; apply mgmt loopzero-system/loopzero-broker-token
+//  1. Generate/reuse the bearer token; apply mgmt loopzero-system/loopzero-broker-token
 //     Secret with keys {token, LOOPZERO_BROKER_TOKEN}.
-//  2. Mirror to workload cluster's external-secrets ns with the
+//  2. Mirror it to the workload cluster's external-secrets ns with the
 //     `external-secrets.io/type=webhook` canonical label.
-//  3. Resolve k3d-loopzero-core-server-0 container IP → install/upgrade
-//     loopzero-external-secrets chart in workload cluster (broker.apiURL points
-//     at mgmt server-0:30001 for cross-cluster).
-//  4. Rollout restart mgmt loopzero-api so envFrom picks up LOOPZERO_BROKER_TOKEN.
+//  3. Rollout restart mgmt loopzero-api so envFrom picks up LOOPZERO_BROKER_TOKEN.
 //
-// D1 exemptions:
-//   - `docker network inspect` = READ-ONLY container discovery.
-//   - `helm upgrade --install` = canonical chart lifecycle tool (declarative;
-//     the chart itself lives in-tree).
+// The broker's ClusterSecretStore is the cell helmfile's release `loopzero-broker`
+// (infra/helmfile/cell.helmfile.yaml.gotmpl). This seed used to install it with its
+// own `helm upgrade --install`, out of Helmfile's sight and with the core server-0
+// container IP as the API address (principle_violations#67); the release now reads
+// its address from the environment and this seed writes only the token.
 type BrokerSeed struct{}
 
 func NewBrokerSeed() *BrokerSeed   { return &BrokerSeed{} }
 func (s *BrokerSeed) Name() string { return "broker" }
 
 const (
-	brokerContextWorkload   = "k3d-loopzero-cell-0"
-	brokerESONamespace      = "external-secrets"
-	brokerSecretName        = "loopzero-broker-token"
-	brokerTokenKey          = "token"
-	brokerCanonicalEnvKey   = "LOOPZERO_BROKER_TOKEN"
-	brokerChartRelativePath = "infra/helm/loopzero-external-secrets"
-	brokerHelmReleaseName   = "loopzero-broker"
-	brokerAPIPort           = 30001
-	brokerCellID            = "cell-0"
-	brokerEnvName           = "dev-public"
-	brokerMgmtContainer     = "k3d-loopzero-core-server-0"
-	brokerNetworkName       = "k3d-loopzero"
+	brokerContextWorkload = "k3d-loopzero-cell-0"
+	brokerESONamespace    = "external-secrets"
+	brokerSecretName      = "loopzero-broker-token"
+	brokerTokenKey        = "token"
+	brokerCanonicalEnvKey = "LOOPZERO_BROKER_TOKEN"
 )
 
 func (s *BrokerSeed) Run(d Deps) Result {
@@ -65,7 +51,7 @@ func (s *BrokerSeed) Run(d Deps) Result {
 	tokenB := []byte(token)
 
 	if d.DryRun {
-		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would %s token + apply Secrets + helm upgrade + restart loopzero-api", tokenAction(reused))}
+		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would %s token + apply Secrets + restart loopzero-api", tokenAction(reused))}
 	}
 
 	// Layer 1 apply — mgmt Secret with both `token` (legacy) + canonical env key.
@@ -87,34 +73,15 @@ func (s *BrokerSeed) Run(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 2 apply workload Secret: %v", err)}
 	}
 
-	// Layer 3: resolve mgmt server-0 IP + helm upgrade the chart.
-	mgmtIP, err := d.Host.dockerNetworkIP(brokerNetworkName, brokerMgmtContainer)
-	if err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 mgmt IP: %v", err)}
-	}
-	apiURL := fmt.Sprintf("http://%s:%d", mgmtIP, brokerAPIPort)
-	chartPath, err := brokerChartAbsPath(d.Host)
-	if err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 chart path: %v", err)}
-	}
-	// Ensure loopzero-build ns exists on workload (chart post-render expects it).
-	if err := workloadCli.EnsureNamespace(d.Ctx, "loopzero-build"); err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 ensure ns loopzero-build: %v", err)}
-	}
-
-	if err := d.Host.helmUpgrade(chartPath, apiURL); err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 helm upgrade: %v", err)}
-	}
-
-	// Layer 4: rollout mgmt loopzero-api.
+	// Layer 3: rollout mgmt loopzero-api.
 	if err := d.Kube.RolloutRestartDeployment(d.Ctx, "loopzero-system", "loopzero-api"); err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 4 rollout loopzero-api: %v", err)}
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 rollout loopzero-api: %v", err)}
 	}
 	if err := waitForRolloutSettled(d.Ctx, d.CtrlClient, "loopzero-system", "loopzero-api", d.settleTimeout(loopzeroAPISettle)); err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 4 loopzero-api did not settle: %v", err)}
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 loopzero-api did not settle: %v", err)}
 	}
 
-	return Result{Verdict: PASS, Reason: fmt.Sprintf("canonical broker chain seeded (%s token; apiURL=%s)", tokenAction(reused), apiURL)}
+	return Result{Verdict: PASS, Reason: fmt.Sprintf("broker token seeded on core and cell (%s)", tokenAction(reused))}
 }
 
 // Verify probes: (a) mgmt Secret has canonical env key non-empty,
@@ -210,121 +177,4 @@ func brokerWorkloadSecret(token []byte) *corev1.Secret {
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{brokerTokenKey: token},
 	}
-}
-
-// defaultDockerNetworkInspect returns the IPv4 address (no CIDR) of the given
-// container inside the docker network. D1 exemption: read-only introspection.
-func defaultDockerNetworkInspect(network, container string) (string, error) {
-	out, err := exec.Command("docker", "network", "inspect", network).Output()
-	if err != nil {
-		return "", fmt.Errorf("docker network inspect %s: %w", network, err)
-	}
-	// Response is `[{...}]` (an array of network entries).
-	var nets []struct {
-		Containers map[string]struct {
-			Name string `json:"Name"`
-			IPv4 string `json:"IPv4Address"`
-		} `json:"Containers"`
-	}
-	if err := json.Unmarshal(out, &nets); err != nil {
-		return "", fmt.Errorf("parse docker network inspect: %w", err)
-	}
-	for _, n := range nets {
-		for _, c := range n.Containers {
-			if c.Name == container {
-				ip, _, _ := strings.Cut(c.IPv4, "/")
-				if ip != "" {
-					return ip, nil
-				}
-			}
-		}
-	}
-	return "", fmt.Errorf("container %s not found in network %s", container, network)
-}
-
-// dockerNetworkGateway returns the IPv4 gateway of a docker network — the address
-// of the bridge itself.
-//
-// WHY IT EXISTS (loopzero-workspace#23). A CONTAINER's IP is assigned by DHCP and
-// SHUFFLES on every `docker restart` / `k3d cluster create`: any config that
-// recorded it starts pointing at another cluster, IN SILENCE — and the symptom
-// never names the cause (an empty `loopzero logs` reads as "Loki is down", never as
-// "you are talking to the wrong cluster"). The gateway takes no part in that
-// shuffle: it is declared in the network's IPAM and lives as long as the
-// network does. Paired with a PUBLISHED port — declared in the cluster's
-// versioned config, not drawn — it is the one stable address a process outside
-// the cluster has to reach it.
-//
-// DERIVED, never written as a literal: `172.18.0.1` is true for today's
-// `k3d-loopzero` network; another network has another bridge. Reading the IPAM
-// keeps the PROPERTY (stability) without inheriting the literal — and an IP
-// literal is exactly what this issue fights.
-//
-// D1 exemption: read-only introspection, the same case as the neighbour above.
-func defaultDockerNetworkGateway(network string) (string, error) {
-	out, err := exec.Command("docker", "network", "inspect", network).Output()
-	if err != nil {
-		return "", fmt.Errorf("docker network inspect %s: %w", network, err)
-	}
-	var nets []struct {
-		IPAM struct {
-			Config []struct {
-				Gateway string `json:"Gateway"`
-			} `json:"Config"`
-		} `json:"IPAM"`
-	}
-	if err := json.Unmarshal(out, &nets); err != nil {
-		return "", fmt.Errorf("parse docker network inspect: %w", err)
-	}
-	for _, n := range nets {
-		for _, c := range n.IPAM.Config {
-			// Sem CIDR: algumas versoes reportam `172.18.0.1/16` neste campo.
-			if gw, _, _ := strings.Cut(c.Gateway, "/"); gw != "" {
-				return gw, nil
-			}
-		}
-	}
-	return "", fmt.Errorf("network %s declares no IPAM gateway", network)
-}
-
-// brokerChartAbsPath resolves the chart path relative to the running binary.
-// Overridable via LOOPZERO_CHART_PATH env for operator custom locations.
-func brokerChartAbsPath(h Host) (string, error) {
-	if p := h.getenv("LOOPZERO_CHART_PATH"); p != "" {
-		return p, nil
-	}
-	// Resolve relative to the CWD — the seed is expected to run from the repo
-	// root (halted-loop) or the cmd/loopzero-ops dir (dev). Try both.
-	for _, candidate := range []string{
-		brokerChartRelativePath,
-		filepath.Join("..", "..", brokerChartRelativePath),
-	} {
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-			abs, aerr := filepath.Abs(candidate)
-			if aerr == nil {
-				return abs, nil
-			}
-		}
-	}
-	return "", fmt.Errorf("chart dir not found (tried %s and ../../%s; set LOOPZERO_CHART_PATH)", brokerChartRelativePath, brokerChartRelativePath)
-}
-
-// defaultHelmUpgrade runs `helm upgrade --install` for the broker chart.
-// D1 exemption: helm is a canonical operator-tool for chart lifecycle.
-func defaultHelmUpgrade(chartPath, apiURL string) error {
-	cmd := exec.Command("helm", "upgrade", "--install", brokerHelmReleaseName,
-		chartPath,
-		"--kube-context", brokerContextWorkload,
-		"-n", brokerESONamespace,
-		"--create-namespace",
-		"--set", "envName="+brokerEnvName,
-		"--set", "broker.enabled=true",
-		"--set", "broker.apiURL="+apiURL,
-		"--set", "broker.tokenSecret="+brokerSecretName,
-		"--set", "broker.cellID="+brokerCellID,
-	)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("helm upgrade: %w: %s", err, snippet(out))
-	}
-	return nil
 }

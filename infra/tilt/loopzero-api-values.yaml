@@ -26,7 +26,11 @@ config:
   argocdUrl: "http://argocd-server.argocd.svc.cluster.local:80"
   buildKubeContext: "build"
   runtimeKubeContext: "in-cluster"
-  lokiUrl: "http://k3d-loopzero-build-serverlb:30094"
+  # The build cluster's Loki on the port infra/k3d/build-cluster.yaml publishes (30120),
+  # through the docker network gateway host.k3d.internal names in the core CoreDNS — the
+  # same address the helmfile environments render (crossCluster.lokiNodePort). The
+  # `loki-cross-cluster` seed used to patch it onto this Deployment.
+  lokiUrl: "http://host.k3d.internal:30120"
   registryUrl: "k3d-loopzero-registry:5000"
   registryInsecure: "true"
   loopzeroSyftImage: "k3d-loopzero-registry:5000/loopzero-syft-scanner:v0.1.0"
@@ -44,7 +48,10 @@ config:
 
 secrets:
   create: true
-  openbaoVaultRoleId: "b805a39a-2b8c-afdd-1b7a-95073b1c1be6"
+  # No OPENBAO_VAULT_ROLE_ID here: OpenBao issues a new role_id at every vault bootstrap,
+  # and `loopzero-ops seed vault-role-id-sync` writes it into Secret loopzero-openbao-approle. The
+  # Tilt Deployment lists this Secret AFTER that one in envFrom, so a literal here would
+  # silently win with a stale value.
   minioAccessKey: "loopzero-admin"
   databaseUrl: "postgres://loopzero:loopzero-dev-password@postgresql.loopzero-system.svc.cluster.local:5432/loopzero?sslmode=disable"
   loopzeroArgoCallbackSecret: "dev-callback-secret"

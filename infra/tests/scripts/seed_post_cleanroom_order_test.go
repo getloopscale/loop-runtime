@@ -11,26 +11,16 @@ import (
 // scriptPath + readScript helpers live in vault_bootstrap_test.go
 // (shared package-level helpers, landed first via PR #92).
 
-// TestSeedPostCleanroomAll_StepOrderCanonical locks Finding #4 of issue
-// #91 (Cleanroom mandate canonical chain run 2026-06-18). The master
-// seed script declared step ORDER:
+// TestSeedPostCleanroomAll_StepOrderCanonical locks the dependency order of
+// the master seed chain.
 //
-//	1 vault → 2 minio → 3 admin → 4 patch-kratos → 4b hydra → 5+ ...
-//
-// but Step 3 (seed-admin-loopzero-dev) HTTP-POSTs a login submit against
-// the canonical Kratos URL (auth-dev.loopzero.example). At Step 3 time,
-// Kratos ConfigMap still has the helm-default URLs (localhost:4455)
-// because Step 4 (patch-kratos-dev-public) has not run yet → CSRF
-// defense rejects the submit with HTTP 000. Sponsor LIVE-caught
-// 2026-06-18: every fresh Cleanroom failed Step 3 admin login.
-//
-// Canonical order: 1 vault → 2 minio → 4 patch-kratos → 4b hydra → 3
-// admin → 5+. The login-submit dependency MUST come after Kratos
-// canonical URLs land in the ConfigMap.
-//
-// Cross-ref memory feedback_post_cleanroom_kratos_patch_dev_public
-// already documents the dependency; this test locks the ORDER so the
-// master script does not regress.
+// Finding #4 of issue #91 (Cleanroom mandate chain run 2026-06-18) was an order
+// defect: Step 3 (seed-admin-loopzero-dev) POSTs a login against auth-dev, and
+// ran before the patch-kratos seed had rewritten the Kratos URLs, so every fresh
+// Cleanroom failed the admin login. The fix of record was to run patch-kratos
+// first. The root cause is gone now — the Kratos and Hydra URLs are environment
+// values `helmfile sync` renders before any seed runs (principle_violations#67)
+// — so the relation left to lock is the one that still exists.
 func TestSeedPostCleanroomAll_StepOrderCanonical(t *testing.T) {
 	body := readScript(t, "seed-post-cleanroom-all.sh")
 
@@ -69,14 +59,6 @@ func TestSeedPostCleanroomAll_StepOrderCanonical(t *testing.T) {
 		why            string
 	}{
 		{"1", "2", "vault must finish before minio (Kratos uses minio for cloud assets)"},
-		// Canonical fix for Finding #4 — patch-kratos (4) MUST run
-		// before admin (3) because admin posts a login submit against
-		// auth-dev.loopzero.example and Kratos rejects pre-patch with HTTP
-		// 000 (cors / cookies.domain / base_url still helm-default).
-		{"4", "3", "patch-kratos MUST run before admin login submit (Finding #4 / issue #91)"},
-		// Same family: hydra URLs canonical must also precede admin so
-		// the OIDC callback chain is consistent.
-		{"4b", "3", "hydra URLs canonical must run before admin (consistency with 4 → 3)"},
 	}
 
 	for _, r := range requiredBefore {
@@ -96,11 +78,12 @@ func TestSeedPostCleanroomAll_StepOrderCanonical(t *testing.T) {
 		}
 	}
 
-	// Traceability comment: Finding #4 / issue #91 referenced in script
-	// header so a future operator understands why the unusual order
-	// (Step 4 before Step 3) is canonical.
-	traceRe := regexp.MustCompile(`Finding #4|issue #91|patch-kratos.*before.*admin|MUST.*precede.*admin`)
-	if !traceRe.MatchString(body) {
-		t.Error("canonical traceability comment missing — future operator may 'fix' the unusual 4-before-3 order")
+	// No step may seed the Kratos or Hydra configuration again: that is what
+	// made the order matter in the first place.
+	for _, id := range []string{"4", "4b"} {
+		if _, back := positions[id]; back {
+			t.Errorf("step %q is back in the chain; the Kratos/Hydra URLs are rendered by helmfile, and a seed "+
+				"patching them re-creates the Finding #4 ordering dependency", id)
+		}
 	}
 }

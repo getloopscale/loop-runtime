@@ -83,10 +83,12 @@ loki:
 #
 # Loki primary Service stays ClusterIP (in-cluster Promtail ingest path).
 # Cross-cluster query path uses the SEPARATE `loki-cross-cluster` NodePort
-# Service in nodeport-service.yaml — clean SoC: chart-default Service handles
-# same-cluster traffic; the standalone manifest exposes the cross-cluster
-# bridge. Sponsor verbatim approval 2026-06-09 "VOCE É AUTORIZADO A FAZER
-# ALTERAÇÕES FAANG LEVEL" gated the canonical persistence.
+# Service that infra/helmfile/build.helmfile.yaml.gotmpl adds through
+# extraObjects where the environment declares crossCluster.lokiNodePort —
+# clean SoC: chart-default Service handles same-cluster traffic; the bridge
+# exposes the cross-cluster query path. Sponsor verbatim approval 2026-06-09
+# "VOCE É AUTORIZADO A FAZER ALTERAÇÕES FAANG LEVEL" gated the canonical
+# persistence.
 deploymentMode: SingleBinary
 singleBinary:
   replicas: 1

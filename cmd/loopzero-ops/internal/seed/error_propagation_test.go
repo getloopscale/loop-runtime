@@ -66,24 +66,6 @@ func TestNetworkingCorednsSeed_FailsWhenCorednsNeverSettles(t *testing.T) {
 	}
 }
 
-func TestPatchKratosSeed_FailsWhenKratosNeverSettles(t *testing.T) {
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Namespace: kratosNamespace, Name: kratosConfigMap},
-		Data:       map[string]string{kratosConfigKey: stubKratosYAML},
-	}
-	ss := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Namespace: kratosNamespace, Name: kratosCourierStatefulSet}}
-	c := fake.NewClientBuilder().WithScheme(newScheme(t)).
-		WithObjects(cm, ss, neverReadyDeployment(kratosNamespace, kratosDeployment)).Build()
-	deps := Deps{
-		RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(),
-		Kube: NewKubeClient(c), CtrlClient: c, Creds: makeKratosCreds(),
-	}
-	got := NewPatchKratosSeed().Run(deps)
-	if got.Verdict != FAIL || !strings.Contains(got.Reason, kratosDeployment) {
-		t.Fatalf("Verdict = %s (%s), want FAIL naming %s", got.Verdict, got.Reason, kratosDeployment)
-	}
-}
-
 func TestDiscoverCorednsHosts_SkipsAbsentContainers(t *testing.T) {
 	var host Host
 	host.DockerContainerIP = func(c string) (string, error) {

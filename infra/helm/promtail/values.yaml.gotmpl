@@ -10,9 +10,20 @@
 #   - prod (DOKS):            per prod.yaml env value (DOKS internal LB)
 # Helmfile templating expands the `.Environment.Values.loki.pushUrl` lookup
 # at sync time; the chart sees a fully-resolved literal.
+#
+# The build cluster's release is labelled `lokiPush: colocated`: it runs next to the
+# Loki build.helmfile installs. Where that Loki is the one the platform reads — the
+# environment publishes it cross-cluster through crossCluster.lokiNodePort, the k3d
+# topologies — this Promtail pushes to the in-cluster Service, and pushUrl stays the
+# address for the Promtails in other clusters (the cells). Elsewhere (prod, drill)
+# pushUrl names a central Loki and every Promtail uses it.
 config:
   clients:
+{{- if and (eq (index .Release.Labels "lokiPush") "colocated") (.Environment.Values | getOrNil "crossCluster.lokiNodePort") }}
+    - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+{{- else }}
     - url: {{ .Environment.Values | getOrNil "loki.pushUrl" | default "http://172.18.0.3:30094/loki/api/v1/push" }}
+{{- end }}
       batchwait: 5s
       batchsize: 1048576
       backoff_config:

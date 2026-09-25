@@ -9,6 +9,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -23,6 +24,21 @@ func newScheme(t *testing.T) *runtime.Scheme {
 		t.Fatalf("add appsv1: %v", err)
 	}
 	return s
+}
+
+// makeLoopZeroAPIDeploymentWithEnv builds a Deployment with N env vars.
+func makeLoopZeroAPIDeploymentWithEnv(envs []corev1.EnvVar) *appsv1.Deployment {
+	one := int32(1)
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: "loopzero-api"},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &one,
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Env: envs}}},
+			},
+		},
+		Status: appsv1.DeploymentStatus{ReadyReplicas: 1, UpdatedReplicas: 1},
+	}
 }
 
 func TestCreateOrUpdateSecret_CreatesWhenAbsent(t *testing.T) {
