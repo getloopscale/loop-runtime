@@ -10,26 +10,9 @@
 #     helmfile -f infra/helmfile/cell.helmfile.yaml -e dev sync
 #   # repeat with KUBECONFIG=~/.kube/loopzero-cell-1.yaml for cell-1
 
-environments:
-  dev:
-    values:
-      - environments/dev.yaml
-  prod:
-    values:
-      - environments/prod.yaml
-  standalone:
-    values:
-      - environments/standalone.yaml
-  standalone-multi:
-    # end-to-end-deploy-validation-plan T0.3 — 3 separate k3d clusters.
-    values:
-      - environments/standalone-multi.yaml
-  drill:
-    # Bug #30 LIVE fix (2026-05-17 iter 21): drill runtime + runtime-2
-    # clusters need Traefik + cert-manager + cf-tunnel bootstrap.
-    # Reuses drill.yaml env values.
-    values:
-      - environments/drill.yaml
+# The environments are declared once, in environments.yaml.
+bases:
+  - environments.yaml
 
 ---
 helmDefaults:
@@ -149,7 +132,7 @@ releases:
     version: 2.16.1
     values:
       - ../helm/keda/values.yaml
-{{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}
+{{- if .Values.profile.highAvailability }}
       # HA sizing for the DigitalOcean workload clusters (same env split as
       # gitea's values-ha.yaml in core.helmfile).
       - ../helm/keda/values.production.yaml
@@ -163,12 +146,12 @@ releases:
     # times out at 900s on DOKS small nodes. Drill L2 harness (50 deploys)
     # doesn't exercise scale-to-zero — KEDA itself is enough. Skip the
     # HTTP addon in drill to unblock Phase 4a runtime sync.
-    installed: {{ ne .Environment.Name "drill" }}
+    installed: {{ .Values.profile.kedaHttpAddon }}
     needs:
       - keda/keda
     values:
       - ../helm/keda-http-addon/values.yaml
-{{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}
+{{- if .Values.profile.highAvailability }}
       - ../helm/keda-http-addon/values.production.yaml
 {{- end }}
 
@@ -215,7 +198,7 @@ releases:
         value: "{{ .Values.policyMode }}"
       - name: domain
         value: "{{ .Values.domain }}"
-{{- if has .Environment.Name (list "standalone-multi" "dev-public" "standalone-public") }}
+{{- if .Values.profile.localRegistry }}
       # Plan 2026-06-04 dev-public-domain-canonicalization — local envs run
       # BuildKit pipelines that push to k3d-loopzero-registry:5000. Without this
       # allowlist entry the tenant pods are rejected by VAP
@@ -289,7 +272,7 @@ releases:
     # out at 15m on DOKS. Drill L2 harness doesn't deploy static apps —
     # only dynamic deploys (Rollout-backed services). Skip in drill to
     # unblock Phase 4a runtime sync.
-    installed: {{ ne .Environment.Name "drill" }}
+    installed: {{ .Values.profile.staticAssets }}
     needs:
       - loopzero-system/rbac
     values:

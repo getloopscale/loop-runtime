@@ -168,10 +168,10 @@ which fails both ways — an undeclared pair, or a declaration that outlived its
 | `cluster-issuer` | cell, secrets | ours | — | `always` |
 | `external-secrets` | cell, core | upstream | 0.14.3 | `always` |
 | `gitea` | core | upstream | 10.6.0 | `always` |
-| `harbor` | core | upstream | 1.16.2 | `{{ ne .Environment.Name "drill" }}` |
+| `harbor` | core | upstream | 1.16.2 | `{{ .Values.profile.harbor }}` |
 | `k6-operator` | — | undeclared | — | `always` |
 | `keda` | cell | upstream | 2.16.1 | `always` |
-| `keda-http-addon` | cell | upstream | 0.8.0 | `{{ ne .Environment.Name "drill" }}` |
+| `keda-http-addon` | cell | upstream | 0.8.0 | `{{ .Values.profile.kedaHttpAddon }}` |
 | `loki` | build | upstream | 6.24.0 | `always` |
 | `minio` | core | upstream | 5.4.0 | `always` |
 | `monitoring` | cell, core | upstream | 3.12.1 | `{{ .Values \| get "installMetricsServer" false }}` |
@@ -187,13 +187,13 @@ which fails both ways — an undeclared pair, or a declaration that outlived its
 | `policy-controller` | cell | upstream | 0.8.1 | `always` |
 | `postgresql` | core | upstream | 18.6.2 | `{{ .Values.inClusterPostgres \| default false }}` |
 | `promtail` | build, cell | upstream | 6.16.6 | `always` |
-| `redis` | core | upstream | 19.6.4 | `{{ ne .Environment.Name "drill" }}` |
+| `redis` | core | upstream | 19.6.4 | `{{ not .Values.profile.managedRedis }}` |
 | `sigstore-extras` | — | undeclared | — | `always` |
-| `smoke-test` | core | ours | — | `{{ and (ne .Environment.Name "drill") (ne .Environment.Name "dev-public") (ne (.Values \| get "clusterRole" "dev") "standalone") }}` |
-| `static-assets` | cell | ours | — | `{{ ne .Environment.Name "drill" }}` |
+| `smoke-test` | core | ours | — | `{{ and .Values.profile.smokeTest (ne (.Values \| get "clusterRole" "dev") "standalone") }}` |
+| `static-assets` | cell | ours | — | `{{ .Values.profile.staticAssets }}` |
 | `tempo` | core | upstream | 1.14.0 | `always` |
 | `loopzero-api` | core | ours | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |
-| `loopzero-cloud` | core | ours | — | `{{ and (ne .Environment.Name "drill") (ne (.Values \| get "clusterRole" "dev") "standalone") }}` |
+| `loopzero-cloud` | core | ours | — | `{{ and .Values.profile.loopzeroCloud (ne (.Values \| get "clusterRole" "dev") "standalone") }}` |
 | `loopzero-external-secrets` | — | undeclared | — | `always` |
 | `traefik` | cell, core | upstream | 28.3.0 | `always` |
 | `velero` | core | ours | — | `always` |

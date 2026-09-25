@@ -143,11 +143,10 @@ func TestB25MinioDistributedConditional(t *testing.T) {
 		start = 0
 	}
 	context := s[start:idx]
-	gateLegacy := strings.Contains(context, `{{- if ne .Environment.Name "standalone" }}`)
-	gateAllowlist := strings.Contains(context, `{{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}`)
-	if !gateLegacy && !gateAllowlist {
-		t.Errorf("B25 regression: minio values-distributed.yaml must be gated to cloud profiles only (dev|prod)")
+	if !strings.Contains(context, `{{- if .Values.profile.highAvailability }}`) {
+		t.Errorf("B25 regression: minio values-distributed.yaml must be gated by profile.highAvailability")
 	}
+	assertHighAvailabilityOnlyInCloudProfiles(t, "B25")
 }
 
 func TestB26MetricsServerInstalledFalse(t *testing.T) {
@@ -191,10 +190,39 @@ func TestB28GiteaHaConditional(t *testing.T) {
 		end = len(s) - idx
 	}
 	block := s[idx : idx+10+end]
-	gateLegacy := strings.Contains(block, `{{- if ne .Environment.Name "standalone" }}`)
-	gateAllowlist := strings.Contains(block, `{{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}`)
-	if !gateLegacy && !gateAllowlist {
-		t.Errorf("B28 regression: gitea values-ha.yaml must be gated to cloud profiles only (dev|prod)")
+	if !strings.Contains(block, `{{- if .Values.profile.highAvailability }}`) {
+		t.Errorf("B28 regression: gitea values-ha.yaml must be gated by profile.highAvailability")
+	}
+	assertHighAvailabilityOnlyInCloudProfiles(t, "B28")
+}
+
+// assertHighAvailabilityOnlyInCloudProfiles checks the other half of the B25/B28 gate: the
+// helmfiles read `profile.highAvailability`, and only the LoopZero Cloud environments (dev, prod)
+// set it. Self-hosting and local profiles run single-replica on commodity hardware.
+func assertHighAvailabilityOnlyInCloudProfiles(t *testing.T, bug string) {
+	t.Helper()
+	for _, env := range []string{"dev", "prod", "standalone", "standalone-multi", "standalone-public", "dev-public", "drill"} {
+		raw, err := os.ReadFile("../../helmfile/environments/" + env + ".yaml")
+		if err != nil {
+			t.Fatalf("%s: read %s env: %v", bug, env, err)
+		}
+		var doc struct {
+			Profile *struct {
+				HighAvailability *bool `yaml:"highAvailability"`
+			} `yaml:"profile"`
+		}
+		if err := yaml.Unmarshal(raw, &doc); err != nil {
+			t.Fatalf("%s: parse %s env: %v", bug, env, err)
+		}
+		if doc.Profile == nil || doc.Profile.HighAvailability == nil {
+			t.Errorf("%s: environments/%s.yaml does not declare profile.highAvailability", bug, env)
+			continue
+		}
+		want := env == "dev" || env == "prod"
+		if *doc.Profile.HighAvailability != want {
+			t.Errorf("%s regression: environments/%s.yaml sets profile.highAvailability=%v, want %v (HA is a LoopZero Cloud posture)",
+				bug, env, *doc.Profile.HighAvailability, want)
+		}
 	}
 }
 
