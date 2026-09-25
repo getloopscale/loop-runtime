@@ -34,7 +34,6 @@ func TestFakeGitProvisioner_ConcurrentAccess(t *testing.T) {
 			for j := 0; j < opsPerGoroutine; j++ {
 				repoName := fmt.Sprintf("repo-%d-%d", id, j)
 				_, _ = prov.EnsureRepo(ctx, repoName, "org")
-				_, _ = prov.RepoExists(ctx, repoName)
 				_ = prov.ArchiveRepo(ctx, repoName)
 			}
 		}(i)

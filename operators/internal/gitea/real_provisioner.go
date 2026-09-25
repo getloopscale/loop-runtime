@@ -86,21 +86,7 @@ func (p *RealProvisioner) EnsureRepo(ctx context.Context, name string, branch st
 	return p.repoURL(name), nil
 }
 
-// RepoExists checks if a repository exists.
-func (p *RealProvisioner) RepoExists(ctx context.Context, name string) (bool, error) {
-	repo, err := p.api.GetRepo(ctx, p.token, p.orgName, name)
-	if err != nil {
-		return false, err
-	}
-	return repo != nil, nil
-}
-
 // ArchiveRepo archives (soft-deletes) a repository.
 func (p *RealProvisioner) ArchiveRepo(ctx context.Context, name string) error {
 	return p.api.ArchiveRepo(ctx, p.token, p.orgName, name)
-}
-
-// UnarchiveRepo flips a repository's archived flag back to false (idempotent).
-func (p *RealProvisioner) UnarchiveRepo(ctx context.Context, name string) error {
-	return p.api.UnarchiveRepo(ctx, p.token, p.orgName, name)
 }
