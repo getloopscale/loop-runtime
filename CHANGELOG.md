@@ -14,6 +14,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Environment status records `cellID`, the cell its namespace was provisioned in, so deletion targets that cell even after the tenant is re-pinned (principle_violations#59)
+
 - Release inspection reports whether its audit trail was complete, unavailable or truncated, instead of showing an unreadable trail as empty (#23)
 
 - Quality gate `values-duplicate-keys` fails any Helm values file under charts/ or infra/helm/ that declares the same key twice.
@@ -63,11 +65,15 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- The API now refuses to start when a numeric or duration setting cannot be parsed (for example a timeout without a unit), naming the setting, instead of silently using the default (#292)
+- The tenant and app operators refuse to start on a malformed LOOPZERO_TENANT_MAX_CONCURRENT or LOOPZERO_DATA_PLANE_POLLER_INTERVAL instead of silently using the default (principle_violations#91)
 
-- The build error for a loopzero.yaml that does not declare a runtime is now in English, like every other build message (#11)
+- The tenant operator connects to the MinIO admin API over TLS when MINIO_ENDPOINT starts with https:// (principle_violations#109)
 
-- Automatic placement of new accounts now respects the per-cell capacity an operator sets, not only the platform-wide limit (#4)
+- The API now refuses to start when a numeric or duration setting cannot be parsed (for example a timeout without a unit), naming the setting, instead of silently using the default (principle_violations#292)
+
+- The build error for a loopzero.yaml that does not declare a runtime is now in English, like every other build message (principle_violations#11)
+
+- Automatic placement of new accounts now respects the per-cell capacity an operator sets, not only the platform-wide limit (principle_violations#4)
 
 - Build timeouts reported by the stuck-build reaper now name the phase budget that was exceeded, from the same values the build lifecycle uses (dp#9)
 
@@ -203,6 +209,10 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- PlatformBootstrap spec.timeouts and spec.argocd.tokenTTLSeconds, which the platform operator never applied (principle_violations#83)
+
+- Operator metrics that were registered but never recorded: loopzero_operator_provisioner_duration_seconds, loopzero_operator_crd_count, loopzero_finalizer_blocked_seconds, loopzero_reconcile_queue_depth, loopzero_self_heal_total, loopzero_orphan_cr_total (principle_violations#72)
+
 - POST /api/v1/tenants/bulk-delete, which could never succeed (it always answered 400)
 
 - The unused secret-store client, cache and database/Kubernetes credential engines were removed from the shared library.
@@ -241,83 +251,115 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- Source upload failures are no longer mislabelled as network or permission problems when an unrelated number or word in the error happened to match (#301)
+- Cancelled or timed-out reconciles no longer trip the ArgoCD circuit breaker and pause tenant deploy setup (principle_violations#106)
 
-- Custom domain setup no longer risks duplicate DNS records after a slow Cloudflare response, and conflict detection now sees every record in large zones (#293)
+- A transient MinIO error no longer rotates a tenant's build storage credentials while builds are running (principle_violations#109)
 
-- Build and runtime log lines written within the same second are now shown in the order they were produced (#295)
+- Connecting a project for a Pro or Team account no longer fails with a platform-degraded error: tenant provisioning now accepts the pro and team plans (principle_violations#85)
 
-- Usage metering recovers on its own after a region credential is rotated, instead of failing until the controller restarts (#291)
+- A ClusterCredential no longer reports its ArgoCD cluster Secret out of sync after losing a routine write conflict (principle_violations#83 follow-up)
 
-- The deploy timeline now reports a temporary server problem as an error instead of "deploy not found" (#288)
+- The app operator now reports failed data-plane readiness writes and readiness samples whose environment has no stored target, instead of logging and continuing silently (principle_violations#68)
 
-- The deploy timeline now shows a release whose sync, mirror or rollback failed as failed or degraded instead of "in progress" forever (#286)
+- The MisplacedTenantDetected alert can fire: the tenant operator now scans for Tenants outside loopzero-system and publishes loopzero_misplaced_tenant_total, and loopzero_tenant_cb_state reflects each circuit breaker's state (principle_violations#72)
 
-- Image-signing latency metrics no longer report fabricated zero-second samples, so the signing latency alert reflects real measurements only (#285)
+- A PreviewEnvironment's status.url now shows the same public URL the dashboard and API report, instead of an operator-built host that did not route; PreviewEnvironment gains the optional spec.publicURL the API fills in (principle_violations#74)
 
-- Pull request previews and GitHub app installations no longer fail silently when the account lookup or save fails; in-flight webhook processing stops cleanly on shutdown (#280)
+- A ClusterCredential whose ArgoCD cluster Secret cannot be written now reports ArgoCDSecretSynced=False and is not Ready, instead of looking healthy while deployments to that cell cannot sync (principle_violations#100)
 
-- Setting or deleting a secret for an account hosted on a region this API cannot reach now reports the sync as failed instead of silently writing it to the wrong cluster (#46)
+- Deleting a PlatformBootstrap now removes the loopzero-platform-tokens Secret it created, and a failed bootstrap records the failure reason in its BootstrapComplete condition (principle_violations#80, principle_violations#81)
 
-- A deploy with an app or account name that cannot form valid resource names now fails with an error instead of crashing the request (#44)
+- Ready/Reconciling/Stalled conditions are written in the same status update as the conditions they summarise, so they are no longer stale for a whole requeue interval after a conflict (principle_violations#61)
 
-- GitHub commit statuses and deployment-sync logins no longer fail when a description or password contains control characters (#282)
+- LoopZeroApplication and ExposedRoute phases only move along their declared lifecycle transitions; a route that stops answering now reports Degraded instead of dropping back to Serving (principle_violations#64, principle_violations#66)
 
-- The commit status on GitHub now links the deployed app's real URL instead of a guessed "api" host (#279)
+- Preview environments are provisioned in the tenant's cell (namespace and every isolation object together), matching where their deployment is synced; the preview-operator chart grants the reads this needs (principle_violations#76)
 
-- Deploying the same commit twice at once (for example a push and a pull request preview) no longer risks one deploy uploading or deleting the other's source (#278)
+- Tenant PriorityClasses and Harbor pull secrets are written to the tenant's cell instead of always to cell-0, ending the endless pull-robot re-creation for tenants on other cells (principle_violations#78)
 
-- The metering freshness signal now keeps growing when usage could not be measured (database unreachable, every tenant failed), so billing gaps can be alerted on (#290)
+- Environment namespaces, RBAC, NetworkPolicies and quotas are created only in the tenant's own cell; an unresolvable cell now reports RuntimeClusterUnresolved and retries instead of silently writing to cell-0, and deletion no longer releases the finalizer when the namespace lookup fails (principle_violations#59)
 
-- Database connection pool metrics (acquire totals, saturation count, acquire wait) now report real values; they previously grew as a running sum of totals, making the related alerts meaningless (#284)
+- Operators pick up a rotated cell kubeconfig or ServiceAccount token without a restart (principle_violations#107)
 
-- An expired credential for the deployment sync service is now refreshed whichever status check first sees it, instead of only after a sync attempt (#276)
+- The tenant operator no longer deletes every live preview Application of a tenant when listing its PreviewEnvironments fails transiently; the step fails and retries instead (principle_violations#57)
 
-- The build timeline and build logs now group every build step into its real phase (clone, install, build, sign, deliver) instead of showing most steps as "other" (#289)
+- Source upload failures are no longer mislabelled as network or permission problems when an unrelated number or word in the error happened to match (principle_violations#301)
 
-- In projects with several services, each service's release now records that service's own image digest instead of possibly another service's (#302)
+- Custom domain setup no longer risks duplicate DNS records after a slow Cloudflare response, and conflict detection now sees every record in large zones (principle_violations#293)
 
-- Source uploads and signed download links now work for object names containing spaces or non-ASCII characters (#8)
+- Build and runtime log lines written within the same second are now shown in the order they were produced (principle_violations#295)
 
-- Services deployed without progressive delivery now get the same graceful-shutdown drain as canary deploys, so in-flight connections are no longer cut during a rollout (#41)
+- Usage metering recovers on its own after a region credential is rotated, instead of failing until the controller restarts (principle_violations#291)
 
-- Deleting a project now fails when the platform cannot reach the deployment repository, instead of reporting success while the service keeps running (#2)
+- The deploy timeline now reports a temporary server problem as an error instead of "deploy not found" (principle_violations#288)
 
-- Evicting a tenant no longer deletes resources of other tenants whose ID starts with the same characters, and an eviction that could not delete every resource now fails instead of reporting success (#45)
+- The deploy timeline now shows a release whose sync, mirror or rollback failed as failed or degraded instead of "in progress" forever (principle_violations#286)
 
-- Only one API replica runs the background loops at a time, and a replica that loses the lease stops them
+- Image-signing latency metrics no longer report fabricated zero-second samples, so the signing latency alert reflects real measurements only (principle_violations#285)
 
-- A scaling configuration is refused for an environment name that can never become a valid environment (leading or trailing hyphen)
+- Pull request previews and GitHub app installations no longer fail silently when the account lookup or save fails; in-flight webhook processing stops cleanly on shutdown (principle_violations#280)
 
-- A duplicate-name conflict is reported the same way on every deploy path
+- Setting or deleting a secret for an account hosted on a region this API cannot reach now reports the sync as failed instead of silently writing it to the wrong cluster (principle_violations#46)
 
-- Evicting a team either completes or changes nothing; a failure part-way no longer leaves a half-deleted team
+- A deploy with an app or account name that cannot form valid resource names now fails with an error instead of crashing the request (principle_violations#44)
 
-- Moving a team to another cell cannot race a concurrent move or a new-team placement past the cell's capacity
+- GitHub commit statuses and deployment-sync logins no longer fail when a description or password contains control characters (principle_violations#282)
 
-- Build cleanup keeps each team's own recent builds; two teams with the same project and environment names no longer evict each other's history
+- The commit status on GitHub now links the deployed app's real URL instead of a guessed "api" host (principle_violations#279)
 
-- The API refuses to start when replay protection, quota enforcement or team controls are configured but unreachable, instead of running with them silently off
+- Deploying the same commit twice at once (for example a push and a pull request preview) no longer risks one deploy uploading or deleting the other's source (principle_violations#278)
 
-- A failed GitHub push or installation event is reported as a failed delivery instead of being silently acknowledged
+- The metering freshness signal now keeps growing when usage could not be measured (database unreachable, every tenant failed), so billing gaps can be alerted on (principle_violations#290)
 
-- Build status and build listings report a database failure instead of showing a build with no apps
+- Database connection pool metrics (acquire totals, saturation count, acquire wait) now report real values; they previously grew as a running sum of totals, making the related alerts meaningless (principle_violations#284)
 
-- Preview environments rebuilt from an earlier build keep the app's runtime, path, build and start commands, instead of failing to sync
+- An expired credential for the deployment sync service is now refreshed whichever status check first sees it, instead of only after a sync attempt (principle_violations#276)
 
-- Compute usage is metered for every environment of a team again; namespaces were being skipped, under-counting usage
+- The build timeline and build logs now group every build step into its real phase (clone, install, build, sign, deliver) instead of showing most steps as "other" (principle_violations#289)
 
-- A secret stored encrypted is never returned or synced as its ciphertext when the encryption backend is unavailable; the request fails with a backend-unavailable error instead
+- In projects with several services, each service's release now records that service's own image digest instead of possibly another service's (principle_violations#302)
 
-- The per-Account project limit is now enforced across all of an account's teams when a deploy creates a new project; previously each team could create up to the limit
+- Source uploads and signed download links now work for object names containing spaces or non-ASCII characters (principle_violations#8)
 
-- The per-environment last-deploy summary no longer fails for an environment whose active release has no recorded commit
+- Services deployed without progressive delivery now get the same graceful-shutdown drain as canary deploys, so in-flight connections are no longer cut during a rollout (principle_violations#41)
 
-- Creating a preview on an installation without a build orchestrator returns "preview service not available" instead of failing with an internal error
+- Deleting a project now fails when the platform cannot reach the deployment repository, instead of reporting success while the service keeps running (principle_violations#2)
 
-- Deleting a project no longer cancels archived releases, and now also cancels rolled-back ones, matching the release lifecycle
+- Evicting a tenant no longer deletes resources of other tenants whose ID starts with the same characters, and an eviction that could not delete every resource now fails instead of reporting success (principle_violations#45)
 
-- Deploy webhooks (deploy.failed, deploy.succeeded) now fire whichever process runs the background loops, and the controller runs the same audit-log retention, build cleanup and custom-domain loops as the API
+- Only one API replica runs the background loops at a time, and a replica that loses the lease stops them (principle_violations#202)
+
+- A scaling configuration is refused for an environment name that can never become a valid environment (leading or trailing hyphen) (principle_violations#201)
+
+- A duplicate-name conflict is reported the same way on every deploy path (principle_violations#193)
+
+- Evicting a team either completes or changes nothing; a failure part-way no longer leaves a half-deleted team (principle_violations#196)
+
+- Moving a team to another cell cannot race a concurrent move or a new-team placement past the cell's capacity (principle_violations#195)
+
+- Build cleanup keeps each team's own recent builds; two teams with the same project and environment names no longer evict each other's history (principle_violations#194)
+
+- The API refuses to start when replay protection, quota enforcement or team controls are configured but unreachable, instead of running with them silently off (principle_violations#199)
+
+- A failed GitHub push or installation event is reported as a failed delivery instead of being silently acknowledged (principle_violations#197, principle_violations#198)
+
+- Build status and build listings report a database failure instead of showing a build with no apps (principle_violations#208)
+
+- Preview environments rebuilt from an earlier build keep the app's runtime, path, build and start commands, instead of failing to sync (principle_violations#183)
+
+- Compute usage is metered for every environment of a team again; namespaces were being skipped, under-counting usage (principle_violations#181)
+
+- A secret stored encrypted is never returned or synced as its ciphertext when the encryption backend is unavailable; the request fails with a backend-unavailable error instead (principle_violations#180)
+
+- The per-Account project limit is now enforced across all of an account's teams when a deploy creates a new project; previously each team could create up to the limit (principle_violations#179)
+
+- The per-environment last-deploy summary no longer fails for an environment whose active release has no recorded commit (principle_violations#187)
+
+- Creating a preview on an installation without a build orchestrator returns "preview service not available" instead of failing with an internal error (principle_violations#185)
+
+- Deleting a project no longer cancels archived releases, and now also cancels rolled-back ones, matching the release lifecycle (principle_violations#190)
+
+- Deploy webhooks (deploy.failed, deploy.succeeded) now fire whichever process runs the background loops, and the controller runs the same audit-log retention, build cleanup and custom-domain loops as the API (principle_violations#182)
 
 - Pinning a team to a cell that is full now answers 409 "cell at capacity" instead of an internal error (#26)
 
@@ -655,17 +697,17 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
-- The API refuses to start in production when reserved-key protection for service environment variables is set to warn-only (#300)
+- The API refuses to start in production when reserved-key protection for service environment variables is set to warn-only (principle_violations#300)
 
-- Error messages from source uploads, build submission and the build timeline now hide the same internal infrastructure terms, including ones previously shown on some paths (#10)
+- Error messages from source uploads, build submission and the build timeline now hide the same internal infrastructure terms, including ones previously shown on some paths (principle_violations#10)
 
-- The Git hosting token used for source pushes is no longer visible in process listings (#294)
+- The Git hosting token used for source pushes is no longer visible in process listings (principle_violations#294)
 
-- A configured certificate authority for the deployment sync service that cannot be loaded now stops startup instead of silently disabling TLS verification (#275)
+- A configured certificate authority for the deployment sync service that cannot be loaded now stops startup instead of silently disabling TLS verification (principle_violations#275)
 
-- Image signing no longer falls back to a shared signing identity when the environment name is not recognised; the build fails instead (#303)
+- Image signing no longer falls back to a shared signing identity when the environment name is not recognised; the build fails instead (principle_violations#303)
 
-- Python builds now stop when a dependency has a known vulnerability, or when the dependency scan cannot run, instead of passing silently (#9)
+- Python builds now stop when a dependency has a known vulnerability, or when the dependency scan cannot run, instead of passing silently (principle_violations#9)
 
 - The auth-failure audit throttle no longer trusts X-Forwarded-For from clients that are not a trusted proxy, so a client cannot bypass the 100/min limit by rewriting the header
 
