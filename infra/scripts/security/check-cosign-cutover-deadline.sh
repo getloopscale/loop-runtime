@@ -70,7 +70,7 @@ set -euo pipefail
 #   2 = ERROR (kubectl/parse error; operator must inspect)
 #
 # Emergency override (EC-7 of edge-case-review):
-#   --emergency-override="<reason>" forces exit 0 + audit_log entry
+#   --emergency-override="<reason>" exits 0 once the audit_log row is written, 2 if it cannot be
 #   Requires post-hoc Change Governor review within 24h.
 
 
@@ -118,6 +118,9 @@ log() {
   echo "[check-cosign-cutover-deadline] $*"
 }
 
+# audit_log writes one audit_log row and returns non-zero when it could not.
+# Every value reaches psql as a variable read through :'name' quoting, never
+# spliced into the statement, so operator text cannot break or extend it.
 audit_log() {
   local action="$1"
   local reason="$2"
@@ -126,17 +129,23 @@ audit_log() {
     return 0
   fi
   if ! command -v psql >/dev/null 2>&1; then
-    log "WARN: psql not found; audit_log entry skipped (action=$action)"
-    return 0
+    log "ERROR: psql not found; cannot write the audit_log entry (action=$action)"
+    return 1
   fi
   local actor="${USER:-unknown}"
-  psql -v ON_ERROR_STOP=1 -c "INSERT INTO audit_log (action, actor, target, metadata, timestamp) VALUES (
-    '$action',
-    '$actor',
-    'cosign-cutover',
-    '{\"reason\":\"$reason\",\"script\":\"check-cosign-cutover-deadline.sh\"}',
-    NOW()
-  )" >/dev/null 2>&1 || log "WARN: audit_log write failed (continuing)"
+  if ! psql -v ON_ERROR_STOP=1 -v "action=$action" -v "actor=$actor" -v "reason=$reason" >/dev/null <<'SQL'
+INSERT INTO audit_log (action, actor, target, metadata, timestamp) VALUES (
+  :'action',
+  :'actor',
+  'cosign-cutover',
+  json_build_object('reason', :'reason', 'script', 'check-cosign-cutover-deadline.sh'),
+  NOW()
+);
+SQL
+  then
+    log "ERROR: audit_log write failed (action=$action)"
+    return 1
+  fi
 }
 
 read_cm_field() {
@@ -157,7 +166,11 @@ read_cm_field() {
 if [[ -n "$EMERGENCY_REASON" ]]; then
   log "WARN: EMERGENCY OVERRIDE engaged. reason='$EMERGENCY_REASON'"
   log "WARN: post-hoc Change Governor review required within 24h"
-  audit_log "cosign_deadline_override" "$EMERGENCY_REASON"
+  # The audit row is the only trace of this bypass: no row, no bypass.
+  if ! audit_log "cosign_deadline_override" "$EMERGENCY_REASON"; then
+    log "ERROR: emergency override REFUSED — the bypass could not be recorded"
+    exit 2
+  fi
   exit 0
 fi
 
