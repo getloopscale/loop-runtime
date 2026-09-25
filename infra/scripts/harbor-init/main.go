@@ -109,6 +109,9 @@ func main() {
 	slog.Info("harbor-init completed successfully")
 }
 
+// harborInitialAdminPassword is the password a fresh Harbor install starts with.
+const harborInitialAdminPassword = "Harbor12345"
+
 // config holds environment-driven configuration.
 type config struct {
 	harborURL        string
@@ -131,7 +134,11 @@ func loadConfig() (config, error) {
 		return c, fmt.Errorf("HARBOR_ADMIN_PASSWORD_NEW is required")
 	}
 	if c.adminPasswordOld == "" {
-		c.adminPasswordOld = "Harbor12345"
+		// Harbor's documented initial admin password. The harbor chart sets no
+		// harborAdminPassword and its post-install hook passes no
+		// HARBOR_ADMIN_PASSWORD_OLD, so a fresh install starts with this one;
+		// it is used once, to log in and replace it with the new password.
+		c.adminPasswordOld = harborInitialAdminPassword
 	}
 	if c.healthTimeout == "" {
 		c.healthTimeout = "120s"
@@ -430,8 +437,9 @@ func (h *harborInit) createCIRobot(ctx context.Context) error {
 			"id", result.ID,
 			"name", result.Name,
 		)
-		// Print the secret to stdout so it can be captured by the caller
-		// (e.g., piped into a Kubernetes Secret or vault).
+		// Print the secret to stderr, apart from the JSON log stream on
+		// stdout, so the caller can capture it (e.g. into a Kubernetes Secret
+		// or vault) without it landing in collected logs.
 		fmt.Fprintf(os.Stderr, "\n=== CI ROBOT CREDENTIALS ===\n")
 		fmt.Fprintf(os.Stderr, "Username: %s\n", result.Name)
 		fmt.Fprintf(os.Stderr, "Secret:   %s\n", result.Secret)
