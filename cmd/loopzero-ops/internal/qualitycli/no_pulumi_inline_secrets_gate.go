@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nopulumiinlinesecrets"
@@ -39,7 +38,7 @@ func setupNoPulumiInlineSecrets(fs *flag.FlagSet) Check {
 		if err != nil {
 			return Fail, err
 		}
-		fmt.Fprint(inv.Stderr, nopulumiinlinesecrets.FormatOutcome(outcome))
+		inv.Stderr.Print(nopulumiinlinesecrets.FormatOutcome(outcome))
 		if !outcome.Pass {
 			return Fail, nil
 		}

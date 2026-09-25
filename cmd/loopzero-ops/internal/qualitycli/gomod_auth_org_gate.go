@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/gomodauthorg"
 )
@@ -31,12 +30,12 @@ func setupGoModAuthOrg(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if rep.OK() {
-			fmt.Fprintf(inv.Stdout, "gomod-auth-org: PASS — auth org matches the go.mod requirement (%v)\n",
+			inv.Stdout.Printf("gomod-auth-org: PASS — auth org matches the go.mod requirement (%v)\n",
 				rep.RequiredOrgs)
 			return Pass, nil
 		}
 		for _, f := range rep.Findings {
-			fmt.Fprintf(inv.Stderr, "gomod-auth-org: FAIL %s — %s\n", f.File, f.Message)
+			inv.Stderr.Printf("gomod-auth-org: FAIL %s — %s\n", f.File, f.Message)
 		}
 		return Fail, nil
 	}

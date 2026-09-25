@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/optionbeso"
 )
@@ -31,13 +30,13 @@ func setupOptionBEsoDeployDoc(_ *flag.FlagSet) Check {
 			if !isViolation(err, optionbeso.ErrViolations) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "option-b-eso-deploy-doc: FAIL — %d assertion(s):\n", len(outcome.Failures))
+			inv.Stderr.Printf("option-b-eso-deploy-doc: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", f)
+				inv.Stderr.Printf("  %s\n", f)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "option-b-eso-deploy-doc: PASS — Option B doc contract preserved (4 sub-paths, decision rationale, canonical commands, ESO drift check)")
+		inv.Stdout.Println("option-b-eso-deploy-doc: PASS — Option B doc contract preserved (4 sub-paths, decision rationale, canonical commands, ESO drift check)")
 		return Pass, nil
 	}
 }

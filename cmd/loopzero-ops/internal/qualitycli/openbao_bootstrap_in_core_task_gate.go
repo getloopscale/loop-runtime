@@ -6,7 +6,6 @@ package qualitycli
 import (
 	"errors"
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/openbaobootstrapincore"
 )
@@ -29,20 +28,20 @@ func setupOpenBaoBootstrapInCoreTask(_ *flag.FlagSet) Check {
 		outcome, err := openbaobootstrapincore.Check(openbaobootstrapincore.Config{RepoRoot: inv.Root})
 		switch {
 		case errors.Is(err, openbaobootstrapincore.ErrForbiddenShortcut):
-			fmt.Fprintf(inv.Stderr, "openbao-bootstrap-in-core-task: FAIL — %d violation(s) of the SECRETS/CORE boundary:\n", len(outcome.Violations))
+			inv.Stderr.Printf("openbao-bootstrap-in-core-task: FAIL — %d violation(s) of the SECRETS/CORE boundary:\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintln(inv.Stderr, "OpenBao runs in the SEPARATE loopzero-secrets cluster. Installing it into core is")
-			fmt.Fprintln(inv.Stderr, "forbidden in EVERY tier — a topology violation, not a shortcut. The canonical")
-			fmt.Fprintln(inv.Stderr, "path is `task k3d:secrets:create` + `task k3d:secrets:bootstrap`.")
-			fmt.Fprintln(inv.Stderr, "See docs/decisions.md (B-047).")
+			inv.Stderr.Println("")
+			inv.Stderr.Println("OpenBao runs in the SEPARATE loopzero-secrets cluster. Installing it into core is")
+			inv.Stderr.Println("forbidden in EVERY tier — a topology violation, not a shortcut. The canonical")
+			inv.Stderr.Println("path is `task k3d:secrets:create` + `task k3d:secrets:bootstrap`.")
+			inv.Stderr.Println("See docs/decisions.md (B-047).")
 			return Fail, nil
 		case err != nil:
 			return Fail, err
 		}
-		fmt.Fprintf(inv.Stdout, "openbao-bootstrap-in-core-task: PASS — no core-cluster OpenBao shortcut (%d lines scanned)\n", outcome.LinesScanned)
+		inv.Stdout.Printf("openbao-bootstrap-in-core-task: PASS — no core-cluster OpenBao shortcut (%d lines scanned)\n", outcome.LinesScanned)
 		return Pass, nil
 	}
 }

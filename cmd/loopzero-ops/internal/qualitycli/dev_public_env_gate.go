@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/devpublicenv"
 )
@@ -30,13 +29,13 @@ func setupDevPublicEnv(_ *flag.FlagSet) Check {
 			if !isViolation(err, devpublicenv.ErrViolations) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "dev-public-env: FAIL — %d assertion(s):\n", len(outcome.Failures))
+			inv.Stderr.Printf("dev-public-env: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", f)
+				inv.Stderr.Printf("  %s\n", f)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "dev-public-env: PASS — dev-public.yaml canonical shape preserved (dev URLs, cookieDomain, CORS, D5 OAuth reuse)")
+		inv.Stdout.Println("dev-public-env: PASS — dev-public.yaml canonical shape preserved (dev URLs, cookieDomain, CORS, D5 OAuth reuse)")
 		return Pass, nil
 	}
 }

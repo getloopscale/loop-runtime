@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratospublicurls"
 )
@@ -30,17 +29,17 @@ func setupOryKratosPublicURLs(_ *flag.FlagSet) Check {
 			if len(outcome.Failures) == 0 {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "ory-kratos-public-urls: FAIL — %d golden assertion(s) violated:\n", len(outcome.Failures))
+			inv.Stderr.Printf("ory-kratos-public-urls: FAIL — %d golden assertion(s) violated:\n", len(outcome.Failures))
 			for _, v := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
 			return Fail, nil
 		}
 		if outcome.Skipped {
-			fmt.Fprintf(inv.Stdout, "ory-kratos-public-urls: SKIP — %s\n", outcome.SkipReason)
+			inv.Stdout.Printf("ory-kratos-public-urls: SKIP — %s\n", outcome.SkipReason)
 			return Pass, nil
 		}
-		fmt.Fprintln(inv.Stdout, "ory-kratos-public-urls: PASS — helm-template golden assertions on Ory Kratos public URLs (M22 empirical follow-up)")
+		inv.Stdout.Println("ory-kratos-public-urls: PASS — helm-template golden assertions on Ory Kratos public URLs (M22 empirical follow-up)")
 		return Pass, nil
 	}
 }

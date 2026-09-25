@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/sprintsyntax"
 )
@@ -30,13 +29,13 @@ func setupSprintSyntax(_ *flag.FlagSet) Check {
 			if !isViolation(err, sprintsyntax.ErrViolations) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "sprint-syntax: FAIL — %d assertion(s):\n", len(outcome.Failures))
+			inv.Stderr.Printf("sprint-syntax: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", f)
+				inv.Stderr.Printf("  %s\n", f)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "sprint-syntax: PASS — 11 hermetic contract assertions clean (script + bash-n + helper + no-heredoc + json-shape + allowlist)")
+		inv.Stdout.Println("sprint-syntax: PASS — 11 hermetic contract assertions clean (script + bash-n + helper + no-heredoc + json-shape + allowlist)")
 		return Pass, nil
 	}
 }

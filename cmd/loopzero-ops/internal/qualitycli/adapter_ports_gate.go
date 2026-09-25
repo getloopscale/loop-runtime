@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/adapterports"
 )
@@ -25,10 +24,10 @@ func setupAdapterPorts(_ *flag.FlagSet) Check {
 			if !isViolation(err, adapterports.ErrNoPortDeclared) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "adapter-ports: FAIL — %v\n", err)
+			inv.Stderr.Printf("adapter-ports: FAIL — %v\n", err)
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "adapter-ports: PASS — %d adapter(s), each declaring the port it satisfies\n", out.Scanned)
+		inv.Stdout.Printf("adapter-ports: PASS — %d adapter(s), each declaring the port it satisfies\n", out.Scanned)
 		return Pass, nil
 	}
 }

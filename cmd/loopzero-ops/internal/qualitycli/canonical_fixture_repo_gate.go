@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/canonicalfixturerepo"
 )
@@ -27,13 +26,13 @@ func setupCanonicalFixtureRepo(_ *flag.FlagSet) Check {
 			if !isViolation(err, canonicalfixturerepo.ErrViolations) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "canonical-fixture-repo: FAIL — %d legacy loopzero-repotest reference(s):\n", len(outcome.Violations))
+			inv.Stderr.Printf("canonical-fixture-repo: FAIL — %d legacy loopzero-repotest reference(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "canonical-fixture-repo: PASS — no legacy loopzero-repotest (canonical: getloopscale/loopzerokit-example)")
+		inv.Stdout.Println("canonical-fixture-repo: PASS — no legacy loopzero-repotest (canonical: getloopscale/loopzerokit-example)")
 		return Pass, nil
 	}
 }

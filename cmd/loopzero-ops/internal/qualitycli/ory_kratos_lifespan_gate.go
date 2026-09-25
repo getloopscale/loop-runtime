@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratoslifespan"
 )
@@ -30,13 +29,13 @@ func setupOryKratosLifespan(_ *flag.FlagSet) Check {
 			if !isViolation(err, orykratoslifespan.ErrViolations) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "ory-kratos-lifespan: FAIL — %d assertion(s):\n", len(outcome.Failures))
+			inv.Stderr.Printf("ory-kratos-lifespan: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", f)
+				inv.Stderr.Printf("  %s\n", f)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "ory-kratos-lifespan: PASS — login/registration=10m, recovery=15m (defense pair with edge rate_limit for RedTeam #89)")
+		inv.Stdout.Println("ory-kratos-lifespan: PASS — login/registration=10m, recovery=15m (defense pair with edge rate_limit for RedTeam #89)")
 		return Pass, nil
 	}
 }

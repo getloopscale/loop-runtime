@@ -6,7 +6,6 @@ package qualitycli
 import (
 	"errors"
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/openbaoinitauth"
 )
@@ -26,24 +25,24 @@ func setupOpenbaoInitAuthMounts(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (Outcome, error) {
 		outcome, err := openbaoinitauth.Check(openbaoinitauth.Config{RepoRoot: inv.Root})
 		if errors.Is(err, openbaoinitauth.ErrChartMissing) {
-			fmt.Fprintln(inv.Stderr, "openbao-init-auth-mounts: FAIL — openbao-init chart missing")
+			inv.Stderr.Println("openbao-init-auth-mounts: FAIL — openbao-init chart missing")
 			return Fail, err
 		}
 		if err != nil {
 			if !isViolation(err, openbaoinitauth.ErrViolations) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "openbao-init-auth-mounts: FAIL — %d assertion(s):\n", len(outcome.Failures))
+			inv.Stderr.Printf("openbao-init-auth-mounts: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", f)
+				inv.Stderr.Printf("  %s\n", f)
 			}
 			return Fail, nil
 		}
 		if outcome.Warn {
-			fmt.Fprintln(inv.Stdout, "openbao-init-auth-mounts: WARN (advisory-only: helm not on PATH)")
+			inv.Stdout.Println("openbao-init-auth-mounts: WARN (advisory-only: helm not on PATH)")
 			return Pass, nil
 		}
-		fmt.Fprintln(inv.Stdout, "openbao-init-auth-mounts: PASS — T5.1-T5.9 auth mounts + per-binary roles + isolation invariants clean")
+		inv.Stdout.Println("openbao-init-auth-mounts: PASS — T5.1-T5.9 auth mounts + per-binary roles + isolation invariants clean")
 		return Pass, nil
 	}
 }

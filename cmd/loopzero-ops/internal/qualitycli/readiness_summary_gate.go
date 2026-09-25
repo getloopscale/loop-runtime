@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/readinesssummary"
 )
@@ -25,16 +24,16 @@ func setupReadinessSummary(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !out.Pass {
-			fmt.Fprintf(inv.Stderr, "readiness-summary: FAIL — %s\n", out.Summary())
+			inv.Stderr.Printf("readiness-summary: FAIL — %s\n", out.Summary())
 			for _, v := range out.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s:%d — %s() persists .status (%s) without folding the readiness summary, "+
+				inv.Stderr.Printf("  %s:%d — %s() persists .status (%s) without folding the readiness summary, "+
 					"neither inline nor by a defer in its caller. A pass through here leaves the Ready condition "+
 					"with what the PREVIOUS pass computed, and that is read as current (ADR-0025 D3, B-105).\n",
 					v.File, v.Line, v.Func, v.Shape)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "readiness-summary: PASS — %s\n", out.Summary())
+		inv.Stdout.Printf("readiness-summary: PASS — %s\n", out.Summary())
 		return Pass, nil
 	}
 }

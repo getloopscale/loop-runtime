@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"path/filepath"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dockerfilemirror"
@@ -30,14 +29,14 @@ func setupDockerfileNoDockerHub(_ *flag.FlagSet) Check {
 		if err != nil {
 			return Fail, err
 		}
-		fmt.Fprintf(inv.Stdout, "%d/%d Dockerfile FROMs OK\n", outcome.OK, outcome.Total)
+		inv.Stdout.Printf("%d/%d Dockerfile FROMs OK\n", outcome.OK, outcome.Total)
 		if !outcome.Pass {
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "FAIL: %s\n", v)
+				inv.Stderr.Printf("FAIL: %s\n", v)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "dockerfile-no-docker-hub: PASS — all FROMs use a mirror/private registry")
+		inv.Stdout.Println("dockerfile-no-docker-hub: PASS — all FROMs use a mirror/private registry")
 		return Pass, nil
 	}
 }

@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/securitycontext"
 )
@@ -28,13 +27,13 @@ func setupSecurityContext(fs *flag.FlagSet) Check {
 
 		if *gate {
 			if o.Pass {
-				fmt.Fprintln(inv.Stdout, "✅ securityContext audit GREEN — 0 NON-CONFORMANT charts without ADR exception.")
+				inv.Stdout.Println("✅ securityContext audit GREEN — 0 NON-CONFORMANT charts without ADR exception.")
 				return Pass, nil
 			}
-			fmt.Fprintf(inv.Stderr, "❌ securityContext audit FAILED — %d NON-CONFORMANT chart(s) without ADR:\n", len(o.Violations))
+			inv.Stderr.Printf("❌ securityContext audit FAILED — %d NON-CONFORMANT chart(s) without ADR:\n", len(o.Violations))
 			for _, v := range o.Violations {
-				fmt.Fprintf(inv.Stderr, "  - %s\n", v)
-				fmt.Fprintf(inv.Stderr, "    Action: fix securityContext in infra/helm/%s/, OR create infra/helm/%s/ADR-securitycontext-exception.md\n", v, v)
+				inv.Stderr.Printf("  - %s\n", v)
+				inv.Stderr.Printf("    Action: fix securityContext in infra/helm/%s/, OR create infra/helm/%s/ADR-securitycontext-exception.md\n", v, v)
 			}
 			return Fail, nil
 		}
@@ -46,15 +45,15 @@ func setupSecurityContext(fs *flag.FlagSet) Check {
 			}
 			return "no"
 		}
-		fmt.Fprintln(inv.Stdout, "# securityContext Audit — infra/helm/")
-		fmt.Fprintln(inv.Stdout)
-		fmt.Fprintf(inv.Stdout, "**Charts inspected:** %d\n\n", len(o.Charts))
-		fmt.Fprintln(inv.Stdout, "| Chart | runAsNonRoot | readOnlyRootFS | drop:[ALL] | allowPrivilegeEscalation:false | Status | ADR Exception |")
-		fmt.Fprintln(inv.Stdout, "|---|---|---|---|---|---|---|")
+		inv.Stdout.Println("# securityContext Audit — infra/helm/")
+		inv.Stdout.Println()
+		inv.Stdout.Printf("**Charts inspected:** %d\n\n", len(o.Charts))
+		inv.Stdout.Println("| Chart | runAsNonRoot | readOnlyRootFS | drop:[ALL] | allowPrivilegeEscalation:false | Status | ADR Exception |")
+		inv.Stdout.Println("|---|---|---|---|---|---|---|")
 		var conformant, partial, nonconf, na int
 		for _, c := range o.Charts {
 			if !c.PodBearing {
-				fmt.Fprintf(inv.Stdout, "| %s | n/a | n/a | n/a | n/a | N/A (no pods) | — |\n", c.Name)
+				inv.Stdout.Printf("| %s | n/a | n/a | n/a | n/a | N/A (no pods) | — |\n", c.Name)
 				na++
 				continue
 			}
@@ -64,7 +63,7 @@ func setupSecurityContext(fs *flag.FlagSet) Check {
 			} else if c.Status == "NON-CONFORMANT" {
 				adr = "❌ missing"
 			}
-			fmt.Fprintf(inv.Stdout, "| %s | %s | %s | %s | %s | %s | %s |\n",
+			inv.Stdout.Printf("| %s | %s | %s | %s | %s | %s | %s |\n",
 				c.Name, yn(c.RunAsNonRoot), yn(c.ReadOnlyRootFS), yn(c.DropAll), yn(c.NoPrivEsc), c.Status, adr)
 			switch c.Status {
 			case "CONFORMANT":
@@ -75,7 +74,7 @@ func setupSecurityContext(fs *flag.FlagSet) Check {
 				nonconf++
 			}
 		}
-		fmt.Fprintf(inv.Stdout, "\n## Summary\n\n- CONFORMANT: %d/%d\n- PARTIAL: %d/%d\n- NON-CONFORMANT: %d/%d\n- N/A (no pods): %d/%d\n- NON-CONFORMANT without ADR: %d\n",
+		inv.Stdout.Printf("\n## Summary\n\n- CONFORMANT: %d/%d\n- PARTIAL: %d/%d\n- NON-CONFORMANT: %d/%d\n- N/A (no pods): %d/%d\n- NON-CONFORMANT without ADR: %d\n",
 			conformant, len(o.Charts), partial, len(o.Charts), nonconf, len(o.Charts), na, len(o.Charts), len(o.Violations))
 		return Pass, nil
 	}

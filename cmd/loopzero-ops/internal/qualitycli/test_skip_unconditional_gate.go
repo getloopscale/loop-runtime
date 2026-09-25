@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testskipunconditional"
@@ -53,25 +52,25 @@ func setupTestSkipUnconditional(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 
-		fmt.Fprintf(inv.Stdout, "[test-skip-unconditional] scanned %d *_test.go file(s) under %s -- %d skip call(s), %d unconditional, %d with code below\n",
+		inv.Stdout.Printf("[test-skip-unconditional] scanned %d *_test.go file(s) under %s -- %d skip call(s), %d unconditional, %d with code below\n",
 			o.FilesScanned, strings.Join(o.ScanRoots, ", "), o.SkipCalls, len(o.Unconditional), len(o.Sites))
 		// Declared sites print on EVERY run, pass or fail. A declaration nobody sees
 		// is the dead assertion with extra steps.
 		for _, t := range o.Tracked {
-			fmt.Fprintf(inv.Stdout, "  TRACKED      %s\n", t)
+			inv.Stdout.Printf("  TRACKED      %s\n", t)
 		}
 		if !o.Pass {
-			fmt.Fprintf(inv.Stderr, "[test-skip-unconditional] FAIL -- %d violation(s):\n", len(o.Violations))
+			inv.Stderr.Printf("[test-skip-unconditional] FAIL -- %d violation(s):\n", len(o.Violations))
 			for _, v := range o.Violations {
-				fmt.Fprintf(inv.Stderr, "  - %s\n", v)
+				inv.Stderr.Printf("  - %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "[test-skip-unconditional] a skip aborts the function, so nothing "+
-				"below it has ever run (B-184): either the assertion comes back and asserts something "+
-				"that is in this tree, or the test goes with the reason written, naming what covers the "+
+			inv.Stderr.Println("[test-skip-unconditional] a skip aborts the function, so nothing " +
+				"below it has ever run (B-184): either the assertion comes back and asserts something " +
+				"that is in this tree, or the test goes with the reason written, naming what covers the " +
 				"contract in its place.")
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "[test-skip-unconditional] PASS -- %d unconditional skip(s), %d with code below, all %d declared\n",
+		inv.Stdout.Printf("[test-skip-unconditional] PASS -- %d unconditional skip(s), %d with code below, all %d declared\n",
 			len(o.Unconditional), len(o.Sites), len(o.Tracked))
 		return Pass, nil
 	}

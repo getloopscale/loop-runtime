@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/publishhygiene"
 )
@@ -31,18 +30,18 @@ func setupPublishHygiene(_ *flag.FlagSet) Check {
 			if !isViolation(err, publishhygiene.ErrLeak) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "publish-hygiene: FAIL — %v\n", err)
+			inv.Stderr.Printf("publish-hygiene: FAIL — %v\n", err)
 			for _, f := range out.Findings {
-				fmt.Fprintf(inv.Stderr, "  %s:%d — %s\n", f.File, f.Line, f.Text)
+				inv.Stderr.Printf("  %s:%d — %s\n", f.File, f.Line, f.Text)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintln(inv.Stderr, "Replace the absolute path with `~`, `<repo>` or `<workspace>`, or declare an")
-			fmt.Fprintln(inv.Stderr, "exemption with a reason AND a sunset in internal/quality/publishhygiene. A dated")
-			fmt.Fprintln(inv.Stderr, "record (docs/wiki, plans/completed, baselines, CHANGELOG) is exempt by design:")
-			fmt.Fprintln(inv.Stderr, "rewriting it would destroy the evidence of what was true then.")
+			inv.Stderr.Println("")
+			inv.Stderr.Println("Replace the absolute path with `~`, `<repo>` or `<workspace>`, or declare an")
+			inv.Stderr.Println("exemption with a reason AND a sunset in internal/quality/publishhygiene. A dated")
+			inv.Stderr.Println("record (docs/wiki, plans/completed, baselines, CHANGELOG) is exempt by design:")
+			inv.Stderr.Println("rewriting it would destroy the evidence of what was true then.")
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "publish-hygiene: PASS — %d live file(s) with no workstation path, %d exempt with a dated reason\n",
+		inv.Stdout.Printf("publish-hygiene: PASS — %d live file(s) with no workstation path, %d exempt with a dated reason\n",
 			out.Scanned, out.Exempt)
 		return Pass, nil
 	}

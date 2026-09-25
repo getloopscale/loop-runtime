@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/valuesduplicatekeys"
 )
@@ -28,19 +27,19 @@ func setupValuesDuplicateKeys(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if out.Skipped {
-			fmt.Fprintf(inv.Stdout, "values-duplicate-keys: SKIP — %s\n", out.Reason)
+			inv.Stdout.Printf("values-duplicate-keys: SKIP — %s\n", out.Reason)
 			return Pass, nil
 		}
 		if out.Pass {
-			fmt.Fprintf(inv.Stdout, "values-duplicate-keys: PASS — %s\n", out.Reason)
+			inv.Stdout.Printf("values-duplicate-keys: PASS — %s\n", out.Reason)
 			return Pass, nil
 		}
-		fmt.Fprintln(inv.Stderr, "values-duplicate-keys: FAIL")
+		inv.Stderr.Println("values-duplicate-keys: FAIL")
 		for _, f := range out.Findings {
-			fmt.Fprintf(inv.Stderr, "  %s:%d — key %q already declared at line %d; Helm keeps this one and drops the first\n",
+			inv.Stderr.Printf("  %s:%d — key %q already declared at line %d; Helm keeps this one and drops the first\n",
 				f.File, f.Line, f.Path, f.FirstLine)
 		}
-		fmt.Fprintln(inv.Stderr, "Fix: merge the two blocks into one key.")
+		inv.Stderr.Println("Fix: merge the two blocks into one key.")
 		return Fail, nil
 	}
 }

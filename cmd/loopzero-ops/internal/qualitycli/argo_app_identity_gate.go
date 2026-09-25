@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/argoappidentity"
 )
@@ -36,12 +35,12 @@ func setupArgoAppIdentity(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if rep.OK() {
-			fmt.Fprintf(inv.Stdout, "argo-app-identity: PASS — %d file(s) scanned; Application and Environment CR "+
+			inv.Stdout.Printf("argo-app-identity: PASS — %d file(s) scanned; Application and Environment CR "+
 				"identities derived only from naming.ArgoAppName / naming.EnvironmentCRName\n", rep.Scanned)
 			return Pass, nil
 		}
 		for _, f := range rep.Findings {
-			fmt.Fprintf(inv.Stderr, "argo-app-identity: FAIL %s\n", f.Message())
+			inv.Stderr.Printf("argo-app-identity: FAIL %s\n", f.Message())
 		}
 		return Fail, nil
 	}

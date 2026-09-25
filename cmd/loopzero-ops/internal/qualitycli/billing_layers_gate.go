@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"path/filepath"
 
@@ -38,10 +37,10 @@ func setupBillingLayers(fs *flag.FlagSet) Check {
 			}
 			// No branch returns 0 without a verdict: a guard that does not resolve,
 			// closed debt without coverage, or an undeclared new layer all fail here.
-			fmt.Fprintf(inv.Stderr, "billing-layers: FAIL — %v\n", err)
+			inv.Stderr.Printf("billing-layers: FAIL — %v\n", err)
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "billing-layers: PASS — %s\n", out.Reason)
+		inv.Stdout.Printf("billing-layers: PASS — %s\n", out.Reason)
 		return Pass, nil
 	}
 }

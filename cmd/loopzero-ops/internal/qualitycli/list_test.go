@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/cliout"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
@@ -23,7 +24,9 @@ func liveTaskfile() string {
 }
 
 // listTo runs `quality --list` with the given flags into w.
-func listTo(w io.Writer, args []string) int { return runList(w, io.Discard, args) }
+func listTo(w io.Writer, args []string) int {
+	return runList(cliout.New(w), cliout.New(io.Discard), args)
+}
 
 // Main's own paths — empty args, help, --list, an unknown gate — and which
 // stream each writes to.

@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/sqlctxprop"
 )
@@ -30,15 +29,15 @@ func setupSqlcTxProp(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass {
-			fmt.Fprintf(inv.Stderr, "sqlc-tx-prop: FAIL — %d violation(s) (scanned %d .go files):\n",
+			inv.Stderr.Printf("sqlc-tx-prop: FAIL — %d violation(s) (scanned %d .go files):\n",
 				len(outcome.Violations), outcome.Scanned)
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s:%d  %s  — %s\n", v.File, v.Line, v.Function, v.Detail)
+				inv.Stderr.Printf("  %s:%d  %s  — %s\n", v.File, v.Line, v.Function, v.Detail)
 			}
-			fmt.Fprintf(inv.Stderr, "\nFix: %s\n", sqlctxprop.ActionableFix())
+			inv.Stderr.Printf("\nFix: %s\n", sqlctxprop.ActionableFix())
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "sqlc-tx-prop: PASS — %d store file(s), %d transactional function(s); every query runs on the transaction it received\n",
+		inv.Stdout.Printf("sqlc-tx-prop: PASS — %d store file(s), %d transactional function(s); every query runs on the transaction it received\n",
 			outcome.Scanned, outcome.TxFunctions)
 		return Pass, nil
 	}

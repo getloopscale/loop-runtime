@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/moduleselfcontained"
 )
@@ -28,13 +27,13 @@ func setupModuleSelfContained(_ *flag.FlagSet) Check {
 			if !isViolation(err, moduleselfcontained.ErrNotSelfContained) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "module-selfcontained: FAIL — %v\n", err)
+			inv.Stderr.Printf("module-selfcontained: FAIL — %v\n", err)
 			for _, f := range out.Failed {
-				fmt.Fprintf(inv.Stderr, "  %s:\n%s\n", f.Module, f.Err)
+				inv.Stderr.Printf("  %s:\n%s\n", f.Module, f.Err)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "module-selfcontained: PASS — %s\n", out.Reason)
+		inv.Stdout.Printf("module-selfcontained: PASS — %s\n", out.Reason)
 		return Pass, nil
 	}
 }

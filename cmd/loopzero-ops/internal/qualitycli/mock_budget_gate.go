@@ -34,14 +34,14 @@ func setupMockBudget(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !o.Pass {
-			fmt.Fprintf(inv.Stderr, "[mock-budget] FAIL: %d file(s) over budget:\n", len(o.Violations))
+			inv.Stderr.Printf("[mock-budget] FAIL: %d file(s) over budget:\n", len(o.Violations))
 			for _, v := range o.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "[mock-budget] design smell — refactor/split OR add: // mock-budget: N — <reason>")
+			inv.Stderr.Println("[mock-budget] design smell — refactor/split OR add: // mock-budget: N — <reason>")
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "[mock-budget] PASS — all test files within budget (%d mocks/file)\n", *budget)
+		inv.Stdout.Printf("[mock-budget] PASS — all test files within budget (%d mocks/file)\n", *budget)
 		return Pass, nil
 	}
 }

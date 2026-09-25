@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/cliout"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
 )
 
@@ -46,20 +47,25 @@ func HelpText() string {
 
 // Main runs `loopzero-ops quality <args>`.
 func Main(args []string, stdout, stderr io.Writer) int {
+	out, errOut := cliout.New(stdout), cliout.New(stderr)
+	return cliout.Settle(dispatch(args, out, errOut), out, errOut)
+}
+
+func dispatch(args []string, stdout, stderr *cliout.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprint(stderr, HelpText())
+		stderr.Print(HelpText())
 		return exitcode.Usage
 	}
 	switch args[0] {
 	case "--help", "-h", "help":
-		fmt.Fprint(stdout, HelpText())
+		stdout.Print(HelpText())
 		return exitcode.OK
 	case "--list":
 		return runList(stdout, stderr, args[1:])
 	}
 	if g, ok := Lookup(args[0]); ok {
-		return g.Run(args[1:], stdout, stderr)
+		return g.run(args[1:], stdout, stderr)
 	}
-	fmt.Fprintf(stderr, "unknown gate: %s\n\n%s", args[0], HelpText())
+	stderr.Printf("unknown gate: %s\n\n%s", args[0], HelpText())
 	return exitcode.Usage
 }

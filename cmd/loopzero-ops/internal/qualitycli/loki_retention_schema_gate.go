@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokiretentionschema"
 )
@@ -29,13 +28,13 @@ func setupLokiRetentionSchema(_ *flag.FlagSet) Check {
 			if !isViolation(err, lokiretentionschema.ErrViolations) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "loki-retention-schema: FAIL — %d assertion(s):\n", len(outcome.Failures))
+			inv.Stderr.Printf("loki-retention-schema: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", f)
+				inv.Stderr.Printf("  %s\n", f)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "loki-retention-schema: PASS — 7 schema assertions (SingleBinary + retention_stream secrets-system + priority int + defaults) clean")
+		inv.Stdout.Println("loki-retention-schema: PASS — 7 schema assertions (SingleBinary + retention_stream secrets-system + priority int + defaults) clean")
 		return Pass, nil
 	}
 }

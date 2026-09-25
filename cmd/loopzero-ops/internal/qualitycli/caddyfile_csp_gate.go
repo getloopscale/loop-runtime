@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfilecspgate"
 )
@@ -35,21 +34,21 @@ func setupCaddyfileCSP(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if outcome.Skipped {
-			fmt.Fprintln(inv.Stdout, "caddyfile-csp: SKIP — infra/local/Caddyfile not present")
+			inv.Stdout.Println("caddyfile-csp: SKIP — infra/local/Caddyfile not present")
 			return Pass, nil
 		}
 		if !outcome.Pass {
-			fmt.Fprintf(inv.Stderr, "caddyfile-csp: FAIL — %d invariant(s) violated:\n", len(outcome.Violations))
+			inv.Stderr.Printf("caddyfile-csp: FAIL — %d invariant(s) violated:\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintln(inv.Stderr, "Per plan caddyfile-app-dev-prod-bundle-file-server-canonical v1 (closes Red Team")
-			fmt.Fprintln(inv.Stderr, "loopzero-cloud#66): the operator-local Caddyfile app-dev block MUST serve the")
-			fmt.Fprintln(inv.Stderr, "prod-bundle via file_server + emit canonical CSP from dashboard/nginx.conf.")
+			inv.Stderr.Println("")
+			inv.Stderr.Println("Per plan caddyfile-app-dev-prod-bundle-file-server-canonical v1 (closes Red Team")
+			inv.Stderr.Println("loopzero-cloud#66): the operator-local Caddyfile app-dev block MUST serve the")
+			inv.Stderr.Println("prod-bundle via file_server + emit canonical CSP from dashboard/nginx.conf.")
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "caddyfile-csp: PASS — app-dev block serves prod-bundle via file_server + canonical CSP + 4 preserved headers + try_files SPA fallback (Red Team #66 closed)")
+		inv.Stdout.Println("caddyfile-csp: PASS — app-dev block serves prod-bundle via file_server + canonical CSP + 4 preserved headers + try_files SPA fallback (Red Team #66 closed)")
 		return Pass, nil
 	}
 }

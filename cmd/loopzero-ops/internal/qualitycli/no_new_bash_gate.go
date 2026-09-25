@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nonewbash"
@@ -40,17 +39,17 @@ func setupNoNewBash(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass {
-			fmt.Fprintln(inv.Stderr, "no-new-bash: FAIL — new bash scripts detected outside allowlist:")
+			inv.Stderr.Println("no-new-bash: FAIL — new bash scripts detected outside allowlist:")
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  - %s\n", v)
+				inv.Stderr.Printf("  - %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintf(inv.Stderr, "To fix: add the script to %s with justificativa per D4 criteria,\n", *allowlist)
-			fmt.Fprintln(inv.Stderr, "OR migrate the function to: helmfile (D2), cmd/loopzero-ops/internal/quality/X Go gate (D5),")
-			fmt.Fprintln(inv.Stderr, "Ginkgo (T4), go:generate (T5.2). See 2026-05-22-shell-script-strategic-plan")
+			inv.Stderr.Println("")
+			inv.Stderr.Printf("To fix: add the script to %s with justificativa per D4 criteria,\n", *allowlist)
+			inv.Stderr.Println("OR migrate the function to: helmfile (D2), cmd/loopzero-ops/internal/quality/X Go gate (D5),")
+			inv.Stderr.Println("Ginkgo (T4), go:generate (T5.2). See 2026-05-22-shell-script-strategic-plan")
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "no-new-bash: PASS — no new bash scripts outside allowlist")
+		inv.Stdout.Println("no-new-bash: PASS — no new bash scripts outside allowlist")
 		return Pass, nil
 	}
 }

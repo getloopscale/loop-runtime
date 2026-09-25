@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/chartdefaulttags"
 )
@@ -29,18 +28,18 @@ func setupChartDefaultTags(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if out.Skipped {
-			fmt.Fprintf(inv.Stdout, "chart-default-tags: SKIP — %s\n", out.Reason)
+			inv.Stdout.Printf("chart-default-tags: SKIP — %s\n", out.Reason)
 			return Pass, nil
 		}
 		if out.Pass {
-			fmt.Fprintf(inv.Stdout, "chart-default-tags: PASS — %s\n", out.Reason)
+			inv.Stdout.Printf("chart-default-tags: PASS — %s\n", out.Reason)
 			return Pass, nil
 		}
-		fmt.Fprintln(inv.Stderr, "chart-default-tags: FAIL")
+		inv.Stderr.Println("chart-default-tags: FAIL")
 		for _, f := range out.Findings {
-			fmt.Fprintf(inv.Stderr, "  %s:%d — chart %s defaults to mutable tag %q\n", f.File, f.Line, f.Chart, f.Tag)
+			inv.Stderr.Printf("  %s:%d — chart %s defaults to mutable tag %q\n", f.File, f.Line, f.Chart, f.Tag)
 		}
-		fmt.Fprintln(inv.Stderr, "Fix: prefer `tag: \"\"` — an empty default fails loudly if nothing overrides it, where `latest` fails silently (#232).")
+		inv.Stderr.Println("Fix: prefer `tag: \"\"` — an empty default fails loudly if nothing overrides it, where `latest` fails silently (#232).")
 		return Fail, nil
 	}
 }

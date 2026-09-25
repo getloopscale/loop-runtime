@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmdiffstructural"
 )
@@ -30,7 +29,7 @@ func setupHelmDiffStructural(fs *flag.FlagSet) Check {
 	pr := fs.String("pr", "", "path to PR rendered YAML")
 	return func(inv Invocation) (Outcome, error) {
 		if *base == "" || *pr == "" {
-			fmt.Fprintln(inv.Stderr, "helm-diff-structural: --base and --pr are required")
+			inv.Stderr.Println("helm-diff-structural: --base and --pr are required")
 			return Fail, nil
 		}
 
@@ -43,7 +42,7 @@ func setupHelmDiffStructural(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		for _, m := range outcome.Messages {
-			fmt.Fprintln(inv.Stdout, m)
+			inv.Stdout.Println(m)
 		}
 		if !outcome.Pass {
 			return Fail, nil

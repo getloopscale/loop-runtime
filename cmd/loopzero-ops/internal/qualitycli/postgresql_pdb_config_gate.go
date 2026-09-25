@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"path/filepath"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pgpdb"
@@ -29,10 +28,10 @@ func setupPostgresqlPDBConfig(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass {
-			fmt.Fprintf(inv.Stderr, "postgresql-pdb-config: FAIL — %s\n", outcome.Message)
+			inv.Stderr.Printf("postgresql-pdb-config: FAIL — %s\n", outcome.Message)
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "postgresql-pdb-config: PASS — %s\n", outcome.Message)
+		inv.Stdout.Printf("postgresql-pdb-config: PASS — %s\n", outcome.Message)
 		return Pass, nil
 	}
 }

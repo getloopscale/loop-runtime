@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/cliout"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/leak"
 )
 
@@ -61,8 +62,10 @@ EXIT:
 
 // leakEnv is what a leak run touches outside the process. runLeak uses the
 // real one; tests inject fakes so every path is exercised without a live edge.
+// The writers keep their first write error, and runLeakWith settles the exit
+// status against them once the probe has reported.
 type leakEnv struct {
-	stdout, stderr io.Writer
+	stdout, stderr *cliout.Writer
 	client         *http.Client
 	discovery      func(ctx context.Context, cli *http.Client, host string) []string
 	placeholders   func() []string
@@ -71,8 +74,8 @@ type leakEnv struct {
 
 func defaultLeakEnv() leakEnv {
 	return leakEnv{
-		stdout:         os.Stdout,
-		stderr:         os.Stderr,
+		stdout:         cliout.New(os.Stdout),
+		stderr:         cliout.New(os.Stderr),
 		client:         leak.DefaultClient(),
 		discovery:      probeDiscovery,
 		placeholders:   probePlaceholders,
@@ -83,8 +86,12 @@ func defaultLeakEnv() leakEnv {
 func runLeak(args []string) int { return runLeakWith(args, defaultLeakEnv()) }
 
 func runLeakWith(args []string, env leakEnv) int {
+	return cliout.Settle(dispatchLeak(args, env), env.stdout, env.stderr)
+}
+
+func dispatchLeak(args []string, env leakEnv) int {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
-		fmt.Fprint(env.stdout, leakHelpText)
+		env.stdout.Print(leakHelpText)
 		return 0
 	}
 	switch args[0] {
@@ -93,7 +100,7 @@ func runLeakWith(args []string, env leakEnv) int {
 	case "ports":
 		return runLeakPorts(args[1:], env)
 	default:
-		fmt.Fprintf(env.stderr, "unknown subcommand %q (use: live|ports)\n", args[0])
+		env.stderr.Printf("unknown subcommand %q (use: live|ports)\n", args[0])
 		return 1
 	}
 }
@@ -137,7 +144,7 @@ func parseLiveFlags(args []string, stderr io.Writer) (liveOptions, error) {
 func runLeakLive(args []string, env leakEnv) int {
 	opts, err := parseLiveFlags(args, env.stderr)
 	if err != nil {
-		fmt.Fprintln(env.stderr, err)
+		env.stderr.Println(err)
 		return 1
 	}
 	hosts := opts.hosts
@@ -145,13 +152,13 @@ func runLeakLive(args []string, env leakEnv) int {
 		// Probe EVERY host the inventory declares: measured 2026-08-18, the
 		// inventory declared 7 hosts and a single-host probe reached 2.
 		if hosts, err = leak.Hosts(opts.inventory); err != nil {
-			fmt.Fprintln(env.stderr, err)
+			env.stderr.Println(err)
 			return 1
 		}
 	}
 	plan, err := leak.BuildPlan(opts.inventory, hosts, opts.authHost)
 	if err != nil {
-		fmt.Fprintln(env.stderr, err)
+		env.stderr.Println(err)
 		return 1
 	}
 	rep := leak.Run(context.Background(), plan, opts.inventory, leak.Checks{
@@ -166,7 +173,7 @@ func runLeakLive(args []string, env leakEnv) int {
 		enc := json.NewEncoder(env.stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(rep); err != nil {
-			fmt.Fprintln(env.stderr, err)
+			env.stderr.Println(err)
 			return 1
 		}
 	} else {
@@ -180,53 +187,53 @@ func runLeakLive(args []string, env leakEnv) int {
 }
 
 // renderLeakText prints the run in probe order.
-func renderLeakText(w io.Writer, plan leak.Plan, rep leak.Report) {
+func renderLeakText(w *cliout.Writer, plan leak.Plan, rep leak.Report) {
 	if len(rep.Wildcards) > 0 {
-		fmt.Fprintf(w, "  SKIP  %-46s wildcard with no concrete hostname to resolve\n", strings.Join(rep.Wildcards, ", "))
+		w.Printf("  SKIP  %-46s wildcard with no concrete hostname to resolve\n", strings.Join(rep.Wildcards, ", "))
 	}
 	for _, v := range rep.Verdicts {
 		switch {
 		case v.Skipped:
-			fmt.Fprintf(w, "  SKIP  %-46s %s\n", v.Host+v.Path, v.Reason)
+			w.Printf("  SKIP  %-46s %s\n", v.Host+v.Path, v.Reason)
 		case v.Passed:
-			fmt.Fprintf(w, "  ok    %-46s %d\n", v.Host+v.Path, v.Status)
+			w.Printf("  ok    %-46s %d\n", v.Host+v.Path, v.Status)
 		default:
-			fmt.Fprintf(w, "  FAIL  %-46s %d\n", v.Host+v.Path, v.Status)
+			w.Printf("  FAIL  %-46s %d\n", v.Host+v.Path, v.Status)
 		}
 	}
 	if rep.Upstream != "" {
-		fmt.Fprintf(w, "  UPSTREAM  %s\n", rep.Upstream)
+		w.Printf("  UPSTREAM  %s\n", rep.Upstream)
 	}
 	for _, l := range rep.DiscoveryLeaks {
-		fmt.Fprintf(w, "  FAIL  %-46s %s\n", plan.AuthHost+"/.well-known/openid-configuration", l)
+		w.Printf("  FAIL  %-46s %s\n", plan.AuthHost+"/.well-known/openid-configuration", l)
 	}
 	for _, p := range rep.PlaceholderLeaks {
-		fmt.Fprintf(w, "  FAIL  %-46s %s\n", "ory-kratos-config", p)
+		w.Printf("  FAIL  %-46s %s\n", "ory-kratos-config", p)
 	}
 	for _, f := range rep.UncoveredFamilies {
-		fmt.Fprintf(w, "  NOT-MEASURED  %-38s no representative in the probe\n", f)
+		w.Printf("  NOT-MEASURED  %-38s no representative in the probe\n", f)
 	}
-	fmt.Fprintf(w, "\n  PASS=%d  FAIL=%d  NOT-MEASURED=%d  SKIP=%d\n", rep.Pass, rep.Fail, rep.Uncovered, rep.Skip)
+	w.Printf("\n  PASS=%d  FAIL=%d  NOT-MEASURED=%d  SKIP=%d\n", rep.Pass, rep.Fail, rep.Uncovered, rep.Skip)
 }
 
 // renderLeakHeadline names what went wrong on stderr, keeping a leak and a
 // coverage hole apart: they call for different actions, and a run with only
 // coverage holes used to announce that "the edge let something through".
-func renderLeakHeadline(stdout, stderr io.Writer, rep leak.Report, asJSON bool) {
+func renderLeakHeadline(stdout, stderr *cliout.Writer, rep leak.Report, asJSON bool) {
 	if rep.Leaked() {
-		fmt.Fprintln(stderr, "\nThe edge let something through without a credential:")
+		stderr.Println("\nThe edge let something through without a credential:")
 		for _, f := range rep.Failures {
-			fmt.Fprintf(stderr, "  - %s\n", f)
+			stderr.Printf("  - %s\n", f)
 		}
 	}
 	if rep.Uncovered > 0 {
-		fmt.Fprintln(stderr, "\nCoverage holes — declared surface the probe does not measure:")
+		stderr.Println("\nCoverage holes — declared surface the probe does not measure:")
 		for _, n := range rep.NotMeasured {
-			fmt.Fprintf(stderr, "  - %s\n", n)
+			stderr.Printf("  - %s\n", n)
 		}
 	}
 	if rep.Closed() && !asJSON {
-		fmt.Fprintln(stdout, "  The edge closes on everything that requires a credential, and opens where the specification requires.")
+		stdout.Println("  The edge closes on everything that requires a credential, and opens where the specification requires.")
 	}
 }
 
@@ -307,12 +314,12 @@ func runLeakPorts(args []string, env leakEnv) int {
 
 	decls, err := leak.ParsePorts(*registry)
 	if err != nil {
-		fmt.Fprintln(env.stderr, err)
+		env.stderr.Println(err)
 		return 1
 	}
 	listening, err := env.listeningPorts()
 	if err != nil {
-		fmt.Fprintf(env.stderr, "could not read the listening ports: %v\n", err)
+		env.stderr.Printf("could not read the listening ports: %v\n", err)
 		return 1
 	}
 
@@ -329,25 +336,25 @@ func runLeakPorts(args []string, env leakEnv) int {
 		enc := json.NewEncoder(env.stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(rep); err != nil {
-			fmt.Fprintln(env.stderr, err)
+			env.stderr.Println(err)
 			return 1
 		}
 	} else {
-		fmt.Fprintf(env.stdout, "  listening on 0.0.0.0: %d   declared: %d\n", len(listening), len(decls))
+		env.stdout.Printf("  listening on 0.0.0.0: %d   declared: %d\n", len(listening), len(decls))
 		for _, f := range undeclared {
-			fmt.Fprintf(env.stdout, "  FAIL  port %-6d %s\n", f.Port, f.Why)
+			env.stdout.Printf("  FAIL  port %-6d %s\n", f.Port, f.Why)
 		}
 		for _, f := range stale {
-			fmt.Fprintf(env.stdout, "  WARN  port %-6d %s\n", f.Port, f.Why)
+			env.stdout.Printf("  WARN  port %-6d %s\n", f.Port, f.Why)
 		}
-		fmt.Fprintf(env.stdout, "\n  to close (class does not admit external reach): %d\n", len(toClose))
+		env.stdout.Printf("\n  to close (class does not admit external reach): %d\n", len(toClose))
 		for _, d := range toClose {
-			fmt.Fprintf(env.stdout, "    %-6d %-8s %s\n", d.Port, d.Class, d.Reason)
+			env.stdout.Printf("    %-6d %-8s %s\n", d.Port, d.Class, d.Reason)
 		}
 	}
 
 	if len(undeclared) > 0 {
-		fmt.Fprintf(env.stderr, "\n%d port(s) listen without being in the registry. The registry is closed by "+
+		env.stderr.Printf("\n%d port(s) listen without being in the registry. The registry is closed by "+
 			"default: declare each one with its class and consumer, or close it.\n", len(undeclared))
 		return 1
 	}

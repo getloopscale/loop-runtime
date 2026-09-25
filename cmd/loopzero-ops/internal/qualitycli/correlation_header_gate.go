@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/correlationheader"
 )
@@ -29,16 +28,16 @@ func setupCorrelationHeader(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass() {
-			fmt.Fprintf(inv.Stderr, "correlation-header: FAIL — %d direct r.Header.Get(\"(X-)?Correlation-ID\") call(s) in routes/:\n", len(outcome.Findings))
+			inv.Stderr.Printf("correlation-header: FAIL — %d direct r.Header.Get(\"(X-)?Correlation-ID\") call(s) in routes/:\n", len(outcome.Findings))
 			for _, v := range outcome.Findings {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintln(inv.Stderr, "Fix: replace with `id := correlation.Read(r)` (api/internal/correlation).")
-			fmt.Fprintln(inv.Stderr, "The helper handles backward-compat (X-Correlation-ID fallback) + deprecation WARN.")
+			inv.Stderr.Println("")
+			inv.Stderr.Println("Fix: replace with `id := correlation.Read(r)` (api/internal/correlation).")
+			inv.Stderr.Println("The helper handles backward-compat (X-Correlation-ID fallback) + deprecation WARN.")
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "correlation-header: PASS — no direct r.Header.Get((X-)?Correlation-ID) in api/internal/routes/ (%s)\n", outcome.Summary())
+		inv.Stdout.Printf("correlation-header: PASS — no direct r.Header.Get((X-)?Correlation-ID) in api/internal/routes/ (%s)\n", outcome.Summary())
 		return Pass, nil
 	}
 }

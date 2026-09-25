@@ -31,19 +31,19 @@ func setupAcyclicGraph(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass {
-			fmt.Fprintf(inv.Stderr, "acyclic-graph: FAIL — %d forbidden upward import edge(s):\n", len(outcome.Violations))
+			inv.Stderr.Printf("acyclic-graph: FAIL — %d forbidden upward import edge(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintln(inv.Stderr, "Decomposition invariant (ADP): loopzero-contracts ◄── engine + loopzero-cloud + loopzero-cli. Arrows never point at a more-stable node.")
+			inv.Stderr.Println("")
+			inv.Stderr.Println("Decomposition invariant (ADP): loopzero-contracts ◄── engine + loopzero-cloud + loopzero-cli. Arrows never point at a more-stable node.")
 			return Fail, nil
 		}
 		msg := fmt.Sprintf("acyclic-graph: PASS — graph is acyclic (checked: %s", strings.Join(outcome.Checked, ", "))
 		if len(outcome.Skipped) > 0 {
 			msg += fmt.Sprintf("; skipped absent: %s", strings.Join(outcome.Skipped, ", "))
 		}
-		fmt.Fprintln(inv.Stdout, msg+")")
+		inv.Stdout.Println(msg + ")")
 		return Pass, nil
 	}
 }

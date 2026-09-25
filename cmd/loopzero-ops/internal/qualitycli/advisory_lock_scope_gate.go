@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/advisorylock"
 )
@@ -28,15 +27,15 @@ func setupAdvisoryLockScope(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass() {
-			fmt.Fprintf(inv.Stderr, "advisory-lock-scope: FAIL — %d session-scoped pg_advisory_lock( call(s):\n", len(outcome.Findings))
+			inv.Stderr.Printf("advisory-lock-scope: FAIL — %d session-scoped pg_advisory_lock( call(s):\n", len(outcome.Findings))
 			for _, v := range outcome.Findings {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintln(inv.Stderr, "Fix: replace with pg_advisory_xact_lock( — transaction-scoped, pool-safe (Rule 7).")
+			inv.Stderr.Println("")
+			inv.Stderr.Println("Fix: replace with pg_advisory_xact_lock( — transaction-scoped, pool-safe (Rule 7).")
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "advisory-lock-scope: PASS — no session-scoped pg_advisory_lock( in production code (%s)\n", outcome.Summary())
+		inv.Stdout.Printf("advisory-lock-scope: PASS — no session-scoped pg_advisory_lock( in production code (%s)\n", outcome.Summary())
 		return Pass, nil
 	}
 }

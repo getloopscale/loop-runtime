@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/silentsurface"
 )
@@ -42,20 +41,20 @@ func setupSilentSurface(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if *report {
-			fmt.Fprintf(inv.Stdout, "%d silent surface(s) in %d route guard(s) (baseline %d):\n",
+			inv.Stdout.Printf("%d silent surface(s) in %d route guard(s) (baseline %d):\n",
 				len(v.Silent), v.Guarded, v.Baseline)
 			for _, s := range v.Silent {
-				fmt.Fprintf(inv.Stdout, "  %s:%d  cfg.%s\n", silentsurface.RouterPath, s.Line, s.Field)
+				inv.Stdout.Printf("  %s:%d  cfg.%s\n", silentsurface.RouterPath, s.Line, s.Field)
 			}
 			return Pass, nil
 		}
-		fmt.Fprintln(inv.Stdout, v.Summary())
+		inv.Stdout.Println(v.Summary())
 		if !v.Pass {
 			for _, s := range v.Silent {
-				fmt.Fprintf(inv.Stdout, "  %s:%d — cfg.%s registers a route and does not report the decision\n",
+				inv.Stdout.Printf("  %s:%d — cfg.%s registers a route and does not report the decision\n",
 					silentsurface.RouterPath, s.Line, s.Field)
 			}
-			fmt.Fprintln(inv.Stderr, silentsurface.ActionableFix)
+			inv.Stderr.Println(silentsurface.ActionableFix)
 			return Fail, nil
 		}
 		return Pass, nil

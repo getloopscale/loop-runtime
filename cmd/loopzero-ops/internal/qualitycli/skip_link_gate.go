@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skiplink"
 )
@@ -39,25 +38,25 @@ func setupSkipLink(fs *flag.FlagSet) Check {
 		// re-freeze after a deliberate sweep.
 		if *emitBaseline {
 			for _, k := range o.Keys {
-				fmt.Fprintln(inv.Stdout, k)
+				inv.Stdout.Println(k)
 			}
 			return Pass, nil
 		}
 		if !o.Pass {
-			fmt.Fprintf(inv.Stderr, "[skip-link] FAIL: %d NEW skip(s) without issue URL:\n", len(o.NewViolations))
+			inv.Stderr.Printf("[skip-link] FAIL: %d NEW skip(s) without issue URL:\n", len(o.NewViolations))
 			for _, v := range o.NewViolations {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "[skip-link] fix: add a GitHub issue URL near the Skip, OR rename to *_skip_test.go")
+			inv.Stderr.Println("[skip-link] fix: add a GitHub issue URL near the Skip, OR rename to *_skip_test.go")
 			if o.BaselineCount > 0 {
-				fmt.Fprintf(inv.Stderr, "[skip-link] note: %d grandfathered violations in baseline — do NOT add new entries\n", o.BaselineCount)
+				inv.Stderr.Printf("[skip-link] note: %d grandfathered violations in baseline — do NOT add new entries\n", o.BaselineCount)
 			}
 			return Fail, nil
 		}
 		if o.BaselineCount > 0 {
-			fmt.Fprintf(inv.Stdout, "[skip-link] PASS — no NEW violations (%d grandfathered)\n", o.BaselineCount)
+			inv.Stdout.Printf("[skip-link] PASS — no NEW violations (%d grandfathered)\n", o.BaselineCount)
 		} else {
-			fmt.Fprintln(inv.Stdout, "[skip-link] PASS — all skip calls have issue URL")
+			inv.Stdout.Println("[skip-link] PASS — all skip calls have issue URL")
 		}
 		return Pass, nil
 	}

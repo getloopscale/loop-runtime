@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/transitcoverage"
 )
@@ -28,7 +27,7 @@ func setupTransitCoverage(_ *flag.FlagSet) Check {
 		if err != nil {
 			return Fail, err
 		}
-		fmt.Fprint(inv.Stderr, outcome.FormatReport())
+		inv.Stderr.Print(outcome.FormatReport())
 		if !outcome.Pass {
 			return Fail, nil
 		}

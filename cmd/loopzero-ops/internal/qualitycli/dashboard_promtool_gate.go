@@ -6,7 +6,6 @@ package qualitycli
 import (
 	"context"
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dashboardpromtool"
 )
@@ -32,24 +31,24 @@ func setupDashboardPromtool(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if len(outcome.SyntaxErrors) > 0 {
-			fmt.Fprintf(inv.Stderr, "dashboard-promtool: FAIL — %d JSON syntax errors:\n", len(outcome.SyntaxErrors))
+			inv.Stderr.Printf("dashboard-promtool: FAIL — %d JSON syntax errors:\n", len(outcome.SyntaxErrors))
 			for _, e := range outcome.SyntaxErrors {
-				fmt.Fprintf(inv.Stderr, "  %s\n", e)
+				inv.Stderr.Printf("  %s\n", e)
 			}
 			return Fail, nil
 		}
 		if len(outcome.PromtoolErrors) > 0 {
-			fmt.Fprintf(inv.Stderr, "dashboard-promtool: FAIL — %d PromQL parse errors:\n", len(outcome.PromtoolErrors))
+			inv.Stderr.Printf("dashboard-promtool: FAIL — %d PromQL parse errors:\n", len(outcome.PromtoolErrors))
 			for _, e := range outcome.PromtoolErrors {
-				fmt.Fprintf(inv.Stderr, "  %s\n", e)
+				inv.Stderr.Printf("  %s\n", e)
 			}
 			return Fail, nil
 		}
 		if outcome.PromtoolSkipped {
-			fmt.Fprintf(inv.Stdout, "dashboard-promtool: PASS (JSON syntax %d/%d) — promtool SKIP (%s)\n",
+			inv.Stdout.Printf("dashboard-promtool: PASS (JSON syntax %d/%d) — promtool SKIP (%s)\n",
 				outcome.TotalScanned, outcome.TotalScanned, outcome.PromtoolReason)
 		} else {
-			fmt.Fprintf(inv.Stdout, "dashboard-promtool: PASS — %d dashboards (JSON syntax + PromQL semantic)\n",
+			inv.Stdout.Printf("dashboard-promtool: PASS — %d dashboards (JSON syntax + PromQL semantic)\n",
 				outcome.TotalScanned)
 		}
 		return Pass, nil

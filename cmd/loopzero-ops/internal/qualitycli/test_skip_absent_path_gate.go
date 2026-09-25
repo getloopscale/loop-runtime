@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testskipabsentpath"
@@ -48,30 +47,30 @@ func setupTestSkipAbsentPath(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 
-		fmt.Fprintf(inv.Stdout, "[test-skip-absent-path] scanned %d *_test.go file(s) under %s — %d skip call(s), %d path-guarded\n",
+		inv.Stdout.Printf("[test-skip-absent-path] scanned %d *_test.go file(s) under %s — %d skip call(s), %d path-guarded\n",
 			o.FilesScanned, strings.Join(o.ScanRoots, ", "), o.SkipCalls, len(o.Sites))
 		for _, c := range o.Conditional {
-			fmt.Fprintf(inv.Stdout, "  CONDITIONAL  %s\n", c)
+			inv.Stdout.Printf("  CONDITIONAL  %s\n", c)
 		}
 		// Tracked absences and external paths print on EVERY run, pass or fail. A
 		// declaration nobody sees is the silent skip with extra steps, and a path
 		// this gate did not judge has to say so rather than vanish into a PASS.
 		for _, t := range o.Tracked {
-			fmt.Fprintf(inv.Stdout, "  TRACKED      %s\n", t)
+			inv.Stdout.Printf("  TRACKED      %s\n", t)
 		}
 		for _, e := range o.Externals {
-			fmt.Fprintf(inv.Stdout, "  EXTERNAL     %s\n", e)
+			inv.Stdout.Printf("  EXTERNAL     %s\n", e)
 		}
 		if !o.Pass {
-			fmt.Fprintf(inv.Stderr, "[test-skip-absent-path] FAIL — %d violation(s):\n", len(o.Violations))
+			inv.Stderr.Printf("[test-skip-absent-path] FAIL — %d violation(s):\n", len(o.Violations))
 			for _, v := range o.Violations {
-				fmt.Fprintf(inv.Stderr, "  - %s\n", v)
+				inv.Stderr.Printf("  - %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "[test-skip-absent-path] a skip that always fires is a deleted test with good "+
+			inv.Stderr.Println("[test-skip-absent-path] a skip that always fires is a deleted test with good " +
 				"manners (B-169): remove it naming the guard that covers the contract, or declare it in the pin.")
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "[test-skip-absent-path] PASS — %d path-guarded skip(s): %d conditional here, %d tracked absence(s), %d external\n",
+		inv.Stdout.Printf("[test-skip-absent-path] PASS — %d path-guarded skip(s): %d conditional here, %d tracked absence(s), %d external\n",
 			len(o.Sites), len(o.Conditional), len(o.Tracked), len(o.Externals))
 		return Pass, nil
 	}

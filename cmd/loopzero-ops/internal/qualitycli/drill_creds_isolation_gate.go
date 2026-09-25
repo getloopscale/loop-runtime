@@ -6,7 +6,6 @@ package qualitycli
 import (
 	"errors"
 	"flag"
-	"fmt"
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/drillcredisolation"
@@ -41,7 +40,7 @@ func setupDrillCredsIsolation(_ *flag.FlagSet) Check {
 			RequireIsolated: os.Getenv("DRILL_REQUIRE_ISOLATED_TOKENS"),
 		})
 		for _, m := range r.Messages {
-			fmt.Fprintf(inv.Stderr, "[drill-creds-isolation] %s\n", m)
+			inv.Stderr.Printf("[drill-creds-isolation] %s\n", m)
 		}
 		switch r.ExitCode {
 		case 0:

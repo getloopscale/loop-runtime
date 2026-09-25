@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noshellwrap"
 )
@@ -26,17 +25,17 @@ func setupNoShellWrap(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass {
-			fmt.Fprintln(inv.Stderr, "no-shell-wrap: FAIL — Go code wraps forbidden CLI without nolint:")
+			inv.Stderr.Println("no-shell-wrap: FAIL — Go code wraps forbidden CLI without nolint:")
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  - %s\n", v)
+				inv.Stderr.Printf("  - %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintln(inv.Stderr, "To fix: use the Go SDK (pulumi-go-sdk, helm.sh/helm/v3, client-go,")
-			fmt.Fprintln(inv.Stderr, "aws-sdk-go-v2, go-github) OR add //nolint:shell-wrap on the call line")
-			fmt.Fprintln(inv.Stderr, "with justificativa per plan D5 + Anti-Pattern #8.")
+			inv.Stderr.Println("")
+			inv.Stderr.Println("To fix: use the Go SDK (pulumi-go-sdk, helm.sh/helm/v3, client-go,")
+			inv.Stderr.Println("aws-sdk-go-v2, go-github) OR add //nolint:shell-wrap on the call line")
+			inv.Stderr.Println("with justificativa per plan D5 + Anti-Pattern #8.")
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "no-shell-wrap: PASS — no forbidden shell wraps detected")
+		inv.Stdout.Println("no-shell-wrap: PASS — no forbidden shell wraps detected")
 		return Pass, nil
 	}
 }

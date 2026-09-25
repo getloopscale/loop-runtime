@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/costseriesproducers"
@@ -70,30 +69,30 @@ func setupCostSeriesProducers(fs *flag.FlagSet) Check {
 		// The known, tracked gap goes to stdout on every run — that is what turns
 		// silence into a tracked absence.
 		for _, a := range outcome.TrackedAbsences {
-			fmt.Fprintf(inv.Stdout, "cost-series-producers: TRACKED ABSENCE — %s is queried by the aggregator and emitted by no repository\n", a)
+			inv.Stdout.Printf("cost-series-producers: TRACKED ABSENCE — %s is queried by the aggregator and emitted by no repository\n", a)
 		}
 
 		if !outcome.Pass {
-			fmt.Fprintf(inv.Stderr, "cost-series-producers: FAIL — %d violation(s):\n", len(outcome.Violations))
+			inv.Stderr.Printf("cost-series-producers: FAIL — %d violation(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintf(inv.Stderr, "The pin is %s. Every series the aggregator queries needs one line there:\n", *declaration)
-			fmt.Fprintln(inv.Stderr, "  <series> PRODUCER <path in this repo that declares the metric>")
-			fmt.Fprintln(inv.Stderr, "  <series> ABSENT   <work item tracking who will emit it, or the decision to drop it>")
+			inv.Stderr.Println("")
+			inv.Stderr.Printf("The pin is %s. Every series the aggregator queries needs one line there:\n", *declaration)
+			inv.Stderr.Println("  <series> PRODUCER <path in this repo that declares the metric>")
+			inv.Stderr.Println("  <series> ABSENT   <work item tracking who will emit it, or the decision to drop it>")
 			return Fail, nil
 		}
 
 		if !outcome.SiblingChecked {
-			fmt.Fprintf(inv.Stderr, "cost-series-producers: DRIFT NOT CHECKED — %s\n", outcome.SiblingSkipReason)
-			fmt.Fprintf(inv.Stdout, "cost-series-producers: PARTIAL — producer contract holds for %d declared series "+
+			inv.Stderr.Printf("cost-series-producers: DRIFT NOT CHECKED — %s\n", outcome.SiblingSkipReason)
+			inv.Stdout.Printf("cost-series-producers: PARTIAL — producer contract holds for %d declared series "+
 				"(%d producer(s) verified, %d tracked absence(s)); drift vs loopzero-cloud NOT CHECKED\n",
 				len(outcome.Declarations), len(outcome.VerifiedProducers), len(outcome.TrackedAbsences))
 			return Pass, nil
 		}
 
-		fmt.Fprintf(inv.Stdout, "cost-series-producers: PASS — %d series queried by loopzero-cloud, all declared "+
+		inv.Stdout.Printf("cost-series-producers: PASS — %d series queried by loopzero-cloud, all declared "+
 			"(%d producer(s) verified, %d tracked absence(s)); drift CHECKED against %s\n",
 			len(outcome.QueriedSeries), len(outcome.VerifiedProducers), len(outcome.TrackedAbsences),
 			outcome.SiblingRoot)

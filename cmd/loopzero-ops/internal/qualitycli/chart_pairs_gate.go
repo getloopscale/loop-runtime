@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/chartpairs"
 )
@@ -25,10 +24,10 @@ func setupChartPairs(_ *flag.FlagSet) Check {
 			if !isViolation(err, chartpairs.ErrUndeclared, chartpairs.ErrStale) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "chart-pairs: FAIL — %v\n", err)
+			inv.Stderr.Printf("chart-pairs: FAIL — %v\n", err)
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "chart-pairs: PASS — %d in infra/helm, %d in charts/, %d declared pair(s): %v\n",
+		inv.Stdout.Printf("chart-pairs: PASS — %d in infra/helm, %d in charts/, %d declared pair(s): %v\n",
 			out.InfraHelm, out.Charts, len(out.Pairs), out.Pairs)
 		return Pass, nil
 	}

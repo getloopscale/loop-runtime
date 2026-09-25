@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyhostparity"
 )
@@ -25,13 +24,13 @@ func setupCaddyHostParity(_ *flag.FlagSet) Check {
 			if !isViolation(err, caddyhostparity.ErrUnserved) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "caddy-host-parity: FAIL — %v\n", err)
+			inv.Stderr.Printf("caddy-host-parity: FAIL — %v\n", err)
 			for _, f := range out.Findings {
-				fmt.Fprintf(inv.Stderr, "  %s has no site block; without a certificate the handshake fails before any HTTP\n", f.Host)
+				inv.Stderr.Printf("  %s has no site block; without a certificate the handshake fails before any HTTP\n", f.Host)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "caddy-host-parity: PASS — %d hostnames required, %d served\n", out.Scanned, out.Served)
+		inv.Stdout.Printf("caddy-host-parity: PASS — %d hostnames required, %d served\n", out.Scanned, out.Served)
 		return Pass, nil
 	}
 }

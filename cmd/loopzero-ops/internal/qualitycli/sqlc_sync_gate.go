@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/sqlcsync"
 )
@@ -29,18 +28,18 @@ func setupSqlcSync(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass {
-			fmt.Fprintf(inv.Stderr, "sqlc-sync: FAIL — %d violation(s) between committed generated/ and fresh sqlc generate (version %s):\n",
+			inv.Stderr.Printf("sqlc-sync: FAIL — %d violation(s) between committed generated/ and fresh sqlc generate (version %s):\n",
 				len(outcome.Violations), outcome.SqlcVersion)
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  [%s] %s\n", v.Reason, v.File)
+				inv.Stderr.Printf("  [%s] %s\n", v.Reason, v.File)
 				if v.Detail != "" {
-					fmt.Fprintf(inv.Stderr, "%s\n", v.Detail)
+					inv.Stderr.Printf("%s\n", v.Detail)
 				}
 			}
-			fmt.Fprintf(inv.Stderr, "\nFix: %s\n", sqlcsync.ActionableFix())
+			inv.Stderr.Printf("\nFix: %s\n", sqlcsync.ActionableFix())
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "sqlc-sync: PASS — committed generated/ in-sync with sqlc %s\n", outcome.SqlcVersion)
+		inv.Stdout.Printf("sqlc-sync: PASS — committed generated/ in-sync with sqlc %s\n", outcome.SqlcVersion)
 		return Pass, nil
 	}
 }

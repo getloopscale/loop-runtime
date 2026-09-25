@@ -32,20 +32,20 @@ func setupNoMigrateForce(_ *flag.FlagSet) Check {
 				"schema_migrations. Use psql for ad-hoc SQL, OR add a '# allowlist: migrate force "+
 				"(rationale)' marker on the same line or within 3 lines above.", len(o.Blocked))
 			if os.Getenv("GITHUB_ACTIONS") != "" {
-				fmt.Fprintf(inv.Stdout, "::error::%s\n", msg)
+				inv.Stdout.Printf("::error::%s\n", msg)
 			} else {
-				fmt.Fprintf(inv.Stderr, "[no-migrate-force] BLOCK: %s\n", msg)
+				inv.Stderr.Printf("[no-migrate-force] BLOCK: %s\n", msg)
 			}
-			fmt.Fprintln(inv.Stderr, "[no-migrate-force] blocked matches:")
+			inv.Stderr.Println("[no-migrate-force] blocked matches:")
 			for _, b := range o.Blocked {
-				fmt.Fprintf(inv.Stderr, "  %s\n", b)
+				inv.Stderr.Printf("  %s\n", b)
 			}
 			return Fail, nil
 		}
 		if o.MatchCount > 0 {
-			fmt.Fprintf(inv.Stdout, "[no-migrate-force] all %d matches allowlisted — OK.\n", o.MatchCount)
+			inv.Stdout.Printf("[no-migrate-force] all %d matches allowlisted — OK.\n", o.MatchCount)
 		} else {
-			fmt.Fprintln(inv.Stdout, "[no-migrate-force] no matches — OK.")
+			inv.Stdout.Println("[no-migrate-force] no matches — OK.")
 		}
 		return Pass, nil
 	}

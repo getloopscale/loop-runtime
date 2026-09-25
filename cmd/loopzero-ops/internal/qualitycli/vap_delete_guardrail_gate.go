@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vapdeleteguardrail"
 )
@@ -29,14 +28,14 @@ func setupVAPDeleteGuardrail(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (Outcome, error) {
 		rep := vapdeleteguardrail.Check(inv.Root, nil)
 		for _, w := range rep.Warnings {
-			fmt.Fprintf(inv.Stderr, "vap-delete-guardrail: WARN: %s\n", w)
+			inv.Stderr.Printf("vap-delete-guardrail: WARN: %s\n", w)
 		}
 		if rep.OK() {
-			fmt.Fprintln(inv.Stdout, "vap-delete-guardrail: OK")
+			inv.Stdout.Println("vap-delete-guardrail: OK")
 			return Pass, nil
 		}
 		for _, f := range rep.Findings {
-			fmt.Fprintf(inv.Stderr, "vap-delete-guardrail: FAIL [%s] %s\n", f.Check, f.Message)
+			inv.Stderr.Printf("vap-delete-guardrail: FAIL [%s] %s\n", f.Check, f.Message)
 		}
 		return Fail, nil
 	}

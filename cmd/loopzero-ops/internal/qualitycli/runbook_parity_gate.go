@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/runbookparity"
 )
@@ -25,13 +24,13 @@ func setupRunbookParity(_ *flag.FlagSet) Check {
 			if !isViolation(err, runbookparity.ErrContradiction) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "runbook-parity: FAIL — %v\n", err)
+			inv.Stderr.Printf("runbook-parity: FAIL — %v\n", err)
 			for _, f := range out.Findings {
-				fmt.Fprintf(inv.Stderr, "  %s:%d names %q; the runbook prescribes %q\n", f.File, f.Line, f.Named, f.Prescribed)
+				inv.Stderr.Printf("  %s:%d names %q; the runbook prescribes %q\n", f.File, f.Line, f.Named, f.Prescribed)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "runbook-parity: PASS — %s\n", out.Reason)
+		inv.Stdout.Printf("runbook-parity: PASS — %s\n", out.Reason)
 		return Pass, nil
 	}
 }

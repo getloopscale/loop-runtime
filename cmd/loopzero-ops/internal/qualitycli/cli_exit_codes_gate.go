@@ -65,19 +65,19 @@ func setupCLIExitCodes(fs *flag.FlagSet) Check {
 		// the subject ever being stat'd, so it was false for any subject that was
 		// in fact right here (B-190).
 		for _, a := range outcome.TrackedAbsences {
-			fmt.Fprintf(inv.Stdout, "cli-exit-codes: TRACKED ABSENCE — %s: stat'd at %s on this run and NOT present: %s\n",
+			inv.Stdout.Printf("cli-exit-codes: TRACKED ABSENCE — %s: stat'd at %s on this run and NOT present: %s\n",
 				a.Subject, a.ResolvedPath, a.Why)
 		}
 
 		if len(outcome.Violations) > 0 {
-			fmt.Fprintf(inv.Stderr, "cli-exit-codes: FAIL — %d violation(s):\n", len(outcome.Violations))
+			inv.Stderr.Printf("cli-exit-codes: FAIL — %d violation(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintln(inv.Stderr, "Permanent contract (Rule 4): 0/1/2/3/4/5 only. SIG handlers may use 130/143.")
-			fmt.Fprintf(inv.Stderr, "When there is no CLI source to read, %s must say so in one line:\n", *pin)
-			fmt.Fprintln(inv.Stderr, "  <subject path>\t<why it is absent, naming what covers the contract instead>")
+			inv.Stderr.Println("")
+			inv.Stderr.Println("Permanent contract (Rule 4): 0/1/2/3/4/5 only. SIG handlers may use 130/143.")
+			inv.Stderr.Printf("When there is no CLI source to read, %s must say so in one line:\n", *pin)
+			inv.Stderr.Println("  <subject path>\t<why it is absent, naming what covers the contract instead>")
 			return Fail, nil
 		}
 
@@ -85,7 +85,7 @@ func setupCLIExitCodes(fs *flag.FlagSet) Check {
 		// nothing", and the second used to fall through to PASS. Both are the same fact
 		// for a reader: the contract was not checked.
 		if !outcome.Checked || outcome.ScannedFiles == 0 {
-			fmt.Fprintf(inv.Stdout, "cli-exit-codes: NOT COVERED — no process.exit() call reachable from this tree is checked "+
+			inv.Stdout.Printf("cli-exit-codes: NOT COVERED — no process.exit() call reachable from this tree is checked "+
 				"against Rule 4, and no other gate enforces the exit-code contract; it holds only where "+
 				"loopzero-cli's own CI runs it, which is UNVERIFIED from this tree (searched: %s)\n",
 				strings.Join(outcome.SearchedPaths, ", "))
@@ -93,12 +93,12 @@ func setupCLIExitCodes(fs *flag.FlagSet) Check {
 			if outcome.Checked {
 				where = fmt.Sprintf("%s exists and held no file this gate could read", outcome.ScannedRoot)
 			}
-			fmt.Fprintf(inv.Stdout, "cli-exit-codes: PARTIAL — 0 file(s) scanned, exit-code contract NOT CHECKED "+
+			inv.Stdout.Printf("cli-exit-codes: PARTIAL — 0 file(s) scanned, exit-code contract NOT CHECKED "+
 				"(%s; %d tracked absence(s))\n", where, len(outcome.TrackedAbsences))
 			return Pass, nil
 		}
 
-		fmt.Fprintf(inv.Stdout, "cli-exit-codes: PASS — %d file(s) under %s, no literal decimal process.exit() outside 0-5 "+
+		inv.Stdout.Printf("cli-exit-codes: PASS — %d file(s) under %s, no literal decimal process.exit() outside 0-5 "+
 			"(signal handlers exempt)\n", outcome.ScannedFiles, outcome.ScannedRoot)
 		return Pass, nil
 	}

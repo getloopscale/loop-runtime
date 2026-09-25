@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clusterrenameguard"
 )
@@ -44,13 +43,13 @@ func setupClusterRenameGuard(fs *flag.FlagSet) Check {
 			if len(outcome.Failures) == 0 {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "cluster-rename-guard: FAIL — %v\n", err)
+			inv.Stderr.Printf("cluster-rename-guard: FAIL — %v\n", err)
 			for _, f := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", f)
+				inv.Stderr.Printf("  %s\n", f)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "cluster-rename-guard: PASS — %d generic occurrence(s) survived the rename unchanged\n", outcome.Checked)
+		inv.Stdout.Printf("cluster-rename-guard: PASS — %d generic occurrence(s) survived the rename unchanged\n", outcome.Checked)
 		return Pass, nil
 	}
 }

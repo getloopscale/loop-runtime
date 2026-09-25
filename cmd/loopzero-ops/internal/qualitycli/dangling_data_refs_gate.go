@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/danglingdata"
 )
@@ -35,16 +34,16 @@ func setupDanglingDataRefs(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass {
-			fmt.Fprintln(inv.Stderr, "dangling-data-refs: FAIL — deleted config/data files still referenced by live callers:")
+			inv.Stderr.Println("dangling-data-refs: FAIL — deleted config/data files still referenced by live callers:")
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  - %s\n", v)
+				inv.Stderr.Printf("  - %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintln(inv.Stderr, "When deleting a config/data tree, remove or rewire the scripts that read it in")
-			fmt.Fprintln(inv.Stderr, "the SAME change. See finding-2026-05-23-governance-subsystem-orphaned.md")
+			inv.Stderr.Println("")
+			inv.Stderr.Println("When deleting a config/data tree, remove or rewire the scripts that read it in")
+			inv.Stderr.Println("the SAME change. See finding-2026-05-23-governance-subsystem-orphaned.md")
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "dangling-data-refs: PASS — no deleted data file left with live references")
+		inv.Stdout.Println("dangling-data-refs: PASS — no deleted data file left with live references")
 		return Pass, nil
 	}
 }

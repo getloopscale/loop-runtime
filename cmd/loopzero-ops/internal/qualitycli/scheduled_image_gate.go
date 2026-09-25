@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scheduledimage"
 )
@@ -25,13 +24,13 @@ func setupScheduledImage(_ *flag.FlagSet) Check {
 			if !isViolation(err, scheduledimage.ErrNoPublicationPath) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "scheduled-image: FAIL — %v\n", err)
+			inv.Stderr.Printf("scheduled-image: FAIL — %v\n", err)
 			for _, f := range out.Findings {
-				fmt.Fprintf(inv.Stderr, "  %s [%s] %s\n", f.File, f.Chart, f.Image)
+				inv.Stderr.Printf("  %s [%s] %s\n", f.File, f.Chart, f.Image)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "scheduled-image: PASS — %s\n", out.Reason)
+		inv.Stdout.Printf("scheduled-image: PASS — %s\n", out.Reason)
 		return Pass, nil
 	}
 }

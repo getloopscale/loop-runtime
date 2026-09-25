@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/taskfileinterface"
 )
@@ -25,17 +24,17 @@ func setupTaskfileInterface(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass {
-			fmt.Fprintln(inv.Stderr, "taskfile-interface: FAIL — public Taskfile command(s) missing:")
+			inv.Stderr.Println("taskfile-interface: FAIL — public Taskfile command(s) missing:")
 			for _, m := range outcome.Missing {
-				fmt.Fprintf(inv.Stderr, "  - %s\n", m)
+				inv.Stderr.Printf("  - %s\n", m)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintln(inv.Stderr, "Action: define these in Taskfile.yml or an included taskfiles/*.yml.")
-			fmt.Fprintln(inv.Stderr, "If intentionally renamed/removed, update ExpectedCommands in")
-			fmt.Fprintln(inv.Stderr, "cmd/loopzero-ops/internal/quality/taskfileinterface/check.go AND CI consumers.")
+			inv.Stderr.Println("")
+			inv.Stderr.Println("Action: define these in Taskfile.yml or an included taskfiles/*.yml.")
+			inv.Stderr.Println("If intentionally renamed/removed, update ExpectedCommands in")
+			inv.Stderr.Println("cmd/loopzero-ops/internal/quality/taskfileinterface/check.go AND CI consumers.")
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "taskfile-interface: PASS — all %d public commands resolve\n", len(taskfileinterface.ExpectedCommands))
+		inv.Stdout.Printf("taskfile-interface: PASS — all %d public commands resolve\n", len(taskfileinterface.ExpectedCommands))
 		return Pass, nil
 	}
 }

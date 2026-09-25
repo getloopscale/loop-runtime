@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/statuswritercontract"
 )
@@ -30,21 +29,21 @@ func init() {
 func setupStatusWriterContract(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (Outcome, error) {
 		o, err := statuswritercontract.Check(statuswritercontract.Config{Root: inv.Root})
-		fmt.Fprintln(inv.Stdout, o.Summary())
+		inv.Stdout.Println(o.Summary())
 		for _, v := range o.Violations {
 			if v.Kind == statuswritercontract.UncoveredSummary {
-				fmt.Fprintf(inv.Stdout, "  %s:%d — the package of %s() persists status and folds no readiness summary, "+
+				inv.Stdout.Printf("  %s:%d — the package of %s() persists status and folds no readiness summary, "+
 					"in-line or deferred (ADR-0025 D3)\n", v.File, v.Line, v.Func)
 				continue
 			}
-			fmt.Fprintf(inv.Stdout, "  %s:%d — %s() persists status with Update (reached by %s)\n",
+			inv.Stdout.Printf("  %s:%d — %s() persists status with Update (reached by %s)\n",
 				v.File, v.Line, v.Func, v.Form)
 		}
 		if err != nil {
 			return Fail, err
 		}
 		if !o.Pass {
-			fmt.Fprintln(inv.Stderr, statuswritercontract.ActionableFix)
+			inv.Stderr.Println(statuswritercontract.ActionableFix)
 			return Fail, nil
 		}
 		return Pass, nil

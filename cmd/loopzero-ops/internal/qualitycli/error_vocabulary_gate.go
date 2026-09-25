@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/errorvocabulary"
 )
@@ -25,14 +24,14 @@ func setupErrorVocabulary(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !out.Pass {
-			fmt.Fprintf(inv.Stderr, "error-vocabulary: FAIL — %s\n", out.Summary())
+			inv.Stderr.Printf("error-vocabulary: FAIL — %s\n", out.Summary())
 			for _, v := range out.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s:%d carries %q in user-facing output: %q\n", v.File, v.Line, v.Term, v.Message)
+				inv.Stderr.Printf("  %s:%d carries %q in user-facing output: %q\n", v.File, v.Line, v.Term, v.Message)
 			}
-			fmt.Fprintln(inv.Stderr, "  Unbreakable Rule 3 forbids these terms in user-facing output. Use product language.")
+			inv.Stderr.Println("  Unbreakable Rule 3 forbids these terms in user-facing output. Use product language.")
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "error-vocabulary: PASS — %s\n", out.Summary())
+		inv.Stdout.Printf("error-vocabulary: PASS — %s\n", out.Summary())
 		return Pass, nil
 	}
 }

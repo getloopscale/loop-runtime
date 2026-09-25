@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmfilecontextparity"
 )
@@ -28,25 +27,25 @@ func init() {
 func setupHelmfileContextParity(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (Outcome, error) {
 		o, err := helmfilecontextparity.Check(helmfilecontextparity.Config{RepoRoot: inv.Root})
-		fmt.Fprintln(inv.Stdout, o.Summary())
+		inv.Stdout.Println(o.Summary())
 		for _, d := range o.Divergences {
-			fmt.Fprintf(inv.Stdout, "  DIVERGES %s:%d — %s is invoked with --kube-context %q but declares %q\n",
+			inv.Stdout.Printf("  DIVERGES %s:%d — %s is invoked with --kube-context %q but declares %q\n",
 				d.Taskfile, d.Line, d.Helmfile, d.Invoked, d.Declared)
 		}
 		for _, m := range o.MissingEnv {
-			fmt.Fprintf(inv.Stdout, "  MISSING VAR %s\n", m)
+			inv.Stdout.Printf("  MISSING VAR %s\n", m)
 		}
 		for _, u := range o.Undeclared {
-			fmt.Fprintf(inv.Stdout, "  NO CONTEXT %s — a `helmfile sync` without the flag would inherit kubectl's active context\n", u)
+			inv.Stdout.Printf("  NO CONTEXT %s — a `helmfile sync` without the flag would inherit kubectl's active context\n", u)
 		}
 		if err != nil {
 			if !isViolation(err, helmfilecontextparity.ErrContextDiverges, helmfilecontextparity.ErrContextNotDeclared, helmfilecontextparity.ErrRequiredEnvNotSet) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "helmfile-context-parity: %v\n", err)
+			inv.Stderr.Printf("helmfile-context-parity: %v\n", err)
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "PASS — every literal helmfile invocation targets the cluster its helmfile declares")
+		inv.Stdout.Println("PASS — every literal helmfile invocation targets the cluster its helmfile declares")
 		return Pass, nil
 	}
 }

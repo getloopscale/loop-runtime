@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/ma7statuslocality"
 )
@@ -28,14 +27,14 @@ func setupMa7StatusLocality(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass {
-			fmt.Fprintf(inv.Stderr, "ma7-status-locality: FAIL \u2014 %d violation(s) (scanned %d .go files):\n", len(outcome.Violations), outcome.Scanned)
+			inv.Stderr.Printf("ma7-status-locality: FAIL \u2014 %d violation(s) (scanned %d .go files):\n", len(outcome.Violations), outcome.Scanned)
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s:%d Gate %s \u2014 %s outside db/store/\n", v.File, v.Line, v.Gate, v.Name)
+				inv.Stderr.Printf("  %s:%d Gate %s \u2014 %s outside db/store/\n", v.File, v.Line, v.Gate, v.Name)
 			}
-			fmt.Fprintf(inv.Stderr, "\nFix: %s\n", ma7statuslocality.ActionableFix())
+			inv.Stderr.Printf("\nFix: %s\n", ma7statuslocality.ActionableFix())
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "ma7-status-locality: PASS \u2014 %d .go files scanned; status machinery confined to db/store/ (MA-7 Gates B+C)\n", outcome.Scanned)
+		inv.Stdout.Printf("ma7-status-locality: PASS \u2014 %d .go files scanned; status machinery confined to db/store/ (MA-7 Gates B+C)\n", outcome.Scanned)
 		return Pass, nil
 	}
 }

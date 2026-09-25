@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/tenantpredicate"
 )
@@ -29,15 +28,15 @@ func setupTenantPredicate(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass {
-			fmt.Fprintf(inv.Stderr, "tenant-predicate: FAIL — %d violation(s) (scanned %d .sql files):\n",
+			inv.Stderr.Printf("tenant-predicate: FAIL — %d violation(s) (scanned %d .sql files):\n",
 				len(outcome.Violations), outcome.Scanned)
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  [%s] %s @ %s:%s — %s\n", v.Reason, v.Query, v.File, v.Table, v.Detail)
+				inv.Stderr.Printf("  [%s] %s @ %s:%s — %s\n", v.Reason, v.Query, v.File, v.Table, v.Detail)
 			}
-			fmt.Fprintf(inv.Stderr, "\nFix: %s\n", tenantpredicate.ActionableFix())
+			inv.Stderr.Printf("\nFix: %s\n", tenantpredicate.ActionableFix())
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "tenant-predicate: PASS — %d .sql files scanned; every multi-tenant query carries tenant_id\n", outcome.Scanned)
+		inv.Stdout.Printf("tenant-predicate: PASS — %d .sql files scanned; every multi-tenant query carries tenant_id\n", outcome.Scanned)
 		return Pass, nil
 	}
 }

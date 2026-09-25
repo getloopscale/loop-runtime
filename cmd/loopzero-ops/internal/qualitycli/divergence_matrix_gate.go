@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/divergencematrix"
 )
@@ -25,13 +24,13 @@ func setupDivergenceMatrix(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass {
-			fmt.Fprintf(inv.Stderr, "divergence-matrix: FAIL — %d issue(s):\n", len(outcome.Violations))
+			inv.Stderr.Printf("divergence-matrix: FAIL — %d issue(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "divergence-matrix: GREEN — matrix integrity OK")
+		inv.Stdout.Println("divergence-matrix: GREEN — matrix integrity OK")
 		return Pass, nil
 	}
 }

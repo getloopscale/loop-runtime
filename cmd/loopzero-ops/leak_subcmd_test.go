@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/cliout"
 )
 
 // fakeEdge serves every path with status and returns a leakEnv pointed at it.
@@ -27,7 +29,7 @@ func fakeEdge(t *testing.T, status func(path string) int) (leakEnv, string, *byt
 	cli.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	var out, errOut bytes.Buffer
 	env := leakEnv{
-		stdout: &out, stderr: &errOut, client: cli,
+		stdout: cliout.New(&out), stderr: cliout.New(&errOut), client: cli,
 		discovery:      func(context.Context, *http.Client, string) []string { return nil },
 		placeholders:   func() []string { return nil },
 		listeningPorts: func() ([]int, error) { return nil, nil },

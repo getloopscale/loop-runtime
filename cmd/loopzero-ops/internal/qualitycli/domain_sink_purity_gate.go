@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/domainsinkpurity"
 )
@@ -26,12 +25,12 @@ func init() {
 func setupDomainSinkPurity(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (Outcome, error) {
 		o, err := domainsinkpurity.Check(domainsinkpurity.Config{RepoRoot: inv.Root})
-		fmt.Fprintln(inv.Stdout, o.Summary())
+		inv.Stdout.Println(o.Summary())
 		for _, s := range o.New {
-			fmt.Fprintf(inv.Stdout, "  NEW LEAK %s — crosses the sink boundary and reaches every package that depends on it\n", s)
+			inv.Stdout.Printf("  NEW LEAK %s — crosses the sink boundary and reaches every package that depends on it\n", s)
 		}
 		for _, s := range o.Gone {
-			fmt.Fprintf(inv.Stdout, "  REMOVED %s — tighten the frozen set in FrozenDefault to lock in the gain\n", s)
+			inv.Stdout.Printf("  REMOVED %s — tighten the frozen set in FrozenDefault to lock in the gain\n", s)
 		}
 		if err != nil {
 			// Only a grown leak is a verdict. A missing sink or a dot-import means
@@ -40,10 +39,10 @@ func setupDomainSinkPurity(_ *flag.FlagSet) Check {
 			if !isViolation(err, domainsinkpurity.ErrSinkLeakGrew) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "domain-sink-purity: FAIL — %v\n", err)
+			inv.Stderr.Printf("domain-sink-purity: FAIL — %v\n", err)
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "PASS — no new symbol (persistence or application layer) crosses the sink (%d frozen, tracked in B-079)\n", o.FrozenCount)
+		inv.Stdout.Printf("PASS — no new symbol (persistence or application layer) crosses the sink (%d frozen, tracked in B-079)\n", o.FrozenCount)
 		return Pass, nil
 	}
 }

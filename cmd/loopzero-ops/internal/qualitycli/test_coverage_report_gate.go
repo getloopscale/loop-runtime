@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testcoveragereport"
 )
@@ -35,21 +34,21 @@ func setupTestCoverageReport(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if outcome.Skipped {
-			fmt.Fprintf(inv.Stdout, "test-coverage-report: SKIP — %s\n", outcome.SkipReason)
+			inv.Stdout.Printf("test-coverage-report: SKIP — %s\n", outcome.SkipReason)
 			return Pass, nil
 		}
 		if !outcome.Pass {
-			fmt.Fprintf(inv.Stderr, "test-coverage-report: FAIL — coverage=%.2f%% (threshold=%.2f%%)", outcome.CoveragePct, *threshold)
+			inv.Stderr.Printf("test-coverage-report: FAIL — coverage=%.2f%% (threshold=%.2f%%)", outcome.CoveragePct, *threshold)
 			if len(outcome.FailedPackages) > 0 {
-				fmt.Fprintf(inv.Stderr, "; failed packages:")
+				inv.Stderr.Printf("; failed packages:")
 				for _, p := range outcome.FailedPackages {
-					fmt.Fprintf(inv.Stderr, " %s", p)
+					inv.Stderr.Printf(" %s", p)
 				}
 			}
-			fmt.Fprintln(inv.Stderr)
+			inv.Stderr.Println()
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "test-coverage-report: PASS — coverage=%.2f%% (threshold=%.2f%%)\n", outcome.CoveragePct, *threshold)
+		inv.Stdout.Printf("test-coverage-report: PASS — coverage=%.2f%% (threshold=%.2f%%)\n", outcome.CoveragePct, *threshold)
 		return Pass, nil
 	}
 }

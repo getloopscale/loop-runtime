@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/installgithooks"
 )
@@ -27,13 +26,13 @@ func setupInstallGitHooks(_ *flag.FlagSet) Check {
 			if !isViolation(err, installgithooks.ErrFailures) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "install-git-hooks: FAIL — %d assertion(s):\n", len(outcome.Failures))
+			inv.Stderr.Printf("install-git-hooks: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", f)
+				inv.Stderr.Printf("  %s\n", f)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "install-git-hooks: PASS — pre-push hook + installer canonical shape validated")
+		inv.Stdout.Println("install-git-hooks: PASS — pre-push hook + installer canonical shape validated")
 		return Pass, nil
 	}
 }

@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/danglingrefs"
 )
@@ -33,16 +32,16 @@ func setupDanglingScriptRefs(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass {
-			fmt.Fprintln(inv.Stderr, "dangling-script-refs: FAIL — deleted scripts still referenced by live callers:")
+			inv.Stderr.Println("dangling-script-refs: FAIL — deleted scripts still referenced by live callers:")
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  - %s\n", v)
+				inv.Stderr.Printf("  - %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintln(inv.Stderr, "Per plan D2: rewire ALL 4 caller surfaces (Taskfile/CI/SKILL/scripts) in the")
-			fmt.Fprintln(inv.Stderr, "same PR that deletes the script. See 2026-05-23-incremental-bash-to-go-migration-plan")
+			inv.Stderr.Println("")
+			inv.Stderr.Println("Per plan D2: rewire ALL 4 caller surfaces (Taskfile/CI/SKILL/scripts) in the")
+			inv.Stderr.Println("same PR that deletes the script. See 2026-05-23-incremental-bash-to-go-migration-plan")
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "dangling-script-refs: PASS — no deleted script left with live references")
+		inv.Stdout.Println("dangling-script-refs: PASS — no deleted script left with live references")
 		return Pass, nil
 	}
 }

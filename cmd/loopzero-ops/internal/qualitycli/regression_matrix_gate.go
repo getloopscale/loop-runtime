@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"path/filepath"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/regressionmatrix"
@@ -37,7 +36,7 @@ func setupRegressionMatrix(fs *flag.FlagSet) Check {
 		if err != nil {
 			return Fail, err
 		}
-		fmt.Fprintf(inv.Stdout, "regression-matrix: %d entries — OK=%d miss=%d (critical=%d) skip=%d\n",
+		inv.Stdout.Printf("regression-matrix: %d entries — OK=%d miss=%d (critical=%d) skip=%d\n",
 			v.Total, v.OK, v.Miss, v.MissCritical, v.Skip)
 		for _, e := range v.MissEntries {
 			marker := " "
@@ -48,13 +47,13 @@ func setupRegressionMatrix(fs *flag.FlagSet) Check {
 			if len(verify) > 80 {
 				verify = verify[:80]
 			}
-			fmt.Fprintf(inv.Stdout, "  MISS%s #%s [%s] %s\n", marker, e.ID, e.CanRecur, verify)
+			inv.Stdout.Printf("  MISS%s #%s [%s] %s\n", marker, e.ID, e.CanRecur, verify)
 		}
 		if v.Failed() {
-			fmt.Fprintf(inv.Stderr, "regression-matrix: FAIL — %d unresolved critical artifact(s); the matrix claims protection that no longer resolves in the repo\n", v.MissCritical)
+			inv.Stderr.Printf("regression-matrix: FAIL — %d unresolved critical artifact(s); the matrix claims protection that no longer resolves in the repo\n", v.MissCritical)
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "regression-matrix: PASS")
+		inv.Stdout.Println("regression-matrix: PASS")
 		return Pass, nil
 	}
 }

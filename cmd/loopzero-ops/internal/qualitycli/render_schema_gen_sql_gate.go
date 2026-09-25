@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/renderschemagensql"
 )
@@ -34,22 +33,22 @@ func setupRenderSchemaGenSQL(fs *flag.FlagSet) Check {
 				return Fail, err
 			}
 			if outcome.Warn {
-				fmt.Fprintf(inv.Stdout, "render-schema-gen-sql: WARN (%s) — pass --advisory-only=false to convert to hard fail once toolchain lands\n", outcome.WarnReason)
+				inv.Stdout.Printf("render-schema-gen-sql: WARN (%s) — pass --advisory-only=false to convert to hard fail once toolchain lands\n", outcome.WarnReason)
 				return Pass, nil
 			}
-			fmt.Fprintln(inv.Stdout, "render-schema-gen-sql: PASS — toolchain + migrations + sqlc.yaml present; pass --render to execute the pipeline")
+			inv.Stdout.Println("render-schema-gen-sql: PASS — toolchain + migrations + sqlc.yaml present; pass --render to execute the pipeline")
 			return Pass, nil
 		}
 		outcome, err := renderschemagensql.Render(cfg)
 		if err != nil {
-			fmt.Fprintf(inv.Stderr, "render-schema-gen-sql: FAIL — %v\n%s\n", err, outcome.Diagnostic)
+			inv.Stderr.Printf("render-schema-gen-sql: FAIL — %v\n%s\n", err, outcome.Diagnostic)
 			return Fail, err
 		}
 		if outcome.Warn {
-			fmt.Fprintf(inv.Stdout, "render-schema-gen-sql: WARN (%s)\n", outcome.WarnReason)
+			inv.Stdout.Printf("render-schema-gen-sql: WARN (%s)\n", outcome.WarnReason)
 			return Pass, nil
 		}
-		fmt.Fprintf(inv.Stdout, "render-schema-gen-sql: PASS — schema.gen.sql rendered (%d lines) + sqlc compile clean\n", outcome.SchemaLines)
+		inv.Stdout.Printf("render-schema-gen-sql: PASS — schema.gen.sql rendered (%d lines) + sqlc compile clean\n", outcome.SchemaLines)
 		return Pass, nil
 	}
 }

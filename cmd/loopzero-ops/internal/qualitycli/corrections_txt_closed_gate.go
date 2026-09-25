@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"path/filepath"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/correctionstxt"
@@ -29,13 +28,13 @@ func setupCorrectionsTxtClosed(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass {
-			fmt.Fprintf(inv.Stderr, "corrections-txt-closed: FAIL — %d close-out violation(s):\n", len(outcome.Violations))
+			inv.Stderr.Printf("corrections-txt-closed: FAIL — %d close-out violation(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "corrections-txt-closed: PASS — all CORRECTIONS.txt items are annotated + closed out")
+		inv.Stdout.Println("corrections-txt-closed: PASS — all CORRECTIONS.txt items are annotated + closed out")
 		return Pass, nil
 	}
 }

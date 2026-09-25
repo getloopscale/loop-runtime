@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/prodimagedigests"
 )
@@ -42,35 +41,35 @@ func setupProdImageDigests(fs *flag.FlagSet) Check {
 			// populations is what kept three fixable findings invisible inside seven
 			// that nobody could fix — the reader could not tell which half was which.
 			if blocking := outcome.Enforced(); len(blocking) > 0 {
-				fmt.Fprintf(inv.Stderr, "prod-image-digests: FAIL — %d referência(s) de imagem mutável que bloqueiam:\n", len(blocking))
+				inv.Stderr.Printf("prod-image-digests: FAIL — %d referência(s) de imagem mutável que bloqueiam:\n", len(blocking))
 				for _, v := range blocking {
-					fmt.Fprintf(inv.Stderr, "  %s\n", v)
+					inv.Stderr.Printf("  %s\n", v)
 				}
 			}
 			if warned := outcome.Warned(); len(warned) > 0 {
-				fmt.Fprintf(inv.Stderr, "prod-image-digests: WARN — %d referência(s) reportada(s) sem bloquear (aguardam o publicador de imagens):\n", len(warned))
+				inv.Stderr.Printf("prod-image-digests: WARN — %d referência(s) reportada(s) sem bloquear (aguardam o publicador de imagens):\n", len(warned))
 				for _, v := range warned {
-					fmt.Fprintf(inv.Stderr, "  %s\n", v)
+					inv.Stderr.Printf("  %s\n", v)
 				}
 			}
-			fmt.Fprintln(inv.Stderr, "")
+			inv.Stderr.Println("")
 			// Two classes, two fixes. Before B-113 only the first existed, and the
 			// message said "use the helper" — useless advice for a chart that ALREADY
 			// uses the helper and declares no digest, which is the whole second class.
-			fmt.Fprintln(inv.Stderr, "Fix — literal in the template (`image: foo/bar:v1.2.3`):")
-			fmt.Fprintln(inv.Stderr, "     use `image: foo/bar@sha256:<digest>`, or delegate to")
-			fmt.Fprintln(inv.Stderr, "     `{{ include \"loopzero-common.image\" . }}`, which prefers a digest.")
-			fmt.Fprintln(inv.Stderr, "Fix — `image.digest missing` in values.yaml:")
-			fmt.Fprintln(inv.Stderr, "     the template is already right; the VALUE is missing. Declare `image.digest`")
-			fmt.Fprintln(inv.Stderr, "     (the image publisher produces it — a digest pinned by hand")
-			fmt.Fprintln(inv.Stderr, "     becomes a lie on the next publication).")
-			fmt.Fprintln(inv.Stderr, "See docs/architecture.md for context.")
+			inv.Stderr.Println("Fix — literal in the template (`image: foo/bar:v1.2.3`):")
+			inv.Stderr.Println("     use `image: foo/bar@sha256:<digest>`, or delegate to")
+			inv.Stderr.Println("     `{{ include \"loopzero-common.image\" . }}`, which prefers a digest.")
+			inv.Stderr.Println("Fix — `image.digest missing` in values.yaml:")
+			inv.Stderr.Println("     the template is already right; the VALUE is missing. Declare `image.digest`")
+			inv.Stderr.Println("     (the image publisher produces it — a digest pinned by hand")
+			inv.Stderr.Println("     becomes a lie on the next publication).")
+			inv.Stderr.Println("See docs/architecture.md for context.")
 			if !outcome.Pass {
 				return Fail, nil
 			}
 		}
 		if outcome.Pass {
-			fmt.Fprintf(inv.Stdout, "prod-image-digests: PASS (scanned %d files, %d warn-mode violation(s))\n", outcome.ScannedFiles, len(outcome.Violations))
+			inv.Stdout.Printf("prod-image-digests: PASS (scanned %d files, %d warn-mode violation(s))\n", outcome.ScannedFiles, len(outcome.Violations))
 		}
 		return Pass, nil
 	}

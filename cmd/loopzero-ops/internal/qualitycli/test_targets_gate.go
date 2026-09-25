@@ -32,16 +32,16 @@ func setupTestTargets(_ *flag.FlagSet) Check {
 				"2026-05-22). Repoint the test to the new path or delete the orphan test.",
 				len(o.Violations))
 			if os.Getenv("GITHUB_ACTIONS") != "" {
-				fmt.Fprintf(inv.Stdout, "::error::%s\n", msg)
+				inv.Stdout.Printf("::error::%s\n", msg)
 			} else {
-				fmt.Fprintf(inv.Stderr, "[test-targets] BLOCK: %s\n", msg)
+				inv.Stderr.Printf("[test-targets] BLOCK: %s\n", msg)
 			}
 			for _, v := range o.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "[test-targets] all %d test target(s) resolve — OK.\n", o.Checked)
+		inv.Stdout.Printf("[test-targets] all %d test target(s) resolve — OK.\n", o.Checked)
 		return Pass, nil
 	}
 }

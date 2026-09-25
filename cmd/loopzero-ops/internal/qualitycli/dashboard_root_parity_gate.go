@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dashboardrootparity"
 )
@@ -25,10 +24,10 @@ func setupDashboardRootParity(_ *flag.FlagSet) Check {
 			if !isViolation(err, dashboardrootparity.ErrDivergent, dashboardrootparity.ErrUndocumented) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "dashboard-root-parity: FAIL — %v\n", err)
+			inv.Stderr.Printf("dashboard-root-parity: FAIL — %v\n", err)
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "dashboard-root-parity: PASS — the edge serves %s and the runbook names it\n", out.Served)
+		inv.Stdout.Printf("dashboard-root-parity: PASS — the edge serves %s and the runbook names it\n", out.Served)
 		return Pass, nil
 	}
 }

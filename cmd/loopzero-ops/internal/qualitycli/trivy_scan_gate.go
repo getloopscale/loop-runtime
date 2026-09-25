@@ -6,7 +6,6 @@ package qualitycli
 import (
 	"context"
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/trivyscan"
 )
@@ -34,10 +33,10 @@ func setupTrivyScan(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass {
-			fmt.Fprintf(inv.Stderr, "trivy-scan: FAIL\n%s\n", outcome.Reason)
+			inv.Stderr.Printf("trivy-scan: FAIL\n%s\n", outcome.Reason)
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "trivy-scan: PASS — %s\n", outcome.Reason)
+		inv.Stdout.Printf("trivy-scan: PASS — %s\n", outcome.Reason)
 		return Pass, nil
 	}
 }

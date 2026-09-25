@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/quarantineprotect"
@@ -39,15 +38,15 @@ func setupQuarantineProtect(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass {
-			fmt.Fprintln(inv.Stderr, "quarantine-protect: FAIL — PR touches quarantined files:")
+			inv.Stderr.Println("quarantine-protect: FAIL — PR touches quarantined files:")
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  - %s\n", v)
+				inv.Stderr.Printf("  - %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintln(inv.Stderr, "Per ADR-2026-06-17-T3 D5: build the new suite at infra/tests/livetest/ paths instead.")
+			inv.Stderr.Println("")
+			inv.Stderr.Println("Per ADR-2026-06-17-T3 D5: build the new suite at infra/tests/livetest/ paths instead.")
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "quarantine-protect: PASS — no quarantine violations")
+		inv.Stdout.Println("quarantine-protect: PASS — no quarantine violations")
 		return Pass, nil
 	}
 }

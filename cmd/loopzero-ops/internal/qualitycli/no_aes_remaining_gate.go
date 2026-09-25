@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noaesremaining"
@@ -43,7 +42,7 @@ func setupNoAESRemaining(fs *flag.FlagSet) Check {
 		if err != nil {
 			return Fail, err
 		}
-		fmt.Fprint(inv.Stderr, noaesremaining.FormatOutcome(outcome))
+		inv.Stderr.Print(noaesremaining.FormatOutcome(outcome))
 		if !outcome.Pass {
 			return Fail, nil
 		}

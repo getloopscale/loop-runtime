@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noenvvaultsecrets"
@@ -40,7 +39,7 @@ func setupNoEnvVaultSecrets(fs *flag.FlagSet) Check {
 		if err != nil {
 			return Fail, err
 		}
-		fmt.Fprint(inv.Stderr, outcome.FormatReport())
+		inv.Stderr.Print(outcome.FormatReport())
 		if !outcome.Pass {
 			return Fail, nil
 		}

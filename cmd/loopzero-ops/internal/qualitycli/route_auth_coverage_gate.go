@@ -6,7 +6,6 @@ package qualitycli
 import (
 	"errors"
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routeauthcoverage"
 )
@@ -34,28 +33,28 @@ func setupRouteAuthCoverage(_ *flag.FlagSet) Check {
 			// the receiver was renamed and the regexp in check.go:84 no longer
 			// matches. Printing only the error would send the reader hunting for an
 			// unprotected route that does not exist.
-			fmt.Fprintf(inv.Stderr, "route-auth-coverage: FAIL — %v\n", err)
-			fmt.Fprintf(inv.Stderr, "  Auth group spans lines %d..%d, registerProtectedRoutes %d..%d — both located.\n",
+			inv.Stderr.Printf("route-auth-coverage: FAIL — %v\n", err)
+			inv.Stderr.Printf("  Auth group spans lines %d..%d, registerProtectedRoutes %d..%d — both located.\n",
 				outcome.AuthStart, outcome.AuthEnd, outcome.ProtStart, outcome.ProtEnd)
-			fmt.Fprintln(inv.Stderr, "  Fix: point the walker at wherever the r.{Get,Post,...} calls now live, or restore them to router.go.")
+			inv.Stderr.Println("  Fix: point the walker at wherever the r.{Get,Post,...} calls now live, or restore them to router.go.")
 			return Fail, err
 		}
 		if err != nil {
 			if !isViolation(err, routeauthcoverage.ErrViolations, routeauthcoverage.ErrUndeclaredOffRouterMount) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "route-auth-coverage: FAIL — %v\n", err)
+			inv.Stderr.Printf("route-auth-coverage: FAIL — %v\n", err)
 			if len(outcome.Violations) > 0 {
-				fmt.Fprintf(inv.Stderr, "  Auth group spans lines %d..%d\n", outcome.AuthStart, outcome.AuthEnd)
-				fmt.Fprintf(inv.Stderr, "  registerProtectedRoutes spans lines %d..%d\n", outcome.ProtStart, outcome.ProtEnd)
+				inv.Stderr.Printf("  Auth group spans lines %d..%d\n", outcome.AuthStart, outcome.AuthEnd)
+				inv.Stderr.Printf("  registerProtectedRoutes spans lines %d..%d\n", outcome.ProtStart, outcome.ProtEnd)
 				for _, v := range outcome.Violations {
-					fmt.Fprintf(inv.Stderr, "  %s\n", v)
+					inv.Stderr.Printf("  %s\n", v)
 				}
-				fmt.Fprintln(inv.Stderr, "Fix: move the route inside middleware.Auth group OR add explicit allowlist entry with rationale.")
+				inv.Stderr.Println("Fix: move the route inside middleware.Auth group OR add explicit allowlist entry with rationale.")
 			}
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "route-auth-coverage: PASS — %d routes either in Auth group or allowlisted (auth spans %d..%d, protected %d..%d)\n",
+		inv.Stdout.Printf("route-auth-coverage: PASS — %d routes either in Auth group or allowlisted (auth spans %d..%d, protected %d..%d)\n",
 			outcome.PassCount, outcome.AuthStart, outcome.AuthEnd, outcome.ProtStart, outcome.ProtEnd)
 		return Pass, nil
 	}

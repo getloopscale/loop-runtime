@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/allowlistsunsets"
 )
@@ -29,9 +28,9 @@ func setupCheckAllowlistSunsets(_ *flag.FlagSet) Check {
 			if !isViolation(err, allowlistsunsets.ErrViolations) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "check-allowlist-sunsets: FAIL — %d assertion(s):\n", len(outcome.Failures))
+			inv.Stderr.Printf("check-allowlist-sunsets: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", f)
+				inv.Stderr.Printf("  %s\n", f)
 			}
 			return Fail, nil
 		}
@@ -40,9 +39,9 @@ func setupCheckAllowlistSunsets(_ *flag.FlagSet) Check {
 		// message describing work that no longer happens is the same defect as a gate whose
 		// remedy names an absent path.
 		for _, w := range outcome.Warnings {
-			fmt.Fprintf(inv.Stdout, "check-allowlist-sunsets: WARN — %s\n", w)
+			inv.Stdout.Printf("check-allowlist-sunsets: WARN — %s\n", w)
 		}
-		fmt.Fprintf(inv.Stdout, "check-allowlist-sunsets: PASS — %d exemption(s) checked, none expired\n", outcome.Checked)
+		inv.Stdout.Printf("check-allowlist-sunsets: PASS — %d exemption(s) checked, none expired\n", outcome.Checked)
 		return Pass, nil
 	}
 }

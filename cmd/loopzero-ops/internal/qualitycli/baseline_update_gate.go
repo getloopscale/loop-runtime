@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baselineupdate"
@@ -40,9 +39,9 @@ func setupBaselineUpdate(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if *dryRun {
-			fmt.Fprint(inv.Stdout, string(result.JSON))
+			inv.Stdout.Print(string(result.JSON))
 		} else {
-			fmt.Fprintf(inv.Stderr, "baseline-update: wrote %d packages to %s\n", result.PackagesWritten, result.OutputPath)
+			inv.Stderr.Printf("baseline-update: wrote %d packages to %s\n", result.PackagesWritten, result.OutputPath)
 		}
 		return Pass, nil
 	}

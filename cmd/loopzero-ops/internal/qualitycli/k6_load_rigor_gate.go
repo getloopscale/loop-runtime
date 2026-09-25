@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/k6loadrigor"
 )
@@ -29,13 +28,13 @@ func setupK6LoadRigor(_ *flag.FlagSet) Check {
 			if !isViolation(err, k6loadrigor.ErrViolations) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "k6-load-rigor: FAIL — %d assertion(s):\n", len(outcome.Failures))
+			inv.Stderr.Printf("k6-load-rigor: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", f)
+				inv.Stderr.Printf("  %s\n", f)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "k6-load-rigor: PASS — dropped_iterations threshold in base + L5 manifest shape + per-level docs canonical")
+		inv.Stdout.Println("k6-load-rigor: PASS — dropped_iterations threshold in base + L5 manifest shape + per-level docs canonical")
 		return Pass, nil
 	}
 }

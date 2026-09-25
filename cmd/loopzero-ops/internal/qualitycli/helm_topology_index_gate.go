@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmtopology"
 )
@@ -36,15 +35,15 @@ func setupHelmTopologyIndex(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if *write {
-			fmt.Fprintf(inv.Stdout, "helm-topology-index: wrote index with %d entries\n", len(rep.Entries))
+			inv.Stdout.Printf("helm-topology-index: wrote index with %d entries\n", len(rep.Entries))
 			return Pass, nil
 		}
 		if rep.InSync {
-			fmt.Fprintf(inv.Stdout, "helm-topology-index: PASS — %d charts indexed, in sync with the helmfiles\n",
+			inv.Stdout.Printf("helm-topology-index: PASS — %d charts indexed, in sync with the helmfiles\n",
 				len(rep.Entries))
 			return Pass, nil
 		}
-		fmt.Fprintf(inv.Stderr, "helm-topology-index: FAIL — %s\n", rep.Message)
+		inv.Stderr.Printf("helm-topology-index: FAIL — %s\n", rep.Message)
 		return Fail, nil
 	}
 }

@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfilenodockerip"
 )
@@ -30,13 +29,13 @@ func setupCaddyfileNoDockerIP(_ *flag.FlagSet) Check {
 			if !isViolation(err, caddyfilenodockerip.ErrViolations) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "caddyfile-no-docker-ip: FAIL — %d violation(s):\n", len(outcome.Violations))
+			inv.Stderr.Printf("caddyfile-no-docker-ip: FAIL — %d violation(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "caddyfile-no-docker-ip: PASS — Caddyfile canonical (no 172.18.x.x, both wildcard blocks use https://127.0.0.1:8443)")
+		inv.Stdout.Println("caddyfile-no-docker-ip: PASS — Caddyfile canonical (no 172.18.x.x, both wildcard blocks use https://127.0.0.1:8443)")
 		return Pass, nil
 	}
 }

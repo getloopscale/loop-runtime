@@ -6,7 +6,6 @@ package qualitycli
 import (
 	"context"
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/trufflehogscan"
 )
@@ -32,7 +31,7 @@ func setupTrufflehogScan(fs *flag.FlagSet) Check {
 			if err != nil {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stdout, "trufflehog-scan: baseline rewritten — %d candidate(s) adjudicated\n", n)
+			inv.Stdout.Printf("trufflehog-scan: baseline rewritten — %d candidate(s) adjudicated\n", n)
 			return Pass, nil
 		}
 
@@ -46,16 +45,16 @@ func setupTrufflehogScan(fs *flag.FlagSet) Check {
 			// NO branch returns 0 without a verdict. The three paths that used to end in
 			// `exit 0` without knowing whether a secret was present — missing binary, run
 			// error, and `--only-verified` with no network — fail here (B-143).
-			fmt.Fprintf(inv.Stderr, "trufflehog-scan: FAIL — %v\n", err)
+			inv.Stderr.Printf("trufflehog-scan: FAIL — %v\n", err)
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "trufflehog-scan: PASS — %s\n", out.Reason)
+		inv.Stdout.Printf("trufflehog-scan: PASS — %s\n", out.Reason)
 		// Not a failure, and not always staleness: the baseline is generated with
 		// --no-verification, a strict superset of verified mode (measured 67 ⊇ 65). An
 		// entry with no matching finding may be a candidate verification discards — and
 		// its being here is exactly why a network outage does not turn into a false red.
 		for _, e := range out.StaleEntries {
-			fmt.Fprintf(inv.Stdout, "  in the baseline with no finding this pass (not a failure; the baseline is a superset): %s [%s] %s\n",
+			inv.Stdout.Printf("  in the baseline with no finding this pass (not a failure; the baseline is a superset): %s [%s] %s\n",
 				e.File, e.Detector, e.ID)
 		}
 		return Pass, nil

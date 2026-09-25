@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/alertrunbooks"
 )
@@ -56,24 +55,24 @@ func setupAlertRunbooks(_ *flag.FlagSet) Check {
 		o := alertrunbooks.Check(alertrunbooks.Config{Root: inv.Root})
 		if !o.Pass {
 			for _, v := range o.Violations {
-				fmt.Fprintf(inv.Stdout, "RUNBOOK-MISSING VIOLATION: %s\n", v)
+				inv.Stdout.Printf("RUNBOOK-MISSING VIOLATION: %s\n", v)
 			}
 			// SITES and ALERTS are different numbers, and the old message said "alert(s)"
 			// while counting sites. Nine alert files exist twice in the tree
 			// (`infra/helm/...` and the mirrored copy in `charts/...`), so the site count
 			// is higher than the alert count — measured 2026-09-06: 46 sites, 37 alerts.
 			// Calling 46 "alerts without runbook" inflates the debt by 24%.
-			fmt.Fprintf(inv.Stderr, "\nFAIL — %d alert(s) without runbook annotation, in %d site(s).\n",
+			inv.Stderr.Printf("\nFAIL — %d alert(s) without runbook annotation, in %d site(s).\n",
 				o.DistinctAlerts(), len(o.Violations))
 			if o.DistinctAlerts() != len(o.Violations) {
-				fmt.Fprintf(inv.Stderr, "(%d site(s) are mirrored copies of the same alert — fix every site.)\n",
+				inv.Stderr.Printf("(%d site(s) are mirrored copies of the same alert — fix every site.)\n",
 					len(o.Violations)-o.DistinctAlerts())
 			}
-			fmt.Fprintln(inv.Stderr, "To fix: add a `runbook_url:` annotation linking to recovery docs, OR add the")
-			fmt.Fprintln(inv.Stderr, "alert name to ExceptionList (cmd/loopzero-ops/internal/quality/alertrunbooks) with an explanation.")
+			inv.Stderr.Println("To fix: add a `runbook_url:` annotation linking to recovery docs, OR add the")
+			inv.Stderr.Println("alert name to ExceptionList (cmd/loopzero-ops/internal/quality/alertrunbooks) with an explanation.")
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "PASS — every alert has a runbook (or is in the exception list).")
+		inv.Stdout.Println("PASS — every alert has a runbook (or is in the exception list).")
 		return Pass, nil
 	}
 }

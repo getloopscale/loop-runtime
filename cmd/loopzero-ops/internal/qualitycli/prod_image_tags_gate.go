@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/prodimagetags"
 )
@@ -26,16 +25,16 @@ func setupProdImageTags(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !o.Pass {
-			fmt.Fprintf(inv.Stderr, "✗ VIOLATION: %d mutable image tag(s) in production-scoped manifests:\n", len(o.Violations))
+			inv.Stderr.Printf("✗ VIOLATION: %d mutable image tag(s) in production-scoped manifests:\n", len(o.Violations))
 			for _, v := range o.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintln(inv.Stderr, "Per ADR-0020 D1: production manifests MUST use immutable :sha7 tags.")
-			fmt.Fprintln(inv.Stderr, "To override an intentional case, add '# loopzero:mutable-tag-allowed' + ADR ref.")
+			inv.Stderr.Println("")
+			inv.Stderr.Println("Per ADR-0020 D1: production manifests MUST use immutable :sha7 tags.")
+			inv.Stderr.Println("To override an intentional case, add '# loopzero:mutable-tag-allowed' + ADR ref.")
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "✓ Scanned %d file(s). No :prod or :latest tags in production manifests.\n", o.ScannedFiles)
+		inv.Stdout.Printf("✓ Scanned %d file(s). No :prod or :latest tags in production manifests.\n", o.ScannedFiles)
 		return Pass, nil
 	}
 }

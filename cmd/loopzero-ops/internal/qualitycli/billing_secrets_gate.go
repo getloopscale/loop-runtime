@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/billingsecrets"
 )
@@ -35,16 +34,16 @@ func setupBillingSecrets(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if len(outcome.Findings) > 0 {
-			fmt.Fprintf(inv.Stderr, "billing-secrets: FAIL — %d billing secret mount(s) with literal optionality:\n",
+			inv.Stderr.Printf("billing-secrets: FAIL — %d billing secret mount(s) with literal optionality:\n",
 				len(outcome.Findings))
 			for _, f := range outcome.Findings {
-				fmt.Fprintf(inv.Stderr, "  %s:%d — %s\n", f.File, f.Line, f.Why)
+				inv.Stderr.Printf("  %s:%d — %s\n", f.File, f.Line, f.Why)
 			}
 			return Fail, nil
 		}
 		// Saying HOW MANY files were read matters: a gate that found nothing because it
 		// read nothing would look, in the log, like a gate that passed.
-		fmt.Fprintf(inv.Stdout, "billing-secrets: PASS — %d chart(s) checked, optionality decided by value\n",
+		inv.Stdout.Printf("billing-secrets: PASS — %d chart(s) checked, optionality decided by value\n",
 			len(outcome.Scanned))
 		return Pass, nil
 	}

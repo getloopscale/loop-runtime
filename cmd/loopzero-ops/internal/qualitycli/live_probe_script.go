@@ -4,8 +4,6 @@
 package qualitycli
 
 import (
-	"fmt"
-
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/liveprobescript"
 )
 
@@ -20,14 +18,14 @@ func liveProbeScriptCheck(spec liveprobescript.Spec) Check {
 			if len(outcome.Failures) == 0 {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "%s: FAIL — %d assertion(s) violated:\n", spec.Gate, len(outcome.Failures))
+			inv.Stderr.Printf("%s: FAIL — %d assertion(s) violated:\n", spec.Gate, len(outcome.Failures))
 			for _, v := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
 			return Fail, nil
 		}
 		n := spec.Assertions()
-		fmt.Fprintf(inv.Stdout, "%s: PASS — %d/%d hermetic assertions on %s\n", spec.Gate, n, n, spec.Script)
+		inv.Stdout.Printf("%s: PASS — %d/%d hermetic assertions on %s\n", spec.Gate, n, n, spec.Script)
 		return Pass, nil
 	}
 }

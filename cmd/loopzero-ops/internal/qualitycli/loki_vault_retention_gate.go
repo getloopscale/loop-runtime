@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokivaultretention"
 )
@@ -29,13 +28,13 @@ func setupLokiVaultRetention(_ *flag.FlagSet) Check {
 			if !isViolation(err, lokivaultretention.ErrViolations) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "loki-vault-retention: FAIL — %d assertion(s):\n", len(outcome.Failures))
+			inv.Stderr.Printf("loki-vault-retention: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", f)
+				inv.Stderr.Printf("  %s\n", f)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "loki-vault-retention: PASS — T8.5 archive CronJob hardening assertions clean")
+		inv.Stdout.Println("loki-vault-retention: PASS — T8.5 archive CronJob hardening assertions clean")
 		return Pass, nil
 	}
 }

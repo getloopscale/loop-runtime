@@ -6,7 +6,6 @@ package qualitycli
 import (
 	"context"
 	"flag"
-	"fmt"
 	"os"
 	"strings"
 
@@ -38,9 +37,9 @@ func setupGitDiffToLines(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if s := gitdiff.FormatLines(pairs); s != "" {
-			fmt.Fprint(inv.Stdout, s)
+			inv.Stdout.Print(s)
 			if !strings.HasSuffix(s, "\n") {
-				fmt.Fprintln(inv.Stdout)
+				inv.Stdout.Println()
 			}
 		}
 		return Pass, nil

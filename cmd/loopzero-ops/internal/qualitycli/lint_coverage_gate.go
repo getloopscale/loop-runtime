@@ -6,7 +6,6 @@ package qualitycli
 import (
 	"errors"
 	"flag"
-	"fmt"
 
 	"path/filepath"
 
@@ -38,7 +37,7 @@ func setupLintCoverage(fs *flag.FlagSet) Check {
 			if werr := lintcoverage.WriteBaseline(p, out.Lint, out.Gofmt); werr != nil {
 				return Fail, werr
 			}
-			fmt.Fprintf(inv.Stdout, "lint-coverage: baseline rewritten — %s\n", out.Reason)
+			inv.Stdout.Printf("lint-coverage: baseline rewritten — %s\n", out.Reason)
 			return Pass, nil
 		}
 
@@ -47,15 +46,15 @@ func setupLintCoverage(fs *flag.FlagSet) Check {
 			if !isViolation(err, lintcoverage.ErrRegression, lintcoverage.ErrUndeclaredModule) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "lint-coverage: FAIL — %v\n", err)
+			inv.Stderr.Printf("lint-coverage: FAIL — %v\n", err)
 			for _, r := range out.Regressions {
-				fmt.Fprintf(inv.Stderr, "  regression: %s [%s] %d → %d\n", r.Module, r.Dimension, r.Was, r.Now)
+				inv.Stderr.Printf("  regression: %s [%s] %d → %d\n", r.Module, r.Dimension, r.Was, r.Now)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "lint-coverage: PASS — %s\n", out.Reason)
+		inv.Stdout.Printf("lint-coverage: PASS — %s\n", out.Reason)
 		for _, i := range out.Improvements {
-			fmt.Fprintf(inv.Stdout, "  improved: %s %d → %d (re-freeze with `--write`)\n", i.Module, i.Was, i.Now)
+			inv.Stdout.Printf("  improved: %s %d → %d (re-freeze with `--write`)\n", i.Module, i.Was, i.Now)
 		}
 		return Pass, nil
 	}

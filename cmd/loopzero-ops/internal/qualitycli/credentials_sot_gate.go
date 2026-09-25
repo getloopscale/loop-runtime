@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/credentialssot"
 )
@@ -29,19 +28,19 @@ func setupCredentialsSot(_ *flag.FlagSet) Check {
 			if !isViolation(err, credentialssot.ErrViolations) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "credentials-sot: FAIL — %d issue(s):\n", len(outcome.Failures))
+			inv.Stderr.Printf("credentials-sot: FAIL — %d issue(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", f)
+				inv.Stderr.Printf("  %s\n", f)
 			}
 			if len(outcome.Discovered) > 0 {
-				fmt.Fprintln(inv.Stderr, "Discovered Secret names:")
+				inv.Stderr.Println("Discovered Secret names:")
 				for _, s := range outcome.Discovered {
-					fmt.Fprintf(inv.Stderr, "  - %s\n", s)
+					inv.Stderr.Printf("  - %s\n", s)
 				}
 			}
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "credentials-sot: PASS — %d bootstrap-created Secrets enumerated in docs/operations.md\n", len(outcome.Discovered))
+		inv.Stdout.Printf("credentials-sot: PASS — %d bootstrap-created Secrets enumerated in docs/operations.md\n", len(outcome.Discovered))
 		return Pass, nil
 	}
 }

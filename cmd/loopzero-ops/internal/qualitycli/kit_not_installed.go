@@ -18,8 +18,8 @@ var errNotVerified = errors.New("not verified")
 // fresh clone: the gate verified nothing, and exit 5 keeps that apart from both
 // a pass and a violation found in the kit.
 func kitNotInstalled(inv Invocation, err error) (Outcome, error) {
-	fmt.Fprintf(inv.Stderr, "%s: NOT VERIFIED — %v\n", inv.Name, err)
-	fmt.Fprintf(inv.Stderr, "  %s checks the installed kit under .claude/, which .gitignore excludes;\n"+
+	inv.Stderr.Printf("%s: NOT VERIFIED — %v\n", inv.Name, err)
+	inv.Stderr.Printf("  %s checks the installed kit under .claude/, which .gitignore excludes;\n"+
 		"  it can only be verified on a machine where the kit is installed.\n", inv.Name)
 	return Fail, fmt.Errorf("%w: %w", errNotVerified, err)
 }

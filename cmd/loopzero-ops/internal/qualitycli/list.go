@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"regexp"
 	"sort"
@@ -15,6 +14,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/cliout"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
 )
 
@@ -167,7 +167,7 @@ func collectCmdStrings(n *yaml.Node) []string {
 // can be captured as a byte-stable baseline (the MA-1 oracle). Any drop / move /
 // removal of a gate invocation changes a TASKS cell, turning the baseline diff
 // (and CI) red.
-func runList(w, stderr io.Writer, args []string) int {
+func runList(w, stderr *cliout.Writer, args []string) int {
 	fs := flag.NewFlagSet("quality --list", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	namesOnly := fs.Bool("names", false, "print gate names only, one per line")
@@ -179,7 +179,7 @@ func runList(w, stderr io.Writer, args []string) int {
 
 	gateTasks, err := taskGateTasks(*taskfile)
 	if err != nil {
-		fmt.Fprintf(stderr, "quality --list: %v\n", err)
+		stderr.Printf("quality --list: %v\n", err)
 		return exitcode.Incomplete
 	}
 
@@ -203,12 +203,12 @@ func runList(w, stderr io.Writer, args []string) int {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(rows); err != nil {
-			fmt.Fprintf(stderr, "quality --list: encode json: %v\n", err)
+			stderr.Printf("quality --list: encode json: %v\n", err)
 			return exitcode.Incomplete
 		}
 	case *namesOnly:
 		for _, g := range specs {
-			fmt.Fprintln(w, g.Name)
+			w.Println(g.Name)
 		}
 	default:
 		for _, g := range specs {
@@ -216,7 +216,7 @@ func runList(w, stderr io.Writer, args []string) int {
 			if ts := gateTasks[g.Name]; len(ts) > 0 {
 				tasksCol = strings.Join(ts, ",")
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\n", g.Name, tasksCol, g.Summary)
+			w.Printf("%s\t%s\t%s\n", g.Name, tasksCol, g.Summary)
 		}
 	}
 	return exitcode.OK

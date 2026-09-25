@@ -25,6 +25,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/cliout"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
 )
 
@@ -39,12 +40,14 @@ const (
 )
 
 // Invocation is what a gate's check receives: the resolved repository root
-// and where to write.
+// and where to write. The writers keep their first write error, and Run
+// settles the exit status against them, so a check writes its report one
+// call per line without handling each write.
 type Invocation struct {
 	Name   string
 	Root   string // resolved repository root; empty when the gate takes no --root
-	Stdout io.Writer
-	Stderr io.Writer
+	Stdout *cliout.Writer
+	Stderr *cliout.Writer
 }
 
 // Check runs a gate once its flags are parsed.
@@ -131,7 +134,15 @@ func Lookup(name string) (Gate, bool) {
 // Run is the one runner every gate goes through: it parses the flags,
 // resolves --root, runs the check and maps the result onto loopzero-ops' exit
 // table. Written once, so a fix to how gates report reaches all of them.
+//
+// A check that passed but whose report could not be written exits
+// Incomplete: a PASS nobody received is not a PASS.
 func (g Gate) Run(args []string, stdout, stderr io.Writer) int {
+	out, errOut := cliout.New(stdout), cliout.New(stderr)
+	return cliout.Settle(g.run(args, out, errOut), out, errOut)
+}
+
+func (g Gate) run(args []string, stdout, stderr *cliout.Writer) int {
 	fs := flag.NewFlagSet(g.Name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var root *string
@@ -156,12 +167,12 @@ func (g Gate) Run(args []string, stdout, stderr io.Writer) int {
 	out, err := check(inv)
 	switch {
 	case errors.Is(err, errUsage):
-		fmt.Fprintf(stderr, "%s: %v\n", g.Name, err)
+		stderr.Printf("%s: %v\n", g.Name, err)
 		return exitcode.Usage
 	case errors.Is(err, errNotVerified):
 		return exitcode.Incomplete
 	case err != nil:
-		fmt.Fprintf(stderr, "%s: ERROR — could not complete the check: %v\n", g.Name, err)
+		stderr.Printf("%s: ERROR — could not complete the check: %v\n", g.Name, err)
 		return exitcode.Incomplete
 	case out == Fail:
 		return exitcode.Failure

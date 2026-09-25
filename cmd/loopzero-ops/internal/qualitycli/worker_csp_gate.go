@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/workercsp"
 )
@@ -30,18 +29,18 @@ func setupWorkerCSP(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if out.Skipped {
-			fmt.Fprintf(inv.Stdout, "worker-csp: SKIP — %s\n", out.Reason)
+			inv.Stdout.Printf("worker-csp: SKIP — %s\n", out.Reason)
 			return Pass, nil
 		}
 		if out.Pass {
-			fmt.Fprintf(inv.Stdout, "worker-csp: PASS — %s\n", out.Reason)
+			inv.Stdout.Printf("worker-csp: PASS — %s\n", out.Reason)
 			return Pass, nil
 		}
-		fmt.Fprintln(inv.Stderr, "worker-csp: FAIL")
+		inv.Stderr.Println("worker-csp: FAIL")
 		for _, f := range out.Findings {
-			fmt.Fprintf(inv.Stderr, "  %s:%d — %s\n", workercsp.DefaultWorkerPath, f.Line, f.Detail)
+			inv.Stderr.Printf("  %s:%d — %s\n", workercsp.DefaultWorkerPath, f.Line, f.Detail)
 		}
-		fmt.Fprintln(inv.Stderr, "Fix: drop 'unsafe-inline' from script-src; use a per-request nonce or external+hashed scripts (issue #235).")
+		inv.Stderr.Println("Fix: drop 'unsafe-inline' from script-src; use a per-request nonce or external+hashed scripts (issue #235).")
 		return Fail, nil
 	}
 }

@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/coveragediff"
 )
@@ -37,7 +36,7 @@ func setupCoverageDiff(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		for _, m := range outcome.Messages {
-			fmt.Fprintln(inv.Stdout, m)
+			inv.Stdout.Println(m)
 		}
 		if !outcome.Pass {
 			return Fail, nil

@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/proxyexposure"
 )
@@ -29,21 +28,21 @@ func setupProxyExposure(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !o.Pass {
-			fmt.Fprintf(inv.Stderr, "[proxy-exposure] FAIL — the edge exposes something nobody declared.\n")
+			inv.Stderr.Printf("[proxy-exposure] FAIL — the edge exposes something nobody declared.\n")
 			for _, u := range o.Undeclared {
-				fmt.Fprintf(inv.Stderr, "  UNDECLARED %s\n", u)
+				inv.Stderr.Printf("  UNDECLARED %s\n", u)
 			}
 			for _, st := range o.Stale {
-				fmt.Fprintf(inv.Stderr, "  STALE      %s — declared, but no such proxy exists\n", st)
+				inv.Stderr.Printf("  STALE      %s — declared, but no such proxy exists\n", st)
 			}
 			for _, m := range o.Malformed {
-				fmt.Fprintf(inv.Stderr, "  MALFORMED  %s\n", m)
+				inv.Stderr.Printf("  MALFORMED  %s\n", m)
 			}
-			fmt.Fprintln(inv.Stderr, "Fix: add a row to infra/quality/proxy-exposure.txt saying what the proxy lets through.")
-			fmt.Fprintln(inv.Stderr, "A reverse_proxy inherits its response from the upstream — if nobody wrote it down, nobody checked it.")
+			inv.Stderr.Println("Fix: add a row to infra/quality/proxy-exposure.txt saying what the proxy lets through.")
+			inv.Stderr.Println("A reverse_proxy inherits its response from the upstream — if nobody wrote it down, nobody checked it.")
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "[proxy-exposure] PASS — %d edge proxies, all declared\n", o.Scanned)
+		inv.Stdout.Printf("[proxy-exposure] PASS — %d edge proxies, all declared\n", o.Scanned)
 		return Pass, nil
 	}
 }

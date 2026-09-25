@@ -40,25 +40,25 @@ func setupScriptCount(fs *flag.FlagSet) Check {
 		}
 		if *update {
 			if v.Count > base.CanonicalSH {
-				fmt.Fprintf(inv.Stderr, "script-count: refuse to ratchet UP (%d > baseline %d)\n", v.Count, base.CanonicalSH)
+				inv.Stderr.Printf("script-count: refuse to ratchet UP (%d > baseline %d)\n", v.Count, base.CanonicalSH)
 				return Fail, nil
 			}
 			out := fmt.Sprintf("{\n  \"canonical_sh\": %d\n}\n", v.Count)
 			if err := os.WriteFile(*baselinePath, []byte(out), 0o644); err != nil { // #nosec G306 -- repo-internal baseline
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stdout, "script-count: baseline ratcheted to %d\n", v.Count)
+			inv.Stdout.Printf("script-count: baseline ratcheted to %d\n", v.Count)
 			return Pass, nil
 		}
 		if !v.OK {
-			fmt.Fprintf(inv.Stderr, "script-count: FAIL — %d canonical .sh > baseline %d (a PR may never increase the count; see 2026-05-24-script-minimization-program-plan)\n", v.Count, v.Baseline)
+			inv.Stderr.Printf("script-count: FAIL — %d canonical .sh > baseline %d (a PR may never increase the count; see 2026-05-24-script-minimization-program-plan)\n", v.Count, v.Baseline)
 			return Fail, nil
 		}
 		if v.Improved {
-			fmt.Fprintf(inv.Stdout, "script-count: PASS — %d canonical .sh (< baseline %d; run --update-baseline to ratchet)\n", v.Count, v.Baseline)
+			inv.Stdout.Printf("script-count: PASS — %d canonical .sh (< baseline %d; run --update-baseline to ratchet)\n", v.Count, v.Baseline)
 			return Pass, nil
 		}
-		fmt.Fprintf(inv.Stdout, "script-count: PASS — %d canonical .sh (== baseline %d)\n", v.Count, v.Baseline)
+		inv.Stdout.Printf("script-count: PASS — %d canonical .sh (== baseline %d)\n", v.Count, v.Baseline)
 		return Pass, nil
 	}
 }

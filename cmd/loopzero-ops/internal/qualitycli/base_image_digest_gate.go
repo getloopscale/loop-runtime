@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baseimagedigest"
 )
@@ -23,15 +22,15 @@ func setupBaseImageDigest(_ *flag.FlagSet) Check {
 		o := baseimagedigest.Check(baseimagedigest.Config{Root: inv.Root})
 		if !o.Pass {
 			for _, v := range o.Violations {
-				fmt.Fprintf(inv.Stdout, "BASE-IMAGE-DIGEST VIOLATION: %s\n", v)
+				inv.Stdout.Printf("BASE-IMAGE-DIGEST VIOLATION: %s\n", v)
 			}
-			fmt.Fprintf(inv.Stderr, "\nFAIL — %d tag-only base image(s).\n", len(o.Violations))
-			fmt.Fprintln(inv.Stderr, "Fix: replace 'tag' with 'tag@sha256:<digest>' (Renovate pinDigests: true),")
-			fmt.Fprintln(inv.Stderr, "OR add '# pragma: allow-tag-pin' on the line above the FROM, OR refresh the")
-			fmt.Fprintln(inv.Stderr, "baseline in cmd/loopzero-ops/internal/quality/baseimagedigest if the bump is intentional + grandfathered.")
+			inv.Stderr.Printf("\nFAIL — %d tag-only base image(s).\n", len(o.Violations))
+			inv.Stderr.Println("Fix: replace 'tag' with 'tag@sha256:<digest>' (Renovate pinDigests: true),")
+			inv.Stderr.Println("OR add '# pragma: allow-tag-pin' on the line above the FROM, OR refresh the")
+			inv.Stderr.Println("baseline in cmd/loopzero-ops/internal/quality/baseimagedigest if the bump is intentional + grandfathered.")
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "PASS — %d FROM directive(s); every base image is digest-pinned, baselined, or pragma'd.\n", o.Scanned)
+		inv.Stdout.Printf("PASS — %d FROM directive(s); every base image is digest-pinned, baselined, or pragma'd.\n", o.Scanned)
 		return Pass, nil
 	}
 }

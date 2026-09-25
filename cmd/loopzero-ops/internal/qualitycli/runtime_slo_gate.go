@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/runtimeslo"
 )
@@ -29,18 +28,18 @@ func setupRuntimeSLO(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if o.Skipped {
-			fmt.Fprintf(inv.Stdout, "[runtime-slo] no go test log at %s — skip\n", *logFile)
+			inv.Stdout.Printf("[runtime-slo] no go test log at %s — skip\n", *logFile)
 			return Pass, nil
 		}
 		if !o.Pass {
-			fmt.Fprintf(inv.Stderr, "[runtime-slo] FAIL: %d test(s)/suite(s) over SLO:\n", len(o.Violations))
+			inv.Stderr.Printf("[runtime-slo] FAIL: %d test(s)/suite(s) over SLO:\n", len(o.Violations))
 			for _, v := range o.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "[runtime-slo] for legitimate slow tests, add: // slow_test: <issue-url>")
+			inv.Stderr.Println("[runtime-slo] for legitimate slow tests, add: // slow_test: <issue-url>")
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "[runtime-slo] PASS — all tests/suites within SLO")
+		inv.Stdout.Println("[runtime-slo] PASS — all tests/suites within SLO")
 		return Pass, nil
 	}
 }

@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pulumirequiredsecrets"
 )
@@ -30,13 +29,13 @@ func setupPulumiRequiredSecrets(_ *flag.FlagSet) Check {
 			if !isViolation(err, pulumirequiredsecrets.ErrViolations) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "pulumi-required-secrets: FAIL — %d issue(s):\n", len(outcome.Failures))
+			inv.Stderr.Printf("pulumi-required-secrets: FAIL — %d issue(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", f)
+				inv.Stderr.Printf("  %s\n", f)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "pulumi-required-secrets: PASS — prod(6) + staging(4) + drill(3) secrets all listed in Pulumi.<env>.yaml + SoT doc")
+		inv.Stdout.Println("pulumi-required-secrets: PASS — prod(6) + staging(4) + drill(3) secrets all listed in Pulumi.<env>.yaml + SoT doc")
 		return Pass, nil
 	}
 }

@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clusterrolenosecretsstar"
@@ -39,7 +38,7 @@ func setupClusterRoleNoSecretsStar(fs *flag.FlagSet) Check {
 		if err != nil {
 			return Fail, err
 		}
-		fmt.Fprint(inv.Stderr, clusterrolenosecretsstar.FormatOutcome(outcome))
+		inv.Stderr.Print(clusterrolenosecretsstar.FormatOutcome(outcome))
 		if !outcome.Pass {
 			return Fail, nil
 		}

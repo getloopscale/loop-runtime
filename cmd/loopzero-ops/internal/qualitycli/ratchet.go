@@ -41,10 +41,10 @@ func ratchetSetup(name string, spec deadlineratchet.Spec, lbl ratchetLabels) fun
 				return Fail, err
 			}
 			if o.Dormant {
-				fmt.Fprintf(inv.Stdout, "[%s] %s\n", name, lbl.dormant)
+				inv.Stdout.Printf("[%s] %s\n", name, lbl.dormant)
 				return Pass, nil
 			}
-			fmt.Fprintf(inv.Stdout, "[%s] start = %s; days since = %d\n", name, o.Date, o.Days)
+			inv.Stdout.Printf("[%s] start = %s; days since = %d\n", name, o.Date, o.Days)
 			emit := ratchetEmitter(inv, name)
 			switch {
 			case o.Blocked:
@@ -59,7 +59,7 @@ func ratchetSetup(name string, spec deadlineratchet.Spec, lbl ratchetLabels) fun
 				emit("warning", fmt.Sprintf("%s slip-alert: day %d of %d (deadline approaching). T0+%dd window open.",
 					lbl.subject, o.Days, spec.DeadlineDay, spec.WarnDay))
 			default:
-				fmt.Fprintf(inv.Stdout, "[%s] within budget (day %d of %d) — OK.\n", name, o.Days, spec.DeadlineDay)
+				inv.Stdout.Printf("[%s] within budget (day %d of %d) — OK.\n", name, o.Days, spec.DeadlineDay)
 			}
 			return Pass, nil
 		}
@@ -70,9 +70,9 @@ func ratchetSetup(name string, spec deadlineratchet.Spec, lbl ratchetLabels) fun
 // plain labelled line anywhere else.
 func ratchetEmitter(inv Invocation, name string) func(level, msg string) {
 	if os.Getenv("GITHUB_ACTIONS") != "" {
-		return func(level, msg string) { fmt.Fprintf(inv.Stdout, "::%s::%s\n", level, msg) }
+		return func(level, msg string) { inv.Stdout.Printf("::%s::%s\n", level, msg) }
 	}
 	return func(level, msg string) {
-		fmt.Fprintf(inv.Stderr, "[%s] %s: %s\n", name, strings.ToUpper(level), msg)
+		inv.Stderr.Printf("[%s] %s: %s\n", name, strings.ToUpper(level), msg)
 	}
 }

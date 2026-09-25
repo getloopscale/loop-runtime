@@ -5,10 +5,12 @@ package qualitycli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/cliout"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmdrift"
 )
 
@@ -74,13 +76,14 @@ func nonNil(s []string) []string {
 // renderDriftHuman writes the report for a person; with annotations it also
 // emits a GitHub `::warning::` for every finding that needs action.
 func renderDriftHuman(annotations bool) driftRenderer {
-	return func(stdout, stderr io.Writer, o *helmdrift.Outcome) error {
+	return func(outW, errW io.Writer, o *helmdrift.Outcome) error {
+		stdout, stderr := cliout.New(outW), cliout.New(errW)
 		for _, e := range o.RenderErrors {
-			fmt.Fprintf(stderr, "✗ helm template failed: %s\n", e)
+			stderr.Printf("✗ helm template failed: %s\n", e)
 		}
 		kindsClean := len(o.Drifts) == 0 && len(o.RenderErrors) == 0
 		if kindsClean {
-			fmt.Fprintln(stdout, "✓ charts/ ↔ infra/helm/: both sides install the same kinds of resource.")
+			stdout.Println("✓ charts/ ↔ infra/helm/: both sides install the same kinds of resource.")
 		}
 		for _, d := range o.Drifts {
 			marker, status := "⚠", "needs a registry entry ("+helmdrift.RegistryRelPath+") or a fix"
@@ -88,18 +91,18 @@ func renderDriftHuman(annotations bool) driftRenderer {
 				marker, status = "ℹ", "intentional (recorded under decision: "+d.Decision+")"
 			}
 			if annotations && !d.Intentional {
-				fmt.Fprintf(stdout, "::warning::Drift detected for %s: templates differ\n", d.Pair)
+				stdout.Printf("::warning::Drift detected for %s: templates differ\n", d.Pair)
 			}
-			fmt.Fprintf(stdout, "%s %s\n", marker, d.Pair)
+			stdout.Printf("%s %s\n", marker, d.Pair)
 			if len(d.OnlyInPublished) > 0 {
-				fmt.Fprintf(stdout, "  Only in published: %s\n", strings.Join(d.OnlyInPublished, " "))
+				stdout.Printf("  Only in published: %s\n", strings.Join(d.OnlyInPublished, " "))
 			}
 			if len(d.OnlyInBootstrap) > 0 {
-				fmt.Fprintf(stdout, "  Only in bootstrap: %s\n", strings.Join(d.OnlyInBootstrap, " "))
+				stdout.Printf("  Only in bootstrap: %s\n", strings.Join(d.OnlyInBootstrap, " "))
 			}
-			fmt.Fprintf(stdout, "  STATUS: %s\n", status)
+			stdout.Printf("  STATUS: %s\n", status)
 			for _, f := range d.Unapproved {
-				fmt.Fprintf(stdout, "  UNRECORDED: %s\n", f)
+				stdout.Printf("  UNRECORDED: %s\n", f)
 			}
 		}
 		// What the two sides GRANT is reported apart from what they INSTALL,
@@ -110,21 +113,21 @@ func renderDriftHuman(annotations bool) driftRenderer {
 			if len(d.Undeclared) > 0 {
 				marker = "⚠"
 				if annotations {
-					fmt.Fprintf(stdout, "::warning::RBAC divergence for %s: %d undeclared cell(s)\n", d.Pair, len(d.Undeclared))
+					stdout.Printf("::warning::RBAC divergence for %s: %d undeclared cell(s)\n", d.Pair, len(d.Undeclared))
 				}
 			}
-			fmt.Fprintf(stdout, "%s %s — RBAC\n", marker, d.Pair)
+			stdout.Printf("%s %s — RBAC\n", marker, d.Pair)
 			for _, line := range d.ReportLines() {
-				fmt.Fprintf(stdout, "  %s\n", line)
+				stdout.Printf("  %s\n", line)
 			}
 		}
 		switch {
 		case !o.Pass:
-			fmt.Fprintln(stderr, "❌ Drifts with no registry entry detected ("+helmdrift.RegistryRelPath+").")
+			stderr.Println("❌ Drifts with no registry entry detected (" + helmdrift.RegistryRelPath + ").")
 		case !kindsClean:
-			fmt.Fprintln(stdout, "✓ All drifts are recorded in "+helmdrift.RegistryRelPath+" (intentional).")
+			stdout.Println("✓ All drifts are recorded in " + helmdrift.RegistryRelPath + " (intentional).")
 		}
-		return nil
+		return errors.Join(stdout.Err(), stderr.Err())
 	}
 }
 

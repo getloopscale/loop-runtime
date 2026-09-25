@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/ldflagsymbols"
 )
@@ -38,13 +37,13 @@ func setupLdflagSymbols(_ *flag.FlagSet) Check {
 		if err != nil {
 			return Fail, err
 		}
-		fmt.Fprintln(inv.Stdout, out.Summary())
+		inv.Stdout.Println(out.Summary())
 		if !out.Pass {
 			for _, v := range out.Violations {
-				fmt.Fprintf(inv.Stdout, "  %s:%d — `-X %s.%s`: %s\n", v.File, v.Line, v.ImportPath, v.Symbol, v.Reason)
+				inv.Stdout.Printf("  %s:%d — `-X %s.%s`: %s\n", v.File, v.Line, v.ImportPath, v.Symbol, v.Reason)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintln(inv.Stderr, ldflagsymbols.ActionableFix)
+			inv.Stderr.Println("")
+			inv.Stderr.Println(ldflagsymbols.ActionableFix)
 			return Fail, nil
 		}
 		return Pass, nil

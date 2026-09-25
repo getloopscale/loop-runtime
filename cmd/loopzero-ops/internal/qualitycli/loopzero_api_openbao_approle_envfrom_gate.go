@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/loopzeroapiopenbao"
 )
@@ -31,17 +30,17 @@ func setupLoopZeroApiOpenbaoApproleEnvfrom(_ *flag.FlagSet) Check {
 			if !isViolation(err, loopzeroapiopenbao.ErrViolations) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "loopzero-api-openbao-approle-envfrom: FAIL — %v\n", err)
+			inv.Stderr.Printf("loopzero-api-openbao-approle-envfrom: FAIL — %v\n", err)
 			for _, f := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", f)
+				inv.Stderr.Printf("  %s\n", f)
 			}
 			return Fail, nil
 		}
 		if outcome.Warn {
-			fmt.Fprintln(inv.Stdout, "[loopzero-api-openbao] WARN: helm not installed — gate is advisory-only (installer notes: brew install helm / apt install helm).")
+			inv.Stdout.Println("[loopzero-api-openbao] WARN: helm not installed — gate is advisory-only (installer notes: brew install helm / apt install helm).")
 			return Pass, nil
 		}
-		fmt.Fprintln(inv.Stdout, "loopzero-api-openbao-approle-envfrom: PASS — envFrom.loopzero-openbao-approle optional=true wired, anti-hardcode preserved")
+		inv.Stdout.Println("loopzero-api-openbao-approle-envfrom: PASS — envFrom.loopzero-openbao-approle optional=true wired, anti-hardcode preserved")
 		return Pass, nil
 	}
 }

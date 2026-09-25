@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/coveragemerge"
 )
@@ -27,7 +26,7 @@ func setupCoverageMerge(fs *flag.FlagSet) Check {
 	output := fs.String("output", "", "merged lcov destination (required)")
 	return func(inv Invocation) (Outcome, error) {
 		if *output == "" {
-			fmt.Fprintln(inv.Stderr, "coverage-merge: --output required")
+			inv.Stderr.Println("coverage-merge: --output required")
 			return Fail, nil
 		}
 		outcome, err := coveragemerge.Merge(coveragemerge.Config{
@@ -39,7 +38,7 @@ func setupCoverageMerge(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		for _, m := range outcome.Messages {
-			fmt.Fprintln(inv.Stdout, m)
+			inv.Stdout.Println(m)
 		}
 		return Pass, nil
 	}

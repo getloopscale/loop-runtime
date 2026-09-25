@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"io"
 	"os"
 
@@ -47,7 +46,7 @@ func setupScriptsAudit(fs *flag.FlagSet) Check {
 		}
 		if *output != "" {
 			// Visibility for operator running interactively
-			fmt.Fprintf(inv.Stderr, "scripts-audit: %d scripts inventoried to %s\n", len(scripts), *output)
+			inv.Stderr.Printf("scripts-audit: %d scripts inventoried to %s\n", len(scripts), *output)
 		}
 		return Pass, nil
 	}

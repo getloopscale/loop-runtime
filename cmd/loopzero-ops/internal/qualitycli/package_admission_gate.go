@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/packageadmission"
 )
@@ -36,13 +35,13 @@ func setupPackageAdmission(_ *flag.FlagSet) Check {
 			if !isViolation(err, packageadmission.ErrForeignDomain, packageadmission.ErrHomeMissing) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "package-admission: FAIL \u2014 %v\n", err)
+			inv.Stderr.Printf("package-admission: FAIL \u2014 %v\n", err)
 			for _, v := range out.Violations {
-				fmt.Fprintf(inv.Stderr, "  api/internal/k8s/%s: %s carries the domain word %q \u2014 move it to k8s/tenancy, k8s/workload or k8s/secretsync\n", v.File, v.Where, v.Word)
+				inv.Stderr.Printf("  api/internal/k8s/%s: %s carries the domain word %q \u2014 move it to k8s/tenancy, k8s/workload or k8s/secretsync\n", v.File, v.Where, v.Word)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "package-admission: PASS \u2014 %d plumbing file(s) in api/internal/k8s name no domain; homes %v are populated\n", out.Scanned, out.Homes)
+		inv.Stdout.Printf("package-admission: PASS \u2014 %d plumbing file(s) in api/internal/k8s name no domain; homes %v are populated\n", out.Scanned, out.Homes)
 		return Pass, nil
 	}
 }

@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmoverlapparity"
 )
@@ -30,16 +29,16 @@ func setupHelmOverlapParity(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if !outcome.Pass {
-			fmt.Fprintf(inv.Stderr, "helm-overlap-parity: FAIL — %d drift/missing finding(s):\n", len(outcome.Violations))
+			inv.Stderr.Printf("helm-overlap-parity: FAIL — %d drift/missing finding(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
-				fmt.Fprintf(inv.Stderr, "  %s\n", v)
+				inv.Stderr.Printf("  %s\n", v)
 			}
-			fmt.Fprintln(inv.Stderr, "")
-			fmt.Fprintln(inv.Stderr, "Fix: align infra/helm/<chart>/Chart.yaml version with charts/<chart>/Chart.yaml,")
-			fmt.Fprintln(inv.Stderr, "     OR bump published chart in charts/<chart>/ first.")
+			inv.Stderr.Println("")
+			inv.Stderr.Println("Fix: align infra/helm/<chart>/Chart.yaml version with charts/<chart>/Chart.yaml,")
+			inv.Stderr.Println("     OR bump published chart in charts/<chart>/ first.")
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "helm-overlap-parity: PASS — bootstrap charts in parity with (or behind) published")
+		inv.Stdout.Println("helm-overlap-parity: PASS — bootstrap charts in parity with (or behind) published")
 		return Pass, nil
 	}
 }

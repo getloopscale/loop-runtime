@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/tenantcsppassthrough"
 )
@@ -28,15 +27,15 @@ func setupTenantCSPPassthrough(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if out.Skipped {
-			fmt.Fprintf(inv.Stdout, "tenant-csp-passthrough: SKIP — %s\n", out.Reason)
+			inv.Stdout.Printf("tenant-csp-passthrough: SKIP — %s\n", out.Reason)
 			return Pass, nil
 		}
 		if out.Pass {
-			fmt.Fprintf(inv.Stdout, "tenant-csp-passthrough: PASS — %s\n", out.Reason)
+			inv.Stdout.Printf("tenant-csp-passthrough: PASS — %s\n", out.Reason)
 			return Pass, nil
 		}
-		fmt.Fprintf(inv.Stderr, "tenant-csp-passthrough: FAIL — static-CSP middleware attached to tenant routes: %v\n", out.Attached)
-		fmt.Fprintln(inv.Stderr, "Every LoopZeroKit per-request nonce is replaced by that fixed policy; inline scripts are blocked silently in the browser (issue #59).")
+		inv.Stderr.Printf("tenant-csp-passthrough: FAIL — static-CSP middleware attached to tenant routes: %v\n", out.Attached)
+		inv.Stderr.Println("Every LoopZeroKit per-request nonce is replaced by that fixed policy; inline scripts are blocked silently in the browser (issue #59).")
 		return Fail, nil
 	}
 }

@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/regressiontest"
@@ -33,21 +32,21 @@ func setupRegressionTest(_ *flag.FlagSet) Check {
 			DiffFiles: os.Getenv("PR_DIFF_FILES"),
 		})
 		if o.Skipped {
-			fmt.Fprintln(inv.Stdout, "[regression-gate] no bug-fix references — SKIP gate")
+			inv.Stdout.Println("[regression-gate] no bug-fix references — SKIP gate")
 			return Pass, nil
 		}
 		if len(o.IssueRefs) > 0 {
-			fmt.Fprintln(inv.Stdout, "[regression-gate] detected bug-fix references:")
+			inv.Stdout.Println("[regression-gate] detected bug-fix references:")
 			for _, r := range o.IssueRefs {
-				fmt.Fprintf(inv.Stdout, "  %s\n", r)
+				inv.Stdout.Printf("  %s\n", r)
 			}
 		}
 		if !o.Pass {
-			fmt.Fprintf(inv.Stderr, "[regression-gate] FAIL: %s\n", o.Reason)
-			fmt.Fprintln(inv.Stderr, "Add a regression test in a *_test.go or *.test.ts file referencing the bug.")
+			inv.Stderr.Printf("[regression-gate] FAIL: %s\n", o.Reason)
+			inv.Stderr.Println("Add a regression test in a *_test.go or *.test.ts file referencing the bug.")
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "[regression-gate] PASS — test file found in diff")
+		inv.Stdout.Println("[regression-gate] PASS — test file found in diff")
 		return Pass, nil
 	}
 }

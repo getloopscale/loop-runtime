@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nocloud"
 )
@@ -31,14 +30,14 @@ func setupNoCloudDevDefault(_ *flag.FlagSet) Check {
 			if !isViolation(err, nocloud.ErrViolations) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "no-cloud-dev-default: FAIL — %d cloud-dev default(s):\n", len(outcome.Failures))
+			inv.Stderr.Printf("no-cloud-dev-default: FAIL — %d cloud-dev default(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", f)
+				inv.Stderr.Printf("  %s\n", f)
 			}
-			fmt.Fprintln(inv.Stderr, "Fix: replace `${VAR:-https://cloud-dev.loopzero.example/...}` with the canonical hostname (app-dev/auth-dev/api-dev.loopzero.example per surface).")
+			inv.Stderr.Println("Fix: replace `${VAR:-https://cloud-dev.loopzero.example/...}` with the canonical hostname (app-dev/auth-dev/api-dev.loopzero.example per surface).")
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "no-cloud-dev-default: PASS — no cloud-dev.loopzero.example default env-vars in test/seed scripts (webhook handler exception allowed)")
+		inv.Stdout.Println("no-cloud-dev-default: PASS — no cloud-dev.loopzero.example default env-vars in test/seed scripts (webhook handler exception allowed)")
 		return Pass, nil
 	}
 }

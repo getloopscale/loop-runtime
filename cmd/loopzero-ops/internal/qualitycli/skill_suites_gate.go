@@ -6,7 +6,6 @@ package qualitycli
 import (
 	"errors"
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillsuites"
 )
@@ -30,25 +29,25 @@ func setupSkillSuites(fs *flag.FlagSet) Check {
 		out, err := skillsuites.Check(skillsuites.Config{RepoRoot: inv.Root, SkillsRel: *skills})
 		switch {
 		case out.Advisory:
-			fmt.Fprintln(inv.Stdout, "skill-suites: ADVISORY — python3/pytest absent; nothing was concluded")
+			inv.Stdout.Println("skill-suites: ADVISORY — python3/pytest absent; nothing was concluded")
 			return Pass, nil
 		case errors.Is(err, skillsuites.ErrSkillsRootMissing):
 			return kitNotInstalled(inv, err)
 		case errors.Is(err, skillsuites.ErrNoSuitesFound):
-			fmt.Fprintf(inv.Stderr, "skill-suites: FAIL — %v\n", err)
+			inv.Stderr.Printf("skill-suites: FAIL — %v\n", err)
 			return Fail, nil
 		case errors.Is(err, skillsuites.ErrSuitesFailed):
 			failed := out.Failed()
-			fmt.Fprintf(inv.Stderr, "skill-suites: FAIL — %d of %d suite(s) red:\n", len(failed), len(out.Results))
+			inv.Stderr.Printf("skill-suites: FAIL — %d of %d suite(s) red:\n", len(failed), len(out.Results))
 			for _, r := range failed {
-				fmt.Fprintf(inv.Stderr, "  %s\n      %s\n", r.Skill, r.Tail)
+				inv.Stderr.Printf("  %s\n      %s\n", r.Skill, r.Tail)
 			}
 			return Fail, nil
 		case err != nil:
-			fmt.Fprintf(inv.Stderr, "skill-suites: FAIL — %v\n", err)
+			inv.Stderr.Printf("skill-suites: FAIL — %v\n", err)
 			return Fail, nil
 		}
-		fmt.Fprintf(inv.Stdout, "skill-suites: PASS — %d skill suite(s) green\n", len(out.Results))
+		inv.Stdout.Printf("skill-suites: PASS — %d skill suite(s) green\n", len(out.Results))
 		return Pass, nil
 	}
 }

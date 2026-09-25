@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -51,7 +50,7 @@ func setupSpotcheckDimension(fs *flag.FlagSet) Check {
 			return Fail, err
 		}
 		for _, m := range outcome.Messages {
-			fmt.Fprintln(inv.Stdout, m)
+			inv.Stdout.Println(m)
 		}
 		return Pass, nil
 	}

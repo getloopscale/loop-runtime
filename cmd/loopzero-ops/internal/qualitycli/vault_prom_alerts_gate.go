@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultpromalerts"
 )
@@ -28,13 +27,13 @@ func setupVaultPromAlerts(_ *flag.FlagSet) Check {
 			if !isViolation(err, vaultpromalerts.ErrViolations) {
 				return Fail, err
 			}
-			fmt.Fprintf(inv.Stderr, "vault-prom-alerts: FAIL — %d assertion(s):\n", len(outcome.Failures))
+			inv.Stderr.Printf("vault-prom-alerts: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
-				fmt.Fprintf(inv.Stderr, "  %s\n", f)
+				inv.Stderr.Printf("  %s\n", f)
 			}
 			return Fail, nil
 		}
-		fmt.Fprintln(inv.Stdout, "vault-prom-alerts: PASS — 4 P1 alerts declared with severity=critical + runbook_url + team=platform-security + domain=vault (+ invariant marker on VaultAuditLogStalled)")
+		inv.Stdout.Println("vault-prom-alerts: PASS — 4 P1 alerts declared with severity=critical + runbook_url + team=platform-security + domain=vault (+ invariant marker on VaultAuditLogStalled)")
 		return Pass, nil
 	}
 }
