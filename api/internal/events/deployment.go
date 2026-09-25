@@ -70,7 +70,6 @@ var stepFamilies = []stepFamily{
 	{"sbom", "sign"},
 	{"attest-image", "sign"},
 	{"deliver-artifact", "deliver"},
-	{"mirror-harbor", "deliver"},
 }
 
 func familyOf(stepName string) (stepFamily, bool) {

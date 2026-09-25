@@ -26,7 +26,6 @@ func TestEveryBuildPipelineTaskHasAPhase(t *testing.T) {
 	}
 	infra := testInfraParams()
 	infra.CosignAttestEnabled = true
-	infra.HarborRegistryURL = "harbor.example.com"
 	for name, apps := range specs {
 		t.Run(name, func(t *testing.T) {
 			spec := testSpec()

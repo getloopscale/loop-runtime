@@ -74,7 +74,7 @@ func (r *BuildReconcileLoop) reconcileBuild(ctx context.Context, build *db.Build
 		// Failed for a workflow whose DAG still has onExit steps or
 		// ContinueOn tasks in flight — those eventually resolve to Succeeded.
 		// Reconciling too early marked builds FAILED even when the pipeline
-		// went on to succeed (observed on mirror-harbor ContinueOn).
+		// went on to succeed (observed on a ContinueOn task).
 		if status.FinishedAt == "" {
 			r.logger.Debug("reconcile loop: workflow reports Failed but not yet finished (likely transient — onExit or ContinueOn pending)",
 				"build_id", build.ID, "workflow_id", build.WorkflowID, "phase", status.Phase)

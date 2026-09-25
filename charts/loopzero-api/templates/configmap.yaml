@@ -41,7 +41,6 @@ data:
   SOURCE_BUCKET: {{ .Values.config.sourceBucket | quote }}
   REGISTRY_URL: {{ .Values.config.registryUrl | quote }}
   REGISTRY_INSECURE: {{ .Values.config.registryInsecure | quote }}
-  HARBOR_REGISTRY_URL: {{ .Values.config.harborRegistryUrl | quote }}
   WORKLOAD_INGRESS_URL: {{ .Values.config.workloadIngressUrl | quote }}
   LOOPZERO_PREVIEW_PUBLIC_DOMAIN: {{ .Values.config.loopzeroPreviewPublicDomain | quote }}
   LOOPZERO_PUBLIC_DOMAIN: {{ .Values.config.loopzeroPublicDomain | quote }}

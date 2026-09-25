@@ -17,7 +17,7 @@
 //
 // Non-scope (future):
 //   - Gitea repo deletion (user data — requires separate consent step)
-//   - Harbor image deletion (optional; retained per retention policy)
+//   - Tenant image deletion from the registry (retained per retention policy)
 
 package placement
 

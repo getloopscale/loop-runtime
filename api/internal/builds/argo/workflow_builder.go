@@ -35,10 +35,9 @@ import (
 // Note: MinIO credentials are injected via K8s Secret (envFrom) in the CWT,
 // not as workflow parameters. See loopzero-minio-credentials secret in build cluster.
 type InfraParams struct {
-	RegistryURL       string
-	RegistryInsecure  bool   // true for local dev registries without TLS
-	BaseDomain        string // Base domain for app hostnames (e.g., "loopzero.local")
-	HarborRegistryURL string // MEET-048: secondary registry for dual-push. Empty = disabled.
+	RegistryURL      string
+	RegistryInsecure bool   // true for local dev registries without TLS
+	BaseDomain       string // Base domain for app hostnames (e.g., "loopzero.local")
 	// CosignImage and SyftImage override the signer and SBOM scanner images
 	// (config LOOPZERO_COSIGN_IMAGE / LOOPZERO_SYFT_IMAGE; local k3d points them at
 	// its registry). Empty means the built-in imageCosignSigner/imageSyftScanner.
@@ -221,12 +220,6 @@ func (b *WorkflowBuilder) workflowTemplates(spec deploycontracts.WorkflowSpec, g
 		}
 		templates = append(templates, delivery...)
 	}
-	// T3.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure, ADR D2: one
-	// shared observability template invoked by the mirror-harbor-{app}
-	// lifecycle hooks on Failed. Absent without Harbor (no hook can fire).
-	if b.infraParams.HarborRegistryURL != "" {
-		templates = append(templates, harborMirrorObserveTemplate())
-	}
 	return templates, onExitName, nil
 }
 
@@ -252,7 +245,7 @@ func languageTemplates(groups []languageGroup, totalApps int) []forge.Templatabl
 // appDeliveryTemplates emits one app's delivery templates: an upload for a
 // static app; for a container app, the BuildKit build, the cosign signature,
 // the SBOM (non-fatal at the DAG level, see appDeliveryTasks), the SLSA
-// attestation when enabled, and the Harbor mirror when configured (MEET-048).
+// attestation when enabled.
 func (b *WorkflowBuilder) appDeliveryTemplates(spec deploycontracts.WorkflowSpec, appPlan deploycontracts.AppBuildPlan) ([]forge.Templatable, error) {
 	if appPlan.DeliveryModel == "static" {
 		return []forge.Templatable{b.uploadAssetsTemplate(spec, appPlan)}, nil
@@ -289,10 +282,6 @@ func (b *WorkflowBuilder) appDeliveryTemplates(spec deploycontracts.WorkflowSpec
 			InsecureSkipSCT:  b.infraParams.CosignInsecureSkipSCT, // T1.2 CR-1 fix
 			SignerImage:      b.infraParams.CosignImage,
 		}))
-	}
-	if b.infraParams.HarborRegistryURL != "" {
-		harborTag := naming.ImageTag(b.infraParams.HarborRegistryURL, spec.TenantID, spec.ProjectID, appPlan.AppName, spec.CommitSHA)
-		templates = append(templates, harborMirrorTemplate(appPlan.AppName, appPlan.ImageTag, harborTag))
 	}
 	return templates, nil
 }
@@ -452,8 +441,7 @@ func languageTasks(spec deploycontracts.WorkflowSpec, g languageGroup) []*forge.
 
 // appDeliveryTasks wires one app's delivery tasks after its language group's
 // steps: deliver-artifact for a static app; for a container app build-image,
-// sign-image, the SBOM, the attestation when enabled and the Harbor mirror
-// when configured.
+// sign-image, the SBOM and the attestation when enabled.
 func (b *WorkflowBuilder) appDeliveryTasks(spec deploycontracts.WorkflowSpec, groups []languageGroup, appPlan deploycontracts.AppBuildPlan) []*forge.Task {
 	suffix := suffixForStrategy(groups, ResolveStrategyForApp(appSpecFromPlan(appPlan)).Name())
 	if appPlan.DeliveryModel == "static" {
@@ -480,18 +468,6 @@ func (b *WorkflowBuilder) appDeliveryTasks(spec deploycontracts.WorkflowSpec, gr
 	if b.infraParams.CosignAttestEnabled {
 		attestTaskName := naming.AttestStepName(appPlan.AppName)
 		tasks = append(tasks, inlineTask(attestTaskName, attestTaskName, []string{signTaskName, sbomTaskName}))
-	}
-	// MEET-048: best-effort dual-push mirror to Harbor. T3.1 / ADR D2: a
-	// lifecycle hook fires harbor-mirror-observe when it fails, so a silent
-	// best-effort failure still leaves a signal.
-	if b.infraParams.HarborRegistryURL != "" {
-		mirrorTaskName := fmt.Sprintf("mirror-harbor-%s", appPlan.AppName)
-		mirrorTask := inlineTask(mirrorTaskName, mirrorTaskName, []string{buildTaskName})
-		mirrorTask.ContinueOn = &model.ContinueOn{Failed: true}
-		mirrorTask.Hooks = map[string]model.LifecycleHook{
-			"exit": harborMirrorObservabilityHook(mirrorTaskName, appPlan.AppName, spec.TenantID, b.infraParams.HarborRegistryURL),
-		}
-		tasks = append(tasks, mirrorTask)
 	}
 	return tasks
 }

@@ -20,7 +20,7 @@ func TestPhaseGroupForStepClassifiesTheNamesTheBuilderEmits(t *testing.T) {
 		// per-app steps, for any app name
 		"build-image-checkout": "build", "sign-image-checkout": "sign",
 		"sbom-checkout": "sign", "attest-image-checkout": "sign",
-		"deliver-artifact-docs": "deliver", "mirror-harbor-checkout": "deliver",
+		"deliver-artifact-docs": "deliver",
 	}
 	for step, want := range cases {
 		if got := PhaseGroupForStep(step); got != want {

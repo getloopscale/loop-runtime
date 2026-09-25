@@ -27,8 +27,7 @@
 // Two constraints shape the implementation:
 //
 //   - `exec` is unusable. Tenant images are arbitrary, and this repo already
-//     documents distroless bases with no /bin/sh (see harbor_mirror.go on
-//     crane). A preStop that shells out fails on exactly the images that are
+//     meets distroless bases with no /bin/sh (the crane image is one). A preStop that shells out fails on exactly the images that are
 //     most hardened.
 //   - The native `sleep` action (GA since k8s 1.30; the clusters run
 //     v1.32.13 per infra/k3d/*.yaml) needs no shell and is the right tool.
@@ -60,7 +59,7 @@ func TestPodSpecHasPreStopSleep(t *testing.T) {
 	}
 	if c.Lifecycle.PreStop.Sleep == nil {
 		t.Fatalf("preStop has no native `sleep` action — an exec hook would need /bin/sh, which\n" +
-			"    distroless tenant images do not have (see argo/harbor_mirror.go on crane)")
+			"    distroless tenant images do not have")
 	}
 
 	secs := c.Lifecycle.PreStop.Sleep.Seconds

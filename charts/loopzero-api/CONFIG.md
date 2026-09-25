@@ -43,7 +43,6 @@ This table is **set-equal** to the rendered ConfigMap keys (hermetic Go guard `T
 | `SOURCE_BUCKET` | `loopzero-builds` | N | - | S3 bucket for source bundles |
 | `REGISTRY_URL` | (empty) | N | - | container registry URL |
 | `REGISTRY_INSECURE` | `false` | N | - | skip registry TLS verify (prod must be false) |
-| `HARBOR_REGISTRY_URL` | (empty) | N | - | secondary Harbor registry (empty=disabled) |
 | `WORKLOAD_INGRESS_URL` | (empty) | N | - | workload ingress URL |
 | `LOOPZERO_PREVIEW_PUBLIC_DOMAIN` | (empty) | N | public-url | preview wildcard public domain |
 | `LOOPZERO_PUBLIC_DOMAIN` | (empty) | N | public-url | app wildcard public domain |

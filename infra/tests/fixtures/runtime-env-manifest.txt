@@ -67,7 +67,6 @@ GITHUB_WEBHOOK_SECRET|SECRET|Y|loopzero-api
 HARBOR_ADMIN_PASSWORD|SECRET|when-harbor|loopzero-{app,platform,preview,tenant}-operator
 HARBOR_ADMIN_USERNAME|SECRET|when-harbor|loopzero-{app,platform,preview,tenant}-operator
 HARBOR_REGISTRY_HOST|CONFIG|N|loopzero-{app,platform,preview,tenant}-operator
-HARBOR_REGISTRY_URL|CONFIG|N|loopzero-api
 HARBOR_URL|CONFIG|N|loopzero-{app,platform,preview,tenant}-operator
 HTTP_CLIENT_TIMEOUT|CONFIG|N|loopzero-api
 HYDRA_ADMIN_URL|CONFIG|Y(prod)|loopzero-cloud

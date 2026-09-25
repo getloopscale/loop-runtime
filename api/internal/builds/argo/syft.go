@@ -31,8 +31,7 @@ const (
 // signed image and produces a CycloneDX JSON SBOM.
 //
 // Sprint 6 / T1.1 — Supply chain SBOM. The SBOM step runs AFTER cosign
-// signing (so the digest is stable and signed) and BEFORE harbor mirror
-// (so the SBOM is generated for the canonical image).
+// signing, so the digest is stable and signed.
 //
 // Trust model:
 //   - The container reads the image digest from BuildKit's metadata file
@@ -46,7 +45,7 @@ const (
 // No runtime binary downloads.
 //
 // CHG-2026-04-22-001 (B7): RegistryInsecure mirrors BuildKit's flag for
-// local k3d. Production registries (DOCR/Harbor) are HTTPS.
+// local k3d. Production registries are HTTPS.
 //
 // continueOn.failed: managed at the DAG level, not template level — see
 // workflow_builder.go where the sbom-{app} task is added with

@@ -67,7 +67,6 @@ config:
   sourceBucket: "loopzero-builds"
   registryUrl: ""
   registryInsecure: "false"
-  harborRegistryUrl: ""
   workloadIngressUrl: ""
   loopzeroPreviewPublicDomain: ""
   loopzeroPublicDomain: ""

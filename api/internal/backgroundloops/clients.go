@@ -8,8 +8,8 @@
 //
 // It exists because each binary used to wire the loop graph by hand, and the
 // copies drifted: the controller's lacked the deploy-event outbox writers
-// (deploy.failed / deploy.succeeded webhooks), the submitter's Harbor URL and
-// per-environment Fulcio audience, the self-healing ArgoCD token, and the
+// (deploy.failed / deploy.succeeded webhooks), the submitter's per-environment
+// Fulcio audience, the self-healing ArgoCD token, and the
 // audit-log pruner, build GC, cell metrics and domain loops. Whichever binary
 // ran the loops decided whether deploy webhooks fired.
 //
@@ -43,8 +43,8 @@ import (
 
 // NewWorkflowSubmitter builds the circuit-breaker-wrapped Argo Workflows
 // submitter for the build cluster, with every submitter setting the
-// configuration carries (Harbor registry, per-environment Fulcio audience,
-// cosign keyless/attestation).
+// configuration carries (per-environment Fulcio audience, cosign
+// keyless/attestation).
 func NewWorkflowSubmitter(cfg config.Config, logger *slog.Logger) (*orchestrationbreaker.CircuitBreakerWorkflowSubmitter, error) {
 	raw, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
 		Kubeconfig:            cfg.BuildKubeconfig,
@@ -52,7 +52,6 @@ func NewWorkflowSubmitter(cfg config.Config, logger *slog.Logger) (*orchestratio
 		RegistryURL:           cfg.RegistryURL,
 		RegistryInsecure:      cfg.RegistryInsecure,
 		BaseDomain:            cfg.BaseDomain,
-		HarborRegistryURL:     cfg.HarborRegistryURL,
 		CosignKeyless:         cfg.CosignKeyless,
 		CosignAttestEnabled:   cfg.CosignAttestEnabled,
 		CosignFulcioURL:       cfg.CosignFulcioURL,

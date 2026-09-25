@@ -127,8 +127,7 @@ type Config struct {
 	MinIOCrossClusterEndpoint string // Used by build cluster workflows to reach MinIO
 	SourceBucket              string // S3 bucket for source bundles (default: "loopzero-builds")
 	RegistryURL               string
-	RegistryInsecure          bool   // true for local dev registries without TLS
-	HarborRegistryURL         string // MEET-048: secondary registry for dual-push during migration. Empty = disabled.
+	RegistryInsecure          bool // true for local dev registries without TLS
 
 	// Cosign keyless signing config (M2 T8.0 of plan 2026-05-27-M07-to-3-85 — v1.1 EC-3 wire env var).
 	// CosignKeyless=false (default): keyed mode via cosign-signing-key Secret.
@@ -483,7 +482,6 @@ func Load() Config {
 		SourceBucket:              envOr("SOURCE_BUCKET", "loopzero-builds"),
 		RegistryURL:               envOr("REGISTRY_URL", "k3d-loopzero-registry:5000"),
 		RegistryInsecure:          os.Getenv("REGISTRY_INSECURE") == "true",
-		HarborRegistryURL:         os.Getenv("HARBOR_REGISTRY_URL"), // MEET-048: empty = disabled
 
 		// Cosign keyless config (M2 T8.0, v1.1 EC-3 of plan 2026-05-27-M07-to-3-85)
 		// Defaults preserve keyed mode (safe regression). Operator sets LOOPZERO_COSIGN_KEYLESS=true
@@ -753,10 +751,8 @@ func (c Config) validateEnvBlocklistMode() error {
 }
 
 func (c Config) validateRegistryURLs() error {
-	for _, kv := range [][2]string{{"REGISTRY_URL", c.RegistryURL}, {"HARBOR_REGISTRY_URL", c.HarborRegistryURL}} {
-		if strings.ContainsAny(kv[1], "\"\\\r\n") {
-			return fmt.Errorf("%s=%q contains a quote, backslash or line break; it must be host[:port]", kv[0], kv[1])
-		}
+	if strings.ContainsAny(c.RegistryURL, "\"\\\r\n") {
+		return fmt.Errorf("REGISTRY_URL=%q contains a quote, backslash or line break; it must be host[:port]", c.RegistryURL)
 	}
 	return nil
 }
