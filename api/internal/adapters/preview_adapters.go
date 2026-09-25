@@ -69,6 +69,7 @@ func (a *PreviewCRCreatorAdapter) EnsurePreviewCR(ctx context.Context, spec prev
 		Branch:    spec.Branch,
 		ReleaseID: spec.ReleaseID,
 		ExpiresAt: spec.ExpiresAt,
+		PublicURL: spec.PublicURL,
 	})
 }
 

@@ -49,6 +49,7 @@ func newPreviewCR(name, tenantSlug, projectSlug string, prNumber int, ttl time.D
 			ExpiresAt: &expires,
 			ReleaseID: "rel-test",
 			CellID:    previewCellID,
+			PublicURL: fmt.Sprintf("https://%s-%s-web-preview-pr-%d.preview-test.example", tenantSlug, projectSlug, prNumber),
 		},
 	}
 }
@@ -193,13 +194,11 @@ var _ = Describe("PreviewController", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 		})
 
-		It("sets the public preview URL on Status", func() {
+		It("reports the public URL the API computed on Status", func() {
 			Eventually(func(g Gomega) {
 				var pe loopzerov1.PreviewEnvironment
 				g.Expect(k8sClient.Get(ctx, previewKey(crName), &pe)).To(Succeed())
-				g.Expect(pe.Status.URL).To(Equal(
-					fmt.Sprintf("https://pr%d-%s.preview.preview-test.example", prNumber, projectSlug),
-				))
+				g.Expect(pe.Status.URL).To(Equal(pe.Spec.PublicURL))
 			}, timeout, interval).Should(Succeed())
 		})
 

@@ -3,7 +3,7 @@
 
 // Group C: Preview controller.
 // Needs the CELL_0_KUBECONFIG cluster (the default for unplaced tenants), the
-// ClusterCredentials of every other cell, and BaseDomain.
+// ClusterCredentials of every other cell.
 // Different scaling profile: TTL checks every 5 minutes.
 package main
 
@@ -102,17 +102,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	baseDomain := os.Getenv("BASE_DOMAIN")
-	if baseDomain == "" {
-		setupLog.Error(nil, "BASE_DOMAIN is required")
-		os.Exit(1)
-	}
-
 	// Previews are created in the runtime cluster of their tenant's cell, the
 	// same cell the tenant-operator points the preview's ArgoCD Application at.
 	runtimeFactory := cellrouting.NewCellAwareRuntimeClientFactory(
 		mgr.GetClient(), runtimeClient, constants.NamespacePlatformSystem)
-	if err := preview.SetupPreviewController(mgr, runtimeFactory, baseDomain); err != nil {
+	if err := preview.SetupPreviewController(mgr, runtimeFactory); err != nil {
 		setupLog.Error(err, "unable to setup PreviewController")
 		os.Exit(1)
 	}

@@ -793,3 +793,34 @@ func TestPreviewService_DeletePreviewByPR_D6_CleanupChain(t *testing.T) {
 		t.Errorf("kind = %q, want preview", envTargets.lastDelete.kind)
 	}
 }
+
+// The public URL the api computes (pkg/naming.PreviewURL) is the one the
+// PreviewEnvironment carries, so the operator reports the same URL the
+// dashboard shows instead of re-deriving its own.
+func TestPreviewService_CreatePreview_PassesThePublicURLToTheCR(t *testing.T) {
+	var got PreviewCRSpec
+	cr := &previewFakeCR{ensureFn: func(_ context.Context, spec PreviewCRSpec) error {
+		got = spec
+		return nil
+	}}
+	svc, err := NewPreviewService(PreviewServiceDeps{
+		Store:               &previewFakeStore{},
+		CRCreator:           cr,
+		PreviewPublicDomain: "preview.example.test",
+	})
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	preview, err := svc.CreatePreview(context.Background(), newRequest())
+	if err != nil {
+		t.Fatalf("CreatePreview: %v", err)
+	}
+
+	if preview.URL == "" {
+		t.Fatal("the preview must carry a public URL")
+	}
+	if got.PublicURL != preview.URL {
+		t.Fatalf("CR PublicURL = %q, want the preview's URL %q", got.PublicURL, preview.URL)
+	}
+}

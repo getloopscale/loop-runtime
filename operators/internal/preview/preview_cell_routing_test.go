@@ -80,7 +80,7 @@ func TestPreviewReconcile_ProvisionsEveryResourceInThePreviewCell(t *testing.T) 
 		WithStatusSubresource(&loopzerov1.PreviewEnvironment{}).Build()
 	cell0 := fake.NewClientBuilder().WithScheme(s).Build()
 	cell1 := fake.NewClientBuilder().WithScheme(s).Build()
-	r := &PreviewReconciler{Client: mgmt, Scheme: s, BaseDomain: "example.test",
+	r := &PreviewReconciler{Client: mgmt, Scheme: s,
 		RuntimeFactory: previewCells{cells: map[string]client.Client{"": cell0, "cell-1": cell1}}}
 
 	if err := reconcileCellPreview(t, r); err != nil {
@@ -117,7 +117,7 @@ func TestPreviewReconcile_FailsWhenThePreviewCellCannotBeResolved(t *testing.T) 
 	mgmt := fake.NewClientBuilder().WithScheme(s).WithObjects(cellPreview("cell-1")).
 		WithStatusSubresource(&loopzerov1.PreviewEnvironment{}).Build()
 	factoryErr := errors.New("cell-1 kubeconfig Secret unreadable")
-	r := &PreviewReconciler{Client: mgmt, Scheme: s, BaseDomain: "example.test",
+	r := &PreviewReconciler{Client: mgmt, Scheme: s,
 		RuntimeFactory: previewCells{err: factoryErr}}
 
 	if err := reconcileCellPreview(t, r); !errors.Is(err, factoryErr) {
@@ -143,5 +143,29 @@ func TestPreviewDelete_DeletesTheNamespaceInThePreviewCell(t *testing.T) {
 
 	if err := cell1.Get(context.Background(), client.ObjectKey{Name: cellPreviewNamespace}, &corev1.Namespace{}); !apierrors.IsNotFound(err) {
 		t.Fatalf("the preview namespace in its cell must be deleted, Get err = %v", err)
+	}
+}
+
+// The URL a preview reports is the one the API computed, never a formula of
+// the controller's own.
+func TestPreviewReconcile_ReportsTheURLTheAPIComputed(t *testing.T) {
+	s := previewCellScheme(t)
+	pv := cellPreview("cell-1")
+	pv.Spec.PublicURL = "https://tn-acme-shop-web-preview-pr-7.preview.example.test"
+	mgmt := fake.NewClientBuilder().WithScheme(s).WithObjects(pv).
+		WithStatusSubresource(&loopzerov1.PreviewEnvironment{}).Build()
+	r := &PreviewReconciler{Client: mgmt, Scheme: s,
+		RuntimeFactory: previewCells{cells: map[string]client.Client{"cell-1": fake.NewClientBuilder().WithScheme(s).Build()}}}
+
+	if err := reconcileCellPreview(t, r); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	var got loopzerov1.PreviewEnvironment
+	if err := mgmt.Get(context.Background(), types.NamespacedName{Name: "pr-7", Namespace: "loopzero-system"}, &got); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Status.URL != pv.Spec.PublicURL {
+		t.Fatalf("status.url = %q, want the API's %q", got.Status.URL, pv.Spec.PublicURL)
 	}
 }

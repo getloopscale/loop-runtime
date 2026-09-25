@@ -68,7 +68,6 @@ type PreviewReconciler struct {
 	//   2. tenant.Spec.CellID (CRs created before Spec.CellID existed)
 	RuntimeFactory cellrouting.RuntimeClientFactory
 	Scheme         *runtime.Scheme
-	BaseDomain     string
 	// IngressNamespace is the namespace where Traefik runs.
 	// Same semantics as EnvironmentReconciler.IngressNamespace —
 	// empty string falls back to constants.NamespaceIngress (`traefik`).
@@ -319,9 +318,11 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview, base
 	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewServiceAccountReady,
 		metav1.ConditionTrue, "Ready", "Preview loopzero-app ServiceAccount provisioned", preview.Generation)
 
-	// Set URL eagerly so it's visible while the workload comes up.
-	preview.Status.URL = fmt.Sprintf("https://pr%d-%s.preview.%s",
-		preview.Spec.PRNumber, preview.Spec.ProjectID, r.BaseDomain)
+	// Report the URL the API computed (pkg/naming.PreviewURL), eagerly so it
+	// is visible while the workload comes up. The controller holds no URL
+	// formula of its own: a second copy had already drifted to a host that
+	// routed nowhere.
+	preview.Status.URL = preview.Spec.PublicURL
 
 	// Sprint 5 / T1.2 — workload-readiness gating. After the namespace and
 	// isolation primitives are in place, wait for the build/release flow
@@ -684,7 +685,7 @@ func (r *PreviewReconciler) bumpCleanupAttempts(preview *loopzerov1.PreviewEnvir
 // ingress controller (Traefik) runs. Empty value falls back to
 // constants.NamespaceIngress so allow-ingress-traefik NetworkPolicies in
 // preview namespaces match those in regular environments.
-func SetupPreviewController(mgr ctrl.Manager, factory cellrouting.RuntimeClientFactory, baseDomain string) error {
+func SetupPreviewController(mgr ctrl.Manager, factory cellrouting.RuntimeClientFactory) error {
 	if factory == nil {
 		return fmt.Errorf("preview controller: a runtime client factory is required")
 	}
@@ -696,7 +697,6 @@ func SetupPreviewController(mgr ctrl.Manager, factory cellrouting.RuntimeClientF
 			Client:           mgr.GetClient(),
 			RuntimeFactory:   factory,
 			Scheme:           mgr.GetScheme(),
-			BaseDomain:       baseDomain,
 			IngressNamespace: ingressNS,
 		})
 }

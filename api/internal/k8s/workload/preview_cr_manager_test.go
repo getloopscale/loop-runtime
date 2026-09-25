@@ -171,3 +171,21 @@ func TestDeletePreviewCR_IdempotentWhenAbsent(t *testing.T) {
 		t.Fatalf("DeletePreviewCR on absent CR should be nil, got %v", err)
 	}
 }
+
+func TestEnsurePreviewCR_CarriesThePublicURL(t *testing.T) {
+	mgr := newPreviewMgr(t)
+	spec := samplePreviewSpec()
+	spec.PublicURL = "https://tn-loopzero-my-project-web-preview-pr-42.preview.example.test"
+
+	if err := mgr.EnsurePreviewCR(context.Background(), spec); err != nil {
+		t.Fatalf("EnsurePreviewCR: %v", err)
+	}
+
+	var got apiv1.PreviewEnvironment
+	if err := mgr.Client.Get(context.Background(), client.ObjectKey{Namespace: k8s.ControlPlaneNamespace, Name: spec.Name}, &got); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Spec.PublicURL != spec.PublicURL {
+		t.Fatalf("spec.publicURL = %q, want %q", got.Spec.PublicURL, spec.PublicURL)
+	}
+}

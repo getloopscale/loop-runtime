@@ -66,6 +66,8 @@ type PreviewCRSpec struct {
 	Branch    string
 	ReleaseID string
 	ExpiresAt time.Time
+	// PublicURL is the preview's user-facing URL (pkg/naming.PreviewURL).
+	PublicURL string
 }
 
 // PreviewServiceDeps bundles dependencies for PreviewService.
@@ -264,6 +266,9 @@ func (s *PreviewService) ensureCR(ctx context.Context, rec *store.PreviewRecord)
 		PRNumber:  rec.PRNumber,
 		Branch:    rec.Branch,
 		ExpiresAt: rec.ExpiresAt,
+	}
+	if rec.URL != nil {
+		spec.PublicURL = *rec.URL
 	}
 	if err := s.deps.CRCreator.EnsurePreviewCR(ctx, spec); err != nil {
 		s.deps.Logger.Error("preview service: ensure CR failed (will retry on reconcile)",

@@ -87,6 +87,14 @@ spec:
                 description: ProjectID is the project this preview belongs to.
                 minLength: 1
                 type: string
+              publicURL:
+                description: |-
+                  PublicURL is the user-facing URL of this preview, computed once by the
+                  API with pkg/naming.PreviewURL (tenant, project, entry app and the
+                  public preview domain). The controller reports it in Status.URL and
+                  never derives a URL of its own: the formula has one owner. Empty when
+                  the API has no public preview domain configured.
+                type: string
               releaseId:
                 description: ReleaseID is the release associated with this preview.
                 type: string

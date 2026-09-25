@@ -138,7 +138,7 @@ type EnvtestConfig struct {
 	// SetupGitRepositoryBindingController + SetupPlatformBootstrapController.
 	EnablePlatform bool
 
-	// BaseDomain is used by Application and Preview controllers for hostname
+	// BaseDomain is used by the Application controller for hostname
 	// assignment. Defaults to "dev.loopzero.example" if empty.
 	BaseDomain string
 }
@@ -239,7 +239,7 @@ func crdPathOrDefault(crdPath string) string {
 	return filepath.Join("..", "..", "config", "crd", "bases")
 }
 
-// baseDomainOrDefault is the hostname base domain for Application and Preview.
+// baseDomainOrDefault is the hostname base domain for the Application controller.
 func baseDomainOrDefault(baseDomain string) string {
 	if baseDomain != "" {
 		return baseDomain
@@ -335,7 +335,7 @@ func setupControllers(h *EnvtestHandle, cfg EnvtestConfig) error {
 			{"SetupExposureController", func() error { return SetupExposureController(mgr, h.CellAwareFactory) }},
 		}},
 		{cfg.EnablePreview, []namedSetup{
-			{"SetupPreviewController", func() error { return SetupPreviewController(mgr, h.CellAwareFactory, baseDomain) }},
+			{"SetupPreviewController", func() error { return SetupPreviewController(mgr, h.CellAwareFactory) }},
 		}},
 		{cfg.EnablePlatform, []namedSetup{
 			{"SetupClusterCredentialController", func() error { return SetupClusterCredentialController(mgr) }},

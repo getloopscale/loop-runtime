@@ -47,7 +47,6 @@ var _ = BeforeSuite(func() {
 		// Tenant is needed because PreviewEnvironment specs may reference
 		// existing Tenant CRs for cell-aware lookup.
 		EnableTenant: true,
-		BaseDomain:   "preview-test.example",
 	})
 	cfg = h.Cfg
 	k8sClient = h.K8sClient

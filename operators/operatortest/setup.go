@@ -388,9 +388,8 @@ func SetupPlatformBootstrapController(mgr ctrl.Manager, httpClient *http.Client)
 
 // SetupPreviewController registers the PreviewController with the given manager.
 // runtimeFactory resolves the runtime cluster of each preview's cell.
-// baseDomain is used for preview URL hostnames.
 //
 // ADR-0023 D1: delegates to internal/preview.
-func SetupPreviewController(mgr ctrl.Manager, runtimeFactory cellrouting.RuntimeClientFactory, baseDomain string) error {
-	return preview.SetupPreviewController(mgr, runtimeFactory, baseDomain)
+func SetupPreviewController(mgr ctrl.Manager, runtimeFactory cellrouting.RuntimeClientFactory) error {
+	return preview.SetupPreviewController(mgr, runtimeFactory)
 }

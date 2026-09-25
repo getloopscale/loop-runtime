@@ -27,6 +27,8 @@ type PreviewCRSpec struct {
 	Branch    string
 	ReleaseID string
 	ExpiresAt time.Time
+	// PublicURL is the preview's user-facing URL (pkg/naming.PreviewURL).
+	PublicURL string
 }
 
 // PreviewCRManager manages PreviewEnvironment custom resources in the
@@ -162,6 +164,7 @@ func buildPreviewCR(spec PreviewCRSpec) *apiv1.PreviewEnvironment {
 			Branch:    spec.Branch,
 			ReleaseID: spec.ReleaseID,
 			ExpiresAt: &expiresAt,
+			PublicURL: spec.PublicURL,
 		},
 	}
 }
