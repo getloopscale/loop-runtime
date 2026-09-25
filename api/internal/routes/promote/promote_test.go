@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+	"github.com/getloopscale/loopzero/api/internal/routestest"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )

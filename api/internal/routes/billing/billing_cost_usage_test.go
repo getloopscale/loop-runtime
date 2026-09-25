@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+	"github.com/getloopscale/loopzero/api/internal/routestest"
 
 	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 )

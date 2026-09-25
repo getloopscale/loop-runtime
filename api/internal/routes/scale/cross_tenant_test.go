@@ -20,7 +20,7 @@ import (
 
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+	"github.com/getloopscale/loopzero/api/internal/routestest"
 )
 
 // Fixtures for this package's isolation tests, duplicated from the parent's

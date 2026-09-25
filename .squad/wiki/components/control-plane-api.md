@@ -16,7 +16,7 @@ sources:
     resource: "api/internal/server/router.go#L3"
     note: "server"
   - id: api-routes
-    resource: "api/internal/routes/httpio/writer.go#L1"
+    resource: "api/internal/httpio/writer.go#L1"
     note: "routes (HTTP surface)"
   - id: api-mw
     resource: "api/internal/middleware/auth/auth.go#L1"
@@ -58,7 +58,7 @@ single directory in the repository.[^api-routes]
 |---|---|---|---|---|---|
 | `api.cmd.server` | `api/cmd` | service | entrypoint | `api/cmd/main.go:3-4` | Composition root of the HTTP API. 25 non-test files, almost all named setup_*.go: each wires one concern (auth, database, k8s, github, orchestrator, transit, workflows, server) and returns a *Deps struct. It imports 21 routes/ packages and constructs every adapter, so the interface-to-infrastructure binding happens here and nowhere else. |
 | `api.server` | `api/internal/server` | package | interface | `api/internal/server/router.go:3` | chi router assembly. The widest importer in the module: go list shows it importing 25 routes/ packages plus all 5 middleware packages. |
-| `api.routes` | `api/internal/routes` | package | — | `api/internal/routes/httpio/writer.go:1` | Directory grouping with NO Go files of its own; 29 sub-packages, one per resource group. Verified: `ls api/internal/routes/*.go` matches nothing and go list reports no package at that path. |
+| `api.routes` | `api/internal/routes` | package | — | `api/internal/httpio/writer.go:1` | Directory grouping with NO Go files of its own; 29 sub-packages, one per resource group. Verified: `ls api/internal/routes/*.go` matches nothing and go list reports no package at that path. |
 | `api.middleware` | `api/internal/middleware` | package | — | `api/internal/middleware/auth/auth.go:1` | Directory grouping with NO Go files of its own; 5 sub-packages split by WHAT they decide: auth (who is calling), policy (per-request rules), ratelimit (windowed quotas), audit, observability. |
 | `api.contract` | `api/internal/contract` | package | interface | `api/internal/contract/engine_conformance_test.go:1` | A package with ZERO non-test Go files and 733 lines of tests, asserting that the OpenAPI spec, the CLI consumer and the dashboard consumer agree with the router. Cartographically a contract check, not a runtime component. |
 | `api.correlation` | `api/internal/correlation` | package | interface | `api/internal/correlation/reader.go:3` | HTTP header reader, distinct from pkg/correlation (the context key). Deliberately placed outside the directory a quality gate scans so the backward-compat fallback is allowed exactly once. |
@@ -115,7 +115,7 @@ says so.
 
 [^api-cmd]: `api/cmd/main.go:3-4`
 [^api-server]: `api/internal/server/router.go:3`
-[^api-routes]: `api/internal/routes/httpio/writer.go:1`
+[^api-routes]: `api/internal/httpio/writer.go:1`
 [^api-mw]: `api/internal/middleware/auth/auth.go:1`
 [^api-cfg]: `api/internal/config/config.go:3`
 [^api-val]: `api/internal/validation/path.go:3`

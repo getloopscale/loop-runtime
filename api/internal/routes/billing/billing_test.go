@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+	"github.com/getloopscale/loopzero/api/internal/routestest"
 )
 
 // fakePlanStore is the plan read the handler shares with every plan gate.

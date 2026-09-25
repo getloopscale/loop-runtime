@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+	"github.com/getloopscale/loopzero/api/internal/routestest"
 )
 
 // fakeEnvEnsurer captures EnsureEnvironment calls so the T4.1 specs can

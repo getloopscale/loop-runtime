@@ -31,7 +31,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	"github.com/getloopscale/loopzero/api/internal/httpio"
 
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/pkg/naming"

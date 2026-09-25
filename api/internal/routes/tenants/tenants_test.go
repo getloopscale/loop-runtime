@@ -12,7 +12,7 @@ import (
 	"time"
 
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+	"github.com/getloopscale/loopzero/api/internal/routestest"
 
 	"log/slog"
 )

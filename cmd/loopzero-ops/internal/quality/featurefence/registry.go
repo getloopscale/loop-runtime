@@ -22,6 +22,7 @@ var registry = map[string]Entry{
 	"gitclient":       {Kind: Kernel},
 	"github":          {Kind: Kernel, Deps: []string{"archive", "gitclient", "metrics", "ports"}},
 	"gitops":          {Kind: Kernel, Deps: []string{"deploycontracts", "gitclient", "metrics"}},
+	"httpio":          {Kind: Kernel},
 	"k8s":             {Kind: Kernel, Deps: []string{"metrics", "ports"}},
 	"leader":          {Kind: Kernel, Deps: []string{"db"}},
 	"lock":            {Kind: Kernel, Deps: []string{"metrics"}},
@@ -29,9 +30,12 @@ var registry = map[string]Entry{
 	"metrics":         {Kind: Kernel, Deps: []string{"surfaces"}},
 	"middleware":      {Kind: Kernel, Deps: []string{"metrics", "ports"}},
 	"objectstore":     {Kind: Kernel},
+	"pagination":      {Kind: Kernel},
+	"plantier":        {Kind: Kernel},
 	"ports":           {Kind: Kernel},
 	"processing":      {Kind: Kernel, Deps: []string{"db"}},
 	"projectstatus":   {Kind: Kernel},
+	"routestest":      {Kind: Kernel, Deps: []string{"middleware"}, TestOnlyLeaf: true},
 	"scrub":           {Kind: Kernel},
 	"sse":             {Kind: Kernel, Deps: []string{"db", "metrics", "middleware", "ports"}},
 	"surfaces":        {Kind: Kernel},
@@ -47,7 +51,7 @@ var registry = map[string]Entry{
 	"cfkv":       {Kind: Layer, Deps: []string{"metrics"}},
 	"cfzone":     {Kind: Layer},
 	"loki":       {Kind: Layer, Deps: []string{"ports"}},
-	"routes":     {Kind: Layer, Deps: []string{"buildplane", "correlation", "db", "github", "k8s", "metrics", "middleware", "ports", "services", "sse", "validation"}},
+	"routes":     {Kind: Layer, Deps: []string{"buildplane", "correlation", "db", "github", "httpio", "k8s", "metrics", "middleware", "pagination", "plantier", "ports", "routestest", "services", "sse", "validation"}},
 	"services":   {Kind: Layer, Deps: []string{"cfkv", "db", "deploycontracts", "events", "manifests", "metrics", "placement", "ports", "processing", "scrub", "sse"}},
 
 	// ── composition roots ───────────────────────────────────────────────────
@@ -56,5 +60,5 @@ var registry = map[string]Entry{
 
 	// ── tests about the tree ────────────────────────────────────────────────
 	"archtest": {Kind: TestOnly},
-	"contract": {Kind: TestOnly, Deps: []string{"routes"}},
+	"contract": {Kind: TestOnly, Deps: []string{"httpio", "routes"}},
 }

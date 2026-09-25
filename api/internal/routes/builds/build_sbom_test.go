@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+	"github.com/getloopscale/loopzero/api/internal/routestest"
 
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"

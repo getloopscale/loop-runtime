@@ -20,7 +20,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	"github.com/getloopscale/loopzero/api/internal/httpio"
 
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"

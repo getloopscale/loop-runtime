@@ -20,7 +20,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+	"github.com/getloopscale/loopzero/api/internal/routestest"
 )
 
 // The lock returns the typed ErrLockTimeout, and services wrap it; the handler

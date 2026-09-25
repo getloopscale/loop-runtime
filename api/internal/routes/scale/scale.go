@@ -23,9 +23,9 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/getloopscale/loopzero/api/internal/httpio"
+	"github.com/getloopscale/loopzero/api/internal/plantier"
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
-	"github.com/getloopscale/loopzero/api/internal/routes/plantier"
 
 	"github.com/go-chi/chi/v5"
 

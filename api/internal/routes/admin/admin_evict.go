@@ -34,7 +34,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	"github.com/getloopscale/loopzero/api/internal/httpio"
 )
 
 // AdminEvictInput is the body for POST /api/v1/admin/tenants/evict.
@@ -157,5 +157,5 @@ func AdminEvictHandler(evictor TenantEvictor, apiEnabled bool) http.HandlerFunc 
 	}
 }
 
-// jsonError lives in audit.go; the response writers moved to routes/httpio
+// jsonError lives in audit.go; the response writers moved to httpio
 // (slice-5) so that no family depends on another to render a response.

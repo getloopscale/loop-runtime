@@ -240,7 +240,7 @@ says where that ADR's text is in git, and none of it is reconstructed from memor
 | ADR-0024 | `cmd/loopzero-ops/internal/quality/docsrefs/check.go:15` | `docs/decisions.md` |
 | ADR-0025 | `pkg/conditions/summary.go:34` | `03-operators` |
 | ADR-0028 | `pkg/conditions/aggregate.go:7` | `docs/architecture.md` |
-| ADR-0030 | `api/internal/routes/httpio/writer.go:45` | `04-pkg` |
+| ADR-0030 | `api/internal/httpio/writer.go:45` | `04-pkg` |
 | ADR-0031 | `pkg/circuitbreaker/circuitbreaker.go:74` | `03-operators` |
 | ADR-0032 | `pkg/conditions/aggregate.go:10` | `docs/architecture.md` |
 | ADR-0033 | `pkg/enforcement/limiter.go:8` | `docs/architecture.md` |

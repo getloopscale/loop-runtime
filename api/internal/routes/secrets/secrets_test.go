@@ -22,7 +22,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+	"github.com/getloopscale/loopzero/api/internal/routestest"
 	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
 
 	"github.com/getloopscale/loopzero/api/internal/db/dbtx"

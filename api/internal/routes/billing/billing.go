@@ -39,8 +39,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
-	"github.com/getloopscale/loopzero/api/internal/routes/plantier"
+	"github.com/getloopscale/loopzero/api/internal/httpio"
+	"github.com/getloopscale/loopzero/api/internal/plantier"
 
 	planpkg "github.com/getloopscale/loopzero-contracts/plan"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"

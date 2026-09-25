@@ -22,9 +22,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
-	"github.com/getloopscale/loopzero/api/internal/routes/pagination"
-	"github.com/getloopscale/loopzero/api/internal/routes/plantier"
+	"github.com/getloopscale/loopzero/api/internal/httpio"
+	"github.com/getloopscale/loopzero/api/internal/pagination"
+	"github.com/getloopscale/loopzero/api/internal/plantier"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 
 	"github.com/go-chi/chi/v5"

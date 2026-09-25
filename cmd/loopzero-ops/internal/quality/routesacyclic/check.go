@@ -14,17 +14,12 @@
 //     — the same coupling on the vertical.
 //  4. A production file importing a test-only leaf.
 //
-// A LEAF is declared, not derived: a family that imports no sibling (`version`)
-// has the same empty allow-list as a leaf (`httpio`), so leafness cannot be read
-// off the registry. Leaves are what every family, and the parent, may import:
-//
-//   - httpio holds the response writers every family needs;
-//   - pagination holds the request-parsing helpers;
-//   - plantier holds what a route does when the tenant's plan cannot be read
-//     (billing, projects, scale and status share it);
-//   - routestest holds test request helpers. It is TEST-ONLY, because its helpers
-//     hand back an owner-role identity for a fixed tenant — a production import
-//     of it is auth-shaped.
+// A LEAF is declared, not derived: a family that imports no sibling has the same
+// empty allow-list as a leaf, so leafness cannot be read off the registry. The
+// shared leaves this fence used to declare (httpio, pagination, plantier and the
+// test-only routestest) moved to the api/internal kernel when api/internal was
+// organized by feature (docs/decisions.md, 2026-09-25), where feature-fence
+// governs them; none is left under routes.
 package routesacyclic
 
 import (
@@ -37,55 +32,42 @@ const (
 )
 
 // leaves are the subpackages every family and the parent may import.
-var leaves = map[string]bool{
-	"httpio":     true,
-	"routestest": true,
-	"pagination": true,
-	"plantier":   true,
-}
+var leaves = map[string]bool{}
 
 // testOnlyLeaves may be imported from _test.go files only.
-var testOnlyLeaves = map[string]bool{
-	"routestest": true,
-}
+var testOnlyLeaves = map[string]bool{}
 
 // allowed is the deny-by-default registry: allowed[A] is the set of subpackages A
 // may import. Every family is added here when it is split out, so its existence is
 // a declaration rather than a discovery.
 var allowed = map[string]map[string]bool{
-	// leaves
-	"httpio":     {},
-	"routestest": {},
-	"pagination": {},
-	"plantier":   {},
-
 	// families
 	"version":      {},
-	"tenants":      {"httpio": true, "routestest": true},
-	"repositories": {"httpio": true, "routestest": true},
-	"domains":      {"httpio": true, "routestest": true},
-	"secrets":      {"httpio": true, "routestest": true},
-	"preview":      {"httpio": true, "routestest": true},
-	"billing":      {"httpio": true, "routestest": true, "plantier": true},
-	"scale":        {"httpio": true, "routestest": true, "plantier": true},
-	"audit":        {"httpio": true, "routestest": true},
-	"health":       {"routestest": true},
-	"integrations": {"httpio": true, "routestest": true},
-	"bootstrap":    {"httpio": true},
-	"auth":         {"httpio": true, "routestest": true},
-	"teams":        {"httpio": true, "routestest": true},
-	"admin":        {"httpio": true},
-	"projects":     {"httpio": true, "routestest": true, "pagination": true, "plantier": true},
-	"environments": {"httpio": true, "routestest": true, "pagination": true},
-	"builds":       {"httpio": true, "routestest": true, "pagination": true},
-	"promote":      {"httpio": true, "routestest": true},
-	"rollback":     {"httpio": true, "routestest": true},
-	"status":       {"httpio": true, "routestest": true, "plantier": true},
-	"logs":         {"httpio": true, "routestest": true},
-	"metrics":      {"httpio": true},
+	"tenants":      {},
+	"repositories": {},
+	"domains":      {},
+	"secrets":      {},
+	"preview":      {},
+	"billing":      {},
+	"scale":        {},
+	"audit":        {},
+	"health":       {},
+	"integrations": {},
+	"bootstrap":    {},
+	"auth":         {},
+	"teams":        {},
+	"admin":        {},
+	"projects":     {},
+	"environments": {},
+	"builds":       {},
+	"promote":      {},
+	"rollback":     {},
+	"status":       {},
+	"logs":         {},
+	"metrics":      {},
 	"timeline":     {},
 	"argocd":       {},
-	"source":       {"httpio": true, "routestest": true},
+	"source":       {},
 }
 
 // Config controls the gate.

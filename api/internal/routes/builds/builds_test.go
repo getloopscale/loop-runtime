@@ -12,7 +12,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/routestest"
+	"github.com/getloopscale/loopzero/api/internal/routestest"
 	"github.com/getloopscale/loopzero/api/internal/validation"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"

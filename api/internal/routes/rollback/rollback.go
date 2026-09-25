@@ -13,8 +13,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/httpio"
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 
 	"github.com/go-chi/chi/v5"
 

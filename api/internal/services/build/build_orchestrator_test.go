@@ -1089,7 +1089,7 @@ func TestBuildOrchestrator_OnBuildCompleted_SucceededWithEmptyApps(t *testing.T)
 		t.Fatalf("expected LoopZeroError, got %T: %v", err, err)
 	}
 	// The service owns the code; its HTTP status is the route layer's mapping
-	// (routes/httpio), asserted by the error-code registry tests.
+	// (httpio), asserted by the error-code registry tests.
 	if loopzeroErr.Code != "INVALID_CALLBACK" {
 		t.Errorf("expected code INVALID_CALLBACK, got %q", loopzeroErr.Code)
 	}

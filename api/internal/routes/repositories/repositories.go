@@ -25,8 +25,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/getloopscale/loopzero/api/internal/github"
+	"github.com/getloopscale/loopzero/api/internal/httpio"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 

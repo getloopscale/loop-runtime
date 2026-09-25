@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	"github.com/getloopscale/loopzero/api/internal/httpio"
 
 	"github.com/go-chi/chi/v5"
 

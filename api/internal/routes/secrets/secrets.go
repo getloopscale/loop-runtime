@@ -32,7 +32,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/httpio"
+	"github.com/getloopscale/loopzero/api/internal/httpio"
 	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
 
 	"github.com/go-chi/chi/v5"
