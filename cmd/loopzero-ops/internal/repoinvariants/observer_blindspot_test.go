@@ -1,4 +1,4 @@
-package main
+package repoinvariants
 
 import (
 	"os"
@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // THE OBSERVER OF THE OBSERVERS HAD THE DEFECT IT EXISTS TO CATCH.
@@ -28,7 +30,7 @@ import (
 
 func observerScript(t *testing.T) string {
 	t.Helper()
-	root, err := filepath.Abs("../..")
+	root, err := qtestutil.RepoRoot()
 	if err != nil {
 		t.Fatalf("root: %v", err)
 	}
@@ -43,7 +45,7 @@ func observerScript(t *testing.T) string {
 // reports whether the check still calls it green.
 func runObserverOn(t *testing.T, edit func(dir string)) (int, string) {
 	t.Helper()
-	root, err := filepath.Abs("../..")
+	root, err := qtestutil.RepoRoot()
 	if err != nil {
 		t.Fatalf("root: %v", err)
 	}

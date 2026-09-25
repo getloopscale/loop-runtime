@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package main
+package repoinvariants
 
 import (
 	"os"
@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // B-013 RED test. A citation that points at something deleted is followed by
@@ -30,24 +32,12 @@ import (
 // sibling-repo paths, prose that names an absence on purpose). A test that failed
 // on all of them would be a test somebody deletes.
 
-func repoRootForCitations(t *testing.T) string {
-	t.Helper()
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(root, ".github")); err != nil {
-		t.Fatalf("repo root %s has no .github: %v", root, err)
-	}
-	return root
-}
-
 // codeownersPathPattern matches a root-anchored CODEOWNERS pattern: the leading
 // `/` is what makes it a path rather than a glob over basenames.
 var codeownersPathPattern = regexp.MustCompile(`^(/[A-Za-z0-9_./@-]+)`)
 
 func TestCodeownersPatternsResolveOnDisk(t *testing.T) {
-	root := repoRootForCitations(t)
+	root := qtestutil.MustRepoRoot()
 	body, err := os.ReadFile(filepath.Join(root, ".github", "CODEOWNERS"))
 	if err != nil {
 		t.Fatalf("read CODEOWNERS: %v", err)
@@ -99,7 +89,7 @@ func hasHexLetter(s string) bool {
 var notCommitWords = map[string]bool{"ed25519": true, "deadbeef": true, "abc1234": true}
 
 func TestCommitSHAsCitedInWorkflowsAreReachable(t *testing.T) {
-	root := repoRootForCitations(t)
+	root := qtestutil.MustRepoRoot()
 	// This check needs local history to resolve a pin, so it cannot measure without it.
 	// Under CI that is a configuration error and must be loud: `public-checks` sets
 	// fetch-depth: 0 precisely so this runs, and a silent skip there would report an

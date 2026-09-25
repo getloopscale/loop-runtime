@@ -18,7 +18,7 @@
 // It does not attempt to validate commands, or `cd` into paths built from
 // variables (`cd {{.FOO}}`) — a guess there would produce false positives on
 // legitimately dynamic tasks, and a guard that cries wolf gets deleted.
-package main
+package repoinvariants
 
 import (
 	"os"
@@ -26,21 +26,23 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
-// taskfilesToScan lists the Taskfile plus its includes, relative to cmd/loopzero-ops.
+// taskfilesToScan lists the Taskfile plus its includes, relative to the repository root.
 var taskfilesToScan = []string{
-	"../../Taskfile.yml",
-	"../../taskfiles/db.yml",
-	"../../taskfiles/dev.yml",
-	"../../taskfiles/drill.yml",
-	"../../taskfiles/helm.yml",
-	"../../taskfiles/infra.yml",
-	"../../taskfiles/k3d.yml",
-	"../../taskfiles/observability.yml",
-	"../../taskfiles/quality.yml",
-	"../../taskfiles/security.yml",
-	"../../taskfiles/test.yml",
+	"Taskfile.yml",
+	"taskfiles/db.yml",
+	"taskfiles/dev.yml",
+	"taskfiles/drill.yml",
+	"taskfiles/helm.yml",
+	"taskfiles/infra.yml",
+	"taskfiles/k3d.yml",
+	"taskfiles/observability.yml",
+	"taskfiles/quality.yml",
+	"taskfiles/security.yml",
+	"taskfiles/test.yml",
 }
 
 // reCdLiteral matches `cd <path>` where the path is a literal (no Go-template
@@ -146,22 +148,13 @@ func auditTaskfileDeadCd(repoRoot, relFile, body string) []deadCdFinding {
 // by design". If cross-repo reach is to be policed, that belongs in its own
 // guard with its own rationale.
 
-func repoRootFromCmd(t *testing.T) string {
-	t.Helper()
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
-	return root
-}
-
 // TestTaskfilesDoNotCdIntoMissingDirs is the #254 guard.
 func TestTaskfilesDoNotCdIntoMissingDirs(t *testing.T) {
-	root := repoRootFromCmd(t)
+	root := qtestutil.MustRepoRoot()
 
 	scanned := 0
 	for _, rel := range taskfilesToScan {
-		b, err := os.ReadFile(rel)
+		b, err := os.ReadFile(filepath.Join(root, rel))
 		if err != nil {
 			t.Errorf("cannot read %s: %v — the scan list is stale, so this file is silently unguarded", rel, err)
 			continue
@@ -192,7 +185,7 @@ func TestTaskfilesDoNotCdIntoMissingDirs(t *testing.T) {
 // TestTaskfilesDeadCd_NegativeControl proves the matcher sees the #254 shape,
 // and that it does not fire on the forms it deliberately ignores.
 func TestTaskfilesDeadCd_NegativeControl(t *testing.T) {
-	root := repoRootFromCmd(t)
+	root := qtestutil.MustRepoRoot()
 
 	broken := "  cmds:\n    - cd cli && npm run build\n"
 	if got := auditTaskfileDeadCd(root, "synthetic.yml", broken); len(got) == 0 {
@@ -240,9 +233,10 @@ var reGlobalContextSwitch = regexp.MustCompile(`kubectl\s+config\s+use-context`)
 // trap. Pass `--context` per invocation, or set KUBECONFIG for the child —
 // both scope to the command instead of mutating shared operator state.
 func TestTaskfilesDoNotMutateGlobalKubecontext(t *testing.T) {
+	root := qtestutil.MustRepoRoot()
 	scanned := 0
 	for _, rel := range taskfilesToScan {
-		b, err := os.ReadFile(rel)
+		b, err := os.ReadFile(filepath.Join(root, rel))
 		if err != nil {
 			t.Errorf("cannot read %s: %v — the scan list is stale, so this file is silently unguarded", rel, err)
 			continue
@@ -285,7 +279,7 @@ func TestTaskfilesDoNotMutateGlobalKubecontext(t *testing.T) {
 // two sibling items: closing against the easiest thing to measure while the
 // bullet asking for the regression guard went unowned.
 func TestTaskfilesDeadCd_SeesTheDeadPackagePattern(t *testing.T) {
-	root := repoRootFromCmd(t)
+	root := qtestutil.MustRepoRoot()
 
 	// The #254 line, verbatim.
 	got := auditTaskfileDeadCd(root, "synthetic.yml", "    - cd pkg && go test ./quality/... -count=1\n")

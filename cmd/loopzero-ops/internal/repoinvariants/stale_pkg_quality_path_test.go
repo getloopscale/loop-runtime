@@ -20,13 +20,15 @@
 // SCOPE: asserts the literal path token only. It deliberately does not
 // validate that the *target* package exists — `check_stale_paths` style
 // resolution belongs in a separate guard if it is ever wanted.
-package main
+package repoinvariants
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // stalePkgQualityToken is the pre-M9 path. Kept as a single const so the
@@ -41,10 +43,7 @@ const canonicalQualityPath = "cmd/loopzero-ops/internal/quality/"
 // to whoever reads it next.
 func collectGoSources(t *testing.T) map[string]string {
 	t.Helper()
-	root, err := filepath.Abs(".")
-	if err != nil {
-		t.Fatalf("resolve cmd/loopzero-ops root: %v", err)
-	}
+	root := filepath.Join(qtestutil.MustRepoRoot(), "cmd", "loopzero-ops")
 
 	out := map[string]string{}
 	walkErr := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {

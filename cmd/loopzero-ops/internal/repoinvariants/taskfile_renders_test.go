@@ -22,12 +22,14 @@
 // cheap and side-effect-free — and it covers the whole class: any task that
 // emits Helm/Go-template braces without escaping them fails here at test time
 // instead of in an operator's terminal.
-package main
+package repoinvariants
 
 import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // taskDryRunTargets are the tasks whose bodies emit `{{ … }}` and are therefore
@@ -48,7 +50,7 @@ func TestTaskfileCommandsRender(t *testing.T) {
 	for _, target := range taskDryRunTargets {
 		t.Run(target, func(t *testing.T) {
 			cmd := exec.Command("task", "--dry", target)
-			cmd.Dir = "../.."
+			cmd.Dir = qtestutil.MustRepoRoot()
 			out, err := cmd.CombinedOutput()
 
 			if err != nil {

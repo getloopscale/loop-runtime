@@ -21,13 +21,15 @@
 // This guard is CLASS-shaped: it asks git which files are ignored, and fails on
 // any that look like source. It catches the next over-broad pattern — `out/`,
 // `target/`, `bin/` — without anyone remembering to look.
-package main
+package repoinvariants
 
 import (
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // sourceExtensions are extensions that should never be ignored wholesale. Build
@@ -84,7 +86,7 @@ func TestGitignoreDoesNotShadowSourceFiles(t *testing.T) {
 	}
 
 	cmd := exec.Command("git", "ls-files", "--others", "--ignored", "--exclude-standard")
-	cmd.Dir = "../.."
+	cmd.Dir = qtestutil.MustRepoRoot()
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("git ls-files: %v", err)

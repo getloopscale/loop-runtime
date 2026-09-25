@@ -1,35 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// TestNoStalePkgQualityPath (quality_stale_pkg_quality_path_test.go) roots at
-// filepath.Abs(".") — the test binary's own directory, cmd/loopzero-ops — so it
-// cannot see a stale `pkg/quality/` citation anywhere else in the repository.
+// TestNoStalePkgQualityPath (stale_pkg_quality_path_test.go) roots at
+// cmd/loopzero-ops, so it cannot see a stale `pkg/quality/` citation anywhere else
+// in the repository.
 // This test applies the same matcher from the repository root (B-014).
-package main
+package repoinvariants
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-)
 
-// repoRootFromHere walks up from cmd/loopzero-ops to the directory holding go.work.
-func repoRootFromHere(t *testing.T) string {
-	t.Helper()
-	dir, err := filepath.Abs(".")
-	if err != nil {
-		t.Fatalf("abs: %v", err)
-	}
-	for i := 0; i < 6; i++ {
-		if _, statErr := os.Stat(filepath.Join(dir, "go.work")); statErr == nil {
-			return dir
-		}
-		dir = filepath.Dir(dir)
-	}
-	t.Fatalf("go.work not found walking up from cmd/loopzero-ops")
-	return ""
-}
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+)
 
 // collectGoSourcesUnder mirrors collectGoSources, rooted anywhere.
 func collectGoSourcesUnder(t *testing.T, root string) map[string]string {
@@ -50,8 +35,8 @@ func collectGoSourcesUnder(t *testing.T, root string) map[string]string {
 			return nil
 		}
 		// Skip the guards themselves: both must name the token to detect it.
-		if strings.HasSuffix(path, "quality_stale_pkg_quality_path_test.go") ||
-			strings.HasSuffix(path, "quality_stale_pkg_quality_scope_test.go") {
+		if strings.HasSuffix(path, "stale_pkg_quality_path_test.go") ||
+			strings.HasSuffix(path, "stale_pkg_quality_scope_test.go") {
 			return nil
 		}
 		b, readErr := os.ReadFile(path) // #nosec G304 -- path from Walk of the repo root
@@ -73,7 +58,7 @@ func collectGoSourcesUnder(t *testing.T, root string) map[string]string {
 
 // TestStalePkgQualityPath_RepoWide is the RED assertion.
 func TestStalePkgQualityPath_RepoWide(t *testing.T) {
-	root := repoRootFromHere(t)
+	root := qtestutil.MustRepoRoot()
 	sources := collectGoSourcesUnder(t, root)
 
 	// Empty-scan floor: a matcher that enumerated nothing must FAIL, not pass.
@@ -85,7 +70,7 @@ func TestStalePkgQualityPath_RepoWide(t *testing.T) {
 	var hits []string
 	for rel, body := range sources {
 		// A GUARD FOR A TOKEN HAS TO NAME THE TOKEN. This file and its sibling
-		// `quality_stale_pkg_quality_path_test.go` both carry `pkg/quality/` in
+		// `stale_pkg_quality_path_test.go` both carry `pkg/quality/` in
 		// their detection logic and in the message they print, so both would
 		// report themselves.
 		//
@@ -112,7 +97,7 @@ func TestStalePkgQualityPath_RepoWide(t *testing.T) {
 // actually reaches api/ — a zero from a walk that never got there is not
 // evidence of a clean tree.
 func TestStalePkgQualityPath_RepoWide_PositiveControl(t *testing.T) {
-	root := repoRootFromHere(t)
+	root := qtestutil.MustRepoRoot()
 	sources := collectGoSourcesUnder(t, root)
 
 	var underAPI int
@@ -139,5 +124,5 @@ func isStalePkgQualityGuard(rel string) bool {
 	if i := strings.LastIndex(rel, "/"); i >= 0 {
 		base = rel[i+1:]
 	}
-	return strings.HasPrefix(base, "quality_stale_pkg_quality_") && strings.HasSuffix(base, "_test.go")
+	return strings.HasPrefix(base, "stale_pkg_quality_") && strings.HasSuffix(base, "_test.go")
 }

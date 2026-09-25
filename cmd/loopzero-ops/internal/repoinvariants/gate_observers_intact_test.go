@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package main
+package repoinvariants
 
 import (
 	"os"
@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // .github/scripts/assert_gate_observers_intact.py is what refuses, ON THIS
@@ -37,7 +39,7 @@ import (
 
 func observersCheckPath(t *testing.T) string {
 	t.Helper()
-	root, err := filepath.Abs("../..")
+	root, err := qtestutil.RepoRoot()
 	if err != nil {
 		t.Fatalf("repo root: %v", err)
 	}
@@ -70,7 +72,7 @@ func runObserversCheck(t *testing.T, root string) (int, string) {
 // test's clothes.
 func observerTree(t *testing.T) string {
 	t.Helper()
-	src, err := filepath.Abs("../..")
+	src, err := qtestutil.RepoRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +119,7 @@ func rewriteObserver(t *testing.T, root, rel, old, replacement string) {
 // THE ANCHOR. Without it every test below is satisfied by a script that always
 // fails, and the suite would be green while the check was worthless.
 func TestObserversCheck_PassesOnThisRepositoryAsItStands(t *testing.T) {
-	root, err := filepath.Abs("../..")
+	root, err := qtestutil.RepoRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
