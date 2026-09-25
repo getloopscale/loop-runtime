@@ -69,22 +69,13 @@ func newStripeStub(t *testing.T, token, existingURL, existingID string, reply st
 	return srv
 }
 
-// stripeSetupStubbedEnv wires stubEnv + creds file for a test, returns cleanup.
-func stripeSetupStubbedEnv(t *testing.T, stubURL, credsPath, webhookURL string) func() {
-	t.Helper()
-	origGetenv := osGetenv
-	osGetenv = func(k string) string {
-		switch k {
-		case stripeAPIEnv:
-			return stubURL
-		case stripeCredsPathEnv:
-			return credsPath
-		case stripeWebhookURLEnv:
-			return webhookURL
-		}
-		return origGetenv(k)
-	}
-	return func() { osGetenv = origGetenv }
+// stripeHost is a Host whose environment points the seed at the stub.
+func stripeHost(stubURL, credsPath, webhookURL string) Host {
+	return Host{Getenv: envOf(map[string]string{
+		stripeAPIEnv:        stubURL,
+		stripeCredsPathEnv:  credsPath,
+		stripeWebhookURLEnv: webhookURL,
+	})}
 }
 
 func TestStripeWhsecCanonical(t *testing.T) {
@@ -139,14 +130,13 @@ func TestStripeWebhookEndpoint_SkipWhenEndpointAndWhsecCanonical(t *testing.T) {
 	credsPath := filepath.Join(dir, "dev-creds.json")
 	_ = os.WriteFile(credsPath, []byte(`{"stripe":{"api_key":"rk_test_abc","webhook_secret":"whsec_test_existing"}}`), 0o600)
 
-	restore := stripeSetupStubbedEnv(t, stub.URL, credsPath, targetURL)
-	defer restore()
+	host := stripeHost(stub.URL, credsPath, targetURL)
 
 	creds, err := LoadCreds(credsPath)
 	if err != nil {
 		t.Fatalf("LoadCreds: %v", err)
 	}
-	deps := Deps{Ctx: context.Background(), Creds: creds}
+	deps := Deps{Host: host, Ctx: context.Background(), Creds: creds}
 	got := NewStripeWebhookEndpointSeed().Run(deps)
 	if got.Verdict != PASS {
 		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
@@ -163,10 +153,9 @@ func TestStripeWebhookEndpoint_DryRunReports(t *testing.T) {
 	dir := t.TempDir()
 	credsPath := filepath.Join(dir, "dev-creds.json")
 	_ = os.WriteFile(credsPath, []byte(`{"stripe":{"api_key":"rk_test_abc","webhook_secret":"whsec_dev_placeholder"}}`), 0o600)
-	restore := stripeSetupStubbedEnv(t, stub.URL, credsPath, targetURL)
-	defer restore()
+	host := stripeHost(stub.URL, credsPath, targetURL)
 	creds, _ := LoadCreds(credsPath)
-	deps := Deps{Ctx: context.Background(), Creds: creds, DryRun: true}
+	deps := Deps{Host: host, Ctx: context.Background(), Creds: creds, DryRun: true}
 	got := NewStripeWebhookEndpointSeed().Run(deps)
 	if got.Verdict != PASS {
 		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
@@ -187,14 +176,13 @@ func TestStripeWebhookEndpoint_CreatesAndDelegatesToSibling(t *testing.T) {
 	credsPath := filepath.Join(dir, "dev-creds.json")
 	_ = os.WriteFile(credsPath, []byte(`{"stripe":{"api_key":"rk_test_abc","webhook_secret":"whsec_dev_placeholder"}}`), 0o600)
 
-	restore := stripeSetupStubbedEnv(t, stub.URL, credsPath, targetURL)
-	defer restore()
+	host := stripeHost(stub.URL, credsPath, targetURL)
 
 	creds, _ := LoadCreds(credsPath)
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(
 		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: "loopzero-cloud"}},
 	).Build()
-	deps := Deps{
+	deps := Deps{Host: host,
 		Ctx:   context.Background(),
 		Kube:  NewKubeClient(c),
 		Creds: creds,
@@ -236,14 +224,13 @@ func TestStripeWebhookEndpoint_DeletesStaleBeforeCreate(t *testing.T) {
 	credsPath := filepath.Join(dir, "dev-creds.json")
 	_ = os.WriteFile(credsPath, []byte(`{"stripe":{"api_key":"rk_test_abc","webhook_secret":"whsec_dev_stale"}}`), 0o600)
 
-	restore := stripeSetupStubbedEnv(t, stub.URL, credsPath, targetURL)
-	defer restore()
+	host := stripeHost(stub.URL, credsPath, targetURL)
 
 	creds, _ := LoadCreds(credsPath)
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(
 		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: "loopzero-cloud"}},
 	).Build()
-	deps := Deps{Ctx: context.Background(), Kube: NewKubeClient(c), Creds: creds}
+	deps := Deps{Host: host, Ctx: context.Background(), Kube: NewKubeClient(c), Creds: creds}
 	got := NewStripeWebhookEndpointSeed().Run(deps)
 	if got.Verdict != PASS {
 		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
@@ -260,11 +247,10 @@ func TestStripeWebhookEndpoint_FailWhenStripeReturnsPlaceholderSecret(t *testing
 	dir := t.TempDir()
 	credsPath := filepath.Join(dir, "dev-creds.json")
 	_ = os.WriteFile(credsPath, []byte(`{"stripe":{"api_key":"rk_test_abc","webhook_secret":"whsec_dev_x"}}`), 0o600)
-	restore := stripeSetupStubbedEnv(t, stub.URL, credsPath, targetURL)
-	defer restore()
+	host := stripeHost(stub.URL, credsPath, targetURL)
 
 	creds, _ := LoadCreds(credsPath)
-	deps := Deps{Ctx: context.Background(), Creds: creds}
+	deps := Deps{Host: host, Ctx: context.Background(), Creds: creds}
 	got := NewStripeWebhookEndpointSeed().Run(deps)
 	if got.Verdict != FAIL {
 		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
@@ -282,11 +268,10 @@ func TestStripeWebhookEndpoint_Verify_PassWhenCanonical(t *testing.T) {
 	dir := t.TempDir()
 	credsPath := filepath.Join(dir, "dev-creds.json")
 	_ = os.WriteFile(credsPath, []byte(`{"stripe":{"api_key":"rk_test_abc","webhook_secret":"whsec_test_canonical"}}`), 0o600)
-	restore := stripeSetupStubbedEnv(t, stub.URL, credsPath, targetURL)
-	defer restore()
+	host := stripeHost(stub.URL, credsPath, targetURL)
 
 	creds, _ := LoadCreds(credsPath)
-	deps := Deps{Ctx: context.Background(), Creds: creds}
+	deps := Deps{Host: host, Ctx: context.Background(), Creds: creds}
 	got := NewStripeWebhookEndpointSeed().Verify(deps)
 	if got.Verdict != PASS {
 		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)

@@ -80,18 +80,17 @@ func TestOpenBaoReadRoleID_WrongTokenFails(t *testing.T) {
 }
 
 func TestReadVaultUnsealRootToken_ReadsFromEnvOverridePath(t *testing.T) {
+	var host Host
 	dir := t.TempDir()
 	path := writeUnsealFile(t, dir, "s.envtoken")
-	origGetenv := osGetenv
-	defer func() { osGetenv = origGetenv }()
-	osGetenv = func(k string) string {
+	host.Getenv = func(k string) string {
 		if k == vaultUnsealFileEnv {
 			return path
 		}
 		return ""
 	}
 
-	got, err := readVaultUnsealRootToken()
+	got, err := readVaultUnsealRootToken(host)
 
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -102,16 +101,15 @@ func TestReadVaultUnsealRootToken_ReadsFromEnvOverridePath(t *testing.T) {
 }
 
 func TestReadVaultUnsealRootToken_FailWhenFileMissing(t *testing.T) {
-	origGetenv := osGetenv
-	defer func() { osGetenv = origGetenv }()
-	osGetenv = func(k string) string {
+	var host Host
+	host.Getenv = func(k string) string {
 		if k == vaultUnsealFileEnv {
 			return "/nonexistent/file.json"
 		}
 		return ""
 	}
 
-	_, err := readVaultUnsealRootToken()
+	_, err := readVaultUnsealRootToken(host)
 
 	if err == nil {
 		t.Fatal("want error on missing file")
@@ -119,21 +117,20 @@ func TestReadVaultUnsealRootToken_FailWhenFileMissing(t *testing.T) {
 }
 
 func TestReadVaultUnsealRootToken_FailWhenRootTokenEmpty(t *testing.T) {
+	var host Host
 	dir := t.TempDir()
 	path := filepath.Join(dir, "unseal.json")
 	if err := os.WriteFile(path, []byte(`{"root_token":""}`), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	origGetenv := osGetenv
-	defer func() { osGetenv = origGetenv }()
-	osGetenv = func(k string) string {
+	host.Getenv = func(k string) string {
 		if k == vaultUnsealFileEnv {
 			return path
 		}
 		return ""
 	}
 
-	_, err := readVaultUnsealRootToken()
+	_, err := readVaultUnsealRootToken(host)
 
 	if err == nil {
 		t.Fatal("want error on empty root_token")
@@ -152,14 +149,13 @@ func pfCtorPointingAtTLS(server *httptest.Server) func(context.Context, TunnelTa
 }
 
 func TestVaultRoleIDSync_HappyPath(t *testing.T) {
+	var host Host
 	server := stubVaultRoleIDServer(t, "canonical-role-id-1234567890abcdef", "s.roottoken")
 	defer server.Close()
 	dir := t.TempDir()
 	unsealPath := writeUnsealFile(t, dir, "s.roottoken")
 
-	origGetenv := osGetenv
-	defer func() { osGetenv = origGetenv }()
-	osGetenv = func(k string) string {
+	host.Getenv = func(k string) string {
 		if k == vaultUnsealFileEnv {
 			return unsealPath
 		}
@@ -169,7 +165,7 @@ func TestVaultRoleIDSync_HappyPath(t *testing.T) {
 	// mgmt cluster has loopzero-api Deployment.
 	mgmt := fake.NewClientBuilder().WithScheme(newScheme(t)).
 		WithObjects(makeLoopZeroAPIDeploymentWithEnv(nil)).Build()
-	deps := Deps{
+	deps := Deps{Host: host,
 		RolloutSettleTimeout: time.Millisecond,
 		Ctx:                  context.Background(),
 		Kube:                 NewKubeClient(mgmt),

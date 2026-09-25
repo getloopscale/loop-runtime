@@ -110,10 +110,9 @@ func TestVaultServiceHTTPSNodePort_FailsWhenNodePortZero(t *testing.T) {
 }
 
 func TestVaultCrossClusterAddr_HappyPath_SetsEnv(t *testing.T) {
+	var host Host
 	// Fake docker inspect returns a canned IP.
-	orig := dockerInspectFn
-	defer func() { dockerInspectFn = orig }()
-	dockerInspectFn = func(container string) (string, error) { return "10.99.0.42", nil }
+	host.DockerContainerIP = func(container string) (string, error) { return "10.99.0.42", nil }
 
 	// mgmt cluster: has loopzero-api Deployment.
 	mgmt := fake.NewClientBuilder().WithScheme(newScheme(t)).
@@ -122,7 +121,7 @@ func TestVaultCrossClusterAddr_HappyPath_SetsEnv(t *testing.T) {
 	vault := fake.NewClientBuilder().WithScheme(newScheme(t)).
 		WithObjects(makeVaultService(30443)).Build()
 
-	deps := Deps{
+	deps := Deps{Host: host,
 		RolloutSettleTimeout: time.Millisecond,
 		Ctx:                  context.Background(),
 		Kube:                 NewKubeClient(mgmt),
@@ -142,13 +141,12 @@ func TestVaultCrossClusterAddr_HappyPath_SetsEnv(t *testing.T) {
 }
 
 func TestVaultCrossClusterAddr_FailWhenVaultServiceMissing(t *testing.T) {
-	orig := dockerInspectFn
-	defer func() { dockerInspectFn = orig }()
-	dockerInspectFn = func(container string) (string, error) { return "10.0.0.1", nil }
+	var host Host
+	host.DockerContainerIP = func(container string) (string, error) { return "10.0.0.1", nil }
 
 	mgmt := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
 	vault := fake.NewClientBuilder().WithScheme(newScheme(t)).Build() // no Service
-	deps := Deps{
+	deps := Deps{Host: host,
 		RolloutSettleTimeout: time.Millisecond,
 		Ctx:                  context.Background(),
 		Kube:                 NewKubeClient(mgmt),

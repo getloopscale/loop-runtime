@@ -8,7 +8,6 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
-	"crypto/tls"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -74,9 +73,8 @@ const (
 	tenantFixtureWebhookPath = "/api/v1/webhooks/github"
 )
 
-// pgConnectFn is the pgx.Connect wrapper (test seam). Signature matches
-// the pgx.Connect surface we actually consume.
-var pgConnectFn = func(ctx context.Context, connString string) (pgConn, error) {
+// pgxConnect opens a pgx connection behind the pgConn surface the seeds use.
+func pgxConnect(ctx context.Context, connString string) (pgConn, error) {
 	c, err := pgx.Connect(ctx, connString)
 	if err != nil {
 		return nil, err
@@ -107,23 +105,16 @@ func (a *pgConnAdapter) Exec(ctx context.Context, sql string, args ...any) error
 }
 func (a *pgConnAdapter) Close(ctx context.Context) error { return a.inner.Close(ctx) }
 
-// tenantFixtureHTTPClient is the http.Client to use for webhook replays.
-// Overridable so tests can point at httptest.
-var tenantFixtureHTTPClient = &http.Client{
-	Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, // #nosec G402 -- self-signed dev cert
-	Timeout:   30 * time.Second,
-}
-
 func (s *TenantFixtureSeed) Run(d Deps) Result {
-	env := osGetenv(tenantFixtureHelmfileEnvKey)
+	env := d.Host.getenv(tenantFixtureHelmfileEnvKey)
 	if env != "" && env != "dev-public" {
 		return Result{Verdict: SKIP, Reason: fmt.Sprintf("LOOPZERO_HELMFILE_ENV=%q (only dev-public applicable)", env)}
 	}
-	tenantID := osGetenv(tenantFixtureTenantIDEnv)
+	tenantID := d.Host.getenv(tenantFixtureTenantIDEnv)
 	if tenantID == "" {
 		return Result{Verdict: SKIP, Reason: "LOOPZERO_TENANT_ID not set (usually seeded by seed-admin-loopzero-dev)"}
 	}
-	rawTier := osGetenvOr(tenantFixturePlanTierEnv, tenantFixtureDefaultPlanTier)
+	rawTier := d.Host.envOr(tenantFixturePlanTierEnv, tenantFixtureDefaultPlanTier)
 	tier, err := domain.ParsePlanTier(strings.ToLower(strings.TrimSpace(rawTier)))
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("%s=%q: %v (expected starter, pro, team or enterprise)", tenantFixturePlanTierEnv, rawTier, err)}
@@ -139,8 +130,8 @@ func (s *TenantFixtureSeed) Run(d Deps) Result {
 	}
 
 	// Layer 1 — subscription upsert (skip-graceful when PG conn absent).
-	if pgConn := osGetenv(tenantFixturePGConnEnv); pgConn != "" {
-		if err := upsertTenantSubscription(d.Ctx, pgConn, tenantID, planTier); err != nil {
+	if pgConn := d.Host.getenv(tenantFixturePGConnEnv); pgConn != "" {
+		if err := upsertTenantSubscription(d.Ctx, d.Host, pgConn, tenantID, planTier); err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 1 subscription upsert: %v", err)}
 		}
 	}
@@ -148,7 +139,7 @@ func (s *TenantFixtureSeed) Run(d Deps) Result {
 	// Layer 2 — GitHub webhook replay (skip-graceful when creds absent).
 	var webhookWarn string
 	if d.Creds != nil && !credshape.IsPlaceholder(d.Creds.GitHub.WebhookSecret) {
-		if err := replayGitHubInstallationWebhook(d.Ctx, d.Creds.GitHub.WebhookSecret); err != nil {
+		if err := replayGitHubInstallationWebhook(d.Ctx, d.Host, d.Creds.GitHub.WebhookSecret); err != nil {
 			// Non-fatal — the deploy chain may not be ready yet (bash parity).
 			// FIX-4 (M24): surface the error in the result reason instead of
 			// dropping it with `_ = err` — a silent swallow hid a real webhook
@@ -161,7 +152,7 @@ func (s *TenantFixtureSeed) Run(d Deps) Result {
 
 	// Layer 3a + 3b — Tenant CR + AppProject unstructured.
 	if d.CtrlClient != nil {
-		if err := ensureTenantCR(d.Ctx, d.CtrlClient, tenantID, crdPlan); err != nil {
+		if err := ensureTenantCR(d.Ctx, d.CtrlClient, tenantID, crdPlan, d.Host.envOr("LOOPZERO_TENANT_DISPLAY_NAME", "LoopZero Dev Tenant")); err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3a Tenant CR: %v", err)}
 		}
 		if err := ensureAppProject(d.Ctx, d.CtrlClient, tenantID); err != nil {
@@ -173,11 +164,11 @@ func (s *TenantFixtureSeed) Run(d Deps) Result {
 
 // Verify probes that Tenant CR + AppProject exist for the target tenant.
 func (s *TenantFixtureSeed) Verify(d Deps) Result {
-	env := osGetenv(tenantFixtureHelmfileEnvKey)
+	env := d.Host.getenv(tenantFixtureHelmfileEnvKey)
 	if env != "" && env != "dev-public" {
 		return Result{Verdict: SKIP, Reason: "not dev-public"}
 	}
-	tenantID := osGetenv(tenantFixtureTenantIDEnv)
+	tenantID := d.Host.getenv(tenantFixtureTenantIDEnv)
 	if tenantID == "" {
 		return Result{Verdict: SKIP, Reason: "LOOPZERO_TENANT_ID unset"}
 	}
@@ -198,8 +189,8 @@ func (s *TenantFixtureSeed) Verify(d Deps) Result {
 }
 
 // upsertTenantSubscription materializes the subscription row idempotently.
-func upsertTenantSubscription(ctx context.Context, pgConnStr, tenantID, planTier string) error {
-	conn, err := pgConnectFn(ctx, pgConnStr)
+func upsertTenantSubscription(ctx context.Context, h Host, pgConnStr, tenantID, planTier string) error {
+	conn, err := h.pgConnect(ctx, pgConnStr)
 	if err != nil {
 		return fmt.Errorf("pgx connect: %w", err)
 	}
@@ -221,10 +212,10 @@ func upsertTenantSubscription(ctx context.Context, pgConnStr, tenantID, planTier
 
 // replayGitHubInstallationWebhook POSTs a canonical installation.created
 // payload with HMAC-SHA256 signature to the cloud webhook endpoint.
-func replayGitHubInstallationWebhook(ctx context.Context, whsec string) error {
-	base := osGetenvOr(tenantFixtureCloudBaseEnv, tenantFixtureDefaultCloudBase)
-	installID := osGetenvOr(tenantFixtureInstallIDEnv, tenantFixtureDefaultInstallationID)
-	accountLogin := osGetenvOr(tenantFixtureAccountLoginEnv, tenantFixtureDefaultAccountLogin)
+func replayGitHubInstallationWebhook(ctx context.Context, h Host, whsec string) error {
+	base := h.envOr(tenantFixtureCloudBaseEnv, tenantFixtureDefaultCloudBase)
+	installID := h.envOr(tenantFixtureInstallIDEnv, tenantFixtureDefaultInstallationID)
+	accountLogin := h.envOr(tenantFixtureAccountLoginEnv, tenantFixtureDefaultAccountLogin)
 
 	payload := fmt.Sprintf(
 		`{"action":"created","installation":{"id":%s,"account":{"login":%q,"type":"User"},"target_type":"User","repository_selection":"all"},"sender":{"login":%q}}`,
@@ -243,7 +234,7 @@ func replayGitHubInstallationWebhook(ctx context.Context, whsec string) error {
 	req.Header.Set("X-GitHub-Delivery", fmt.Sprintf("install-canonical-replay-%d", time.Now().Unix()))
 	req.Header.Set("X-Hub-Signature-256", sig)
 
-	resp, err := tenantFixtureHTTPClient.Do(req)
+	resp, err := h.devHTTP().Do(req)
 	if err != nil {
 		return err
 	}
@@ -279,8 +270,7 @@ func tenantCRDPlan(tier domain.PlanTier) (string, error) {
 
 // ensureTenantCR creates or updates the Tenant CR (unstructured — CRD may not
 // be in the scheme in fake-client tests; unstructured decouples).
-func ensureTenantCR(ctx context.Context, cli ctrlclient.Client, tenantID, crdPlan string) error {
-	displayName := osGetenvOr("LOOPZERO_TENANT_DISPLAY_NAME", "LoopZero Dev Tenant")
+func ensureTenantCR(ctx context.Context, cli ctrlclient.Client, tenantID, crdPlan, displayName string) error {
 	tenant := &unstructured.Unstructured{}
 	tenant.SetGroupVersionKind(schema.GroupVersionKind{Group: "loopzero.io", Version: "v1", Kind: "Tenant"})
 	tenant.SetNamespace(tenantFixtureNamespace)

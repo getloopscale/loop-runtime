@@ -45,7 +45,7 @@ const (
 )
 
 func (s *VaultRoleIDSyncSeed) Run(d Deps) Result {
-	rootToken, err := readVaultUnsealRootToken()
+	rootToken, err := readVaultUnsealRootToken(d.Host)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("unseal file: %v", err)}
 	}
@@ -103,8 +103,8 @@ func (s *VaultRoleIDSyncSeed) Verify(d Deps) Result {
 
 // readVaultUnsealRootToken pulls .root_token from the Cleanroom unseal file
 // (canonical dev-only artifact per vault-bootstrap-dev.sh).
-func readVaultUnsealRootToken() (string, error) {
-	path := osGetenv(vaultUnsealFileEnv)
+func readVaultUnsealRootToken(h Host) (string, error) {
+	path := h.getenv(vaultUnsealFileEnv)
 	if path == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {

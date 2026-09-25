@@ -50,16 +50,15 @@ func neverReadyDeployment(ns, name string) *appsv1.Deployment {
 }
 
 func TestNetworkingCorednsSeed_FailsWhenCorednsNeverSettles(t *testing.T) {
-	orig := dockerInspectFn
-	defer func() { dockerInspectFn = orig }()
-	dockerInspectFn = func(string) (string, error) { return "172.20.0.10", nil }
+	var host Host
+	host.DockerContainerIP = func(string) (string, error) { return "172.20.0.10", nil }
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "coredns"},
 		Data:       map[string]string{"NodeHosts": ""},
 	}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).
 		WithObjects(cm, neverReadyDeployment("kube-system", "coredns")).Build()
-	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c), CtrlClient: c}
+	deps := Deps{Host: host, RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c), CtrlClient: c}
 
 	got := NewNetworkingCrossClusterCorednsSeed().Run(deps)
 	if got.Verdict != FAIL || !strings.Contains(got.Reason, "coredns") {
@@ -86,15 +85,14 @@ func TestPatchKratosSeed_FailsWhenKratosNeverSettles(t *testing.T) {
 }
 
 func TestDiscoverCorednsHosts_SkipsAbsentContainers(t *testing.T) {
-	orig := dockerInspectFn
-	defer func() { dockerInspectFn = orig }()
-	dockerInspectFn = func(c string) (string, error) {
+	var host Host
+	host.DockerContainerIP = func(c string) (string, error) {
 		if c == "k3d-loopzero-build-serverlb" {
 			return "172.20.0.10", nil
 		}
 		return "", errContainerAbsent
 	}
-	hosts, err := discoverCorednsHosts()
+	hosts, err := discoverCorednsHosts(host)
 	if err != nil {
 		t.Fatalf("an absent container is a skip, not an error: %v", err)
 	}
@@ -104,12 +102,11 @@ func TestDiscoverCorednsHosts_SkipsAbsentContainers(t *testing.T) {
 }
 
 func TestDiscoverCorednsHosts_PropagatesDockerFailures(t *testing.T) {
-	orig := dockerInspectFn
-	defer func() { dockerInspectFn = orig }()
-	dockerInspectFn = func(string) (string, error) {
+	var host Host
+	host.DockerContainerIP = func(string) (string, error) {
 		return "", errors.New("Cannot connect to the Docker daemon")
 	}
-	if _, err := discoverCorednsHosts(); err == nil {
+	if _, err := discoverCorednsHosts(host); err == nil {
 		t.Fatal("a docker daemon failure must not read as 'no containers'")
 	}
 }
@@ -161,7 +158,7 @@ func TestHTTPHelpers_ReturnAnErrorOnAMalformedBaseURL(t *testing.T) {
 // The Stripe helpers used http.DefaultClient, which has no timeout: a hung
 // connection hung the whole seed chain.
 func TestStripeHTTPClient_HasATimeout(t *testing.T) {
-	if stripeHTTPClient.Timeout <= 0 {
+	if (Host{}).stripeHTTP().Timeout <= 0 {
 		t.Fatal("stripe HTTP client must bound every request")
 	}
 }

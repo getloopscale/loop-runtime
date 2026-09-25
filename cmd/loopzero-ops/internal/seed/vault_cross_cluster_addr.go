@@ -64,7 +64,7 @@ func (s *VaultCrossClusterAddrSeed) Run(d Deps) Result {
 	}
 
 	// Step 2 — docker inspect the k3d-loopzero-secrets serverlb IP.
-	ip, err := dockerInspectContainerIP(vaultServerLBContainer)
+	ip, err := d.Host.dockerContainerIP(vaultServerLBContainer)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("docker inspect %s: %v", vaultServerLBContainer, err)}
 	}
@@ -101,7 +101,7 @@ func (s *VaultCrossClusterAddrSeed) Verify(d Deps) Result {
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
-	ip, err := dockerInspectContainerIP(vaultServerLBContainer)
+	ip, err := d.Host.dockerContainerIP(vaultServerLBContainer)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
@@ -134,19 +134,13 @@ func vaultServiceHTTPSNodePort(ctx context.Context, services Services) (int32, e
 	return 0, fmt.Errorf("openbao Service has no port named %q", openbaoHTTPSPortName)
 }
 
-// dockerInspectContainerIP returns the first non-empty IPAddress from
-// `docker inspect --format '{{...}}' <container>`. D1 exemption applies:
-// this is READ-ONLY container introspection, not shell-out for mutation.
-var dockerInspectFn = defaultDockerInspect
-
 // errContainerAbsent marks a docker inspect of a container that does not
 // exist — the one docker failure a caller may treat as "skip".
 var errContainerAbsent = errors.New("container does not exist")
 
-func dockerInspectContainerIP(container string) (string, error) {
-	return dockerInspectFn(container)
-}
-
+// defaultDockerInspect returns the first non-empty IPAddress from
+// `docker inspect --format '{{...}}' <container>`. D1 exemption applies:
+// this is READ-ONLY container introspection, not shell-out for mutation.
 func defaultDockerInspect(container string) (string, error) {
 	// docker inspect exits non-zero if the container is missing.
 	out, err := exec.Command("docker", "inspect",

@@ -51,12 +51,9 @@ const (
 	ghFixtureWebhookURLEnv = "LOOPZERO_WEBHOOK_URL"
 )
 
-// ghAPIFn shells out `gh api` and returns stdout. body, when non-nil, is sent
-// on stdin (paired with `--input -`) so request payloads — the webhook secret
-// in particular — never enter argv. Package var so tests can stub it without a
-// live GitHub network dependency.
-var ghAPIFn = defaultGhAPI
-
+// defaultGhAPI shells out `gh api` and returns stdout. body, when non-nil, is
+// sent on stdin (paired with `--input -`) so request payloads — the webhook
+// secret in particular — never enter argv.
 func defaultGhAPI(body []byte, args ...string) ([]byte, error) {
 	full := append([]string{"api"}, args...)
 	cmd := exec.Command("gh", full...) // #nosec G204 -- args controlled
@@ -92,9 +89,7 @@ func ghRequestLine(args []string) (verb, path string) {
 	return verb, path
 }
 
-// ghAuthCheckFn probes gh auth status. Separate var so tests bypass.
-var ghAuthCheckFn = defaultGhAuthCheck
-
+// defaultGhAuthCheck probes gh auth status.
 func defaultGhAuthCheck() error {
 	cmd := exec.Command("gh", "auth", "status")
 	return cmd.Run()
@@ -128,17 +123,17 @@ func (s *GitHubWebhookFixtureSeed) Run(d Deps) Result {
 	if credshape.IsPlaceholder(whsec) {
 		return Result{Verdict: SKIP, Reason: "github.webhook_secret placeholder"}
 	}
-	if err := ghAuthCheckFn(); err != nil {
+	if err := d.Host.ghAuthCheck(); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("gh not authenticated: %v — run `gh auth login --scopes repo,admin:repo_hook`", err)}
 	}
-	owner := osGetenvOr(ghFixtureRepoOwnerEnv, ghFixtureDefaultOwner)
-	repo := osGetenvOr(ghFixtureRepoNameEnv, ghFixtureDefaultRepo)
-	targetURL := osGetenvOr(ghFixtureWebhookURLEnv, ghFixtureDefaultWebhookURL)
+	owner := d.Host.envOr(ghFixtureRepoOwnerEnv, ghFixtureDefaultOwner)
+	repo := d.Host.envOr(ghFixtureRepoNameEnv, ghFixtureDefaultRepo)
+	targetURL := d.Host.envOr(ghFixtureWebhookURLEnv, ghFixtureDefaultWebhookURL)
 
-	if err := ghAssertAdmin(owner, repo); err != nil {
+	if err := ghAssertAdmin(d.Host, owner, repo); err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
-	existingID, err := ghFindHookByURL(owner, repo, targetURL)
+	existingID, err := ghFindHookByURL(d.Host, owner, repo, targetURL)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("list hooks: %v", err)}
 	}
@@ -149,12 +144,12 @@ func (s *GitHubWebhookFixtureSeed) Run(d Deps) Result {
 		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would POST new hook targeting %s", targetURL)}
 	}
 	if existingID != 0 {
-		if err := ghPatchHook(owner, repo, existingID, targetURL, whsec); err != nil {
+		if err := ghPatchHook(d.Host, owner, repo, existingID, targetURL, whsec); err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("PATCH hook %d: %v", existingID, err)}
 		}
 		return Result{Verdict: PASS, Reason: fmt.Sprintf("PATCH ok — hook %d refreshed at %s", existingID, targetURL)}
 	}
-	newID, err := ghCreateHook(owner, repo, targetURL, whsec)
+	newID, err := ghCreateHook(d.Host, owner, repo, targetURL, whsec)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("POST hook: %v", err)}
 	}
@@ -166,13 +161,13 @@ func (s *GitHubWebhookFixtureSeed) Verify(d Deps) Result {
 	if d.Creds == nil {
 		return Result{Verdict: SKIP, Reason: "creds absent"}
 	}
-	if err := ghAuthCheckFn(); err != nil {
+	if err := d.Host.ghAuthCheck(); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("gh not authenticated: %v", err)}
 	}
-	owner := osGetenvOr(ghFixtureRepoOwnerEnv, ghFixtureDefaultOwner)
-	repo := osGetenvOr(ghFixtureRepoNameEnv, ghFixtureDefaultRepo)
-	targetURL := osGetenvOr(ghFixtureWebhookURLEnv, ghFixtureDefaultWebhookURL)
-	id, err := ghFindHookByURL(owner, repo, targetURL)
+	owner := d.Host.envOr(ghFixtureRepoOwnerEnv, ghFixtureDefaultOwner)
+	repo := d.Host.envOr(ghFixtureRepoNameEnv, ghFixtureDefaultRepo)
+	targetURL := d.Host.envOr(ghFixtureWebhookURLEnv, ghFixtureDefaultWebhookURL)
+	id, err := ghFindHookByURL(d.Host, owner, repo, targetURL)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
@@ -183,8 +178,8 @@ func (s *GitHubWebhookFixtureSeed) Verify(d Deps) Result {
 }
 
 // ghAssertAdmin gates hook mutation on repo-admin permission (per bash).
-func ghAssertAdmin(owner, repo string) error {
-	out, err := ghAPIFn(nil, fmt.Sprintf("/repos/%s/%s", owner, repo))
+func ghAssertAdmin(h Host, owner, repo string) error {
+	out, err := h.ghAPI(nil, fmt.Sprintf("/repos/%s/%s", owner, repo))
 	if err != nil {
 		return fmt.Errorf("cannot read /repos/%s/%s — check gh auth + repo access: %w", owner, repo, err)
 	}
@@ -200,8 +195,8 @@ func ghAssertAdmin(owner, repo string) error {
 
 // ghFindHookByURL returns the hook ID whose config.url matches targetURL,
 // or 0 when none. Bubble errors up.
-func ghFindHookByURL(owner, repo, targetURL string) (int64, error) {
-	out, err := ghAPIFn(nil, fmt.Sprintf("/repos/%s/%s/hooks", owner, repo))
+func ghFindHookByURL(h Host, owner, repo, targetURL string) (int64, error) {
+	out, err := h.ghAPI(nil, fmt.Sprintf("/repos/%s/%s/hooks", owner, repo))
 	if err != nil {
 		return 0, err
 	}
@@ -217,21 +212,21 @@ func ghFindHookByURL(owner, repo, targetURL string) (int64, error) {
 	return 0, nil
 }
 
-func ghPatchHook(owner, repo string, id int64, targetURL, whsec string) error {
+func ghPatchHook(h Host, owner, repo string, id int64, targetURL, whsec string) error {
 	body, err := ghHookBody(targetURL, whsec, false)
 	if err != nil {
 		return err
 	}
-	_, err = ghAPIFn(body, "-X", "PATCH", fmt.Sprintf("/repos/%s/%s/hooks/%d", owner, repo, id), "--input", "-")
+	_, err = h.ghAPI(body, "-X", "PATCH", fmt.Sprintf("/repos/%s/%s/hooks/%d", owner, repo, id), "--input", "-")
 	return err
 }
 
-func ghCreateHook(owner, repo, targetURL, whsec string) (int64, error) {
+func ghCreateHook(h Host, owner, repo, targetURL, whsec string) (int64, error) {
 	body, err := ghHookBody(targetURL, whsec, true)
 	if err != nil {
 		return 0, err
 	}
-	out, err := ghAPIFn(body, "-X", "POST", fmt.Sprintf("/repos/%s/%s/hooks", owner, repo), "--input", "-")
+	out, err := h.ghAPI(body, "-X", "POST", fmt.Sprintf("/repos/%s/%s/hooks", owner, repo), "--input", "-")
 	if err != nil {
 		return 0, err
 	}

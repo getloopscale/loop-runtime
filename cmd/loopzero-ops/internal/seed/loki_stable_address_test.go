@@ -41,13 +41,11 @@ import (
 var errNoGatewayForTest = errors.New("network declares no IPAM gateway")
 
 func TestLokiCrossCluster_URLDerivaDoGatewayNaoDoContainer(t *testing.T) {
+	var host Host
 	// Arrange — o fake distingue as duas fontes: se o codigo perguntar pelo IP do
 	// CONTAINER, recebe 172.20.0.99; se perguntar pelo GATEWAY, recebe 172.20.0.1.
-	origNet := dockerNetworkFn
-	origGw := dockerGatewayFn
-	defer func() { dockerNetworkFn = origNet; dockerGatewayFn = origGw }()
-	dockerNetworkFn = func(network, container string) (string, error) { return "172.20.0.99", nil }
-	dockerGatewayFn = func(network string) (string, error) { return "172.20.0.1", nil }
+	host.DockerNetworkIP = func(network, container string) (string, error) { return "172.20.0.99", nil }
+	host.DockerGateway = func(network string) (string, error) { return "172.20.0.1", nil }
 
 	pt := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Namespace: lokiMonitoringNS, Name: lokiPromtailSecret},
@@ -74,7 +72,7 @@ func TestLokiCrossCluster_URLDerivaDoGatewayNaoDoContainer(t *testing.T) {
 	}
 	mgmtC := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(apiDep).Build()
 
-	deps := Deps{
+	deps := Deps{Host: host,
 		RolloutSettleTimeout: time.Millisecond,
 		Ctx:                  context.Background(),
 		Kube:                 NewKubeClient(mgmtC),
@@ -103,14 +101,12 @@ func TestLokiCrossCluster_URLDerivaDoGatewayNaoDoContainer(t *testing.T) {
 }
 
 func TestLokiCrossCluster_FalhaAltoQuandoOGatewayNaoResolve(t *testing.T) {
+	var host Host
 	// Fail-fast: sem gateway nao existe endereco estavel. Cair no IP do container
 	// como "fallback" reintroduziria o defeito EM SILENCIO — e um fallback silencioso
 	// para o comportamento errado e' pior que a falha, porque nunca e' investigado.
-	origNet := dockerNetworkFn
-	origGw := dockerGatewayFn
-	defer func() { dockerNetworkFn = origNet; dockerGatewayFn = origGw }()
-	dockerNetworkFn = func(network, container string) (string, error) { return "172.20.0.99", nil }
-	dockerGatewayFn = func(network string) (string, error) { return "", errNoGatewayForTest }
+	host.DockerNetworkIP = func(network, container string) (string, error) { return "172.20.0.99", nil }
+	host.DockerGateway = func(network string) (string, error) { return "", errNoGatewayForTest }
 
 	pt := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Namespace: lokiMonitoringNS, Name: lokiPromtailSecret},
@@ -136,7 +132,7 @@ func TestLokiCrossCluster_FalhaAltoQuandoOGatewayNaoResolve(t *testing.T) {
 	}
 	mgmtC := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(apiDep).Build()
 
-	got := NewLokiCrossClusterSeed().Run(Deps{
+	got := NewLokiCrossClusterSeed().Run(Deps{Host: host,
 		RolloutSettleTimeout: time.Millisecond,
 		Ctx:                  context.Background(),
 		Kube:                 NewKubeClient(mgmtC),

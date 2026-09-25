@@ -39,7 +39,7 @@ func (s *SecretsSeedDevSeed) Run(d Deps) Result {
 	if d.Creds == nil {
 		return Result{Verdict: SKIP, Reason: "dev-credentials.json absent (SKIP-graceful)"}
 	}
-	rootToken, err := readVaultUnsealRootToken()
+	rootToken, err := readVaultUnsealRootToken(d.Host)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("unseal: %v", err)}
 	}
@@ -145,7 +145,7 @@ func (s *SecretsSeedDevSeed) Verify(d Deps) Result {
 	if d.Creds == nil {
 		return Result{Verdict: SKIP, Reason: "dev-credentials.json absent"}
 	}
-	rootToken, err := readVaultUnsealRootToken()
+	rootToken, err := readVaultUnsealRootToken(d.Host)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}

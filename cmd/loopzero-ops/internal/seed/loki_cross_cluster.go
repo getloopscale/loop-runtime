@@ -101,7 +101,7 @@ func (s *LokiCrossClusterSeed) Run(d Deps) Result {
 	// FALHA ALTO se o gateway nao resolve. Cair no IP do container como fallback
 	// reintroduziria o defeito EM SILENCIO, e um fallback silencioso para o
 	// comportamento errado e' pior que a falha: nunca e' investigado.
-	gateway, err := dockerNetworkGateway(brokerNetworkName)
+	gateway, err := d.Host.dockerGateway(brokerNetworkName)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf(
 			"Layer 3 gateway da rede %s: %v — sem gateway nao ha endereco estavel para LOKI_URL "+

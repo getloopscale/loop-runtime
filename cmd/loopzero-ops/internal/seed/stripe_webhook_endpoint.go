@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
 )
@@ -55,10 +54,6 @@ const (
 	stripeWhsecPlaceholderPref = "whsec_dev_"
 )
 
-// stripeHTTPClient bounds every Stripe API call; http.DefaultClient has no
-// timeout, so a hung connection used to hang the whole seed chain.
-var stripeHTTPClient = &http.Client{Timeout: 30 * time.Second}
-
 // stripeAPIWebhookEndpoint mirrors the fields we read/write on the Stripe response.
 type stripeAPIWebhookEndpoint struct {
 	ID     string `json:"id"`
@@ -92,10 +87,10 @@ func (s *StripeWebhookEndpointSeed) Run(d Deps) Result {
 	}
 	apiKey := strings.TrimSpace(d.Creds.Stripe.APIKey)
 
-	base := osGetenvOr(stripeAPIEnv, stripeAPIDefaultBase)
-	targetURL := osGetenvOr(stripeWebhookURLEnv, stripeDefaultWebhookURL)
+	base := d.Host.envOr(stripeAPIEnv, stripeAPIDefaultBase)
+	targetURL := d.Host.envOr(stripeWebhookURLEnv, stripeDefaultWebhookURL)
 
-	existingID, err := stripeFindEndpointByURL(d.Ctx, base, apiKey, targetURL)
+	existingID, err := stripeFindEndpointByURL(d.Ctx, d.Host.stripeHTTP(), base, apiKey, targetURL)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("list endpoints: %v", err)}
 	}
@@ -107,11 +102,11 @@ func (s *StripeWebhookEndpointSeed) Run(d Deps) Result {
 		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would create Stripe endpoint url=%s + persist whsec + delegate materialize", targetURL)}
 	}
 	if existingID != "" {
-		if err := stripeDeleteEndpoint(d.Ctx, base, apiKey, existingID); err != nil {
+		if err := stripeDeleteEndpoint(d.Ctx, d.Host.stripeHTTP(), base, apiKey, existingID); err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("delete stale endpoint %s: %v", existingID, err)}
 		}
 	}
-	created, err := stripeCreateEndpoint(d.Ctx, base, apiKey, targetURL)
+	created, err := stripeCreateEndpoint(d.Ctx, d.Host.stripeHTTP(), base, apiKey, targetURL)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("create endpoint: %v", err)}
 	}
@@ -123,7 +118,7 @@ func (s *StripeWebhookEndpointSeed) Run(d Deps) Result {
 	}
 
 	// Persist to dev-credentials.json — mode 0600 preserved by writeJSONAtomically.
-	credsPath := stripeCredsPath()
+	credsPath := stripeCredsPath(d.Host)
 	if credsPath == "" {
 		return Result{Verdict: FAIL, Reason: "cannot resolve dev-credentials.json path (LOOPZERO_DEV_CREDENTIALS or $HOME/.loopzero/dev-credentials.json)"}
 	}
@@ -152,9 +147,9 @@ func (s *StripeWebhookEndpointSeed) Verify(d Deps) Result {
 	if !stripeWhsecCanonical(d.Creds.Stripe.WebhookSecret) {
 		return Result{Verdict: FAIL, Reason: "stripe.webhook_secret placeholder — canonical seed did not run"}
 	}
-	base := osGetenvOr(stripeAPIEnv, stripeAPIDefaultBase)
-	targetURL := osGetenvOr(stripeWebhookURLEnv, stripeDefaultWebhookURL)
-	id, err := stripeFindEndpointByURL(d.Ctx, base, apiKey, targetURL)
+	base := d.Host.envOr(stripeAPIEnv, stripeAPIDefaultBase)
+	targetURL := d.Host.envOr(stripeWebhookURLEnv, stripeDefaultWebhookURL)
+	id, err := stripeFindEndpointByURL(d.Ctx, d.Host.stripeHTTP(), base, apiKey, targetURL)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
@@ -177,13 +172,13 @@ func stripeWhsecCanonical(v string) bool {
 	return true
 }
 
-func stripeFindEndpointByURL(ctx context.Context, base, apiKey, targetURL string) (string, error) {
+func stripeFindEndpointByURL(ctx context.Context, client *http.Client, base, apiKey, targetURL string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/webhook_endpoints?limit=100", nil)
 	if err != nil {
 		return "", err
 	}
 	req.SetBasicAuth(apiKey, "")
-	resp, err := stripeHTTPClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -203,13 +198,13 @@ func stripeFindEndpointByURL(ctx context.Context, base, apiKey, targetURL string
 	return "", nil
 }
 
-func stripeDeleteEndpoint(ctx context.Context, base, apiKey, id string) error {
+func stripeDeleteEndpoint(ctx context.Context, client *http.Client, base, apiKey, id string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, base+"/v1/webhook_endpoints/"+id, nil)
 	if err != nil {
 		return err
 	}
 	req.SetBasicAuth(apiKey, "")
-	resp, err := stripeHTTPClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -220,7 +215,7 @@ func stripeDeleteEndpoint(ctx context.Context, base, apiKey, id string) error {
 	return nil
 }
 
-func stripeCreateEndpoint(ctx context.Context, base, apiKey, targetURL string) (stripeAPIWebhookEndpoint, error) {
+func stripeCreateEndpoint(ctx context.Context, client *http.Client, base, apiKey, targetURL string) (stripeAPIWebhookEndpoint, error) {
 	body := url.Values{}
 	body.Set("url", targetURL)
 	for _, event := range []string{
@@ -239,7 +234,7 @@ func stripeCreateEndpoint(ctx context.Context, base, apiKey, targetURL string) (
 	}
 	req.SetBasicAuth(apiKey, "")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := stripeHTTPClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return stripeAPIWebhookEndpoint{}, err
 	}
@@ -263,11 +258,11 @@ func stripeCreateEndpoint(ctx context.Context, base, apiKey, targetURL string) (
 
 // stripeCredsPath resolves the dev-credentials.json path from env or $HOME.
 // Returns "" when neither is available (test env with no HOME).
-func stripeCredsPath() string {
-	if p := osGetenv(stripeCredsPathEnv); p != "" {
+func stripeCredsPath(h Host) string {
+	if p := h.getenv(stripeCredsPathEnv); p != "" {
 		return p
 	}
-	if h := osGetenv("HOME"); h != "" {
+	if h := h.getenv("HOME"); h != "" {
 		return h + "/.loopzero/dev-credentials.json"
 	}
 	return ""

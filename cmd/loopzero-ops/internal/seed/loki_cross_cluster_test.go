@@ -46,6 +46,7 @@ func buildClientCtorFor(name string, k KubeClient) func(string) (KubeClient, err
 }
 
 func TestLokiCrossClusterSeed_Run_PatchesPromtailAndSetsLokiURL(t *testing.T) {
+	var host Host
 	// Stub docker network so Layer 3 can resolve the stable address.
 	//
 	// O GATEWAY passou a ser stubado aqui por duas razoes, e a segunda so apareceu
@@ -54,13 +55,10 @@ func TestLokiCrossClusterSeed_Run_PatchesPromtailAndSetsLokiURL(t *testing.T) {
 	// chamava `docker network inspect` DE VERDADE e passou a depender da maquina —
 	// mediu `10.0.5.1`, o gateway real deste host. Um teste de unidade que alcanca o
 	// daemon do Docker e' nao-deterministico por construcao.
-	origNet := dockerNetworkFn
-	origGw := dockerGatewayFn
-	defer func() { dockerNetworkFn = origNet; dockerGatewayFn = origGw }()
-	dockerNetworkFn = func(network, container string) (string, error) {
+	host.DockerNetworkIP = func(network, container string) (string, error) {
 		return "172.20.0.99", nil
 	}
-	dockerGatewayFn = func(network string) (string, error) {
+	host.DockerGateway = func(network string) (string, error) {
 		return "172.20.0.1", nil
 	}
 
@@ -99,7 +97,7 @@ func TestLokiCrossClusterSeed_Run_PatchesPromtailAndSetsLokiURL(t *testing.T) {
 	}
 	mgmtC := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(apiDep).Build()
 
-	deps := Deps{
+	deps := Deps{Host: host,
 		RolloutSettleTimeout: time.Millisecond,
 		Ctx:                  context.Background(),
 		Kube:                 NewKubeClient(mgmtC),

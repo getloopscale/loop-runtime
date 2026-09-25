@@ -131,10 +131,10 @@ func (s *PatchKratosSeed) loadConfig(d Deps) (PatchKratosConfig, Result, bool) {
 		return PatchKratosConfig{}, Result{Verdict: SKIP, Reason: "creds absent (no --creds-file / dev-credentials.json)"}, true
 	}
 	cfg := PatchKratosConfig{
-		PublicURL:      osGetenvOr("KRATOS_PUBLIC_URL", kratosDefaultPublicURL),
-		DashboardURL:   osGetenvOr("DASHBOARD_URL", kratosDefaultDashboardURL),
-		CloudURL:       osGetenvOr("CLOUD_URL", kratosDefaultCloudURL),
-		CookieDomain:   osGetenvOr("COOKIE_DOMAIN", kratosDefaultCookieDomain),
+		PublicURL:      d.Host.envOr("KRATOS_PUBLIC_URL", kratosDefaultPublicURL),
+		DashboardURL:   d.Host.envOr("DASHBOARD_URL", kratosDefaultDashboardURL),
+		CloudURL:       d.Host.envOr("CLOUD_URL", kratosDefaultCloudURL),
+		CookieDomain:   d.Host.envOr("COOKIE_DOMAIN", kratosDefaultCookieDomain),
 		GitHubClientID: d.Creds.GitHub.ClientID,
 		GitHubSecret:   d.Creds.GitHub.ClientSecret,
 		GoogleClientID: d.Creds.Google.ClientID,
@@ -163,16 +163,6 @@ func (s *PatchKratosSeed) loadConfig(d Deps) (PatchKratosConfig, Result, bool) {
 		return PatchKratosConfig{}, Result{Verdict: FAIL, Reason: fmt.Sprintf("creds missing: %v", missing)}, true
 	}
 	return cfg, Result{}, false
-}
-
-// osGetenvOr returns the env var value or the default when empty. Package-var
-// osGetenv is the same test seam used by secrets_seed_dev.
-func osGetenvOr(key, def string) string {
-	v := osGetenv(key)
-	if v == "" {
-		return def
-	}
-	return v
 }
 
 // patchKratosYAML applies the 7 canonical patches to the input yaml body and

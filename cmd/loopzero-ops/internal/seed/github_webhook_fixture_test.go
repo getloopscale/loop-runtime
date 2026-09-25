@@ -46,19 +46,8 @@ func (s *ghAPIStub) call(body []byte, args ...string) ([]byte, error) {
 	return []byte(`{}`), nil
 }
 
-func stubGhAPI(t *testing.T, stub *ghAPIStub) func() {
-	t.Helper()
-	orig := ghAPIFn
-	ghAPIFn = stub.call
-	return func() { ghAPIFn = orig }
-}
-
-func stubGhAuth(t *testing.T, err error) func() {
-	t.Helper()
-	orig := ghAuthCheckFn
-	ghAuthCheckFn = func() error { return err }
-	return func() { ghAuthCheckFn = orig }
-}
+// ghAuthReturns is a Host.GHAuthCheck that always answers err.
+func ghAuthReturns(err error) func() error { return func() error { return err } }
 
 func makeGhWebhookCreds(whsec string) *Creds {
 	c := &Creds{}
@@ -91,8 +80,9 @@ func TestGitHubWebhookFixture_SkipWhenPlaceholder(t *testing.T) {
 }
 
 func TestGitHubWebhookFixture_FailWhenGhNotAuthed(t *testing.T) {
-	defer stubGhAuth(t, errors.New("not logged in"))()
-	deps := Deps{Ctx: context.Background(), Creds: makeGhWebhookCreds("whsec_abc")}
+	var host Host
+	host.GHAuthCheck = ghAuthReturns(errors.New("not logged in"))
+	deps := Deps{Host: host, Ctx: context.Background(), Creds: makeGhWebhookCreds("whsec_abc")}
 	got := NewGitHubWebhookFixtureSeed().Run(deps)
 	if got.Verdict != FAIL {
 		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
@@ -103,15 +93,16 @@ func TestGitHubWebhookFixture_FailWhenGhNotAuthed(t *testing.T) {
 }
 
 func TestGitHubWebhookFixture_FailWhenNotAdmin(t *testing.T) {
-	defer stubGhAuth(t, nil)()
+	var host Host
+	host.GHAuthCheck = ghAuthReturns(nil)
 	notAdmin, _ := json.Marshal(ghRepoPermissions{Permissions: struct {
 		Admin bool `json:"admin"`
 	}{Admin: false}})
 	stub := &ghAPIStub{responses: map[string][]byte{
 		"/repos/getloopscale/loopzerokit-example": notAdmin,
 	}}
-	defer stubGhAPI(t, stub)()
-	deps := Deps{Ctx: context.Background(), Creds: makeGhWebhookCreds("whsec_abc")}
+	host.GHAPI = stub.call
+	deps := Deps{Host: host, Ctx: context.Background(), Creds: makeGhWebhookCreds("whsec_abc")}
 	got := NewGitHubWebhookFixtureSeed().Run(deps)
 	if got.Verdict != FAIL {
 		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
@@ -122,7 +113,8 @@ func TestGitHubWebhookFixture_FailWhenNotAdmin(t *testing.T) {
 }
 
 func TestGitHubWebhookFixture_CreatesNewHook(t *testing.T) {
-	defer stubGhAuth(t, nil)()
+	var host Host
+	host.GHAuthCheck = ghAuthReturns(nil)
 	admin, _ := json.Marshal(ghRepoPermissions{Permissions: struct {
 		Admin bool `json:"admin"`
 	}{Admin: true}})
@@ -135,9 +127,7 @@ func TestGitHubWebhookFixture_CreatesNewHook(t *testing.T) {
 	// The POST path is same as GET — override via error-then-response. Simpler:
 	// intercept a second call to /hooks by re-mapping after first call. Instead,
 	// we drive the POST by returning createdHook when the argv contains `-X POST`.
-	orig := ghAPIFn
-	defer func() { ghAPIFn = orig }()
-	ghAPIFn = func(body []byte, args ...string) ([]byte, error) {
+	host.GHAPI = func(body []byte, args ...string) ([]byte, error) {
 		for _, a := range args {
 			if a == "POST" {
 				return createdHook, nil
@@ -146,7 +136,7 @@ func TestGitHubWebhookFixture_CreatesNewHook(t *testing.T) {
 		return stub.call(body, args...)
 	}
 
-	deps := Deps{Ctx: context.Background(), Creds: makeGhWebhookCreds("whsec_abc")}
+	deps := Deps{Host: host, Ctx: context.Background(), Creds: makeGhWebhookCreds("whsec_abc")}
 	got := NewGitHubWebhookFixtureSeed().Run(deps)
 	if got.Verdict != PASS {
 		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
@@ -160,7 +150,8 @@ func TestGitHubWebhookFixture_CreatesNewHook(t *testing.T) {
 }
 
 func TestGitHubWebhookFixture_PatchesExistingHook(t *testing.T) {
-	defer stubGhAuth(t, nil)()
+	var host Host
+	host.GHAuthCheck = ghAuthReturns(nil)
 	admin, _ := json.Marshal(ghRepoPermissions{Permissions: struct {
 		Admin bool `json:"admin"`
 	}{Admin: true}})
@@ -171,9 +162,9 @@ func TestGitHubWebhookFixture_PatchesExistingHook(t *testing.T) {
 		"/repos/getloopscale/loopzerokit-example":       admin,
 		"/repos/getloopscale/loopzerokit-example/hooks": existing,
 	}}
-	defer stubGhAPI(t, stub)()
+	host.GHAPI = stub.call
 
-	deps := Deps{Ctx: context.Background(), Creds: makeGhWebhookCreds("whsec_abc")}
+	deps := Deps{Host: host, Ctx: context.Background(), Creds: makeGhWebhookCreds("whsec_abc")}
 	got := NewGitHubWebhookFixtureSeed().Run(deps)
 	if got.Verdict != PASS {
 		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
@@ -196,7 +187,8 @@ func TestGitHubWebhookFixture_PatchesExistingHook(t *testing.T) {
 }
 
 func TestGitHubWebhookFixture_DryRunReports(t *testing.T) {
-	defer stubGhAuth(t, nil)()
+	var host Host
+	host.GHAuthCheck = ghAuthReturns(nil)
 	admin, _ := json.Marshal(ghRepoPermissions{Permissions: struct {
 		Admin bool `json:"admin"`
 	}{Admin: true}})
@@ -205,8 +197,8 @@ func TestGitHubWebhookFixture_DryRunReports(t *testing.T) {
 		"/repos/getloopscale/loopzerokit-example":       admin,
 		"/repos/getloopscale/loopzerokit-example/hooks": emptyHooks,
 	}}
-	defer stubGhAPI(t, stub)()
-	deps := Deps{Ctx: context.Background(), Creds: makeGhWebhookCreds("whsec_abc"), DryRun: true}
+	host.GHAPI = stub.call
+	deps := Deps{Host: host, Ctx: context.Background(), Creds: makeGhWebhookCreds("whsec_abc"), DryRun: true}
 	got := NewGitHubWebhookFixtureSeed().Run(deps)
 	if got.Verdict != PASS {
 		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
@@ -217,15 +209,16 @@ func TestGitHubWebhookFixture_DryRunReports(t *testing.T) {
 }
 
 func TestGitHubWebhookFixture_Verify_PassWhenHookExists(t *testing.T) {
-	defer stubGhAuth(t, nil)()
+	var host Host
+	host.GHAuthCheck = ghAuthReturns(nil)
 	existing, _ := json.Marshal([]ghWebhook{
 		{ID: 7, Config: ghWebhookConfig{URL: ghFixtureDefaultWebhookURL}},
 	})
 	stub := &ghAPIStub{responses: map[string][]byte{
 		"/repos/getloopscale/loopzerokit-example/hooks": existing,
 	}}
-	defer stubGhAPI(t, stub)()
-	deps := Deps{Ctx: context.Background(), Creds: makeGhWebhookCreds("whsec_abc")}
+	host.GHAPI = stub.call
+	deps := Deps{Host: host, Ctx: context.Background(), Creds: makeGhWebhookCreds("whsec_abc")}
 	got := NewGitHubWebhookFixtureSeed().Verify(deps)
 	if got.Verdict != PASS {
 		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
@@ -233,13 +226,14 @@ func TestGitHubWebhookFixture_Verify_PassWhenHookExists(t *testing.T) {
 }
 
 func TestGitHubWebhookFixture_Verify_FailWhenNoHook(t *testing.T) {
-	defer stubGhAuth(t, nil)()
+	var host Host
+	host.GHAuthCheck = ghAuthReturns(nil)
 	emptyHooks, _ := json.Marshal([]ghWebhook{})
 	stub := &ghAPIStub{responses: map[string][]byte{
 		"/repos/getloopscale/loopzerokit-example/hooks": emptyHooks,
 	}}
-	defer stubGhAPI(t, stub)()
-	deps := Deps{Ctx: context.Background(), Creds: makeGhWebhookCreds("whsec_abc")}
+	host.GHAPI = stub.call
+	deps := Deps{Host: host, Ctx: context.Background(), Creds: makeGhWebhookCreds("whsec_abc")}
 	got := NewGitHubWebhookFixtureSeed().Verify(deps)
 	if got.Verdict != FAIL {
 		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
@@ -297,7 +291,8 @@ func TestGitHubWebhookFixture_Name(t *testing.T) {
 // failing PATCH/POST returned, which Run copied into Result.Reason and the seed
 // printed to stdout and --json.
 func TestGhHookMutation_KeepsSecretOutOfArgv(t *testing.T) {
-	defer stubGhAuth(t, nil)()
+	var host Host
+	host.GHAuthCheck = ghAuthReturns(nil)
 	const whsec = "whsec_must_not_leak_0123456789"
 	admin, _ := json.Marshal(ghRepoPermissions{Permissions: struct {
 		Admin bool `json:"admin"`
@@ -309,9 +304,9 @@ func TestGhHookMutation_KeepsSecretOutOfArgv(t *testing.T) {
 		"/repos/getloopscale/loopzerokit-example":       admin,
 		"/repos/getloopscale/loopzerokit-example/hooks": existing,
 	}}
-	defer stubGhAPI(t, stub)()
+	host.GHAPI = stub.call
 
-	got := NewGitHubWebhookFixtureSeed().Run(Deps{Ctx: context.Background(), Creds: makeGhWebhookCreds(whsec)})
+	got := NewGitHubWebhookFixtureSeed().Run(Deps{Host: host, Ctx: context.Background(), Creds: makeGhWebhookCreds(whsec)})
 	if got.Verdict != PASS {
 		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
 	}
@@ -326,7 +321,8 @@ func TestGhHookMutation_KeepsSecretOutOfArgv(t *testing.T) {
 }
 
 func TestGitHubWebhookFixture_FailedPatchReasonOmitsSecret(t *testing.T) {
-	defer stubGhAuth(t, nil)()
+	var host Host
+	host.GHAuthCheck = ghAuthReturns(nil)
 	const whsec = "whsec_must_not_leak_0123456789"
 	admin, _ := json.Marshal(ghRepoPermissions{Permissions: struct {
 		Admin bool `json:"admin"`
@@ -341,9 +337,9 @@ func TestGitHubWebhookFixture_FailedPatchReasonOmitsSecret(t *testing.T) {
 		},
 		errOnPath: map[string]error{"/repos/getloopscale/loopzerokit-example/hooks/99": errors.New("HTTP 422")},
 	}
-	defer stubGhAPI(t, stub)()
+	host.GHAPI = stub.call
 
-	got := NewGitHubWebhookFixtureSeed().Run(Deps{Ctx: context.Background(), Creds: makeGhWebhookCreds(whsec)})
+	got := NewGitHubWebhookFixtureSeed().Run(Deps{Host: host, Ctx: context.Background(), Creds: makeGhWebhookCreds(whsec)})
 	if got.Verdict != FAIL {
 		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
 	}

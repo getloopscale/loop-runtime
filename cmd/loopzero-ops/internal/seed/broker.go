@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -87,12 +88,12 @@ func (s *BrokerSeed) Run(d Deps) Result {
 	}
 
 	// Layer 3: resolve mgmt server-0 IP + helm upgrade the chart.
-	mgmtIP, err := dockerNetworkContainerIP(brokerNetworkName, brokerMgmtContainer)
+	mgmtIP, err := d.Host.dockerNetworkIP(brokerNetworkName, brokerMgmtContainer)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 mgmt IP: %v", err)}
 	}
 	apiURL := fmt.Sprintf("http://%s:%d", mgmtIP, brokerAPIPort)
-	chartPath, err := brokerChartAbsPath()
+	chartPath, err := brokerChartAbsPath(d.Host)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 chart path: %v", err)}
 	}
@@ -101,7 +102,7 @@ func (s *BrokerSeed) Run(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 ensure ns loopzero-build: %v", err)}
 	}
 
-	if err := helmUpgradeBrokerChart(chartPath, apiURL); err != nil {
+	if err := d.Host.helmUpgrade(chartPath, apiURL); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 helm upgrade: %v", err)}
 	}
 
@@ -211,14 +212,8 @@ func brokerWorkloadSecret(token []byte) *corev1.Secret {
 	}
 }
 
-// dockerNetworkContainerIP returns the IPv4 address (no CIDR) of the given
+// defaultDockerNetworkInspect returns the IPv4 address (no CIDR) of the given
 // container inside the docker network. D1 exemption: read-only introspection.
-var dockerNetworkFn = defaultDockerNetworkInspect
-
-func dockerNetworkContainerIP(network, container string) (string, error) {
-	return dockerNetworkFn(network, container)
-}
-
 func defaultDockerNetworkInspect(network, container string) (string, error) {
 	out, err := exec.Command("docker", "network", "inspect", network).Output()
 	if err != nil {
@@ -265,10 +260,6 @@ func defaultDockerNetworkInspect(network, container string) (string, error) {
 // sem herdar o literal — e literal de IP e' exatamente o que este issue combate.
 //
 // D1 exemption: read-only introspection, mesmo caso do vizinho acima.
-var dockerGatewayFn = defaultDockerNetworkGateway
-
-func dockerNetworkGateway(network string) (string, error) { return dockerGatewayFn(network) }
-
 func defaultDockerNetworkGateway(network string) (string, error) {
 	out, err := exec.Command("docker", "network", "inspect", network).Output()
 	if err != nil {
@@ -297,8 +288,8 @@ func defaultDockerNetworkGateway(network string) (string, error) {
 
 // brokerChartAbsPath resolves the chart path relative to the running binary.
 // Overridable via LOOPZERO_CHART_PATH env for operator custom locations.
-func brokerChartAbsPath() (string, error) {
-	if p := osGetenv("LOOPZERO_CHART_PATH"); p != "" {
+func brokerChartAbsPath(h Host) (string, error) {
+	if p := h.getenv("LOOPZERO_CHART_PATH"); p != "" {
 		return p, nil
 	}
 	// Resolve relative to the CWD — the seed is expected to run from the repo
@@ -307,7 +298,7 @@ func brokerChartAbsPath() (string, error) {
 		brokerChartRelativePath,
 		filepath.Join("..", "..", brokerChartRelativePath),
 	} {
-		if info, err := statPath(candidate); err == nil && info.IsDir() {
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
 			abs, aerr := filepath.Abs(candidate)
 			if aerr == nil {
 				return abs, nil
@@ -317,14 +308,8 @@ func brokerChartAbsPath() (string, error) {
 	return "", fmt.Errorf("chart dir not found (tried %s and ../../%s; set LOOPZERO_CHART_PATH)", brokerChartRelativePath, brokerChartRelativePath)
 }
 
-// helmUpgradeBrokerChart runs `helm upgrade --install` for the broker chart.
+// defaultHelmUpgrade runs `helm upgrade --install` for the broker chart.
 // D1 exemption: helm is a canonical operator-tool for chart lifecycle.
-var helmUpgradeFn = defaultHelmUpgrade
-
-func helmUpgradeBrokerChart(chartPath, apiURL string) error {
-	return helmUpgradeFn(chartPath, apiURL)
-}
-
 func defaultHelmUpgrade(chartPath, apiURL string) error {
 	cmd := exec.Command("helm", "upgrade", "--install", brokerHelmReleaseName,
 		chartPath,

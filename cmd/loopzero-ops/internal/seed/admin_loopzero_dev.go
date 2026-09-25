@@ -6,7 +6,6 @@ package seed
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,7 +14,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 // AdminLoopzeroDevSeed is the Go port of
@@ -79,15 +77,8 @@ type AdminLoopzeroDevConfig struct {
 	CanonicalProject string
 }
 
-// adminHTTPClient is the http.Client for cookie-jar flows.
-// Overridable so tests can point at httptest.
-var adminHTTPClient = &http.Client{
-	Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, // #nosec G402
-	Timeout:   30 * time.Second,
-}
-
 func (s *AdminLoopzeroDevSeed) Run(d Deps) Result {
-	cfg := loadAdminConfig()
+	cfg := loadAdminConfig(d.Host)
 	if cfg.KratosAdminURL == "" {
 		return Result{Verdict: SKIP, Reason: fmt.Sprintf("KRATOS_ADMIN_URL not set (usually port-forward svc/ory-kratos-admin -> local). Kratos admin API required for %s.", cfg.Email)}
 	}
@@ -95,21 +86,21 @@ func (s *AdminLoopzeroDevSeed) Run(d Deps) Result {
 		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would seed canonical %s (identity + PG state + session)", cfg.Email)}
 	}
 	// Phase 1 — Kratos identity resolve-or-create.
-	identityID, err := kratosResolveOrCreateIdentity(d.Ctx, cfg)
+	identityID, err := kratosResolveOrCreateIdentity(d.Ctx, d.Host.devHTTP(), cfg)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Phase 1 identity: %v", err)}
 	}
 	// Phase 2 — PG auxiliary state (SKIP-graceful when PG conn absent).
 	if cfg.PGConn != "" {
-		if err := adminEnsurePGState(d.Ctx, cfg, identityID); err != nil {
+		if err := adminEnsurePGState(d.Ctx, d.Host, cfg, identityID); err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Phase 2 PG state: %v", err)}
 		}
 	}
 	// Phase 3 — Password reset + session cookie mint.
-	if err := kratosSetIdentityPassword(d.Ctx, cfg, identityID); err != nil {
+	if err := kratosSetIdentityPassword(d.Ctx, d.Host.devHTTP(), cfg, identityID); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Phase 3 password reset: %v", err)}
 	}
-	cookie, err := kratosMintSessionCookie(d.Ctx, cfg)
+	cookie, err := kratosMintSessionCookie(d.Ctx, d.Host.devHTTP(), cfg)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Phase 3 session mint: %v", err)}
 	}
@@ -121,7 +112,7 @@ func (s *AdminLoopzeroDevSeed) Run(d Deps) Result {
 
 // Verify probes /sessions/whoami using the persisted session cookie.
 func (s *AdminLoopzeroDevSeed) Verify(d Deps) Result {
-	cfg := loadAdminConfig()
+	cfg := loadAdminConfig(d.Host)
 	cookie, err := os.ReadFile(cfg.SessionFile) // #nosec G304 -- operator supplied
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("read session file: %v", err)}
@@ -129,7 +120,7 @@ func (s *AdminLoopzeroDevSeed) Verify(d Deps) Result {
 	if len(cookie) == 0 {
 		return Result{Verdict: FAIL, Reason: "session file empty"}
 	}
-	email, err := kratosWhoami(d.Ctx, cfg.PublicKratosURL, string(cookie))
+	email, err := kratosWhoami(d.Ctx, d.Host.devHTTP(), cfg.PublicKratosURL, string(cookie))
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("/sessions/whoami: %v", err)}
 	}
@@ -140,22 +131,22 @@ func (s *AdminLoopzeroDevSeed) Verify(d Deps) Result {
 }
 
 // loadAdminConfig resolves env → defaults.
-func loadAdminConfig() AdminLoopzeroDevConfig {
-	home := osGetenv("HOME")
-	sessionFile := osGetenvOr(adminSessionFileEnv, home+"/.loopzero/admin-loopzero-dev-session.txt")
-	sessionJWT := osGetenvOr(adminSessionJWTEnv, home+"/.loopzero/local-dogfood-session-jwt.txt")
+func loadAdminConfig(h Host) AdminLoopzeroDevConfig {
+	home := h.getenv("HOME")
+	sessionFile := h.envOr(adminSessionFileEnv, home+"/.loopzero/admin-loopzero-dev-session.txt")
+	sessionJWT := h.envOr(adminSessionJWTEnv, home+"/.loopzero/local-dogfood-session-jwt.txt")
 	return AdminLoopzeroDevConfig{
-		Email:            osGetenvOr(adminEmailEnv, adminDefaultEmail),
+		Email:            h.envOr(adminEmailEnv, adminDefaultEmail),
 		DisplayName:      adminDefaultDisplayName,
 		Username:         adminDefaultUsername,
 		TenantSlug:       adminDefaultTenantSlug,
-		SeedPassword:     osGetenvOr(adminSeedPasswordEnv, adminSeedPassword),
-		PublicKratosURL:  osGetenvOr(adminPublicKratosEnv, adminDefaultPublicKratos),
-		PublicCloudURL:   osGetenvOr(adminPublicCloudEnv, adminDefaultPublicCloud),
-		KratosAdminURL:   osGetenv(adminKratosAdminEnv),
+		SeedPassword:     h.envOr(adminSeedPasswordEnv, adminSeedPassword),
+		PublicKratosURL:  h.envOr(adminPublicKratosEnv, adminDefaultPublicKratos),
+		PublicCloudURL:   h.envOr(adminPublicCloudEnv, adminDefaultPublicCloud),
+		KratosAdminURL:   h.getenv(adminKratosAdminEnv),
 		SessionFile:      sessionFile,
 		SessionJWTFile:   sessionJWT,
-		PGConn:           osGetenv(adminPGConnEnv),
+		PGConn:           h.getenv(adminPGConnEnv),
 		CanonicalProject: adminCanonicalProject,
 	}
 }
@@ -167,14 +158,14 @@ type kratosIdentity struct {
 	Traits map[string]any `json:"traits"`
 }
 
-func kratosResolveOrCreateIdentity(ctx context.Context, cfg AdminLoopzeroDevConfig) (string, error) {
+func kratosResolveOrCreateIdentity(ctx context.Context, client *http.Client, cfg AdminLoopzeroDevConfig) (string, error) {
 	// Search by credentials_identifier.
 	u := cfg.KratosAdminURL + "/admin/identities?credentials_identifier=" + url.QueryEscape(cfg.Email)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return "", err
 	}
-	resp, err := adminHTTPClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("list identities: %w", err)
 	}
@@ -200,7 +191,7 @@ func kratosResolveOrCreateIdentity(ctx context.Context, cfg AdminLoopzeroDevConf
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err = adminHTTPClient.Do(req)
+	resp, err = client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("create identity: %w", err)
 	}
@@ -225,14 +216,14 @@ func kratosResolveOrCreateIdentity(ctx context.Context, cfg AdminLoopzeroDevConf
 
 // kratosSetIdentityPassword uses PUT (full replace) so Kratos hashes the
 // password on save. JSON Patch would store cleartext and login would fail.
-func kratosSetIdentityPassword(ctx context.Context, cfg AdminLoopzeroDevConfig, identityID string) error {
+func kratosSetIdentityPassword(ctx context.Context, client *http.Client, cfg AdminLoopzeroDevConfig, identityID string) error {
 	// Fetch current identity as the PUT base.
 	getURL := cfg.KratosAdminURL + "/admin/identities/" + identityID
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 	if err != nil {
 		return err
 	}
-	resp, err := adminHTTPClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("GET current identity: %w", err)
 	}
@@ -261,7 +252,7 @@ func kratosSetIdentityPassword(ctx context.Context, cfg AdminLoopzeroDevConfig, 
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err = adminHTTPClient.Do(req)
+	resp, err = client.Do(req)
 	if err != nil {
 		return fmt.Errorf("PUT identity: %w", err)
 	}
@@ -276,14 +267,14 @@ func kratosSetIdentityPassword(ctx context.Context, cfg AdminLoopzeroDevConfig, 
 // kratosMintSessionCookie runs the browser-mode login flow and returns
 // the ory_kratos_session cookie value. Uses net/http/cookiejar to preserve
 // the CSRF cookie across GET+POST.
-func kratosMintSessionCookie(ctx context.Context, cfg AdminLoopzeroDevConfig) (string, error) {
+func kratosMintSessionCookie(ctx context.Context, base *http.Client, cfg AdminLoopzeroDevConfig) (string, error) {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return "", err
 	}
 	client := &http.Client{
-		Transport: adminHTTPClient.Transport,
-		Timeout:   adminHTTPClient.Timeout,
+		Transport: base.Transport,
+		Timeout:   base.Timeout,
 		Jar:       jar,
 	}
 
@@ -370,13 +361,13 @@ func kratosMintSessionCookie(ctx context.Context, cfg AdminLoopzeroDevConfig) (s
 
 // kratosWhoami calls /sessions/whoami with the ory_kratos_session cookie.
 // Returns the identity's email or an error.
-func kratosWhoami(ctx context.Context, publicKratosURL, cookieValue string) (string, error) {
+func kratosWhoami(ctx context.Context, client *http.Client, publicKratosURL, cookieValue string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, publicKratosURL+"/sessions/whoami", nil)
 	if err != nil {
 		return "", err
 	}
 	req.AddCookie(&http.Cookie{Name: "ory_kratos_session", Value: cookieValue})
-	resp, err := adminHTTPClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -418,8 +409,8 @@ func kratosWhoami(ctx context.Context, publicKratosURL, cookieValue string) (str
 // explicit SERIALIZABLE transaction is a T2 change: it requires extending the
 // shared pgConn seam (tenant_fixture.go) with Begin/Commit + a pgTx interface,
 // implemented in pgConnAdapter and the test stub.
-func adminEnsurePGState(ctx context.Context, cfg AdminLoopzeroDevConfig, kratosID string) error {
-	conn, err := pgConnectFn(ctx, cfg.PGConn)
+func adminEnsurePGState(ctx context.Context, h Host, cfg AdminLoopzeroDevConfig, kratosID string) error {
+	conn, err := h.pgConnect(ctx, cfg.PGConn)
 	if err != nil {
 		return fmt.Errorf("pgx connect: %w", err)
 	}

@@ -53,7 +53,7 @@ var corednsAliases = map[string]string{
 }
 
 func (s *NetworkingCrossClusterCorednsSeed) Run(d Deps) Result {
-	hosts, err := discoverCorednsHosts()
+	hosts, err := discoverCorednsHosts(d.Host)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
@@ -89,7 +89,7 @@ func (s *NetworkingCrossClusterCorednsSeed) Run(d Deps) Result {
 
 // Verify probes the ConfigMap contains all canonical hostnames.
 func (s *NetworkingCrossClusterCorednsSeed) Verify(d Deps) Result {
-	hosts, err := discoverCorednsHosts()
+	hosts, err := discoverCorednsHosts(d.Host)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
@@ -109,10 +109,10 @@ func (s *NetworkingCrossClusterCorednsSeed) Verify(d Deps) Result {
 // discoverCorednsHosts returns hostname → IP for each present k3d container.
 // An absent container is skipped (its entry is absent from the map); any other
 // docker failure is returned, so a dead daemon does not read as "no clusters".
-func discoverCorednsHosts() (map[string]string, error) {
+func discoverCorednsHosts(h Host) (map[string]string, error) {
 	out := map[string]string{}
 	for _, container := range corednsContainers {
-		ip, err := dockerInspectContainerIP(container)
+		ip, err := h.dockerContainerIP(container)
 		if errors.Is(err, errContainerAbsent) {
 			continue
 		}

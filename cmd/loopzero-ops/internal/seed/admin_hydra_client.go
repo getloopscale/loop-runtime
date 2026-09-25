@@ -62,8 +62,8 @@ func (s *AdminHydraClientSeed) Run(d Deps) Result {
 		return Result{Verdict: PASS, Reason: "dry-run: would resolve admin user_id + register/PUT Hydra client + persist secret"}
 	}
 	// Step 1 — PG lookup.
-	pgURL := envOrDefault(pgDatabaseURLEnv, pgDatabaseURLDefault)
-	userID, err := adminHydraLookupUserID(d.Ctx, pgURL, adminEmailCanonical)
+	pgURL := d.Host.envOr(pgDatabaseURLEnv, pgDatabaseURLDefault)
+	userID, err := adminHydraLookupUserID(d.Ctx, d.Host, pgURL, adminEmailCanonical)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("PG lookup: %v (run seed admin-loopzero-dev first)", err)}
 	}
@@ -96,8 +96,8 @@ func (s *AdminHydraClientSeed) Run(d Deps) Result {
 // Verify probes: (a) PG has admin user, (b) Hydra has ≥ 3 clients live.
 // Skips the token-mint probe (bash also flagged it informational).
 func (s *AdminHydraClientSeed) Verify(d Deps) Result {
-	pgURL := envOrDefault(pgDatabaseURLEnv, pgDatabaseURLDefault)
-	userID, err := adminHydraLookupUserID(d.Ctx, pgURL, adminEmailCanonical)
+	pgURL := d.Host.envOr(pgDatabaseURLEnv, pgDatabaseURLDefault)
+	userID, err := adminHydraLookupUserID(d.Ctx, d.Host, pgURL, adminEmailCanonical)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("PG lookup: %v", err)}
 	}
@@ -123,10 +123,10 @@ func (s *AdminHydraClientSeed) Verify(d Deps) Result {
 
 // adminHydraLookupUserID connects to PG and looks up the admin user id.
 // Small connection: single query, no pool needed.
-// Uses pgConnectFn seam (shared with tenant_fixture + admin_loopzero_dev) so
+// Uses Host.PGConnect (shared with tenant_fixture + admin_loopzero_dev) so
 // tests can substitute a stubPgConn without a live PG.
-func adminHydraLookupUserID(ctx context.Context, url, email string) (string, error) {
-	c, err := pgConnectFn(ctx, url)
+func adminHydraLookupUserID(ctx context.Context, h Host, url, email string) (string, error) {
+	c, err := h.pgConnect(ctx, url)
 	if err != nil {
 		return "", err
 	}

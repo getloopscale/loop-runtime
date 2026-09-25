@@ -94,8 +94,11 @@ type Deps struct {
 	// kubeconfig. Test injection substitutes them.
 	RestConfig *rest.Config
 	CtrlClient ctrlclient.Client
-	Creds      *Creds
-	DryRun     bool
+	// Host is what the seed reads from outside the cluster (environment,
+	// local tools, HTTP, Postgres). The zero value uses the real ones.
+	Host   Host
+	Creds  *Creds
+	DryRun bool
 	// Policy responde se a ausência do insumo de uma capacidade é tolerável neste
 	// ambiente. Nil = nada é exigido, que preserva o comportamento anterior a
 	// 2026-08-11 para todo chamador que não a injeta. Populada só na raiz de

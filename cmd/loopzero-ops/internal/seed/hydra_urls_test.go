@@ -110,9 +110,8 @@ func TestHydraURLs_FailWhenConfigMapMissing(t *testing.T) {
 }
 
 func TestHydraURLs_HonoursEnvOverride(t *testing.T) {
-	origGetenv := osGetenv
-	defer func() { osGetenv = origGetenv }()
-	osGetenv = func(k string) string {
+	var host Host
+	host.Getenv = func(k string) string {
 		switch k {
 		case "LOOPZERO_AUTH_HOST":
 			return "custom-auth.example.com"
@@ -124,7 +123,7 @@ func TestHydraURLs_HonoursEnvOverride(t *testing.T) {
 
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).
 		WithObjects(makeHydraCM(sampleHydraYAML), makeHydraDeployment()).Build()
-	deps := Deps{Ctx: context.Background(), Kube: NewKubeClient(c)}
+	deps := Deps{Host: host, Ctx: context.Background(), Kube: NewKubeClient(c)}
 
 	NewHydraURLsSeed().Run(deps)
 

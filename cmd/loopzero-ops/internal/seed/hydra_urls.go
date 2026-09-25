@@ -39,9 +39,9 @@ const (
 )
 
 func (s *HydraURLsSeed) Run(d Deps) Result {
-	authNS := envOrDefault("AUTH_NAMESPACE", hydraAuthNamespace)
-	authHost := envOrDefault("LOOPZERO_AUTH_HOST", defaultHydraAuthHostVal)
-	appHost := envOrDefault("LOOPZERO_APP_HOST", defaultHydraAppHostVal)
+	authNS := d.Host.envOr("AUTH_NAMESPACE", hydraAuthNamespace)
+	authHost := d.Host.envOr("LOOPZERO_AUTH_HOST", defaultHydraAuthHostVal)
+	appHost := d.Host.envOr("LOOPZERO_APP_HOST", defaultHydraAppHostVal)
 
 	cm, err := d.Kube.GetConfigMap(d.Ctx, authNS, hydraConfigMapName)
 	if err != nil {
@@ -72,9 +72,9 @@ func (s *HydraURLsSeed) Run(d Deps) Result {
 // bash `--verify` (which hit an external URL) — a data probe is deterministic
 // and doesn't depend on external DNS being wired.
 func (s *HydraURLsSeed) Verify(d Deps) Result {
-	authNS := envOrDefault("AUTH_NAMESPACE", hydraAuthNamespace)
-	authHost := envOrDefault("LOOPZERO_AUTH_HOST", defaultHydraAuthHostVal)
-	appHost := envOrDefault("LOOPZERO_APP_HOST", defaultHydraAppHostVal)
+	authNS := d.Host.envOr("AUTH_NAMESPACE", hydraAuthNamespace)
+	authHost := d.Host.envOr("LOOPZERO_AUTH_HOST", defaultHydraAuthHostVal)
+	appHost := d.Host.envOr("LOOPZERO_APP_HOST", defaultHydraAppHostVal)
 	cm, err := d.Kube.GetConfigMap(d.Ctx, authNS, hydraConfigMapName)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("get %s/%s: %v", authNS, hydraConfigMapName, err)}
@@ -114,12 +114,4 @@ func rewriteHydraURLs(in, authHost, appHost string) string {
 	out = reHydraLogout.ReplaceAllString(out, "logout: https://"+appHost+"/logout")
 	out = reHydraError.ReplaceAllString(out, "error: https://"+appHost+"/auth/error")
 	return out
-}
-
-// envOrDefault returns osGetenv(key) when non-empty, else def.
-func envOrDefault(key, def string) string {
-	if v := osGetenv(key); v != "" {
-		return v
-	}
-	return def
 }
