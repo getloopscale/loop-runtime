@@ -102,14 +102,6 @@ const (
 	DORegistryTokenRefreshBuffer = 24 * time.Hour
 )
 
-// --- Harbor Robot Account TTL ---
-
-const (
-	// HarborRobotAccountTTL is the maximum lifetime for Harbor robot accounts.
-	// MEET-048 mandate: TTL must not exceed 24h.
-	HarborRobotAccountTTL = 24 * time.Hour
-)
-
 // --- External API URLs ---
 // URLs for external provider APIs. These are compile-time constants because
 // the API endpoint is dictated by the provider, not by our deployment.

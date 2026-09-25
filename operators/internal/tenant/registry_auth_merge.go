@@ -4,15 +4,14 @@
 package tenant
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 )
 
 // mergedAuthEntry represents one registry's credentials inside a Docker
-// config.json `auths` map. Username/Password are written for Harbor (some
-// registries require them); `auth` is the base64(username:password) field that
-// every OCI tooling (BuildKit, crane, cosign) consumes.
+// config.json `auths` map. Username/Password are kept when the source document
+// carries them; `auth` is the base64(username:password) field that every OCI
+// tooling (BuildKit, crane, cosign) consumes.
 type mergedAuthEntry struct {
 	Username string `json:"username,omitempty"`
 	Password string `json:"password,omitempty"`
@@ -42,8 +41,8 @@ func parseDockerConfigJSON(data []byte) (mergedDockerConfig, error) {
 }
 
 // upsertAuth replaces (or adds) the auth entry for `host`, preserving every
-// other host already present. Core merge primitive that lets two writers
-// (DOCR and Harbor) coexist on the same Secret without overwriting each other.
+// other host already present, so the operator never erases a registry entry it
+// did not write.
 func (c *mergedDockerConfig) upsertAuth(host string, entry mergedAuthEntry) {
 	if c.Auths == nil {
 		c.Auths = map[string]mergedAuthEntry{}
@@ -61,17 +60,6 @@ func marshalDockerConfigJSON(cfg mergedDockerConfig) ([]byte, error) {
 		return nil, fmt.Errorf("marshal docker config.json: %w", err)
 	}
 	return data, nil
-}
-
-// authEntryFromBasic builds a mergedAuthEntry from username/password,
-// computing the base64-encoded `auth` field used by all OCI tooling.
-func authEntryFromBasic(username, password string) mergedAuthEntry {
-	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-	return mergedAuthEntry{
-		Username: username,
-		Password: password,
-		Auth:     auth,
-	}
 }
 
 // mergeAuthsByHost reads an existing config.json (`existing`) and applies the

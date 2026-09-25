@@ -30,7 +30,6 @@ const (
 	TypeBuildNamespaceReady = apiv1.TypeBuildNamespaceReady
 	TypePriorityClassReady  = apiv1.TypePriorityClassReady
 	TypeArgoCDAppReady      = apiv1.TypeArgoCDAppReady
-	TypeHarborProjectReady  = apiv1.TypeHarborProjectReady
 	TypeTransitKeyAvailable = apiv1.TypeTransitKeyAvailable
 
 	// PlatformBootstrap conditions

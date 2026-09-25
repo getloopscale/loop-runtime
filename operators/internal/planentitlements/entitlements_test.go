@@ -16,7 +16,7 @@ func TestFor_StarterGetsTheBaseTier(t *testing.T) {
 	if e.PriorityClassName != "loopzero-tenant-starter" || e.PriorityValue != 100 || e.Preemption != corev1.PreemptNever {
 		t.Fatalf("starter priority = %+v", e)
 	}
-	if e.HarborQuotaBytes != 5*gb || e.ManagesSecrets || e.ManagesNetworking {
+	if e.ManagesSecrets || e.ManagesNetworking {
 		t.Fatalf("starter entitlements = %+v", e)
 	}
 }
@@ -28,7 +28,7 @@ func TestFor_ProGetsThePaidMidTier(t *testing.T) {
 	if e.PriorityClassName != "loopzero-tenant-growth" || e.PriorityValue != 500 || e.Preemption != corev1.PreemptLowerPriority {
 		t.Fatalf("pro priority = %+v", e)
 	}
-	if e.HarborQuotaBytes != 50*gb || !e.ManagesSecrets || e.ManagesNetworking {
+	if !e.ManagesSecrets || e.ManagesNetworking {
 		t.Fatalf("pro entitlements = %+v", e)
 	}
 }
@@ -51,7 +51,7 @@ func TestFor_EnterpriseGetsEverything(t *testing.T) {
 	if e.PriorityClassName != "loopzero-tenant-enterprise" || e.PriorityValue != 1000 {
 		t.Fatalf("enterprise priority = %+v", e)
 	}
-	if e.HarborQuotaBytes != -1 || !e.ManagesSecrets || !e.ManagesNetworking {
+	if !e.ManagesSecrets || !e.ManagesNetworking {
 		t.Fatalf("enterprise entitlements = %+v", e)
 	}
 }

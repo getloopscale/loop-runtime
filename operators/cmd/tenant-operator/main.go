@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Group A: Tenant + Environment controllers.
-// Heaviest operator — owns all external provisioners (Gitea, ArgoCD, Harbor, MinIO)
+// Heaviest operator — owns all external provisioners (Gitea, ArgoCD, MinIO)
 // and both cross-cluster clients (build + runtime).
 package main
 
@@ -31,7 +31,6 @@ import (
 	"github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/environment"
 	"github.com/getloopscale/loopzero/operators/internal/gitea"
-	"github.com/getloopscale/loopzero/operators/internal/harbor"
 	"github.com/getloopscale/loopzero/operators/internal/metrics"
 	miniop "github.com/getloopscale/loopzero/operators/internal/minio"
 	"github.com/getloopscale/loopzero/operators/internal/operatorboot"
@@ -208,7 +207,6 @@ func setupControllers(mgr ctrl.Manager, cfg config) error {
 	if err != nil {
 		return err
 	}
-	harborClient, harborRegistryHost := newHarborClient(cfg.Harbor)
 
 	minIOEndpoint := ""
 	if cfg.MinIO != nil {
@@ -218,8 +216,6 @@ func setupControllers(mgr ctrl.Manager, cfg config) error {
 		GiteaURL:                cfg.GiteaURL,
 		WorkloadClusterURL:      cfg.WorkloadClusterURL,
 		MinIOProvisioner:        minIOProvisioner,
-		HarborClient:            harborClient,
-		HarborRegistryHost:      harborRegistryHost,
 		RegistryCIDRs:           cfg.RegistryCIDRs,
 		MaxConcurrentReconciles: cfg.TenantMaxConcurrent,
 		Credentials: tenant.BuildCredentials{
@@ -256,14 +252,4 @@ func newMinIOProvisioner(cfg *minIOConfig) (miniop.CredentialProvisioner, error)
 	}
 	ctrl.Log.WithName("setup").Info("minio per-tenant provisioner enabled", "endpoint", cfg.Endpoint)
 	return miniop.NewCircuitBreakerProvisioner(raw, newBreaker("minio"), slog.Default()), nil
-}
-
-// newHarborClient returns a nil client when Harbor is not configured.
-func newHarborClient(cfg *harborConfig) (harbor.Provisioner, string) {
-	if cfg == nil {
-		return nil, ""
-	}
-	ctrl.Log.WithName("setup").Info("harbor integration enabled", "url", cfg.URL)
-	client := harbor.NewCircuitBreakerClient(harbor.NewClient(cfg.URL, cfg.Username, cfg.Password), newBreaker("harbor"), slog.Default())
-	return client, cfg.RegistryHost
 }

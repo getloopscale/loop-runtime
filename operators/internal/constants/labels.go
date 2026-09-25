@@ -6,8 +6,7 @@
 // Every Kubernetes label key, annotation key, finalizer name, resource name, and
 // well-known value shared across controllers is defined here, and controller
 // code uses these constants rather than string literals. A value only one
-// package uses stays in that package (for example harbor's robot renewal
-// threshold).
+// package uses stays in that package.
 //
 // This eliminates the "scattered strings" anti-pattern where the same identifier
 // (e.g., "loopzero.io/tenant") appears in 15+ locations with no single source of truth.
@@ -83,15 +82,6 @@ const (
 	// AnnotationTokenExpiresAt stores the RFC3339 expiry timestamp for cached DO registry tokens.
 	// Used to skip the DO API call when the token has more than DORegistryTokenRefreshBuffer remaining.
 	AnnotationTokenExpiresAt = "loopzero.io/token-expires-at" //nolint:gosec // G101 false positive: annotation KEY, not credential value
-
-	// AnnotationHarborTokenExpiresAt stores the RFC3339 expiry timestamp for the
-	// Harbor robot account credentials currently merged into the unified
-	// `buildkit-registry-config` Secret. Distinct from AnnotationTokenExpiresAt
-	// (DOCR scope) so the two writers do not overwrite each other's cache hint
-	// — see CHG-002b 2026-04-28 incident on tn-lt-l3r-tn-39 where Harbor
-	// stomped the DOCR expiry with a `2262-11-17` maxint, causing
-	// isRegistryTokenFresh() to falsely believe the DOCR token was still cached.
-	AnnotationHarborTokenExpiresAt = "loopzero.io/harbor-token-expires-at" //nolint:gosec // G101 false positive: annotation KEY, not credential value
 
 	// AnnotationParentGeneration propagates the parent Tenant's generation to child
 	// Environment CRs. When the Tenant reconciles, it bumps this annotation, which

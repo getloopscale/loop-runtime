@@ -11,7 +11,6 @@ Set-equal to the rendered Secret keys (hermetic Go guard). `openssl rand -hex 32
 |---|---|---|
 | `DIGITALOCEAN_TOKEN` | from DO | tenant-operator credential |
 | `GITEA_TOKEN` | gitea API token | tenant-operator credential |
-| `HARBOR_ADMIN_PASSWORD` | harbor admin pw | tenant-operator credential |
 | `MINIO_ACCESS_KEY` | access key | tenant-operator credential |
 | `MINIO_SECRET_KEY` | openssl rand -hex 20 | tenant-operator credential |
 | `REGISTRY_DOCKER_CONFIG` | docker config json | tenant-operator credential |

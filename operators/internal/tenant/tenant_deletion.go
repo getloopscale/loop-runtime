@@ -163,9 +163,6 @@ func (r *TenantReconciler) cleanupTenantResources(ctx context.Context, tenant *l
 		}
 	}
 
-	run("harbor", "harbor-cleanup", func() error {
-		return r.deleteHarborProject(ctx, tenant)
-	})
 	run("argocd-apps", "argocd-cleanup", func() error {
 		return r.ArgoCDProvisioner.DeleteApplications(ctx, tenant.Name)
 	})

@@ -23,8 +23,7 @@ type config struct {
 	BuildKubeconfig string
 	Cell0Kubeconfig string
 
-	MinIO  *minIOConfig  // nil: per-tenant MinIO credentials disabled
-	Harbor *harborConfig // nil: Harbor integration disabled
+	MinIO *minIOConfig // nil: per-tenant MinIO credentials disabled
 
 	RegistryCIDRs        []string
 	DOToken              string
@@ -39,10 +38,6 @@ type config struct {
 
 type minIOConfig struct {
 	Endpoint, AccessKey, SecretKey string
-}
-
-type harborConfig struct {
-	URL, Username, Password, RegistryHost string
 }
 
 // loadConfig reads the environment through getenv. Every problem is
@@ -92,15 +87,6 @@ func loadConfig(getenv func(string) string) (config, error) {
 	minio := minIOConfig{Endpoint: getenv("MINIO_ENDPOINT"), AccessKey: getenv("MINIO_ACCESS_KEY"), SecretKey: getenv("MINIO_SECRET_KEY")}
 	if minio.Endpoint != "" && minio.AccessKey != "" && minio.SecretKey != "" {
 		cfg.MinIO = &minio
-	}
-
-	if url := getenv("HARBOR_URL"); url != "" {
-		h := harborConfig{URL: url, Username: getenv("HARBOR_ADMIN_USERNAME"), Password: getenv("HARBOR_ADMIN_PASSWORD")}
-		if h.Username == "" || h.Password == "" {
-			problems = append(problems, errors.New("HARBOR_ADMIN_USERNAME and HARBOR_ADMIN_PASSWORD are required when HARBOR_URL is set"))
-		}
-		h.RegistryHost = orDefault("HARBOR_REGISTRY_HOST", strings.TrimPrefix(strings.TrimPrefix(url, "https://"), "http://"))
-		cfg.Harbor = &h
 	}
 
 	return cfg, errors.Join(problems...)

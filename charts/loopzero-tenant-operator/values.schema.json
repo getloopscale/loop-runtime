@@ -184,15 +184,6 @@
         "giteaUrl": {
           "type": "string"
         },
-        "harborAdminUsername": {
-          "type": "string"
-        },
-        "harborRegistryHost": {
-          "type": "string"
-        },
-        "harborUrl": {
-          "type": "string"
-        },
         "ingressNamespace": {
           "type": "string"
         },
@@ -242,9 +233,6 @@
           "type": "string"
         },
         "giteaToken": {
-          "type": "string"
-        },
-        "harborAdminPassword": {
           "type": "string"
         },
         "minioAccessKey": {

@@ -14,15 +14,11 @@ import (
 	"github.com/getloopscale/loopzero/operators/internal/constants"
 )
 
-const gb = 1024 * 1024 * 1024
-
 // Entitlements is what one plan tier grants.
 type Entitlements struct {
 	PriorityClassName string
 	PriorityValue     int32
 	Preemption        corev1.PreemptionPolicy
-	// HarborQuotaBytes is the registry storage quota; -1 is unlimited.
-	HarborQuotaBytes int64
 	// ManagesSecrets lets the environment deployer manage Secrets.
 	ManagesSecrets bool
 	// ManagesNetworking lets the environment deployer manage Ingresses and
@@ -35,7 +31,6 @@ var (
 		PriorityClassName: constants.PriorityClassStarter,
 		PriorityValue:     constants.PriorityValueStarter,
 		Preemption:        corev1.PreemptNever,
-		HarborQuotaBytes:  5 * gb,
 	}
 	// paid is the mid tier. Its PriorityClass keeps the "growth" name that
 	// clusters already carry from before pro and team existed.
@@ -43,14 +38,12 @@ var (
 		PriorityClassName: constants.PriorityClassGrowth,
 		PriorityValue:     constants.PriorityValueGrowth,
 		Preemption:        corev1.PreemptLowerPriority,
-		HarborQuotaBytes:  50 * gb,
 		ManagesSecrets:    true,
 	}
 	enterprise = Entitlements{
 		PriorityClassName: constants.PriorityClassEnterprise,
 		PriorityValue:     constants.PriorityValueEnterprise,
 		Preemption:        corev1.PreemptLowerPriority,
-		HarborQuotaBytes:  -1,
 		ManagesSecrets:    true,
 		ManagesNetworking: true,
 	}

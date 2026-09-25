@@ -63,7 +63,7 @@ func TestKstatusTypes_NoCollisionWithDetailTypes(t *testing.T) {
 	}
 	detail := []string{
 		TypeGitRepoReady, TypeQuotaEnforced, TypeBuildNamespaceReady,
-		TypePriorityClassReady, TypeArgoCDAppReady, TypeHarborProjectReady,
+		TypePriorityClassReady, TypeArgoCDAppReady,
 		TypeGiteaReady, TypeArgoCDReady, TypeDatabaseSeeded, TypeBootstrapComplete,
 		TypeCredentialsResolved, TypeRepositoryRegistered, TypeRepositoryReachable, TypeConsumerHealthy,
 		TypeEnvNamespaceReady, TypeEnvRBACReady, TypeEnvNetworkPolicyReady, TypeEnvQuotaReady, TypePullSecretReady,

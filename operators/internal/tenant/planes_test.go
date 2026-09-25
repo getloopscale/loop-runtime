@@ -30,7 +30,7 @@ import (
 // diverges.
 //
 // The declaration is NOT an interface per plane. The shape B-060's DoD
-// proposed copying — the `gitea`/`argocd`/`minio`/`harbor` provisioners —
+// proposed copying — the `gitea`/`argocd`/`minio` provisioners —
 // is a narrow facade over an EXTERNAL service, and each one already exists.
 // Repeating it here would produce single-implementer interfaces over
 // internal code, the anti-pattern `rules/architecture.md` and Rule 11 name.
@@ -41,8 +41,7 @@ import (
 type plane string
 
 const (
-	// BUILD — what builds and stores artefacts: the tenant's bundle bucket
-	// and image project.
+	// BUILD — what builds and stores artefacts: the tenant's bundle bucket.
 	planeBuild plane = "BUILD"
 	// CONTROL — what declares the desired state: the git repository and the
 	// ArgoCD project that syncs it.
@@ -59,7 +58,6 @@ const (
 // struct appears here, so a new client cannot arrive without a plane.
 var planeOfClient = map[string]plane{
 	"MinIOProvisioner":  planeBuild,
-	"HarborClient":      planeBuild,
 	"GitProvisioner":    planeControl,
 	"ArgoCDProvisioner": planeControl,
 	"VaultClient":       planeSecrets,
@@ -86,7 +84,6 @@ var planesOfFile = map[string][]plane{
 	"tenant_credentials.go":    {},
 	"tenant_deletion.go":       {planeBuild, planeControl},
 	"tenant_gitops.go":         {planeControl},
-	"tenant_harbor.go":         {planeBuild},
 	"tenant_priority.go":       {},
 	"misplaced_tenant_scan.go": {},
 }
@@ -105,7 +102,7 @@ func declares(declared []plane, p plane) bool {
 // `TenantReconciler` field whose type comes from one of them IS a plane client.
 var servicePackages = map[string]bool{
 	"argocd": true, "gitea": true, "minio": true, "miniop": true,
-	"harbor": true, "vault": true,
+	"vault": true,
 }
 
 // packageFiles lists the package's production .go files.

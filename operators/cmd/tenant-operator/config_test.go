@@ -39,7 +39,7 @@ func TestLoadConfig_AppliesTheDefaults(t *testing.T) {
 		cfg.ArgoCDNamespace != constants.DefaultArgoCDNamespace || cfg.TenantMaxConcurrent != 0 {
 		t.Fatalf("defaults = %+v", cfg)
 	}
-	if cfg.MinIO != nil || cfg.Harbor != nil {
+	if cfg.MinIO != nil {
 		t.Fatalf("optional integrations enabled without configuration: %+v", cfg)
 	}
 }
@@ -67,21 +67,6 @@ func TestLoadConfig_ReadsTheConcurrency(t *testing.T) {
 	cfg, err := loadConfig(env(with(map[string]string{"LOOPZERO_TENANT_MAX_CONCURRENT": "8"})))
 	if err != nil || cfg.TenantMaxConcurrent != 8 {
 		t.Fatalf("got (%d, %v), want 8", cfg.TenantMaxConcurrent, err)
-	}
-}
-
-func TestLoadConfig_HarborNeedsItsAdminCredentials(t *testing.T) {
-	if _, err := loadConfig(env(with(map[string]string{"HARBOR_URL": "https://harbor.example"}))); err == nil {
-		t.Fatal("HARBOR_URL without admin credentials was accepted")
-	}
-}
-
-func TestLoadConfig_HarborRegistryHostDefaultsToTheURLHost(t *testing.T) {
-	cfg, err := loadConfig(env(with(map[string]string{
-		"HARBOR_URL": "https://harbor.example", "HARBOR_ADMIN_USERNAME": "u", "HARBOR_ADMIN_PASSWORD": "p",
-	})))
-	if err != nil || cfg.Harbor == nil || cfg.Harbor.RegistryHost != "harbor.example" {
-		t.Fatalf("got (%+v, %v), want registry host harbor.example", cfg.Harbor, err)
 	}
 }
 

@@ -30,7 +30,6 @@ const (
 	TypeBuildNamespaceReady = "BuildNamespaceReady"
 	TypePriorityClassReady  = "PriorityClassReady"
 	TypeArgoCDAppReady      = "ArgoCDAppReady"
-	TypeHarborProjectReady  = "HarborProjectReady"
 	TypeTransitKeyAvailable = "TransitKeyAvailable"
 )
 

@@ -79,7 +79,6 @@ var _ = Describe("kstatus compliance — universal Ready/Reconciling/Stalled", f
 				conditions.TypeBuildNamespaceReady,
 				conditions.TypePriorityClassReady,
 				conditions.TypeArgoCDAppReady,
-				conditions.TypeHarborProjectReady,
 			}, 5),
 			Entry("Environment detail types", []string{
 				conditions.TypeEnvNamespaceReady,

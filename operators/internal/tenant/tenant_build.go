@@ -209,7 +209,7 @@ func (r *TenantReconciler) ensureBuildRegistryCredentials(ctx context.Context, b
 // validity AND that the Secret currently contains a DOCR auth entry. The
 // auth-presence check is necessary because, post-CHG-002b host-scoped merge,
 // the Secret may exist (with valid annotation) but still be missing the DOCR
-// `auths` entry — for instance if the Harbor writer raced ahead and this
+// `auths` entry — for instance if another writer raced ahead and this
 // function previously short-circuited the DOCR write. Returning false in that
 // case forces a re-merge and restores the missing entry.
 func (r *TenantReconciler) isRegistryTokenFresh(ctx context.Context, namespace string) bool {
@@ -238,8 +238,8 @@ func (r *TenantReconciler) isRegistryTokenFresh(ctx context.Context, namespace s
 	}
 
 	// Auth-presence check: the cached token annotation only matters if the
-	// DOCR auth is actually in the Secret. A Secret with only Harbor auths
-	// must not short-circuit DOCR's writer.
+	// DOCR auth is actually in the Secret. A Secret holding only another
+	// registry's auths must not short-circuit DOCR's writer.
 	if secret.Data == nil {
 		return false
 	}
@@ -412,11 +412,11 @@ func (r *TenantReconciler) reconcileBuildMinIOCredentials(ctx context.Context, n
 
 // ensureBuildkitRegistrySecret upserts the DOCR auth entries from `dockerConfig`
 // into the unified `buildkit-registry-config` Secret while preserving any
-// auths from other writers (notably Harbor — see `ensureHarborRegistrySecret`).
+// auth entry for another host.
 //
-// CHG-002b 2026-04-28 — root cause: this used to fully overwrite the Secret
-// with DOCR-only auths, racing the Harbor writer and producing 401s on
-// `mirror-harbor-*` steps. Host-scoped merge eliminates the oscillation.
+// CHG-002b 2026-04-28 — this used to fully overwrite the Secret with DOCR-only
+// auths, racing a second writer and producing 401s. Host-scoped merge ended the
+// oscillation, and it still keeps an entry the operator did not write.
 //
 // `dockerConfig` is expected to be a Docker config.json document for DOCR.
 // All `auths` entries from it are upserted onto the merged Secret; this

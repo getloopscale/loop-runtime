@@ -4,7 +4,7 @@
 // Package circuitbreaker provides a generic in-memory circuit breaker.
 //
 // MEET-052: Extracted from api/internal/services/pg_circuit_breaker.go to be
-// reusable across API and operator provisioner clients (Gitea, Harbor, MinIO, ArgoCD).
+// reusable across API and operator provisioner clients (Gitea, MinIO, ArgoCD).
 //
 // State is per-process, not shared across replicas. This is acceptable because
 // each replica detects failure independently after openThreshold failures, and
@@ -50,7 +50,7 @@ func (s State) String() string {
 
 // Config configures a circuit breaker instance.
 type Config struct {
-	// Name identifies the circuit breaker (e.g., "gitea", "harbor") for logging.
+	// Name identifies the circuit breaker (e.g., "gitea", "minio") for logging.
 	Name string
 
 	// OpenThreshold is the number of consecutive failures to open the circuit.

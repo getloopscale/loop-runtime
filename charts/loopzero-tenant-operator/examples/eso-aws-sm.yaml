@@ -33,8 +33,6 @@ spec:
       remoteRef: { key: "loopzero/tenant-operator", property: "digitalocean_token" }
     - secretKey: GITEA_TOKEN
       remoteRef: { key: "loopzero/tenant-operator", property: "gitea_token" }
-    - secretKey: HARBOR_ADMIN_PASSWORD
-      remoteRef: { key: "loopzero/tenant-operator", property: "harbor_admin_password" }
     - secretKey: MINIO_ACCESS_KEY
       remoteRef: { key: "loopzero/tenant-operator", property: "minio_access_key" }
     - secretKey: MINIO_SECRET_KEY

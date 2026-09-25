@@ -54,7 +54,7 @@ var (
 	// MEET-052: Tenant deletion per-step metrics.
 
 	// TenantDeletionStepDuration measures the duration of each cleanup step
-	// during tenant deletion (harbor, argocd, build-ns, minio, gitea).
+	// during tenant deletion (argocd, build-ns, minio, gitea).
 	TenantDeletionStepDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "loopzero_tenant_deletion_step_duration_seconds",
