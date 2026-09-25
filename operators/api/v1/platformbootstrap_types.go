@@ -64,10 +64,6 @@ type PlatformBootstrapSpec struct {
 	// API configures the API bootstrap endpoint for DB seeding.
 	API APIBootstrapSpec `json:"api"`
 
-	// Timeouts configures per-phase timeouts in seconds.
-	// +optional
-	Timeouts BootstrapTimeouts `json:"timeouts,omitempty"`
-
 	// MaxRetries is the maximum number of retries per phase before transitioning to Failed.
 	// +kubebuilder:default=10
 	// +optional
@@ -116,11 +112,6 @@ type ArgoCDBootstrapSpec struct {
 	// +optional
 	AdminSecretName string `json:"adminSecretName,omitempty"`
 
-	// TokenTTLSeconds is the TTL for the generated ArgoCD JWT.
-	// +kubebuilder:default=7776000
-	// +optional
-	TokenTTLSeconds int64 `json:"tokenTTLSeconds,omitempty"`
-
 	// RepoCredentials defines the repo credential secrets to create for ArgoCD.
 	// +optional
 	RepoCredentials []ArgoCDRepoCredential `json:"repoCredentials,omitempty"`
@@ -164,29 +155,6 @@ type APIBootstrapSpec struct {
 	// B1: Without this, callBootstrapEndpoint fails 401 when SEC-003 is enabled.
 	// +optional
 	BootstrapSecretRef *SecretKeyRef `json:"bootstrapSecretRef,omitempty"`
-}
-
-// BootstrapTimeouts configures per-phase timeouts.
-type BootstrapTimeouts struct {
-	// GiteaReadySeconds is how long to wait for Gitea to be reachable.
-	// +kubebuilder:default=120
-	// +optional
-	GiteaReadySeconds int `json:"giteaReadySeconds,omitempty"`
-
-	// ArgoCDReadySeconds is how long to wait for ArgoCD to be reachable.
-	// +kubebuilder:default=120
-	// +optional
-	ArgoCDReadySeconds int `json:"argoCDReadySeconds,omitempty"`
-
-	// APIReadySeconds is how long to wait for the API to be healthy.
-	// +kubebuilder:default=120
-	// +optional
-	APIReadySeconds int `json:"apiReadySeconds,omitempty"`
-
-	// TotalBootstrapSeconds is the overall timeout for the entire bootstrap process.
-	// +kubebuilder:default=600
-	// +optional
-	TotalBootstrapSeconds int `json:"totalBootstrapSeconds,omitempty"`
 }
 
 // SecretKeyRef references a Kubernetes Secret.

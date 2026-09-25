@@ -21,9 +21,6 @@ sources:
   - id: f-argocdrepocredential
     resource: "operators/api/v1/platformbootstrap_types.go#L137"
     note: "ArgoCDRepoCredential"
-  - id: f-bootstraptimeouts
-    resource: "operators/api/v1/platformbootstrap_types.go#L170"
-    note: "BootstrapTimeouts"
   - id: f-giteabootstrapspec
     resource: "operators/api/v1/platformbootstrap_types.go#L78"
     note: "GiteaBootstrapSpec"
@@ -82,7 +79,6 @@ Go struct in operators/api/v1 (CRD API group, own Go module mod.operators.api) D
 |---|---|---|---|
 | `Namespace` | `string` | json:namespace,omitempty; +kubebuilder:default="argocd"; +optional | `operators/api/v1/platformbootstrap_types.go:111` |
 | `AdminSecretName` | `string` | json:adminSecretName,omitempty; +kubebuilder:default="argocd-initial-admin-secret"; +optional | `operators/api/v1/platformbootstrap_types.go:117` |
-| `TokenTTLSeconds` | `int64` | json:tokenTTLSeconds,omitempty; +kubebuilder:default=7776000; +optional | `operators/api/v1/platformbootstrap_types.go:122` |
 | `RepoCredentials` | `[]ArgoCDRepoCredential` | json:repoCredentials,omitempty; +optional | `operators/api/v1/platformbootstrap_types.go:126` |
 | `InternalURL` | `string` | json:internalURL,omitempty; +kubebuilder:default="https://argocd-server.argocd.svc.cluster.local"; +kubebuilder:validation:Pattern=`^https?://[a-zA-Z0-9][a-zA-Z0-9.\-]+(:[0-9]+)?(/.*)?$`; +optional | `operators/api/v1/platformbootstrap_types.go:133` |
 
@@ -95,18 +91,6 @@ Go struct in operators/api/v1 (CRD API group, own Go module mod.operators.api) D
 |---|---|---|---|
 | `Name` | `string` | json:name | `operators/api/v1/platformbootstrap_types.go:139` |
 | `URL` | `string` | json:url | `operators/api/v1/platformbootstrap_types.go:142` |
-
-
-## `BootstrapTimeouts`
-
-Go struct in operators/api/v1 (CRD API group, own Go module mod.operators.api) Declared at `operators/api/v1/platformbootstrap_types.go:170`.
-
-| Field | Type | Marker / json tag | Anchor |
-|---|---|---|---|
-| `GiteaReadySeconds` | `int` | json:giteaReadySeconds,omitempty; +kubebuilder:default=120; +optional | `operators/api/v1/platformbootstrap_types.go:174` |
-| `ArgoCDReadySeconds` | `int` | json:argoCDReadySeconds,omitempty; +kubebuilder:default=120; +optional | `operators/api/v1/platformbootstrap_types.go:179` |
-| `APIReadySeconds` | `int` | json:apiReadySeconds,omitempty; +kubebuilder:default=120; +optional | `operators/api/v1/platformbootstrap_types.go:184` |
-| `TotalBootstrapSeconds` | `int` | json:totalBootstrapSeconds,omitempty; +kubebuilder:default=600; +optional | `operators/api/v1/platformbootstrap_types.go:189` |
 
 
 ## `GiteaBootstrapSpec`
@@ -154,7 +138,6 @@ Go struct in operators/api/v1 (CRD API group, own Go module mod.operators.api) D
 | `Gitea` | `GiteaBootstrapSpec` | json:gitea | `operators/api/v1/platformbootstrap_types.go:59` |
 | `ArgoCD` | `ArgoCDBootstrapSpec` | json:argocd | `operators/api/v1/platformbootstrap_types.go:62` |
 | `API` | `APIBootstrapSpec` | json:api | `operators/api/v1/platformbootstrap_types.go:65` |
-| `Timeouts` | `BootstrapTimeouts` | json:timeouts,omitempty; +optional | `operators/api/v1/platformbootstrap_types.go:69` |
 | `MaxRetries` | `int` | json:maxRetries,omitempty; +kubebuilder:default=10; +optional | `operators/api/v1/platformbootstrap_types.go:74` |
 
 
@@ -198,7 +181,6 @@ Go struct in operators/api/v1 (CRD API group, own Go module mod.operators.api) D
 [^f-apibootstrapspec]: `operators/api/v1/platformbootstrap_types.go:146`
 [^f-argocdbootstrapspec]: `operators/api/v1/platformbootstrap_types.go:107`
 [^f-argocdrepocredential]: `operators/api/v1/platformbootstrap_types.go:137`
-[^f-bootstraptimeouts]: `operators/api/v1/platformbootstrap_types.go:170`
 [^f-giteabootstrapspec]: `operators/api/v1/platformbootstrap_types.go:78`
 [^f-platformbootstraplist]: `operators/api/v1/platformbootstrap_types.go:224`
 [^f-platformbootstrapspec]: `operators/api/v1/platformbootstrap_types.go:57`

@@ -84,7 +84,6 @@ func TestPlatformBootstrap_SpecArgoCD(t *testing.T) {
 			ArgoCD: ArgoCDBootstrapSpec{
 				Namespace:       "argocd",
 				AdminSecretName: "argocd-initial-admin-secret",
-				TokenTTLSeconds: 7776000,
 				RepoCredentials: []ArgoCDRepoCredential{
 					{Name: "gitea-creds", URL: "http://gitea-http.gitea.svc.cluster.local:3000"},
 				},
@@ -98,9 +97,6 @@ func TestPlatformBootstrap_SpecArgoCD(t *testing.T) {
 	}
 	if pbs.Spec.ArgoCD.AdminSecretName != "argocd-initial-admin-secret" {
 		t.Errorf("expected AdminSecretName %q, got %q", "argocd-initial-admin-secret", pbs.Spec.ArgoCD.AdminSecretName)
-	}
-	if pbs.Spec.ArgoCD.TokenTTLSeconds != 7776000 {
-		t.Errorf("expected TokenTTLSeconds %d, got %d", 7776000, pbs.Spec.ArgoCD.TokenTTLSeconds)
 	}
 	if len(pbs.Spec.ArgoCD.RepoCredentials) != 1 {
 		t.Fatalf("expected 1 repo credential, got %d", len(pbs.Spec.ArgoCD.RepoCredentials))
@@ -149,36 +145,6 @@ func TestPlatformBootstrap_SpecAPIWithoutSecret(t *testing.T) {
 
 	if pbs.Spec.API.BootstrapSecretRef != nil {
 		t.Error("expected BootstrapSecretRef to be nil when not set")
-	}
-}
-
-func TestPlatformBootstrap_SpecTimeouts(t *testing.T) {
-	pbs := PlatformBootstrap{
-		Spec: PlatformBootstrapSpec{
-			Timeouts: BootstrapTimeouts{
-				GiteaReadySeconds:     120,
-				ArgoCDReadySeconds:    120,
-				APIReadySeconds:       120,
-				TotalBootstrapSeconds: 600,
-			},
-			MaxRetries: 10,
-		},
-	}
-
-	if pbs.Spec.Timeouts.GiteaReadySeconds != 120 {
-		t.Errorf("expected GiteaReadySeconds %d, got %d", 120, pbs.Spec.Timeouts.GiteaReadySeconds)
-	}
-	if pbs.Spec.Timeouts.ArgoCDReadySeconds != 120 {
-		t.Errorf("expected ArgoCDReadySeconds %d, got %d", 120, pbs.Spec.Timeouts.ArgoCDReadySeconds)
-	}
-	if pbs.Spec.Timeouts.APIReadySeconds != 120 {
-		t.Errorf("expected APIReadySeconds %d, got %d", 120, pbs.Spec.Timeouts.APIReadySeconds)
-	}
-	if pbs.Spec.Timeouts.TotalBootstrapSeconds != 600 {
-		t.Errorf("expected TotalBootstrapSeconds %d, got %d", 600, pbs.Spec.Timeouts.TotalBootstrapSeconds)
-	}
-	if pbs.Spec.MaxRetries != 10 {
-		t.Errorf("expected MaxRetries %d, got %d", 10, pbs.Spec.MaxRetries)
 	}
 }
 
