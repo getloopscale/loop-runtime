@@ -84,6 +84,8 @@ func TestPlanLimitsStoreOnTheRequestRoleCannotSeeTheSubscription(t *testing.T) {
 		t.Fatalf("read the request role's RLS posture: %v", err)
 	}
 	if bypasses {
+		// A role that bypasses RLS cannot reproduce https://github.com/getloopscale/loopzero/issues/382:
+		// every row is visible to it, so the test would pass whatever the wiring.
 		t.Skip("DATABASE_URL is not the isolated request role (it bypasses RLS); point it at loopzero_api")
 	}
 	const owner, acct, tn1, tn2 = "rls-req-uid", "acct-rls-req", "tn-rls-req-a", "tn-rls-req-b"
