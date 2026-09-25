@@ -4,6 +4,7 @@
 package domains
 
 import (
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 	"log/slog"
 	"net/http"
 	"time"
@@ -49,8 +50,9 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Already verified or active — return success (idempotent, MEET-033)
-	if d.Status == "verified" || d.Status == "provisioning" || d.Status == "active" {
+	// Already verified or past it — return success (idempotent, MEET-033)
+	switch statemachine.DomainPhase(d.Status) {
+	case statemachine.DPhVerified, statemachine.DPhProvisioning, statemachine.DPhActive:
 		httpio.WriteJSON(w, http.StatusOK, domainVerifyResponse{
 			Domain:     d.Domain,
 			Status:     d.Status,
@@ -59,8 +61,10 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only pending_verification and failed can be verified
-	if d.Status != "pending_verification" && d.Status != "failed" {
+	// Only a phase with a verification transition can be verified; the
+	// machine answers which (pending_verification verifies, failed retries).
+	next, err := verificationPhase(d.Status)
+	if err != nil {
 		httpio.WriteJSON(w, http.StatusOK, domainVerifyResponse{
 			Domain: d.Domain,
 			Status: d.Status,
@@ -84,7 +88,7 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	if !verified {
 		httpio.WriteJSON(w, http.StatusOK, domainVerifyResponse{
 			Domain:            d.Domain,
-			Status:            "pending_verification",
+			Status:            d.Status,
 			VerificationError: "TXT record not found for _loopzero-verify." + d.Domain,
 			Hint:              "DNS changes can take up to 48 hours to propagate. Most providers update within 5 minutes.",
 		})
@@ -101,7 +105,7 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 
 	httpio.WriteJSON(w, http.StatusOK, domainVerifyResponse{
 		Domain:     d.Domain,
-		Status:     "verified",
+		Status:     string(next),
 		VerifiedAt: &now,
 		Message:    "Provisioning in progress. Check status with: loopzero domain status " + d.Domain,
 	})

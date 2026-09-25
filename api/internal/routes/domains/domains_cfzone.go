@@ -6,6 +6,7 @@ package domains
 import (
 	"context"
 	"errors"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -78,7 +79,7 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 		AppName:            req.App,
 		Environment:        req.Environment,
 		Domain:             req.Domain,
-		Status:             "pending_ns",
+		Status:             string(statemachine.DPhPendingNS),
 		VerificationToken:  "", // not needed for v2
 		CFZoneID:           &zoneID,
 		CFZoneStatus:       "pending",
@@ -101,7 +102,7 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	metrics.CustomDomainsTotal.WithLabelValues(uc.TenantID, "pending_ns").Inc()
+	metrics.CustomDomainsTotal.WithLabelValues(uc.TenantID, string(statemachine.DPhPendingNS)).Inc()
 
 	httpio.WriteJSON(w, http.StatusCreated, domainCreateV2Response{
 		OK:                 true,

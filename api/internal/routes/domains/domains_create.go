@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -96,7 +97,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		AppName:           req.App,
 		Environment:       req.Environment,
 		Domain:            req.Domain,
-		Status:            "pending_verification",
+		Status:            string(statemachine.DPhPendingVerification),
 		VerificationToken: token,
 		TLSStatus:         strPtr("pending"),
 	}
@@ -114,7 +115,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	metrics.CustomDomainsTotal.WithLabelValues(uc.TenantID, "pending_verification").Inc()
+	metrics.CustomDomainsTotal.WithLabelValues(uc.TenantID, string(statemachine.DPhPendingVerification)).Inc()
 
 	httpio.WriteJSON(w, http.StatusCreated, domainCreateResponse{
 		OK:          true,

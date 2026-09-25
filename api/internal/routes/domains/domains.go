@@ -57,17 +57,24 @@ type (
 // Replaces ad-hoc map with pkg/statemachine convention.
 var domainMachine = statemachine.NewDomainTypedMachine()
 
-// canRemove checks if a domain can transition to "removing" from its current state.
-// Uses the formal state machine — does not panic on invalid transitions.
-func canRemove(currentStatus string) bool {
-	ok := true
-	defer func() {
-		if recover() != nil {
-			ok = false
-		}
-	}()
-	result := domainMachine.Transition(statemachine.DomainPhase(currentStatus), statemachine.DPEventRemove)
-	return ok && result == statemachine.DPhRemoving
+// removalPhase is the phase a domain in current moves to when it is removed,
+// or an error when the machine has no removal from current (terminal or
+// unknown). TryTransition answers without panicking: an invalid transition is
+// a refusal here, not a programming error to recover from.
+func removalPhase(current string) (statemachine.DomainPhase, error) {
+	return domainMachine.TryTransition(statemachine.DomainPhase(current), statemachine.DPEventRemove)
+}
+
+// verificationPhase is the phase a TXT-verified domain in current moves to:
+// pending_verification verifies, failed retries. Any other phase has no
+// verification transition and returns an error.
+func verificationPhase(current string) (statemachine.DomainPhase, error) {
+	phase := statemachine.DomainPhase(current)
+	event := statemachine.DPEventVerify
+	if phase == statemachine.DPhFailed {
+		event = statemachine.DPEventRetry
+	}
+	return domainMachine.TryTransition(phase, event)
 }
 
 // DomainHandler provides HTTP handlers for custom domain operations.
@@ -231,7 +238,7 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// v1: expose verification token to owner/admin for pending domains
-	if d.Status == "pending_verification" && auth.HasMinRole(uc.Role, "admin") {
+	if statemachine.DomainPhase(d.Status) == statemachine.DPhPendingVerification && auth.HasMinRole(uc.Role, "admin") {
 		resp.Verification = &domainVerificationInfo{
 			TXTName:  "_loopzero-verify." + d.Domain,
 			TXTValue: d.VerificationToken,

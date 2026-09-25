@@ -42,7 +42,8 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// CRIT-02: validate transition via formal state machine
-	if !canRemove(d.Status) {
+	next, err := removalPhase(d.Status)
+	if err != nil {
 		httpio.WriteJSON(w, http.StatusConflict, map[string]string{
 			"error": "Domain cannot be removed in its current state (" + d.Status + "). Try again later.",
 			"code":  "INVALID_STATE",
@@ -51,7 +52,7 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// CRIT-01: CAS transition prevents TOCTOU race with concurrent deploy.
-	if err := h.store.TransitionStatus(ctx, d.Domain, d.Status, "removing"); err != nil {
+	if err := h.store.TransitionStatus(ctx, d.Domain, d.Status, string(next)); err != nil {
 		slog.ErrorContext(ctx, "domain transition to removing failed", "error", err)
 		httpio.WriteJSON(w, http.StatusConflict, map[string]string{
 			"code":    "CONCURRENT_MODIFICATION",
@@ -63,7 +64,7 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusOK, domainDeleteResponse{
 		OK:     true,
 		Domain: d.Domain,
-		Status: "removing",
+		Status: string(next),
 	})
 }
 
