@@ -1,6 +1,6 @@
 apiVersion: v2
 name: argo-ci-namespace
-description: T0.2 Cenário B POC — namespace + RBAC + NetworkPolicy for CI workflows separated from tenant build pipeline (boundary mitigation per Principal Architect, ADR-2026-05-27-T0.2-RATIFIED D3).
+description: T0.2 Scenario B POC — namespace + RBAC + NetworkPolicy for CI workflows separated from tenant build pipeline (boundary mitigation per Principal Architect, ADR-2026-05-27-T0.2-RATIFIED D3).
 version: 0.1.0
 appVersion: "0.1.0"
 type: application

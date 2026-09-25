@@ -173,14 +173,14 @@ dataPlanePoller:
   interval: "30s"
 
 cell0KubeconfigMount:
-  # Flipado em 2026-08-09. Ficou `false` desde o T1.4a do deep-review-remediation-plan,
-  # que deixou o mount default-off para um rollout gradual — e o flip nunca aconteceu.
+  # Flipped on 2026-08-09. It had been `false` since T1.4a of the deep-review-remediation-plan,
+  # which left the mount default-off for a gradual rollout — and the flip never happened.
   #
-  # Enquanto estava desligado, `appFactory` ficava nil e `reconcileWorkloadStatus`
-  # retornava na primeira linha SEM LOG (application_controller.go). O status do workload
-  # nunca era lido, e toda LoopZeroApplication ficava em Progressing para sempre: medido em
-  # 26 dias no app-dev, com os pods Running. O app-operator era o único dos quatro sem
-  # o kubeconfig do runtime — justamente o que lê o estado dos pods lá. Issue #274.
+  # While it was off, `appFactory` stayed nil and `reconcileWorkloadStatus`
+  # returned on its first line WITH NO LOG (application_controller.go). The workload status
+  # was never read, and every LoopZeroApplication stayed in Progressing forever: measured over
+  # 26 days on app-dev, with the pods Running. The app-operator was the only one of the four
+  # without the runtime kubeconfig — precisely the one that reads the pod state there. Issue #274.
   enabled: true
   # Path inside the container where the kubeconfig file appears.
   path: /etc/loopzero/runtime/kubeconfig

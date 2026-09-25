@@ -8,9 +8,12 @@
 // Plan: 2026-05-16-drill-prod-identical-multicluster-plan.md (v1.1)
 // MEET-ASYNC-AMENDMENT-2026-05-16-001 (pending ratification)
 //
-// Per CTO directive 2026-05-16: "nosso sistema NUNCA vai trabalhar com single
-// cell, remova essa posibilidade, e vamos alterar o drill-test para ser
-// IGUAL prod e ele deve fazer os teste reais 100% fiel a produção."
+// Per CTO directive 2026-05-16 (English: "our system will NEVER work with a single
+// cell, remove that possibility, and we will change the drill-test to be the SAME as
+// prod, and it must run the real tests 100% faithful to production"), verbatim:
+// "nosso sistema NUNCA vai trabalhar com single cell, remova essa posibilidade,"  // english-only: verbatim CTO directive, kept as evidence
+// "e vamos alterar o drill-test para ser IGUAL prod e ele deve fazer os"  // english-only: verbatim CTO directive, kept as evidence
+// "teste reais 100% fiel a produção."  // english-only: verbatim CTO directive, kept as evidence
 //
 // This stack mirrors `infra/pulumi/src/components/infra.ts:139-186` 4-cluster
 // topology (mgmt + build + runtime + runtime-2), enabling:

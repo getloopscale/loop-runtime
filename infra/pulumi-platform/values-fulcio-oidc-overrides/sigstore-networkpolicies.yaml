@@ -1,4 +1,4 @@
-# Sigstore NetworkPolicies — Cenário A.2 (kube-router default-deny fix)
+# Sigstore NetworkPolicies — Scenario A.2 (kube-router default-deny fix)
 #
 # DISCOVERY (2026-05-28 Ralph iter 4):
 # - cosign v2.4.3 sign pod (namespace=argo) hit `connection refused` calling Fulcio.

@@ -1,4 +1,4 @@
-# K3s config file for Cenário A.2 fix (M07 plan 2026-05-28 T2.2)
+# K3s config file for Scenario A.2 fix (M07 plan 2026-05-28 T2.2)
 #
 # Ralph iter 7 LIVE-validated (2026-05-28): K3s default `anonymous-auth=false`
 # blocks Fulcio anonymous OIDC discovery. This config enables anonymous
@@ -12,7 +12,7 @@
 #   docker restart k3d-loopzero-build-server-0
 #   # Wait ~10s for k3s ready: kubectl get nodes
 #
-# Then apply Cenário A.1 RBAC (now effective):
+# Then apply Scenario A.1 RBAC (now effective):
 #   KC=$(k3d kubeconfig write loopzero-build)
 #   kubectl --kubeconfig="$KC" apply -f \
 #     infra/pulumi-platform/values-fulcio-oidc-overrides/cenario-a-anonymous-discovery.yaml

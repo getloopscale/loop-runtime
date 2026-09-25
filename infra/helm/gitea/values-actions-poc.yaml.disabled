@@ -1,12 +1,12 @@
 # T0.2 POC overlay: enable Gitea Actions runner (DISABLED-BY-DEFAULT).
 #
 # Per ADR-2026-05-27-T0.2 (`.claude/knowledge-base/decisions/2026-05-27-T0.2-ci-platform-choice.md`).
-# Sponsor renames `.disabled` → `.yaml` after Cenário A meeting approval, then
+# Sponsor renames `.disabled` → `.yaml` after the Scenario A meeting approval, then
 # adds this file to helmfile values list in `infra/helmfile/core.helmfile.yaml.gotmpl`
 # under the gitea release.
 #
-# Why Cenário A: reuses LoopZero's existing Gitea install (zero new infra cost),
-# GitHub Actions YAML compatibility (curve zero for operator), K8s-native
+# Why Scenario A: reuses LoopZero's existing Gitea install (zero new infra cost),
+# GitHub Actions YAML compatibility (zero learning curve for the operator), K8s-native
 # runner scale-to-zero via KEDA already deployed in build cluster.
 #
 # Engineering ready engineering — sponsor sign-off opens path to:

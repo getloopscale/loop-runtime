@@ -90,7 +90,7 @@ podSecurityContext:
 
 service:
   http:
-    # Bug #44 fix: ClusterIP virtual IP (não headless) habilita kube-proxy LB.
+    # Bug #44 fix: ClusterIP virtual IP (not headless) enables kube-proxy LB.
     type: ClusterIP
     #
     # NO sessionAffinity — git HTTP uses Authorization header per request

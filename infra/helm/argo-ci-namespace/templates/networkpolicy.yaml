@@ -1,5 +1,5 @@
 {{- if .Values.networkPolicy.enabled }}
-# T0.2 Cenário B POC — NetworkPolicy isolating CI namespace.
+# T0.2 Scenario B POC — NetworkPolicy isolating CI namespace.
 # Per ADR-2026-05-27-T0.2-RATIFIED D3 + SBR conditional:
 # "Runner namespace egress-restricted to Gitea API + DOCR + Sigstore only."
 #

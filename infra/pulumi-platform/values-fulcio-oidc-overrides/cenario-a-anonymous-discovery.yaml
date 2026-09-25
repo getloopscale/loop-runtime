@@ -1,24 +1,24 @@
-# Cenário A — Anonymous discovery 401/403 fix (M07 plan 2026-05-28 T2.1)
+# Scenario A — Anonymous discovery 401/403 fix (M07 plan 2026-05-28 T2.1)
 #
-# ⚠️ Ralph iter 5 LIVE TESTED (2026-05-28): ESSA APLICAÇÃO ISOLADA É INSUFICIENTE
-# para K3s clusters com anonymous-auth=false (k3s 1.30+ default behavior).
+# ⚠️ Ralph iter 5 LIVE TESTED (2026-05-28): APPLYING THIS ALONE IS INSUFFICIENT
+# for K3s clusters with anonymous-auth=false (k3s 1.30+ default behavior).
 #
-# Two cenário variants identified LIVE:
+# Two scenario variants identified LIVE:
 #   A.1 — K3s `--anonymous-auth=true` + RBAC missing → ClusterRoleBinding fixes
-#   A.2 — K3s `--anonymous-auth=false` → ClusterRoleBinding ALONE não basta;
-#         ALL endpoints retornam 401 (including /healthz, /livez), confirmando
-#         que anonymous requests são rejeitadas no LEVEL DE AUTENTICAÇÃO,
-#         antes mesmo de RBAC ser avaliado.
+#   A.2 — K3s `--anonymous-auth=false` → ClusterRoleBinding ALONE is not enough;
+#         ALL endpoints return 401 (including /healthz, /livez), confirming
+#         that anonymous requests are rejected at the AUTHENTICATION LEVEL,
+#         before RBAC is even evaluated.
 #
 # LIVE VERIFY (Ralph iter 5):
 #   kubectl run dual-test --rm -i --image=alpine/curl -- sh -c "
 #     curl -sk -w 'STATUS=%{http_code}' --max-time 3 \
 #       https://kubernetes.default.svc.cluster.local/healthz
 #   "
-#   Se retorna 401 → Cenário A.2 (cluster-level config); CRB abaixo NÃO RESOLVE.
-#   Se retorna 200 + curl /openid retorna 401 → Cenário A.1; aplicar CRB abaixo.
+#   If it returns 401 → Scenario A.2 (cluster-level config); the CRB below DOES NOT FIX IT.
+#   If it returns 200 + curl /openid returns 401 → Scenario A.1; apply the CRB below.
 #
-# ─── Cenário A.2 fix (OPERATOR HARD STOP — high blast radius) ────────────
+# ─── Scenario A.2 fix (OPERATOR HARD STOP — high blast radius) ────────────
 #
 # Requires K3s cluster recreate with `--kube-apiserver-arg=anonymous-auth=true`:
 #
@@ -27,15 +27,15 @@
 #     --k3s-arg "--kube-apiserver-arg=anonymous-auth=true@server:*"
 #   # then re-bootstrap Sigstore stack (helm install fulcio + rekor)
 #
-# Effort: ~30min operator + ALL prior Sigstore state perdido
+# Effort: ~30min operator + ALL prior Sigstore state lost
 # Blast radius: loopzero-build cluster destruction + state loss
 # Alternative paths:
-#   (a) Fork fulcio chart 2.9.1 + adicionar extraEnv para SA token bearer
-#   (b) Use Helm postRenderer kustomize patch para inject extraEnv
-#   (c) Custom Fulcio image com built-in OIDC client config
+#   (a) Fork fulcio chart 2.9.1 + add extraEnv for the SA token bearer
+#   (b) Use a Helm postRenderer kustomize patch to inject extraEnv
+#   (c) Custom Fulcio image with built-in OIDC client config
 #   (d) Wait for chart 2.10+ exposing extraEnv hook
 #
-# ─── Cenário A.1 fix (apply below se K3s anonymous-auth=true) ────────────
+# ─── Scenario A.1 fix (apply below if K3s anonymous-auth=true) ───────────
 #
 # Apply via:
 #   KC=$(k3d kubeconfig write loopzero-build)

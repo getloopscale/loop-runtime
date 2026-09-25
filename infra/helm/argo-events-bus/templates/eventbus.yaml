@@ -1,4 +1,4 @@
-# T0.2 Cenário B POC — EventBus (JetStream NATS) CR.
+# T0.2 Scenario B POC — EventBus (JetStream NATS) CR.
 # Per ADR-2026-05-27-T0.2-RATIFIED D1.
 #
 # Deployed AFTER argo-events upstream chart (Helmfile needs: ordering)

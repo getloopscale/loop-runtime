@@ -4,10 +4,10 @@ description: Grafana k6 Operator for distributed load testing
 version: 0.1.0
 appVersion: "0.0.18"
 dependencies:
-  # 3.10.0 nao existe no indice upstream — medido 2026-08-18: 39 versoes publicadas, e a
-  # serie 3.x vive ate 3.16.0. Ficamos dentro do mesmo major de proposito: a 4.x salta o
-  # k6-operator de app 0.0.23 para 1.6.0, o que e uma decisao de upgrade e nao de conserto
-  # de dependencia quebrada. (B-015)
+  # 3.10.0 does not exist in the upstream index — measured 2026-08-18: 39 published versions,
+  # and the 3.x series runs up to 3.16.0. We stay within the same major on purpose: 4.x jumps
+  # the k6-operator app from 0.0.23 to 1.6.0, which is an upgrade decision and not a fix for
+  # a broken dependency. (B-015)
   - name: k6-operator
     version: "3.16.0"
     repository: "https://grafana.github.io/helm-charts"

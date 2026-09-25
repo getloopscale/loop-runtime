@@ -1,9 +1,9 @@
-# Cenário A — CACert Fix (M07 plan 2026-05-28-fulcio-cacert-keyless-LIVE v1.1)
+# Scenario A — CACert Fix (M07 plan 2026-05-28-fulcio-cacert-keyless-LIVE v1.1)
 #
-# Research-1 (2026-05-28) finding: Fulcio v1.8.6 OIDCIssuer config schema expõe
-# campo nativo CACert (PEM-encoded CA cert) exatamente para self-signed CA
-# scenarios. Iter 1-9 falhou em achar essa option upstream — perseguia
-# SSL_CERT_FILE env + extraVolumes mount + custom image, todos paths errados.
+# Research-1 (2026-05-28) finding: the Fulcio v1.8.6 OIDCIssuer config schema exposes
+# a native CACert field (PEM-encoded CA cert) precisely for self-signed CA
+# scenarios. Iter 1-9 failed to find that option upstream — it chased
+# SSL_CERT_FILE env + extraVolumes mount + custom image, all wrong paths.
 #
 # Source: https://pkg.go.dev/github.com/sigstore/fulcio/pkg/config
 # Quote: "CACert is an optional parameter that holds the CA certificate in PEM
@@ -27,7 +27,7 @@
 # Verify:
 #   kubectl get cm fulcio-server-config -n fulcio-system \
 #     -o jsonpath='{.data.config\.json}' | jq '.OIDCIssuers'
-#   # Esperado: entry para kubernetes.default.svc.cluster.local com campo CACert PEM
+#   # Expected: an entry for kubernetes.default.svc.cluster.local with a CACert PEM field
 
 config:
   contents:

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Phase 3.2 inventory — single source of truth para Vault → K8s Secret mapping.
+# Phase 3.2 inventory — single source of truth for the Vault → K8s Secret mapping.
 #
 # Schema per entry:
 #   targetSecret:   string  K8s Secret name (matches existing secretKeyRef in Deployments)
@@ -47,9 +47,9 @@ externalSecrets:
     vaultCategory: secrets
     data:
       # NOTE: loopzero-api Deployment reads argocd-token + cf-api-token via
-      # per-key secretKeyRef (kebab-case OK). cf-api-token block added em
+      # per-key secretKeyRef (kebab-case OK). cf-api-token block added in
       # deployment.yaml iter 10 (Phase 3.3 closure follow-up); previously
-      # config.go:417 lia via os.Getenv only.
+      # config.go:417 read it via os.Getenv only.
       - secretKey: argocd-token
         vaultKey: argocd/token
       - secretKey: cf-api-token
@@ -57,9 +57,9 @@ externalSecrets:
 
   # Phase 3.3 finding: loopzero-api Deployment uses envFrom.secretRef pattern
   # for bulk Secret consumption (existing: dbCredentialsSecret +
-  # loopzero-service-auth). For the 5 NEW Secrets below (não existentes pre-v1.8),
-  # we use UPPER_SNAKE keys matching env var names exatamente — pods consume
-  # via NEW envFrom.secretRef block em deployment.yaml (added Phase 3.3 closure).
+  # loopzero-service-auth). For the 5 NEW Secrets below (not existing pre-v1.8),
+  # we use UPPER_SNAKE keys matching env var names exactly — pods consume
+  # via a NEW envFrom.secretRef block in deployment.yaml (added Phase 3.3 closure).
   - targetSecret: loopzero-api-minio
     targetNamespace: loopzero-system
     vaultBinary: api
@@ -180,15 +180,15 @@ externalSecrets:
         vaultKey: stripe/webhook_secret
 
   # === tenant-operator binary (4 secrets + GITEA_TOKEN shared) ===
-  # Phase 3.3 finding: operators use envFrom.secretRef pattern (não
-  # per-key secretKeyRef como loopzero-api). Keys MUST be UPPER_SNAKE
-  # matching env var names exatamente (kubelet expoe Secret data keys
-  # como env var names diretamente via envFrom).
+  # Phase 3.3 finding: operators use the envFrom.secretRef pattern (not
+  # per-key secretKeyRef like loopzero-api). Keys MUST be UPPER_SNAKE
+  # matching env var names exactly (kubelet exposes Secret data keys
+  # as env var names directly via envFrom).
   #
-  # ALIGN: target Secret name precisa match
+  # ALIGN: the target Secret name needs to match
   # `.Values.secrets.existingSecret` (default "loopzero-tenant-operator"
-  # per `loopzero-common.fullname` helper). Operator chart já tem Secret
-  # template para esses; ESO substitui creation com sync from Vault.
+  # per the `loopzero-common.fullname` helper). The operator chart already has a Secret
+  # template for these; ESO replaces creation with a sync from Vault.
 
   - targetSecret: loopzero-tenant-operator  # matches charts/loopzero-tenant-operator/templates/secret.yaml
     targetNamespace: loopzero-system
@@ -196,9 +196,9 @@ externalSecrets:
     vaultCategory: secrets
     data:
       # ENV VAR NAMES (UPPER_SNAKE) — envFrom maps Secret keys → env vars 1:1
-      - secretKey: GITEA_TOKEN  # shared com loopzero-api (D6 path: api/secrets/gitea/token)
+      - secretKey: GITEA_TOKEN  # shared with loopzero-api (D6 path: api/secrets/gitea/token)
         vaultKey: gitea/token
-        vaultBinaryOverride: api  # explicit override: usa path api/secrets/gitea/token
+        vaultBinaryOverride: api  # explicit override: uses path api/secrets/gitea/token
       - secretKey: MINIO_ACCESS_KEY
         vaultKey: minio/access_key
         vaultBinaryOverride: api
@@ -236,7 +236,7 @@ externalSecrets:
   # passphrase moves. Defense-in-depth: passphrase + key separately rotatable.
   #
   # NOTE: Build cluster NS = loopzero-build (not loopzero-system). Requires ESO operator
-  # install em build cluster (separate helmfile release; tracked iter T2.3.bis).
+  # install on the build cluster (separate helmfile release; tracked iter T2.3.bis).
   # Argo Workflows cosign-sign template reads via secretKeyRef from this Secret.
   - targetSecret: cosign-passphrase
     targetNamespace: loopzero-build

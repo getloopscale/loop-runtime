@@ -1,4 +1,4 @@
-# T0.2 Cenário B POC — argo-ci-namespace defaults.
+# T0.2 Scenario B POC — argo-ci-namespace defaults.
 # Per ADR-2026-05-27-T0.2-RATIFIED D3: CI workflows live in dedicated
 # namespace separate from tenant builds (argo). NetworkPolicy enforces
 # egress restriction to Gitea API + DOCR + Argo Workflows controller only.

@@ -1,10 +1,10 @@
-# B-161/B-067 — os quatro alertas voltaram a carregar `runbook_url`, agora para um caminho
-# que EXISTE: `docs/runbooks.md`.
+# B-161/B-067 — the four alerts carry `runbook_url` again, now pointing at a path
+# that EXISTS: `docs/runbooks.md`.
 #
-# Ate' 2026-08-19 eles apontavam para `docs.loopzero.example/runbooks/vault-*`, que responde 404. Os
-# links mortos sairam naquele dia (B-161) e os quatro ficaram mudos — o gate `vault-prom-alerts`,
-# que exige >= 4 anotacoes, reprovou por isso, e reprovou com razao: remover um link morto conserta
-# a citacao e nao o alerta.
+# Until 2026-08-19 they pointed at `docs.loopzero.example/runbooks/vault-*`, which answers 404. The
+# dead links were removed that day (B-161) and the four went silent — the `vault-prom-alerts` gate,
+# which requires >= 4 annotations, failed because of it, and failed rightly: removing a dead link
+# fixes the citation, not the alert.
 #
 # Registro: MEET-ASYNC-AMENDMENT-2026-08-19-remove-dead-vault-runbook-links (pending ratification).
 # SPDX-License-Identifier: Apache-2.0

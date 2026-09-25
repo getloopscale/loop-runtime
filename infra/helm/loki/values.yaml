@@ -86,9 +86,10 @@ loki:
 # Service that infra/helmfile/build.helmfile.yaml.gotmpl adds through
 # extraObjects where the environment declares crossCluster.lokiNodePort —
 # clean SoC: chart-default Service handles same-cluster traffic; the bridge
-# exposes the cross-cluster query path. Sponsor verbatim approval 2026-06-09
-# "VOCE É AUTORIZADO A FAZER ALTERAÇÕES FAANG LEVEL" gated the canonical
-# persistence.
+# exposes the cross-cluster query path. The sponsor's verbatim approval of
+# 2026-06-09 (English: "YOU ARE AUTHORIZED TO MAKE FAANG-LEVEL CHANGES"),
+# "VOCE É AUTORIZADO A FAZER ALTERAÇÕES FAANG LEVEL",  # english-only: verbatim sponsor approval, kept as evidence
+# gated the canonical persistence.
 deploymentMode: SingleBinary
 singleBinary:
   replicas: 1

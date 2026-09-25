@@ -39,7 +39,7 @@
         "y": 0
       },
       "id": 100,
-      "title": "Status Geral",
+      "title": "Overall Status",
       "type": "row",
       "datasource": {
         "type": "prometheus",
@@ -406,7 +406,7 @@
         "y": 6
       },
       "id": 200,
-      "title": "Alertas Ativos — Detalhes",
+      "title": "Active Alerts — Details",
       "type": "row",
       "datasource": {
         "type": "prometheus",
@@ -415,7 +415,7 @@
     },
     {
       "id": 7,
-      "title": "Alertas Firing (tabela descritiva)",
+      "title": "Firing Alerts (descriptive table)",
       "type": "table",
       "datasource": {
         "type": "prometheus",
@@ -427,7 +427,7 @@
         "x": 0,
         "y": 7
       },
-      "description": "Todos os alertas atualmente disparados com contexto completo",
+      "description": "All currently firing alerts with full context",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -566,7 +566,7 @@
         "y": 17
       },
       "id": 300,
-      "title": "Histórico de Alertas",
+      "title": "Alert History",
       "type": "row",
       "datasource": {
         "type": "prometheus",
@@ -575,7 +575,7 @@
     },
     {
       "id": 8,
-      "title": "Alertas ao Longo do Tempo",
+      "title": "Alerts Over Time",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -587,7 +587,7 @@
         "x": 0,
         "y": 18
       },
-      "description": "Timeline mostrando quando cada alerta esteve ativo",
+      "description": "Timeline showing when each alert was active",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -651,7 +651,7 @@
         "y": 26
       },
       "id": 400,
-      "title": "Indicadores que Disparam Alertas",
+      "title": "Indicators That Fire Alerts",
       "type": "row",
       "datasource": {
         "type": "prometheus",
@@ -672,7 +672,7 @@
         "x": 0,
         "y": 27
       },
-      "description": "Alerta dispara quando restarts > 3 em 15min. Mostra restarts por pod para identificar qual está quebrando.",
+      "description": "Alert fires when restarts > 3 in 15min. Shows restarts per pod to identify which one is breaking.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -731,7 +731,7 @@
         "x": 12,
         "y": 27
       },
-      "description": "Alerta dispara quando canary job falha por 10+ min. Mostra status do Harbor e jobs recentes.",
+      "description": "Alert fires when the canary job fails for 10+ min. Shows Harbor status and recent jobs.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -798,7 +798,7 @@
         "x": 0,
         "y": 34
       },
-      "description": "Alerta dispara quando p99 > 2s por 5min. Mostra latency com threshold marcado.",
+      "description": "Alert fires when p99 > 2s for 5min. Shows latency with the threshold marked.",
       "fieldConfig": {
         "defaults": {
           "unit": "s",
@@ -861,7 +861,7 @@
         "x": 12,
         "y": 34
       },
-      "description": "Alerta dispara quando taxa de falha > 30% por 10min. Mostra builds succeeded vs failed.",
+      "description": "Alert fires when the failure rate > 30% for 10min. Shows builds succeeded vs failed.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -944,7 +944,7 @@
         "x": 0,
         "y": 41
       },
-      "description": "Alerta dispara quando pool > 90%. Mostra uso atual vs max.",
+      "description": "Alert fires when pool > 90%. Shows current usage vs max.",
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
@@ -1013,7 +1013,7 @@
         "x": 12,
         "y": 41
       },
-      "description": "Alerta dispara quando depth > 50. Mostra fila de reconciliação dos operators.",
+      "description": "Alert fires when depth > 50. Shows the operators' reconciliation queue.",
       "fieldConfig": {
         "defaults": {
           "custom": {

@@ -75,8 +75,10 @@ describe("Phase 0 audit doc invariants (T0.1 + T0.2 + T0.3)", () => {
     });
 
     it("includes 1000% functional gap analysis", () => {
-      // Plan T0.3 evidence: "TODOS OS COMMANDS DO LOOPZERO CLI DEVE ESTAR
-      // 1000% FUNCIONAIS" — audit must assess this directive.
+      // Plan T0.3 evidence, the directive (English: "ALL LOOPZERO CLI COMMANDS MUST
+      // BE 1000% FUNCTIONAL") verbatim:
+      // "TODOS OS COMMANDS DO LOOPZERO CLI DEVE ESTAR 1000% FUNCIONAIS"  // english-only: verbatim plan directive, kept as evidence
+      // — audit must assess this directive.
       expect(text).toMatch(/1000%/);
     });
 

@@ -122,21 +122,21 @@ authMethods:
 
 # Policies to provision. Each: { name, ruleHcl }.
 #
-# DOIS NOMES PARECIDOS ainda vivem aqui, e so' um e' policy (B-098):
+# TWO SIMILAR NAMES still live here, and only one is a policy (B-098):
 #
-#   loopzero-api  (policy) — E' ESTA. O role de k8s-core a carrega.
-#   loopzero-api  (role)   — role no mount k8s-core, nao e' policy
+#   loopzero-api  (policy) — IT IS THIS ONE. The k8s-core role carries it.
+#   loopzero-api  (role)   — a role on the k8s-core mount, not a policy
 #
-# Eram QUATRO ate' 2026-08-19. `loopzero-api-read` e `loopzero-api-transit-encrypt` sairam: nenhum
-# role as carregava, e as duas eram versoes ANTERIORES e MAIS LARGAS da `loopzero-api` corrente
-# (`transit/encrypt/+` contra `transit/encrypt/loopzero-tenants-*`; a arvore inteira do tenant
-# contra o ramo `+/api/*`). Nao eram resto neutro: liga-las por engano concederia DEMAIS.
+# There were FOUR until 2026-08-19. `loopzero-api-read` and `loopzero-api-transit-encrypt` were removed:
+# no role carried them, and both were EARLIER and BROADER versions of the current `loopzero-api`
+# (`transit/encrypt/+` versus `transit/encrypt/loopzero-tenants-*`; the whole tenant tree versus
+# the `+/api/*` branch). They were not neutral leftovers: wiring them by mistake would grant TOO MUCH.
 #
-# A confusao ja' custou um patch no lugar errado — ao corrigir o B-072 a mudanca foi aplicada
-# em `loopzero-api-transit-encrypt` porque o padrao casou primeiro, e so' um teste novo pegou.
+# The confusion already cost a patch in the wrong place — when fixing B-072 the change was applied
+# to `loopzero-api-transit-encrypt` because the pattern matched it first, and only a new test caught it.
 #
-# O gate `openbao-init-auth-mounts` agora recusa policy declarada que nenhum role carregue,
-# para que a lista de candidatos nao volte a crescer em silencio.
+# The `openbao-init-auth-mounts` gate now refuses a declared policy that no role carries,
+# so the list of candidates does not grow back in silence.
 policies:
   - name: eso-read
     ruleHcl: |
@@ -163,21 +163,21 @@ policies:
   # `delete` line below.
   - name: tenant-controller-transit
     ruleHcl: |
-      # `delete` foi REMOVIDO em 2026-08-16 (`B-075`, ratificado). O apagamento
-      # criptográfico por tenant é operator-side QUANDO CONSTRUÍDO, e ele não existe:
-      # `DeleteTenantKey` é só declaração de interface, sem implementação, sem
-      # atribuição e sem chamador em toda a árvore.
+      # `delete` was REMOVED on 2026-08-16 (`B-075`, ratified). Per-tenant crypto-shredding
+      # is operator-side WHEN BUILT, and it does not exist: `DeleteTenantKey` is only an
+      # interface declaration, with no implementation, no assignment and no caller
+      # anywhere in the tree.
       #
-      # Enquanto isso, a concessão era destruição irreversível com função zero — e
-      # sobre um espaço de nomes que ninguém preenche: aqui se lia `tenant-<id>` e o
-      # `api` cria `loopzero-tenants-<id>` (`pkg/vault/transit_client.go` tenantKeyPrefix).
-      # Ligar esse caminho teria apagado nada e reportado sucesso.
+      # Meanwhile, the grant was irreversible destruction with zero function — and over
+      # a namespace nobody fills: this read `tenant-<id>` while the `api` creates
+      # `loopzero-tenants-<id>` (`pkg/vault/transit_client.go` tenantKeyPrefix). Wiring that
+      # path would have deleted nothing and reported success.
       #
-      # Ela volta junto do shredder, apontando para o prefixo certo, e a asserção
-      # `TestOpenBaoInitAuth_NoPolicyGrantsDeleteOnATransitKey` é emendada na mesma
-      # mudança. Os verbos que ficam também são inertes hoje pela mesma divergência de
-      # prefixo; sair só o `delete` é o que a decisão autorizou, e é o único com
-      # consequência irreversível.
+      # It comes back together with the shredder, pointed at the right prefix, and the
+      # assertion `TestOpenBaoInitAuth_NoPolicyGrantsDeleteOnATransitKey` is amended in
+      # the same change. The verbs that remain are also inert today, from the same prefix
+      # divergence; removing only `delete` is what the decision authorised, and it is the
+      # only one with an irreversible consequence.
       path "transit/keys/tenant-+" {
         capabilities = ["create", "read", "update"]
       }
@@ -273,21 +273,21 @@ policies:
       path "secret/data/loopzero/+/api/secrets/minio/*" {
         capabilities = ["read"]
       }
-      # `delete` foi REMOVIDO em 2026-08-16 (`B-075`, ratificado). O apagamento
-      # criptográfico por tenant é operator-side QUANDO CONSTRUÍDO, e ele não existe:
-      # `DeleteTenantKey` é só declaração de interface, sem implementação, sem
-      # atribuição e sem chamador em toda a árvore.
+      # `delete` was REMOVED on 2026-08-16 (`B-075`, ratified). Per-tenant crypto-shredding
+      # is operator-side WHEN BUILT, and it does not exist: `DeleteTenantKey` is only an
+      # interface declaration, with no implementation, no assignment and no caller
+      # anywhere in the tree.
       #
-      # Enquanto isso, a concessão era destruição irreversível com função zero — e
-      # sobre um espaço de nomes que ninguém preenche: aqui se lia `tenant-<id>` e o
-      # `api` cria `loopzero-tenants-<id>` (`pkg/vault/transit_client.go` tenantKeyPrefix).
-      # Ligar esse caminho teria apagado nada e reportado sucesso.
+      # Meanwhile, the grant was irreversible destruction with zero function — and over
+      # a namespace nobody fills: this read `tenant-<id>` while the `api` creates
+      # `loopzero-tenants-<id>` (`pkg/vault/transit_client.go` tenantKeyPrefix). Wiring that
+      # path would have deleted nothing and reported success.
       #
-      # Ela volta junto do shredder, apontando para o prefixo certo, e a asserção
-      # `TestOpenBaoInitAuth_NoPolicyGrantsDeleteOnATransitKey` é emendada na mesma
-      # mudança. Os verbos que ficam também são inertes hoje pela mesma divergência de
-      # prefixo; sair só o `delete` é o que a decisão autorizou, e é o único com
-      # consequência irreversível.
+      # It comes back together with the shredder, pointed at the right prefix, and the
+      # assertion `TestOpenBaoInitAuth_NoPolicyGrantsDeleteOnATransitKey` is amended in
+      # the same change. The verbs that remain are also inert today, from the same prefix
+      # divergence; removing only `delete` is what the decision authorised, and it is the
+      # only one with an irreversible consequence.
       path "transit/keys/tenant-+" {
         capabilities = ["create", "read", "update"]
       }

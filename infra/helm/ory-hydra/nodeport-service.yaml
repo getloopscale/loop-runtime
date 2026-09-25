@@ -1,22 +1,22 @@
-# Ponte NodePort — expõe o Hydra público para a borda (Caddy) do host.
+# NodePort bridge — exposes the public Hydra to the host's edge (Caddy).
 #
-# Irmão de `infra/helm/ory-kratos/nodeport-service.yaml`, criado pela mesma medição de
-# 2026-08-10 e pelo mesmo motivo: o Service do chart é ClusterIP e a borda o alcançava por
-# `kubectl port-forward` não supervisionado, que morreu junto com os clusters.
+# Sibling of `infra/helm/ory-kratos/nodeport-service.yaml`, created by the same measurement of
+# 2026-08-10 and for the same reason: the chart's Service is ClusterIP and the edge reached it
+# through an unsupervised `kubectl port-forward`, which died together with the clusters.
 #
-# O Hydra aparece no fluxo de login logo depois do Kratos — o Caddyfile registra que "o
-# navegador precisa alcançar o Hydra (localhost:14444), não o Kratos" no passo de consentimento.
-# Consertar só o Kratos deixaria o login quebrando um passo adiante, que é o meio-conserto
-# que o B-018 existe para não repetir.
+# Hydra appears in the login flow right after Kratos — the Caddyfile records that "the
+# browser needs to reach Hydra (localhost:14444), not Kratos" at the consent step.
+# Fixing only Kratos would leave login breaking one step further on, which is the half-fix
+# B-018 exists not to repeat.
 #
-# AS TRÊS PONTAS: este Service (`nodePort: 30006`), o mapeamento `14444:30006` em
-# `infra/k3d/core-cluster.yaml`, e o `localhost:14444` do Caddyfile.
-# `infra/tests/charts/ory_edge_nodeport_test.go` trava as três.
+# THE THREE ENDS: this Service (`nodePort: 30006`), the `14444:30006` mapping in
+# `infra/k3d/core-cluster.yaml`, and the Caddyfile's `localhost:14444`.
+# `infra/tests/charts/ory_edge_nodeport_test.go` locks all three.
 #
-# ATENÇÃO À PORTA: o Service do chart do Hydra escuta em 4444, e NÃO em 80 como o do Kratos.
-# Um encaminhamento para 80 aqui produz um Service que existe, tem endpoints, e recusa
-# conexão — medido ao restaurar o encaminhamento manual, que respondeu `HTTP 000` até a
-# porta ser corrigida.
+# MIND THE PORT: the Hydra chart's Service listens on 4444, and NOT on 80 like Kratos's.
+# Forwarding to 80 here produces a Service that exists, has endpoints, and refuses
+# connections — measured while restoring the manual forwarding, which answered `HTTP 000` until
+# the port was fixed.
 apiVersion: v1
 kind: Service
 metadata:
