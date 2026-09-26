@@ -148,7 +148,7 @@ jq -n \
   --slurpfile p2 "$P2" \
   --slurpfile p3 "$P3" \
   '{
-    cenario: $verdict,
+    scenario: $verdict,
     exit_code: $exit,
     probe1_sa_token: $p1[0],
     probe2_network: $p2[0],

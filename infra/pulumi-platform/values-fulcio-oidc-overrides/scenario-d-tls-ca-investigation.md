@@ -60,4 +60,4 @@ recommended for KISS local k3d — keeps chart pinned, isolated patch.
 
 DO NOT pre-apply the Scenario D fix without verdict — it's complex and
 chart-specific. Scenario C (issuer mismatch, 45% probability) has clean
-values override (see `cenario-c-issuer-mismatch.yaml`).
+values override (see `scenario-c-issuer-mismatch.yaml`).

@@ -40,7 +40,7 @@
 # Apply via:
 #   KC=$(k3d kubeconfig write loopzero-build)
 #   kubectl --kubeconfig="$KC" apply -f \
-#     infra/pulumi-platform/values-fulcio-oidc-overrides/cenario-a-anonymous-discovery.yaml
+#     infra/pulumi-platform/values-fulcio-oidc-overrides/scenario-a-anonymous-discovery.yaml
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1

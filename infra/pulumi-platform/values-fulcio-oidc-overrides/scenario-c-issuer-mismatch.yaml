@@ -4,7 +4,7 @@
 #   KC=$(k3d kubeconfig write loopzero-build)
 #   helm --kubeconfig="$KC" upgrade fulcio sigstore/fulcio \
 #     --version 2.9.1 -n sigstore-system --reuse-values \
-#     -f infra/pulumi-platform/values-fulcio-oidc-overrides/cenario-c-issuer-mismatch.yaml
+#     -f infra/pulumi-platform/values-fulcio-oidc-overrides/scenario-c-issuer-mismatch.yaml
 #
 # Then verify:
 #   kubectl --kubeconfig="$KC" -n sigstore-system get cm fulcio-server-config \

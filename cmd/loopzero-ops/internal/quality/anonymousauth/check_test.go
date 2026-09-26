@@ -107,7 +107,7 @@ func TestCheck_AllowsK3dSubdir(t *testing.T) {
 // (applied via docker exec to k3d) are explicitly allowlisted by path.
 func TestCheck_AllowsFulcioOIDCOverrides(t *testing.T) {
 	root := t.TempDir()
-	write(t, root, "infra/pulumi-platform/values-fulcio-oidc-overrides/cenario-a.yaml",
+	write(t, root, "infra/pulumi-platform/values-fulcio-oidc-overrides/scenario-a.yaml",
 		"kube-apiserver-arg:\n  - \"anonymous-auth=true\"\n")
 	out, _ := Check(Config{RepoRoot: root})
 	if !out.Pass {
