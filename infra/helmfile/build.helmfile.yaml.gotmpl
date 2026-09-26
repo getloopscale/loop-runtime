@@ -67,7 +67,15 @@ releases:
     needs:
       - argo/argo-workflows
     values:
-      - {}
+      # The bucket loopzero-api stages source bundles in (core.helmfile passes the
+      # same environment value to loopzero-api's config.sourceBucket).
+      - sourceBucket: {{ .Values | get "sourceBucket" "loopzero-builds" | quote }}
+{{- if .Values.profile.localRegistry }}
+        # The clone runner `task images:build` pushes to the local registry
+        # (taskfiles/infra.yml tags it v0.1.0, the chart's default tag).
+        images:
+          cloneRunner: "k3d-loopzero-registry:5000/loopzero-clone-runner:v0.1.0"
+{{- end }}
     # Skip ServiceAccount/RBAC duplication — argo-workflows release already
     # creates loopzero-build-sa with the right permissions.
     # 2026-04-30 NEW-8 fix: chart templates read `workflow.serviceAccount.create`

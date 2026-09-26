@@ -46,13 +46,35 @@ func TestDrillBootstrap_CreatesEachCellWithAnIDBootstrapAccepts(t *testing.T) {
 	}
 }
 
-func TestDrillBootstrap_PatchesEachCellOnce(t *testing.T) {
-	m := regexp.MustCompile(`for cell in ([a-z0-9 -]+); do\s+kubectl patch clustercredential`).FindStringSubmatch(readDrillBootstrap(t))
-	if m == nil {
-		t.Fatal("the ClusterCredential patch loop was not found")
+// A ClusterCredential's status has one writer, the ClusterCredential controller
+// (operators/internal/platform/clustercredential_controller.go), which sets
+// status.connected from a live /healthz probe on every reconcile and overwrites
+// anything else wrote there. The drill used to write connected=true itself
+// (Bug #22) so loopzero-api would find cells before the operator ran; loopzero-api's
+// release is wait:false (core.helmfile), so it restarts until the operator,
+// installed by the same sync, connects the cells — no bootstrap write needed.
+func TestDrillBootstrap_WritesNoClusterCredentialStatus(t *testing.T) {
+	if regexp.MustCompile(`patch clustercredential[^\n]*--subresource=status`).MatchString(readDrillBootstrap(t)) {
+		t.Fatal("the drill writes ClusterCredential status; that field belongs to the ClusterCredential controller")
 	}
-	if got := strings.Join(strings.Fields(m[1]), ","); got != "cell-0,cell-1" {
-		t.Fatalf("patched cells = %s, want cell-0,cell-1", got)
+}
+
+// Every value the drill patched into a chart-rendered object after the sync is
+// rendered by the sync now (infra/tests/charts/drill_bootstrap_rendered_test.go).
+// A patch left behind would be the next divergence between the drill and the
+// charts: the next `helmfile sync` reverts it, and the drill no longer tests the
+// install the charts declare.
+func TestDrillBootstrap_PatchesNoChartRenderedObject(t *testing.T) {
+	drill := readDrillBootstrap(t)
+	for name, pattern := range map[string]string{
+		"loopzero-api env (Bugs #52, #65/#73/#79)": `set env deployment/loopzero-api`,
+		"operator env (Bug #57)":               `set env deployment/"\$OP"`,
+		"operator NetworkPolicy (Bug #59)":     `patch networkpolicy`,
+		"loopzero-clone template (Bug #64)":        `clusterworkflowtemplate loopzero-clone`,
+	} {
+		if regexp.MustCompile(pattern).MatchString(drill) {
+			t.Errorf("the drill still patches the %s instead of rendering it", name)
+		}
 	}
 }
 

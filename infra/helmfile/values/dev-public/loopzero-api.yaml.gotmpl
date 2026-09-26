@@ -78,8 +78,6 @@ config:
   # wildcard root, not the internal base domain. Caddy's `*.preview-dev.loopzero.example` block
   # reverse-proxies <internal-sni>.loopzero.local to Traefik (infra/local/Caddyfile).
   loopzeroPreviewPublicDomain: "preview-dev.loopzero.example"
-  # Gitea lives in `loopzero-system`, not the chart default `gitea` namespace.
-  giteaUrl: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
   # Admin endpoints are gated by this defense-in-depth flag; without it the admin journeys
   # (B38) get HTTP 404 for every /admin/* call.
   loopzeroAdminApi: "true"

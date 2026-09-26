@@ -135,6 +135,9 @@ metrics:
 
 networkPolicy:
   enabled: true
+  # Namespace Gitea runs in; loopzero-common renders the egress rule to it on port
+  # 3000. core.helmfile sets it to where it installs Gitea.
+  giteaNamespace: gitea
   ingress:
     # Prometheus scraping metrics
     - from:
@@ -154,14 +157,6 @@ networkPolicy:
           port: 6443
         - protocol: TCP
           port: 443
-    # Gitea
-    - ports:
-        - protocol: TCP
-          port: 3000
-      to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: gitea
     # ArgoCD
     - ports:
         - protocol: TCP

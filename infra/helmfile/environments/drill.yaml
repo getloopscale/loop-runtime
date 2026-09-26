@@ -17,7 +17,7 @@
 #   2. Export drill kubeconfigs from pulumi stack outputs to per-cluster files
 #   3. helmfile -e drill sync                            (~25min platform bootstrap)
 #   4. drill-mint-jwt.sh → JWT for L-series tests       (T2.2)
-#   5. bootstrap-cell-{default,1,2}-cc-drill.sh         (T2.3 D3 cell wiring)
+#   5. bootstrap-cell-cc.sh --cell <0|1> --env drill (T2.3 D3 cell wiring)
 #   6. Run drill scenarios (L0-L4 + Stage 1/2 + chaos)
 #   7. infra/pulumi-drill && pulumi destroy             (~10min mandatory teardown)
 #   8. drill-teardown-validator.sh                      (T4.1.bis doctl fallback)
@@ -102,6 +102,11 @@ inClusterPostgres: false
 #   pgPort: <pulumi stack output pg.port>
 #   pgDatabase: <pulumi stack output pg.database>
 # These keys are consumed by loopzero-api + migrations helm values.
+
+# The DO Spaces bucket source bundles are staged in and cloned from
+# (infra/pulumi-drill `buckets.builds`). core.helmfile gives it to loopzero-api,
+# build.helmfile to the loopzero-clone ClusterWorkflowTemplate.
+sourceBucket: loopzero-drill-builds-sfo3
 
 # DOKS default storage class.
 underlyingStorageClass: do-block-storage

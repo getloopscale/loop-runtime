@@ -26,9 +26,9 @@ image:
 # helmfile env overlay (this file); follow-up PR adds a hermetic helmfile-
 # render gate.
 
-# dev-public NetworkPolicy override: gitea is in loopzero-system ns (not the
-# chart-default `gitea` ns). Same fix as loopzero-tenant-operator. Without
-# this, operator egress to gitea API is blocked → reconcile loops fail.
+# dev-public NetworkPolicy override: ArgoCD and MinIO egress, which the chart
+# default does not carry. Gitea egress is not listed: core.helmfile sets
+# networkPolicy.giteaNamespace to where it installs Gitea.
 networkPolicy:
   enabled: true
   ingress:
@@ -45,13 +45,6 @@ networkPolicy:
           port: 6443
         - protocol: TCP
           port: 443
-    - ports:
-        - protocol: TCP
-          port: 3000
-      to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: loopzero-system
     - ports:
         - protocol: TCP
           port: 8080

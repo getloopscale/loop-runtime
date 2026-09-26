@@ -625,6 +625,19 @@ spec:
     {{- if .Values.networkPolicy.extraEgress }}
     {{- toYaml .Values.networkPolicy.extraEgress | nindent 4 }}
     {{- end }}
+    {{- /* The namespace the platform's Gitea runs in. core.helmfile installs Gitea
+           and tells each consumer where (networkPolicy.giteaNamespace), so the
+           egress rule follows the install instead of every environment
+           restating the whole extraEgress list to change one namespace. */}}
+    {{- with .Values.networkPolicy.giteaNamespace }}
+    - ports:
+        - protocol: TCP
+          port: 3000
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+    {{- end }}
     {{- /* T2.2 of plan dashboard-badge-data-plane-poller (Red Team #128).
            When the consuming chart declares dataPlanePoller.enabled=true,
            implicitly add the Prometheus egress rule the poller needs so

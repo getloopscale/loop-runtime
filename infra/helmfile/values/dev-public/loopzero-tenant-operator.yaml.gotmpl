@@ -22,7 +22,6 @@ image:
   pullPolicy: Always
 
 config:
-  giteaUrl: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
   # Slice 4 ISP remediation (commit 52ccf8a6 2026-06-18) dropped baseDomain
   # from loopzero-tenant-operator schema — the binary never reads BASE_DOMAIN.
   # Schema enforces additionalProperties:false at /config; passing it makes
@@ -51,49 +50,3 @@ kubeconfig:
     existingConfigMap: loopzero-build-kubeconfig
   cell0:
     existingConfigMap: loopzero-cell-0-kubeconfig
-
-# dev-public env-specific NetworkPolicy override: helmfile installs Gitea
-# in `loopzero-system` namespace (NOT a dedicated `gitea` ns like the chart
-# default assumes). Same for ArgoCD (canonical = `argocd` ns, already OK).
-# Without this override, tenant-operator egress is blocked → circuit
-# breaker opens → tenants stuck in Provisioning forever.
-networkPolicy:
-  enabled: true
-  ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: monitoring
-      ports:
-        - protocol: TCP
-          port: 8443
-  extraEgress:
-    - ports:
-        - protocol: TCP
-          port: 6443
-        - protocol: TCP
-          port: 443
-    # Gitea — in dev-public this is in loopzero-system, not gitea namespace
-    - ports:
-        - protocol: TCP
-          port: 3000
-      to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: loopzero-system
-    # ArgoCD
-    - ports:
-        - protocol: TCP
-          port: 8080
-      to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: argocd
-    # MinIO
-    - ports:
-        - protocol: TCP
-          port: 9000
-      to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: loopzero-system

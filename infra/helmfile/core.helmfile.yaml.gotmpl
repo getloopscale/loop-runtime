@@ -100,6 +100,12 @@ repositories:
 # ---------------------------------------------------------------------------
 # Releases — ordered by sync wave via `needs:`
 # ---------------------------------------------------------------------------
+{{- /* Where this file installs Gitea, in every environment. Every release that
+       talks to Gitea (loopzero-api, the tenant and platform operators) is told from
+       here, instead of each environment overlay restating the address and each
+       drill or heal patching it into the running objects. */}}
+{{- $giteaNamespace := "loopzero-system" }}
+{{- $giteaURL := printf "http://gitea-http.%s.svc.cluster.local:3000" $giteaNamespace }}
 releases:
   # Wave -3: CRDs and observability foundations (no dependencies)
   - name: cert-manager
@@ -219,7 +225,7 @@ releases:
   - name: gitea
     labels:
       profile: dashboard-only
-    namespace: loopzero-system
+    namespace: {{ $giteaNamespace }}
     chart: gitea-charts/gitea
     version: 10.6.0
     needs:
@@ -452,6 +458,11 @@ releases:
       - loopzero-auth/ory-kratos
     values:
       - ../../charts/loopzero-api/values-bootstrap.yaml
+      - config:
+          giteaUrl: {{ $giteaURL | quote }}
+          # One bucket name for the whole install: loopzero-build-cwts (build.helmfile)
+          # clones from the same environment value.
+          sourceBucket: {{ .Values | get "sourceBucket" "loopzero-builds" | quote }}
       # Layered values per env (T2.2): image channel, pull secret, per-environment
       # config. MUST be LAST in the values list to win merge precedence.
       - values/{{ .Environment.Name }}/loopzero-api.yaml.gotmpl
@@ -496,6 +507,10 @@ releases:
       - loopzero-system/loopzero-crds
     values:
       - ../../charts/loopzero-tenant-operator/values.yaml
+      - config:
+          giteaUrl: {{ $giteaURL | quote }}
+        networkPolicy:
+          giteaNamespace: {{ $giteaNamespace | quote }}
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../../charts/loopzero-tenant-operator/values-standalone-multi.yaml
 {{- end }}
@@ -556,6 +571,8 @@ releases:
       - loopzero-system/loopzero-crds
     values:
       - ../../charts/loopzero-platform-operator/values.yaml
+      - networkPolicy:
+          giteaNamespace: {{ $giteaNamespace | quote }}
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../../charts/loopzero-platform-operator/values-standalone-multi.yaml
 {{- end }}

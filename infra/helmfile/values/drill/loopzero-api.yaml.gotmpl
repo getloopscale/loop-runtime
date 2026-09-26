@@ -32,6 +32,14 @@ ingressRoute:
   host: api.loopzero-drill.example
 
 config:
+  # Bugs #65/#73/#79: drill-helmfile-bootstrap.sh used to `kubectl set env` these
+  # onto the Deployment after the sync. Drill pushes to the DOCR namespace it pulls
+  # the platform from, serves tenants under the drill zone, and keeps source
+  # bundles in DO Spaces (the bucket itself is environments/drill.yaml
+  # sourceBucket, shared with the build cluster).
+  baseDomain: {{ .Values.domain | quote }}
+  registryUrl: "registry.digitalocean.com/loopzero-system"
+  minioEndpoint: "https://sfo3.digitaloceanspaces.com"
   # Plan 2026-05-19-drill-skills-rigor-restoration T2.1 LIVE fix (Bug #24 root cause):
   # without an issuer and a JWKS URL every JWT validation fails 401. The issuer MUST match
   # what Hydra emits exactly (values-hydra-drill urls.self.issuer); the JWKS is fetched
@@ -43,3 +51,9 @@ config:
   mgmtKubeContext: {{ requiredEnv "CORE_KUBE_CONTEXT" | quote }}
   buildKubeContext: {{ requiredEnv "BUILD_KUBE_CONTEXT" | quote }}
   runtimeKubeContext: {{ requiredEnv "CELL_0_KUBE_CONTEXT" | quote }}
+
+# Bug #65: the DO Spaces key pair, exported by drill-helmfile-bootstrap.sh (Phase
+# 2.5) as LOOPZERO_SPACES_KEY / LOOPZERO_SPACES_SECRET before any sync.
+secrets:
+  minioAccessKey: {{ requiredEnv "LOOPZERO_SPACES_KEY" | quote }}
+  minioSecretKey: {{ requiredEnv "LOOPZERO_SPACES_SECRET" | quote }}

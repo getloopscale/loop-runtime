@@ -150,7 +150,7 @@ tasks:
         0. Pre-flight gate (preconditions — drill:preflight automatic)
         1. Provision drill stack (4 clusters, ~25min)
         2. Mint JWT (drill-mint-jwt.sh)
-        3. Bootstrap cell wiring (3 cells per D3)
+        3. Bootstrap cell wiring (cells 0 and 1, one per runtime cluster)
         4. Run TestL2_1_FiftyConcurrentDeploys against drill API
         5. Mandatory teardown + validator
 
