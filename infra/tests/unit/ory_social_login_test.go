@@ -156,7 +156,7 @@ func TestOryKratosAccountLinking(t *testing.T) {
 // for DDL + `000002_seed_data.up.sql` for plan_limits) per pre-release
 // policy. The old per-feature migrations were kept in
 // `api/internal/db/migrations-archive/` until that folder was deleted; they
-// remain in git history (`git show d426889d1:api/internal/db/migrations-archive/`).
+// remain in git history (`git show f9d4c4bff:api/internal/db/migrations-archive/`).
 // This test now
 // asserts the consolidated schema still defines the table, columns, and
 // FK that the lazy migration depends on. Forward-only is no longer

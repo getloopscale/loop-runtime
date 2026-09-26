@@ -206,7 +206,7 @@ default-credential service with zero consumers.
 
 **`api/internal` is organized by feature** (2026-09-25).
 
-Measured at `0db5c3dc8`: the top level of `api/internal` mixed layer folders (`services/` with 7
+Measured at `33285e697`: the top level of `api/internal` mixed layer folders (`services/` with 7
 contexts, `routes/` with 26 handler families and 4 shared leaves, `adapters/` with 28 production
 files, `ports/`, `buildplane/`) with feature folders (`placement/`, `metering/`). One feature was
 reachable under two paths: placement under `placement/` and `services/placement/`, the build under
@@ -329,9 +329,9 @@ logic changed. Out-of-tree tooling that hard-codes an old path breaks at build t
 
 **One verdict contract for the quality gates** (2026-09-25).
 
-*Context.* Measured at `f6d513272`: `loopzero-ops quality` registers 143 gates, one adapter file
+*Context.* Measured at `f87f2e3b6`: `loopzero-ops quality` registers 143 gates, one adapter file
 each in `cmd/loopzero-ops/internal/qualitycli`, all run by one runner (`Gate.Run`, since
-`9f5c2ceb6`). The runner was already single; the verdict was not. The 137 check packages under
+`83a931f08`). The runner was already single; the verdict was not. The 137 check packages under
 `internal/quality/` expose their result in 16 return shapes — `(Outcome, error)` ×67,
 `(*Outcome, error)` ×49, `*Outcome` ×5, `(Verdict, error)` ×3, `(Report, error)` ×3 and eleven
 more — and carry the verdict through five channels: a `Pass` boolean (read by 70 adapters), a

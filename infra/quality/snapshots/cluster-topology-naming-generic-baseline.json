@@ -394,7 +394,7 @@
         "pkg/vault/cached_client.go",
         "pkg/vault/doc.go"
       ],
-      "reason": "f2115079b removed the vault client stack no production code called: cached_client.go was deleted and the SDK-choice paragraph of doc.go went with it. Both captured lines left with the code that carried them; nothing was renamed, and each was the only captured line in its file.",
+      "reason": "ab165d772 removed the vault client stack no production code called: cached_client.go was deleted and the SDK-choice paragraph of doc.go went with it. Both captured lines left with the code that carried them; nothing was renamed, and each was the only captured line in its file.",
       "why_not_recaptured": "Re-capturing would compare the edited tree with itself (EC-1). The capture stays 7a4e5efa's; these two entries are retired with this note."
     }
   ],

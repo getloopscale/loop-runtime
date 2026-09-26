@@ -9,7 +9,7 @@
 
 # routes/builds: the build-callback payload types. The HTTP callback route was
 # removed earlier (C-01); the adapter method was their only user and nothing
-# called it (44a2e1a78). No request decoded them and no response wrote them.
+# called it (4a5aae119). No request decoded them and no response wrote them.
 url | api/internal/routes/builds/builds.go | BuildCallbackApp was the payload of a callback route that no longer existed; no handler decoded or wrote it
 type | api/internal/routes/builds/builds.go | BuildCallbackApp was the payload of a callback route that no longer existed; no handler decoded or wrote it
 image_digest | api/internal/routes/builds/builds.go | BuildCallbackApp was the payload of a callback route that no longer existed; no handler decoded or wrote it
@@ -18,7 +18,7 @@ error | api/internal/routes/builds/builds.go | BuildCallbackInput was the payloa
 apps | api/internal/routes/builds/builds.go | BuildCallbackInput was the payload of a callback route that no longer existed; no handler decoded or wrote it
 
 # routes/status: statusResponse.Rollout was a *rolloutStatusResponse with
-# omitempty that no code ever assigned (c53da571d), so `rollout` and its
+# omitempty that no code ever assigned (91f7a41da), so `rollout` and its
 # fields never appeared in a status response. The CLI's reader of
 # analysis_status reads a field the engine never sent.
 rollout | api/internal/routes/status/status.go | a nil pointer with omitempty that no handler ever set, so the key never reached a response
@@ -29,7 +29,7 @@ canary_weight | api/internal/routes/status/status.go | a field of the never-set 
 analysis_status | api/internal/routes/status/status.go | a field of the never-set rollout object, so it never reached a response
 
 # routes/domains: the request body of AddDNSRecords, a handler with no route
-# and no client (c53da571d).
+# and no client (91f7a41da).
 records | api/internal/routes/domains/domains_dns.go | the request body of AddDNSRecords, which had no route, so no client ever sent it
 
 # db/generated: the sqlc row of GetLatestReleaseAttestationByBuild, whose only
