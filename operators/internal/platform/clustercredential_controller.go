@@ -131,7 +131,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// ALWAYS reconcile ArgoCD cluster secret to mirror the kubeconfig Secret
 	// token, BEFORE connectivity check. Previously the early-return on
 	// connectivity=false (Step 3 below) skipped this sync, leaving the ArgoCD
-	// secret with a stale token even after heal scripts (H14/H15) refreshed
+	// secret with a stale token even after heal scripts (H12/H15) refreshed
 	// the kubeconfig.
 	// Effect: when operator action rotates the token in cell-X-kubeconfig,
 	// the controller propagates it to <cell>-argocd-cluster on the next

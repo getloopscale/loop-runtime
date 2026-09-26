@@ -24,18 +24,13 @@ func TestHeal_PassesBootstrapACellIDItAccepts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	calls := regexp.MustCompile(`bootstrap-cell-cc\.sh|\$BOOTSTRAP\w*" --cell (\d+)`).FindAllStringSubmatch(string(heal), -1)
-	var cells []string
-	for _, c := range calls {
-		if c[1] != "" {
-			cells = append(cells, c[1])
-		}
+	m := regexp.MustCompile(`for cell in ([0-9 ]+); do[\s\S]*?\$BOOTSTRAP" --cell "\$cell"`).FindStringSubmatch(string(heal))
+	if m == nil {
+		t.Fatal("the cell repair loop calling bootstrap-cell-cc.sh --cell \"$cell\" was not found")
 	}
-	if len(cells) != 2 {
-		t.Fatalf("found --cell values %v, want the two heals (H12 for cell-0, H14 for cell-1)", cells)
-	}
-	if cells[0] != "0" || cells[1] != "1" {
-		t.Errorf("H12 heals cell-0 and H14 cell-1, got --cell %v", cells)
+	cells := strings.Fields(m[1])
+	if strings.Join(cells, ",") != "0,1" {
+		t.Fatalf("the heal repairs cells %v, want 0 and 1", cells)
 	}
 
 	bootstrap := filepath.Join("..", "..", "..", "infra", "helmfile", "scripts", "bootstrap-cell-cc.sh")

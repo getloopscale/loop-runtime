@@ -54,7 +54,7 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 		connected, _ := kmgmt("-n", "loopzero-system", "get", "clustercredentials",
 			"-o", `jsonpath={.items[?(@.spec.cellID=="cell-1")].status.connected}`)
 		if !strings.Contains(connected, "true") {
-			Skip("cell-1 ClusterCredential not connected (run task k3d:heal — H14); activation invariants N/A")
+			Skip("cell-1 ClusterCredential not connected (run task k3d:heal — H12); activation invariants N/A")
 		}
 	})
 
