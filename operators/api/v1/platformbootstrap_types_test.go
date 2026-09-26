@@ -53,7 +53,7 @@ func TestPlatformBootstrap_SpecGitea(t *testing.T) {
 				Organizations:  []string{"loopzero", "acme"},
 				TokenName:      "platform-bootstrap-token",
 				TokenScopes:    []string{"write:organization", "write:admin"},
-				InternalURL:    "http://gitea-http.gitea.svc.cluster.local:3000",
+				InternalURL:    "http://gitea-http.loopzero-system.svc.cluster.local:3000",
 			},
 		},
 	}
@@ -73,7 +73,7 @@ func TestPlatformBootstrap_SpecGitea(t *testing.T) {
 	if len(pbs.Spec.Gitea.TokenScopes) != 2 {
 		t.Fatalf("expected 2 token scopes, got %d", len(pbs.Spec.Gitea.TokenScopes))
 	}
-	if pbs.Spec.Gitea.InternalURL != "http://gitea-http.gitea.svc.cluster.local:3000" {
+	if pbs.Spec.Gitea.InternalURL != "http://gitea-http.loopzero-system.svc.cluster.local:3000" {
 		t.Errorf("expected InternalURL to match, got %q", pbs.Spec.Gitea.InternalURL)
 	}
 }
@@ -85,7 +85,7 @@ func TestPlatformBootstrap_SpecArgoCD(t *testing.T) {
 				Namespace:       "argocd",
 				AdminSecretName: "argocd-initial-admin-secret",
 				RepoCredentials: []ArgoCDRepoCredential{
-					{Name: "gitea-creds", URL: "http://gitea-http.gitea.svc.cluster.local:3000"},
+					{Name: "gitea-creds", URL: "http://gitea-http.loopzero-system.svc.cluster.local:3000"},
 				},
 				InternalURL: "https://argocd-server.argocd.svc.cluster.local",
 			},

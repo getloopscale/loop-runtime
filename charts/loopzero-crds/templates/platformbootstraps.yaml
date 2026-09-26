@@ -140,7 +140,7 @@ spec:
                     - name
                     type: object
                   internalURL:
-                    default: http://gitea-http.gitea.svc.cluster.local:3000
+                    default: http://gitea-http.loopzero-system.svc.cluster.local:3000
                     description: |-
                       InternalURL is the cluster-internal URL for Gitea HTTP API.
                       SEC-004: Validated to prevent SSRF via arbitrary URL redirection.

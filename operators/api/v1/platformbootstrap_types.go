@@ -93,7 +93,7 @@ type GiteaBootstrapSpec struct {
 
 	// InternalURL is the cluster-internal URL for Gitea HTTP API.
 	// SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
-	// +kubebuilder:default="http://gitea-http.gitea.svc.cluster.local:3000"
+	// +kubebuilder:default="http://gitea-http.loopzero-system.svc.cluster.local:3000"
 	// +kubebuilder:validation:Pattern=`^https?://[a-zA-Z0-9][a-zA-Z0-9.\-]+(:[0-9]+)?(/.*)?$`
 	// +optional
 	InternalURL string `json:"internalURL,omitempty"`

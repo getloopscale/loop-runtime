@@ -103,7 +103,7 @@ Go struct in operators/api/v1 (CRD API group, own Go module mod.operators.api) D
 | `Organizations` | `[]string` | json:organizations,omitempty; +optional | `operators/api/v1/platformbootstrap_types.go:86` |
 | `TokenName` | `string` | json:tokenName,omitempty; +kubebuilder:default="platform-bootstrap-token"; +optional | `operators/api/v1/platformbootstrap_types.go:92` |
 | `TokenScopes` | `[]string` | json:tokenScopes,omitempty; +optional | `operators/api/v1/platformbootstrap_types.go:96` |
-| `InternalURL` | `string` | json:internalURL,omitempty; +kubebuilder:default="http://gitea-http.gitea.svc.cluster.local:3000"; +kubebuilder:validation:Pattern=`^https?://[a-zA-Z0-9][a-zA-Z0-9.\-]+(:[0-9]+)?(/.*)?$`; +optional | `operators/api/v1/platformbootstrap_types.go:103` |
+| `InternalURL` | `string` | json:internalURL,omitempty; +kubebuilder:default="http://gitea-http.loopzero-system.svc.cluster.local:3000"; +kubebuilder:validation:Pattern=`^https?://[a-zA-Z0-9][a-zA-Z0-9.\-]+(:[0-9]+)?(/.*)?$`; +optional | `operators/api/v1/platformbootstrap_types.go:99` |
 
 
 ## `PlatformBootstrap`

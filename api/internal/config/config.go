@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/pkg/gitearepo"
 )
 
 // T1.3 (plan 2026-05-21-deep-review-remediation): dev-default sentinels are
@@ -465,7 +467,7 @@ func Load() Config {
 		RuntimeKubeContext: envOr("CELL_0_KUBE_CONTEXT", "k3d-loopzero-cell-0"),
 
 		// Service URLs
-		GiteaURL:             envOr("GITEA_URL", "http://gitea-http.gitea.svc.cluster.local:3000"),
+		GiteaURL:             envOr("GITEA_URL", gitearepo.DefaultInternalURL),
 		GiteaCrossClusterURL: envOr("GITEA_CROSS_CLUSTER_URL", ""),
 		GiteaOrg:             envOr("GITEA_ORG", "loopzero"),
 		APICrossClusterURL:   envOr("API_CROSS_CLUSTER_URL", "http://loopzero-api.loopzero-system.svc.cluster.local:3001"),

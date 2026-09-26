@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/getloopscale/loopzero/pkg/gitearepo"
 	"gopkg.in/yaml.v3"
 )
 
@@ -30,8 +31,11 @@ var helmfileDrillEnv = append(append([]string{}, helmfileCoreEnv...),
 	"LOOPZERO_SPACES_SECRET=spaces-secret-placeholder",
 )
 
-// Gitea is installed by core.helmfile into loopzero-system in every environment.
-const giteaInternalURL = "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+// Gitea is installed by core.helmfile into loopzero-system in every environment,
+// which is the address gitearepo.DefaultInternalURL names. Asserting the
+// helmfile's rendered value against the constant pins the helmfile's
+// $giteaNamespace to it as well (issue #354).
+const giteaInternalURL = gitearepo.DefaultInternalURL
 
 // The drill's DO Spaces source bucket (infra/pulumi-drill `buckets.builds`).
 const drillSourceBucket = "loopzero-drill-builds-sfo3"

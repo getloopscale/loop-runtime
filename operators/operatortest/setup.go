@@ -86,7 +86,7 @@ func (f *FakeGitProvisioner) EnsureRepo(_ context.Context, name string, _ string
 	if url, ok := f.repos[name]; ok {
 		return url, nil
 	}
-	url := fmt.Sprintf("http://gitea-http.gitea.svc.cluster.local:3000/loopzero/%s.git", name)
+	url := fmt.Sprintf("http://gitea-http.loopzero-system.svc.cluster.local:3000/loopzero/%s.git", name)
 	f.repos[name] = url
 	return url, nil
 }

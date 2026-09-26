@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/pkg/gitearepo"
 )
 
 // LOOPZERO_CLUSTER_ISSUER is seeded for every test in this binary by TestMain
@@ -341,5 +342,17 @@ func TestConfig_Validate_ProductionSecret(t *testing.T) {
 	// Assert: callback secret is set
 	if cfg.ArgoCallbackSecret != "super-secret-production-key" {
 		t.Errorf("expected production secret, got %q", cfg.ArgoCallbackSecret)
+	}
+}
+
+// Issue #354: with GITEA_URL unset the API must reach the Gitea the platform
+// installs (loopzero-system), not a namespace no environment creates.
+func TestConfig_Load_GiteaURLDefaultsToThePlatformGitea(t *testing.T) {
+	t.Setenv("GITEA_URL", "")
+
+	cfg := config.Load()
+
+	if cfg.GiteaURL != gitearepo.DefaultInternalURL {
+		t.Errorf("GiteaURL default = %q, want gitearepo.DefaultInternalURL %q", cfg.GiteaURL, gitearepo.DefaultInternalURL)
 	}
 }

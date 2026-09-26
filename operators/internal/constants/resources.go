@@ -3,6 +3,8 @@
 
 package constants
 
+import "github.com/getloopscale/loopzero/pkg/gitearepo"
+
 // --- Secret Names ---
 // These are the well-known names of Kubernetes Secrets created by controllers.
 // CWTs and other components reference these by name — changing them is a breaking change.
@@ -140,8 +142,10 @@ const (
 // In-cluster service URLs used as defaults when environment variables are not set.
 
 const (
-	// DefaultGiteaURL is the default in-cluster Gitea HTTP URL.
-	DefaultGiteaURL = "http://gitea-http.gitea.svc.cluster.local:3000"
+	// DefaultGiteaURL is the default in-cluster Gitea HTTP URL. It is the
+	// platform-wide gitearepo.DefaultInternalURL, so the operators and the api
+	// fall back to the same Gitea (issue #354).
+	DefaultGiteaURL = gitearepo.DefaultInternalURL
 
 	// DefaultGiteaOrg is the Gitea organisation that owns the tenant gitops
 	// repositories when the GITEA_ORG environment variable is unset. It must agree

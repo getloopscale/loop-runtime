@@ -56,7 +56,7 @@ config:
   argoNamespace: "argo"
   argocdNamespace: "argocd"
   apiCrossClusterUrl: "http://loopzero-api.loopzero-system.svc.cluster.local:3001"
-  giteaUrl: "http://gitea-http.gitea.svc.cluster.local:3000"
+  giteaUrl: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
   giteaCrossClusterUrl: ""
   giteaOrg: "loopzero"
   mgmtKubeContext: "k3d-loopzero-core"

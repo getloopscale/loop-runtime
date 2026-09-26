@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/pkg/gitearepo"
 )
 
 func env(m map[string]string) func(string) string {
@@ -41,6 +42,18 @@ func TestLoadConfig_AppliesTheDefaults(t *testing.T) {
 	}
 	if cfg.MinIO != nil {
 		t.Fatalf("optional integrations enabled without configuration: %+v", cfg)
+	}
+}
+
+// Issue #354: unset, GITEA_URL falls back to the Gitea the platform installs
+// (loopzero-system), the same address the api falls back to.
+func TestLoadConfig_DefaultGiteaURLIsThePlatformGitea(t *testing.T) {
+	cfg, err := loadConfig(env(requiredEnv()))
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
+	if cfg.GiteaURL != gitearepo.DefaultInternalURL {
+		t.Errorf("GiteaURL default = %q, want gitearepo.DefaultInternalURL %q", cfg.GiteaURL, gitearepo.DefaultInternalURL)
 	}
 }
 

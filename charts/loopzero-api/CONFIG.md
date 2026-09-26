@@ -32,7 +32,7 @@ This table is **set-equal** to the rendered ConfigMap keys (hermetic Go guard `T
 | `ARGO_NAMESPACE` | `argo` | N | - | Argo Workflows namespace |
 | `ARGOCD_NAMESPACE` | `argocd` | N | - | ArgoCD namespace |
 | `API_CROSS_CLUSTER_URL` | `http://loopzero-api.loopzero-system.svc.cluster.local:3001` | N | internal-url | cross-cluster API URL |
-| `GITEA_URL` | `http://gitea-http.gitea.svc.cluster.local:3000` | N | internal-url | Gitea URL |
+| `GITEA_URL` | `http://gitea-http.loopzero-system.svc.cluster.local:3000` | N | internal-url | Gitea URL |
 | `GITEA_CROSS_CLUSTER_URL` | (empty) | N | internal-url | Gitea URL reachable from build cluster |
 | `GITEA_ORG` | `loopzero` | N | - | Gitea org for tenant gitops repos |
 | `CORE_KUBE_CONTEXT` | `k3d-loopzero-core` | N | - | mgmt cluster context name |
