@@ -39,6 +39,7 @@ SUBCOMMANDS:
   dsn <field>                          Print one part of a Postgres DSN read on stdin
   sql <script> [flags]                 Render a seed script for psql (see sql --help)
   kubeconform-schemas [--check]        Derive the loopzero.io kubeconform schemas from the CRDs
+  validate-chart --release R --chart D Render one chart and schema-validate the render
 
 EXIT CODES (every subcommand):
   0  success
@@ -77,6 +78,8 @@ func run(args []string) int {
 		return runSQLMain(args[1:])
 	case "kubeconform-schemas":
 		return runKubeconformSchemasMain(args[1:])
+	case "validate-chart":
+		return runValidateChartMain(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n\n%s", args[0], helpText)
 		return 1

@@ -608,31 +608,41 @@ tasks:
       - kubeconform --strict infra/helm/postgresql/templates/pdb.yaml
       - kubeconform --strict infra/helm/gitea/templates/pdb.yaml
       - kubeconform --strict infra/helm/argocd/templates/pdb.yaml
-      # NetworkPolicies
+      # Chart renders go through `loopzero-ops validate-chart`, never `helm template | kubeconform`:
+      # go-task runs a command without pipefail, so that pipe took kubeconform's status alone
+      # and a render that FAILED validated "0 resource found" and passed (#392 — Velero did
+      # exactly that on every fresh clone). validate-chart builds a chart's declared
+      # dependencies first (a fresh clone vendors none), and fails naming the chart on a
+      # render error, an empty render or a schema violation. Local strict schemas under
+      # infra/kubeconform-schemas/ are looked up before kubeconform's defaults.
+      # The repoinvariants test TestNoTaskfileCommandPipesARenderIntoKubeconform keeps the
+      # pipe from coming back.
+      - cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .
       # network-policies migrated from a raw manifest to a Helm chart (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5).
-      # `helm template` produces a YAML stream that kubeconform can consume via stdin.
-      - helm template network-policies infra/helm/network-policies/ | kubeconform --strict --summary
+      - /tmp/loopzero-ops validate-chart --release network-policies --chart infra/helm/network-policies/
       # Internal LoopZero charts (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5+).
       # Skip Traefik IngressRoute and ClusterImagePolicy CRDs (not in default schema).
       # loopzero-api and loopzero-cloud are one chart each (charts/), installed by Helmfile with
       # their bootstrap values. ServiceMonitor is a CRD kind the default schema lacks.
-      - helm dependency build charts/loopzero-api/ >/dev/null
-      - helm template loopzero-api charts/loopzero-api/ -f charts/loopzero-api/values-bootstrap.yaml | kubeconform --strict --skip IngressRoute,Certificate,ServiceMonitor --summary
-      - helm dependency build charts/loopzero-cloud/ >/dev/null
-      - helm template loopzero-cloud charts/loopzero-cloud/ -f charts/loopzero-cloud/values-bootstrap.yaml | kubeconform --strict --skip IngressRoute,Certificate,ExternalSecret --summary
+      - /tmp/loopzero-ops validate-chart --release loopzero-api --chart charts/loopzero-api/ -f charts/loopzero-api/values-bootstrap.yaml --skip IngressRoute,Certificate,ServiceMonitor
+      - /tmp/loopzero-ops validate-chart --release loopzero-cloud --chart charts/loopzero-cloud/ -f charts/loopzero-cloud/values-bootstrap.yaml --skip IngressRoute,Certificate,ExternalSecret
       # ADR-0023 / plan v1.1 T1.5: monolith charts deleted. The 4 split
       # operator charts live in charts/ (validated by validate:helm-charts target).
-      - helm template cloudflared infra/helm/cloudflared/ | kubeconform --strict --summary
-      - helm template smoke-test infra/helm/smoke-test/ | kubeconform --strict --summary
-      - helm template cluster-issuer infra/helm/cluster-issuer/ | kubeconform --strict --skip ClusterIssuer --summary
+      - /tmp/loopzero-ops validate-chart --release cloudflared --chart infra/helm/cloudflared/
+      - /tmp/loopzero-ops validate-chart --release smoke-test --chart infra/helm/smoke-test/
+      - /tmp/loopzero-ops validate-chart --release cluster-issuer --chart infra/helm/cluster-issuer/ --skip ClusterIssuer
       # The one admission-policies chart (charts/), installed by Helmfile on core and every
       # cell; rendered with the core overlay too, because that is a second install shape.
-      - helm template admission-policies charts/loopzero-admission-policies/ | kubeconform --strict --skip ClusterImagePolicy,ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding,PrometheusRule --summary
-      - helm template admission-policies-mgmt charts/loopzero-admission-policies/ -f charts/loopzero-admission-policies/values-mgmt.yaml | kubeconform --strict --skip ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding --summary
-      # velero-backup-dr-plan v1.0 / Validate — wrapper chart + schedules.
+      - /tmp/loopzero-ops validate-chart --release admission-policies --chart charts/loopzero-admission-policies/ --skip ClusterImagePolicy,ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding,PrometheusRule
+      - /tmp/loopzero-ops validate-chart --release admission-policies-mgmt --chart charts/loopzero-admission-policies/ -f charts/loopzero-admission-policies/values-mgmt.yaml --skip ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding
+      # velero-backup-dr-plan v1.0 / Validate — wrapper chart + schedules, in the install
+      # shape of core.helmfile: values.yaml is passed explicitly because a `--set list[0].x`
+      # patches only a list that a -f file supplied. Without it the --set built a new
+      # one-field backupStorageLocation, the chart's values schema rejected the render, and
+      # the pipe this replaced reported that as a pass (#392).
       # Skip Velero CRD kinds (BackupStorageLocation, Schedule, etc.) which
       # are not in default kubeconform schemas.
-      - helm template test infra/helm/velero/ -f infra/helm/velero/values-schedules.yaml --set velero.configuration.backupStorageLocation[0].bucket=test --set velero.configuration.backupStorageLocation[0].config.region=sfo3 --set velero.configuration.backupStorageLocation[0].config.s3Url=https://sfo3.digitaloceanspaces.com | kubeconform --strict --skip BackupStorageLocation,VolumeSnapshotLocation,Backup,Restore,Schedule,DownloadRequest,DeleteBackupRequest,PodVolumeBackup,PodVolumeRestore,BackupRepository,ServerStatusRequest --summary
+      - /tmp/loopzero-ops validate-chart --release test --chart infra/helm/velero/ -f infra/helm/velero/values.yaml -f infra/helm/velero/values-schedules.yaml --set velero.configuration.backupStorageLocation[0].bucket=test --set velero.configuration.backupStorageLocation[0].config.region=sfo3 --set velero.configuration.backupStorageLocation[0].config.s3Url=https://sfo3.digitaloceanspaces.com --skip BackupStorageLocation,VolumeSnapshotLocation,Backup,Restore,Schedule,DownloadRequest,DeleteBackupRequest,PodVolumeBackup,PodVolumeRestore,BackupRepository,ServerStatusRequest
       # Monitoring manifests (ServiceMonitor, PrometheusRule are CRD kinds — skip those)
       - kubeconform --strict --skip ServiceMonitor,PrometheusRule,Probe infra/helm/monitoring/manifests/
       # infra/helm/argo-workflows/templates/ contains Go template syntax ({{ }}) — requires helm template to validate
