@@ -337,6 +337,16 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The per-cell concurrent build limit counts every team's builds on the cell again (#386)
+
+- Signing in no longer answers "No team associated with this account" for every user on the isolated database role, and members of several teams can pick one (#386)
+
+- Push-to-deploy, pull-request previews and secrets delivered to running services work on the isolated database role (#384)
+
+- Deploys finish, activate on sync and report their GitHub commit status, and every change is recorded in the audit log, when the platform runs on the isolated database role (#384)
+
+- Every authenticated request now reads and writes its own team's data once the isolated database role is in use; before, lists came back empty and changes were refused without an error (#384)
+
 - The helm-topology-index gate no longer lists a deleted chart as undeclared when only its downloaded dependencies (the gitignored charts/ folder) remain on disk, so the index is the same on a fresh clone and on a working machine (design_pattern_findings#30)
 
 - Deploying to a team that was deleted and recreated under the same name no longer fails because its deployment repository was left archived (principle_violations#98)
@@ -832,6 +842,8 @@ to [Semantic Versioning](https://semver.org/).
   explanation (#B-069)
 
 ### Security
+
+- A team can no longer list the repositories of a GitHub installation that belongs to another team (#386)
 
 - The admission policies no longer admit images from a Harbor host: `registries.harborPrefix` and the Harbor image globs are removed, and the registries block now refuses unknown keys (design_pattern_findings#30)
 
