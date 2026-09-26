@@ -33,7 +33,7 @@ INSERT INTO audit_log (
 -- is empty — same SQL shape regardless of filter combination. The
 -- COALESCE on correlation_id matches legacy behavior (NULL → '' so
 -- domain.AuditEntryResult.CorrelationID plain-string scans cleanly,
--- preserving achado #26 fix).
+-- preserving the finding #26 fix).
 SELECT action,
        resource_type,
        resource_id,

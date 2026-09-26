@@ -22,7 +22,7 @@ var (
 	// silently accepted a match anywhere in the file.
 	tagSemverRE = regexp.MustCompile(`^v\d+\.\d+\.\d+(-[a-z0-9.-]+)?$`)
 	tagSHARE    = regexp.MustCompile(`^(sha-)?[a-f0-9]{8,40}$`)
-	tagBranchRE = regexp.MustCompile(`^(chg|feat|fix|hotfix|achado)[a-z0-9-]*$`)
+	tagBranchRE = regexp.MustCompile(`^(chg|feat|fix|hotfix|achado)[a-z0-9-]*$`) // english-only: `achado` is a prefix real historical branch tags used, so detection must keep it
 )
 
 // imageTagVerdict decides whether a chart's default image tag is admissible

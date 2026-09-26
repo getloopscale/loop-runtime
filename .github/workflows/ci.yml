@@ -478,7 +478,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
 
-          echo "::group::papeis"
+          echo "::group::roles"
           PGPASSWORD=postgres psql -U postgres -d loopzero_test -v ON_ERROR_STOP=1 \
             -f loopzero/api/internal/db/testdata/test-roles.sql
           echo "::endgroup::"

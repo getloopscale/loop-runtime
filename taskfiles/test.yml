@@ -834,7 +834,7 @@ tasks:
     desc: |
       Validates that K8s versions in Pulumi.{stack}.yaml are still supported by
       DigitalOcean. DOKS rotates patch versions ~quarterly — catches stale slugs
-      before bootstrap fails with 422 invalid version slug. Sprint 8 v3.2 / Pilar 2.
+      before bootstrap fails with 422 invalid version slug. Sprint 8 v3.2 / Pillar 2.
     cmds:
       - |
         python3 infra/scripts/validate/k8s_versions.py
@@ -890,7 +890,7 @@ tasks:
     desc: |
       Composite Sprint 8 validation — runs all three Sprint 8 v3.2 checks
       (helm-charts, k8s-versions, manifests) plus pulumi vitest suite.
-      Use as PR gate. Sprint 8 v3.2 / Pilar 2.
+      Use as PR gate. Sprint 8 v3.2 / Pillar 2.
     cmds:
       - task: validate:helm-charts
       - task: validate:k8s-versions

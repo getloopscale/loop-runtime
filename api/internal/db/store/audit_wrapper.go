@@ -33,7 +33,7 @@ package store
 //     queries/audit.sql)
 //   - Multi-tenant: tenant_id always present (tenantpredicate gate
 //     enforces; audit_log is in TenantOwnedTables)
-//   - achado #26 fix: COALESCE(correlation_id, '') preserved in
+//   - finding #26 fix: COALESCE(correlation_id, '') preserved in
 //     ListAuditLogForTenant so NULL correlation_id scans as empty
 //     string into ports.AuditEntryResult.CorrelationID
 //   - fail-loud row-scan: legacy `return err` instead of silent
