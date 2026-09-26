@@ -114,19 +114,19 @@ func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 	}
 	r := NewRouter(cfg)
 
-	rotas := mutatingRoutes(t, r)
-	if len(rotas) < 17 {
+	routes := mutatingRoutes(t, r)
+	if len(routes) < 17 {
 		t.Fatalf("baseline dumper walked %d mutating route(s); fixture must reach the audited group "+
-			"(the same ≥17 floor that TestEveryMutatingRouteRecordsItsDeclaredAction enforces).", len(rotas))
+			"(the same ≥17 floor that TestEveryMutatingRouteRecordsItsDeclaredAction enforces).", len(routes))
 	}
 
-	auditar := mwaudit.AuditLog(slog.New(slog.NewTextHandler(io.Discard, nil)), writer)(http.HandlerFunc(
+	auditMiddleware := mwaudit.AuditLog(slog.New(slog.NewTextHandler(io.Discard, nil)), writer)(http.HandlerFunc(
 		func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 
-	for _, rt := range rotas {
+	for _, rt := range routes {
 		lastResourceID = ""
 		req := httptest.NewRequest(rt.method, concretePath(rt.pattern), nil)
-		auditar.ServeHTTP(httptest.NewRecorder(), withFixedUser(req))
+		auditMiddleware.ServeHTTP(httptest.NewRecorder(), withFixedUser(req))
 		src := "none"
 		if lastResourceID != "" {
 			src = "url"

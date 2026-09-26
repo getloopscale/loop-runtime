@@ -301,7 +301,7 @@ func TestDevPublic_EnvDomainSecretsScale_SecretsZeroLeak(t *testing.T) {
 	srv := httptest.NewServer(mockSecretsHandler(t, true))
 	defer srv.Close()
 
-	sentinel := "M11-FASE-A-ZERO-LEAK-SENTINEL"
+	sentinel := "M11-PHASE-A-ZERO-LEAK-SENTINEL"
 	// Simulate: POST a secret with a sentinel value, then hit multiple LIVE-adjacent
 	// endpoints and assert the sentinel VALUE never leaks in response bodies.
 	body := fmt.Sprintf(`{"name":"leak-test","value":%q}`, sentinel)

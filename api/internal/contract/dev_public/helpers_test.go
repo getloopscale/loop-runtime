@@ -105,7 +105,7 @@ func mintTestJWT(t *testing.T, tenantID string) string {
 		"aud":       []string{"loopzero-cloud"},
 		"tenant_id": tenantID,
 		"email":     "test@loopzero.example",
-		"name":      "M11 Fase A Test User",
+		"name":      "M11 Phase A Test User",
 		"iat":       time.Now().Unix(),
 		"exp":       time.Now().Add(24 * time.Hour).Unix(),
 		"nbf":       time.Now().Unix(),
@@ -113,7 +113,7 @@ func mintTestJWT(t *testing.T, tenantID string) string {
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	// Sign with a deterministic in-memory secret derived from the test key.
 	// The mock server accepts any JWT with the same secret.
-	signed, err := tok.SignedString([]byte("m11-fase-a-hermetic-test-secret"))
+	signed, err := tok.SignedString([]byte("m11-phase-a-hermetic-test-secret"))
 	if err != nil {
 		t.Fatalf("mintTestJWT: sign failed: %v", err)
 	}
@@ -206,7 +206,7 @@ func truncate(b []byte, n int) string {
 func TestDevPublic_Helpers_MintTestJWT_ExpiresIn24h(t *testing.T) {
 	tok := mintTestJWT(t, "tn-243c747b30c41e51")
 	parsed, err := jwt.Parse(tok, func(_ *jwt.Token) (interface{}, error) {
-		return []byte("m11-fase-a-hermetic-test-secret"), nil
+		return []byte("m11-phase-a-hermetic-test-secret"), nil
 	})
 	require.NoError(t, err)
 	require.True(t, parsed.Valid)

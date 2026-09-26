@@ -130,10 +130,10 @@ func envPublicHosts(t *testing.T, env string) []string {
 	return hosts
 }
 
-// TestNenhumaTaskTemDefaultDeAmbienteSemBorda is DoD bullet 3 of B-165 as an
+// TestNoTaskDefaultsToAnEnvironmentWithoutAnEdge is DoD bullet 3 of B-165 as an
 // executable invariant: every environment a task names as its default must have
 // its public hostnames served by a real Caddyfile site block.
-func TestNenhumaTaskTemDefaultDeAmbienteSemBorda(t *testing.T) {
+func TestNoTaskDefaultsToAnEnvironmentWithoutAnEdge(t *testing.T) {
 	served := caddyServedHosts(t)
 	if len(served) == 0 {
 		t.Fatal("infra/local/Caddyfile declares no site blocks; the edge measurement would be vacuous")
