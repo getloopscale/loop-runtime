@@ -81,6 +81,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The drill bootstrap no longer writes ClusterCredential status; the ClusterCredential controller is its only writer (principle_violations#234)
+
 - The `PulumiOrphanStackDetected` alert's summary and description now say "parallel project" instead of the Portuguese "paralelas"; the alert name, labels and expression are unchanged (#380)
 
 - The Taskfile task `contraprova:v2:hermetic` is now `counterproof:v2:hermetic`, and the counter-proof live-test package moved to `infra/tests/livetest/counterproof`; its verdicts read APPROVED / REJECTED / PARTIALLY_APPROVED (#380)
@@ -273,6 +275,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- `task k3d:heal` no longer re-applies the build registry config, loopzero-api image variables or the clone-template release, which the install already renders (principle_violations#243)
+
 - The legacy Pulumi stack drops the Harbor-only resources and outputs — the container-images bucket, the `harbor_db` database, the Harbor managed Valkey cluster and the `harborRedis*` outputs; the next `pulumi up` plans their deletion and prod needs the cluster unprotected first (design_pattern_findings#30)
 
 - The Harbor alert rules, the "Registry (Harbor)" dashboard and the Harbor panels of the home and alerts-overview dashboards are removed, as is the Harbor mirror PrometheusRule of loopzero-admission-policies (design_pattern_findings#30)
@@ -342,6 +346,14 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- `task k3d:heal` re-bootstraps a missing or disconnected cell through `bootstrap-cell-cc.sh` instead of rewriting its kubeconfig by hand, which pointed cell-0 at the core cluster and gave cell-1 an identity that could not deploy (principle_violations#243)
+
+- The drill environment renders its API, operator and build-template configuration from Helmfile values instead of patching the running objects after each sync, and its platform-operator overlay passes the chart schema again (principle_violations#234)
+
+- The tenant and platform operators and the API are told where the platform installs Gitea (`loopzero-system`) in every environment, including prod, instead of a `gitea` namespace no environment uses (principle_violations#234)
+
+- Connecting a GitHub repository now refuses a `loopzero.yaml` that declares no apps, the same rule every push deploy applies, so a repository can no longer be linked and then build nothing on each push; the missing-file message no longer points at the removed `loopzero init` command (principle_violations#141)
 
 - The admin operations to evict tenants, pin a tenant to a cell and inspect a release now see every team's data again: eviction no longer matches nothing and deletes nothing in the database while tearing the cluster side down, the pin finds the tenant and counts the target cell correctly, and inspection finds releases of any team (#386)
 
