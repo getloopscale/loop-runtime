@@ -74,7 +74,7 @@ cd infra/tests && go test ./e2e/... -v -timeout 120m \
 
 ### Quality gates — the CI substitute
 
-GitHub Actions was removed as the pipeline in 2026-05-23. **5 workflows remain** (`build-publish.yml`, `release-artifacts.yml`, `workflow-hygiene.yml`, `ci.yml`, `delivery-gate-armed.yml`) — measured 2026-09-11; this said **4** and named four, having already been corrected up from **3**, which is the third time this count has drifted — this line said **3** and named the first three until 2026-08-19, and the fourth had been added deliberately in the meantime. Three of them are not the quality gate; **`ci.yml` is**, and its own header says why: the gates moved to a pre-push hook that runs *on the pusher machine and only there*, so a repository with no GitHub gate has none for anyone else. The gate inventory is **125 wired quality gates** in `cmd/loopzero-ops` — 143 registered, 125 wired (measured 2026-09-25 via `--list`, the oracle, after `sprint-syntax` was deleted with the dead script it pinned and `english-only` was added). They run locally, or under whatever CI a deployment wires up. This line said **140** until then, while § Components said **126** four screens later — one file, two numbers, neither re-measured.
+GitHub Actions was removed as the pipeline in 2026-05-23. **5 workflows remain** (`build-publish.yml`, `release-artifacts.yml`, `workflow-hygiene.yml`, `ci.yml`, `delivery-gate-armed.yml`) — measured 2026-09-11; this said **4** and named four, having already been corrected up from **3**, which is the third time this count has drifted — this line said **3** and named the first three until 2026-08-19, and the fourth had been added deliberately in the meantime. Three of them are not the quality gate; **`ci.yml` is**, and its own header says why: the gates moved to a pre-push hook that runs *on the pusher machine and only there*, so a repository with no GitHub gate has none for anyone else. The gate inventory is **126 wired quality gates** in `cmd/loopzero-ops` — 144 registered, 126 wired (measured 2026-09-26 via `--list`, the oracle, after `kubeconform-schemas-sync` was added; 143 / 125 on 2026-09-25, after `sprint-syntax` was deleted with the dead script it pinned and `english-only` was added). They run locally, or under whatever CI a deployment wires up. This line said **140** until then, while § Components said **126** four screens later — one file, two numbers, neither re-measured.
 
 ```bash
 task quality:gates            # full-repo scan
@@ -92,7 +92,7 @@ task db:reset                 # drop + recreate + migrate + seed
 task db:generate              # regenerate api/internal/db/generated/ via sqlc
 ```
 
-A stray `./loopzero-ops` at the repo root is a **gitignored local build artifact**, not the gate binary — it can be arbitrarily stale (one measured on 2026-07-30 reported 73 gates against a source tree carrying 108; the tree carries 143 registered / 125 wired as of 2026-09-25) and is absent in a fresh clone. Always build first; never read `./loopzero-ops` as the oracle.
+A stray `./loopzero-ops` at the repo root is a **gitignored local build artifact**, not the gate binary — it can be arbitrarily stale (one measured on 2026-07-30 reported 73 gates against a source tree carrying 108; the tree carries 144 registered / 126 wired as of 2026-09-26) and is absent in a fresh clone. Always build first; never read `./loopzero-ops` as the oracle.
 
 **Adding a new `.sh` file is FORBIDDEN by default** (`no-new-bash` gate, D3). New logic belongs in `cmd/loopzero-ops/internal/quality/` (Go — this is where the gates live; the old `pkg/quality/` was relocated out of the shared base at M9), `infra/helmfile/` (declarative), or `infra/tests/e2e/` (Ginkgo). The gate still runs; the written allowlist + justification contract it used to cite was deleted and is not replaced.
 
@@ -140,7 +140,7 @@ loopzero deploy → CLI validates → upload bundle → API locks env → submit
 | `operators/` | 4 split binaries (`operators/cmd/{tenant,app,preview,platform}-operator`) — kubebuilder + controller-runtime |
 | `operators/api/` | CRD Go types (own module) |
 | `pkg/` | Shared libs: `statemachine`, `errors`, `naming`, `conditions`, `enforcement`, `circuitbreaker`, `healthcheck`, `id`, `logging`, `domain`, `events`, `vault`, `shellrun`, `pulumi`, `correlation` |
-| `cmd/loopzero-ops/` | Ops + quality binary: **125** wired quality gates of 143 registered (**155** directories — the difference is helpers and not-yet-wired checks; `loopzero-ops quality --list` is the oracle) + `seed` / `drill` / `pulumi` / `chaos` / `dsn` / `sql` subcommands |
+| `cmd/loopzero-ops/` | Ops + quality binary: **126** wired quality gates of 144 registered (**157** directories under `internal/quality`, measured 2026-09-26 — the difference is helpers and not-yet-wired checks; `loopzero-ops quality --list` is the oracle) + `seed` / `drill` / `pulumi` / `chaos` / `dsn` / `sql` / `kubeconform-schemas` subcommands |
 | `infra/helm/` (**39** dirs, measured 2026-09-25 after Harbor left) | Bootstrap charts — installed by **Helmfile L2** |
 | `charts/` (12) | Published OCI charts — consumed by **ArgoCD L3**; use the `loopzero-common` library |
 | `infra/tests/` | Ginkgo e2e, chaos, load (k6), unit (own module) |

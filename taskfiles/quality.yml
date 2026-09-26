@@ -104,6 +104,7 @@ tasks:
       # removing a finalizer is an UPDATE. The production bootstrap seeded one in `default`.
       - /tmp/loopzero-ops quality platform-cr-namespace
       - /tmp/loopzero-ops quality crd-semantic-diff
+      - /tmp/loopzero-ops quality kubeconform-schemas-sync  # the loopzero.io kubeconform schemas are what the CRDs produce (#389)
       - /tmp/loopzero-ops quality stack-coverage
       - /tmp/loopzero-ops quality base-image-digest
       # test-coverage-report leaves the "measured broken" ledger: the 0.00% average came from
