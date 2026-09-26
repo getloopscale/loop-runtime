@@ -9,7 +9,8 @@
 // snapshot path which is the documented contract for CI scripts.
 //
 // Flow: solo deploy → logs --build-id $BID → assert exit 0 + non-empty body
-//                  → logs (project default) exit 0 → cleanup.
+//
+//	→ logs (project default) exit 0 → cleanup.
 package e2e
 
 import (

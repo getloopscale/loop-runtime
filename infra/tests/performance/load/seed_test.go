@@ -41,21 +41,22 @@ type SeedConfig struct {
 
 // SeedResult tracks what was created.
 type SeedResult struct {
-	UsersCreated      int
-	TenantsCreated    int
-	ProjectsCreated   int
+	UsersCreated       int
+	TenantsCreated     int
+	ProjectsCreated    int
 	MembershipsCreated int
-	Errors            []string
+	Errors             []string
 }
 
 // Seed creates synthetic load test data in PostgreSQL.
 // All resources use "loadtest-" prefix for identification.
 //
 // Schema:
-//   users:          loadtest-user-{i}  / loadtest-{i}@loadtest.loopzero.dev / github_id=9000000+i
-//   tenants:        loadtest-tn-{i}    / plan=starter / owner=loadtest-user-{i}
-//   tenant_members: (loadtest-tn-{i}, loadtest-user-{i}) / role=owner
-//   projects:       loadtest-proj-{i}-{j} / tenant=loadtest-tn-{i}
+//
+//	users:          loadtest-user-{i}  / loadtest-{i}@loadtest.loopzero.dev / github_id=9000000+i
+//	tenants:        loadtest-tn-{i}    / plan=starter / owner=loadtest-user-{i}
+//	tenant_members: (loadtest-tn-{i}, loadtest-user-{i}) / role=owner
+//	projects:       loadtest-proj-{i}-{j} / tenant=loadtest-tn-{i}
 func Seed(ctx context.Context, cfg SeedConfig) (*SeedResult, error) {
 	db, err := sql.Open("pgx", cfg.DBUrl)
 	if err != nil {
@@ -174,9 +175,9 @@ func Cleanup(ctx context.Context, dbURL string) error {
 // This bypasses GitHub OAuth for load testing, using the same internal
 // auth mechanism that the cloud→engine proxy uses in production.
 type ServiceAuthClient struct {
-	client     *http.Client
-	apiURL     string
-	secret     string
+	client *http.Client
+	apiURL string
+	secret string
 }
 
 // NewServiceAuthClient creates an HTTP client that authenticates via X-Service-Auth.

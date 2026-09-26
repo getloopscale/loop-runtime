@@ -29,11 +29,11 @@ import (
 // does not propagate failure to the mgmt control plane.
 //
 // Scenario:
-//   1. Pre-condition: mgmt + workload both up; API serving health.
-//   2. `k3d cluster stop loopzero-cell-0` — pauses worker containers; state preserved.
-//   3. Within 60s: verify API on mgmt still serves /healthz.
-//   4. Within 90s: verify cell-0 tenant workloads (in mgmt) still reachable.
-//   5. Cleanup: `k3d cluster start loopzero-cell-0` — resumes.
+//  1. Pre-condition: mgmt + workload both up; API serving health.
+//  2. `k3d cluster stop loopzero-cell-0` — pauses worker containers; state preserved.
+//  3. Within 60s: verify API on mgmt still serves /healthz.
+//  4. Within 90s: verify cell-0 tenant workloads (in mgmt) still reachable.
+//  5. Cleanup: `k3d cluster start loopzero-cell-0` — resumes.
 //
 // SLO claims validated:
 //   - Blast radius: 1 cell (workload), 0 cells (mgmt control plane).

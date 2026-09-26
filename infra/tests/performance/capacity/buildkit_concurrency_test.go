@@ -62,9 +62,9 @@ func TestCapacityBuildKitConcurrency(t *testing.T) {
 	buildCtx := os.Getenv("LOOPZERO_BUILD_CONTEXT")
 
 	const (
-		numBuilds         = 12 // Exceeds projected ceiling (2 nodes * 4 = 8)
-		projectedPerNode  = 4  // Community observation from cell-budget.md
-		pollInterval      = 1 * time.Second
+		numBuilds        = 12 // Exceeds projected ceiling (2 nodes * 4 = 8)
+		projectedPerNode = 4  // Community observation from cell-budget.md
+		pollInterval     = 1 * time.Second
 	)
 	projectedCeiling := buildNodes * projectedPerNode
 

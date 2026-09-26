@@ -27,10 +27,10 @@ var _ = Describe("Journey 06: Rollback", Ordered, Label("journey"), func() {
 	)
 
 	var (
-		workDir  string
-		host     string
-		buildV1  string
-		buildV2  string
+		workDir string
+		host    string
+		buildV1 string
+		buildV2 string
 	)
 
 	BeforeAll(func() {

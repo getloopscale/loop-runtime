@@ -34,9 +34,9 @@ import (
 // cluster mid-run.
 
 const (
-	l2ConcurrencyDefault   = 50
-	l2MemoryRequiredGib    = 100
-	l2PerTenantMemoryGib   = 2 // approximate worst-case per concurrent build
+	l2ConcurrencyDefault = 50
+	l2MemoryRequiredGib  = 100
+	l2PerTenantMemoryGib = 2 // approximate worst-case per concurrent build
 )
 
 // requireL2Harness gates the L2 scenarios. Returns the harness or

@@ -53,11 +53,11 @@ func TestCapacityArgoCDMemoryPerApp(t *testing.T) {
 	}
 
 	const (
-		appCount     = 100
-		argoNS       = "argocd"
-		benchLabel   = "loopzero.dev/capacity-bench"
-		settleTime   = 60 * time.Second
-		projectedKB  = 500 // cell-budget.md projection: ~500 kB/app
+		appCount    = 100
+		argoNS      = "argocd"
+		benchLabel  = "loopzero.dev/capacity-bench"
+		settleTime  = 60 * time.Second
+		projectedKB = 500 // cell-budget.md projection: ~500 kB/app
 	)
 
 	cfg := NewConfig("argocd-memory")
@@ -198,12 +198,12 @@ func TestCapacityArgoCDMemoryPerApp(t *testing.T) {
 		ProjectedBytes:    projectedBytes,
 		ActualVsProjected: float64(perAppBytes) / float64(projectedBytes),
 		CorrelationData: map[string]interface{}{
-			"app_count":            created,
-			"controller_replicas":  controllerReplicas,
-			"apps_per_replica":     appsPerReplica,
-			"per_app_bytes":        perAppBytes,
-			"per_app_kb":           perAppBytes / 1024,
-			"projected_kb":         projectedKB,
+			"app_count":           created,
+			"controller_replicas": controllerReplicas,
+			"apps_per_replica":    appsPerReplica,
+			"per_app_bytes":       perAppBytes,
+			"per_app_kb":          perAppBytes / 1024,
+			"projected_kb":        projectedKB,
 		},
 	}
 

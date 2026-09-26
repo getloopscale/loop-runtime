@@ -241,16 +241,16 @@ func TestCapacityGoMemory(t *testing.T) {
 		ActualVsProjected: float64(peak) / float64(projectedPeak),
 		CorrelationData: map[string]interface{}{
 			// Load profile
-			"waves":              waves,
-			"workers_per_wave":   workers,
-			"total_submitted":    totalSubmitted,
-			"total_succeeded":    totalSucceeded,
-			"poll_interval":      pollInterval.String(),
+			"waves":            waves,
+			"workers_per_wave": workers,
+			"total_submitted":  totalSubmitted,
+			"total_succeeded":  totalSucceeded,
+			"poll_interval":    pollInterval.String(),
 			// Gap 3: GC pressure (sys includes stacks, GC metadata, mmap'd regions)
-			"peak_sys_bytes":     peakSysVal,
-			"peak_sys_mi":        peakSysVal / 1024 / 1024,
-			"before_sys_mi":      int64(beforeSys) / 1024 / 1024,
-			"after_sys_mi":       int64(afterSys) / 1024 / 1024,
+			"peak_sys_bytes": peakSysVal,
+			"peak_sys_mi":    peakSysVal / 1024 / 1024,
+			"before_sys_mi":  int64(beforeSys) / 1024 / 1024,
+			"after_sys_mi":   int64(afterSys) / 1024 / 1024,
 			// Gap 2: Multi-replica totals
 			"kubectl_baseline_mi": baselineKubeMi,
 			"kubectl_postload_mi": postKubeMi,

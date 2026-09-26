@@ -9,11 +9,11 @@
 // (note: chaos manifests themselves were NOT moved by T0.1 — they are
 // CRDs declaratively applied, not bash scripts). The Go helpers here:
 //
-//   1. ApplyChaos      — kubectl apply -f <manifest>
-//   2. WaitForFinished — poll chaos resource status until phase=Finished
-//   3. AssertSLOHeld   — wrap existing loopzero-ops chaos slo-compare (preserved per ADR D8)
-//   4. AssertSpanCoverage — NEW per blueprint P3: query OTel/Tempo for span patterns
-//   5. CleanupChaos    — kubectl delete podchaos,networkchaos,iochaos,stresschaos --all
+//  1. ApplyChaos      — kubectl apply -f <manifest>
+//  2. WaitForFinished — poll chaos resource status until phase=Finished
+//  3. AssertSLOHeld   — wrap existing loopzero-ops chaos slo-compare (preserved per ADR D8)
+//  4. AssertSpanCoverage — NEW per blueprint P3: query OTel/Tempo for span patterns
+//  5. CleanupChaos    — kubectl delete podchaos,networkchaos,iochaos,stresschaos --all
 package chaos
 
 import (
@@ -32,14 +32,14 @@ type Manifest struct {
 
 // ChaosResult captures the verdict per cycle-chaos.
 type ChaosResult struct {
-	Scenario      string
-	Phase         string // applied / running / finished
-	BaselineJSON  string
-	DuringJSON    string
-	PostJSON      string
-	Verdict       string // PASS / FAIL / INCONCLUSIVE
+	Scenario       string
+	Phase          string // applied / running / finished
+	BaselineJSON   string
+	DuringJSON     string
+	PostJSON       string
+	Verdict        string // PASS / FAIL / INCONCLUSIVE
 	SLODegradation string
-	RecoveryTime  time.Duration
+	RecoveryTime   time.Duration
 }
 
 // TempoTraceQuery represents a query to the Tempo backend.
