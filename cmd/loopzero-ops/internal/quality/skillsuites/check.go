@@ -83,13 +83,20 @@ type Outcome struct {
 	Unverified error
 }
 
-// Verdict is Fail on a red suite or on a discovery that found none,
-// NotVerified where the kit is not installed, Skip when pytest is absent (the
-// gate is advisory then), and Pass otherwise.
+// Verdict is Fail on a red suite or on a discovery that found none, Skip when
+// the kit is not installed or pytest is absent, NotVerified for any other
+// reason nothing could be verified, and Pass otherwise.
+//
+// A missing kit is Skip, not NotVerified (owner decision, 2026-09-26): the kit
+// is a gitignored dependency, so its absence is the normal state of every fresh
+// clone, and a gate that fails there fails for something the repository does
+// not contain. The skip still names the reason, so it never reads as green.
 func (o Outcome) Verdict() verdict.Verdict {
 	switch {
 	case o.Violation != nil:
 		return verdict.Fail
+	case errors.Is(o.Unverified, ErrSkillsRootMissing):
+		return verdict.Skip
 	case o.Unverified != nil:
 		return verdict.NotVerified
 	case o.Advisory:

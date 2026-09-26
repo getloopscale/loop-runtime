@@ -26,8 +26,11 @@ func setupSkillScriptPaths(fs *flag.FlagSet) Check {
 			return nil, err
 		}
 		switch out.Verdict() {
-		case verdict.NotVerified:
+		case verdict.Skip:
 			reportKitNotInstalled(inv, out.Unverified)
+			return out, nil
+		case verdict.NotVerified:
+			inv.Stderr.Printf("skill-script-paths: NOT VERIFIED — %v\n", out.Unverified)
 			return out, nil
 		case verdict.Fail:
 			inv.Stderr.Printf("skill-script-paths: FAIL — %d invocation(s) resolve in only one layout:\n", len(out.Findings))

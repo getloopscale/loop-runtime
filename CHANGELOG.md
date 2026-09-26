@@ -81,6 +81,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- On a clone without the gitignored development kit (`.claude/`, `.squad/`), the four quality gates that check that kit (`skill-suites`, `skill-script-paths`, `records-tree-split`, `ecosystem-validators`) now skip and print why, instead of three of them exiting 5, so `task quality:gates` can pass on a fresh clone; with the kit installed they run in full (docs/decisions.md, 2026-09-26: a gate over the gitignored kit skips when the kit is absent)
+
 - `coverage-merge` without `--output` and `helm-diff-structural` without `--base`/`--pr` report the missing flag as an invalid invocation (`invalid invocation: ...`); the exit status is unchanged (1) (principle_violations#256)
 
 - The drill bootstrap no longer writes ClusterCredential status; the ClusterCredential controller is its only writer (principle_violations#234)

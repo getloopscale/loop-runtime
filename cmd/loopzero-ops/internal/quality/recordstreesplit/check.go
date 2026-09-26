@@ -120,11 +120,12 @@ type Outcome struct {
 	Violations    []string
 }
 
-// Verdict is NotVerified when the live tree is absent on this machine, and
-// otherwise Pass when the check passed and Fail when it did not.
+// Verdict is Skip when the live tree is absent on this machine — the records
+// root is gitignored, so every fresh clone lacks it (owner decision,
+// 2026-09-26) — and otherwise Pass when the check passed and Fail when it did not.
 func (o Outcome) Verdict() verdict.Verdict {
 	if o.LiveMissing {
-		return verdict.NotVerified
+		return verdict.Skip
 	}
 	return verdict.FromPass(o.Pass)
 }

@@ -97,11 +97,11 @@ func TestBashAndShAreInterpretersToo(t *testing.T) {
 	}
 }
 
-// Absence is a FAILURE, not a skip. A gate reporting green over a tree it never found is
-// the exact shape of defect this gate exists to refuse.
-func TestMissingSkillsRootIsAFailureNotASkip(t *testing.T) {
+// Absence is reported by name. Its verdict is Skip (a fresh clone has no kit), and the
+// named reason is what keeps that skip from ever reading as a pass.
+func TestMissingSkillsRootIsReportedByName(t *testing.T) {
 	if _, err := violationOf(Check(Config{RepoRoot: t.TempDir()})); !errors.Is(err, ErrSkillsRootMissing) {
-		t.Fatalf("a missing skills root must fail loudly: %v", err)
+		t.Fatalf("a missing skills root must be reported as such: %v", err)
 	}
 }
 

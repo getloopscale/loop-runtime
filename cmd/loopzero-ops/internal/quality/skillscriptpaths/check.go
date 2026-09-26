@@ -63,8 +63,9 @@ import (
 var ErrUnreachableInvocation = errors.New("a skill invokes a script by a path that does not resolve in the layout it runs in — the agent following it gets 'No such file or directory', and which layout it breaks in depends on how the ecosystem was installed")
 
 // ErrSkillsRootMissing means the skills directory is absent, so nothing was checked.
-// Absence is a FAILURE and not a skip: a gate that reports green over a tree it never
-// found is the shape of defect this whole gate exists to refuse.
+// The verdict is Skip with this reason printed, never a silent pass: the kit is a
+// gitignored dependency, and a clone without it has nothing of this repository's
+// own to verify.
 var ErrSkillsRootMissing = errors.New("the skills root is absent — it is the installed, gitignored kit, so nothing was verified on this machine")
 
 // invocationRE matches an interpreter followed by a bare `skills/...` path.
@@ -99,12 +100,16 @@ type Outcome struct {
 	Unverified error
 }
 
-// Verdict is Fail when the check found a violation, NotVerified when it
-// could verify nothing on this machine, and Pass otherwise.
+// Verdict is Fail when the check found a violation, Skip when the kit is not
+// installed (a gitignored dependency, absent from every fresh clone — owner
+// decision, 2026-09-26), NotVerified when anything else left it unable to
+// verify, and Pass otherwise.
 func (o Outcome) Verdict() verdict.Verdict {
 	switch {
 	case o.Violation != nil:
 		return verdict.Fail
+	case errors.Is(o.Unverified, ErrSkillsRootMissing):
+		return verdict.Skip
 	case o.Unverified != nil:
 		return verdict.NotVerified
 	}

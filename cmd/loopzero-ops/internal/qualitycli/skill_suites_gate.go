@@ -14,7 +14,7 @@ import (
 func init() {
 	register(Gate{
 		Name:    "skill-suites",
-		Summary: "Runs the pytest suites under .claude/skills/*/tests/, which no task ran. Advisory when pytest is absent; FAILS when discovery finds no suite, because finding nothing is not the same as finding nothing wrong; NOT VERIFIED (exit 5) where the gitignored kit is not installed (B-124).",
+		Summary: "Runs the pytest suites under .claude/skills/*/tests/, which no task ran. Advisory when pytest is absent; FAILS when discovery finds no suite, because finding nothing is not the same as finding nothing wrong; SKIP where the gitignored kit is not installed, with the reason printed (B-124).",
 		Setup:   setupSkillSuites,
 	})
 }
@@ -32,10 +32,12 @@ func setupSkillSuites(fs *flag.FlagSet) Check {
 			return nil, err
 		}
 		switch {
+		case errors.Is(out.Unverified, skillsuites.ErrSkillsRootMissing):
+			reportKitNotInstalled(inv, out.Unverified)
 		case out.Verdict() == verdict.Skip:
 			inv.Stdout.Println("skill-suites: ADVISORY — python3/pytest absent; nothing was concluded")
 		case out.Verdict() == verdict.NotVerified:
-			reportKitNotInstalled(inv, out.Unverified)
+			inv.Stderr.Printf("skill-suites: NOT VERIFIED — %v\n", out.Unverified)
 		case errors.Is(out.Violation, skillsuites.ErrNoSuitesFound):
 			inv.Stderr.Printf("skill-suites: FAIL — %v\n", out.Violation)
 		case out.Verdict() == verdict.Fail:

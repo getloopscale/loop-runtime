@@ -143,9 +143,9 @@ func TestNoSuitesFoundIsAFailureNotASilentPass(t *testing.T) {
 }
 
 // A missing skills tree is the installed kit being absent, which .gitignore makes
-// the state of every fresh clone. It must fail, and by a name distinct from a
-// tree that is present and holds no suite.
-func TestMissingSkillsTreeIsAFailure(t *testing.T) {
+// the state of every fresh clone. It is reported by a name distinct from a tree
+// that is present and holds no suite (which fails); its verdict is Skip.
+func TestMissingSkillsTreeIsReportedByName(t *testing.T) {
 	if _, err := Discover(Config{RepoRoot: t.TempDir()}); !errors.Is(err, ErrSkillsRootMissing) {
 		t.Fatalf("a missing skills tree must be reported as such: %v", err)
 	}

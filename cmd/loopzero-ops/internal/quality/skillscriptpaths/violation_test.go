@@ -36,8 +36,8 @@ func TestVerdictIsFailOnlyWhenTheCheckFoundAViolation(t *testing.T) {
 	}
 }
 
-func TestVerdictOfAnUninstalledKitIsNotVerified(t *testing.T) {
-	if got := (Outcome{Unverified: ErrSkillsRootMissing}).Verdict(); got != verdict.NotVerified {
-		t.Fatalf("kit not installed: Verdict() = %v, want NOT VERIFIED", got)
+func TestVerdictOfAnUninstalledKitIsSkip(t *testing.T) {
+	if got := (Outcome{Unverified: ErrSkillsRootMissing}).Verdict(); got != verdict.Skip {
+		t.Fatalf("kit not installed: Verdict() = %v, want SKIP", got)
 	}
 }

@@ -36,7 +36,7 @@ func TestOutcomeVerdictNamesEachState(t *testing.T) {
 	}{
 		{"red suite", Outcome{Violation: ErrSuitesFailed}, verdict.Fail},
 		{"no suite found", Outcome{Violation: ErrNoSuitesFound}, verdict.Fail},
-		{"kit not installed", Outcome{Unverified: ErrSkillsRootMissing}, verdict.NotVerified},
+		{"kit not installed", Outcome{Unverified: ErrSkillsRootMissing}, verdict.Skip},
 		{"pytest absent", Outcome{Advisory: true}, verdict.Skip},
 		{"green", Outcome{Results: []Result{{Skill: "a", Passed: true}}}, verdict.Pass},
 	}

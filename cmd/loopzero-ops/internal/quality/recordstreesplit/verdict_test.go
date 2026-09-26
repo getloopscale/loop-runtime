@@ -9,9 +9,9 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
-func TestOutcomeVerdictOfAnAbsentLiveTreeIsNotVerified(t *testing.T) {
-	if got := (Outcome{LiveMissing: true}).Verdict(); got != verdict.NotVerified {
-		t.Fatalf("live tree absent: Verdict() = %v, want NOT VERIFIED", got)
+func TestOutcomeVerdictOfAnAbsentLiveTreeIsSkip(t *testing.T) {
+	if got := (Outcome{LiveMissing: true}).Verdict(); got != verdict.Skip {
+		t.Fatalf("live tree absent: Verdict() = %v, want SKIP", got)
 	}
 }
 

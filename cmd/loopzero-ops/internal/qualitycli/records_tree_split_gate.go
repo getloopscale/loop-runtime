@@ -28,8 +28,8 @@ func setupRecordsTreeSplit(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		o := recordstreesplit.Check(recordstreesplit.Config{RepoRoot: inv.Root})
 		switch {
-		case o.Verdict() == verdict.NotVerified:
-			inv.Stderr.Printf("records-tree-split: NOT VERIFIED — %s is absent on this machine.\n"+
+		case o.Verdict() == verdict.Skip:
+			inv.Stdout.Printf("records-tree-split: SKIP — %s is absent on this machine.\n"+
 				"  It is gitignored, so a fresh clone has none; there is no records tree here to check.\n",
 				recordstreesplit.DefaultLiveDir)
 			return o, nil
