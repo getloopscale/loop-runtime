@@ -374,13 +374,21 @@ error to 5.
   difference is the reason the report prints, which the gate already states.
 
 *Migration.* The contract landed with the runner and the vocabulary; every adapter compiled
-against it through a transitional `Outcome` (Pass/Fail) that implements `Result`. The gates still
-deciding by hand are listed exactly in `legacyOutcomeGates` (`qualitycli/contract_test.go`): a
-new gate cannot join the list, a migrated gate must leave it, and no adapter may declare a
-`Verdict` method of its own. Gates migrate in batches, each moving its check's verdict into the
-check's package with a test there and keeping the report byte-identical unless the old behaviour
-was a defect. The transitional `Outcome`, `isViolation` and `errNotVerified` are deleted with the
-last legacy gate.
+against it through a transitional `Outcome` (Pass/Fail) that implemented `Result`, and the gates
+still deciding by hand were listed exactly in a test ledger that could only shrink. All 143 gates
+moved in six batches, each running the previous and the new binary on the same tree and comparing
+exit code, stdout and stderr; the transitional `Outcome`, `isViolation`, `errNotVerified` and the
+ledger were then deleted. What keeps the contract is now structural: a `verdict.Verdict` is not a
+`verdict.Result`, so a `Check` cannot return one, and `qualitycli/contract_test.go` refuses a
+`Verdict` method declared in the adapter package. Reports stayed byte-identical except where the old
+behaviour was a defect, each fixed test-first: five gates printed `FAIL` over a run that exited 5
+(three with a missing chart, `render-schema-gen-sql --render`, `route-auth-coverage` with no route
+enumerated), and `skill-script-paths` and `skill-suites` reported a kit file they could not read as
+a violation (exit 1) instead of an incomplete check (exit 5). `coverage-merge` and
+`helm-diff-structural` report a missing required flag through the runner's usage path (same exit 1).
+One inconsistency is left as found, because the check documents it as a choice: with the kit absent,
+`ecosystem-validators` is advisory (`Skip`, exit 0) while the three other kit gates are
+`NotVerified` (exit 5).
 
 ## Numbered ADRs cited by the code
 

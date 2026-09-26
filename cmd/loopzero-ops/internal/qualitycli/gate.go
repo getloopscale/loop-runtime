@@ -32,28 +32,6 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
-// Outcome is the verdict of a gate whose check has not yet moved to the
-// verdict contract: the adapter decides Pass or Fail by hand from the check's
-// own outcome type. It is transitional — the gates still using it are listed,
-// exactly, in legacyOutcomeGates (contract_test.go), and a gate outside that
-// list cannot use it.
-type Outcome int
-
-const (
-	// Pass — the check ran and found nothing wrong.
-	Pass Outcome = iota
-	// Fail — the check ran and found a violation.
-	Fail
-)
-
-// Verdict makes a legacy Outcome a verdict.Result.
-func (o Outcome) Verdict() verdict.Verdict {
-	if o == Pass {
-		return verdict.Pass
-	}
-	return verdict.Fail
-}
-
 // Invocation is what a gate's check receives: the resolved repository root
 // and where to write. The writers keep their first write error, and Run
 // settles the exit status against them, so a check writes its report one
@@ -72,6 +50,11 @@ type Invocation struct {
 // unreadable input, a tool that errored. The runner reports the error and
 // exits Incomplete: a check that could not measure never reads as a
 // violation, and never as a pass.
+//
+// The adapter renders the outcome; it never chooses the verdict.
+// verdict.Verdict does not implement verdict.Result, so a Check cannot return
+// a verdict constant, and contract_test.go refuses a Verdict method declared
+// in this package.
 type Check func(Invocation) (verdict.Result, error)
 
 // errUsage marks an invalid invocation discovered after parsing (a flag value
@@ -268,16 +251,4 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
-}
-
-// isViolation reports whether err is one of the sentinels a check returns when
-// it measured and found something wrong. Any other error means the check could
-// not measure, which the runner reports as incomplete rather than as a verdict.
-func isViolation(err error, verdicts ...error) bool {
-	for _, v := range verdicts {
-		if errors.Is(err, v) {
-			return true
-		}
-	}
-	return false
 }

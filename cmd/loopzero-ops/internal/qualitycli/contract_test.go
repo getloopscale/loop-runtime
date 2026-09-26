@@ -9,10 +9,12 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"sort"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // The gate contract (docs/decisions.md, "One verdict contract for the quality
@@ -20,18 +22,11 @@ import (
 // through verdict.Result, and the runner alone turns that verdict into an exit
 // status. A gate adapter renders the outcome; it never decides the verdict.
 //
-// A gate that has not moved yet still decides by hand, through the legacy
-// Outcome (Pass/Fail), isViolation or errNotVerified. Those gates are listed
-// here EXACTLY: a new gate cannot join the list, and a migrated gate must leave
-// it, so the list only shrinks.
-var legacyOutcomeGates = []string{}
-
-// legacyMarkers are the package-level identifiers through which an adapter
-// decides a verdict by hand.
-var legacyMarkers = map[string]bool{
-	"Pass": true, "Fail": true, "Outcome": true,
-	"isViolation": true, "errNotVerified": true,
-}
+// Two things hold that in place. verdict.Verdict does not implement
+// verdict.Result, so a Check cannot return a verdict it chose
+// (TestAVerdictIsNotAResult); and no file in this package may declare a
+// Verdict method, so an adapter cannot wrap a hand-picked verdict in a type of
+// its own (TestNoAdapterDeclaresItsOwnVerdict).
 
 type adapterFile struct {
 	path  string
@@ -89,106 +84,6 @@ func registeredNames(f *ast.File) []string {
 	return names
 }
 
-// usesAny reports whether node references, unqualified, any identifier in set.
-func usesAny(node ast.Node, set map[string]bool) bool {
-	found := false
-	ast.Inspect(node, func(n ast.Node) bool {
-		switch x := n.(type) {
-		case *ast.FuncDecl:
-			// A declaration's own name is not a use of it.
-			found = found || usesAny(x.Type, set) || (x.Body != nil && usesAny(x.Body, set))
-			return false
-		case *ast.KeyValueExpr:
-			// Outcome{Pass: ...} names a field, not the legacy constant.
-			found = found || usesAny(x.Value, set)
-			return false
-		case *ast.Field:
-			// A struct field or parameter named Pass is not the constant either.
-			found = found || usesAny(x.Type, set)
-			return false
-		case *ast.SelectorExpr:
-			// pkg.Pass or out.Pass is not the legacy constant; skip the Sel.
-			ast.Inspect(x.X, func(m ast.Node) bool {
-				if id, ok := m.(*ast.Ident); ok && set[id.Name] {
-					found = true
-				}
-				return !found
-			})
-			return false
-		case *ast.Ident:
-			if set[x.Name] {
-				found = true
-			}
-		}
-		return !found
-	})
-	return found
-}
-
-// legacyGates returns the gates whose adapter decides a verdict by hand,
-// directly or through a package-level helper that does.
-func legacyGates(files []adapterFile) []string {
-	markers := map[string]bool{}
-	for k := range legacyMarkers {
-		markers[k] = true
-	}
-	// A helper that uses a marker is itself a marker, to a fixed point.
-	for changed := true; changed; {
-		changed = false
-		for _, af := range files {
-			if af.path == "gate.go" {
-				continue
-			}
-			for _, d := range af.file.Decls {
-				fd, ok := d.(*ast.FuncDecl)
-				if !ok || fd.Recv != nil || fd.Name.Name == "init" || markers[fd.Name.Name] {
-					continue
-				}
-				if usesAny(fd.Body, markers) {
-					markers[fd.Name.Name] = true
-					changed = true
-				}
-			}
-		}
-	}
-	var legacy []string
-	for _, af := range files {
-		if len(af.gates) == 0 {
-			continue
-		}
-		if usesAny(af.file, markers) {
-			legacy = append(legacy, af.gates...)
-		}
-	}
-	sort.Strings(legacy)
-	return legacy
-}
-
-func TestLegacyOutcomeGatesIsExact(t *testing.T) {
-	got := legacyGates(parseAdapters(t))
-	want := append([]string(nil), legacyOutcomeGates...)
-	sort.Strings(want)
-
-	gotSet, wantSet := map[string]bool{}, map[string]bool{}
-	for _, g := range got {
-		gotSet[g] = true
-	}
-	for _, g := range want {
-		wantSet[g] = true
-	}
-	for _, g := range got {
-		if !wantSet[g] {
-			t.Errorf("gate %q decides its verdict by hand (legacy Outcome, isViolation or errNotVerified): "+
-				"return its check's outcome, which states the verdict through verdict.Result", g)
-		}
-	}
-	for _, g := range want {
-		if !gotSet[g] {
-			t.Errorf("gate %q no longer decides its verdict by hand: remove it from legacyOutcomeGates", g)
-		}
-	}
-}
-
 func TestEveryRegisteredGateHasOneAdapterFile(t *testing.T) {
 	seen := map[string]string{}
 	for _, af := range parseAdapters(t) {
@@ -206,16 +101,12 @@ func TestEveryRegisteredGateHasOneAdapterFile(t *testing.T) {
 // TestNoAdapterDeclaresItsOwnVerdict refuses a Result implemented inside this
 // package: the verdict is stated by a check's own package, next to the data it
 // reads, and an adapter-local Result would be a verdict chosen by hand under
-// another name. The legacy Outcome in gate.go is the one exception, and it
-// leaves with the last legacy gate.
+// another name.
 func TestNoAdapterDeclaresItsOwnVerdict(t *testing.T) {
 	for _, af := range parseAdapters(t) {
 		for _, d := range af.file.Decls {
 			fd, ok := d.(*ast.FuncDecl)
 			if !ok || fd.Recv == nil || fd.Name.Name != "Verdict" {
-				continue
-			}
-			if af.path == "gate.go" && recvName(fd) == "Outcome" {
 				continue
 			}
 			t.Errorf("%s declares a Verdict method on %s: a check's package states the verdict, not its adapter",
@@ -248,5 +139,15 @@ func TestContractCheckSeesTheRegistry(t *testing.T) {
 	}
 	if n != len(Gates()) {
 		t.Fatalf("adapter files declare %d gate(s), the registry holds %d", n, len(Gates()))
+	}
+}
+
+// TestAVerdictIsNotAResult is what keeps a Check from returning a verdict
+// constant: the runner takes a verdict.Result, and a bare verdict is not one.
+func TestAVerdictIsNotAResult(t *testing.T) {
+	result := reflect.TypeOf((*verdict.Result)(nil)).Elem()
+
+	if reflect.TypeOf(verdict.Pass).Implements(result) {
+		t.Fatal("verdict.Verdict implements verdict.Result: an adapter could return a verdict it chose")
 	}
 }
