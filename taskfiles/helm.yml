@@ -86,6 +86,15 @@ tasks:
         done
         echo "Synced $COUNT CRDs from $SRC to $DST"
 
+  helm:sync-kubeconform-schemas:
+    desc: |
+      Regenerate the loopzero.io strict kubeconform schemas under
+      infra/kubeconform-schemas/master-standalone-strict/ from
+      operators/config/crd/bases/ (#389). Run it with helm:sync-crds after any
+      CRD change; the kubeconform-schemas-sync quality gate fails until you do.
+    cmds:
+      - go run ./cmd/loopzero-ops kubeconform-schemas
+
   helm:install:test:
     desc: Run helm test hooks post-install
     cmds:
