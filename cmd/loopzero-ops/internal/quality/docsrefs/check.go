@@ -41,11 +41,8 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/calendarday"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
-
-// ErrUnresolvedReferences means at least one reference points at something that
-// does not exist and is not allowlisted.
-var ErrUnresolvedReferences = errors.New("at least one normative reference does not resolve")
 
 // ErrNoReferencesEnumerated means the scan found no normative reference at all.
 //
@@ -101,6 +98,20 @@ type Outcome struct {
 	// kit, which is a gitignored install: on a checkout without the kit they
 	// cannot be checked either way. They make the verdict partial, not red.
 	NotVerified []Reference
+	// MalformedAllowlist is the parse failure of the allowlist (wrapping
+	// ErrMalformedAllowlist). A line that reads as an exemption and exempts
+	// nothing is the defect this gate exists to remove, so it fails the gate.
+	MalformedAllowlist error
+}
+
+// Verdict is Fail when the allowlist is malformed or any reference does not
+// resolve, and Pass otherwise. References into a kit that is not installed make
+// the pass partial, not red.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.MalformedAllowlist != nil || len(o.Unresolved) > 0 {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // resolution is a resolver's answer for one reference.
@@ -388,6 +399,7 @@ func loadAllowlist(path string) (map[string]allowEntry, error) {
 const DefaultAllowlistRelPath = "cmd/loopzero-ops/internal/quality/docsrefs/allowlist.txt"
 
 // Check runs every resolver and reports the references that do not resolve.
+// A violation is on the outcome; the error means the check could not measure.
 func Check(cfg Config) (Outcome, error) {
 	if cfg.RepoRoot == "" {
 		cfg.RepoRoot = "."
@@ -401,6 +413,9 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	allow, err := loadAllowlist(cfg.AllowlistPath)
+	if errors.Is(err, ErrMalformedAllowlist) {
+		return Outcome{MalformedAllowlist: err}, nil
+	}
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -412,13 +427,13 @@ func Check(cfg Config) (Outcome, error) {
 			return out, cerr
 		}
 		for _, ref := range refs {
-			verdict := r.resolve(cfg.RepoRoot, ref)
-			if verdict == unverifiable {
+			answer := r.resolve(cfg.RepoRoot, ref)
+			if answer == unverifiable {
 				out.NotVerified = append(out.NotVerified, ref)
 				continue
 			}
 			out.Checked++
-			if verdict == resolved {
+			if answer == resolved {
 				continue
 			}
 			// The sunset date is INCLUSIVE: an entry dated today still exempts,
@@ -434,12 +449,8 @@ func Check(cfg Config) (Outcome, error) {
 			out.Unresolved = append(out.Unresolved, ref)
 		}
 	}
-	if len(out.Unresolved) > 0 {
-		return out, ErrUnresolvedReferences
-	}
-	// Evaluated AFTER ErrUnresolvedReferences, for the same reason the floor in
-	// routeauthcoverage is: a tree full of broken references must be reported as
-	// broken references, never as an empty scan.
+	// An unresolved reference was counted in Checked, so a tree full of broken
+	// references is reported as broken references, never as an empty scan.
 	if out.Checked == 0 {
 		return out, ErrNoReferencesEnumerated
 	}

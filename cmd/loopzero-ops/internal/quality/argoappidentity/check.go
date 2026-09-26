@@ -47,6 +47,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // scanRoots are the trees where an ArgoCD Application name can legitimately be needed.
@@ -93,6 +95,9 @@ type Report struct {
 
 // OK reports whether the gate passed.
 func (r Report) OK() bool { return len(r.Findings) == 0 }
+
+// Verdict is Fail when any finding was reported and Pass otherwise.
+func (r Report) Verdict() verdict.Verdict { return verdict.Of(r.Findings) }
 
 // Message renders the remediation hint for a finding.
 func (f Finding) Message() string {

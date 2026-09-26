@@ -27,8 +27,7 @@ func setupCoverageMerge(fs *flag.FlagSet) Check {
 	output := fs.String("output", "", "merged lcov destination (required)")
 	return func(inv Invocation) (verdict.Result, error) {
 		if *output == "" {
-			inv.Stderr.Println("coverage-merge: --output required")
-			return Fail, nil
+			return nil, usageError("--output required")
 		}
 		outcome, err := coveragemerge.Merge(coveragemerge.Config{
 			GoProfilePath: *goProfile,
@@ -36,11 +35,11 @@ func setupCoverageMerge(fs *flag.FlagSet) Check {
 			OutputPath:    *output,
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		for _, m := range outcome.Messages {
 			inv.Stdout.Println(m)
 		}
-		return Pass, nil
+		return outcome, nil
 	}
 }

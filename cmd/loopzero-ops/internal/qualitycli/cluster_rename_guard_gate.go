@@ -41,16 +41,16 @@ func setupClusterRenameGuard(fs *flag.FlagSet) Check {
 			SkipAncestryCheck: *skipAncestry,
 		})
 		if err != nil {
-			if len(outcome.Failures) == 0 {
-				return Fail, err
-			}
-			inv.Stderr.Printf("cluster-rename-guard: FAIL — %v\n", err)
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
+			inv.Stderr.Println("cluster-rename-guard: FAIL — generic occurrences were modified")
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Printf("cluster-rename-guard: PASS — %d generic occurrence(s) survived the rename unchanged\n", outcome.Checked)
-		return Pass, nil
+		return outcome, nil
 	}
 }

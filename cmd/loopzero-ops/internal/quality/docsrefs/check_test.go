@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // writeTree lays out a synthetic repo. Keys are repo-relative paths.
@@ -41,7 +43,7 @@ func TestCheck_DanglingRuleRefFails(t *testing.T) {
 		"docsrefs-allowlist.txt":   "",
 	})
 	out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")})
-	if !errors.Is(err, ErrUnresolvedReferences) {
+	if err != nil || out.Verdict() != verdict.Fail {
 		t.Fatalf("a dangling rule reference must fail; got err=%v", err)
 	}
 	if len(out.Unresolved) != 1 || !strings.Contains(out.Unresolved[0].Raw, "ghost.md") {
@@ -59,7 +61,7 @@ func TestCheck_BareFilenameOnADirectoryLineIsAReference(t *testing.T) {
 		"docsrefs-allowlist.txt": "",
 	})
 	out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")})
-	if !errors.Is(err, ErrUnresolvedReferences) {
+	if err != nil || out.Verdict() != verdict.Fail {
 		t.Fatalf("a bare filename on a .claude/rules/ line must be treated as a reference; got err=%v", err)
 	}
 	if len(out.Unresolved) != 1 || !strings.Contains(out.Unresolved[0].Raw, "ghost.md") {
@@ -102,7 +104,7 @@ func TestCheck_DanglingADRRefFails(t *testing.T) {
 		"docsrefs-allowlist.txt": "",
 	})
 	out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")})
-	if !errors.Is(err, ErrUnresolvedReferences) {
+	if err != nil || out.Verdict() != verdict.Fail {
 		t.Fatalf("an ADR cited by Go code and documented nowhere must fail; got %v", err)
 	}
 	if len(out.Unresolved) != 1 || out.Unresolved[0].Raw != "ADR-9999" {
@@ -159,7 +161,7 @@ func TestCheck_ExpiredAllowlistEntryFails(t *testing.T) {
 		"CLAUDE.md":                "Read `.claude/rules/ghost.md`.\n",
 		"docsrefs-allowlist.txt":   "rule | .claude/rules/ghost.md | " + past() + " | deadline passed\n",
 	})
-	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); !errors.Is(err, ErrUnresolvedReferences) {
+	if out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil || out.Verdict() != verdict.Fail || len(out.Unresolved) == 0 {
 		t.Errorf("an expired entry must stop exempting; got %v", err)
 	}
 }
@@ -184,8 +186,8 @@ func TestCheck_MalformedAllowlistIsAnError(t *testing.T) {
 		"CLAUDE.md":              "x\n",
 		"docsrefs-allowlist.txt": "rule | .claude/rules/ghost.md | no-date\n",
 	})
-	_, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")})
-	if !errors.Is(err, ErrMalformedAllowlist) {
+	out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")})
+	if err != nil || !errors.Is(out.MalformedAllowlist, ErrMalformedAllowlist) || out.Verdict() != verdict.Fail {
 		t.Errorf("a malformed allowlist line must be a typed error, never ignored; got %v", err)
 	}
 }
@@ -254,7 +256,7 @@ func TestCheck_BrokenRefsBeatTheEmptyScanFloor(t *testing.T) {
 		"CLAUDE.md":                "Read `.claude/rules/ghost.md`.\n",
 		"docsrefs-allowlist.txt":   "",
 	})
-	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); !errors.Is(err, ErrUnresolvedReferences) {
+	if out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil || out.Verdict() != verdict.Fail || len(out.Unresolved) == 0 {
 		t.Errorf("broken references must be reported as such, not as an empty scan; got %v", err)
 	}
 }
@@ -268,7 +270,7 @@ func TestCheck_MentionUnderGitignoredKitIsNotADRDocumentation(t *testing.T) {
 		".claude/knowledge-base/decisions/2026-01-01-thing.md": "This is ADR-0024.\n",
 		"docsrefs-allowlist.txt":                               "",
 	})
-	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); !errors.Is(err, ErrUnresolvedReferences) {
+	if out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil || out.Verdict() != verdict.Fail || len(out.Unresolved) == 0 {
 		t.Errorf("a record under .claude/ must not resolve the ADR; got %v", err)
 	}
 }

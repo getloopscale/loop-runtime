@@ -33,16 +33,16 @@ func setupArgoAppIdentity(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		rep, err := argoappidentity.Check(inv.Root)
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if rep.OK() {
+		if rep.Verdict() == verdict.Pass {
 			inv.Stdout.Printf("argo-app-identity: PASS — %d file(s) scanned; Application and Environment CR "+
 				"identities derived only from naming.ArgoAppName / naming.EnvironmentCRName\n", rep.Scanned)
-			return Pass, nil
+			return rep, nil
 		}
 		for _, f := range rep.Findings {
 			inv.Stderr.Printf("argo-app-identity: FAIL %s\n", f.Message())
 		}
-		return Fail, nil
+		return rep, nil
 	}
 }

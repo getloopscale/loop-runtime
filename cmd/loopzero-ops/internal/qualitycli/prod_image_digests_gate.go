@@ -35,7 +35,7 @@ func setupProdImageDigests(fs *flag.FlagSet) Check {
 		}
 		outcome, err := prodimagedigests.Check(prodimagedigests.Config{Root: inv.Root, Enforce: policy})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		if len(outcome.Violations) > 0 {
 			// Reported per kind, not under one banner. One number over both
@@ -65,13 +65,13 @@ func setupProdImageDigests(fs *flag.FlagSet) Check {
 			inv.Stderr.Println("     (the image publisher produces it — a digest pinned by hand")
 			inv.Stderr.Println("     becomes a lie on the next publication).")
 			inv.Stderr.Println("See docs/architecture.md for context.")
-			if !outcome.Pass {
-				return Fail, nil
+			if outcome.Verdict() == verdict.Fail {
+				return outcome, nil
 			}
 		}
-		if outcome.Pass {
+		if outcome.Verdict() == verdict.Pass {
 			inv.Stdout.Printf("prod-image-digests: PASS (scanned %d files, %d warn-mode violation(s))\n", outcome.ScannedFiles, len(outcome.Violations))
 		}
-		return Pass, nil
+		return outcome, nil
 	}
 }

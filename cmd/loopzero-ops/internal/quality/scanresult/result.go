@@ -19,6 +19,8 @@ package scanresult
 import (
 	"errors"
 	"fmt"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrNothingScanned means the gate reached no input at all. Finding nothing is
@@ -49,6 +51,19 @@ func (r Result) Err() error {
 // scan was declared partial) and nothing was found.
 func (r Result) Pass() bool {
 	return r.Err() == nil && len(r.Findings) == 0
+}
+
+// Verdict is what the scan amounts to: NotVerified when nothing was scanned
+// and the scan was not declared partial, Fail when it found something, Pass
+// otherwise.
+func (r Result) Verdict() verdict.Verdict {
+	switch {
+	case r.Err() != nil:
+		return verdict.NotVerified
+	case len(r.Findings) > 0:
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Summary renders the counts a PASS or FAIL line should carry, so a green run

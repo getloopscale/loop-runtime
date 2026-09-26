@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const pkg = "example.com/app/internal/svc"
@@ -63,8 +65,8 @@ func legalTree(t *testing.T) string {
 func TestCheck_LegalTreePasses(t *testing.T) {
 	out, err := Check(legalTree(t), fence())
 
-	if err != nil {
-		t.Fatalf("legal tree must pass: %v edges=%+v", err, out.Edges)
+	if err != nil || out.Verdict() != verdict.Pass {
+		t.Fatalf("legal tree must pass: %v %v edges=%+v", err, out.Violation, out.Edges)
 	}
 	if out.FilesParsed != 6 {
 		t.Errorf("FilesParsed = %d, want 6", out.FilesParsed)
@@ -77,7 +79,7 @@ func TestCheck_ForbiddenSiblingEdgeFails(t *testing.T) {
 
 	out, err := Check(root, fence())
 
-	if !errors.Is(err, ErrForbiddenEdge) {
+	if err != nil || !errors.Is(out.Violation, ErrForbiddenEdge) {
 		t.Fatalf("err = %v, want ErrForbiddenEdge", err)
 	}
 	if len(out.Edges) != 1 || out.Edges[0].From != "release" || out.Edges[0].To != "build" {
@@ -91,7 +93,7 @@ func TestCheck_NestedDirectoryDoesNotEscapeTheAllowList(t *testing.T) {
 
 	out, err := Check(root, fence())
 
-	if !errors.Is(err, ErrForbiddenEdge) || out.Edges[0].From != "release" {
+	if err != nil || !errors.Is(out.Violation, ErrForbiddenEdge) || out.Edges[0].From != "release" {
 		t.Fatalf("err = %v edges = %+v, want release → build from the nested package", err, out.Edges)
 	}
 }
@@ -102,7 +104,7 @@ func TestCheck_SubpackageImportingTheParentFails(t *testing.T) {
 
 	out, err := Check(root, fence())
 
-	if !errors.Is(err, ErrForbiddenEdge) || out.Edges[0].To != ParentNode {
+	if err != nil || !errors.Is(out.Violation, ErrForbiddenEdge) || out.Edges[0].To != ParentNode {
 		t.Fatalf("err = %v edges = %+v, want release → parent", err, out.Edges)
 	}
 }
@@ -113,7 +115,7 @@ func TestCheck_ParentImportingANonLeafFails(t *testing.T) {
 
 	out, err := Check(root, fence())
 
-	if !errors.Is(err, ErrForbiddenEdge) || out.Edges[0].From != ParentNode {
+	if err != nil || !errors.Is(out.Violation, ErrForbiddenEdge) || out.Edges[0].From != ParentNode {
 		t.Fatalf("err = %v edges = %+v, want parent → build", err, out.Edges)
 	}
 }
@@ -124,7 +126,7 @@ func TestCheck_ProductionImportOfTestOnlyLeafIsItsOwnFailure(t *testing.T) {
 
 	out, err := Check(root, fence())
 
-	if !errors.Is(err, ErrTestOnlyLeafFromProduction) {
+	if err != nil || !errors.Is(out.Violation, ErrTestOnlyLeafFromProduction) {
 		t.Fatalf("err = %v, want ErrTestOnlyLeafFromProduction", err)
 	}
 	if !out.Edges[0].TestOnly {
@@ -138,7 +140,7 @@ func TestCheck_UnregisteredSubpackageFails(t *testing.T) {
 
 	out, err := Check(root, fence())
 
-	if !errors.Is(err, ErrUnregisteredSubpackage) {
+	if err != nil || !errors.Is(out.Violation, ErrUnregisteredSubpackage) {
 		t.Fatalf("err = %v, want ErrUnregisteredSubpackage", err)
 	}
 	if len(out.Unregistered) != 1 || out.Unregistered[0] != "newthing" {
@@ -154,8 +156,8 @@ func TestCheck_DirectoryWithoutGoIsNotASubpackage(t *testing.T) {
 
 	out, err := Check(root, fence())
 
-	if err != nil {
-		t.Fatalf("an empty directory must not fail the fence: %v unregistered=%v", err, out.Unregistered)
+	if err != nil || out.Violation != nil {
+		t.Fatalf("an empty directory must not fail the fence: %v %v unregistered=%v", err, out.Violation, out.Unregistered)
 	}
 }
 
@@ -165,9 +167,9 @@ func TestCheck_EmptyRootIsNothingParsed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := Check(root, fence())
+	out, err := Check(root, fence())
 
-	if !errors.Is(err, ErrNothingParsed) {
+	if err != nil || !errors.Is(out.Violation, ErrNothingParsed) {
 		t.Fatalf("err = %v, want ErrNothingParsed", err)
 	}
 }
@@ -235,9 +237,9 @@ func TestCheck_ACyclicRegistryFailsBeforeAnyFileIsRead(t *testing.T) {
 	f := fence()
 	f.Allowed["release"]["build"] = true
 
-	_, err := Check(legalTree(t), f)
+	out, err := Check(legalTree(t), f)
 
-	if !errors.Is(err, ErrRegistryCycle) {
+	if err != nil || !errors.Is(out.Violation, ErrRegistryCycle) {
 		t.Fatalf("err = %v, want ErrRegistryCycle", err)
 	}
 }

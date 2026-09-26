@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func writeFile(t *testing.T, root, rel, body string) {
@@ -33,7 +35,7 @@ func TestDecisionDocDoesNotResolveAnIDItOnlyMentions(t *testing.T) {
 	// The gate RETURNS AN ERROR when a normative reference does not resolve — the
 	// error is the expected result here, not a test failure.
 	out, err := Check(Config{RepoRoot: root})
-	if err == nil || len(out.Unresolved) == 0 {
+	if err != nil || out.Verdict() != verdict.Fail || len(out.Unresolved) == 0 {
 		t.Fatal("ADR-0024 resolved because it was mentioned in the body of a decision document — the absence fabricated the presence")
 	}
 	if out.Unresolved[0].Raw != "ADR-0024" {

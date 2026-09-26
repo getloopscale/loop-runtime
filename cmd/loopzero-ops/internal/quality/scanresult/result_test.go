@@ -7,6 +7,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func TestResult_NothingScannedIsNotAPass(t *testing.T) {
@@ -50,5 +52,29 @@ func TestResult_SummaryCarriesTheCounts(t *testing.T) {
 	got := Result{Scanned: 4, Findings: []string{"x"}}.Summary()
 	if got != "4 scanned, 1 finding(s)" {
 		t.Errorf("Summary() = %q", got)
+	}
+}
+
+func TestResult_VerdictOfANothingScannedIsNotVerified(t *testing.T) {
+	if got := (Result{}).Verdict(); got != verdict.NotVerified {
+		t.Fatalf("Verdict() = %v, want NOT VERIFIED — reading nothing verifies nothing", got)
+	}
+}
+
+func TestResult_VerdictOfFindingsIsFail(t *testing.T) {
+	if got := (Result{Scanned: 1, Findings: []string{"x"}}).Verdict(); got != verdict.Fail {
+		t.Fatalf("Verdict() = %v, want FAIL", got)
+	}
+}
+
+func TestResult_VerdictOfACleanScanIsPass(t *testing.T) {
+	if got := (Result{Scanned: 1}).Verdict(); got != verdict.Pass {
+		t.Fatalf("Verdict() = %v, want PASS", got)
+	}
+}
+
+func TestResult_VerdictOfADeclaredPartialScanIsPass(t *testing.T) {
+	if got := (Result{Partial: "sibling absent"}).Verdict(); got != verdict.Pass {
+		t.Fatalf("Verdict() = %v, want PASS", got)
 	}
 }

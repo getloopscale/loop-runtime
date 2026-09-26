@@ -19,6 +19,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config tells Check which dashboard tree to scan.
@@ -44,6 +46,11 @@ type Outcome struct {
 	// (skipped promtool is acceptable — does not fail Pass).
 	Pass bool
 }
+
+// Verdict is Fail on any JSON syntax or PromQL parse error. A run without
+// promtool is still a Pass on the syntax it checked; its report names the
+// skipped half.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Check scans every .json in DashboardsDir.
 //   - Pass 1: json.Unmarshal each file (ALWAYS).

@@ -62,9 +62,16 @@ func legalTree(t *testing.T) string {
 	return root
 }
 
+// check runs the fence over root and returns what it refused. A layout that
+// breaks a rule is a refusal on the outcome, never an error: an error fails the
+// test here, so no case below can pass on a scan that did not complete.
 func check(t *testing.T, root string) (subpackagefence.Outcome, error) {
 	t.Helper()
-	return Check(Config{RepoRoot: root, Registry: miniRegistry()})
+	out, err := Check(Config{RepoRoot: root, Registry: miniRegistry()})
+	if err != nil {
+		t.Fatalf("the check could not complete: %v", err)
+	}
+	return out, out.Violation
 }
 
 func TestCheck_LegalLayoutPasses(t *testing.T) {
@@ -187,8 +194,8 @@ func TestCheck_RegistryPermittingACycleIsRefused(t *testing.T) {
 	reg := miniRegistry()
 	reg["release"] = Entry{Kind: Feature, Deps: []string{"build"}}
 
-	_, err := Check(Config{RepoRoot: legalTree(t), Registry: reg})
-	if !errors.Is(err, subpackagefence.ErrRegistryCycle) {
+	out, err := Check(Config{RepoRoot: legalTree(t), Registry: reg})
+	if err != nil || !errors.Is(out.Violation, subpackagefence.ErrRegistryCycle) {
 		t.Fatalf("a registry with build ⇄ release must be refused; err = %v", err)
 	}
 }

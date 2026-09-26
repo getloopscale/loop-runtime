@@ -32,20 +32,20 @@ func setupBillingSecrets(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := billingsecrets.Check(billingsecrets.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if len(outcome.Findings) > 0 {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("billing-secrets: FAIL — %d billing secret mount(s) with literal optionality:\n",
 				len(outcome.Findings))
 			for _, f := range outcome.Findings {
 				inv.Stderr.Printf("  %s:%d — %s\n", f.File, f.Line, f.Why)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		// Saying HOW MANY files were read matters: a gate that found nothing because it
 		// read nothing would look, in the log, like a gate that passed.
 		inv.Stdout.Printf("billing-secrets: PASS — %d chart(s) checked, optionality decided by value\n",
 			len(outcome.Scanned))
-		return Pass, nil
+		return outcome, nil
 	}
 }

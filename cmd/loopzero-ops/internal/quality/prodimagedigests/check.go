@@ -32,6 +32,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultScanPaths are scanned when Config.ScanPaths is empty.
@@ -74,6 +76,10 @@ type Outcome struct {
 	// "WARN" per finding from it, instead of from one global mode.
 	Enforce map[Kind]bool
 }
+
+// Verdict is Fail when a violation of an enforced kind exists; findings of a
+// kind the policy only reports leave it a Pass.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Enforced lists the findings that made (or would make) the gate fail.
 func (o *Outcome) Enforced() []Violation { return o.byEnforcement(true) }

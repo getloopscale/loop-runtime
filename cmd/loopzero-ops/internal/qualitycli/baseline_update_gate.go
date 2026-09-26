@@ -37,13 +37,13 @@ func setupBaselineUpdate(fs *flag.FlagSet) Check {
 			DryRun:        *dryRun || os.Getenv("DRY_RUN") == "1",
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		if *dryRun {
 			inv.Stdout.Print(string(result.JSON))
 		} else {
 			inv.Stderr.Printf("baseline-update: wrote %d packages to %s\n", result.PackagesWritten, result.OutputPath)
 		}
-		return Pass, nil
+		return result, nil
 	}
 }

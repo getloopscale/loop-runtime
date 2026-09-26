@@ -39,6 +39,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/coverageparse"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -70,6 +71,10 @@ type Outcome struct {
 	// Messages — diagnostic stream.
 	Messages []string
 }
+
+// Verdict is Pass: merging is an operation, and an Outcome exists only when
+// it completed. A merge that failed is Merge's error.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.Pass }
 
 // fileLines accumulates per-line counts for a single source file.
 type fileLines struct {

@@ -25,18 +25,18 @@ func setupAdvisoryLockScope(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := advisorylock.Check(advisorylock.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !outcome.Pass() {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("advisory-lock-scope: FAIL — %d session-scoped pg_advisory_lock( call(s):\n", len(outcome.Findings))
 			for _, v := range outcome.Findings {
 				inv.Stderr.Printf("  %s\n", v)
 			}
 			inv.Stderr.Println("")
 			inv.Stderr.Println("Fix: replace with pg_advisory_xact_lock( — transaction-scoped, pool-safe (Rule 7).")
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Printf("advisory-lock-scope: PASS — no session-scoped pg_advisory_lock( in production code (%s)\n", outcome.Summary())
-		return Pass, nil
+		return outcome, nil
 	}
 }

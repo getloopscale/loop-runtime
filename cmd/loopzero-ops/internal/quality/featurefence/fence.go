@@ -205,18 +205,22 @@ func Check(cfg Config) (subpackagefence.Outcome, error) {
 	if root == "" {
 		root = "."
 	}
-	out, fenceErr := subpackagefence.Check(root, f)
-	if fenceErr != nil && !errors.Is(fenceErr, subpackagefence.ErrForbiddenEdge) &&
-		!errors.Is(fenceErr, subpackagefence.ErrTestOnlyLeafFromProduction) &&
-		!errors.Is(fenceErr, subpackagefence.ErrUnregisteredSubpackage) {
-		return out, fenceErr
+	out, err := subpackagefence.Check(root, f)
+	if err != nil {
+		return out, err
+	}
+	if out.Violation != nil && !errors.Is(out.Violation, subpackagefence.ErrForbiddenEdge) &&
+		!errors.Is(out.Violation, subpackagefence.ErrTestOnlyLeafFromProduction) &&
+		!errors.Is(out.Violation, subpackagefence.ErrUnregisteredSubpackage) {
+		return out, nil
 	}
 	inner, err := checkInner(root, cfg.registry())
 	if err != nil {
 		return out, err
 	}
 	out.Edges = append(out.Edges, inner.edges...)
-	return out, errors.Join(fenceErr, inner.err())
+	out.Violation = errors.Join(out.Violation, inner.err())
+	return out, nil
 }
 
 // role is where a package directory sits in the layout.

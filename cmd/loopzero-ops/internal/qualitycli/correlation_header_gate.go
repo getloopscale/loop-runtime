@@ -26,9 +26,9 @@ func setupCorrelationHeader(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := correlationheader.Check(correlationheader.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !outcome.Pass() {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("correlation-header: FAIL — %d direct r.Header.Get(\"(X-)?Correlation-ID\") call(s) in the HTTP packages:\n", len(outcome.Findings))
 			for _, v := range outcome.Findings {
 				inv.Stderr.Printf("  %s\n", v)
@@ -36,9 +36,9 @@ func setupCorrelationHeader(_ *flag.FlagSet) Check {
 			inv.Stderr.Println("")
 			inv.Stderr.Println("Fix: replace with `id := correlation.Read(r)` (api/internal/correlation).")
 			inv.Stderr.Println("The helper handles backward-compat (X-Correlation-ID fallback) + deprecation WARN.")
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Printf("correlation-header: PASS — no direct r.Header.Get((X-)?Correlation-ID) in the HTTP packages of api/internal (%s)\n", outcome.Summary())
-		return Pass, nil
+		return outcome, nil
 	}
 }

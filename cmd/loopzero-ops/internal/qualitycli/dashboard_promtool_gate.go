@@ -29,21 +29,21 @@ func setupDashboardPromtool(fs *flag.FlagSet) Check {
 		outcome, err := dashboardpromtool.Check(context.Background(),
 			dashboardpromtool.Config{DashboardsDir: *dashboardsDir})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if len(outcome.SyntaxErrors) > 0 {
+		if outcome.Verdict() == verdict.Fail && len(outcome.SyntaxErrors) > 0 {
 			inv.Stderr.Printf("dashboard-promtool: FAIL — %d JSON syntax errors:\n", len(outcome.SyntaxErrors))
 			for _, e := range outcome.SyntaxErrors {
 				inv.Stderr.Printf("  %s\n", e)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
-		if len(outcome.PromtoolErrors) > 0 {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("dashboard-promtool: FAIL — %d PromQL parse errors:\n", len(outcome.PromtoolErrors))
 			for _, e := range outcome.PromtoolErrors {
 				inv.Stderr.Printf("  %s\n", e)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		if outcome.PromtoolSkipped {
 			inv.Stdout.Printf("dashboard-promtool: PASS (JSON syntax %d/%d) — promtool SKIP (%s)\n",
@@ -52,6 +52,6 @@ func setupDashboardPromtool(fs *flag.FlagSet) Check {
 			inv.Stdout.Printf("dashboard-promtool: PASS — %d dashboards (JSON syntax + PromQL semantic)\n",
 				outcome.TotalScanned)
 		}
-		return Pass, nil
+		return outcome, nil
 	}
 }

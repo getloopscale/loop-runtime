@@ -80,6 +80,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultPinFile is the checked-in absence declaration, repo-relative. It sits
@@ -122,6 +124,9 @@ type Absence struct {
 }
 
 // Outcome is the verdict.
+//
+// Its verdict is Fail on any violation. A run that found no CLI source to read
+// is still a Pass: its report says PARTIAL and names what it did not check.
 type Outcome struct {
 	// Checked is true only when a CLI source tree was found and walked.
 	Checked bool
@@ -165,6 +170,9 @@ func (o *Outcome) Pass() bool {
 }
 
 var exitRe = regexp.MustCompile(`process\.exit\((\d+)\)`)
+
+// Verdict is Fail when any violation was found and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.Of(o.Violations) }
 
 // Check finds the CLI source tree and enforces the 0-5 exit-code contract on
 // it. When no tree is found, the absence must be declared in the pin; when a

@@ -28,6 +28,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ParentNode names the parent package in an Edge.
@@ -76,16 +78,30 @@ type Outcome struct {
 	Unregistered []string
 	Edges        []Edge
 	FilesParsed  int
+	// Violation is why the fence refuses (wrapping one of the Err* reasons above),
+	// or nil when it holds. A refusal is the fence's verdict, never an error.
+	Violation error
 }
 
-// Check validates the registry, then scans repoRoot/f.Dir.
+// Verdict is Fail when the fence refuses and Pass when it holds.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
+}
+
+// Check validates the registry, then scans repoRoot/f.Dir. What the fence
+// refuses is the outcome's Violation; the error means the scan could not
+// complete (I/O or parse).
 func Check(repoRoot string, f Fence) (Outcome, error) {
 	var out Outcome
 	if repoRoot == "" {
 		repoRoot = "."
 	}
 	if err := ValidateRegistry(f); err != nil {
-		return out, fmt.Errorf("%s: %w", f.Dir, err)
+		out.Violation = fmt.Errorf("%s: %w", f.Dir, err)
+		return out, nil
 	}
 
 	root := filepath.Join(repoRoot, f.Dir)
@@ -132,10 +148,11 @@ func Check(repoRoot string, f Fence) (Outcome, error) {
 
 	sort.Strings(out.Subpackages)
 	sort.Strings(out.Unregistered)
-	return out, out.verdict(f.Dir)
+	out.Violation = out.violation(f.Dir)
+	return out, nil
 }
 
-func (o Outcome) verdict(dir string) error {
+func (o Outcome) violation(dir string) error {
 	if o.FilesParsed == 0 {
 		return fmt.Errorf("%s: %w", dir, ErrNothingParsed)
 	}

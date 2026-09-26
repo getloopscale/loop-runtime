@@ -56,7 +56,7 @@ func setupCLIExitCodes(fs *flag.FlagSet) Check {
 			PinFile:  *pin,
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 
 		// The tracked absence goes to stdout on every run — that is what turns a
@@ -70,7 +70,7 @@ func setupCLIExitCodes(fs *flag.FlagSet) Check {
 				a.Subject, a.ResolvedPath, a.Why)
 		}
 
-		if len(outcome.Violations) > 0 {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("cli-exit-codes: FAIL — %d violation(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  %s\n", v)
@@ -79,7 +79,7 @@ func setupCLIExitCodes(fs *flag.FlagSet) Check {
 			inv.Stderr.Println("Permanent contract (Rule 4): 0/1/2/3/4/5 only. SIG handlers may use 130/143.")
 			inv.Stderr.Printf("When there is no CLI source to read, %s must say so in one line:\n", *pin)
 			inv.Stderr.Println("  <subject path>\t<why it is absent, naming what covers the contract instead>")
-			return Fail, nil
+			return outcome, nil
 		}
 
 		// `!Checked` is "no subject found"; `ScannedFiles == 0` is "found and read
@@ -96,11 +96,11 @@ func setupCLIExitCodes(fs *flag.FlagSet) Check {
 			}
 			inv.Stdout.Printf("cli-exit-codes: PARTIAL — 0 file(s) scanned, exit-code contract NOT CHECKED "+
 				"(%s; %d tracked absence(s))\n", where, len(outcome.TrackedAbsences))
-			return Pass, nil
+			return outcome, nil
 		}
 
 		inv.Stdout.Printf("cli-exit-codes: PASS — %d file(s) under %s, no literal decimal process.exit() outside 0-5 "+
 			"(signal handlers exempt)\n", outcome.ScannedFiles, outcome.ScannedRoot)
-		return Pass, nil
+		return outcome, nil
 	}
 }

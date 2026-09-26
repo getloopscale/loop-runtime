@@ -24,6 +24,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Occurrence is one line the baseline classified as GENERIC — a false positive of
@@ -99,7 +101,12 @@ type Outcome struct {
 	Failures []string
 }
 
+// Verdict is Fail when any generic occurrence did not survive the rename.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.Of(o.Failures) }
+
 // Check verifies that every GENERIC occurrence in the baseline is still present.
+// A modified occurrence is a Failure on the outcome; the error means the check
+// could not run (an unreadable baseline, a baseline captured after the rename).
 func Check(cfg Config) (Outcome, error) {
 	var out Outcome
 
@@ -152,9 +159,6 @@ func Check(cfg Config) (Outcome, error) {
 			occ.Path, occ.Token, strings.TrimSpace(occ.Content)))
 	}
 
-	if len(out.Failures) > 0 {
-		return out, errors.New("generic occurrences were modified")
-	}
 	return out, nil
 }
 

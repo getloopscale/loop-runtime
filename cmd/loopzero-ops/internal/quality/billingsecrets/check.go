@@ -22,6 +22,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // billingSecretNames are the secrets whose absence kills billing.
@@ -88,6 +90,9 @@ type Outcome struct {
 	// it read nothing does not look like a gate that passed.
 	Scanned []string
 }
+
+// Verdict is Fail when any billing secret mount has literal optionality.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.Of(o.Findings) }
 
 // Check scans the chart template and the values that feed it, and fails literal
 // optionality on the billing secrets.

@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // The baseline's `amendments` field is read.
@@ -38,7 +40,7 @@ func TestAmendmentExemptsARemovedPath(t *testing.T) {
 	})
 
 	out, err := Check(Config{RepoRoot: root, BaselinePath: base, SkipAncestryCheck: true})
-	if err != nil {
+	if err != nil || out.Verdict() != verdict.Pass {
 		t.Fatalf("an amended path must not fail the gate: %v (%v)", err, out.Failures)
 	}
 }
@@ -58,8 +60,8 @@ func TestAmendmentWithoutAReasonIsNotHonoured(t *testing.T) {
 		},
 	})
 
-	if _, err := Check(Config{RepoRoot: root, BaselinePath: base, SkipAncestryCheck: true}); err == nil {
-		t.Fatal("an amendment with no reason must not exempt anything")
+	if out, err := Check(Config{RepoRoot: root, BaselinePath: base, SkipAncestryCheck: true}); err != nil || out.Verdict() != verdict.Fail {
+		t.Fatalf("an amendment with no reason must not exempt anything (err=%v)", err)
 	}
 }
 
@@ -77,8 +79,8 @@ func TestUnamendedRemovalStillFails(t *testing.T) {
 		},
 	})
 
-	if _, err := Check(Config{RepoRoot: root, BaselinePath: base, SkipAncestryCheck: true}); err == nil {
-		t.Fatal("a removal nobody amended must still fail")
+	if out, err := Check(Config{RepoRoot: root, BaselinePath: base, SkipAncestryCheck: true}); err != nil || out.Verdict() != verdict.Fail {
+		t.Fatalf("a removal nobody amended must still fail (err=%v)", err)
 	}
 }
 

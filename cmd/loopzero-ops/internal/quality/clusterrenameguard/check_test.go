@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // writeBaseline materializes a baseline file plus the source files it describes.
@@ -48,7 +50,10 @@ func TestFailsWhenAGenericOccurrenceWasRenamed(t *testing.T) {
 	})
 
 	outcome, err := Check(Config{RepoRoot: root, BaselinePath: path, SkipAncestryCheck: true})
-	if err == nil {
+	if err != nil {
+		t.Fatalf("a renamed occurrence is a finding, not an error: %v", err)
+	}
+	if outcome.Verdict() != verdict.Fail {
 		t.Fatal("expected the gate to FAIL when a generic occurrence was renamed")
 	}
 	if len(outcome.Failures) != 1 {
@@ -71,8 +76,8 @@ func TestPassesWhenGenericOccurrencesAreUntouched(t *testing.T) {
 	})
 
 	outcome, err := Check(Config{RepoRoot: root, BaselinePath: path, SkipAncestryCheck: true})
-	if err != nil {
-		t.Fatalf("expected PASS, got failures: %v", outcome.Failures)
+	if err != nil || outcome.Verdict() != verdict.Pass {
+		t.Fatalf("expected PASS, got err=%v failures: %v", err, outcome.Failures)
 	}
 }
 
@@ -87,8 +92,8 @@ func TestNewFileWithGenericOccurrenceIsNotARegression(t *testing.T) {
 		"docs/adr.md": "The CAPI management cluster is named fleet.\n",
 	})
 
-	if _, err := Check(Config{RepoRoot: root, BaselinePath: path, SkipAncestryCheck: true}); err != nil {
-		t.Fatalf("a generic occurrence in a file absent from the baseline must not fail: %v", err)
+	if out, err := Check(Config{RepoRoot: root, BaselinePath: path, SkipAncestryCheck: true}); err != nil || out.Verdict() != verdict.Pass {
+		t.Fatalf("a generic occurrence in a file absent from the baseline must not fail: err=%v failures=%v", err, out.Failures)
 	}
 }
 
@@ -118,7 +123,10 @@ func TestMissingFileIsReportedAsAFailure(t *testing.T) {
 	path := writeBaseline(t, root, baseline, nil)
 
 	outcome, err := Check(Config{RepoRoot: root, BaselinePath: path, SkipAncestryCheck: true})
-	if err == nil {
+	if err != nil {
+		t.Fatalf("a missing file is a finding, not an error: %v", err)
+	}
+	if outcome.Verdict() != verdict.Fail {
 		t.Fatal("expected FAIL when a baseline file no longer exists")
 	}
 	if len(outcome.Failures) != 1 {
@@ -145,8 +153,8 @@ func TestFollowsAGenericOccurrenceAcrossAFileRename(t *testing.T) {
 		"manifests/new-name.yaml": "kind: ClusterSecretStore\n  # backed by the vault (OpenBao)\n",
 	})
 
-	if _, err := Check(Config{RepoRoot: root, BaselinePath: path, SkipAncestryCheck: true}); err != nil {
-		t.Fatalf("a moved file must not read as a renamed false positive: %v", err)
+	if out, err := Check(Config{RepoRoot: root, BaselinePath: path, SkipAncestryCheck: true}); err != nil || out.Verdict() != verdict.Pass {
+		t.Fatalf("a moved file must not read as a renamed false positive: err=%v failures=%v", err, out.Failures)
 	}
 }
 
@@ -164,7 +172,7 @@ func TestStillFailsWhenTheLineIsGoneFromTheWholeTree(t *testing.T) {
 		"manifests/new-name.yaml": "kind: ClusterSecretStore\n  # backed by the secrets (OpenBao)\n",
 	})
 
-	if _, err := Check(Config{RepoRoot: root, BaselinePath: path, SkipAncestryCheck: true}); err == nil {
-		t.Fatal("a generic line absent from the entire tree is a renamed false positive and must FAIL")
+	if out, err := Check(Config{RepoRoot: root, BaselinePath: path, SkipAncestryCheck: true}); err != nil || out.Verdict() != verdict.Fail {
+		t.Fatalf("a generic line absent from the entire tree is a renamed false positive and must FAIL (err=%v)", err)
 	}
 }

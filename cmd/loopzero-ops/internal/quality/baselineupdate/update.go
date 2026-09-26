@@ -23,6 +23,7 @@ import (
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baseline"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/coverageparse"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -63,6 +64,10 @@ type Result struct {
 	// JSON is populated only when DryRun=true (the would-be content).
 	JSON []byte
 }
+
+// Verdict is Pass: the update is an operation, and a Result exists only when
+// it completed. A failed update is Run's error.
+func (r Result) Verdict() verdict.Verdict { return verdict.Pass }
 
 // Run executes the pipeline.
 //
