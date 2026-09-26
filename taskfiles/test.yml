@@ -640,9 +640,9 @@ tasks:
       # patches only a list that a -f file supplied. Without it the --set built a new
       # one-field backupStorageLocation, the chart's values schema rejected the render, and
       # the pipe this replaced reported that as a pass (#392).
-      # Skip Velero CRD kinds (BackupStorageLocation, Schedule, etc.) which
-      # are not in default kubeconform schemas.
-      - /tmp/loopzero-ops validate-chart --release test --chart infra/helm/velero/ -f infra/helm/velero/values.yaml -f infra/helm/velero/values-schedules.yaml --set velero.configuration.backupStorageLocation[0].bucket=test --set velero.configuration.backupStorageLocation[0].config.region=sfo3 --set velero.configuration.backupStorageLocation[0].config.s3Url=https://sfo3.digitaloceanspaces.com --skip BackupStorageLocation,VolumeSnapshotLocation,Backup,Restore,Schedule,DownloadRequest,DeleteBackupRequest,PodVolumeBackup,PodVolumeRestore,BackupRepository,ServerStatusRequest
+      # The Velero kinds (Schedule, BackupStorageLocation, ...) are validated, not skipped:
+      # their strict schemas are generated from the pinned chart's CRDs (#391).
+      - /tmp/loopzero-ops validate-chart --release test --chart infra/helm/velero/ -f infra/helm/velero/values.yaml -f infra/helm/velero/values-schedules.yaml --set velero.configuration.backupStorageLocation[0].bucket=test --set velero.configuration.backupStorageLocation[0].config.region=sfo3 --set velero.configuration.backupStorageLocation[0].config.s3Url=https://sfo3.digitaloceanspaces.com
       # Monitoring manifests (ServiceMonitor, PrometheusRule are CRD kinds — skip those)
       - kubeconform --strict --skip ServiceMonitor,PrometheusRule,Probe infra/helm/monitoring/manifests/
       # infra/helm/argo-workflows/templates/ contains Go template syntax ({{ }}) — requires helm template to validate
@@ -704,10 +704,17 @@ tasks:
         - Schema drift between chart upgrades
       Uses local CRD schemas at infra/kubeconform-schemas/ for kinds not in
       the default kubeconform schema repository (CustomResourceDefinition).
+      The render is offline: LOOPZERO_DB_PASSWORD is a render-only placeholder set
+      by the script, never a real secret (#391).
     cmds:
       # Delegate to a shell script — keeps kubeconform's {{...}} template
       # placeholders out of Task's Go-template parser.
       - bash infra/kubeconform-schemas/validate-helmfile-templates.sh
+      # The Velero schemas the render was just checked against are generated from
+      # the chart version infra/helm/velero/Chart.lock pins; the render above built
+      # that dependency, so this is where a Velero upgrade without a schema refresh
+      # is caught (#391). Refresh: task helm:sync-kubeconform-schemas.
+      - cd cmd/loopzero-ops && go run . kubeconform-schemas --check --root ../.. --chart infra/helm/velero
 
   validate:layered-bootstrap:
     desc: |
