@@ -34,7 +34,7 @@ if [ -z "${LOOPZERO_TEST_TENANT_ID:-}" ] && [ -f "${HOME}/.loopzero/local-dogfoo
     | python3 -c "import json,sys; sys.stdout.write(json.load(sys.stdin).get('tenant_id',''))" 2>/dev/null || echo "")
 fi
 TENANT_ID="${LOOPZERO_TEST_TENANT_ID:-admin-loopzero-dev}"
-PROJECT_NAME="${LOOPZERO_TEST_PROJECT:-teste}"
+PROJECT_NAME="${LOOPZERO_TEST_PROJECT:-teste}" # english-only: canonical live fixture project name, already persisted in dev-public (namespaces, DNS, Caddyfile); renaming is an owner decision
 ENV_NAME="${LOOPZERO_TEST_ENV:-production}"
 DEV_PUBLIC_BASE="${LOOPZERO_DEV_PUBLIC_BASE:-https://app-dev.loopzero.example}"
 KUBE_CONTEXT="${LOOPZERO_KUBE_CONTEXT:-k3d-loopzero-core}"

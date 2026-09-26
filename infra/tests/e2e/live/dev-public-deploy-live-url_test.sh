@@ -41,7 +41,7 @@ PROBE_COMMIT_SHA="${LOOPZERO_DEPLOY_LIVE_URL_COMMIT:-deadbeefdeadbeefdeadbeefdea
 # project_canonical_dev_user_credentials + reference seed scripts).
 # Operator can override; setting empty string SKIPs C+D with a SKIP verdict
 # (not a FAIL).
-CANONICAL_PROJECT="${LOOPZERO_DEPLOY_LIVE_URL_CANONICAL_PROJECT:-teste}"
+CANONICAL_PROJECT="${LOOPZERO_DEPLOY_LIVE_URL_CANONICAL_PROJECT:-teste}" # english-only: canonical live fixture project name, already persisted in dev-public (namespaces, DNS, Caddyfile); renaming is an owner decision
 CANONICAL_ENV="${LOOPZERO_DEPLOY_LIVE_URL_CANONICAL_ENV:-production}"
 
 usage() {

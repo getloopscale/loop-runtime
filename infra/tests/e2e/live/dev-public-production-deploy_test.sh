@@ -42,7 +42,7 @@ set -euo pipefail
 REPO_OWNER="${REPO_OWNER:-getloopscale}"
 REPO_NAME="${REPO_NAME:-loopzerokit-example}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-develop}"
-PROJECT_NAME="${PROJECT_NAME:-teste}"
+PROJECT_NAME="${PROJECT_NAME:-teste}" # english-only: canonical live fixture project name, already persisted in dev-public (namespaces, DNS, Caddyfile); renaming is an owner decision
 ENV_NAME="${ENV_NAME:-production}"
 SESSION_FILE="${SESSION_FILE:-$HOME/.loopzero/admin-loopzero-dev-session.txt}"
 PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.loopzero.example}"
