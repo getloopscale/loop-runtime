@@ -4,7 +4,6 @@
 package qualitycli
 
 import (
-	"errors"
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillpaths"
@@ -27,21 +26,21 @@ func init() {
 func setupSkillPaths(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := skillpaths.Check(skillpaths.Config{RepoRoot: inv.Root})
-		if errors.Is(err, skillpaths.ErrSkillsRootMissing) {
-			return kitNotInstalled(inv, err)
-		}
 		if err != nil {
-			if !isViolation(err, skillpaths.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		switch outcome.Verdict() {
+		case verdict.NotVerified:
+			reportKitNotInstalled(inv, outcome.Unverified)
+		case verdict.Fail:
 			inv.Stderr.Printf("skill-paths: FAIL — %d broken reference(s) across SKILL.md files\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
-			return Fail, nil
+		default:
+			inv.Stdout.Printf("skill-paths: PASS — %d skills, %d paths, %d task invocations resolve\n",
+				outcome.CheckedSkills, outcome.CheckedPaths, outcome.CheckedTasks)
 		}
-		inv.Stdout.Printf("skill-paths: PASS — %d skills, %d paths, %d task invocations resolve\n",
-			outcome.CheckedSkills, outcome.CheckedPaths, outcome.CheckedTasks)
-		return Pass, nil
+		return outcome, nil
 	}
 }

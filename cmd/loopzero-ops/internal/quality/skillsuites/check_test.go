@@ -57,7 +57,7 @@ func TestGreenSuitePasses(t *testing.T) {
 	root := t.TempDir()
 	suite(t, root, "ok", "def test_true():\n    assert True\n")
 
-	out, err := Check(Config{RepoRoot: root, PerSuiteTimeout: 60 * time.Second})
+	out, err := violationOf(Check(Config{RepoRoot: root, PerSuiteTimeout: 60 * time.Second}))
 	if !pytestAvailable() {
 		assertAdvisory(t, out, err)
 		return
@@ -74,7 +74,7 @@ func TestRedSuiteFails(t *testing.T) {
 	root := t.TempDir()
 	suite(t, root, "broken", "def test_false():\n    assert False\n")
 
-	out, err := Check(Config{RepoRoot: root, PerSuiteTimeout: 60 * time.Second})
+	out, err := violationOf(Check(Config{RepoRoot: root, PerSuiteTimeout: 60 * time.Second}))
 	if !pytestAvailable() {
 		assertAdvisory(t, out, err)
 		return
@@ -95,7 +95,7 @@ func TestOneRedAmongGreensStillFails(t *testing.T) {
 	suite(t, root, "b", "def test_bad():\n    assert False\n")
 	suite(t, root, "c", "def test_ok():\n    assert True\n")
 
-	out, err := Check(Config{RepoRoot: root, PerSuiteTimeout: 60 * time.Second})
+	out, err := violationOf(Check(Config{RepoRoot: root, PerSuiteTimeout: 60 * time.Second}))
 	if !pytestAvailable() {
 		assertAdvisory(t, out, err)
 		return
@@ -117,7 +117,7 @@ func TestSkillWithoutTestsIsNotASuite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := Check(Config{RepoRoot: root, PerSuiteTimeout: 60 * time.Second})
+	out, err := violationOf(Check(Config{RepoRoot: root, PerSuiteTimeout: 60 * time.Second}))
 	if !pytestAvailable() {
 		assertAdvisory(t, out, err)
 		return
@@ -137,7 +137,7 @@ func TestNoSuitesFoundIsAFailureNotASilentPass(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, ".claude", "skills"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrNoSuitesFound) {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrNoSuitesFound) {
 		t.Fatalf("an empty skills tree must fail loudly: %v", err)
 	}
 }
@@ -157,7 +157,7 @@ func TestHangingSuiteIsBoundedAndReportedAsFailure(t *testing.T) {
 	root := t.TempDir()
 	suite(t, root, "slow", "import time\n\n\ndef test_sleep():\n    time.sleep(30)\n")
 
-	out, err := Check(Config{RepoRoot: root, PerSuiteTimeout: 2 * time.Second})
+	out, err := violationOf(Check(Config{RepoRoot: root, PerSuiteTimeout: 2 * time.Second}))
 	if !pytestAvailable() {
 		assertAdvisory(t, out, err)
 		return

@@ -4,7 +4,6 @@
 package qualitycli
 
 import (
-	"errors"
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esochartsanity"
@@ -26,21 +25,19 @@ func init() {
 func setupLoopZeroExternalSecretsChartSanity(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := esochartsanity.Check(esochartsanity.Config{RepoRoot: inv.Root})
-		if errors.Is(err, esochartsanity.ErrChartMissing) {
-			inv.Stderr.Println("loopzero-external-secrets-chart-sanity: FAIL — loopzero-external-secrets chart missing")
-			return Fail, err
-		}
+		// A missing chart (esochartsanity.ErrChartMissing) verified nothing; the
+		// runner reports it and exits Incomplete.
 		if err != nil {
-			if !isViolation(err, esochartsanity.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("loopzero-external-secrets-chart-sanity: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("loopzero-external-secrets-chart-sanity: PASS — 8 chart-sanity assertions across 5 canonical envs clean")
-		return Pass, nil
+		return outcome, nil
 	}
 }

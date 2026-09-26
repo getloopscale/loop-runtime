@@ -33,6 +33,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const (
@@ -65,6 +67,16 @@ type Outcome struct {
 	SchemaLines int
 	// Diagnostic is the tool stderr on failure.
 	Diagnostic string
+}
+
+// Verdict is Skip when a required tool is missing and the run is advisory,
+// and Pass otherwise: a check or render that could not complete is an error,
+// not an outcome.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Warn {
+		return verdict.Skip
+	}
+	return verdict.Pass
 }
 
 // ErrRenderFailed is emitted when any stage of the render pipeline fails.

@@ -49,6 +49,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrSuitesFailed means at least one skill suite is red.
@@ -73,6 +75,27 @@ type Result struct {
 type Outcome struct {
 	Advisory bool // pytest absent; nothing was concluded
 	Results  []Result
+	// Violation is what the run found wrong (ErrSuitesFailed, ErrNoSuitesFound),
+	// or nil. A violation is the check's verdict, never its error.
+	Violation error
+	// Unverified is why nothing could be verified on this machine
+	// (ErrSkillsRootMissing: the gitignored kit is not installed), or nil.
+	Unverified error
+}
+
+// Verdict is Fail on a red suite or on a discovery that found none,
+// NotVerified where the kit is not installed, Skip when pytest is absent (the
+// gate is advisory then), and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	switch {
+	case o.Violation != nil:
+		return verdict.Fail
+	case o.Unverified != nil:
+		return verdict.NotVerified
+	case o.Advisory:
+		return verdict.Skip
+	}
+	return verdict.Pass
 }
 
 // Failed lists the red suites.
@@ -170,7 +193,12 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	suites, err := Discover(cfg)
-	if err != nil {
+	switch {
+	case errors.Is(err, ErrSkillsRootMissing):
+		return Outcome{Unverified: err}, nil
+	case errors.Is(err, ErrNoSuitesFound):
+		return Outcome{Violation: err}, nil
+	case err != nil:
 		return Outcome{}, err
 	}
 
@@ -182,7 +210,7 @@ func Check(cfg Config) (Outcome, error) {
 	sort.Slice(out.Results, func(i, j int) bool { return out.Results[i].Skill < out.Results[j].Skill })
 
 	if len(out.Failed()) > 0 {
-		return out, ErrSuitesFailed
+		out.Violation = ErrSuitesFailed
 	}
 	return out, nil
 }

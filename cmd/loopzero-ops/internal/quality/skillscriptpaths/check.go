@@ -54,6 +54,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrUnreachableInvocation means a SKILL.md tells an agent to run a script by a path
@@ -89,6 +91,24 @@ type Outcome struct {
 	SkillsScanned int
 	FilesScanned  int
 	Findings      []Finding
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+	// Unverified is why the check could verify nothing on this machine
+	// (wrapping one of its Err* reasons), or nil.
+	Unverified error
+}
+
+// Verdict is Fail when the check found a violation, NotVerified when it
+// could verify nothing on this machine, and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	switch {
+	case o.Violation != nil:
+		return verdict.Fail
+	case o.Unverified != nil:
+		return verdict.NotVerified
+	}
+	return verdict.Pass
 }
 
 // Config selects the tree to scan.
@@ -144,7 +164,7 @@ func Check(cfg Config) (Outcome, error) {
 
 	entries, err := os.ReadDir(root)
 	if errors.Is(err, fs.ErrNotExist) {
-		return Outcome{}, fmt.Errorf("%w: %s", ErrSkillsRootMissing, root)
+		return Outcome{Unverified: fmt.Errorf("%w: %s", ErrSkillsRootMissing, root)}, nil
 	}
 	if err != nil {
 		return Outcome{}, fmt.Errorf("reading %s: %w", root, err)
@@ -231,7 +251,8 @@ func Check(cfg Config) (Outcome, error) {
 	})
 
 	if len(out.Findings) > 0 {
-		return out, ErrUnreachableInvocation
+		out.Violation = ErrUnreachableInvocation
+		return out, nil
 	}
 	return out, nil
 }

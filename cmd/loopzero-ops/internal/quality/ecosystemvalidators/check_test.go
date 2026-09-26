@@ -54,7 +54,7 @@ func TestGreenValidatorsPass(t *testing.T) {
 		{Name: "a", Rel: "mechanisms/gates/a.py"}, {Name: "b", Rel: "mechanisms/gates/b.py"},
 	}, Timeout: 30 * time.Second}
 
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if !pythonAvailable() {
 		if err != nil || !out.Advisory {
 			t.Fatalf("without python3 the gate is advisory, not an error; err=%v out=%+v", err, out)
@@ -78,7 +78,7 @@ func TestRedValidatorFails(t *testing.T) {
 		{Name: "ok", Rel: "mechanisms/gates/ok.py"}, {Name: "bad", Rel: "mechanisms/gates/bad.py"},
 	}, Timeout: 30 * time.Second}
 
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if !pythonAvailable() {
 		return
 	}
@@ -98,7 +98,7 @@ func TestWarningsAreCountedButDoNotFail(t *testing.T) {
 	})
 	cfg := Config{RepoRoot: root, Validators: []Validator{{Name: "warn", Rel: "mechanisms/gates/warn.py"}}, Timeout: 30 * time.Second}
 
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if !pythonAvailable() {
 		return
 	}
@@ -117,7 +117,7 @@ func TestMissingValidatorInAnInstalledKitIsAFailure(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, ".claude", "mechanisms"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrValidatorsMissing) && pythonAvailable() {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrValidatorsMissing) && pythonAvailable() {
 		t.Fatalf("a missing validator in an installed kit must fail loudly; err=%v", err)
 	}
 }
@@ -126,7 +126,7 @@ func TestMissingValidatorInAnInstalledKitIsAFailure(t *testing.T) {
 // validators to run. That is ADVISORY with the reason named, not a FAIL: a
 // versioned gate must not fail on every clone over an unversioned install.
 func TestKitNotInstalledIsAdvisory(t *testing.T) {
-	out, err := Check(Config{RepoRoot: t.TempDir()})
+	out, err := violationOf(Check(Config{RepoRoot: t.TempDir()}))
 	if err != nil {
 		t.Fatalf("no kit is advisory, not an error: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestBothLayoutsResolve(t *testing.T) {
 // asserting it here would make this module's suite depend on an unversioned
 // install.
 func TestRealTreeRunsTheDeclaredValidatorsOrIsAdvisory(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot, Timeout: 3 * time.Minute})
+	out, err := violationOf(Check(Config{RepoRoot: repoRoot, Timeout: 3 * time.Minute}))
 	if out.Advisory {
 		if err != nil || out.AdvisoryReason == "" || len(out.Results) != 0 {
 			t.Fatalf("advisory must carry a reason and no results; err=%v out=%+v", err, out)

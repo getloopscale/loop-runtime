@@ -31,25 +31,29 @@ func setupRenderSchemaGenSQL(fs *flag.FlagSet) Check {
 		if !*render {
 			outcome, err := renderschemagensql.Check(cfg)
 			if err != nil {
-				return Fail, err
+				return nil, err
 			}
-			if outcome.Warn {
+			if outcome.Verdict() == verdict.Skip {
 				inv.Stdout.Printf("render-schema-gen-sql: WARN (%s) — pass --advisory-only=false to convert to hard fail once toolchain lands\n", outcome.WarnReason)
-				return Pass, nil
+				return outcome, nil
 			}
 			inv.Stdout.Println("render-schema-gen-sql: PASS — toolchain + migrations + sqlc.yaml present; pass --render to execute the pipeline")
-			return Pass, nil
+			return outcome, nil
 		}
 		outcome, err := renderschemagensql.Render(cfg)
 		if err != nil {
-			inv.Stderr.Printf("render-schema-gen-sql: FAIL — %v\n%s\n", err, outcome.Diagnostic)
-			return Fail, err
+			// The pipeline could not run: the runner reports the error and exits
+			// Incomplete. The tool output is what explains it.
+			if outcome.Diagnostic != "" {
+				inv.Stderr.Println(outcome.Diagnostic)
+			}
+			return nil, err
 		}
-		if outcome.Warn {
+		if outcome.Verdict() == verdict.Skip {
 			inv.Stdout.Printf("render-schema-gen-sql: WARN (%s)\n", outcome.WarnReason)
-			return Pass, nil
+			return outcome, nil
 		}
 		inv.Stdout.Printf("render-schema-gen-sql: PASS — schema.gen.sql rendered (%d lines) + sqlc compile clean\n", outcome.SchemaLines)
-		return Pass, nil
+		return outcome, nil
 	}
 }

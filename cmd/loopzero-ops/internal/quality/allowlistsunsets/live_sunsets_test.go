@@ -29,7 +29,7 @@ import (
 // program that does not exist does not need to exist. Rung 6 keeps the other half.
 func TestPastSunsetIsRefused(t *testing.T) {
 	root := seed(t, "ID-1 | refactor | 2026-01-05 | something deferred\n")
-	out, err := Check(Config{RepoRoot: root, Today: mustDay(t, "2026-09-16")})
+	out, err := violationOf(Check(Config{RepoRoot: root, Today: mustDay(t, "2026-09-16")}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("a sunset eight months past must be refused; err=%v failures=%v", err, out.Failures)
 	}
@@ -42,7 +42,7 @@ func TestPastSunsetIsRefused(t *testing.T) {
 // and failing on it would refuse work on the one day somebody could still act on it.
 func TestSunsetTodayWarnsAndPasses(t *testing.T) {
 	root := seed(t, "ID-1 | refactor | 2026-09-16 | expires today\n")
-	out, err := Check(Config{RepoRoot: root, Today: mustDay(t, "2026-09-16")})
+	out, err := violationOf(Check(Config{RepoRoot: root, Today: mustDay(t, "2026-09-16")}))
 	if err != nil {
 		t.Fatalf("a sunset dated today must pass: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestSunsetTodayWarnsAndPasses(t *testing.T) {
 
 func TestFutureSunsetPassesSilently(t *testing.T) {
 	root := seed(t, "ID-1 | refactor | 2027-01-01 | plenty of time\n")
-	out, err := Check(Config{RepoRoot: root, Today: mustDay(t, "2026-09-16")})
+	out, err := violationOf(Check(Config{RepoRoot: root, Today: mustDay(t, "2026-09-16")}))
 	if err != nil {
 		t.Fatalf("a future sunset must pass: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestFutureSunsetPassesSilently(t *testing.T) {
 // typo into a permanent exemption, which is the failure mode the sunset exists to close.
 func TestUnparseableDateIsRefused(t *testing.T) {
 	root := seed(t, "ID-1 | refactor | 09/05/2026 | wrong format\n")
-	if _, err := Check(Config{RepoRoot: root, Today: mustDay(t, "2026-09-16")}); !errors.Is(err, ErrViolations) {
+	if _, err := violationOf(Check(Config{RepoRoot: root, Today: mustDay(t, "2026-09-16")})); !errors.Is(err, ErrViolations) {
 		t.Fatalf("an unparseable sunset must be refused, got err=%v", err)
 	}
 }
@@ -74,7 +74,7 @@ func TestUnparseableDateIsRefused(t *testing.T) {
 // A line with too few columns carries no sunset at all.
 func TestMalformedEntryIsRefused(t *testing.T) {
 	root := seed(t, "ID-1 | refactor\n")
-	if _, err := Check(Config{RepoRoot: root, Today: mustDay(t, "2026-09-16")}); !errors.Is(err, ErrViolations) {
+	if _, err := violationOf(Check(Config{RepoRoot: root, Today: mustDay(t, "2026-09-16")})); !errors.Is(err, ErrViolations) {
 		t.Fatalf("a malformed entry must be refused, got err=%v", err)
 	}
 }
@@ -82,7 +82,7 @@ func TestMalformedEntryIsRefused(t *testing.T) {
 // Comments and blank lines are not entries.
 func TestCommentsAndBlanksAreNotEntries(t *testing.T) {
 	root := seed(t, "# a comment | with | pipes | in it\n\n   \nID-1 | refactor | 2027-01-01 | fine\n")
-	if _, err := Check(Config{RepoRoot: root, Today: mustDay(t, "2026-09-16")}); err != nil {
+	if _, err := violationOf(Check(Config{RepoRoot: root, Today: mustDay(t, "2026-09-16")})); err != nil {
 		t.Fatalf("comments and blanks must be skipped: %v", err)
 	}
 }

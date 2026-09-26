@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/recordstreesplit"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
@@ -28,22 +27,21 @@ func init() {
 func setupRecordsTreeSplit(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		o := recordstreesplit.Check(recordstreesplit.Config{RepoRoot: inv.Root})
-		if o.LiveMissing {
+		switch {
+		case o.Verdict() == verdict.NotVerified:
 			inv.Stderr.Printf("records-tree-split: NOT VERIFIED — %s is absent on this machine.\n"+
 				"  It is gitignored, so a fresh clone has none; there is no records tree here to check.\n",
 				recordstreesplit.DefaultLiveDir)
-			return Fail, fmt.Errorf("%w: %s is absent", errNotVerified, recordstreesplit.DefaultLiveDir)
-		}
-		if o.Pass && o.ArchiveAbsent {
+			return o, nil
+		case o.Verdict() == verdict.Pass && o.ArchiveAbsent:
 			inv.Stdout.Printf("OK one live records tree (%s, %d records); no retired archive at %s, so nothing is frozen\n",
 				recordstreesplit.DefaultLiveDir, o.LiveCount, recordstreesplit.DefaultArchiveDir)
-			return Pass, nil
-		}
-		if o.Pass {
+			return o, nil
+		case o.Verdict() == verdict.Pass:
 			inv.Stdout.Printf("OK one live records tree (%s, %d records); %s frozen at %d\n",
 				recordstreesplit.DefaultLiveDir, o.LiveCount,
 				recordstreesplit.DefaultArchiveDir, o.FrozenSize)
-			return Pass, nil
+			return o, nil
 		}
 		for _, v := range o.Violations {
 			inv.Stderr.Printf("VIOLATION: %s\n", v)
@@ -69,6 +67,6 @@ func setupRecordsTreeSplit(_ *flag.FlagSet) Check {
 			inv.Stderr.Printf("%s if the removal is deliberate.\n",
 				recordstreesplit.DefaultManifestPath)
 		}
-		return Fail, nil
+		return o, nil
 	}
 }

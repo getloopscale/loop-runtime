@@ -4,7 +4,6 @@
 package qualitycli
 
 import (
-	"errors"
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esocreationpolicy"
@@ -25,21 +24,19 @@ func init() {
 func setupLoopZeroExternalSecretsCreationPolicy(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := esocreationpolicy.Check(esocreationpolicy.Config{RepoRoot: inv.Root})
-		if errors.Is(err, esocreationpolicy.ErrChartMissing) {
-			inv.Stderr.Println("loopzero-external-secrets-creation-policy: FAIL — chart missing")
-			return Fail, err
-		}
+		// A missing chart (esocreationpolicy.ErrChartMissing) verified nothing;
+		// the runner reports it and exits Incomplete.
 		if err != nil {
-			if !isViolation(err, esocreationpolicy.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("loopzero-external-secrets-creation-policy: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("loopzero-external-secrets-creation-policy: PASS — 4 assertions (creationPolicy Orphan + Owner=0 + deletionPolicy Retain + count parity) clean")
-		return Pass, nil
+		return outcome, nil
 	}
 }

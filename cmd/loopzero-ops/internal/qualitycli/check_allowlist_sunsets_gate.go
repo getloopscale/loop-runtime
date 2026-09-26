@@ -26,14 +26,14 @@ func setupCheckAllowlistSunsets(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := allowlistsunsets.Check(allowlistsunsets.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, allowlistsunsets.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("check-allowlist-sunsets: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		// Report what was actually read. This line claimed "7 fixture cases" until 2026-09-16,
 		// when the fixtures went with the missing Python script they graded — a success
@@ -43,6 +43,6 @@ func setupCheckAllowlistSunsets(_ *flag.FlagSet) Check {
 			inv.Stdout.Printf("check-allowlist-sunsets: WARN — %s\n", w)
 		}
 		inv.Stdout.Printf("check-allowlist-sunsets: PASS — %d exemption(s) checked, none expired\n", outcome.Checked)
-		return Pass, nil
+		return outcome, nil
 	}
 }

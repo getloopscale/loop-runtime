@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/calendarday"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const (
@@ -63,6 +64,17 @@ type Outcome struct {
 	Failures []string
 	Warnings []string
 	Checked  int
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrViolations means at least one entry has expired or cannot be read.
@@ -132,7 +144,8 @@ func Check(cfg Config) (Outcome, error) {
 		return out, fmt.Errorf("allowlist-sunsets: scan %s: %w", rel, serr)
 	}
 	if len(out.Failures) > 0 {
-		return out, ErrViolations
+		out.Violation = ErrViolations
+		return out, nil
 	}
 	return out, nil
 }

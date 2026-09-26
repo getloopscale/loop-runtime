@@ -30,7 +30,7 @@ func TestBareInvocationFails(t *testing.T) {
 	root := tree(t, map[string]string{
 		"release": "```bash\npython3 skills/release/scripts/compute_next_version.py --x\n```\n",
 	})
-	out, err := Check(Config{RepoRoot: root})
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrUnreachableInvocation) {
 		t.Fatalf("bare invocation must fail; got err=%v findings=%+v", err, out.Findings)
 	}
@@ -46,7 +46,7 @@ func TestExplicitEcosystemPrefixPasses(t *testing.T) {
 	root := tree(t, map[string]string{
 		"release": "```bash\npython3 .claude/skills/release/scripts/compute_next_version.py\n```\n",
 	})
-	if _, err := Check(Config{RepoRoot: root}); err != nil {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); err != nil {
 		t.Fatalf("an explicit .claude/ prefix must pass: %v", err)
 	}
 }
@@ -57,7 +57,7 @@ func TestShellResolvedPrefixPasses(t *testing.T) {
 		"release": "```bash\nECO=$([ -d .claude/skills ] && echo .claude || echo .)\n" +
 			"python3 \"$ECO/skills/release/scripts/compute_next_version.py\"\n```\n",
 	})
-	if _, err := Check(Config{RepoRoot: root}); err != nil {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); err != nil {
 		t.Fatalf("the $ECO form must pass: %v", err)
 	}
 }
@@ -70,7 +70,7 @@ func TestPathNamedInProseIsNotAnInvocation(t *testing.T) {
 		"auto-plan": "- `skills/auto-plan/scripts/select_next_milestone.py` — milestone selector\n" +
 			"- `rules/cycle-review.md` — review sub-cycle\n",
 	})
-	if _, err := Check(Config{RepoRoot: root}); err != nil {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); err != nil {
 		t.Fatalf("a named path is not an invocation: %v", err)
 	}
 }
@@ -81,7 +81,7 @@ func TestBareInvocationInProseAlsoFails(t *testing.T) {
 	root := tree(t, map[string]string{
 		"cycle-goal": "To cancel: `python3 skills/cycle-goal/scripts/install_goal_hook.py --clear`.\n",
 	})
-	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrUnreachableInvocation) {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrUnreachableInvocation) {
 		t.Fatalf("a prose invocation must fail: %v", err)
 	}
 }
@@ -91,7 +91,7 @@ func TestBashAndShAreInterpretersToo(t *testing.T) {
 		root := tree(t, map[string]string{
 			"x": "```bash\n" + exe + " skills/x/scripts/run.sh\n```\n",
 		})
-		if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrUnreachableInvocation) {
+		if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrUnreachableInvocation) {
 			t.Fatalf("%s invocation must fail: %v", exe, err)
 		}
 	}
@@ -100,7 +100,7 @@ func TestBashAndShAreInterpretersToo(t *testing.T) {
 // Absence is a FAILURE, not a skip. A gate reporting green over a tree it never found is
 // the exact shape of defect this gate exists to refuse.
 func TestMissingSkillsRootIsAFailureNotASkip(t *testing.T) {
-	if _, err := Check(Config{RepoRoot: t.TempDir()}); !errors.Is(err, ErrSkillsRootMissing) {
+	if _, err := violationOf(Check(Config{RepoRoot: t.TempDir()})); !errors.Is(err, ErrSkillsRootMissing) {
 		t.Fatalf("a missing skills root must fail loudly: %v", err)
 	}
 }
@@ -112,7 +112,7 @@ func TestRealTreeIsClean(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := Check(Config{RepoRoot: root})
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 
 	// No ecosystem installed: the contract is a LOUD refusal, and asserting it beats
 	// vanishing — it proves the gate cannot report green over a tree it never found.
@@ -183,7 +183,7 @@ func TestIgnoresLocalSessionFileAtTheRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := Check(Config{RepoRoot: root})
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("err = %v; a .local.md must not fail the repository: %+v", err, out.Findings)
 	}
@@ -197,7 +197,7 @@ func TestUnreadableSkillDocIsAnError(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "SKILL.md"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if err == nil || errors.Is(err, ErrUnreachableInvocation) {
 		t.Fatalf("an unreadable SKILL.md was skipped, got %v", err)
 	}
@@ -212,7 +212,7 @@ func TestUnreadableRuleDocIsAnError(t *testing.T) {
 	if err := os.Symlink(filepath.Join(rules, "real"), filepath.Join(rules, "linked.md")); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if err == nil || errors.Is(err, ErrUnreachableInvocation) {
 		t.Fatalf("an unreadable rule document was skipped, got %v", err)
 	}

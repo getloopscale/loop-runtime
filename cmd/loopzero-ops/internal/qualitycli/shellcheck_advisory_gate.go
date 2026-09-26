@@ -28,23 +28,20 @@ func init() {
 func setupShellcheckAdvisory(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := shellcheckadvisory.Check(shellcheckadvisory.Config{RepoRoot: inv.Root})
-		if errors.Is(err, shellcheckadvisory.ErrNothingScanned) {
-			inv.Stderr.Printf("shellcheck-advisory: FAIL — %v\n", err)
-			return Fail, nil
-		}
 		if err != nil {
-			if !isViolation(err, shellcheckadvisory.ErrViolations) {
-				return Fail, err
-			}
-			inv.Stderr.Printf("shellcheck-advisory: FAIL — %d file(s) scanned; violations follow:\n%s\n", outcome.ScannedFiles, outcome.Diagnostic)
-			return Fail, nil
+			return nil, err
 		}
-		if outcome.Warn {
+		switch {
+		case errors.Is(outcome.Violation, shellcheckadvisory.ErrNothingScanned):
+			inv.Stderr.Printf("shellcheck-advisory: FAIL — %v\n", outcome.Violation)
+		case outcome.Verdict() == verdict.Fail:
+			inv.Stderr.Printf("shellcheck-advisory: FAIL — %d file(s) scanned; violations follow:\n%s\n", outcome.ScannedFiles, outcome.Diagnostic)
+		case outcome.Verdict() == verdict.Skip:
 			inv.Stdout.Println("[shellcheck] WARN: shellcheck not installed — gate is advisory-only.")
 			inv.Stdout.Println("[shellcheck] Install via apt/brew/go to enable enforcement (R1-F5 T4.1).")
-			return Pass, nil
+		default:
+			inv.Stdout.Printf("shellcheck-advisory: PASS — %d files clean (SC1091/SC2155/SC2086/SC2046 tolerated)\n", outcome.ScannedFiles)
 		}
-		inv.Stdout.Printf("shellcheck-advisory: PASS — %d files clean (SC1091/SC2155/SC2086/SC2046 tolerated)\n", outcome.ScannedFiles)
-		return Pass, nil
+		return outcome, nil
 	}
 }

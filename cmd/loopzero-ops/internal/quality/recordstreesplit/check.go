@@ -44,6 +44,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultLiveDir is the canonical records tree, per rules/records-location.md.
@@ -116,6 +118,15 @@ type Outcome struct {
 	Added         []string // in the archive, absent from the manifest
 	Removed       []string // in the manifest, absent from the archive
 	Violations    []string
+}
+
+// Verdict is NotVerified when the live tree is absent on this machine, and
+// otherwise Pass when the check passed and Fail when it did not.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.LiveMissing {
+		return verdict.NotVerified
+	}
+	return verdict.FromPass(o.Pass)
 }
 
 // Check runs the gate.

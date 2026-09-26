@@ -34,6 +34,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrValidatorFailed means at least one validator exited non-zero.
@@ -96,6 +98,22 @@ type Outcome struct {
 	Advisory       bool
 	AdvisoryReason string
 	Results        []Result
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when a validator failed, Skip when nothing was concluded
+// (the kit or python3 is absent; the gate is advisory then), and Pass
+// otherwise. Warnings never fail it.
+func (o Outcome) Verdict() verdict.Verdict {
+	switch {
+	case o.Violation != nil:
+		return verdict.Fail
+	case o.Advisory:
+		return verdict.Skip
+	}
+	return verdict.Pass
 }
 
 // Failed lists the validators that exited non-zero.
@@ -187,7 +205,8 @@ func Check(cfg Config) (Outcome, error) {
 		out.Results = append(out.Results, run(cfg.RepoRoot, script, v.Name, v.Args, cfg.Timeout))
 	}
 	if len(out.Failed()) > 0 {
-		return out, ErrValidatorFailed
+		out.Violation = ErrValidatorFailed
+		return out, nil
 	}
 	return out, nil
 }

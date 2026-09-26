@@ -189,8 +189,6 @@ func (g Gate) run(args []string, stdout, stderr *cliout.Writer) int {
 	case errors.Is(err, errUsage):
 		stderr.Printf("%s: %v\n", g.Name, err)
 		return exitcode.Usage
-	case errors.Is(err, errNotVerified):
-		return exitcode.Incomplete
 	case err != nil:
 		stderr.Printf("%s: ERROR — could not complete the check: %v\n", g.Name, err)
 		return exitcode.Incomplete

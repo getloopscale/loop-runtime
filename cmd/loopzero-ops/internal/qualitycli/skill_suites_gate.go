@@ -28,27 +28,25 @@ func setupSkillSuites(fs *flag.FlagSet) Check {
 	skills := fs.String("skills", "", "skills dir relative to root (default: .claude/skills)")
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := skillsuites.Check(skillsuites.Config{RepoRoot: inv.Root, SkillsRel: *skills})
+		if err != nil {
+			return nil, err
+		}
 		switch {
-		case out.Advisory:
+		case out.Verdict() == verdict.Skip:
 			inv.Stdout.Println("skill-suites: ADVISORY — python3/pytest absent; nothing was concluded")
-			return Pass, nil
-		case errors.Is(err, skillsuites.ErrSkillsRootMissing):
-			return kitNotInstalled(inv, err)
-		case errors.Is(err, skillsuites.ErrNoSuitesFound):
-			inv.Stderr.Printf("skill-suites: FAIL — %v\n", err)
-			return Fail, nil
-		case errors.Is(err, skillsuites.ErrSuitesFailed):
+		case out.Verdict() == verdict.NotVerified:
+			reportKitNotInstalled(inv, out.Unverified)
+		case errors.Is(out.Violation, skillsuites.ErrNoSuitesFound):
+			inv.Stderr.Printf("skill-suites: FAIL — %v\n", out.Violation)
+		case out.Verdict() == verdict.Fail:
 			failed := out.Failed()
 			inv.Stderr.Printf("skill-suites: FAIL — %d of %d suite(s) red:\n", len(failed), len(out.Results))
 			for _, r := range failed {
 				inv.Stderr.Printf("  %s\n      %s\n", r.Skill, r.Tail)
 			}
-			return Fail, nil
-		case err != nil:
-			inv.Stderr.Printf("skill-suites: FAIL — %v\n", err)
-			return Fail, nil
+		default:
+			inv.Stdout.Printf("skill-suites: PASS — %d skill suite(s) green\n", len(out.Results))
 		}
-		inv.Stdout.Printf("skill-suites: PASS — %d skill suite(s) green\n", len(out.Results))
-		return Pass, nil
+		return out, nil
 	}
 }

@@ -16,7 +16,7 @@ import (
 
 func TestCheck_ChartMissing_FAIL(t *testing.T) {
 	root := t.TempDir()
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrChartMissing) {
 		t.Fatalf("expected ErrChartMissing, got %v", err)
 	}
@@ -30,7 +30,7 @@ func TestCheck_HelmAbsent_IsErrHelmUnavailable(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 	t.Setenv("PATH", "/nonexistent")
-	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, helmrender.ErrHelmUnavailable) {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, helmrender.ErrHelmUnavailable) {
 		t.Fatalf("want helmrender.ErrHelmUnavailable, got %v", err)
 	}
 }
@@ -40,7 +40,7 @@ func TestCheck_RealRepoWithHelm(t *testing.T) {
 		t.Skip("helm not on PATH — skipping")
 	}
 	root := qtestutil.Root(t)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("real-repo violation: %v; %v", err, outcome.Failures)
 	}

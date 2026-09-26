@@ -17,7 +17,7 @@ import (
 // TestCheck_MissingChartFails asserts the sentinel error when chart dir absent.
 func TestCheck_MissingChartFails(t *testing.T) {
 	root := t.TempDir()
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrChartMissing) {
 		t.Fatalf("expected ErrChartMissing, got %v", err)
 	}
@@ -30,7 +30,7 @@ func TestCheck_MissingBootstrapValuesFails(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, chartPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrChartMissing) {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrChartMissing) {
 		t.Fatalf("expected ErrChartMissing for a chart without %s, got %v", valuesPath, err)
 	}
 }
@@ -45,7 +45,7 @@ func TestCheck_MissingHelmWarns(t *testing.T) {
 		t.Fatalf("write values: %v", err)
 	}
 	t.Setenv("PATH", "/nonexistent")
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected advisory fallthrough, got err=%v", err)
 	}
@@ -59,7 +59,7 @@ func TestCheck_MissingHelmWarns(t *testing.T) {
 // helm sees advisory fallthrough. Both are legitimate.
 func TestCheck_RealRepoPassesOrAdvisoryFallthrough(t *testing.T) {
 	abs := qtestutil.RootFile(t, chartPath)
-	outcome, checkErr := Check(Config{RepoRoot: abs})
+	outcome, checkErr := violationOf(Check(Config{RepoRoot: abs}))
 	if checkErr != nil {
 		// RootFile asserted the chart exists, so every error here — including
 		// ErrChartMissing — is a real disagreement, never a reason to pass.
@@ -78,7 +78,7 @@ func TestCheck_HelmAbsentIsAdvisoryWhenChartExists(t *testing.T) {
 		t.Skip("helm is installed; this test simulates the missing-helm branch and is redundant here")
 	}
 	abs := qtestutil.RootFile(t, chartPath)
-	outcome, checkErr := Check(Config{RepoRoot: abs})
+	outcome, checkErr := violationOf(Check(Config{RepoRoot: abs}))
 	if checkErr != nil {
 		t.Fatalf("chart exists but helm absent — must be advisory fallthrough, got err=%v", checkErr)
 	}

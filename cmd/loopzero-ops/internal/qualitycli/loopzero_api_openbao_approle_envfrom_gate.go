@@ -28,20 +28,19 @@ func setupLoopZeroAPIOpenbaoApproleEnvfrom(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := loopzeroapiopenbao.Check(loopzeroapiopenbao.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, loopzeroapiopenbao.ErrViolations) {
-				return Fail, err
-			}
-			inv.Stderr.Printf("loopzero-api-openbao-approle-envfrom: FAIL — %v\n", err)
+			return nil, err
+		}
+		switch outcome.Verdict() {
+		case verdict.Fail:
+			inv.Stderr.Printf("loopzero-api-openbao-approle-envfrom: FAIL — %v\n", outcome.Violation)
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
-			return Fail, nil
-		}
-		if outcome.Warn {
+		case verdict.Skip:
 			inv.Stdout.Println("[loopzero-api-openbao] WARN: helm not installed — gate is advisory-only (installer notes: brew install helm / apt install helm).")
-			return Pass, nil
+		default:
+			inv.Stdout.Println("loopzero-api-openbao-approle-envfrom: PASS — envFrom.loopzero-openbao-approle optional=true wired, anti-hardcode preserved")
 		}
-		inv.Stdout.Println("loopzero-api-openbao-approle-envfrom: PASS — envFrom.loopzero-openbao-approle optional=true wired, anti-hardcode preserved")
-		return Pass, nil
+		return outcome, nil
 	}
 }

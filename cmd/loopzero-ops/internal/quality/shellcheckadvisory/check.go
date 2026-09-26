@@ -26,6 +26,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // excludeCodes are the shellcheck codes intentionally suppressed today.
@@ -61,6 +63,22 @@ type Outcome struct {
 	ScannedFiles int
 	// Diagnostic is the shellcheck stdout+stderr when it emitted violations.
 	Diagnostic string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation (a scan over no script
+// included), Skip when shellcheck is not installed (the gate is advisory then),
+// and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	switch {
+	case o.Violation != nil:
+		return verdict.Fail
+	case o.Warn:
+		return verdict.Skip
+	}
+	return verdict.Pass
 }
 
 // ErrViolations means shellcheck flagged at least one violation.
@@ -72,7 +90,8 @@ var ErrNothingScanned = errors.New("no shell script found under the scan paths â
 // Check runs the shellcheck pass with the same tolerated codes as the bash
 // script. When shellcheck is not installed, returns nil error with
 // Outcome.Warn=true (advisory-only fallthrough). A scan that finds no script
-// returns ErrNothingScanned.
+// reports ErrNothingScanned as the outcome's Violation: the gate linted
+// nothing, which it treats as a failure, not as a pass.
 func Check(cfg Config) (Outcome, error) {
 	root := cfg.RepoRoot
 	if root == "" {
@@ -91,7 +110,7 @@ func Check(cfg Config) (Outcome, error) {
 	}
 	if len(files) == 0 {
 		// Zero scripts is a scan that read nothing, not a clean tree.
-		return Outcome{}, ErrNothingScanned
+		return Outcome{Violation: ErrNothingScanned}, nil
 	}
 
 	args := []string{"-e", strings.Join(excludeCodes, ",")}
@@ -105,7 +124,8 @@ func Check(cfg Config) (Outcome, error) {
 	out := Outcome{ScannedFiles: len(files)}
 	if runErr != nil {
 		out.Diagnostic = strings.TrimRight(stdout.String()+stderr.String(), "\n")
-		return out, ErrViolations
+		out.Violation = ErrViolations
+		return out, nil
 	}
 	return out, nil
 }

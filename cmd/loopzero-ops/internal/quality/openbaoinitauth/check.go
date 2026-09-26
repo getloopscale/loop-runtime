@@ -34,6 +34,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	"gopkg.in/yaml.v3"
 )
 
@@ -70,6 +71,21 @@ type Config struct {
 type Outcome struct {
 	Warn     bool
 	Failures []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation, Skip when helm is not on
+// PATH (the gate is advisory then and rendered nothing), and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	switch {
+	case o.Violation != nil:
+		return verdict.Fail
+	case o.Warn:
+		return verdict.Skip
+	}
+	return verdict.Pass
 }
 
 // ErrViolations signals ≥ 1 assertion failed.
@@ -103,15 +119,15 @@ func Check(cfg Config) (Outcome, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return Outcome{Failures: []string{fmt.Sprintf("helm template failed: %v\n%s", err, stderr.String())}}, ErrViolations
+		return Outcome{Failures: []string{fmt.Sprintf("helm template failed: %v\n%s", err, stderr.String())}, Violation: ErrViolations}, nil
 	}
 	if stdout.Len() == 0 {
-		return Outcome{Failures: []string{"helm template returned empty output"}}, ErrViolations
+		return Outcome{Failures: []string{"helm template returned empty output"}, Violation: ErrViolations}, nil
 	}
 
 	failures := checkRendered(stdout.String(), mounts)
 	if len(failures) > 0 {
-		return Outcome{Failures: failures}, ErrViolations
+		return Outcome{Failures: failures, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
 }

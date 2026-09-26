@@ -37,6 +37,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // chartPath is the loopzero-api chart; valuesPath the values Helmfile installs it with.
@@ -56,6 +58,21 @@ type Outcome struct {
 	// mirrors the same pattern as ory-kratos-lifespan's optional helmfile branch).
 	Warn     bool
 	Failures []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation, Skip when helm is not on
+// PATH (the gate is advisory then and rendered nothing), and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	switch {
+	case o.Violation != nil:
+		return verdict.Fail
+	case o.Warn:
+		return verdict.Skip
+	}
+	return verdict.Pass
 }
 
 // ErrViolations means the rendered chart is missing the canonical envFrom wiring.
@@ -104,11 +121,11 @@ func Check(cfg Config) (Outcome, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return Outcome{Failures: []string{fmt.Sprintf("helm template failed: %v\n%s", err, stderr.String())}}, ErrViolations
+		return Outcome{Failures: []string{fmt.Sprintf("helm template failed: %v\n%s", err, stderr.String())}, Violation: ErrViolations}, nil
 	}
 	failures := append(checkRendered(stdout.String()), checkSource(string(source))...)
 	if len(failures) > 0 {
-		return Outcome{Failures: failures}, ErrViolations
+		return Outcome{Failures: failures, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
 }

@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/taskfileinterface"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const skillsDir = ".claude/skills"
@@ -42,6 +43,24 @@ type Outcome struct {
 	CheckedPaths  int
 	CheckedTasks  int
 	Failures      []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+	// Unverified is why the check could verify nothing on this machine
+	// (wrapping one of its Err* reasons), or nil.
+	Unverified error
+}
+
+// Verdict is Fail when the check found a violation, NotVerified when it
+// could verify nothing on this machine, and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	switch {
+	case o.Violation != nil:
+		return verdict.Fail
+	case o.Unverified != nil:
+		return verdict.NotVerified
+	}
+	return verdict.Pass
 }
 
 // ErrSkillsRootMissing means .claude/skills is absent. That directory is the
@@ -79,7 +98,7 @@ func Check(cfg Config) (Outcome, error) {
 	skillsRoot := filepath.Join(root, skillsDir)
 	entries, err := os.ReadDir(skillsRoot)
 	if errors.Is(err, fs.ErrNotExist) {
-		return Outcome{}, ErrSkillsRootMissing
+		return Outcome{Unverified: ErrSkillsRootMissing}, nil
 	}
 	if err != nil {
 		return Outcome{}, fmt.Errorf("read skills dir %s: %w", skillsDir, err)
@@ -144,7 +163,8 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	if len(out.Failures) > 0 {
-		return out, ErrViolations
+		out.Violation = ErrViolations
+		return out, nil
 	}
 	return out, nil
 }
