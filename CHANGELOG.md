@@ -347,6 +347,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The API, the tenant operator, the loopzero-api chart and new PlatformBootstrap resources now default the in-cluster Gitea address to the loopzero-system namespace the platform installs Gitea into, instead of a `gitea` namespace that exists in no environment; existing PlatformBootstrap resources keep their stored address (#354)
+
 - `task k3d:heal` re-bootstraps a missing or disconnected cell through `bootstrap-cell-cc.sh` instead of rewriting its kubeconfig by hand, which pointed cell-0 at the core cluster and gave cell-1 an identity that could not deploy (principle_violations#243)
 
 - The drill environment renders its API, operator and build-template configuration from Helmfile values instead of patching the running objects after each sync, and its platform-operator overlay passes the chart schema again (principle_violations#234)
