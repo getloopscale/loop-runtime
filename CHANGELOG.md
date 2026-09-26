@@ -81,6 +81,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `coverage-merge` without `--output` and `helm-diff-structural` without `--base`/`--pr` report the missing flag as an invalid invocation (`invalid invocation: ...`); the exit status is unchanged (1) (principle_violations#256)
+
 - The drill bootstrap no longer writes ClusterCredential status; the ClusterCredential controller is its only writer (principle_violations#234)
 
 - The `PulumiOrphanStackDetected` alert's summary and description now say "parallel project" instead of the Portuguese "paralelas"; the alert name, labels and expression are unchanged (#380)
@@ -346,6 +348,12 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- `skill-script-paths` and `skill-suites` report a kit file they cannot read as "could not complete" (exit 5) instead of as a violation (exit 1) (principle_violations#256)
+
+- `openbao-init-auth-mounts`, `loopzero-external-secrets-chart-sanity`, `loopzero-external-secrets-creation-policy` (chart missing), `render-schema-gen-sql --render` (pipeline could not run) and `route-auth-coverage` (no route enumerated) no longer print a `FAIL` line over a run that exits 5; the report now matches the exit status (principle_violations#256)
+
+- A quality gate whose check crashes now exits 5 ("could not complete") and names the panic, instead of exiting 2, which is outside the `loopzero-ops` exit table (principle_violations#256)
 
 - The API, the tenant operator, the loopzero-api chart and new PlatformBootstrap resources now default the in-cluster Gitea address to the loopzero-system namespace the platform installs Gitea into, instead of a `gitea` namespace that exists in no environment; existing PlatformBootstrap resources keep their stored address (#354)
 
