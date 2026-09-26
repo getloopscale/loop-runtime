@@ -337,6 +337,10 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The admin operations to evict tenants, pin a tenant to a cell and inspect a release now see every team's data again: eviction no longer matches nothing and deletes nothing in the database while tearing the cluster side down, the pin finds the tenant and counts the target cell correctly, and inspection finds releases of any team (#386)
+
+- Background work that crosses tenants — creating an account through the platform bootstrap and recording deploy completion or failure events — no longer fails with a database permission error on installations whose database was built from the migrations (#385)
+
 - The per-cell concurrent build limit counts every team's builds on the cell again (#386)
 
 - Signing in no longer answers "No team associated with this account" for every user on the isolated database role, and members of several teams can pick one (#386)
