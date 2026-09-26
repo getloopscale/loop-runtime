@@ -1,12 +1,18 @@
 {
-  "total": 82,
+  "total": 47,
   "by_domain": {
-    "bootstrap": 32,
-    "drill": 16,
+    "bootstrap": 23,
+    "drill": 11,
     "other": 7,
-    "test": 27
+    "test": 6
   },
   "_changelog": [
+    {
+      "date": "2026-09-25",
+      "from": {"total": 82,  "bootstrap": 32, "drill": 16, "other": 7, "test": 27},
+      "to":   {"total": 47,  "bootstrap": 23, "drill": 11, "other": 7, "test": 6},
+      "reason": "Ratchet down to the measured count. The ceiling had not moved since 2026-07-01 while the tree shrank: the architecture-output remediation deleted dead scripts, moved seed logic into loopzero-ops Go subcommands, and ported the 17 hermetic secret-lifecycle and loopzero-cloud wiring shell harnesses to Go tests (design_pattern_findings#60). A ceiling 35 above the tree lets that many new un-homed scripts in unnoticed; it now matches `loopzero-ops quality unhomed-logic --report`."
+    },
     {
       "date": "2026-07-01",
       "from": {"total": 181, "bootstrap": 35, "drill": 16, "other": 9, "test": 121},
