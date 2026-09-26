@@ -72,6 +72,12 @@ type Registry struct {
 }
 
 // ParseRegistry reads the declared registry.
+// knownSections are the registry's section names. An unknown one is refused by
+// name rather than letting its lines read as "outside any section".
+var knownSections = map[string]bool{
+	"anchor": true, "floor": true, "layers": true, "references": true, "debts": true,
+}
+
 func ParseRegistry(r io.Reader) (Registry, error) {
 	var reg Registry
 	sc := bufio.NewScanner(r)
@@ -89,22 +95,26 @@ func ParseRegistry(r io.Reader) (Registry, error) {
 		}
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
 			section = strings.ToLower(strings.Trim(line, "[]"))
+			if !knownSections[section] {
+				return reg, fmt.Errorf("%w: unknown section [%s] on line %d — the sections are [anchor], [floor], [layers], [references] and [debts]",
+					ErrRegistryMalformed, section, n)
+			}
 			continue
 		}
 
-		// The section names ([ancora], [piso], [camadas], [referencias]) are the
-		// registry's format keys, matched literally against the data file.
+		// The section names are the registry's format keys, matched literally
+		// against the data file.
 		switch section {
-		case "ancora":
+		case "anchor":
 			reg.Anchor = append(reg.Anchor, line)
-		case "piso":
+		case "floor":
 			v, err := strconv.Atoi(line)
 			if err != nil || v < 0 {
 				return reg, fmt.Errorf("%w: invalid floor on line %d: %q", ErrRegistryMalformed, n, line)
 			}
 			reg.Floor = v
 			floorRead = true
-		case "camadas":
+		case "layers":
 			l, err := parseLayer(line, n)
 			if err != nil {
 				return reg, err
@@ -115,7 +125,7 @@ func ParseRegistry(r io.Reader) (Registry, error) {
 			}
 			seen[l.ID] = true
 			reg.Layers = append(reg.Layers, l)
-		case "referencias":
+		case "references":
 			ref, err := parseReference(line, n)
 			if err != nil {
 				return reg, err
@@ -144,11 +154,11 @@ func ParseRegistry(r io.Reader) (Registry, error) {
 	// A missing anchor is not a simpler registry — it is a registry that cannot detect a
 	// new layer, which is half of what it exists to do.
 	if len(reg.Anchor) == 0 {
-		return reg, fmt.Errorf("%w: section [ancora] is empty — without it, a new layer is born invisible", ErrRegistryMalformed)
+		return reg, fmt.Errorf("%w: section [anchor] is empty — without it, a new layer is born invisible", ErrRegistryMalformed)
 	}
 	// EC-4: with no declared floor, deleting lines makes the gate pass.
 	if !floorRead {
-		return reg, fmt.Errorf("%w: section [piso] is missing — it is what stops the registry from silencing itself", ErrRegistryMalformed)
+		return reg, fmt.Errorf("%w: section [floor] is missing — it is what stops the registry from silencing itself", ErrRegistryMalformed)
 	}
 	return reg, nil
 }

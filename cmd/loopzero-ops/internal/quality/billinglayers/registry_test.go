@@ -10,16 +10,16 @@ import (
 )
 
 const minimal = `
-[ancora]
+[anchor]
 loopzero-stripe-webhook
 
-[piso]
+[floor]
 1
 
-[camadas]
+[layers]
 seed | loopzero | a.go,b.go | test:t_test.go | skips without a credential
 
-[referencias]
+[references]
 c.go | it is the guard, not the layer
 `
 
@@ -55,11 +55,11 @@ func TestLayerAcceptsAListOfFiles(t *testing.T) {
 
 func TestMalformedLineFails(t *testing.T) {
 	for _, bad := range []string{
-		"[camadas]\nseed | loopzero | a.go | test:t_test.go\n",   // 4 fields
-		"[camadas]\nseed | loopzero | a.go | test:t_test.go |\n", // empty description
-		"[camadas]\nseed | loopzero |  | test:t_test.go | why\n", // no file
-		"[camadas]\nseed | loopzero | a.go | foo:x | why\n",      // unknown guard
-		"[referencias]\nc.go\n",                              // reference without a reason
+		"[layers]\nseed | loopzero | a.go | test:t_test.go\n",   // 4 fields
+		"[layers]\nseed | loopzero | a.go | test:t_test.go |\n", // empty description
+		"[layers]\nseed | loopzero |  | test:t_test.go | why\n", // no file
+		"[layers]\nseed | loopzero | a.go | foo:x | why\n",      // unknown guard
+		"[references]\nc.go\n",                              // reference without a reason
 	} {
 		if _, err := ParseRegistry(strings.NewReader(bad)); err == nil {
 			t.Fatalf("a malformed line must fail: %q", bad)
@@ -69,7 +69,7 @@ func TestMalformedLineFails(t *testing.T) {
 
 // Two layers with the same id: one hides the other, and the floor stays satisfied.
 func TestDuplicateIDFails(t *testing.T) {
-	dup := "[camadas]\nseed | loopzero | a.go | test:t | x\nseed | loopzero | b.go | test:t | y\n"
+	dup := "[layers]\nseed | loopzero | a.go | test:t | x\nseed | loopzero | b.go | test:t | y\n"
 	if _, err := ParseRegistry(strings.NewReader(dup)); err == nil {
 		t.Fatal("a duplicate id must fail")
 	}
@@ -86,7 +86,7 @@ func TestCommentsAndBlankLinesAreIgnored(t *testing.T) {
 // EC-7: `Gate: X` and `gate:X` are the same intent.
 func TestGuardNormalisesWhitespaceAndCase(t *testing.T) {
 	r, err := ParseRegistry(strings.NewReader(
-		"[ancora]\nx\n\n[piso]\n1\n\n[camadas]\nseed | loopzero | a.go |   Gate: billing-secrets   | x\n"))
+		"[anchor]\nx\n\n[floor]\n1\n\n[layers]\nseed | loopzero | a.go |   Gate: billing-secrets   | x\n"))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -98,13 +98,13 @@ func TestGuardNormalisesWhitespaceAndCase(t *testing.T) {
 
 // EC-4: deleting lines must not make the gate pass.
 func TestMissingFloorFails(t *testing.T) {
-	if _, err := ParseRegistry(strings.NewReader("[camadas]\nseed | loopzero | a.go | test:t | x\n")); err == nil {
+	if _, err := ParseRegistry(strings.NewReader("[layers]\nseed | loopzero | a.go | test:t | x\n")); err == nil {
 		t.Fatal("a registry without a floor declares no minimum, and the minimum is what prevents self-silencing")
 	}
 }
 
 func TestEmptyAnchorFails(t *testing.T) {
-	noAnchor := "[piso]\n1\n\n[camadas]\nseed | loopzero | a.go | test:t | x\n"
+	noAnchor := "[floor]\n1\n\n[layers]\nseed | loopzero | a.go | test:t | x\n"
 	if _, err := ParseRegistry(strings.NewReader(noAnchor)); !errors.Is(err, ErrRegistryMalformed) {
 		t.Fatalf("without an anchor there is no way to detect a new layer; err=%v", err)
 	}
@@ -132,5 +132,16 @@ func TestDebtWithUnknownStatusIsMalformed(t *testing.T) {
 		if _, err := ParseRegistry(strings.NewReader(minimal + "\n" + bad)); !errors.Is(err, ErrRegistryMalformed) {
 			t.Errorf("%q: want ErrRegistryMalformed, got %v", bad, err)
 		}
+	}
+}
+
+// A section name the parser does not know is refused by name. Before, its lines
+// fell through as "outside any section", which named the symptom and hid the
+// cause — and a registry still using the retired Portuguese keys
+// ([camadas], [piso], ...) would have been reported as a stray line.
+func TestParseRegistry_refusesAnUnknownSectionByName(t *testing.T) {
+	_, err := ParseRegistry(strings.NewReader("[anchor]\nx\n\n[floor]\n1\n\n[camadas]\nseed | loopzero | a.go | test:t | x\n")) // english-only: the fixture must carry the retired Portuguese section key the parser refuses
+	if !errors.Is(err, ErrRegistryMalformed) || !strings.Contains(err.Error(), "unknown section [camadas]") {
+		t.Fatalf("want ErrRegistryMalformed naming the unknown section, got %v", err)
 	}
 }

@@ -53,8 +53,8 @@ func gitRepo(t *testing.T, files map[string]string) string {
 func base(t *testing.T, extra map[string]string) string {
 	t.Helper()
 	files := map[string]string{
-		"infra/quality/billing-layers.txt": "[ancora]\n" + input() + "\n\n[piso]\n1\n\n" +
-			"[camadas]\nseed | loopzero | layer.go | test:guard_test.go | skips without a credential\n",
+		"infra/quality/billing-layers.txt": "[anchor]\n" + input() + "\n\n[floor]\n1\n\n" +
+			"[layers]\nseed | loopzero | layer.go | test:guard_test.go | skips without a credential\n",
 		"layer.go":              "const s = \"" + input() + "\"\n",
 		"guard_test.go":         "package a\n",
 		"taskfiles/quality.yml": "cmds:\n",
@@ -82,8 +82,8 @@ func TestPassesWhenEveryGuardResolves(t *testing.T) {
 
 func TestBrokenGuardFailsNamingTheLayer(t *testing.T) {
 	root := base(t, map[string]string{
-		"infra/quality/billing-layers.txt": "[ancora]\n" + input() + "\n\n[piso]\n1\n\n" +
-			"[camadas]\nseed | loopzero | layer.go | test:deleted_test.go | skips without a credential\n",
+		"infra/quality/billing-layers.txt": "[anchor]\n" + input() + "\n\n[floor]\n1\n\n" +
+			"[layers]\nseed | loopzero | layer.go | test:deleted_test.go | skips without a credential\n",
 	})
 	out, err := run(t, root, "")
 	if !errors.Is(err, ErrGuardUnresolved) {
@@ -109,9 +109,9 @@ func TestUndeclaredFileReferencingAnInputFails(t *testing.T) {
 func TestDeclaredReferenceDoesNotFail(t *testing.T) {
 	root := base(t, map[string]string{
 		"new_layer.go": "const x = \"" + input() + "\"\n",
-		"infra/quality/billing-layers.txt": "[ancora]\n" + input() + "\n\n[piso]\n1\n\n" +
-			"[camadas]\nseed | loopzero | layer.go | test:guard_test.go | skips without a credential\n\n" +
-			"[referencias]\nnew_layer.go | it is the guard, not the layer\n",
+		"infra/quality/billing-layers.txt": "[anchor]\n" + input() + "\n\n[floor]\n1\n\n" +
+			"[layers]\nseed | loopzero | layer.go | test:guard_test.go | skips without a credential\n\n" +
+			"[references]\nnew_layer.go | it is the guard, not the layer\n",
 	})
 	if _, err := run(t, root, ""); err != nil {
 		t.Fatalf("a reference declared with a reason does not fail: %v", err)
@@ -128,8 +128,8 @@ func TestRegistryDoesNotFailItself(t *testing.T) {
 // EC-4: deleting lines must not make the gate pass.
 func TestBelowTheFloorFails(t *testing.T) {
 	root := base(t, map[string]string{
-		"infra/quality/billing-layers.txt": "[ancora]\n" + input() + "\n\n[piso]\n2\n\n" +
-			"[camadas]\nseed | loopzero | layer.go | test:guard_test.go | skips without a credential\n",
+		"infra/quality/billing-layers.txt": "[anchor]\n" + input() + "\n\n[floor]\n2\n\n" +
+			"[layers]\nseed | loopzero | layer.go | test:guard_test.go | skips without a credential\n",
 	})
 	if _, err := run(t, root, ""); !errors.Is(err, ErrBelowFloor) {
 		t.Fatalf("fewer layers than the floor fails; err=%v", err)
@@ -139,8 +139,8 @@ func TestBelowTheFloorFails(t *testing.T) {
 // EC-8: present-but-incomplete is not absent.
 func TestDeclaredFileThatDisappearedFails(t *testing.T) {
 	root := base(t, map[string]string{
-		"infra/quality/billing-layers.txt": "[ancora]\n" + input() + "\n\n[piso]\n1\n\n" +
-			"[camadas]\nseed | loopzero | gone.go | test:guard_test.go | skips without a credential\n",
+		"infra/quality/billing-layers.txt": "[anchor]\n" + input() + "\n\n[floor]\n1\n\n" +
+			"[layers]\nseed | loopzero | gone.go | test:guard_test.go | skips without a credential\n",
 	})
 	if _, err := run(t, root, ""); !errors.Is(err, ErrGuardUnresolved) {
 		t.Fatalf("a declared file that does not exist fails; err=%v", err)
@@ -150,8 +150,8 @@ func TestDeclaredFileThatDisappearedFails(t *testing.T) {
 // Partial coverage is REPORTED, never silenced — and never fails.
 func TestAbsentSiblingReportsPartialNotGreen(t *testing.T) {
 	root := base(t, map[string]string{
-		"infra/quality/billing-layers.txt": "[ancora]\n" + input() + "\n\n[piso]\n2\n\n" +
-			"[camadas]\nseed | loopzero | layer.go | test:guard_test.go | skips without a credential\n" +
+		"infra/quality/billing-layers.txt": "[anchor]\n" + input() + "\n\n[floor]\n2\n\n" +
+			"[layers]\nseed | loopzero | layer.go | test:guard_test.go | skips without a credential\n" +
 			"custo | loopzero-cloud | cmd/main.go | open:B-033 | switches off without prometheus\n",
 	})
 	out, err := run(t, root, "")
@@ -201,8 +201,8 @@ func TestRealTreePasses(t *testing.T) {
 // and absent on every clone.
 func TestOpenDebtResolvesFromTheVersionedRegistryWithoutABacklog(t *testing.T) {
 	root := base(t, map[string]string{
-		"infra/quality/billing-layers.txt": "[ancora]\n" + input() + "\n\n[piso]\n1\n\n" +
-			"[camadas]\nseed | loopzero | layer.go | open:B-033 | skips without a credential\n\n" +
+		"infra/quality/billing-layers.txt": "[anchor]\n" + input() + "\n\n[floor]\n1\n\n" +
+			"[layers]\nseed | loopzero | layer.go | open:B-033 | skips without a credential\n\n" +
 			"[debts]\nB-033 | approved | the cost ceiling ships with a gate\n",
 	})
 	if _, err := os.Stat(filepath.Join(root, "BACKLOG.md")); err == nil {
