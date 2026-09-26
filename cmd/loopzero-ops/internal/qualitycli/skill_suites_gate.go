@@ -8,6 +8,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillsuites"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -25,7 +26,7 @@ func init() {
 // three of fifteen were red, and the defect two of them caught had already shipped.
 func setupSkillSuites(fs *flag.FlagSet) Check {
 	skills := fs.String("skills", "", "skills dir relative to root (default: .claude/skills)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		out, err := skillsuites.Check(skillsuites.Config{RepoRoot: inv.Root, SkillsRel: *skills})
 		switch {
 		case out.Advisory:

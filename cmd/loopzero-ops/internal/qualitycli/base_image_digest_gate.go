@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baseimagedigest"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -18,7 +19,7 @@ func init() {
 }
 
 func setupBaseImageDigest(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		o := baseimagedigest.Check(baseimagedigest.Config{Root: inv.Root})
 		if !o.Pass {
 			for _, v := range o.Violations {

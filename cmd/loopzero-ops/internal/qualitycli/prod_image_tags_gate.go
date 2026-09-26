@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/prodimagetags"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -18,7 +19,7 @@ func init() {
 }
 
 func setupProdImageTags(fs *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		scanPaths := fs.Args() // optional positional scan-path overrides
 		o, err := prodimagetags.Check(prodimagetags.Config{Root: inv.Root, ScanPaths: scanPaths})
 		if err != nil {

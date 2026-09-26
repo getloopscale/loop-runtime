@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultbootstrapunsealloop"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -23,7 +24,7 @@ func init() {
 // Migrated from infra/tests/check-vault-bootstrap-unseal-loop_test.sh
 // (M-Migrate2 continuation 2026-07-07).
 func setupVaultBootstrapUnsealLoop(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := vaultbootstrapunsealloop.Check(vaultbootstrapunsealloop.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, vaultbootstrapunsealloop.ErrViolations) {

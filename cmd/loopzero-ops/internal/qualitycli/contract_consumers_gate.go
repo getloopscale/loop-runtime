@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/contractconsumers"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -28,7 +29,7 @@ func init() {
 func setupContractConsumers(fs *flag.FlagSet) Check {
 	baseRef := fs.String("base-ref", "origin/develop", "git ref the PR branches from")
 	headRef := fs.String("head-ref", "HEAD", "git ref of the PR HEAD")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := contractconsumers.Check(contractconsumers.Config{
 			RepoRoot: inv.Root,
 			BaseRef:  *baseRef,

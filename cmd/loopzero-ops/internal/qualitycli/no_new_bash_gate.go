@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nonewbash"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func setupNoNewBash(fs *flag.FlagSet) Check {
 	allowlist := fs.String("allowlist", "infra/quality/shell-scripts-allowlist.md", "allowlist markdown file")
 	baseRef := fs.String("base-ref", "origin/main", "base git ref")
 	headRef := fs.String("head-ref", "HEAD", "head git ref")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		absRoot, err := os.Getwd()
 		if err == nil && inv.Root == "." {
 			// Resolve "." to absolute path for clearer error messages

@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/coveragediff"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -25,7 +26,7 @@ func setupCoverageDiff(fs *flag.FlagSet) Check {
 	lcov := fs.String("lcov", "", "merged lcov report")
 	threshold := fs.Float64("threshold", 80.0, "minimum coverage percent on touched lines")
 	report := fs.String("report", "", "optional Markdown report destination")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := coveragediff.Run(coveragediff.Config{
 			DiffPath:   *diff,
 			LCOVPath:   *lcov,

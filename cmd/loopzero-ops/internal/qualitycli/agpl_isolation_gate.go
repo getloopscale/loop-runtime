@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/agplisolation"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -18,7 +19,7 @@ func init() {
 }
 
 func setupAGPLIsolation(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		o := agplisolation.Check(agplisolation.Config{Root: inv.Root})
 		if !o.Pass {
 			inv.Stderr.Printf("FAIL — %d AGPL violation(s) outside the ADR-0048 allow-list:\n", len(o.Violations))

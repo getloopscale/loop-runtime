@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vaultpromalerts"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -21,7 +22,7 @@ func init() {
 // Migrated from infra/tests/check-vault-prom-alerts_test.sh
 // (M-Migrate2 2026-07-10 M16 T3.3 Wave 2).
 func setupVaultPromAlerts(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := vaultpromalerts.Check(vaultpromalerts.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, vaultpromalerts.ErrViolations) {

@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/loopzeroapiopenbao"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 // Migrated from infra/tests/helm/loopzero-api-openbao-approle-envfrom_test.sh
 // (M-Migrate2 continuation 2026-07-07).
 func setupLoopZeroAPIOpenbaoApproleEnvfrom(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := loopzeroapiopenbao.Check(loopzeroapiopenbao.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, loopzeroapiopenbao.ErrViolations) {

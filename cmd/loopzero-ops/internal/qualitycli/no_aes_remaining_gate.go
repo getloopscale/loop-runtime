@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noaesremaining"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -31,7 +32,7 @@ func init() {
 // after T+60d from CutoverDay.
 func setupNoAESRemaining(fs *flag.FlagSet) Check {
 	allowlist := fs.String("allowlist", "", "comma-separated allowlisted paths")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		cfg := noaesremaining.Config{RepoRoot: inv.Root}
 		if *allowlist != "" {
 			for _, p := range strings.Split(*allowlist, ",") {

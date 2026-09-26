@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scriptcount"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -25,7 +26,7 @@ func init() {
 func setupScriptCount(fs *flag.FlagSet) Check {
 	baselinePath := fs.String("baseline", "infra/quality/script-count-baseline.json", "baseline JSON ceiling")
 	update := fs.Bool("update-baseline", false, "ratchet the ceiling down to current count (write)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		data, err := os.ReadFile(*baselinePath) // #nosec G304 -- repo-internal baseline path
 		if err != nil {
 			return Fail, err

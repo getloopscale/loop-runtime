@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/platformcrnamespace"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 // is restricted to that namespace — and undeletable if the admission fence is switched on,
 // because removing a finalizer is an UPDATE.
 func setupPlatformCRNamespace(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		out, err := platformcrnamespace.Check(platformcrnamespace.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, platformcrnamespace.ErrOutsideNamespace) {

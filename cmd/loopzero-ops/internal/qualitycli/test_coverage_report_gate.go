@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testcoveragereport"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 func setupTestCoverageReport(fs *flag.FlagSet) Check {
 	threshold := fs.Float64("threshold", testcoveragereport.DefaultCoverageThreshold, "coverage percentage floor (0-100)")
 	tags := fs.String("tags", "", "go build tags (e.g., helm_render)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := testcoveragereport.Check(testcoveragereport.Config{
 			RepoRoot:          inv.Root,
 			CoverageThreshold: *threshold,

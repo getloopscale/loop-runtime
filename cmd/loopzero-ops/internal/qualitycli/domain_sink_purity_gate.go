@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/domainsinkpurity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -23,7 +24,7 @@ func init() {
 // the services DAG sink and refuses the next one. Removing them costs 63
 // call sites (B-079); stopping the growth costs this.
 func setupDomainSinkPurity(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		o, err := domainsinkpurity.Check(domainsinkpurity.Config{RepoRoot: inv.Root})
 		inv.Stdout.Println(o.Summary())
 		for _, s := range o.New {

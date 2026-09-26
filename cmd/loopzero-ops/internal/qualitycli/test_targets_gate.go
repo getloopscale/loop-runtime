@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testtargets"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -20,7 +21,7 @@ func init() {
 }
 
 func setupTestTargets(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		o, err := testtargets.Check(testtargets.Config{Root: inv.Root})
 		if err != nil {
 			return Fail, err

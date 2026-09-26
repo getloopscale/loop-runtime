@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scriptsaudit"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -23,7 +24,7 @@ func init() {
 
 func setupScriptsAudit(fs *flag.FlagSet) Check {
 	output := fs.String("output", "", "write CSV to file (default: stdout)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		scripts, err := scriptsaudit.ScanRepo(inv.Root)
 		if err != nil {
 			return Fail, err

@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/ma7statuslocality"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -21,7 +22,7 @@ func init() {
 // status UPDATE funcs + <machine>.SafeTransition are referenced only from
 // api/internal/db/store/. ADR 2026-07-03-m9-db-store-subpackage-topology D3.
 func setupMa7StatusLocality(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := ma7statuslocality.Check(ma7statuslocality.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

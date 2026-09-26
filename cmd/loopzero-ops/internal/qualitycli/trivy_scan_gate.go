@@ -8,6 +8,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/trivyscan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 // the reason, and a finding exits 1.
 func setupTrivyScan(fs *flag.FlagSet) Check {
 	severities := fs.String("severities", "CRITICAL,HIGH", "comma-separated severity filter")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := trivyscan.Check(context.Background(), trivyscan.Config{
 			RepoRoot:   inv.Root,
 			Severities: *severities,

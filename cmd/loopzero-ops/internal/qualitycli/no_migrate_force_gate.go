@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nomigrateforce"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -20,7 +21,7 @@ func init() {
 }
 
 func setupNoMigrateForce(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		o, err := nomigrateforce.Check(nomigrateforce.Config{Root: inv.Root})
 		if err != nil {
 			return Fail, err

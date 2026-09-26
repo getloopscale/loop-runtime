@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/featurefence"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -20,7 +21,7 @@ func init() {
 // setupFeatureFence enforces the package-by-feature layout of api/internal
 // (docs/decisions.md, 2026-09-25).
 func setupFeatureFence(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		o, err := featurefence.Check(featurefence.Config{RepoRoot: inv.Root})
 		return reportSubpackageFence(inv, o, err, featurefence.ActionableFix())
 	}

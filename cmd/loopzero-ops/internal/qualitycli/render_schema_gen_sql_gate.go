@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/renderschemagensql"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -25,7 +26,7 @@ func init() {
 func setupRenderSchemaGenSQL(fs *flag.FlagSet) Check {
 	render := fs.Bool("render", false, "run the destructive render pipeline (spins docker + rewrites schema.gen.sql); default is check-only")
 	advisoryOnly := fs.Bool("advisory-only", false, "return Warn instead of failure when a required tool is missing")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		cfg := renderschemagensql.Config{RepoRoot: inv.Root, AdvisoryOnly: *advisoryOnly}
 		if !*render {
 			outcome, err := renderschemagensql.Check(cfg)

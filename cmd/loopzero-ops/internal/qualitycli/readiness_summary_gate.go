@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/readinesssummary"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -18,7 +19,7 @@ func init() {
 }
 
 func setupReadinessSummary(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		out, err := readinesssummary.Check(readinesssummary.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

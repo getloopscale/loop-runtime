@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/billingsecrets"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -28,7 +29,7 @@ func init() {
 // because a literal holds equally for every environment, and the public one ends up
 // inheriting the most permissive choice.
 func setupBillingSecrets(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := billingsecrets.Check(billingsecrets.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

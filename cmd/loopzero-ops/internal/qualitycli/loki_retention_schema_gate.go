@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokiretentionschema"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 // Migrated from infra/tests/check-loki-retention-schema_test.sh
 // (M-Migrate2 2026-07-10 M16 T3.2 Wave 2).
 func setupLokiRetentionSchema(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := lokiretentionschema.Check(lokiretentionschema.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, lokiretentionschema.ErrViolations) {

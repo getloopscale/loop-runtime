@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/cliexitcodes"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -48,7 +49,7 @@ func setupCLIExitCodes(fs *flag.FlagSet) Check {
 		"standalone loopzero-cli checkout (default $LOOPZERO_CLI_ROOT, else <root>/../loopzero-cli)")
 	pin := fs.String("pin", cliexitcodes.DefaultPinFile,
 		"declared-absence pin, relative to --root")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := cliexitcodes.Check(cliexitcodes.Config{
 			RepoRoot: inv.Root,
 			CLIRoot:  *cliRoot,

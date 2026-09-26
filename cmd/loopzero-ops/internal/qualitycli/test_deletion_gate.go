@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testdeletion"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -21,7 +22,7 @@ func init() {
 }
 
 func setupTestDeletion(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		o, err := testdeletion.Check(testdeletion.Config{
 			BaseRef:  os.Getenv("BASE_REF"),
 			HeadRef:  os.Getenv("HEAD_REF"),

@@ -8,6 +8,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/trufflehogscan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -23,7 +24,7 @@ func init() {
 func setupTrufflehogScan(fs *flag.FlagSet) Check {
 	baseline := fs.String("baseline", "", "adjudicated baseline path (default: <root>/"+trufflehogscan.BaselineRelPath+")")
 	write := fs.Bool("write", false, "regenerate the adjudicated baseline (refuses while any candidate is live)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		if *write {
 			n, err := trufflehogscan.Generate(context.Background(), trufflehogscan.Config{
 				RepoRoot: inv.Root, BaselinePath: *baseline,

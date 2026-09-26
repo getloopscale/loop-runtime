@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/acyclicgraph"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -25,7 +26,7 @@ func init() {
 // cloud never imports engine-internal pkg/*. Sibling repos are resolved relative
 // to the engine root and skipped when absent.
 func setupAcyclicGraph(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := acyclicgraph.Check(acyclicgraph.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

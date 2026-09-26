@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/gitdiff"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/shellrun"
 )
 
@@ -29,7 +30,7 @@ func init() {
 func setupGitDiffToLines(fs *flag.FlagSet) Check {
 	base := fs.String("base", "", "base ref (falls back to $BASE_REF, then origin/main)")
 	head := fs.String("head", "", "head ref (falls back to $HEAD_REF, then HEAD)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		b := firstNonEmpty(*base, os.Getenv("BASE_REF"), "origin/main")
 		h := firstNonEmpty(*head, os.Getenv("HEAD_REF"), "HEAD")
 		pairs, err := gitdiff.RunGitDiff(context.Background(), shellrun.NewDefault(), gitdiff.Config{BaseRef: b, HeadRef: h})

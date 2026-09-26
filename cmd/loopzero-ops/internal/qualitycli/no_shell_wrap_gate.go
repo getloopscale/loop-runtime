@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noshellwrap"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -19,7 +20,7 @@ func init() {
 }
 
 func setupNoShellWrap(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := noshellwrap.Check(noshellwrap.Config{Root: inv.Root})
 		if err != nil {
 			return Fail, err

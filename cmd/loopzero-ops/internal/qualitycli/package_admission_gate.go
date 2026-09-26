@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/packageadmission"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -29,7 +30,7 @@ func init() {
 // that emptied out (the split was undone, and a gate green over a vacuum is the
 // failure adapter-ports records), and nothing scanned at all.
 func setupPackageAdmission(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		out, err := packageadmission.Check(packageadmission.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, packageadmission.ErrForeignDomain, packageadmission.ErrHomeMissing) {

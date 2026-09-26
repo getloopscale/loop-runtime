@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/moduleselfcontained"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -21,7 +22,7 @@ func init() {
 // which is how CI builds it: a module that only compiles inside the workspace
 // passes locally and fails there.
 func setupModuleSelfContained(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		out, err := moduleselfcontained.Check(moduleselfcontained.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, moduleselfcontained.ErrNotSelfContained) {

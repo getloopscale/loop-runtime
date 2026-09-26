@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baselineupdate"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -27,7 +28,7 @@ func setupBaselineUpdate(fs *flag.FlagSet) Check {
 	lcov := fs.String("lcov", "", "CLI lcov.info")
 	baseline := fs.String("baseline", "", "baseline JSON write target")
 	dryRun := fs.Bool("dry-run", false, "print would-be JSON to stdout instead of writing")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		// Env fallback matches bash contract (DRY_RUN, GO_PROFILE, CLI_LCOV, BASELINE_FILE).
 		result, err := baselineupdate.Run(baselineupdate.Config{
 			GoProfilePath: firstNonEmpty(*goProfile, os.Getenv("GO_PROFILE")),

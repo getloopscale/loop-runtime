@@ -8,6 +8,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dashboardpromtool"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 // 2026-05-26-maturity-3-62-to-4-0-roadmap.
 func setupDashboardPromtool(fs *flag.FlagSet) Check {
 	dashboardsDir := fs.String("dir", "infra/helm/monitoring/dashboards", "dashboard directory to scan")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := dashboardpromtool.Check(context.Background(),
 			dashboardpromtool.Config{DashboardsDir: *dashboardsDir})
 		if err != nil {

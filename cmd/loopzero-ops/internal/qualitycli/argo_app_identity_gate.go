@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/argoappidentity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -29,7 +30,7 @@ func init() {
 // the tenant's workload. Renaming the emit side without them would have made the operator
 // destroy exactly what it had just created.
 func setupArgoAppIdentity(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		rep, err := argoappidentity.Check(inv.Root)
 		if err != nil {
 			return Fail, err

@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/gomodauthorg"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 // "not found" — the same message as a repo that does not exist — so the build fails naming the
 // wrong cause. This shipped twice in two days from one root cause (ci.yml, then api/Dockerfile).
 func setupGoModAuthOrg(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		rep, err := gomodauthorg.Check(inv.Root)
 		if err != nil {
 			return Fail, err

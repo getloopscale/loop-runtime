@@ -8,6 +8,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellcheckadvisory"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -25,7 +26,7 @@ func init() {
 // Migrated from infra/scripts/local/shellcheck-advisory.sh
 // (M-Migrate2 continuation 2026-07-07).
 func setupShellcheckAdvisory(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := shellcheckadvisory.Check(shellcheckadvisory.Config{RepoRoot: inv.Root})
 		if errors.Is(err, shellcheckadvisory.ErrNothingScanned) {
 			inv.Stderr.Printf("shellcheck-advisory: FAIL — %v\n", err)

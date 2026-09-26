@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skiplink"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -23,7 +24,7 @@ func setupSkipLink(fs *flag.FlagSet) Check {
 	baseline := fs.String("baseline", "infra/quality/skip-link-baseline.txt", "baseline file")
 	ignoreBaseline := fs.Bool("ignore-baseline", false, "treat all violations as new")
 	emitBaseline := fs.Bool("emit-baseline", false, "print baseline keys for every violation, one per line, and exit 0")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		o, err := skiplink.Check(skiplink.Config{
 			TargetDir:      *dir,
 			BaselineFile:   *baseline,

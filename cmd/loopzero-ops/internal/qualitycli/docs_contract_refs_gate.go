@@ -8,6 +8,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/docsrefs"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -20,7 +21,7 @@ func init() {
 
 func setupDocsContractRefs(fs *flag.FlagSet) Check {
 	allowlist := fs.String("allowlist", "", "path to the allowlist (default: <root>/"+docsrefs.DefaultAllowlistRelPath+")")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		out, err := docsrefs.Check(docsrefs.Config{RepoRoot: inv.Root, AllowlistPath: *allowlist})
 		switch {
 		case errors.Is(err, docsrefs.ErrMalformedAllowlist):

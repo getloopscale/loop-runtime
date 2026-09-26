@@ -8,6 +8,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillscriptpaths"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -20,7 +21,7 @@ func init() {
 
 func setupSkillScriptPaths(fs *flag.FlagSet) Check {
 	skills := fs.String("skills", "", "skills dir relative to root (default: .claude/skills)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		out, err := skillscriptpaths.Check(skillscriptpaths.Config{RepoRoot: inv.Root, SkillsRel: *skills})
 		switch {
 		case errors.Is(err, skillscriptpaths.ErrSkillsRootMissing):

@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/silentsurface"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -35,7 +36,7 @@ func setupSilentSurface(fs *flag.FlagSet) Check {
 	// only actionable if somebody can see WHICH items compose it. Without it the
 	// only way to read the list is to make the gate fail.
 	report := fs.Bool("report", false, "list the mute surfaces (no gate)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		v, err := silentsurface.Check(silentsurface.Config{Root: inv.Root})
 		if err != nil {
 			return Fail, err

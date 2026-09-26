@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/billinglayers"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -25,7 +26,7 @@ func init() {
 // check the other four had".
 func setupBillingLayers(fs *flag.FlagSet) Check {
 	sibling := fs.String("sibling-root", "", "root of ../loopzero-cloud (default: the sibling of --root)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		if *sibling == "" {
 			*sibling = filepath.Join(inv.Root, "..", "loopzero-cloud")
 		}

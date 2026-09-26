@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/valuesduplicatekeys"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -21,7 +22,7 @@ func init() {
 // key twice: Helm keeps the last declaration silently, so the first block never
 // renders while the file reads as configured.
 func setupValuesDuplicateKeys(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		out, err := valuesduplicatekeys.Check(valuesduplicatekeys.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

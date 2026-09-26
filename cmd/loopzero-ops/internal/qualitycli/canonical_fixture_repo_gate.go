@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/canonicalfixturerepo"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -20,7 +21,7 @@ func init() {
 // setupCanonicalFixtureRepo enforces canonical getloopscale/loopzerokit-example fixture.
 // Migrated from infra/tests/check-canonical-fixture-repo_test.sh (M-Migrate2 2026-07-07).
 func setupCanonicalFixtureRepo(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := canonicalfixturerepo.Check(canonicalfixturerepo.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, canonicalfixturerepo.ErrViolations) {

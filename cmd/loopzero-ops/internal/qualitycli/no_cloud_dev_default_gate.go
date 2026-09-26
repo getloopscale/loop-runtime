@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nocloud"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 // Migrated from infra/tests/check-no-cloud-dev-default_test.sh
 // (M-Migrate2 2026-07-10 M16 T2.3 Wave 1).
 func setupNoCloudDevDefault(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := nocloud.Check(nocloud.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, nocloud.ErrViolations) {

@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/transitcoverage"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 // the FAANG dual-path invariant: Set/ListForResync MUST use the dispatcher
 // (encryptForStore/decryptFromStore), never bypass to raw s.encrypt/decrypt.
 func setupTransitCoverage(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := transitcoverage.Check(transitcoverage.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

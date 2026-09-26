@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/installgithooks"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -20,7 +21,7 @@ func init() {
 // setupInstallGitHooks validates the M8 1.5 pre-push hook + installer.
 // Migrated from infra/tests/check-install-git-hooks_test.sh (M-Migrate2 2026-07-07).
 func setupInstallGitHooks(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := installgithooks.Check(installgithooks.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, installgithooks.ErrFailures) {

@@ -6,6 +6,7 @@ package qualitycli
 import (
 	"flag"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/workercsp"
 )
 
@@ -23,7 +24,7 @@ func init() {
 // governance-gated path; see the failingGate entry in quality_gate_wiring_test.go.
 func setupWorkerCSP(fs *flag.FlagSet) Check {
 	worker := fs.String("worker", "", "worker source path relative to root")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		out, err := workercsp.Check(workercsp.Config{RepoRoot: inv.Root, WorkerPath: *worker})
 		if err != nil {
 			return Fail, err

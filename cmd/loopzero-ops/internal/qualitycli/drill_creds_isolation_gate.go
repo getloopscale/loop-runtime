@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/drillcredisolation"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -28,7 +29,7 @@ func init() {
 // its prod counterpart (catastrophic per D7). A shared token is a violation;
 // missing tokens mean the isolation could not be checked.
 func setupDrillCredsIsolation(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		r := drillcredisolation.Check(drillcredisolation.Env{
 			DrillDO:         os.Getenv("DRILL_DO_TOKEN"),
 			DigitalOcean:    os.Getenv("DIGITALOCEAN_TOKEN"),

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/regressionmatrix"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -27,7 +28,7 @@ func init() {
 func setupRegressionMatrix(fs *flag.FlagSet) Check {
 	matrix := fs.String("matrix", "docs/runbooks.md", "matrix markdown path (repo-relative)")
 	strict := fs.Bool("strict", false, "fail on ANY miss, not just critical ones (can-recur column NO)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		matrixPath := *matrix
 		if !filepath.IsAbs(matrixPath) {
 			matrixPath = filepath.Join(inv.Root, matrixPath)

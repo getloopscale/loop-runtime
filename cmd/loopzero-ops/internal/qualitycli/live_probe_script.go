@@ -5,6 +5,7 @@ package qualitycli
 
 import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/liveprobescript"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // liveProbeScriptCheck runs one live probe script contract
@@ -12,7 +13,7 @@ import (
 // verdicts: a violated assertion is a violation; an error with no assertion
 // behind it means the contract could not be evaluated.
 func liveProbeScriptCheck(spec liveprobescript.Spec) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := liveprobescript.Check(inv.Root, spec)
 		if err != nil {
 			if len(outcome.Failures) == 0 {

@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyfilecspgate"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -28,7 +29,7 @@ func init() {
 // (cloud-dev, auth-dev) are not affected (block-bound extraction via brace
 // counting).
 func setupCaddyfileCSP(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := caddyfilecspgate.Check(caddyfilecspgate.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

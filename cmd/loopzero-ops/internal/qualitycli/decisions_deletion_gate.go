@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/decisionsdeletion"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -20,7 +21,7 @@ func init() {
 func setupDecisionsDeletion(fs *flag.FlagSet) Check {
 	base := fs.String("base-ref", "origin/main", "base git ref")
 	head := fs.String("head-ref", "HEAD", "head git ref")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		o, err := decisionsdeletion.Check(decisionsdeletion.Config{RepoRoot: inv.Root, BaseRef: *base, HeadRef: *head})
 		if err != nil {
 			return Fail, err

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/correctionstxt"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 // (migrated from infra/tests/check-corrections-txt-closed_test.sh). Enforces
 // close-out hygiene on the drill war-journal infra/tests/performance/load/CORRECTIONS.txt.
 func setupCorrectionsTxtClosed(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := correctionstxt.Check(filepath.Join(inv.Root, "infra", "tests", "performance", "load", "CORRECTIONS.txt"))
 		if err != nil {
 			return Fail, err

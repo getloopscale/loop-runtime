@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/drilloutputs"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -18,7 +19,7 @@ func init() {
 }
 
 func setupDrillOutputsConsumers(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		o, err := drilloutputs.Check(drilloutputs.Config{Root: inv.Root})
 		if err != nil {
 			return Fail, err

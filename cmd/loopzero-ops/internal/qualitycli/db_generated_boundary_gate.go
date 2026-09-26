@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dbgeneratedboundary"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -21,7 +22,7 @@ func init() {
 // api/internal/{services,routes,server} imports api/internal/db/generated.
 // ADR 2026-07-03 m9-db-store-subpackage-topology, decision D3.
 func setupDBGeneratedBoundary(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := dbgeneratedboundary.Check(dbgeneratedboundary.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

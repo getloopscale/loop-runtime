@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dockerfilemirror"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 // (migrated from infra/tests/scripts/dockerfile-no-docker-hub_test.sh). Fails if
 // any infra/images/*/Dockerfile FROM would resolve to Docker Hub.
 func setupDockerfileNoDockerHub(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := dockerfilemirror.Check(dockerfilemirror.Config{
 			ImagesDir: filepath.Join(inv.Root, "infra", "images"),
 		})

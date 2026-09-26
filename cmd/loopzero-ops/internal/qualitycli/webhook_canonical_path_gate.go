@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/webhookcanonicalpath"
 )
 
@@ -23,7 +24,7 @@ func init() {
 // The canonical is /api/v1/webhooks/github (handler-direct).
 // Migrated from infra/tests/check-webhook-canonical-path_test.sh (M-Migrate2, 2026-07-07).
 func setupWebhookCanonicalPath(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := webhookcanonicalpath.Check(webhookcanonicalpath.Config{RepoRoot: inv.Root})
 		if err != nil {
 			// Distinguish a genuine violation from a real I/O error (fail-closed):

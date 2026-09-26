@@ -22,14 +22,21 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
+	"runtime/debug"
 	"sort"
 	"sync"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/cliout"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
-// Outcome is a gate's verdict once its check has run.
+// Outcome is the verdict of a gate whose check has not yet moved to the
+// verdict contract: the adapter decides Pass or Fail by hand from the check's
+// own outcome type. It is transitional — the gates still using it are listed,
+// exactly, in legacyOutcomeGates (contract_test.go), and a gate outside that
+// list cannot use it.
 type Outcome int
 
 const (
@@ -38,6 +45,14 @@ const (
 	// Fail — the check ran and found a violation.
 	Fail
 )
+
+// Verdict makes a legacy Outcome a verdict.Result.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o == Pass {
+		return verdict.Pass
+	}
+	return verdict.Fail
+}
 
 // Invocation is what a gate's check receives: the resolved repository root
 // and where to write. The writers keep their first write error, and Run
@@ -52,11 +67,12 @@ type Invocation struct {
 
 // Check runs a gate once its flags are parsed.
 //
-// It returns Pass or Fail when it reached a verdict, and an error when it
-// could not — an unreadable input, a tool that errored. The runner reports
-// the error and exits Incomplete: a check that could not measure never reads
-// as a violation, and never as a pass.
-type Check func(Invocation) (Outcome, error)
+// It returns the outcome its check produced — a verdict.Result, which states
+// the verdict — when the check reached one, and an error when it could not: an
+// unreadable input, a tool that errored. The runner reports the error and
+// exits Incomplete: a check that could not measure never reads as a
+// violation, and never as a pass.
+type Check func(Invocation) (verdict.Result, error)
 
 // errUsage marks an invalid invocation discovered after parsing (a flag value
 // the gate cannot use). The runner exits Usage.
@@ -164,8 +180,12 @@ func (g Gate) run(args []string, stdout, stderr *cliout.Writer) int {
 	if root != nil {
 		inv.Root = resolveRoot(*root)
 	}
-	out, err := check(inv)
+	res, err := g.check(check, inv)
+	var crash *panicError
 	switch {
+	case errors.As(err, &crash):
+		stderr.Printf("%s: ERROR — %v\n%s", g.Name, crash, crash.stack)
+		return exitcode.Incomplete
 	case errors.Is(err, errUsage):
 		stderr.Printf("%s: %v\n", g.Name, err)
 		return exitcode.Usage
@@ -174,10 +194,57 @@ func (g Gate) run(args []string, stdout, stderr *cliout.Writer) int {
 	case err != nil:
 		stderr.Printf("%s: ERROR — could not complete the check: %v\n", g.Name, err)
 		return exitcode.Incomplete
-	case out == Fail:
-		return exitcode.Failure
+	case isNil(res):
+		stderr.Printf("%s: ERROR — the check returned no result\n", g.Name)
+		return exitcode.Incomplete
 	}
-	return exitcode.OK
+	return exitStatus(g.Name, res.Verdict(), stderr)
+}
+
+// check runs the gate's check, turning a panic into a panicError: a check that
+// crashed reached no verdict, and must exit Incomplete like any other check
+// that could not complete — not with the Go runtime's own status.
+func (g Gate) check(check Check, inv Invocation) (res verdict.Result, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			res, err = nil, &panicError{value: p, stack: debug.Stack()}
+		}
+	}()
+	return check(inv)
+}
+
+// panicError is a check that panicked, with the stack it panicked on.
+type panicError struct {
+	value any
+	stack []byte
+}
+
+func (e *panicError) Error() string { return fmt.Sprintf("the check panicked: %v", e.value) }
+
+// exitStatus is the one place a verdict becomes an exit status. The check has
+// already reported its verdict; the runner adds a line only for an outcome
+// that never decided.
+func exitStatus(name string, v verdict.Verdict, stderr *cliout.Writer) int {
+	switch v {
+	case verdict.Pass, verdict.Skip:
+		return exitcode.OK
+	case verdict.Fail:
+		return exitcode.Failure
+	case verdict.NotVerified:
+		return exitcode.Incomplete
+	}
+	stderr.Printf("%s: ERROR — the check returned no verdict\n", name)
+	return exitcode.Incomplete
+}
+
+// isNil reports whether res carries no outcome: a nil interface, or a nil
+// pointer behind a non-nil interface, whose Verdict method would crash.
+func isNil(res verdict.Result) bool {
+	if res == nil {
+		return true
+	}
+	v := reflect.ValueOf(res)
+	return v.Kind() == reflect.Pointer && v.IsNil()
 }
 
 // resolveRoot expands "." to the absolute working directory so messages show

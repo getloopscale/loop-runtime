@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/chartdefaulttags"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 // values and cannot see chart defaults. Registered but NOT wired — RED today,
 // fix lives in infra/helm/ (governance-gated).
 func setupChartDefaultTags(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		out, err := chartdefaulttags.Check(chartdefaulttags.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/englishonly"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -20,7 +21,7 @@ func init() {
 // setupEnglishOnly refuses Portuguese in any tracked text file, Go identifier
 // or tracked path name (#380).
 func setupEnglishOnly(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		r, err := englishonly.Check(englishonly.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

@@ -8,6 +8,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skillpaths"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 // Migrated from infra/tests/skills/skill-paths_test.sh
 // (M-Migrate2 continuation 2026-07-07).
 func setupSkillPaths(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := skillpaths.Check(skillpaths.Config{RepoRoot: inv.Root})
 		if errors.Is(err, skillpaths.ErrSkillsRootMissing) {
 			return kitNotInstalled(inv, err)

@@ -8,6 +8,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esocreationpolicy"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 // Migrated from infra/tests/check-loopzero-external-secrets-creation-policy_test.sh
 // (M-Migrate2 2026-07-10 M16 T3.6 Wave 2).
 func setupLoopZeroExternalSecretsCreationPolicy(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := esocreationpolicy.Check(esocreationpolicy.Config{RepoRoot: inv.Root})
 		if errors.Is(err, esocreationpolicy.ErrChartMissing) {
 			inv.Stderr.Println("loopzero-external-secrets-creation-policy: FAIL — chart missing")

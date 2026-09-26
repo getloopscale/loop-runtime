@@ -12,6 +12,7 @@ import (
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testinventory"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testpyramid"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -25,7 +26,7 @@ func init() {
 func setupTestPyramid(fs *flag.FlagSet) Check {
 	base := fs.String("baseline", "infra/quality/test-pyramid-baseline.json", "frozen measured pyramid")
 	write := fs.Bool("write", false, "re-freeze the baseline from the current tree")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		basePath := filepath.Join(inv.Root, *base)
 
 		// The PR label remains the way out for a single PR. It comes first because it

@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/tenantcsppassthrough"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -21,7 +22,7 @@ func init() {
 // middleware must never be attached to tenant IngressRoutes, or LoopZeroKit's
 // per-request nonce stops matching the body and every inline script dies.
 func setupTenantCSPPassthrough(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		out, err := tenantcsppassthrough.Check(tenantcsppassthrough.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

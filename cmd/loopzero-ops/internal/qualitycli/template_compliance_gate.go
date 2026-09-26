@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/templatecompliance"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -29,7 +30,7 @@ func setupTemplateCompliance(fs *flag.FlagSet) Check {
 	prBody := fs.String("pr-body", "", "PR markdown body (falls back to $PR_BODY)")
 	prAuthor := fs.String("pr-author", "", "PR author login (falls back to $PR_AUTHOR)")
 	prLabels := fs.String("pr-labels", "", "CSV PR labels (falls back to $PR_LABELS)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		// Env fallback: PR body is untrusted input. CI passes it via env var
 		// (NOT a CLI arg) to avoid GitHub Actions ${{ }} shell-injection.
 		body, author, labels := *prBody, *prAuthor, *prLabels

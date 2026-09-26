@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/prodimagedigests"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 // violations after 7-day soak validates zero false positives.
 func setupProdImageDigests(fs *flag.FlagSet) Check {
 	enforce := fs.Bool("enforce", false, "fail on violations (default: warn-only)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		// `--enforce` upgrades the policy to every kind. Without it the decided
 		// default applies: literal `:tag` blocks, missing `image.digest` warns until
 		// the image publisher emits the value. See kind.go.

@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/crdsemanticdiff"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 func setupCRDSemanticDiff(fs *flag.FlagSet) Check {
 	crd := fs.String("crd", "", "limit to a single CRD short-name (e.g. tenants)")
 	verbose := fs.Bool("verbose", false, "append inline diff snippets")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := crdsemanticdiff.Check(crdsemanticdiff.Config{
 			Root:      inv.Root,
 			CRDFilter: *crd,

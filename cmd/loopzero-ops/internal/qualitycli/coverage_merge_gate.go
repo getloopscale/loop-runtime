@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/coveragemerge"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func setupCoverageMerge(fs *flag.FlagSet) Check {
 	goProfile := fs.String("go-profile", "", "Go coverage profile path")
 	cliLCOV := fs.String("cli-lcov", "", "TypeScript lcov path")
 	output := fs.String("output", "", "merged lcov destination (required)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		if *output == "" {
 			inv.Stderr.Println("coverage-merge: --output required")
 			return Fail, nil

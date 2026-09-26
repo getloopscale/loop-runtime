@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/esooverlay"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -23,7 +24,7 @@ func init() {
 // Migrated from infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh
 // (M-Migrate2 continuation 2026-07-07).
 func setupDevPublicLoopZeroExternalSecretsOverlay(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := esooverlay.Check(esooverlay.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, esooverlay.ErrViolations) {

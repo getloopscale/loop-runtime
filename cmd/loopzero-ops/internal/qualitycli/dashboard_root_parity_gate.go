@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dashboardrootparity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -18,7 +19,7 @@ func init() {
 }
 
 func setupDashboardRootParity(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		out, err := dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, dashboardrootparity.ErrDivergent, dashboardrootparity.ErrUndocumented) {

@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baselinecompare"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -29,7 +30,7 @@ func setupBaselineCompare(fs *flag.FlagSet) Check {
 	slack := fs.Float64("slack", 3.0, "tolerance below baseline (pp)")
 	deferLabel := fs.Bool("defer", false, "defer label present (EC-2 escape valve)")
 	deferReason := fs.String("defer-reason", "", "defer justification")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		// Env fallback matches the bash env contract (BASELINE_FILE, CURRENT_FILE,
 		// DEFER_*). Untrusted PR-derived DEFER_REASON arrives via env, not CLI arg.
 		baselinePath := firstNonEmpty(*baseline, os.Getenv("BASELINE_FILE"))

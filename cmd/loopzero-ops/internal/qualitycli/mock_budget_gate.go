@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/mockbudget"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -23,7 +24,7 @@ func init() {
 func setupMockBudget(fs *flag.FlagSet) Check {
 	dir := fs.String("dir", ".", "target directory to scan")
 	budget := fs.Int("budget", mockbudget.DefaultBudget, "max mocks per test file")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		if env := os.Getenv("BUDGET"); env != "" {
 			if n, e := fmt.Sscanf(env, "%d", budget); n == 1 && e == nil {
 				// budget set from env

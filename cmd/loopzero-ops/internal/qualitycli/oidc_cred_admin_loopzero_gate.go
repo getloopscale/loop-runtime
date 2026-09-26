@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/oidccredadminloopzero"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -21,7 +22,7 @@ func init() {
 // credential — rejects fabricated paulo@loopzero.test / LoopZeroDev2026!.
 // Migrated from infra/tests/check-oidc-cred-admin-loopzero_test.sh (M-Migrate2 2026-07-07).
 func setupOIDCCredAdminLoopzero(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := oidccredadminloopzero.Check(oidccredadminloopzero.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, oidccredadminloopzero.ErrViolations) {

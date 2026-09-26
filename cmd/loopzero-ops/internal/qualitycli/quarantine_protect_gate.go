@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/quarantineprotect"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -26,7 +27,7 @@ func setupQuarantineProtect(fs *flag.FlagSet) Check {
 	baseRef := fs.String("base-ref", "origin/main", "base git ref")
 	headRef := fs.String("head-ref", "HEAD", "head git ref")
 	prTitle := fs.String("pr-title", os.Getenv("GITHUB_PR_TITLE"), "PR title (substring-matched for [ARCHIVE-DELETE] marker)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := quarantineprotect.Check(quarantineprotect.Config{
 			RepoRoot:        inv.Root,
 			ArchivePathRoot: *archive,

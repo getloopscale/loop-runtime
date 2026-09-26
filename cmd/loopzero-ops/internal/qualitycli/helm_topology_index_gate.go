@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmtopology"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -25,7 +26,7 @@ func init() {
 func setupHelmTopologyIndex(fs *flag.FlagSet) Check {
 	doc := fs.String("doc", "", "generated index path (default docs/architecture.md)")
 	write := fs.Bool("write", false, "regenerate the index instead of verifying it")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		mode := helmtopology.ModeCheck
 		if *write {
 			mode = helmtopology.ModeWrite

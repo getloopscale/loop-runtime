@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/recordstreesplit"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -25,7 +26,7 @@ func init() {
 // who checks the wrong one reports absence where evidence exists. The gate pins
 // the retired tree's `.md` set to a manifest and refuses drift either way.
 func setupRecordsTreeSplit(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		o := recordstreesplit.Check(recordstreesplit.Config{RepoRoot: inv.Root})
 		if o.LiveMissing {
 			inv.Stderr.Printf("records-tree-split: NOT VERIFIED — %s is absent on this machine.\n"+

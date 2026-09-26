@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/proxyexposure"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -20,7 +21,7 @@ func init() {
 func setupProxyExposure(fs *flag.FlagSet) Check {
 	caddyfile := fs.String("caddyfile", "", "edge config (default infra/local/Caddyfile)")
 	registry := fs.String("registry", "", "declaration file (default infra/quality/proxy-exposure.txt)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		o, err := proxyexposure.Check(proxyexposure.Config{
 			Root: inv.Root, Caddyfile: *caddyfile, Registry: *registry,
 		})

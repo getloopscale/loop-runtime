@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/migrationtestcoverage"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -44,7 +45,7 @@ func init() {
 func setupMigrationTestCoverage(fs *flag.FlagSet) Check {
 	migrationsDir := fs.String("migrations-dir", "", "override migrations dir")
 	testsDir := fs.String("tests-dir", "", "override unit tests dir")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := migrationtestcoverage.Check(migrationtestcoverage.Config{
 			Root:          inv.Root,
 			MigrationsDir: *migrationsDir,

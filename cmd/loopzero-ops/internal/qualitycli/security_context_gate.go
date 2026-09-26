@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/securitycontext"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -19,7 +20,7 @@ func init() {
 
 func setupSecurityContext(fs *flag.FlagSet) Check {
 	gate := fs.Bool("gate", false, "gate mode: exit 1 if any NON-CONFORMANT chart lacks an ADR exception")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		o, err := securitycontext.Check(securitycontext.Config{Root: inv.Root})
 		if err != nil {
 			return Fail, err

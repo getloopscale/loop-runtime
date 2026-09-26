@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/ldflagsymbols"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -32,7 +33,7 @@ func init() {
 //
 // Decision: MEET-ASYNC-AMENDMENT-2026-08-16-ldflag-symbol-resolution
 func setupLdflagSymbols(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		out, err := ldflagsymbols.Check(ldflagsymbols.Config{Root: inv.Root})
 		if err != nil {
 			return Fail, err

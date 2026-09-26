@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clusterimagepolicymode"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -18,7 +19,7 @@ func init() {
 }
 
 func setupClusterImagePolicyMode(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		o := clusterimagepolicymode.Check(clusterimagepolicymode.Config{Root: inv.Root})
 		if !o.Pass {
 			inv.Stderr.Printf("FAIL — clusterImagePolicy.mode governance violation: %s\n", o.Reason)

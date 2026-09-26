@@ -8,6 +8,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/openbaobootstrapincore"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 // inverted on 2026-08-12 (B-047): it used to constrain the shortcut's shape and
 // now refuses the shortcut. Migrated from a shell test on 2026-07-07.
 func setupOpenBaoBootstrapInCoreTask(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := openbaobootstrapincore.Check(openbaobootstrapincore.Config{RepoRoot: inv.Root})
 		switch {
 		case errors.Is(err, openbaobootstrapincore.ErrForbiddenShortcut):

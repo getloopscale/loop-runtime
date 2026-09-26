@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/anonymousauth"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 // LOCAL-only and why drift into a prod chart would broaden the apiserver
 // attack surface.
 func setupAnonymousAuth(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := anonymousauth.Check(anonymousauth.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

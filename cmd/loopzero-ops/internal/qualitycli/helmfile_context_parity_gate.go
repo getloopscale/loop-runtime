@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmfilecontextparity"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -25,7 +26,7 @@ func init() {
 // so declaring the context fixes the dangerous default and this gate supplies
 // the conflict.
 func setupHelmfileContextParity(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		o, err := helmfilecontextparity.Check(helmfilecontextparity.Config{RepoRoot: inv.Root})
 		inv.Stdout.Println(o.Summary())
 		for _, d := range o.Divergences {

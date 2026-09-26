@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clusterrenameguard"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -33,7 +34,7 @@ func setupClusterRenameGuard(fs *flag.FlagSet) Check {
 		"baseline of GENERIC occurrences captured before the rename")
 	skipAncestry := fs.Bool("skip-ancestry-check", false,
 		"skip the guard that refuses a baseline captured after the rename began (EC-1)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := clusterrenameguard.Check(clusterrenameguard.Config{
 			RepoRoot:          inv.Root,
 			BaselinePath:      *baseline,

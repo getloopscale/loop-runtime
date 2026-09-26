@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/deadlineratchet"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ratchetLabels are the words a deadline-ratchet gate reports with.
@@ -27,7 +28,7 @@ type ratchetLabels struct {
 func ratchetSetup(name string, spec deadlineratchet.Spec, lbl ratchetLabels) func(*flag.FlagSet) Check {
 	return func(fs *flag.FlagSet) Check {
 		asOf := fs.String("as-of", "", "reference date YYYY-MM-DD (testing; default: today)")
-		return func(inv Invocation) (Outcome, error) {
+		return func(inv Invocation) (verdict.Result, error) {
 			cfg := deadlineratchet.Config{Root: inv.Root}
 			if *asOf != "" {
 				t, err := time.Parse("2006-01-02", *asOf)

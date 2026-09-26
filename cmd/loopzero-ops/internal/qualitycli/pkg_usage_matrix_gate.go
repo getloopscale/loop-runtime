@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pkgusagematrix"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func setupPkgUsageMatrix(fs *flag.FlagSet) Check {
 	docPath := fs.String("doc-path", "", "override matrix doc path")
 	write := fs.Bool("write", false, "regenerate the matrix (default: --check only)")
 	fs.Bool("check", true, "verify matrix freshness (default)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		mode := pkgusagematrix.ModeCheck
 		if *write {
 			mode = pkgusagematrix.ModeWrite

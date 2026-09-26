@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellhygiene"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 // infra/scripts, infra/helmfile/scripts, infra/tests must set a `set -euo
 // pipefail` variant in its top 60 lines.
 func setupShellHygiene(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := shellhygiene.Check(shellhygiene.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

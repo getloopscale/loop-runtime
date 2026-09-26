@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/danglingdata"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 func setupDanglingDataRefs(fs *flag.FlagSet) Check {
 	baseRef := fs.String("base-ref", "origin/develop", "base git ref")
 	headRef := fs.String("head-ref", "HEAD", "head git ref")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := danglingdata.Check(danglingdata.Config{
 			RepoRoot: inv.Root,
 			BaseRef:  *baseRef,

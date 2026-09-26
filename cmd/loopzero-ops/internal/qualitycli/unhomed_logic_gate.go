@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/unhomedlogic"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -32,7 +33,7 @@ func setupUnhomedLogic(fs *flag.FlagSet) Check {
 	ledger := fs.Bool("ledger", false, "emit per-script disposition + evidence (markdown, for Phase-5 review)")
 	update := fs.Bool("update-baseline", false, "ratchet the baseline to current (write)")
 	fs.Bool("check", true, "ratchet against baseline (default)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		data, err := os.ReadFile(*allowlist) // #nosec G304 -- repo-internal allowlist path
 		switch {
 		case errors.Is(err, iofs.ErrNotExist):

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/spotcheck"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -31,7 +32,7 @@ func init() {
 // audit dimension + persona for the nightly adversarial spotcheck.
 func setupSpotcheckDimension(fs *flag.FlagSet) Check {
 	seed := fs.Int64("seed", 0, "selection seed (0 → $SPOTCHECK_SEED or time.Now)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		s := *seed
 		if s == 0 {
 			if env := os.Getenv("SPOTCHECK_SEED"); env != "" {

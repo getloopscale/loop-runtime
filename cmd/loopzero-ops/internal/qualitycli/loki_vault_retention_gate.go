@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lokivaultretention"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 // Migrated from infra/tests/check-loki-vault-retention_test.sh
 // (M-Migrate2 2026-07-10 M16 T3.1 Wave 2).
 func setupLokiVaultRetention(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := lokivaultretention.Check(lokivaultretention.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, lokivaultretention.ErrViolations) {

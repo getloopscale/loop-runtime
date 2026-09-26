@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/publishhygiene"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 // This repository publishes OCI charts and images, and published history is public
 // RETROACTIVELY.
 func setupPublishHygiene(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		out, err := publishhygiene.Check(publishhygiene.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, publishhygiene.ErrLeak) {

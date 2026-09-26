@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/tenantpredicate"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 // 2026-05-29-sqlc-migration v1.2. Per platform-security-engineer condition
 // 1 (VETO-backed) + M-1 + M-2.
 func setupTenantPredicate(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := tenantpredicate.Check(tenantpredicate.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

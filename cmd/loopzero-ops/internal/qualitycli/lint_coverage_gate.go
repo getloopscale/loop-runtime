@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lintcoverage"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 
 func setupLintCoverage(fs *flag.FlagSet) Check {
 	write := fs.Bool("write", false, "re-freeze the baseline with the measured values")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		if *write {
 			out, merr := lintcoverage.Measure(lintcoverage.Config{RepoRoot: inv.Root})
 			// Re-freezing uses what was MEASURED, even after a regression — it is a

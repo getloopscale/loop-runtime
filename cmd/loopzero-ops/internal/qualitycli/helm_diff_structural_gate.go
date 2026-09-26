@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmdiffstructural"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -27,7 +28,7 @@ func setupHelmDiffStructural(fs *flag.FlagSet) Check {
 	chart := fs.String("chart", "", "chart name (diagnostics)")
 	base := fs.String("base", "", "path to base rendered YAML")
 	pr := fs.String("pr", "", "path to PR rendered YAML")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		if *base == "" || *pr == "" {
 			inv.Stderr.Println("helm-diff-structural: --base and --pr are required")
 			return Fail, nil

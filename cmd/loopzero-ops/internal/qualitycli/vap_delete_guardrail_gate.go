@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/vapdeleteguardrail"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -25,7 +26,7 @@ func init() {
 // instance without any instance rule being consulted, which is the vector of the reference
 // incident this policy exists to prevent.
 func setupVAPDeleteGuardrail(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		rep := vapdeleteguardrail.Check(inv.Root, nil)
 		for _, w := range rep.Warnings {
 			inv.Stderr.Printf("vap-delete-guardrail: WARN: %s\n", w)

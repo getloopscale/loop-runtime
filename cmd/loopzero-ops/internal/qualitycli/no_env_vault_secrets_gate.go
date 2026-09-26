@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/noenvvaultsecrets"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 func setupNoEnvVaultSecrets(fs *flag.FlagSet) Check {
 	warnOnly := fs.Bool("warn-only", false, "treat pattern matches as WARN instead of FAIL (FORBIDDEN still FAIL)")
 	allowlist := fs.String("allowlist", "", "comma-separated extra allowlisted env names")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		cfg := noenvvaultsecrets.Config{
 			RepoRoot: inv.Root,
 			WarnOnly: *warnOnly,

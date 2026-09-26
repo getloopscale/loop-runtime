@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/costseriesproducers"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -55,7 +56,7 @@ func setupCostSeriesProducers(fs *flag.FlagSet) Check {
 		"pinned series/producer contract, relative to --root")
 	aggregator := fs.String("aggregator", costseriesproducers.DefaultAggregatorFile,
 		"cost aggregator source, relative to --loopzero-cloud")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := costseriesproducers.Check(costseriesproducers.Config{
 			RepoRoot:        inv.Root,
 			SiblingRoot:     *sibling,

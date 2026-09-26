@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/sqlcsync"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 // Successor gate to schema_mirror_test.go (deleted in T4.2 per D7 two-step
 // after this gate goes green for one CI cycle).
 func setupSqlcSync(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := sqlcsync.Check(sqlcsync.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/ecosystemvalidators"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -18,7 +19,7 @@ func init() {
 }
 
 func setupEcosystemValidators(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		out, err := ecosystemvalidators.Check(ecosystemvalidators.Config{RepoRoot: inv.Root})
 		if out.Advisory {
 			inv.Stdout.Printf("ecosystem-validators: ADVISORY — nothing was concluded: %s\n", out.AdvisoryReason)

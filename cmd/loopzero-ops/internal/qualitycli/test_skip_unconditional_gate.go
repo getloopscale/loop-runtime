@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testskipunconditional"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -35,7 +36,7 @@ func setupTestSkipUnconditional(fs *flag.FlagSet) Check {
 	scanDir := fs.String("scan", strings.Join(testskipunconditional.DefaultScanDirs, ","),
 		"comma-separated test trees to scan (repo-relative)")
 	pin := fs.String("pin", testskipunconditional.DefaultPinFile, "declaration file (repo-relative)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		var scanDirs []string
 		for _, d := range strings.Split(*scanDir, ",") {
 			if d = strings.TrimSpace(d); d != "" {

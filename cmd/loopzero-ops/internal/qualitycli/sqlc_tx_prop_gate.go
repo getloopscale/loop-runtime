@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/sqlctxprop"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -23,7 +24,7 @@ func init() {
 // form risks bypassing the lock holder's transaction. Rule 6 + Rule 7
 // invariant preservation.
 func setupSqlcTxProp(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := sqlctxprop.Check(sqlctxprop.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

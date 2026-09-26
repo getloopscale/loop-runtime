@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/optionbeso"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 // Migrated from infra/tests/check-option-b-eso-deploy-doc_test.sh
 // (M-Migrate2 continuation 2026-07-07).
 func setupOptionBEsoDeployDoc(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := optionbeso.Check(optionbeso.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, optionbeso.ErrViolations) {

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/pgpdb"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 // (migrated from infra/tests/scripts/postgresql-pdb-config_test.sh). Guards the
 // B2 regression: the postgresql chart must set primary.pdb.create: false.
 func setupPostgresqlPDBConfig(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := pgpdb.Check(filepath.Join(inv.Root, "infra", "helm", "postgresql", "values.yaml"))
 		if err != nil {
 			return Fail, err

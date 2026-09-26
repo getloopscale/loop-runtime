@@ -324,7 +324,63 @@ logic changed. Out-of-tree tooling that hard-codes an old path breaks at build t
 | 2026-06-11 | **Wiring-triad pillar-(b) test contract** (D5). |
 | 2026-06-11 | **Tilt-owned YAML to Helm ConfigMap + Secret mount** as the canonical pattern (D1). |
 | 2026-09-06 | **Restore the governance gate and agents** deleted in `8cb41f660` — selectively, not wholesale. |
+| 2026-09-25 | **One verdict contract for the quality gates.** A gate's check returns its own outcome, which states its verdict (`Pass`, `Fail`, `Skip`, `NotVerified`) through `verdict.Result`; the error it returns means only "could not measure"; the quality runner is the one place a verdict becomes an exit status. Full record below the table. |
 | 2026-05-21 | **External tooling evaluations.** Recommendations recorded and adopted per tool. |
+
+**One verdict contract for the quality gates** (2026-09-25).
+
+*Context.* Measured at `f6d513272`: `loopzero-ops quality` registers 143 gates, one adapter file
+each in `cmd/loopzero-ops/internal/qualitycli`, all run by one runner (`Gate.Run`, since
+`9f5c2ceb6`). The runner was already single; the verdict was not. The 137 check packages under
+`internal/quality/` expose their result in 16 return shapes — `(Outcome, error)` ×67,
+`(*Outcome, error)` ×49, `*Outcome` ×5, `(Verdict, error)` ×3, `(Report, error)` ×3 and eleven
+more — and carry the verdict through five channels: a `Pass` boolean (read by 70 adapters), a
+violation reported as a sentinel **error** (42 adapters list the sentinels by hand through
+`isViolation`), a `Skipped` flag (12), a `Warn` flag (8), and `OK()` / `Failed()` methods (3
+each). Every adapter re-derived the verdict from its check's channel and returned `Pass` or
+`Fail` by hand: 173 `return Pass` and 145 `return Fail` sites. What "skipped" means was decided
+per adapter — 19 adapters carry a SKIP or ADVISORY path that exits 0, three gates over the gitignored kit exit 5 when
+it is absent, and `ecosystem-validators` exits 0 on the same absence. Two defects sat in the
+runner path itself: the legacy `Outcome` zero value **was** `Pass`, so an outcome nobody set
+passed; and a check that panicked exited with the Go runtime's status 2, outside loopzero-ops'
+exit table (0/1/5). No adapter swallowed an error into exit 0 — the runner already mapped every
+error to 5.
+
+*Decision.*
+- `internal/quality/verdict` holds the vocabulary: `Pass` (exit 0), `Fail` (1), `Skip` (0 — the
+  rule was not evaluated here for a reason the gate's policy accepts and its report states: an
+  absent optional subject, or an advisory gate's missing tool), `NotVerified` (5 — a subject
+  that exists could not be verified on this machine). The zero value is not a verdict and exits 5.
+- A check keeps its own outcome type — its tests assert on it and its report prints it — and
+  that type implements `verdict.Result` (`Verdict() verdict.Verdict`) in the check's own
+  package, tested there. The check's `error` means only "could not measure": a violation is a
+  result whose verdict is `Fail`, never a sentinel error.
+- `qualitycli.Check` returns `(verdict.Result, error)`. `verdict.Verdict` does not implement
+  `Result`, so an adapter cannot return a verdict it chose; it returns the outcome the check
+  produced and only renders it. The runner is the one place a verdict becomes an exit status; a
+  nil result, an undecided verdict and a panic all exit 5.
+
+*Alternatives rejected.*
+- *One `Result` struct for every check* (`Check(ctx) Result` with findings and a summary line,
+  rendered by the runner). The 143 reports are not one shape — headers, remediation footers,
+  PARTIAL notes, markdown audits, `::error::` annotations — and they are read by people and
+  scripts today. A common struct either loses that information or grows a free-form text field
+  that re-opens the hand-written verdict. It would also discard the typed outcomes the check
+  tests assert on.
+- *Keep the per-gate outcome and map it in the adapter with a helper.* That is the state
+  measured above: the mapping stays hand-written 143 times, next to the rendering instead of the
+  data, and a new sentinel in a check silently becomes an exit 5 in its adapter.
+- *A fifth `Advisory` verdict.* Its exit status and its report are those of `Skip`; the
+  difference is the reason the report prints, which the gate already states.
+
+*Migration.* The contract landed with the runner and the vocabulary; every adapter compiled
+against it through a transitional `Outcome` (Pass/Fail) that implements `Result`. The gates still
+deciding by hand are listed exactly in `legacyOutcomeGates` (`qualitycli/contract_test.go`): a
+new gate cannot join the list, a migrated gate must leave it, and no adapter may declare a
+`Verdict` method of its own. Gates migrate in batches, each moving its check's verdict into the
+check's package with a test there and keeping the report byte-identical unless the old behaviour
+was a defect. The transitional `Outcome`, `isViolation` and `errNotVerified` are deleted with the
+last legacy gate.
 
 ## Numbered ADRs cited by the code
 

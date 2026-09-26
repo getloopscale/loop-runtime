@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/nolegacysatoken"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 // gate (T7.6 of plan 2026-06-02-openbao-adoption v1.3).
 func setupNoLegacySATokenSecret(fs *flag.FlagSet) Check {
 	allowlist := fs.String("allowlist", "", "comma-separated allowlisted paths")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		cfg := nolegacysatoken.Config{RepoRoot: inv.Root}
 		if *allowlist != "" {
 			for _, p := range strings.Split(*allowlist, ",") {

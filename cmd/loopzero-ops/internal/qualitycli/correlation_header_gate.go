@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/correlationheader"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -22,7 +23,7 @@ func init() {
 // api/internal/correlation.Read(r) instead (T6.1 of plan
 // 2026-06-01-p3-infra-observability-test-debt, ADR D5 — closes val-002).
 func setupCorrelationHeader(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := correlationheader.Check(correlationheader.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

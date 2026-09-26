@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/orykratoslifespan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -23,7 +24,7 @@ func init() {
 // Migrated from infra/tests/helm/ory-kratos-lifespan_test.sh
 // (M-Migrate2 continuation 2026-07-07).
 func setupOryKratosLifespan(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := orykratoslifespan.Check(orykratoslifespan.Config{RepoRoot: inv.Root})
 		if err != nil {
 			if !isViolation(err, orykratoslifespan.ErrViolations) {

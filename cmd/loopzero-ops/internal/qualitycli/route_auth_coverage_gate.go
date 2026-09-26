@@ -8,6 +8,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/routeauthcoverage"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 // Migrated from infra/tests/check-route-auth-coverage_test.sh
 // (M-Migrate2 continuation 2026-07-07).
 func setupRouteAuthCoverage(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := routeauthcoverage.Check(routeauthcoverage.Config{RepoRoot: inv.Root})
 		if errors.Is(err, routeauthcoverage.ErrNoRoutesEnumerated) {
 			// Named apart from the generic failure so the operator reads the CAUSE.

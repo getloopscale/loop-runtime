@@ -7,6 +7,7 @@ import (
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/advisorylock"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -21,7 +22,7 @@ func init() {
 // from infra/tests/scripts/check-advisory-lock-scope_test.sh). Forbids
 // session-scoped pg_advisory_lock( in production code (CLAUDE.md Rule 7).
 func setupAdvisoryLockScope(_ *flag.FlagSet) Check {
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := advisorylock.Check(advisorylock.Config{RepoRoot: inv.Root})
 		if err != nil {
 			return Fail, err

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/clusterrolenosecretsstar"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {
@@ -24,7 +25,7 @@ func init() {
 // if any unconditional secrets/configmaps cluster-wide grant is found.
 func setupClusterRoleNoSecretsStar(fs *flag.FlagSet) Check {
 	allowlist := fs.String("allowlist", "", "comma-separated extra allowlisted chart paths (relative to root)")
-	return func(inv Invocation) (Outcome, error) {
+	return func(inv Invocation) (verdict.Result, error) {
 		cfg := clusterrolenosecretsstar.Config{
 			RepoRoot: inv.Root,
 		}
