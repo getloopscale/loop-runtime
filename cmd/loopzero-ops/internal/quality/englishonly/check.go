@@ -25,6 +25,12 @@
 // files' lines verbatim is registered in verbatimCaptures instead, with the
 // keys that hold the captures and the reason.
 //
+// Prose and names are read separately (names.go). The prose detector skips
+// identifiers and paths; Go identifiers and the components of tracked paths
+// are judged against their own word list, so a Portuguese package, file,
+// type or constant is a finding too. A Go identifier keeps its name with the
+// same line marker; a path has no line to carry one and is renamed instead.
+//
 // Why a repository gate: the only language check was an advisory editor hook
 // in a local, gitignored kit. It ran on the file being edited, never on the
 // tree, and ~313 lines of Portuguese had accumulated in 74 files (#380).
@@ -134,6 +140,10 @@ type Finding struct {
 
 func (f Finding) String() string {
 	switch f.Kind {
+	case KindPortugueseIdentifier:
+		return fmt.Sprintf("%s:%d: Portuguese identifier %s (%s)", f.Path, f.Line, f.Text, strings.Join(f.Evidence, ", "))
+	case KindPortuguesePath:
+		return fmt.Sprintf("%s: Portuguese file or directory name (%s)", f.Path, strings.Join(f.Evidence, ", "))
 	case KindExemptionWithoutReason:
 		return fmt.Sprintf("%s:%d: exemption marker without a reason of at least %d words: %s", f.Path, f.Line, minReasonWords, f.Text)
 	default:
@@ -159,10 +169,12 @@ func Check(cfg Config) (Report, error) {
 	if err != nil {
 		return r, err
 	}
+	judgedPaths := map[string]bool{}
 	for _, rel := range paths {
 		if excluded(rel) {
 			continue
 		}
+		r.Findings = append(r.Findings, pathFindings(rel, judgedPaths)...)
 		full := filepath.Join(cfg.RepoRoot, filepath.FromSlash(rel))
 		info, err := os.Lstat(full)
 		if err != nil {
@@ -208,13 +220,15 @@ func scan(rel string, data []byte) ([]Finding, int, error) {
 		return nil, 0, fmt.Errorf("%s: %w", rel, err)
 	}
 	var (
-		findings []Finding
-		exempted int
+		findings    []Finding
+		exempted    int
+		exemptLines = map[int]bool{}
 	)
 	for i, line := range lines {
 		if m := markerRE.FindStringSubmatch(line); m != nil {
 			if reasonWords(m[1]) >= minReasonWords {
 				exempted++
+				exemptLines[i+1] = true
 				continue
 			}
 			findings = append(findings, Finding{Path: rel, Line: i + 1, Kind: KindExemptionWithoutReason, Text: strings.TrimSpace(line)})
@@ -227,6 +241,9 @@ func scan(rel string, data []byte) ([]Finding, int, error) {
 		if v := Classify(line); v.Portuguese {
 			findings = append(findings, Finding{Path: rel, Line: i + 1, Kind: KindPortuguese, Evidence: v.Evidence, Text: strings.TrimSpace(line)})
 		}
+	}
+	if strings.HasSuffix(rel, ".go") {
+		findings = append(findings, scanGoIdentifiers(rel, data, exemptLines)...)
 	}
 	return findings, exempted, nil
 }

@@ -17,7 +17,8 @@ func init() {
 	})
 }
 
-// setupEnglishOnly refuses Portuguese in any tracked text file (#380).
+// setupEnglishOnly refuses Portuguese in any tracked text file, Go identifier
+// or tracked path name (#380).
 func setupEnglishOnly(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (Outcome, error) {
 		r, err := englishonly.Check(englishonly.Config{RepoRoot: inv.Root})
@@ -25,12 +26,13 @@ func setupEnglishOnly(_ *flag.FlagSet) Check {
 			return Fail, err
 		}
 		if len(r.Findings) > 0 {
-			inv.Stderr.Printf("%s: FAIL — %d line(s) in %d scanned file(s) are not English:\n", inv.Name, len(r.Findings), r.Files)
+			inv.Stderr.Printf("%s: FAIL — %d finding(s) in %d scanned file(s) are not English:\n", inv.Name, len(r.Findings), r.Files)
 			for _, f := range r.Findings {
 				inv.Stderr.Printf("  %s\n", f)
 			}
 			inv.Stderr.Println("")
-			inv.Stderr.Println("To fix: translate the line. Keep Portuguese only where its language is a")
+			inv.Stderr.Println("To fix: translate the line, or rename the identifier, file or directory")
+			inv.Stderr.Println("and every reference to it. Keep Portuguese only where its language is a")
 			inv.Stderr.Println("requirement — product copy, a verbatim quotation, a fixture that must be")
 			inv.Stderr.Println("Portuguese — and say why on the line itself: the word english-only, a colon,")
 			inv.Stderr.Println("and a reason of at least five words.")
