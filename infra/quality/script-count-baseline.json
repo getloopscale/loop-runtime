@@ -1,6 +1,12 @@
 {
-  "canonical_sh": 523,
+  "canonical_sh": 123,
   "_changelog": [
+    {
+      "date": "2026-09-25",
+      "from": 523,
+      "to": 123,
+      "reason": "Ratchet DOWN to the measured count. design_pattern_findings#60 ported 17 hermetic bash harnesses to Go (14 under infra/tests/secrets/ -> Go package infra/tests/secrets; the 3 infra/tests/check-loopzero-cloud-*-wiring_test.sh -> infra/tests/charts/loopzero_cloud_dev_public_wiring_test.go), taking the tree from 140 to 123. The ceiling had not been ratcheted since 2026-07-05 while deletions took the tree from 523 to 140, so it no longer bounded anything: a +383 regression would have passed. `--update-baseline` was not used because it rewrites the file without this history."
+    },
     {
       "date": "2026-07-05",
       "from": 522,

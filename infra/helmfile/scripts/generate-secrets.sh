@@ -194,7 +194,8 @@ if [[ -z "${LOOPZERO_DB_HOST:-}" ]]; then
   # fallback keeps the chicken-and-egg working. Long-term (T10.3, post T+60d) the
   # fallback is removed and Vault becomes the only path. Restored 2026-06-17 after
   # #69 (a cloud-CI commit) accidentally dropped it — caught by the
-  # check-generate-secrets-vault-fallback hermetic gate. The Vault branch runs
+  # cold-bootstrap fallback test (infra/tests/secrets/generate_secrets_vault_fallback_test.go).
+  # The Vault branch runs
   # BEFORE the legacy fallback so `${LOOPZERO_DB_PASSWORD:-loopzero-dev-password}` only
   # applies when Vault did NOT set it.
   if [[ -n "${BAO_ADDR:-}" ]] && [[ -n "${BAO_TOKEN:-}" ]] && command -v bao >/dev/null 2>&1; then

@@ -93,9 +93,9 @@ config:
 
   # B-033 (2026-08-31) — the cost aggregator reads this at boot; empty, it logs
   # "cost aggregator disabled" and does not start, `cost_counters` stays empty and the
-  # api's CostEnforcer degrades to pass-through. Same URL loopzero-app-operator consumes in
-  # its dev-public overlay — change both in lockstep
-  # (infra/tests/check-loopzero-cloud-cost-aggregator-wiring_test.sh).
+  # api's CostEnforcer degrades to pass-through. Same URL loopzero-api's readiness poller
+  # consumes (dataPlanePoller.prometheusUrl in its dev-public overlay) — change both in
+  # lockstep (infra/tests/charts/loopzero_cloud_dev_public_wiring_test.go).
   prometheusUrl: "http://prometheus-server.monitoring.svc.cluster.local:80"
 
 # T2 CANONICAL 2026-07-16: materialise Secret `loopzero-rag-admin-key` from OpenBao

@@ -61,7 +61,7 @@ bash infra/scripts/ci/check-mock-budget.sh  # find files >5 mocks
 
 ## Naming
 
-- **Shell tests end in `_test.sh`** (kebab-case name, snake `_test` suffix: `check-loopzero-cloud-cost-aggregator-wiring_test.sh`). The suffix is deliberate, not an inconsistency: it mirrors Go's `_test.go`, and gates recognise test files by it (`billinglayers`, `divergencematrix` treat `_test.sh` exactly like `_test.go`). Renaming to `-test.sh` would silently turn those files into production scripts for every such gate.
+- **Shell tests end in `_test.sh`** (kebab-case name, snake `_test` suffix: `dev-public-login-rate-limit_test.sh`). The suffix is deliberate, not an inconsistency: it mirrors Go's `_test.go`, and gates recognise test files by it (`billinglayers`, `divergencematrix` treat `_test.sh` exactly like `_test.go`). Renaming to `-test.sh` would silently turn those files into production scripts for every such gate.
 - **Python scripts are snake_case** (`assert_delivery_gate_armed.py`), so any of them can be imported as a module instead of copied.
 
 ## Patterns reused across gates

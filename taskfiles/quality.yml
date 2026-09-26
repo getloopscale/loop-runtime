@@ -284,26 +284,16 @@ tasks:
       - /tmp/loopzero-ops quality skill-paths                        # M-Migrate2 (2026-07-07): replaced infra/tests/skills/skill-paths_test.sh with pure-logic Go gate. Governance: SKILL.md path resolution (declared BLOCKING).
       - /tmp/loopzero-ops quality dev-public-env                     # M-Migrate2 (2026-07-07): replaced infra/tests/helm/dev-public-env_test.sh with pure-logic Go gate. dev-public.yaml canonical shape (dev URLs + cookieDomain + CORS + D5 OAuth reuse + no localhost/legacy leaks).
       - /tmp/loopzero-ops quality k6-load-rigor                      # M-Migrate2 (2026-07-07): replaced infra/tests/check-k6-load-rigor_test.sh with pure-logic Go gate. k6 load rigor: dropped_iterations threshold + L5 distributed + per-level doc (plan k6-load-test-rigor-fixes).
-      - bash infra/tests/secrets/check-seed-loopzero-secrets_test.sh        # vault-INT T8.1 EC-21: idempotent Vault seed script (plan 2026-06-02 v1.8)
-      - bash infra/tests/secrets/check-rotate-secret_test.sh            # vault-INT T8.1 EC-22: cross-binary atomic rotation script (plan 2026-06-02 v1.8)
-      - bash infra/tests/secrets/check-vault-sync_test.sh               # vault-INT Phase 9 T9.1: ESO sync status check (replaces loopzero_config_secret_source metric, plan 2026-06-02 v1.8 D11)
-      - bash infra/tests/secrets/check-vault-bootstrap-eso_test.sh      # vault-INT Runbook P1 codification: ESO ClusterSecretStore bootstrap (plan 2026-06-02 v1.8)
-      - bash infra/tests/secrets/check-enable-vault-backup_test.sh      # vault-INT Runbook P4 codification: enable snapshot-agent backup (plan 2026-06-02 v1.8)
-      - bash infra/tests/secrets/check-restore-vault-snapshot_test.sh   # vault-INT Runbook P5 DR codification: dry-run by default + --execute opt-in (plan 2026-06-02 v1.8)
-      - bash infra/tests/secrets/check-rotation-table-parity_test.sh    # vault-INT parity gate: rotate-secret.sh ROTATION_TABLE vs loopzero-external-secrets/values.yaml inventory (plan 2026-06-02 v1.8 iter 17)
-      # openbao-adoption v1.5 hermetic tests (iter 28-34) — wired iter 35
-      - bash infra/tests/secrets/check-loopzero-api-no-cluster-secrets_test.sh             # openbao-adoption T5.13: legacyClusterWideSecrets backward-compat flag (deep review finding #1)
-      - bash infra/tests/secrets/check-loopzero-api-vault-projected-token_test.sh          # openbao-adoption T5.11: projected SA token audience=vault.loopzero.io + dual-chart parity
-      - bash infra/tests/secrets/check-scoped-kubeconfig-vault_test.sh                 # openbao-adoption T7.3: Vault kubernetes engine SA token fetch + legacy fallback
-      - bash infra/tests/secrets/check-promtail-vault-scrape_test.sh                   # openbao-adoption T8.1+T8.3: Promtail secrets-system scrape + Grafana dashboard
-      # iter 34 trio compatibility regression tests (4 defensive-path locks)
-      - bash infra/tests/secrets/check-generate-secrets-vault-fallback_test.sh         # openbao-adoption iter 34: T6.5 cold-bootstrap fallback Vault-skipped path (cleanroom)
-      - bash infra/tests/secrets/check-scoped-kubeconfig-cold-bootstrap_test.sh        # openbao-adoption iter 34: T7.3 cold-bootstrap legacy SA-token Secret block (cell wiring)
-      - bash infra/tests/secrets/check-promtail-vault-empty-targets_test.sh            # openbao-adoption iter 34: T8.1 promtail filter when secrets-system NS absent (dogfood compat)
-      # B-033 (2026-08-31): dev-public overlay MUST publish LOOPZERO_PROMETHEUS_URL for
-      # cost aggregator wiring — hermetic, no live cluster required. Without that var,
-      # cost_counters stays empty in dev-public and CostEnforcer degrades to pass-through.
-      - bash infra/tests/check-loopzero-cloud-cost-aggregator-wiring_test.sh
+      # OpenBao secret-lifecycle scripts (seed, rotate, sync check, ESO bootstrap,
+      # snapshot backup/restore, rotation-table parity) and the cold-bootstrap
+      # fallbacks of scoped-kubeconfig.sh and generate-secrets.sh. Fourteen bash
+      # harnesses until 2026-09-25, now one Go package: the scripts run under bash
+      # with Go fakes for kubectl/bao/aws/helmfile. The chart-side checks that lived
+      # beside them (loopzero-api secret RBAC + OpenBao token, Promtail audit scrape,
+      # loopzero-cloud dev-public wiring) run in `go test ./charts/` below.
+      # -count=1: they read scripts in infra/scripts and infra/helmfile, outside
+      # this module, which Go's test cache does not key on. yq and jq are required.
+      - cd infra/tests && go test ./secrets/ -count=1
       - /tmp/loopzero-ops quality credentials-sot                    # M-Migrate2 (2026-07-07): replaced infra/tests/docs/credentials-sot_test.sh with pure-logic Go gate. Doc-sync: credentials-required.md enumerates bootstrap Secrets.
       # J-22 openbao-transit v1.2 productive-idle hermetic tests (iters 20-26) — wired iter 27.
       # All 4 are anti-drift contract guards for the engineering deliverables

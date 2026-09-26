@@ -695,36 +695,26 @@ KEEP-OPERATOR (truly justified per D4) or candidate for downstream phase action.
 > `taskfiles/quality.yml` invocations updated in lockstep. `unhomedlogic` gate
 > unaffected (paths keep the `infra/tests/` prefix). Part of the infra/tests
 > taxonomy refactor (review 2026-07-11). No behavior change.
-
-| Script | LOC | Justification |
-|---|---:|---|
-| infra/tests/secrets/check-enable-vault-backup_test.sh | 232 | domain homing 2026-07-11 — moved from repo root; wired in quality:gates (OpenBao snapshot backup) |
-| infra/tests/secrets/check-generate-secrets-vault-fallback_test.sh | 88 | domain homing 2026-07-11 — moved from root; cold-bootstrap Vault-skipped fallback |
-| infra/tests/secrets/check-promtail-vault-empty-targets_test.sh | 92 | domain homing 2026-07-11 — moved from root; promtail vault-audit filter when NS absent |
-| infra/tests/secrets/check-promtail-vault-scrape_test.sh | 102 | domain homing 2026-07-11 — moved from root; promtail secrets-system scrape + Grafana |
-| infra/tests/secrets/check-restore-vault-snapshot_test.sh | 218 | domain homing 2026-07-11 — moved from root; OpenBao DR restore dry-run |
-| infra/tests/secrets/check-rotate-secret_test.sh | 249 | domain homing 2026-07-11 — moved from root; cross-binary atomic rotation |
-| infra/tests/secrets/check-rotation-table-parity_test.sh | 149 | domain homing 2026-07-11 — moved from root; ROTATION_TABLE vs ESO inventory parity |
-| infra/tests/secrets/check-scoped-kubeconfig-cold-bootstrap_test.sh | 80 | domain homing 2026-07-11 — moved from root; cold-bootstrap legacy SA-token block |
-| infra/tests/secrets/check-scoped-kubeconfig-vault_test.sh | 95 | domain homing 2026-07-11 — moved from root; Vault k8s engine SA token fetch |
-| infra/tests/secrets/check-seed-loopzero-secrets_test.sh | 321 | domain homing 2026-07-11 — moved from root; idempotent Vault seed |
-| infra/tests/secrets/check-loopzero-api-no-cluster-secrets_test.sh | 109 | domain homing 2026-07-11 — moved from root; legacyClusterWideSecrets flag |
-| infra/tests/secrets/check-loopzero-api-vault-projected-token_test.sh | 164 | domain homing 2026-07-11 — moved from root; projected SA token audience=vault.loopzero.io |
-| infra/tests/secrets/check-vault-bootstrap-eso_test.sh | 199 | domain homing 2026-07-11 — moved from root; ESO ClusterSecretStore bootstrap |
-| infra/tests/secrets/check-vault-sync_test.sh | 230 | domain homing 2026-07-11 — moved from root; ESO ExternalSecret sync status |
+>
+> **Ported to Go 2026-09-25 (design_pattern_findings#60).** The fourteen harnesses
+> this section homed are gone, and so are their rows: each carried its own copy of
+> one skeleton (colour helpers, PASS/FAIL counters, an "ALL PASS (n/n)" footer, a
+> mock-PATH runner re-typed four times). The script tests are the Go package
+> `infra/tests/secrets` (bash runs the scripts under test; kubectl/bao/aws/helmfile
+> are Go fakes), and the chart-side ones are in `infra/tests/charts`
+> (`loopzero_api_secret_access_test.go`, `promtail_vault_audit_test.go`). Both run in
+> `task quality:gates`.
 
 ### Post-baseline additions (DELEGATION-M7-rag-ui — T1+T2 durable RAG dashboard wiring — 2026-07-16)
 
-| Script | LOC | Justification |
-|---|---:|---|
-| infra/tests/check-loopzero-cloud-rag-dashboard-wiring_test.sh | ~120 | KEEP-CI-ORCHESTRATOR 2026-07-16 — hermetic gate closing DELEGATION-M7-rag-ui.md T1+T2. Renders `helmfile -e dev-public template --selector name=loopzero-cloud` and YAML-parses via python3 stdlib (`yaml.safe_load_all`) to assert 5 wiring invariants on the loopzero-cloud Deployment + rendered ExternalSecret: (A1) env RAG_BASE_URL literal non-empty http(s):// URL; (A2) env RAG_PLATFORM_ADMIN_KEY sourced via valueFrom.secretKeyRef name=loopzero-rag-admin-key key=RAG_PLATFORM_ADMIN_KEY optional=true; (A3) chart-owned template file `charts/loopzero-cloud/templates/externalsecret-admin-keys.yaml` present; (A4) rendered ExternalSecret targets Secret loopzero-rag-admin-key from OpenBao path loopzero/cloud property rag_platform_admin_key; (A5) target.creationPolicy=Owner (anti-orphan). Guards regression to the volatile-`kubectl set env` state that caused `/v1/dashboard/rag/*` → 404 (breaks app-dev.loopzero.example/rag/analytics). Hermetic, no live cluster — pairs with LIVE `kubectl get externalsecret loopzero-rag-admin-key` post-sync + pod-env probe (operator gate). |
-| infra/tests/check-loopzero-cloud-lens-dashboard-wiring_test.sh | ~130 | KEEP-CI-ORCHESTRATOR 2026-07-20 — hermetic gate for the loopzero-lens dev-public dashboard wiring, sibling of the RAG gate above (same class, same toolchain). Renders `helmfile -e dev-public template --selector name=loopzero-cloud` and `yq`-asserts the same 4 wiring invariants for lens: (A1) env LENS_BASE_URL non-empty http(s):// URL (dev-public → `http://host.k3d.internal:18084`, the loopzero-lens host process port); (A2) env LENS_PLATFORM_ADMIN_KEY via valueFrom.secretKeyRef name=loopzero-lens-admin-key key=LENS_PLATFORM_ADMIN_KEY optional=true; (A3) chart template `charts/loopzero-cloud/templates/externalsecret-admin-keys.yaml` present; (A4) rendered ExternalSecret targets Secret loopzero-lens-admin-key from OpenBao path loopzero/cloud property lens_platform_admin_key + creationPolicy=Owner. Without LENS_BASE_URL the loopzero-lens Model-B broker in cmd/main.go stays nil and the `/v1/dashboard/lens/*` (M41/M44) BFF is skipped (breaks app-dev.loopzero.example/lens). Hermetic, no live cluster. |
+> **Ported to Go 2026-09-25 (design_pattern_findings#60)** — the dev-public loopzero-cloud
+> wiring gates (RAG and lens dashboard brokers, B-033 cost-aggregator Prometheus URL)
+> are `infra/tests/charts/loopzero_cloud_dev_public_wiring_test.go`, run by
+> `go test ./charts/` in `task quality:gates`. Their rows were removed with the scripts.
 
 ### Post-baseline additions (plan b033-prometheus-url-dev-public — 2026-08-31)
 
-| Script | LOC | Justification |
-|---|---:|---|
-| infra/tests/check-loopzero-cloud-cost-aggregator-wiring_test.sh | 106 | KEEP-CI-ORCHESTRATOR 2026-08-31 — B-033 T1.1 hermetic gate. Renders `helmfile -e dev-public template --selector name=loopzero-cloud` + `loopzero-api` and asserts A1/A2 (LOOPZERO_PROMETHEUS_URL present with the canonical value `http://prometheus-server.monitoring.svc.cluster.local:80`) + A3 (byte-identical parity with `dataPlanePoller.prometheusUrl` in loopzero-api.yaml.gotmpl, where the readiness poller moved from loopzero-app-operator on 2026-09-25 — absorbs EC-1 of the edge-case plan). Without that variable the cost aggregator in loopzero-cloud/cmd/main.go disables itself at boot with `logger.Info("cost aggregator disabled")`, `cost_counters` stays empty, and the CostEnforcer in api/ degrades to pass-through — the build/egress/pull caps go unenforced on dev-public. Wired in `taskfiles/quality.yml § quality:gates` (T2.2 of the plan). Hermetic, no cluster. Canonical pattern of the siblings `check-loopzero-cloud-{rag,lens}-dashboard-wiring_test.sh`. D4 criteria: Necessary (guards a real regression of the B-033 root cause) + Simple (pattern replicated) + Operator-time (hermetic, no live cluster) + Allowlisted (this entry). |
+> **Ported to Go 2026-09-25** — see the note on the RAG section above.
 
 ### Kit-sync gap closure (commit 63cc51c48 landed .sh files without allowlist rows — 2026-08-31)
 

@@ -24,7 +24,7 @@ import (
 // Picking an unpublished NodePort would render fine here and still leave the edge
 // unable to reach it.
 func TestLoopZeroCloudServiceIsNodePortForTheEdge(t *testing.T) {
-	rendered := renderLoopZeroCloudService(t)
+	rendered := renderDevPublicLoopZeroCloud(t)
 
 	svc := extractServiceBlock(rendered, "loopzero-cloud")
 	if svc == "" {
@@ -55,7 +55,8 @@ func TestLoopZeroCloudNodePortIsOptional(t *testing.T) {
 	}
 }
 
-func renderLoopZeroCloudService(t *testing.T) string {
+// renderDevPublicLoopZeroCloud renders the loopzero-cloud release of the dev-public core.
+func renderDevPublicLoopZeroCloud(t *testing.T) string {
 	t.Helper()
 	return helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "dev-public", "loopzero-cloud", "charts/loopzero-cloud")
 }
