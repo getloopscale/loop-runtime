@@ -36,7 +36,7 @@ loki:
 func TestCheck_HappyPath_PASS(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, lokiValuesRel), canonical)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected nil, got %v; %v", err, outcome.Failures)
 	}
@@ -47,7 +47,7 @@ func TestCheck_HappyPath_PASS(t *testing.T) {
 
 func TestCheck_MissingFile_FAIL(t *testing.T) {
 	root := t.TempDir()
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -60,7 +60,7 @@ func TestCheck_ParseError_FAIL(t *testing.T) {
 	root := t.TempDir()
 	// Unterminated bracket → real YAML parse error.
 	writeFile(t, filepath.Join(root, lokiValuesRel), "loki: [unclosed\n")
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for parse error, got %v", err)
 	}
@@ -81,7 +81,7 @@ loki:
         priority: 10
 `
 	writeFile(t, filepath.Join(root, lokiValuesRel), broken)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -102,7 +102,7 @@ loki:
         priority: "high"
 `
 	writeFile(t, filepath.Join(root, lokiValuesRel), broken)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -123,7 +123,7 @@ loki:
         priority: 10
 `
 	writeFile(t, filepath.Join(root, lokiValuesRel), broken)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -134,7 +134,7 @@ loki:
 
 func TestCheck_RealRepoPasses(t *testing.T) {
 	root := qtestutil.Root(t)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("real repo violation: %v; %v", err, outcome.Failures)
 	}

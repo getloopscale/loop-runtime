@@ -42,6 +42,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrNoPortDeclared means an adapter file declares an exported type without naming its port.
@@ -70,6 +71,17 @@ type Config struct {
 type Outcome struct {
 	Scanned int
 	Missing []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // declaresPort reports whether the file has `var _ <something> = ...` with a declared TYPE.
@@ -159,8 +171,9 @@ func Check(cfg Config) (Outcome, error) {
 		return out, fmt.Errorf("%w: %s holds no adapter at all", ErrNothingScanned, adapterPackagesGlob)
 	}
 	if len(out.Missing) > 0 {
-		return out, fmt.Errorf("%w: %s — declare `var _ <Port> = (*<Type>)(nil)`",
+		out.Violation = fmt.Errorf("%w: %s — declare `var _ <Port> = (*<Type>)(nil)`",
 			ErrNoPortDeclared, strings.Join(out.Missing, ", "))
+		return out, nil
 	}
 	return out, nil
 }

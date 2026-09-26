@@ -61,7 +61,7 @@ func TestDistinctChartsPass(t *testing.T) {
 		map[string]chart{"gitea": {name: "gitea", templates: map[string]string{"a.yaml": "kind: A\n"}}},
 		map[string]chart{"loopzero-api": {name: "loopzero-api", templates: map[string]string{"d.yaml": "kind: Deployment\n"}}})
 
-	out, err := chartpairs.Check(chartpairs.Config{RepoRoot: root})
+	out, err := violationOf(chartpairs.Check(chartpairs.Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("no chart exists twice; got %v", err)
 	}
@@ -76,7 +76,7 @@ func TestSameNameInBothTreesIsRefused(t *testing.T) {
 		map[string]chart{"loopzero-api": {name: "loopzero-api", templates: map[string]string{"x.yaml": "kind: X\n"}}},
 		map[string]chart{"loopzero-api": {name: "loopzero-api", templates: map[string]string{"y.yaml": "kind: Y\n"}}})
 
-	out, err := chartpairs.Check(chartpairs.Config{RepoRoot: root})
+	out, err := violationOf(chartpairs.Check(chartpairs.Config{RepoRoot: root}))
 	if !errors.Is(err, chartpairs.ErrDuplicated) {
 		t.Fatalf("want ErrDuplicated, got %v", err)
 	}
@@ -92,7 +92,7 @@ func TestTemplateIdenticalCopyUnderAnotherNameIsRefused(t *testing.T) {
 		map[string]chart{"admission-policies": {name: "admission-policies", templates: policyTemplates}},
 		map[string]chart{"loopzero-admission-policies": {name: "loopzero-admission-policies", templates: policyTemplates}})
 
-	out, err := chartpairs.Check(chartpairs.Config{RepoRoot: root})
+	out, err := violationOf(chartpairs.Check(chartpairs.Config{RepoRoot: root}))
 	if !errors.Is(err, chartpairs.ErrDuplicated) {
 		t.Fatalf("want ErrDuplicated, got %v", err)
 	}
@@ -110,7 +110,7 @@ func TestChartsSharingOnlySomeTemplatesAreNotACopy(t *testing.T) {
 		map[string]chart{"admission-policies": {name: "admission-policies", templates: policyTemplates}},
 		map[string]chart{"loopzero-admission-policies": {name: "loopzero-admission-policies", templates: variant}})
 
-	if _, err := chartpairs.Check(chartpairs.Config{RepoRoot: root}); err != nil {
+	if _, err := violationOf(chartpairs.Check(chartpairs.Config{RepoRoot: root})); err != nil {
 		t.Fatalf("two charts with different template sets are two charts; got %v", err)
 	}
 }
@@ -122,7 +122,7 @@ func TestChartsWithoutTemplatesAreNotComparedByContent(t *testing.T) {
 		map[string]chart{"wrapper": {name: "wrapper"}},
 		map[string]chart{"loopzero-common": {name: "loopzero-common"}})
 
-	if _, err := chartpairs.Check(chartpairs.Config{RepoRoot: root}); err != nil {
+	if _, err := violationOf(chartpairs.Check(chartpairs.Config{RepoRoot: root})); err != nil {
 		t.Fatalf("empty template sets are not evidence of a copy; got %v", err)
 	}
 }
@@ -130,14 +130,14 @@ func TestChartsWithoutTemplatesAreNotComparedByContent(t *testing.T) {
 // No charts at all is refused: zero with zero must not read as "scanned clean".
 func TestNoChartsAtAllIsRefused(t *testing.T) {
 	root := t.TempDir()
-	if _, err := chartpairs.Check(chartpairs.Config{RepoRoot: root}); !errors.Is(err, chartpairs.ErrNothingScanned) {
+	if _, err := violationOf(chartpairs.Check(chartpairs.Config{RepoRoot: root})); !errors.Is(err, chartpairs.ErrNothingScanned) {
 		t.Fatalf("want ErrNothingScanned, got %v", err)
 	}
 }
 
 // The real population of this repository holds no chart twice.
 func TestRealTree(t *testing.T) {
-	out, err := chartpairs.Check(chartpairs.Config{RepoRoot: qtestutil.Root(t)})
+	out, err := violationOf(chartpairs.Check(chartpairs.Config{RepoRoot: qtestutil.Root(t)}))
 	if err != nil {
 		t.Fatalf("real tree holds a chart twice: %v (duplicates=%v)", err, out.Duplicates)
 	}

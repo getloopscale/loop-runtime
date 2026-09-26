@@ -49,7 +49,7 @@ func TestOurImageWithAPublicationPathPasses(t *testing.T) {
 	root := tree(t, "c1", cronTemplate,
 		"crons:\n  a:\n    enabled: true\nimg:\n  repository: ghcr.io/getloopscale/loopzero-api\n  tag: develop\n",
 		matrixWithLoopZeroAPI)
-	out, err := Check(Config{RepoRoot: root})
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("a published image passes: %v (%+v)", err, out.Findings)
 	}
@@ -63,7 +63,7 @@ func TestOurImageWithoutAPublicationPathFails(t *testing.T) {
 	root := tree(t, "c1", cronTemplate,
 		"crons:\n  a:\n    enabled: true\nimg:\n  repository: registry.digitalocean.com/loopzero-system/loopzero-ops\n  tag: v0.1.0\n",
 		matrixWithLoopZeroAPI)
-	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}})
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}}))
 	if !errors.Is(err, ErrNoPublicationPath) {
 		t.Fatalf("an image with no publication path fails; err=%v", err)
 	}
@@ -78,7 +78,7 @@ func TestThirdPartyImageIsNotOurs(t *testing.T) {
 		root := tree(t, "c1", cronTemplate,
 			"crons:\n  a:\n    enabled: true\nimg:\n  repository: "+img+"\n  tag: v1\n",
 			matrixWithLoopZeroAPI)
-		if _, err := Check(Config{RepoRoot: root}); err != nil {
+		if _, err := violationOf(Check(Config{RepoRoot: root})); err != nil {
 			t.Fatalf("%s is third-party: %v", img, err)
 		}
 	}
@@ -88,7 +88,7 @@ func TestThirdPartyImageIsNotOurs(t *testing.T) {
 func TestLiteralImageInTemplateIsJudged(t *testing.T) {
 	lit := "kind: CronJob\nspec:\n  template:\n    spec:\n      containers:\n        - image: registry.digitalocean.com/loopzero-system/loopzero-ops:v0.1.0\n"
 	root := tree(t, "c1", lit, "crons:\n  a:\n    enabled: true\n", matrixWithLoopZeroAPI)
-	if _, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}}); !errors.Is(err, ErrNoPublicationPath) {
+	if _, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}})); !errors.Is(err, ErrNoPublicationPath) {
 		t.Fatalf("a literal fails too; err=%v", err)
 	}
 }
@@ -97,7 +97,7 @@ func TestLiteralImageInTemplateIsJudged(t *testing.T) {
 func TestChartWithoutScheduleIsNotScanned(t *testing.T) {
 	noCron := "kind: Deployment\nspec:\n  template:\n    spec:\n      containers:\n        - image: registry.digitalocean.com/loopzero-system/loopzero-ops:v0.1.0\n"
 	root := tree(t, "c1", noCron, "x: 1\n", matrixWithLoopZeroAPI)
-	out, err := Check(Config{RepoRoot: root})
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrNothingScanned) {
 		t.Fatalf("with no schedule there is nothing to scan, and zero scanned fails; err=%v (%+v)", err, out)
 	}
@@ -109,14 +109,14 @@ func TestMissingMatrixFails(t *testing.T) {
 	p := filepath.Join(root, "infra/helm/c1/templates/cron.yaml")
 	_ = os.MkdirAll(filepath.Dir(p), 0o750)
 	_ = os.WriteFile(p, []byte(cronTemplate), 0o600)
-	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrMatrixUnreadable) {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrMatrixUnreadable) {
 		t.Fatalf("without the matrix nothing says what is published; err=%v", err)
 	}
 }
 
 // The real population.
 func TestRealTree(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot})
+	out, err := violationOf(Check(Config{RepoRoot: repoRoot}))
 	if err != nil {
 		for _, f := range out.Findings {
 			t.Errorf("%s — %s: %s", f.Chart, f.Image, f.Why)
@@ -143,7 +143,7 @@ spec:
 	root := tree(t, "c1", real,
 		"crons:\n  a:\n    enabled: true\nloopzeroOpsImage:\n  repository: registry.digitalocean.com/loopzero-system/loopzero-ops\n  tag: v0.1.0\n",
 		matrixWithLoopZeroAPI)
-	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}})
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}}))
 	if !errors.Is(err, ErrNoPublicationPath) {
 		t.Fatalf("the real form must be resolved; err=%v (%+v)", err, out.Findings)
 	}
@@ -165,7 +165,7 @@ spec:
 	root := tree(t, "c1", real,
 		"crons:\n  a:\n    enabled: true\nimg:\n  repository: ghcr.io/getloopscale/loopzero-api\n  tag: develop\n",
 		matrixWithLoopZeroAPI)
-	if _, err := Check(Config{RepoRoot: root}); err != nil {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); err != nil {
 		t.Fatalf("a published image through a variable passes: %v", err)
 	}
 }
@@ -179,12 +179,12 @@ func TestExemptionNeedsReasonAndSunset(t *testing.T) {
 		{Image: "loopzero-ops", Sunset: "2026-11-18"},
 		{Image: "loopzero-ops", Reason: "the crons do not run the binary"},
 	} {
-		if _, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{e}}); err == nil {
+		if _, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{e}})); err == nil {
 			t.Fatalf("an incomplete exemption must not pass: %+v", e)
 		}
 	}
 	ok := Exemption{Image: "loopzero-ops", Reason: "the crons do not run the binary", Sunset: "2026-11-18"}
-	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{ok}})
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{ok}}))
 	if err != nil {
 		t.Fatalf("a complete exemption passes: %v", err)
 	}
@@ -206,7 +206,7 @@ spec:
 	root := tree(t, "c1", wt,
 		"img:\n  repository: registry.digitalocean.com/loopzero-system/loopzero-ops\n  tag: v0.1.0\n",
 		matrixWithLoopZeroAPI)
-	if _, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}}); !errors.Is(err, ErrNoPublicationPath) {
+	if _, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}})); !errors.Is(err, ErrNoPublicationPath) {
 		t.Fatalf("event-triggered execution fails the same way; err=%v", err)
 	}
 }
@@ -217,7 +217,7 @@ func TestUnresolvedImageExpressionIsAFinding(t *testing.T) {
 	inc := "kind: CronJob\nspec:\n  template:\n    spec:\n      containers:\n        - image: {{ include \"x.image\" . }}\n"
 	root := tree(t, "c1", inc, "crons:\n  a:\n    enabled: true\n", matrixWithLoopZeroAPI)
 
-	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}})
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}}))
 
 	if !errors.Is(err, ErrNoPublicationPath) || len(out.Findings) != 1 || !strings.Contains(out.Findings[0].Why, "template expression") {
 		t.Fatalf("an unresolved image must be a finding; out=%+v err=%v", out, err)
@@ -228,7 +228,7 @@ func TestUnresolvedImageExpressionIsAFinding(t *testing.T) {
 func TestMalformedValuesIsAnError(t *testing.T) {
 	root := tree(t, "c1", cronTemplate, "img: [unclosed\n", matrixWithLoopZeroAPI)
 
-	if _, err := Check(Config{RepoRoot: root}); err == nil || errors.Is(err, ErrNoPublicationPath) {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); err == nil || errors.Is(err, ErrNoPublicationPath) {
 		t.Fatalf("a malformed values.yaml must be an error of its own; err=%v", err)
 	}
 }
@@ -239,7 +239,7 @@ func TestDefaultPipeIsResolved(t *testing.T) {
 	tmpl := "kind: CronJob\nspec:\n  template:\n    spec:\n      containers:\n        - image: {{ .Values.job.image | default \"registry.digitalocean.com/loopzero-system/loopzero-ops:v1\" }}\n"
 	root := tree(t, "c1", tmpl, "job: {}\n", matrixWithLoopZeroAPI)
 
-	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}})
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}}))
 
 	if !errors.Is(err, ErrNoPublicationPath) || len(out.Findings) != 1 || !strings.Contains(out.Findings[0].Image, "loopzero-ops:v1") {
 		t.Fatalf("the default literal must be the resolved image; out=%+v err=%v", out, err)

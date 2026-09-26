@@ -26,14 +26,14 @@ func setupPlatformCRNamespace(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := platformcrnamespace.Check(platformcrnamespace.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, platformcrnamespace.ErrOutsideNamespace) {
-				return Fail, err
-			}
-			inv.Stderr.Printf("platform-cr-namespace: %v\n", err)
-			return Fail, nil
+			return nil, err
+		}
+		if out.Verdict() == verdict.Fail {
+			inv.Stderr.Printf("platform-cr-namespace: %v\n", out.Violation)
+			return out, nil
 		}
 		inv.Stdout.Printf("platform-cr-namespace: PASS — %d platform CR(s), all in %s (%d file(s))\n",
 			len(out.Checked), platformcrnamespace.CanonicalNamespace, out.Files)
-		return Pass, nil
+		return out, nil
 	}
 }

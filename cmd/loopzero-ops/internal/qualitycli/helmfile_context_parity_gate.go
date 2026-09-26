@@ -40,13 +40,13 @@ func setupHelmfileContextParity(_ *flag.FlagSet) Check {
 			inv.Stdout.Printf("  NO CONTEXT %s — a `helmfile sync` without the flag would inherit kubectl's active context\n", u)
 		}
 		if err != nil {
-			if !isViolation(err, helmfilecontextparity.ErrContextDiverges, helmfilecontextparity.ErrContextNotDeclared, helmfilecontextparity.ErrRequiredEnvNotSet) {
-				return Fail, err
-			}
-			inv.Stderr.Printf("helmfile-context-parity: %v\n", err)
-			return Fail, nil
+			return nil, err
+		}
+		if o.Verdict() == verdict.Fail {
+			inv.Stderr.Printf("helmfile-context-parity: %v\n", o.Violation)
+			return o, nil
 		}
 		inv.Stdout.Println("PASS — every literal helmfile invocation targets the cluster its helmfile declares")
-		return Pass, nil
+		return o, nil
 	}
 }

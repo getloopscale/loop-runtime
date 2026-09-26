@@ -59,6 +59,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrSinkLeakGrew means a persistence symbol crossed the sink's boundary that
@@ -172,6 +174,17 @@ type Outcome struct {
 	Gone        []string
 	// FilesParsed lets the caller tell "nothing leaked" from "nothing was read".
 	FilesParsed int
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Check parses the sink and compares its persistence surface to the frozen set.
@@ -235,7 +248,8 @@ func Check(cfg Config) (Outcome, error) {
 	sort.Strings(out.Gone)
 
 	if len(out.New) > 0 {
-		return out, ErrSinkLeakGrew
+		out.Violation = ErrSinkLeakGrew
+		return out, nil
 	}
 	return out, nil
 }

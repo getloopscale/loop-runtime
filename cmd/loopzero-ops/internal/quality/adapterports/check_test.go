@@ -39,7 +39,7 @@ func TestAdapterWithAssertionPasses(t *testing.T) {
 	root := adaptersTree(t, map[string]string{
 		"x_adapter.go": "package xadapter\n\ntype XAdapter struct{}\n\nvar _ foo.Port = (*XAdapter)(nil)\n",
 	})
-	out, err := adapterports.Check(adapterports.Config{RepoRoot: root})
+	out, err := violationOf(adapterports.Check(adapterports.Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("adapter with an assertion should pass; got %v", err)
 	}
@@ -53,7 +53,7 @@ func TestAdapterWithoutAssertionIsRefused(t *testing.T) {
 	root := adaptersTree(t, map[string]string{
 		"y_adapter.go": "package xadapter\n\n// YAdapter adapts something.\ntype YAdapter struct{}\n",
 	})
-	out, err := adapterports.Check(adapterports.Config{RepoRoot: root})
+	out, err := violationOf(adapterports.Check(adapterports.Config{RepoRoot: root}))
 	if !errors.Is(err, adapterports.ErrNoPortDeclared) {
 		t.Fatalf("expected ErrNoPortDeclared, got %v", err)
 	}
@@ -68,7 +68,7 @@ func TestUsageAssertionIsNotAPortDeclaration(t *testing.T) {
 	root := adaptersTree(t, map[string]string{
 		"z_adapter.go": "package xadapter\n\ntype ZAdapter struct{}\n\nvar _ = db.SomeType{}\n",
 	})
-	if _, err := adapterports.Check(adapterports.Config{RepoRoot: root}); !errors.Is(err, adapterports.ErrNoPortDeclared) {
+	if _, err := violationOf(adapterports.Check(adapterports.Config{RepoRoot: root})); !errors.Is(err, adapterports.ErrNoPortDeclared) {
 		t.Fatalf("a usage assertion does not declare a port; expected refusal, got %v", err)
 	}
 }
@@ -87,7 +87,7 @@ func TestFileWithoutExportedTypeIsNotRequiredToDeclare(t *testing.T) {
 		"adapters.go":  "// Package adapters ...\npackage adapters\n",
 		"w_adapter.go": "package xadapter\n\ntype WAdapter struct{}\n\nvar _ foo.Port = (*WAdapter)(nil)\n",
 	})
-	out, err := adapterports.Check(adapterports.Config{RepoRoot: root})
+	out, err := violationOf(adapterports.Check(adapterports.Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("the doc file need not declare a port; got %v", err)
 	}
@@ -99,14 +99,14 @@ func TestFileWithoutExportedTypeIsNotRequiredToDeclare(t *testing.T) {
 // An absent package fails: a future dissolution (the other alternative in the DoD) must not
 // leave the guard green over nothing.
 func TestMissingPackageIsRefused(t *testing.T) {
-	if _, err := adapterports.Check(adapterports.Config{RepoRoot: t.TempDir()}); !errors.Is(err, adapterports.ErrNothingScanned) {
+	if _, err := violationOf(adapterports.Check(adapterports.Config{RepoRoot: t.TempDir()})); !errors.Is(err, adapterports.ErrNothingScanned) {
 		t.Fatal("an absent package should fail")
 	}
 }
 
 // The real population.
 func TestRealTree(t *testing.T) {
-	out, err := adapterports.Check(adapterports.Config{RepoRoot: filepath.Join("..", "..", "..", "..", "..")})
+	out, err := violationOf(adapterports.Check(adapterports.Config{RepoRoot: filepath.Join("..", "..", "..", "..", "..")}))
 	if err != nil {
 		t.Fatalf("real tree: %v (without a port: %v)", err, out.Missing)
 	}

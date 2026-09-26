@@ -33,16 +33,16 @@ func setupPackageAdmission(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := packageadmission.Check(packageadmission.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, packageadmission.ErrForeignDomain, packageadmission.ErrHomeMissing) {
-				return Fail, err
-			}
-			inv.Stderr.Printf("package-admission: FAIL \u2014 %v\n", err)
+			return nil, err
+		}
+		if out.Verdict() == verdict.Fail {
+			inv.Stderr.Printf("package-admission: FAIL \u2014 %v\n", out.Violation)
 			for _, v := range out.Violations {
 				inv.Stderr.Printf("  api/internal/k8s/%s: %s carries the domain word %q \u2014 move it to k8s/tenancy, k8s/workload or k8s/secretsync\n", v.File, v.Where, v.Word)
 			}
-			return Fail, nil
+			return out, nil
 		}
 		inv.Stdout.Printf("package-admission: PASS \u2014 %d plumbing file(s) in api/internal/k8s name no domain; homes %v are populated\n", out.Scanned, out.Homes)
-		return Pass, nil
+		return out, nil
 	}
 }

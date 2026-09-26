@@ -24,7 +24,7 @@ import (
 // taskfiles/*.yml kept 13 (a raw grep reads 25 then and 16 now — the same one
 // line of difference on both sides).
 func TestDeclaredScopeDenominatorDoesNotShrink(t *testing.T) {
-	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
+	out, err := violationOf(Check(Config{RepoRoot: qtestutil.Root(t)}))
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestDeclaredScopeDenominatorDoesNotShrink(t *testing.T) {
 // 4 of 28 invocations is not a PASS over 28 of 28, and the previous text gave
 // both numbers without ever saying one is out of the other.
 func TestSummaryStatesTheFractionNotJustTheCounts(t *testing.T) {
-	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
+	out, err := violationOf(Check(Config{RepoRoot: qtestutil.Root(t)}))
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}

@@ -40,6 +40,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/lintcoverage"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrNotSelfContained means a module does not build without the workspace.
@@ -68,6 +69,17 @@ type Outcome struct {
 	Checked int
 	Failed  []Failure
 	Reason  string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Check builds every module with the workspace disabled.
@@ -101,7 +113,8 @@ func Check(cfg Config) (Outcome, error) {
 
 	if len(out.Failed) > 0 {
 		f := out.Failed[0]
-		return out, fmt.Errorf("%w: %s — %s", ErrNotSelfContained, f.Module, firstLine(f.Err))
+		out.Violation = fmt.Errorf("%w: %s — %s", ErrNotSelfContained, f.Module, firstLine(f.Err))
+		return out, nil
 	}
 	out.Reason = fmt.Sprintf("%d module(s) build without the workspace (GOWORK=off), which is what CI does", out.Checked)
 	return out, nil

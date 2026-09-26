@@ -45,7 +45,7 @@ selfservice:
 
 func TestCheck_CanonicalPasses(t *testing.T) {
 	root := writeFixture(t, canonical)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected PASS, got err=%v failures=%v", err, outcome.Failures)
 	}
@@ -53,7 +53,7 @@ func TestCheck_CanonicalPasses(t *testing.T) {
 
 func TestCheck_MissingFileFails(t *testing.T) {
 	root := t.TempDir()
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -62,7 +62,7 @@ func TestCheck_MissingFileFails(t *testing.T) {
 func TestCheck_WrongLoginLifespanFails(t *testing.T) {
 	body := strings.Replace(canonical, "lifespan: 10m\n      ui_url: \"{{ .Values.publicUIURL }}/login\"", "lifespan: 1h\n      ui_url: \"{{ .Values.publicUIURL }}/login\"", 1)
 	root := writeFixture(t, body)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations when login lifespan wrong, got %v", err)
 	}
@@ -71,7 +71,7 @@ func TestCheck_WrongLoginLifespanFails(t *testing.T) {
 func TestCheck_MissingRecoveryLifespanFails(t *testing.T) {
 	body := strings.Replace(canonical, "    recovery:\n      # T2.2 plan kratos-self-service-rate-limit-systemic — email-bomb defense\n      lifespan: 15m\n      ui_url: \"{{ .Values.publicUIURL }}/recovery\"\n", "", 1)
 	root := writeFixture(t, body)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations when recovery section missing, got %v", err)
 	}
@@ -81,7 +81,7 @@ func TestCheck_MissingPlanSlugCitationFails(t *testing.T) {
 	// Strip all plan slug references (drops attribution — the traceability contract).
 	body := strings.ReplaceAll(canonical, "kratos-self-service-rate-limit-systemic", "SOMETHING-ELSE")
 	root := writeFixture(t, body)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations when plan slug not cited, got %v", err)
 	}
@@ -93,7 +93,7 @@ func TestCheck_FileTooLongFails(t *testing.T) {
 		body += "# padding line\n"
 	}
 	root := writeFixture(t, body)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations when file exceeds LoC budget, got %v", err)
 	}
@@ -101,7 +101,7 @@ func TestCheck_FileTooLongFails(t *testing.T) {
 
 func TestCheck_RealRepoPasses(t *testing.T) {
 	abs := qtestutil.RootFile(t, valuesPath)
-	outcome, checkErr := Check(Config{RepoRoot: abs})
+	outcome, checkErr := violationOf(Check(Config{RepoRoot: abs}))
 	if checkErr != nil {
 		t.Fatalf("real values.yaml.gotmpl must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
 	}

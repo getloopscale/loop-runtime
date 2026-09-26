@@ -25,16 +25,16 @@ func setupModuleSelfContained(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := moduleselfcontained.Check(moduleselfcontained.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, moduleselfcontained.ErrNotSelfContained) {
-				return Fail, err
-			}
-			inv.Stderr.Printf("module-selfcontained: FAIL — %v\n", err)
+			return nil, err
+		}
+		if out.Verdict() == verdict.Fail {
+			inv.Stderr.Printf("module-selfcontained: FAIL — %v\n", out.Violation)
 			for _, f := range out.Failed {
 				inv.Stderr.Printf("  %s:\n%s\n", f.Module, f.Err)
 			}
-			return Fail, nil
+			return out, nil
 		}
 		inv.Stdout.Printf("module-selfcontained: PASS — %s\n", out.Reason)
-		return Pass, nil
+		return out, nil
 	}
 }

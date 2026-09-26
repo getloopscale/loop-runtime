@@ -42,7 +42,7 @@ const canonicalBody = `# Canonical dev-public edge Caddyfile fixture.
 
 func TestCheck_CanonicalCaddyfilePasses(t *testing.T) {
 	root := writeFixture(t, canonicalBody)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected PASS, got err=%v violations=%v", err, outcome.Violations)
 	}
@@ -61,7 +61,7 @@ func TestCheck_DockerNetworkIPHardcodedFails(t *testing.T) {
 }
 `
 	root := writeFixture(t, body)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -77,7 +77,7 @@ func TestCheck_DockerNetworkIPInCommentIsAllowed(t *testing.T) {
 }
 `
 	root := writeFixture(t, body)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("comment-only 172.18 should PASS, got err=%v violations=%v", err, outcome.Violations)
 	}
@@ -93,7 +93,7 @@ func TestCheck_ProdDevBlockMissingCanonicalUpstreamFails(t *testing.T) {
 }
 `
 	root := writeFixture(t, body)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v (violations=%v)", err, outcome.Violations)
 	}
@@ -108,7 +108,7 @@ func TestCheck_PreviewDevBlockMissingCanonicalUpstreamFails(t *testing.T) {
 }
 `
 	root := writeFixture(t, body)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v (violations=%v)", err, outcome.Violations)
 	}
@@ -116,7 +116,7 @@ func TestCheck_PreviewDevBlockMissingCanonicalUpstreamFails(t *testing.T) {
 
 func TestCheck_CaddyfileMissingSurfacesError(t *testing.T) {
 	root := t.TempDir()
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if err == nil {
 		t.Fatal("expected error when Caddyfile missing, got nil")
 	}
@@ -136,7 +136,7 @@ func TestCheck_RealRepoCaddyfilePasses(t *testing.T) {
 	}
 	for i := 0; i < 8; i++ {
 		if _, statErr := os.Stat(filepath.Join(abs, "infra", "local", "Caddyfile")); statErr == nil {
-			outcome, checkErr := Check(Config{RepoRoot: abs})
+			outcome, checkErr := violationOf(Check(Config{RepoRoot: abs}))
 			if checkErr != nil {
 				t.Fatalf("real Caddyfile must satisfy invariant. err=%v violations=%v", checkErr, outcome.Violations)
 			}

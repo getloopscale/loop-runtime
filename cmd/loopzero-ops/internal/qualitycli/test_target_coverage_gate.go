@@ -22,8 +22,11 @@ func init() {
 func setupTestTargetCoverage(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := testtargetcoverage.Check(testtargetcoverage.Config{RepoRoot: inv.Root})
+		if err != nil {
+			return nil, err
+		}
 		switch {
-		case errors.Is(err, testtargetcoverage.ErrModuleUncovered):
+		case errors.Is(out.Violation, testtargetcoverage.ErrModuleUncovered):
 			inv.Stderr.Printf("test-target-coverage: FAIL — %d module(s) with no Taskfile target running their tests:\n", len(out.Uncovered))
 			for _, m := range out.Uncovered {
 				inv.Stderr.Printf("  %s\n", m)
@@ -33,8 +36,8 @@ func setupTestTargetCoverage(_ *flag.FlagSet) Check {
 			inv.Stderr.Println("modules outside go.work), OR add a NAMED exemption with a reason in")
 			inv.Stderr.Println("internal/quality/testtargetcoverage. `go build` does not count: that is")
 			inv.Stderr.Println("exactly how cmd/loopzero-ops looked covered while no test of it ever ran (B-088).")
-			return Fail, nil
-		case errors.Is(err, testtargetcoverage.ErrPackageUncovered):
+			return out, nil
+		case errors.Is(out.Violation, testtargetcoverage.ErrPackageUncovered):
 			inv.Stderr.Printf("test-target-coverage: FAIL — %d package(s) with tests that no target runs:\n", len(out.UncoveredPackages))
 			for _, p := range out.UncoveredPackages {
 				inv.Stderr.Printf("  %s\n", p)
@@ -44,14 +47,12 @@ func setupTestTargetCoverage(_ *flag.FlagSet) Check {
 			inv.Stderr.Println("the target's pattern, give them a target of their own, or declare a PACKAGE exemption")
 			inv.Stderr.Println("with a reason and a sunset. This is exactly how 41 files went unseen in a module the")
 			inv.Stderr.Println("gate reported as covered (B-092/B-114).")
-			return Fail, nil
-		case err != nil:
-			return Fail, err
+			return out, nil
 		}
 		inv.Stdout.Printf("test-target-coverage: PASS — %d module(s), %d covered, %d exempt with a dated reason. "+
 			"The granularity is the PACKAGE: a module with a target still fails if its pattern does not reach "+
 			"a subtree that has tests (B-114).\n",
 			len(out.Modules), len(out.Covered), len(out.Exempt))
-		return Pass, nil
+		return out, nil
 	}
 }

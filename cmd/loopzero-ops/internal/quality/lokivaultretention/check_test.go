@@ -64,7 +64,7 @@ func TestCheck_HappyPath_PASS(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, archiveCronRel), canonicalCronJob)
 
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected nil err, got %v; failures=%v", err, outcome.Failures)
 	}
@@ -76,7 +76,7 @@ func TestCheck_HappyPath_PASS(t *testing.T) {
 func TestCheck_MissingCronJob_FAIL(t *testing.T) {
 	root := t.TempDir()
 
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for missing CronJob, got %v", err)
 	}
@@ -111,7 +111,7 @@ spec:
 `
 	writeFile(t, filepath.Join(root, archiveCronRel), brokenCron)
 
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -122,7 +122,7 @@ spec:
 
 func TestCheck_RealRepoPasses(t *testing.T) {
 	root := qtestutil.Root(t)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("real repo violation: %v; failures=%v", err, outcome.Failures)
 	}

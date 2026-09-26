@@ -27,16 +27,16 @@ func setupVaultBootstrapUnsealLoop(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := vaultbootstrapunsealloop.Check(vaultbootstrapunsealloop.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, vaultbootstrapunsealloop.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("vault-bootstrap-unseal-loop: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("vault-bootstrap-unseal-loop: PASS — canonical fix preserved (rc-independent parse, capitalized True compare, anti-patterns absent)")
-		return Pass, nil
+		return outcome, nil
 	}
 }

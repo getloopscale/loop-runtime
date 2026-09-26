@@ -42,7 +42,7 @@ func TestMessageContradictingTheRunbookFails(t *testing.T) {
 		runbookRel: runbookOK,
 		"api/internal/services/build/argo_step_watcher.go": "logger.Error(\"argo step watcher: build cluster auth failed — rotate loopzero-build-sa token\",\n",
 	})
-	out, err := Check(Config{RepoRoot: root})
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrContradiction) {
 		t.Fatalf("a message that says to do what the runbook forbids fails; err=%v", err)
 	}
@@ -59,7 +59,7 @@ func TestMessageAgreeingWithTheRunbookPasses(t *testing.T) {
 		runbookRel: runbookOK,
 		"api/internal/services/build/argo_step_watcher.go": "logger.Error(\"argo step watcher: build cluster auth failed — rotate loopzero-workflow-submitter token\",\n",
 	})
-	if _, err := Check(Config{RepoRoot: root}); err != nil {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); err != nil {
 		t.Fatalf("an aligned message passes: %v", err)
 	}
 }
@@ -70,7 +70,7 @@ func TestMissingRunbookFails(t *testing.T) {
 	root := tree(t, map[string]string{
 		"api/internal/services/build/argo_step_watcher.go": "logger.Error(\"rotate loopzero-build-sa token\")\n",
 	})
-	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrRunbookMissing) {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrRunbookMissing) {
 		t.Fatalf("without a runbook there is nothing to compare; err=%v", err)
 	}
 }
@@ -80,14 +80,14 @@ func TestZeroMessagesScannedFails(t *testing.T) {
 		runbookRel: runbookOK,
 		"api/x.go": "package x\n",
 	})
-	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrNothingScanned) {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrNothingScanned) {
 		t.Fatalf("zero messages scanned fails; err=%v", err)
 	}
 }
 
 // The real population.
 func TestRealTree(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot})
+	out, err := violationOf(Check(Config{RepoRoot: repoRoot}))
 	if err != nil {
 		for _, f := range out.Findings {
 			t.Errorf("%s:%d — says to rotate %q, runbook prescribes %q", f.File, f.Line, f.Named, f.Prescribed)
@@ -114,7 +114,7 @@ func TestProhibitionSplitAcrossTWOQuotedLines(t *testing.T) {
 		runbookRel: real,
 		"api/internal/services/build/argo_step_watcher.go": "logger.Error(\"build cluster auth failed — rotate loopzero-build-sa token\",\n",
 	})
-	out, err := Check(Config{RepoRoot: root})
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrContradiction) {
 		t.Fatalf("the prohibition split across two lines must be read; err=%v (%+v)", err, out.Findings)
 	}
@@ -131,7 +131,7 @@ func TestCommentQuotingTheOldMessageIsNotAFinding(t *testing.T) {
 			"\t\t// FIXED: this message used to say \"rotate loopzero-build-sa token\", and the runbook forbids it.\n" +
 			"\t\tlogger.Error(\"build cluster auth failed — rotate loopzero-workflow-submitter token\",\n",
 	})
-	if _, err := Check(Config{RepoRoot: root}); err != nil {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); err != nil {
 		t.Fatalf("a comment documenting the fix is not a finding: %v", err)
 	}
 }
@@ -147,7 +147,7 @@ func TestUnreadableGoFileIsAnError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := Check(Config{RepoRoot: root}); err == nil {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); err == nil {
 		t.Fatal("an unreadable Go file under api/ must be an error")
 	}
 }

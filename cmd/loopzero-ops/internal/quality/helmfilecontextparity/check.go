@@ -54,6 +54,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrContextDiverges means a task targets a cluster its helmfile does not declare.
@@ -106,6 +108,17 @@ type Outcome struct {
 	// invoking command never sets. A Task var is not an env var — a distinction
 	// nothing in the tree stated until it broke an install.
 	MissingEnv []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // helmfileTokenRe finds the start of an invocation.
@@ -198,7 +211,18 @@ func Check(cfg Config) (Outcome, error) {
 		}
 	}
 	sort.Strings(out.Undeclared)
-	return out, verdict(out)
+	out.Violation = violation(out)
+	// The floor comes AFTER the findings: when every invocation diverges, the
+	// counts alone cannot distinguish "worst possible result" from "measured
+	// nothing", and reporting the instrumentation error would bury the finding.
+	// The floor measures what the doc-comment promises: zero COMPARISONS.
+	// Folding the parameterised count in here let a tree whose every context is
+	// a template report PASS having compared nothing —
+	// `route-auth-coverage: PASS — 0 routes` with a different subject.
+	if out.Violation == nil && out.ComparedCount == 0 {
+		return out, ErrNothingCompared
+	}
+	return out, nil
 }
 
 // taskfilesIn expands the globs under root, sorted.
@@ -306,16 +330,12 @@ func (c classifier) classify(rel string, lines []string, inv invocation) {
 	}
 }
 
-// verdict turns the outcome into the gate's error.
-//
-// The floor comes AFTER the findings: when every invocation diverges, the
-// counts alone cannot distinguish "worst possible result" from "measured
-// nothing", and reporting the instrumentation error would bury the finding.
+// violation is what the outcome finds wrong, or nil.
 //
 // Divergence is reported before absence because it names a concrete wrong
 // cluster, while an undeclared helmfile is a latent one. Summary() carries
-// both counts either way, so neither is hidden by the choice of error.
-func verdict(out Outcome) error {
+// both counts either way, so neither is hidden by the choice of reason.
+func violation(out Outcome) error {
 	switch {
 	case len(out.Divergences) > 0:
 		return ErrContextDiverges
@@ -323,12 +343,6 @@ func verdict(out Outcome) error {
 		return ErrContextNotDeclared
 	case len(out.MissingEnv) > 0:
 		return ErrRequiredEnvNotSet
-	case out.ComparedCount == 0:
-		// The floor measures what the doc-comment promises: zero COMPARISONS.
-		// Folding the parameterised count in here let a tree whose every
-		// context is a template report PASS having compared nothing —
-		// `route-auth-coverage: PASS — 0 routes` with a different subject.
-		return ErrNothingCompared
 	}
 	return nil
 }

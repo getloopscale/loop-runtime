@@ -27,16 +27,16 @@ func setupCaddyfileNoDockerIP(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := caddyfilenodockerip.Check(caddyfilenodockerip.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, caddyfilenodockerip.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("caddyfile-no-docker-ip: FAIL — %d violation(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  %s\n", v)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("caddyfile-no-docker-ip: PASS — Caddyfile canonical (no 172.18.x.x, both wildcard blocks use https://127.0.0.1:8443)")
-		return Pass, nil
+		return outcome, nil
 	}
 }

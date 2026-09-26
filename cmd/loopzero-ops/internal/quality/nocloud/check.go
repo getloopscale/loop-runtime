@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 var scanRoots = []string{
@@ -57,6 +58,17 @@ type Config struct {
 // M16 mandates Failures []string per blueprint ADR D1).
 type Outcome struct {
 	Failures []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrNothingScanned means no scan root exists, so nothing was read.
@@ -108,7 +120,7 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	if len(failures) > 0 {
-		return Outcome{Failures: failures}, ErrViolations
+		return Outcome{Failures: failures, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
 }

@@ -40,6 +40,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrDivergent means the runbook names a path the edge does not serve.
@@ -88,6 +90,17 @@ type Config struct {
 type Outcome struct {
 	Served     string
 	Documented string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Check compares the served root with the path the runbook documents.
@@ -127,8 +140,10 @@ func Check(cfg Config) (Outcome, error) {
 	cloneRE := regexp.MustCompile(`([~/][A-Za-z0-9_./-]*loopzero-cloud[A-Za-z0-9_./-]*)`)
 	if c := cloneRE.FindString(text); c != "" {
 		out.Documented = c
-		return out, fmt.Errorf("%w: serves %q, runbook says %q", ErrDivergent, out.Served, c)
+		out.Violation = fmt.Errorf("%w: serves %q, runbook says %q", ErrDivergent, out.Served, c)
+		return out, nil
 	}
-	return out, fmt.Errorf("%w: the edge serves %q and %s does not mention it",
+	out.Violation = fmt.Errorf("%w: the edge serves %q and %s does not mention it",
 		ErrUndocumented, out.Served, runbookRel)
+	return out, nil
 }

@@ -53,7 +53,7 @@ func TestRunbookNamesTheServedRoot(t *testing.T) {
 		"app-dev.loopzero.example {\n  root * /home/dev/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
 		"# runbook\n\nThe dashboard is built in `~/loopzero-cloud/loopzero-cloud`.\n")
 
-	if _, err := dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root}); err != nil {
+	if _, err := violationOf(dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root})); err != nil {
 		t.Fatalf("runbook and Caddyfile agree; got %v", err)
 	}
 }
@@ -64,7 +64,7 @@ func TestDivergenceIsRefused(t *testing.T) {
 		"app-dev.loopzero.example {\n  root * /home/dev/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
 		"# runbook\n\nThe dashboard is built in `~/.buildmeta-cloud/loopzero-cloud`.\n")
 
-	out, err := dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root})
+	out, err := violationOf(dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root}))
 	if !errors.Is(err, dashboardrootparity.ErrDivergent) {
 		t.Fatalf("expected ErrDivergent, got %v", err)
 	}
@@ -80,7 +80,7 @@ func TestSilentRunbookIsRefused(t *testing.T) {
 		"app-dev.loopzero.example {\n  root * /home/dev/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
 		"# runbook\n\nNothing about where the dashboard is built.\n")
 
-	if _, err := dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root}); !errors.Is(err, dashboardrootparity.ErrUndocumented) {
+	if _, err := violationOf(dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root})); !errors.Is(err, dashboardrootparity.ErrUndocumented) {
 		t.Fatalf("expected ErrUndocumented, got %v", err)
 	}
 }
@@ -90,14 +90,14 @@ func TestSilentRunbookIsRefused(t *testing.T) {
 func TestNoServedRootIsRefusedNotPassed(t *testing.T) {
 	root := tree(t, "app-dev.loopzero.example {\n  reverse_proxy localhost:1\n}\n", "# runbook\n")
 
-	if _, err := dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root}); !errors.Is(err, dashboardrootparity.ErrNothingServed) {
+	if _, err := violationOf(dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root})); !errors.Is(err, dashboardrootparity.ErrNothingServed) {
 		t.Fatalf("expected ErrNothingServed, got %v", err)
 	}
 }
 
 // The real population: this repository's tree must agree with itself.
 func TestRealTreeAgrees(t *testing.T) {
-	out, err := dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: filepath.Join("..", "..", "..", "..", "..")})
+	out, err := violationOf(dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: filepath.Join("..", "..", "..", "..", "..")}))
 	if err != nil {
 		t.Fatalf("real tree diverges: %v (served=%q documented=%q)", err, out.Served, out.Documented)
 	}

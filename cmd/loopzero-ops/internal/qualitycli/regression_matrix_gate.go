@@ -35,7 +35,7 @@ func setupRegressionMatrix(fs *flag.FlagSet) Check {
 		}
 		v, err := regressionmatrix.Check(matrixPath, inv.Root, *strict)
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		inv.Stdout.Printf("regression-matrix: %d entries — OK=%d miss=%d (critical=%d) skip=%d\n",
 			v.Total, v.OK, v.Miss, v.MissCritical, v.Skip)
@@ -50,11 +50,11 @@ func setupRegressionMatrix(fs *flag.FlagSet) Check {
 			}
 			inv.Stdout.Printf("  MISS%s #%s [%s] %s\n", marker, e.ID, e.CanRecur, verify)
 		}
-		if v.Failed() {
+		if v.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("regression-matrix: FAIL — %d unresolved critical artifact(s); the matrix claims protection that no longer resolves in the repo\n", v.MissCritical)
-			return Fail, nil
+			return v, nil
 		}
 		inv.Stdout.Println("regression-matrix: PASS")
-		return Pass, nil
+		return v, nil
 	}
 }

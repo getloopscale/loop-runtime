@@ -70,7 +70,7 @@ spec:
 func TestCheck_HappyPath_PASS(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, ruleFileRel), canonicalRuleBody)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected nil, got %v; %v", err, outcome.Failures)
 	}
@@ -81,7 +81,7 @@ func TestCheck_HappyPath_PASS(t *testing.T) {
 
 func TestCheck_MissingFile_FAIL(t *testing.T) {
 	root := t.TempDir()
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -96,7 +96,7 @@ func TestCheck_MissingAlert_FAIL(t *testing.T) {
 	broken := canonicalRuleBody
 	broken = replaceFirst(broken, "- alert: VaultSealedOrDown", "- alert: DifferentAlert")
 	writeFile(t, filepath.Join(root, ruleFileRel), broken)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -110,7 +110,7 @@ func TestCheck_NonCriticalSeverity_FAIL(t *testing.T) {
 	broken := replaceFirst(canonicalRuleBody, "severity: critical\n            team: platform-security\n            domain: vault\n          annotations:\n            runbook_url: https://runbooks/vault-auth-failure",
 		"severity: warning\n            team: platform-security\n            domain: vault\n          annotations:\n            runbook_url: https://runbooks/vault-auth-failure")
 	writeFile(t, filepath.Join(root, ruleFileRel), broken)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -124,7 +124,7 @@ func TestCheck_MissingInvariant_FAIL(t *testing.T) {
 	// Remove invariant marker.
 	broken := replaceFirst(canonicalRuleBody, "invariant: \"audit-log-must-flow\"\n", "")
 	writeFile(t, filepath.Join(root, ruleFileRel), broken)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -135,7 +135,7 @@ func TestCheck_MissingInvariant_FAIL(t *testing.T) {
 
 func TestCheck_RealRepoPasses(t *testing.T) {
 	root := qtestutil.Root(t)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("real repo violation: %v; %v", err, outcome.Failures)
 	}

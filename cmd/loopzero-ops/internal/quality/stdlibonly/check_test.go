@@ -41,7 +41,7 @@ var _ = context.Background
 var _ = errors.New
 var _ = time.Now
 `)
-	out, err := stdlibonly.Check(stdlibonly.Config{RepoRoot: root})
+	out, err := violationOf(stdlibonly.Check(stdlibonly.Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("a stdlib-only package should pass; got %v", err)
 	}
@@ -63,7 +63,7 @@ import (
 var _ = context.Background
 var _ = prometheus.NewCounter
 `)
-	out, err := stdlibonly.Check(stdlibonly.Config{RepoRoot: root})
+	out, err := violationOf(stdlibonly.Check(stdlibonly.Config{RepoRoot: root}))
 	if !errors.Is(err, stdlibonly.ErrExternalImport) {
 		t.Fatalf("want ErrExternalImport, got %v", err)
 	}
@@ -81,7 +81,7 @@ import "github.com/getloopscale/loopzero/pkg/errors"
 
 var _ = errors.New
 `)
-	if _, err := stdlibonly.Check(stdlibonly.Config{RepoRoot: root}); !errors.Is(err, stdlibonly.ErrExternalImport) {
+	if _, err := violationOf(stdlibonly.Check(stdlibonly.Config{RepoRoot: root})); !errors.Is(err, stdlibonly.ErrExternalImport) {
 		t.Fatalf("an import from this repository breaks the property too; got %v", err)
 	}
 }
@@ -89,14 +89,14 @@ var _ = errors.New
 // An absent package is an error, not silence: a rename that moves the directory would leave
 // the guard green forever over nothing.
 func TestStdlibOnly_MissingPackageIsRefused(t *testing.T) {
-	if _, err := stdlibonly.Check(stdlibonly.Config{RepoRoot: t.TempDir()}); !errors.Is(err, stdlibonly.ErrNothingScanned) {
+	if _, err := violationOf(stdlibonly.Check(stdlibonly.Config{RepoRoot: t.TempDir()})); !errors.Is(err, stdlibonly.ErrNothingScanned) {
 		t.Fatal("an absent package should fail, not pass silently")
 	}
 }
 
 // The real population: 9 imports today, all standard library.
 func TestStdlibOnly_RealTree(t *testing.T) {
-	out, err := stdlibonly.Check(stdlibonly.Config{RepoRoot: qtestutil.Root(t)})
+	out, err := violationOf(stdlibonly.Check(stdlibonly.Config{RepoRoot: qtestutil.Root(t)}))
 	if err != nil {
 		t.Fatalf("the real tree broke the property: %v (external=%v)", err, out.External)
 	}

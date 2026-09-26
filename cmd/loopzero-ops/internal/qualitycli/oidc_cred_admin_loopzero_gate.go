@@ -25,16 +25,16 @@ func setupOIDCCredAdminLoopzero(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := oidccredadminloopzero.Check(oidccredadminloopzero.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, oidccredadminloopzero.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("oidc-cred-admin-loopzero: FAIL — %d fabricated credential reference(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  %s\n", v)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("oidc-cred-admin-loopzero: PASS — no fabricated paulo@loopzero.test/LoopZeroDev2026! (canonical: admin@loopzero.example)")
-		return Pass, nil
+		return outcome, nil
 	}
 }

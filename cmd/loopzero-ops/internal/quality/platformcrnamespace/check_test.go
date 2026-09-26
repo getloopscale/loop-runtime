@@ -30,7 +30,7 @@ func tree(t *testing.T, files map[string]string) Config {
 const canonicalCR = "apiVersion: loopzero.io/v1\nkind: Tenant\nmetadata:\n  name: tn-x\n  namespace: loopzero-system\n"
 
 func TestCanonicalNamespacePasses(t *testing.T) {
-	out, err := Check(tree(t, map[string]string{"infra/a.yaml": canonicalCR}))
+	out, err := violationOf(Check(tree(t, map[string]string{"infra/a.yaml": canonicalCR})))
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
@@ -42,7 +42,7 @@ func TestCanonicalNamespacePasses(t *testing.T) {
 // The MEASURED defect (B-095): the production bootstrap applied the Tenant in `default`.
 func TestNamespaceOutsideCanonicalFails(t *testing.T) {
 	outside := "apiVersion: loopzero.io/v1\nkind: Tenant\nmetadata:\n  name: tn-x\n  namespace: default\n"
-	out, err := Check(tree(t, map[string]string{"infra/a.yaml": outside}))
+	out, err := violationOf(Check(tree(t, map[string]string{"infra/a.yaml": outside})))
 	if !errors.Is(err, ErrOutsideNamespace) {
 		t.Fatalf("err = %v; want ErrOutsideNamespace", err)
 	}
@@ -55,7 +55,7 @@ func TestNamespaceOutsideCanonicalFails(t *testing.T) {
 // running the shell first — which is why detection is textual.
 func TestFindsInsideShellHeredoc(t *testing.T) {
 	sh := "#!/usr/bin/env bash\nkubectl apply -f - <<'EOF'\napiVersion: loopzero.io/v1\nkind: Tenant\nmetadata:\n  name: tn-x\n  namespace: default\nEOF\n"
-	if _, err := Check(tree(t, map[string]string{"infra/s.sh": sh})); !errors.Is(err, ErrOutsideNamespace) {
+	if _, err := violationOf(Check(tree(t, map[string]string{"infra/s.sh": sh}))); !errors.Is(err, ErrOutsideNamespace) {
 		t.Fatalf("err = %v; the CR was in a heredoc, which is exactly where the real defect was", err)
 	}
 }
@@ -64,7 +64,7 @@ func TestFindsInsideShellHeredoc(t *testing.T) {
 // the gate would accuse any same-named kind.
 func TestSameNamedKindFromAnotherGroupDoesNotCount(t *testing.T) {
 	other := "apiVersion: other.example.com/v1\nkind: Environment\nmetadata:\n  namespace: default\n"
-	if _, err := Check(tree(t, map[string]string{"infra/a.yaml": other})); !errors.Is(err, ErrNothingScanned) {
+	if _, err := violationOf(Check(tree(t, map[string]string{"infra/a.yaml": other}))); !errors.Is(err, ErrNothingScanned) {
 		t.Fatalf("err = %v; an `Environment` from another apiGroup is not a platform CR", err)
 	}
 }
@@ -72,14 +72,14 @@ func TestSameNamedKindFromAnotherGroupDoesNotCount(t *testing.T) {
 // A shell variable: the value is a runtime one. Judging it here would be guessing.
 func TestNamespaceInVariableIsNotAccused(t *testing.T) {
 	v := "apiVersion: loopzero.io/v1\nkind: Tenant\nmetadata:\n  namespace: ${NS}\n"
-	if _, err := Check(tree(t, map[string]string{"infra/s.sh": v})); err != nil {
+	if _, err := violationOf(Check(tree(t, map[string]string{"infra/s.sh": v}))); err != nil {
 		t.Fatalf("err = %v; the value of ${NS} is decided at execution time", err)
 	}
 }
 
 // A scan that reaches nothing reports green over nothing — the `PASS — 0 routes` shape.
 func TestEmptyScanIsAnError(t *testing.T) {
-	if _, err := Check(tree(t, map[string]string{"infra/a.yaml": "kind: ConfigMap\n"})); !errors.Is(err, ErrNothingScanned) {
+	if _, err := violationOf(Check(tree(t, map[string]string{"infra/a.yaml": "kind: ConfigMap\n"}))); !errors.Is(err, ErrNothingScanned) {
 		t.Fatalf("err = %v; want ErrNothingScanned", err)
 	}
 }
@@ -98,7 +98,7 @@ func TestEmptyScanIsAnError(t *testing.T) {
 // fewer is measuring less than the tree.
 func TestRealTreeHasNoCROutsideNamespace(t *testing.T) {
 	root := qtestutil.Root(t)
-	out, err := Check(Config{RepoRoot: root})
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}

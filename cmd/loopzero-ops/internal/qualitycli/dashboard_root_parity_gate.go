@@ -22,13 +22,13 @@ func setupDashboardRootParity(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, dashboardrootparity.ErrDivergent, dashboardrootparity.ErrUndocumented) {
-				return Fail, err
-			}
-			inv.Stderr.Printf("dashboard-root-parity: FAIL — %v\n", err)
-			return Fail, nil
+			return nil, err
+		}
+		if out.Verdict() == verdict.Fail {
+			inv.Stderr.Printf("dashboard-root-parity: FAIL — %v\n", out.Violation)
+			return out, nil
 		}
 		inv.Stdout.Printf("dashboard-root-parity: PASS — the edge serves %s and the runbook names it\n", out.Served)
-		return Pass, nil
+		return out, nil
 	}
 }

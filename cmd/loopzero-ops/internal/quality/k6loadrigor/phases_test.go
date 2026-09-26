@@ -64,12 +64,12 @@ func tree(t *testing.T, overrides map[string]string) string {
 
 func failuresFor(t *testing.T, overrides map[string]string) string {
 	t.Helper()
-	out, _ := Check(Config{RepoRoot: tree(t, overrides)})
+	out, _ := violationOf(Check(Config{RepoRoot: tree(t, overrides)}))
 	return strings.Join(out.Failures, "\n")
 }
 
 func TestCheck_CompleteLayoutPasses(t *testing.T) {
-	out, err := Check(Config{RepoRoot: tree(t, nil)})
+	out, err := violationOf(Check(Config{RepoRoot: tree(t, nil)}))
 	if err != nil {
 		t.Fatalf("want PASS, got %v %v", err, out.Failures)
 	}

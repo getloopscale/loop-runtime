@@ -26,6 +26,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrOutsideNamespace means a manifest applies a platform CR outside `loopzero-system`.
@@ -60,6 +62,17 @@ type Output struct {
 	Checked    []Occurrence
 	Violations []Occurrence
 	Files      int
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Output) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 var (
@@ -127,7 +140,8 @@ func Check(cfg Config) (Output, error) {
 		for _, v := range out.Violations {
 			fmt.Fprintf(&b, "\n  %s:%d — %s in %q", v.File, v.Line, v.Kind, v.Namespace)
 		}
-		return out, fmt.Errorf("%w (expected %q):%s", ErrOutsideNamespace, CanonicalNamespace, b.String())
+		out.Violation = fmt.Errorf("%w (expected %q):%s", ErrOutsideNamespace, CanonicalNamespace, b.String())
+		return out, nil
 	}
 	return out, nil
 }

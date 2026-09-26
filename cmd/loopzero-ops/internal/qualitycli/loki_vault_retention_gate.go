@@ -26,16 +26,16 @@ func setupLokiVaultRetention(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := lokivaultretention.Check(lokivaultretention.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, lokivaultretention.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("loki-vault-retention: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("loki-vault-retention: PASS — T8.5 archive CronJob hardening assertions clean")
-		return Pass, nil
+		return outcome, nil
 	}
 }

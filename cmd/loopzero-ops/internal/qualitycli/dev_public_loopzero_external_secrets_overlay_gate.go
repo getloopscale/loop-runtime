@@ -27,16 +27,16 @@ func setupDevPublicLoopZeroExternalSecretsOverlay(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := esooverlay.Check(esooverlay.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, esooverlay.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("dev-public-loopzero-external-secrets-overlay: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("dev-public-loopzero-external-secrets-overlay: PASS — post-T1.2 workload-identity contract preserved (K8s-auth, no legacy AppRole)")
-		return Pass, nil
+		return outcome, nil
 	}
 }

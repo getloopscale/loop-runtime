@@ -67,7 +67,7 @@ func base(t *testing.T, extra map[string]string) string {
 
 func run(t *testing.T, root, sibling string) (Outcome, error) {
 	t.Helper()
-	return Check(Config{RepoRoot: root, SiblingRoot: sibling})
+	return violationOf(Check(Config{RepoRoot: root, SiblingRoot: sibling}))
 }
 
 func TestPassesWhenEveryGuardResolves(t *testing.T) {
@@ -175,7 +175,7 @@ func TestMissingRegistryFails(t *testing.T) {
 
 // The real population (rules/testing.md § 4.2).
 func TestRealTreePasses(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot, SiblingRoot: filepath.Join(repoRoot, "..", "loopzero-cloud")})
+	out, err := violationOf(Check(Config{RepoRoot: repoRoot, SiblingRoot: filepath.Join(repoRoot, "..", "loopzero-cloud")}))
 	if err != nil {
 		for i, b := range out.Broken {
 			if i == 8 {

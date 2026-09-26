@@ -33,15 +33,15 @@ func setupBillingLayers(fs *flag.FlagSet) Check {
 
 		out, err := billinglayers.Check(billinglayers.Config{RepoRoot: inv.Root, SiblingRoot: *sibling})
 		if err != nil {
-			if !isViolation(err, billinglayers.ErrUndeclaredSurface, billinglayers.ErrBelowFloor, billinglayers.ErrGuardUnresolved, billinglayers.ErrRegistryMalformed) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if out.Verdict() == verdict.Fail {
 			// No branch returns 0 without a verdict: a guard that does not resolve,
 			// closed debt without coverage, or an undeclared new layer all fail here.
-			inv.Stderr.Printf("billing-layers: FAIL — %v\n", err)
-			return Fail, nil
+			inv.Stderr.Printf("billing-layers: FAIL — %v\n", out.Violation)
+			return out, nil
 		}
 		inv.Stdout.Printf("billing-layers: PASS — %s\n", out.Reason)
-		return Pass, nil
+		return out, nil
 	}
 }

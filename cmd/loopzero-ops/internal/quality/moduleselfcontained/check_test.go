@@ -48,7 +48,7 @@ func TestModuleThatOnlyBuildsWithWorkspaceFails(t *testing.T) {
 	b := &fakeBuilder{failures: map[string]error{
 		"operators": errors.New("go: updates to go.mod needed; to update it:\n\tgo mod tidy"),
 	}}
-	out, err := Check(Config{RepoRoot: root, Builder: b})
+	out, err := violationOf(Check(Config{RepoRoot: root, Builder: b}))
 	if !errors.Is(err, ErrNotSelfContained) {
 		t.Fatalf("a module that only builds with go.work fails; err=%v", err)
 	}
@@ -62,7 +62,7 @@ func TestModuleThatOnlyBuildsWithWorkspaceFails(t *testing.T) {
 func TestFailureInOneModuleDoesNotStopTheOthers(t *testing.T) {
 	root := tree(t, "api", "operators", "pkg")
 	b := &fakeBuilder{failures: map[string]error{"api": errors.New("boom")}}
-	_, _ = Check(Config{RepoRoot: root, Builder: b})
+	_, _ = violationOf(Check(Config{RepoRoot: root, Builder: b}))
 	if len(b.seen) != 3 {
 		t.Fatalf("all three must be built; seen=%v", b.seen)
 	}
@@ -70,7 +70,7 @@ func TestFailureInOneModuleDoesNotStopTheOthers(t *testing.T) {
 
 func TestAllSelfContainedPasses(t *testing.T) {
 	root := tree(t, "api", "pkg")
-	out, err := Check(Config{RepoRoot: root, Builder: &fakeBuilder{}})
+	out, err := violationOf(Check(Config{RepoRoot: root, Builder: &fakeBuilder{}}))
 	if err != nil {
 		t.Fatalf("all self-contained passes: %v", err)
 	}
@@ -80,14 +80,14 @@ func TestAllSelfContainedPasses(t *testing.T) {
 }
 
 func TestZeroModulesFails(t *testing.T) {
-	if _, err := Check(Config{RepoRoot: t.TempDir(), Builder: &fakeBuilder{}}); err == nil {
+	if _, err := violationOf(Check(Config{RepoRoot: t.TempDir(), Builder: &fakeBuilder{}})); err == nil {
 		t.Fatal("zero modules scanned must fail")
 	}
 }
 
 // The real population — slow on purpose: it is what proves the invariant on the tree that ships.
 func TestRealTree(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot})
+	out, err := violationOf(Check(Config{RepoRoot: repoRoot}))
 	if err != nil {
 		for _, f := range out.Failed {
 			t.Errorf("%s does not build without go.work:\n%s", f.Module, f.Err)

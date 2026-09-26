@@ -42,6 +42,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrContradiction means a message names a ServiceAccount the runbook forbids.
@@ -97,6 +99,17 @@ type Outcome struct {
 	Scanned  int
 	Findings []Finding
 	Reason   string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Check compares every rotation message against the runbook's prescription.
@@ -188,8 +201,9 @@ func Check(cfg Config) (Outcome, error) {
 	}
 	if len(out.Findings) > 0 {
 		f := out.Findings[0]
-		return out, fmt.Errorf("%w: %s:%d says to rotate %q, and the runbook forbids exactly that — the correct SA is %q. The wrong one authenticates and is FORBIDDEN, trading a readable 401 for a silent 403",
+		out.Violation = fmt.Errorf("%w: %s:%d says to rotate %q, and the runbook forbids exactly that — the correct SA is %q. The wrong one authenticates and is FORBIDDEN, trading a readable 401 for a silent 403",
 			ErrContradiction, f.File, f.Line, f.Named, f.Prescribed)
+		return out, nil
 	}
 	out.Reason = fmt.Sprintf("%d rotation message(s) scanned, all naming the ServiceAccount the runbook prescribes (%s)", out.Scanned, prescribed)
 	return out, nil

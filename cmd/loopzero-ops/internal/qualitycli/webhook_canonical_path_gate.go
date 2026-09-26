@@ -4,7 +4,6 @@
 package qualitycli
 
 import (
-	"errors"
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
@@ -27,18 +26,18 @@ func setupWebhookCanonicalPath(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := webhookcanonicalpath.Check(webhookcanonicalpath.Config{RepoRoot: inv.Root})
 		if err != nil {
-			// Distinguish a genuine violation from a real I/O error (fail-closed):
-			// reporting an I/O error as "detected in 0 place(s)" would mislead.
-			if !errors.Is(err, webhookcanonicalpath.ErrViolations) {
-				return Fail, err
-			}
+			// A real I/O error, never a violation (fail-closed): reporting it as
+			// "detected in 0 place(s)" would mislead.
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("webhook-canonical-path: FAIL — /engine/api/v1/webhooks/github detected in %d place(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  %s\n", v)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("webhook-canonical-path: PASS — no forbidden /engine/api/v1/webhooks/github references")
-		return Pass, nil
+		return outcome, nil
 	}
 }

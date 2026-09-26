@@ -55,7 +55,7 @@ func TestCheck_CleanRepo_PASS(t *testing.T) {
 	writeExec(t, filepath.Join(root, "infra/tests/e2e/e2e.sh"), cleanScript)
 	writeExec(t, filepath.Join(root, "infra/scripts/local/setup.sh"), cleanScript)
 
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected nil, got %v; failures=%v", err, outcome.Failures)
 	}
@@ -68,7 +68,7 @@ func TestCheck_ForbiddenPattern_FAIL(t *testing.T) {
 	root := t.TempDir()
 	writeExec(t, filepath.Join(root, "infra/scripts/local/bad.sh"), forbiddenScript)
 
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -81,7 +81,7 @@ func TestCheck_WebhookHandlerException_PASS(t *testing.T) {
 	root := t.TempDir()
 	writeExec(t, filepath.Join(root, "infra/scripts/local/webhook.sh"), webhookAllowedScript)
 
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected nil err (webhook exception), got %v; failures=%v", err, outcome.Failures)
 	}
@@ -94,7 +94,7 @@ func TestCheck_MixedFile_OnlyReportsViolation(t *testing.T) {
 	root := t.TempDir()
 	writeExec(t, filepath.Join(root, "infra/tests/e2e/mixed.sh"), mixedScript)
 
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for mixed file, got %v", err)
 	}
@@ -105,7 +105,7 @@ func TestCheck_MixedFile_OnlyReportsViolation(t *testing.T) {
 
 // Every scan root absent means nothing was read, which is not a clean result.
 func TestCheck_AllScanRootsMissing_IsNothingScanned(t *testing.T) {
-	if _, err := Check(Config{RepoRoot: t.TempDir()}); !errors.Is(err, ErrNothingScanned) {
+	if _, err := violationOf(Check(Config{RepoRoot: t.TempDir()})); !errors.Is(err, ErrNothingScanned) {
 		t.Fatalf("expected ErrNothingScanned when no scan root exists, got %v", err)
 	}
 }
@@ -116,7 +116,7 @@ func TestCheck_ViolationInEachOfThreeRoots(t *testing.T) {
 	writeExec(t, filepath.Join(root, "infra/tests/e2e/bad2.sh"), forbiddenScript)
 	writeExec(t, filepath.Join(root, "infra/scripts/local/bad3.sh"), forbiddenScript)
 
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -128,7 +128,7 @@ func TestCheck_ViolationInEachOfThreeRoots(t *testing.T) {
 func TestCheck_RealRepoPasses(t *testing.T) {
 	root := qtestutil.Root(t)
 
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("real repo violation: %v; failures=%v", err, outcome.Failures)
 	}

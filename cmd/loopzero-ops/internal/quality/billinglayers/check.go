@@ -76,6 +76,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrUndeclaredSurface means a file references a billing input without being declared.
@@ -112,6 +114,17 @@ type Outcome struct {
 	NotVerified []string
 	Partial     bool
 	Reason      string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Check reads the registry and verifies it is honest.
@@ -124,10 +137,15 @@ func Check(cfg Config) (Outcome, error) {
 
 	f, err := os.Open(filepath.Clean(filepath.Join(root, RegistryRelPath)))
 	if err != nil {
-		return out, fmt.Errorf("%w: could not read %s: %w", ErrRegistryMalformed, RegistryRelPath, err)
+		out.Violation = fmt.Errorf("%w: could not read %s: %w", ErrRegistryMalformed, RegistryRelPath, err)
+		return out, nil
 	}
 	reg, perr := ParseRegistry(f)
 	_ = f.Close()
+	if errors.Is(perr, ErrRegistryMalformed) {
+		out.Violation = perr
+		return out, nil
+	}
 	if perr != nil {
 		return out, perr
 	}
@@ -143,8 +161,9 @@ func Check(cfg Config) (Outcome, error) {
 
 	// EC-4: the floor is what stops the registry from silencing itself.
 	if out.Layers < reg.Floor {
-		return out, fmt.Errorf("%w: %d layers declared, floor %d — really removing a layer requires lowering the floor in the same diff",
+		out.Violation = fmt.Errorf("%w: %d layers declared, floor %d — really removing a layer requires lowering the floor in the same diff",
 			ErrBelowFloor, out.Layers, reg.Floor)
+		return out, nil
 	}
 
 	declared := map[string]bool{RegistryRelPath: true} // EC-1: citing the input is its definition
@@ -185,11 +204,13 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	if len(out.Broken) > 0 {
-		return out, fmt.Errorf("%w: %s", ErrGuardUnresolved, describe(out.Broken))
+		out.Violation = fmt.Errorf("%w: %s", ErrGuardUnresolved, describe(out.Broken))
+		return out, nil
 	}
 	if len(out.Undeclared) > 0 {
-		return out, fmt.Errorf("%w (%d): %s — declare it as a layer, or as a reference with the reason it is not one",
+		out.Violation = fmt.Errorf("%w (%d): %s — declare it as a layer, or as a reference with the reason it is not one",
 			ErrUndeclaredSurface, len(out.Undeclared), strings.Join(out.Undeclared, ", "))
+		return out, nil
 	}
 
 	out.Reason = fmt.Sprintf("%d layer(s) with a guard that resolves, %d file(s) swept", out.Layers, out.Scanned)

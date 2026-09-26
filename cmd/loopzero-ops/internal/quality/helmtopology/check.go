@@ -55,6 +55,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const (
@@ -105,6 +107,15 @@ type Report struct {
 	Body    string // the deterministic table — what gets compared
 	InSync  bool
 	Message string
+}
+
+// Verdict is Pass when the index was written, or when it is in sync with the
+// helmfiles; Fail when a check finds it missing, unmarked or out of date.
+func (r Report) Verdict() verdict.Verdict {
+	if r.Mode == ModeWrite {
+		return verdict.Pass
+	}
+	return verdict.FromPass(r.InSync)
 }
 
 // Regexes over the helmfile TEXT. The files are `.gotmpl` and carry Go template syntax, so any

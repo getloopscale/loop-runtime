@@ -32,7 +32,7 @@ func gitTreeWithSymlink(t *testing.T, target string) string {
 func TestVersionedSymlinkToADirectoryIsScannedAsItsTarget(t *testing.T) {
 	root := gitTreeWithSymlink(t, "../shared/dir")
 
-	out, err := Check(Config{RepoRoot: root})
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 
 	if err != nil || len(out.Unverified) != 0 {
 		t.Fatalf("a versioned symlink publishes its target text, which is readable; out=%+v err=%v", out, err)
@@ -42,7 +42,7 @@ func TestVersionedSymlinkToADirectoryIsScannedAsItsTarget(t *testing.T) {
 func TestVersionedSymlinkTargetCarryingAHomePathIsALeak(t *testing.T) {
 	root := gitTreeWithSymlink(t, realHome("dashboards"))
 
-	out, err := Check(Config{RepoRoot: root})
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 
 	if len(out.Findings) != 1 || out.Findings[0].File != "chart/rules" {
 		t.Fatalf("the symlink target is what git publishes and it names a workstation path; out=%+v err=%v", out, err)

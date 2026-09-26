@@ -22,14 +22,14 @@ func setupChartPairs(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := chartpairs.Check(chartpairs.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, chartpairs.ErrDuplicated) {
-				return Fail, err
-			}
-			inv.Stderr.Printf("chart-pairs: FAIL — %v\n", err)
-			return Fail, nil
+			return nil, err
+		}
+		if out.Verdict() == verdict.Fail {
+			inv.Stderr.Printf("chart-pairs: FAIL — %v\n", out.Violation)
+			return out, nil
 		}
 		inv.Stdout.Printf("chart-pairs: PASS — %d chart(s) in infra/helm, %d in charts/, none of them twice\n",
 			out.InfraHelm, out.Charts)
-		return Pass, nil
+		return out, nil
 	}
 }

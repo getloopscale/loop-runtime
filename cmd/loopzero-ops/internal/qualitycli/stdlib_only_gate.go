@@ -22,13 +22,13 @@ func setupStdlibOnly(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := stdlibonly.Check(stdlibonly.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, stdlibonly.ErrExternalImport) {
-				return Fail, err
-			}
-			inv.Stderr.Printf("stdlib-only: FAIL — %v\n", err)
-			return Fail, nil
+			return nil, err
+		}
+		if out.Verdict() == verdict.Fail {
+			inv.Stderr.Printf("stdlib-only: FAIL — %v\n", out.Violation)
+			return out, nil
 		}
 		inv.Stdout.Printf("stdlib-only: PASS — %d import(s), all from the standard library\n", out.Scanned)
-		return Pass, nil
+		return out, nil
 	}
 }

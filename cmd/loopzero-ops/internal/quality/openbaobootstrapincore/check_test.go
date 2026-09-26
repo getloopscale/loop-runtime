@@ -41,7 +41,7 @@ tasks:
 
 // The canonical path must pass, or the gate is an exemption in its own birth.
 func TestCheck_CanonicalTaskfilePasses(t *testing.T) {
-	out, err := Check(withTaskfile(t, cleanTaskfile))
+	out, err := violationOf(Check(withTaskfile(t, cleanTaskfile)))
 	if err != nil {
 		t.Fatalf("err = %v; the canonical secrets-cluster path must pass. violations=%v", err, out.Violations)
 	}
@@ -57,7 +57,7 @@ func TestCheck_NamedTargetIsForbidden(t *testing.T) {
     cmds:
       - echo hi
 `
-	out, err := Check(withTaskfile(t, body))
+	out, err := violationOf(Check(withTaskfile(t, body)))
 	if !errors.Is(err, ErrForbiddenShortcut) {
 		t.Fatalf("err = %v; want ErrForbiddenShortcut", err)
 	}
@@ -77,7 +77,7 @@ func TestCheck_RenamedTargetWithTheSameEffectIsForbidden(t *testing.T) {
     cmds:
       - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-core --selector name=openbao sync
 `
-	out, err := Check(withTaskfile(t, body))
+	out, err := violationOf(Check(withTaskfile(t, body)))
 	if !errors.Is(err, ErrForbiddenShortcut) {
 		t.Fatalf("err = %v; a renamed target with the SAME effect must still fail. violations=%v", err, out.Violations)
 	}
@@ -97,7 +97,7 @@ func TestCheck_MgmtContextOnANonSecretsHelmfileIsFine(t *testing.T) {
     cmds:
       - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-core sync
 `
-	if _, err := Check(withTaskfile(t, body)); err != nil {
+	if _, err := violationOf(Check(withTaskfile(t, body))); err != nil {
 		t.Fatalf("err = %v; only the SECRETS plane is forbidden in mgmt", err)
 	}
 }
@@ -105,10 +105,10 @@ func TestCheck_MgmtContextOnANonSecretsHelmfileIsFine(t *testing.T) {
 // A missing or empty taskfile must be loud. Reporting success for a file it
 // could not read is how a gate silently stops guarding.
 func TestCheck_UnreadableTaskfileIsAnError(t *testing.T) {
-	if _, err := Check(Config{RepoRoot: t.TempDir()}); !errors.Is(err, ErrNothingScanned) {
+	if _, err := violationOf(Check(Config{RepoRoot: t.TempDir()})); !errors.Is(err, ErrNothingScanned) {
 		t.Fatalf("err = %v; want ErrNothingScanned for a missing taskfile", err)
 	}
-	if _, err := Check(withTaskfile(t, "")); !errors.Is(err, ErrNothingScanned) {
+	if _, err := violationOf(Check(withTaskfile(t, ""))); !errors.Is(err, ErrNothingScanned) {
 		t.Fatalf("err = %v; want ErrNothingScanned for an empty taskfile", err)
 	}
 }
@@ -117,7 +117,7 @@ func TestCheck_UnreadableTaskfileIsAnError(t *testing.T) {
 // and must have actually read the file, not passed by reading nothing.
 func TestCheck_RealTreeHasNoShortcut(t *testing.T) {
 	root := qtestutil.Root(t)
-	out, err := Check(Config{RepoRoot: root})
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("err = %v; violations=%v", err, out.Violations)
 	}
@@ -145,7 +145,7 @@ func TestCheck_EvasionsAreClosed(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := Check(withTaskfile(t, tc.body))
+			out, err := violationOf(Check(withTaskfile(t, tc.body)))
 			if !errors.Is(err, ErrForbiddenShortcut) {
 				t.Errorf("err = %v; this evasion must be caught. violations=%v", err, out.Violations)
 			}
@@ -168,7 +168,7 @@ func TestCheck_ScansEveryTaskfileNotJustK3d(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	out, err := Check(Config{RepoRoot: dir})
+	out, err := violationOf(Check(Config{RepoRoot: dir}))
 	if !errors.Is(err, ErrForbiddenShortcut) {
 		t.Fatalf("err = %v; a target in infra.yml is as invocable as one in k3d.yml", err)
 	}

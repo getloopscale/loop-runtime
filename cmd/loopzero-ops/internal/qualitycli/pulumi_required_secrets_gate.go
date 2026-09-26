@@ -27,16 +27,16 @@ func setupPulumiRequiredSecrets(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := pulumirequiredsecrets.Check(pulumirequiredsecrets.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, pulumirequiredsecrets.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("pulumi-required-secrets: FAIL — %d issue(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("pulumi-required-secrets: PASS — prod(6) + staging(4) + drill(3) secrets all listed in Pulumi.<env>.yaml + SoT doc")
-		return Pass, nil
+		return outcome, nil
 	}
 }

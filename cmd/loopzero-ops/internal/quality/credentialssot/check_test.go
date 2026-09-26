@@ -58,7 +58,7 @@ func buildFixture(t *testing.T) string {
 
 func TestCheck_CanonicalPasses(t *testing.T) {
 	root := buildFixture(t)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected PASS, got err=%v failures=%v", err, outcome.Failures)
 	}
@@ -69,7 +69,7 @@ func TestCheck_CanonicalPasses(t *testing.T) {
 
 func TestCheck_SotMissingFails(t *testing.T) {
 	root := t.TempDir()
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrSotMissing) {
 		t.Fatalf("expected ErrSotMissing, got %v", err)
 	}
@@ -81,7 +81,7 @@ func TestCheck_UndocumentedSecretFails(t *testing.T) {
 	writeFile(t, root, "infra/helmfile/scripts/generate-runtime-secrets.sh",
 		"#!/bin/bash\nkubectl create secret generic loopzero-orphan-runtime -n runtime\n",
 	)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for undocumented secret, got %v", err)
 	}
@@ -104,7 +104,7 @@ func TestCheck_MissingDrillEnvVarFails(t *testing.T) {
 			"## Chart-hardcoded credentials\n\n(none)\n\n"+
 			"## Rotation playbook\n\n(runbook)\n",
 	)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for missing DIGITALOCEAN_TOKEN, got %v", err)
 	}
@@ -127,7 +127,7 @@ func TestCheck_MissingSectionFails(t *testing.T) {
 			"| CLOUDFLARE_API_TOKEN |\n\n"+
 			"## Chart-hardcoded credentials\n\n(none)\n",
 	)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for missing Rotation playbook, got %v", err)
 	}
@@ -146,7 +146,7 @@ func TestCheck_VariableExpansionsSkipped(t *testing.T) {
 			"| PULUMI_CONFIG_PASSPHRASE |\n| CLOUDFLARE_API_TOKEN |\n\n"+
 			"## Chart-hardcoded credentials\n(none)\n\n## Rotation playbook\n(runbook)\n",
 	)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations when zero discovered, got %v (failures=%v)", err, outcome.Failures)
 	}
@@ -159,7 +159,7 @@ func TestCheck_RealRepoPasses(t *testing.T) {
 	}
 	for i := 0; i < 8; i++ {
 		if _, statErr := os.Stat(filepath.Join(abs, sotDoc)); statErr == nil {
-			outcome, checkErr := Check(Config{RepoRoot: abs})
+			outcome, checkErr := violationOf(Check(Config{RepoRoot: abs}))
 			if checkErr != nil {
 				t.Fatalf("real repo must satisfy invariant. err=%v failures=%v discovered=%v", checkErr, outcome.Failures, outcome.Discovered)
 			}

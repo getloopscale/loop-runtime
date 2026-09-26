@@ -28,17 +28,17 @@ func setupNoCloudDevDefault(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := nocloud.Check(nocloud.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, nocloud.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("no-cloud-dev-default: FAIL — %d cloud-dev default(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
 			inv.Stderr.Println("Fix: replace `${VAR:-https://cloud-dev.loopzero.example/...}` with the canonical hostname (app-dev/auth-dev/api-dev.loopzero.example per surface).")
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("no-cloud-dev-default: PASS — no cloud-dev.loopzero.example default env-vars in test/seed scripts (webhook handler exception allowed)")
-		return Pass, nil
+		return outcome, nil
 	}
 }

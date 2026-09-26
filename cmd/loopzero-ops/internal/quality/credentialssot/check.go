@@ -27,6 +27,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const sotDoc = "docs/operations.md"
@@ -76,6 +78,17 @@ type Config struct {
 type Outcome struct {
 	Discovered []string
 	Failures   []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrViolations means at least one Secret is created in code but not documented
@@ -125,7 +138,8 @@ func Check(cfg Config) (Outcome, error) {
 	outcome := Outcome{Discovered: discovered}
 	if len(discovered) == 0 {
 		outcome.Failures = append(outcome.Failures, "no literal Secret names discovered — canonical generators may have moved or the grep pattern is broken")
-		return outcome, ErrViolations
+		outcome.Violation = ErrViolations
+		return outcome, nil
 	}
 
 	// Assert each discovered Secret appears in the SoT doc.
@@ -150,7 +164,8 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	if len(outcome.Failures) > 0 {
-		return outcome, ErrViolations
+		outcome.Violation = ErrViolations
+		return outcome, nil
 	}
 	return outcome, nil
 }

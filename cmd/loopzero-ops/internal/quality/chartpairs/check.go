@@ -50,6 +50,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrDuplicated means a chart exists in both trees, by name or as a template-identical copy.
@@ -70,6 +71,17 @@ type Outcome struct {
 	InfraHelm  int
 	Charts     int
 	Duplicates []string // "infra/helm/<dir> ↔ charts/<dir> (<how>)", sorted
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // chartInfo is what the check needs of one chart directory.
@@ -195,8 +207,9 @@ func Check(cfg Config) (Outcome, error) {
 	}
 	sort.Strings(out.Duplicates)
 	if len(out.Duplicates) > 0 {
-		return out, fmt.Errorf("%w: %s — install the charts/ chart from Helmfile with bootstrap values and delete the infra/helm copy (docs/decisions.md, \"One chart per bootstrap/published pair\")",
+		out.Violation = fmt.Errorf("%w: %s — install the charts/ chart from Helmfile with bootstrap values and delete the infra/helm copy (docs/decisions.md, \"One chart per bootstrap/published pair\")",
 			ErrDuplicated, strings.Join(out.Duplicates, "; "))
+		return out, nil
 	}
 	return out, nil
 }

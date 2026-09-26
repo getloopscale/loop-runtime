@@ -28,10 +28,10 @@ func setupPublishHygiene(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := publishhygiene.Check(publishhygiene.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, publishhygiene.ErrLeak) {
-				return Fail, err
-			}
-			inv.Stderr.Printf("publish-hygiene: FAIL — %v\n", err)
+			return nil, err
+		}
+		if out.Verdict() == verdict.Fail {
+			inv.Stderr.Printf("publish-hygiene: FAIL — %v\n", out.Violation)
 			for _, f := range out.Findings {
 				inv.Stderr.Printf("  %s:%d — %s\n", f.File, f.Line, f.Text)
 			}
@@ -40,10 +40,10 @@ func setupPublishHygiene(_ *flag.FlagSet) Check {
 			inv.Stderr.Println("exemption with a reason AND a sunset in internal/quality/publishhygiene. A dated")
 			inv.Stderr.Println("record (docs/wiki, plans/completed, baselines, CHANGELOG) is exempt by design:")
 			inv.Stderr.Println("rewriting it would destroy the evidence of what was true then.")
-			return Fail, nil
+			return out, nil
 		}
 		inv.Stdout.Printf("publish-hygiene: PASS — %d live file(s) with no workstation path, %d exempt with a dated reason\n",
 			out.Scanned, out.Exempt)
-		return Pass, nil
+		return out, nil
 	}
 }

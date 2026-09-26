@@ -32,6 +32,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // prunedDirs are skipped anywhere in the tree.
@@ -120,6 +122,17 @@ type Outcome struct {
 	// granularity B-114 added: a module can have a target and still leave
 	// subtrees outside it.
 	UncoveredPackages []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Config controls the check.
@@ -215,10 +228,12 @@ func Check(cfg Config) (Outcome, error) {
 		}
 	}
 	if len(out.Uncovered) > 0 {
-		return out, ErrModuleUncovered
+		out.Violation = ErrModuleUncovered
+		return out, nil
 	}
 	if len(out.UncoveredPackages) > 0 {
-		return out, ErrPackageUncovered
+		out.Violation = ErrPackageUncovered
+		return out, nil
 	}
 	return out, nil
 }

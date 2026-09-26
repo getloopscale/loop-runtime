@@ -41,7 +41,7 @@ stripe:
 
 func TestCheck_CanonicalPasses(t *testing.T) {
 	root := writeFixture(t, canonical)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected PASS, got err=%v failures=%v", err, outcome.Failures)
 	}
@@ -49,7 +49,7 @@ func TestCheck_CanonicalPasses(t *testing.T) {
 
 func TestCheck_MissingFileFails(t *testing.T) {
 	root := t.TempDir()
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -58,7 +58,7 @@ func TestCheck_MissingFileFails(t *testing.T) {
 func TestCheck_LocalhostLeakFails(t *testing.T) {
 	body := canonical + "\nlegacyKratosUrl: http://localhost:4455\n"
 	root := writeFixture(t, body)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for localhost leak, got %v", err)
 	}
@@ -67,7 +67,7 @@ func TestCheck_LocalhostLeakFails(t *testing.T) {
 func TestCheck_LegacyNonDevURLFails(t *testing.T) {
 	body := canonical + "\nlegacyRedirectUrl: https://app.loopzero.example\n"
 	root := writeFixture(t, body)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for legacy non-dev URL, got %v", err)
 	}
@@ -76,7 +76,7 @@ func TestCheck_LegacyNonDevURLFails(t *testing.T) {
 func TestCheck_DevSuffixEnvVarFails(t *testing.T) {
 	body := canonical + "\nenv:\n  - name: LOOPZERO_GITHUB_CLIENT_ID_DEV\n    value: xxx\n"
 	root := writeFixture(t, body)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for _DEV env var override, got %v", err)
 	}
@@ -85,7 +85,7 @@ func TestCheck_DevSuffixEnvVarFails(t *testing.T) {
 func TestCheck_MissingCookieDomainFails(t *testing.T) {
 	body := strings.Replace(canonical, `cookieDomain: "loopzero.example"`, `cookieDomain: "localhost"`, 1)
 	root := writeFixture(t, body)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for missing cookieDomain, got %v", err)
 	}
@@ -98,7 +98,7 @@ func TestCheck_RealRepoPasses(t *testing.T) {
 	}
 	for i := 0; i < 8; i++ {
 		if _, statErr := os.Stat(filepath.Join(abs, envPath)); statErr == nil {
-			outcome, checkErr := Check(Config{RepoRoot: abs})
+			outcome, checkErr := violationOf(Check(Config{RepoRoot: abs}))
 			if checkErr != nil {
 				t.Fatalf("real dev-public.yaml must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
 			}
@@ -118,7 +118,7 @@ func TestCheck_RealRepoPasses(t *testing.T) {
 // origin that nobody controls is worse than one origin fewer.
 func TestCheck_CloudDevReappearingFails(t *testing.T) {
 	root := writeFixture(t, canonical+"\n  - \"https://cloud-dev.loopzero.example\"\n")
-	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrViolations) {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations when reintroducing cloud-dev into an origin list, got %v", err)
 	}
 }

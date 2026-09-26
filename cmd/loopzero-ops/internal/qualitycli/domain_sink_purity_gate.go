@@ -33,17 +33,17 @@ func setupDomainSinkPurity(_ *flag.FlagSet) Check {
 		for _, s := range o.Gone {
 			inv.Stdout.Printf("  REMOVED %s — tighten the frozen set in FrozenDefault to lock in the gain\n", s)
 		}
+		// Only a grown leak is a verdict. A missing sink or a dot-import means the
+		// gate could not measure, and collapsing the two is exactly the
+		// distinction B-040 cost this repo.
 		if err != nil {
-			// Only a grown leak is a verdict. A missing sink or a dot-import means
-			// the gate could not measure, and collapsing the two is exactly the
-			// distinction B-040 cost this repo.
-			if !isViolation(err, domainsinkpurity.ErrSinkLeakGrew) {
-				return Fail, err
-			}
-			inv.Stderr.Printf("domain-sink-purity: FAIL — %v\n", err)
-			return Fail, nil
+			return nil, err
+		}
+		if o.Verdict() == verdict.Fail {
+			inv.Stderr.Printf("domain-sink-purity: FAIL — %v\n", o.Violation)
+			return o, nil
 		}
 		inv.Stdout.Printf("PASS — no new symbol (persistence or application layer) crosses the sink (%d frozen, tracked in B-079)\n", o.FrozenCount)
-		return Pass, nil
+		return o, nil
 	}
 }

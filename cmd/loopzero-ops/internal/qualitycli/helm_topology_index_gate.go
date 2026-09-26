@@ -33,18 +33,18 @@ func setupHelmTopologyIndex(fs *flag.FlagSet) Check {
 		}
 		rep, err := helmtopology.Check(inv.Root, mode, *doc)
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		if *write {
 			inv.Stdout.Printf("helm-topology-index: wrote index with %d entries\n", len(rep.Entries))
-			return Pass, nil
+			return rep, nil
 		}
-		if rep.InSync {
+		if rep.Verdict() == verdict.Pass {
 			inv.Stdout.Printf("helm-topology-index: PASS — %d charts indexed, in sync with the helmfiles\n",
 				len(rep.Entries))
-			return Pass, nil
+			return rep, nil
 		}
 		inv.Stderr.Printf("helm-topology-index: FAIL — %s\n", rep.Message)
-		return Fail, nil
+		return rep, nil
 	}
 }

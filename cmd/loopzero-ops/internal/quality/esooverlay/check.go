@@ -20,6 +20,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const overlayPath = "infra/helmfile/values/dev-public/loopzero-external-secrets.yaml.gotmpl"
@@ -32,6 +34,17 @@ type Config struct {
 // Outcome is the summary.
 type Outcome struct {
 	Failures []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrViolations means at least one assertion failed.
@@ -51,7 +64,7 @@ func Check(cfg Config) (Outcome, error) {
 	full := filepath.Join(root, overlayPath)
 	body, err := os.ReadFile(full)
 	if err != nil {
-		return Outcome{Failures: []string{fmt.Sprintf("overlay missing at %s: %v", overlayPath, err)}}, ErrViolations
+		return Outcome{Failures: []string{fmt.Sprintf("overlay missing at %s: %v", overlayPath, err)}, Violation: ErrViolations}, nil
 	}
 	text := string(body)
 
@@ -124,7 +137,7 @@ func Check(cfg Config) (Outcome, error) {
 	_ = forbidContains
 
 	if len(failures) > 0 {
-		return Outcome{Failures: failures}, ErrViolations
+		return Outcome{Failures: failures, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
 }

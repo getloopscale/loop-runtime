@@ -50,7 +50,7 @@ func gitTree(t *testing.T, files map[string]string) string {
 
 func TestRealHomePathIsALeak(t *testing.T) {
 	root := gitTree(t, map[string]string{"a.md": "see " + realHome("project/x") + "\n"})
-	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}})
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}}))
 	if !errors.Is(err, ErrLeak) {
 		t.Fatalf("a real user home is a leak; err=%v", err)
 	}
@@ -69,7 +69,7 @@ func TestSyntheticHomesAndNonRoutableIPsAreNotLeaks(t *testing.T) {
 		"local.go": "const dev = \"127.0.0.1\"\nconst lan = \"192.168.1.10\"\n",
 		"fix.go":   "const home = \"/home/dev/loopzero\"\n",
 	})
-	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}})
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}}))
 	if err != nil {
 		t.Fatalf("test constants and CI homes are not leaks: %v (%+v)", err, out.Findings)
 	}
@@ -85,7 +85,7 @@ func TestIPHalfIsDeliberatelyOutOfScope(t *testing.T) {
 		"versions.md": "Accepted tags: `13.3.2.1-1`, `15.5-10`\n",
 		"cf.go":       `const cf = "173.245.48.0/20"` + "\n",
 	})
-	if _, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}}); err != nil {
+	if _, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}})); err != nil {
 		t.Fatalf("this lock measures HOME PATH; addresses are loopzero-rag's scope: %v", err)
 	}
 }
@@ -100,7 +100,7 @@ func TestAuditTrailIsNotScanned(t *testing.T) {
 		".claude/knowledge-base/decisions/x.md": "measured in " + realHome("m") + "\n",
 		"live.md":                               "no leak\n",
 	})
-	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}})
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}}))
 	if err != nil {
 		t.Fatalf("a dated record is not scanned: %v (%+v)", err, out.Findings)
 	}
@@ -119,12 +119,12 @@ func TestExemptionNeedsReasonAndSunset(t *testing.T) {
 		{Path: "deploy.conf", Sunset: "2026-11-17"},
 		{Path: "deploy.conf", Reason: "deployment path"},
 	} {
-		if _, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{e}}); err == nil {
+		if _, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{e}})); err == nil {
 			t.Fatalf("an incomplete exemption must not pass: %+v", e)
 		}
 	}
 	ok := Exemption{Path: "deploy.conf", Reason: "live deployment path", Sunset: "2026-11-17"}
-	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{ok}})
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{ok}}))
 	if err != nil {
 		t.Fatalf("a complete exemption must pass: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestExemptionNeedsReasonAndSunset(t *testing.T) {
 // Absence is a FAILURE, never a skip.
 func TestEmptyTreeIsAFailure(t *testing.T) {
 	root := gitTree(t, map[string]string{})
-	if _, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}}); !errors.Is(err, ErrNothingScanned) {
+	if _, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}})); !errors.Is(err, ErrNothingScanned) {
 		t.Fatalf("scanning zero files must fail; err=%v", err)
 	}
 }
@@ -144,7 +144,7 @@ func TestEmptyTreeIsAFailure(t *testing.T) {
 // The real population (B-109). This assertion is what gives the gate its meaning: it is
 // born measured against the tree that ships, not against fixtures.
 func TestRealTreeIsClean(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot})
+	out, err := violationOf(Check(Config{RepoRoot: repoRoot}))
 	if err != nil {
 		for i, f := range out.Findings {
 			if i == 12 {
@@ -166,7 +166,7 @@ func TestLeakBeforeAVeryLongLineIsKept(t *testing.T) {
 	long := strings.Repeat("x", 2*1024*1024)
 	root := gitTree(t, map[string]string{"a.md": "see " + realHome("x") + "\n" + long + "\n"})
 
-	out, err := Check(Config{RepoRoot: root})
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 
 	if !errors.Is(err, ErrLeak) || len(out.Findings) != 1 {
 		t.Fatalf("the leak before the long line must be reported; findings=%v err=%v", out.Findings, err)
@@ -183,7 +183,7 @@ func TestUnreadableVersionedFileIsUnverified(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := Check(Config{RepoRoot: root})
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 
 	if !errors.Is(err, ErrUnverified) || len(out.Unverified) != 1 {
 		t.Fatalf("an unreadable versioned file must be unverified; out=%+v err=%v", out, err)
@@ -194,7 +194,7 @@ func TestUnreadableVersionedFileIsUnverified(t *testing.T) {
 func TestBinaryFileIsSkippedAndCounted(t *testing.T) {
 	root := gitTree(t, map[string]string{"a.md": "clean\n", "logo.png": "\x89PNG\x00" + realHome("x")})
 
-	out, err := Check(Config{RepoRoot: root})
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 
 	if err != nil || out.Binary != 1 {
 		t.Fatalf("binary file must be skipped and counted; out=%+v err=%v", out, err)

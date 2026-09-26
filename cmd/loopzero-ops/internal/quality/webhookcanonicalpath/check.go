@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // forbiddenPattern is the wrong URL that Caddy 301-redirects to app-dev where
@@ -39,6 +40,17 @@ type Config struct {
 // Outcome is the summary the CLI prints.
 type Outcome struct {
 	Violations []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrNothingScanned means no scan dir exists, so nothing was read.
@@ -47,7 +59,8 @@ var ErrNothingScanned = errors.New("no scan dir exists — the gate read nothing
 // ErrViolations means the forbidden pattern was found on at least one file.
 var ErrViolations = errors.New("forbidden /engine/api/v1/webhooks/github pattern detected")
 
-// Check walks scanDirs under repoRoot and returns ErrViolations if any tracked
+// Check walks scanDirs under repoRoot and reports ErrViolations, as the
+// outcome's Violation, if any tracked
 // file contains the forbiddenPattern. Comments-in-code are allowed via the
 // `guard` / `legacy` marker on the same line (mirrors the sibling allowlist
 // heuristic in T1.4).
@@ -83,7 +96,7 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	if len(violations) > 0 {
-		return Outcome{Violations: violations}, ErrViolations
+		return Outcome{Violations: violations, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
 }

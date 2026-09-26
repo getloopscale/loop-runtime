@@ -22,13 +22,13 @@ func setupAdapterPorts(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := adapterports.Check(adapterports.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, adapterports.ErrNoPortDeclared) {
-				return Fail, err
-			}
-			inv.Stderr.Printf("adapter-ports: FAIL — %v\n", err)
-			return Fail, nil
+			return nil, err
+		}
+		if out.Verdict() == verdict.Fail {
+			inv.Stderr.Printf("adapter-ports: FAIL — %v\n", out.Violation)
+			return out, nil
 		}
 		inv.Stdout.Printf("adapter-ports: PASS — %d adapter(s), each declaring the port it satisfies\n", out.Scanned)
-		return Pass, nil
+		return out, nil
 	}
 }

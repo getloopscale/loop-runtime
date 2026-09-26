@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 var forbiddenPattern = regexp.MustCompile(`paulo@loopzero\.test|LoopZeroDev2026!`)
@@ -28,7 +29,20 @@ var scanDirs = []string{
 }
 
 type Config struct{ RepoRoot string }
-type Outcome struct{ Violations []string }
+type Outcome struct {
+	Violations []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
+}
 
 // ErrNothingScanned means no scan dir exists, so nothing was read.
 var ErrNothingScanned = errors.New("no scan dir exists — the gate read nothing")
@@ -64,7 +78,7 @@ func Check(cfg Config) (Outcome, error) {
 		return Outcome{}, fmt.Errorf("%w: none of %s exists under %s", ErrNothingScanned, strings.Join(scanDirs, ", "), root)
 	}
 	if len(violations) > 0 {
-		return Outcome{Violations: violations}, ErrViolations
+		return Outcome{Violations: violations, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
 }

@@ -4,7 +4,6 @@
 package qualitycli
 
 import (
-	"errors"
 	"flag"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/openbaobootstrapincore"
@@ -27,8 +26,10 @@ func init() {
 func setupOpenBaoBootstrapInCoreTask(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := openbaobootstrapincore.Check(openbaobootstrapincore.Config{RepoRoot: inv.Root})
-		switch {
-		case errors.Is(err, openbaobootstrapincore.ErrForbiddenShortcut):
+		if err != nil {
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("openbao-bootstrap-in-core-task: FAIL — %d violation(s) of the SECRETS/CORE boundary:\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  %s\n", v)
@@ -38,11 +39,9 @@ func setupOpenBaoBootstrapInCoreTask(_ *flag.FlagSet) Check {
 			inv.Stderr.Println("forbidden in EVERY tier — a topology violation, not a shortcut. The canonical")
 			inv.Stderr.Println("path is `task k3d:secrets:create` + `task k3d:secrets:bootstrap`.")
 			inv.Stderr.Println("See docs/decisions.md (B-047).")
-			return Fail, nil
-		case err != nil:
-			return Fail, err
+			return outcome, nil
 		}
 		inv.Stdout.Printf("openbao-bootstrap-in-core-task: PASS — no core-cluster OpenBao shortcut (%d lines scanned)\n", outcome.LinesScanned)
-		return Pass, nil
+		return outcome, nil
 	}
 }

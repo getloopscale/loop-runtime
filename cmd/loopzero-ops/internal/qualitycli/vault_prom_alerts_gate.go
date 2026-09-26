@@ -25,16 +25,16 @@ func setupVaultPromAlerts(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := vaultpromalerts.Check(vaultpromalerts.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, vaultpromalerts.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("vault-prom-alerts: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("vault-prom-alerts: PASS — 4 P1 alerts declared with severity=critical + runbook_url + team=platform-security + domain=vault (+ invariant marker on VaultAuditLogStalled)")
-		return Pass, nil
+		return outcome, nil
 	}
 }

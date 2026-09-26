@@ -28,16 +28,16 @@ func setupOptionBEsoDeployDoc(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := optionbeso.Check(optionbeso.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, optionbeso.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("option-b-eso-deploy-doc: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("option-b-eso-deploy-doc: PASS — Option B doc contract preserved (4 sub-paths, decision rationale, canonical commands, ESO drift check)")
-		return Pass, nil
+		return outcome, nil
 	}
 }

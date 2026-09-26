@@ -22,16 +22,16 @@ func setupRunbookParity(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := runbookparity.Check(runbookparity.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, runbookparity.ErrContradiction) {
-				return Fail, err
-			}
-			inv.Stderr.Printf("runbook-parity: FAIL — %v\n", err)
+			return nil, err
+		}
+		if out.Verdict() == verdict.Fail {
+			inv.Stderr.Printf("runbook-parity: FAIL — %v\n", out.Violation)
 			for _, f := range out.Findings {
 				inv.Stderr.Printf("  %s:%d names %q; the runbook prescribes %q\n", f.File, f.Line, f.Named, f.Prescribed)
 			}
-			return Fail, nil
+			return out, nil
 		}
 		inv.Stdout.Printf("runbook-parity: PASS — %s\n", out.Reason)
-		return Pass, nil
+		return out, nil
 	}
 }

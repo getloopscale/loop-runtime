@@ -22,16 +22,16 @@ func setupScheduledImage(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := scheduledimage.Check(scheduledimage.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, scheduledimage.ErrNoPublicationPath) {
-				return Fail, err
-			}
-			inv.Stderr.Printf("scheduled-image: FAIL — %v\n", err)
+			return nil, err
+		}
+		if out.Verdict() == verdict.Fail {
+			inv.Stderr.Printf("scheduled-image: FAIL — %v\n", out.Violation)
 			for _, f := range out.Findings {
 				inv.Stderr.Printf("  %s [%s] %s\n", f.File, f.Chart, f.Image)
 			}
-			return Fail, nil
+			return out, nil
 		}
 		inv.Stdout.Printf("scheduled-image: PASS — %s\n", out.Reason)
-		return Pass, nil
+		return out, nil
 	}
 }

@@ -69,7 +69,7 @@ func buildFixture(t *testing.T) string {
 
 func TestCheck_CanonicalPasses(t *testing.T) {
 	root := buildFixture(t)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected PASS, got err=%v failures=%v", err, outcome.Failures)
 	}
@@ -86,7 +86,7 @@ func TestCheck_ProdMissingKeyFails(t *testing.T) {
 			"  # cfApiToken\n"+
 			"  # minioRootPassword\n",
 	)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations when prod stack drops a key, got %v", err)
 	}
@@ -104,7 +104,7 @@ func TestCheck_SotDocDropsKeyFails(t *testing.T) {
 			"| `giteaAdminPassword` |\n"+
 			"| `minioRootPassword` |\n",
 	)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations when SoT drops backticks around a required key, got %v", err)
 	}
@@ -115,7 +115,7 @@ func TestCheck_ProdStackMissingFails(t *testing.T) {
 	// Only SoT + staging present; no prod stack file.
 	writeFile(t, root, stagingStackPath, "config:\n")
 	writeFile(t, root, sotDocPath, "# CR\n\n`spacesAccessKeyId` `spacesSecretAccessKey` `digitaloceanToken` `cfApiToken` `giteaAdminPassword` `minioRootPassword`\n")
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations when prod stack missing, got %v", err)
 	}
@@ -127,7 +127,7 @@ func TestCheck_DrillStackTolerantWhenAbsent(t *testing.T) {
 	if err := os.Remove(filepath.Join(root, drillStackPath)); err != nil {
 		t.Fatalf("remove drill: %v", err)
 	}
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected PASS when drill stack absent (tolerant), got err=%v failures=%v", err, outcome.Failures)
 	}
@@ -135,7 +135,7 @@ func TestCheck_DrillStackTolerantWhenAbsent(t *testing.T) {
 
 func TestCheck_RealRepoPasses(t *testing.T) {
 	abs := qtestutil.RootFile(t, prodStackPath)
-	outcome, checkErr := Check(Config{RepoRoot: abs})
+	outcome, checkErr := violationOf(Check(Config{RepoRoot: abs}))
 	if checkErr != nil {
 		t.Fatalf("real repo must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
 	}

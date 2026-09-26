@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // caddyfilePath is the canonical dev-public edge config, relative to repo root.
@@ -53,6 +54,17 @@ type Config struct {
 // Outcome is the summary the CLI prints.
 type Outcome struct {
 	Violations []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrViolations means at least one invariant failed.
@@ -99,7 +111,7 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	if len(violations) > 0 {
-		return Outcome{Violations: violations}, ErrViolations
+		return Outcome{Violations: violations, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
 }

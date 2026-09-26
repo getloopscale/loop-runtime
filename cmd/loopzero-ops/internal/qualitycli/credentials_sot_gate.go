@@ -26,9 +26,9 @@ func setupCredentialsSot(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := credentialssot.Check(credentialssot.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, credentialssot.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("credentials-sot: FAIL — %d issue(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
@@ -39,9 +39,9 @@ func setupCredentialsSot(_ *flag.FlagSet) Check {
 					inv.Stderr.Printf("  - %s\n", s)
 				}
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Printf("credentials-sot: PASS — %d bootstrap-created Secrets enumerated in docs/operations.md\n", len(outcome.Discovered))
-		return Pass, nil
+		return outcome, nil
 	}
 }

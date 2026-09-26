@@ -42,7 +42,7 @@ func TestCheck_DivergentContextFails(t *testing.T) {
 		"      - helmfile -f infra/helmfile/a.gotmpl --kube-context k3d-loopzero-core sync\n",
 		map[string]string{"infra/helmfile/a.gotmpl": declaresBuild},
 	)
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if !errors.Is(err, ErrContextDiverges) {
 		t.Fatalf("a task pointing at a cluster the helmfile does not declare must FAIL; got %v", err)
 	}
@@ -60,7 +60,7 @@ func TestCheck_MatchingContextPasses(t *testing.T) {
 		"      - helmfile -f infra/helmfile/a.gotmpl --kube-context k3d-loopzero-core sync\n",
 		map[string]string{"infra/helmfile/a.gotmpl": declaresCore},
 	)
-	if _, err := Check(cfg); err != nil {
+	if _, err := violationOf(Check(cfg)); err != nil {
 		t.Errorf("agreement is the passing case; got %v", err)
 	}
 }
@@ -70,7 +70,7 @@ func TestCheck_MatchingContextPasses(t *testing.T) {
 // whole tripwire slice exists to remove.
 func TestCheck_NoComparableInvocationsIsAnError(t *testing.T) {
 	cfg := tree(t, "      - echo nada\n", map[string]string{"infra/helmfile/a.gotmpl": declaresCore})
-	if _, err := Check(cfg); !errors.Is(err, ErrNothingCompared) {
+	if _, err := violationOf(Check(cfg)); !errors.Is(err, ErrNothingCompared) {
 		t.Errorf("zero comparisons must be a LOUD error, never a silent PASS; got %v", err)
 	}
 }
@@ -91,7 +91,7 @@ func TestCheck_ParameterisedOnBothSidesIsNotADivergence(t *testing.T) {
 			"infra/helmfile/a.gotmpl":    declaresCore,
 		},
 	)
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if err != nil {
 		t.Fatalf("a context parameterised on both sides is out of static reach, not a violation; got %v", err)
 	}
@@ -107,7 +107,7 @@ func TestCheck_UndeclaredHelmfileIsReported(t *testing.T) {
 		"      - helmfile -f infra/helmfile/a.gotmpl --kube-context k3d-loopzero-core sync\n",
 		map[string]string{"infra/helmfile/a.gotmpl": "releases: []\n"},
 	)
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if !errors.Is(err, ErrContextNotDeclared) {
 		t.Fatalf("an invoked helmfile that declares no context must FAIL; got %v", err)
 	}
@@ -125,7 +125,7 @@ func TestCheck_MultiLineInvocationIsParsed(t *testing.T) {
 			"          -e dev \\\n          --kube-context k3d-loopzero-build \\\n          sync\n",
 		map[string]string{"infra/helmfile/a.gotmpl": declaresCore},
 	)
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if !errors.Is(err, ErrContextDiverges) {
 		t.Fatalf("a wrapped invocation must be parsed, not skipped; got %v out=%+v", err, out)
 	}
@@ -141,7 +141,7 @@ func TestCheck_CommentNearAnInvocationIsNotParsed(t *testing.T) {
 			"      # `helm upgrade -f values.yaml` would 404 on the missing file\n",
 		map[string]string{"infra/helmfile/a.gotmpl": declaresCore},
 	)
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if err != nil {
 		t.Fatalf("a comment must not become a finding; got %v", err)
 	}
@@ -154,7 +154,7 @@ func TestCheck_CommentNearAnInvocationIsNotParsed(t *testing.T) {
 // literal invocation must agree. A failure here is a real divergence, not a
 // fixture artefact.
 func TestCheck_RealTree(t *testing.T) {
-	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
+	out, err := violationOf(Check(Config{RepoRoot: qtestutil.Root(t)}))
 	if out.ComparedCount+out.SkippedParameterised == 0 {
 		t.Fatalf("the real tree has helmfile invocations; enumerating none means the parser is broken, not that the tree is clean")
 	}
@@ -229,7 +229,7 @@ func TestCheck_WindowStopsAtAYAMLBoundary(t *testing.T) {
 			"      - helmfile -f infra/helmfile/a.gotmpl --kube-context k3d-loopzero-core sync\n",
 		map[string]string{"infra/helmfile/a.gotmpl": declaresCore},
 	)
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if err != nil {
 		t.Fatalf("the real invocation agrees with its helmfile; got %v", err)
 	}
@@ -251,7 +251,7 @@ func TestCheck_RequiredEnvMustBeSetByTheInvokingTask(t *testing.T) {
 	}
 	unset := tree(t,
 		"      - helmfile -f infra/helmfile/cell.gotmpl --kube-context \"{{.CELL_CTX}}\" sync\n", hf)
-	out, err := Check(unset)
+	out, err := violationOf(Check(unset))
 	if !errors.Is(err, ErrRequiredEnvNotSet) {
 		t.Fatalf("a helmfile demanding an env var that its caller never exports must FAIL; got %v out=%+v", err, out)
 	}
@@ -266,7 +266,7 @@ func TestCheck_RequiredEnvMustBeSetByTheInvokingTask(t *testing.T) {
 	set := tree(t,
 		"      - LOOPZERO_CELL_CONTEXT=\"{{.CELL_CTX}}\" helmfile -f infra/helmfile/cell.gotmpl --kube-context \"{{.CELL_CTX}}\" sync\n"+
 			"      - helmfile -f infra/helmfile/a.gotmpl --kube-context k3d-loopzero-core sync\n", hf)
-	if _, err := Check(set); err != nil {
+	if _, err := violationOf(Check(set)); err != nil {
 		t.Errorf("exporting it from the same source as the flag is the correct shape; got %v", err)
 	}
 }
@@ -284,13 +284,13 @@ func TestFloor_EmptyTaskfilesDirFails(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "taskfiles"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrNothingCompared) {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrNothingCompared) {
 		t.Errorf("an empty taskfiles/ must fail; got %v", err)
 	}
 }
 
 func TestFloor_WrongRootFails(t *testing.T) {
-	if _, err := Check(Config{RepoRoot: t.TempDir()}); !errors.Is(err, ErrNothingCompared) {
+	if _, err := violationOf(Check(Config{RepoRoot: t.TempDir()})); !errors.Is(err, ErrNothingCompared) {
 		t.Errorf("a root with no taskfiles/ at all must fail — a gate aimed at the wrong tree must say so, not vouch for a repository it never opened; got %v", err)
 	}
 }
@@ -303,7 +303,7 @@ func TestCheck_PathEscapingTheRootIsNotRead(t *testing.T) {
 		"      - helmfile -f ../../../../etc/hosts --kube-context k3d-loopzero-core sync\n",
 		map[string]string{"infra/helmfile/a.gotmpl": declaresCore},
 	)
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if !errors.Is(err, ErrContextNotDeclared) {
 		t.Fatalf("a path outside the audited tree must surface as undeclared, never be read; got %v", err)
 	}
@@ -330,8 +330,8 @@ func TestCheck_RelativeRootBehavesLikeAbsolute(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fromAbs, _ := Check(Config{RepoRoot: abs})
-	fromRel, _ := Check(Config{RepoRoot: "."})
+	fromAbs, _ := violationOf(Check(Config{RepoRoot: abs}))
+	fromRel, _ := violationOf(Check(Config{RepoRoot: "."}))
 	if fromAbs.ComparedCount != fromRel.ComparedCount ||
 		fromAbs.SkippedParameterised != fromRel.SkippedParameterised ||
 		len(fromAbs.Undeclared) != len(fromRel.Undeclared) {
@@ -353,7 +353,7 @@ func TestCheck_EnvAssignmentOnThePrecedingLineCounts(t *testing.T) {
 			"infra/helmfile/a.gotmpl":    declaresCore,
 		},
 	)
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if err != nil {
 		t.Fatalf("an assignment one line above the token is still an assignment; got %v missing=%+v", err, out.MissingEnv)
 	}
@@ -372,7 +372,7 @@ func TestCheck_ConsecutiveInvocationsDoNotShareOperands(t *testing.T) {
 			"infra/helmfile/b.gotmpl": declaresBuild,
 		},
 	)
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if err != nil {
 		t.Fatalf("both invocations agree with their own helmfile; got %v", err)
 	}

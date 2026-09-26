@@ -55,6 +55,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const taskfileGlob = "taskfiles/*.yml"
@@ -93,6 +95,17 @@ type Outcome struct {
 	// LinesScanned proves the gate read something. A check that parsed nothing
 	// and reported success is the `PASS — 0 routes` shape of B-040.
 	LinesScanned int
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrForbiddenShortcut means the core-cluster OpenBao shortcut is present.
@@ -141,7 +154,8 @@ func Check(cfg Config) (Outcome, error) {
 		return out, ErrNothingScanned
 	}
 	if len(out.Violations) > 0 {
-		return out, ErrForbiddenShortcut
+		out.Violation = ErrForbiddenShortcut
+		return out, nil
 	}
 	return out, nil
 }

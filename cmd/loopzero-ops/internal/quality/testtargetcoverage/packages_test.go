@@ -83,10 +83,10 @@ func TestModuleWithRestrictedPatternLeavesOtherSubtreeUncovered(t *testing.T) {
 	writeFile(t, root, "infra/tests/scripts/s_test.go", "package s\n")
 	writeFile(t, root, "taskfiles/test.yml", "  cmds:\n    - cd infra/tests && go test ./unit/...\n")
 
-	out, err := Check(Config{
+	out, err := violationOf(Check(Config{
 		RepoRoot: root, Taskfiles: []string{"taskfiles/test.yml"},
 		Exemptions: []Exemption{}, Now: time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC),
-	})
+	}))
 	if !errors.Is(err, ErrPackageUncovered) {
 		t.Fatalf("a subtree with no target must fail even when the module has another target; err=%v out=%+v", err, out)
 	}
@@ -109,10 +109,10 @@ func TestWildcardTargetCoversEveryPackage(t *testing.T) {
 	writeFile(t, root, "m/b/c/c_test.go", "package c\n")
 	writeFile(t, root, "taskfiles/test.yml", "  cmds:\n    - cd m && go test ./...\n")
 
-	if _, err := Check(Config{
+	if _, err := violationOf(Check(Config{
 		RepoRoot: root, Taskfiles: []string{"taskfiles/test.yml"},
 		Exemptions: []Exemption{}, Now: time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC),
-	}); err != nil {
+	})); err != nil {
 		t.Fatalf("`go test ./...` covers every package of the module: %v", err)
 	}
 }
@@ -128,10 +128,10 @@ func TestPackageWithoutTestsNeedsNoTarget(t *testing.T) {
 	writeFile(t, root, "m/notests/x.go", "package notests\n")
 	writeFile(t, root, "taskfiles/test.yml", "  cmds:\n    - cd m && go test ./a/...\n")
 
-	if _, err := Check(Config{
+	if _, err := violationOf(Check(Config{
 		RepoRoot: root, Taskfiles: []string{"taskfiles/test.yml"},
 		Exemptions: []Exemption{}, Now: time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC),
-	}); err != nil {
+	})); err != nil {
 		t.Fatalf("a package without tests needs no target: %v", err)
 	}
 }
@@ -153,7 +153,7 @@ func TestPackageExemptionRequiresAReason(t *testing.T) {
 	// Without a reason: refused.
 	withoutReason := base
 	withoutReason.Exemptions = []Exemption{{Module: "m", Packages: []string{"e2e"}, Sunset: "2026-11-11"}}
-	if _, err := Check(withoutReason); !errors.Is(err, ErrExemptionWithoutReason) {
+	if _, err := violationOf(Check(withoutReason)); !errors.Is(err, ErrExemptionWithoutReason) {
 		t.Fatalf("a package exemption without a reason must be refused; err=%v", err)
 	}
 
@@ -163,7 +163,7 @@ func TestPackageExemptionRequiresAReason(t *testing.T) {
 		Module: "m", Packages: []string{"e2e"}, Sunset: "2026-11-11",
 		Reason: "requires a running cluster; runs through the e2e target, not the unit suite",
 	}}
-	if _, err := Check(withReason); err != nil {
+	if _, err := violationOf(Check(withReason)); err != nil {
 		t.Fatalf("a package exemption with a reason and a sunset must pass: %v", err)
 	}
 }
@@ -171,7 +171,7 @@ func TestPackageExemptionRequiresAReason(t *testing.T) {
 // The real population (B-109): the tree that ships must satisfy the new granularity,
 // otherwise the change would be a rule the repository itself does not meet.
 func TestRealTreeSatisfiesPackageGranularity(t *testing.T) {
-	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
+	out, err := violationOf(Check(Config{RepoRoot: qtestutil.Root(t)}))
 	if err != nil {
 		t.Fatalf("the real tree must satisfy package granularity; err=%v\n  uncovered: %v", err, out.UncoveredPackages)
 	}

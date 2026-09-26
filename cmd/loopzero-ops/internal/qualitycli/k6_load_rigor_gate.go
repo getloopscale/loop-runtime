@@ -26,16 +26,16 @@ func setupK6LoadRigor(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := k6loadrigor.Check(k6loadrigor.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, k6loadrigor.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("k6-load-rigor: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("k6-load-rigor: PASS — dropped_iterations threshold in base + L5 manifest shape + per-level docs canonical")
-		return Pass, nil
+		return outcome, nil
 	}
 }

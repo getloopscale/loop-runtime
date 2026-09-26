@@ -44,6 +44,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	"gopkg.in/yaml.v3"
 )
 
@@ -123,6 +124,17 @@ type Outcome struct {
 	Exempt   int
 	Findings []Finding
 	Reason   string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Check scans every autonomously executed manifest under infra/helm and charts.
@@ -141,8 +153,9 @@ func Check(cfg Config) (Outcome, error) {
 	exempt := map[string]bool{}
 	for _, e := range cfg.exemptions() {
 		if strings.TrimSpace(e.Reason) == "" || strings.TrimSpace(e.Sunset) == "" {
-			return out, fmt.Errorf("%w: the exemption for %q has no reason or no sunset — without both it declares nothing, it only silences",
+			out.Violation = fmt.Errorf("%w: the exemption for %q has no reason or no sunset — without both it declares nothing, it only silences",
 				ErrNoPublicationPath, e.Image)
+			return out, nil
 		}
 		exempt[e.Image] = true
 	}
@@ -177,7 +190,8 @@ func Check(cfg Config) (Outcome, error) {
 
 	sort.Slice(out.Findings, func(i, j int) bool { return out.Findings[i].File < out.Findings[j].File })
 	if len(out.Findings) > 0 {
-		return out, fmt.Errorf("%w (%d): %s", ErrNoPublicationPath, len(out.Findings), out.Findings[0].Why)
+		out.Violation = fmt.Errorf("%w (%d): %s", ErrNoPublicationPath, len(out.Findings), out.Findings[0].Why)
+		return out, nil
 	}
 	out.Reason = fmt.Sprintf("%d autonomously executed manifest(s) scanned; %d image(s) exempt with reason and sunset", out.Scanned, out.Exempt)
 	return out, nil

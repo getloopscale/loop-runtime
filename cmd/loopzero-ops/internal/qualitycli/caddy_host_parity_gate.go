@@ -22,16 +22,16 @@ func setupCaddyHostParity(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, caddyhostparity.ErrUnserved) {
-				return Fail, err
-			}
-			inv.Stderr.Printf("caddy-host-parity: FAIL — %v\n", err)
+			return nil, err
+		}
+		if out.Verdict() == verdict.Fail {
+			inv.Stderr.Printf("caddy-host-parity: FAIL — %v\n", out.Violation)
 			for _, f := range out.Findings {
 				inv.Stderr.Printf("  %s has no site block; without a certificate the handshake fails before any HTTP\n", f.Host)
 			}
-			return Fail, nil
+			return out, nil
 		}
 		inv.Stdout.Printf("caddy-host-parity: PASS — %d hostnames required, %d served\n", out.Scanned, out.Served)
-		return Pass, nil
+		return out, nil
 	}
 }

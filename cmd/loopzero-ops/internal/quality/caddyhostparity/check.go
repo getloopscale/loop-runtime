@@ -47,6 +47,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrUnserved means a demanded hostname has no site block to terminate its TLS.
@@ -109,6 +110,17 @@ type Outcome struct {
 	Scanned  int
 	Served   int
 	Findings []Finding
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // serves reports whether a declared site address covers the hostname, honouring the
@@ -231,8 +243,9 @@ func Check(cfg Config) (Outcome, error) {
 		for _, f := range out.Findings {
 			names = append(names, f.Host)
 		}
-		return out, fmt.Errorf("%w: %s — demanded by %s, absent from %s",
+		out.Violation = fmt.Errorf("%w: %s — demanded by %s, absent from %s",
 			ErrUnserved, strings.Join(names, ", "), verifierRel, caddyfileRel)
+		return out, nil
 	}
 	return out, nil
 }

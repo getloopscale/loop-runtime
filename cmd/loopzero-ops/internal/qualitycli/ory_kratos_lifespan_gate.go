@@ -27,16 +27,16 @@ func setupOryKratosLifespan(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := orykratoslifespan.Check(orykratoslifespan.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, orykratoslifespan.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("ory-kratos-lifespan: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("ory-kratos-lifespan: PASS — login/registration=10m, recovery=15m (defense pair with edge rate_limit for RedTeam #89)")
-		return Pass, nil
+		return outcome, nil
 	}
 }

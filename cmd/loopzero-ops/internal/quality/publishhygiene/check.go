@@ -63,6 +63,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrLeak means a versioned live file carries a host address or workstation path.
@@ -164,6 +166,17 @@ type Outcome struct {
 	Binary int
 	// Unverified lists versioned files that could not be read, with the reason.
 	Unverified []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Check scans every versioned live file.
@@ -176,7 +189,8 @@ func Check(cfg Config) (Outcome, error) {
 	exempt := map[string]bool{}
 	for _, e := range cfg.exemptions() {
 		if strings.TrimSpace(e.Reason) == "" || strings.TrimSpace(e.Sunset) == "" {
-			return out, fmt.Errorf("%w: exemption for %q has no reason or no sunset", ErrLeak, e.Path)
+			out.Violation = fmt.Errorf("%w: exemption for %q has no reason or no sunset", ErrLeak, e.Path)
+			return out, nil
 		}
 		exempt[e.Path] = true
 	}
@@ -207,7 +221,8 @@ func Check(cfg Config) (Outcome, error) {
 		out.Findings = append(out.Findings, scanText(string(data), rel)...)
 	}
 	if len(out.Findings) > 0 {
-		return out, ErrLeak
+		out.Violation = ErrLeak
+		return out, nil
 	}
 	if len(out.Unverified) > 0 {
 		return out, fmt.Errorf("%w: %s", ErrUnverified, strings.Join(out.Unverified, "; "))

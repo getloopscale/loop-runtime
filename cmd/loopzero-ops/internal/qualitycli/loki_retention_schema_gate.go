@@ -26,16 +26,16 @@ func setupLokiRetentionSchema(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := lokiretentionschema.Check(lokiretentionschema.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, lokiretentionschema.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("loki-retention-schema: FAIL — %d assertion(s):\n", len(outcome.Failures))
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("loki-retention-schema: PASS — 7 schema assertions (SingleBinary + retention_stream secrets-system + priority int + defaults) clean")
-		return Pass, nil
+		return outcome, nil
 	}
 }

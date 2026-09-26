@@ -64,7 +64,7 @@ done
 
 func TestCheck_CanonicalPasses(t *testing.T) {
 	root := writeFixture(t, canonical)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected PASS, got err=%v failures=%v", err, outcome.Failures)
 	}
@@ -72,7 +72,7 @@ func TestCheck_CanonicalPasses(t *testing.T) {
 
 func TestCheck_MissingTargetFails(t *testing.T) {
 	root := t.TempDir()
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -82,7 +82,7 @@ func TestCheck_BuggyDirectPipeFails(t *testing.T) {
 	// Injects the ORIGINAL buggy pattern on a non-comment line.
 	buggy := canonical + "\n" + `INIT_STATUS=$(bao status -format=json 2>/dev/null | python3 -c "print('True')")` + "\n"
 	root := writeFixture(t, buggy)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for buggy direct-pipe, got %v (failures=%v)", err, outcome.Failures)
 	}
@@ -92,7 +92,7 @@ func TestCheck_LowercaseTrueFallbackFails(t *testing.T) {
 	// Injects the `|| echo "true"` (lowercase) trap on a SEALED= assign path.
 	buggy := canonical + "\n" + `SEALED=$(echo "$BAO_STATUS_JSON" | python3 -c "print('True')" || echo "true")` + "\n"
 	root := writeFixture(t, buggy)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for lowercase 'true' fallback, got %v (failures=%v)", err, outcome.Failures)
 	}
@@ -103,7 +103,7 @@ func TestCheck_LowercaseTrueInCommentIsAllowed(t *testing.T) {
 	// skips lines whose trimmed prefix starts with `#`.
 	withComment := canonical + "\n" + `# forbidden: SEALED=$(x || echo "true")` + "\n"
 	root := writeFixture(t, withComment)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("comment-line ref should NOT fail. err=%v failures=%v", err, outcome.Failures)
 	}
@@ -119,7 +119,7 @@ func TestCheck_MissingAuditTrailFails(t *testing.T) {
 		body += line + "\n"
 	}
 	root := writeFixture(t, body)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for missing CANONICAL FIX marker, got %v", err)
 	}
@@ -139,7 +139,7 @@ func TestCheck_MissingCaptureCountFails(t *testing.T) {
 		body += line + "\n"
 	}
 	root := writeFixture(t, body)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations when only 1 capture present, got %v", err)
 	}
@@ -147,7 +147,7 @@ func TestCheck_MissingCaptureCountFails(t *testing.T) {
 
 func TestCheck_RealRepoScriptPasses(t *testing.T) {
 	abs := qtestutil.RootFile(t, filepath.Join("infra", "scripts", "local", "vault-bootstrap-dev.sh"))
-	outcome, checkErr := Check(Config{RepoRoot: abs})
+	outcome, checkErr := violationOf(Check(Config{RepoRoot: abs}))
 	if checkErr != nil {
 		t.Fatalf("real script must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
 	}

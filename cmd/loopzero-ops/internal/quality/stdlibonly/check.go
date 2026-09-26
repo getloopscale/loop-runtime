@@ -37,6 +37,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrExternalImport means the package imports something outside the standard library.
@@ -60,6 +62,17 @@ type Config struct {
 type Outcome struct {
 	Scanned  int
 	External []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Check verifies that the guarded package imports only the standard library.
@@ -112,8 +125,9 @@ func Check(cfg Config) (Outcome, error) {
 		return out, fmt.Errorf("%w: %s declares no import at all", ErrNothingScanned, guardedPackage)
 	}
 	if len(out.External) > 0 {
-		return out, fmt.Errorf("%w: %s imports %s — and that reaches every one of its importers",
+		out.Violation = fmt.Errorf("%w: %s imports %s — and that reaches every one of its importers",
 			ErrExternalImport, guardedPackage, strings.Join(out.External, ", "))
+		return out, nil
 	}
 	return out, nil
 }

@@ -15,13 +15,28 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config selects the tree to check.
 type Config struct{ RepoRoot string }
 
 // Outcome lists the assertions that failed.
-type Outcome struct{ Failures []string }
+type Outcome struct {
+	Failures []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
+}
 
 // ErrFailures means at least one assertion failed.
 var ErrFailures = errors.New("install-git-hooks assertions failed")
@@ -62,7 +77,7 @@ func Check(cfg Config) (Outcome, error) {
 	chk("installer bash -n clean", instErr == nil && bashSyntax(inst))
 
 	if len(failures) > 0 {
-		return Outcome{Failures: failures}, ErrFailures
+		return Outcome{Failures: failures, Violation: ErrFailures}, nil
 	}
 	return Outcome{}, nil
 }

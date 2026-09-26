@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	"gopkg.in/yaml.v3"
 )
 
@@ -36,6 +37,17 @@ type Config struct {
 // Outcome is the aggregated result (canonical M-Migrate2 shape per blueprint ADR D1).
 type Outcome struct {
 	Failures []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrViolations signals ≥ 1 assertion failed.
@@ -77,14 +89,14 @@ func Check(cfg Config) (Outcome, error) {
 	content, err := qgshell.StatAndRead(lokiPath)
 	if err != nil {
 		failures = append(failures, fmt.Sprintf("loki values.yaml MISSING: %s", lokiValuesRel))
-		return Outcome{Failures: failures}, ErrViolations
+		return Outcome{Failures: failures, Violation: ErrViolations}, nil
 	}
 
 	// Assertion 1: YAML parses cleanly.
 	var vals lokiValues
 	if err := yaml.Unmarshal(content, &vals); err != nil {
 		failures = append(failures, fmt.Sprintf("YAML parse error: %v", err))
-		return Outcome{Failures: failures}, ErrViolations
+		return Outcome{Failures: failures, Violation: ErrViolations}, nil
 	}
 
 	// Assertion 2: exactly 1 retention_stream entry.
@@ -118,7 +130,7 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	if len(failures) > 0 {
-		return Outcome{Failures: failures}, ErrViolations
+		return Outcome{Failures: failures, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
 }

@@ -24,16 +24,16 @@ func setupCanonicalFixtureRepo(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := canonicalfixturerepo.Check(canonicalfixturerepo.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if !isViolation(err, canonicalfixturerepo.ErrViolations) {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("canonical-fixture-repo: FAIL — %d legacy loopzero-repotest reference(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  %s\n", v)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("canonical-fixture-repo: PASS — no legacy loopzero-repotest (canonical: getloopscale/loopzerokit-example)")
-		return Pass, nil
+		return outcome, nil
 	}
 }
