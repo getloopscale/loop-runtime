@@ -20,7 +20,7 @@ package devpublic
 // Design (ADR D3): per-subtest httptest.NewServer — no shared global state.
 // The mock handlers reproduce the CONTRACT SHAPE asserted by the bash source
 // (status codes, error envelope, headers). Behavioral parity vs LIVE dev-public
-// stays halt-boundary per ADR D4 (Class B sponsor JUNTOS).
+// stays halt-boundary per ADR D4 (Class B: joint sponsor session).
 
 import (
 	"encoding/json"

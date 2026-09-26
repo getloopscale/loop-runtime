@@ -40,7 +40,7 @@ var _ = Describe("c13: build-valid, health-destructive config fails loud (no cha
 	})
 
 	It("FAILs the release loud (SYNC_FAILED) within the 180s SyncTimeout, never a silent hang", func() {
-		// Expected LIVE flow (operator/sponsor JUNTOS per cleanroom-up-live-test-mandate.md):
+		// Expected LIVE flow (operator and sponsor together, on a live cluster):
 		//   1. deploy-path health preflight (NOT chaos-mesh).
 		//   2. deploy a build-valid but health-destructive .loopzero/services.json
 		//      (readiness path always 404s).

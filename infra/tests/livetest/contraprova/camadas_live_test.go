@@ -14,7 +14,7 @@ import (
 
 // T3.4 layers 4-7 hermetic tests. The layers themselves exec out to $LOOPZERO
 // CLI + kubectl + HTTP, so hermetic tests focus on input validation +
-// fixture creation. LIVE behavior is exercised by sponsor JUNTOS Phase 5.
+// fixture creation. LIVE behavior is exercised by the joint sponsor session, Phase 5.
 
 func TestDefaultLiveConfig_SetsCanonicalDefaults(t *testing.T) {
 	cfg := DefaultLiveConfig("20260617")

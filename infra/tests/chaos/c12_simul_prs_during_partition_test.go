@@ -100,7 +100,7 @@ var _ = Describe("c12: simultaneous PRs during mgmt<->build network partition", 
 	})
 
 	It("keeps withEnvironmentLock: >=1 ACTIVE release, ZERO duplicate ACTIVE per commit_sha, post-heal", func() {
-		// Expected LIVE flow (operator/sponsor JUNTOS per cleanroom-up-live-test-mandate.md):
+		// Expected LIVE flow (operator and sponsor together, on a live cluster):
 		//   1. checkAPIHealth() — API serving before chaos.
 		//   2. applyChaos("c12-partition-mgmt-build.yaml") — scoped NetworkChaos
 		//      partition [loopzero-system, argo-system], duration 180s (EC-6).
