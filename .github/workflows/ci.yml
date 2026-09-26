@@ -96,7 +96,7 @@ on:
   #   - it is RED, and has been. Runs 32084704925 through 32197072865 — the last
   #     fifteen — all failed, the failing step being `Test the hermetic modules`,
   #     and `go test ./... -count=1` in cmd/loopzero-ops is red in a clean worktree
-  #     today on `trufflehogscan.TestArvoreRealEstaAdjudicada` (re-measured
+  #     today on `trufflehogscan.TestRealTreeIsAdjudicated` (re-measured
   #     2026-09-06). Promoting a permanently-red job to a gate on the PR would
   #     block every promotion for a cause unrelated to the change under review,
   #     which is how gates get switched off.

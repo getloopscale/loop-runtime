@@ -42,7 +42,7 @@ deploy key and two checkouts -- the setup `build-and-test` performs, in a job
 that takes 2-4 minutes and whose last 15 runs all failed (measured
 2026-09-06 over runs 32084704925..32197072865; the failing step is `Test the
 hermetic modules`, and `go test ./... -count=1` in cmd/loopzero-ops is red on
-`trufflehogscan.TestArvoreRealEstaAdjudicada` in a clean worktree today). A
+`trufflehogscan.TestRealTreeIsAdjudicated` in a clean worktree today). A
 new signal hung inside an already-red job is not a signal. This script needs
 python3 and bash, both preinstalled on every runner, and finishes in seconds.
 
