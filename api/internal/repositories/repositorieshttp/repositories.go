@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"gopkg.in/yaml.v3"
 
 	"github.com/getloopscale/loopzero/api/internal/github"
 	"github.com/getloopscale/loopzero/api/internal/httpio"
@@ -339,8 +338,8 @@ func (h *RepositoryHandler) GetConnection(w http.ResponseWriter, r *http.Request
 }
 
 // validateLoopZeroYamlOnRef runs the pre-link introspector chain: branch
-// existence + loopzero.yaml presence + loopzero.yaml parses as non-empty YAML
-// mapping. Returns true when validation passed; false (and writes the
+// existence + deploy descriptor presence + the descriptor passes
+// github.ParseDeployDescriptor, the rule every push deploy applies. Returns true when validation passed; false (and writes the
 // HTTP response) on any failure. Extracted from Connect for T4.2 of
 // plan 2026-06-11-code-review-remediation v1.2 + ADR D6 — keeps the
 // Connect orchestrator focused on link-creation logic.
@@ -350,7 +349,7 @@ func (h *RepositoryHandler) GetConnection(w http.ResponseWriter, r *http.Request
 //   - INVALID_REPO            (400) — repo not "owner/name" format
 //   - BRANCH_NOT_FOUND        (400) — branch missing on GitHub
 //   - MISSING_LOOPZERO_YAML       (400) — file absent at that ref
-//   - INVALID_LOOPZERO_YAML       (400) — empty, malformed, or zero fields
+//   - INVALID_LOOPZERO_YAML       (400) — refused by github.ParseDeployDescriptor
 //   - GITHUB_UNAVAILABLE      (502) — GitHub API transport failure
 func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w http.ResponseWriter, req connectRequest, branch string) bool {
 	parts := strings.SplitN(req.Repo, "/", 2)
@@ -380,44 +379,30 @@ func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w htt
 		return false
 	}
 
-	content, err := h.introspector.GetFileContent(ctx, req.InstallationID, owner, name, branch, "loopzero.yaml")
+	content, err := h.introspector.GetFileContent(ctx, req.InstallationID, owner, name, branch, github.DeployDescriptorPath)
 	if err != nil {
 		var fnf *github.FileNotFoundError
 		if errors.As(err, &fnf) {
 			httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 				"code":    "MISSING_LOOPZERO_YAML",
-				"message": "loopzero.yaml not found on branch \"" + branch + "\". Run `loopzero init` locally and commit the file. Docs: https://docs.loopzero.example/config/loopzero-yaml",
+				"message": github.DeployDescriptorPath + " not found on branch \"" + branch + "\". Add it at the repository root, declaring the apps to deploy under `apps:`, and commit it. Docs: https://docs.loopzero.example/config/loopzero-yaml",
 			})
 			return false
 		}
-		slog.ErrorContext(ctx, "loopzero.yaml fetch failed", "error", err, "repo", req.Repo)
+		slog.ErrorContext(ctx, "deploy descriptor fetch failed", "error", err, "repo", req.Repo)
 		httpio.WriteJSON(w, http.StatusBadGateway, map[string]string{
 			"code":    "GITHUB_UNAVAILABLE",
-			"message": "Could not fetch loopzero.yaml right now. Try again in a moment.",
+			"message": "Could not fetch " + github.DeployDescriptorPath + " right now. Try again in a moment.",
 		})
 		return false
 	}
 
-	// EC-4 / EC-19: loopzero.yaml MUST parse as a non-empty YAML mapping.
-	if len(strings.TrimSpace(string(content))) == 0 {
+	// EC-4 / EC-19: the same rule a push applies (github.ParseDeployDescriptor),
+	// so a repository Connect links is one every push can build.
+	if _, err := github.ParseDeployDescriptor(content); err != nil {
 		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"code":    "INVALID_LOOPZERO_YAML",
-			"message": "loopzero.yaml is empty. Add at least a `name:` field. Docs: https://docs.loopzero.example/config/loopzero-yaml",
-		})
-		return false
-	}
-	var parsed map[string]interface{}
-	if err := yaml.Unmarshal(content, &parsed); err != nil {
-		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
-			"code":    "INVALID_LOOPZERO_YAML",
-			"message": "loopzero.yaml is not valid YAML: " + err.Error(),
-		})
-		return false
-	}
-	if len(parsed) == 0 {
-		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
-			"code":    "INVALID_LOOPZERO_YAML",
-			"message": "loopzero.yaml has no fields. Add at least a `name:` entry.",
+			"message": err.Error() + " Docs: https://docs.loopzero.example/config/loopzero-yaml",
 		})
 		return false
 	}

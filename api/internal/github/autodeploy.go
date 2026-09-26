@@ -15,8 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/getloopscale/loopzero/api/internal/archive"
 	"github.com/getloopscale/loopzero/api/internal/gitclient"
 
@@ -140,12 +138,13 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, req PushRequest) error {
 	}
 	defer src.close()
 
-	loopzeroYaml, err := src.loopzeroYaml()
+	loopzeroYaml, err := src.deployDescriptor()
 	if err != nil {
-		log.Warn("auto-deploy: no loopzero.yaml found in repo, skipping", "error", err)
-		return nil // not a LoopZero project — ignore silently
+		// Not deployable by the same rule Connect applies: nothing to build.
+		log.Warn("auto-deploy: repository is not deployable, skipping", "error", err)
+		return nil
 	}
-	log.Info("auto-deploy: loopzero.yaml found", "project_in_yaml", loopzeroYaml.Project, "apps", len(loopzeroYaml.Apps))
+	log.Info("auto-deploy: deploy descriptor found", "project_in_yaml", loopzeroYaml.Project, "apps", len(loopzeroYaml.Apps))
 
 	if err := d.stageBundle(ctx, src, req.TenantID, req.CommitSHA, req.CommitMessage, req.SenderLogin); err != nil {
 		return fmt.Errorf("auto-deploy: %w", err)
@@ -229,10 +228,11 @@ func (d *AutoDeployer) markCommitPending(log *slog.Logger, req PushRequest, owne
 // clone-repo step fails with "Object does not exist" trying to fetch the
 // bundle from S3 (LIVE catch 2026-06-07 J-23).
 //
-// It also returns the parsed loopzero.yaml — preview deploy uses it to populate
-// apps with framework/path/build so LanguageStrategy resolves the right
-// build steps. A repository with no loopzero.yaml returns nil and still uploads:
-// the preview build fails noisily later if it is missing.
+// It also returns the deploy descriptor (ParseDeployDescriptor) — preview
+// deploy uses it to populate apps with framework/path/build so
+// LanguageStrategy resolves the right build steps. A repository with no
+// deployable descriptor returns nil and still uploads: the preview then
+// inherits the apps of the latest successful build.
 func (d *AutoDeployer) PrepareSourceBundle(ctx context.Context, repoFullName, commitSHA string, installationID int64, tenantID string) (*LoopZeroYamlMinimal, error) {
 	log := d.cfg.Logger.With("repo", repoFullName, "sha", commitSHA, "tenant", tenantID)
 
@@ -247,12 +247,12 @@ func (d *AutoDeployer) PrepareSourceBundle(ctx context.Context, repoFullName, co
 	}
 	defer src.close()
 
-	loopzeroYaml, yamlErr := src.loopzeroYaml()
-	if yamlErr != nil {
-		log.Warn("prepare-source-bundle: loopzero.yaml not found", "error", yamlErr)
+	loopzeroYaml, descriptorErr := src.deployDescriptor()
+	if descriptorErr != nil {
+		log.Warn("prepare-source-bundle: repository is not deployable; the preview falls back to the last build's apps", "error", descriptorErr)
 		loopzeroYaml = nil
 	} else {
-		log.Info("prepare-source-bundle: loopzero.yaml parsed", "apps", len(loopzeroYaml.Apps))
+		log.Info("prepare-source-bundle: deploy descriptor parsed", "apps", len(loopzeroYaml.Apps))
 	}
 
 	if err := d.stageBundle(ctx, src, tenantID, commitSHA, "preview build", "loopzero-preview-service"); err != nil {
@@ -270,7 +270,8 @@ func splitRepoFullName(repoFullName string) (owner, repo string, err error) {
 }
 
 // sourceTarball is a downloaded GitHub tarball kept in a temp file, because
-// it is read twice: once for loopzero.yaml, once for the bundle conversion.
+// it is read twice: once for the deploy descriptor, once for the bundle
+// conversion.
 type sourceTarball struct {
 	file *os.File
 }
@@ -301,7 +302,7 @@ func (s *sourceTarball) rewound() (io.Reader, error) {
 	return s.file, nil
 }
 
-func (s *sourceTarball) loopzeroYaml() (*LoopZeroYamlMinimal, error) {
+func (s *sourceTarball) deployDescriptor() (*LoopZeroYamlMinimal, error) {
 	r, err := s.rewound()
 	if err != nil {
 		return nil, err
@@ -456,8 +457,9 @@ func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commi
 	return bundlePath, cleanup, nil
 }
 
-// extractLoopZeroYaml reads loopzero.yaml from a GitHub tarball (.tar.gz).
-// GitHub tarballs have a top-level directory like "owner-repo-sha/".
+// extractLoopZeroYaml reads the deploy descriptor from a GitHub tarball (.tar.gz)
+// and applies ParseDeployDescriptor to it. GitHub tarballs have a top-level
+// directory like "owner-repo-sha/".
 func extractLoopZeroYaml(r io.Reader) (*LoopZeroYamlMinimal, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
@@ -479,17 +481,13 @@ func extractLoopZeroYaml(r io.Reader) (*LoopZeroYamlMinimal, error) {
 		name := filepath.Base(header.Name)
 		// Also check one level deep (the loopzero.yaml is at repo root)
 		parts := strings.Split(header.Name, "/")
-		if len(parts) == 2 && name == "loopzero.yaml" {
+		if len(parts) == 2 && name == DeployDescriptorPath {
 			data, err := io.ReadAll(tr)
 			if err != nil {
-				return nil, fmt.Errorf("read loopzero.yaml: %w", err)
+				return nil, fmt.Errorf("read %s: %w", DeployDescriptorPath, err)
 			}
-			var cfg LoopZeroYamlMinimal
-			if err := yaml.Unmarshal(data, &cfg); err != nil {
-				return nil, fmt.Errorf("parse loopzero.yaml: %w", err)
-			}
-			return &cfg, nil
+			return ParseDeployDescriptor(data)
 		}
 	}
-	return nil, fmt.Errorf("loopzero.yaml not found in tarball")
+	return nil, fmt.Errorf("%s not found in tarball", DeployDescriptorPath)
 }

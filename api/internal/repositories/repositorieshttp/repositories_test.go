@@ -424,8 +424,27 @@ func TestRepositories_Connect_InvalidYaml_400(t *testing.T) {
 	}
 }
 
-func TestRepositories_Connect_LoopZeroYamlExists_200(t *testing.T) {
+const deployableLoopZeroYaml = "project: my-app\napps:\n  api:\n    type: server\n"
+
+// Connect refuses the descriptor a push could not deploy: a loopzero.yaml that
+// declares no app used to link fine and then build nothing on every push.
+func TestRepositories_Connect_LoopZeroYamlWithoutApps_400(t *testing.T) {
 	intro := &fakeIntrospector{fileBytes: []byte("name: my-app\nframework: node\n")}
+	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
+
+	w := httptest.NewRecorder()
+	h.Connect(w, connectReq(`{"repo":"owner/r","installation_id":42}`))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("INVALID_LOOPZERO_YAML")) {
+		t.Errorf("want INVALID_LOOPZERO_YAML, got %s", w.Body.String())
+	}
+}
+
+func TestRepositories_Connect_LoopZeroYamlExists_200(t *testing.T) {
+	intro := &fakeIntrospector{fileBytes: []byte(deployableLoopZeroYaml)}
 	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
 
 	w := httptest.NewRecorder()
@@ -471,7 +490,7 @@ func TestRepositories_Connect_DeployIsBoundToTheServerLifetime(t *testing.T) {
 	serverCtx, stopServer := context.WithCancel(context.Background())
 	stopServer() // the server is already shutting down
 	deployer := recordingDeployer{ctxErr: make(chan error, 1)}
-	intro := &fakeIntrospector{fileBytes: []byte("name: my-api\n"), head: &github.HeadCommitInfo{SHA: "abc123"}}
+	intro := &fakeIntrospector{fileBytes: []byte(deployableLoopZeroYaml), head: &github.HeadCommitInfo{SHA: "abc123"}}
 	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro).WithAutoDeployer(deployer, serverCtx)
 
 	body := `{"repo":"owner/r","installation_id":42}`

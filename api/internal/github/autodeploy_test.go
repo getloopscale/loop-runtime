@@ -9,6 +9,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -123,8 +124,9 @@ func TestExtractLoopZeroYaml_MalformedYaml(t *testing.T) {
 	if cfg != nil {
 		t.Fatal("expected nil config for malformed YAML")
 	}
-	if !strings.Contains(err.Error(), "parse loopzero.yaml") {
-		t.Errorf("expected 'parse loopzero.yaml' error, got: %v", err)
+	var invalid *InvalidDeployDescriptorError
+	if !errors.As(err, &invalid) {
+		t.Errorf("expected the deploy descriptor refusal, got: %v", err)
 	}
 }
 
