@@ -143,17 +143,11 @@ func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 		return rows[i].path < rows[j].path
 	})
 
-	// Locate the records dir. Test's cwd is the package dir (api/internal/server/),
-	// so records/ is up four levels (api/ → repo root → .claude/records/).
-	repoRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
-	baselineDir := filepath.Join(repoRoot, ".claude", "records", "alignment")
-	if err := os.MkdirAll(baselineDir, 0o755); err != nil {
-		t.Fatalf("create baseline dir: %v", err)
-	}
-	baselinePath := filepath.Join(baselineDir, "b059-baseline-resource-id-coverage.txt")
+	// The dump goes to a temporary directory. It used to be written into the
+	// repository, under .claude/records/alignment/, on every `go test ./...`: a
+	// test with a side effect on the working tree, in a path outside the
+	// project's records root, that nothing ever read back.
+	baselinePath := filepath.Join(t.TempDir(), "b059-baseline-resource-id-coverage.txt")
 
 	var sb strings.Builder
 	sb.WriteString("# B-059 Phase 1 T1.1 baseline — resource_id coverage per mutating route\n")
