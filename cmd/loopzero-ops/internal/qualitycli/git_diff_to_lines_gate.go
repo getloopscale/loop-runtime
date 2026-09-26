@@ -35,7 +35,7 @@ func setupGitDiffToLines(fs *flag.FlagSet) Check {
 		h := firstNonEmpty(*head, os.Getenv("HEAD_REF"), "HEAD")
 		pairs, err := gitdiff.RunGitDiff(context.Background(), shellrun.NewDefault(), gitdiff.Config{BaseRef: b, HeadRef: h})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		if s := gitdiff.FormatLines(pairs); s != "" {
 			inv.Stdout.Print(s)
@@ -43,6 +43,6 @@ func setupGitDiffToLines(fs *flag.FlagSet) Check {
 				inv.Stdout.Println()
 			}
 		}
-		return Pass, nil
+		return pairs, nil
 	}
 }

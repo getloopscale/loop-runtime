@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellscript"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Script captures one shell script with audit metadata.
@@ -78,6 +79,13 @@ var callerSearchFilenames = map[string]bool{
 	"Tiltfile":     true,
 }
 
+// Scripts is the inventory a scan produced.
+type Scripts []Script
+
+// Verdict is Pass: the inventory is an operation, and Scripts exists only when
+// the scan completed. A scan that could not complete is ScanRepo's error.
+func (Scripts) Verdict() verdict.Verdict { return verdict.Pass }
+
 // ScanRepo walks the repo root and returns a sorted []Script with
 // {Path, LOC, LastMod, Callers, Disposition} populated for every .sh
 // found outside excludedDirs.
@@ -85,7 +93,7 @@ var callerSearchFilenames = map[string]bool{
 // Symlinks are dereferenced via filepath.EvalSymlinks; if multiple paths
 // point to the same canonical file, only the first encountered is kept
 // (EC-07: no double-counting).
-func ScanRepo(root string) ([]Script, error) {
+func ScanRepo(root string) (Scripts, error) {
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return nil, fmt.Errorf("abs root: %w", err)

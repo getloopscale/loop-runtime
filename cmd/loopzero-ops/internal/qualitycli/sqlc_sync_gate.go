@@ -26,9 +26,9 @@ func setupSqlcSync(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := sqlcsync.Check(sqlcsync.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("sqlc-sync: FAIL — %d violation(s) between committed generated/ and fresh sqlc generate (version %s):\n",
 				len(outcome.Violations), outcome.SqlcVersion)
 			for _, v := range outcome.Violations {
@@ -38,9 +38,9 @@ func setupSqlcSync(_ *flag.FlagSet) Check {
 				}
 			}
 			inv.Stderr.Printf("\nFix: %s\n", sqlcsync.ActionableFix())
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Printf("sqlc-sync: PASS — committed generated/ in-sync with sqlc %s\n", outcome.SqlcVersion)
-		return Pass, nil
+		return outcome, nil
 	}
 }

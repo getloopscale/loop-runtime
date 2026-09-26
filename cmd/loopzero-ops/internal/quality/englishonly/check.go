@@ -49,6 +49,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // marker is the exemption key. It is assembled rather than written with its
@@ -161,6 +162,9 @@ type Report struct {
 	Exempted int
 	Findings []Finding
 }
+
+// Verdict is Fail when any line, identifier or path is not English.
+func (r Report) Verdict() verdict.Verdict { return verdict.Of(r.Findings) }
 
 // Check scans every tracked text file under cfg.RepoRoot.
 func Check(cfg Config) (Report, error) {

@@ -21,22 +21,22 @@ func init() {
 func setupSecurityContext(fs *flag.FlagSet) Check {
 	gate := fs.Bool("gate", false, "gate mode: exit 1 if any NON-CONFORMANT chart lacks an ADR exception")
 	return func(inv Invocation) (verdict.Result, error) {
-		o, err := securitycontext.Check(securitycontext.Config{Root: inv.Root})
+		o, err := securitycontext.Check(securitycontext.Config{Root: inv.Root, Gate: *gate})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 
 		if *gate {
-			if o.Pass {
+			if o.Verdict() == verdict.Pass {
 				inv.Stdout.Println("✅ securityContext audit GREEN — 0 NON-CONFORMANT charts without ADR exception.")
-				return Pass, nil
+				return o, nil
 			}
 			inv.Stderr.Printf("❌ securityContext audit FAILED — %d NON-CONFORMANT chart(s) without ADR:\n", len(o.Violations))
 			for _, v := range o.Violations {
 				inv.Stderr.Printf("  - %s\n", v)
 				inv.Stderr.Printf("    Action: fix securityContext in infra/helm/%s/, OR create infra/helm/%s/ADR-securitycontext-exception.md\n", v, v)
 			}
-			return Fail, nil
+			return o, nil
 		}
 
 		// report mode — markdown matrix to stdout.
@@ -77,6 +77,6 @@ func setupSecurityContext(fs *flag.FlagSet) Check {
 		}
 		inv.Stdout.Printf("\n## Summary\n\n- CONFORMANT: %d/%d\n- PARTIAL: %d/%d\n- NON-CONFORMANT: %d/%d\n- N/A (no pods): %d/%d\n- NON-CONFORMANT without ADR: %d\n",
 			conformant, len(o.Charts), partial, len(o.Charts), nonconf, len(o.Charts), na, len(o.Charts), len(o.Violations))
-		return Pass, nil
+		return o, nil
 	}
 }

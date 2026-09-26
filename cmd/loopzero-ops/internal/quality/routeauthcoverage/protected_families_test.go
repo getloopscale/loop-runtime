@@ -48,7 +48,7 @@ func TestProtectedFamiliesInAnotherFileAreCountedAsProtected(t *testing.T) {
 		"api/internal/server/protected_routes.go": protectedFamiliesFile,
 	})
 
-	out, err := Check(Config{RepoRoot: root, MinRoutes: 4, OffRouterMounts: map[string]string{}})
+	out, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 4, OffRouterMounts: map[string]string{}}))
 
 	if err != nil {
 		t.Fatalf("Check: %v (violations %v, off-router %v)", err, out.Violations, out.OffRouterUndeclared)
@@ -64,7 +64,7 @@ func TestProtectedFamiliesAreViolationsWhenNotCalledFromTheAuthGroup(t *testing.
 		"api/internal/server/protected_routes.go": protectedFamiliesFile,
 	})
 
-	out, err := Check(Config{RepoRoot: root, MinRoutes: 1, OffRouterMounts: map[string]string{}})
+	out, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1, OffRouterMounts: map[string]string{}}))
 
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("err = %v, want ErrViolations: registerProtectedRoutes runs outside the Auth group", err)

@@ -36,7 +36,7 @@ func setupContractConsumers(fs *flag.FlagSet) Check {
 			HeadRef:  *headRef,
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		// Lost coverage is ALWAYS printed — including on PASS, which is where it would
 		// vanish. A consumer root that is absent (usually a sibling checkout that is
@@ -61,10 +61,10 @@ func setupContractConsumers(fs *flag.FlagSet) Check {
 				"gate would be reporting PASS without reading that surface.\n" +
 				"  Fix: point trackedFiles in cmd/loopzero-ops/internal/quality/contractconsumers/check.go " +
 				"at the new path.\n")
-			return Fail, nil
+			return outcome, nil
 		}
 		if outcome.CommandError != "" {
-			return Fail, fmt.Errorf("git/grep: %s", outcome.CommandError)
+			return nil, fmt.Errorf("git/grep: %s", outcome.CommandError)
 		}
 		// Acknowledged drops are printed on every run: a decision recorded in
 		// the registry is still a contract change a reviewer must see.
@@ -76,26 +76,26 @@ func setupContractConsumers(fs *flag.FlagSet) Check {
 			inv.Stderr.Printf("contract-consumers: FAIL — %d acknowledgement(s) match no drop between %s and %s: %v\n"+
 				"  Remove them: an acknowledgement that outlived its drop pre-approves the next removal of that tag from that file.\n",
 				len(outcome.StaleAcknowledgements), *baseRef, *headRef, outcome.StaleAcknowledgements)
-			return Fail, nil
+			return outcome, nil
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("contract-consumers: FAIL — %d consumer reference(s) to dropped JSON tag(s) (between %s and %s):\n",
 				len(outcome.Findings), *baseRef, *headRef)
 			inv.Stderr.Print(contractconsumers.FormatFindings(outcome.Findings))
 			inv.Stderr.Println("")
 			inv.Stderr.Printf("Fix:\n  %s\n", contractconsumers.ActionableFix())
-			return Fail, nil
+			return outcome, nil
 		}
-		verdict := "PASS"
+		label := "PASS"
 		if outcome.Partial {
-			verdict = "PASS (PARTIAL)"
+			label = "PASS (PARTIAL)"
 		}
 		if len(outcome.DroppedTags) == 0 {
-			inv.Stdout.Printf("contract-consumers: %s — no JSON tag drops in tracked files\n", verdict)
+			inv.Stdout.Printf("contract-consumers: %s — no JSON tag drops in tracked files\n", label)
 		} else {
 			inv.Stdout.Printf("contract-consumers: %s — %d JSON tag(s) dropped + ZERO consumer reads found: %v\n",
-				verdict, len(outcome.DroppedTags), outcome.DroppedTags)
+				label, len(outcome.DroppedTags), outcome.DroppedTags)
 		}
-		return Pass, nil
+		return outcome, nil
 	}
 }

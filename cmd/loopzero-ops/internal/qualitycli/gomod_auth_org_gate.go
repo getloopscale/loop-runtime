@@ -28,16 +28,16 @@ func setupGoModAuthOrg(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		rep, err := gomodauthorg.Check(inv.Root)
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if rep.OK() {
+		if rep.Verdict() == verdict.Pass {
 			inv.Stdout.Printf("gomod-auth-org: PASS — auth org matches the go.mod requirement (%v)\n",
 				rep.RequiredOrgs)
-			return Pass, nil
+			return rep, nil
 		}
 		for _, f := range rep.Findings {
 			inv.Stderr.Printf("gomod-auth-org: FAIL %s — %s\n", f.File, f.Message)
 		}
-		return Fail, nil
+		return rep, nil
 	}
 }

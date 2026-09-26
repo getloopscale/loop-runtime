@@ -71,6 +71,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // The four ways this gate refuses. Each is typed so the caller can never collapse
@@ -122,6 +124,17 @@ type Outcome struct {
 	NewCandidates []Finding
 	StaleEntries  []Entry
 	Reason        string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Check runs the scan and applies the policy.
@@ -196,15 +209,17 @@ func Check(ctx context.Context, cfg Config) (Outcome, error) {
 				names = append(names, f.String())
 			}
 		}
-		return out, fmt.Errorf("%w: %s", ErrLiveSecret, strings.Join(names, "; "))
+		out.Violation = fmt.Errorf("%w: %s", ErrLiveSecret, strings.Join(names, "; "))
+		return out, nil
 	}
 	if len(out.NewCandidates) > 0 {
 		var names []string
 		for _, f := range out.NewCandidates {
 			names = append(names, f.String())
 		}
-		return out, fmt.Errorf("%w (%d): %s — remove the secret, or adjudicate with `--write` (which REFUSES while any live one exists)",
+		out.Violation = fmt.Errorf("%w (%d): %s — remove the secret, or adjudicate with `--write` (which REFUSES while any live one exists)",
 			ErrUnadjudicated, len(out.NewCandidates), strings.Join(names, "; "))
+		return out, nil
 	}
 
 	// The reason says what was ESTABLISHED. "scan clean" is the phrase that sustained five
@@ -262,6 +277,16 @@ func (e execScanner) Scan(ctx context.Context, root string) (string, error) {
 // the installed version has (EC-7).
 func isScanRan(code int) bool { return code == 0 || code == 183 }
 
+// Generated reports an adjudicated baseline rewritten from a scan.
+type Generated struct {
+	// Candidates is the number of findings the baseline now adjudicates.
+	Candidates int
+}
+
+// Verdict is Pass: generating is an operation, and a Generated exists only
+// when the baseline was written. A live finding refuses the write, as an error.
+func (Generated) Verdict() verdict.Verdict { return verdict.Pass }
+
 // Generate (re)writes the adjudicated baseline.
 //
 // Runs with `--no-verification` ON PURPOSE: that mode is a strict superset of the
@@ -270,7 +295,7 @@ func isScanRan(code int) bool { return code == 0 || code == 183 }
 // lock that fails because of a network accident gets switched off.
 //
 // The refusal when a live finding exists lives in WriteBaseline, where it cannot be bypassed.
-func Generate(ctx context.Context, cfg Config) (int, error) {
+func Generate(ctx context.Context, cfg Config) (Generated, error) {
 	root := cfg.RepoRoot
 	if root == "" {
 		root = "."
@@ -294,20 +319,20 @@ func Generate(ctx context.Context, cfg Config) (int, error) {
 	raw, err := scanner.Scan(scanCtx, root)
 	if err != nil {
 		if errors.Is(err, ErrScannerMissing) || errors.Is(err, ErrScanFailed) {
-			return 0, err
+			return Generated{}, err
 		}
-		return 0, fmt.Errorf("%w: %w", ErrScanFailed, err)
+		return Generated{}, fmt.Errorf("%w: %w", ErrScanFailed, err)
 	}
 	findings, err := ParseFindings(strings.NewReader(raw))
 	if err != nil {
-		return 0, err
+		return Generated{}, err
 	}
 	if err := WriteBaseline(basePath, findings); err != nil {
-		return 0, err
+		return Generated{}, err
 	}
 	b, err := LoadBaseline(basePath)
 	if err != nil {
-		return 0, err
+		return Generated{}, err
 	}
-	return len(b.Entries), nil
+	return Generated{Candidates: len(b.Entries)}, nil
 }

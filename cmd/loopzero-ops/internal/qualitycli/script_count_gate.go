@@ -5,7 +5,6 @@ package qualitycli
 
 import (
 	"flag"
-	"fmt"
 	"os"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scriptcount"
@@ -29,37 +28,36 @@ func setupScriptCount(fs *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		data, err := os.ReadFile(*baselinePath) // #nosec G304 -- repo-internal baseline path
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		base, err := scriptcount.ParseBaseline(data)
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		v, err := scriptcount.Check(inv.Root, base)
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		if *update {
-			if v.Count > base.CanonicalSH {
-				inv.Stderr.Printf("script-count: refuse to ratchet UP (%d > baseline %d)\n", v.Count, base.CanonicalSH)
-				return Fail, nil
+			r, err := scriptcount.Ratchet(*baselinePath, v)
+			if err != nil {
+				return nil, err
 			}
-			out := fmt.Sprintf("{\n  \"canonical_sh\": %d\n}\n", v.Count)
-			if err := os.WriteFile(*baselinePath, []byte(out), 0o644); err != nil { // #nosec G306 -- repo-internal baseline
-				return Fail, err
+			if r.Verdict() == verdict.Fail {
+				inv.Stderr.Printf("script-count: refuse to ratchet UP (%d > baseline %d)\n", r.Count, r.Baseline)
+				return r, nil
 			}
-			inv.Stdout.Printf("script-count: baseline ratcheted to %d\n", v.Count)
-			return Pass, nil
+			inv.Stdout.Printf("script-count: baseline ratcheted to %d\n", r.Count)
+			return r, nil
 		}
-		if !v.OK {
+		switch {
+		case v.Verdict() == verdict.Fail:
 			inv.Stderr.Printf("script-count: FAIL — %d canonical .sh > baseline %d (a PR may never increase the count; see 2026-05-24-script-minimization-program-plan)\n", v.Count, v.Baseline)
-			return Fail, nil
-		}
-		if v.Improved {
+		case v.Improved:
 			inv.Stdout.Printf("script-count: PASS — %d canonical .sh (< baseline %d; run --update-baseline to ratchet)\n", v.Count, v.Baseline)
-			return Pass, nil
+		default:
+			inv.Stdout.Printf("script-count: PASS — %d canonical .sh (== baseline %d)\n", v.Count, v.Baseline)
 		}
-		inv.Stdout.Printf("script-count: PASS — %d canonical .sh (== baseline %d)\n", v.Count, v.Baseline)
-		return Pass, nil
+		return v, nil
 	}
 }

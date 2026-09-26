@@ -38,7 +38,7 @@ func setupSpotcheckDimension(fs *flag.FlagSet) Check {
 			if env := os.Getenv("SPOTCHECK_SEED"); env != "" {
 				v, err := strconv.ParseInt(env, 10, 64)
 				if err != nil {
-					return Fail, usageError("SPOTCHECK_SEED=%q is not an integer", env)
+					return nil, usageError("SPOTCHECK_SEED=%q is not an integer", env)
 				}
 				s = v
 			}
@@ -48,11 +48,11 @@ func setupSpotcheckDimension(fs *flag.FlagSet) Check {
 		}
 		outcome, err := spotcheck.Run(spotcheck.Config{Seed: s})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		for _, m := range outcome.Messages {
 			inv.Stdout.Println(m)
 		}
-		return Pass, nil
+		return outcome, nil
 	}
 }

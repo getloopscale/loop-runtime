@@ -63,7 +63,7 @@ func TestFailureInOneModuleDoesNotBlockTheOthers(t *testing.T) {
 		lint:     map[string]int{"api": 0},
 		failures: map[string]error{"pkg": errors.New("golangci-lint blew up in pkg")},
 	}
-	out, err := Check(Config{RepoRoot: root, Runner: r})
+	out, err := violationOf(Check(Config{RepoRoot: root, Runner: r}))
 
 	if len(r.seen) != 2 {
 		t.Fatalf("BOTH modules must be run; seen=%v", r.seen)
@@ -84,7 +84,7 @@ func TestOutputStatesTheCountPerModule(t *testing.T) {
 		lint: map[string]int{"api": 0, "cmd/loopzero-ops": 221},
 		fmtc: map[string]int{"api": 70, "cmd/loopzero-ops": 0},
 	}
-	out, err := Check(Config{RepoRoot: root, Runner: r})
+	out, err := violationOf(Check(Config{RepoRoot: root, Runner: r}))
 	if err != nil {
 		t.Fatalf("equal to frozen passes: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestOutputStatesTheCountPerModule(t *testing.T) {
 func TestRegressionFails(t *testing.T) {
 	root := repoWith(t, `{"lint":{"api":0},"gofmt":{"api":0}}`, "api")
 	r := &fakeRunner{lint: map[string]int{"api": 1}}
-	out, err := Check(Config{RepoRoot: root, Runner: r})
+	out, err := violationOf(Check(Config{RepoRoot: root, Runner: r}))
 	if !errors.Is(err, ErrRegression) {
 		t.Fatalf("a regression fails; err=%v", err)
 	}
@@ -113,7 +113,7 @@ func TestRegressionFails(t *testing.T) {
 func TestGofmtHasItsOwnRatchet(t *testing.T) {
 	root := repoWith(t, `{"lint":{"pkg":0},"gofmt":{"pkg":30}}`, "pkg")
 	r := &fakeRunner{lint: map[string]int{"pkg": 0}, fmtc: map[string]int{"pkg": 31}}
-	out, err := Check(Config{RepoRoot: root, Runner: r})
+	out, err := violationOf(Check(Config{RepoRoot: root, Runner: r}))
 	if !errors.Is(err, ErrRegression) {
 		t.Fatalf("a formatting regression fails even with lint at 0; err=%v", err)
 	}
@@ -125,7 +125,7 @@ func TestGofmtHasItsOwnRatchet(t *testing.T) {
 func TestUndeclaredModuleFails(t *testing.T) {
 	root := repoWith(t, `{"lint":{"api":0},"gofmt":{"api":0}}`, "api", "module/new")
 	r := &fakeRunner{lint: map[string]int{"api": 0, "module/new": 5}}
-	if _, err := Check(Config{RepoRoot: root, Runner: r}); !errors.Is(err, ErrUndeclaredModule) {
+	if _, err := violationOf(Check(Config{RepoRoot: root, Runner: r})); !errors.Is(err, ErrUndeclaredModule) {
 		t.Fatalf("a new module enters declared, never silently; err=%v", err)
 	}
 }
@@ -135,7 +135,7 @@ func TestMissingBaselineFailsTheGate(t *testing.T) {
 	p := filepath.Join(root, "api", "go.mod")
 	_ = os.MkdirAll(filepath.Dir(p), 0o750)
 	_ = os.WriteFile(p, []byte("module x\n"), 0o600)
-	if _, err := Check(Config{RepoRoot: root, Runner: &fakeRunner{}}); !errors.Is(err, ErrBaselineMissing) {
+	if _, err := violationOf(Check(Config{RepoRoot: root, Runner: &fakeRunner{}})); !errors.Is(err, ErrBaselineMissing) {
 		t.Fatalf("without frozen counts no green is possible; err=%v", err)
 	}
 }

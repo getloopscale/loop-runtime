@@ -109,3 +109,39 @@ func TestAnUnreadableSkillIsIncompleteNotAViolation(t *testing.T) {
 		})
 	}
 }
+
+// A router whose markers are found but which enumerates no route gave the gate
+// nothing to vouch for: exit 5, and the report says what to fix without also
+// calling it a FAIL.
+func TestARouterWithNoEnumeratedRouteIsIncompleteNotAFailure(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "api", "internal", "server")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	router := "package server\n\nimport \"github.com/getloopscale/loopzero/api/internal/middleware\"\n\n" +
+		"func Router() {\n\tr.Group(func(r chi.Router) {\n" +
+		"\t\tr.Use(middleware.Auth(cfg.TokenValidator, cfg.MemberStore))\n" +
+		"\t\tprojects.Register(r, cfg)\n\t})\n}\n\n" +
+		"func registerProtectedRoutes(r chi.Router) {\n\tbuilds.Register(r, cfg)\n}\n"
+	if err := os.WriteFile(filepath.Join(dir, "router.go"), []byte(router), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	g, ok := Lookup("route-auth-coverage")
+	if !ok {
+		t.Fatal("route-auth-coverage is not registered")
+	}
+	var stdout, stderr bytes.Buffer
+
+	rc := g.Run([]string{"--root", root}, &stdout, &stderr)
+
+	if rc != exitcode.Incomplete {
+		t.Fatalf("exit = %d, want %d; stderr = %q", rc, exitcode.Incomplete, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "route-auth-coverage: FAIL") {
+		t.Fatalf("an incomplete run reported FAIL:\n%s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Fix: point the walker") {
+		t.Fatalf("the report must still say what to fix:\n%s", stderr.String())
+	}
+}

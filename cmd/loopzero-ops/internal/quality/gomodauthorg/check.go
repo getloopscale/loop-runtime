@@ -36,6 +36,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // authFiles are the places that configure module authentication. Each is checked against the
@@ -75,6 +77,9 @@ type Report struct {
 
 // OK reports whether the gate passed.
 func (r Report) OK() bool { return len(r.Findings) == 0 }
+
+// Verdict is Fail when any build file authenticates against another org.
+func (r Report) Verdict() verdict.Verdict { return verdict.Of(r.Findings) }
 
 // Check runs the gate against repoRoot.
 func Check(repoRoot string) (Report, error) {

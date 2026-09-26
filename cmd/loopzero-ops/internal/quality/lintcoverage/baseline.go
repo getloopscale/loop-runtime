@@ -45,8 +45,8 @@ type Improvement struct {
 	Was, Now int
 }
 
-// Verdict is the outcome of comparing one dimension.
-type Verdict struct {
+// Comparison is the outcome of comparing one dimension.
+type Comparison struct {
 	Regressions  []Regression
 	Improvements []Improvement
 	// Undeclared lists modules with no frozen entry. A new module enters DECLARED, otherwise
@@ -83,8 +83,8 @@ func LoadBaseline(path string) (Baseline, error) {
 }
 
 // Compare measures the observed counts against one frozen dimension.
-func (b Baseline) Compare(observed, frozen map[string]int, dimension string) Verdict {
-	var v Verdict
+func (b Baseline) Compare(observed, frozen map[string]int, dimension string) Comparison {
+	var v Comparison
 	mods := make([]string, 0, len(observed))
 	for m := range observed {
 		mods = append(mods, m)

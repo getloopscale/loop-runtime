@@ -36,9 +36,9 @@ func baseWith(t *testing.T, fs []Finding) string {
 
 func run(t *testing.T, sc Scanner, basePath string) (Outcome, error) {
 	t.Helper()
-	return Check(context.Background(), Config{
+	return violationOf(Check(context.Background(), Config{
 		RepoRoot: t.TempDir(), BaselinePath: basePath, Scanner: sc,
-	})
+	}))
 }
 
 // ADR-3. Human adjudication covers "this is not a secret" — never "this secret may live here".
@@ -87,10 +87,10 @@ func TestExecutionErrorFailsAndIsNotASkip(t *testing.T) {
 // Path 1: a missing scanner produces the SAME exit 0 as a clean repository.
 func TestMissingBinaryFails(t *testing.T) {
 	base := baseWith(t, found(t, line("Postgres", "a.md", "x", false)))
-	_, err := Check(context.Background(), Config{
+	_, err := violationOf(Check(context.Background(), Config{
 		RepoRoot: t.TempDir(), BaselinePath: base,
 		Scanner: execScanner{binary: "trufflehog-that-does-not-exist-" + t.Name()},
-	})
+	}))
 	if !errors.Is(err, ErrScannerMissing) {
 		t.Fatalf("a missing binary fails; err=%v", err)
 	}
@@ -133,10 +133,10 @@ func TestGreenSaysWhatWasEstablished(t *testing.T) {
 // EC-4. A hung scan locks the delivery gate forever.
 func TestExpiredDeadlineFails(t *testing.T) {
 	base := baseWith(t, found(t, line("Postgres", "a.md", "x", false)))
-	_, err := Check(context.Background(), Config{
+	_, err := violationOf(Check(context.Background(), Config{
 		RepoRoot: t.TempDir(), BaselinePath: base, Timeout: time.Nanosecond,
 		Scanner: sleepyScanner{},
-	})
+	}))
 	if !errors.Is(err, ErrScanFailed) {
 		t.Fatalf("an expired deadline fails, never skips; err=%v", err)
 	}
@@ -182,7 +182,7 @@ func TestRealTreeIsAdjudicated(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(repoRoot, defaultBaselineRel)); err != nil {
 		t.Fatalf("the baseline must be versioned: %v", err)
 	}
-	out, err := Check(context.Background(), Config{RepoRoot: repoRoot})
+	out, err := violationOf(Check(context.Background(), Config{RepoRoot: repoRoot}))
 	if err != nil {
 		for i, f := range out.NewCandidates {
 			if i == 10 {

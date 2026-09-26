@@ -58,6 +58,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/featurefence"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config controls the gate behavior.
@@ -117,6 +118,18 @@ type Outcome struct {
 	// removal of that tag from that file.
 	StaleAcknowledgements []string
 	CommandError          string // populated if git or grep failed
+}
+
+// Verdict is Fail when a tracked path is missing (the gate would read nothing),
+// when an acknowledgement outlived its drop, or when a consumer still reads a
+// dropped tag; Pass otherwise. A missing consumer root makes the pass partial,
+// not a failure. CommandError is not a verdict: a check whose git or grep
+// failed could not measure.
+func (o Outcome) Verdict() verdict.Verdict {
+	if len(o.MissingTracked) > 0 || len(o.StaleAcknowledgements) > 0 || !o.Pass {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // trackedFiles enumerates source files whose struct field drops trigger the gate.

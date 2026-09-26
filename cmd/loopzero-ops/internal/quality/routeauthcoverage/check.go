@@ -26,6 +26,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const routerPath = "api/internal/server/router.go"
@@ -92,6 +94,17 @@ type Outcome struct {
 	Violations         []string
 	// OffRouterUndeclared lists registrations outside router.go with no declaration.
 	OffRouterUndeclared []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrViolations means at least one route is unprotected and un-allowlisted.
@@ -191,7 +204,8 @@ func Check(cfg Config) (Outcome, error) {
 		Violations: violations,
 	}
 	if len(violations) > 0 {
-		return outcome, ErrViolations
+		outcome.Violation = ErrViolations
+		return outcome, nil
 	}
 	// The enumeration floor (B-040). Order matters and is load-bearing: this
 	// runs AFTER ErrViolations, and it counts routes ENUMERATED — approved plus
@@ -233,7 +247,8 @@ func Check(cfg Config) (Outcome, error) {
 	}
 	if len(undeclared) > 0 {
 		outcome.OffRouterUndeclared = undeclared
-		return outcome, ErrUndeclaredOffRouterMount
+		outcome.Violation = ErrUndeclaredOffRouterMount
+		return outcome, nil
 	}
 	return outcome, nil
 }

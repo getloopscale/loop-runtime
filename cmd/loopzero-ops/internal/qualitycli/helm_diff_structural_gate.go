@@ -30,8 +30,7 @@ func setupHelmDiffStructural(fs *flag.FlagSet) Check {
 	pr := fs.String("pr", "", "path to PR rendered YAML")
 	return func(inv Invocation) (verdict.Result, error) {
 		if *base == "" || *pr == "" {
-			inv.Stderr.Println("helm-diff-structural: --base and --pr are required")
-			return Fail, nil
+			return nil, usageError("--base and --pr are required")
 		}
 
 		outcome, err := helmdiffstructural.Check(helmdiffstructural.Config{
@@ -40,14 +39,11 @@ func setupHelmDiffStructural(fs *flag.FlagSet) Check {
 			PRPath:   *pr,
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		for _, m := range outcome.Messages {
 			inv.Stdout.Println(m)
 		}
-		if !outcome.Pass {
-			return Fail, nil
-		}
-		return Pass, nil
+		return outcome, nil
 	}
 }

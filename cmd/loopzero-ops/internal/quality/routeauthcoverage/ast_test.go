@@ -58,7 +58,7 @@ func TestWithChainedRegistrationIsEnumerated(t *testing.T) {
 	root := tree(t, map[string]string{
 		routerPath: routerWith("\t\tr.With(rateLimit...).Post(\"/api/v1/builds\", h)\n", ""),
 	})
-	out, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	out, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestWithChainedRegistrationOutsideAuthIsAViolation(t *testing.T) {
 	root := tree(t, map[string]string{
 		routerPath: routerWith("\t\tr.Get(\"/api/v1/ok\", h)\n", "\tr.With(rateLimit...).Post(\"/api/v1/open\", h)\n"),
 	})
-	out, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	out, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("an `r.With(...)` route outside the Auth group and outside the allowlist must fail; err=%v out=%+v", err, out)
 	}
@@ -89,7 +89,7 @@ func TestCommentedRegistrationIsNotEnumerated(t *testing.T) {
 		routerPath: routerWith("\t\tr.Get(\"/api/v1/ok\", h)\n",
 			"\t// r.Post(\"/api/v1/ghost\", h) — turned off in 2026-01\n"),
 	})
-	out, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	out, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -111,7 +111,7 @@ func Register(r chi.Router) {
 }
 `,
 	})
-	_, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	_, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if !errors.Is(err, ErrUndeclaredOffRouterMount) {
 		t.Fatalf("a registration outside router.go must fail until it is declared; err=%v", err)
 	}
@@ -131,7 +131,7 @@ func Register(r chi.Router) {
 	cfg := Config{RepoRoot: root, MinRoutes: 1, OffRouterMounts: map[string]string{
 		"api/internal/routes/declared/mount.go": "canonical mount point, called from inside the protected range",
 	}}
-	if _, err := Check(cfg); err != nil {
+	if _, err := violationOf(Check(cfg)); err != nil {
 		t.Fatalf("a mount point declared with a reason must pass: %v", err)
 	}
 }
@@ -150,7 +150,7 @@ func Register(r chi.Router) {
 	cfg := Config{RepoRoot: root, MinRoutes: 1, OffRouterMounts: map[string]string{
 		"api/internal/routes/empty/mount.go": "   ",
 	}}
-	if _, err := Check(cfg); !errors.Is(err, ErrUndeclaredOffRouterMount) {
+	if _, err := violationOf(Check(cfg)); !errors.Is(err, ErrUndeclaredOffRouterMount) {
 		t.Fatalf("a declaration without a reason declares nothing; err=%v", err)
 	}
 }
@@ -167,7 +167,7 @@ func TestX(t *testing.T) {
 }
 `,
 	})
-	if _, err := Check(Config{RepoRoot: root, MinRoutes: 1}); err != nil {
+	if _, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1})); err != nil {
 		t.Fatalf("a registration in a test file is not public surface: %v", err)
 	}
 }
@@ -179,7 +179,7 @@ func TestEnumerationCollapseBelowFloorFails(t *testing.T) {
 	root := tree(t, map[string]string{
 		routerPath: routerWith("\t\tr.Get(\"/api/v1/ok\", h)\n", ""),
 	})
-	_, err := Check(Config{RepoRoot: root, MinRoutes: 10})
+	_, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 10}))
 	if !errors.Is(err, ErrEnumerationBelowFloor) {
 		t.Fatalf("1 route under a floor of 10 is a collapse, not a small system; err=%v", err)
 	}
@@ -191,7 +191,7 @@ func TestExactlyAtTheFloorPasses(t *testing.T) {
 	root := tree(t, map[string]string{
 		routerPath: routerWith("\t\tr.Get(\"/a\", h)\n\t\tr.Get(\"/b\", h)\n", ""),
 	})
-	if _, err := Check(Config{RepoRoot: root, MinRoutes: 2}); err != nil {
+	if _, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 2})); err != nil {
 		t.Fatalf("exactly at the floor must pass: %v", err)
 	}
 }
@@ -200,7 +200,7 @@ func TestExactlyAtTheFloorPasses(t *testing.T) {
 // not enumerate zero and land on an error that talks about something else.
 func TestUnparseableRouterIsAnInstrumentationError(t *testing.T) {
 	root := tree(t, map[string]string{routerPath: "package server\nfunc broken( {\n"})
-	_, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	_, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if !errors.Is(err, ErrRouterUnparseable) {
 		t.Fatalf("an invalid router.go must fail as a parse error; err=%v", err)
 	}
@@ -210,7 +210,7 @@ func TestUnparseableRouterIsAnInstrumentationError(t *testing.T) {
 // this proves what it sees in what exists — and it is the assertion that pins the fix,
 // because the count had to RISE from 42 to ~71.
 func TestRealRouterEnumeratesTheChainedFormToo(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot})
+	out, err := violationOf(Check(Config{RepoRoot: repoRoot}))
 	if err != nil {
 		t.Fatalf("Check on the real tree: %v", err)
 	}

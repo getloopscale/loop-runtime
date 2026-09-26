@@ -65,7 +65,7 @@ func registerProtectedRoutes(r chi.Router) {
 
 func TestCheck_CanonicalPasses(t *testing.T) {
 	root := writeFixture(t, canonicalRouter)
-	outcome, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	outcome, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if err != nil {
 		t.Fatalf("expected PASS, got err=%v violations=%v", err, outcome.Violations)
 	}
@@ -82,7 +82,7 @@ func TestCheck_CanonicalPasses(t *testing.T) {
 
 func TestCheck_MissingRouterFails(t *testing.T) {
 	root := t.TempDir()
-	_, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	_, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if !errors.Is(err, ErrRouterNotFound) {
 		t.Fatalf("expected ErrRouterNotFound, got %v", err)
 	}
@@ -104,7 +104,7 @@ func NewRouter() *chi.Mux {
 }
 `
 	root := writeFixture(t, body)
-	_, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	_, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if !errors.Is(err, ErrAuthGroupMissing) {
 		t.Fatalf("expected ErrAuthGroupMissing, got %v", err)
 	}
@@ -119,7 +119,7 @@ func extra() {
 }
 `
 	root := writeFixture(t, body)
-	outcome, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	outcome, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for unprotected route, got %v (violations=%v)", err, outcome.Violations)
 	}
@@ -139,7 +139,7 @@ func adminExtra() {
 }
 `
 	root := writeFixture(t, body)
-	outcome, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	outcome, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if err != nil {
 		t.Fatalf("expected PASS with allowlist prefix match, got err=%v violations=%v", err, outcome.Violations)
 	}
@@ -147,7 +147,7 @@ func adminExtra() {
 
 func TestCheck_RealRepoRouterPasses(t *testing.T) {
 	abs := qtestutil.RootFile(t, routerPath)
-	outcome, checkErr := Check(Config{RepoRoot: abs})
+	outcome, checkErr := violationOf(Check(Config{RepoRoot: abs}))
 	if checkErr != nil {
 		t.Fatalf("real router.go must satisfy invariant. err=%v violations=%v", checkErr, outcome.Violations)
 	}
@@ -189,7 +189,7 @@ func TestCheck_ZeroRoutesEnumerated_IsAFailure(t *testing.T) {
 		"\t\tprojects.Register(r, cfg)\n",
 		"\tbuilds.Register(r, cfg)\n", "")
 
-	out, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	out, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if !errors.Is(err, ErrNoRoutesEnumerated) {
 		t.Fatalf("a router with the markers and zero registrations must FAIL, not pass vacuously; got err=%v outcome=%+v", err, out)
 	}
@@ -206,7 +206,7 @@ func TestCheck_AllRoutesViolating_ReportsViolationsNotEmptyEnumeration(t *testin
 		"\t// nothing protected either\n",
 		"\tr.Get(\"/api/v1/alpha\", h)\n\tr.Post(\"/api/v1/beta\", h)\n\tr.Delete(\"/api/v1/gamma\", h)\n")
 
-	out, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	out, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if errors.Is(err, ErrNoRoutesEnumerated) {
 		t.Fatalf("BUG: %d unprotected routes reported as an empty enumeration — the diagnosis points at the gate instead of at the unprotected surface", len(out.Violations))
 	}
@@ -222,7 +222,7 @@ func TestCheck_AllRoutesViolating_ReportsViolationsNotEmptyEnumeration(t *testin
 func TestCheck_SingleRouteEnumerated_Passes(t *testing.T) {
 	root := synthRouter(t, "\t\tr.Get(\"/api/v1/only\", h)\n", "", "")
 
-	out, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	out, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if err != nil {
 		t.Fatalf("a single approved route must pass; got %v", err)
 	}
@@ -237,7 +237,7 @@ func TestCheck_SingleRouteEnumerated_Passes(t *testing.T) {
 // — passed vacuously, because no test name matched.
 func TestCheck_RealTreeStillPasses(t *testing.T) {
 	root := qtestutil.Root(t)
-	out, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	out, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if err != nil {
 		t.Fatalf("the shipping tree must still pass; got %v", err)
 	}

@@ -53,7 +53,7 @@ func freeze(t *testing.T, root string) string {
 // A missing baseline is a FAILURE, never a skip: without it the ratchet compares nothing.
 func TestMissingBaselineIsAFailure(t *testing.T) {
 	root := treeWith(t, 8, 1, 1)
-	_, err := CheckDerived(root, filepath.Join(root, "does-not-exist.json"), DefaultThresholds())
+	_, err := violationOf(CheckDerived(root, filepath.Join(root, "does-not-exist.json"), DefaultThresholds()))
 	if !errors.Is(err, ErrBaselineMissing) {
 		t.Fatalf("a missing baseline must fail loudly; err=%v", err)
 	}
@@ -62,7 +62,7 @@ func TestMissingBaselineIsAFailure(t *testing.T) {
 // The frozen tree passes against itself — without this the ratchet would be born red.
 func TestFrozenTreePassesAgainstItself(t *testing.T) {
 	root := treeWith(t, 8, 1, 1)
-	if _, err := CheckDerived(root, freeze(t, root), DefaultThresholds()); err != nil {
+	if _, err := violationOf(CheckDerived(root, freeze(t, root), DefaultThresholds())); err != nil {
 		t.Fatalf("the measured tree must pass against its own baseline: %v", err)
 	}
 }
@@ -78,7 +78,7 @@ func TestMoreE2EThanBaselineRegresses(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	out, err := CheckDerived(root, base, DefaultThresholds())
+	out, err := violationOf(CheckDerived(root, base, DefaultThresholds()))
 	if !errors.Is(err, ErrRegressed) {
 		t.Fatalf("raising e2e above the baseline is a regression; err=%v out=%+v", err, out)
 	}
@@ -97,7 +97,7 @@ func TestImprovingIsNotARegression(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := CheckDerived(root, base, DefaultThresholds()); err != nil {
+	if _, err := violationOf(CheckDerived(root, base, DefaultThresholds())); err != nil {
 		t.Fatalf("more unit tests improve the pyramid and must not fail: %v", err)
 	}
 }
@@ -106,7 +106,7 @@ func TestImprovingIsNotARegression(t *testing.T) {
 // against a file that declared 0.1% e2e, that is, against fiction.
 func TestAspirationGapIsReportedNotBlocking(t *testing.T) {
 	root := treeWith(t, 5, 1, 4) // 50/10/40 — far above the e2e target
-	out, err := CheckDerived(root, freeze(t, root), DefaultThresholds())
+	out, err := violationOf(CheckDerived(root, freeze(t, root), DefaultThresholds()))
 	if err != nil {
 		t.Fatalf("distance to the ADR target does not block: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestAspirationGapIsReportedNotBlocking(t *testing.T) {
 // file that describes the past.
 func TestRealTreeMatchesTheFrozenBaseline(t *testing.T) {
 	base := filepath.Join(repoRoot, "infra/quality/test-pyramid-baseline.json")
-	out, err := CheckDerived(repoRoot, base, DefaultThresholds())
+	out, err := violationOf(CheckDerived(repoRoot, base, DefaultThresholds()))
 	if err != nil {
 		t.Fatalf("the real tree regressed relative to the baseline: %v (%+v)", err, out.Regressions)
 	}
@@ -136,7 +136,7 @@ func TestRealTreeMatchesTheFrozenBaseline(t *testing.T) {
 // reported (they were not relaxed).
 func TestE2EAspirationGapIsSilencedAfterADRAmendment(t *testing.T) {
 	root := treeWith(t, 5, 1, 4) // 50/10/40 — e2e far above the D7 target
-	out, err := CheckDerived(root, freeze(t, root), DefaultThresholds())
+	out, err := violationOf(CheckDerived(root, freeze(t, root), DefaultThresholds()))
 	if err != nil {
 		t.Fatalf("the ratchet must not fail the frozen tree: %v", err)
 	}

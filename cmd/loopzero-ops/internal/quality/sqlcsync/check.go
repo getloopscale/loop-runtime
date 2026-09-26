@@ -32,6 +32,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config controls the gate behavior.
@@ -60,6 +62,10 @@ type Outcome struct {
 	// SqlcVersion is the version of the sqlc binary used (for evidence + debug).
 	SqlcVersion string
 }
+
+// Verdict is Pass when the committed generated/ matches a fresh sqlc
+// generate, and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Default paths relative to RepoRoot.
 const (

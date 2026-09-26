@@ -17,6 +17,8 @@ package spotcheck
 import (
 	"fmt"
 	"math/rand"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Dimensions are the audit dimensions the spotcheck samples from.
@@ -45,6 +47,10 @@ type Outcome struct {
 	// CLI runner prints to stdout.
 	Messages []string
 }
+
+// Verdict is Pass: a spot check selects what to audit next and judges
+// nothing, so an Outcome exists only when the selection was made.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.Pass }
 
 // summaryFile is the 2026-05-11 audit baseline. It lived under the gitignored
 // .claude/knowledge-base/ and was deleted in f082f6ecd, so the only copy a

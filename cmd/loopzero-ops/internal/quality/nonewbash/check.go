@@ -29,6 +29,7 @@ import (
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/revrange"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellscript"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config tells Check where to operate.
@@ -44,6 +45,9 @@ type Outcome struct {
 	Pass       bool     // true if no violations
 	Violations []string // human-readable per-violation messages
 }
+
+// Verdict is Pass when no new script sits outside the allowlist, Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Check is the entry point invoked by `loopzero-ops quality no-new-bash`.
 // Returns outcome + error. Error is reserved for INFRASTRUCTURE failures

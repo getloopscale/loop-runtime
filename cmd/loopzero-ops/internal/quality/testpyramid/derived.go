@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testinventory"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // # Why the pyramid became DERIVED, and why the verdict is a ratchet
@@ -82,6 +84,17 @@ type DerivedOutcome struct {
 	// AspirationGaps are the distance to the ADR target — reported, not blocking,
 	// because the target was never measured against the real tree.
 	AspirationGaps []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o DerivedOutcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Pass reports whether nothing regressed.
@@ -119,6 +132,52 @@ func WriteBaseline(path string, inv testinventory.Inventory, measuredAt, note st
 }
 
 func round1(f float64) float64 { return float64(int(f*10+0.5)) / 10 }
+
+// DeferLabel is the PR label that defers the ratchet for a single PR.
+const DeferLabel = "pyramid-defer"
+
+// Deferred reports a run the DeferLabel excused from measuring.
+type Deferred struct{}
+
+// Verdict is Skip: a deferred run measured nothing, and that is the one case
+// where not measuring is the right answer.
+func (Deferred) Verdict() verdict.Verdict { return verdict.Skip }
+
+// Deferral returns a Deferred when labels (comma-separated, as PR_LABELS
+// carries them) include DeferLabel.
+func Deferral(labels string) (Deferred, bool) {
+	for _, lbl := range strings.Split(labels, ",") {
+		if strings.TrimSpace(lbl) == DeferLabel {
+			return Deferred{}, true
+		}
+	}
+	return Deferred{}, false
+}
+
+// Refrozen reports a baseline frozen from the current tree.
+type Refrozen struct {
+	Total                     int
+	UnitPct, IntegPct, E2EPct float64
+}
+
+// Verdict is Pass: freezing is an operation, and a Refrozen exists only when
+// the baseline was written.
+func (Refrozen) Verdict() verdict.Verdict { return verdict.Pass }
+
+// Refreeze derives the pyramid from the tree under repoRoot and freezes it at
+// baselinePath, dated measuredAt (YYYY-MM-DD).
+func Refreeze(repoRoot, baselinePath, measuredAt string) (Refrozen, error) {
+	derived, err := testinventory.Derive(repoRoot)
+	if err != nil {
+		return Refrozen{}, err
+	}
+	note := "Derived from the tree by testinventory.Derive, not declared (B-106)."
+	if err := WriteBaseline(baselinePath, derived, measuredAt, note); err != nil {
+		return Refrozen{}, err
+	}
+	u, i, e := derived.Ratios()
+	return Refrozen{Total: derived.Total(), UnitPct: u, IntegPct: i, E2EPct: e}, nil
+}
 
 // CheckDerived derives the pyramid from the tree and ratchets it against the frozen
 // baseline, reporting the distance to the ADR aspiration separately.
@@ -169,7 +228,8 @@ func CheckDerived(repoRoot, baselinePath string, thresholds Thresholds) (Derived
 	// intervention). The e2e gap is no longer reported; the ratchet stays active.
 
 	if !out.Pass() {
-		return out, ErrRegressed
+		out.Violation = ErrRegressed
+		return out, nil
 	}
 	return out, nil
 }

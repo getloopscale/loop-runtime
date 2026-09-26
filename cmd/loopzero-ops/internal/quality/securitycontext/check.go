@@ -21,6 +21,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultHelmDir holds bootstrap charts, relative to repo root.
@@ -55,6 +57,9 @@ type ChartResult struct {
 type Config struct {
 	Root    string
 	HelmDir string // default DefaultHelmDir (relative to Root)
+	// Gate enforces the audit: a NON-CONFORMANT chart without an ADR exception
+	// fails the run. Without it the run is a report and never fails.
+	Gate bool
 }
 
 // Outcome captures the result.
@@ -62,6 +67,17 @@ type Outcome struct {
 	Pass       bool // true if no NON-CONFORMANT chart lacks an ADR exception
 	Charts     []ChartResult
 	Violations []string // chart names NON-CONFORMANT without ADR
+	// Gated records that the run enforced the audit (Config.Gate).
+	Gated bool
+}
+
+// Verdict is Fail when an enforced audit found a NON-CONFORMANT chart without
+// an ADR exception, and Pass otherwise: a report run never fails.
+func (o Outcome) Verdict() verdict.Verdict {
+	if !o.Gated {
+		return verdict.Pass
+	}
+	return verdict.FromPass(o.Pass)
 }
 
 // Check audits all charts under cfg.HelmDir.

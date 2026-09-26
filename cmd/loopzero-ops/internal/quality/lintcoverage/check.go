@@ -59,6 +59,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrRegression means a module got worse than its frozen count.
@@ -104,6 +106,17 @@ type Outcome struct {
 	Undeclared   []string
 	Failed       []Failure
 	Reason       string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Measure runs every module and returns the counts, WITHOUT judging them.
@@ -151,6 +164,43 @@ func Measure(cfg Config) (Outcome, error) {
 	return out, nil
 }
 
+// Refrozen reports a baseline rewritten from what was measured.
+type Refrozen struct {
+	// Reason is the per-module summary of the counts that were frozen.
+	Reason string
+}
+
+// Verdict is Pass: refreezing is an operation, and a Refrozen exists only when
+// the baseline was written. A refreeze that could not complete is an error.
+func (Refrozen) Verdict() verdict.Verdict { return verdict.Pass }
+
+// Refreeze measures every module and rewrites the baseline with the counts.
+//
+// It uses what was MEASURED, even after a regression — refreezing is a
+// deliberate act, and the baseline file's diff is where it becomes visible. A
+// run that measured nothing has nothing to freeze and is refused.
+func Refreeze(cfg Config) (Refrozen, error) {
+	out, err := Measure(cfg)
+	if err != nil {
+		return Refrozen{}, err
+	}
+	if len(out.Lint) == 0 && len(out.Gofmt) == 0 {
+		return Refrozen{}, errors.New("nothing measured, so nothing to freeze")
+	}
+	root := cfg.RepoRoot
+	if root == "" {
+		root = "."
+	}
+	path := cfg.BaselinePath
+	if path == "" {
+		path = filepath.Join(root, BaselineRelPath)
+	}
+	if err := WriteBaseline(path, out.Lint, out.Gofmt); err != nil {
+		return Refrozen{}, err
+	}
+	return Refrozen{Reason: out.Reason}, nil
+}
+
 // Check measures every module and applies the ratchet.
 func Check(cfg Config) (Outcome, error) {
 	out, err := Measure(cfg)
@@ -181,12 +231,14 @@ func Check(cfg Config) (Outcome, error) {
 	}
 	if len(out.Regressions) > 0 {
 		r := out.Regressions[0]
-		return out, fmt.Errorf("%w: %s [%s] %d → %d — the baseline refuses regression; fix it, or refreeze with `--write` explaining why",
+		out.Violation = fmt.Errorf("%w: %s [%s] %d → %d — the baseline refuses regression; fix it, or refreeze with `--write` explaining why",
 			ErrRegression, r.Module, r.Dimension, r.Was, r.Now)
+		return out, nil
 	}
 	if len(out.Undeclared) > 0 {
-		return out, fmt.Errorf("%w (%d): %s — a new module enters DECLARED, never silently; run `--write`",
+		out.Violation = fmt.Errorf("%w (%d): %s — a new module enters DECLARED, never silently; run `--write`",
 			ErrUndeclaredModule, len(out.Undeclared), strings.Join(out.Undeclared, ", "))
+		return out, nil
 	}
 	return out, nil
 }

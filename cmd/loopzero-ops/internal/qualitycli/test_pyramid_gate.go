@@ -7,10 +7,8 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testinventory"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testpyramid"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
@@ -31,39 +29,32 @@ func setupTestPyramid(fs *flag.FlagSet) Check {
 
 		// The PR label remains the way out for a single PR. It comes first because it
 		// is the one case where NOT measuring is the right answer.
-		for _, lbl := range strings.Split(os.Getenv("PR_LABELS"), ",") {
-			if strings.TrimSpace(lbl) == "pyramid-defer" {
-				inv.Stdout.Println("[pyramid] label 'pyramid-defer' — PASS (open the automatic issue)")
-				return Pass, nil
-			}
+		if d, ok := testpyramid.Deferral(os.Getenv("PR_LABELS")); ok {
+			inv.Stdout.Println("[pyramid] label 'pyramid-defer' — PASS (open the automatic issue)")
+			return d, nil
 		}
 
 		if *write {
-			derived, err := testinventory.Derive(inv.Root)
+			frozen, err := testpyramid.Refreeze(inv.Root, basePath, time.Now().UTC().Format("2006-01-02"))
 			if err != nil {
-				return Fail, err
+				return nil, err
 			}
-			note := "Derived from the tree by testinventory.Derive, not declared (B-106)."
-			if err := testpyramid.WriteBaseline(basePath, derived, time.Now().UTC().Format("2006-01-02"), note); err != nil {
-				return Fail, err
-			}
-			u, i, e := derived.Ratios()
 			inv.Stdout.Printf("[pyramid] baseline frozen: %d files — unit %.1f%% / integration %.1f%% / e2e %.1f%%\n",
-				derived.Total(), u, i, e)
-			return Pass, nil
+				frozen.Total, frozen.UnitPct, frozen.IntegPct, frozen.E2EPct)
+			return frozen, nil
 		}
 
 		o, err := testpyramid.CheckDerived(inv.Root, basePath, testpyramid.DefaultThresholds())
 		if err != nil {
-			if !isViolation(err, testpyramid.ErrRegressed) {
-				return Fail, err
-			}
-			inv.Stderr.Printf("[pyramid] FAIL — %v\n", err)
+			return nil, err
+		}
+		if o.Verdict() == verdict.Fail {
+			inv.Stderr.Printf("[pyramid] FAIL — %v\n", o.Violation)
 			for _, v := range o.Regressions {
 				inv.Stderr.Printf("  %s\n", v)
 			}
 			inv.Stderr.Println("[pyramid] the ratchet only allows improvement; use the 'pyramid-defer' label for a single PR")
-			return Fail, nil
+			return o, nil
 		}
 		inv.Stdout.Printf("[pyramid] PASS — %d files derived from the tree: unit %.1f%% / integration %.1f%% / e2e %.1f%%\n",
 			o.Total, o.UnitPct, o.IntegPct, o.E2EPct)
@@ -73,6 +64,6 @@ func setupTestPyramid(fs *flag.FlagSet) Check {
 		for _, g := range o.AspirationGaps {
 			inv.Stdout.Printf("[pyramid] distance to the ADR D7 target (reported, does not block): %s\n", g)
 		}
-		return Pass, nil
+		return o, nil
 	}
 }

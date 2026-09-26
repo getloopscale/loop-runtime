@@ -24,24 +24,7 @@ import (
 // Outcome (Pass/Fail), isViolation or errNotVerified. Those gates are listed
 // here EXACTLY: a new gate cannot join the list, and a migrated gate must leave
 // it, so the list only shrinks.
-var legacyOutcomeGates = []string{
-	"contract-consumers",
-	"english-only",
-	"git-diff-to-lines",
-	"gomod-auth-org",
-	"helm-diff-structural",
-	"lint-coverage",
-	"no-new-bash",
-	"route-auth-coverage",
-	"script-count",
-	"scripts-audit",
-	"security-context",
-	"spotcheck-dimension",
-	"sqlc-sync",
-	"test-pyramid",
-	"trufflehog-scan",
-	"unhomed-logic",
-}
+var legacyOutcomeGates = []string{}
 
 // legacyMarkers are the package-level identifiers through which an adapter
 // decides a verdict by hand.

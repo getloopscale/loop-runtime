@@ -4,13 +4,9 @@
 package qualitycli
 
 import (
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	iofs "io/fs"
-	"os"
-	"path/filepath"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/unhomedlogic"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
@@ -34,41 +30,26 @@ func setupUnhomedLogic(fs *flag.FlagSet) Check {
 	update := fs.Bool("update-baseline", false, "ratchet the baseline to current (write)")
 	fs.Bool("check", true, "ratchet against baseline (default)")
 	return func(inv Invocation) (verdict.Result, error) {
-		data, err := os.ReadFile(*allowlist) // #nosec G304 -- repo-internal allowlist path
-		switch {
-		case errors.Is(err, iofs.ErrNotExist):
-			// AN ABSENT ALLOWLIST DECLARES NO EXEMPTIONS — the same contract
-			// `internal/quality/nonewbash` states, and for the same measured reason:
-			// this allowlist lives under `.claude/`, which `3d4075ca3` (2026-09-08)
-			// removed from tracking, so it exists in no clone and on no runner.
-			// Measured 2026-09-16, this read returned 5 and blocked a push.
-			//
-			// Nothing exempt is the strictest reading, so losing the file cannot
-			// weaken the gate. A file that is PRESENT and unreadable stays fatal.
+		data, absent, err := unhomedlogic.LoadAllowlist(*allowlist)
+		if err != nil {
+			return nil, err
+		}
+		if absent {
 			inv.Stderr.Printf("unhomed-logic: no allowlist at %s — nothing is exempt\n", *allowlist)
-			data = nil
-		case err != nil:
-			return Fail, err
 		}
 		// Content verification: read each script body to invalidate suspect KEEPs.
-		readBody := func(p string) (string, bool) {
-			b, err := os.ReadFile(filepath.Join(inv.Root, p)) // #nosec G304 -- repo-internal script path
-			if err != nil {
-				return "", false
-			}
-			return string(b), true
-		}
-		current := unhomedlogic.Count(string(data), readBody)
+		readBody := unhomedlogic.BodiesUnder(inv.Root)
+		current := unhomedlogic.Count(data, readBody)
 
 		if *report {
 			for _, l := range current.Render() {
 				inv.Stdout.Println(l)
 			}
-			return Pass, nil
+			return unhomedlogic.Outcome{Current: current}, nil
 		}
 
 		if *ledger {
-			entries := unhomedlogic.Ledger(string(data), readBody)
+			entries := unhomedlogic.Ledger(data, readBody)
 			inv.Stdout.Println("# Phase-5 Classification Ledger — un-homed operational logic")
 			inv.Stdout.Println("")
 			inv.Stdout.Println("Proposed disposition per script (operator ratifies). Evidence is mechanical fact.")
@@ -85,29 +66,27 @@ func setupUnhomedLogic(fs *flag.FlagSet) Check {
 				inv.Stdout.Printf("| %s | %s | %d | %s | %s | %s |\n",
 					e.Domain, e.Path, e.LOC, yn(e.HasPython), yn(e.ShellsLive), fmt.Sprintf("%s (%s)", e.Disposition, e.Rationale))
 			}
-			return Pass, nil
+			return unhomedlogic.Outcome{Current: current}, nil
 		}
 
 		if *update {
-			b, _ := json.MarshalIndent(current, "", "  ")
-			if err := os.WriteFile(*baselinePath, append(b, '\n'), 0o600); err != nil {
-				return Fail, err
+			if err := unhomedlogic.WriteBaseline(*baselinePath, current); err != nil {
+				return nil, err
 			}
 			inv.Stdout.Printf("unhomed-logic: baseline ratcheted to %d un-homed\n", current.Total)
-			return Pass, nil
+			return unhomedlogic.Outcome{Current: current}, nil
 		}
 
 		// --check (default): fail if current exceeds baseline (regression).
-		bdata, err := os.ReadFile(*baselinePath) // #nosec G304 -- repo-internal baseline path
+		baseline, err := unhomedlogic.LoadBaseline(*baselinePath)
 		if err != nil {
-			inv.Stderr.Printf("unhomed-logic: no baseline at %s — run --update-baseline first\n", *baselinePath)
-			return Fail, err
+			var unreadable *unhomedlogic.BaselineReadError
+			if errors.As(err, &unreadable) {
+				inv.Stderr.Printf("unhomed-logic: no baseline at %s — run --update-baseline first\n", *baselinePath)
+			}
+			return nil, err
 		}
-		var baseline unhomedlogic.Counts
-		if err := json.Unmarshal(bdata, &baseline); err != nil {
-			return Fail, err
-		}
-		ok, regressions := unhomedlogic.RatchetCheck(current, baseline)
+		o := unhomedlogic.Ratchet(current, baseline)
 		for _, l := range current.Render() {
 			inv.Stdout.Println(l)
 		}
@@ -117,18 +96,18 @@ func setupUnhomedLogic(fs *flag.FlagSet) Check {
 				inv.Stderr.Printf("  - %s\n", s)
 			}
 			inv.Stderr.Println("A KEEP claim must be genuine operator glue. Move the logic to loopzero-ops/Go, or drop the KEEP tag.")
-			return Fail, nil
+			return o, nil
 		}
-		if !ok {
+		if o.Verdict() == verdict.Fail {
 			inv.Stderr.Println("unhomed-logic: FAIL — un-homed operational logic increased:")
-			for _, r := range regressions {
+			for _, r := range o.Regressions {
 				inv.Stderr.Printf("  - %s\n", r)
 			}
 			inv.Stderr.Println("Per plan 2026-05-23-operational-logic-capability-architecture: a PR may never")
 			inv.Stderr.Println("increase un-homed logic. Home the capability (loopzero-ops/declarative/test) or delete it.")
-			return Fail, nil
+			return o, nil
 		}
 		inv.Stdout.Printf("unhomed-logic: PASS — %d un-homed (≤ baseline %d)\n", current.Total, baseline.Total)
-		return Pass, nil
+		return o, nil
 	}
 }

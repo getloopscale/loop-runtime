@@ -27,14 +27,14 @@ func setupScriptsAudit(fs *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		scripts, err := scriptsaudit.ScanRepo(inv.Root)
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 
 		var w io.Writer
 		if *output != "" {
 			f, err := os.Create(*output)
 			if err != nil {
-				return Fail, err
+				return nil, err
 			}
 			defer f.Close()
 			w = f
@@ -43,12 +43,12 @@ func setupScriptsAudit(fs *flag.FlagSet) Check {
 		}
 
 		if err := scriptsaudit.EmitCSV(scripts, w); err != nil {
-			return Fail, err
+			return nil, err
 		}
 		if *output != "" {
 			// Visibility for operator running interactively
 			inv.Stderr.Printf("scripts-audit: %d scripts inventoried to %s\n", len(scripts), *output)
 		}
-		return Pass, nil
+		return scripts, nil
 	}
 }

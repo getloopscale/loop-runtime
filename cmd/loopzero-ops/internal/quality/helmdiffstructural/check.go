@@ -32,6 +32,7 @@ import (
 	"regexp"
 	"sort"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -81,6 +82,9 @@ type Outcome struct {
 	Violations []Violation
 	Messages   []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // extractTuples parses one rendered manifest file into a sorted slice of
 // (Kind, Name, Namespace) tuples using a real multi-document YAML decoder —

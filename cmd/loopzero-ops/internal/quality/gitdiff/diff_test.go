@@ -153,7 +153,7 @@ func TestRunGitDiff_DefaultRefs(t *testing.T) {
 
 	pairs, err := RunGitDiff(context.Background(), m, Config{})
 	require.NoError(t, err)
-	assert.Equal(t, []Pair{{File: "foo.go", Line: 2}}, pairs)
+	assert.Equal(t, Pairs{{File: "foo.go", Line: 2}}, pairs)
 }
 
 func TestRunGitDiff_CustomRefs(t *testing.T) {
@@ -165,7 +165,7 @@ func TestRunGitDiff_CustomRefs(t *testing.T) {
 		BaseRef: "origin/develop", HeadRef: "feature-x",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, []Pair{{File: "bar.go", Line: 20}}, pairs)
+	assert.Equal(t, Pairs{{File: "bar.go", Line: 20}}, pairs)
 }
 
 func TestRunGitDiff_GitFails_OpsDeployFailure(t *testing.T) {
