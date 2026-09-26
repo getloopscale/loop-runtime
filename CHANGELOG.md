@@ -14,6 +14,10 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Quality gate `kubeconform-schemas-sync`, wired into `task quality:gates`, fails when a loopzero.io kubeconform schema is missing, stale or orphaned against its CRD (#389)
+
+- `loopzero-ops kubeconform-schemas` (and `task helm:sync-kubeconform-schemas`) regenerates the loopzero.io kubeconform schemas from the CRDs, with a `--check` mode (#389)
+
 - The `english-only` quality gate now also refuses Portuguese Go identifiers and Portuguese file or directory names in tracked paths; a Go identifier can keep its name only with the same inline exemption and reason (#380)
 
 - `POST /internal/bootstrap` accepts `admin_user_id`, `admin_email` and `admin_display_name`, so a tenant can be provisioned for a login identity and not only a GitHub one (principle_violations#58, #383)
@@ -352,6 +356,8 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- Offline manifest validation now checks loopzero.io objects against their current CRDs: six schemas (ClusterCredential, Environment, GitRepositoryBinding, PreviewEnvironment, Tenant, LoopZeroApplication) lacked fields and constraints added since (#389)
 
 - `skill-script-paths` and `skill-suites` report a kit file they cannot read as "could not complete" (exit 5) instead of as a violation (exit 1) (principle_violations#256)
 
