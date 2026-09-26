@@ -56,7 +56,7 @@ func init() {
 func setupAlertRunbooks(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		o := alertrunbooks.Check(alertrunbooks.Config{Root: inv.Root})
-		if !o.Pass {
+		if o.Verdict() == verdict.Fail {
 			for _, v := range o.Violations {
 				inv.Stdout.Printf("RUNBOOK-MISSING VIOLATION: %s\n", v)
 			}
@@ -73,9 +73,9 @@ func setupAlertRunbooks(_ *flag.FlagSet) Check {
 			}
 			inv.Stderr.Println("To fix: add a `runbook_url:` annotation linking to recovery docs, OR add the")
 			inv.Stderr.Println("alert name to ExceptionList (cmd/loopzero-ops/internal/quality/alertrunbooks) with an explanation.")
-			return Fail, nil
+			return o, nil
 		}
 		inv.Stdout.Println("PASS — every alert has a runbook (or is in the exception list).")
-		return Pass, nil
+		return o, nil
 	}
 }

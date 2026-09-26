@@ -28,13 +28,13 @@ func setupCaddyfileDevServerDeny(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := caddyfiledevserverdeny.Check(caddyfiledevserverdeny.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if outcome.Skipped {
+		if outcome.Verdict() == verdict.Skip {
 			inv.Stdout.Println("caddyfile-dev-server-deny: SKIP — infra/local/Caddyfile not present")
-			return Pass, nil
+			return outcome, nil
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("caddyfile-dev-server-deny: FAIL — %d invariant(s) violated:\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  %s\n", v)
@@ -45,9 +45,9 @@ func setupCaddyfileDevServerDeny(_ *flag.FlagSet) Check {
 			inv.Stderr.Println("/vite.config.*, /package.json). The @dev_server_only matcher + `respond 404`")
 			inv.Stderr.Println("must be declared BEFORE the catch-all `handle {` so try_files fallback cannot")
 			inv.Stderr.Println("bypass the deny with SPA-fallback to index.html.")
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("caddyfile-dev-server-deny: PASS — app-dev block explicitly 404s dev-server-only paths (loopzero-cloud#141 defense-in-depth)")
-		return Pass, nil
+		return outcome, nil
 	}
 }

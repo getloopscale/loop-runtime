@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func TestCheck_HelmfileAbsentIsSkipped(t *testing.T) {
@@ -45,7 +46,7 @@ func TestCheck_RenderFailureFails(t *testing.T) {
 
 	out, err := Check(Config{RepoRoot: root, Render: failing})
 
-	if !errors.Is(err, ErrViolations) || out.Pass || out.Skipped {
+	if err != nil || out.Verdict() != verdict.Fail || out.Pass || out.Skipped {
 		t.Fatalf("render failure must fail the gate; out=%+v err=%v", out, err)
 	}
 	if !strings.Contains(strings.Join(out.Failures, "\n"), "LOOPZERO_DB_PASSWORD") {
@@ -57,7 +58,7 @@ func TestCheck_EmptyRenderFails(t *testing.T) {
 	root := writeHelmfileConfig(t)
 	empty := func(_, _ string) ([]byte, error) { return nil, nil }
 
-	if _, err := Check(Config{RepoRoot: root, Render: empty}); !errors.Is(err, ErrViolations) {
+	if out, err := Check(Config{RepoRoot: root, Render: empty}); err != nil || out.Verdict() != verdict.Fail {
 		t.Fatalf("an empty render must fail the gate; err=%v", err)
 	}
 }
@@ -89,7 +90,7 @@ func TestCheck_GoldenRenderPasses(t *testing.T) {
 func TestCheck_MissingHelmfileConfigIsAnError(t *testing.T) {
 	render := func(_, _ string) ([]byte, error) { return nil, nil }
 
-	if _, err := Check(Config{RepoRoot: t.TempDir(), Render: render}); err == nil || errors.Is(err, ErrViolations) {
+	if _, err := Check(Config{RepoRoot: t.TempDir(), Render: render}); err == nil {
 		t.Fatalf("a missing helmfile config is a broken setup, not a pass; err=%v", err)
 	}
 }

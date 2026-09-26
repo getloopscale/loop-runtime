@@ -19,6 +19,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultRulesDir holds the PrometheusRule manifests, relative to repo root.
@@ -110,6 +112,9 @@ type Outcome struct {
 	// test that was supposed to prove it.
 	LinksChecked int
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // DistinctAlerts counts ALERTS, not sites. The two numbers diverge exactly when an alert
 // lives in the `infra/helm` copy and in the `charts` copy — and the difference matters

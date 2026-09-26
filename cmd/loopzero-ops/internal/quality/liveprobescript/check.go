@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // AllowlistRel is the registry every live probe script must be listed in.
@@ -68,10 +69,21 @@ func (s Spec) Assertions() int {
 // Outcome collects every failed assertion.
 type Outcome struct {
 	Failures []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
 }
 
-// ErrViolations signals that at least one assertion failed; the failures are
-// in the Outcome. Any other error is structural.
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
+}
+
+// ErrViolations is the outcome's Violation when at least one assertion failed;
+// the failures are in the Outcome. An error Check returns is structural.
 var ErrViolations = errors.New("live probe script contract violated")
 
 // Check evaluates spec against the repository at repoRoot ("" means the
@@ -87,7 +99,7 @@ func Check(repoRoot string, spec Spec) (Outcome, error) {
 	failures := checkScript(filepath.Join(repoRoot, spec.Script), spec)
 	failures = append(failures, checkAllowlisted(filepath.Join(repoRoot, AllowlistRel), spec.Script)...)
 	if len(failures) > 0 {
-		return Outcome{Failures: failures}, ErrViolations
+		return Outcome{Failures: failures, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
 }

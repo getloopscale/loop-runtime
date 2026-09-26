@@ -32,13 +32,13 @@ func setupTestCoverageReport(fs *flag.FlagSet) Check {
 			BuildTags:         *tags,
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if outcome.Skipped {
+		if outcome.Verdict() == verdict.Skip {
 			inv.Stdout.Printf("test-coverage-report: SKIP — %s\n", outcome.SkipReason)
-			return Pass, nil
+			return outcome, nil
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("test-coverage-report: FAIL — coverage=%.2f%% (threshold=%.2f%%)", outcome.CoveragePct, *threshold)
 			if len(outcome.FailedPackages) > 0 {
 				inv.Stderr.Printf("; failed packages:")
@@ -47,9 +47,9 @@ func setupTestCoverageReport(fs *flag.FlagSet) Check {
 				}
 			}
 			inv.Stderr.Println()
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Printf("test-coverage-report: PASS — coverage=%.2f%% (threshold=%.2f%%)\n", outcome.CoveragePct, *threshold)
-		return Pass, nil
+		return outcome, nil
 	}
 }

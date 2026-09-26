@@ -26,21 +26,21 @@ func setupChartDefaultTags(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := chartdefaulttags.Check(chartdefaulttags.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if out.Skipped {
+		if out.Verdict() == verdict.Skip {
 			inv.Stdout.Printf("chart-default-tags: SKIP — %s\n", out.Reason)
-			return Pass, nil
+			return out, nil
 		}
-		if out.Pass {
+		if out.Verdict() == verdict.Pass {
 			inv.Stdout.Printf("chart-default-tags: PASS — %s\n", out.Reason)
-			return Pass, nil
+			return out, nil
 		}
 		inv.Stderr.Println("chart-default-tags: FAIL")
 		for _, f := range out.Findings {
 			inv.Stderr.Printf("  %s:%d — chart %s defaults to mutable tag %q\n", f.File, f.Line, f.Chart, f.Tag)
 		}
 		inv.Stderr.Println("Fix: prefer `tag: \"\"` — an empty default fails loudly if nothing overrides it, where `latest` fails silently (#232).")
-		return Fail, nil
+		return out, nil
 	}
 }

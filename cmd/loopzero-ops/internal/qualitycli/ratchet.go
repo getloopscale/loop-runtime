@@ -33,17 +33,17 @@ func ratchetSetup(name string, spec deadlineratchet.Spec, lbl ratchetLabels) fun
 			if *asOf != "" {
 				t, err := time.Parse("2006-01-02", *asOf)
 				if err != nil {
-					return Fail, usageError("invalid --as-of date %q (want YYYY-MM-DD)", *asOf)
+					return nil, usageError("invalid --as-of date %q (want YYYY-MM-DD)", *asOf)
 				}
 				cfg.AsOf = t
 			}
 			o, err := deadlineratchet.Check(spec, cfg)
 			if err != nil {
-				return Fail, err
+				return nil, err
 			}
-			if o.Dormant {
+			if o.Verdict() == verdict.Skip {
 				inv.Stdout.Printf("[%s] %s\n", name, lbl.dormant)
-				return Pass, nil
+				return o, nil
 			}
 			inv.Stdout.Printf("[%s] start = %s; days since = %d\n", name, o.Date, o.Days)
 			emit := ratchetEmitter(inv, name)
@@ -52,7 +52,6 @@ func ratchetSetup(name string, spec deadlineratchet.Spec, lbl ratchetLabels) fun
 				emit("error", fmt.Sprintf("%s DEADLINE BLOWN at day %d (>%d days). No sponsor exception found. "+
 					"Per ADR %s this auto-blocks. To unblock: execute it and update the marker, OR create "+
 					"%s with an 'approved-by: <name>' line.", lbl.subject, o.Days, spec.DeadlineDay, lbl.adr, lbl.exception))
-				return Fail, nil
 			case o.ExceptionPermitted:
 				emit("warning", fmt.Sprintf("%s deadline (%dd) BLOWN at day %d — sponsor exception present. Permitting.",
 					lbl.subject, spec.DeadlineDay, o.Days))
@@ -62,7 +61,7 @@ func ratchetSetup(name string, spec deadlineratchet.Spec, lbl ratchetLabels) fun
 			default:
 				inv.Stdout.Printf("[%s] within budget (day %d of %d) — OK.\n", name, o.Days, spec.DeadlineDay)
 			}
-			return Pass, nil
+			return o, nil
 		}
 	}
 }

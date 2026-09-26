@@ -25,18 +25,18 @@ func setupTenantCSPPassthrough(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := tenantcsppassthrough.Check(tenantcsppassthrough.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if out.Skipped {
+		if out.Verdict() == verdict.Skip {
 			inv.Stdout.Printf("tenant-csp-passthrough: SKIP — %s\n", out.Reason)
-			return Pass, nil
+			return out, nil
 		}
-		if out.Pass {
+		if out.Verdict() == verdict.Pass {
 			inv.Stdout.Printf("tenant-csp-passthrough: PASS — %s\n", out.Reason)
-			return Pass, nil
+			return out, nil
 		}
 		inv.Stderr.Printf("tenant-csp-passthrough: FAIL — static-CSP middleware attached to tenant routes: %v\n", out.Attached)
 		inv.Stderr.Println("Every LoopZeroKit per-request nonce is replaced by that fixed policy; inline scripts are blocked silently in the browser (issue #59).")
-		return Fail, nil
+		return out, nil
 	}
 }

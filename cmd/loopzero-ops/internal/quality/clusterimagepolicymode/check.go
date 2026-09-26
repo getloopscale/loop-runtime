@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Default locations relative to repo root.
@@ -57,6 +59,9 @@ type Outcome struct {
 	Mode   string // "", "warn", "enforce", or other
 	Reason string // human-readable explanation
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Check evaluates the ClusterImagePolicy.mode governance rule.
 func Check(cfg Config) *Outcome {

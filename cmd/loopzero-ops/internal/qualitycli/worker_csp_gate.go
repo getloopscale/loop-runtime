@@ -27,21 +27,21 @@ func setupWorkerCSP(fs *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := workercsp.Check(workercsp.Config{RepoRoot: inv.Root, WorkerPath: *worker})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if out.Skipped {
+		if out.Verdict() == verdict.Skip {
 			inv.Stdout.Printf("worker-csp: SKIP — %s\n", out.Reason)
-			return Pass, nil
+			return out, nil
 		}
-		if out.Pass {
+		if out.Verdict() == verdict.Pass {
 			inv.Stdout.Printf("worker-csp: PASS — %s\n", out.Reason)
-			return Pass, nil
+			return out, nil
 		}
 		inv.Stderr.Println("worker-csp: FAIL")
 		for _, f := range out.Findings {
 			inv.Stderr.Printf("  %s:%d — %s\n", workercsp.DefaultWorkerPath, f.Line, f.Detail)
 		}
 		inv.Stderr.Println("Fix: drop 'unsafe-inline' from script-src; use a per-request nonce or external+hashed scripts (issue #235).")
-		return Fail, nil
+		return out, nil
 	}
 }

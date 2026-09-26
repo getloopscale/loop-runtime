@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/calendarday"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DateLayout is the ISO-8601 date layout for marker files.
@@ -53,6 +54,19 @@ type Outcome struct {
 	Warn               bool   // in the (WarnDay, DeadlineDay] alert window
 	Blocked            bool   // days > DeadlineDay without a signed exception
 	ExceptionPermitted bool   // past deadline but a signed exception permitted it
+}
+
+// Verdict is Fail when the deadline blew with no signed exception, Skip while
+// the ratchet is dormant (no start marker yet), and Pass otherwise — a
+// warning window or a permitted exception warns without failing.
+func (o Outcome) Verdict() verdict.Verdict {
+	switch {
+	case o.Blocked:
+		return verdict.Fail
+	case o.Dormant:
+		return verdict.Skip
+	}
+	return verdict.Pass
 }
 
 // Check evaluates the ratchet for spec against cfg.

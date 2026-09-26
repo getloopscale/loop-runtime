@@ -27,20 +27,20 @@ func setupOryKratosPublicURLs(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := orykratospublicurls.Check(orykratospublicurls.Config{RepoRoot: inv.Root})
 		if err != nil {
-			if len(outcome.Failures) == 0 {
-				return Fail, err
-			}
+			return nil, err
+		}
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("ory-kratos-public-urls: FAIL — %d golden assertion(s) violated:\n", len(outcome.Failures))
 			for _, v := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", v)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
-		if outcome.Skipped {
+		if outcome.Verdict() == verdict.Skip {
 			inv.Stdout.Printf("ory-kratos-public-urls: SKIP — %s\n", outcome.SkipReason)
-			return Pass, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("ory-kratos-public-urls: PASS — helm-template golden assertions on Ory Kratos public URLs (M22 empirical follow-up)")
-		return Pass, nil
+		return outcome, nil
 	}
 }

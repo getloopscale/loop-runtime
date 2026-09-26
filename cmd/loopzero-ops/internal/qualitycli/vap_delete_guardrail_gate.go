@@ -31,13 +31,13 @@ func setupVAPDeleteGuardrail(_ *flag.FlagSet) Check {
 		for _, w := range rep.Warnings {
 			inv.Stderr.Printf("vap-delete-guardrail: WARN: %s\n", w)
 		}
-		if rep.OK() {
+		if rep.Verdict() == verdict.Pass {
 			inv.Stdout.Println("vap-delete-guardrail: OK")
-			return Pass, nil
+			return rep, nil
 		}
 		for _, f := range rep.Findings {
 			inv.Stderr.Printf("vap-delete-guardrail: FAIL [%s] %s\n", f.Check, f.Message)
 		}
-		return Fail, nil
+		return rep, nil
 	}
 }

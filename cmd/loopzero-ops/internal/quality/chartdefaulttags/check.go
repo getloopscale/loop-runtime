@@ -36,6 +36,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultChartGlob is the loopzero-owned bootstrap chart family.
@@ -80,6 +82,15 @@ type Outcome struct {
 	Reason   string
 	Scanned  int
 	Findings []Finding
+}
+
+// Verdict is Skip when the subject is absent from this checkout, and
+// otherwise Pass when the check passed and Fail when it did not.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Skipped {
+		return verdict.Skip
+	}
+	return verdict.FromPass(o.Pass)
 }
 
 // Check runs the guard.

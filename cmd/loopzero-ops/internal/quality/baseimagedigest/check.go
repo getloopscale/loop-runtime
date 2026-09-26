@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultDockerfiles are the production Dockerfiles linted (test fixtures excluded).
@@ -75,6 +77,9 @@ type Outcome struct {
 	FilesRead  int      // configured Dockerfiles actually opened
 	Violations []string // "<dockerfile>: <cleaned FROM line>"
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Check lints the configured Dockerfiles for tag-only base images.
 func Check(cfg Config) *Outcome {

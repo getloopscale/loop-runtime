@@ -21,7 +21,7 @@ func init() {
 func setupBaseImageDigest(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		o := baseimagedigest.Check(baseimagedigest.Config{Root: inv.Root})
-		if !o.Pass {
+		if o.Verdict() == verdict.Fail {
 			for _, v := range o.Violations {
 				inv.Stdout.Printf("BASE-IMAGE-DIGEST VIOLATION: %s\n", v)
 			}
@@ -29,9 +29,9 @@ func setupBaseImageDigest(_ *flag.FlagSet) Check {
 			inv.Stderr.Println("Fix: replace 'tag' with 'tag@sha256:<digest>' (Renovate pinDigests: true),")
 			inv.Stderr.Println("OR add '# pragma: allow-tag-pin' on the line above the FROM, OR refresh the")
 			inv.Stderr.Println("baseline in cmd/loopzero-ops/internal/quality/baseimagedigest if the bump is intentional + grandfathered.")
-			return Fail, nil
+			return o, nil
 		}
 		inv.Stdout.Printf("PASS — %d FROM directive(s); every base image is digest-pinned, baselined, or pragma'd.\n", o.Scanned)
-		return Pass, nil
+		return o, nil
 	}
 }

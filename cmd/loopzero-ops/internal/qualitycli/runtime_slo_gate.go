@@ -26,21 +26,21 @@ func setupRuntimeSLO(fs *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		o, err := runtimeslo.Check(runtimeslo.Config{LogFile: *logFile, Limits: runtimeslo.DefaultLimits()})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if o.Skipped {
+		if o.Verdict() == verdict.Skip {
 			inv.Stdout.Printf("[runtime-slo] no go test log at %s — skip\n", *logFile)
-			return Pass, nil
+			return o, nil
 		}
-		if !o.Pass {
+		if o.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("[runtime-slo] FAIL: %d test(s)/suite(s) over SLO:\n", len(o.Violations))
 			for _, v := range o.Violations {
 				inv.Stderr.Printf("  %s\n", v)
 			}
 			inv.Stderr.Println("[runtime-slo] for legitimate slow tests, add: // slow_test: <issue-url>")
-			return Fail, nil
+			return o, nil
 		}
 		inv.Stdout.Println("[runtime-slo] PASS — all tests/suites within SLO")
-		return Pass, nil
+		return o, nil
 	}
 }

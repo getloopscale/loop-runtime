@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	"gopkg.in/yaml.v3"
 )
 
@@ -53,6 +54,15 @@ type Outcome struct {
 	Reason   string
 	Scanned  int
 	Findings []Finding
+}
+
+// Verdict is Skip when the subject is absent from this checkout, and
+// otherwise Pass when the check passed and Fail when it did not.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Skipped {
+		return verdict.Skip
+	}
+	return verdict.FromPass(o.Pass)
 }
 
 // Check scans every values file under the configured roots. A file that does

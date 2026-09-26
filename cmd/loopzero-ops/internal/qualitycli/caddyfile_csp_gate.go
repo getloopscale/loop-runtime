@@ -32,13 +32,13 @@ func setupCaddyfileCSP(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := caddyfilecspgate.Check(caddyfilecspgate.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if outcome.Skipped {
+		if outcome.Verdict() == verdict.Skip {
 			inv.Stdout.Println("caddyfile-csp: SKIP — infra/local/Caddyfile not present")
-			return Pass, nil
+			return outcome, nil
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("caddyfile-csp: FAIL — %d invariant(s) violated:\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  %s\n", v)
@@ -47,9 +47,9 @@ func setupCaddyfileCSP(_ *flag.FlagSet) Check {
 			inv.Stderr.Println("Per plan caddyfile-app-dev-prod-bundle-file-server-canonical v1 (closes Red Team")
 			inv.Stderr.Println("loopzero-cloud#66): the operator-local Caddyfile app-dev block MUST serve the")
 			inv.Stderr.Println("prod-bundle via file_server + emit canonical CSP from dashboard/nginx.conf.")
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("caddyfile-csp: PASS — app-dev block serves prod-bundle via file_server + canonical CSP + 4 preserved headers + try_files SPA fallback (Red Team #66 closed)")
-		return Pass, nil
+		return outcome, nil
 	}
 }

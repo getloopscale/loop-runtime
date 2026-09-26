@@ -25,6 +25,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config tells Check where the engine repo root is. Sibling repos are resolved
@@ -40,6 +42,10 @@ type Outcome struct {
 	Skipped    []string // siblings absent (informational)
 	Checked    []string // nodes actually scanned
 }
+
+// Verdict is Pass when the graph is acyclic and Fail otherwise. An absent
+// sibling is informational: it narrows what was checked, and the report says so.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // node is one graph vertex to scan: its directory + the import prefixes it MUST
 // NOT contain (the upward edges that would break the DAG).

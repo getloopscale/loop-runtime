@@ -13,13 +13,14 @@ package orykratospublicurls
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const helmfileRel = "infra/helmfile/core.helmfile.yaml.gotmpl"
@@ -45,8 +46,14 @@ type Outcome struct {
 	SkipReason string
 }
 
-// ErrViolations signals ≥ 1 golden assertion failed.
-var ErrViolations = errors.New("ory-kratos-public-urls hermetic golden violated")
+// Verdict is Skip when the subject is absent from this checkout, and
+// otherwise Pass when the check passed and Fail when it did not.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Skipped {
+		return verdict.Skip
+	}
+	return verdict.FromPass(o.Pass)
+}
 
 // envAssertion is one env → set of expected regex patterns that MUST appear
 // in the rendered helmfile output.
@@ -131,7 +138,7 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	if len(failures) > 0 {
-		return Outcome{Pass: false, Failures: failures}, ErrViolations
+		return Outcome{Pass: false, Failures: failures}, nil
 	}
 	return Outcome{Pass: true}, nil
 }

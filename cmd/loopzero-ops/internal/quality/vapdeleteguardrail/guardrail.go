@@ -40,6 +40,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const (
@@ -97,6 +99,10 @@ type Report struct {
 
 // OK reports whether the gate passed.
 func (r Report) OK() bool { return len(r.Findings) == 0 }
+
+// Verdict is Fail when any finding was reported; warnings are advisory and
+// leave it a Pass.
+func (r Report) Verdict() verdict.Verdict { return verdict.Of(r.Findings) }
 
 // Renderer renders a chart to a YAML stream. Injected so the hermetic test does not
 // require the helm binary (crdsemanticdiff:63 precedent).

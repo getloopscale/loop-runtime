@@ -43,12 +43,9 @@ func setupDrillCredsIsolation(_ *flag.FlagSet) Check {
 		for _, m := range r.Messages {
 			inv.Stderr.Printf("[drill-creds-isolation] %s\n", m)
 		}
-		switch r.ExitCode {
-		case 0:
-			return Pass, nil
-		case 1:
-			return Fail, nil
+		if r.Verdict() == verdict.NotVerified {
+			return nil, errors.New("required drill tokens are not set, so their isolation from production could not be checked")
 		}
-		return Fail, errors.New("required drill tokens are not set, so their isolation from production could not be checked")
+		return r, nil
 	}
 }

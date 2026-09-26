@@ -74,7 +74,7 @@ func allowlistFor(spec Spec) string {
 
 func failuresOf(t *testing.T, root string, spec Spec) []string {
 	t.Helper()
-	out, err := Check(root, spec)
+	out, err := violationOf(Check(root, spec))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("want ErrViolations, got %v", err)
 	}
@@ -95,7 +95,7 @@ func TestCheck_ValidScriptPasses(t *testing.T) {
 	for _, spec := range Specs {
 		t.Run(spec.Gate, func(t *testing.T) {
 			root := writeRepo(t, spec, validScripts[spec.Gate], allowlistFor(spec))
-			out, err := Check(root, spec)
+			out, err := violationOf(Check(root, spec))
 			if err != nil {
 				t.Fatalf("want pass, got %v: %v", err, out.Failures)
 			}
@@ -201,7 +201,7 @@ func TestCheck_RealRepoPasses(t *testing.T) {
 	root := qtestutil.Root(t)
 	for _, spec := range Specs {
 		t.Run(spec.Gate, func(t *testing.T) {
-			out, err := Check(root, spec)
+			out, err := violationOf(Check(root, spec))
 			if err != nil {
 				t.Fatalf("real repository fails %s: %v: %v", spec.Gate, err, out.Failures)
 			}

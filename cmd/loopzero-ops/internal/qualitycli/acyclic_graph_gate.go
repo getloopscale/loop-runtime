@@ -29,22 +29,22 @@ func setupAcyclicGraph(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := acyclicgraph.Check(acyclicgraph.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("acyclic-graph: FAIL — %d forbidden upward import edge(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  %s\n", v)
 			}
 			inv.Stderr.Println("")
 			inv.Stderr.Println("Decomposition invariant (ADP): loopzero-contracts ◄── engine + loopzero-cloud + loopzero-cli. Arrows never point at a more-stable node.")
-			return Fail, nil
+			return outcome, nil
 		}
 		msg := fmt.Sprintf("acyclic-graph: PASS — graph is acyclic (checked: %s", strings.Join(outcome.Checked, ", "))
 		if len(outcome.Skipped) > 0 {
 			msg += fmt.Sprintf("; skipped absent: %s", strings.Join(outcome.Skipped, ", "))
 		}
 		inv.Stdout.Println(msg + ")")
-		return Pass, nil
+		return outcome, nil
 	}
 }

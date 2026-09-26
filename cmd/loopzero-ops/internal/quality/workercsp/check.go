@@ -33,6 +33,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultWorkerPath is the Cloudflare static-delivery worker source.
@@ -57,6 +59,15 @@ type Outcome struct {
 	Skipped  bool
 	Reason   string
 	Findings []Finding
+}
+
+// Verdict is Skip when the subject is absent from this checkout, and
+// otherwise Pass when the check passed and Fail when it did not.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Skipped {
+		return verdict.Skip
+	}
+	return verdict.FromPass(o.Pass)
 }
 
 // cspLineRe finds the CSP header assignment regardless of quoting style.

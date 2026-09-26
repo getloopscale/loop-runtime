@@ -13,6 +13,8 @@ package regressiontest
 import (
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config drives the gate (all from PR context env vars).
@@ -29,6 +31,15 @@ type Outcome struct {
 	Skipped   bool
 	IssueRefs []string
 	Reason    string
+}
+
+// Verdict is Skip when the subject is absent from this checkout, and
+// otherwise Pass when the check passed and Fail when it did not.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Skipped {
+		return verdict.Skip
+	}
+	return verdict.FromPass(o.Pass)
 }
 
 // issueRefRe matches a bug/issue keyword immediately followed by #N.

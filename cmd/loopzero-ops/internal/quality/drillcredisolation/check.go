@@ -23,6 +23,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Env holds the token env vars the check reads. Injected for hermetic testing
@@ -38,10 +40,23 @@ type Env struct {
 	RequireIsolated string // DRILL_REQUIRE_ISOLATED_TOKENS ("true" = strict)
 }
 
-// Result is the verdict.
+// Result is what the check concluded.
 type Result struct {
 	ExitCode int      // 0 safe / 1 catastrophic / 2 missing
 	Messages []string // stderr-style lines (faithful to bash log() output intent)
+}
+
+// Verdict is Pass when the drill tokens are isolated from production, Fail
+// when a drill token is a production token, and NotVerified when the tokens
+// needed to compare them are not set.
+func (r Result) Verdict() verdict.Verdict {
+	switch r.ExitCode {
+	case 0:
+		return verdict.Pass
+	case 1:
+		return verdict.Fail
+	}
+	return verdict.NotVerified
 }
 
 // hashShort mirrors the bash `printf %s "$x" | sha256sum | cut -c1-8`.

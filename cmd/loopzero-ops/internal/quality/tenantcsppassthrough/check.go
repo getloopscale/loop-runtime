@@ -41,6 +41,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config points the check at the two files that together define the invariant.
@@ -63,6 +65,15 @@ type Outcome struct {
 	Reason        string
 	CSPMiddleware []string // middleware names that define a static CSP
 	Attached      []string // of those, the ones the renderer references
+}
+
+// Verdict is Skip when the subject is absent from this checkout, and
+// otherwise Pass when the check passed and Fail when it did not.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Skipped {
+		return verdict.Skip
+	}
+	return verdict.FromPass(o.Pass)
 }
 
 var (

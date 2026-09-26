@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config tells Check which repo to scan.
@@ -42,6 +43,15 @@ type Outcome struct {
 	Pass       bool
 	Skipped    bool // Caddyfile absent
 	Violations []string
+}
+
+// Verdict is Skip when the subject is absent from this checkout, and
+// otherwise Pass when the check passed and Fail when it did not.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Skipped {
+		return verdict.Skip
+	}
+	return verdict.FromPass(o.Pass)
 }
 
 // requiredPaths are the minimum path prefixes the @dev_server_only matcher
