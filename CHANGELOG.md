@@ -14,6 +14,10 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `loopzero-ops kubeconform-schemas --chart DIR` generates strict kubeconform schemas from the CRDs a chart's pinned dependency ships; the Velero schemas are committed and refreshed by `task helm:sync-kubeconform-schemas` (#391)
+
+- `loopzero-ops validate-chart` renders one Helm chart and schema-validates the render, with no path on which a broken render reads as valid (#392)
+
 - Quality gate `kubeconform-schemas-sync`, wired into `task quality:gates`, fails when a loopzero.io kubeconform schema is missing, stale or orphaned against its CRD (#389)
 
 - `loopzero-ops kubeconform-schemas` (and `task helm:sync-kubeconform-schemas`) regenerates the loopzero.io kubeconform schemas from the CRDs, with a `--check` mode (#389)
@@ -356,6 +360,10 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- `task validate:helmfile-templates` passes: Velero objects are validated against generated schemas instead of failing, the offline render no longer needs `LOOPZERO_DB_PASSWORD`, and the `dev` environment's missing loopzero-cloud values layer was added (#391)
+
+- `task validate:manifests` now fails, naming the chart, when a chart fails to render or renders nothing; it used to pass over a broken render (Velero on every fresh clone), and it builds chart dependencies itself (#392)
 
 - Offline manifest validation now checks loopzero.io objects against their current CRDs: six schemas (ClusterCredential, Environment, GitRepositoryBinding, PreviewEnvironment, Tenant, LoopZeroApplication) lacked fields and constraints added since (#389)
 
