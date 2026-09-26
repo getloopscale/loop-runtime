@@ -206,6 +206,34 @@ func TestOrphanDirectoryAppearsMarked(t *testing.T) {
 	}
 }
 
+// A chart deleted from git leaves its downloaded dependencies behind: `charts/`
+// under infra/helm is gitignored, so `git rm` keeps the directory alive on every
+// machine that ever ran `helm dependency build`. Listing it as undeclared made
+// the index depend on local artifacts — measured 2026-09-25 after infra/helm/harbor
+// was deleted, with only charts/harbor-1.16.0.tgz left on disk.
+func TestDirectoryHoldingOnlyDownloadedDependenciesIsNotAChart(t *testing.T) {
+	root := fixture(t, map[string]string{
+		"mgmt": "releases:\n  - name: a\n    chart: ../helm/a\n",
+	}, map[string]bool{"a": true, "leftover": false})
+	deps := filepath.Join(root, helmDir, "leftover", "charts")
+	if err := os.MkdirAll(deps, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(deps, "leftover-1.0.0.tgz"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := Check(root, ModeCheck, "doc.md")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	for _, e := range rep.Entries {
+		if e.Chart == "leftover" {
+			t.Fatalf("a directory holding only downloaded dependencies was indexed as %q", e.Nature)
+		}
+	}
+}
+
 // --- the helmfiles are .gotmpl: any YAML parser fails on them -------------------------------
 
 func TestDoesNotParseGotmplAsYAML(t *testing.T) {

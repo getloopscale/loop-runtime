@@ -337,6 +337,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The helm-topology-index gate no longer lists a deleted chart as undeclared when only its downloaded dependencies (the gitignored charts/ folder) remain on disk, so the index is the same on a fresh clone and on a working machine (design_pattern_findings#30)
+
 - Deploying to a team that was deleted and recreated under the same name no longer fails because its deployment repository was left archived (principle_violations#98)
 
 - A deployed app's status URL and route health checks now use the same hostname the platform routes traffic to, instead of a shorter one no route matched; existing apps move to the routed hostname on their next reconcile (principle_violations#231)

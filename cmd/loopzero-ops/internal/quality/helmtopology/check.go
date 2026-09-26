@@ -240,6 +240,13 @@ func collect(root string) ([]Entry, error) {
 			continue
 		}
 		if _, seen := byChart[d.Name()]; !seen {
+			residue, err := onlyDownloadedDependencies(filepath.Join(root, helmDir, d.Name()))
+			if err != nil {
+				return nil, err
+			}
+			if residue {
+				continue
+			}
 			byChart[d.Name()] = &acc{clusters: map[string]bool{}, nature: NatureUndeclared}
 		}
 	}
@@ -423,4 +430,26 @@ tenant environments is not here.
 func docFooter() string {
 	return "\nThe generation date stays out of the table by design: a freshness gate answers\n" +
 		"\"has the content diverged from the source?\", not \"was this generated today?\".\n"
+}
+
+// onlyDownloadedDependencies reports whether dir holds nothing but a charts/
+// subdirectory. That subdirectory is where `helm dependency build` downloads a
+// chart's dependencies, and it is gitignored under infra/helm, so a chart
+// deleted from git leaves it behind on every machine that ever built it. Such a
+// directory is a local artifact, not a chart nobody declares: indexing it made
+// the index differ between a fresh clone and a working machine.
+func onlyDownloadedDependencies(dir string) (bool, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false, fmt.Errorf("helm-topology: read %s: %w", dir, err)
+	}
+	if len(entries) == 0 {
+		return false, nil
+	}
+	for _, e := range entries {
+		if !e.IsDir() || e.Name() != "charts" {
+			return false, nil
+		}
+	}
+	return true, nil
 }
