@@ -14,6 +14,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- The `english-only` quality gate now also refuses Portuguese Go identifiers and Portuguese file or directory names in tracked paths; a Go identifier can keep its name only with the same inline exemption and reason (#380)
+
 - `POST /internal/bootstrap` accepts `admin_user_id`, `admin_email` and `admin_display_name`, so a tenant can be provisioned for a login identity and not only a GitHub one (principle_violations#58, #383)
 
 - `loopzero-ops quality english-only` gate, wired into `task quality:gates`: every git-tracked text file must be English, and a line keeps Portuguese only with an inline `english-only` exemption stating a reason of at least five words (#380)
@@ -78,6 +80,10 @@ to [Semantic Versioning](https://semver.org/).
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
 ### Changed
+
+- The `PulumiOrphanStackDetected` alert's summary and description now say "parallel project" instead of the Portuguese "paralelas"; the alert name, labels and expression are unchanged (#380)
+
+- The Taskfile task `contraprova:v2:hermetic` is now `counterproof:v2:hermetic`, and the counter-proof live-test package moved to `infra/tests/livetest/counterproof`; its verdicts read APPROVED / REJECTED / PARTIALLY_APPROVED (#380)
 
 - The data-plane readiness poller behind the dashboard's project badge now runs in loopzero-api instead of loopzero-app-operator: configure it with `dataPlanePoller.{enabled,prometheusUrl,interval}` on the loopzero-api chart; the app-operator chart no longer accepts `dataPlanePoller` and no longer takes a database connection string (principle_violations#68)
 
