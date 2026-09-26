@@ -5,11 +5,14 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/api/internal/server"
 )
 
 // Resolving a user's teams spans tenants and runs before any team is selected,
@@ -55,5 +58,51 @@ func TestTheRepositoryStoreReadsThroughTheCrossTenantPool(t *testing.T) {
 
 	if err == nil || !strings.Contains(err.Error(), "crossTenantMarker") {
 		t.Fatalf("installation lookup went to %v; want the cross-tenant pool", err)
+	}
+}
+
+// The admin surface acts on a tenant it does not belong to — eviction matches
+// and deletes any tenant, the pin counts every tenant on the target cell, and
+// the inspector reads a release whose tenant is unknown until it is read — so
+// it is wired on the cross-tenant pool. Over the request pool an admin call
+// has no tenant scope and fail-closed RLS hides every row
+// (tests/integration/admin_cross_tenant_rls_test.go).
+func TestTheAdminSurfaceIsWiredOnTheCrossTenantPool(t *testing.T) {
+	var sc server.Config
+
+	wireAdmin(&sc, serverWiring{cfg: config.Config{}, crossTenant: &db.PgxAdapter{}, logger: slog.Default()})
+
+	if sc.Admin.Evictor == nil || sc.Admin.Pinner == nil || sc.Admin.ReleaseInspector == nil {
+		t.Fatalf("admin surface = %+v; want evict, pin and inspect wired from the cross-tenant pool alone", sc.Admin)
+	}
+}
+
+func TestTheAdminEvictionMatchesTenantsThroughTheCrossTenantPool(t *testing.T) {
+	evictor := buildAdminEvictor(config.Config{}, crossTenantMarker{})
+
+	_, err := evictor.MatchTenants(context.Background(), "tn-e2e-%", nil)
+
+	if err == nil || !strings.Contains(err.Error(), "crossTenantMarker") {
+		t.Fatalf("eviction pattern match went to %v; want the cross-tenant pool", err)
+	}
+}
+
+func TestTheAdminCellPinReadsThroughTheCrossTenantPool(t *testing.T) {
+	pinner := newAdminCellPinner(crossTenantMarker{})
+
+	_, err := pinner.Pin(context.Background(), "tn-a", "cell-0")
+
+	if err == nil || !strings.Contains(err.Error(), "crossTenantMarker") {
+		t.Fatalf("cell pin went to %v; want the cross-tenant pool", err)
+	}
+}
+
+func TestTheAdminReleaseInspectionReadsThroughTheCrossTenantPool(t *testing.T) {
+	inspector := newAdminReleaseInspector(crossTenantMarker{})
+
+	_, err := inspector.Inspect(context.Background(), "rel-a")
+
+	if err == nil || !strings.Contains(err.Error(), "crossTenantMarker") {
+		t.Fatalf("release inspection went to %v; want the cross-tenant pool", err)
 	}
 }

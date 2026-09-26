@@ -196,8 +196,8 @@ func NewRouter(cfg Config) *chi.Mux {
 	// the cloud /engine/* proxy carries on user-JWT requests. The handler
 	// still enforces LOOPZERO_ADMIN_API=true as a separate defense-in-depth gate.
 	if surfaces.Recorded(cfg.Surfaces, surfaces.AdminEvict, cfg.Admin.Evictor != nil,
-		"no database — `buildAdminEvictor` (setup_server.go:290) runs inside the block "+
-			"that requires `dbAdapter`. A missing `loopzero-api-admin` Secret does NOT turn "+
+		"no database — `buildAdminEvictor` (wireAdmin, setup_server.go) is built on "+
+			"the cross-tenant pool, which exists only with a database. A missing `loopzero-api-admin` Secret does NOT turn "+
 			"this route off: it feeds the key the middleware checks, and without it "+
 			"access is DENIED (fail closed), not opened") {
 		r.With(authn.RequireAdminService).Post(
@@ -207,8 +207,8 @@ func NewRouter(cfg Config) *chi.Mux {
 	}
 	// CHG-2026-04-30-DELETE-SINGLE-CELL: pin tenants to specific cell.
 	if surfaces.Recorded(cfg.Surfaces, surfaces.AdminPin, cfg.Admin.Pinner != nil,
-		"no database — the CellPinner is built on `PostgresCellStore` "+
-			"(setup_server.go:299). This is the ONLY route that moves a tenant between cells, "+
+		"no database — the CellPinner is built on `PostgresCellStore` over the "+
+			"cross-tenant pool (newAdminCellPinner, setup_server.go). This is the ONLY route that moves a tenant between cells, "+
 			"so turning it off does not degrade anything: it removes the operation") {
 		r.With(authn.RequireAdminService).Post("/api/v1/admin/tenants/pin", placementhttp.AdminPinCellHandler(cfg.Admin.Pinner, cfg.AuditWriter, cfg.Admin.APIEnabled))
 	}
@@ -218,8 +218,8 @@ func NewRouter(cfg Config) *chi.Mux {
 	// route it sits behind Authenticator.RequireAdminService; the handler keeps only
 	// the LOOPZERO_ADMIN_API feature gate.
 	if surfaces.Recorded(cfg.Surfaces, surfaces.ReleaseInspect, cfg.Admin.ReleaseInspector != nil,
-		"no database — built in setup_server.go:315, inside the block that requires "+
-			"`dbAdapter`. It is on-call's view of a release's signing chain; turned off, "+
+		"no database — built by newAdminReleaseInspector (setup_server.go) on the "+
+			"cross-tenant pool, which exists only with a database. It is on-call's view of a release's signing chain; turned off, "+
 			"on-call loses the diagnosis exactly when it is needed") {
 		r.With(authn.RequireAdminService).Get("/api/v1/admin/releases/{id}/inspect", releasehttp.AdminReleaseInspectHandler(cfg.Admin.ReleaseInspector, cfg.Admin.APIEnabled))
 	}

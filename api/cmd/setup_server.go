@@ -325,23 +325,40 @@ func newAuditWriter(write func(context.Context, store.AuditEntry) error, logger 
 // wireAdmin wires the admin surface: tenant eviction, the cell pin (the only
 // path that moves a tenant; it also patches the Tenant CR so the operator
 // re-emits the ArgoCD destination), and the read-only release inspector.
+//
+// All three act on a tenant the caller does not belong to — an admin call is
+// authorized by service auth and carries no tenant scope — so they run on the
+// cross-tenant pool. Over the request pool fail-closed RLS hides every row:
+// eviction matched and deleted nothing while the cluster side was torn down,
+// the pin found no tenant and could not count the target cell, and the
+// inspector found no release.
 func wireAdmin(sc *server.Config, w serverWiring) {
-	d := w.dbAdapter
-	if d == nil {
+	if w.crossTenant == nil {
 		return
 	}
-	sc.Admin.Evictor = buildAdminEvictor(w.cfg, d)
-	pinner := placement.NewCellPinner(&store.PostgresCellStore{DB: d})
+	sc.Admin.Evictor = buildAdminEvictor(w.cfg, w.crossTenant)
+	pinner := newAdminCellPinner(w.crossTenant)
 	if mgmt := buildMgmtDynamicClient(w.cfg, w.logger); mgmt != nil {
 		pinner = pinner.WithTenantCRPatcher(placementadapter.NewTenantCRCellPatcher(mgmt, "loopzero-system"))
 	}
 	sc.Admin.Pinner = pinner
-	// The inspector's build store is nil on purpose: workflow_id degrades to
-	// null, as when the workflow CR was reaped. It is read-only, so the no-op
-	// event store never receives an emit.
-	sc.Admin.ReleaseInspector = release.NewReleaseInspector(
-		store.NewReleaseStoreSqlc(d, store.NoopEventStore{}),
-		&store.PostgresAuditStore{DB: d},
+	sc.Admin.ReleaseInspector = newAdminReleaseInspector(w.crossTenant)
+}
+
+// newAdminCellPinner builds the database half of the pin. It reads the tenant
+// and counts the target cell's tenants across every tenant placed there.
+func newAdminCellPinner(crossTenant db.DBTX) *placement.CellPinner {
+	return placement.NewCellPinner(&store.PostgresCellStore{DB: crossTenant})
+}
+
+// newAdminReleaseInspector reads a release by id, whatever its tenant, and the
+// audit rows of that tenant. The build store is nil on purpose: workflow_id
+// degrades to null, as when the workflow CR was reaped. It is read-only, so the
+// no-op event store never receives an emit.
+func newAdminReleaseInspector(crossTenant db.DBTX) release.ReleaseInspector {
+	return release.NewReleaseInspector(
+		store.NewReleaseStoreSqlc(crossTenant, store.NoopEventStore{}),
+		&store.PostgresAuditStore{DB: crossTenant},
 		nil,
 	)
 }

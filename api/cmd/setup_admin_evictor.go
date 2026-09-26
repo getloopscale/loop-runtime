@@ -29,12 +29,17 @@ import (
 // available, but partial-cluster breakage (e.g. runtime kubeconfig mis-set)
 // shouldn't prevent the API from starting. A startup log line makes the
 // degraded mode explicit.
-func buildAdminEvictor(cfg config.Config, dbAdapter *db.PgxAdapter) placementhttp.TenantEvictor {
+//
+// crossTenant is the cross-tenant pool (loopzero_worker): eviction matches and
+// deletes tenants the caller does not belong to, which fail-closed RLS hides
+// from the request pool. The FK-ordered cascade needs a pgx pool to run in one
+// transaction, which the background adapter is.
+func buildAdminEvictor(cfg config.Config, crossTenant db.DBTX) placementhttp.TenantEvictor {
 	// T1.4 (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed admin
 	// tenant store. ListTenantIDsByPattern + 8-step FK-ordered
 	// eviction cascade preserved verbatim; all queries are
 	// tenantpredicate:exempt per the admin path (LOOPZERO_ADMIN_API gate).
-	store := store.NewTenantStoreSqlc(dbAdapter)
+	store := store.NewTenantStoreSqlc(crossTenant)
 	dbDeleter := &placementadapter.TenantDBDeleterAdapter{Store: store}
 
 	k8sEv, err := tenancy.NewTenantK8sEvictor(tenancy.EvictorConfig{
