@@ -79,15 +79,19 @@ func projectCapCleanup(t *testing.T, std *sql.DB, owner string) {
 	t.Helper()
 	for _, s := range []string{
 		`DELETE FROM projects WHERE tenant_id IN (SELECT id FROM tenants WHERE owner_id=$1)`,
-		`DELETE FROM subscriptions WHERE account_id IN (SELECT id FROM accounts WHERE owner_id=$1)`,
+		`DELETE FROM subscriptions WHERE account_id IN (SELECT account_id FROM tenants WHERE owner_id=$1)`,
 		`DELETE FROM tenant_members WHERE user_id=$1`,
 		`DELETE FROM tenants WHERE owner_id=$1`,
-		`DELETE FROM accounts WHERE owner_id=$1`,
-		`DELETE FROM users WHERE id=$1`,
 	} {
 		if _, err := std.Exec(s, owner); err != nil {
 			t.Fatalf("cleanup %q: %v", s, err)
 		}
+	}
+	if err := execAsAccountsOwner(context.Background(), `DELETE FROM accounts WHERE owner_id=$1`, owner); err != nil {
+		t.Fatalf("cleanup accounts: %v", err)
+	}
+	if _, err := std.Exec(`DELETE FROM users WHERE id=$1`, owner); err != nil {
+		t.Fatalf("cleanup users: %v", err)
 	}
 }
 
@@ -102,7 +106,11 @@ func projectCapSeed(t *testing.T, std *sql.DB, owner, acct, tn1, tn2, plan strin
 		}
 	}
 	exec(`INSERT INTO users (id,email,display_name,username) VALUES ($1,$1||'@e2e.test','O',$1)`, owner)
-	exec(`INSERT INTO accounts (id,display_name,plan,owner_id,created_at,updated_at) VALUES ($1,'A',$2,$3,now(),now())`, acct, plan, owner)
+	if err := execAsAccountsOwner(context.Background(),
+		`INSERT INTO accounts (id,display_name,plan,owner_id,created_at,updated_at) VALUES ($1,'A',$2,$3,now(),now())`,
+		acct, plan, owner); err != nil {
+		t.Fatalf("seed account: %v", err)
+	}
 	exec(`INSERT INTO tenants (id,display_name,slug,owner_id,account_id,cell_id) VALUES ($1,'T1',$1,$2,$3,'cell-0')`, tn1, owner, acct)
 	exec(`INSERT INTO tenants (id,display_name,slug,owner_id,account_id,cell_id) VALUES ($1,'T2',$1,$2,$3,'cell-0')`, tn2, owner, acct)
 	exec(`INSERT INTO subscriptions (id,tenant_id,account_id,plan,status) VALUES ($1,$2,$3,$4,'active') ON CONFLICT (account_id) DO NOTHING`, "sub-"+acct, tn1, acct, plan)

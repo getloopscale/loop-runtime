@@ -5,6 +5,7 @@ package integration
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -56,15 +57,19 @@ func bootstrapCleanup(t *testing.T, seed *sql.DB, owner string) {
 	t.Helper()
 	for _, s := range []string{
 		`UPDATE users SET active_tenant_id = NULL WHERE id = $1`,
-		`DELETE FROM subscriptions WHERE account_id IN (SELECT id FROM accounts WHERE owner_id = $1)`,
+		`DELETE FROM subscriptions WHERE account_id IN (SELECT account_id FROM tenants WHERE owner_id = $1)`,
 		`DELETE FROM tenant_members WHERE user_id = $1`,
 		`DELETE FROM tenants WHERE owner_id = $1`,
-		`DELETE FROM accounts WHERE owner_id = $1`,
-		`DELETE FROM users WHERE id = $1`,
 	} {
 		if _, err := seed.Exec(s, owner); err != nil {
 			t.Fatalf("cleanup %q: %v", s, err)
 		}
+	}
+	if err := execAsAccountsOwner(context.Background(), `DELETE FROM accounts WHERE owner_id = $1`, owner); err != nil {
+		t.Fatalf("cleanup accounts: %v", err)
+	}
+	if _, err := seed.Exec(`DELETE FROM users WHERE id = $1`, owner); err != nil {
+		t.Fatalf("cleanup users: %v", err)
 	}
 }
 

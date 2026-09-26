@@ -97,20 +97,22 @@ func TestWorkerRole_Exists(t *testing.T) {
 }
 
 // TestWorkerRole_GrantsInvariant_AllTablesAccessible (S1 SHOULD TEST):
-// every table in public schema that the migration GRANTed should be
-// accessible via has_table_privilege checks for SELECT/INSERT/UPDATE/
-// DELETE. Catches the case where a future migration creates a table
-// but forgets to GRANT — the gate test will fail at CI time, not at
-// production runtime under a reconcile loop.
+// every table migration 000023 GRANTed stays accessible via
+// has_table_privilege checks for SELECT/INSERT/UPDATE/DELETE.
+//
+// It does NOT catch a table created later without a grant — its list is the
+// 000023 list, so a new table never appears in it. Thirteen tables were
+// missed that way (issue #385). That invariant is
+// worker_role_grants_test.go, which derives the required privileges from
+// the engine's SQL and the migrations.
 func TestWorkerRole_GrantsInvariant_AllTablesAccessible(t *testing.T) {
 	pool := loopzeroWorkerPool(t)
 	requireLoopZeroWorkerRole(t, pool)
 	ctx := context.Background()
 
-	// Tables explicitly GRANTed by migration 000023. If you add a new
-	// table that background loops touch, extend BOTH the migration AND
-	// this list. The intentional excludes (schema_migrations) are
-	// commented in the migration header.
+	// Tables explicitly GRANTed by migration 000023. A table created later
+	// gets its grant from a new migration, checked by
+	// worker_role_grants_test.go — not by extending this list.
 	grantedTables := []string{
 		"app_scaling_config",
 		"audit_log",

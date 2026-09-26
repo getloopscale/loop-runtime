@@ -112,6 +112,6 @@ func cleanCrossTenantAccount(ctx context.Context, pool *pgxpool.Pool, acct, owne
 	} {
 		_, _ = pool.Exec(ctx, q, []string{tnA, tnB})
 	}
-	_, _ = pool.Exec(ctx, `DELETE FROM accounts WHERE id = $1`, acct)
+	_ = execAsAccountsOwner(ctx, `DELETE FROM accounts WHERE id = $1`, acct)
 	_, _ = pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, owner)
 }
