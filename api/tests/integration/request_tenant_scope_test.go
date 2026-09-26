@@ -85,6 +85,8 @@ func requireIsolatedRequestRole(t *testing.T) {
 		t.Fatalf("read the request role's RLS posture: %v", err)
 	}
 	if bypasses {
+		// A role that bypasses RLS cannot reproduce https://github.com/getloopscale/loopzero/issues/384:
+		// it sees every tenant's rows whether or not the connection is scoped.
 		t.Skip("DATABASE_URL is not the isolated request role (it bypasses RLS); point it at loopzero_api")
 	}
 }
