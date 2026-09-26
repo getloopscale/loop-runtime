@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	"gopkg.in/yaml.v3"
 )
 
@@ -63,6 +64,9 @@ type Outcome struct {
 	Pass    bool
 	Missing []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // taskfileDoc is the minimal YAML shape we parse: the `tasks:` map keys are
 // task names; `includes:` maps include-name → include spec.

@@ -31,7 +31,7 @@ func setupSkipLink(fs *flag.FlagSet) Check {
 			IgnoreBaseline: *ignoreBaseline || *emitBaseline,
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		// A baseline nobody can regenerate is a baseline that decays. The keys are
 		// not derivable from the human-facing output (which carries absolute paths
@@ -41,9 +41,9 @@ func setupSkipLink(fs *flag.FlagSet) Check {
 			for _, k := range o.Keys {
 				inv.Stdout.Println(k)
 			}
-			return Pass, nil
+			return o, nil
 		}
-		if !o.Pass {
+		if o.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("[skip-link] FAIL: %d NEW skip(s) without issue URL:\n", len(o.NewViolations))
 			for _, v := range o.NewViolations {
 				inv.Stderr.Printf("  %s\n", v)
@@ -52,13 +52,13 @@ func setupSkipLink(fs *flag.FlagSet) Check {
 			if o.BaselineCount > 0 {
 				inv.Stderr.Printf("[skip-link] note: %d grandfathered violations in baseline — do NOT add new entries\n", o.BaselineCount)
 			}
-			return Fail, nil
+			return o, nil
 		}
 		if o.BaselineCount > 0 {
 			inv.Stdout.Printf("[skip-link] PASS — no NEW violations (%d grandfathered)\n", o.BaselineCount)
 		} else {
 			inv.Stdout.Println("[skip-link] PASS — all skip calls have issue URL")
 		}
-		return Pass, nil
+		return o, nil
 	}
 }

@@ -27,19 +27,19 @@ func setupSqlcTxProp(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := sqlctxprop.Check(sqlctxprop.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("sqlc-tx-prop: FAIL — %d violation(s) (scanned %d .go files):\n",
 				len(outcome.Violations), outcome.Scanned)
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  %s:%d  %s  — %s\n", v.File, v.Line, v.Function, v.Detail)
 			}
 			inv.Stderr.Printf("\nFix: %s\n", sqlctxprop.ActionableFix())
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Printf("sqlc-tx-prop: PASS — %d store file(s), %d transactional function(s); every query runs on the transaction it received\n",
 			outcome.Scanned, outcome.TxFunctions)
-		return Pass, nil
+		return outcome, nil
 	}
 }

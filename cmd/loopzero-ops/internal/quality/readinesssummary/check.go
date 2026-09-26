@@ -46,6 +46,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultPackages are the six reconciler packages B-138 declares as the population.
@@ -79,6 +81,9 @@ type Outcome struct {
 	Sites      int
 	Violations []Site
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 type function struct {
 	name      string

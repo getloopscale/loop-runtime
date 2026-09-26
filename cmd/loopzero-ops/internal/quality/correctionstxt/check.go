@@ -19,6 +19,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Outcome is the gate result.
@@ -26,6 +28,9 @@ type Outcome struct {
 	Pass       bool
 	Violations []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 var (
 	headingRe = regexp.MustCompile(`^### `)

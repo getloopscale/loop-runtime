@@ -26,13 +26,13 @@ func setupPostgresqlPDBConfig(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := pgpdb.Check(filepath.Join(inv.Root, "infra", "helm", "postgresql", "values.yaml"))
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("postgresql-pdb-config: FAIL — %s\n", outcome.Message)
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Printf("postgresql-pdb-config: PASS — %s\n", outcome.Message)
-		return Pass, nil
+		return outcome, nil
 	}
 }

@@ -24,6 +24,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // excludedDirs are pruned anywhere in the tree.
@@ -43,6 +45,9 @@ type Outcome struct {
 	Checked    int      // number of resolvable target assignments examined
 	Violations []string // "test:line: VAR=... → MISSING <target>"
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // assignRe matches a SCRIPT*/LIB assignment line, capturing the RHS value.
 var assignRe = regexp.MustCompile(`^\s*(SCRIPT|SCRIPT_UNDER_TEST|SCRIPT_PATH|LIB)=(.+)$`)

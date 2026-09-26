@@ -32,9 +32,9 @@ func setupDanglingDataRefs(fs *flag.FlagSet) Check {
 			HeadRef:  *headRef,
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Println("dangling-data-refs: FAIL — deleted config/data files still referenced by live callers:")
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  - %s\n", v)
@@ -42,9 +42,9 @@ func setupDanglingDataRefs(fs *flag.FlagSet) Check {
 			inv.Stderr.Println("")
 			inv.Stderr.Println("When deleting a config/data tree, remove or rewire the scripts that read it in")
 			inv.Stderr.Println("the SAME change. See finding-2026-05-23-governance-subsystem-orphaned.md")
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("dangling-data-refs: PASS — no deleted data file left with live references")
-		return Pass, nil
+		return outcome, nil
 	}
 }

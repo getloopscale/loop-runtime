@@ -29,6 +29,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/deletedrefs"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config tells Check where to operate.
@@ -43,6 +44,9 @@ type Outcome struct {
 	Pass       bool
 	Violations []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // excludedPathFragments are files that legitimately NAME a deleted script
 // without being a live caller (the allowlist, the audit CSV).

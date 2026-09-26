@@ -19,6 +19,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // runtimeRegistryRe isolates the `var runtimeRegistry = map[...]{ ... }` block
@@ -84,6 +86,9 @@ type Outcome struct {
 	TypeErrors    []string // strategy types missing from languages.go
 	Missing       []string // language keys with no fixture coverage
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Check runs the gate.
 func Check(cfg Config) (*Outcome, error) {

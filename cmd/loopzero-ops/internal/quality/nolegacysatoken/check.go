@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config tells Check which repo to scan + allows operator override.
@@ -29,6 +30,9 @@ type Outcome struct {
 	Pass bool
 	Hits []Hit
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Hit is a single violation location.
 type Hit struct {

@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config tells Check which repo to scan.
@@ -30,6 +32,9 @@ type Outcome struct {
 	Total      int
 	Violations []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // scanDirs are the trees scanned (relative to RepoRoot).
 var scanDirs = []string{"infra/scripts", "infra/helmfile/scripts", "infra/tests"}

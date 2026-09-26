@@ -37,6 +37,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Baseline is the number of route-registering guards that do NOT report their
@@ -108,6 +110,9 @@ type Verdict struct {
 	Pass     bool
 	Baseline int
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Verdict) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Summary renders the one-line result the gate runner prints.
 func (v Verdict) Summary() string {

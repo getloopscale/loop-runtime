@@ -39,7 +39,7 @@ func setupSilentSurface(fs *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		v, err := silentsurface.Check(silentsurface.Config{Root: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		if *report {
 			inv.Stdout.Printf("%d silent surface(s) in %d route guard(s) (baseline %d):\n",
@@ -47,17 +47,17 @@ func setupSilentSurface(fs *flag.FlagSet) Check {
 			for _, s := range v.Silent {
 				inv.Stdout.Printf("  %s:%d  cfg.%s\n", silentsurface.RouterPath, s.Line, s.Field)
 			}
-			return Pass, nil
+			return v, nil
 		}
 		inv.Stdout.Println(v.Summary())
-		if !v.Pass {
+		if v.Verdict() == verdict.Fail {
 			for _, s := range v.Silent {
 				inv.Stdout.Printf("  %s:%d — cfg.%s registers a route and does not report the decision\n",
 					silentsurface.RouterPath, s.Line, s.Field)
 			}
 			inv.Stderr.Println(silentsurface.ActionableFix)
-			return Fail, nil
+			return v, nil
 		}
-		return Pass, nil
+		return v, nil
 	}
 }

@@ -31,13 +31,13 @@ func setupTrivyScan(fs *flag.FlagSet) Check {
 			Severities: *severities,
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("trivy-scan: FAIL\n%s\n", outcome.Reason)
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Printf("trivy-scan: PASS — %s\n", outcome.Reason)
-		return Pass, nil
+		return outcome, nil
 	}
 }

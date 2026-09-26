@@ -30,6 +30,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config tells Check which repo to scan + allows operator override of allowlist.
@@ -44,6 +46,9 @@ type Outcome struct {
 	Pass bool
 	Hits []Hit
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Hit is a single violation location.
 type Hit struct {

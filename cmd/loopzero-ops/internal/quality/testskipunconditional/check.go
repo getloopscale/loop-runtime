@@ -128,6 +128,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skipshape"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultScanDirs are the trees this gate governs; see skipshape.
@@ -170,6 +171,9 @@ type Outcome struct {
 
 	Violations []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // site is one unconditional skip, with what follows it.
 type site struct {

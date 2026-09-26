@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/revrange"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // archiveDeleteMarker is the PR title substring that unlocks DELETE operations
@@ -52,6 +53,9 @@ type Outcome struct {
 	Pass       bool     // true if no violations
 	Violations []string // human-readable per-violation messages
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Check is the entry point invoked by `loopzero-ops quality quarantine-protect`.
 // Returns outcome + error. Error is reserved for INFRASTRUCTURE failures

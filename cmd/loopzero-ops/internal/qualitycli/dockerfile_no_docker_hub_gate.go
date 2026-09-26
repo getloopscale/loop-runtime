@@ -28,16 +28,16 @@ func setupDockerfileNoDockerHub(_ *flag.FlagSet) Check {
 			ImagesDir: filepath.Join(inv.Root, "infra", "images"),
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		inv.Stdout.Printf("%d/%d Dockerfile FROMs OK\n", outcome.OK, outcome.Total)
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("FAIL: %s\n", v)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("dockerfile-no-docker-hub: PASS — all FROMs use a mirror/private registry")
-		return Pass, nil
+		return outcome, nil
 	}
 }

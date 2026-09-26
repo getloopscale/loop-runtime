@@ -24,12 +24,12 @@ func setupDecisionsDeletion(fs *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		o, err := decisionsdeletion.Check(decisionsdeletion.Config{RepoRoot: inv.Root, BaseRef: *base, HeadRef: *head})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		for _, s := range o.Superseded {
 			inv.Stdout.Printf("✓ %s (properly superseded)\n", s)
 		}
-		if !o.Pass {
+		if o.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("✗ VIOLATION: %d protected file(s) deleted without a superseding record:\n", len(o.Violations))
 			for _, v := range o.Violations {
 				inv.Stderr.Printf("  - %s\n", v)
@@ -37,13 +37,13 @@ func setupDecisionsDeletion(fs *flag.FlagSet) Check {
 			inv.Stderr.Println("")
 			inv.Stderr.Println("Deleting a protected governance document (docs/decisions.md, docs/runbooks.md)")
 			inv.Stderr.Println("requires a sibling .md with 'superseded_by: <deleted-basename>' frontmatter.")
-			return Fail, nil
+			return o, nil
 		}
 		if len(o.DeletedFiles) == 0 {
 			inv.Stdout.Println("✓ No protected governance document deleted. Stability hook clean.")
 		} else {
 			inv.Stdout.Printf("✓ All %d deletion(s) properly superseded. Stability hook clean.\n", len(o.DeletedFiles))
 		}
-		return Pass, nil
+		return o, nil
 	}
 }

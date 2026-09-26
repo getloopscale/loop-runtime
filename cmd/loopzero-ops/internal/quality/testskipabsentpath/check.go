@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skipshape"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultScanDirs are the trees this gate governs; see skipshape.
@@ -118,6 +119,9 @@ type Outcome struct {
 	// Violations is what makes the gate fail.
 	Violations []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // The anti-vacuity floors. Each is a BROKEN SETUP, not a clean tree.
 var (

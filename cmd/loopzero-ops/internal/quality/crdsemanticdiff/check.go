@@ -26,6 +26,7 @@ import (
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmrender"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -77,6 +78,9 @@ type Outcome struct {
 	Drifts   []Drift
 	Messages []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // rawCRD is the minimal shape of a CustomResourceDefinition YAML doc.
 type rawCRD struct {

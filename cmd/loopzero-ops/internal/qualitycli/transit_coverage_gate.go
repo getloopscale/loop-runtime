@@ -26,12 +26,12 @@ func setupTransitCoverage(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := transitcoverage.Check(transitcoverage.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		inv.Stderr.Print(outcome.FormatReport())
-		if !outcome.Pass {
-			return Fail, nil
+		if outcome.Verdict() == verdict.Fail {
+			return outcome, nil
 		}
-		return Pass, nil
+		return outcome, nil
 	}
 }

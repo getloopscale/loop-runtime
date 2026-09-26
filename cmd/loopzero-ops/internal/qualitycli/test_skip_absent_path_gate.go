@@ -45,7 +45,7 @@ func setupTestSkipAbsentPath(fs *flag.FlagSet) Check {
 			PinFile:  *pin,
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 
 		inv.Stdout.Printf("[test-skip-absent-path] scanned %d *_test.go file(s) under %s — %d skip call(s), %d path-guarded\n",
@@ -62,17 +62,17 @@ func setupTestSkipAbsentPath(fs *flag.FlagSet) Check {
 		for _, e := range o.Externals {
 			inv.Stdout.Printf("  EXTERNAL     %s\n", e)
 		}
-		if !o.Pass {
+		if o.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("[test-skip-absent-path] FAIL — %d violation(s):\n", len(o.Violations))
 			for _, v := range o.Violations {
 				inv.Stderr.Printf("  - %s\n", v)
 			}
 			inv.Stderr.Println("[test-skip-absent-path] a skip that always fires is a deleted test with good " +
 				"manners (B-169): remove it naming the guard that covers the contract, or declare it in the pin.")
-			return Fail, nil
+			return o, nil
 		}
 		inv.Stdout.Printf("[test-skip-absent-path] PASS — %d path-guarded skip(s): %d conditional here, %d tracked absence(s), %d external\n",
 			len(o.Sites), len(o.Conditional), len(o.Tracked), len(o.Externals))
-		return Pass, nil
+		return o, nil
 	}
 }

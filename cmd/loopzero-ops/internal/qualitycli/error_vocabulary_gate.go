@@ -22,17 +22,17 @@ func setupErrorVocabulary(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := errorvocabulary.Check(errorvocabulary.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !out.Pass {
+		if out.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("error-vocabulary: FAIL — %s\n", out.Summary())
 			for _, v := range out.Violations {
 				inv.Stderr.Printf("  %s:%d carries %q in user-facing output: %q\n", v.File, v.Line, v.Term, v.Message)
 			}
 			inv.Stderr.Println("  Unbreakable Rule 3 forbids these terms in user-facing output. Use product language.")
-			return Fail, nil
+			return out, nil
 		}
 		inv.Stdout.Printf("error-vocabulary: PASS — %s\n", out.Summary())
-		return Pass, nil
+		return out, nil
 	}
 }

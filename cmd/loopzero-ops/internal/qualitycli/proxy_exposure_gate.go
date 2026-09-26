@@ -26,9 +26,9 @@ func setupProxyExposure(fs *flag.FlagSet) Check {
 			Root: inv.Root, Caddyfile: *caddyfile, Registry: *registry,
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !o.Pass {
+		if o.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("[proxy-exposure] FAIL — the edge exposes something nobody declared.\n")
 			for _, u := range o.Undeclared {
 				inv.Stderr.Printf("  UNDECLARED %s\n", u)
@@ -41,9 +41,9 @@ func setupProxyExposure(fs *flag.FlagSet) Check {
 			}
 			inv.Stderr.Println("Fix: add a row to infra/quality/proxy-exposure.txt saying what the proxy lets through.")
 			inv.Stderr.Println("A reverse_proxy inherits its response from the upstream — if nobody wrote it down, nobody checked it.")
-			return Fail, nil
+			return o, nil
 		}
 		inv.Stdout.Printf("[proxy-exposure] PASS — %d edge proxies, all declared\n", o.Scanned)
-		return Pass, nil
+		return o, nil
 	}
 }

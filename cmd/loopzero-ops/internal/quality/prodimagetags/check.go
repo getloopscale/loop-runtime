@@ -20,6 +20,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultScanPaths are scanned when Config.ScanPaths is empty.
@@ -44,6 +46,9 @@ type Outcome struct {
 	ScannedFiles int
 	Violations   []string // "file:lineno: <stripped line>"
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 var (
 	// `(image|tag): [<quote>]<repo>:(prod|latest)<boundary>` — matches the

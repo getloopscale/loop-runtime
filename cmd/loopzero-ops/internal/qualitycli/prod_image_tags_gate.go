@@ -23,9 +23,9 @@ func setupProdImageTags(fs *flag.FlagSet) Check {
 		scanPaths := fs.Args() // optional positional scan-path overrides
 		o, err := prodimagetags.Check(prodimagetags.Config{Root: inv.Root, ScanPaths: scanPaths})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !o.Pass {
+		if o.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("✗ VIOLATION: %d mutable image tag(s) in production-scoped manifests:\n", len(o.Violations))
 			for _, v := range o.Violations {
 				inv.Stderr.Printf("  %s\n", v)
@@ -33,9 +33,9 @@ func setupProdImageTags(fs *flag.FlagSet) Check {
 			inv.Stderr.Println("")
 			inv.Stderr.Println("Per ADR-0020 D1: production manifests MUST use immutable :sha7 tags.")
 			inv.Stderr.Println("To override an intentional case, add '# loopzero:mutable-tag-allowed' + ADR ref.")
-			return Fail, nil
+			return o, nil
 		}
 		inv.Stdout.Printf("✓ Scanned %d file(s). No :prod or :latest tags in production manifests.\n", o.ScannedFiles)
-		return Pass, nil
+		return o, nil
 	}
 }

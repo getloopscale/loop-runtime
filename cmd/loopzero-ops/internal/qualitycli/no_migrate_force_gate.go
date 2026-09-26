@@ -24,9 +24,9 @@ func setupNoMigrateForce(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		o, err := nomigrateforce.Check(nomigrateforce.Config{Root: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !o.Pass {
+		if o.Verdict() == verdict.Fail {
 			// allowlist: migrate force (this is the gate's own diagnostic message)
 			msg := fmt.Sprintf("%d unallowlisted occurrence(s) of 'migrate force' in production code. "+
 				"Per CORRECTIONS.txt item B, forcing a migration on a production DB corrupts "+
@@ -41,13 +41,13 @@ func setupNoMigrateForce(_ *flag.FlagSet) Check {
 			for _, b := range o.Blocked {
 				inv.Stderr.Printf("  %s\n", b)
 			}
-			return Fail, nil
+			return o, nil
 		}
 		if o.MatchCount > 0 {
 			inv.Stdout.Printf("[no-migrate-force] all %d matches allowlisted — OK.\n", o.MatchCount)
 		} else {
 			inv.Stdout.Println("[no-migrate-force] no matches — OK.")
 		}
-		return Pass, nil
+		return o, nil
 	}
 }

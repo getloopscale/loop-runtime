@@ -26,16 +26,16 @@ func setupCorrectionsTxtClosed(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := correctionstxt.Check(filepath.Join(inv.Root, "infra", "tests", "performance", "load", "CORRECTIONS.txt"))
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("corrections-txt-closed: FAIL — %d close-out violation(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  %s\n", v)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("corrections-txt-closed: PASS — all CORRECTIONS.txt items are annotated + closed out")
-		return Pass, nil
+		return outcome, nil
 	}
 }

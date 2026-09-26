@@ -18,6 +18,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultBudget is the per-file mock ceiling (ADR D8).
@@ -34,6 +36,9 @@ type Outcome struct {
 	Pass       bool
 	Violations []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 var excludedDirs = map[string]bool{
 	"vendor": true, "node_modules": true, ".git": true, "dist": true, "build": true,

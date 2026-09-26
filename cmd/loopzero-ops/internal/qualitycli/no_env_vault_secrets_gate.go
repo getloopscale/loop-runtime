@@ -38,12 +38,12 @@ func setupNoEnvVaultSecrets(fs *flag.FlagSet) Check {
 
 		outcome, err := noenvvaultsecrets.Check(cfg)
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		inv.Stderr.Print(outcome.FormatReport())
-		if !outcome.Pass {
-			return Fail, nil
+		if outcome.Verdict() == verdict.Fail {
+			return outcome, nil
 		}
-		return Pass, nil
+		return outcome, nil
 	}
 }

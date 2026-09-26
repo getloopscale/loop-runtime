@@ -43,6 +43,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/featurefence"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config controls the gate.
@@ -68,6 +69,9 @@ type Outcome struct {
 	// silently drop a fence — the dispatch surfaces these as a WARN so the
 	// coverage loss is never invisible).
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 const generatedImportPath = "github.com/getloopscale/loopzero/api/internal/db/generated"
 

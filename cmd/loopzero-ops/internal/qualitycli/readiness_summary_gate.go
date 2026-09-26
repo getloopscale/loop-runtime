@@ -22,9 +22,9 @@ func setupReadinessSummary(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := readinesssummary.Check(readinesssummary.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !out.Pass {
+		if out.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("readiness-summary: FAIL — %s\n", out.Summary())
 			for _, v := range out.Violations {
 				inv.Stderr.Printf("  %s:%d — %s() persists .status (%s) without folding the readiness summary, "+
@@ -32,9 +32,9 @@ func setupReadinessSummary(_ *flag.FlagSet) Check {
 					"with what the PREVIOUS pass computed, and that is read as current (ADR-0025 D3, B-105).\n",
 					v.File, v.Line, v.Func, v.Shape)
 			}
-			return Fail, nil
+			return out, nil
 		}
 		inv.Stdout.Printf("readiness-summary: PASS — %s\n", out.Summary())
-		return Pass, nil
+		return out, nil
 	}
 }

@@ -26,18 +26,18 @@ func setupShellHygiene(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := shellhygiene.Check(shellhygiene.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("shell-hygiene: FAIL — %d / %d scripts missing set -euo pipefail in top 60 lines:\n", len(outcome.Violations), outcome.Total)
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  %s\n", v)
 			}
 			inv.Stderr.Println("")
 			inv.Stderr.Println("Add 'set -euo pipefail' near the top. Sourced libs in **/lib/*.sh are exempt.")
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Printf("shell-hygiene: PASS — %d scripts have set -euo pipefail (libs in **/lib/*.sh exempt)\n", outcome.Total)
-		return Pass, nil
+		return outcome, nil
 	}
 }

@@ -68,6 +68,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config parameterises one run.
@@ -106,6 +108,9 @@ type Outcome struct {
 	FilesScanned int
 	Violations   []Violation
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Summary renders the one-line result the gate runner prints.
 func (o Outcome) Summary() string {

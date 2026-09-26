@@ -29,6 +29,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/revrange"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ProtectedDocs are the governance documents under deletion guard, relative
@@ -52,6 +53,9 @@ type Outcome struct {
 	Superseded   []string // "deleted -> superseder" for properly-superseded ones
 	Violations   []string // deleted without a superseder
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Check runs the gate.
 func Check(cfg Config) (*Outcome, error) {

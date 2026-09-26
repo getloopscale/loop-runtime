@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/deletedrefs"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config tells Check where to operate.
@@ -44,6 +45,9 @@ type Outcome struct {
 	Pass       bool
 	Violations []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // dataExtensions are the deleted-file types worth checking (config/data inputs
 // a script might hardcode). .md is excluded — prose deletion is routine and

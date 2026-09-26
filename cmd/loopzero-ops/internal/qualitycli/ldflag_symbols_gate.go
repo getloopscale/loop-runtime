@@ -36,17 +36,17 @@ func setupLdflagSymbols(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		out, err := ldflagsymbols.Check(ldflagsymbols.Config{Root: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		inv.Stdout.Println(out.Summary())
-		if !out.Pass {
+		if out.Verdict() == verdict.Fail {
 			for _, v := range out.Violations {
 				inv.Stdout.Printf("  %s:%d — `-X %s.%s`: %s\n", v.File, v.Line, v.ImportPath, v.Symbol, v.Reason)
 			}
 			inv.Stderr.Println("")
 			inv.Stderr.Println(ldflagsymbols.ActionableFix)
-			return Fail, nil
+			return out, nil
 		}
-		return Pass, nil
+		return out, nil
 	}
 }

@@ -28,18 +28,18 @@ func setupAnonymousAuth(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := anonymousauth.Check(anonymousauth.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("anonymous-auth: FAIL — %d %q occurrence(s) outside infra/k3d/:\n", len(outcome.Violations), anonymousauth.ForbiddenLiteral)
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  %s\n", v)
 			}
 			inv.Stderr.Println("")
 			inv.Stderr.Println("Fix: remove the flag, or move the file under infra/k3d/. Production DOKS uses authenticated OIDC discovery via Pulumi sigstore.ts — see ADR 2026-05-28-T1.4-anonymous-auth-local-only.")
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Printf("anonymous-auth: PASS — no %q outside infra/k3d/\n", anonymousauth.ForbiddenLiteral)
-		return Pass, nil
+		return outcome, nil
 	}
 }

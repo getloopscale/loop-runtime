@@ -36,6 +36,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 type Config struct {
@@ -47,6 +49,9 @@ type Outcome struct {
 	Violations []string
 	Findings   map[string]string // metric name → value
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 const (
 	// storeDir holds every file that may write or read secrets.encrypted_value.

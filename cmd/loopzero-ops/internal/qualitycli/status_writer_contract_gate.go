@@ -41,12 +41,12 @@ func setupStatusWriterContract(_ *flag.FlagSet) Check {
 				v.File, v.Line, v.Func, v.Form)
 		}
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !o.Pass {
+		if o.Verdict() == verdict.Fail {
 			inv.Stderr.Println(statuswritercontract.ActionableFix)
-			return Fail, nil
+			return o, nil
 		}
-		return Pass, nil
+		return o, nil
 	}
 }

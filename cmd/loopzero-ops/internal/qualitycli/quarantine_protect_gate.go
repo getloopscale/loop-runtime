@@ -36,18 +36,18 @@ func setupQuarantineProtect(fs *flag.FlagSet) Check {
 			PRTitle:         *prTitle,
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Println("quarantine-protect: FAIL — PR touches quarantined files:")
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  - %s\n", v)
 			}
 			inv.Stderr.Println("")
 			inv.Stderr.Println("Per ADR-2026-06-17-T3 D5: build the new suite at infra/tests/livetest/ paths instead.")
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("quarantine-protect: PASS — no quarantine violations")
-		return Pass, nil
+		return outcome, nil
 	}
 }

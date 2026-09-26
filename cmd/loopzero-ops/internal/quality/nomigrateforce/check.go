@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultExcludeDirs are directory names pruned anywhere in the tree. Docs
@@ -56,6 +57,9 @@ type Outcome struct {
 	MatchCount int      // total matches (allowlisted + blocked)
 	Blocked    []string // "path:lineno: content" for un-allowlisted matches
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 var (
 	// migrate force, allowing flags between: `migrate -path X force`.

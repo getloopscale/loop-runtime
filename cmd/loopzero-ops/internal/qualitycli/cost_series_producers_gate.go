@@ -64,7 +64,7 @@ func setupCostSeriesProducers(fs *flag.FlagSet) Check {
 			AggregatorFile:  *aggregator,
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 
 		// The known, tracked gap goes to stdout on every run — that is what turns
@@ -73,7 +73,7 @@ func setupCostSeriesProducers(fs *flag.FlagSet) Check {
 			inv.Stdout.Printf("cost-series-producers: TRACKED ABSENCE — %s is queried by the aggregator and emitted by no repository\n", a)
 		}
 
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("cost-series-producers: FAIL — %d violation(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  %s\n", v)
@@ -82,7 +82,7 @@ func setupCostSeriesProducers(fs *flag.FlagSet) Check {
 			inv.Stderr.Printf("The pin is %s. Every series the aggregator queries needs one line there:\n", *declaration)
 			inv.Stderr.Println("  <series> PRODUCER <path in this repo that declares the metric>")
 			inv.Stderr.Println("  <series> ABSENT   <work item tracking who will emit it, or the decision to drop it>")
-			return Fail, nil
+			return outcome, nil
 		}
 
 		if !outcome.SiblingChecked {
@@ -90,13 +90,13 @@ func setupCostSeriesProducers(fs *flag.FlagSet) Check {
 			inv.Stdout.Printf("cost-series-producers: PARTIAL — producer contract holds for %d declared series "+
 				"(%d producer(s) verified, %d tracked absence(s)); drift vs loopzero-cloud NOT CHECKED\n",
 				len(outcome.Declarations), len(outcome.VerifiedProducers), len(outcome.TrackedAbsences))
-			return Pass, nil
+			return outcome, nil
 		}
 
 		inv.Stdout.Printf("cost-series-producers: PASS — %d series queried by loopzero-cloud, all declared "+
 			"(%d producer(s) verified, %d tracked absence(s)); drift CHECKED against %s\n",
 			len(outcome.QueriedSeries), len(outcome.VerifiedProducers), len(outcome.TrackedAbsences),
 			outcome.SiblingRoot)
-		return Pass, nil
+		return outcome, nil
 	}
 }

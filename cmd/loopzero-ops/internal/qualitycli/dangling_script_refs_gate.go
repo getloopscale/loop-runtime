@@ -30,9 +30,9 @@ func setupDanglingScriptRefs(fs *flag.FlagSet) Check {
 			HeadRef:  *headRef,
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Println("dangling-script-refs: FAIL — deleted scripts still referenced by live callers:")
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  - %s\n", v)
@@ -40,9 +40,9 @@ func setupDanglingScriptRefs(fs *flag.FlagSet) Check {
 			inv.Stderr.Println("")
 			inv.Stderr.Println("Per plan D2: rewire ALL 4 caller surfaces (Taskfile/CI/SKILL/scripts) in the")
 			inv.Stderr.Println("same PR that deletes the script. See 2026-05-23-incremental-bash-to-go-migration-plan")
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("dangling-script-refs: PASS — no deleted script left with live references")
-		return Pass, nil
+		return outcome, nil
 	}
 }

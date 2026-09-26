@@ -19,6 +19,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultRulesDir holds the PrometheusRule manifests, relative to repo root.
@@ -41,6 +43,9 @@ type Outcome struct {
 	Pass       bool
 	Violations []string // "<file>:<line> — alert <name> ..."
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // ErrNothingScanned means the rules directory held no rule file: a scan over
 // nothing cannot report the absence of orphans.

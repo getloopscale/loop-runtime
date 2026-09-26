@@ -37,12 +37,12 @@ func setupClusterRoleNoSecretsStar(fs *flag.FlagSet) Check {
 
 		outcome, err := clusterrolenosecretsstar.Check(cfg)
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		inv.Stderr.Print(clusterrolenosecretsstar.FormatOutcome(outcome))
-		if !outcome.Pass {
-			return Fail, nil
+		if outcome.Verdict() == verdict.Fail {
+			return outcome, nil
 		}
-		return Pass, nil
+		return outcome, nil
 	}
 }

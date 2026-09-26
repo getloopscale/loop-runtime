@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -73,6 +74,9 @@ type Outcome struct {
 	Generated string // the freshly generated table body
 	Messages  []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // listPkgDirs returns the sorted list of pkg/<X> subdirectory names that are
 // actually importable Go packages (excluding "tools" — explicit bash skip +

@@ -37,6 +37,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config controls the gate.
@@ -62,6 +64,9 @@ type Outcome struct {
 	// TxFunctions counts the functions with a db.DBTX parameter that were checked.
 	TxFunctions int
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // ErrNothingScanned means the scan met no transactional function: the rule was
 // checked against nothing.

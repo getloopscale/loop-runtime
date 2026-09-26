@@ -32,17 +32,17 @@ func setupMockBudget(fs *flag.FlagSet) Check {
 		}
 		o, err := mockbudget.Check(mockbudget.Config{TargetDir: *dir, Budget: *budget})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !o.Pass {
+		if o.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("[mock-budget] FAIL: %d file(s) over budget:\n", len(o.Violations))
 			for _, v := range o.Violations {
 				inv.Stderr.Printf("  %s\n", v)
 			}
 			inv.Stderr.Println("[mock-budget] design smell — refactor/split OR add: // mock-budget: N — <reason>")
-			return Fail, nil
+			return o, nil
 		}
 		inv.Stdout.Printf("[mock-budget] PASS — all test files within budget (%d mocks/file)\n", *budget)
-		return Pass, nil
+		return o, nil
 	}
 }

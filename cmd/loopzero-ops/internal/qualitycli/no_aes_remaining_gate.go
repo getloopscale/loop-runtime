@@ -41,12 +41,12 @@ func setupNoAESRemaining(fs *flag.FlagSet) Check {
 		}
 		outcome, err := noaesremaining.Check(cfg)
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		inv.Stderr.Print(noaesremaining.FormatOutcome(outcome))
-		if !outcome.Pass {
-			return Fail, nil
+		if outcome.Verdict() == verdict.Fail {
+			return outcome, nil
 		}
-		return Pass, nil
+		return outcome, nil
 	}
 }

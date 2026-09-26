@@ -22,9 +22,9 @@ func setupStackCoverage(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		o, err := stackcoverage.Check(stackcoverage.Config{Root: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !o.Pass {
+		if o.Verdict() == verdict.Fail {
 			if len(o.TypeErrors) > 0 {
 				inv.Stderr.Println("[stack-coverage] strategy type drift in languages.go:")
 				for _, e := range o.TypeErrors {
@@ -38,9 +38,9 @@ func setupStackCoverage(_ *flag.FlagSet) Check {
 				}
 			}
 			inv.Stderr.Println("[stack-coverage] add fixtures OR deregister the strategy from languages.go::ResolveStrategy.")
-			return Fail, nil
+			return o, nil
 		}
 		inv.Stdout.Printf("[stack-coverage] PASS: all %d strategies have fixture coverage.\n", o.StrategyCount)
-		return Pass, nil
+		return o, nil
 	}
 }

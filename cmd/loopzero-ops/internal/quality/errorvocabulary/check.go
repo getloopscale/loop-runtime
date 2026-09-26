@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/featurefence"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // errorWriters are the functions whose argument reaches the response BODY.
@@ -121,6 +122,9 @@ type Outcome struct {
 	Messages   int
 	Violations []Violation
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // defaultRoots are the directories whose messages reach a user: every feature
 // of api/internal (its handlers and its services), read from the registry

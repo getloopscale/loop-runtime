@@ -22,6 +22,7 @@ package proxyexposure
 
 import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exposure"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 
 	"fmt"
 	"os"
@@ -75,6 +76,9 @@ type Outcome struct {
 	Stale      []string // registry rows matching no exposure
 	Malformed  []string // registry rows that do not parse
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Check runs the gate.
 func Check(cfg Config) (*Outcome, error) {

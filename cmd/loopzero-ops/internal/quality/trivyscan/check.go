@@ -16,6 +16,8 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // The two ways a scan can fail to establish a verdict. Both are typed so the
@@ -57,6 +59,9 @@ type Outcome struct {
 	// Reason is the pass summary or the findings table.
 	Reason string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Check scans cfg.RepoRoot and returns the verdict. It returns an error wrapping
 // ErrScannerMissing or ErrScanFailed whenever no complete scan happened.

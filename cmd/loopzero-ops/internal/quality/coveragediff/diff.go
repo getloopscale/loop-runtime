@@ -32,6 +32,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/coverageparse"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -86,6 +87,9 @@ type Outcome struct {
 	// Messages is the ordered diagnostic stream.
 	Messages []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // IsSourceFile returns true for `*.go`, `*.ts`, `*.tsx` files that
 // are NOT test files (matches bash is_source_file).

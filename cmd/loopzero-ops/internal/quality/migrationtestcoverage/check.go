@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -70,6 +71,9 @@ type Outcome struct {
 	Violations []Violation
 	Messages   []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // shortPrefix strips leading zeros from num.
 // "000011" → "11"  ;  "0" → "0"  ;  "000000" → "0".

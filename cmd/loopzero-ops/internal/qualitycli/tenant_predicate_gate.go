@@ -26,18 +26,18 @@ func setupTenantPredicate(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := tenantpredicate.Check(tenantpredicate.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("tenant-predicate: FAIL — %d violation(s) (scanned %d .sql files):\n",
 				len(outcome.Violations), outcome.Scanned)
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  [%s] %s @ %s:%s — %s\n", v.Reason, v.Query, v.File, v.Table, v.Detail)
 			}
 			inv.Stderr.Printf("\nFix: %s\n", tenantpredicate.ActionableFix())
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Printf("tenant-predicate: PASS — %d .sql files scanned; every multi-tenant query carries tenant_id\n", outcome.Scanned)
-		return Pass, nil
+		return outcome, nil
 	}
 }

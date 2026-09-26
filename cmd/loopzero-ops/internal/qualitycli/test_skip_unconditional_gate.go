@@ -50,7 +50,7 @@ func setupTestSkipUnconditional(fs *flag.FlagSet) Check {
 			PinFile:  *pin,
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 
 		inv.Stdout.Printf("[test-skip-unconditional] scanned %d *_test.go file(s) under %s -- %d skip call(s), %d unconditional, %d with code below\n",
@@ -60,7 +60,7 @@ func setupTestSkipUnconditional(fs *flag.FlagSet) Check {
 		for _, t := range o.Tracked {
 			inv.Stdout.Printf("  TRACKED      %s\n", t)
 		}
-		if !o.Pass {
+		if o.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("[test-skip-unconditional] FAIL -- %d violation(s):\n", len(o.Violations))
 			for _, v := range o.Violations {
 				inv.Stderr.Printf("  - %s\n", v)
@@ -69,10 +69,10 @@ func setupTestSkipUnconditional(fs *flag.FlagSet) Check {
 				"below it has ever run (B-184): either the assertion comes back and asserts something " +
 				"that is in this tree, or the test goes with the reason written, naming what covers the " +
 				"contract in its place.")
-			return Fail, nil
+			return o, nil
 		}
 		inv.Stdout.Printf("[test-skip-unconditional] PASS -- %d unconditional skip(s), %d with code below, all %d declared\n",
 			len(o.Unconditional), len(o.Sites), len(o.Tracked))
-		return Pass, nil
+		return o, nil
 	}
 }

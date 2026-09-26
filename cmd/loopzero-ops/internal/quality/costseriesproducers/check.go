@@ -61,6 +61,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultDeclarationFile is the pinned contract, repo-relative. It sits beside
@@ -122,6 +123,9 @@ type Outcome struct {
 	// SiblingChecked is false -- nothing was observed.
 	QueriedSeries []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 var (
 	// metricDeclRe matches a prometheus Opts metric name declaration, which is

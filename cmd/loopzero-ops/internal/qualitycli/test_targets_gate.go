@@ -24,9 +24,9 @@ func setupTestTargets(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		o, err := testtargets.Check(testtargets.Config{Root: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !o.Pass {
+		if o.Verdict() == verdict.Fail {
 			msg := fmt.Sprintf("%d *_test.sh target(s) point at a missing repo path. "+
 				"A relocated/deleted script-under-test left its test pointing at a dead "+
 				"SCRIPT=/SCRIPT_UNDER_TEST= path (the dr/ relocation rot, finding "+
@@ -40,9 +40,9 @@ func setupTestTargets(_ *flag.FlagSet) Check {
 			for _, v := range o.Violations {
 				inv.Stderr.Printf("  %s\n", v)
 			}
-			return Fail, nil
+			return o, nil
 		}
 		inv.Stdout.Printf("[test-targets] all %d test target(s) resolve — OK.\n", o.Checked)
-		return Pass, nil
+		return o, nil
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/revrange"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config drives the gate.
@@ -41,6 +42,9 @@ type Outcome struct {
 	DeletedTests []string
 	Reason       string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 const justificationMarker = "test deletion justification:"
 const approvalLabel = "test-deletion-approved"

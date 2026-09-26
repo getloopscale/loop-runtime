@@ -34,14 +34,14 @@ func setupCoverageDiff(fs *flag.FlagSet) Check {
 			ReportPath: *report,
 		})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		for _, m := range outcome.Messages {
 			inv.Stdout.Println(m)
 		}
-		if !outcome.Pass {
-			return Fail, nil
+		if outcome.Verdict() == verdict.Fail {
+			return outcome, nil
 		}
-		return Pass, nil
+		return outcome, nil
 	}
 }

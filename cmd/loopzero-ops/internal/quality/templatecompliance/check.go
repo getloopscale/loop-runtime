@@ -22,6 +22,8 @@ import (
 	"bufio"
 	"fmt"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Default bot/label allowlists (matches bash arrays).
@@ -81,6 +83,9 @@ type Outcome struct {
 	// Messages — diagnostic stream.
 	Messages []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // IsBotAuthor returns true when author matches any allowlist entry.
 func IsBotAuthor(author string, allowlist []string) bool {

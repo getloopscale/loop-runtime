@@ -37,12 +37,12 @@ func setupNoPulumiInlineSecrets(fs *flag.FlagSet) Check {
 		}
 		outcome, err := nopulumiinlinesecrets.Check(cfg)
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
 		inv.Stderr.Print(nopulumiinlinesecrets.FormatOutcome(outcome))
-		if !outcome.Pass {
-			return Fail, nil
+		if outcome.Verdict() == verdict.Fail {
+			return outcome, nil
 		}
-		return Pass, nil
+		return outcome, nil
 	}
 }

@@ -22,9 +22,9 @@ func setupDrillOutputsConsumers(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		o, err := drilloutputs.Check(drilloutputs.Config{Root: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !o.Pass {
+		if o.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("✗ Found %d legacy drill-outputs consumer reference(s):\n", len(o.Findings))
 			for _, f := range o.Findings {
 				inv.Stderr.Printf("  %s\n", f)
@@ -34,9 +34,9 @@ func setupDrillOutputsConsumers(_ *flag.FlagSet) Check {
 			inv.Stderr.Println("cluster/pg/bucket access with direct named outputs, e.g. mgmtClusterKubeconfig,")
 			inv.Stderr.Println("pgHost, bucketBuilds (pulumi stack output <name>).")
 			inv.Stderr.Println("Per L2-unlock plan T1.3 + EC-02. See finding-2026-05-16-pulumi-outputs-rca.md.")
-			return Fail, nil
+			return o, nil
 		}
 		inv.Stdout.Println("✓ No legacy drill-outputs consumers found.")
-		return Pass, nil
+		return o, nil
 	}
 }

@@ -67,6 +67,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // CutoverDay is the openbao-adoption v1.3 T+0 reference (UTC).
@@ -96,6 +97,9 @@ type Outcome struct {
 	FilesFound      int       // candidate non-test .go files under scanRoots
 	FilesScanned    int       // of those, the ones not allowlisted away
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Hit is a single violation location.
 type Hit struct {

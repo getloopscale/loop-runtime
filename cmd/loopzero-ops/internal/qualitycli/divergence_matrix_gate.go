@@ -22,16 +22,16 @@ func setupDivergenceMatrix(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := divergencematrix.Check(divergencematrix.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("divergence-matrix: FAIL — %d issue(s):\n", len(outcome.Violations))
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  %s\n", v)
 			}
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Println("divergence-matrix: GREEN — matrix integrity OK")
-		return Pass, nil
+		return outcome, nil
 	}
 }

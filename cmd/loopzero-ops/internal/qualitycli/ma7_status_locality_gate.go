@@ -25,17 +25,17 @@ func setupMa7StatusLocality(_ *flag.FlagSet) Check {
 	return func(inv Invocation) (verdict.Result, error) {
 		outcome, err := ma7statuslocality.Check(ma7statuslocality.Config{RepoRoot: inv.Root})
 		if err != nil {
-			return Fail, err
+			return nil, err
 		}
-		if !outcome.Pass {
+		if outcome.Verdict() == verdict.Fail {
 			inv.Stderr.Printf("ma7-status-locality: FAIL \u2014 %d violation(s) (scanned %d .go files):\n", len(outcome.Violations), outcome.Scanned)
 			for _, v := range outcome.Violations {
 				inv.Stderr.Printf("  %s:%d Gate %s \u2014 %s outside db/store/\n", v.File, v.Line, v.Gate, v.Name)
 			}
 			inv.Stderr.Printf("\nFix: %s\n", ma7statuslocality.ActionableFix())
-			return Fail, nil
+			return outcome, nil
 		}
 		inv.Stdout.Printf("ma7-status-locality: PASS \u2014 %d .go files scanned; status machinery confined to db/store/ (MA-7 Gates B+C)\n", outcome.Scanned)
-		return Pass, nil
+		return outcome, nil
 	}
 }

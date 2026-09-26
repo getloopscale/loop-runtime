@@ -23,6 +23,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // MatrixRelPath is the document that holds the matrix.
@@ -56,6 +58,9 @@ type Outcome struct {
 	Pass       bool
 	Violations []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Check verifies matrix integrity: code markers ⟷ matrix rows.
 func Check(cfg Config) (*Outcome, error) {
