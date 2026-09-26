@@ -88,12 +88,18 @@ tasks:
 
   helm:sync-kubeconform-schemas:
     desc: |
-      Regenerate the loopzero.io strict kubeconform schemas under
-      infra/kubeconform-schemas/master-standalone-strict/ from
-      operators/config/crd/bases/ (#389). Run it with helm:sync-crds after any
-      CRD change; the kubeconform-schemas-sync quality gate fails until you do.
+      Regenerate the strict kubeconform schemas under
+      infra/kubeconform-schemas/master-standalone-strict/:
+        - loopzero.io, from operators/config/crd/bases/ (#389). Run it with
+          helm:sync-crds after any CRD change; the kubeconform-schemas-sync
+          quality gate fails until you do.
+        - velero.io, from the CRDs the Velero chart version pinned in
+          infra/helm/velero/Chart.lock ships (#391). Run it after bumping that
+          chart; validate:helmfile-templates fails until you do.
     cmds:
       - go run ./cmd/loopzero-ops kubeconform-schemas
+      - helm dependency build infra/helm/velero >/dev/null
+      - go run ./cmd/loopzero-ops kubeconform-schemas --chart infra/helm/velero
 
   helm:install:test:
     desc: Run helm test hooks post-install

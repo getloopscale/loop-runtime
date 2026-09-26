@@ -27,6 +27,24 @@ func newFixture(t *testing.T) fixture {
 	return f
 }
 
+// diffFromCRDs compares the schemas the CRDs in crdDir produce with schemaDir.
+func diffFromCRDs(crdDir, schemaDir string) ([]Drift, error) {
+	want, err := Generate(crdDir)
+	if err != nil {
+		return nil, err
+	}
+	return Compare(want, schemaDir)
+}
+
+// writeFromCRDs brings schemaDir in step with the CRDs in crdDir.
+func writeFromCRDs(crdDir, schemaDir string) ([]Drift, error) {
+	want, err := Generate(crdDir)
+	if err != nil {
+		return nil, err
+	}
+	return WriteSchemas(want, schemaDir)
+}
+
 func write(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
@@ -36,10 +54,10 @@ func write(t *testing.T, path, body string) {
 
 func TestDiffReportsNothingAfterWrite(t *testing.T) {
 	f := newFixture(t)
-	if _, err := Write(f.crdDir, f.schemaDir); err != nil {
+	if _, err := writeFromCRDs(f.crdDir, f.schemaDir); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	drift, err := Diff(f.crdDir, f.schemaDir)
+	drift, err := diffFromCRDs(f.crdDir, f.schemaDir)
 	if err != nil {
 		t.Fatalf("Diff: %v", err)
 	}
@@ -50,12 +68,12 @@ func TestDiffReportsNothingAfterWrite(t *testing.T) {
 
 func TestDiffReportsACRDChangedWithoutRegeneration(t *testing.T) {
 	f := newFixture(t)
-	if _, err := Write(f.crdDir, f.schemaDir); err != nil {
+	if _, err := writeFromCRDs(f.crdDir, f.schemaDir); err != nil {
 		t.Fatal(err)
 	}
 	write(t, filepath.Join(f.crdDir, "loopzero.io_widgets.yaml"), strings.Replace(widgetCRD, "maximum: 9", "maximum: 99", 1))
 
-	drift, err := Diff(f.crdDir, f.schemaDir)
+	drift, err := diffFromCRDs(f.crdDir, f.schemaDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +84,7 @@ func TestDiffReportsACRDChangedWithoutRegeneration(t *testing.T) {
 
 func TestDiffReportsAMissingSchema(t *testing.T) {
 	f := newFixture(t)
-	drift, err := Diff(f.crdDir, f.schemaDir)
+	drift, err := diffFromCRDs(f.crdDir, f.schemaDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,12 +95,12 @@ func TestDiffReportsAMissingSchema(t *testing.T) {
 
 func TestDiffReportsAnOrphanSchemaOfAnOwnedGroup(t *testing.T) {
 	f := newFixture(t)
-	if _, err := Write(f.crdDir, f.schemaDir); err != nil {
+	if _, err := writeFromCRDs(f.crdDir, f.schemaDir); err != nil {
 		t.Fatal(err)
 	}
 	write(t, filepath.Join(f.schemaDir, "gadget-loopzero.io-v1.json"), `{}`)
 
-	drift, err := Diff(f.crdDir, f.schemaDir)
+	drift, err := diffFromCRDs(f.crdDir, f.schemaDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +113,7 @@ func TestWriteRemovesOrphansAndKeepsThirdPartySchemas(t *testing.T) {
 	f := newFixture(t)
 	write(t, filepath.Join(f.schemaDir, "gadget-loopzero.io-v1.json"), `{}`)
 
-	changes, err := Write(f.crdDir, f.schemaDir)
+	changes, err := writeFromCRDs(f.crdDir, f.schemaDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,14 +134,14 @@ func TestDiffRefusesASourceDirectoryWithNoCRD(t *testing.T) {
 	if err := os.Remove(filepath.Join(f.crdDir, "loopzero.io_widgets.yaml")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Diff(f.crdDir, f.schemaDir); err == nil {
+	if _, err := diffFromCRDs(f.crdDir, f.schemaDir); err == nil {
 		t.Fatal("Diff over an empty CRD directory returned no error; it compared nothing")
 	}
 }
 
 func TestDiffRefusesAMissingSchemaDirectory(t *testing.T) {
 	f := newFixture(t)
-	if _, err := Diff(f.crdDir, filepath.Join(f.schemaDir, "absent")); err == nil {
+	if _, err := diffFromCRDs(f.crdDir, filepath.Join(f.schemaDir, "absent")); err == nil {
 		t.Fatal("Diff against an absent schema directory returned no error")
 	}
 }

@@ -4,7 +4,9 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,5 +104,88 @@ func TestKubeconformSchemasRejectsAStrayArgument(t *testing.T) {
 	var out, errOut bytes.Buffer
 	if code := runKubeconformSchemas([]string{"extra"}, &out, &errOut); code != 1 {
 		t.Fatalf("exit %d, want 1", code)
+	}
+}
+
+// thirdPartyChart writes a wrapper chart under root whose pinned dependency
+// ships one CRD of a group LoopZero does not own.
+func thirdPartyChart(t *testing.T, root string) (chartRel, schemaFile string) {
+	t.Helper()
+	chartRel = filepath.Join("infra", "helm", "wrapper")
+	crd := strings.NewReplacer("loopzero.io", "example.com", "Gizmo", "Doohickey").Replace(subcmdCRD)
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{Name: "upstream/crds/doohickeys.yaml", Mode: 0o644, Size: int64(len(crd)), Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte(crd)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, chartRel, "charts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lock := "dependencies:\n- name: upstream\n  repository: https://example.invalid\n  version: 2.0.0\n"
+	if err := os.WriteFile(filepath.Join(root, chartRel, "Chart.lock"), []byte(lock), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, chartRel, "charts", "upstream-2.0.0.tgz"), buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return chartRel, filepath.Join(root, kubeconformschema.DefaultSchemaDir, "doohickey-example.com-v1.json")
+}
+
+func TestKubeconformSchemasWritesTheSchemasAChartDependencyShips(t *testing.T) {
+	root, loopzeroSchema := schemaRepo(t)
+	chart, schemaFile := thirdPartyChart(t, root)
+	var out, errOut bytes.Buffer
+
+	code := runKubeconformSchemas([]string{"--root", root, "--chart", chart}, &out, &errOut)
+
+	if code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errOut.String())
+	}
+	if _, err := os.Stat(schemaFile); err != nil {
+		t.Fatalf("third-party schema not written: %v", err)
+	}
+	if _, err := os.Stat(loopzeroSchema); !os.IsNotExist(err) {
+		t.Fatalf("--chart touched the loopzero.io schemas: %v", err)
+	}
+}
+
+func TestKubeconformSchemasCheckOfAChartFailsUntilItsSchemasAreWritten(t *testing.T) {
+	root, _ := schemaRepo(t)
+	chart, _ := thirdPartyChart(t, root)
+	var out, errOut bytes.Buffer
+
+	if code := runKubeconformSchemas([]string{"--check", "--root", root, "--chart", chart}, &out, &errOut); code != 1 {
+		t.Fatalf("check before write: exit %d, want 1; stderr %q", code, errOut.String())
+	}
+	if code := runKubeconformSchemas([]string{"--root", root, "--chart", chart}, &out, &errOut); code != 0 {
+		t.Fatalf("write: exit %d, stderr %q", code, errOut.String())
+	}
+	if code := runKubeconformSchemas([]string{"--check", "--root", root, "--chart", chart}, &out, &errOut); code != 0 {
+		t.Fatalf("check after write: exit %d, stderr %q", code, errOut.String())
+	}
+}
+
+func TestKubeconformSchemasOfAnUnbuiltChartCannotReachAVerdict(t *testing.T) {
+	root, _ := schemaRepo(t)
+	chart, _ := thirdPartyChart(t, root)
+	if err := os.Remove(filepath.Join(root, chart, "charts", "upstream-2.0.0.tgz")); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+
+	code := runKubeconformSchemas([]string{"--check", "--root", root, "--chart", chart}, &out, &errOut)
+
+	if code != 5 || !strings.Contains(errOut.String(), "helm dependency build") {
+		t.Fatalf("exit %d stderr %q, want 5 naming the build step", code, errOut.String())
 	}
 }

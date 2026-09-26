@@ -56,38 +56,43 @@ func Generate(crdDir string) (_ []Schema, err error) {
 	if len(names) == 0 {
 		return nil, fmt.Errorf("no CRD (*.yaml) in %s", crdDir)
 	}
-	var out []Schema
-	seen := map[string]string{}
+	docs := make([]namedDocument, 0, len(names))
 	for _, name := range names {
 		data, err := root.ReadFile(name)
 		if err != nil {
 			return nil, fmt.Errorf("read CRD: %w", err)
 		}
-		schemas, err := FromCRD(data)
+		docs = append(docs, namedDocument{source: filepath.Join(crdDir, name), data: data})
+	}
+	return fromDocuments(docs)
+}
+
+// namedDocument is one CRD document and where it was read from.
+type namedDocument struct {
+	source string
+	data   []byte
+}
+
+// fromDocuments turns CRD documents into schemas sorted by file name, and
+// refuses two documents that produce the same schema.
+func fromDocuments(docs []namedDocument) ([]Schema, error) {
+	var out []Schema
+	seen := map[string]string{}
+	for _, d := range docs {
+		schemas, err := FromCRD(d.data)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", filepath.Join(crdDir, name), err)
+			return nil, fmt.Errorf("%s: %w", d.source, err)
 		}
 		for _, s := range schemas {
 			if prev, dup := seen[s.Name]; dup {
-				return nil, fmt.Errorf("%s and %s both produce %s", prev, name, s.Name)
+				return nil, fmt.Errorf("%s and %s both produce %s", prev, d.source, s.Name)
 			}
-			seen[s.Name] = name
+			seen[s.Name] = d.source
 			out = append(out, s)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
-}
-
-// Diff compares the schemas the CRDs in crdDir produce with those committed
-// in schemaDir. Only files of a group the CRDs declare are considered, so the
-// third-party schemas sharing the directory are never reported.
-func Diff(crdDir, schemaDir string) ([]Drift, error) {
-	want, err := Generate(crdDir)
-	if err != nil {
-		return nil, err
-	}
-	return Compare(want, schemaDir)
 }
 
 // Compare reports how the schemas committed in schemaDir differ from want.
@@ -126,13 +131,10 @@ func compare(want []Schema, root *os.Root) ([]Drift, error) {
 	return drift, nil
 }
 
-// Write brings schemaDir in step with the CRDs: it writes every missing or
-// stale schema and removes every orphan, and returns what it changed.
-func Write(crdDir, schemaDir string) (_ []Drift, err error) {
-	want, err := Generate(crdDir)
-	if err != nil {
-		return nil, err
-	}
+// WriteSchemas brings the schemas of want's groups in schemaDir in step with
+// want: it writes every missing or stale one and removes every orphan of
+// those groups. Files of any other group are never touched.
+func WriteSchemas(want []Schema, schemaDir string) (_ []Drift, err error) {
 	root, err := os.OpenRoot(schemaDir)
 	if err != nil {
 		return nil, fmt.Errorf("schema directory: %w", err)

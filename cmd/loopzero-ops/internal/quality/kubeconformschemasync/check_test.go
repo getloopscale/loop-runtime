@@ -45,7 +45,11 @@ func repo(t *testing.T) string {
 		}
 	}
 	writeFile(t, filepath.Join(crdDir, "loopzero.io_gadgets.yaml"), gadgetCRD)
-	if _, err := kubeconformschema.Write(crdDir, schemaDir); err != nil {
+	want, err := kubeconformschema.Generate(crdDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := kubeconformschema.WriteSchemas(want, schemaDir); err != nil {
 		t.Fatal(err)
 	}
 	return root
