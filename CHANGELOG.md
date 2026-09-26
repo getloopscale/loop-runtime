@@ -81,6 +81,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `task quality:gates` skips the backlog-structure check and says why when `BACKLOG.md` or the installed kit is absent — both are gitignored, so a fresh clone has neither — instead of failing every clone; it runs in full where both exist (docs/decisions.md, 2026-09-26: a gate over the gitignored kit skips when the kit is absent)
+
 - On a clone without the gitignored development kit (`.claude/`, `.squad/`), the four quality gates that check that kit (`skill-suites`, `skill-script-paths`, `records-tree-split`, `ecosystem-validators`) now skip and print why, instead of three of them exiting 5, so `task quality:gates` can pass on a fresh clone; with the kit installed they run in full (docs/decisions.md, 2026-09-26: a gate over the gitignored kit skips when the kit is absent)
 
 - `coverage-merge` without `--output` and `helm-diff-structural` without `--base`/`--pr` report the missing flag as an invalid invocation (`invalid invocation: ...`); the exit status is unchanged (1) (principle_violations#256)

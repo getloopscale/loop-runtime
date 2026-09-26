@@ -175,7 +175,15 @@ tasks:
       # cosmetic: a MEASURED item stuck at `raw` was ranked below unmeasured items.
       # Blocks on blocker/major; a vague DoD (minor) exits 0 and does not block.
       # MEET-ASYNC-AMENDMENT-2026-08-19-wire-backlog-validator (pending ratification).
-      - python3 .claude/skills/backlog-review/scripts/check_backlog_structure.py BACKLOG.md
+      # BACKLOG.md and the kit script are both unversioned (.gitignore), so a fresh clone
+      # has neither: it SKIPs and says why, and runs in full where both exist
+      # (docs/decisions.md, 2026-09-26: a gate over the gitignored kit skips when absent).
+      - |
+        if [ -f BACKLOG.md ] && [ -f .claude/skills/backlog-review/scripts/check_backlog_structure.py ]; then
+          python3 .claude/skills/backlog-review/scripts/check_backlog_structure.py BACKLOG.md
+        else
+          echo "backlog-structure: SKIP — BACKLOG.md or the installed kit is absent; both are gitignored, so nothing was checked"
+        fi
       - /tmp/loopzero-ops quality module-selfcontained  # B-140: every module compiles without go.work (CI uses GOWORK=off)
       - /tmp/loopzero-ops quality correlation-header   # T6.1 of plan 2026-06-01-p3-infra-observability-test-debt
       - /tmp/loopzero-ops quality prod-image-digests
