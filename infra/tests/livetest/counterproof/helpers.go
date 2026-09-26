@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package contraprova implements T3.4 of plan canonical-tests-rewrite-v2 v1.0
-// per ADR-2026-06-17-T3 D3: contra-prova is canonical anti-lying gate;
-// live-proof byte-grep absorbed as Camada 8.
+// Package counterproof implements T3.4 of plan canonical-tests-rewrite-v2 v1.0
+// per ADR-2026-06-17-T3 D3: the counter-proof is the canonical anti-lying gate;
+// live-proof byte-grep absorbed as Layer 8.
 //
-// Port of the 7 camadas + new Camada 8 from
-// archive/canonical-tests-v1/skills/contra-prova/SKILL.md (348 LOC bash + skill markdown).
+// Port of the 7 layers + new Layer 8 from the v1 counter-proof skill
+// (archive/canonical-tests-v1/skills/contra-prova/SKILL.md, 348 LOC bash + skill markdown).
 //
-// Each Camada is an exported function returning ok bool + detail string.
-// The orchestrator (RunContraProva) chains them with fail-fast semantics per
-// the v1 Regra Suprema: "NUNCA aceita 'passou' como evidencia".
-package contraprova
+// Each Layer is an exported function returning ok bool + detail string.
+// The orchestrator (RunCounterProof) chains them with fail-fast semantics per
+// the v1 Supreme Rule: "never accept 'passed' as evidence".
+package counterproof
 
 import (
 	"context"
@@ -26,17 +26,17 @@ import (
 	"time"
 )
 
-// Verdict types per cycle-rule-schema canonical vocabulary (contra-prova-specific).
+// Verdict types per cycle-rule-schema canonical vocabulary (counter-proof-specific).
 type Verdict string
 
 const (
-	APROVADA              Verdict = "APROVADA"
-	REPROVADA             Verdict = "REPROVADA"
-	PARCIALMENTE_APROVADA Verdict = "PARCIALMENTE_APROVADA"
+	Approved          Verdict = "APPROVED"
+	Rejected          Verdict = "REJECTED"
+	PartiallyApproved Verdict = "PARTIALLY_APPROVED"
 )
 
-// Camada represents one layer of the 8-layer verification.
-type Camada struct {
+// Layer represents one layer of the 8-layer verification.
+type Layer struct {
 	N       int    // 1..8
 	Name    string // "chaos summary byte-grep" etc.
 	OK      bool
@@ -44,21 +44,21 @@ type Camada struct {
 	Skipped bool
 }
 
-// Outcome aggregates the 8 camadas plus the final verdict.
+// Outcome aggregates the 8 layers plus the final verdict.
 type Outcome struct {
 	Verdict Verdict
-	Camadas []Camada
+	Layers  []Layer
 	Started time.Time
 	Ended   time.Time
-	// "Honestidade Explicita" — per Regra Suprema, the verifier MUST enumerate
-	// what is NOT GREEN even when overall verdict is APROVADA.
+	// "Explicit honesty" — per the Supreme Rule, the verifier MUST enumerate
+	// what is NOT GREEN even when the overall verdict is Approved.
 	HonestyCaveats []string
 }
 
-// Camada1_ChaosSummaryByteGrep parses /tmp/chaos-full-{ts}/summary.md asserting
-// PASS_CT=10 AND FAIL_CT=0 AND INCONC_CT=0 per v1 contra-prova Camada 1.
-func Camada1_ChaosSummaryByteGrep(chaosSummaryPath string) Camada {
-	c := Camada{N: 1, Name: "chaos summary byte-grep"}
+// Layer1_ChaosSummaryByteGrep parses /tmp/chaos-full-{ts}/summary.md asserting
+// PASS_CT=10 AND FAIL_CT=0 AND INCONC_CT=0 per v1 counter-proof Layer 1.
+func Layer1_ChaosSummaryByteGrep(chaosSummaryPath string) Layer {
+	c := Layer{N: 1, Name: "chaos summary byte-grep"}
 	data, err := os.ReadFile(chaosSummaryPath)
 	if err != nil {
 		c.Detail = fmt.Sprintf("read %s: %v", chaosSummaryPath, err)
@@ -81,9 +81,9 @@ type junitSuite struct {
 	Skipped  int      `xml:"skipped,attr"`
 }
 
-// Camada2_DogfoodJUnitParse parses JUnit XML asserting failures<=1.
-func Camada2_DogfoodJUnitParse(junitXMLPath string) Camada {
-	c := Camada{N: 2, Name: "dogfood JUnit XML parse"}
+// Layer2_DogfoodJUnitParse parses JUnit XML asserting failures<=1.
+func Layer2_DogfoodJUnitParse(junitXMLPath string) Layer {
+	c := Layer{N: 2, Name: "dogfood JUnit XML parse"}
 	f, err := os.Open(junitXMLPath)
 	if err != nil {
 		c.Detail = fmt.Sprintf("open %s: %v", junitXMLPath, err)
@@ -105,10 +105,10 @@ func Camada2_DogfoodJUnitParse(junitXMLPath string) Camada {
 	return c
 }
 
-// Camada3_GitState reads `git status --short` + `git rev-parse HEAD` to assert
+// Layer3_GitState reads `git status --short` + `git rev-parse HEAD` to assert
 // working tree clean + on develop branch.
-func Camada3_GitState(ctx context.Context, repoRoot string) Camada {
-	c := Camada{N: 3, Name: "git state"}
+func Layer3_GitState(ctx context.Context, repoRoot string) Layer {
+	c := Layer{N: 3, Name: "git state"}
 	branchCmd := exec.CommandContext(ctx, "git", "branch", "--show-current")
 	branchCmd.Dir = repoRoot
 	branchOut, _ := branchCmd.Output()
@@ -120,7 +120,7 @@ func Camada3_GitState(ctx context.Context, repoRoot string) Camada {
 	statusCmd := exec.CommandContext(ctx, "git", "status", "--short")
 	statusCmd.Dir = repoRoot
 	statusOut, _ := statusCmd.Output()
-	// Filter pre-existing noise per v1 contra-prova
+	// Filter pre-existing noise per v1 counter-proof
 	lines := strings.Split(strings.TrimSpace(string(statusOut)), "\n")
 	uncleanCount := 0
 	for _, l := range lines {
@@ -137,11 +137,11 @@ func Camada3_GitState(ctx context.Context, repoRoot string) Camada {
 	return c
 }
 
-// Camada8_LiveProofByteGrep — NEW per ADR T3 D3: live-proof absorbed as Camada 8.
+// Layer8_LiveProofByteGrep — NEW per ADR T3 D3: live-proof absorbed as Layer 8.
 // 3 checks × 3 layers (commit/rendered/LIVE) for oidc/stripe/resend.
 // Replaces archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh.
-func Camada8_LiveProofByteGrep(ctx context.Context, repoRoot string) Camada {
-	c := Camada{N: 8, Name: "live-proof byte-grep (oidc + stripe + resend)"}
+func Layer8_LiveProofByteGrep(ctx context.Context, repoRoot string) Layer {
+	c := Layer{N: 8, Name: "live-proof byte-grep (oidc + stripe + resend)"}
 	envFile := filepath.Join(repoRoot, ".env")
 	data, err := os.ReadFile(envFile)
 	if err != nil {
@@ -172,36 +172,36 @@ func Camada8_LiveProofByteGrep(ctx context.Context, repoRoot string) Camada {
 		c.Detail = fmt.Sprintf("L1 .env missing: %v", missing)
 		return c
 	}
-	c.Detail = "L1 .env all 4 checks present (L2 rendered + L3 LIVE skipped in helper; gated por LIVE Ginkgo spec)"
+	c.Detail = "L1 .env all 4 checks present (L2 rendered + L3 LIVE skipped in helper; gated by the LIVE Ginkgo spec)"
 	c.OK = true
 	return c
 }
 
-// RunContraProva chains layers 1..8 with fail-fast semantics.
+// RunCounterProof chains layers 1..8 with fail-fast semantics.
 // Returns Outcome with Verdict per the v1 Supreme Rule.
 //
 // LIVE layers 4-7 (deploy, proof-of-life, proof-of-death, hygiene) are
-// gated by build tag `live` in contraprova_live_test.go; this orchestrator
-// assumes upstream contraprova_test.go feeds pre-captured artifact paths.
-func RunContraProva(ctx context.Context, repoRoot, chaosSummary, junitXML string) *Outcome {
+// implemented in layers_live.go; this orchestrator assumes its caller feeds
+// pre-captured artifact paths.
+func RunCounterProof(ctx context.Context, repoRoot, chaosSummary, junitXML string) *Outcome {
 	o := &Outcome{Started: time.Now()}
 
-	o.Camadas = append(o.Camadas, Camada1_ChaosSummaryByteGrep(chaosSummary))
-	o.Camadas = append(o.Camadas, Camada2_DogfoodJUnitParse(junitXML))
-	o.Camadas = append(o.Camadas, Camada3_GitState(ctx, repoRoot))
-	o.Camadas = append(o.Camadas, Camada8_LiveProofByteGrep(ctx, repoRoot))
+	o.Layers = append(o.Layers, Layer1_ChaosSummaryByteGrep(chaosSummary))
+	o.Layers = append(o.Layers, Layer2_DogfoodJUnitParse(junitXML))
+	o.Layers = append(o.Layers, Layer3_GitState(ctx, repoRoot))
+	o.Layers = append(o.Layers, Layer8_LiveProofByteGrep(ctx, repoRoot))
 
 	failCount := 0
-	for _, c := range o.Camadas {
+	for _, c := range o.Layers {
 		if !c.OK && !c.Skipped {
 			failCount++
 		}
 	}
 	switch failCount {
 	case 0:
-		o.Verdict = APROVADA
+		o.Verdict = Approved
 	default:
-		o.Verdict = REPROVADA
+		o.Verdict = Rejected
 	}
 	o.Ended = time.Now()
 	return o

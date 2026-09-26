@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// LIVE layers (camadas) 4-7 of counter-proof (contra-prova) v2 per T3.4 of plan canonical-tests-rewrite-v2 v1.0.
+// LIVE layers 4-7 of the counter-proof v2 per T3.4 of plan canonical-tests-rewrite-v2 v1.0.
 // These wrap exec calls to $LOOPZERO CLI + kubectl + HTTP probes that exercise a
-// real deploy/delete cycle on dev-public. Per ADR D5: chain antiga remains
+// real deploy/delete cycle on dev-public. Per ADR D5: the old chain remains
 // executable; this is the new path's equivalent.
 
-package contraprova
+package counterproof
 
 import (
 	"context"
@@ -21,8 +21,8 @@ import (
 // LiveConfig captures everything needed to execute layers 4-7.
 type LiveConfig struct {
 	LoopZeroCLI      string        // path to compiled $LOOPZERO binary
-	ProjectName  string        // contra-prova-{ts}
-	FixtureDir   string        // /tmp/contra-prova-deploy-{ts}/
+	ProjectName  string        // counter-proof-{ts}
+	FixtureDir   string        // /tmp/counter-proof-deploy-{ts}/
 	EnvName      string        // production
 	PollInterval time.Duration // default 5s
 	BuildTimeout time.Duration // default 15m (Buildkit cold cache)
@@ -35,8 +35,8 @@ type LiveConfig struct {
 func DefaultLiveConfig(timestamp string) LiveConfig {
 	return LiveConfig{
 		LoopZeroCLI:      "loopzero",
-		ProjectName:  "contra-prova-" + timestamp,
-		FixtureDir:   filepath.Join("/tmp", "contra-prova-deploy-"+timestamp),
+		ProjectName:  "counter-proof-" + timestamp,
+		FixtureDir:   filepath.Join("/tmp", "counter-proof-deploy-"+timestamp),
 		EnvName:      "production",
 		PollInterval: 5 * time.Second,
 		BuildTimeout: 15 * time.Minute,
@@ -44,11 +44,11 @@ func DefaultLiveConfig(timestamp string) LiveConfig {
 	}
 }
 
-// Camada5_ProvaDeVida HTTP-probes the deployed app via port-forward and asserts /health=200.
-func Camada5_ProvaDeVida(ctx context.Context, cfg LiveConfig) Camada {
-	c := Camada{N: 5, Name: "Prova de Vida HTTP + SecurityContext"}
+// Layer5_ProofOfLife HTTP-probes the deployed app via port-forward and asserts /health=200.
+func Layer5_ProofOfLife(ctx context.Context, cfg LiveConfig) Layer {
+	c := Layer{N: 5, Name: "proof of life HTTP + SecurityContext"}
 	if cfg.HTTPProbeURL == "" {
-		c.Detail = "HTTPProbeURL not set — call Camada4 first to populate"
+		c.Detail = "HTTPProbeURL not set — call Layer4 first to populate"
 		c.Skipped = true
 		return c
 	}
@@ -73,7 +73,7 @@ func Camada5_ProvaDeVida(ctx context.Context, cfg LiveConfig) Camada {
 	return c
 }
 
-// createMinimalFixture writes a Node.js Hello-World fixture used by Camada 4.
+// createMinimalFixture writes a Node.js Hello-World fixture used by Layer 4.
 func createMinimalFixture(dir, projectName string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
@@ -85,8 +85,8 @@ apps:
     framework: node
     build: ""
 `, projectName),
-		"package.json":      `{"name":"contra-prova","version":"0.0.1","main":"index.js","scripts":{"start":"node index.js"}}`,
-		"package-lock.json": `{"name":"contra-prova","version":"0.0.1","lockfileVersion":3,"requires":true,"packages":{}}`,
+		"package.json":      `{"name":"counter-proof","version":"0.0.1","main":"index.js","scripts":{"start":"node index.js"}}`,
+		"package-lock.json": `{"name":"counter-proof","version":"0.0.1","lockfileVersion":3,"requires":true,"packages":{}}`,
 		"index.js": fmt.Sprintf(`const http = require('http');
 http.createServer((req, res) => {
   if (req.url === '/health') { res.end('ok'); return; }

@@ -1130,7 +1130,7 @@ tasks:
       retired: their scripts were deleted, so the tasks could only fail with
       "No such file". Chaos coverage lives in chaos:v2:hermetic and the
       live-proof checks were absorbed into the counter-proof chain
-      (infra/tests/livetest/contraprova, Layer 8) run by chain:v2:full.
+      (infra/tests/livetest/counterproof, Layer 8) run by chain:v2:full.
 
       Default Task semantics provide fail-fast — if any scenario exits
       non-zero, the umbrella aborts (per ADR D6). No `ignore_error: true`
@@ -1191,13 +1191,13 @@ tasks:
     cmds:
       - go test ./infra/tests/livetest/chaos/... -count=1 -timeout 1m
 
-  contraprova:v2:hermetic:
+  counterproof:v2:hermetic:
     desc: |
       T3.4 v2 counter-proof helper unit tests (hermetic). Validates 8 layers
       (chaos summary byte-grep / JUnit XML parse / git state / live-proof
       absorption per ADR D3). No LIVE deploy needed.
     cmds:
-      - go test ./infra/tests/livetest/contraprova/... -count=1 -timeout 1m
+      - go test ./infra/tests/livetest/counterproof/... -count=1 -timeout 1m
 
   livetest:v2:hermetic:
     desc: |
@@ -1207,7 +1207,7 @@ tasks:
       - task: cleanroom:v2:hermetic
       - task: dogfood:v2:hermetic
       - task: chaos:v2:hermetic
-      - task: contraprova:v2:hermetic
+      - task: counterproof:v2:hermetic
 
   # T3.5 of plan canonical-tests-rewrite-v2 v1.0 — chain runner v2 (Taskfile composition per ADR D2)
   chain:v2:full:
@@ -1222,7 +1222,7 @@ tasks:
       - task: cleanroom:v2  # T3.1 6 phases
       - bash infra/scripts/local/seed-post-cleanroom-all.sh --verify
       - task: dogfood:v2    # T3.2 per-journey LIVE specs
-      - go test -tags=live ./infra/tests/livetest/contraprova/... -count=1 -timeout 30m -v
+      - go test -tags=live ./infra/tests/livetest/counterproof/... -count=1 -timeout 30m -v
       - echo "T3.5 chain:v2:full ENGINEERING-COMPLETE — sponsor CP3 TOGETHER gate pending"
 
   chain:v2:engineering:
@@ -1233,4 +1233,4 @@ tasks:
       - task: cleanroom:v2:hermetic
       - task: dogfood:v2:hermetic
       - task: chaos:v2:hermetic
-      - task: contraprova:v2:hermetic
+      - task: counterproof:v2:hermetic

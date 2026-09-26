@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package contraprova
+package counterproof
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 
 func TestDefaultLiveConfig_SetsCanonicalDefaults(t *testing.T) {
 	cfg := DefaultLiveConfig("20260617")
-	if cfg.ProjectName != "contra-prova-20260617" {
+	if cfg.ProjectName != "counter-proof-20260617" {
 		t.Errorf("ProjectName = %q", cfg.ProjectName)
 	}
 	if cfg.EnvName != "production" {
@@ -54,9 +54,9 @@ func TestCreateMinimalFixture_WritesAllFiles(t *testing.T) {
 	}
 }
 
-func TestCamada5_ProvaDeVida_SkippedWhenHTTPProbeURLEmpty(t *testing.T) {
+func TestLayer5_ProofOfLife_SkippedWhenHTTPProbeURLEmpty(t *testing.T) {
 	cfg := DefaultLiveConfig("20260617")
-	c := Camada5_ProvaDeVida(context.Background(), cfg)
+	c := Layer5_ProofOfLife(context.Background(), cfg)
 	if !c.Skipped {
 		t.Errorf("Skipped = false, want true when HTTPProbeURL empty")
 	}
