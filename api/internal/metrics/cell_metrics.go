@@ -98,8 +98,8 @@ var (
 	})
 
 	// PulumiStacksTotal tracks the number of live Pulumi stacks across
-	// the canonical project. C20 + monitors paralelas-stack
-	// re-introduction (any stack outside the canonical name set →
+	// the canonical project. C20 + monitors the re-introduction of a
+	// parallel-project stack (any stack outside the canonical name set →
 	// PulumiOrphanStackDetected alert).
 	PulumiStacksTotal = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "loopzero_pulumi_stacks_total",

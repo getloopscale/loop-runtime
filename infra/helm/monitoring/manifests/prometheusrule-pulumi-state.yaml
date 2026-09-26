@@ -7,7 +7,7 @@
 # Alerts:
 #   • PulumiArchiveStaleness — no Pulumi archive in 90d (rotation gap).
 #   • PulumiOrphanStackDetected — stack discovered outside canonical
-#     project name (paralelas re-introduction). Pairs with the
+#     project name (a parallel project re-introduced). Pairs with the
 #     `find infra -name 'Pulumi.yaml' | wc -l == 1` regression test
 #     (T-14, condition C25).
 #
@@ -51,7 +51,7 @@ spec:
 
         - alert: PulumiOrphanStackDetected
           # Per condition C20 + C25: any stack outside the canonical
-          # `loopzero-infra` project name suggests paralelas re-introduction
+          # `loopzero-infra` project name suggests a parallel project was re-introduced
           # OR an experimental stack that wasn't cleaned up. Either is
           # a process violation worth paging.
           #
@@ -68,15 +68,15 @@ spec:
             severity: critical
             loopzero_component: pulumi-archive
           annotations:
-            summary: "Pulumi stack count exceeds expected baseline (potential paralelas regression)"
+            summary: "Pulumi stack count exceeds expected baseline (potential parallel-project regression)"
             runbook: "docs/runbooks.md"
             description: |
               loopzero_pulumi_stacks_total = {{ $value }} for >6h, exceeds
               the expected baseline of 4 (dev/prod/staging/homolog).
-              Unexpected stacks suggest paralelas re-introduction —
+              Unexpected stacks suggest a parallel project was re-introduced —
               an operator or workflow created a stack outside the
               canonical infra/pulumi/ project. Verify via:
                 cd infra/pulumi && pulumi stack ls --json | jq '.[].name'
               Compare against canonical names. Remove or document
-              the new stack per C26 (paralelas-style re-introduction
+              the new stack per C26 (parallel-project re-introduction
               process).

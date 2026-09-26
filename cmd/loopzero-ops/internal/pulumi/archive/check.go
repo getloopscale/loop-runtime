@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package archive exports Pulumi stack state for paralelas dirs to
+// Package archive exports Pulumi stack state for parallel project dirs to
 // encrypted S3 (s3://loopzero-archive/pulumi-state/). Pre-flight verifies
 // archive bucket has required SSE-KMS encryption (C4). Per-stack export
 // goes through plaintext-secret regex scan (C9) before upload.
@@ -43,8 +43,8 @@ const PulumiVersionPinned = "3.140.0"
 // DefaultArchiveBucket — S3 bucket holding the pulumi state archives.
 const DefaultArchiveBucket = "loopzero-archive"
 
-// DefaultParalelas — pulumi paralelas dirs subject to archive.
-var DefaultParalelas = []string{
+// DefaultParallelProjects — pulumi parallel project dirs subject to archive.
+var DefaultParallelProjects = []string{
 	"infra/pulumi-infra",
 	"infra/pulumi-platform",
 }
@@ -81,8 +81,8 @@ type Config struct {
 	// Root is the repo root. Default: ".".
 	Root string
 
-	// Paralelas overrides DefaultParalelas.
-	Paralelas []string
+	// ParallelProjects overrides DefaultParallelProjects.
+	ParallelProjects []string
 
 	// ArchiveBucket overrides DefaultArchiveBucket.
 	ArchiveBucket string
@@ -222,10 +222,10 @@ func extractSSEAlgo(raw string) (string, error) {
 	return r.ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm, nil
 }
 
-// enumerateTargets returns paralelas dirs that have a Pulumi.yaml.
-func enumerateTargets(root string, paralelas []string) []string {
+// enumerateTargets returns parallel project dirs that have a Pulumi.yaml.
+func enumerateTargets(root string, parallelProjects []string) []string {
 	var out []string
-	for _, dir := range paralelas {
+	for _, dir := range parallelProjects {
 		pulumiYAML := filepath.Join(root, dir, "Pulumi.yaml")
 		if _, err := os.Stat(pulumiYAML); err == nil {
 			out = append(out, dir)
@@ -404,9 +404,9 @@ func Run(cfg Config) (*Outcome, error) {
 	if root == "" {
 		root = "."
 	}
-	paralelas := cfg.Paralelas
-	if paralelas == nil {
-		paralelas = DefaultParalelas
+	parallelProjects := cfg.ParallelProjects
+	if parallelProjects == nil {
+		parallelProjects = DefaultParallelProjects
 	}
 	bucket := cfg.ArchiveBucket
 	if bucket == "" {
@@ -418,16 +418,16 @@ func Run(cfg Config) (*Outcome, error) {
 	}
 
 	out := &Outcome{}
-	targets := enumerateTargets(root, paralelas)
+	targets := enumerateTargets(root, parallelProjects)
 	out.Targets = targets
 	out.Messages = append(out.Messages,
 		"[pulumi-archive] step 1: pre-flight",
-		"[pulumi-archive] step 2: enumerating paralelas Pulumi dirs",
+		"[pulumi-archive] step 2: enumerating the parallel Pulumi project dirs",
 		fmt.Sprintf("[pulumi-archive]   %d dirs to archive: %s", len(targets), strings.Join(targets, " ")))
 	if len(targets) == 0 {
 		out.Pass = true
 		out.Messages = append(out.Messages,
-			"[pulumi-archive]   no paralelas dirs found — Phase 3 already cleaned",
+			"[pulumi-archive]   no parallel project dirs found — Phase 3 already cleaned",
 			"[pulumi-archive] DONE — nothing to do")
 		return out, nil
 	}

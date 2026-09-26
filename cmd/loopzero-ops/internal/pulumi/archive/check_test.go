@@ -21,10 +21,10 @@ func mapEnv(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
 }
 
-func mkRepo(t *testing.T, paralelas []string) string {
+func mkRepo(t *testing.T, parallelProjects []string) string {
 	t.Helper()
 	root := t.TempDir()
-	for _, dir := range paralelas {
+	for _, dir := range parallelProjects {
 		full := filepath.Join(root, dir, "Pulumi.yaml")
 		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o755))
 		require.NoError(t, os.WriteFile(full, []byte("name: t\nruntime: nodejs\n"), 0o600))
@@ -268,10 +268,10 @@ func TestStackResourceCount_MalformedOutputIsAnError(t *testing.T) {
 
 func TestRun_NoTargets(t *testing.T) {
 	out, err := Run(Config{
-		Root:      t.TempDir(),
-		Paralelas: []string{"infra/missing"},
-		Runner:    shellrun.NewMock(),
-		DryRun:    true,
+		Root:             t.TempDir(),
+		ParallelProjects: []string{"infra/missing"},
+		Runner:           shellrun.NewMock(),
+		DryRun:           true,
 	})
 	require.NoError(t, err)
 	assert.True(t, out.Pass)
@@ -290,11 +290,11 @@ func TestRun_DryRunSkipsExportAndUpload(t *testing.T) {
 	})
 	m.SetDefaultResponse(&shellrun.Result{ExitCode: 0})
 	out, err := Run(Config{
-		Root:      root,
-		Paralelas: []string{"infra/pulumi-infra"},
-		Runner:    m,
-		DryRun:    true,
-		Timestamp: "20260520T120000Z",
+		Root:             root,
+		ParallelProjects: []string{"infra/pulumi-infra"},
+		Runner:           m,
+		DryRun:           true,
+		Timestamp:        "20260520T120000Z",
 	})
 	require.NoError(t, err)
 	assert.True(t, out.Pass)
@@ -324,10 +324,10 @@ func TestRun_LiveResourcesWarn(t *testing.T) {
 	})
 	m.SetDefaultResponse(&shellrun.Result{ExitCode: 0})
 	out, err := Run(Config{
-		Root:      root,
-		Paralelas: []string{"infra/pulumi-infra"},
-		Runner:    m,
-		DryRun:    true,
+		Root:             root,
+		ParallelProjects: []string{"infra/pulumi-infra"},
+		Runner:           m,
+		DryRun:           true,
 	})
 	require.NoError(t, err)
 	assert.False(t, out.Pass, "live resources → Pass=false (operator gate)")
@@ -343,10 +343,10 @@ func TestRun_StackLsFailureBlocksPass(t *testing.T) {
 	})
 	m.SetDefaultResponse(&shellrun.Result{ExitCode: 0})
 	out, err := Run(Config{
-		Root:      root,
-		Paralelas: []string{"infra/pulumi-infra"},
-		Runner:    m,
-		DryRun:    true,
+		Root:             root,
+		ParallelProjects: []string{"infra/pulumi-infra"},
+		Runner:           m,
+		DryRun:           true,
 	})
 	require.NoError(t, err)
 	assert.False(t, out.Pass, "a dir whose stacks cannot be listed was not archived — Pass must be false")
@@ -361,10 +361,10 @@ func TestRun_UnknownResourceCountBlocksPass(t *testing.T) {
 	m.SetResponse(`pulumi stack --stack dev --json`, &shellrun.Result{ExitCode: 1, Stderr: "backend unreachable"})
 	m.SetDefaultResponse(&shellrun.Result{ExitCode: 0})
 	out, err := Run(Config{
-		Root:      root,
-		Paralelas: []string{"infra/pulumi-infra"},
-		Runner:    m,
-		DryRun:    true,
+		Root:             root,
+		ParallelProjects: []string{"infra/pulumi-infra"},
+		Runner:           m,
+		DryRun:           true,
 	})
 	require.NoError(t, err)
 	assert.False(t, out.Pass, "an unknown live-resource count must block the stack rm")
@@ -405,12 +405,12 @@ func writeExport(t *testing.T, tmpDir, body string) {
 
 func liveConfig(root, tmpDir string, m *shellrun.MockRunner) Config {
 	return Config{
-		Root:      root,
-		Paralelas: []string{"infra/pulumi-infra"},
-		Runner:    m,
-		Env:       mapEnv(map[string]string{"PULUMI_CONFIG_PASSPHRASE": "p", "AWS_ACCESS_KEY_ID": "k"}),
-		Timestamp: "20260520T120000Z",
-		TmpDir:    tmpDir,
+		Root:             root,
+		ParallelProjects: []string{"infra/pulumi-infra"},
+		Runner:           m,
+		Env:              mapEnv(map[string]string{"PULUMI_CONFIG_PASSPHRASE": "p", "AWS_ACCESS_KEY_ID": "k"}),
+		Timestamp:        "20260520T120000Z",
+		TmpDir:           tmpDir,
 	}
 }
 
@@ -456,7 +456,7 @@ func TestRun_PlaintextHitsUploadOnceAccepted(t *testing.T) {
 func TestDefaults(t *testing.T) {
 	assert.Equal(t, "loopzero-archive", DefaultArchiveBucket)
 	assert.Equal(t, "3.140.0", PulumiVersionPinned)
-	assert.Equal(t, []string{"infra/pulumi-infra", "infra/pulumi-platform"}, DefaultParalelas)
+	assert.Equal(t, []string{"infra/pulumi-infra", "infra/pulumi-platform"}, DefaultParallelProjects)
 	assert.True(t, PlaintextSecretPattern.MatchString("api_key"))
 	assert.True(t, PlaintextSecretPattern.MatchString("PASSWORD"))
 	assert.False(t, PlaintextSecretPattern.MatchString("benign"))
@@ -550,9 +550,9 @@ func TestRun_FullExportPath_HappyPath(t *testing.T) {
 		[]byte(`{"deployment":{"resources":[]}}`), 0o600))
 
 	out, err := Run(Config{
-		Root:      root,
-		Paralelas: []string{"infra/pulumi-infra"},
-		Runner:    mFile,
+		Root:             root,
+		ParallelProjects: []string{"infra/pulumi-infra"},
+		Runner:           mFile,
 		Env: mapEnv(map[string]string{
 			"PULUMI_CONFIG_PASSPHRASE": "p",
 			"AWS_ACCESS_KEY_ID":        "k",
