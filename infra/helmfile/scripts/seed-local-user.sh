@@ -79,19 +79,23 @@ if [[ -z "$PG_POD" ]]; then
   exit 1
 fi
 
-# 2) DB password from Secret.
-PGPASS=$(kubectl --context "$SEED_CTX" -n "$NS_LOOPZERO" get secret loopzero-db-credentials -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
+# 2) Connect as loopzero_worker. The seed writes users, accounts, tenants and
+#    tenant_members and deletes the user's memberships in every OTHER tenant —
+#    cross-tenant work, which since 000064 only loopzero_worker may do (its named
+#    *_worker_cross_tenant policies, 000062); the table owner is refused by FORCE
+#    ROW LEVEL SECURITY. `task db:roles` sets this password (#396).
+PGPASS=$(kubectl --context "$SEED_CTX" -n "$NS_LOOPZERO" get secret loopzero-db-credentials -o 'jsonpath={.data.worker-password}' 2>/dev/null | base64 -d)
 if [[ -z "$PGPASS" ]]; then
   # T1.3 (plan 2026-05-21-deep-review-remediation): fail-fast instead of
-  # hardcoded fallback. loopzero-db-credentials must exist BEFORE seed runs —
-  # generate-secrets.sh in bootstrap:standalone creates it.
-  log "error: loopzero-db-credentials.password missing in $NS_LOOPZERO — run generate-secrets.sh first OR set LOOPZERO_DB_PASSWORD env var before task setup"
+  # hardcoded fallback. generate-secrets.sh writes worker-password and
+  # `task db:roles` gives loopzero_worker that password.
+  log "error: loopzero-db-credentials.worker-password missing in $NS_LOOPZERO — run generate-secrets.sh <env> core and task db:roles first"
   exit 1
 fi
 
 run_psql() {
   kubectl --context "$SEED_CTX" -n "$NS_LOOPZERO" exec "$PG_POD" -c postgresql -- \
-    env PGPASSWORD="$PGPASS" psql -U loopzero -d loopzero -v ON_ERROR_STOP=1 "$@"
+    env PGPASSWORD="$PGPASS" psql -U loopzero_worker -d loopzero -v ON_ERROR_STOP=1 "$@"
 }
 
 log "seeding tenant=$TENANT_ID user=$USER_ID role=$ROLE"
