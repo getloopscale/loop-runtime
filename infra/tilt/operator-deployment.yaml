@@ -169,7 +169,7 @@ spec:
             # This is the workload cluster's k3d LB IP on the mgmt network.
             # Update after cluster recreate: docker inspect k3d-loopzero-cell-0-server-0
             - name: WORKLOAD_CLUSTER_URL
-              value: "https://10.0.3.10:6443"
+              value: "https://k3d-loopzero-cell-0-server-0:6443"
             # TLS verification: true for local dev (self-signed certs).
             # Production MUST set OPERATOR_INSECURE_SKIP_TLS=false (SEC-001).
             - name: OPERATOR_INSECURE_SKIP_TLS

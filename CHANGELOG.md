@@ -370,6 +370,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A cold setup no longer rewrites tracked files with the host's container IPs: the committed cross-cluster addresses are container names, so a clean checkout stays clean (#264)
+
 - Inspecting a release id that does not exist through the admin API now answers 404 instead of 500 (#415)
 
 - The Tilt dev loop runs loopzero-api under the chart's permissions, as production does, instead of a drifted copy that could not move a tenant between cells (#414)

@@ -10,10 +10,12 @@
 #       MINIO_CROSS_CLUSTER_ENDPOINT, GITEA_CROSS_CLUSTER_URL,
 #       API_CROSS_CLUSTER_URL, WORKLOAD_INGRESS_URL
 #       (post-T1.1.b commit 3fbde9a13: api-deployment.yaml uses envFrom now)
-#   - infra/tilt/operator-deployment.yaml   (WORKLOAD_CLUSTER_URL — still inline)
 #   - Build cluster secrets                 (loopzero-minio-credentials MINIO_ENDPOINT)
-#   - infra/helm/monitoring/values.yaml     (scrape targets)
 #   - infra/helm/promtail/values.yaml       (Loki cross-cluster endpoint)
+#
+# It edits no file git tracks (#264): the committed cross-cluster addresses are
+# container names (monitoring scrape targets, the operators' WORKLOAD_CLUSTER_URL),
+# which Docker's DNS resolves on the k3d network, so nothing needs rewriting.
 #
 # ArgoCD cluster-workload secret and repo credentials are managed by
 # provision-api-tokens.sh (uses Docker hostnames, not IPs).
@@ -24,7 +26,6 @@ set -euo pipefail
 
 SHARED_NETWORK="k3d-loopzero"
 DEPLOYMENT="infra/tilt/api-deployment.yaml"
-OPERATOR_DEPLOYMENT="infra/tilt/operator-deployment.yaml"
 
 if [ ! -f "$DEPLOYMENT" ]; then
   echo "ERROR: $DEPLOYMENT not found. Run from repo root."
@@ -55,13 +56,6 @@ if [ -z "$WORKLOAD_LB" ]; then
 fi
 echo "  Workload LB: $WORKLOAD_LB (Traefik:80/443)"
 
-# Workload server IP (K8s API: 6443)
-WORKLOAD_SERVER=$(get_ip k3d-loopzero-cell-0-server-0)
-echo "  Workload server: $WORKLOAD_SERVER (K8s API:6443)"
-
-# Build LB IP (monitoring scrape targets)
-BUILD_LB=$(get_ip k3d-loopzero-build-serverlb)
-echo "  Build LB: $BUILD_LB (Argo metrics:30090)"
 
 # ---------------------------------------------------------------------------
 # Patch API ConfigMap (loopzero-api)
@@ -126,33 +120,6 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Patch operator deployment (still inline — operator-deployment.yaml was NOT
-# migrated by T1.1.b; remains Tilt-owned with inline value: for WORKLOAD_CLUSTER_URL)
-# ---------------------------------------------------------------------------
-patch_env_inline() {
-  local file="$1" env_name="$2" new_value="$3"
-  local OLD
-  # Defensive grep: || true prevents `set -e` exit when env_name absent.
-  OLD=$(grep "${env_name}" -A1 "$file" 2>/dev/null | grep 'value:' | head -1 | sed 's/.*value: "\([^"]*\)".*/\1/' || true)
-  if [ -z "$OLD" ]; then
-    echo "  ${env_name}: not found in $(basename "$file") (skipping)"
-    return 0
-  fi
-  if [ "$OLD" = "$new_value" ]; then
-    echo "  ${env_name}: already correct ($new_value)"
-    return 0
-  fi
-  sed -i "s|${OLD}|${new_value}|" "$file"
-  echo "  ${env_name}: $OLD → $new_value"
-}
-
-if [ -f "$OPERATOR_DEPLOYMENT" ]; then
-  echo ""
-  echo "=== Patching $OPERATOR_DEPLOYMENT ==="
-  patch_env_inline "$OPERATOR_DEPLOYMENT" "WORKLOAD_CLUSTER_URL" "https://${WORKLOAD_SERVER}:6443"
-fi
-
-# ---------------------------------------------------------------------------
 # Build cluster MinIO credentials (cross-cluster endpoint)
 # ---------------------------------------------------------------------------
 echo ""
@@ -174,35 +141,6 @@ if [ -n "$BUILD_KUBECONFIG" ]; then
   fi
 else
   echo "WARNING: Cannot get kubeconfig for loopzero-build — skipping"
-fi
-
-# ---------------------------------------------------------------------------
-# Monitoring values — cross-cluster scrape targets
-# ---------------------------------------------------------------------------
-MONITORING_VALUES="infra/helm/monitoring/values.yaml"
-if [ -f "$MONITORING_VALUES" ]; then
-  echo ""
-  echo "=== Patching $MONITORING_VALUES ==="
-
-  if [ -n "$BUILD_LB" ]; then
-    OLD_ARGO=$(grep -o '"[0-9.]*:30090"' "$MONITORING_VALUES" | tr -d '"' || true)
-    NEW_ARGO="${BUILD_LB}:30090"
-    if [ -n "$OLD_ARGO" ] && [ "$OLD_ARGO" != "$NEW_ARGO" ]; then
-      sed -i "s|\"${OLD_ARGO}\"|\"${NEW_ARGO}\"|g" "$MONITORING_VALUES"
-      echo "  Argo Workflows target: $OLD_ARGO → $NEW_ARGO"
-    else
-      echo "  Argo Workflows target: already correct ($NEW_ARGO)"
-    fi
-  fi
-
-  OLD_TRAEFIK=$(grep -o '"[0-9.]*:30091"' "$MONITORING_VALUES" | tr -d '"' || true)
-  NEW_TRAEFIK="${WORKLOAD_LB}:30091"
-  if [ -n "$OLD_TRAEFIK" ] && [ "$OLD_TRAEFIK" != "$NEW_TRAEFIK" ]; then
-    sed -i "s|\"${OLD_TRAEFIK}\"|\"${NEW_TRAEFIK}\"|g" "$MONITORING_VALUES"
-    echo "  Traefik target: $OLD_TRAEFIK → $NEW_TRAEFIK"
-  else
-    echo "  Traefik target: already correct ($NEW_TRAEFIK)"
-  fi
 fi
 
 # ---------------------------------------------------------------------------
