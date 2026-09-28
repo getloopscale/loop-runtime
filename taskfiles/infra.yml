@@ -70,7 +70,7 @@ tasks:
       - |
         HELMFILE_ENV="${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
         echo "[infra:install:core] helmfile env: $HELMFILE_ENV"
-        bash infra/helmfile/scripts/generate-secrets.sh "$HELMFILE_ENV" mgmt
+        bash infra/helmfile/scripts/generate-secrets.sh "$HELMFILE_ENV" core
       # GHCR canonical pre-flight (sponsor verbatim 2026-06-23 "NOSSO SISTEMA É GHCR",  # english-only: verbatim sponsor quote, kept as evidence
       # i.e. "OUR SYSTEM IS GHCR"). For env dev-public, the 5 engine images (loopzero-api + 4 split
       # operators) AND loopzero-cloud + loopzero-dashboard are published canonically
@@ -162,7 +162,7 @@ tasks:
         fi
         echo "OK: dashboard-only selector matched $count releases"
       # Same pre-sync as infra:install:core for LOOPZERO_DB_PASSWORD
-      - bash infra/helmfile/scripts/generate-secrets.sh {{.ENV}} mgmt
+      - bash infra/helmfile/scripts/generate-secrets.sh {{.ENV}} core
       - |
         export LOOPZERO_DB_PASSWORD=$(kubectl --context {{.CORE_CONTEXT}} -n loopzero-system \
           get secret loopzero-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}' \

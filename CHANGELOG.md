@@ -368,6 +368,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A cold `task setup` provisions the core cluster's database credentials again: two install steps still named the cluster by its pre-rename name, which the credentials script silently skipped, and it now refuses a cluster name it does not handle (#397)
+
 - The rollback and concurrent-build integration tests run under the production role split (loopzero_worker fixtures, tenant-scoped loopzero_api request pool) and no longer fail or flake under fail-closed Row Level Security (#387)
 
 - The module-selfcontained gate reports a module whose private dependency cannot be fetched without a credential as NOT VERIFIED and names it, instead of failing it; an unknown revision, a go.mod inconsistency or a compile error still fails (#370)

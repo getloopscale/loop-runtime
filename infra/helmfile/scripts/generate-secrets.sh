@@ -153,11 +153,13 @@ if [[ "$BACKUP_ONLY" == "true" ]]; then
 fi
 
 # The central cluster has been called `core` since the 2026-08-09 rename (ADR
-# docs/decisions.md). Caller and guard changed
-# together: while both said `mgmt` nothing broke, but the vocabulary stayed stuck.
+# docs/decisions.md). This used to log "noop" and exit 0 for any other name, and
+# two Taskfile callers still passing `mgmt` then installed the platform with no
+# database Secret — which only a cold install noticed (#397). A name this script
+# does not handle is the caller's mistake, so it is refused.
 if [[ "$CLUSTER" != "core" ]]; then
-  log "noop: cluster=$CLUSTER (only core handled by this script)"
-  exit 0
+  log "ERROR: cluster=$CLUSTER is not handled — this script provisions the core cluster only; pass 'core' (the pre-rename name was 'mgmt')"
+  exit 1
 fi
 
 log "generating mgmt secrets for env=$ENV (idempotent mode)"
