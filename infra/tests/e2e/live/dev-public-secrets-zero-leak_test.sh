@@ -23,7 +23,7 @@ SCENARIO_FILTER=""
 # CANONICAL FIX 2026-06-15 (FAANG, NO WORKAROUND): tenant_id is the
 # LoopZero internal opaque ID (e.g., `tn-dc7f25705bbba5b3`), NOT a slug
 # derived from email/username. Test default `admin-loopzero-dev` (slug
-# guess) produced ns `loopzero-admin-loopzero-dev-teste-production` that
+# guess) produced ns `loopzero-admin-loopzero-dev-sample-production` that
 # NEVER exists in any cluster — canonical ns is
 # `loopzero-<tenant_id>-<project>-<env>` (pkg/naming.TenantNamespace).
 # Extract real tenant_id from session JWT claim (HMAC session JWT
@@ -34,7 +34,7 @@ if [ -z "${LOOPZERO_TEST_TENANT_ID:-}" ] && [ -f "${HOME}/.loopzero/local-dogfoo
     | python3 -c "import json,sys; sys.stdout.write(json.load(sys.stdin).get('tenant_id',''))" 2>/dev/null || echo "")
 fi
 TENANT_ID="${LOOPZERO_TEST_TENANT_ID:-admin-loopzero-dev}"
-PROJECT_NAME="${LOOPZERO_TEST_PROJECT:-teste}" # english-only: canonical live fixture project name, already persisted in dev-public (namespaces, DNS, Caddyfile); renaming is an owner decision
+PROJECT_NAME="${LOOPZERO_TEST_PROJECT:-sample}"
 ENV_NAME="${LOOPZERO_TEST_ENV:-production}"
 DEV_PUBLIC_BASE="${LOOPZERO_DEV_PUBLIC_BASE:-https://app-dev.loopzero.example}"
 KUBE_CONTEXT="${LOOPZERO_KUBE_CONTEXT:-k3d-loopzero-core}"
@@ -70,7 +70,7 @@ Flags:
 
 Env overrides:
   LOOPZERO_TEST_TENANT_ID    Tenant ID (default admin-loopzero-dev)
-  LOOPZERO_TEST_PROJECT      Project (default teste)
+  LOOPZERO_TEST_PROJECT      Project (default sample)
   LOOPZERO_TEST_ENV          Env (default production)
   LOOPZERO_DEV_PUBLIC_BASE   Cloud base URL (default https://cloud-dev.loopzero.example)
   LOOPZERO_KUBE_CONTEXT      Mgmt cluster context (default k3d-loopzero-core)

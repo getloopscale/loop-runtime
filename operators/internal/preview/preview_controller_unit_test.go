@@ -419,7 +419,7 @@ func TestPreviewNamespaceName_IsTheCanonicalFormat(t *testing.T) {
 	r := &PreviewReconciler{}
 	preview := &loopzerov1.PreviewEnvironment{
 		Spec: loopzerov1.PreviewEnvironmentSpec{
-			TenantID: "tn-acme", ProjectID: "teste", PRNumber: 3,
+			TenantID: "tn-acme", ProjectID: "sample", PRNumber: 3,
 		},
 	}
 
@@ -427,7 +427,7 @@ func TestPreviewNamespaceName_IsTheCanonicalFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("previewNamespaceName: %v", err)
 	}
-	want := "loopzero-tn-acme-teste-preview-pr-3"
+	want := "loopzero-tn-acme-sample-preview-pr-3"
 	if got != want {
 		t.Errorf("previewNamespaceName = %q, want %q — the legacy format matches "+
 			"no namespace on any cluster", got, want)

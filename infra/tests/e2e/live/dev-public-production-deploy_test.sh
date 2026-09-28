@@ -12,14 +12,14 @@
 #   1. Preflight  — gh auth + kubectl context + dev-public reachability
 #   2. Reset      — reset-for-e2e.sh applied (DB + Kratos identities)
 #   3. Seed       — admin@loopzero.example session via seed-admin-loopzero-dev.sh
-#   4. Project    — POST /api/v1/projects {name: teste} (T4.1 auto-creates production env)
+#   4. Project    — POST /api/v1/projects {name: sample} (T4.1 auto-creates production env)
 #   5. Connect    — connect-canonical-fixture.sh wires the canonical loopzerokit-example repo
 #   6. Push       — gh api PUT /repos/.../contents/<path> synthesizes a real commit
 #   7. Chain      — webhook -> autodeploy -> build -> release ACTIVE -> ArgoCD Synced+Healthy
-#   8. Assert M2  — kubectl get ns loopzero-<tenant>-teste-production exists (M2 canonical)
+#   8. Assert M2  — kubectl get ns loopzero-<tenant>-sample-production exists (M2 canonical)
 #   9. Assert M2  — kubectl get appproject <tenant> destinations contains M2 namespace
-#  10. Assert M2  — kubectl get sa loopzero-app -n loopzero-<tenant>-teste-production exists
-#  11. Assert M2  — pods Running 2/2 in loopzero-<tenant>-teste-production
+#  10. Assert M2  — kubectl get sa loopzero-app -n loopzero-<tenant>-sample-production exists
+#  11. Assert M2  — pods Running 2/2 in loopzero-<tenant>-sample-production
 #  12. Assert M2  — ArgoCD Application <tenant>-production Synced+Healthy
 #  13. Anti-WA    — grep this script body: ZERO `kubectl patch appproject` calls,
 #                    ZERO `kubectl create namespace` calls, ZERO `kubectl ... apply -f -`
@@ -42,7 +42,7 @@ set -euo pipefail
 REPO_OWNER="${REPO_OWNER:-getloopscale}"
 REPO_NAME="${REPO_NAME:-loopzerokit-example}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-develop}"
-PROJECT_NAME="${PROJECT_NAME:-teste}" # english-only: canonical live fixture project name, already persisted in dev-public (namespaces, DNS, Caddyfile); renaming is an owner decision
+PROJECT_NAME="${PROJECT_NAME:-sample}"
 ENV_NAME="${ENV_NAME:-production}"
 SESSION_FILE="${SESSION_FILE:-$HOME/.loopzero/admin-loopzero-dev-session.txt}"
 PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.loopzero.example}"

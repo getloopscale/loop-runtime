@@ -47,9 +47,9 @@ var _ = Describe("J-17 Deployments + Realtime Logs", Label("live", "dogfood", "j
 	})
 
 	Context("Scenario A — REST list + filter forwarding", func() {
-		It("GET /engine/api/v1/projects/teste/builds returns 200 with total > 0", func() {
+		It("GET /engine/api/v1/projects/sample/builds returns 200 with total > 0", func() {
 			status, body, err := CurlJSON(ctx, env, "GET",
-				env.CloudBaseURL+"/engine/api/v1/projects/teste/builds?env=production", jwt, nil)
+				env.CloudBaseURL+"/engine/api/v1/projects/sample/builds?env=production", jwt, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(status).To(Equal(200))
 			Expect(body).To(HaveKey("builds"))

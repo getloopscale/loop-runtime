@@ -6,7 +6,7 @@
 //
 // Symptom (QA dogfooding 2026-06-21):
 //
-//	/projects/teste/scale → plan_tier='starter', ceiling=2, slider max=2
+//	/projects/sample/scale → plan_tier='starter', ceiling=2, slider max=2
 //
 // while QA doc J-20 asserts `team` tier (replicas=3 succeeds; only
 // >team triggers 402 PLAN_UPGRADE_REQUIRED).

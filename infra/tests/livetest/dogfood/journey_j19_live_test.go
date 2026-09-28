@@ -42,14 +42,14 @@ var _ = Describe("J-19 Runtime Logs Streaming", Label("live", "dogfood", "j19"),
 			// needs a streaming client, same as j17 Scenario B; this scenario
 			// asserts the authenticated prereq only.
 			status, _, err := CurlJSON(ctx, env, "GET",
-				env.CloudBaseURL+"/engine/api/v1/projects/teste/builds", jwt, nil)
+				env.CloudBaseURL+"/engine/api/v1/projects/sample/builds", jwt, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(status).To(Equal(200))
 		})
 	})
 
 	Context("Scenario B — SSE 'log' event arrives", func() {
-		It("GET /engine/api/v1/projects/teste/logs/stream yields a 'log' event", func() {
+		It("GET /engine/api/v1/projects/sample/logs/stream yields a 'log' event", func() {
 			Skip("SSE streaming spec — implementation in T3.2 follow-up commit (mirrors j17 Scenario B)")
 		})
 	})

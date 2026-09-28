@@ -189,7 +189,7 @@ func TestNamespace_canonical(t *testing.T) {
 		want      string
 		wantError bool
 	}{
-		{name: "production", tenant: "tn-x", project: "teste", env: "production", want: "loopzero-tn-x-teste-production"},
+		{name: "production", tenant: "tn-x", project: "sample", env: "production", want: "loopzero-tn-x-sample-production"},
 		{name: "staging", tenant: "tn-x", project: "api", env: "staging", want: "loopzero-tn-x-api-staging"},
 		{name: "preview", tenant: "tn-x", project: "web", env: "preview-pr-7", want: "loopzero-tn-x-web-preview-pr-7"},
 		{name: "empty tenant", tenant: "", project: "p", env: "e", wantError: true},
@@ -686,13 +686,13 @@ func TestEnvironmentCRName_emptyProjectFailsLoudly(t *testing.T) {
 // certificate issued and valid.
 
 func TestAppCertSecretName_matchesTheRenderer(t *testing.T) {
-	got, err := AppCertSecretName("teste", "app")
+	got, err := AppCertSecretName("sample", "app")
 	if err != nil {
 		t.Fatalf("AppCertSecretName: %v", err)
 	}
 	// This value was observed in app-dev: the real Secret created by the renderer.
-	if got != "tls-teste-app" {
-		t.Errorf("AppCertSecretName = %q, want %q — the renderer produces tls-{project}-{app}", got, "tls-teste-app")
+	if got != "tls-sample-app" {
+		t.Errorf("AppCertSecretName = %q, want %q — the renderer produces tls-{project}-{app}", got, "tls-sample-app")
 	}
 }
 

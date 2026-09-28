@@ -37,11 +37,11 @@ PROBE_COMMIT_SHA="${LOOPZERO_DEPLOY_LIVE_URL_COMMIT:-deadbeefdeadbeefdeadbeefdea
 # Canonical fixture project for scenarios C+D (BUILD → RELEASE → URL
 # end-to-end). Scenarios C+D probe an EXISTING active release because the
 # build chain requires a real GitHub source commit (not the synthetic
-# commit_sha used for A+B). The canonical fixture is `teste` (per memory
+# commit_sha used for A+B). The canonical fixture is `sample` (per memory
 # project_canonical_dev_user_credentials + reference seed scripts).
 # Operator can override; setting empty string SKIPs C+D with a SKIP verdict
 # (not a FAIL).
-CANONICAL_PROJECT="${LOOPZERO_DEPLOY_LIVE_URL_CANONICAL_PROJECT:-teste}" # english-only: canonical live fixture project name, already persisted in dev-public (namespaces, DNS, Caddyfile); renaming is an owner decision
+CANONICAL_PROJECT="${LOOPZERO_DEPLOY_LIVE_URL_CANONICAL_PROJECT:-sample}"
 CANONICAL_ENV="${LOOPZERO_DEPLOY_LIVE_URL_CANONICAL_ENV:-production}"
 
 usage() {
@@ -241,7 +241,7 @@ sys.exit(1)
 }
 
 # Scenario C — canonical project has ACTIVE release with non-empty URL.
-# Probes the EXISTING canonical fixture project (default `teste`) instead
+# Probes the EXISTING canonical fixture project (default `sample`) instead
 # of a synthetic probe, because building a release requires real GitHub
 # source — the synthetic probe used by A+B is intentional for the m37
 # tuple assertion but cannot drive a real BUILD → RELEASE → URL chain.

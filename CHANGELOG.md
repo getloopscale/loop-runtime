@@ -89,6 +89,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The canonical fixture project the dev environment seeds, its preview hostnames and the live journeys that exercise it are named `sample` instead of the Portuguese `teste`; an environment seeded before this keeps the old project until it is re-seeded (#379)
+
 - The integration-test role fixture creates only the roles the platform uses; TestRolesExist asserts loopzero_api, loopzero_worker and loopzero_cloud exist and cannot bypass Row Level Security (#387)
 
 - The tenant-isolation CI job builds its database from the whole migration chain with golang-migrate v4.19.1, the tool production runs, instead of a schema dump plus five hand-named migrations (#387)

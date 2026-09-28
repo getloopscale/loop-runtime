@@ -4,8 +4,8 @@
 // Ginkgo envtest specs that pin the EnvironmentController's canonical
 // namespace contract (plan 2026-06-09-m2-operator-canonical-fix v1.4, T3.1):
 //
-//   - An Environment CR with Project=teste and Environment=production makes
-//     the controller create namespace `loopzero-tn-X-teste-production` (the
+//   - An Environment CR with Project=sample and Environment=production makes
+//     the controller create namespace `loopzero-tn-X-sample-production` (the
 //     three-segment canonical form), never the two-segment legacy form.
 //   - An Environment CR whose Project and Environment combine into a name
 //     longer than 63 characters gets NamespaceReady=False Reason=NameTooLong
@@ -61,8 +61,8 @@ func canonicalNamespaceEnvironment(project, envName, tenantName string) *loopzer
 var _ = Describe("EnvironmentController canonical namespace and 63-char overflow", Ordered, func() {
 
 	Context("canonical three-segment namespace", func() {
-		It("creates namespace `loopzero-tn-X-teste-production` when Project=teste + Environment=production", func() {
-			env := canonicalNamespaceEnvironment("teste", "production", "tn-canon")
+		It("creates namespace `loopzero-tn-X-sample-production` when Project=sample + Environment=production", func() {
+			env := canonicalNamespaceEnvironment("sample", "production", "tn-canon")
 			// Spec.Namespace.Name is filtered out by the CRD's `Optional`
 			// validation but the controller recomputes from Project regardless.
 			env.Spec.Namespace.Name = "tn-canon-production" // M1-shaped (wrong) — controller must override
@@ -71,7 +71,7 @@ var _ = Describe("EnvironmentController canonical namespace and 63-char overflow
 			Eventually(func(g Gomega) {
 				var ns corev1.Namespace
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-tn-canon-teste-production",
+					Name: "loopzero-tn-canon-sample-production",
 				}, &ns)).To(Succeed())
 			}, timeout, interval).Should(Succeed())
 		})
@@ -79,7 +79,7 @@ var _ = Describe("EnvironmentController canonical namespace and 63-char overflow
 		AfterAll(func() {
 			// Best-effort cleanup so re-runs (or sister describes) start clean.
 			_ = k8sClient.Delete(ctx, &loopzerov1.Environment{
-				ObjectMeta: metav1.ObjectMeta{Name: "tn-canon-teste-production", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "tn-canon-sample-production", Namespace: "default"},
 			})
 		})
 	})

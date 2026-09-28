@@ -313,7 +313,7 @@ func TestGetRedeploySource_PreservesRuntime(t *testing.T) {
 		build: &db.Build{
 			ID:          "build-source",
 			TenantID:    "tn-1",
-			ProjectID:   "teste",
+			ProjectID:   "sample",
 			Environment: "production",
 			CommitSHA:   "dcd30d4a3a70b6775684e2a9e32945d57663a9f0",
 			Status:      "SUCCEEDED",

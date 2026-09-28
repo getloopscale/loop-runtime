@@ -338,7 +338,7 @@ func TestDevPublic_EngineContract_ProductionDeploy(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"environments": []map[string]any{
-				{"tenant": "tn-243c747b30c41e51", "env_name": "production", "project": "teste"},
+				{"tenant": "tn-243c747b30c41e51", "env_name": "production", "project": "sample"},
 			},
 		})
 	})
@@ -352,7 +352,7 @@ func TestDevPublic_EngineContract_ProductionDeploy(t *testing.T) {
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	body, _ := io.ReadAll(resp.Body)
-	require.Contains(t, string(body), `"project":"teste"`,
+	require.Contains(t, string(body), `"project":"sample"`,
 		"Tenant CR environments[] MUST include (project, env_name) tuple per M2 J-23 canonical")
 }
 

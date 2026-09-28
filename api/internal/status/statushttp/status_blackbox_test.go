@@ -369,7 +369,7 @@ func TestStatusRoute_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 	projects := &fakeStatusProjectStore{
 		project: &ports.ProjectResult{
 			ID:     "proj-123",
-			Name:   "teste",
+			Name:   "sample",
 			TeamID: "tn-acme",
 		},
 	}
@@ -378,7 +378,7 @@ func TestStatusRoute_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 
 	t.Run("metrics_range_url is templated when grafanaBaseURL set", func(t *testing.T) {
 		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "https://grafana.loopzero.local")
-		req := newStatusRequest("teste", "production", true)
+		req := newStatusRequest("sample", "production", true)
 		rec := httptest.NewRecorder()
 
 		handler.Get(rec, req)
@@ -392,7 +392,7 @@ func TestStatusRoute_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 			t.Fatalf("decode response: %v", err)
 		}
 
-		want := "https://grafana.loopzero.local/d/loopzero-project?var-project=teste&var-env=production"
+		want := "https://grafana.loopzero.local/d/loopzero-project?var-project=sample&var-env=production"
 		if got, _ := resp["metrics_range_url"].(string); got != want {
 			t.Errorf("metrics_range_url mismatch: got %q, want %q", got, want)
 		}
@@ -400,7 +400,7 @@ func TestStatusRoute_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 
 	t.Run("metrics_range_url is empty (honest) when grafanaBaseURL empty", func(t *testing.T) {
 		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
-		req := newStatusRequest("teste", "production", true)
+		req := newStatusRequest("sample", "production", true)
 		rec := httptest.NewRecorder()
 
 		handler.Get(rec, req)
@@ -421,7 +421,7 @@ func TestStatusRoute_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 
 	t.Run("prom_query_keys is always present with 8 canonical names in order", func(t *testing.T) {
 		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
-		req := newStatusRequest("teste", "production", true)
+		req := newStatusRequest("sample", "production", true)
 		rec := httptest.NewRecorder()
 
 		handler.Get(rec, req)
@@ -467,7 +467,7 @@ func TestStatusRoute_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 		// grafanaBaseURL — dashboard consumers need the list to render
 		// signal pills regardless of whether Grafana link is available.
 		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "https://grafana.loopzero.local")
-		req := newStatusRequest("teste", "production", true)
+		req := newStatusRequest("sample", "production", true)
 		rec := httptest.NewRecorder()
 
 		handler.Get(rec, req)

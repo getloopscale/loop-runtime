@@ -554,7 +554,7 @@ auth-dev.loopzero.example {
 # URL convention: <internal-sni>.preview-dev.loopzero.example
 #   where <internal-sni> is the IngressRoute Host match the manifest
 #   builder emits via appHostname(), e.g.,
-#   "tn-08fa2ecedc3c7e77-teste-api-preview-pr-1".
+#   "tn-08fa2ecedc3c7e77-sample-api-preview-pr-1".
 #
 # The {http.request.host.labels.3} expression extracts the first label
 # from the public hostname (Caddy indexes labels RIGHT-to-LEFT, so for

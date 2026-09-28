@@ -29,20 +29,20 @@ func TestAppHostname_canonical_full_formula(t *testing.T) {
 		{
 			name:      "production canonical",
 			tenantID:  "tn-82988ea9aef248ef",
-			projectID: "teste",
+			projectID: "sample",
 			appName:   "api",
 			envName:   "production",
 			base:      "loopzero.local",
-			want:      "tn-82988ea9aef248ef-teste-api-production.loopzero.local",
+			want:      "tn-82988ea9aef248ef-sample-api-production.loopzero.local",
 		},
 		{
 			name:      "public domain (dev-public prod-dev wildcard)",
 			tenantID:  "tn-82988ea9aef248ef",
-			projectID: "teste",
+			projectID: "sample",
 			appName:   "api",
 			envName:   "production",
 			base:      "prod-dev.loopzero.example",
-			want:      "tn-82988ea9aef248ef-teste-api-production.prod-dev.loopzero.example",
+			want:      "tn-82988ea9aef248ef-sample-api-production.prod-dev.loopzero.example",
 		},
 		{
 			name:      "staging env",
@@ -97,8 +97,8 @@ func TestAppHostname_truncates_over_63_chars_rfc1123(t *testing.T) {
 }
 
 func TestAppURL_https_scheme_and_publicDomain(t *testing.T) {
-	got := AppURL("tn-82988ea9aef248ef", "teste", "api", "production", "prod-dev.loopzero.example")
-	want := "https://tn-82988ea9aef248ef-teste-api-production.prod-dev.loopzero.example"
+	got := AppURL("tn-82988ea9aef248ef", "sample", "api", "production", "prod-dev.loopzero.example")
+	want := "https://tn-82988ea9aef248ef-sample-api-production.prod-dev.loopzero.example"
 	if got != want {
 		t.Fatalf("AppURL = %q; want %q", got, want)
 	}

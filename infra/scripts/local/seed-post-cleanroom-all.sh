@@ -257,8 +257,8 @@ run_step "9-seed-tenant-fixture" "(cd $REPO_ROOT/cmd/loopzero-ops && LOOPZERO_PL
 # Step 10 (M15 W2: migrated to loopzero-ops seed; bash script deleted)
 run_step "10-seed-admin-hydra-client" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed admin-hydra-client ${VERIFY_FLAG:+--verify})"
 
-# Step 11 (NEW 2026-06-16) — connect canonical fixture (project "teste" +
-# repo link). Required by LIVE wrappers that probe /projects/teste/* paths.
+# Step 11 (NEW 2026-06-16) — connect canonical fixture (project "sample" +
+# repo link). Required by LIVE wrappers that probe /projects/sample/* paths.
 # Depends on step 10 (admin Hydra client) only indirectly via session JWT.
 if [[ -x "$SCRIPT_DIR/connect-canonical-fixture.sh" ]]; then
   run_step "11-connect-canonical-fixture" "bash $SCRIPT_DIR/connect-canonical-fixture.sh"

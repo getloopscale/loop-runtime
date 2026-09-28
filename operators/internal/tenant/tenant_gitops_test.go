@@ -78,9 +78,9 @@ func TestCanonicalDestNamespace_UsesTheThreeSegmentFormula(t *testing.T) {
 		{
 			name:    "canonical: tenant + project + env",
 			tenant:  "tn-08fa2ecedc3c7e77",
-			project: "teste",
+			project: "sample",
 			env:     "production",
-			want:    "loopzero-tn-08fa2ecedc3c7e77-teste-production",
+			want:    "loopzero-tn-08fa2ecedc3c7e77-sample-production",
 		},
 		{
 			name:    "canonical: preview env name (preview-pr-N)",

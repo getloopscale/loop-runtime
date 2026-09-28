@@ -37,9 +37,9 @@ var _ = Describe("J-08 Project Detail Overview", Label("live", "dogfood", "j08")
 	AfterEach(func() { cancel() })
 
 	Context("Scenario A — REST detail", func() {
-		It("GET /engine/api/v1/projects/teste returns 200 with a body", func() {
+		It("GET /engine/api/v1/projects/sample returns 200 with a body", func() {
 			status, body, err := CurlJSON(ctx, env, "GET",
-				env.CloudBaseURL+"/engine/api/v1/projects/teste", jwt, nil)
+				env.CloudBaseURL+"/engine/api/v1/projects/sample", jwt, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(status).To(Equal(200))
 			Expect(body).ToNot(BeNil())

@@ -37,9 +37,9 @@ var _ = Describe("J-21 Readiness Score", Label("live", "dogfood", "j21"), func()
 	AfterEach(func() { cancel() })
 
 	Context("Scenario A — status feeds the readiness signals", func() {
-		It("GET /engine/api/v1/projects/teste/status returns 200 (source of the 8 signals)", func() {
+		It("GET /engine/api/v1/projects/sample/status returns 200 (source of the 8 signals)", func() {
 			status, _, err := CurlJSON(ctx, env, "GET",
-				env.CloudBaseURL+"/engine/api/v1/projects/teste/status", jwt, nil)
+				env.CloudBaseURL+"/engine/api/v1/projects/sample/status", jwt, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(status).To(Equal(200))
 		})

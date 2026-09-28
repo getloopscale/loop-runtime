@@ -4,7 +4,7 @@
 # T2.1 of plan 2026-06-08-pre-release-test-rigor v1.2 — connects the canonical
 # fixture GitHub repo (`getloopscale/loopzerokit-example`, per 2026-06-16 sponsor
 # mandate; supersedes legacy `loopzero-repotest`) to the canonical LoopZero project
-# `teste` in admin@loopzero.example's tenant. Idempotent + handles orphan
+# `sample` in admin@loopzero.example's tenant. Idempotent + handles orphan
 # installations.
 #
 # Preconditions:
@@ -29,7 +29,7 @@
 #   bash infra/scripts/local/connect-canonical-fixture.sh --dry-run
 #
 # Exit codes (per plan T2.1):
-#   0  fixture ready (project teste exists, GitHub App active on loopzerokit-example)
+#   0  fixture ready (project sample exists, GitHub App active on loopzerokit-example)
 #   1  preflight failure (gh auth missing OR rate-limit exhausted OR session absent)
 #   2  LIVE infrastructure unreachable (LoopZero API, PG, GitHub API itself)
 set -euo pipefail
@@ -43,7 +43,7 @@ REPO_OWNER="${REPO_OWNER:-getloopscale}"
 # directed discard+delete in favor of the canonical LoopZeroKit shape.
 REPO_NAME="${REPO_NAME:-loopzerokit-example}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-develop}"
-PROJECT_NAME="${PROJECT_NAME:-teste}" # english-only: canonical live fixture project name, already persisted in dev-public (namespaces, DNS, Caddyfile); renaming is an owner decision
+PROJECT_NAME="${PROJECT_NAME:-sample}"
 SESSION_FILE="${SESSION_FILE:-$HOME/.loopzero/admin-loopzero-dev-session.txt}"
 PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
 # Canonical 2026-06-20 (issue #108): post-M2 decomposition, the LoopZero CLI

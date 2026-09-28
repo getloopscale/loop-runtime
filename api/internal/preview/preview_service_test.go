@@ -397,10 +397,10 @@ func TestPreviewURL_CanonicalWildcardConvention(t *testing.T) {
 			name:     "public domain + entry app — canonical clickable URL",
 			public:   "preview-dev.loopzero.example",
 			tenant:   "tn-08fa2ecedc3c7e77",
-			project:  "teste",
+			project:  "sample",
 			entry:    "api",
 			prNumber: 1,
-			want:     "https://tn-08fa2ecedc3c7e77-teste-api-preview-pr-1.preview-dev.loopzero.example",
+			want:     "https://tn-08fa2ecedc3c7e77-sample-api-preview-pr-1.preview-dev.loopzero.example",
 		},
 		{
 			name:     "public empty → falls back to base domain (legacy local)",

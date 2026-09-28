@@ -101,49 +101,49 @@ func TestRewriteManifestsForEnv_RewritesNamespaceHostAndLabel(t *testing.T) {
 // then deployed into the preview namespace instead of production, and the
 // production ArgoCD App reported them as "Synced" because that's where
 // the manifest told it to look — exactly the cross-project corruption
-// observed against `teste` (build-e83c0186d91cfca1).
+// observed against `sample` (build-e83c0186d91cfca1).
 //
 // This fixture mirrors actual renderer output for a preview-pr-1 → production
-// promote on project "teste" under tenant "tn-e9bb8ad57e7f3c21". Asserts the
+// promote on project "sample" under tenant "tn-e9bb8ad57e7f3c21". Asserts the
 // rewriter swaps the namespace + hostname suffix + env label cleanly even
 // when project is in the middle of the namespace segment.
 const previewToProductionMultiProjectSample = `apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: teste-app
-  namespace: loopzero-tn-e9bb8ad57e7f3c21-teste-preview-pr-1
+  name: sample-app
+  namespace: loopzero-tn-e9bb8ad57e7f3c21-sample-preview-pr-1
   labels:
-    app: teste-app
+    app: sample-app
     loopzero.io/environment: preview-pr-1
-    loopzero.io/project: teste
+    loopzero.io/project: sample
     loopzero.io/tenant: tn-e9bb8ad57e7f3c21
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: teste-app
+      app: sample-app
       loopzero.io/environment: preview-pr-1
   template:
     metadata:
       labels:
-        app: teste-app
+        app: sample-app
         loopzero.io/environment: preview-pr-1
     spec:
       containers:
         - name: app
-          image: registry/teste-app:tag
+          image: registry/sample-app:tag
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: teste-app
-  namespace: loopzero-tn-e9bb8ad57e7f3c21-teste-preview-pr-1
+  name: sample-app
+  namespace: loopzero-tn-e9bb8ad57e7f3c21-sample-preview-pr-1
 spec:
   routes:
     - kind: Rule
-      match: Host(` + "`" + `tn-e9bb8ad57e7f3c21-teste-app-preview-pr-1.loopzero.local` + "`" + `)
+      match: Host(` + "`" + `tn-e9bb8ad57e7f3c21-sample-app-preview-pr-1.loopzero.local` + "`" + `)
       services:
-        - name: teste-app
+        - name: sample-app
           port: 80
 `
 
@@ -155,7 +155,7 @@ func TestRewriteManifestsForEnv_MultiProjectCanonicalNamespace(t *testing.T) {
 	out, err := rewriteManifestsForEnv(
 		previewToProductionMultiProjectSample,
 		"tn-e9bb8ad57e7f3c21",
-		"teste",
+		"sample",
 		"preview-pr-1",
 		"production",
 		"loopzero.local",
@@ -165,9 +165,9 @@ func TestRewriteManifestsForEnv_MultiProjectCanonicalNamespace(t *testing.T) {
 	}
 
 	mustContain := []string{
-		"namespace: loopzero-tn-e9bb8ad57e7f3c21-teste-production",
+		"namespace: loopzero-tn-e9bb8ad57e7f3c21-sample-production",
 		"loopzero.io/environment: production",
-		"tn-e9bb8ad57e7f3c21-teste-app-production.loopzero.local",
+		"tn-e9bb8ad57e7f3c21-sample-app-production.loopzero.local",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(out, want) {
@@ -175,7 +175,7 @@ func TestRewriteManifestsForEnv_MultiProjectCanonicalNamespace(t *testing.T) {
 		}
 	}
 	mustNotContain := []string{
-		"loopzero-tn-e9bb8ad57e7f3c21-teste-preview-pr-1",
+		"loopzero-tn-e9bb8ad57e7f3c21-sample-preview-pr-1",
 		"loopzero.io/environment: preview-pr-1",
 		"-preview-pr-1.loopzero.local",
 	}

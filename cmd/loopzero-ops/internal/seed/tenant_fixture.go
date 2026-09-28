@@ -69,7 +69,7 @@ const (
 	tenantFixtureHelmfileEnvKey  = "LOOPZERO_HELMFILE_ENV"
 
 	tenantFixtureNamespace   = "loopzero-system"
-	tenantFixtureProject     = "teste" // english-only: canonical live fixture project name, already persisted in dev-public (namespaces, DNS, Caddyfile); renaming is an owner decision
+	tenantFixtureProject     = "sample"
 	tenantFixtureEnvName     = "production"
 	tenantFixtureEnvCluster  = "workload"
 	tenantFixtureWebhookPath = "/api/v1/webhooks/github"
