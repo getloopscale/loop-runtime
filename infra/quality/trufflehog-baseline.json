@@ -74,7 +74,7 @@
     {
       "id": "a7f0a2be2e2315e4",
       "detector": "Postgres",
-      "first_seen_in": "api/tests/integration/project_cap_deploy_path_test.go"
+      "first_seen_in": "api/tests/integration/project_cap_hermetic_m5_test.go"
     },
     {
       "id": "4df01e360d804595",
@@ -92,29 +92,29 @@
       "first_seen_in": "cli/src/installer/profiles/example-values.yaml"
     },
     {
-      "id": "abd38b5e3fb0e34e",
-      "detector": "Postgres",
-      "first_seen_in": "code-review-output/code-review.db"
-    },
-    {
       "id": "126b9cbe3bfbd4fd",
       "detector": "Eraser",
-      "first_seen_in": "docs/architecture.md"
+      "first_seen_in": "docs/architecture/eraser-diagrams-index.md"
+    },
+    {
+      "id": "3752c28fa807eb85",
+      "detector": "Postgres",
+      "first_seen_in": "docs/knowledge-base/implementations/dashboard-badge-data-plane-poller/READY_TO_READ_TEAM-2026-07-02.md"
     },
     {
       "id": "6a867b62662cf001",
       "detector": "Postgres",
-      "first_seen_in": "dogfood-2026-05-08-fixes-plan"
+      "first_seen_in": "docs/plans/dogfood-2026-05-08-fixes-plan.md"
     },
     {
       "id": "81a963f476bdf6f3",
       "detector": "Docker",
-      "first_seen_in": "harbor-gaps-resolution"
+      "first_seen_in": "docs/plans/harbor-gaps-resolution.md"
     },
     {
       "id": "f7e813169b5bcf82",
       "detector": "Postgres",
-      "first_seen_in": "self-hosted-systematization"
+      "first_seen_in": "docs/plans/self-hosted-systematization.md"
     },
     {
       "id": "df235625d3592369",
@@ -177,9 +177,19 @@
       "first_seen_in": "infra/tests/snapshots/helmfile-drill-phase1.yaml"
     },
     {
-      "id": "3752c28fa807eb85",
+      "id": "76118ab9f6e7a8b9",
       "detector": "Postgres",
-      "first_seen_in": "knowledge-base/implementations/dashboard-badge-data-plane-poller/READY_TO_READ_TEAM-2026-07-02.md"
+      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
+    },
+    {
+      "id": "8f009e0552c35796",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
+    },
+    {
+      "id": "abd38b5e3fb0e34e",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
     },
     {
       "id": "62283828d0b786e1",
