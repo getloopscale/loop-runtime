@@ -12,7 +12,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/release"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // The admin routes act on a tenant the caller does not belong to: an admin
@@ -174,8 +173,10 @@ func TestAdminReleaseInspectionOnTheRequestPoolFindsNoRelease(t *testing.T) {
 
 	_, err := adminInspectorOn(scopedRequestPool(t)).Inspect(context.Background(), rel)
 
-	var notFound *loopzeroerrors.LoopZeroError
-	if !errors.As(err, &notFound) || notFound.Code != "RELEASE_NOT_FOUND" {
-		t.Fatalf("inspection over the request pool = %v; want RELEASE_NOT_FOUND (hidden by RLS)", err)
+	// Hidden by RLS reads as not found; the inspector reports its own not-found,
+	// which the admin handler answers with 404 (#415).
+	var notFound release.ErrReleaseInspectionNotFound
+	if !errors.As(err, &notFound) {
+		t.Fatalf("inspection over the request pool = %v; want the release not found (hidden by RLS)", err)
 	}
 }
