@@ -14,6 +14,12 @@
 // built from a template variable is resolved at run time and is not judged here.
 // Paths are resolved against the task's `dir:` (or the repo root) and, when the
 // command `cd`s into a literal directory first, against that directory too.
+//
+// A command that tests for the SAME path before running it (`[ -f <path> ]`,
+// `test -e <path>`) is not a dead reference: the guard decides whether the script
+// runs, so the task cannot fail with "No such file". That is how a task reaches a
+// script in the gitignored kit (docs/decisions.md, 2026-09-26). Only a positive
+// existence test of the exact path counts; a guard on anything else does not.
 package repoinvariants
 
 import (
@@ -59,6 +65,15 @@ func commandText(n yaml.Node) string {
 	return ""
 }
 
+// scriptGuardedByExistenceCheck reports whether cmd tests that ref exists (`[ -f ref ]`,
+// `[ -e ref ]`, `test -f ref`, `test -e ref`, with or without a leading `./`) before it
+// could run it. A negated test does not count: it runs the script when it is absent.
+func scriptGuardedByExistenceCheck(cmd, ref string) bool {
+	path := regexp.QuoteMeta(strings.TrimPrefix(ref, "./"))
+	guard := regexp.MustCompile(`(?:\[|\btest)\s+-[ef]\s+['"]?(?:\./)?` + path + `['"]?(?:\s|\]|;|&|$)`)
+	return guard.MatchString(cmd)
+}
+
 func scriptResolves(repoRoot, taskDir, cmd, ref string) bool {
 	bases := []string{filepath.Join(repoRoot, taskDir)}
 	for _, m := range reCdTarget.FindAllStringSubmatch(cmd, -1) {
@@ -98,6 +113,9 @@ func TestTaskfileCommandsRunScriptsThatExist(t *testing.T) {
 						continue
 					}
 					checked++
+					if scriptGuardedByExistenceCheck(cmd, ref) {
+						continue
+					}
 					if !scriptResolves(repoRoot, task.Dir, cmd, ref) {
 						t.Errorf("%s: task %q runs %s, which does not exist — the task can only fail with \"No such file\"",
 							tf, name, ref)
