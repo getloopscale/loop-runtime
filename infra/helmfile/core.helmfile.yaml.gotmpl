@@ -284,8 +284,7 @@ releases:
     # here from pinned source (infra/images/minio, infra/images/clone-runner). A
     # local registry profile gets the ones `task images:build` pushes; any other
     # environment takes them from its declared registry prefix — the same place its
-    # clone runner already comes from — or fails here, instead of falling back to a
-    # chart default that no longer exists.
+    # clone runner already comes from — and never from the chart's dead default.
     set:
 {{- if .Values.profile.localRegistry }}
       - name: image.repository
@@ -297,7 +296,10 @@ releases:
       - name: mcImage.tag
         value: "v0.1.0"
 {{- else }}
-{{- $registry := required "registries.docrPrefix: MinIO is built from source now (#394) and published beside this environment's other images — declare the registry prefix" (.Values | get "registries.docrPrefix" "") }}
+{{- /* The same rule the platform charts follow: an environment that declares a
+       registry prefix pulls from it; one that declares none (standalone self-host)
+       gets the bare image name, as loopzero-api's `repository: loopzero-api` does there. */}}
+{{- $registry := .Values | get "registries.docrPrefix" "" }}
       - name: image.repository
         value: "{{ $registry }}loopzero-minio"
       - name: image.tag

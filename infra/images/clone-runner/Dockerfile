@@ -25,15 +25,21 @@ RUN apk add --no-cache git \
     && test "$(git -C /src/mc rev-parse HEAD)" = "${MC_COMMIT}"
 
 WORKDIR /src/mc
+# No -X version injection (see infra/images/minio/Dockerfile): the release and
+# commit are carried by the OCI labels below.
 RUN CGO_ENABLED=0 GOFLAGS=-mod=readonly go build -trimpath \
-      -ldflags "-s -w -X github.com/minio/mc/cmd.ReleaseTag=${MC_TAG} -X github.com/minio/mc/cmd.CommitID=${MC_COMMIT}" \
-      -o /out/mc . \
+      -ldflags "-s -w" -o /out/mc . \
     && /out/mc --version
 
 FROM mirror.gcr.io/library/alpine:3.21.6@sha256:c3f8e73fdb79deaebaa2037150150191b9dcbfba68b4a46d70103204c53f4709
 
-LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero"
-LABEL org.opencontainers.image.title="loopzero-clone-runner"
+ARG MC_TAG=RELEASE.2025-08-13T08-35-41Z
+ARG MC_COMMIT=7394ce0dd2a80935aded936b09fa12cbb3cb8096
+
+LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero" \
+      org.opencontainers.image.title="loopzero-clone-runner" \
+      io.loopzero.mc.release="${MC_TAG}" \
+      io.loopzero.mc.revision="${MC_COMMIT}"
 
 # /usr/bin/mc is the path the MinIO chart's jobs call explicitly.
 COPY --from=mc-build /out/mc /usr/bin/mc

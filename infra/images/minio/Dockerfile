@@ -21,21 +21,18 @@ FROM mirror.gcr.io/library/golang:1.23.12-alpine3.21@sha256:4bb4be21ac98da06bc26
 # it points to).
 ARG MINIO_TAG=RELEASE.2024-12-18T13-15-44Z
 ARG MINIO_COMMIT=16f8cf1c52f0a77eeb8f7565aaf7f7df12454583
-# The release time the tag encodes, in the form upstream's gen-ldflags writes.
-ARG MINIO_VERSION=2024-12-18T13:15:44Z
 
 RUN apk add --no-cache git \
     && git clone --depth 1 --branch "${MINIO_TAG}" https://github.com/minio/minio.git /src/minio \
     && test "$(git -C /src/minio rev-parse HEAD)" = "${MINIO_COMMIT}"
 
 WORKDIR /src/minio
+# No -X version injection: the ldflag-symbols gate verifies every injection against
+# a module of THIS repository, and upstream's version strings are informational only
+# (user agent, a metric label, an admin message) — measured in cmd/ at this commit.
+# The release and commit are carried by the OCI labels below instead.
 RUN CGO_ENABLED=0 GOFLAGS=-mod=readonly go build -trimpath -tags kqueue \
-      -ldflags "-s -w \
-        -X github.com/minio/minio/cmd.Version=${MINIO_VERSION} \
-        -X github.com/minio/minio/cmd.ReleaseTag=${MINIO_TAG} \
-        -X github.com/minio/minio/cmd.CommitID=${MINIO_COMMIT} \
-        -X github.com/minio/minio/cmd.ShortCommitID=${MINIO_COMMIT%${MINIO_COMMIT#????????????}}" \
-      -o /out/minio . \
+      -ldflags "-s -w" -o /out/minio . \
     && /out/minio --version
 
 FROM mirror.gcr.io/library/alpine:3.21.6@sha256:c3f8e73fdb79deaebaa2037150150191b9dcbfba68b4a46d70103204c53f4709
