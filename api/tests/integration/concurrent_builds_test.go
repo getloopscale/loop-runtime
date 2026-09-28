@@ -23,10 +23,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"runtime"
-	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -205,36 +201,40 @@ func (f *fakeMembershipStore) GetMemberships(ctx context.Context, userID string)
 // --- Test setup ---
 
 // testIntegrationSetup holds all the components needed for integration tests.
+//
+// Two pools, because production has two roles. `seed` is the cross-tenant
+// fixture pool (seedDBURL): it writes and inspects fixture rows the way the
+// background loops do. `adapter` is the request pool the server runs on,
+// tenant-scoped like requestPoolConfig — the code under test never touches
+// `seed`, so no fixture's scope can leak into it.
 type testIntegrationSetup struct {
-	pool       *pgxpool.Pool
+	seed       *pgxpool.Pool
 	server     *httptest.Server
 	buildStore db.BuildStore
 	adapter    *db.PgxAdapter
 }
 
-// setupIntegrationTest creates a real PostgreSQL-backed test server.
-// It runs all migrations, seeds required data, and returns a teardown function.
+// setupIntegrationTest creates a real PostgreSQL-backed test server over an
+// already-migrated database (the harness applies the migrations; CI provisions
+// them in the tenant-isolation job), seeds the required data, and serves the
+// build routes on a tenant-scoped request pool.
 func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 	t.Helper()
 
-	pool := testPool(t)
+	seed := seedPool(t)
+	seedTestData(t, seed)
 
-	// Run migrations
-	runMigrations(t, pool)
-
-	// Seed test data
-	seedTestData(t, pool)
-
-	// Create real stores backed by the pool
-	adapter := &db.PgxAdapter{Pool: pool}
+	// Enough connections for the concurrent submissions to contend on the
+	// environment lock rather than on the pool.
+	adapter := tenantScopedRequestPool(t, 8)
 	buildStore := store.NewBuildStoreSqlc(adapter)                             // T1.2b
 	releaseStore := store.NewReleaseStoreSqlc(adapter, store.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	envTargetStore := store.NewPostgresEnvironmentTargetStore(adapter, adapter)
 	eventStore := store.NewPostgresEventStore(adapter, adapter)
 	idempotencyStore := &store.PostgresIdempotencyStore{DB: adapter}
 
-	// Create real locker backed by the pool (reusing adapters package — no duplication)
-	locker := &lock.PoolEnvironmentLocker{Pool: pool}
+	// Create real locker backed by the request pool, as setupStores does.
+	locker := &lock.PoolEnvironmentLocker{Pool: adapter.Pool}
 
 	// Create real orchestrator with fake external services
 	orch := builds.NewBuildOrchestrator(builds.BuildOrchestratorDeps{
@@ -275,58 +275,20 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 	})
 
 	return &testIntegrationSetup{
-		pool:       pool,
+		seed:       seed,
 		server:     srv,
 		buildStore: buildStore,
 		adapter:    adapter,
 	}
 }
 
-// migrationsDir returns the absolute path to the migrations directory.
-// Uses runtime.Caller to locate this test file and derives the path from there.
-func migrationsDir() string {
-	_, thisFile, _, _ := runtime.Caller(0)
-	// thisFile: .../api/tests/integration/concurrent_builds_test.go
-	// we want:  .../api/internal/db/migrations/
-	apiDir := filepath.Dir(filepath.Dir(filepath.Dir(thisFile)))
-	return filepath.Join(apiDir, "internal", "db", "migrations")
-}
-
-// runMigrations applies every `*.up.sql` file in the shared migrations dir to
-// the test database in numeric-prefix order. Discovers files via a glob so the
-// helper stays in-sync as new migrations land (the old hardcoded 000001..000003
-// list drifted stale by 2026-04 — closes #184). Errors from IF NOT EXISTS /
-// duplicate-object statements are logged, not fatal, so the helper is safe
-// against an already-migrated DB (the operator harness runs `migrate up`
-// before invoking the tests).
-func runMigrations(t *testing.T, pool *pgxpool.Pool) {
-	t.Helper()
-
-	ctx := context.Background()
-	dir := migrationsDir()
-
-	paths, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
-	if err != nil {
-		t.Fatalf("failed to glob migrations in %s: %v", dir, err)
-	}
-	if len(paths) == 0 {
-		t.Fatalf("no *.up.sql migrations found in %s", dir)
-	}
-	sort.Strings(paths) // numeric prefix (000001, 000002, …) sorts lexicographically
-
-	for _, path := range paths {
-		sql, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("failed to read migration %s: %v", path, err)
-		}
-		if _, err := pool.Exec(ctx, string(sql)); err != nil {
-			// Ignore errors from IF NOT EXISTS / IF EXISTS statements
-			t.Logf("migration %s: %v (may be expected for idempotent migrations)", path, err)
-		}
-	}
-}
-
 // seedTestData creates the test tenant, user, project, and membership records.
+//
+// Through the cross-tenant fixture pool (seedDBURL), the way the bootstrap path
+// creates them, and the Account through its owner (execAsAccountsOwner): since
+// migration 000062 the tables are fail-closed and 000064 removed the owner's
+// standing bypass, so a fixture that is not written by a role the policies name
+// is refused.
 func seedTestData(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
@@ -334,14 +296,6 @@ func seedTestData(t *testing.T, pool *pgxpool.Pool) {
 
 	// Clean up any existing test data (idempotent)
 	cleanupTestData(t, pool)
-
-	withTenantContext(t, pool, "tenant-test", func(conn *pgxpool.Conn) {
-		seedTestDataOn(t, ctx, conn)
-	})
-}
-
-func seedTestDataOn(t *testing.T, ctx context.Context, pool *pgxpool.Conn) {
-	t.Helper()
 
 	// Create test user (username NOT NULL + UNIQUE per migration 000034 —
 	// user-test is stable so the ON CONFLICT still catches re-seeds).
@@ -359,11 +313,10 @@ func seedTestDataOn(t *testing.T, ctx context.Context, pool *pgxpool.Conn) {
 	// fixture frozen at an older schema. `accounts` carries no tenant column and
 	// is deliberately outside RLS (it is the parent of the tenant, so scoping it
 	// per tenant would be circular).
-	_, err = pool.Exec(ctx,
+	if err := execAsAccountsOwner(ctx,
 		`INSERT INTO accounts (id, display_name, owner_id)
 		 VALUES ('acct-test', 'Test Account', 'user-test')
-		 ON CONFLICT (id) DO NOTHING`)
-	if err != nil {
+		 ON CONFLICT (id) DO NOTHING`); err != nil {
 		t.Fatalf("failed to seed account: %v", err)
 	}
 
@@ -401,9 +354,9 @@ func cleanupTestData(t *testing.T, pool *pgxpool.Pool) {
 
 	ctx := context.Background()
 
-	// Clean up in reverse dependency order. Same reason as the seed: DELETE is also
-	// filtered by RLS, so without a context it deletes zero rows in silence —
-	// and the next test inherits the previous one's state.
+	// Clean up in reverse dependency order, through the cross-tenant fixture
+	// pool: DELETE is filtered by RLS too, and a role no policy names deletes
+	// zero rows in silence — the next test would inherit this one's state.
 	tables := []string{
 		"DELETE FROM sse_events WHERE build_id IN (SELECT id FROM builds WHERE tenant_id = 'tenant-test')",
 		"DELETE FROM idempotency_keys WHERE tenant_id = 'tenant-test'",
@@ -413,38 +366,11 @@ func cleanupTestData(t *testing.T, pool *pgxpool.Pool) {
 		"DELETE FROM builds WHERE tenant_id = 'tenant-test'",
 	}
 
-	withTenantContext(t, pool, "tenant-test", func(conn *pgxpool.Conn) {
-		for _, q := range tables {
-			if _, err := conn.Exec(ctx, q); err != nil {
-				t.Logf("cleanup query %q: %v", q, err)
-			}
+	for _, q := range tables {
+		if _, err := pool.Exec(ctx, q); err != nil {
+			t.Fatalf("cleanup query %q: %v", q, err)
 		}
-	})
-}
-
-// withTenantContext runs fn on ONE connection whose `app.tenant_id` is set.
-//
-// A fixture writes the way production writes: inside the tenant's context. Since
-// migration 000062 the tables are fail-closed and 000064 removed the owner's
-// standing bypass, so a seed without context is refused — correctly. What makes
-// this a helper instead of one `set_config` line is the pool: `set_config(...,
-// false)` is SESSION-scoped, and `pool.Exec` may hand the next statement a
-// different connection, which would silently have no context. Holding one
-// connection for the whole fixture is what makes the context apply to all of it.
-func withTenantContext(t *testing.T, pool *pgxpool.Pool, tenantID string, fn func(conn *pgxpool.Conn)) {
-	t.Helper()
-
-	ctx := context.Background()
-	conn, err := pool.Acquire(ctx)
-	if err != nil {
-		t.Fatalf("acquire connection for tenant context: %v", err)
 	}
-	defer conn.Release()
-
-	if _, err := conn.Exec(ctx, `SELECT set_config('app.tenant_id', $1, false)`, tenantID); err != nil {
-		t.Fatalf("set tenant context: %v", err)
-	}
-	fn(conn)
 }
 
 // --- Helper functions ---
@@ -497,7 +423,7 @@ func TestConcurrentBuildSubmission(t *testing.T) {
 	setup := setupIntegrationTest(t)
 
 	// Clean builds before each test
-	cleanupTestData(t, setup.pool)
+	cleanupTestData(t, setup.seed)
 
 	reqBody := map[string]interface{}{
 		"project_id":  "proj-test1234",
@@ -579,7 +505,7 @@ func TestConcurrentBuildSubmission(t *testing.T) {
 
 	// Assert: only one Build record exists with status QUEUED or RUNNING
 	var count int
-	err := setup.pool.QueryRow(context.Background(),
+	err := setup.seed.QueryRow(context.Background(),
 		`SELECT COUNT(*) FROM builds
 		 WHERE tenant_id = 'tenant-test' AND project_id = 'proj-test1234'
 		   AND environment = 'production' AND status IN ('QUEUED', 'RUNNING')`,
@@ -604,7 +530,7 @@ func TestIdempotencyReplay(t *testing.T) {
 	// Both responses should be identical.
 
 	setup := setupIntegrationTest(t)
-	cleanupTestData(t, setup.pool)
+	cleanupTestData(t, setup.seed)
 
 	reqBody := map[string]interface{}{
 		"project_id":  "proj-test1234",
@@ -660,7 +586,7 @@ func TestIdempotencyReplay(t *testing.T) {
 
 	// Assert: only one Build record exists (not two)
 	var count int
-	err = setup.pool.QueryRow(context.Background(),
+	err = setup.seed.QueryRow(context.Background(),
 		`SELECT COUNT(*) FROM builds
 		 WHERE tenant_id = 'tenant-test' AND project_id = 'proj-test1234'
 		   AND environment = 'staging'`,
@@ -678,7 +604,7 @@ func TestIdempotencyMismatch(t *testing.T) {
 	// Second call with key K and payload B gets 422.
 
 	setup := setupIntegrationTest(t)
-	cleanupTestData(t, setup.pool)
+	cleanupTestData(t, setup.seed)
 
 	payloadA := map[string]interface{}{
 		"project_id":  "proj-test1234",
@@ -736,7 +662,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 	// Submit build 2: gets 202 (not 409, because the first build is no longer active).
 
 	setup := setupIntegrationTest(t)
-	cleanupTestData(t, setup.pool)
+	cleanupTestData(t, setup.seed)
 
 	reqBody := map[string]interface{}{
 		"project_id":  "proj-test1234",
@@ -772,7 +698,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 
 	// QUEUED -> RUNNING is already done by SubmitBuild.
 	// Now RUNNING -> SUCCEEDED.
-	_, err = setup.pool.Exec(ctx,
+	_, err = setup.seed.Exec(ctx,
 		`UPDATE builds SET status = $1, finished_at = NOW()
 		 WHERE id = $2`,
 		string(statemachine.BPhSucceeded), buildID,
@@ -783,7 +709,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 
 	// Verify build is terminal
 	var status string
-	err = setup.pool.QueryRow(ctx,
+	err = setup.seed.QueryRow(ctx,
 		`SELECT status FROM builds WHERE id = $1`, buildID,
 	).Scan(&status)
 	if err != nil {
@@ -807,7 +733,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 
 	// Assert: two builds exist — one SUCCEEDED, one RUNNING
 	var totalBuilds int
-	err = setup.pool.QueryRow(ctx,
+	err = setup.seed.QueryRow(ctx,
 		`SELECT COUNT(*) FROM builds
 		 WHERE tenant_id = 'tenant-test' AND project_id = 'proj-test1234'
 		   AND environment = 'production'`,
@@ -820,7 +746,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 	}
 
 	var activeBuilds int
-	err = setup.pool.QueryRow(ctx,
+	err = setup.seed.QueryRow(ctx,
 		`SELECT COUNT(*) FROM builds
 		 WHERE tenant_id = 'tenant-test' AND project_id = 'proj-test1234'
 		   AND environment = 'production' AND status IN ('QUEUED', 'RUNNING')`,

@@ -25,6 +25,7 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -153,22 +154,34 @@ func TestCheckConstraintsOnStatus(t *testing.T) {
 	})
 }
 
-// TestRolesExist verifies that the three database roles were created.
+// TestRolesExist verifies that the roles the platform connects as exist, and
+// that none of them can escape Row Level Security.
+//
+// The inventory is the one the code and the migrations use: loopzero_api (the
+// request path), loopzero_worker (the background loops, migration 000023) and
+// loopzero_cloud (the control plane, migration 000063). It used to name
+// loopzero_migrate and loopzero_readonly, which no migration, chart or connection in
+// this repository creates or uses — the test-roles fixture created them only so
+// this test would pass, and a database built by the migrations failed it
+// (issue #387).
 func TestRolesExist(t *testing.T) {
 	pool := setupHardeningTestDB(t)
 	ctx := context.Background()
 
-	roles := []string{"loopzero_api", "loopzero_migrate", "loopzero_readonly"}
+	roles := []string{"loopzero_api", "loopzero_worker", "loopzero_cloud"}
 	for _, role := range roles {
-		t.Run(fmt.Sprintf("role %s exists", role), func(t *testing.T) {
-			var exists bool
+		t.Run(fmt.Sprintf("role %s exists and is bound by RLS", role), func(t *testing.T) {
+			var super, bypass bool
 			err := pool.QueryRow(ctx,
-				"SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = $1)", role).Scan(&exists)
+				"SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = $1", role).Scan(&super, &bypass)
+			if errors.Is(err, pgx.ErrNoRows) {
+				t.Fatalf("role %s does not exist", role)
+			}
 			if err != nil {
 				t.Fatalf("query: %v", err)
 			}
-			if !exists {
-				t.Errorf("role %s does not exist", role)
+			if super || bypass {
+				t.Errorf("role %s escapes Row Level Security (rolsuper=%v rolbypassrls=%v)", role, super, bypass)
 			}
 		})
 	}

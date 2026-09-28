@@ -58,8 +58,21 @@ func requestScopeSeed(t *testing.T) {
 func scopedRequestPool(t *testing.T) *loopzerodb.PgxAdapter {
 	t.Helper()
 	requireIsolatedRequestRole(t)
+	return tenantScopedRequestPool(t, 1)
+}
+
+// tenantScopedRequestPool builds the pool that serves HTTP requests the way
+// setupDatabase does (requestPoolConfig): over the request role, every
+// connection scoped to the tenant its context carries (dbtx.WithTenantScope). Code under test that
+// production runs on the request path runs on this pool, not on a raw one: a
+// raw connection carries whatever `app.tenant_id` a previous user left on it,
+// which is how a fixture's scope leaked into the code under test and made
+// TestConcurrentBuildSubmission pass or fail by connection (issue #387).
+func tenantScopedRequestPool(t *testing.T, maxConns int32) *loopzerodb.PgxAdapter {
+	t.Helper()
+	_ = testPool(t) // skips when PostgreSQL is unreachable
 	adapter, err := loopzerodb.NewPool(context.Background(), dbURL(), loopzerodb.PoolConfig{
-		MaxConns:          1,
+		MaxConns:          maxConns,
 		HealthCheckPeriod: time.Minute,
 		MaxConnLifetime:   time.Hour,
 		MaxConnIdleTime:   time.Hour,

@@ -377,7 +377,7 @@ jobs:
   # tenant read another tenant's rows.
   #
   # This job exists so that cannot recur silently. It provisions a real
-  # PostgreSQL, applies the schema and migration 000062, and runs the isolation
+  # PostgreSQL, applies the whole migration chain, and runs the isolation
   # suite with LOOPZERO_RLS_AUDIT_REQUIRE=1 — which turns "cannot connect" from a
   # skip into a failure.
   #
@@ -490,33 +490,28 @@ jobs:
           echo "::group::roles"
           PGPASSWORD=postgres psql -U postgres -d loopzero_test -v ON_ERROR_STOP=1 \
             -f loopzero/api/internal/db/testdata/test-roles.sql
+          # The owner owns its database, as in production: the chain creates the
+          # pgcrypto extension (000037), which needs CREATE on the database.
+          PGPASSWORD=postgres psql -U postgres -d loopzero_test -v ON_ERROR_STOP=1 \
+            -c "ALTER DATABASE loopzero_test OWNER TO loopzero"
           echo "::endgroup::"
 
-          # The dump replays a few metering helpers out of dependency order.
-          # Those errors are tolerated here and the outcome is asserted below —
-          # a count is a stronger check than a clean-looking log.
-          echo "::group::schema (as owner loopzero)"
-          PGPASSWORD=loopzero psql -U loopzero -d loopzero_test \
-            -f loopzero/api/internal/db/schema.gen.sql 2>&1 | tail -5
-          echo "::endgroup::"
-
-          echo "::group::migrations de isolamento"
-          # Applied by name rather than by a glob over the whole directory: the
-          # rest of the migration chain is not replayable against a schema dump
-          # (the dump already carries its result), and a glob would silently
-          # start including the next migration somebody adds.
+          # THE WHOLE MIGRATION CHAIN, with the tool and version production runs
+          # (api/Dockerfile builds golang-migrate v4.19.1 with the same flags).
           #
-          # The flip side is that adding a migration and forgetting this line is
-          # invisible — the job stays green measuring the schema WITHOUT it. The
-          # step below counts what the migrations must have produced, which is
-          # what catches the omission for 62/63/64; 065 and 066 are pinned by
-          # their own integration tests (FK ON DELETE, idempotency per tenant).
-          for m in 000062_rls_fail_closed 000063_cloud_named_role 000064_drop_owner_maintenance \
-                   000065_explicit_fk_on_delete 000066_idempotency_key_per_tenant; do
-            echo "-- $m"
-            PGPASSWORD=loopzero psql -U loopzero -d loopzero_test -v ON_ERROR_STOP=1 \
-              -f "loopzero/api/internal/db/migrations/$m.up.sql"
-          done
+          # This used to load schema.gen.sql and then five isolation migrations
+          # named by hand. That database was not the one production has: the
+          # dump carries no reference data (plan_limits is filled by 000002), and
+          # 000067/000068 were never on the list. Tests passed only because two
+          # of them re-ran every migration file as the owner at test time and
+          # ignored the errors — which also loaded the plan limits the project-cap
+          # tests depend on. The chain removes both the list and the dependency:
+          # a new migration is applied here the day it lands (issue #387).
+          echo "::group::migrations (as owner loopzero)"
+          GOBIN="${RUNNER_TEMP}/migrate" GOWORK=off go install -tags postgres \
+            github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1
+          "${RUNNER_TEMP}/migrate/migrate" -path loopzero/api/internal/db/migrations \
+            -database "postgres://loopzero:loopzero@localhost:5432/loopzero_test?sslmode=disable" up
           echo "::endgroup::"
 
       # Asserted before the tests run: if the migration silently did less than

@@ -364,7 +364,10 @@ func TestReleases_PreFlightCheck_DetectsExistingViolations(t *testing.T) {
 // with the trigger's RAISE message, which says the tenant does not exist or has
 // no cell. Seeding the parents is what the trigger asks for — the honest fix
 // rather than disabling it.
-func seedTenantRow(t *testing.T, pool *pgxpool.Pool, tenantID string) {
+//
+// It takes a pool or a transaction, so a fixture can be written by the role a
+// transaction switched to.
+func seedTenantRow(t *testing.T, pool fixtureExecer, tenantID string) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -387,4 +390,9 @@ func seedTenantRow(t *testing.T, pool *pgxpool.Pool, tenantID string) {
 			t.Fatalf("seed %s for %s: %v", step.what, tenantID, err)
 		}
 	}
+}
+
+// fixtureExecer is what a fixture writes through: a pool or a transaction.
+type fixtureExecer interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }

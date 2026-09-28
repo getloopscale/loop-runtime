@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -35,6 +36,14 @@ func seedDBURL() string {
 		return url
 	}
 	return dbURL()
+}
+
+// seedPool is the cross-tenant fixture pool (see seedDBURL). Like testPool it
+// skips when PostgreSQL is unreachable.
+func seedPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	_ = testPool(t)
+	return poolFor(t, seedDBURL())
 }
 
 // ownerDBURL is the connection for the one kind of fixture row the engine's
