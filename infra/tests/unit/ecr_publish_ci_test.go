@@ -160,3 +160,30 @@ func TestBuildPublishECRStepsAreOptIn(t *testing.T) {
 		}
 	}
 }
+
+// A reusable workflow may never ask for more than its caller grants: GitHub refuses the
+// whole run at startup (`startup_failure`, no job log, no message in the API). This
+// happened on 2026-09-28 — `attestations: write` entered build-publish.yml on 2026-09-16,
+// the images job never granted it, and the first develop push after it published nothing.
+func TestImagesJobGrantsEveryPermissionTheReusableDeclares(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(), buildPublishWorkflow))
+	if err != nil {
+		t.Fatalf("%s: %v", buildPublishWorkflow, err)
+	}
+	var reusable struct {
+		Permissions map[string]string `yaml:"permissions"`
+	}
+	if err := yaml.Unmarshal(data, &reusable); err != nil {
+		t.Fatalf("%s is not valid YAML: %v", buildPublishWorkflow, err)
+	}
+	if len(reusable.Permissions) == 0 {
+		t.Fatalf("%s declares no top-level permissions — this test reads them", buildPublishWorkflow)
+	}
+	granted := loadWorkflow(t, releaseArtifactsWorkflow).Jobs["images"].Permissions
+	for scope, level := range reusable.Permissions {
+		if granted[scope] != level {
+			t.Errorf("%s: build-publish.yml asks for %s: %s, the images job grants %q — GitHub refuses the run at startup",
+				releaseArtifactsWorkflow, scope, level, granted[scope])
+		}
+	}
+}

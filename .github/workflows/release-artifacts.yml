@@ -118,6 +118,9 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      # build-publish.yml asks for it (GitHub-native provenance). A reusable that asks for
+      # more than its caller grants is refused at startup, with no log and no message.
+      attestations: write
     uses: ./.github/workflows/build-publish.yml
     with:
       image: ${{ matrix.image }}
